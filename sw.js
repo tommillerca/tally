@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v420';
+const VERSION = 'tally-v421';
 const PRECACHE = [
   './',
   './index.html',
@@ -42,6 +42,8 @@ const PRECACHE = [
   './js/hunt.js',
   './js/native.js',
   './js/pit.js',
+  './js/mimic.js',
+  './js/wanderer.js',
   './js/talkbox.js',
   './data/boneheadz.js',
   './assets/fonts/bangers.woff2',
@@ -51,6 +53,20 @@ const PRECACHE = [
      appears, and 4KB is not worth taking out and putting back. */
   './assets/fonts/boldpixels.woff2',
   './assets/brand/wordmark.png',
+  /* GWART, the Shop's shopkeeper. 456KB for the pair, and they are precached
+     because they ARE the Shop tab's header: a cold fetch means the panel paints
+     its crimson glow with nobody standing in it, and his entrance is a 2.4s
+     one-shot that has already played by the time a network image lands.
+     THEY ARE THE 2048 MASTERS ON PURPOSE, and that was measured rather than
+     assumed. The art is flat-shaded: 2,474 unique colours in the whole 2048
+     square. A Lanczos downscale to 1440 interpolates that up to 12,932 colours,
+     and the PNG comes out BIGGER than the master (479KB against 360KB). There
+     is no smaller honest version at a smaller size. The 74% cut that does exist
+     is a 256-colour quantise at full resolution (121KB for the pair), and that
+     edits Cam's art — max delta 30/255 on 0.94% of pixels, alpha included — so
+     it is Tom's call, not a build step. */
+  './assets/gwart/gwart.png',
+  './assets/gwart/gwart-stars.png',
   /* The common crate's 9 authored frames. The whole sequence runs inside a
      260ms window, so a cold fetch mid-open paints a blank frame. Precached
      rather than left to the runtime cache for that reason. 36KB for all 9. */
@@ -167,6 +183,13 @@ const PRECACHE = [
   './assets/bh/mage/fx/zigzag.png',
   './assets/bh/mage/fx/sparks.png',
   './assets/bh/mage/mage-fight.png',   // a hand-drawn boss: a cold-cache miss shows a broken image where a monster should be
+  // the two bosses added with the Mimic. Same rule as the line above: a
+  // cold-cache miss draws a broken image where a monster should be.
+  './assets/bh/mimic/mimic.png',
+  './assets/bh/mimic/mimic-eyes-2.png',
+  './assets/bh/mimic/mimic-eyes-3.png',
+  './assets/bh/mimic/mimic-loop.gif',   // the reveal IS this file; without it the chest never opens
+  './assets/bh/wanderer/wanderer.png',
   './assets/bh/glutton/idle.png',
   './assets/bh/glutton/tongue.png',
   './assets/bh/glutton/middle.png',
@@ -220,6 +243,9 @@ const PRECACHE = [
   './assets/bh/C/shiny/C4.png',
   './assets/bh/C/shiny/C5.png',
   './assets/bh/C/CX.png',
+  // Bumbleseal, drawn on the Today hype banner, which is the DEFAULT screen: a
+  // cold-cache miss is a hole in the first thing a player sees.
+  './assets/bh/C/C6.png',
   './assets/bh/anim/lizard-amethyst/base.png',
   './assets/bh/anim/lizard-amethyst/lid.png',
   './assets/pit/gate-boneyard.webp',

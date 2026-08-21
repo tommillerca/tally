@@ -45,6 +45,22 @@
  *   MINI      the mini-boss disc is not smaller than a loot disc and its skull
  *             renders at 24. Failure is DOWN. A marker that starts a fight was
  *             a smaller disc AND a slacker fill than a marker that pays coins.
+ *   NAME      the rare spawn is called the same thing, character for character,
+ *             on BOTH Boneyard surfaces: the "OUT THERE TODAY" card you see
+ *             before the map opens, and the map key you see after. It was
+ *             "Mystery Egg / rare spawn · walk to hatch a pet" on one and
+ *             "Mystery egg / Rare: walk to hatch a pet" on the other, and since
+ *             the intro card is destroyed the moment the map starts, a player
+ *             never sees them side by side and neither did any screenshot.
+ *             Both strings are read out of the rendered DOM. PROVEN RED twice
+ *             on 2026-08-20, each in a throwaway tree, with all five CONTROL
+ *             rows green in both runs:
+ *               revert the map key row to 'Mystery egg'  -> 2 red
+ *                 ("the map key calls it", "the two surfaces agree"),
+ *                 CONTROL 36 pixel imgs / 36 decoded
+ *               revert the intro card note to 'rare spawn · walk to hatch a pet'
+ *                 -> 1 red ("both describe it as"),
+ *                 CONTROL 37 pixel imgs / 37 decoded
  *
  * PROVE-RED, measured 2026-08-20 against origin/main at v417 (36ea2c6), which
  * has the same map and the same spawn field. FIVE rows go red and all four
@@ -76,9 +92,14 @@ const EXPECT = {
   'Bone cache':  'assets/icons-pix/bone.png',
   'Coin pile':   'assets/icons-pix/coin.png',
   'Buried crate':'assets/icons-pix/crate.png',
-  'Mystery egg': 'assets/icons-pix/egg-basic.png',
+  'Mystery Egg': 'assets/icons-pix/egg-basic.png',
   'Mini-boss':   'assets/icons-pix/badge-skull.png',
 };
+/* THE RARE SPAWN'S NAME AND LINE, as the player must read them on BOTH Boneyard
+   surfaces. Pinned as literals on purpose: importing js/app.js's MYSTERY_EGG
+   would compare the constant to itself and pass through any rename. */
+const EGG_NAME = 'Mystery Egg';
+const EGG_DESC = 'Rare: walk to hatch a pet';
 /* THE ONE ROW ALLOWED TO BE A VECTOR, and the reason, so nobody has to go
    digging: there is no pixel drawing for a food find yet. It cannot borrow one
    of the seven ingredient icons because the spawn does not know which
@@ -106,12 +127,46 @@ try {
   await browser.defaultBrowserContext().overridePermissions(new URL(base).origin, ['geolocation']);
   await page.setViewport({ width: 440, height: 956, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await seed(page, {});
-  await page.setGeolocation({ latitude: 49.2827, longitude: -123.1207 });
+  /* WHERE THE PLAYER STANDS IS CHOSEN, NOT ASSUMED, and this row is why.
+     The Mystery Egg is an 8% roll per cell per 45-minute instance
+     (js/hunt.js: `if (rr() < 0.08)`, seeded on date:cx:cy:rare:i<N>), so a
+     fixed pin gets an egg on the map in some instances and not in others. That
+     is exactly what happened on 2026-08-21: this audit blocked a release gate
+     with "no map marker draws assets/icons-pix/egg-basic.png", then passed four
+     times in a row half an hour later. Nothing was broken either time. A guard
+     whose sample is a dice roll reports the weather, not the code.
+     So: ask the app's OWN generator which nearby cell has an egg in the
+     instance that is running right now, and stand there. Deterministic given
+     the clock, and no app change: spawnsForRoute is a pure function.
+     If no cell within range has one, the fixed pin is kept and EGG-PRESENT
+     below fails loudly rather than the MATCH row failing for a reason that
+     reads like an art regression. */
+  const HOME = { latitude: 49.2827, longitude: -123.1207 };
+  const eggSpot = await page.evaluate(async (home) => {
+    const hunt = await import('./js/hunt.js');
+    const date = new Date().toISOString().slice(0, 10);
+    const near = hunt.spawnsForRoute(date, home.latitude, home.longitude)
+      .filter(sp => sp.type === 'rare');
+    if (!near.length) return null;
+    /* stand ON the egg's own cell so it lands inside NEAR_M and draws as a
+       full-density marker rather than a dimmed far beacon */
+    const e = near.sort((a, b) => a.dist - b.dist)[0];
+    return { latitude: e.lat, longitude: e.lng, was: e.dist };
+  }, HOME);
+  await page.setGeolocation(eggSpot ? { latitude: eggSpot.latitude, longitude: eggSpot.longitude } : HOME);
   await page.evaluate(() => { location.hash = '#/today'; });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await sleep(1500);
   await page.evaluate(() => { location.hash = '#/boneyard'; });
   await sleep(1500);
+  /* READ THE INTRO CARD FIRST. "OUT THERE TODAY" lives in #mapIntro and is torn
+     out the moment the map opens, so a player sees it or the map key but never
+     both, which is exactly why the two drifted unnoticed. This has to happen
+     before the click below or there is nothing left to read. */
+  const intro = await page.evaluate(() => [...document.querySelectorAll('#mapIntro .legend-row')].map(r => ({
+    name: (r.querySelector('b')?.textContent || '').trim(),
+    note: (r.querySelector('.note')?.textContent || '').replace(/^\s*·\s*/, '').trim(),
+  })));
   await page.evaluate(() => { const b = document.querySelector('#mapStart'); if (b && b.offsetParent) b.click(); });
   await sleep(13000);
   // the key starts hidden; it is the same markup either way, so unhide it rather
@@ -138,6 +193,7 @@ try {
       minis: disc('.map-mini-mark'),
       legend: [...document.querySelectorAll('#mapLegend .leg-row')].map(r => ({
         name: (r.querySelector('b') || {}).textContent || '',
+        desc: ((r.querySelector('small') || {}).textContent || '').trim(),
         w: px((r.querySelector('.leg-ico').firstElementChild || r).getBoundingClientRect().width),
         icons: icons(r.querySelector('.leg-ico')),
       })),
@@ -145,6 +201,13 @@ try {
   });
 
   /* ---- CONTROL first. Every row below reads from this sample. ---- */
+  /* THE SAMPLE THIS RUN ACTUALLY GOT. Without this the MATCH row's egg failure
+     is ambiguous: it reads the same whether the art regressed or whether the
+     instance simply had no egg in it. */
+  ok('CONTROL  an egg was placed on the map to compare, so the MATCH row has a sample',
+    !!eggSpot, eggSpot ? `stood on an egg cell (it was ${Math.round(eggSpot.was)}m from the fixed pin)`
+      : 'NO CELL IN RANGE HAS A MYSTERY EGG THIS 45-MINUTE INSTANCE: the MATCH row below cannot grade the egg, and a failure there is about the sample, not the art');
+
   ok('CONTROL  the map drew spawn markers', s.spawns.length > 0, `${s.spawns.length} spawn discs`);
   ok('CONTROL  the map drew mini-boss markers', s.minis.length > 0, `${s.minis.length} mini discs`);
   ok('CONTROL  the map key rendered all nine rows', s.legend.length === 9, `${s.legend.length} rows`);
@@ -156,7 +219,28 @@ try {
   ok('CONTROL  the sample actually contains decoded pixel art (not just boxes)',
     pixIcons.length > 0 && pixIcons.some(i => i.nw > 0),
     `${pixIcons.length} pixel imgs, ${pixIcons.filter(i => i.nw > 0).length} decoded`);
+  ok('CONTROL  the Boneyard intro card rendered its rows', intro.length > 0,
+    `${intro.length} rows: ${intro.map(r => r.name).join(', ') || 'none'}`);
   if (fails) throw new Error('sample did not hold');
+
+  /* ---- NAME. The rare spawn is called the SAME THING on both surfaces.
+     Tom, 2026-08-20: "you call mystery eggs rare spawns on the map but different
+     in the legend they should be called mystery eggs in both places". The map
+     key said "Mystery egg / Rare: walk to hatch a pet" and the intro card said
+     "Mystery Egg / rare spawn · walk to hatch a pet": different casing AND
+     different phrasing for one marker. Both are read out of the rendered DOM,
+     not out of the source, so this is the string the player actually gets. ---- */
+  const introEgg = intro.find(r => /egg/i.test(r.name));
+  const keyEgg = s.legend.map(r => ({ name: r.name.trim() })).find(r => /egg/i.test(r.name));
+  ok('NAME     both Boneyard surfaces name the rare spawn, so there is something to compare',
+    !!introEgg && !!keyEgg, `intro "${introEgg?.name ?? 'MISSING'}", key "${keyEgg?.name ?? 'MISSING'}"`);
+  ok(`NAME     the map key calls it "${EGG_NAME}"`, keyEgg?.name === EGG_NAME, `got "${keyEgg?.name}"`);
+  ok(`NAME     the intro card calls it "${EGG_NAME}"`, introEgg?.name === EGG_NAME, `got "${introEgg?.name}"`);
+  ok('NAME     the two surfaces agree, character for character',
+    !!introEgg && introEgg.name === keyEgg?.name, `intro "${introEgg?.name}" vs key "${keyEgg?.name}"`);
+  ok(`NAME     both describe it as "${EGG_DESC}"`,
+    introEgg?.note === EGG_DESC && s.legend.find(r => /egg/i.test(r.name))?.desc === EGG_DESC,
+    `intro "${introEgg?.note}" vs key "${s.legend.find(r => /egg/i.test(r.name))?.desc}"`);
 
   /* ---- DECODE. A perfect box over a PNG that never loaded. ---- */
   const blank = pixIcons.filter(i => !(i.nw > 0));

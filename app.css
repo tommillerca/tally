@@ -143,84 +143,109 @@ svg { display: block; }
    space above the bonehead card it has the boneheadz word mark as a nice
    branding touch."
 
-   WHY IT WORKS ON WKWEBVIEW SPECIFICALLY. The scroller here is .screen, not the
-   document, and iOS implements its rubber band by letting the underlying
-   UIScrollView take a NEGATIVE content offset: the whole scrolled content layer
-   translates down, absolutely-positioned descendants of the scroller included.
-   `overscroll-behavior: contain` above stops the chain reaching the page; it does
-   not stop the element's own bounce. So a mark parked above the content origin
-   rides down into view under your finger with no JS and no listener, and nothing
-   else on the app has to know it exists.
+   FOURTH ATTEMPT, AND THE FIRST ONE THAT MEASURED WKWEBVIEW INSTEAD OF ASSUMING
+   IT. v414, v415 and v421 all parked the mark ABOVE the Today scroller's content
+   origin (`bottom: 100%` on `.screen--today::before`) on the reasoning written in
+   the version of this block they shipped with: iOS rubber-bands the nested
+   UIScrollView to a NEGATIVE content offset, the scrolled content layer
+   translates down, and an absolutely positioned descendant parked above the
+   origin rides down into view for free. Half of that is true. The half that is
+   not is the half the whole feature stood on.
 
-   WHY IT CANNOT PEEK. Scrollable overflow only ever grows downward: scrollTop
-   cannot go negative by scrolling, so at rest and at every scroll position the
-   mark sits outside the overflow clip. The bounce is the only thing that can
-   reach it.
+   MEASURED 2026-08-21 ON A BOOTED iPHONE 17 PRO (iOS 26.5), MobileSafari, a
+   sustained synthesised drag held down for ~10s so the bounce could be
+   screenshotted while it was open:
+     - the bounce is REAL: `#screen.scrollTop` bottomed out at -168, 33 scroll
+       events fired with a negative offset, and an element inside the scroller
+       moved 168px down by getBoundingClientRect. `overscroll-behavior: contain`
+       does NOT kill it. So the listener below has always been getting real data.
+     - and NOTHING PARKED ABOVE THE ORIGIN PAINTS INTO THE EXPOSED STRIP. In a
+       126pt-deep bounce, sampled at both halves of the width, the strip was the
+       scroller's own background COLOUR (#202) edge to edge and 0 px of anything
+       else. Four forms tested in one page: a `::before` at `bottom: 100%`, a real
+       `<div>` at `bottom: 100%`, and a `background-image` at `center -60px` with
+       `background-attachment: local` AND with `scroll`. Zero pixels, all four.
+       WebKit sizes the scrolled-contents layer to the scrollable-overflow rect,
+       which starts AT the scroll origin, and fills the rubber-band region from
+       the layer's solid backgroundColor. Content above the origin is outside the
+       layer and outside the fill. It is not clipped by a rule anyone can move: it
+       is not in the layer that gets translated.
+   So the mark Tom was told to pull for could not have appeared however far he
+   pulled, on any of the three builds. That, and not the pull threshold, is why he
+   never saw it. The old geometry note argued the reveal "enters THROUGH the
+   status-bar strip by definition, exactly like a pull-to-refresh spinner, and
+   that was settled in v415: it is not worth an unreachable peek." Tom has
+   overridden that: "i still have not been able to see the wordmark after
+   scrolling at any time or update despite what you say so fix that shit." The
+   peek is not unreachable now, it is landed clear of the status bar, and this is
+   the paragraph that records the override.
 
-   WHY IT COSTS NO LAYOUT. position: absolute takes it out of flow. Measured with
-   the rule present and absent: all 556 element rects on Today identical, first
-   card y 76 and 76, scrollHeight 3034 and 3034.
+   SO THE MARK LEFT THE SCROLLER. It is `#app::before` now, gated on Today by
+   `:has(.screen--today)` so `screen--today` stays the single source of truth and
+   route() needs no second flag. #app is `position: relative; z-index: 1;
+   overflow: hidden` (line 134 and 901), so:
+     - HIDDEN AT REST BY THE SAME CONSTRUCTION AS BEFORE, and this is the part
+       that must not regress. `bottom: 100%` against #app puts the box at
+       [-62, 0], i.e. entirely above the viewport, and #app's `overflow: hidden`
+       clips it. Zero pixels at rest at --sat 0, 47, 59, 62 alike, with no
+       arithmetic against the inset to get backwards the way v415 did. What
+       changed is only WHICH box does the clipping, and #app is a plain
+       non-scrolling clip in the ordinary paint order rather than a compositor
+       layer that stops existing above its origin.
+     - REVEALED BY A TRANSFORM, NOT BY THE BOUNCE. `translateY` off --wm-pull
+       drives it down `--sat + 66px`, so at full pull the box lands at
+       [--sat + 4, --sat + 66]: the WHOLE mark below the status bar and the
+       Dynamic Island, on every inset, instead of 0 visible pixels at 36px of pull
+       and a first pixel at 76px. Guard: the UNDERNOTCH row.
+     - z-index: -1 puts it BEHIND the screen's content inside #app's stacking
+       context. At full pull its lower ~16px are under the first card (which the
+       real bounce has itself pushed down by the pull), so the mark slides out
+       from behind the world rather than printing on top of it, and a
+       pointer-events: none element at a negative z-index cannot take a tap off
+       any control (anti-regression rule 6).
 
-   IT SHIPPED TWICE AND TOM NEVER SAW IT. Both misses are worth keeping, because
-   they were different mistakes.
-   v414 parked it at top -(54 + --sat), 150x40, opacity .55: at --sat 59 that was
-   73px of rubber-band travel before ONE pixel appeared and 113px to be whole,
-   and the note called that threshold deliberate. "i dont see it live?"
-   v415 cut the offset to -(8 + --sat) and grew it to 172x46, so 21px for the
-   first pixel. "your wordmark still isnt there." The threshold was no longer the
-   problem: a 172x46 sliver at 55% opacity sitting behind the status bar simply is
-   not something a person notices. (The v415 note claimed .55 -> .78 and the rule
-   shipped .55, because raising it turned the INK row red and the number got put
-   back while the sentence stayed. A guard steering the design.)
-   Tom, third pass: "Make it unmistakable. Drive it off scroll position so it
-   fades in deterministically, bigger and higher contrast."
+   CONFIRMED ON THE DEVICE, NOT JUST IN THE AUDIT. This rule and the listener were
+   lifted verbatim into a bare page with the same #app/.screen boxes and the real
+   wordmark.png, served to the same booted iPhone 17 Pro, and the same held drag
+   was screenshotted: the wordmark painted IN FULL, entirely below the Dynamic
+   Island, during a real rubber band. Four releases in, that link gets checked
+   before the file is believed.
 
-   AND v415 HAD A THIRD FAILURE NOBODY HAD SEEN, WHICH IS WHY THE OFFSET IS GONE.
-   `top: calc(-8px - var(--sat))` at height 46 puts the mark's bottom edge at
-   38 - sat. Measured live at three insets: at --sat 47 and 59 it is above the
-   origin (Tom's case, invisible), and at --sat 0 it is 38px BELOW it, so 38 of
-   the 46px were welded to the top of Today permanently, at every scroll position,
-   on every device with no top inset: desktop, notchless phones, the Android
-   shell. Same rule, opposite failures at the two ends of --sat, which is the tell
-   that arithmetic against the inset was the wrong mechanism from the start.
+   IT STILL COSTS NO LAYOUT. position: absolute takes it out of flow and it is no
+   longer a child of the scroller at all. Guard: the NO-SHIFT rows, which compare
+   every rect on Today with the mark present and absent.
 
-   SO: `bottom: 100%` and no top offset at all. For an absolutely positioned box
-   in a relatively positioned containing block, `bottom: 100%` puts its bottom
-   edge exactly on the containing block's top edge; verified here that the
-   percentage resolves against the scroller's PADDING BOX height (clientHeight
-   867, not scrollHeight 2972) and that the used top comes out at -62px at --sat
-   0, 47, 59 and 62 alike. Zero pixels at rest and a first pixel at the first
-   pixel of travel, by construction, at every inset. The --sat 0 bug is not fixed,
-   it is unrepresentable, and the height no longer has to be reconciled against
-   anything so it can be sized for legibility: 232x62, 1.82x the old area.
-   Any reveal from above the scrollport enters THROUGH the status-bar strip by
-   definition, exactly like a pull-to-refresh spinner, and that was settled in
-   v415: it is not worth an unreachable peek.
+   OPACITY IS DRIVEN OFF SCROLL POSITION, not off geometry alone. --wm-pull is set
+   on :root by a passive scroll listener in js/app.js from the scroller's NEGATIVE
+   scrollTop, which on iOS is the pull distance in pixels (measured above, not
+   assumed): min(1, pull / 36), quantised to twentieths. :root and not #screen
+   because #app::before cannot inherit a property set on #screen, which is its
+   sibling's subtree.
 
-   OPACITY IS DRIVEN OFF SCROLL POSITION, not off geometry alone. --wm-pull is
-   set by a passive scroll listener in js/app.js from the scroller's NEGATIVE
-   scrollTop, which on iOS is the pull distance in pixels: min(1, pull / 36). A
-   1px sliver at 1px of pull is therefore transparent, and by 36px the mark is at
-   full brightness with 56% of it on screen. Deterministic in the pull distance
-   rather than in how hard the flick was.
+   THE OPACITY DEFAULT IS 1 AND THE TRANSFORM DEFAULT IS 0. A `var(--wm-pull, 0)`
+   opacity is the transparent-by-default trap that shipped invisible before, so
+   the default stays loud and the FAILOPEN row still goes red on it. Be honest
+   about what that no longer buys: with the reveal now a transform, a listener
+   that never fires means no reveal, full stop. The old block claimed the CSS
+   default made a silent no-op "impossible"; it never did, because the geometry it
+   fell back on could not paint. What actually retires that risk is the device
+   measurement above: the negative offset IS reported and the listener DOES fire.
 
-   THE DEFAULT IS 1, AND THAT IS THE WHOLE SAFETY ARGUMENT. If a WebView ever
-   fails to report the negative offset the listener never fires, --wm-pull is
-   never set, and var(--wm-pull, 1) reveals the mark at FULL opacity off the
-   geometry alone. Third attempt at this feature: a JS reveal that silently
-   no-ops into a blank space is the one outcome that must be impossible.
-
-   NO KEYFRAMES, NO DURATION, NO ITERATION COUNT: the fade tracks the finger 1:1
-   like a scrollbar does. prefers-reduced-motion is handled in the listener, not
-   here, by pinning --wm-pull to 1: the end state, which is also the loudest one,
-   so a player who asked for no motion gets the mark with no fade rather than a
-   dimmer mark. Guard: tests/overscroll-wordmark-audit.mjs */
+   NO KEYFRAMES, NO DURATION, NO ITERATION COUNT: the reveal tracks the finger 1:1
+   like a scrollbar does. prefers-reduced-motion drops the FADE (opacity pinned to
+   1) and keeps the travel, because a scroll-linked position is direct
+   manipulation and not an animation; it is one line of CSS below rather than a
+   branch in the listener. Guard: tests/overscroll-wordmark-audit.mjs */
 .screen--today { position: relative; }
-.screen--today::before {
-  content: ""; position: absolute; left: 50%; margin-left: -116px;
-  bottom: 100%; width: 232px; height: 62px;
+#app:has(.screen--today)::before {
+  content: ""; position: absolute; z-index: -1; pointer-events: none;
+  left: 50%; margin-left: -116px; bottom: 100%; width: 232px; height: 62px;
   background: url(assets/brand/wordmark.png) center / contain no-repeat;
-  opacity: var(--wm-pull, 1); pointer-events: none;
+  opacity: var(--wm-pull, 1);
+  transform: translateY(calc(var(--wm-pull, 0) * (var(--sat) + 66px)));
+}
+@media (prefers-reduced-motion: reduce) {
+  #app:has(.screen--today)::before { opacity: 1; }
 }
 
 /* ---------- header ---------- */
@@ -1044,10 +1069,45 @@ body::before {
   background: #f2e9d7; border-radius: 22px;
   padding: 7px 7px 20px; box-shadow: 5px 6px 0 rgba(0, 0, 0, .55);
 }
+/* THE SCROLL PEEK, and it is arithmetic rather than a tuned height. Tom,
+   2026-08-21: "how will the player know to scroll down and see more right now?
+   i have a feeling they wont know unless we show half a banner width or
+   something to make them go look." Measured on the shipped tree before the
+   change: the first card below the doors cleared the fold by 60px at 393x852
+   with no inset, by 1.2px at --sat 59, by 14.8px at 320x568, and by nothing at
+   all at 320x568 with an inset. Three of the four viewports showed a sliver or
+   less, so a constant height cannot be the answer: the fold moves with the
+   viewport and the notch, and the hero has to move with it.
+
+   So the SCENE gives up exactly what the peek needs, and the 201px is measured,
+   not chosen. From the fold upward, at both widths:
+     66.2  the tab bar (plus --sab, which is why it is a separate term)
+     14    .screen's own top padding, on top of --sat
+      7    .hero-card's top padding
+     20    .hero-card's chin
+     12    .hero-card's bottom margin
+     67.8  .hero-actions, the four doors
+     14    .hero-actions' bottom margin
+   134.8 of that is below the scene and above the first card, 66.2 is the bar,
+   and the sum is 201. Whatever is left after the peek is the scene's, capped so
+   a tall screen does not get an absurd hero and floored so a short one keeps a
+   figure. Verified by measuring the peek off the render at four configurations,
+   not by trusting this comment: tests/today-peek-audit.mjs.
+
+   --gw-h and --gw-top are the status column above the figure (the chips, then
+   Gwart), and they live here because .hero-char's top is their sum. 90px is
+   R3's ruling (Tom: "essentially half his current height"), the height at which
+   his face measures 40.8px against a 40px legibility bar, and it scales down
+   with the viewport rather than through a breakpoint: 10.6vh crosses 90 at an
+   849px-tall screen, so every current phone gets the full plaque and only a
+   short one trades it away. */
 .hero-scene {
+  --gw-top: 50px;                          /* .hero-top's 10px + its 32px + an 8px gap */
+  --gw-h: clamp(58px, 10.6vh, 90px);
+  --peek: clamp(28px, 5.2vh, 46px);
   position: relative; overflow: hidden; cursor: pointer;
   margin: 0;
-  height: min(62vh, 520px);
+  height: min(600px, max(280px, calc(100vh - var(--sat) - var(--sab) - 201px - var(--peek))));
   background: var(--coral);
   border: 2.5px solid #17151d; border-radius: 16px;
   text-align: left;
@@ -1076,14 +1136,94 @@ body::before {
      (sat+14) and the scene's negative margin cancels exactly that padding, so the
      scene starts under the day-head. Adding var(--sat) here double-counted the
      notch (~59px of dead space on notched phones). Anchor to the scene instead. */
+  /* CURRENCIES AT THE TOP, AND THEY LEAD. Tom asked for the currencies at the
+     top of the screen with Gwart under them, three times. They used to be a
+     split row, the Trends dot pinned left and the wallet pinned right, with the
+     art showing between them; that is two floating plates rather than a status
+     column. Left-aligned and grouped, they are one object with the plaque
+     directly beneath, which is the whole point of the arrangement. */
   position: absolute; top: 10px; left: 12px; right: 12px; z-index: 5;
-  display: flex; justify-content: space-between; align-items: flex-start;
+  display: flex; justify-content: flex-start; align-items: center; gap: 7px;
 }
 .hero-top-right { display: flex; gap: 7px; }
 .hero-top .streak-chip, .hero-top .bh-coin, .hero-top .bh-crates {
   background: rgba(42, 45, 40, .82); border: 2px solid var(--ink); color: var(--text);
   box-shadow: var(--sh-sm);
   background: rgba(13, 12, 18, 0.62); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+
+/* ============================ GWART, ON TODAY ==============================
+   Under the currencies, which is where Tom put him. This is NOT the Emporium
+   panel: that one is a full-bleed 328px header with a crimson radial behind a
+   384px-wide wizard, and every number in it was solved for that panel's size.
+   Nothing is copied from it. What IS shared is Cam's animation (.wz-body,
+   .wz-enter, .wz-sway, .wz-stars-*, declared once, further down this file) and
+   the art files, which are already precached for the Shop.
+
+   THE PLATE IS #d5c8b0 AND THAT IS TOM'S NUMBER. The first version used the
+   app's own cream and he came back with "gwart's background is too bright",
+   then, given two darker options, "split the difference between A and B". Note
+   what this hex is NOT: it is not --text. --text is #f2e9d7 and it is also the
+   talk box's type colour, so a search-and-replace on the cream in this file
+   changes the words in the dialogue box as well. Tom caught exactly that once:
+   "why did you change the text colour in the textbox? i asked you to just
+   change gwart's background colour." One literal, in one rule, on purpose.
+
+   THE CROP IS THE ART'S, NOT A TASTE CALL. R3 measured the frame that keeps the
+   whole pointed hat while making his face read: (293, 442) - (1753, 1136) in
+   the 2048 square, 1460 x 694, which is where the tip of the cone lands on the
+   top edge and the beard on the bottom. So the plate's proportions FOLLOW that
+   rect instead of being declared: the height is the ruling (--gw-h), the
+   content width is height x 1460/694, and the art is the untouched 2048 square
+   blown up until 1460 of its columns span the plate and shoved left and up by
+   the crop's own origin. No second copy of the PNG, no object-fit guessing, and
+   the whole square stays intact underneath so Cam's clip-path thirds and his
+   sway origin land where he drew them.
+
+   NO PALM GLOWS. Measured in R3: his lime screen-blend is a 134-channel shift
+   over his own near-black demo ground and 12 channels over this cream plate,
+   which is invisible. They belong on the dark Emporium panel, and they are
+   there. */
+.gw-today {
+  --gw-ch: calc(var(--gw-h) - 4px);                   /* inside the 2px border */
+  --gw-cw: calc(var(--gw-ch) * 1460 / 694);           /* the crop's own aspect */
+  position: absolute; left: 12px; top: var(--gw-top); z-index: 5;
+  width: calc(var(--gw-cw) + 4px); height: var(--gw-h);
+  overflow: hidden; pointer-events: none;
+  background: #d5c8b0;
+  border: 2px solid var(--ink); border-radius: var(--radius-sm); box-shadow: var(--sh);
+  animation: gwFloat 6.4s ease-in-out infinite;
+}
+/* 5.00px peak to peak, 6.4s, resting midpoint 0, so a frozen frame sits dead
+   centre rather than at an extreme. */
+@keyframes gwFloat { 0%, 100% { transform: translateY(2.5px); } 50% { transform: translateY(-2.5px); } }
+/* The 2048 square, scaled so 1460 of its columns fill the plate, then offset by
+   the crop's origin. .wz-scene's own position:relative and aspect-ratio are
+   overridden here; both dimensions are given, so the ratio has nothing to do. */
+.gw-today .wz-scene {
+  position: absolute;
+  width: calc(var(--gw-cw) * 2048 / 1460); height: calc(var(--gw-cw) * 2048 / 1460);
+  left: calc(var(--gw-cw) * -293 / 1460); top: calc(var(--gw-cw) * -442 / 1460);
+}
+@media (prefers-reduced-motion: reduce) {
+  .gw-today { animation: none; }
+}
+/* HE STEPS OUT ON A SHORT PHONE, and the arithmetic is why. Above the fold at
+   320x568 there are 501.8px, of which 201 belong to the tab bar, the doors and
+   the card's own frame. That leaves 300.8 to be split between the scene and the
+   peek, so the figure's box is `238 - peek - plaque` px however it is sliced:
+   at a 24px peek and a plaque small enough to keep his face legible there is
+   nothing left, and the measured result was a 144px Bonehead standing beside a
+   108px pet, which is the figure contract's own failure mode. Above 600px of
+   viewport height there is room for all three and he is drawn; below it the
+   currencies and the peek are kept, because those are what Tom asked for, and
+   the wizard is what gives way. One line to reverse if that is the wrong trade:
+   the figure goes back to 144px and he comes back at 320x568. Graded in both
+   directions by tests/today-peek-audit.mjs, so his disappearing at 852 is red
+   and so is the figure collapsing here. */
+@media (max-height: 600px) {
+  .hero-scene { --gw-h: 0px; }
+  .gw-today { display: none; }
 }
 /* ===== THE TALK BOX: the app's one typing-dialogue surface =====
    Approved in the canvas "The Raising and the Talk Box". Every talking surface
@@ -1366,11 +1506,30 @@ body::before {
    The asymmetric left/right is not a typo: the ink inside the 640 canvas is NOT
    centred in it (bbox 94..509, centre 301 not 320), so a symmetric box hangs the
    drawing 17px to the left. This puts it on the card's centre line. */
-.hero-char { position: absolute; left: -16px; right: -34px; top: 18px; bottom: 79px;
+/* THE FIGURE STARTS WHERE THE STATUS COLUMN ENDS, and that is a sum rather than
+   a number so the plaque can never grow into his head: it is exactly the chips'
+   top offset plus their height plus the gap (--gw-top) plus the plaque
+   (--gw-h). This is also what closes the dead air over his skull. The scene had
+   been taller than the figure could fill, so the top of the card was empty
+   coral; the chips and Gwart occupy that band now and the figure sits under it
+   rather than floating inside it. */
+.hero-char { position: absolute; left: -16px; right: -34px;
+  top: calc(var(--gw-top, 50px) + var(--gw-h, 90px)); bottom: 79px;
   z-index: 2; display: flex; align-items: flex-end; justify-content: center;
   animation: bhIdle 4s ease-in-out infinite;
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, .4)); }
-@keyframes bhIdle { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+/* THE SIDEWAYS SHIFT LIVES INSIDE THE KEYFRAMES, and it has to. bhIdle owns
+   `transform`, so a static translateX on .hero-char is overwritten the moment
+   the animation runs. --bh-shift defaults to 0, so every existing user of this
+   animation is unchanged. */
+@keyframes bhIdle { 0%, 100% { transform: translate(var(--bh-shift, 0px), 0); }
+  50% { transform: translate(var(--bh-shift, 0px), -5px); } }
+/* A BIG PET SHARES THE FRAME. Tom, 2026-08-21: "we need to start moving the
+   bonehead off centre and to the left because it has to share the screen more
+   with its pet." Set on .hero-char and NOT on the scene, because custom
+   properties inherit and the companion runs the same animation: putting it on
+   the parent would walk the pet left by the same 58px. */
+.hero-scene.sharing .hero-char { --bh-shift: -58px; }
 .hero-char .bh-anim { --av-fit: contain; --av-pos: bottom center; }
 .hero-char .bh-anim img { object-fit: contain; object-position: bottom center; }
 /* equipped pet trots along beside the bonehead on the home screen */
@@ -2697,6 +2856,66 @@ body::before {
   white-space: nowrap; }
 .rr-haul .pz { background: rgba(42, 45, 40, .82); font-size: var(--fs-2); padding: 3px 11px 3px 8px; }
 .pz svg { flex: none; }
+
+/* THE HYPE BANNER, directly above the step-race result. It has to out-shout the
+   gold banner underneath it WITHOUT shouting in words (ten of them, all told), so
+   every bit of the weight is art and colour: a coral wash over the card grain, a
+   coral keyline, and figures at 78px, which is bigger than any row the "Out there
+   today" card it replaced ever drew.
+   ONE FRAME, TWO TARGETS. The halves are a grid, not two cards: the eyebrow and
+   the sentence both span the full width, and a single hairline is the only thing
+   between the Boneyard column and the shop column. That is what stops it reading
+   as a list of announcements. */
+.hype { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end; column-gap: 8px; padding: 9px 10px 10px;
+  /* THE ONE KNOB FOR THE ART. hypePlateHtml emits percentages, so the creature
+     boxes are sized here and nowhere else. 320 is the narrowest phone this app
+     supports and it is what caps the small value: two plates, the seal's cell and
+     both captions have to sit on 268px of content. */
+  --hf: 78px; }
+@media (min-width: 380px) { .hype { --hf: 100px; } }
+/* THE SEAL SCALES WITH THEM. petAsideHtml takes its size in px and writes it into
+   the markup, so unlike the two plates she cannot be sized from a custom property:
+   rendered at one number she was 92 against 100px monsters on a 393 phone and 92
+   against 78 on a 320 one, where she dwarfed them. zoom scales the cell's LAYOUT
+   box as well as its pixels, which is the whole requirement here, and one
+   declaration is cheaper than teaching the pet contract a second sizing path. */
+.hype-half.seal .hype-figs { zoom: .85; }
+@media (min-width: 380px) { .hype-half.seal .hype-figs { zoom: 1; } }
+/* THE WASH IS THREE LAYERS AND EACH NEEDS ITS OWN SIZE. .card sets
+   background-size: 150px 150px for the grain, and background-size applies to
+   EVERY layer: the first render tiled both gradients at 150px and painted the
+   banner in vertical bands. Caught in the screenshot, not in the source. */
+.hype { background-image: radial-gradient(115% 95% at 18% 0%, rgba(253, 104, 87, .34), rgba(253, 104, 87, 0) 64%),
+  linear-gradient(158deg, rgba(253, 104, 87, .16), rgba(253, 104, 87, 0) 58%), var(--grain);
+  background-size: cover, cover, 150px 150px;
+  background-repeat: no-repeat, no-repeat, repeat;
+  background-blend-mode: normal, normal, soft-light;
+  border-color: var(--ink); box-shadow: var(--sh), inset 0 0 0 1.5px rgba(253, 104, 87, .38); }
+/* The heading, not a chip. It spans both columns, which is a large part of what
+   keeps the two halves reading as one banner. */
+.hype-eye { grid-column: 1 / -1; justify-self: start; font-family: var(--display); font-weight: 400;
+  font-size: var(--fs-4); line-height: 1; letter-spacing: .04em; color: var(--coral);
+  margin-bottom: 6px; }
+.hype-half { grid-row: 2; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  background: none; border: 0; padding: 0; cursor: pointer; min-width: 0; }
+/* THE HAIRLINE, BACK. She stood on a sunken plate for one revision and Tom read
+   it as a button ("there shouldnt be any button thing around the bee"). Both
+   halves are tap targets and the left one has never carried a box, so neither
+   does she now: the columns are told apart by a line and the gap, and nothing in
+   either half looks pressable. */
+.hype-half.seal { grid-column: 2; padding-left: 9px; border-left: 1px solid var(--line-strong); }
+.hype-half:active { transform: translateY(1px); }
+.hype-figs { display: flex; align-items: flex-end; justify-content: center; gap: 0; min-width: 0; }
+/* The box is fixed and the plate inside it is absolutely placed by
+   hypePlateHtml's measured percentages, so both creatures stand on one floor. */
+.hype-fig { position: relative; display: block; flex: 0 0 auto; width: var(--hf); height: var(--hf);
+  overflow: visible; filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
+.hype-fig img { position: absolute; left: 0; top: 0; max-width: none; }
+.hype-half .petcrop { filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
+.hype-cap { font-family: var(--display); font-weight: 400; font-size: var(--fs-3); line-height: 1.1;
+  letter-spacing: .02em; color: var(--text); text-align: center; }
+.hype-half.seal .hype-cap { color: var(--coral); }
 
 /* THE TODAY BANNER: the permanent home for the result, and the surface that
    carries EVERY place's purse (the poster drops them to keep 4th and 5th above
@@ -6774,6 +6993,45 @@ body::before {
 /* the tab you press acknowledges the press; the active state slides in instead
    of teleporting */
 #tabbar .tab { transition: color .18s ease, transform .12s ease; }
+/* POSTER STICKERS. Tom picked this direction 2026-08-21 out of three, over a
+   quieter "one lamp lit" option. The complaint it answers: "right now it feels
+   all one note."
+   EVERY TAB CARRIES ITS HUE ALL THE TIME, held back into bone while inactive,
+   and the active one becomes a filled sticker in the same language the cards
+   already use (--sh-sm, the hard offset shadow that is never blurred).
+   THE HUES ARE THE DECK'S, and three of the four are tokens this file already
+   defines. Sky is the one the app had no token for, so it is written out with
+   its deck value rather than invented.
+   NO color-mix, ON PURPOSE. The direction was authored with
+   `color-mix(in srgb, var(--nav) 55%, #8f8578)`, which needs iOS 16.4. These
+   four hexes are that mix pre-computed and were verified identical against the
+   rendered output, so the floor stays where it is.
+   MEASURED off the render, not off the stylesheet: worst pair is the active
+   Today label at 4.85:1, and the inactive tinted labels land 5.62 to 7.06,
+   which is BETTER than the 5.17 the untinted bar ships today.
+   THE FAB STAYS LOUDEST. A bar of coloured blocks puts real pressure on the
+   primary action, so it keeps its ring and its own shadow; measured 1.11x the
+   active plate's area and 8px of rise. If a future tab grows, re-measure that
+   ratio rather than trusting it. */
+#tabbar .tab[data-tab="today"]    { --nav: var(--coral);  --nav-dim: #cc7566; }
+#tabbar .tab[data-tab="boneyard"] { --nav: var(--violet); --nav-dim: #968cb6; }
+#tabbar .tab[data-tab="friends"]  { --nav: #72a8f1;       --nav-dim: #7f98bb; }
+#tabbar .tab[data-tab="bonehead"] { --nav: var(--gold);   --nav-dim: #bd9a54; }
+#tabbar { border-top: 2px solid rgba(242, 233, 215, .2); }
+#tabbar .tab { position: relative; border-radius: 12px; color: var(--nav-dim); }
+#tabbar .tab::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  border-radius: 12px; background: var(--nav); box-shadow: var(--sh-sm);
+  opacity: 0; transform: translate(-1px, -1px);
+  transition: opacity .16s ease, transform .16s ease;
+}
+#tabbar .tab.active::before { opacity: 1; transform: none; }
+#tabbar .tab.active { color: var(--ink); font-weight: 800; }
+#tabbar .fab { box-shadow: var(--sh), 0 0 0 4px var(--bg); }
+@media (prefers-reduced-motion: reduce) {
+  /* the plate still appears, it just stops sliding. Never a 0.001s duration. */
+  #tabbar .tab::before { transition: opacity .16s ease; transform: none; }
+}
 #tabbar .tab:active { transform: scale(.92); }
 .fab { transition: transform .12s ease; }
 .fab:active { transform: scale(.92); }
@@ -6797,6 +7055,41 @@ body::before {
 .screen > .route-in { animation: routeIn .2s ease-out; }
 @keyframes routeIn { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .screen > .route-in { animation: none; } }
+
+/* AND THE OLD SCREEN COVERS THE GAP WHILE IT WAITS. Tom, 2026-08-21: "swapping
+   between boneyard and today briefly shows the empty tray that sits behind the
+   app. feels cheap." The rule above hides #screen from the moment a navigation
+   starts until every image on the new screen has decoded, and for that window
+   there was nothing in front of the body gradient but the tab bar. js/app.js
+   (holdOutgoing) MOVES the outgoing nodes into one of these and parks it over
+   #screen; the new screen builds underneath and the copy fades off it.
+   IT SITS BETWEEN #screen AND #tabbar, by DOM order and nothing else: both are
+   positioned with z-index auto, so paint order is source order, and inserting it
+   right after #screen is what keeps the bar and the gear on top of it and
+   tappable. pointer-events: none for the same reason.
+   It carries #screen's own class list (holdOutgoing copies className), so it
+   keeps that screen's padding, including the Boneyard's full-bleed
+   `.screen--map`. overflow is clamped here so a frozen copy never grows a
+   scrollbar of its own; scrollTop is still settable on it, which is how the copy
+   freezes at the offset the player left.
+   THE FADE IS A TRANSITION AND THE REMOVAL IS A TIMER, deliberately. Nothing
+   waits on transitionend, so a reduced-motion player, whose transition is none,
+   gets a clean hard cut at the same moment instead of a copy that never leaves.
+   No keyframes, no iteration count: there is nothing here to collapse to 0.001s
+   and run a thousand times a second. */
+.screen-held {
+  position: absolute; left: 0; right: 0;
+  overflow: hidden; pointer-events: none;
+  transition: opacity .18s ease-out;
+}
+.screen-held-out { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .screen-held { transition: none; } }
+/* A held swap already has a finished picture on top, so the arriving child must
+   NOT also fade up from transparent: two crossed opacity fades leave a quarter of
+   the ground visible at the midpoint, which is the tray again. The class stays on
+   the child regardless (it is the router's "arrived by a navigation" marker and
+   two audits read it); only the animation is suppressed. */
+.screen.screen-swap > .route-in { animation: none; }
 /* Sheets are the app's other surface and get the same treatment. SCOPED TO
    #sheets deliberately: the Boneyard reuses `.sheet-body` as a screen class, so an
    unscoped rule matched it, tied on specificity with `.screen > .route-in` and won
@@ -9089,3 +9382,239 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .rk-rr small { font-size: 10.5px; color: var(--text-3); }
 .rk-left { flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--text-2);
   background: var(--surface-3); border-radius: 7px; padding: 3px 7px; }
+
+/* GWART'S MENAGERIE. The pet shelf sits above the rack: Tom, 2026-08-21, wanted
+   "a hero banner above the normal shop stuff for bumbleseal ... below on one
+   segment you can have a scrolling list of just her accessories and then the
+   normal shop below that." The rack's nine cells are untouched; this is its own
+   block, so the theme rules and the adjacency rule the rack lives by still hold. */
+.pet-shelf { margin: 0 0 18px; }
+.pet-hero { position: relative; margin: 0 0 4px; border: 2px solid rgba(242, 233, 215, .10);
+  border-radius: 16px; overflow: hidden; display: flex; align-items: flex-end; gap: 6px;
+  padding: 8px 12px 12px;
+  background: radial-gradient(ellipse 90% 70% at 50% 46%, #4a3a10 0%, #2a2109 46%, rgba(13, 12, 18, 0) 100%); }
+.pet-new { position: absolute; left: 12px; top: 11px; font-size: 10px; font-weight: 800;
+  letter-spacing: .14em; padding: 3px 8px; border-radius: 999px; background: var(--text); color: var(--ink); }
+.pet-hero-art { flex: none; margin-top: 6px; }
+.pet-hero-copy { flex: 1; min-width: 0; padding-bottom: 10px; }
+.pet-kind { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; color: var(--gold); }
+.pet-name { font-family: var(--display); font-size: 26px; line-height: 1.02; margin: 2px 0 5px; }
+.pet-hero-copy p { font-size: 11.5px; opacity: .74; line-height: 1.38; margin: 0 0 9px; }
+.pet-buy { font-size: 14px; }
+/* scroll-snap so a flick lands on a tile rather than between two */
+.pet-row { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; }
+.pet-row .rk { width: 112px; flex: none; scroll-snap-align: start; }
+/* LOCKED, NOT HIDDEN. Every accessory is drawn for HER body and would hang in
+   empty air on any other pet, so it cannot be sold before she is. Showing it
+   locked says why, and is also the reason to want her. */
+.pet-locked .rk-stage { opacity: .45; }
+.pet-lock { font-size: 10.5px; font-weight: 700; color: var(--text-3); text-align: center; padding: 6px 4px; }
+.rk-owned { font-size: 10.5px; font-weight: 700; color: var(--text-2); text-align: center; padding: 6px 4px; }
+/* =====================================================================   GWART'S EMPORIUM — the Shop tab's header (option A, approved 2026-08-20)
+   ============================================================================
+   The Shop tab drops the hub's character header entirely (no name heading, no
+   portrait card, no LV/streak row, no stat pills) and puts the shopkeeper there
+   instead: a full-bleed panel, Gwart large and centred, the wordmark in the
+   headroom above him, the Settings gear in his bottom corner. Wardrobe,
+   Backpack and Build share this hub and are untouched: the swap is one ternary
+   arm in renderCharacter(), see js/app.js.
+
+   WHY OPTION A AND NOT THE WHOLE FIGURE. Six builds were rendered and measured
+   (scratchpad emporium/, sheet4.png). A is the CROP FIX, not a reframe: Gwart
+   stays at the size Tom approved, face 77px, and what changes is where he is cut
+   off. The complaint it fixes, in source rows off the 2048px art: the shipped
+   fade started at row 1020 while both hands run 746..1105, so 23.7% of his hands
+   were dissolving into the floor. He now cuts at row 1240, below the hands and
+   below the belly, at the row where his feet start, so he reads as standing
+   behind a counter rather than as melting into one. His feet are still absent
+   and Tom accepted that: the alternatives that keep them (B/C/D) cost the face
+   77 -> 60, 52 or the grid a whole extra tile row.
+
+   EVERY NUMBER BELOW IS DERIVED FROM THE ART, NOT TUNED. The art's own alpha
+   bbox is [183, 202, 1821, 1689] in the 2048 square, so:
+     --gw-k     384 / 1638   the scale that makes his ink 384 CSS px wide
+     --gw-side  2048 * k     the square the animation needs (Cam: aspect-ratio 1)
+     (--gw-off is GONE. It was 1002 * k, the x-centre of the UNION of both
+      layers' ink, and centring on that leaned the wizard 3px right because the
+      stars layer's ink sits 28.5px left of centre in its own square while his
+      sits half a pixel off dead centre. .gw-art centres the square instead.)
+     --gw-top   70 - 202*k   drops the art so the top of the sparkle arc lands
+                             exactly on the wordmark band's floor
+     --gw-panel top + 1240*k + 14.5   the cut row plus the opaque floor
+   Panel 327.84px, and with the chips' own 14px margin the grid pays 150.7px
+   against today's 191.1px header. Product tiles: 1.08 rows at --sat 0, 0.89 at
+   --sat 59.
+
+   THE FLOOR IS var(--bg) AND THE BLOCK IS PAINTED, so the seam under the panel
+   is zero BY CONSTRUCTION rather than by a matched hex. The mockup could get
+   away with #111122 because it sat on a flat plate; the app's ground is a
+   four-stop body gradient plus three radials, and no constant matches that at
+   every y. So .gw-hero paints var(--bg) across the panel AND the 14px below it,
+   the floor fades to the same var(--bg), and the two sides of the seam are the
+   same declared colour.
+
+   NO GRAIN LAYER HERE, AND THAT IS A BUG FIX, NOT TASTE. body::before is the
+   app's grain and it is a BACKDROP: position fixed, z-index 0, behind #app at
+   z-index 1, so an opaque panel is supposed to occlude it. An earlier build of
+   this panel copied that backdrop's recipe (opacity .5, mix-blend-mode
+   soft-light) as a LOCAL layer, and soft-light over near-black is a net LIFT:
+   the headroom fogged to (59,59,71) at sigma 8.90 against the app's own 1.68.
+   That is what Tom saw "spilling everywhere". If grain is ever wanted here the
+   local idiom is .hero-scene's ::after: opacity .07 and NO blend mode.
+
+   THE GEAR MOVES INTO THE PANEL rather than floating over Gwart's hat. The
+   global #gearBtn is hidden for this tab and un-hidden by the same code on the
+   way out (anti-regression rule 8), and the one in here is the same .gear-btn
+   with the same target, so nothing new was styled. Measured on the render: 0%
+   wordmark ink and 0% art ink inside its 38px box, disc against its own ground
+   1.16:1 where the floating gear sits at 1.11:1 today.
+
+   Guard: tests/emporium-audit.mjs. */
+.gw-hero {
+  --gw-side: 480.117px;
+  --gw-top: 22.645px;
+  --gw-panel: 327.841px;
+  --gw-band: 70px;
+  --gw-fl: 30px;
+  --gw-air: 14.5px;
+  position: relative;
+  /* full-bleed: out through .screen's own calc(var(--sat) + 14px) / var(--pad) */
+  margin: calc(-1 * (var(--sat) + 14px)) calc(-1 * var(--pad)) 0;
+  padding-bottom: 14px;
+  background: var(--bg);
+}
+/* the chips' own 14px margin is the gap, and .gw-hero already paid it above */
+.gw-hero + .ch-tabs { margin-top: 0; }
+.gw-panel {
+  position: relative; overflow: hidden; height: calc(var(--sat) + var(--gw-panel));
+  /* isolation, because the palm glows are mix-blend-mode: screen and a screen
+     blend with no stacking context of its own reaches every pixel below it. */
+  isolation: isolate;
+  /* K_DIM, the approved dim level (r2, Tom 2026-08-20). The four stops are the
+     deck's crimson ramp at full strength — 194,21,46 / 160,17,38 / 109,14,30 /
+     43,10,19 — and --gw-dim is the ONE number that sets how far down they are
+     pulled, so a different level is a one-line change and not a recomputed ramp.
+     At 0.45 that lands on rgb(87,9,21) at the core, which is what every contrast
+     and ink number on this panel was measured against. The last stop is var(--bg)
+     at zero alpha, so the glow dies into the ground rather than into black. */
+  --gw-dim: 0.45;
+  background: radial-gradient(ellipse 84% 66% at 50% 54%,
+    rgb(calc(194 * var(--gw-dim)) calc(21 * var(--gw-dim)) calc(46 * var(--gw-dim))) 0%,
+    rgb(calc(160 * var(--gw-dim)) calc(17 * var(--gw-dim)) calc(38 * var(--gw-dim))) 22%,
+    rgb(calc(109 * var(--gw-dim)) calc(14 * var(--gw-dim)) calc(30 * var(--gw-dim))) 46%,
+    rgba(calc(43 * var(--gw-dim)), calc(10 * var(--gw-dim)), calc(19 * var(--gw-dim)), 0.7) 72%,
+    rgba(13, 12, 18, 0) 100%);
+}
+/* CENTRE THE SQUARE, because Cam already centred Gwart inside it. This used to
+   be calc(50% - var(--gw-off)) with --gw-off derived from 1002*k, the x-centre
+   of the UNION of both layers' ink. That union is dragged left by the stars
+   layer, whose ink centre sits at 995.5 in its own 2048 square while the
+   WIZARD's sits at 1023.5, half a pixel off dead centre. So centring the union
+   leaned the subject right, measured 3.0px off centre on the rendered pixels at
+   393 and spotted by Tom on sight. Expressed as half of --gw-side rather than as
+   a second constant so it cannot drift if the scale is ever retuned. */
+.gw-art { position: absolute; left: calc(50% - var(--gw-side) / 2); top: calc(var(--sat) + var(--gw-top)); width: var(--gw-side); }
+/* rgba(13,12,18,0) is var(--bg) at zero alpha: naming `transparent` here would
+   still be correct in every engine that ships today, but spelling the colour out
+   is what makes the top of the fade provably the same hue as its bottom. */
+.gw-floor {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; pointer-events: none;
+  height: var(--gw-fl);
+  background: linear-gradient(to top, var(--bg) 0, var(--bg) var(--gw-air), rgba(13, 12, 18, 0) 100%);
+}
+/* The app's own sticker shadow (3px 4px 0 var(--ink)), not a straight-down drop:
+   every other display heading in here throws to the lower right and one that
+   throws straight down reads as a different app. -3px is an optical nudge, not a
+   centring fix: Bangers' apostrophe and the terminal M do not weigh the same. */
+.gw-wm {
+  position: absolute; left: 0; right: 0; top: calc(var(--sat) + 14px); z-index: 4;
+  font-family: var(--display); font-weight: 400; font-size: 55px; line-height: 1;
+  letter-spacing: 0.004em; text-align: center; color: var(--text);
+  transform: translateX(-3px); text-shadow: 3px 4px 0 var(--ink);
+}
+.gw-gear { top: auto; bottom: 14px; right: 16px; }
+
+/* ---- Cam's spell-cast animation, inlined VERBATIM from tally-refs/wizard/
+   animation/wizard-cast.css. Not one keyframe, duration, easing or percentage is
+   altered; the only additions are the reduced-motion block Cam's README asks for
+   and the .gw- prefix on nothing at all (his class names are kept so the file can
+   be diffed against the handoff). ---- */
+@keyframes zBreathe { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.012) scaleX(1.003)} }
+@keyframes zEnterCine { 0%{transform:scale(.88) translateY(2.5%);opacity:0;filter:blur(8px)} 25%{filter:blur(1.5px)} 45%{opacity:.7;filter:blur(0)} 100%{transform:scale(1) translateY(0);opacity:1;filter:blur(0)} }
+/* starts and ends at 0deg so the delayed loop begins without a jolt */
+@keyframes zOrbitSoft { 0%,100%{transform:rotate(0deg)} 25%{transform:rotate(1.1deg)} 75%{transform:rotate(-1.1deg)} }
+@keyframes zTwA { 0%,100%{opacity:1} 22%{opacity:.35} 48%{opacity:.9} 71%{opacity:.5} }
+@keyframes zTwB { 0%,100%{opacity:.5} 30%{opacity:1} 55%{opacity:.4} 80%{opacity:.95} }
+@keyframes zTwC { 0%,100%{opacity:.8} 18%{opacity:.45} 42%{opacity:1} 76%{opacity:.4} }
+@keyframes zGlowIn { 0%{opacity:0;transform:scale(.6)} 100%{opacity:.55;transform:scale(1)} }
+@keyframes zGlowIdle { 0%,100%{opacity:.35;transform:scale(1)} 50%{opacity:.75;transform:scale(1.12)} }
+
+.wz-scene { position:relative; aspect-ratio:1; overflow:hidden; }
+.wz-scene img { position:absolute; inset:0; width:100%; height:100%; }
+.wz-body { position:absolute; inset:0; transform-origin:50% 95%; animation:zBreathe 5.4s ease-in-out infinite; }
+.wz-enter { position:absolute; inset:0; transform-origin:50% 62%; animation:zEnterCine 2.4s cubic-bezier(0.22,1,0.36,1) both; }
+.wz-sway { position:absolute; inset:0; transform-origin:50% 85%; animation:zOrbitSoft 9s ease-in-out 2.4s infinite; }
+.wz-stars-l { clip-path:inset(0 62% 0 0);   animation:zTwA 3.6s ease-in-out 2.4s infinite; }
+.wz-stars-m { clip-path:inset(0 38% 0 38%); animation:zTwB 4.4s ease-in-out 2.4s infinite; }
+.wz-stars-r { clip-path:inset(0 0 0 62%);   animation:zTwC 3s   ease-in-out 2.4s infinite; }
+.wz-glow { position:absolute; width:12%; height:9%; border-radius:50%;
+  background:radial-gradient(circle,rgba(211,255,60,.55),transparent 70%);
+  filter:blur(6px); mix-blend-mode:screen;
+  animation:zGlowIn 1.6s cubic-bezier(0.22,1,0.36,1) both, zGlowIdle 4.5s ease-in-out 2.4s infinite; }
+.wz-glow.left  { left:16%; top:40%; }
+.wz-glow.right { left:72%; top:40%; animation-delay:0s,4.65s; }
+
+/* Cam's README: "keep the entrance as a plain fast fade, disable the sway; the
+   twinkle is low-amplitude and can stay". THE DURATIONS ARE NOT COLLAPSED. The
+   sway, the breathe, the twinkle and the glow idle are all INFINITE loops, and
+   this repo has already been bitten by `animation-duration: .001s` under reduced
+   motion, which runs a loop a thousand times a second. An infinite loop is
+   switched OFF with animation-name: none. The twinkle keeps its authored
+   3.6 / 4.4 / 3s. */
+@media (prefers-reduced-motion: reduce) {
+  .gw-panel .wz-enter, .gw-today .wz-enter { animation: zGwFade .28s linear both; }
+  .gw-panel .wz-sway, .gw-panel .wz-body,
+  .gw-today .wz-sway, .gw-today .wz-body { animation-name: none; }
+  .gw-panel .wz-glow { animation: zGwFade .28s linear both; opacity: .45; }
+}
+@keyframes zGwFade { from { opacity: 0 } to { opacity: 1 } }
+/* ------------------------------------------------------------ THE WANDERER
+   IN THE PIT. Tom, with a mockup: "make this work better than my crude mock up
+   but he should be about this big in the pit". His mockup has the Wanderer
+   filling the stage, head near the top and feet on the floor, with the player's
+   bonehead small at the bottom left. The point is not size, it is the GAP: it
+   should read as fighting something far bigger than you.
+
+   This is per-boss on purpose and touches nothing else. The Glutton keeps
+   #foeStage.glutton-foe, the Live Wire keeps #foeStage.mage-foe, and the Mimic
+   keeps the default .fstage, which is a decision rather than an oversight: the
+   Mimic is a chest that bit you and is deliberately NOT a wall.
+
+   WHY THE NUMBERS ARE WHAT THEY ARE, and they were measured off the render at
+   393x852 and 320x568, not derived on paper. His plate is a 640-square whose ink
+   only occupies 562x417 of it (the art's own alpha box), so 35% of the box is
+   transparent and the element's height says nothing about how big he looks. Two
+   consequences drive everything below:
+     - object-fit:contain renders the square at min(width, height), so WIDTH is
+       the binding constraint in a landscape arena, not height. Growing the
+       height past the arena's width buys nothing but overflow.
+     - 21% of the box hangs below his boots, so a stage sitting on the floor line
+       leaves him floating a fifth of his own height above it. The negative
+       margin below is that strip, pulled off, so his feet land on the floor. */
+.arena.boss-wanderer .fighterG.foe-side { width: 100%; transform: translateX(14px); }
+#foeStage.wanderer-foe {
+  /* Wider than the column and taller than the arena on purpose: the height is
+     what keeps WIDTH the binding dimension, so his ink grows with the arena's
+     width rather than being letterboxed by its height. */
+  width: 100%; height: clamp(300px, 130cqh, 430px); align-self: end;
+  /* the empty strip under his boots, pulled off so he stands on the floor */
+  margin-bottom: clamp(-120px, -35cqh, -92px);
+}
+/* THE PLAYER STEPS BACK AND TO THE LEFT, exactly as they do for the Live Wire,
+   and further: the gap IS the design. Scaled rather than re-sized so nothing in
+   the fighter's own layout (the pet, the KO pose, the lunge transforms) has to
+   know about it, and anchored bottom-centre so their feet stay on the same
+   floor line as his. */
+.arena.boss-wanderer .fighterG:not(.foe-side) { transform: translateX(-52px); z-index: 3; }
+.arena.boss-wanderer .fighterG:not(.foe-side) > .fstage { transform: scale(.58); transform-origin: bottom center; }
+.arena.boss-wanderer .pet-fighter { transform: translateX(14px); z-index: 4; }

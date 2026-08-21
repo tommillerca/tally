@@ -152,11 +152,27 @@ const SPEAKER = 'BONEHOUND';
 
 /* EVERY talkBoxHtml() CALL SITE IN THE APP. A site that is not here fails
    COVERAGE below; a site that is here and undriven prints its reason on every
-   run so it cannot rot into "covered". EMPTY ON PURPOSE as of v418: Today's line
-   came off and Gwart's is not built. The rows below still grade the module, and
-   the moment Gwart (or anything else) renders a box, COVERAGE goes red until it
-   is registered here. */
-const SITES = {};
+   run so it cannot rot into "covered". It was EMPTY from v418, when Today's line
+   came off, until v421, when the Wanderer's encounter became the first app
+   surface to render one. That is the mechanism working: COVERAGE went red the
+   moment a new box shipped and stayed red until it was registered and driven. */
+const SITES = {
+  /* THE FIRST APP SURFACE TO RENDER A TALK BOX since Today's line came off in
+     v418. Not Gwart, who this comment kept predicting: the Wanderer's pre-fight
+     encounter got there first (js/wanderer.js, showWandererEncounter).
+     Driven, and driven the way this audit wants rather than by rendering the
+     markup and reading it back: tests/wanderer-encounter-audit.mjs opens the real
+     overlay, lets both lines type through runTalkBox, taps the real buttons and
+     screenshots the transition. Its LINES row asserts the SHIPPED strings arrive
+     in .tb-txt, which is the thing that would break if this module regressed. */
+  'js/wanderer.js:wnd-enc-box': { driven: true,
+    why: "the Wanderer's pre-fight encounter, driven end to end by tests/wanderer-encounter-audit.mjs: real overlay, both lines typed through runTalkBox, real taps on the real Fight/Flee buttons" },
+  /* The Mimic's reveal, the SECOND app surface to render a box, and deliberately
+     the smaller shape of the two: one un-held line, no speaker, no choice, so it
+     exercises the SYSTEM state where the Wanderer exercises the WAITING one. */
+  'js/mimic.js:mimic-enc-box': { driven: true,
+    why: "the Mimic's pre-fight reveal, driven end to end by tests/mimic-audit.mjs: the real overlay over the real app, the shipped line typed through runTalkBox, a real tap mid-line, and the frames sampled in pixels through the handover" },
+};
 
 const puppeteer = await loadPuppeteer();
 const browser = await puppeteer.launch({

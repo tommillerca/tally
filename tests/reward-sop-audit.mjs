@@ -188,7 +188,16 @@ const ACTIONS = [
   { id: 'js/wheel.js:PRIZES', sites: 7, undriven: "the prize table's grant thunks; the day gate is kv 'wheelLastDate', set BEFORE the grant in maybeShowDailyWheel's commit(), and tests/wheel-audit.mjs drives the wheel itself" },
 
   // ---- app.js: the screens that pay ------------------------------------
-  { id: 'js/app.js:openFight', sites: 13, undriven: 'the fight settlement: eleven modes, every one of them delegating to a claim function registered above (claimFriendBattle, claimDenWin, claimMiniWin, claimGluttonWin) or gated on an award() key it reads before paying. The two remote branches are pinned by name by the NO-OP guards in tests/unit.test.js, and tests/glutton-audit.mjs and tests/spire-phase3-audit.mjs drive the two that shipped exploits' },
+  /* 13 -> 17, RE-GRADED, and the count was two behind before this change: the
+     Mimic's settle landed without touching this line, which is exactly the
+     drift this row exists to catch. The four sites are the two spawn ambushes,
+     two each (the xp award and the crate it hands over). Both are the same
+     shape and both are graded: each claims the SPAWN'S OWN ledger key, so the
+     boss and the loot he replaced compete for one row that db.addIfAbsent can
+     only create once, and both orders plus three-way concurrency are driven
+     against a real IndexedDB by tests/mimic-audit.mjs and
+     tests/wanderer-boneyard-audit.mjs (ONE-SHOT / ATOMIC). */
+  { id: 'js/app.js:openFight', sites: 17, undriven: 'the fight settlement: thirteen modes, every one of them delegating to a claim function registered above (claimFriendBattle, claimDenWin, claimMiniWin, claimGluttonWin) or gated on an award() key it reads before paying. The two remote branches are pinned by name by the NO-OP guards in tests/unit.test.js; tests/glutton-audit.mjs and tests/spire-phase3-audit.mjs drive the two that shipped exploits; and the two Boneyard ambushes (mimic, wanderer) are driven by tests/mimic-audit.mjs and tests/wanderer-boneyard-audit.mjs' },
   { id: 'js/app.js:renderBoneyard', sites: 4, undriven: 'the map: the tribute button and the spawn button, both delegating to collectTribute and collectSpawn, which are driven above. Was 5 until 2026-08-18: a collect also paid a garden seed, and with the Bone Garden off the player\'s path a seed cannot be planted, so that grant came out' },
   { id: 'js/app.js:openKitchen', sites: 3, undriven: 'awardCapped on a served dish (driven above), plus a coin-priced forage' },
   { id: 'js/app.js:openHollow', sites: 1, undriven: 'awardCapped on a harvested bed; harvestPlot is the authority and is driven above' },
@@ -214,6 +223,10 @@ const ACTIONS = [
     transition: 'a rack piece goes from unowned to owned, once and forever',
     authority: 'db.addIfAbsent on the kv row rackbuy:<artId>, claimed BEFORE anything is deducted, so the check and the write are one transaction',
     undriven: "driven to destruction by tests/purchase-firewall.mjs, which is where the second-attempt proof lives rather than here: it buys through the real function against a real IndexedDB, measures every store either side, and performs the same purchase twice sequentially AND three times concurrently. Proven red there on a kvGet/kvSet claim (3 callers charged 7,200 for a 2,400 item) and on paying before the claim" },
+  { id: 'js/loot.js:buyPetItem', sites: 2,
+    transition: 'Bumbleseal, or one piece of her wardrobe, goes from unowned to owned, once and forever',
+    authority: 'db.addIfAbsent on the kv row petbuy:<id>, claimed BEFORE anything is deducted, so the check and the write are one transaction. Identical to buyRackItem by design; the function header says that if the two ever diverge, the divergence is the bug',
+    undriven: "driven to destruction by tests/purchase-firewall.mjs, added 2026-08-21 when THIS ROW WAS THE THING THAT WAS MISSING: the function shipped on ext/bumbleseal-pets and reward-sop found it unregistered during the v421 merge. A registry row saying 'same shape as the one next door' is an argument, not evidence, and this is the most expensive button in the game, so it got the rack's own three legs instead. Measured green there: 50,000 spent exactly once, a second sequential buy pays 0, three concurrent buys of one 8,000 accessory spend 8,000 and grant 1. Plus a leg the rack has no equivalent for, PET-GATE: an accessory is refused with reason 'needs-pet' before she is owned AND the balance does not move, because every piece is drawn positioned for HER body and would hang in empty air on any other pet" },
   { id: 'js/app.js:openGiftSheet', sites: 1, undriven: 'a REFUND of coins this device already deducted, on a failed send; not a payout' },
   { id: 'js/app.js:openSurveySheet', sites: 1, undriven: "one-time, gated on kv 'surveyDone' read before the grant" },
 ];

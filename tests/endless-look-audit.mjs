@@ -46,7 +46,7 @@ try {
      was 0%. 51 itself is included by name because it is the first failing rank. */
   const RANKS = [1, 4, 8, 12, 24, 40, 48,
     /* every rank across the boundary, because roughly half of them are drawn
-       bosses (glutton/mage) that bring their own art and are skipped: sampling
+       bosses (glutton/mage/mimic/wanderer) that bring their own art and are skipped: sampling
        sparsely up here left THREE ordinary ranks to grade, and a three-row
        sample is how a check ends up asserting almost nothing. */
     51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65,
@@ -73,7 +73,12 @@ try {
          otherwise whatever openFight's fallback generator produces */
       const got = cfg ? (cfg.foeOutfit || null) : null;
       return {
-        rank: r, name: foe.name, drawn: !!(foe.glutton || foe.mage),
+        /* FOUR drawn bosses now, not two: the Mimic and the Wanderer joined the
+           Glutton and the Live Wire in v421. A drawn boss has no roster `look`
+           by design, so grading one as an ordinary rank marks healthy code red.
+           Kept as an explicit list rather than "has no look", because "has no
+           look" is exactly the defect this audit exists to catch. */
+        rank: r, name: foe.name, drawn: !!(foe.glutton || foe.mage || foe.mimic || foe.wanderer),
         want, got,
         carried: !!(got && want && JSON.stringify(got) === JSON.stringify(want)),
         approvedFace: !!(got && approved.has(JSON.stringify(got))),

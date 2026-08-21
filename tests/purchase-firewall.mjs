@@ -263,9 +263,60 @@ const res = await page.evaluate(async () => {
   }
   const rrSpent = rrStart - (await loot.coins());
 
+  /* ---- THE PET SHOP, driven the same way and for the same reason ----
+     buyPetItem is buyRackItem's twin (its own header says so: "If this ever
+     diverges from buyRackItem, the divergence is the bug") and it is the most
+     expensive button in the game at 50,000 coins. Until 2026-08-21 nothing drove
+     it: reward-sop found it as an unregistered paying site during the v421 merge,
+     and a registry row saying "same shape as the one next door" is an argument,
+     not evidence. So it gets the same three legs the rack gets: pay once, refuse
+     the second attempt, and survive three concurrent callers.
+     THE GATE LEG IS ITS OWN THING and has no rack equivalent: an accessory is
+     unbuyable until the pet is owned, because every piece is drawn positioned
+     for HER body, so a purse sold to someone without her hangs in empty air.
+     Graded here rather than trusted, and graded on the MONEY: refused is not
+     enough, the balance must not move. */
+  await db.kvSet('coins', 500000);
+  /* PET_SHOP lives in the data module, not in loot.js: loot.js imports it. Read
+     it from its own home so this leg cannot silently grade a stale re-export. */
+  const { PET_SHOP } = await import('/data/boneheadz.js');
+  const petId = PET_SHOP.pet.id;
+  const accId = PET_SHOP.items[0].id;
+
+  /* the gate, BEFORE she is owned: an accessory must be refused AND free */
+  const g0 = await loot.coins();
+  const gate = await loot.buyPetItem(accId);
+  const gateSpent = g0 - (await loot.coins());
+
+  const petPrice = PET_SHOP.pet.coin;
+  const p0 = await loot.coins();
+  const petBefore = await snap();
+  const petBuy1 = await loot.buyPetItem(petId);
+  const petSpent = p0 - (await loot.coins());
+  const petAfter = await snap();
+
+  /* the second attempt, sequentially: refused, and free */
+  const p1 = await loot.coins();
+  const petBuy2 = await loot.buyPetItem(petId);
+  const petSpent2 = p1 - (await loot.coins());
+
+  /* three concurrent callers on an accessory she now unlocks */
+  const accPrice = PET_SHOP.items[0].coin;
+  const a0 = await loot.coins();
+  const accRs = await Promise.all([
+    loot.buyPetItem(accId), loot.buyPetItem(accId), loot.buyPetItem(accId),
+  ]);
+  const petRace = { id: accId, price: accPrice, spent: a0 - (await loot.coins()),
+    granted: accRs.filter(r => r.ok).length };
+
+  const petOwned = [...(await loot.ownedCosmeticIds())];
+
   return { target: { ...target, gear: target.gear.id }, coinPrice, dustPrice, before, after, afterTwice,
     buy1, buy2, wearBefore, wearAfter, wearOther, otherArt: other ? other.artId : null, race, dustLeg,
-    ladder: loot.RACK_REROLL_LADDER, rrSteps, rrSpent };
+    ladder: loot.RACK_REROLL_LADDER, rrSteps, rrSpent,
+    pet: { petId, accId, petPrice, accPrice, gate, gateSpent, petBuy1, petBuy2, petSpent, petSpent2,
+      petRace, ownsPet: petOwned.includes(petId), ownsAcc: petOwned.includes(accId),
+      petBefore, petAfter } };
 });
 
 if (res.error) { ok('SETUP the audit found something to grade', false, res.error); }
@@ -331,6 +382,28 @@ else {
   ok('ONCE-RACE three concurrent buys of the same piece charge for exactly one',
     !!res.race && res.race.spent === res.race.price && res.race.granted === 1,
     res.race ? `3 callers spent ${res.race.spent} (price ${res.race.price}), ${res.race.granted} granted` : 'not run');
+
+  /* ---- THE PET SHOP ---- */
+  const P = res.pet;
+  ok('CONTROL the pet leg ran against a real, non-zero price',
+    !!P && P.petPrice > 0 && P.accPrice > 0 && P.petBuy1.ok === true,
+    P ? `${P.petId} at ${P.petPrice} coins, ${P.accId} at ${P.accPrice}, buy ok=${P.petBuy1.ok}` : 'not run');
+  ok('PET-GATE an accessory is refused before the pet is owned, and costs nothing',
+    !!P && P.gate.ok === false && P.gate.reason === 'needs-pet' && P.gateSpent === 0,
+    P ? `reason=${P.gate.reason}, coins moved ${P.gateSpent}` : 'not run');
+  ok('PET-COINS the balance fell by exactly the pet\'s price',
+    !!P && P.petSpent === P.petPrice, P ? `fell ${P.petSpent} against price ${P.petPrice}` : 'not run');
+  ok('PET-ONCE-SEQ buying her a second time pays nothing',
+    !!P && P.petBuy2.ok === false && P.petSpent2 === 0,
+    P ? `second call ok=${P.petBuy2.ok} reason=${P.petBuy2.reason}, coins moved ${P.petSpent2}` : 'not run');
+  ok('PET-ONCE-RACE three concurrent buys of one accessory charge for exactly one',
+    !!P && P.petRace.spent === P.petRace.price && P.petRace.granted === 1,
+    P ? `3 callers spent ${P.petRace.spent} (price ${P.petRace.price}), ${P.petRace.granted} granted` : 'not run');
+  ok('PET-GRANT what was paid for is actually owned afterwards',
+    !!P && P.ownsPet && P.ownsAcc, P ? `pet=${P.ownsPet} accessory=${P.ownsAcc}` : 'not run');
+  ok('PET-FIREWALL the pet purchase moved no gear loadout and no other equipment',
+    !!P && P.petBefore.gearloadout === P.petAfter.gearloadout,
+    P ? `${P.petBefore.gearloadout} -> ${P.petAfter.gearloadout}` : 'not run');
 
   /* ---- DUST ---- */
   ok('CONTROL the dust leg ran with a real, non-zero dust price',

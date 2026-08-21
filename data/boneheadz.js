@@ -1867,6 +1867,43 @@ const BH_ITEMS_ALL = [
   "name": "Gold Stick"
  },
  {
+  "id": "C6",
+  "slot": "C",
+  "rarity": "legendary",
+  "hatchChance": 0.01,
+  "name": "Bumbleseal"
+ },
+ {
+  "id": "CE1",
+  "slot": "CE",
+  "rarity": "epic",
+  "name": "Bug-Eye Shades"
+ },
+ {
+  "id": "CB1",
+  "slot": "CB",
+  "rarity": "rare",
+  "name": "Courier Purse"
+ },
+ {
+  "id": "CB2",
+  "slot": "CB",
+  "rarity": "epic",
+  "name": "Charmed Courier"
+ },
+ {
+  "id": "CG1",
+  "slot": "CG",
+  "rarity": "legendary",
+  "name": "Live Wire Stinger"
+ },
+ {
+  "id": "CM1",
+  "slot": "CM",
+  "rarity": "uncommon",
+  "name": "Pimple Patches"
+ },
+ {
   "id": "C1",
   "slot": "C",
   "rarity": "epic",
@@ -1994,7 +2031,87 @@ export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${it
    to fill its slot, which is what the figure contract means by aligning on INK.
    Re-measure with PIL's getbbox on assets/bh/C/*.png if the art is ever redrawn;
    every value below is within 0.002 of the current files. */
+
+/* PET ACCESSORY SLOTS, and the reason they are their own table.
+ *
+ * They are NOT in BH_SLOTS. Everything that draws the player figure iterates
+ * BH_SLOTS (js/app.js has nine such sites), so a pet accessory listed there
+ * would be painted on the BONEHEAD, not on the pet.
+ *
+ * And they do NOT use slot 'C'. Six places filter on `slot === 'C'` to mean
+ * "a pet species": hatchEgg and breed draw their pool from it, the pet roster
+ * reads it, and the shiny-gap list reads it. A sellable accessory carrying 'C'
+ * would become hatchable from a 60-dust Mystery Egg, which is the shop giving
+ * away its own stock on the same screen that sells it. Distinct slot codes
+ * exclude them from all six by construction rather than by remembering a flag.
+ *
+ * Z-ORDER: the glasses are ALWAYS on top. Tom, 2026-08-20: "the glasses are
+ * ALWAYS on top in the hierarchy for cosmetics." One number, here, rather than
+ * an ordering rule spread across the renderer.
+ *
+ * Cam draws every layer pre-positioned in the same 2048 square as the base, so
+ * compositing is a plain stack: no per-pet anchors, no offsets, no art
+ * multiplied per pet. Each layer is drawn with the SAME crop transform as the
+ * base, which is what keeps it registered.
+ */
+/* GWART'S MENAGERIE: what the shop sells for a pet, and at what price.
+ *
+ * THE SHOT BOX IS THE PRODUCT PHOTO. Framing an accessory's bounding box puts
+ * the purse's STRAP in the middle of the tile, because the strap stretches the
+ * box upward while the BAG holds the ink. Tom, 2026-08-21: "your purse is
+ * focused on the strap right now in the preview not the bag." So each item
+ * carries the box that holds its ink mass, centred on its own centroid, as
+ * fractions of the 2048 square. Measured, not eyeballed. Patches is the wide one
+ * because it is three scattered marks (flower, heart, star) rather than one
+ * mass, and a tight box drops two of them out of shot.
+ *
+ * EVERY ACCESSORY BELONGS TO ONE PET, and that is a fact about the art, not a
+ * rule someone chose. Measured 2026-08-21: the glasses overlap Bumbleseal's own
+ * ink by 94.8% and overlap Drizzle, Mallard and Bulldog by 0.0%. Cam draws each
+ * piece positioned for that pet's body inside the shared canvas, so on any other
+ * pet it would float in empty space. A second pet needs its own set drawn.
+ *
+ * PRICES ARE TOM'S (2026-08-21), and deliberately high: "we want to sell the pet
+ * for 50,000 and her accessories need to cost more too this is a test to see
+ * appetite for pet cosmetics." For scale, the rack's dearest piece is 3,000. */
+/* HOW BIG A PET STANDS ON TODAY. 108 is the house size every species is
+   normalised to. Bumbleseal is deliberately larger: Tom, 2026-08-21, asked for
+   "about 25% bigger" than the 135 he was shown, which is 169. She is a 50,000
+   coin legendary and she reads as a companion rather than a trinket at that size.
+   Anything not listed here uses the house 108, so a new pet inherits the norm
+   rather than an accident. */
+export const PET_HERO_PX = { C6: 169 };
+
+/* `hatchChance` ON A PET IS THE WHOLE SHOP-PET MECHANISM, and it lives on the
+   item rather than in a table in js/loot.js on purpose: pickRandomPet reads it
+   off the catalogue, so a second shop pet inherits the rule by declaring the
+   field instead of by somebody remembering a second list. Tom, 2026-08-21:
+   "she can be a legendary pet and shes only in 1% of eggs so most people will
+   want to buy her." A pet carrying it rolls at exactly that rate and is kept
+   OUT of the even split the rest of the roster shares, or the 50,000-coin price
+   is a lie: an equal share of today's four-deep non-common pool is 25%.
+   `exclusive` is the stronger, separate flag (never obtainable at all, the Day
+   One Lizard) and the two are not interchangeable. */
+
+export const PET_SHOP = {
+  pet: { id: 'C6', coin: 50000, blurb: 'A diva that would rather shop than fly. Let her buzz the boutique below for more accessories.' },
+  items: [
+    { id: 'CE1', coin: 8000,  shot: [0.1394, 0.3327, 0.3933, 0.5866] },
+    { id: 'CB1', coin: 6000,  shot: [0.4262, 0.4132, 0.7973, 0.7843] },   // rides higher than CB2: no charms on the strap to fill the top of the frame
+    { id: 'CB2', coin: 9000,  shot: [0.4210, 0.4253, 0.7921, 0.7964] },
+    { id: 'CG1', coin: 12000, shot: [0.7261, 0.2925, 0.9117, 0.4780] },
+    { id: 'CM1', coin: 3500,  shot: [0.1215, 0.3293, 0.4116, 0.6194] },   // 10% wider and nudged up-left: three scattered marks, not one mass
+  ],
+};
+
+export const PET_SLOTS = [
+  { code: 'CG', label: 'Stinger', z: 10 },
+  { code: 'CB', label: 'Bag', z: 20 },
+  { code: 'CM', label: 'Patches', z: 30 },
+  { code: 'CE', label: 'Glasses', z: 40 },
+];
 export const PET_CROP = {
+  C6: { x0: 0.1187, y0: 0.1709, x1: 0.8389, y1: 0.8843 },
   C1: { x0: 0.5594, y0: 0.6047, x1: 0.8531, y1: 0.8938 },
   C2: { x0: 0.5453, y0: 0.5922, x1: 0.9187, y1: 0.8500 },
   C3: { x0: 0.5422, y0: 0.6125, x1: 0.8969, y1: 0.8812 },

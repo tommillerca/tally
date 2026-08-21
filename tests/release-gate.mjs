@@ -98,7 +98,30 @@ if (own) console.log(`serving this repo at ${base}\n`);
    pins the terminal cosmetic fallback, which used to pick uniformly from 362
    items and so paid legendaries 3.41x their drop weight, ignored the crate's
    rarity floor, and handed back pet-slot items that cannot drop from crates. */
-const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'rack-theme-lint.mjs'];
+/* pet-accessory-lint is PURE for the same reason: it imports data/boneheadz.js,
+   reads five PNG headers and finishes instantly. It pins the one string that
+   separates a sellable pet accessory from a pet species: an accessory carrying
+   slot 'C' joins the Mystery Egg's hatch pool and is handed out free on the same
+   screen that sells it, with nothing in the UI looking wrong. It also keeps pet
+   slot codes out of BH_SLOTS (nine app.js sites iterate it to draw the PLAYER),
+   holds the glasses on top of the pet stack, and grades every layer against the
+   clipping budget croppedPetImg's own scale leaves it. */
+/* pet-pool-audit is PURE for the same reason: it imports js/loot.js and
+   data/boneheadz.js, boots nothing, and finishes in ~5s. It is the price tag on
+   Gwart's Emporium as an assertion. Bumbleseal is 50,000 coins and her
+   accessories 3,500 to 12,000, and all of that scarcity is four filter calls in
+   js/loot.js that nothing measured. It pins her hatch rate at 1% over 200,000
+   draws in BOTH pool shapes (+/- 0.0015, 6.7 sigma, red at the 25% an even share
+   would give her), that no pet accessory can come out of a crate at either
+   floor, and, statically, that there is exactly ONE pet pool and ONE crate
+   predicate in the module. That last row is the point: the two pet pools had
+   already drifted once (the Day One Lizard reachable from a random grant), and
+   the two crate pools were drifted when this was written, which is how 0.993%
+   of Common Crate fallback rolls and 2.938% of Golden Crate rolls came back a
+   pet accessory revealed as a duplicate of an item the player never owned.
+   Carries SAMPLE, REACH and LEAK as controls: LEAK rebuilds the pre-fix pool and
+   REQUIRES it to leak, because three of its rows assert a zero. */
+const PURE = ['unit.test.js', 'first-session-audit.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs'];
 const BROWSER = [
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
   'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit. Its six LIVE rows need a reachable vector tile host (the only route to a spire fight is a marker on the Boneyard) and report UNPROVEN with exit 97 without one: four of them used to be nested inside `if (launcher)` and simply vanish, taking the denominator with them (22 assertions instead of 26, summarised as 20/22). It stays in FAST because the static COVERAGE half needs no browser and is the half that catches a new fight mode with no exit rule
@@ -109,12 +132,15 @@ const BROWSER = [
   'spire-intro-audit.mjs',   // the announcement fires from BOOT: the same shape that once shipped silently dead
   'dead-shell-audit.mjs',    // a dead shell recovers itself once, and never loops
   'boot-flash-audit.mjs',    // the first painted frame is never bare furniture. #tabbar and #gearBtn are static markup in index.html, so before the fix they painted at first paint on EVERY boot, ahead of the JS-built splash: an empty Today with the bottom bar on it, which is what Tom reported on 2026-08-19. Grades PIXELS off a CDP screencast started before navigation, cold AND warm, at 440x956 and 393x852, at CPU x6 so the window is ~20 frames wide instead of one. Bound is ZERO bare frames, not fewer. Carries its own controls: the capture must contain a frame from before the app had content (else the run could not hold the bug), and some frame must score a real tab bar over real content (else the detector is blind). FAILSAFE blocks a module so the app can never render and asserts app.css's 8s keyframe brings the shell back with no reload, ahead of index.html's 12s recovery, which is anti-regression rule 8 as an assertion. NAVIGATION is the regression the fix could most easily cause and pins it: the bar never blinks out on a real tab click. Self-serving, measured 54s, 35 checks. FAST because it is the app's first impression and because the failsafe row is the only thing standing between this fix and a permanently hidden shell
-
+  'route-flash-audit.mjs',   // and no NAVIGATION shows the tray either. Same bug class one layer in, reported by Tom on 2026-08-21: route() stripped `screen-in` before the new screen existed, so every real tab change opened a hole onto the body gradient and the bare bar. Measured on pristine main at 440x956 through a CDP screencast, Boneyard -> Today: 4 bare frames / 108ms at CPU x1, 6 / 136ms at x6. Bound is ZERO, not fewer. Grades two swaps (the full-bleed `.screen--map` Boneyard, and a padded screen to one full of canvas art) plus a reduced-motion pass. CONTROL re-runs the same graded swap with `.screen-held { display: none }` injected, which puts the app back to exactly the bug, and REQUIRES bare frames: a green FLASH beside a green CONTROL is an audit grading nothing and fails. FAILSAFE and SWEEP are the regression this fix could most easily cause and the reason it is FAST, not full: the fix parks a copy of the outgoing screen over the live app on every single navigation, so a copy that is ever stranded is a frozen app, and FAILSAFE serves a revealWhenReady that never resolves to prove the 1200ms cap takes it off anyway. Self-serving, measured 119s, 39 checks
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'art-register-audit.mjs',  // cosmetics register on ink, not on boxes; node-only and half a second, and it REPLACES grill-fit-audit.mjs, which belonged to no tier and so failed the coverage assertion below on every run
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
   'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap
-  'bestiary-audit.mjs',      // the teaser stays a teaser; Today names the hunt
+  'bestiary-audit.mjs',      // the teaser stays a teaser, and since 2026-08-21 Today names no hunt at all: its row went with the "Out there today" card, so the Today half of that file is now an ABSENCE graded against the teaser wall as its control
+  'hype-banner-audit.mjs',   // the Today hype banner, on the app's default screen: the two new Boneyard creatures and the new pet, in ONE banner above the step winner. Three ways this fails silently and none of them throw: a creature that never decodes (graded on naturalWidth after an awaited decode, because an empty box measures perfectly), the banner growing until it pushes the ring further down than the 275px banner stack it replaced did (bounded against 1133 / 973, measured on 6212e75), and the copy clipping (scrollWidth against clientWidth, not a character count). Both viewports, because the ten words and the three figures fail differently at 320 than at 393. SETUP refuses to grade anything unless Today rendered AND the banner is on it, and the two ROUTE rows drive the real buttons because the whole point of the two halves is that they land in two different places
+
+  'today-peek-audit.mjs',    // the Today status column and the scroll peek, both of them things Tom asked for three times: the currencies at the TOP of the screen with Gwart UNDER them, and a card genuinely half on the screen at the bottom edge so a player knows there is more ("i have a feeling they wont know unless we show half a banner width or something to make them go look"). Measured on the shipped tree before the change, the first card below the doors cleared the fold by 60px at 393x852, by 1.2px at --sat 59, by 14.8px at 320x568 and by nothing at all with an inset there, so the peek is arithmetic against the fold rather than a tuned height and this is what stops it drifting back. Four configurations, both widths and both insets, and the peek is asked of SOMETHING with a card's shape rather than of the hype banner by name, because which card lands there depends on the account. The rows that are not ORDER or PEEK are the ways those two pass on a broken screen: an empty plate orders perfectly (GWART grades his ink off the render plus a decode on the sources), the peek is cheapest to buy by shrinking the hero until the Bonehead is a thumbnail (FIGURE floors the stage per viewport, rule 11), and the plaque is drawn OVER the figure so a collision is invisible in the composite (CLEAR differences the figure against a frame without it and pins both animations to their worst frame). PLATE and TEXT pin two corrections Tom has already had to make once: #d5c8b0 is his "split the difference between A and B", and --text must still be #f2e9d7 because the plate hex and the talk box's type colour were the same string. FAST because Today is the app's default screen and every one of these is a one-line revert
   'mage-audit.mjs',          // the Live Wire on every surface he belongs on
   'art-resolution-audit.mjs',  // no gear art drawn above the resolution Cam's masters actually carry, and no nearest-neighbour on continuous-tone art
   'fight-layout-audit.mjs',  // the fight screen holds still
@@ -150,6 +176,13 @@ const BROWSER = [
   'dvh-fallback-audit.mjs',  // a browser that cannot parse dvh must still reach the tab bar: #app carried no height fallback, which put the navigation 2173px below the fold on Today. 24s: static coverage of every dvh/svh in the sheet, plus four boots
   'overscroll-wordmark-audit.mjs', // the Today overscroll wordmark is INVISIBLE until you pull: REST (zero ink pixels in the band at scrollTop 0, and the band byte-identical with the feature on and off), CLAMP (the engine refuses a negative scrollTop, which is why ordinary scrolling can never reach it), ABOVE, TODAY (present on Today and on none of five other screens), NO-SHIFT (all 556 element rects identical with the mark present and absent, animations frozen first and the freeze proven, because Today's idle Bonehead really does move 31 of 400 rects on an untouched tree) and INK (the revealed mark composites to rgb(142,135,126) against --text-3's rgb(143,133,120)). It does NOT test the rubber band and says so at the top: iOS overscroll is a WKWebView behaviour and no headless Chromium bounces. MECHANISM is the closest honest proxy and the row that matters most: displaced on screen, the mark's ink moves up by exactly the scroll delta, so it is proven to live in the scrolled content layer that a bounce translates. A mark that had drifted onto the viewport would sit still under a pull and reveal nothing while every other row here stayed green. Self-serving, measured 34s, 18 checks. Proven red five ways: a positive `top` (4 FAILED), position: fixed (1, and silent to every other row while the feature would be dead on the device), the class dropped from the selector so every screen gets the mark (1), opacity 1 (1), and route()'s classList.toggle deleted (7). The third of those is why TODAY grades the PAINTED pseudo-element and not the class: the first version required both, route() still applies the class on Today, and the selector rewrite that put the wordmark on all six screens left the row green at 18/18
   'talkbox-audit.mjs',       // the typing dialogue box on Today, which is the app's one talking surface and sits on the default home screen. Four pins, all on PIXELS off the box's own clipped rect because a computed style reads a visible caret off a frame nobody painted: TYPE (the ink takes 14+ intermediate amounts, so a print-at-once cannot pass, cross-checked against the DOM prefix sequence), SKIP (a real mouse click MID-LINE completes the line, with a precondition row that refuses to grade unless the tap landed between the first character and the last, and both wrong answers pinned: a no-op AND a restart), EXCLUSIVE (across every frame of a held box, never a caret and a chevron at once, which is the box saying "wait" twice) and REDUCED (every one of 39 fast samples already carries the whole line, and the caret detector that fires on the animated run sees nothing). Carries four controls because three of its rows assert a ZERO and that is the shape which passes on a blank frame: CONTROL-CARET and CONTROL-CHEVRON require each detector to fire somewhere, and CONTROL-ISOLATION requires the caret region to score zero on a finished box that HAS a name label in the same #a5e847, so a caret count is a caret and not the speaker's name bleeding in past the 2-degree rotation. Plus HITTEST in both directions (anti-regression rule 6: the box owns its centre while the line is live or it can never be skipped, and hands it back once a self-dismissing line is done or it eats a 42%-wide Backpack target) and COVERAGE, which derives the graded set from js/*.js so the NEXT chat bubble converted to a talk box fails this audit until it is driven or excused. Self-serving, measured 24s, 40 checks. FAST because it is on the app's first screen and because being unable to hurry a talking box along is, in Tom's words, the single most irritating thing about this pattern
+  /* THE TWO ICON-RENDER AUDITS. boneyard-icon-audit landed on main with NO
+     TIER, which means the coverage assertion below has been red and `npm run
+     gate` has been exiting 1 before a browser started, for the fourth time (see
+     the crate-palette, xp-cap and nine-that-landed entries below). Declared here
+     rather than left, because everything in this branch runs behind it. */
+  'boneyard-icon-audit.mjs',    // the Boneyard map and its key draw the same pixel art at whole steps and it actually decodes. Six rows and four controls, self-serving, measured 35s green at 41 decoded pixel imgs. Its VECTOR row fails in BOTH directions on purpose: a new spawn falling back to vector is the v416 bug returning, and the day the food-find drawing lands it goes red and says to wire it
+  'pixel-art-swap-audit.mjs',   // the TEN screens the Boneyard audit does not reach, rendered: no screen draws a vector or an emoji at >= 16px for a concept that has pixel art on disk, no pixel <img> lands off a whole step, and no call site reserves space the snapped art loses more than a fifth of. Identifies a drawing by its own path data normalised through the page's serializer, never by a class name, because the defect is a SILENT fallback that looks right in source and right in the DOM: it is why 305 graded sites and a 7/7 green icon-inventory coexisted with three vector wedges on the daily wheel. Also pins the wheel's WORDS against its pictures (LABEL): each wedge's tag must be a whole word of the Shop's own label for the thing that wedge draws, resolved by hit-testing which sector <path> the word and the picture each sit inside. That is the defect a medium swap creates and no other row can see: the gold wedge came out of the swap with the right art, the right grant and the word GOLD over a picture of a bone chest. Carries TEN controls, including "all three media present", "no two drivers landed on the same screen" and "every wheel word paired to exactly one named picture", so a row for a medium the probe cannot see, or a screen a driver silently missed, fails instead of passing on nothing. FAST because this class has now shipped four separate times and Tom has found every instance of it by playing. Self-serving, measured 65s, 18 checks
   'nickname-private-audit.mjs', // the pet nickname is PRIVATE, and a leak is invisible from the UI: a nickname that reached the Crew would still render, still reload, still clear, so nothing would look broken and nobody would report it. Points the app at a fake API with social.js's own ?api= hook, drives the real controls, and reads the bytes off page.on('request') rather than grepping the source: WIRE asserts the nickname is in zero request bodies and zero URLs, with a POSITIVE CONTROL that the pet fields that ARE meant to upload were found in the same captured body, so a blind capture fails instead of passing. Also HOSTILE (a 23-char payload that really would fire, escaped at both innerHTML sites), REFUSE, CLEAR and reload. FAST rather than full because a privacy leak is silent and permanent once shipped. Self-serving, measured 58s, 58 checks
 ];
 
@@ -305,6 +338,53 @@ const DECLARED = {
   'boneyard-audit.mjs': ['full', "the Boneyard loading and its action bar; run it on any map or action-bar change. All 22 rows need a reachable vector tile host and the suite reports UNPROVEN with exit 97 without one. Measured 2026-08-17 on a container with no route to tiles.openfreemap.org it read 11 green and 11 red, and SEVEN of those greens were vacuous: three straggler rows on 0 stragglers, a beat row on 0 beats, a pop-time row on all-zero counts and two INTERACTED rows where false stays false because there is no map to interact with. Its own ARRIVAL-SLOW latency row carries the `stragglers.length > 0` empty-sample guard and went red correctly; the identical ARRIVAL row one section up never got that guard."],
   'endless-look-audit.mjs': ['full', 'the Gauntlet equips the roster face pit.js chose: rank 51+ was 0% approved monsters.'],
   'pit-cap-paths-audit.mjs': ['full', 'every boss-shaped claim path either raises the Gauntlet ceiling or is excluded by name.'],
+  'mimic-audit.mjs': ['full', "the Mimic: a chest that is not a chest, its reveal, and both new drawn bosses in the Gauntlet. "
+    + 'Run it on any change to js/mimic.js, the Boneyard chest spawn, or the drawn-boss list in js/pit.js. Full rather than fast '
+    + 'because it boots the Boneyard and drives a real reveal, whose animation IS assets/bh/mimic/mimic-loop.gif: without that '
+    + 'file precached the chest never opens, which is why sw.js carries it. Its REVEAL section also owns the half of the feature '
+    + 'that is a JUDGEMENT: Tom asked for the Wanderer\'s encounter "but not quite as intense", so the SMALLER rows turn that into '
+    + 'measurements off a CDP screencast of the real overlay over the real lit app: no choice at all, a scrim bounded on BOTH sides '
+    + '(a full blackout fails it, which the prove-red caught), a sequence that only ever darkens so a strobe cannot creep in, and a '
+    + 'length under 60% of the Wanderer\'s own exported constants. COVER and HANDOVER are the quiet pair, the same shape as the '
+    + "Wanderer's: the overlay hands over on a black frame it still owns, and app.js builds the arena before it lifts it."],
+  'wanderer-boneyard-audit.mjs': ['full', 'the Wanderer outdoors, the map\'s only PATROLLING agent: his position and heading are a pure '
+    + 'function of (date, cell, clock), so a 5-second refreshWorld cannot teleport him, a second device computes the same metre, '
+    + 'and closing the app cannot reroll him off your back. Purity is proved in a SECOND browser page with its own module realm, '
+    + 'the heading against the real path bearing, and the cone with the player inside it and outside it on both axes, then read '
+    + 'back out of the paint function so the drawn wedge and the wedge that catches you are one shape. '
+    + 'Run it on any change to js/wanderer.js or refreshWanderer / the wanderer settle branch in js/app.js. It also pins '
+    + 'the ceiling decision: a Boneyard Wanderer mints NO bossfirst marker, so five wins move endlessCeiling by 0, with the '
+    + 'Glutton driven in the same session as the control that the instrument can move at all. Full rather than fast because it '
+    + 'boots two pages and claims against the real IndexedDB; about 30s.'],
+  'wanderer-patrol-live-audit.mjs': ['full', "the Wanderer's TRIP WIRE, fired for real: the sibling suite proves his derivation, his cone geometry, "
+    + 'his ledger key and the ceiling by calling the module, and none of that can see the thing the feature actually IS, which is a GPS '
+    + 'fix arriving on the open Boneyard, landing inside a cone nobody tapped, and a fight starting on its own. Two boots of the real app '
+    + "with the device position overridden off his REAL heading: 45 m behind him he is drawn and lit and nothing happens, 45 m into his "
+    + 'light the arena opens on his name. Each boot is the other\'s control. Run it on any change to refreshWanderer, the geolocation '
+    + 'watch, or the cone. MapLibre needs WebGL and vector tiles, so on a machine with neither it reports UNPROVEN with exit 97 by name '
+    + 'rather than green, the same contract boneyard-audit.mjs runs under. About 60s.'],
+  'wanderer-arena-audit.mjs': ['full', "the Wanderer LOOMS in the Pit, and nothing else on that stage moved. Tom's mockup has him filling the "
+    + 'arena with the player small at the bottom left, and the gap is the design rather than the size. Every row is measured off the '
+    + 'INK, never the stage box: his plate is a 640-square whose drawing occupies 562x417 of it, so 35% of the element is transparent '
+    + 'and its rect says nothing about what he covers. Graded at 393x852 AND 320x568 because the arena height is a clamp on the '
+    + 'viewport and those are two genuinely different boxes (330px and 283px). It also PINS the three other drawn bosses: the Mimic is '
+    + 'held to the default stage, exactly the player\'s size, because he is a chest that bit you and not a wall, and the player is only '
+    + 'scaled down in front of the Wanderer. Needs no map: it drives window.__denFight with wanderer:true, which is the field the arena '
+    + 'class, the stage class and the plate all key off. Run it on any change to .arena.boss-wanderer, #foeStage.wanderer-foe, .fstage '
+    + 'or the arena height. About 40s.'],
+  'wanderer-patrol-sim.mjs': ['skip', "a MEASURING INSTRUMENT, not a pass/fail check, the same shape as gauntlet-sim.mjs: it prints "
+    + 'catches per hour of walking against the Wanderer at a sweep of cone ranges and asserts nothing about them, so running it on '
+    + 'every gate would burn a minute to prove nothing. Run it BY HAND whenever CONE_RANGE_M, CONE_HALF_DEG, WANDER_LAP_MIN or the '
+    + 'cell size changes. It is where the shipped 300 m came from: 90 m measured 0.12 catches/h and 88% of hour-long walks meeting '
+    + 'him not at all, which is a headline feature nobody meets. It imports the real js/wanderer.js and its FIRST line is a control '
+    + 'that its own range-sweep cone agrees with inWandererCone at the shipped range, because a sim with a private copy of the '
+    + "geometry measures the copy. Exits 1 if that control fails."],
+  'gauntlet-sim.mjs': ['skip', "a MEASURING INSTRUMENT, not a pass/fail check: it prints win rates and asserts nothing, "
+    + 'so running it on every gate would burn minutes to prove nothing. Declared skip rather than hidden in HELPERS, because '
+    + 'HELPERS is for modules the checks themselves import and nothing imports this one. Run it BY HAND whenever a Gauntlet '
+    + 'multiplier, a talent tree or a drawn boss changes. Its own header records why it exists: the Mimic was specced at 1.05x '
+    + 'and measured 12.0% player win against 28.8% for an ordinary rung, and the Wanderer was specced at 1.22x to sit above the '
+    + "Glutton's 1.18x and measured EASIER than him. Reading the multiplier is not the same as knowing the difficulty."],
   'boneyard-icon-audit.mjs': ['full', "the Boneyard and its map key draw the same pixel art at whole steps, and it decodes. "
     + 'Run it on any change to pixCur, crateIcon, the map key or the marker sizes. It is full rather than fast because it '
     + 'boots the Boneyard map, so it wants the same reachable vector tile host as boneyard-audit. '
@@ -315,6 +395,44 @@ const DECLARED = {
     + 'for the one row grantCosmetic writes, which is what quota, abort and the wipe-protocol freeze do to that same call, so no app '
     + 'logic is stubbed. Proven red on origin/main c3b7bc9 (3 rows) before the fix existed: 300 coins charged, no piece granted, and '
     + 'the retry answered owned while the player owned nothing, which made the piece unbuyable forever.'],
+  'hero-share-audit.mjs': ['full', "a big pet shares the Today frame, and a normal pet changes nothing. "
+    + 'Run it on any change to the Today hero, PET_HERO_PX, or the bhIdle keyframes. Full because it equips two pets and '
+    + 'renders the screen for each. Its CONTROL row is the point: the shift composes through --bh-shift INSIDE bhIdle (a static '
+    + 'translate on .hero-char is overwritten by the animation), and --bh-shift is a custom property, so setting it one level up '
+    + 'walks the PET left by the same 58px. Proven red both ways on 2026-08-21: flagging every pet as sharing reddens CONTROL, '
+    + 'and moving the property to the scene reddens the pet-inheritance row.'],
+  'emporium-audit.mjs': ['full', "Gwart's Emporium: the shopkeeper takes the header's room, not the shelves'. "
+    + 'Run it on any change to gwartHeroHtml, the .gw-* block in app.css, or the hub tab scoping. Full because it drives four hub '
+    + 'tabs and reads pixels back. WRITTEN BECAUSE app.css PROMISED IT: the block ended with \"Guard: tests/emporium-audit.mjs\" '
+    + 'and that file existed on no ref, which reads as covered to the next person. Proven red twice on 2026-08-21: restoring '
+    + '--gw-off (the union-of-both-layers centring) puts CENTRED at 202.0 against 196.5, and hiding the floating gear without '
+    + 'giving it back reddens SCOPE.'],
+  'wanderer-encounter-audit.mjs': ['full', "the beat between stepping into his light and the arena: two typed lines, "
+    + 'a real Fight/Flee choice, and a stepped retro zoom on Fight. Run it on any change to showWandererEncounter, the '
+    + '.wnd-enc block, or startWandererEncounter in js/app.js. Full because it drives the real buttons and screenshots the '
+    + 'transition. The two rows that matter most are the quiet ones: FLEE must open no fight (a prompt whose second button '
+    + 'still starts the fight is decoration) and COVER must find the overlay STILL UP when the choice resolves, because the '
+    + 'arena is built underneath its hold frame and tearing it down one line early brings the map back mid-handover. '
+    + 'All eight rows proven red on 2026-08-21 in a throwaway tree; the mutations are listed in the file header.'],
+  'device-open.mjs': ['skip', "not an audit: it is the tool that OPENS the app on a booted simulator, "
+    + 'serves the tree on a fresh port and hands back the URL. Declared here because the gate refuses to start while any '
+    + 'file in tests/ is undeclared, which is the assertion that has already blocked this gate four separate times. '
+    + 'Running it would boot a simulator and sit in the foreground serving, which is the opposite of what a gate wants.'],
+  'rebuild-lossless-audit.mjs': ['full', "re-running scripts/build-cosmetics.py must not delete, rename or "
+    + 're-rarity a single item that ships today. Run it on any change to that script, to SPECIALS/OVERRIDES, or to the art '
+    + 'library. Tiered full rather than pure because it shells out to python3 and rebuilds the whole catalogue against Cam\'s '
+    + 'library, about a minute; it needs no browser. THIS IS A MIGRATION GUARD, NOT A BUILD CHECK: every cosmetic a player owns '
+    + 'is keyed by an id in the generated file, and its name and rarity are what the game shows them, so re-running the script '
+    + 'edits live inventory. Measured on 2026-08-21 before the fix: 63 items DELETED, 172 RENAMED and 3 DEMOTED, including '
+    + 'Nightfall Katana going legendary to common, and the script exited 0 and printed a cheerful item count either way. '
+    + 'It SKIPS with a reason when the art library is absent, because a guard that fails on a teammate\'s laptop for an '
+    + 'environmental reason is one people learn to ignore. Four mutations proven red; they are in the file header.'],
+  'tabbar-contrast-audit.mjs': ['full', "the tab bar's per-destination colour must not cost a label its legibility, "
+    + 'nor the centre FAB its dominance. Run it on any change to #tabbar, its colours, or its padding. Full rather than fast '
+    + 'because it drives all four destinations and reads the composited colours back. Contrast is computed from RENDERED values, '
+    + 'not from tokens: this bar layers a plate under a glyph under a label, and a token says what was asked for rather than what '
+    + 'the player got. Proven red twice on 2026-08-21: sinking one tab dim colour into the bar ground (CONTRAST, 1.07:1 on '
+    + 'boneyard) and growing the tab padding until the active plate matched the FAB (FAB, 0.5x).'],
   'boneyard-geo-intent-audit.mjs': ['full', 'the map only asks for location when the player asked for the map: a self-reload that restores #/boneyard must show the button, not fire the iOS permission prompt. Run it on any change to route(), the hashchange listener, or the Boneyard auto-start.'],
   'community-audit.mjs': ['full', 'the Discord card: real invite link, plain-words copy, once from boot, lives on in News and Settings.'],
   'gift-confirm-audit.mjs': ['full', 'one tap must never send coins to another player: the gift chips arm, commit and cool off.'],
@@ -377,9 +495,19 @@ const DECLARED = {
   /* THE NETWORK BETWEEN OFF AND ON, which nothing here had ever driven. */
   'flaky-network-audit.mjs': ['full', "offline-boot proves the app BOOTS with no network; this drives what happens when you press things, in the three states that are not 'on': GONE, HANGING (accepted and never answered, which no catch in this app could ever reach) and FLAP (the server acts, the answer is lost). Grades what reached the store AND what the player was told, with an online CONTROL twin on every offline row and every gift row gated on the sheet having opened, so an empty sample set cannot read green. Proven red at ddbb079 with only this file copied into a throwaway tree: 11/31 there against 31/31 here, and the 20 red rows are the findings, not a broken harness (its OFFLINE-FIRST rows and every online CONTROL twin are green in BOTH trees). 32/32 and 191s measured on the final file, green on three consecutive runs. Self-serving, and it stops its own server and clears the browser HTTP cache, so 'full' rather than fast."],
   'onb-audit.mjs': ['full', 'onboarding on a virgin IndexedDB, the only suite that sees the launch funnel.'],
-  'out-there-audit.mjs': ['full', 'Out There Today still offers the gear drop.'],
+  'out-there-audit.mjs': ['skip', 'its whole subject is the "Out there today" card, which came off Today on 2026-08-21 when Tom asked for every banner except the step winner to go and one hype banner to replace them. outThereHtml and its four row builders are intact and unreachable in js/app.js (revival is one call plus the heldSpires read), so this file is kept as the record of what the card had to do. tests/hype-banner-audit.mjs guards what stands there now, including a GONE row that fails if the card comes back unasked.'],
   'pit-refresh-audit.mjs': ['full', 'the Pit re-renders when a fight ends: beaten remote den stops offering FIGHT without a reopen.'],
   'paddock-scene-audit.mjs': ['full', 'the Paddock end-to-end: real chip tap, decoded herd, band rule in the live DOM, motion as rendered pixels.'],
+  /* FOUND UNDECLARED ON ext/today-hype-banner AT 1784d1e4, 2026-08-21, and it is
+     the FOURTH time this has landed (see the fight-hint, crate-palette and
+     xp-cap entries). It arrived with v418 and nothing named it here, so the
+     coverage assertion below has been RED on this branch and the whole gate has
+     been exiting 1 before a browser started. Declared rather than left, because
+     every audit on this branch, including the motion one under it, runs behind
+     that assertion. Tier chosen from what the file does; move it if its author
+     disagrees. */
+  'boneyard-icon-audit.mjs': ['full', 'the Boneyard and its map key draw the same pixel art, at WHOLE steps, and it decodes. Written against the five v416 defects that were one mechanism: pixCur() snaps to 48/24/16 and returns null under 16, so a call site asking for a size that snaps down silently gets smaller art than its box, and one under the floor silently gets the old vector next to a pixel map. Boots the map and grades decoded naturalWidth plus rendered box, with a positive control that refuses to pass on a blank screen.'],
+  'motion-truth-audit.mjs': ['full', "a surface said to move must MOVE IN THE APP, in decoded pixels, and every motion claim must print what the other half of the players get. Tom, 2026-08-21: \"the hype banners you made before had moving components to them? ... that NEVER showed on the live app it was always a static grid.\" The animation was never missing: measured on the LIVE site the drop wall moves 50% of its pixels and the reel 31%. The one state where they are a permanently static grid is prefers-reduced-motion: reduce, which app.css collapses globally on `*` and which gates the reel's JS driver so #tzReel never gets a beat class at all. Both are defensible; neither was verified, so every review happened in the one state where it moved. Grades both states end to end: MOVES (peak changed-pixel fraction >= 3%), REDUCE (EXACTLY 0%), BEATS (the reel's own class advances, so a pixel delta from the art behind it cannot pass for the reel running), STILL on a banner declared static as the instrument's negative control, and COVERAGE, which fails by name on any animated Today banner missing from the REGISTER. Two boots with a media feature emulated before the first navigation (js/fx.js reads reducedMotion once at import), about 70s: full, not fast."],
   'pit-cap-audit.mjs': ['full', 'the Gauntlet ceiling reads as a ceiling.'],
   'placeholder-audit.mjs': ['full', 'nothing prints a literal template placeholder.'],
   'podium-audit.mjs': ['full', 'the Crew top three shows and still opens the full list.'],
@@ -389,7 +517,7 @@ const DECLARED = {
   'scout-audit.mjs': ['full', "the world follows where you look and stays the same size. All six rows need a reachable vector tile host and the suite reports UNPROVEN with exit 97 without one. Measured 2026-08-17: three red, and both greens vacuous. 'BOUNDED: scouting does not grow the marker count' passed on `0 -> 0 markers`, which is tally/CLAUDE.md rule 11 in one line, a ceiling satisfied by an empty set; 'ANCHORED: a den you only looked at is not enterable' passed because there was no map, not because the distance rule held. window.__map is assigned before the map's error handler runs, so its presence proved nothing either."],
   'spawn-quiet-audit.mjs': ['full', "the quiet Boneyard collect: bones, coins and herbs must never regain the full-screen reveal, and crate + rare must keep it. Four STATIC rows grade everywhere and pin the write-cost arithmetic to its sources (openSheet is the only emitter of feat_open/feat_time; the D1 events table carries 3 indexes, so one sheet is 2 events is 8 row-writes of the 100k/day free tier). The driven half walks onto a real spawn of each of the five types on a real map, so it needs a reachable vector tile host and declares itself UNPROVEN with exit 97 without one rather than passing on an empty sample. Counts analytics by serving a one-line patched js/analytics.js over request interception, because the real queue refuses to record under ?demo; the two ceremony collects are the control that proves the zero on the quiet path is a measurement."],
   'speech-audit.mjs': ['full', 'sweeps every salt of the chatter pools.'],
-  'spire-explainer-audit.mjs': ['full', 'every number in the explainer comes from the constants.'],
+  'spire-explainer-audit.mjs': ['skip', 'it opens the spire explainer through details.spire-banner on Today, and that row went with the "Out there today" card on 2026-08-21. The explainer copy it grades is still built by spireBannerHtml, which nothing calls; when the spires get a surface again this file is the check that comes back with it.'],
   'spire-phase3-audit.mjs': ['full', 'a refused spire claim must not leave the client owning a tower.'],
   't1-audit.mjs': ['full', 'Tier 1 daily loop, 33 checks through the real add-food flow. Section 7 (the Boneyard, 11 rows) needs a reachable vector tile host and declares itself UNPROVEN with exit 97 where there is not one, rather than letting two `count(...) === 0` rows pass on a map with nothing on it. Sections 1 to 6 need no map and still grade there.'],
   't2-audit.mjs': ['full', 'Tier 2 payoff moments, each provoked.'],

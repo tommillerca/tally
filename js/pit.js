@@ -1626,6 +1626,37 @@ export const isGluttonRung = rank => rank > 0 && rank % GLUTTON_EVERY === 0;
    Offset from the Glutton's tens so the two never land on the same rank. */
 export const MAGE_EVERY = 7;
 export const isMageRung = rank => rank > 0 && rank % MAGE_EVERY === 0 && !isGluttonRung(rank);
+/* THE WANDERER AND THE MIMIC take the ladder to four drawn bosses. Tom,
+   2026-08-20: "the mimic, and wanderer and glutton and mage, should all be in
+   the gauntlet of the pit."
+   The periods are chosen so the two NEW rungs answer the two questions the
+   existing pair leaves open, rather than piling a third and fourth gear check
+   on top of the same one:
+
+     the Wanderer is the RAREST and the HARDEST. 13 is the longest period on the
+     ladder, so he is a fight you meet roughly half as often as the Glutton, and
+     his step (1.22x) sits just above the Glutton's 1.18x. He pays accordingly.
+
+     the Mimic is the OPPOSITE: frequent (every 6) and barely a step at all
+     (1.05x). He is variety, not a wall. Measured before shipping: adding a
+     second real gear check every 6 rungs would have taken the ladder's clear
+     rate down materially, and Tom asked for four bosses, not for the Gauntlet
+     to get harder. So the Mimic is a face and a fixed kit, not a difficulty
+     spike, and the aggregate numbers are in the PR body.
+
+   PRIORITY IS STRICT and each predicate excludes every higher one, exactly the
+   way isMageRung already excludes the Glutton, so no rung is ever two bosses and
+   the Glutton and the Live Wire keep every rung they held before this change. */
+export const WANDERER_EVERY = 13;
+export const isWandererRung = rank =>
+  rank > 0 && rank % WANDERER_EVERY === 0 && !isGluttonRung(rank) && !isMageRung(rank);
+export const MIMIC_EVERY = 6;
+export const isMimicRung = rank =>
+  rank > 0 && rank % MIMIC_EVERY === 0 && !isGluttonRung(rank) && !isMageRung(rank) && !isWandererRung(rank);
+// "The Mimic", "The Mimic II" ... "The Mimic VI", then back to the bare name
+// rather than printing a bare digit (the failure ENDLESS_NAMES_DEEP exists for).
+const ROMAN6 = ['II', 'III', 'IV', 'V', 'VI'];
+const cycleName = (base, tier) => (tier > 1 && ROMAN6[tier - 2]) ? `${base} ${ROMAN6[tier - 2]}` : base;
 export function endlessFoe(rank) {
   if (isGluttonRung(rank)) {
     const tier = rank / GLUTTON_EVERY;
@@ -1664,6 +1695,67 @@ export function endlessFoe(rank) {
       xp: 110 + rank * 12,
       coins: 200 + rank * 18,
       repeatCoins: 22 + Math.min(40, rank * 3),
+    };
+  }
+  if (isWandererRung(rank)) {
+    const tier = Math.floor(rank / WANDERER_EVERY);
+    return {
+      rank,
+      name: cycleName('The Wanderer', tier),
+      wanderer: true,
+      art: 'assets/bh/wanderer/wanderer.png',
+      // the biggest step on the ladder, because he is the rarest thing on it.
+      // Proportional like the other two, so he is the same wall at rung 13 and
+      // at rung 130 rather than fading into the curve.
+      /* 1.45x, AND THE NUMBER WAS MEASURED, NOT CHOSEN. The elemental tree is
+         the WEAKEST of the six for an AI foe (tests/gauntlet-sim.mjs: 65.7%
+         player win at 1.05x, against 5.3% for the fastest tree), so the honest
+         multiplier for "the hardest rung on the ladder" is far above the
+         Glutton's 1.18x. At 1.45x he measures 16.3% player win against the
+         Glutton's 18.1%: the hardest boss, by a nose, which is what rarest
+         should buy. Picking 1.22x to "sit just above the Glutton" on paper
+         would have shipped him EASIER than the Glutton at 35.8%. */
+      mult: +((1.32 + rank * 0.07) * 1.45).toFixed(3),
+      /* A FIXED KIT IS THE FIGHT IDENTITY. Ordinary climbers rotate through
+         ENDLESS_TREES by rank, which is why none of them fights like anyone in
+         particular. He always brings the elemental tree, because the lantern is
+         the whole drawing: you learn that the Wanderer burns you, and you can
+         come back dressed for it. */
+      talents: ENDLESS_TREES[5],
+      weaponId: 'starter',          // he carries a lantern, not a weapon
+      aiLevel: 5,
+      xp: 180 + rank * 16,
+      coins: 320 + rank * 26,
+      repeatCoins: 28 + Math.min(50, rank * 3),
+    };
+  }
+  if (isMimicRung(rank)) {
+    const tier = Math.floor(rank / MIMIC_EVERY);
+    return {
+      rank,
+      name: cycleName('The Mimic', tier),
+      mimic: true,
+      art: 'assets/bh/mimic/mimic.png',
+      /* DELIBERATELY NOT A CHECK, and this is the rung where that had to be
+         MEASURED rather than reasoned. He comes round every 6 rungs, and the
+         Gauntlet is strictly sequential (app.js derives the next rank from the
+         COUNT of endless wins), so every boss rung is a gate you cannot walk
+         past. A real gear check that often is not a boss, it is a wall with a
+         face.
+         The first build of him used the slab tree, on the theory that 1.05x was
+         "inside the noise". It is not: the TREE dominates the multiplier. He
+         measured 12.0% player win against 28.8% for an ordinary rung, which
+         would have made the lightest boss on the ladder the heaviest. The tree
+         below was chosen off tests/gauntlet-sim.mjs to land him just under the
+         ordinary rungs instead: 31.0% against 37.6%. */
+      mult: +((1.32 + rank * 0.07) * 1.05).toFixed(3),
+      // a strongbox: he wards, he turtles, and he punishes the turn you commit
+      talents: ENDLESS_TREES[4],
+      weaponId: 'bonecrusher',      // the lid has teeth
+      aiLevel: 3,
+      xp: 70 + rank * 10,
+      coins: 130 + rank * 15,
+      repeatCoins: 16 + Math.min(35, rank * 2),
     };
   }
   const cycle = Math.floor((rank - 1) / ENDLESS_NAMES.length) + 1;

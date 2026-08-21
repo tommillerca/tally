@@ -3,6 +3,21 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 421, date: '2026-08-21', title: 'The Wanderer, and Gwart has a pet for sale', items: [
+    'Someone else is out in the Boneyard now. The Wanderer walks a slow beat around the map with a lantern, and the light in front of him is a cone you can see on the ground. Step into it and he comes for you.',
+    'He gives you a moment first. The screen goes dark, you hear heavy footsteps, and he walks in out of it carrying the lamp. Then you choose: fight him or back out of the light. Backing out costs you nothing but the moment.',
+    'He is the hardest thing out there. Fighting him is meant to be a decision.',
+    'Buried crates on the map are not always crates. Some of them have teeth.',
+    'The chest that had teeth gets its own moment too, a smaller one: one line, and then the fight.',
+    'Gwart is selling a Bumbleseal, and a wardrobe to go with her. Shades, two different purses, a live wire stinger and a set of patches, all sold separately so you can dress her how you want. She is legendary, and she turns up in about one egg in a hundred, so most people will be buying her.',
+    'Today leads with your coins and dust at the top, Gwart underneath them, and the next card peeking up from the bottom edge so you can tell there is more down there.',
+    'Fixed: pull down on Today and the Boneheadz wordmark actually appears now. It never could before. It was parked in a part of the screen that iPhones do not draw into, so no amount of pulling was ever going to show it.',
+    'The Shop tab is Gwart\'s Emporium now: he stands behind the counter instead of the usual character header, and he was leaning three pixels to the right, which he is not any more.',
+    'The tab bar carries a colour for each place it goes, and the one you are on reads like a sticker.',
+    'The daily wheel had three prizes still drawn as line art next to four drawn in pixels. All seven match now.',
+    'Fixed: the tray flashed on its way between the Boneyard and Today.',
+    'Fixed: the Mystery Egg was called two different things on two screens that sit one tap apart.',
+  ] },
   { n: 420, date: '2026-08-20', title: 'The wordmark, loud this time', items: [
     'Pull down on Today and the Boneheadz wordmark is bigger, brighter, and starts showing on the very first pixel of the tug instead of after a hard yank.',
     'It fades up as you pull, so how far you pull is what decides how much of it you see.',

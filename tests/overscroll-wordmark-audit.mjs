@@ -1,14 +1,47 @@
 /* THE OVERSCROLL WORDMARK: hidden at rest, Today only, free of layout, and
  * UNMISTAKABLE once you pull.
  *
- * WHAT THIS FILE CANNOT DO, SAID FIRST. It does not test the rubber band. iOS
+ * WHAT THIS FILE CANNOT DO, SAID FIRST. It does not produce a rubber band. iOS
  * overscroll is a WKWebView/UIScrollView behaviour: no headless Chromium bounces,
  * and a scripted negative scrollTop is clamped to 0 by the engine (asserted
- * below, because that clamp is also the reason the mark cannot leak). The only
- * proof that pulling down on an iPhone shows the wordmark is pulling down on an
- * iPhone. Nothing here claims otherwise. What it CAN do is drive the production
- * scroll listener with a faked negative offset and then assert PIXELS, which is
- * the whole geometry and the whole fade curve minus the finger.
+ * below, because that clamp is also the reason ordinary scrolling cannot leak the
+ * mark). What it CAN do is drive the production scroll listener with a faked
+ * negative offset and then assert PIXELS, which is the whole geometry and the
+ * whole reveal curve minus the finger.
+ *
+ * WHAT A DEVICE SAID, 2026-08-21, BECAUSE THE THING THIS FILE CANNOT DO IS
+ * EXACTLY WHERE THREE RELEASES DIED. Booted iPhone 17 Pro (iOS 26.5),
+ * MobileSafari, a synthesised drag HELD open for ~10s so the bounce could be
+ * screenshotted while it was happening:
+ *   - the nested scroller DOES rubber-band, and `overscroll-behavior: contain`
+ *     does not stop it. #screen.scrollTop bottomed out at -168, 33 scroll events
+ *     fired with a negative value, and an element inside the scroller moved 168px
+ *     down by getBoundingClientRect. So the listener has always had real data.
+ *   - and NOTHING PARKED ABOVE THE SCROLLER'S CONTENT ORIGIN PAINTS INTO THE
+ *     EXPOSED STRIP. In a 126pt-deep bounce, sampled at both halves of the width,
+ *     the strip was the scroller's own background COLOUR edge to edge and zero px
+ *     of anything else. Four forms of "parked above the origin" were in that page
+ *     and all four scored zero: a `::before` at `bottom: 100%`, a real div at
+ *     `bottom: 100%`, and a background-image at `center -60px` with
+ *     `background-attachment: local` and with `scroll`. WebKit sizes the
+ *     scrolled-contents layer to the scrollable-overflow rect, which begins AT
+ *     the origin, and fills the rubber-band region from that layer's solid
+ *     backgroundColor.
+ * That is why Tom never saw the mark on any of v414, v415 or v421: not the pull
+ * threshold, which is what every earlier version of this file argued about, but a
+ * mark that could not have appeared however far he pulled.
+ *
+ * AND THE FIX WAS CONFIRMED THE SAME WAY, ON THE SAME SIMULATOR, BEFORE THIS FILE
+ * WAS BELIEVED. The shipped rule and the shipped listener were lifted verbatim
+ * into a bare page with the same #app/.screen boxes and the real wordmark.png,
+ * and the same held drag was screenshotted: the wordmark painted IN FULL, at
+ * device rows 245-369, entirely below the Dynamic Island, during a real rubber
+ * band. That is the end of the chain, and it is the one link no headless run and
+ * no row in this file can assert. The previous version
+ * of this header said "the only proof that pulling down on an iPhone shows the
+ * wordmark is pulling down on an iPhone", and then let a design decision rest on
+ * an assumption about WKWebView that nobody had measured. Measuring it took one
+ * page and one held drag.
  *
  * WHAT IT DOES TEST is everything that can be wrong WITHOUT a bounce, which is
  * every requirement Tom actually set:
@@ -16,22 +49,22 @@
  *   CLAMP     scrollTop cannot go negative, so ordinary scrolling can never
  *             reach it either
  *   ABOVE     at every scroll position the mark's bottom edge stays above the
- *             scrollport's top edge
- *   MECHANISM the mark rides the SCROLLED CONTENT LAYER, measured in pixels.
- *             This is the one property the whole feature depends on: the bounce
- *             translates that layer, so a mark that had drifted onto the
- *             viewport (position: fixed, background-attachment: fixed, moved out
- *             of the scroller) would sit perfectly still under a pull and reveal
- *             nothing, while every other row here stayed green.
- *   CURVE     the fade is a function of PULL DISTANCE, driven by the real
- *             listener in js/app.js, monotonic, and at FULL opacity by 36px
+ *             viewport's top edge, so only a NEGATIVE offset can reveal it
+ *   MECHANISM the mark is NOT inside the scroller and does NOT ride the scrolled
+ *             content layer, asserted twice: `#screen::before` paints nothing,
+ *             and 60px of real scrolling moves the mark's ink by ZERO pixels.
+ *             The direction of this row is REVERSED from the one it replaces,
+ *             which required the ride. See its block: the ride is the bug.
+ *   CURVE     opacity AND travel are functions of PULL DISTANCE, driven by the
+ *             real listener in js/app.js, monotonic, and fully revealed by 36px
  *   FAILOPEN  with the listener never having fired, the mark is at opacity 1 and
- *             not at 0. v414 and v415 both shipped invisible; a JS-driven reveal
- *             whose default is transparent is how this ships invisible a third
- *             time, on any WebView that does not report the negative offset.
- *   REDUCED   prefers-reduced-motion pins it to the end state, the feature brings
- *             no animation for the global 0.001s duration collapse to act on, and
- *             the iteration cap that actually stops a loop is in force
+ *             not at 0, AND fully outside the clip. A JS-driven reveal whose
+ *             default is transparent is one of the ways this shipped invisible.
+ *   REDUCED   prefers-reduced-motion drops the FADE and leaves the TRAVEL alone.
+ *             Pinning --wm-pull itself, which is how reduced motion used to be
+ *             handled, would now park the mark permanently on screen. The feature
+ *             brings no animation for the global 0.001s duration collapse to act
+ *             on, and the iteration cap that actually stops a loop is in force
  *   COST      the listener writes a style at most 21 times across 200 distinct
  *             pull values: the quantisation is real, not a comment
  *   VISIBLE   at a 36px pull there are thousands of BRIGHT ink pixels on screen
@@ -43,6 +76,15 @@
  *   INK       the revealed mark composites BRIGHT, near the source cream
  *   PRECACHE  the asset is in sw.js PRECACHE, because an unprecached background
  *             image is a blank space on one bar of LTE
+ *   UNDERNOTCH at the pull the reveal calls FULL, thousands of the mark's pixels
+ *             are BELOW env(safe-area-inset-top), i.e. out from under the status
+ *             bar and the Dynamic Island, and the first of them arrive by 24px of
+ *             pull. GRADED again as of 2026-08-21, on Tom's instruction. See its
+ *             own block for why it was downgraded for one release and why that
+ *             is over.
+ *   REACHABLE two-sided per inset and against the INSET, not the origin: nothing
+ *             at rest at the fail-open opacity, and the WHOLE mark below --sat at
+ *             a full pull, with the same clearance on every phone.
  *
  * THE INK ROW WAS INVERTED ON PURPOSE, 2026-08-20. It used to pin the revealed
  * mark to --text-3 (#8f8578) with a brightness CEILING of 200, i.e. a rule that
@@ -77,48 +119,90 @@
  *         BRIGHTNESS together, and CURVE reads the opacity the real listener
  *         produced rather than the one the CSS declares.
  *
- * The notch is faked (--sat: 62px, anti-regression rule 4). The mark's own offset
- * no longer contains --sat (that is the point: the threshold is now the same on
- * every phone), but .screen's padding does, so the card position every pixel clip
- * is measured against still depends on it.
+ * The notch is faked (--sat: 62px, anti-regression rule 4), and it is now the
+ * term the whole feature turns on rather than one it was written to avoid. An
+ * earlier row here FORBADE --sat from entering the reveal, on the reasoning that
+ * no phone should need a harder pull than another; --sat is the occlusion, so a
+ * rule that keeps the occluding term out of the number can never notice the
+ * occlusion. The PULL is inset-free (--wm-pull is min(1, pull/36) everywhere) and
+ * the TRAVEL contains --sat on purpose, which is what lands the same clearance on
+ * every phone. REACHABLE's last row grades the clearance, not the offset.
  *
- * PROVE-RED. Every mutation run in a throwaway worktree, each asserting the edit
- * really applied before the result was read (guard-hygiene-lint's failure 3).
- * These three are inherited from the versions of this file that shipped v414 and
- * v415, on rows that have not changed:
- *   app.css  .screen--today::before -> .screen::before    1 FAILED, TODAY:
- *            "today:MARK bonehead:MARK progress:MARK ..." on all six screens
- *   js/app.js  the classList.toggle('screen--today') line deleted
- *                                                         7 FAILED, including
- *            TODAY "today:- bonehead:- ..." and INK "no ink pixels found at all"
- *   app.css  position: absolute -> position: fixed        1 FAILED, MECHANISM,
- *            re-run on this tree: "shift 0px (want -60)". Silent to every other
- *            row, and the feature would be dead on the device.
- * and these were run against this release, on this file:
- *   app.css  the SHIPPED v415 geometry restored verbatim, `top: calc(-8px -
- *            var(--sat))` at 172x46                       6 FAILED. REST at
- *            --sat 0 reads 5,935 ink pixels in the 14px above the first card and
- *            a bottom edge at +38px; REACHABLE reads -38px of travel at --sat 0
- *            (it is already on screen), 9px at 47, 21px at 59, and the IDENTICAL
- *            row prints "-38px, 9px, 21px, 21px". That is the live regression
- *            this release fixes, going red on the geometry that shipped it.
- *   app.css  opacity: var(--wm-pull, 1) -> .55            8 FAILED: INK mean
- *            rgb(144,137,127) against the cream, both CURVE rows flat at 0.55 at
- *            every pull, VISIBLE at 0.55, FAILOPEN, REDUCED, and both SAMPLE
- *            rows that exist to stop a dim mark being graded as a bright one.
- *            The exact regression the OLD INK row used to demand.
- *   app.css  opacity: var(--wm-pull, 1) -> var(--wm-pull, 0)
- *                                                         2 FAILED, FAILOPEN and
- *            its SAMPLE row: the transparent-by-default trap, and it is invisible
- *            to every geometry and pixel row in this file because every one of
- *            them sets the pull first.
- *   js/app.js  the bindWordmarkPull() call deleted         3 FAILED: CURVE flat
- *            at 1.00 at every pull, COST "0 writes across 200 scroll events",
- *            and the reduced-motion SAMPLE row reading --wm-pull "".
- *   js/app.js  `still.matches ? 1 :` removed from the listener
- *                                                         1 FAILED, REDUCED.
+ * PROVE-RED. Every mutation run in a THROWAWAY COPY of the tree (cp -R, never in
+ * the worktree), each one asserting the edit really applied before the result was
+ * read (guard-hygiene-lint's failure 3). Run 2026-08-21 against this file, on the
+ * release that moved the mark out of the scroller. The tree is 41/41 green.
+ *
+ *   m1  app.css  the `transform: translateY(...)` line DELETED, i.e. the reveal
+ *                reverted to the geometry v421 shipped: the mark parked with its
+ *                bottom edge on the viewport origin and nothing to move it.
+ *                                                       12 FAILED, including
+ *       UNDERNOTCH "0 ink px below the status bar at 36px of pull (floor 6000);
+ *       first pull with any visible ink: none up to 120px" and its SAMPLE partner
+ *       reading "6px:0 12px:0 18px:0 24px:0 36px:0 48px:0 72px:0 120px:0", plus
+ *       VISIBLE "0 ink px ... travel 0px measured at capture", CONTROL, both
+ *       MECHANISM-adjacent pixel rows, INK, CURVE and all five REACHABLE rows.
+ *       THIS IS THE ROW TOM ASKED FOR, GOING RED ON THE THING HE COULD NOT SEE.
+ *
+ *   m2  app.css + js/app.js  the SHIPPED v421 FEATURE RESTORED VERBATIM:
+ *                `.screen--today::before` with `bottom: 100%`, no transform, and
+ *                the listener writing --wm-pull back onto #screen.
+ *                                                       24 FAILED plus the count
+ *       guard: "only 37 checks ran, expected 41", because the four REACHABLE rows
+ *       skip themselves when their SAMPLE row finds no mark. Named rows include
+ *       MECHANISM "#screen::before content none" going red the other way,
+ *       UNDERNOTCH, VISIBLE, TODAY "today:- bonehead:- ..." (the mark is inside a
+ *       scroller this file no longer looks in), COST "0 writes", and every REST
+ *       geometry row reading null. The regression that shipped three times cannot
+ *       pass this file quietly any more.
+ *
+ *   m3  app.css  `bottom: 100%` -> `bottom: calc(100% - var(--sat))`, i.e. the
+ *                mark made VISIBLE AT REST, which is the other half of the
+ *                constraint and the v415 regression in a new dress.
+ *                                                       12 FAILED: REST in
+ *       pixels ("nothing of the mark is on screen"), REST's geometry row, ABOVE,
+ *       FAILOPEN, the ON/OFF band-identity row, and REACHABLE at --sat 47, 59 and
+ *       59. --sat 0 correctly stays GREEN, because there the mutation is a no-op.
+ *       Making the mark reachable did NOT cost the rest-state guarantee; that is
+ *       the whole point of moving the reveal into a transform.
+ *
+ *   m4  app.css  `opacity: var(--wm-pull, 1)` -> `var(--wm-pull, 0)`, the
+ *                transparent-by-default trap.            6 FAILED: FAILOPEN, its
+ *       SAMPLE partner, and all four REACHABLE rows, which read the rest state at
+ *       the fail-open opacity on purpose so a dim mark cannot be graded as a
+ *       hidden one.
+ *
+ *   m5  js/app.js  `still.matches ? 1 :` PUT BACK in the listener, which is how
+ *                reduced motion used to be handled and is now a live bug: it pins
+ *                --wm-pull, and --wm-pull drives the TRANSFORM.
+ *                                                       1 FAILED, REDUCED: "at
+ *       pull 0 with reduce: opacity 1, travel 128px". The wordmark parked on
+ *       screen forever for anyone who asked for less motion.
+ *
+ *   m6  app.css  `#app:has(.screen--today)::before` -> `#app::before`, the
+ *                selector regression that used to slip through.
+ *                                                       1 FAILED, TODAY: "today:
+ *       MARK bonehead:MARK progress:MARK foods:MARK friends:MARK settings:MARK".
+ *
+ * INHERITED PROVE-REDS, from the versions of this file that shipped v414, v415
+ * and v421, on rows whose claim has not changed:
+ *   app.css  the SHIPPED v415 geometry, `top: calc(-8px - var(--sat))` at 172x46
+ *                                                       6 FAILED. REST at --sat 0
+ *            read 5,935 ink pixels in the 14px above the first card and a bottom
+ *            edge at +38px: on screen at every scroll position on every device
+ *            with no top inset.
+ *   app.css  opacity: var(--wm-pull, 1) -> .55           8 FAILED: INK mean
+ *            rgb(144,137,127) against the cream, both CURVE rows flat at 0.55,
+ *            VISIBLE, FAILOPEN, REDUCED and both SAMPLE rows that exist to stop a
+ *            dim mark being graded as a bright one.
+ *   js/app.js  the bindWordmarkPull() call deleted        3 FAILED: CURVE flat,
+ *            COST "0 writes across 200 scroll events", and the reduced-motion
+ *            SAMPLE row reading --wm-pull "".
  *   js/app.js  the 1/20 quantisation removed              1 FAILED, COST: 61
  *            writes across 200 scroll events instead of 21.
+ *   js/app.js  the classList.toggle('screen--today') line deleted
+ *                                                        7 FAILED, including
+ *            TODAY and INK "no ink pixels found at all".
  *
  * The selector mutation is the reason to insist on this. The first version of
  * TODAY required the CLASS and a painted pseudo-element, and route() still adds
@@ -148,7 +232,10 @@ const INK_LUM = 60;        // ink detector: measured backdrop max is 33
 const CREAM = [255, 243, 211];   // the wordmark PNG's own ink
 const MARK_H = 62;         // app.css: the mark's height. `bottom: 100%` does the rest
 const PAD = 14;            // .screen's padding above the first card, on top of --sat
-const FULL = 36;           // js/app.js bindWordmarkPull(): px of pull for opacity 1
+const FULL = 36;           // js/app.js bindWordmarkPull(): px of pull for a full reveal
+const LAND = 66;           // app.css: the travel is --sat + this, so the mark lands
+                           // with its TOP edge LAND - MARK_H below the inset
+const GAP = LAND - MARK_H; // 4px of clearance between the status bar and the mark
 
 /* THE SIMULATED PULL. Chromium clamps scrollTop at 0, so the only way to reach
    the production listener is to shadow the element's scrollTop getter with an own
@@ -169,11 +256,17 @@ const pullTo = (page, px, hold = false) => page.evaluate((d, keep) => {
   const el = document.getElementById('screen');
   Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => -d });
   el.dispatchEvent(new Event('scroll'));
-  const op = getComputedStyle(el, '::before').opacity;
+  const cs = getComputedStyle(document.getElementById('app'), '::before');
+  const m = cs.transform.match(/matrix\(([^)]+)\)/);
   if (!keep) delete el.scrollTop;
-  return { faked: -d, op: parseFloat(op), varSet: el.style.getPropertyValue('--wm-pull') };
+  return {
+    faked: -d, op: parseFloat(cs.opacity),
+    ty: m ? parseFloat(m[1].split(',')[5]) : 0,
+    varSet: document.documentElement.style.getPropertyValue('--wm-pull'),
+  };
 }, px, hold);
 const releasePull = page => page.evaluate(() => { delete document.getElementById('screen').scrollTop; });
+const clearPull = page => page.evaluate(() => document.documentElement.style.removeProperty('--wm-pull'));
 
 /* ---------- static: the asset is precached ---------- */
 const sw = readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
@@ -230,15 +323,26 @@ await sleep(1800);
 await page.addStyleTag({ content: `:root{--sat:${SAT}px}` });
 await sleep(600);
 
+/* THE MARK IS #app::before NOW, NOT #screen::before, AND EVERY GEOMETRY ROW HAS
+   TO READ IT WHERE IT LIVES. `top` and `height` are the box before the transform;
+   `ty` is the translate the rule resolved out of --wm-pull, read off the computed
+   matrix rather than recomputed here, so the number comes from the shipped CSS.
+   The mark's PAINTED bottom edge is top + h + ty, and every rest/clip row below
+   grades that sum and not `top` alone: a mark hidden by the clip and a mark
+   driven down past the status bar differ only in ty. */
 const geo = () => page.evaluate(() => {
   const el = document.getElementById('screen');
-  if (!el) return null;
-  const cs = getComputedStyle(el, '::before');
+  const app = document.getElementById('app');
+  if (!el || !app) return null;
+  const cs = getComputedStyle(app, '::before');
   const first = el.firstElementChild?.getBoundingClientRect();
+  const m = cs.transform.match(/matrix\(([^)]+)\)/);
   return {
     cls: el.className, content: cs.content,
     top: parseFloat(cs.top), h: parseFloat(cs.height), w: parseFloat(cs.width),
+    ty: m ? parseFloat(m[1].split(',')[5]) : (cs.transform === 'none' ? 0 : NaN),
     opacity: parseFloat(cs.opacity), bg: cs.backgroundImage, position: cs.position,
+    zIndex: cs.zIndex, events: cs.pointerEvents,
     scrollTop: el.scrollTop, scrollH: el.scrollHeight, clientH: el.clientHeight,
     firstY: first ? Math.round(first.y) : null,
   };
@@ -246,8 +350,8 @@ const geo = () => page.evaluate(() => {
 
 const g0 = await geo();
 ok('SETUP     Today is up with the mark declared: a ::before with the wordmark as its background',
-  !!g0 && /wordmark\.png/.test(g0.bg) && g0.content !== 'none' && g0.w > 0 && g0.h > 0,
-  g0 ? `class="${g0.cls}" ${g0.w}x${g0.h} top ${g0.top} opacity ${g0.opacity} position ${g0.position}` : 'no #screen');
+  !!g0 && /wordmark\.png/.test(g0.bg) && g0.content !== 'none' && g0.w > 0 && g0.h > 0 && Number.isFinite(g0.ty),
+  g0 ? `class="${g0.cls}" ${g0.w}x${g0.h} top ${g0.top} ty ${g0.ty} opacity ${g0.opacity} position ${g0.position} z ${g0.zIndex}` : 'no #app/#screen');
 
 /* The asset behind the rule really loads. A 404 paints nothing, and every pixel
    row below would then be grading an empty box. */
@@ -271,9 +375,16 @@ ok('REST      at scrollTop 0 not one pixel above the ink threshold is in the ban
    JSON turns into null and node adds to 0: `0 <= 0` passed, and the row said
    "bottom 0px" about an element that did not exist. Caught by running the
    prove-red that deletes the class toggle in route(). */
-ok('REST      the mark\'s bottom edge sits above the scrollport, so the overflow clip owns it',
-  Number.isFinite(g0.top) && Number.isFinite(g0.h) && g0.top + g0.h <= 0,
-  `top ${g0.top}px + height ${g0.h}px = bottom ${g0.top + g0.h}px (must be a real number <= 0)`);
+ok('REST      the mark\'s bottom edge sits above the viewport, so #app\'s overflow clip owns it',
+  Number.isFinite(g0.top) && Number.isFinite(g0.h) && Number.isFinite(g0.ty) && g0.top + g0.h + g0.ty <= 0,
+  `top ${g0.top}px + height ${g0.h}px + translate ${g0.ty}px = bottom ${g0.top + g0.h + g0.ty}px (must be a real number <= 0)`);
+/* THE MARK IS BEHIND THE WORLD AND CANNOT TAKE A TAP. z-index -1 inside #app's
+   stacking context (#app is z-index 1) is what lets the mark land ON the strip the
+   first card occupies at rest without printing over the card, and
+   pointer-events: none is anti-regression rule 6 in one declaration: an
+   absolutely positioned box over content has to be unable to swallow a control. */
+ok('REST      the mark paints BEHIND the screen content and cannot be hit-tested',
+  g0.zIndex === '-1' && g0.events === 'none', `z-index ${g0.zIndex}, pointer-events ${g0.events}`);
 
 /* ---------- REST AT --sat 0, WHICH IS WHERE THE LIVE BUG WAS ---------- */
 /* Every REST row above runs at one faked inset. v415's rule was fine there and
@@ -286,21 +397,26 @@ ok('REST      the mark\'s bottom edge sits above the scrollport, so the overflow
    SAMPLE row underneath it refuses to grade anything until the opacity is 1. */
 await page.evaluate(() => {
   document.documentElement.style.setProperty('--sat', '0px');
-  document.getElementById('screen').style.removeProperty('--wm-pull');
+  document.documentElement.style.removeProperty('--wm-pull');
 });
 await sleep(400);
 const sat0 = await page.evaluate(() => {
   const el = document.getElementById('screen');
-  const cs = getComputedStyle(el, '::before');
-  return { top: parseFloat(cs.top), h: parseFloat(cs.height), op: parseFloat(cs.opacity), pad: getComputedStyle(el).paddingTop };
+  const cs = getComputedStyle(document.getElementById('app'), '::before');
+  const m = cs.transform.match(/matrix\(([^)]+)\)/);
+  return {
+    top: parseFloat(cs.top), h: parseFloat(cs.height), op: parseFloat(cs.opacity),
+    ty: m ? parseFloat(m[1].split(',')[5]) : (cs.transform === 'none' ? 0 : NaN),
+    pad: getComputedStyle(el).paddingTop,
+  };
 });
 ok('SAMPLE    at --sat 0 the mark is at its fail-open opacity, so the pixel row below is grading a mark that would actually paint',
-  sat0.op === 1 && Number.isFinite(sat0.top) && sat0.h > 0,
-  `opacity ${sat0.op}, top ${sat0.top}px, height ${sat0.h}px, .screen padding-top ${sat0.pad}`);
+  sat0.op === 1 && Number.isFinite(sat0.top) && sat0.h > 0 && Number.isFinite(sat0.ty),
+  `opacity ${sat0.op}, top ${sat0.top}px, height ${sat0.h}px, translate ${sat0.ty}px, .screen padding-top ${sat0.pad}`);
 const sat0Stats = await stats(await shot({ x: 0, y: 0, width: VW, height: PAD }));
 ok('REST      at --sat 0 nothing of the mark is on screen at rest, in pixels: no inset is the case the shipped rule got backwards',
-  sat0Stats.n === 0 && Number.isFinite(sat0.top) && sat0.top + sat0.h <= 0,
-  `${sat0Stats.n} ink px in the ${PAD}px above the first card, bottom edge at ${sat0.top + sat0.h}px (v415 measured +38px here, visible at every scroll position)`);
+  sat0Stats.n === 0 && Number.isFinite(sat0.top) && sat0.top + sat0.h + sat0.ty <= 0,
+  `${sat0Stats.n} ink px in the ${PAD}px above the first card, bottom edge at ${sat0.top + sat0.h + sat0.ty}px (v415 measured +38px here, visible at every scroll position)`);
 await page.evaluate(v => document.documentElement.style.setProperty('--sat', v + 'px'), SAT);
 await sleep(400);
 
@@ -313,15 +429,30 @@ await sleep(400);
    until every row that reads it has been graded. */
 
 /* ---------- CLAMP + ABOVE ---------- */
+/* CLAMP still matters and it is still about the ENGINE, not about this feature:
+   Chromium refuses a negative scrollTop, which is why no headless run can produce
+   a rubber band and why the listener has to be driven by a faked getter below.
+   ABOVE changed meaning with the mark. It used to subtract scrollTop, because the
+   mark was a descendant of the scroller and rode the scrolled layer. It no longer
+   is (app.css: nothing above a WKWebView scroller's origin ever paints), so the
+   claim is the stronger one: ORDINARY SCROLLING DOES NOT MOVE IT AT ALL. The
+   listener sees every one of these scrolls and writes 0 for each, so the mark
+   stays clipped at every scroll position and the only thing that can reveal it is
+   a negative offset. */
 const clamp = await page.evaluate(() => {
   const el = document.getElementById('screen');
   el.scrollTop = -400;
   const after = el.scrollTop;
-  const cs = getComputedStyle(el, '::before');
+  const read = () => {
+    const cs = getComputedStyle(document.getElementById('app'), '::before');
+    const m = cs.transform.match(/matrix\(([^)]+)\)/);
+    const ty = m ? parseFloat(m[1].split(',')[5]) : (cs.transform === 'none' ? 0 : NaN);
+    return parseFloat(cs.top) + parseFloat(cs.height) + ty;
+  };
   const out = [];
   for (const s of [0, 120, 600, 1e6]) {
     el.scrollTop = s;
-    out.push({ want: s, got: Math.round(el.scrollTop), bottom: parseFloat(cs.top) + parseFloat(cs.height) - el.scrollTop });
+    out.push({ want: s, got: Math.round(el.scrollTop), bottom: read() });
   }
   el.scrollTop = 0;
   return { negative: after, out };
@@ -329,60 +460,83 @@ const clamp = await page.evaluate(() => {
 ok('CLAMP     scrollTop cannot be driven negative, so ordinary scrolling can never reach the mark',
   clamp.negative === 0, `set -400, engine reported ${clamp.negative}`);
 const notAbove = clamp.out.filter(r => !Number.isFinite(r.bottom) || r.bottom > 0);
-ok('ABOVE     at every scroll position the mark stays above the scrollport top edge',
+ok('ABOVE     at every scroll position the mark stays above the viewport top edge: only a NEGATIVE offset reveals it',
   clamp.out.length === 4 && notAbove.length === 0,
   clamp.out.map(r => `scrollTop ${r.got}: bottom ${Math.round(r.bottom)}px`).join(', '));
 
 /* ---------- MECHANISM ---------- */
-/* THE SIMULATION, AND IT IS A SIMULATION. A rubber band translates the whole
-   scrolled content layer down by d, so it is reproduced by moving BOTH the flow
-   content and the mark down by d: padding for the content, `top` for the mark.
-   Nothing else about the render changes. It is not a bounce; it is the geometry a
-   bounce produces, which is all a browser without one can offer.
-   Sampling stays inside the region that is content-free at BOTH scroll positions
-   (the card lands at BOUNCE + 76 and at BOUNCE + 76 - DELTA), because a clip that
-   reaches the card grades the card: the first version of this row read 445,425
-   ink pixels off the green Bonehead panel and would have passed on a mark that
-   never painted at all. */
-/* --wm-pull is PINNED for this block, and it has to be. The block scrolls the
-   element for real, which fires the production listener, which sets the property
-   to 0 for any non-negative scrollTop and would black out the mark mid-row. 1 is
-   also the honest value: a 240px bounce is 6.7x the 36px the fade needs, so a real
-   device at this displacement is at full opacity. A stylesheet !important beats
-   the listener's inline write. The fade itself is graded by CURVE and VISIBLE
-   below, off the listener with nothing pinned. */
-const DISP = await page.addStyleTag({ content:
-  `#screen{padding-top:calc(var(--sat) + 14px + ${BOUNCE}px) !important; --wm-pull:1 !important}` +
-  `.screen--today::before{bottom:auto !important; top:${BOUNCE - MARK_H}px !important}` });
+/* THIS IS THE ROW THE WHOLE RELEASE EXISTS FOR, AND ITS DIRECTION IS REVERSED
+ * FROM THE ONE IT REPLACES.
+ *
+ * The old MECHANISM row asserted that the mark RIDES THE SCROLLED CONTENT LAYER:
+ * "the bounce translates that layer, so a mark that had drifted onto the viewport
+ * would sit perfectly still under a pull and reveal nothing." It was a good row
+ * about a false premise. Measured on a booted iPhone 17 Pro (iOS 26.5) on
+ * 2026-08-21, with the drag HELD open for ~10 seconds so the bounce could be
+ * screenshotted while it was happening:
+ *   - the bounce is real. scrollTop bottomed out at -168, 33 scroll events fired
+ *     with a negative value, and an element inside the scroller moved 168px down
+ *     by getBoundingClientRect. `overscroll-behavior: contain` does not stop it.
+ *   - and the exposed strip contained NOTHING but the scroller's own background
+ *     COLOUR, edge to edge, in a 126pt-deep bounce. Four forms of "parked above
+ *     the origin" were in that one page and all four scored zero pixels: a
+ *     `::before` at `bottom: 100%`, a real div at `bottom: 100%`, and a
+ *     background-image at `center -60px` with `background-attachment: local` and
+ *     with `scroll`. WebKit sizes the scrolled-contents layer to the
+ *     scrollable-overflow rect, which begins AT the origin, and fills the
+ *     rubber-band region from that layer's solid backgroundColor.
+ * So riding the scrolled layer is not the mechanism, it is the bug: three
+ * releases shipped a mark that could not have appeared however far Tom pulled.
+ * The mark is `#app::before` now and the reveal is a transform off --wm-pull.
+ * These rows fail if anyone puts it back inside the scroller, which is the
+ * regression that has already shipped three times. */
+const inScroller = await page.evaluate(() => {
+  const cs = getComputedStyle(document.getElementById('screen'), '::before');
+  return { content: cs.content, bg: cs.backgroundImage, w: parseFloat(cs.width) };
+});
+ok('MECHANISM the mark is NOT painted inside the scroller: content above a WKWebView scroller\'s content origin never appears in the rubber-band strip, measured on device',
+  !/wordmark/.test(inScroller.bg) && !/url\(/.test(inScroller.bg),
+  `#screen::before content ${inScroller.content}, background-image ${inScroller.bg}`);
+
+/* THE CONTENT DISPLACEMENT IS THE ONLY THING SIMULATED NOW. A rubber band moves
+   the scroller's flow content down by the pull; that is reproduced with padding.
+   The MARK is deliberately NOT displaced by this harness: it moves by its own
+   shipped rule off --wm-pull, so these rows go red if that rule changes, instead
+   of grading a constant this file chose (the trap caught on 2026-08-21). */
+const contentPull = px => `#screen{padding-top:calc(var(--sat) + ${PAD}px + ${px}px) !important}`;
+const PIN = await page.addStyleTag({ content: ':root{--wm-pull:1 !important}' });
+const DISP = await page.addStyleTag({ content: contentPull(BOUNCE) });
 await sleep(500);
-/* The sample window: below the mark's simulated position and above where the
-   first card lands, at BOTH scroll positions. mark [BOUNCE-63, BOUNCE-1] and
-   [BOUNCE-62-DELTA, BOUNCE-DELTA], card at BOUNCE+76 and BOUNCE+76-DELTA. */
-const clip = { x: 0, y: 0, width: VW, height: BOUNCE + BAND - DELTA - 16 };
+/* The window starts at --sat, because above that the phone paints its own status
+   bar over whatever is there, and stops just short of where the displaced first
+   card lands. Everything between is backdrop at rest (the REST rows measure 0 ink
+   there), so ink in it is the wordmark and nothing else. */
+const clip = { x: 0, y: SAT, width: VW, height: PAD + BOUNCE - 2 };
 const at0 = await stats(await shot(clip));
+ok(`CONTROL   the sampler is not blind: at a full pull the mark puts thousands of ink pixels into the same band the REST rows graded as empty, and its top edge lands ${GAP}px BELOW the inset`,
+  at0.n > 4000 && at0.n < 200000 && Math.abs(css(at0.top) - GAP) <= 3,
+  `${at0.n} px over lum ${INK_LUM}, first ink row y=${css(at0.top)}css inside a clip that starts at --sat (want ${GAP})`);
+/* Scrolling must not move it. This is the same claim ABOVE makes off geometry,
+   made again in PIXELS, and it is the one that goes red if the mark is put back
+   in the scroller: in there its ink would shift by exactly -DELTA. */
 await page.evaluate(d => { document.getElementById('screen').scrollTop = d; }, DELTA);
 await sleep(400);
 const atD = await stats(await shot(clip));
 await page.evaluate(() => { document.getElementById('screen').scrollTop = 0; });
 await sleep(300);
-
-ok(`CONTROL   the sampler is not blind: displaced by a simulated ${BOUNCE}px bounce the mark puts thousands of ink pixels into the same band the REST rows graded as empty`,
-  at0.n > 2000 && at0.n < 200000 && Math.abs(css(at0.top) - (BOUNCE - MARK_H)) <= 3,
-  `${at0.n} px over lum ${INK_LUM}, first ink row y=${css(at0.top)}css (want ${BOUNCE - MARK_H})`);
 const shift = css(atD.top - at0.top);
-ok(`MECHANISM the mark rides the scrolled content layer: ${DELTA}px of scroll moves its ink up by ${DELTA}px, which is the displacement a rubber band applies to that same layer`,
-  atD.n > 2000 && Math.abs(shift + DELTA) <= 3,
-  `ink first row ${css(at0.top)}css -> ${css(atD.top)}css, shift ${shift}px (want -${DELTA})`);
+ok(`MECHANISM the mark does not ride the scrolled layer: ${DELTA}px of scroll moves its ink by ZERO px, because it is not in the layer the bounce translates`,
+  atD.n > 4000 && shift === 0,
+  `ink first row ${css(at0.top)}css -> ${css(atD.top)}css, shift ${shift}px (want 0; inside the scroller this reads -${DELTA})`);
 
 /* ---------- INK ---------- */
-/* Same displaced capture, graded on colour, and the direction of this row was
-   REVERSED in the release that made the mark unmistakable (see the header). It
-   used to require the composite to land on --text-3 with a brightness ceiling of
-   200. It now requires the opposite: at a full pull the mark reads as the cream
-   it is drawn in, with a brightness FLOOR. Measured both ways on this tree:
-   opacity 1 gives mean rgb(230,219,192) and brightest channel 255; the .55 the
-   old row demanded gives mean ~(143,133,120) and never clears 200, so the two
-   states are 80+ levels apart on every channel and the bound is not delicate. */
+/* Same capture, graded on colour, and the direction of this row was REVERSED in
+   the release that made the mark unmistakable (see the header). It used to pin the
+   revealed mark to --text-3 with a brightness CEILING of 200, i.e. a rule that
+   said "this must stay dim", which is the thing Tom rejected in words. It now
+   requires the opposite, with a brightness FLOOR. Measured both ways: opacity 1
+   gives mean rgb(230,219,192) and brightest channel 255; the .55 the old row
+   demanded gives mean ~(143,133,120) and never clears 200. */
 /* No ink at all is a FAILED row, never a thrown TypeError: a suite that dies
    mid-run prints a stack instead of the remaining rows, which reads like a broken
    app rather than a broken feature. */
@@ -393,7 +547,94 @@ ok('INK       at a full pull the mark composites BRIGHT, near the cream it is dr
     ? `mean rgb(${at0.mean.join(',')}) vs source ink rgb(${CREAM.join(',')}) delta ${off.join('/')}, brightest channel ${at0.maxCh} (the dim version this replaces measured mean 143,133,120 / max 200)`
     : 'no ink pixels found at all: there is nothing to grade the colour of');
 await DISP.evaluate(n => n.remove());
+await PIN.evaluate(n => n.remove());
+await clearPull(page);
 await sleep(300);
+
+/* ---------- UNDERNOTCH: what is visible BELOW the status bar ---------- */
+/* THE ROW THAT LETS TOM SEE IT. GRADED, 2026-08-21.
+ *
+ * Tom, on the third release: "you claimed twice that scrolling down on today
+ * showed a boneheadz logo above behind scroll. it doesnt and youve never actually
+ * got this right despite claiming you did multiple times." Then, on the fourth:
+ * "i still have not been able to see the wordmark after scrolling at any time or
+ * update despite what you say so fix that shit." He is the ground truth and this
+ * file was green through all of it.
+ *
+ * WHAT IT WAS GREEN ABOUT. Every geometry row measured the pull at which the
+ * mark's bottom edge crossed y = 0, THE VIEWPORT'S TOP EDGE. On the phone Tom
+ * holds that is not where the screen starts being visible: the app ships
+ * `viewport-fit=cover` with a black-translucent status bar, so the top
+ * env(safe-area-inset-top) of the viewport is UNDER the system status bar, and on
+ * a 17-class phone the Dynamic Island is a physical cutout ~125x37pt sitting dead
+ * centre in that strip, exactly where a 232px-wide centred wordmark rides in.
+ * Arriving at y = 0 and being VISIBLE were 62px apart and this file measured the
+ * first while reporting the second. Every pixel row, meanwhile, graded a 240px
+ * displacement, 6.7x the pull js/app.js calls full, in a window chosen to clear
+ * the first card, which put it far below the inset by accident.
+ *
+ * WHY IT WAS DOWNGRADED TO A PRINTED NUMBER ON THE PREVIOUS RELEASE, AND WHY THAT
+ * IS OVER. It was written as an assertion, went red, and blocked the v421 gate.
+ * The reasoning for downgrading it was that app.css recorded a decision ("it is
+ * not worth an unreachable peek") and a guard must not wire a disagreement with a
+ * settled decision into the release gate. That reasoning was sound and the
+ * decision it deferred to was wrong twice over: Tom has now overridden it in
+ * words, and the mechanism it was defending could not have worked at all (see the
+ * MECHANISM block: nothing above a WKWebView scroller's origin paints). So the
+ * row is graded again, app.css records the override, and the geometry moved to
+ * meet it rather than the other way round.
+ *
+ * IT IS DRIVEN BY THE REAL LISTENER AT REAL PULL DISTANCES. Nothing here pins
+ * --wm-pull: each step fakes the negative scrollTop, dispatches a real scroll
+ * event, and lets js/app.js decide the reveal, so the fade curve and the travel
+ * curve are both the shipped ones. The content is displaced by the same pull with
+ * padding, because a real bounce moves the flow content too and the mark sits
+ * BEHIND it (z-index -1); grading the mark against a card that had not moved
+ * would under-count it exactly where the card overlaps.
+ *
+ * NOT A SIMULATION OF THE BOUNCE, AND IT DOES NOT NEED TO BE. What it asserts is
+ * the ARITHMETIC OF THE OCCLUSION: wherever the rubber band takes the layer, the
+ * top --sat of the viewport is not visible, and the mark now has to be below it. */
+const PULLS = [6, 12, 18, 24, FULL, 48, 72, 120];
+const underInk = [];
+for (const P of PULLS) {
+  const d = await page.addStyleTag({ content: contentPull(P) });
+  await pullTo(page, P, true);        // held: the listener resets to 0 the moment it is released
+  await sleep(260);
+  /* THE WINDOW STOPS AT THE FIRST CARD, WHICH THE DISPLACEMENT PUTS AT
+     --sat + PAD + P, minus 2px so a border or a shadow cannot be counted as the
+     mark. Its top edge is the inset: above that the phone paints its own status
+     bar over whatever is there. Everything between is backdrop at rest (the REST
+     rows measure 0 ink there), so ink in it is the wordmark and nothing else.
+     Caught by running this row: a window that reached the card read 92,468 "ink"
+     pixels at a SIX pixel pull, where the mark's bottom edge is 43px ABOVE the
+     inset and cannot have contributed one of them. That is the same green
+     Bonehead panel that fooled the first CONTROL row, and it would have graded a
+     mark that never painted at all as a triumph. The mark sits BEHIND the card
+     (z-index -1), so what this counts is only what a person can actually see. */
+  const s = await stats(await shot({ x: 0, y: SAT, width: VW, height: PAD + P - 2 }));
+  underInk.push({ P, n: s.n });
+  await releasePull(page);
+  await d.evaluate(n => n.remove());
+}
+await clearPull(page);
+await sleep(200);
+const VIS_MIN = 200;        // ink pixels below the inset that count as "any of it is showing"
+const FULL_MIN = 6000;      // and what "he cannot miss it" costs at the pull the fade calls full
+const FIRST_INK_MAX = 24;   // px of pull that may pass before ANY of it is visible. Ratchet DOWN only.
+const firstSeen = underInk.find(u => u.n >= VIS_MIN);
+const atFullPull = underInk.find(u => u.P === FULL);
+/* SAMPLE: at the largest pull the strip MUST be full of ink, or this row's numbers
+   are a blind sampler and not an occlusion. Same trap the CONTROL row exists for. */
+ok(`SAMPLE    the under-the-notch sampler is not blind: at ${PULLS[PULLS.length - 1]}px of pull the strip below --sat is full of ink`,
+  underInk[underInk.length - 1].n > 2000,
+  underInk.map(u => `${u.P}px:${u.n}`).join(' '));
+ok(`UNDERNOTCH at the ${FULL}px pull js/app.js calls FULL, thousands of the mark's pixels are BELOW the status bar at --sat ${SAT}, and the first of them arrives by ${FIRST_INK_MAX}px`,
+  !!atFullPull && atFullPull.n >= FULL_MIN && !!firstSeen && firstSeen.P <= FIRST_INK_MAX,
+  `${atFullPull ? atFullPull.n : 'no'} ink px below the status bar at ${FULL}px of pull (floor ${FULL_MIN}); first pull with any visible ink: ` +
+  `${firstSeen ? firstSeen.P + 'px' : 'none up to ' + PULLS[PULLS.length - 1] + 'px'}. ` +
+  `The three releases before this one read 0 here at ${FULL}px, first ink at 76px and whole at 124px, because the mark was pinned to the viewport origin and ` +
+  `a mark whose bottom edge is pinned there cannot clear an inset of ${SAT} until the pull exceeds ${SAT}. Sweep: ${underInk.map(u => `${u.P}px:${u.n}`).join(' ')}`);
 
 /* ---------- CURVE: the fade is driven off scroll position ---------- */
 /* THIS IS THE ROW THE FEATURE WAS MISSING. Everything above grades geometry and
@@ -405,13 +646,14 @@ await sleep(300);
 const curve = [];
 for (const px of [0, 4, 9, 18, 27, 36, 72, 240]) curve.push(await pullTo(page, px));
 const monotonic = curve.every((c, i) => i === 0 || c.op >= curve[i - 1].op - 1e-9);
-ok('CURVE     the mark\'s opacity is a function of PULL DISTANCE, read back off the real listener, and it only ever increases with the pull',
-  curve[0].op === 0 && monotonic && curve.every(c => Number.isFinite(c.op)),
-  curve.map(c => `${-c.faked}px:${c.op.toFixed(2)}`).join(' '));
+const travels = curve.every((c, i) => i === 0 || c.ty >= curve[i - 1].ty - 1e-9);
+ok('CURVE     opacity AND travel are functions of PULL DISTANCE, read back off the real listener, and both only ever increase with the pull',
+  curve[0].op === 0 && curve[0].ty === 0 && monotonic && travels && curve.every(c => Number.isFinite(c.op) && Number.isFinite(c.ty)),
+  curve.map(c => `${-c.faked}px:${c.op.toFixed(2)}/${c.ty.toFixed(0)}px`).join(' '));
 const atFull = curve.find(c => -c.faked === FULL);
-ok(`CURVE     by ${FULL}px of pull it is at FULL opacity, and half way there it is already half lit: v414 and v415 both capped at .55 and Tom saw neither`,
-  atFull.op === 1 && curve.find(c => -c.faked === 18).op >= 0.45,
-  `${FULL}px -> ${atFull.op}, 18px -> ${curve.find(c => -c.faked === 18).op}, 4px -> ${curve.find(c => -c.faked === 4).op} (a jitter-sized pull stays near invisible on purpose)`);
+ok(`CURVE     by ${FULL}px of pull it is at FULL opacity and has travelled its whole ${SAT + LAND}px, so the mark is lit AND clear of the status bar: v414 and v415 both capped at .55 and Tom saw neither`,
+  atFull.op === 1 && Math.abs(atFull.ty - (SAT + LAND)) <= 0.5 && curve.find(c => -c.faked === 18).op >= 0.45,
+  `${FULL}px -> opacity ${atFull.op} travel ${atFull.ty}px (want ${SAT + LAND}), 18px -> ${curve.find(c => -c.faked === 18).op}, 4px -> ${curve.find(c => -c.faked === 4).op} (a jitter-sized pull stays near invisible on purpose)`);
 
 /* FAILOPEN. The one way a JS-driven reveal ships blank: the listener never runs
    (a WebView that does not report the negative offset, a boot that threw before
@@ -419,12 +661,24 @@ ok(`CURVE     by ${FULL}px of pull it is at FULL opacity, and half way there it 
    feature, so the default is asserted, not assumed. Clearing the inline property
    is exactly the state before the first scroll event. */
 const failopen = await page.evaluate(() => {
-  const el = document.getElementById('screen');
-  el.style.removeProperty('--wm-pull');
-  return parseFloat(getComputedStyle(el, '::before').opacity);
+  document.documentElement.style.removeProperty('--wm-pull');
+  const cs = getComputedStyle(document.getElementById('app'), '::before');
+  const m = cs.transform.match(/matrix\(([^)]+)\)/);
+  const ty = m ? parseFloat(m[1].split(',')[5]) : (cs.transform === 'none' ? 0 : NaN);
+  return { op: parseFloat(cs.opacity), ty, bottom: parseFloat(cs.top) + parseFloat(cs.height) + ty };
 });
-ok('FAILOPEN  with --wm-pull never set, the mark is at FULL opacity and not at zero: a listener that never fires degrades to the loud version, never to a blank space',
-  failopen === 1, `computed opacity with no listener contribution: ${failopen}`);
+/* AND BE HONEST ABOUT WHAT THIS BUYS NOW. `var(--wm-pull, 0)` on the opacity is
+   the transparent-by-default trap that shipped invisible before, so the default
+   stays loud and this row still goes red on it. What it no longer buys is a
+   working feature on a WebView that never reports the negative offset: the reveal
+   is a TRANSFORM now, whose default is 0, so a listener that never fires means no
+   reveal. The old block claimed the opacity default made a silent no-op
+   "impossible"; it never did, because the geometry it fell back on could not
+   paint at all. What retires that risk is the device measurement in the MECHANISM
+   block: the negative offset IS reported and the listener DOES fire. */
+ok('FAILOPEN  with --wm-pull never set the mark is at FULL opacity and fully outside the clip: the only thing that hides it at rest is geometry, never a transparent default',
+  failopen.op === 1 && failopen.ty === 0 && failopen.bottom <= 0,
+  `opacity ${failopen.op}, translate ${failopen.ty}px, bottom edge ${failopen.bottom}px`);
 
 /* REDUCED MOTION. The mark declares NO animation, so there is no keyframe to
    shorten. What reduced motion does here is pin the scroll-linked opacity to the
@@ -447,7 +701,7 @@ ok('FAILOPEN  with --wm-pull never set, the mark is at FULL opacity and not at z
 await pullTo(page, FULL);
 const rmBase = await pullTo(page, 0);
 ok('SAMPLE    with motion allowed a zero pull really is transparent, so the reduced-motion row below cannot pass on the fail-open default',
-  rmBase.op === 0 && rmBase.varSet === '0', `opacity ${rmBase.op}, --wm-pull "${rmBase.varSet}"`);
+  rmBase.op === 0 && rmBase.varSet === '0' && rmBase.ty === 0, `opacity ${rmBase.op}, --wm-pull "${rmBase.varSet}", travel ${rmBase.ty}px`);
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
 await sleep(250);
 /* The pin is in the LISTENER, so a scroll event has to run for it to apply.
@@ -463,16 +717,28 @@ await sleep(250);
    evidence for it was a stale read, so: read in its own task, after a settle. */
 await pullTo(page, 0);
 await sleep(300);
-const rm = { op: await page.evaluate(() => parseFloat(getComputedStyle(document.getElementById('screen'), '::before').opacity)) };
+const rm = await page.evaluate(() => {
+  const cs = getComputedStyle(document.getElementById('app'), '::before');
+  const m = cs.transform.match(/matrix\(([^)]+)\)/);
+  return { op: parseFloat(cs.opacity), ty: m ? parseFloat(m[1].split(',')[5]) : (cs.transform === 'none' ? 0 : NaN) };
+});
 const rmDur = await page.evaluate(() => {
-  const cs = getComputedStyle(document.querySelector('.screen--today'), '::before');
+  const cs = getComputedStyle(document.getElementById('app'), '::before');
   return { dur: cs.animationDuration, name: cs.animationName, iter: cs.animationIterationCount, trans: cs.transitionDuration };
 });
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'no-preference' }]);
 await sleep(250);
-ok('REDUCED   under prefers-reduced-motion the listener pins the mark to the end state instead of fading it, and the feature declares no animation for the global duration collapse to act on',
-  rm.op === 1 && rmDur.name === 'none' && rmDur.iter === '1',
-  `opacity at pull 0 with reduce: ${rm.op}; animation-name ${rmDur.name}, duration ${rmDur.dur}, iterations ${rmDur.iter}, transition ${rmDur.trans}`);
+/* AND THE TRAVEL MUST NOT BE PINNED WITH IT, which is new and is the trap the old
+   mechanism hid. Reduced motion used to be handled by pinning --wm-pull itself to
+   1 in the listener, which was harmless while the mark was clipped no matter what
+   the variable said. It is not harmless now: --wm-pull drives the TRANSFORM, so
+   pinning it would park the wordmark permanently on screen for every player who
+   asked for less motion, the moment anything scrolled. So the pin moved to a
+   media query on the OPACITY only, and this row asserts both halves: lit at a
+   zero pull, and still at a zero pull. */
+ok('REDUCED   under prefers-reduced-motion the fade is dropped (opacity pinned to 1) while the TRAVEL still tracks the pull, and the feature declares no animation for the global duration collapse to act on',
+  rm.op === 1 && rm.ty === 0 && rmDur.name === 'none' && rmDur.iter === '1',
+  `at pull 0 with reduce: opacity ${rm.op}, travel ${rm.ty}px (must be 0: a pinned travel would park the mark on screen); animation-name ${rmDur.name}, duration ${rmDur.dur}, iterations ${rmDur.iter}, transition ${rmDur.trans}`);
 
 /* COST. A scroll listener on this element is the one thing that could make the
    feature expensive, and "it is quantised" is a comment until something counts.
@@ -481,16 +747,17 @@ ok('REDUCED   under prefers-reduced-motion the listener pins the mark to the end
    range may produce at most 21 writes (0 through 1 in twentieths). */
 const cost = await page.evaluate(async n => {
   const el = document.getElementById('screen');
+  const root = document.documentElement;
   let writes = 0;
-  const real = el.style.setProperty.bind(el.style);
-  el.style.setProperty = (...a) => { if (a[0] === '--wm-pull') writes++; return real(...a); };
+  const real = root.style.setProperty.bind(root.style);
+  root.style.setProperty = (...a) => { if (a[0] === '--wm-pull') writes++; return real(...a); };
   let d = 0;
   Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => -d });
   const t0 = performance.now();
   for (let i = 0; i < n; i++) { d = (i / n) * 120; el.dispatchEvent(new Event('scroll')); }
   const ms = performance.now() - t0;
   delete el.scrollTop;
-  delete el.style.setProperty;
+  delete root.style.setProperty;
   return { writes, ms, n };
 }, 200);
 ok('COST      the listener is quantised for real: 200 distinct pull values produce at most 21 style writes, so a bounce cannot write a custom property once per frame',
@@ -499,31 +766,29 @@ ok('COST      the listener is quantised for real: 200 distinct pull values produ
 
 /* ---------- VISIBLE: pixels, at the pull the curve says is full ---------- */
 /* The money row, and the one whose absence let v414 and v415 pass this file.
-   FIRST ATTEMPT WAS WRONG AND SAID SO LOUDLY: 0 ink pixels. I displaced the mark
-   to top: -27, which is where a 36px bounce leaves it in CONTENT coordinates, and
-   the overflow clip ate it. That clip is the entire feature (the mark is only ever
-   reachable because the bounce translates the content INSIDE the clip, which
-   Chromium will not do), so a simulation has to move the mark to where it is
-   PAINTABLE and then sample only the rows the pull would expose.
-   So: the same BOUNCE displacement CONTROL uses, and a screenshot of the LAST
-   FULL rows of the mark's box, which is exactly the slice a FULL-px pull reveals.
-   Opacity comes from the real listener with nothing pinned. */
-const VIS = await page.addStyleTag({ content:
-  `#screen{padding-top:calc(var(--sat) + 14px + ${BOUNCE}px) !important}` +
-  `.screen--today::before{bottom:auto !important; top:${BOUNCE - MARK_H}px !important}` });
+   It is simpler than it was, because the mark no longer has to be smuggled out of
+   an overflow clip to be photographed: it lands on the viewport by its own rule.
+   Nothing is pinned. The listener sets the opacity AND the travel from a faked
+   negative scrollTop, the content is displaced by the same pull the way a real
+   bounce displaces it, and the capture is the strip below the status bar. */
+const VIS = await page.addStyleTag({ content: contentPull(FULL) });
 await pullTo(page, FULL, true);      // held: see pullTo's note
 await sleep(400);
 /* The opacity that goes into the row is re-read AT CAPTURE TIME, not the one
    pullTo returned before the sleep. That is the whole lesson of the black band. */
 const visGeo = await geo();
-const vis = await stats(await shot({ x: 0, y: BOUNCE - FULL, width: VW, height: FULL }));
+/* Same card rule as UNDERNOTCH: from the mark's top edge down to just short of
+   where the displaced first card lands. The mark's lower rows are behind the card
+   and are not Tom's to see, so they are not counted. */
+const vis = await stats(await shot({ x: 0, y: SAT + GAP, width: VW, height: PAD + FULL - GAP - 2 }));
 const visOff = vis.mean ? CREAM.map((c, i) => Math.abs(vis.mean[i] - c)) : null;
-ok(`VISIBLE   a ${FULL}px pull puts thousands of bright wordmark pixels on screen: not merely present, VISIBLE`,
-  visGeo.opacity === 1 && vis.n > 4000 && !!visOff && Math.max(...visOff) <= 50 && vis.maxCh >= 240,
-  `${vis.n} ink px in the ${FULL}px the pull exposes, opacity ${visGeo.opacity} measured at capture, mean rgb(${vis.mean ? vis.mean.join(',') : 'none'}), brightest ${vis.maxCh}`);
+ok(`VISIBLE   a ${FULL}px pull puts thousands of bright wordmark pixels on screen BELOW the status bar: not merely present, VISIBLE`,
+  visGeo.opacity === 1 && Math.abs(visGeo.ty - (SAT + LAND)) <= 0.5
+  && vis.n > 6000 && !!visOff && Math.max(...visOff) <= 50 && vis.maxCh >= 240,
+  `${vis.n} ink px in the ${PAD + FULL - GAP - 2}px of the mark that is clear of the first card, starting ${GAP}px below --sat ${SAT}; opacity ${visGeo.opacity} and travel ${visGeo.ty}px measured at capture, mean rgb(${vis.mean ? vis.mean.join(',') : 'none'}), brightest ${vis.maxCh}`);
 await releasePull(page);
 await VIS.evaluate(n => n.remove());
-await page.evaluate(() => document.getElementById('screen').style.removeProperty('--wm-pull'));
+await clearPull(page);
 await sleep(300);
 
 /* ---------- TODAY ONLY ---------- */
@@ -534,7 +799,7 @@ for (const t of tabs) {
   await sleep(1500);
   seen.push({ t, ...await page.evaluate(() => {
     const el = document.getElementById('screen');
-    const cs = getComputedStyle(el, '::before');
+    const cs = getComputedStyle(document.getElementById('app'), '::before');
     /* THE MARK, NOT THE CLASS. The first version of this row required BOTH the
        class and a painted pseudo-element, and the class is applied by route() in
        js/app.js, which a CSS mutation does not touch: rewriting the selector to
@@ -595,74 +860,80 @@ ok('NO-SHIFT  the first card\'s y and the scroll height are EXACTLY equal with t
   && onGeo.scrollH > 0 && onGeo.scrollH === offGeo.scrollH,
   `first card y ${onGeo.firstY} -> ${offGeo.firstY}, scrollHeight ${onGeo.scrollH} -> ${offGeo.scrollH}`);
 
-/* ---- REACHABLE. The assertion this file was missing, and the reason it passed
-   while the feature was invisible on Tom's phone. Everything above proves the
-   mark costs no LAYOUT. Nothing proved it can be SEEN. Shipped v414 needed 73px
-   of rubber-band travel at --sat 59px before one pixel appeared, and 113px to be
-   whole, at .55 opacity; the CSS called that deliberate. A reveal nobody can
-   reach is not a reveal.
-   The bounce itself cannot be reproduced headless (WKWebView gives the scroller
-   a negative content offset; Chromium does not), so this asserts the GEOMETRY
-   that decides the pull, which is the part that was wrong. FIRST_PX_MAX is a
-   ceiling and may only be ratcheted DOWN. */
+/* ---- REACHABLE. The assertion this file was missing for two releases, and it is
+   TWO-SIDED against the INSET now rather than against the viewport origin.
+   The ceiling used to be "the mark's bottom edge reaches y = 0 within 1px of
+   pull", which is the number that was green while Tom saw nothing: y = 0 is under
+   the status bar. The floor is unchanged in spirit and is the v415 regression:
+   the mark must not already be on screen at rest, at ANY inset, --sat 0 included,
+   where the shipped v415 rule welded 38 of its 46px to the top of Today forever.
+   So, per inset:
+     FLOOR    with --wm-pull unset (the state before the first scroll event, and
+              the loudest opacity this feature has) the mark's bottom edge is at
+              or above 0, so the clip owns every pixel of it.
+     CEILING  at a full pull its TOP edge is at least --sat, so the whole mark is
+              clear of the status bar and the Dynamic Island on every phone.
+   Both are measured off getComputedStyle including the resolved transform, so a
+   change to the travel expression moves them. */
 /* RE-ENABLE FIRST. The section above deliberately strips .screen--today to
    measure the feature OFF, and never puts it back, so a naive read here finds no
-   pseudo-element at all and every ceiling below passes vacuously on a null. That
-   is the same empty-sample trap this file's own SAMPLE rows exist to catch. */
+   pseudo-element at all and every bound below passes vacuously on a null. That is
+   the same empty-sample trap this file's own SAMPLE rows exist to catch. */
 await page.evaluate(() => document.getElementById('screen').classList.add('screen--today'));
+await clearPull(page);
 await sleep(300);
-const FIRST_PX_MAX = 1;    // ratcheted 30 -> 4 -> 1 as the offset arithmetic went away
-/* NO OPACITY BOUND HERE. There used to be a note explaining that an opacity floor
-   would contradict the INK row's --text-3 ceiling. That contradiction is gone
-   (INK now demands bright), but the division of labour is still right: CURVE and
-   VISIBLE own the look, off the real listener; this section owns the GEOMETRY,
-   which is measured with --wm-pull absent and would read 1 everywhere. */
-/* --sat 0 IS IN THE LIST, and it is the inset that mattered most. The shipped
-   v415 rule read `top: calc(-8px - var(--sat))` at height 46, so its bottom edge
-   sat at 38 - sat: above the origin on a notched phone (Tom saw nothing) and 38px
-   BELOW it with no inset, welding most of the wordmark to the top of Today on
-   desktop, notchless phones and the Android shell. Every inset this file used to
-   grade was non-zero, which is how a rule with a live regression on one whole
-   class of device passed 25 of 25. */
+/* --sat 0 IS IN THE LIST, and it is the inset that mattered most: v415 read
+   `top: calc(-8px - var(--sat))` at height 46, so its bottom edge sat at 38 - sat,
+   above the origin on a notched phone (Tom saw nothing) and 38px BELOW it with no
+   inset. Every inset this file used to grade was non-zero, which is how a rule
+   with a live regression on one whole class of device passed 25 of 25. */
 const INSETS = [[390, 844, 0], [390, 844, 47], [393, 852, 59], [440, 956, 59]];
-const firstPxSeen = [];
+const clearances = [];
 let reachChecked = 0;
 for (const [W, H, sat] of INSETS) {
   await page.setViewport({ width: W, height: H, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await page.evaluate(v => document.documentElement.style.setProperty('--sat', v + 'px'), sat);
   await sleep(400);
   const g = await page.evaluate(() => {
-    const sc = document.querySelector('.screen--today');
-    if (!sc) return null;
-    const cs = getComputedStyle(sc, '::before');
-    return { top: parseFloat(cs.top), h: parseFloat(cs.height), op: parseFloat(cs.opacity) };
+    const app = document.getElementById('app');
+    if (!document.querySelector('.screen--today')) return null;
+    const read = () => {
+      const cs = getComputedStyle(app, '::before');
+      const m = cs.transform.match(/matrix\(([^)]+)\)/);
+      return {
+        top: parseFloat(cs.top), h: parseFloat(cs.height), op: parseFloat(cs.opacity),
+        ty: m ? parseFloat(m[1].split(',')[5]) : (cs.transform === 'none' ? 0 : NaN),
+      };
+    };
+    document.documentElement.style.removeProperty('--wm-pull');
+    const rest = read();
+    document.documentElement.style.setProperty('--wm-pull', 1);
+    const full = read();
+    document.documentElement.style.removeProperty('--wm-pull');
+    return { rest, full };
   });
-  /* SAMPLE REACH: no element, no pseudo, or a zero-height mark makes every
-     ceiling below pass for free. */
-  ok(`SAMPLE    ${W}x${H} --sat ${sat}: there is a wordmark with real geometry to measure`,
-    !!g && Number.isFinite(g.top) && g.h > 0,
+  /* SAMPLE REACH: no element, no pseudo, or a zero-height mark makes every bound
+     below pass for free. */
+  ok(`SAMPLE    ${W}x${H} --sat ${sat}: there is a wordmark with real geometry to measure, at rest and at a full pull`,
+    !!g && Number.isFinite(g.rest.top) && g.rest.h > 0 && Number.isFinite(g.rest.ty) && Number.isFinite(g.full.ty),
     JSON.stringify(g));
-  if (!g || !Number.isFinite(g.top) || !(g.h > 0)) continue;
+  if (!g || !Number.isFinite(g.rest.top) || !(g.rest.h > 0) || !Number.isFinite(g.full.ty)) continue;
   reachChecked++;
-  const firstPx = -(g.top + g.h);
-  const whole = -g.top;
-  firstPxSeen.push(firstPx);
-  /* TWO-SIDED. The ceiling is "he can reach it"; the floor is "it is not already
-     there", which is the --sat 0 regression, and a one-sided ceiling passes a
-     mark hanging 38px into the screen with room to spare. */
-  ok(`REACHABLE ${W}x${H} --sat ${sat}: the first pixel arrives within ${FIRST_PX_MAX}px of pull, and not before 0`,
-    firstPx >= 0 && firstPx <= FIRST_PX_MAX,
-    `needs ${firstPx.toFixed(0)}px of rubber-band travel before ANY of the mark is on screen (${whole.toFixed(0)}px to be whole). v414 shipped at 73px, which is why Tom could not see it.`);
+  const restBottom = g.rest.top + g.rest.h + g.rest.ty;
+  const fullTop = g.full.top + g.full.ty;
+  clearances.push(fullTop - sat);
+  ok(`REACHABLE ${W}x${H} --sat ${sat}: nothing at rest, and at a full pull the WHOLE mark is below the status bar`,
+    g.rest.op === 1 && restBottom <= 0 && fullTop >= sat,
+    `at rest the bottom edge is ${restBottom.toFixed(0)}px at the fail-open opacity ${g.rest.op} (v415 measured +38px here, on screen at every scroll position); at a full pull the top edge is ${fullTop.toFixed(0)}px, ${(fullTop - sat).toFixed(0)}px below the inset (v414/v415/v421 all landed it ABOVE the inset, which is why Tom saw nothing)`);
 }
-/* SAME ON EVERY PHONE. The old rule put --sat in the offset, so the threshold was
-   9px on a 14-class notch and 21px on a 17-class one: nobody chose that, it fell
-   out of an anchor picked for a different reason. Pinning the mark's BOTTOM edge
-   to the origin instead makes the pull identical everywhere, and this row is what
-   stops --sat creeping back into it. */
-ok('REACHABLE the threshold is IDENTICAL on every inset, so no phone gets a harder pull than another',
-  firstPxSeen.length === INSETS.length && new Set(firstPxSeen.map(v => v.toFixed(1))).size === 1,
-  `first-pixel pull per inset: ${firstPxSeen.map(v => v.toFixed(0) + 'px').join(', ')}`);
-ok('SAMPLE    every inset in the class was measured, so the ceilings above mean something',
+/* SAME ON EVERY PHONE. The travel contains --sat on purpose now (that is the
+   occlusion the feature has to clear), so what has to be identical is the
+   CLEARANCE it buys, not the raw offset. This row is what stops the travel
+   drifting into an expression that lands the mark differently per device. */
+ok(`REACHABLE the clearance below the status bar at a full pull is IDENTICAL on every inset (${GAP}px), so no phone gets a worse reveal than another`,
+  clearances.length === INSETS.length && new Set(clearances.map(v => v.toFixed(1))).size === 1 && Math.abs(clearances[0] - GAP) <= 0.5,
+  `clearance per inset: ${clearances.map(v => v.toFixed(0) + 'px').join(', ')}`);
+ok('SAMPLE    every inset in the class was measured, so the bounds above mean something',
   reachChecked === INSETS.length, `${reachChecked} of ${INSETS.length}`);
 
 await dec.close();
@@ -670,7 +941,14 @@ await browser.close();
 if (srv) srv.close();
 
 const failed = results.filter(r => !r.pass);
-if (results.length < 37) { console.log(`\nFAIL: only ${results.length} checks ran, expected 37`); process.exit(1); }
+/* 41. UNDERNOTCH is a GRADED row again (it was downgraded to a printed number for
+   one release; the block at that line carries why, and why that is over), and the
+   release that moved the mark out of the scroller added the two rows that would
+   have caught the dead mechanism: MECHANISM "not painted inside the scroller" and
+   REST "behind the content and not hit-testable". Restoring the v421 rule verbatim
+   drops this to 37, because the REACHABLE rows skip themselves when their SAMPLE
+   row finds no mark, so the count guard goes red on that regression too. */
+if (results.length < 41) { console.log(`\nFAIL: only ${results.length} checks ran, expected 41`); process.exit(1); }
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 if (failed.length) { console.log('FAILED: ' + failed.map(f => f.n).join(', ')); process.exit(1); }
 console.log('overscroll-wordmark-audit clean');

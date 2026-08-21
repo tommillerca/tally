@@ -36,7 +36,7 @@ import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustVa
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
   removeInstance, breedParents, breedCost, transmogCost, TRANSMOG_HIDE,
   nickProblem, cleanNick, NICK_MAX } from '../js/loot.js';
-import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset } from '../data/boneheadz.js';
+import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, PET_SLOTS } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
   SEED_IDS, seedName, isRareSeed, growMinutes, GROW_MIN, GROW_MIN_RARE,
@@ -509,7 +509,12 @@ test('rarity weights sum to 100 and crates are sane', () => {
 test('boneheadz: unique ids, valid slots, assets exist', () => {
   const ids = new Set(BH_ITEMS.map(i => i.id));
   assert.equal(ids.size, BH_ITEMS.length);
-  const slotCodes = new Set(BH_SLOTS.map(s => s.code));
+  /* BOTH SLOT TABLES. This set exists to catch a typo'd slot, and a pet
+     accessory's slot is not a typo: PET_SLOTS is a second, deliberate table
+     (see data/boneheadz.js) precisely BECAUSE those codes must not sit in
+     BH_SLOTS, which nine sites iterate to paint the PLAYER figure. Checking
+     against BH_SLOTS alone rejected CE1 for having a slot the app defines. */
+  const slotCodes = new Set([...BH_SLOTS.map(s => s.code), ...PET_SLOTS.map(s => s.code)]);
   for (const i of BH_ITEMS) {
     assert.ok(slotCodes.has(i.slot), i.id);
     assert.ok(RARITY_ORDER.includes(i.rarity), i.id);
@@ -693,7 +698,11 @@ test('endless: the Live Wire lands every 7 rungs, never on the Glutton', async (
   assert.equal(pit.endlessFoe(70).glutton, true, 'rung 70 stays the Glutton');
   for (let r = 1; r <= 200; r++) {
     const f = pit.endlessFoe(r);
-    assert.ok(!(f.mage && f.glutton), `rung ${r} cannot be both`);
+    /* FOUR drawn bosses share the ladder now, so "never two at once" is a
+       property of the whole set rather than of one pair. Counting is the form
+       that cannot rot when a fifth is added. */
+    const drawn = [f.glutton, f.mage, f.mimic, f.wanderer].filter(Boolean).length;
+    assert.ok(drawn <= 1, `rung ${r} cannot be more than one boss (${drawn})`);
   }
   // a real step above the ordinary ladder, but a lighter one than the Glutton's
   const plain = r => 1.32 + r * 0.07;
@@ -1358,9 +1367,37 @@ test('css: nothing cancels the safe-area inset with a negative top margin', () =
     const top = m[1] ? m[2].trim() : topValue(m[2]);
     if (/--sat/.test(top) && /-\s*1\s*\*|^-/.test(top)) offenders.push(line.trim());
   }
-  assert.deepEqual(offenders, [],
+  /* ONE EXEMPTION, AND IT IS TIED TO ITS PROOF RATHER THAN TO A NAME.
+     This rule matches CSS TEXT, and text cannot tell "the panel's BACKGROUND
+     bleeds under the notch", which is what a full-bleed hero is for, from "the
+     CONTENT slides under the notch", which is the v240 bug. Gwart's Emporium
+     genuinely uses the pattern and genuinely does the safe thing: its own audit
+     samples the safe-area band in PIXELS and measures 0 ink there.
+     So the exemption is only valid while that proof exists. If
+     tests/emporium-audit.mjs is ever deleted or renamed, this test fails again
+     and the exemption has to be re-earned. An allowlist that outlives its
+     evidence is how a guard quietly stops guarding. */
+  const PROVEN_BY_PIXELS = [
+    { css: '.gw-hero', audit: 'emporium-audit.mjs', row: 'BAND' },
+  ];
+  const proven = PROVEN_BY_PIXELS.filter(p => {
+    if (!existsSync(join(here, p.audit))) return false;
+    return readFileSync(join(here, p.audit), 'utf8').includes(p.row);
+  });
+  assert.equal(proven.length, PROVEN_BY_PIXELS.length,
+    'every safe-area exemption must name an audit that exists and still carries its row');
+  const excused = offenders.filter(l => proven.some(p => cssRuleFor(css, l).includes(p.css)));
+  assert.deepEqual(offenders.filter(o => !excused.includes(o)), [],
     'a negative top margin containing var(--sat) pulls content under the notch');
 });
+/* which selector owns a declaration: walk back to the nearest `{` above it */
+function cssRuleFor(css, line) {
+  const i = css.indexOf(line);
+  if (i < 0) return '';
+  const before = css.slice(0, i);
+  const open = before.lastIndexOf('{');
+  return open < 0 ? '' : before.slice(before.lastIndexOf('}', open) + 1, open);
+}
 
 test('css: the scroll container still reserves the safe area', () => {
   const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
@@ -1756,11 +1793,14 @@ test('the Warden badges are the only ones you cannot grind for', () => {
 
 test('no random pet roll can ever include an exclusive pet', () => {
   // hatchEgg() has always excluded them; grantPet('random') did not, so the
-  // Founder's Lizard was reachable by chance. Both roll pools are asserted here by
-  // reading the source, because the pools are built inline and cannot be imported.
+  // Founder's Lizard was reachable by chance. The two inline pools were merged
+  // into pickRandomPet() so there is nothing left to keep in step, and this reads
+  // the source because there is still no way to ask the pool what it contains
+  // without driving it. ONE pool now, and it excludes exclusives; that the two
+  // callers really route through it is tests/pet-pool-audit.mjs's SHARED row.
   const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
   const pools = [...src.matchAll(/BH_ITEMS\.filter\(i => i\.slot === 'C'([^)]*)\)/g)].map(m => m[1]);
-  assert.ok(pools.length >= 2, `expected the hatch + grant pools, found ${pools.length}`);
+  assert.ok(pools.length >= 1, `expected the shared pet pool, found ${pools.length}`);
   for (const p of pools) {
     assert.match(p, /!i\.exclusive/, `a pet pool is built without excluding exclusives: "i.slot === 'C'${p}"`);
   }
@@ -2278,7 +2318,7 @@ test('every Gauntlet rank resolves a real monster look', () => {
   const naked = [];
   for (let r = 1; r <= 140; r++) {
     const f = pitMod.endlessFoe(r);
-    if (f.glutton || f.mage) continue;      // drawn bosses bring their own art
+    if (f.glutton || f.mage || f.mimic || f.wanderer) continue;   // drawn bosses bring their own art
     if (!f.look || !f.look.B || !f.look.SK) naked.push(`${r}: ${f.name}`);
     if (/\s\d+$/.test(f.name)) naked.push(`${r}: bare digit in "${f.name}"`);
   }
@@ -2804,9 +2844,14 @@ test('paddock: the species grid counts copies, stars shinies and locks the rest'
 });
 
 test('paddock: the footer counts copies and kinds, not species rows', () => {
-  assert.equal(PDK.footerLabel(PDK_ROSTER), '5 PETS · 3 OF 6 KINDS');
-  assert.equal(PDK.footerLabel([PDK_ROSTER[0]]), '1 PET · 1 OF 6 KINDS', 'singular reads right');
-  assert.equal(PDK.footerLabel([]), '0 PETS · 0 OF 6 KINDS');
+  /* DERIVED, NOT TYPED. This read '3 OF 6 KINDS' and broke the day a seventh
+     pet was added, which is a true statement about the catalogue being graded
+     as a regression. The point of the row is that the footer counts COPIES and
+     KINDS rather than species rows, and that survives the catalogue growing. */
+  const kinds = BH_ITEMS.filter(i => i.slot === 'C').length;
+  assert.equal(PDK.footerLabel(PDK_ROSTER), `5 PETS · 3 OF ${kinds} KINDS`);
+  assert.equal(PDK.footerLabel([PDK_ROSTER[0]]), `1 PET · 1 OF ${kinds} KINDS`, 'singular reads right');
+  assert.equal(PDK.footerLabel([]), `0 PETS · 0 OF ${kinds} KINDS`);
 });
 
 test('paddock: nothing emits a .pd- class', () => {

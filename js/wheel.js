@@ -36,16 +36,48 @@ function iconHtml(p, size) {
   return `<svg viewBox="${r.vb}" width="${size}" height="${size}" style="color:${r.tint};filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))">${r.inner}</svg>`;
 }
 
-/* WHICH PRIZES HAVE PIXEL ART, and which honestly do not.
-   Coins and the Battle Charm map 1:1 onto Tom's 48px set. The two crate wedges
-   do NOT: the set has one crate drawing, and this wheel's whole point is that
-   the gold wedge is a DIFFERENT crate from the common one, a distinction it
-   currently carries in the tint (#e8c24d vs #f2e9d7) that a single PNG cannot.
-   The Fresh Scrap has no pixel drawing at all. Those three keep the vector. */
-const PIX_PRIZE = p => (p.coin ? 'coin' : p.iconId === 'charm' ? 'xp2' : null);
+/* WHICH PRIZES HAVE PIXEL ART. All seven, as of v421.
+   Three of them used to be listed here as art that did not exist, and that note
+   was wrong on all three counts, which is what Tom was looking at: "the daily
+   spin wheel still doesnt have the pixel art icons in some of the wheel's
+   parts" (2026-08-21).
+     COINS and the BATTLE CHARM map 1:1 onto Tom's 48px set. Always did.
+     THE TWO CRATES were held back on the reasoning that "the set has one crate
+       drawing", so the gold wedge could only stay distinct in its tint. It is
+       not one drawing: assets/crates/common/f0.png and assets/crates/golden/f0.png
+       are two different 48px chests, already precached, already what
+       app.js:crateIcon serves at its top step on the Shop cells. They live
+       outside PIX_CUR only because that table is keyed to assets/icons-pix/.
+     THE FRESH SCRAP was called "no pixel drawing at all". All seven cooking
+       ingredients have one. The wedge already picked sinew as the stand-in for
+       a prize that grants a RANDOM common ingredient (bhIconRaw('ingr-sinew')
+       below), so this swaps the medium and changes no subject.
+   The vector arms below are the fallback, not the plan: they still fire if a
+   PNG ever goes missing, so a wedge can never come up bare. */
+/* EXPORTED SO THE GUARD CAN ASK RATHER THAN GUESS. tests/wheel-audit.mjs used to
+   derive its expected count from the rendered LABEL text (a numeric tag, or the
+   word "Charm"), and its header claimed that was "derived from the module's own
+   prize table". It was not: it was a proxy for the table, and when the Scrap
+   wedge joined the pixel set the proxy stayed behind and the row went red on
+   healthy code. Now both sides of that row come from here.
+   pixelPrizeCount is a function of the SAME table wheelSvg draws, so a wedge
+   cannot join or leave the pixel set without moving the expectation with it. */
+const PIX_PRIZE = p => (p.coin ? 'coin' : p.iconId === 'charm' ? 'xp2' : p.iconId === 'ingredient' ? 'sinew' : null);
+export const pixelPrizeCount = () => PRIZES.filter(p => PIX_PRIZE(p)).length;
+/* Keyed by iconId, and it reuses .crate-ico-pix on purpose: that class is where
+   image-rendering:pixelated lives (app.css). A private class here would render
+   these two through the browser's smooth scaler, which is the exact failure this
+   whole set of art is fighting. */
+const CRATE_PRIZE = { 'crate-daily': 'crates/common/f0', 'crate-golden': 'crates/golden/f0' };
 // Ask for the ARTWORK, never just the kind: wheelSvg drops its vector only when
 // this returns something, so a helper that declines can never leave a bare wedge.
-const pixPrizeImg = p => { const k = PIX_PRIZE(p); return (k && pixCur(k, 48)) || null; };
+const pixPrizeImg = p => {
+  const k = PIX_PRIZE(p);
+  if (k) return pixCur(k, 48) || null;
+  const f = CRATE_PRIZE[p.iconId];
+  return f ? `<img src="assets/${f}.png" alt="" class="crate-ico-pix" width="48" height="48"`
+    + ` style="width:48px;height:48px" decoding="sync">` : null;
+};
 
 /* The pixel art is placed as DOM <img> SIBLINGS of the wheel svg, not inside it.
    The svg is a 0..200 viewBox scaled to a fluid min(80vw,320px) box, so anything
@@ -69,7 +101,15 @@ const PRIZES = [
   { key: 'c30',    coin: true,               tag: '30',     name: '30 Coins',       weight: 22, gold: false, grant: () => coinsAdd(30) },
   { key: 'daily',  iconId: 'crate-daily',    tag: 'Crate',  name: 'Common Crate',    weight: 12, gold: false, grant: () => grantCrate('daily', 'wheel') },
   { key: 'ingr',   iconId: 'ingredient',     tag: 'Scrap',  name: 'a Fresh Scrap',  weight: 20, gold: false, grant: (rng) => grantIngredient(seededIngredient(rng), 1) },
-  { key: 'golden', iconId: 'crate-golden',   tag: 'GOLD',   name: 'a Golden Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
+  /* 'Golden', not 'GOLD'. The wedge grants grantCrate('golden'), reveals as "a
+     Golden Crate", and now draws assets/crates/golden/f0.png, which is the same
+     bone chest the Shop cell and the gift reveal serve for that crate and which
+     v389 shipped under that exact name. 'GOLD' promised treasure over a picture
+     of a chest and read as a currency the game does not have; the drawing and
+     the grant agreed with each other and only the word was the odd one out.
+     Title case to match its sibling wedges too: the gold fill and the gold text
+     colour already say jackpot without shouting. */
+  { key: 'golden', iconId: 'crate-golden',   tag: 'Golden', name: 'a Golden Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
   { key: 'c75',    coin: true,               tag: '75',     name: '75 Coins',       weight: 18, gold: false, grant: () => coinsAdd(75) },
   { key: 'c150',   coin: true,               tag: '150',    name: '150 Coins',      weight: 8,  gold: false, grant: () => coinsAdd(150) },
   { key: 'charm',  iconId: 'charm',          tag: 'Charm',  name: 'a Battle Charm', weight: 12, gold: false, grant: () => grantConsumable('xp2', 'wheel') },
@@ -216,7 +256,14 @@ function landingRotation(idx, spins = 5) {
 export async function maybeShowDailyWheel({ sounds = true, force = false } = {}) {
   // ?wheel=1 = preview: shows the wheel anytime, no gate, no grant (safe to demo)
   const preview = typeof location !== 'undefined' && location.search.includes('wheel=1');
-  if (navigator.webdriver && !window.__wheelForce && !force && !preview) return false;
+  /* ?calm is the device-side twin of navigator.webdriver, and the wheel needs it
+     named separately because it is the one boot interruption that does NOT live
+     in js/app.js's !S.settings family: it is its own module and its own gate.
+     Without it a phone opened with simctl lands on the wheel every time and no
+     device check can reach Today. See the CALM_BOOT comment in js/app.js. */
+  const calm = navigator.webdriver
+    || (typeof location !== 'undefined' && new URLSearchParams(location.search).has('calm'));
+  if (calm && !window.__wheelForce && !force && !preview) return false;
   ensureStyle();
   const today = dateKey();
   // one-time make-good: the pre-v61 bug consumed the day on SHOW, so anyone who
