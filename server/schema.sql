@@ -20,7 +20,14 @@ CREATE TABLE IF NOT EXISTS players (
   max_level INTEGER,                 -- highest level ever accepted (monotone ratchet)
   max_level_at INTEGER,              -- when max_level was last raised (the jump anchor)
   week_key TEXT,                     -- the race week the accepted week_steps belong to
-  week_steps INTEGER                 -- highest weekSteps accepted for week_key (monotone)
+  week_steps INTEGER,                -- highest weekSteps accepted for week_key (monotone)
+  -- TEST ACCOUNTS (2026-08-22). Any test that talks to the LIVE API must
+  -- register with {test:true} so the account lands flagged. Flagged rows are
+  -- excluded from every public surface (/leaderboard, the step-race board, the
+  -- friend-code lookup), so a test run can never again flood the Crew with
+  -- dead level-1 "players". Existing DBs: migrations/2026-08-22-test-accounts.sql,
+  -- applied BEFORE deploying the worker that filters on it.
+  is_test INTEGER DEFAULT 0
 );
 
 -- Names are one-of-a-kind, case-insensitively. /name enforces this in code too

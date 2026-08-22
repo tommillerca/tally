@@ -904,6 +904,13 @@ export default {
         const asExisting = row => json({ playerId: row.id, handle: row.handle, friendCode: row.friend_code, name: row.name || null, existing: true });
         const existing = await env.DB.prepare('SELECT id, handle, friend_code, name FROM players WHERE pubkey = ?').bind(pub).first();
         if (existing) return asExisting(existing);
+        /* TEST ACCOUNTS opt in at birth. Any test that talks to the live API
+           registers with {test:true}; the row lands with is_test=1 and every
+           public surface below excludes it, so a test run can never again fill
+           the Crew with dead level-1 "players" (docs/BOT-CENSUS-2026-08-22.md).
+           Honesty-only flag: a liar who omits it gains nothing but visibility,
+           and a real client never sends it. */
+        const isTest = body.test === true ? 1 : 0;
         // retry on the (astronomically unlikely) friend-code collision
         for (let i = 0; i < 5; i++) {
           const id = newId(), handle = makeHandle(), code = makeFriendCode(), now = Date.now();
@@ -913,8 +920,8 @@ export default {
                transaction: a failure between them left a player who had joined
                the Crew and was never welcomed, and no later call would notice. */
             await env.DB.batch([
-              env.DB.prepare('INSERT INTO players (id, pubkey, handle, friend_code, created_at, last_seen) VALUES (?,?,?,?,?,?)')
-                .bind(id, pub, handle, code, now, now),
+              env.DB.prepare('INSERT INTO players (id, pubkey, handle, friend_code, created_at, last_seen, is_test) VALUES (?,?,?,?,?,?,?)')
+                .bind(id, pub, handle, code, now, now, isTest),
               // welcome grant: a little hello the client ingests as a ledger event
               env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
                 .bind(id, 'social-welcome', 'welcome', JSON.stringify({ coins: 50, xp: 10, note: 'Welcome to the Crew' }), now),
@@ -1210,7 +1217,8 @@ export default {
         const auth = await verifySigned(request, env, bodyText);
         if (auth.err) return json({ error: auth.err }, 401);
         const code = String((JSON.parse(bodyText || '{}').code) || '').toUpperCase().trim();
-        const target = await env.DB.prepare('SELECT id FROM players WHERE friend_code = ?').bind(code).first();
+        // is_test filter: a flagged test account is unfriendable, same 404 as absent
+        const target = await env.DB.prepare('SELECT id FROM players WHERE friend_code = ? AND COALESCE(is_test, 0) = 0').bind(code).first();
         if (!target) return json({ error: 'no player with that code' }, 404);
         if (target.id === auth.playerId) return json({ error: 'that is your own code' }, 400);
         return json(await requestFriendship(env, auth.playerId, target.id));
@@ -1524,6 +1532,7 @@ export default {
                   (SELECT COALESCE(SUM(? - sp.claimed_at), 0) FROM spires sp WHERE sp.owner = players.id AND sp.tended_at > ?) held_ms
            FROM players
            WHERE profile IS NOT NULL -- a registration that never synced a snapshot COALESCEs to a level-1 "bot"; hide it
+             AND COALESCE(is_test, 0) = 0 -- flagged test accounts never surface; also gates the "New Boneheadz" card and add-tokens, both derived from these rows
            ORDER BY lvl DESC, badges DESC, last_seen DESC LIMIT 100`)
           .bind(Date.now() - SPIRE_DORMANT_MS, Date.now(), Date.now() - SPIRE_DORMANT_MS).all();
         const nowLb = Date.now();
@@ -1575,6 +1584,7 @@ export default {
                   CAST(COALESCE(json_extract(profile,'$.weekSteps'),0) AS INTEGER) steps
              FROM players
             WHERE profile IS NOT NULL
+              AND COALESCE(is_test, 0) = 0 -- a test account must never place (or be paid) in the race
               AND json_extract(profile,'$.weekKey') = ?
               AND CAST(COALESCE(json_extract(profile,'$.raceV'),0) AS INTEGER) >= ${RACE_RULES}
               AND CAST(COALESCE(json_extract(profile,'$.weekSteps'),0) AS INTEGER) > 0

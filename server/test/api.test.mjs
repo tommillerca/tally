@@ -491,5 +491,35 @@ await test('names are unique: case-insensitive, and re-saving your OWN name stil
     'a player re-saving their own name must not be told it is taken');
 });
 
+/* TEST ACCOUNTS (2026-08-22). A live-API test registers with {test:true}; the
+   row lands is_test=1 and is invisible on every public surface, so test runs
+   stop flooding the Crew with dead level-1 accounts (docs/BOT-CENSUS-2026-08-22.md).
+   PROVE-RED: drop the COALESCE(is_test,0)=0 clause from /leaderboard or the
+   /friends/request lookup in src/index.js and the matching assert fails by name. */
+await test('is_test account is hidden from the leaderboard and unfriendable', async () => {
+  const bot = await makeKeys();
+  const br = await (await fetch(BASE + '/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
+    body: JSON.stringify({ pubkey: bot.pubJwk, test: true }),
+  })).json();
+  assert.ok(br.playerId, 'flagged registration still works: ' + JSON.stringify(br));
+  // give it a profile: without the filter this is exactly a leaderboard row
+  const body = JSON.stringify({ snapshot: { level: 998, outfit: { SK: 'SK0-1' }, gear: [] }, appV: 'test' });
+  assert.equal((await signedFetch(bot.kp, br.playerId, 'PUT', '/profile', body)).status, 200);
+
+  const viewer = await makeKeys();
+  const vp = await (await regFetch(viewer.pubJwk)).json();
+  const board = await (await signedFetch(viewer.kp, vp.playerId, 'GET', '/leaderboard')).json();
+  assert.ok(!board.players.some(x => x.playerId === br.playerId), 'flagged account never surfaces on the board');
+
+  const fr = await signedFetch(viewer.kp, vp.playerId, 'POST', '/friends/request', JSON.stringify({ code: br.friendCode }));
+  assert.equal(fr.status, 404, 'flagged account is unfriendable (same 404 as absent)');
+
+  // and an UNflagged register stays visible: the filter hides bots, not players
+  const un = await (await regFetch((await makeKeys()).pubJwk)).json();
+  assert.ok(un.playerId && !un.existing, 'plain registration unaffected');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

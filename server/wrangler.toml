@@ -1,4 +1,8 @@
 # Boneheadz Gym social API (Cloudflare Worker + D1).
+# TESTS AGAINST THE LIVE API register with {test:true} on POST /register, so the
+# account lands flagged (players.is_test=1) and never appears on any public
+# surface. Never mint an unflagged account against production (see
+# docs/BOT-CENSUS-2026-08-22.md for what that did).
 # Local dev needs NO account:  npm run db:local && npm run dev
 # Production deploy (once Tom's Cloudflare account exists):
 #   npx wrangler d1 create bonez   -> paste database_id below
