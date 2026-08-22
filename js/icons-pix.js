@@ -73,6 +73,11 @@ const PIX_CUR = {
   ectoplasm: 'ectoplasm',
   marrow: 'marrow', graveroot: 'graveroot', ember: 'ember',
   bog: 'bog', sinew: 'sinew', salt: 'salt',
+  /* keyed by the SPAWN TYPE, not by an ingredient id, so spawnIcon('herbs')
+     looks it up directly. A bundle of sprigs on purpose: the Herb patch is the
+     food find and it does not know which of the seven it carries until you
+     collect it, so it names the category and promises no particular one. */
+  herbs: 'herbs',
   /* keyed by the RECIPES iconId so recipeIconHtml can look it up directly. */
   'dish-broth': 'dish-broth', 'dish-hash': 'dish-hash', 'dish-stew': 'dish-stew',
   'dish-skewer': 'dish-skewer', 'dish-fajita': 'dish-fajita',

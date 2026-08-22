@@ -18,7 +18,7 @@ export const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 
 export const CRATES = {
   daily:  { label: 'Common Crate',  icon: '📦', rolls: 1, floor: 0, coins: [20, 40], consumableChance: 0.12 },
-  golden: { label: 'Golden Crate', icon: '🧰', rolls: 3, floor: 2, coins: [10, 25], consumableChance: 0.18 },
+  golden: { label: 'Bone Crate', icon: '🧰', rolls: 3, floor: 2, coins: [10, 25], consumableChance: 0.18 },
   egg:    { label: 'Step Egg',     icon: '🥚', rolls: 1, floor: 1, coins: [20, 50], slotBias: ['FW', 'S', 'C'], consumableChance: 0.15 },
 };
 
@@ -35,7 +35,7 @@ export const VIGOR_DRAUGHT_AMOUNT = 3;
 
 export const SHOP = [
   { id: 'crate-daily', label: 'Common Crate', icon: '📦', cost: 150 },
-  { id: 'crate-golden', label: 'Golden Crate', icon: '🧰', cost: 400 },
+  { id: 'crate-golden', label: 'Bone Crate', icon: '🧰', cost: 400 },
   { id: 'vigor', label: 'Vigor Draught', icon: '⚡', cost: 90 },
   { id: 'xp2', label: 'Battle Charm', icon: '🧿', cost: 100 },
 ];

@@ -585,21 +585,27 @@ function spawnPays(type) {
   return `${def.xp || 15} XP, plus ${ing}`;
 }
 
-/* THE HERB PATCH IS THE ONE VECTOR MARKER LEFT, and it is waiting on art, not on
-   wiring. Tom, 2026-08-20: "food ingredients till not pixel art". He is looking
-   at this: the Herb patch is THE food spawn (cooking.js SPAWN_FOOD gives it two
-   ingredients every time) and it is the most numerous marker out there, so seven
-   flat vector leaves is most of what the Boneyard looks like. coins, bones,
-   crate and rare all take pixel art below; this one cannot, because
-   assets/icons-pix has no food-find drawing in it. THE SEVEN INGREDIENTS ALL DO
-   have pixel art and all seven are wired (PIX_CUR keys them by INGREDIENTS id,
-   ingIconHtml reads them straight), so this is not a wiring miss anywhere else.
-   WHAT IS NEEDED IS ONE 48px DRAWING of a food find, and it is deliberately NOT
-   one of the seven: the spawn does not know which ingredient it carries until
-   you collect it ("ingredient is a surprise on collect, not previewed" in the
-   spawn pass), so putting marrow or graveroot on the marker would promise an
-   ingredient the find may not hold. `garden-seed` is itself already a stand-in
-   and now the wrong metaphor, since the seeds it was drawn for left the game. */
+/* THE HERB PATCH DRAWS PIXEL ART NOW. It was the last vector marker on the map
+   and it was waiting on ART, not on wiring: Tom, 2026-08-20, "food ingredients
+   till not pixel art", then again on 2026-08-21, "ive told you 5 times to switch
+   out the old herb art for the pixel art i gave you". The drawing existed the
+   whole time and nobody had claimed it. It was snapshotted on
+   `origin/rescue/wt/cur` as assets/icons-pix/food/herb-sprigs.png, one of a
+   24-file PixelLab batch that also holds the twins of the seven ingredients, and
+   it is now assets/icons-pix/herbs.png, keyed in PIX_CUR by the SPAWN TYPE so
+   spawnIcon can look it up directly.
+   IT IS DELIBERATELY NOT ONE OF THE SEVEN INGREDIENTS: the spawn does not know
+   which ingredient it carries until you collect it ("ingredient is a surprise on
+   collect, not previewed" in the spawn pass), so putting marrow or graveroot on
+   the marker would promise an ingredient the find may not hold. A bundle of
+   sprigs names the CATEGORY and promises nothing.
+   `garden-seed` stays as the fallback arm only: it is the wrong metaphor now
+   that the Bone Garden has left the game, but a marker must never come up bare.
+   WHY IT KEPT NOT HAPPENING, recorded so it cannot happen again:
+   tests/boneyard-icon-audit.mjs's VECTOR row carried a written exemption,
+   `VECTOR_OK = ['Herb patch']`, so the one guard that looks at this pixel
+   was TOLD to expect the old art and stayed green through five reports. The
+   exemption is gone and that row now grades this drawing. */
 
 /* ONE NAME AND ONE LINE for the rare spawn, because three hand-typed copies is
    how it ended up with three. The map key said "Mystery egg / Rare: walk to
@@ -617,7 +623,7 @@ function spawnIcon(type, s = 20) {
   if (type === 'coins') return ICONS.coin(s);
   if (type === 'crate') return crateIcon('daily', s);
   if (type === 'rare') return crateIcon('egg', s); // Mystery Egg spawn
-  if (type === 'herbs') return bhIcon('garden-seed', s);
+  if (type === 'herbs') return pixCur('herbs', s) || bhIcon('garden-seed', s);
   return ICONS.bone(s);
 }
 
@@ -744,9 +750,9 @@ function mapLegendHtml() {
        patch THE food spawn: SPAWN_FOOD gives it two cooking ingredients every
        time, where everything else carries one about a fifth of the time. The row
        was naming a screen that is gone and a payout it no longer gives.
-       ITS ICON IS STILL VECTOR ON PURPOSE, and it is the one thing on this list
-       that is: there is no pixel drawing for a food find yet (see the note on
-       spawnIcon). It matches the map, which is what this key is for. */
+       ITS ICON IS PIXEL ART LIKE EVERY OTHER SPAWN ROW as of 2026-08-21
+       (assets/icons-pix/herbs.png, see the note on spawnIcon). It draws through
+       the same spawnIcon call the map uses, which is what this key is for. */
     [spawn('herbs'), 'Herb patch', 'Two cooking ingredients'],
     [spawn('rare', ' rare'), MYSTERY_EGG.name, MYSTERY_EGG.desc],
     [mini, 'Mini-boss', 'A quick fight for coins + XP'],
@@ -1050,7 +1056,7 @@ async function boot() {
   await refreshShinyPets();
   await refreshSlimedSlots();
   const closed = await awardDayCloseIfDue(S.settings.targets);
-  if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 2400);
+  if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Bone Crate earned', 3400), 2400);
   else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 2400);
   await ingestHkPayload(hkTaken);
   backupNudge();
@@ -1143,7 +1149,7 @@ async function rollDayIfNeeded() {
     if (wasOnToday) S.date = today;
     const closed = await awardDayCloseIfDue(S.settings.targets);
     if (wasOnToday) route(); // a new day starts at the top, like a fresh open
-    if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 1400);
+    if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Bone Crate earned', 3400), 1400);
     else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 1400);
     maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
     refreshNotifSchedules();
@@ -1553,7 +1559,7 @@ function openRaceIntro() {
       <ul class="spire-terms">
         <li>Every step from <b>today</b> counts. Nothing to join, nothing to tap.</li>
         <li>Watch the board on the <b>Crew tab</b>: who is first, who is behind you, and by how much.</li>
-        <li>The <b>top ${RACE_PURSE.length}</b> all get paid. First takes <b>${top.coins.toLocaleString()} coins</b>, a Golden Crate and <b>${top.dust} dust</b>.</li>
+        <li>The <b>top ${RACE_PURSE.length}</b> all get paid. First takes <b>${top.coins.toLocaleString()} coins</b>, a Bone Crate and <b>${top.dust} dust</b>.</li>
       </ul>
       <button class="drop-cta" id="raceIntroGo">SEE THE BOARD</button>
       <button class="drop-later" id="raceIntroLater">Not now</button>
@@ -1631,7 +1637,7 @@ const raceLanesHtml = (podium, { prizes = false } = {}) => {
 
 const racePrizeHtml = p => `<span class="rr-prize">
   <span class="pz">${ICONS.coin(13)}${(p.coins || 0).toLocaleString()}</span>
-  ${p.crate ? `<span class="pz">${crateIcon(p.crate, 14)}${p.crate === 'golden' ? 'Golden' : 'Crate'}</span>` : ''}
+  ${p.crate ? `<span class="pz">${crateIcon(p.crate, 14)}${p.crate === 'golden' ? 'Bone' : 'Crate'}</span>` : ''}
   ${p.dust ? `<span class="pz">${ICONS.dust(12)}${p.dust}</span>` : ''}
 </span>`;
 
@@ -2509,7 +2515,7 @@ function giftSender(g) {
 function revealGift(g) {
   const p = (g && g.payload) || {};
   const cards = [];
-  if (p.crate) cards.push({ iconHtml: crateIcon(p.crate, 130), name: p.crate === 'golden' ? 'Golden Crate' : 'Common Crate', rarity: p.crate === 'golden' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
+  if (p.crate) cards.push({ iconHtml: crateIcon(p.crate, 130), name: p.crate === 'golden' ? 'Bone Crate' : 'Common Crate', rarity: p.crate === 'golden' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
   if (p.gearId && GEAR_BY_ID[p.gearId]) {
     const gear = GEAR_BY_ID[p.gearId];
     cards.push({ iconHtml: `<img src="${bhAsset(BH_BY_ID[gear.artId])}" alt="" style="width:130px;height:130px;object-fit:contain">`, name: gear.name, rarity: gear.rarity, kind: 'GEAR', stats: 'Equip it in the Wardrobe' });
@@ -4653,7 +4659,7 @@ function buildDenPin(el, d) {
 function openDenSheet(den, { cleared = false, inRange = false, onFight = null } = {}) {
   const odds = denGearOdds(den.tier || 0);
   const r = den.reward || {};
-  const crateName = r.crate === 'golden' ? 'Golden' : r.crate === 'egg' ? 'Step Egg' : r.crate ? 'Common' : null;
+  const crateName = r.crate === 'golden' ? 'Bone' : r.crate === 'egg' ? 'Step Egg' : r.crate ? 'Common' : null;
   const pay = [
     crateName ? [crateIcon(r.crate, 24), crateName.toUpperCase(), 'CRATE'] : null,
     r.coins ? [ICONS.coin(22), String(r.coins), 'COINS'] : null,
@@ -9554,7 +9560,7 @@ async function renderFriends(el) {
             ${podium.map((z, i) => `<div class="row p${i + 1}">
               <span class="pl">${esc(z.place)}</span>
               <span class="t3-price">${ICONS.coin(13)} ${z.coins.toLocaleString()}</span>
-              ${z.crate ? `<span class="t3-price crate">${crateIcon(z.crate, 15)} ${z.crate === 'golden' ? 'Golden' : 'Crate'}</span>` : ''}
+              ${z.crate ? `<span class="t3-price crate">${crateIcon(z.crate, 15)} ${z.crate === 'golden' ? 'Bone' : 'Crate'}</span>` : ''}
               ${z.dust ? `<span class="t3-price dust">${ICONS.dust(12)} ${z.dust}</span>` : ''}
             </div>`).join('')}
           </div>
@@ -11115,7 +11121,7 @@ async function openLevelUpMoment({ levelUp, levelRewards, fromLevel, ms, extras 
         </div>
         ${levelRewards ? `<div class="lu-rewards">
           <span class="bh-pill">${ICONS.coin(16)} +${levelRewards.coins}</span>
-          <span class="bh-pill">${crateChip('golden')} ${levelRewards.crates > 1 ? levelRewards.crates + ' Golden Crates' : 'Golden Crate'}</span>
+          <span class="bh-pill">${crateChip('golden')} ${levelRewards.crates > 1 ? levelRewards.crates + ' Bone Crates' : 'Bone Crate'}</span>
           ${levelRewards.dust ? `<span class="bh-pill">${ICONS.dust(16)} +${levelRewards.dust}</span>` : ''}
           ${levelRewards.eggs ? `<span class="bh-pill">${crateIcon('egg', 15)} ${levelRewards.eggs > 1 ? levelRewards.eggs + ' Step Eggs' : 'Step Egg'}</span>` : ''}
         </div>` : ''}
@@ -16842,7 +16848,7 @@ async function renderPit(wrap) {
     <div class="t3-sect"><b>After the ladder</b><i></i></div>
     <div class="t3-row${champBeaten ? ' done' : ''}">
       <span class="t3-med">${crateIcon('golden', 22)}</span>
-      <div class="t3-tx"><b>${CHAMPION.name}</b><small>${champBeaten ? `rematch · ${ICONS.coin(12)}${CHAMPION.repeatCoins}` : 'Wields the Bonecrusher · first win drops it + a Golden Crate'}</small></div>
+      <div class="t3-tx"><b>${CHAMPION.name}</b><small>${champBeaten ? `rematch · ${ICONS.coin(12)}${CHAMPION.repeatCoins}` : 'Wields the Bonecrusher · first win drops it + a Bone Crate'}</small></div>
       ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate}>${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
     </div>`;
   const endlessSect = `

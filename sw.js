@@ -98,6 +98,7 @@ const PRECACHE = [
   './assets/icons-pix/bog.png',
   './assets/icons-pix/sinew.png',
   './assets/icons-pix/salt.png',
+  './assets/icons-pix/herbs.png',
   './assets/icons-pix/dish-broth.png',
   './assets/icons-pix/dish-hash.png',
   './assets/icons-pix/dish-stew.png',

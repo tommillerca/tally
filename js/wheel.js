@@ -96,20 +96,24 @@ function wheelIconsHtml() {
 }
 
 // ---- prize table (wheel order; adjacent segments differ in value) ----
-// weights sum to 100. jackpot (Golden Crate) is the gold wedge.
+// weights sum to 100. jackpot (the Bone Crate) is the gold wedge.
 const PRIZES = [
   { key: 'c30',    coin: true,               tag: '30',     name: '30 Coins',       weight: 22, gold: false, grant: () => coinsAdd(30) },
   { key: 'daily',  iconId: 'crate-daily',    tag: 'Crate',  name: 'Common Crate',    weight: 12, gold: false, grant: () => grantCrate('daily', 'wheel') },
   { key: 'ingr',   iconId: 'ingredient',     tag: 'Scrap',  name: 'a Fresh Scrap',  weight: 20, gold: false, grant: (rng) => grantIngredient(seededIngredient(rng), 1) },
-  /* 'Golden', not 'GOLD'. The wedge grants grantCrate('golden'), reveals as "a
-     Golden Crate", and now draws assets/crates/golden/f0.png, which is the same
-     bone chest the Shop cell and the gift reveal serve for that crate and which
-     v389 shipped under that exact name. 'GOLD' promised treasure over a picture
-     of a chest and read as a currency the game does not have; the drawing and
-     the grant agreed with each other and only the word was the odd one out.
-     Title case to match its sibling wedges too: the gold fill and the gold text
-     colour already say jackpot without shouting. */
-  { key: 'golden', iconId: 'crate-golden',   tag: 'Golden', name: 'a Golden Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
+  /* 'Bone', not 'Golden', and the same fix one level up. v421 renamed this tag
+     from 'GOLD' to 'Golden' because the drawing and the grant agreed with each
+     other and only the word was the odd one out. Tom, 2026-08-21: "we need to
+     rename the golden crate to bone crate because the icon doesnt match
+     anymore". Right: assets/crates/golden/f0.png is a BONE chest, and 'Golden'
+     was still describing the vector treasure chest it replaced, so this time it
+     is the PRODUCT that was the odd one out, not one wedge.
+     WHAT DID NOT MOVE: `key: 'golden'`, `iconId: 'crate-golden'` and
+     grantCrate('golden') are save keys and shop ids. Only the words changed.
+     The tag has to be a WHOLE WORD of the Shop's label for the art this wedge
+     draws, which tests/pixel-art-swap-audit.mjs grades by scraping loot.js, so
+     'Bone' tracks 'Bone Crate' automatically and 'Golden' now fails there. */
+  { key: 'golden', iconId: 'crate-golden',   tag: 'Bone',   name: 'a Bone Crate', weight: 3,  gold: true,  grant: () => grantCrate('golden', 'wheel') },
   { key: 'c75',    coin: true,               tag: '75',     name: '75 Coins',       weight: 18, gold: false, grant: () => coinsAdd(75) },
   { key: 'c150',   coin: true,               tag: '150',    name: '150 Coins',      weight: 8,  gold: false, grant: () => coinsAdd(150) },
   { key: 'charm',  iconId: 'charm',          tag: 'Charm',  name: 'a Battle Charm', weight: 12, gold: false, grant: () => grantConsumable('xp2', 'wheel') },
