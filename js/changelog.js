@@ -3,7 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
-  { n: 423, date: '2026-08-22', title: 'The Wanderer walks like a person', items: [
+  { n: 423, date: '2026-08-22', title: 'Dress your seal, and the Wanderer walks like a person', items: [
+    'You can finally put Bumbleseal\'s accessories on her. Stable, under her card: tap a piece to wear it, tap it again to take it off. She wears them everywhere, on Today, out in the Paddock, and into a fight.',
+    'She can wear all four at once: stinger, bag, patches and shades.',
     'Two Wanderers on the map used to walk in step and swing their lanterns the same way, which looked like a glitch. They each have their own beat now.',
     'His lantern light stayed put while you pinched the map, so he looked like he was sliding around loose. It sticks to the ground now.',
     'He was sometimes drawn facing one way with his light pointing the other. He turns to face the way he is walking.',
