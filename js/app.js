@@ -3661,15 +3661,15 @@ async function renderToday(el) {
      of one that was about to arrive by itself. */
   const gwBox = $('.gw-box', el);
   const gwSay = line => { if (gwBox) runTalkBox(gwBox, line, { name: 'GWART' }); gwIdleReset(); };
+  /* Nothing to advance here any more. gwartLine() owns "not the same one again"
+     itself now (the bag, see gwPick), so the caller that used to bump a salt was
+     the caller that decided which line came next, and both callers had to
+     remember to. */
   $('#gwartBtn', el)?.addEventListener('click', e => {
     e.stopPropagation();                       // the scene itself opens the Backpack
-    S.gwSalt = ((S.gwSalt || 0) + 1) % GW_SALT_MAX;   // the NEXT line, not the same one again
     gwSay(gwartLine(gwCtx));
   });
-  gwIdleStart(el, () => {
-    S.gwSalt = ((S.gwSalt || 0) + 1) % GW_SALT_MAX;
-    return gwartLine(gwCtx);
-  });
+  gwIdleStart(el, () => gwartLine(gwCtx));
   /* TAP THE PET. It pops, it makes a noise, and Gwart says something about it:
      she is the one thing on this card he gets asked about directly. The line
      comes from GW_PET_LINES rather than gwartLine, because "what is that" is not
@@ -4056,11 +4056,13 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
  * HE IS NOT THE BONEHEAD. speechLine() above is the Bonehead narrating himself
  * ("I am 206 bones of pure potential"), which is a different character and a
  * different job. Gwart CARVED him: he talks ABOUT the boy, in the third person,
- * and what he says is meant to be worth acting on. The seventeen lines Tom has
- * already seen are the ones in the approved R3 mockup
- * (today-preview/today-mockup.html), and they are reproduced here verbatim
- * rather than rewritten, then sorted into the same state buckets speechLine
- * uses so a line arrives because it is TRUE right now.
+ * and what he says is meant to be worth acting on. He started with the
+ * seventeen lines of the approved R3 mockup (today-preview/today-mockup.html),
+ * reproduced verbatim rather than rewritten and sorted into the same state
+ * buckets speechLine uses so a line arrives because it is TRUE right now. All
+ * seventeen are still in here; the buckets around them were filled out in v424
+ * because seventeen lines across nine states is two or three per state, and a
+ * state you sit in all morning then reads as one line on a loop.
  *
  * COPY RULES, and they are Tom's taste contract rather than my preference: dry,
  * no exclamation marks, no hype, no ad-speak, and never a scold. Useful first
@@ -4070,60 +4072,177 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
  * priority order, and everything below that is chatter POOLED and picked
  * across, because trying the chatter pools in order is what once made a player
  * with a streak hear only streak lines. */
-const GW_SALT_MAX = 1e6;
-function gwartLine({ entries, tot, targets, crates, streak, level, isToday,
+/* A BAG, NOT A DIE, and this is the reported bug rather than a refinement.
+ * Tom, 2026-08-22: "for Gwart on the today screen he just says the same line
+ * over and over we need to make some cool text lines for him". Two faults, and
+ * they compounded: the pool was thin (every early-return state below shipped
+ * exactly TWO lines), and the picker had no memory. It indexed the eligible pool
+ * by a per-session salt bumped by one per line, so a two-line bucket is
+ * A, B, A, B for as long as that state lasts, and a state like "an unopened
+ * crate" or "nothing logged yet" lasts most of a session.
+ *
+ * The pool below got the depth. The picker got a MEMORY:
+ *   gwSaid is the bag. A line is drawn only from what is not in it yet, so every
+ *   line of the eligible pool is heard before any of them comes round again.
+ *   When the bag empties it refills MINUS the line just said, so a refill cannot
+ *   hand back the line still on screen: with two or more lines eligible an
+ *   immediate repeat is not representable, which is the half of this a player
+ *   can actually see.
+ * The bag is keyed on the STRINGS, not on a bucket, so a state change
+ * mid-session (the crate gets opened) carries the memory across instead of
+ * resetting it, and an interpolated line (`Day 4.`) behaves like any other. It
+ * is bounded by the pool it is drawing from, because that is what empties it. */
+const gwSaid = new Set();
+let gwLast = '';
+function gwPick(pool) {
+  if (!pool.length) return gwLast;
+  let fresh = pool.filter(l => !gwSaid.has(l));
+  if (!fresh.length) {
+    gwSaid.clear();
+    fresh = pool.filter(l => l !== gwLast);
+    if (!fresh.length) fresh = pool;            // a one-line pool has no second choice
+  }
+  const line = fresh[Math.floor(Math.random() * fresh.length)];
+  gwSaid.add(line);
+  gwLast = line;
+  return line;
+}
+const gwartLine = ctx => gwPick(gwartPool(ctx));
+
+/* EVERY LINE HERE FITS THE BAND, and that is a hard constraint rather than a
+   style note: .gw-box is 13px in the plaque's 90px band, and at 393x852 the box
+   is 176px wide, which is THREE wrapped lines and no more. A fourth line paints
+   over the Bonehead's head. The TYPE row in tests/talkbox-audit.mjs measures
+   EVERY line in this catalogue at that width, so a line that does not fit fails
+   the audit on the day it is written. About 59 characters is the ceiling in
+   practice; measure, do not count.
+
+   THE STATE IS THE POINT. A line arrives because it is true right now, so a new
+   line goes in the bucket whose condition it describes, not in the general pool
+   at the bottom. The general pool is the only one that is pure character. */
+function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
   steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0 }) {
-  if (S.gwSalt == null) S.gwSalt = Math.floor(Math.random() * GW_SALT_MAX);
-  const pick = arr => arr[(S.gwSalt + arr.length) % arr.length];
   const hour = new Date().getHours();
-  if (crates.length) return pick([
+  if (crates.length) return [
     'A crate by his feet, still shut. I gave him hands for this.',
     'That crate has been sitting there since I got here.',
-  ]);
-  if (!isToday) return pick([
+    'Nothing in a shut crate has ever done anybody good.',
+    'The crate is not a decoration. It opens.',
+    'Open the crate. I want to see what he is wearing next.',
+    'I have seen crates sit shut for weeks. Yours is shut.',
+    'Whatever is in there is already yours. Go and look.',
+    'A shut crate is just a box. Make it something else.',
+  ];
+  if (!isToday) return [
     'Yesterday is set. You cannot re-cut a finished thing.',
     'Old ground. Nothing to log back here.',
-  ]);
-  if (cropsRipe) return pick([
+    'That day is carved. Look if you like. It will not move.',
+    'Back here the numbers are done. Today is the one that pays.',
+    'You are behind the boy, not beside him. Nothing to feed.',
+    'I keep the old days for reading, not for fixing.',
+    'No work back here. The work is where he is standing.',
+  ];
+  if (cropsRipe) return [
     'The garden is ready. I watered it. You pick it.',
     cropsRipe === 1 ? 'One bed is done. Go on before something else finds it.'
       : `${cropsRipe} beds are done. Go on before something else finds them.`,
-  ]);
-  if (dishReady) return pick([
+    'Ripe. It will not get riper standing there.',
+    'The patch is finished. Take it in before the weather turns.',
+    'Ready out the back. It keeps a while, not forever.',
+    'Pick it and it goes in the pot. That is the whole loop.',
+    'I do the growing. The carrying is yours.',
+  ];
+  if (dishReady) return [
     'Something is done in the pot. He cannot smell it. I can.',
     'The pot has finished. It will not improve from here.',
-  ]);
-  if (!entries.length) return pick([
+    'Dinner is up. Serve it before it becomes an experiment.',
+    'The cauldron is done and quietly pleased with itself.',
+    'Cooked. Take it out. He eats with his eyes anyway.',
+    'That pot has been ready a while now. I did mention it.',
+  ];
+  if (!entries.length) return [
     'Nothing logged yet. He runs on what you eat. Feed the boy.',
     'Empty ledger so far. He is patient. I am less so.',
-  ]);
-  if (targets && targets.p && tot.p >= targets.p) return pick([
+    hour < 11 ? 'Morning. The ledger is blank. It usually starts that way.'
+      : 'Still nothing written down. The day is getting on.',
+    'Whatever you ate, write it. Accurate beats flattering.',
+    'The ledger is where he came from. Nothing in it yet.',
+    'No entries. He will stand here all day. He is good at it.',
+    'Log the first thing. The rest tends to follow.',
+    'Nothing yet. Even a rough guess beats a blank.',
+  ];
+  if (targets && targets.p && tot.p >= targets.p) return [
     'Protein is in. That is the part I build bone out of.',
     'Good protein today. His frame will take it from here.',
-  ]);
-  if (targets && tot.kcal > targets.kcal) return pick([
+    'Protein done. The rest of the day is yours to spend.',
+    'That is the material I need. The rest of it is fuel.',
+    'Enough protein in him to hold the joints together.',
+    'Protein met. I will not pretend I am not pleased.',
+  ];
+  if (targets && tot.kcal > targets.kcal) return [
     'A big day, logged honestly. The ledger is the whole craft.',
     'Written down as it happened. That is the only rule I have.',
-  ]);
-  if (targets && targets.kcal - tot.kcal <= 350 && targets.kcal - tot.kcal > 0) return pick([
+    'Over, and recorded. I have no notes and no opinion.',
+    'A large day. They happen. The ledger does not flinch.',
+    'Numbers are numbers. You wrote them down. That is the work.',
+    'Big one. Nothing to fix, nothing to explain to me.',
+  ];
+  if (targets && targets.kcal - tot.kcal <= 350 && targets.kcal - tot.kcal > 0) return [
     'You are close. Finish it the way you started.',
     'Nearly there. No need to get clever at the end.',
-  ]);
-  const chatter = [
-    ...(steps >= 12000 ? ['You covered ground today. I felt it in his ankles.'] : []),
-    ...(streak >= 3 ? [`Day ${streak}. He was a box of parts once. Look at him.`] : []),
-    ...(fightsReady >= 1 ? [`${fightsReady} fights left in him. He will not say no, so you decide.`] : []),
-    ...(hour >= 23 || hour < 5 ? ['Late. I keep these hours. He does not need to.'] : []),
-    ...(level ? [`Level ${level}. I carved the joint. You did the walking.`] : []),
+    'Room for one more thing. Choose it properly.',
+    'Almost there. The last stretch is the easy part to lose.',
+    'A little left in the day. Spend it on something good.',
+    'Close enough to see it. Walk it in.',
   ];
-  return pick([
+  const chatter = [
+    ...(steps >= 12000 ? [
+      'You covered ground today. I felt it in his ankles.',
+      'A lot of walking. He does not tire. You might.',
+      'You put miles on him today. He will not thank you.',
+      `${steps.toLocaleString()} steps. I stopped counting at the first thousand.`,
+    ] : []),
+    ...(streak >= 3 ? [
+      `Day ${streak}. He was a box of parts once. Look at him.`,
+      `${streak} days running. The habit is doing the work now.`,
+      `Day ${streak}. I have seen people stop at two. You did not.`,
+      `${streak} in a row. I have started to expect it of you.`,
+    ] : []),
+    ...(fightsReady >= 1 ? [
+      `${fightsReady} fights left in him. He will not say no, so you decide.`,
+      'He has fight in him. Spend it or it sits there.',
+      'Something in the Pit is worth hitting. He volunteers.',
+    ] : []),
+    ...(hour >= 23 || hour < 5 ? [
+      'Late. I keep these hours. He does not need to.',
+      'Late log. I am always up. That is not a recommendation.',
+      'The small hours. Write it down and go to bed.',
+    ] : []),
+    ...(level ? [
+      `Level ${level}. I carved the joint. You did the walking.`,
+      `Level ${level} and the frame still holds. Good joinery.`,
+      `Level ${level}. He gets a little less wobbly each time.`,
+    ] : []),
+  ];
+  return [
     ...chatter,
     'Two hundred and six pieces. I know where every one goes.',
     'You keep coming back, so he keeps standing up.',
     'Straight back. Good. I worried about that spine.',
     'He does not remember being a pile. I do.',
     'The Stable is through that door. Nobody ever looks left.',
-  ]);
+    'I carve. You feed. He walks. Nobody has improved on it.',
+    'He was quieter before he could stand. Not better. Quieter.',
+    'Everyone thinks the hat is the important part of him.',
+    'I have made hundreds of these. This is the one I watch.',
+    'There is a wardrobe. He is not going to dress himself.',
+    'A day you write down is a day he gets to keep.',
+    'He is not fussy. He will wear whatever you leave out.',
+    'People ask what he is made of. Mostly attendance.',
+    'I am old, not busy. Take your time.',
+    'He has never once complained. I make up for it.',
+    'Tap me again if you like. I have a lot of these.',
+  ];
 }
 /* GWART ON THE PET, which is the one thing he is asked about directly: tapping
    the pet already pops her, and he comments on it. Verbatim from the mockup. */
@@ -4133,7 +4252,14 @@ const GW_PET_LINES = [
   'It follows him. I have stopped asking why.',
 ];
 if (typeof window !== 'undefined' && navigator.webdriver) {
-  window.__gwart = (ctx, salt) => { S.gwSalt = salt; return gwartLine(ctx); };
+  /* TWO SEAMS, because the pool and the picker are two different things to
+     grade. __gwartPool hands back a state's WHOLE catalogue, so the audit can
+     measure every line against the band and count what each bucket holds
+     (sweeping a salt only ever sampled it). __gwart drives the real picker, so
+     the audit can call it a hundred times and watch the bag: no line twice in a
+     row, and nothing repeats until the pool is spent. */
+  window.__gwartPool = ctx => gwartPool(ctx);
+  window.__gwart = ctx => gwartLine(ctx);
 }
 
 /* HE VOLUNTEERS A LINE, AND THE CADENCE IS 30 SECONDS. Tom: "he should honestly

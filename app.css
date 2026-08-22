@@ -1454,9 +1454,13 @@ body::before {
    at 13px the shipped chrome gives 103.8px (13.8 over the band) and this gives
    89.2px (0.8 under it); the same tightening also pulls the shipped 11px box
    from 88.4px down to 76.1px. Graded by the TYPE rows in tests/talkbox-audit.mjs,
-   which harvest the real line pool through window.__gwart and measure the box
-   the longest one produces, in both directions: too small fails and too tall
-   fails.
+   which harvest the real line pool through window.__gwartPool and measure the
+   box EVERY line produces, in both directions: too small fails and too tall
+   fails. Every line, not just the longest, since v424 took the catalogue from
+   seventeen lines to eighty-nine: at that size "the longest one fits" and "they
+   all fit" stopped being the same claim. Measured there, the whole catalogue
+   comes out at 89.2px (three wrapped lines) or 71.7px (two), and nothing else
+   fits in 176px, so a fourth wrapped line is what this is guarding against.
    The border is an OPAQUE cream, see below. */
 .gw-box {
   flex: 1; min-width: 0; --tb-size: 13px;
