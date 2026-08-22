@@ -3459,9 +3459,13 @@ async function renderToday(el) {
      resting state, so "seen" and "finished" are the same pixels. */
   const gwSeen = gwEntranceSeen;
   gwEntranceSeen = true;
-  const C = 2 * Math.PI * 66;
+  /* MOCKUP Option B: summary-strip ring circumference (r=20 in a 48 viewBox) and
+     the variant switch. ?mockb=1 ring-dominant, 2 equal thirds, 3 flat-inset. */
+  const TS_C = 2 * Math.PI * 20;
+  const MOCKB = new URLSearchParams(location.search).get('mockb') || '1';
+  document.body.classList.remove('mockb1', 'mockb2', 'mockb3');
+  document.body.classList.add('mockb' + MOCKB);
   const prev = S.ui;
-  const protHit = t.p && tot.p >= t.p;
 
   el.innerHTML = `
   <!-- The scene is CORAL by default (the deck's hero colour), but an equipped
@@ -3578,33 +3582,8 @@ async function renderToday(el) {
     <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(24)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
 
-  ${isToday && topNudge ? `
-  <div class="ul-wrap${topNudge.action === 'logfood' ? ' has-skip' : ''}">
-  <button class="card unlock-nudge" id="unlockNudge" data-ulaction="${topNudge.action}">
-    <span class="ul-ico">${topNudge.hero === 'food' ? ICONS.boltStroke(20) : topNudge.hero === 'ward' ? ICONS.bone(20) : ICONS.pit(24)}</span>
-    <span class="ul-txt"><b>${esc(topNudge.nudge)}</b><small>${
-      topNudge.action === 'logfood' ? 'Tap to log your first meal'
-      : topNudge.action === 'pit' ? 'Tap to enter The Pit'
-      : topNudge.hero === 'ward' ? 'Tap to open your Wardrobe'
-      : 'Tap to open Build and spend it'}</small></span>
-    <span class="ul-chev">›</span>
-  </button>
-  ${/* The way out. Not a dismissal of the card: skipping falls through to
-       whatever the next nudge is, so somebody who does not want to log right
-       now still gets pointed at the fight, the crates or their gear. */''}
-  ${topNudge.action === 'logfood' ? '<button class="ul-skip" id="ulSkip">Not right now</button>' : ''}
-  </div>` : ''}
-
-  ${isToday && hkStale ? `
-  <button class="card hk-stale" id="hkStaleFix">
-    <b>⚠️ Steps aren't syncing</b>
-    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
-  </button>` : ''}
-
-  ${isToday ? hypeBannerHtml() : ''}
-
-  ${isToday ? '<details class="rr-banner" id="raceResultCard" hidden></details>' : ''}
-
+  ${/* MOCKUP (Option B baseline): the unlock nudge is gone; quests sit directly
+       under the four hub chips. Another branch lands this for real. */''}
   ${isToday ? `
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
     <summary><span class="q-sum-ico">${ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
@@ -3633,6 +3612,47 @@ async function renderToday(el) {
     </div>
   </details>` : ''}
 
+  ${/* ===== MOCKUP Option B: the summary strip. One pinned anchor RIGHT under
+       the quests: the calorie ring, the streak, the wellness dots. Sticky; a
+       scroll listener below adds .cond so it condenses to a slim docked bar.
+       Variant density comes from ?mockb: 2 = equal thirds, 1/3 = ring-dominant.
+       The transient banners (hk-stale, hype, race) now arrive BELOW it, so the
+       anchor holds its place under the quests whatever the day brings. ===== */''}
+  <div class="tsum-pin" id="tsumPin"></div>
+  <div class="tsum${MOCKB === '2' ? ' thirds' : ''}" id="tsum">
+    <div class="ts-top">
+      <div class="ts-cell ts-cal">
+        <span class="ts-ringwrap">
+          <svg viewBox="0 0 48 48">
+            <circle class="ts-track" cx="24" cy="24" r="20" fill="none" stroke-width="5.5"/>
+            <circle class="ts-fill ${over ? 'over' : ''}" id="ringFill" cx="24" cy="24" r="20" fill="none" stroke-width="5.5" stroke-linecap="round"
+              stroke-dasharray="${TS_C}" stroke-dashoffset="${TS_C * (1 - prev.ringPct)}"/>
+          </svg>
+        </span>
+        <span class="ts-kcal"><b id="ringBig">${Math.abs(prev.remainShown ?? remaining).toLocaleString()}</b><small>${over ? 'kcal over' : 'kcal left'}</small></span>
+      </div>
+      <div class="ts-cell ts-streak"><b>${streak}${ICONS.flame(13)}</b><small>day streak</small></div>
+      ${wellness ? `<div class="ts-cell ts-well"><b class="ts-dots">
+        <i class="${wellness.water >= WATER_GOAL ? 'on' : ''}"></i><i class="${wellness.bed ? 'on' : ''}"></i><i class="${wellness.sleepHours != null ? 'on' : ''}"></i>
+      </b><small>wellness</small></div>` : ''}
+    </div>
+    <div class="ts-macros">
+      <span class="ts-m"><small>P ${Math.round(tot.p)}/${t.p}</small><span class="bar protein"><i style="width:${prev.macroPcts[0]}%"></i></span></span>
+      <span class="ts-m"><small>C ${Math.round(tot.c)}/${t.c}</small><span class="bar carbs"><i style="width:${prev.macroPcts[1]}%"></i></span></span>
+      <span class="ts-m"><small>F ${Math.round(tot.f)}/${t.f}</small><span class="bar fat"><i style="width:${prev.macroPcts[2]}%"></i></span></span>
+    </div>
+  </div>
+
+  ${isToday && hkStale ? `
+  <button class="card hk-stale" id="hkStaleFix">
+    <b>⚠️ Steps aren't syncing</b>
+    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
+  </button>` : ''}
+
+  ${isToday ? hypeBannerHtml() : ''}
+
+  ${isToday ? '<details class="rr-banner" id="raceResultCard" hidden></details>' : ''}
+
   <div class="day-strip">
     <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
     <div class="day-title">
@@ -3643,33 +3663,17 @@ async function renderToday(el) {
     <button class="icon-btn" id="todaySettings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke-width="2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
   </div>
 
-  <div class="card ring-card">
-    <div class="ring-wrap">
-      <svg viewBox="0 0 158 158">
-        <circle class="ring-track" cx="79" cy="79" r="66" fill="none" stroke-width="13"/>
-        <circle class="ring-fill ${over ? 'over' : ''}" id="ringFill" cx="79" cy="79" r="66" fill="none" stroke-width="13" stroke-linecap="round"
-          stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - prev.ringPct)}"/>
-      </svg>
-      <div class="ring-center">
-        <div class="big" id="ringBig">${Math.abs(prev.remainShown ?? remaining).toLocaleString()}</div>
-        <div class="lbl">${over ? 'kcal over' : 'kcal left'}</div>
-      </div>
-    </div>
-    <div class="ring-side">
-      <div class="kv"><span>Eaten</span><b>${Math.round(tot.kcal).toLocaleString()}</b></div>
-      <div class="kv"><span>Target</span><b>${t.kcal.toLocaleString()}</b></div>
-      <div class="divider" style="margin:2px 0"></div>
-      ${macroRow('Protein', tot.p, t.p, 'protein', prev.macroPcts[0], protHit)}
-      ${macroRow('Carbs', tot.c, t.c, 'carbs', prev.macroPcts[1], false)}
-      ${macroRow('Fat', tot.f, t.f, 'fat', prev.macroPcts[2], false)}
-    </div>
-  </div>
+  ${/* ===== MOCKUP Option B: the sections below the strip share ONE card skin,
+       spacing rhythm and header idiom so they read as siblings. External
+       12px-uppercase kickers render always; CSS per variant picks external
+       (mockb1/3) or the cards' own internal titles (mockb2). ===== */''}
+  ${isToday && wellness ? `<section class="tsec"><div class="tsec-h">Daily wellness</div>${wellnessCardHtml(wellness, routines, routinesDoneToday)}</section>` : ''}
+  ${isToday && kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe) ? `<section class="tsec"><div class="tsec-h">Kitchen</div>${kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe)}</section>` : ''}
+  ${healthCardHtml(hk, isToday) ? `<section class="tsec"><div class="tsec-h">Activity</div>${healthCardHtml(hk, isToday)}</section>` : ''}
 
-  ${isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday) : ''}
-  ${isToday ? kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe) : ''}
-  ${healthCardHtml(hk, isToday)}
-
+  <section class="tsec tsec-meals"><div class="tsec-h">Meals</div>
   ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
+  </section>
 
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
   ${isToday ? `<p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>` : ''}
@@ -3684,11 +3688,28 @@ async function renderToday(el) {
   ];
   requestAnimationFrame(() => requestAnimationFrame(() => {
     const ring = $('#ringFill', el);
-    if (ring) ring.style.strokeDashoffset = String(C * (1 - pct));
-    $$('.ring-side .bar i', el).forEach((bar, i) => { bar.style.width = macroPcts[i] + '%'; });
+    if (ring) ring.style.strokeDashoffset = String(TS_C * (1 - pct));
+    $$('.ts-macros .bar i', el).forEach((bar, i) => { bar.style.width = macroPcts[i] + '%'; });
   }));
   tweenNumber($('#ringBig', el), prev.remainShown ?? remaining, Math.abs(remaining), 650, v => Math.round(Math.abs(v)).toLocaleString());
   S.ui = { ringPct: pct, remainShown: Math.abs(remaining), macroPcts };
+
+  /* MOCKUP Option B: condense the pinned strip once it actually pins. The
+     sentinel (#tsumPin) keeps its flow offset when the sticky strip is stuck,
+     so the threshold cannot feed back on itself. The handler unhooks itself
+     when a re-render replaces the strip. */
+  {
+    const strip = $('#tsum', el), pin = $('#tsumPin', el);
+    const scr = el.closest('.screen');
+    if (strip && pin && scr) {
+      const onScroll = () => {
+        if (!strip.isConnected) { scr.removeEventListener('scroll', onScroll); return; }
+        strip.classList.toggle('cond', scr.scrollTop >= pin.offsetTop - 6);
+      };
+      scr.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    }
+  }
 
   $('#todaySettings', el)?.addEventListener('click', () => { location.hash = '#/settings'; });
   $('#prevDay').addEventListener('click', () => { S.date = addDays(S.date, -1); refresh(); });
@@ -3890,12 +3911,8 @@ async function renderToday(el) {
   if (isToday) hydrateRaceResult(el);
 }
 
-function macroRow(label, val, target, cls, prevPct = 0, glow = false) {
-  return `<div class="macro">
-    <div class="row"><span>${label}${glow ? ` <span class="hit-dot">${ICONS.check(11)}</span>` : ''}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
-    <div class="bar ${cls} ${glow ? 'glow' : ''}"><i style="width:${prevPct}%"></i></div>
-  </div>`;
-}
+/* macroRow was only fed by the old ring-card; the Option B strip carries the
+   macro bars now (MOCKUP branch: deleted with its one caller). */
 
 const bubbleSideCache = {};
 async function measureBubbleSide(stage, eq) {

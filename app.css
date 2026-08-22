@@ -9993,3 +9993,104 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .arena.boss-wanderer .fighterG:not(.foe-side) { transform: translateX(-52px); z-index: 3; }
 .arena.boss-wanderer .fighterG:not(.foe-side) > .fstage { transform: scale(.58); transform-origin: bottom center; }
 .arena.boss-wanderer .pet-fighter { transform: translateX(14px); z-index: 4; }
+
+/* ================================================================ *
+ * MOCKUP: Option B Today rework (branch x425/mockup-today-b).
+ * A pinned summary strip (calorie ring / streak / wellness dots) under the
+ * quests, condensing on scroll; the sections below share ONE card skin,
+ * header idiom and spacing rhythm. Variants ride on a body class from
+ * ?mockb=N:
+ *   mockb1  ring-dominant strip, external 12px kickers, incumbent card skin
+ *   mockb2  equal-thirds strip, self-labeled cards (internal headers)
+ *   mockb3  ring-dominant strip, internal headers, flat surface-2 inset skin
+ * Everything below deletes wholesale if no variant is approved.
+ * ================================================================ */
+
+/* ---- the summary strip ---- */
+.tsum-pin { height: 0; }
+/* Sticky offsets inside .screen are measured on top of its own padding-top
+   (calc(--sat + 14px)), so -14px pins the strip flush to the safe area. */
+.tsum {
+  position: sticky; top: -14px; z-index: 15;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px var(--pad); margin-bottom: 14px;
+}
+.ts-top { display: flex; align-items: center; gap: 10px; }
+.ts-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 62px; }
+.ts-cell small { font-size: 10.5px; color: var(--text-3); font-weight: 600; letter-spacing: 0.02em; }
+.ts-cal { flex: 1; flex-direction: row; justify-content: flex-start; gap: 12px; }
+.ts-ringwrap { width: 62px; height: 62px; flex: none; display: block; transition: width 0.25s ease, height 0.25s ease; }
+.ts-ringwrap svg { width: 100%; height: 100%; transform: rotate(-90deg); display: block; }
+.ts-track { stroke: var(--surface-3); }
+.ts-fill { stroke: var(--accent); transition: stroke-dashoffset 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+.ts-fill.over { stroke: var(--amber); }
+.ts-kcal { display: flex; flex-direction: column; }
+.ts-kcal b { font-size: 25px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.05; }
+.ts-kcal small { font-size: 11px; color: var(--text-3); font-weight: 600; }
+.ts-streak b, .ts-well b { display: flex; align-items: center; gap: 3px; font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ts-streak svg { width: 13px; height: 13px; }
+.ts-dots { display: flex; gap: 5px; padding: 6px 0 5px; }
+.ts-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--surface-3); border: 1px solid var(--line-strong); }
+.ts-dots i.on { background: var(--accent); border-color: var(--accent); }
+.ts-macros { display: flex; gap: 12px; margin-top: 10px; max-height: 40px; overflow: hidden; transition: max-height 0.25s ease, margin-top 0.25s ease, opacity 0.2s ease; }
+.ts-m { flex: 1; display: grid; gap: 3px; }
+.ts-m small { font-size: 10.5px; font-weight: 600; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.ts-m .bar { height: 5px; }
+
+/* condensed: pinned as one slim full-bleed docked bar, so nothing scrolls past
+   its shoulders (soft dark drop only; already in the language) */
+.tsum.cond {
+  padding: calc(var(--sat) + 8px) var(--pad) 8px;
+  margin: 0 calc(-1 * var(--pad)) 14px;
+  border-radius: 0 0 16px 16px; border-top: none; border-left: none; border-right: none;
+  box-shadow: var(--sh-sm); border-color: var(--line-strong);
+}
+.tsum.cond .ts-ringwrap { width: 26px; height: 26px; }
+.tsum.cond .ts-kcal { flex-direction: row; align-items: baseline; gap: 5px; }
+.tsum.cond .ts-kcal b { font-size: 17px; }
+.tsum.cond .ts-streak small, .tsum.cond .ts-well small { display: none; }
+.tsum.cond .ts-cell { min-width: 0; }
+.tsum.cond .ts-macros { max-height: 0; margin-top: 0; opacity: 0; }
+
+/* equal-thirds density (mockb2): three even cells, hairline-separated */
+.tsum.thirds .ts-top { gap: 0; }
+.tsum.thirds .ts-cell { flex: 1; min-width: 0; gap: 3px; }
+.tsum.thirds .ts-cal { flex-direction: column; justify-content: center; gap: 4px; }
+.tsum.thirds .ts-ringwrap { width: 38px; height: 38px; }
+.tsum.thirds .ts-kcal { align-items: center; }
+.tsum.thirds .ts-kcal b { font-size: 18px; }
+.tsum.thirds .ts-cell + .ts-cell { border-left: 1px solid var(--line); }
+.tsum.thirds.cond .ts-cal { flex-direction: row; gap: 6px; }
+.tsum.thirds.cond .ts-ringwrap { width: 24px; height: 24px; }
+.tsum.thirds.cond .ts-kcal b { font-size: 16px; }
+
+/* ---- the sections: one skin, one header idiom, one rhythm ---- */
+.tsec { margin-bottom: 18px; }
+.tsec-h { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin: 0 2px 6px; }
+.tsec .card { margin-bottom: 0; }
+.tsec-meals .meal {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 8px var(--pad) 12px; margin-bottom: 10px;
+}
+.tsec-meals .meal:last-child { margin-bottom: 0; }
+
+/* mockb1: external kickers label the group; the cards' own uppercase titles
+   would double them, so they stand down. */
+body.mockb1 .tsec > .card > .card-title:first-child,
+body.mockb1 .wellness-card > .sect-h:first-child { display: none; }
+
+/* mockb2 + mockb3: cards label themselves; the external kickers stand down,
+   and meal names snap to the same 12px uppercase idiom as every other title. */
+body.mockb2 .tsec-h, body.mockb3 .tsec-h { display: none; }
+body.mockb2 .meal-head h2, body.mockb3 .meal-head h2 {
+  font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3);
+}
+.tsum.thirds.cond .ts-kcal small { white-space: nowrap; }
+
+/* mockb3: flat inset skin, no hairlines, tighter rhythm */
+body.mockb3 .tsec { margin-bottom: 10px; }
+body.mockb3 .tsec .card, body.mockb3 .tsec-meals .meal, body.mockb3 .tsum {
+  background: var(--surface-2); border: none; border-radius: 14px;
+}
+body.mockb3 .tsec-meals .meal { margin-bottom: 8px; }
+body.mockb3 .tsum.cond { box-shadow: var(--sh-sm); }
