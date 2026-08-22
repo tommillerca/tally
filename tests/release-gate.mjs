@@ -401,12 +401,13 @@ const DECLARED = {
     + 'for the one row grantCosmetic writes, which is what quota, abort and the wipe-protocol freeze do to that same call, so no app '
     + 'logic is stubbed. Proven red on origin/main c3b7bc9 (3 rows) before the fix existed: 300 coins charged, no piece granted, and '
     + 'the retry answered owned while the player owned nothing, which made the piece unbuyable forever.'],
-  'hero-share-audit.mjs': ['full', "a big pet shares the Today frame, and a normal pet changes nothing. "
-    + 'Run it on any change to the Today hero, PET_HERO_PX, or the bhIdle keyframes. Full because it equips two pets and '
-    + 'renders the screen for each. Its CONTROL row is the point: the shift composes through --bh-shift INSIDE bhIdle (a static '
-    + 'translate on .hero-char is overwritten by the animation), and --bh-shift is a custom property, so setting it one level up '
-    + 'walks the PET left by the same 58px. Proven red both ways on 2026-08-21: flagging every pet as sharing reddens CONTROL, '
-    + 'and moving the property to the scene reddens the pet-inheritance row.'],
+  'hero-share-audit.mjs': ['full', "a big pet shares the Today frame, the PAIR reads centred, and a normal pet changes nothing. "
+    + 'Run it on any change to the Today hero, PET_HERO_REL, the --fig arithmetic in .hero-scene, or the bhIdle keyframes. Full '
+    + 'because it equips two pets and renders the screen at five configurations. Its CONTROL row is the point: the shift composes '
+    + 'through --bh-shift INSIDE bhIdle (a static translate on .hero-char is overwritten by the animation), and --bh-shift is a '
+    + 'custom property, so setting it one level up walks the PET left by the same amount. Proven red both ways on 2026-08-21: '
+    + 'flagging every pet as sharing reddens CONTROL, and moving the property to the scene reddens the pet-inheritance row. The '
+    + 'composition rows were re-proven on 2026-08-21 against the four declarations they own; see the header of the file.'],
   'emporium-audit.mjs': ['full', "Gwart's Emporium: the shopkeeper takes the header's room, not the shelves'. "
     + 'Run it on any change to gwartHeroHtml, the .gw-* block in app.css, or the hub tab scoping. Full because it drives four hub '
     + 'tabs and reads pixels back. WRITTEN BECAUSE app.css PROMISED IT: the block ended with \"Guard: tests/emporium-audit.mjs\" '

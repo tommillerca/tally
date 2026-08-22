@@ -2086,13 +2086,25 @@ export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${it
  * PRICES ARE TOM'S (2026-08-21), and deliberately high: "we want to sell the pet
  * for 50,000 and her accessories need to cost more too this is a test to see
  * appetite for pet cosmetics." For scale, the rack's dearest piece is 3,000. */
-/* HOW BIG A PET STANDS ON TODAY. 108 is the house size every species is
-   normalised to. Bumbleseal is deliberately larger: Tom, 2026-08-21, asked for
-   "about 25% bigger" than the 135 he was shown, which is 169. She is a 50,000
-   coin legendary and she reads as a companion rather than a trinket at that size.
-   Anything not listed here uses the house 108, so a new pet inherits the norm
+/* HOW BIG A PET STANDS ON TODAY, AS A SHARE OF THE BONEHEAD BESIDE IT.
+   108/408 is the house size every species is normalised to: 108px of pet beside
+   the 408px figure a full-height phone draws. Bumbleseal is deliberately larger:
+   Tom, 2026-08-21, asked for "about 25% bigger" than the 135 he was shown, which
+   is 169 at that same reference. She is a 50,000 coin legendary and she reads as
+   a companion rather than a trinket at that size.
+
+   A RATIO AND NOT A PIXEL COUNT, and that is the correction rather than the
+   original. Tom's ruling was always relative ("bigger than"), and shipping it as
+   169 absolute pixels turned it into a different ruling on every screen: the
+   figure is object-fit: contain inside a viewport-derived box, so on a 375x667
+   phone he is drawn at 258px and a 169px pet is two thirds of his height, and on
+   the 320x568 worst case she is the same size he is. Expressed as a share she
+   holds Tom's proportion at every size. app.css multiplies it by --fig.
+   Anything not listed here uses the house share, so a new pet inherits the norm
    rather than an accident. */
-export const PET_HERO_PX = { C6: 169 };
+export const PET_HERO_REF = 408;                     // the figure's drawn side on a full-height phone
+export const PET_HERO_HOUSE = 108 / PET_HERO_REF;
+export const PET_HERO_REL = { C6: 169 / PET_HERO_REF };
 
 /* `hatchChance` ON A PET IS THE WHOLE SHOP-PET MECHANISM, and it lives on the
    item rather than in a table in js/loot.js on purpose: pickRandomPet reads it

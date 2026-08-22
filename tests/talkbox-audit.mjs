@@ -408,6 +408,87 @@ page.on('pageerror', e => { pageErrors.push(String(e)); console.log('PAGEERROR',
     sheetUp && quiet === 0, `${quiet} line(s) started while a sheet was up`);
   await page.evaluate(() => { window.__gwIdleMs = 0; history.back(); location.hash = '#/today'; });
   await sleep(900);
+
+  /* ==================== HIS LINE IS BIG ENOUGH TO READ =====================
+     Tom, 2026-08-21: "the gwart gwart font size is too smalll when he talks."
+     It shipped at 11px, the smallest type in the app, against 16px for the same
+     component in the Wanderer's encounter.
+
+     TWO ROWS, AND THEY PULL AGAINST EACH OTHER ON PURPOSE. Raising the size is
+     one declaration and it has an obvious failure on the other side: .gw-row is
+     absolutely positioned over the artwork at z-index 5 while the Bonehead is at
+     2, so a box that outgrows the plaque's band paints over his head. One row
+     fails if the type shrinks, the other fails if the box grows. Neither alone
+     is a check; the pair is.
+
+     MEASURED ON THE LONGEST LINE THE POOL CAN ACTUALLY PRODUCE, harvested here
+     rather than pinned: window.__gwart is the real chooser and takes a salt, so
+     sweeping salts across contexts that reach each of its early returns walks
+     the whole catalogue. A new, longer line therefore lands in this measurement
+     on the day it is written, instead of on the day somebody remembers to update
+     a constant. 393x852 is the binding width because the plaque leaves the box
+     only 176px there; the row asserts that width really is the tightest it saw.
+
+     PROVEN RED IN BOTH DIRECTIONS, 2026-08-21, each in its own `cp -R` copy with
+     the exit code read from a file:
+       .gw-box --tb-size back to the shipped 11px
+         FAIL TYPE Gwart's line is big enough to read  11px
+       .gw-box --tb-size pushed to 16px (which still wraps to three lines: the
+       ceiling here is the band, not the wrapping)
+         FAIL TYPE and the box that holds it still fits the band  box 108.9px
+              tall in a 90px band, 176.1px wide, on the longest line */
+  await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await page.evaluate(() => { location.hash = '#/pit'; });
+  await sleep(300);
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(1500);
+  const type = await page.evaluate(() => {
+    if (typeof window.__gwart !== 'function') return { err: 'no window.__gwart seam' };
+    /* Contexts chosen to reach every early return in gwartLine plus the pooled
+       chatter at the bottom, so no branch's lines are missed. */
+    const base = { entries: [{}], tot: { p: 0, kcal: 0 }, targets: { p: 100, kcal: 2000 },
+      crates: [], streak: 0, level: 0, isToday: true };
+    const ctxs = [
+      { ...base, crates: [{}] },
+      { ...base, isToday: false },
+      { ...base, cropsRipe: 1 }, { ...base, cropsRipe: 4 },
+      { ...base, dishReady: true },
+      { ...base, entries: [] },
+      { ...base, tot: { p: 200, kcal: 0 } },
+      { ...base, tot: { p: 0, kcal: 3000 } },
+      { ...base, tot: { p: 0, kcal: 1800 } },
+      { ...base, steps: 20000, streak: 12, level: 99, fightsReady: 6 },
+    ];
+    const pool = new Set();
+    for (const c of ctxs) for (let salt = 0; salt < 24; salt++) pool.add(window.__gwart(c, salt));
+    const longest = [...pool].sort((a, b) => b.length - a.length)[0] || '';
+    const box = document.querySelector('.talkbox.gw-box');
+    const line = box && box.querySelector('.tb-line');
+    if (!box || !line) return { err: 'no .gw-box on Today' };
+    /* The ghost lays the box out (see app.css .tb-line::before), so writing the
+       line there is what the real render does, not a shortcut around it. */
+    const wasTb = line.dataset.tb;
+    line.dataset.tb = longest;
+    const r = box.getBoundingClientRect();
+    const band = parseFloat(getComputedStyle(document.querySelector('.gw-today')).height);
+    const out = { pool: pool.size, longest, chars: longest.length,
+      fs: parseFloat(getComputedStyle(box).fontSize),
+      wnd: 16,                       // .wnd-enc-box takes .talkbox's own --tb-size
+      w: +r.width.toFixed(1), h: +r.height.toFixed(1), band: +band.toFixed(1) };
+    line.dataset.tb = wasTb;
+    return out;
+  });
+  ok('SETUP the line pool was harvested and a box was there to measure (an empty pool grades nothing)',
+    !type.err && type.pool >= 12 && type.chars >= 40,
+    type.err || `${type.pool} distinct lines, longest ${type.chars} chars: "${type.longest}"`);
+  if (!type.err) {
+    ok('TYPE Gwart\'s line is big enough to read, not the smallest type in the app',
+      type.fs >= 13,
+      `${type.fs}px (was 11px, the same component in the Wanderer's encounter is ${type.wnd}px)`);
+    ok('TYPE and the box that holds it still fits the band, so it cannot paint over his head',
+      type.h <= type.band + 1,
+      `box ${type.h}px tall in a ${type.band}px band, ${type.w}px wide, on the longest line`);
+  }
 }
 
 /* ==================== THE MODULE, ON ITS HARNESS ========================== */
