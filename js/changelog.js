@@ -14,6 +14,10 @@ export const CHANGES = [
     'The Golden Crate is the Bone Crate now, because that is what it has looked like for a while.',
     'Pull down on Today and the wordmark eases in properly instead of jerking with your finger.',
     'Fixed: tapping Bonehead in the bottom bar did nothing if you were already in the Shop or the Backpack. Every tab always takes you somewhere now.',
+    'Your Bonehead was standing well off to one side on Today, with his barbell clipped off the edge. He is centred with his pet again.',
+    'The card frame around him is gone. The art runs to the edges and fades into the page, the way it was meant to.',
+    'Gwart talks. Tap him for a line, and he will offer one on his own now and then about what is worth doing.',
+    'Fixed: on a few screens the new seal was drawing across your Bonehead\'s chest at four times her size. Her art is on a bigger canvas than every other pet and nothing knew.',
   ] },
   { n: 421, date: '2026-08-21', title: 'The Wanderer, and Gwart has a pet for sale', items: [
     'Someone else is out in the Boneyard now. The Wanderer walks a slow beat around the map with a lantern, and the light in front of him is a cone you can see on the ground. Step into it and he comes for you.',
