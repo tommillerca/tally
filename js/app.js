@@ -12359,21 +12359,40 @@ const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
    BELOW it was visibly blocky in the side-by-side and every item above it was
    indistinguishable between the two paths. */
 const SMALL_INK = 64;
+/* THE ALPHA BOX OF A FILE NEVER CHANGES, SO IT IS SCANNED ONCE.
+   Measured 2026-08-21 on this tree, at 440x956 / CPU x6, driving the real tab
+   bar: one navigation to the Bonehead hub calls this 15 times and scans
+   2,789,376 source pixels in JS (6 masters at 640² plus 9 thumbnails at 192²),
+   every time, for the SAME fifteen files. That was the app's single biggest
+   navigation cost: 101ms of script, 196ms from tap to reveal and 20 dropped
+   frames on the hub, against 19ms / 52ms / 5 for the cheapest tab.
+   Keyed on the src, which is what the scan reads, so a cached hit produces
+   byte-identical geometry; the first visit pays exactly what it paid before.
+   The offscreen canvas and its full-size drawImage go with it, since they exist
+   only to feed the scan.
+   ponytail: unbounded Map, but the keys are asset paths from a closed set of a
+   few hundred art files at four ints each; evict if that ever stops being true. */
+const TRIM_BOX = new Map();
 function drawTrimmedArt(canvas, src, pad = 0.08, _fromMaster = false) {
   return new Promise(res => {
     const img = new Image();
     img.onload = () => {
       const iw = img.naturalWidth, ih = img.naturalHeight;
-      const off = document.createElement('canvas'); off.width = iw; off.height = ih;
-      const octx = off.getContext('2d'); octx.drawImage(img, 0, 0);
-      let x0 = iw, y0 = ih, x1 = 0, y1 = 0, found = false;
-      try {
-        const d = octx.getImageData(0, 0, iw, ih).data;
-        for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) {
-          if (d[(y * iw + x) * 4 + 3] > 14) { found = true; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-        }
-      } catch { /* tainted; use full image */ }
-      if (!found) { x0 = 0; y0 = 0; x1 = iw - 1; y1 = ih - 1; }
+      let box = TRIM_BOX.get(src);
+      if (!box) {
+        const off = document.createElement('canvas'); off.width = iw; off.height = ih;
+        const octx = off.getContext('2d'); octx.drawImage(img, 0, 0);
+        let x0 = iw, y0 = ih, x1 = 0, y1 = 0, found = false;
+        try {
+          const d = octx.getImageData(0, 0, iw, ih).data;
+          for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) {
+            if (d[(y * iw + x) * 4 + 3] > 14) { found = true; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+          }
+        } catch { /* tainted; use full image */ }
+        if (!found) { x0 = 0; y0 = 0; x1 = iw - 1; y1 = ih - 1; }
+        TRIM_BOX.set(src, box = [x0, y0, x1, y1]);
+      }
+      const [x0, y0, x1, y1] = box;
       const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
       /* Tiny ink from a thumbnail: take the master and start again. One extra
          request, and only for the items that cannot be served by a tier. */
