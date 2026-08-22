@@ -152,6 +152,133 @@ function tx(store, mode, fn) {
   }));
 }
 
+/* ===================== A REJECTED WRITE MUST NOT BE SWALLOWED =====================
+ *
+ * THE BUG. Exactly ONE write in this app survived a full disk: the meal log in
+ * js/app.js, which wraps its own put and tells the player. Every other write was
+ * a bare `await db.put(...)` / `await kvSet(...)` with no catch. On a quota abort
+ * the promise rejects, the rest of the function is skipped, and the rejection
+ * unwinds to window.unhandledrejection, where js/analytics.js files it as an
+ * anonymous `err` row with a truncated message. The player sees the fight-win
+ * animation and never gets the crate, and nobody can tell afterwards which write
+ * it was.
+ *
+ * WHY HERE AND NOT AT THE CALL SITES. 100+ try/catch blocks is a change nobody
+ * can review, and the 101st write would forget it. Worse, a per-site catch cannot
+ * see the failures a caller ALREADY swallows: a `.catch(() => {})` two frames up
+ * hides the write forever, and there are plenty of those. Every write goes
+ * through this file, so this is the one place that sees all of them.
+ *
+ * WHY THE ATOMIC PRIMITIVES ARE IN THE SEAM, AND THIS IS THE WHOLE POINT ON v417.
+ * When this fix was first written, every payout went through `db.put`, so
+ * wrapping put/del/clear covered the money. It does not any more. The reward SOP
+ * (CLAUDE.md, added 2026-08-17) now REQUIRES every paying action to go through
+ * addIfAbsent / take / kvUpdate / kvBump instead, and those open their own
+ * transactions without touching `tx()` or `db.put`. Porting the original patch
+ * unchanged would therefore have covered the bookkeeping and MISSED every coin,
+ * crate, pet and XP row in the game: the exact writes whose silent loss the fix
+ * exists for, newly invisible to it. So they are wrapped here too.
+ *
+ * ONLY A REJECTION IS A FAILURE. Each primitive has a legitimate falsy answer:
+ * addIfAbsent resolves false for "somebody else has this key", take resolves
+ * undefined for "already gone", kvUpdate resolves undefined for "nothing to do".
+ * Those are ANSWERS. Reporting them would fire on every correctly-refused double
+ * claim, which is the same conflation the SOP already calls out in award().
+ *
+ * A FROZEN TAB IS NOT A FAILING TAB. During "Erase all data" every other tab sets
+ * `frozen` synchronously and rejects every write on purpose while it waits to
+ * reload. Those rejections are the design working, so they are filtered out here
+ * rather than becoming a storm of toasts on the way out.
+ *
+ * The rejection is still RE-THROWN, unchanged: callers keep their control flow,
+ * the reward code after a failed write still does not run, and the app still does
+ * not pretend the write landed. The only thing added is that the failure is now
+ * announced, once, to someone who can speak.
+ *
+ * LOUD vs QUIET. Some writes are fire-and-forget by design and interrupting the
+ * player for those would be worse than silence. The line drawn here:
+ *
+ *   LOUD (default)  the write is the durable record of something the player did
+ *                   or earned and can NAME afterwards: a meal, a weight, a step
+ *                   row, an XP award, a crate/pet/gear row, coins, dust, talents,
+ *                   the garden, the pantry, their equipped look.
+ *   QUIET           ambient bookkeeping the app re-derives, re-asks or repeats
+ *                   next launch: "have I shown this popup", "when did I last
+ *                   sync", the telemetry queue, a cached position, a one-shot
+ *                   migration marker.
+ *
+ * The QUIET list is EXPLICIT and the default is LOUD, deliberately (anti-
+ * regression rule 8: never default to hidden). A new key nobody classified
+ * degrades to a toast that is arguably unnecessary, never to a reward that
+ * vanishes in silence.
+ *
+ * Store alone was not a usable axis: `kv` carries both `coins` and
+ * `discordIntroSeen`. Key is.
+ */
+const QUIET_KV = new Set([
+  // telemetry and identity plumbing
+  'evq', 'analyticsId', 'recoveryId', 'recoverySetAt',
+  // "have I already shown this" one-shots for intros, tours and announcements
+  'spiresIntroSeen', 'bossesIntroSeen', 'mageIntroSeen', 'raceIntroSeen', 'raceResultSeen',
+  'gardenIntroSeen', 'discordIntroSeen', 'discordIntroShown', 'discordJoined',
+  'betaThanksSeen', 'cosmeticTeaserSeen', 'changelogSeen', 'grantsSeen', 'seenUnlocks',
+  'hlwSeen', 'siegeSeen', 'map-seen', 'mapLpHint', 'namePrompted', 'notifAsked',
+  'surveyDone', 'surveySnoozeAt', 'renameRequired', 'petSeenLevel',
+  // "when did I last do X" throttles: a lost timestamp costs one extra attempt
+  'lastNudgeAt', 'racePushAt', 'socialSyncAt', 'crewSeenTs', 'hkLastSync',
+  'hkStaleNotified', 'hkSleepDiag', 'lastExportAt', 'backupAt', 'transmuteAt',
+  // idempotent one-shot migrations and backfills: they re-run next launch
+  'game-init', 'loot-init', 'bootRestored', 'dayOneEquipFix', 'denceil-backfill',
+  'seedpouch-backfill', 'freeze-refunded', 'wheelResetOnce_v61', 'petLvlV', 'hkScopesV',
+  // diagnostics and caches the app recomputes
+  'vaultConflict', 'vaultUnreadable', 'lastLoc', 'knownIncoming', 'cloudOff', 'apiBase',
+]);
+/* Two families are minted per week / per drop, so they cannot be listed by name.
+   Both are pure "have I shown this yet" markers, same class as the set above. */
+const QUIET_KV_PREFIX = ['dropSeen.', 'raceResult:', 'raceResultShown:'];
+
+export function writeIsQuiet(store, val) {
+  if (store !== 'kv') return false;
+  const k = val && typeof val === 'object' ? val.k : val;
+  if (typeof k !== 'string') return false;
+  return QUIET_KV.has(k) || QUIET_KV_PREFIX.some(p => k.startsWith(p));
+}
+
+/* The sink is registered ONCE, by js/app.js, because js/app.js owns the toast and
+   the analytics client and this file must not import either (js/analytics.js
+   imports THIS file, so a reverse import would be a cycle). */
+let writeFailureSink = null;
+export function onWriteFailure(fn) { writeFailureSink = typeof fn === 'function' ? fn : null; }
+
+function keyOf(store, val) {
+  if (val == null || typeof val !== 'object') return val == null ? null : String(val);
+  if (store === 'kv') return val.k;
+  return val.id ?? val.key ?? val.date ?? null;
+}
+
+function reportWriteFailure(store, val, op, err) {
+  if (err && String((err && err.message) || err) === FROZEN_MSG) return;   // erasing on purpose
+  const key = keyOf(store, val);
+  const quiet = writeIsQuiet(store, val);
+  const quota = /quota|QuotaExceeded/i.test(`${(err && err.name) || ''} ${(err && err.message) || ''}`);
+  /* Tag the error itself as well as calling the sink. Anything that catches this
+     downstream, including analytics' unhandledrejection handler, can now say
+     WHICH write died instead of filing an anonymous row. */
+  try { if (err && typeof err === 'object') err.tallyWrite = { store, key, op, quiet, quota }; } catch { /* frozen error */ }
+  /* THE ONE STORE THAT CANNOT BE REPORTED. The sink queues telemetry, and
+     telemetry is queued by writing kv 'evq'. Reporting a failed 'evq' write would
+     queue an event, which writes 'evq', which fails, forever. */
+  if (store === 'kv' && key === 'evq') return;
+  if (!writeFailureSink) return;
+  try { writeFailureSink({ store, key, op, quiet, quota, error: err }); }
+  catch { /* a broken reporter must never break the write path */ }
+}
+
+/* Rejections are re-thrown so every existing caller behaves exactly as before. */
+function guard(store, val, op, run) {
+  return run().catch(err => { reportWriteFailure(store, val, op, err); throw err; });
+}
+
 /* ATOMIC INSERT-IF-ABSENT. Returns true only for the caller whose row landed.
  *
  * `add` (not `put`) fails with ConstraintError when the key is taken, and the
@@ -169,7 +296,7 @@ export function addIfAbsent(store, val) {
      is the safe direction. js/game.js reads the stamp back and is written
      against exactly this: see awardOnce. */
   bumpStore(store);
-  return open().then(db => new Promise((resolve, reject) => {
+  return guard(store, val, 'addIfAbsent', () => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(store, 'readwrite');
     let inserted = true;
     const req = t.objectStore(store).add(val);
@@ -183,7 +310,7 @@ export function addIfAbsent(store, val) {
     t.oncomplete = () => resolve(inserted);
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error || new Error('addIfAbsent aborted'));
-  }));
+  })));
 }
 
 /* ATOMIC TAKE. Hands the row over and deletes it, in ONE transaction.
@@ -200,7 +327,7 @@ export function addIfAbsent(store, val) {
 export function take(store, key) {
   if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   bumpStore(store);
-  return open().then(db => new Promise((resolve, reject) => {
+  return guard(store, key, 'take', () => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(store, 'readwrite');
     const os = t.objectStore(store);
     const g = os.get(key);
@@ -209,7 +336,7 @@ export function take(store, key) {
     t.oncomplete = () => resolve(row);
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error || new Error('take aborted'));
-  }));
+  })));
 }
 
 /* ATOMIC READ-MODIFY-WRITE on one kv row. `fn` MUST be synchronous, see above.
@@ -228,7 +355,7 @@ export function take(store, key) {
 export function kvUpdate(k, fn, fallback = null) {
   if (frozen) return Promise.reject(new Error(FROZEN_MSG));
   bumpStore('kv');
-  return open().then(db => new Promise((resolve, reject) => {
+  return guard('kv', k, 'kvUpdate', () => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction('kv', 'readwrite');
     const os = t.objectStore('kv');
     const g = os.get(k);
@@ -242,7 +369,7 @@ export function kvUpdate(k, fn, fallback = null) {
     t.oncomplete = () => resolve(next);
     t.onerror = () => reject(threw || t.error);
     t.onabort = () => reject(threw || t.error || new Error('kvUpdate aborted'));
-  }));
+  })));
 }
 
 /* The currency primitive. `coins` and `bonedust` are plain numbers in kv and
@@ -254,10 +381,10 @@ export function kvBump(k, n, { min = 0 } = {}) {
 }
 
 export const db = {
-  put: (store, val) => { bumpStore(store); return tx(store, 'readwrite', s => s.put(val)); },
-  del: (store, key) => { bumpStore(store); return tx(store, 'readwrite', s => s.delete(key)); },
+  put: (store, val) => { bumpStore(store); return guard(store, val, 'put', () => tx(store, 'readwrite', s => s.put(val))); },
+  del: (store, key) => { bumpStore(store); return guard(store, key, 'del', () => tx(store, 'readwrite', s => s.delete(key))); },
   get: (store, key) => tx(store, 'readonly', s => s.get(key)),
-  clear: (store) => { bumpStore(store); return tx(store, 'readwrite', s => s.clear()); },
+  clear: (store) => { bumpStore(store); return guard(store, null, 'clear', () => tx(store, 'readwrite', s => s.clear())); },
   all: (store) => tx(store, 'readonly', s => s.getAll()),
   count: (store) => tx(store, 'readonly', s => s.count()),
   epoch: (store) => storeEpoch(store),
