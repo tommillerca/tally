@@ -4586,11 +4586,13 @@ body::before {
    it in every fight?" The arena gets the same prestige as a glow on the DRAWING
    instead of an outline on its container. */
 .pet-card.is-shiny { box-shadow: 0 0 0 2px rgba(var(--gold-rgb),.6), 0 0 16px rgba(var(--gold-rgb),.35); }
-/* The glow goes on the STAGE, not the img: `.fstage.petmini.r-epic img` already
-   owns the img's filter for rarity, and a second filter rule there simply replaced
-   it (measured: the shiny lizard came out epic-violet with no gold at all). A
-   filter on the container composes over whatever the child already draws, so a
-   shiny epic reads as both. */
+/* The glow goes on the STAGE, not the img. It was written that way because
+   `.fstage.petmini.r-epic img` owned the img's filter for rarity and a second
+   filter rule there simply replaced it (measured: the shiny lizard came out
+   epic-violet with no gold at all). That rarity rule is gone as of v425 (see the
+   note by .pet-card.r-epic), so the img's filter is free again, but this stays on
+   the container: a filter there composes over whatever the child draws, which is
+   what keeps a shiny animated pet's own layer filters intact. */
 .petmini.is-shiny { box-shadow: none; filter: drop-shadow(0 0 7px rgba(var(--gold-rgb),.9)); }
 .hatch-prize.is-shiny img { filter: drop-shadow(0 0 10px rgba(var(--gold-rgb),.9)); }
 @media (prefers-reduced-motion: reduce) {
