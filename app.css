@@ -7350,6 +7350,22 @@ body::before {
 /* The CONTAINER carries the hide, not the first child: screens render many
    sibling nodes (Crew nine, Today fifteen) and the first one routinely holds none
    of the art, so hiding it waited on nothing. */
+/* AND THIS GATE IS A SWITCH, NOT AN ANIMATION. #screen declares no transition,
+   but `transition-property` defaults to `all`, and the reduced-motion block near
+   the top of this file sets `transition-duration: 0.001s !important` on `*`. So
+   for a player who asks for less motion, every property change on #screen becomes
+   a one-millisecond transition, and a transition's first computed value is the
+   OLD one: the frame in which `screen-in` lands still reads opacity 0, and the
+   real value arrives on the next frame. That one frame is a hole, and the moment
+   the held copy stopped dissolving over it, it became visible. Caught by
+   tests/route-flash-audit.mjs REDUCED-MOTION, one bare frame at 214ms, which is
+   exactly what that row is for. Declaring the property away is the fix, because
+   there is nothing on #screen that is meant to transition; the alternative,
+   holding the copy an extra frame, would have paid a frame on every navigation
+   for every player to work around an accident that only exists for some.
+   This is the 0.001s trap the reduced-motion block itself warns about, one
+   element over. */
+.screen { transition-property: none; }
 .screen:not(.screen-in) { opacity: 0; }
 .screen.screen-in { opacity: 1; }
 .screen > .route-in { animation: routeIn .2s ease-out; }
@@ -7372,18 +7388,18 @@ body::before {
    `.screen--map`. overflow is clamped here so a frozen copy never grows a
    scrollbar of its own; scrollTop is still settable on it, which is how the copy
    freezes at the offset the player left.
-   THE FADE IS A TRANSITION AND THE REMOVAL IS A TIMER, deliberately. Nothing
-   waits on transitionend, so a reduced-motion player, whose transition is none,
-   gets a clean hard cut at the same moment instead of a copy that never leaves.
-   No keyframes, no iteration count: there is nothing here to collapse to 0.001s
-   and run a thousand times a second. */
+   IT LEAVES ON ONE FRAME AND HAS NO EXIT ANIMATION AT ALL. It used to fade out
+   over .18s and be removed on a 260ms timer, which put both screens on the glass
+   together for a quarter of a second: Tom, 2026-08-21, "switching between tabs is
+   not smooth it's showing a staggered preview of the the existing page as you
+   swap". js/app.js removes the node in the same task that applies `screen-in`,
+   so the swap is one composited frame with no in-between state for CSS to
+   describe. Nothing to collapse to 0.001s, nothing to wait on transitionend for,
+   and reduced motion needs no special case because there is no motion. */
 .screen-held {
   position: absolute; left: 0; right: 0;
   overflow: hidden; pointer-events: none;
-  transition: opacity .18s ease-out;
 }
-.screen-held-out { opacity: 0; }
-@media (prefers-reduced-motion: reduce) { .screen-held { transition: none; } }
 /* A held swap already has a finished picture on top, so the arriving child must
    NOT also fade up from transparent: two crossed opacity fades leave a quarter of
    the ground visible at the midpoint, which is the tray again. The class stays on

@@ -2865,6 +2865,22 @@ let screenCleanup = null;
  * revealWhenReady's 700ms cap, and every stale node is swept on the next
  * navigation regardless. Degrade to a hard cut, never to a frozen app.
  *
+ * AND IT LEAVES ON ONE FRAME, IT DOES NOT DISSOLVE. Tom, 2026-08-21: "switching
+ * between tabs is not smooth it's showing a staggered preview of the the
+ * existing page as you swap". The copy used to fade out over .18s and then be
+ * removed on a 260ms timer, so from the moment the new screen was ready there
+ * was a quarter of a second in which BOTH screens were on the glass at once and
+ * the outgoing one hung over the incoming one as a ghost. Measured at 440x956,
+ * CPU x6, through a CDP screencast: Boneyard -> Today held the old paint whole
+ * to 144ms and then showed the two screens superimposed until 418ms; Crew ->
+ * Today, 145ms and 503ms. That superimposed window IS the "staggered preview of
+ * the existing page", and a dissolve is the wrong grammar for a tab bar anyway:
+ * a cut reads as "you are there now", a dissolve reads as "time is passing".
+ * So the copy is REMOVED, in the same task that route() applies `screen-in`.
+ * Same task means the same paint: no frame can contain both screens, and none
+ * can contain neither (which would be the tray flash above). See
+ * tests/route-flash-audit.mjs GHOST.
+ *
  * NO REFERENCES BREAK. #screen keeps its identity: bindWordmarkPull() binds a
  * scroll listener to that exact node once at startup, so swapping in a fresh
  * element instead would have silently killed the overscroll wordmark. */
@@ -2894,8 +2910,11 @@ function holdOutgoing(el) {
     gone = true;
     clearTimeout(cap);
     if (dropHeld === drop) dropHeld = null;
-    g.classList.add('screen-held-out');
-    setTimeout(() => g.remove(), 260);   // > the .18s fade; a timer, so reduced motion still clears it
+    /* ONE FRAME, NOT A DISSOLVE (see the header). route() calls this in the same
+       task in which revealWhenReady schedules `screen-in`, and no paint happens
+       between a microtask and the rAF that follows it, so the lid comes off and
+       the new screen turns opaque in the same composited frame. */
+    g.remove();
     try { cl?.(); } catch { /* never block navigation on teardown */ }
   };
   const cap = setTimeout(drop, 1200);
@@ -2991,22 +3010,36 @@ function route({ keepScroll = false } = {}) {
     if (!isNav) { el.classList.add('screen-in'); markBooted(); child?.classList.add('route-in'); return; }
     return revealWhenReady(el, { cls: 'screen-in', cap: 700 }).then(() => {
       markBooted();
-      /* ONE FADE, NOT TWO, AND THE CLASS STAYS EITHER WAY.
+      /* NO FADE AT ALL ON A SWAP, AND THE CLASS STAYS EITHER WAY.
          `route-in` fades the new child up from transparent. Over the ground on a
          boot that is right. Under a held screen it is wrong: two crossed opacity
          fades do not add up to one, they leave the ground showing through at
-         t(1-t), a quarter of it at the midpoint, which is this bug again, dimmer.
-         So the ANIMATION is suppressed for a held swap (app.css .screen-swap) and
-         the held copy alone does the dissolve, with the new screen already whole
-         underneath it. The CLASS is still applied on every navigation, because it
-         is the router's marker that a child arrived by one and two audits read it
-         that way (tests/feel-audit.mjs ROUTE-IN, tests/screen-sweep.mjs ARRIVAL).
-         Set explicitly per navigation rather than cleared on the way out: a hold
-         that is dropped mid-fade must not leave the next screen's entrance
-         suppressed, and a boot has no hold to suppress it in the first place. */
+         t(1-t), a quarter of it at the midpoint, which is the tray flash again,
+         dimmer. So the ANIMATION is suppressed for a held swap (app.css
+         .screen-swap) and the held copy simply leaves. The CLASS is still applied
+         on every navigation, because it is the router's marker that a child
+         arrived by one and two audits read it that way (tests/feel-audit.mjs
+         ROUTE-IN, tests/screen-sweep.mjs ARRIVAL). Set explicitly per navigation
+         rather than cleared on the way out: a hold dropped by the next navigation
+         must not leave that screen's entrance suppressed, and a boot has no hold
+         to suppress it in the first place. */
       el.classList.toggle('screen-swap', !!dropHeld);
       child?.classList.add('route-in');
-      dropHeld?.();
+      /* AND THE LID COMES OFF IN THE FRAME THE SCREEN TURNS OPAQUE, NEVER BEFORE.
+         revealWhenReady applies `screen-in` from a requestAnimationFrame, and its
+         promise resolves as a MICROTASK, which is not the same thing: the decode
+         it was waiting on can settle after a frame's callbacks have already run,
+         in which case this code runs, the copy goes, and that frame paints with
+         the old screen gone and the new one still at opacity 0. That is the tray
+         flash tests/route-flash-audit.mjs exists for, and it caught it here: one
+         bare frame at 214ms on the reduced-motion pass, on the first version of
+         this hard cut. Deferring the drop by one frame puts it in the SAME rAF
+         batch as the class, registered after it, so the two land together and no
+         frame can hold either the tray or both screens. `drop` is captured rather
+         than re-read: it is bound to this navigation's copy, and by the next
+         frame `dropHeld` may already belong to a newer one. */
+      const drop = dropHeld;
+      requestAnimationFrame(() => drop?.());
     });
   });
 }
@@ -4589,7 +4622,20 @@ async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
     setTimeout(apply, 300);
   };
   const guard = setTimeout(show, cap);
-  const imgs = [...root.querySelectorAll('img')];
+  /* THE FIRST PICTURE DOES NOT WAIT ON IMAGES THAT ARE NOT IN IT.
+     `loading="lazy"` is the author saying "this is not first-paint content", and
+     the browser honours that literally: an offscreen lazy image never starts
+     loading, so `decode()` on it returns a promise that NEVER settles and the
+     only thing that can end the wait is the cap. Measured on this tree at
+     440x956, CPU x6: the Shop renders 64 images of which 10 are `loading="lazy"`
+     thumbnails laid out at zero width, so every arrival at the Shop, cold AND
+     warm, sat on the full cap: #screen had its content at 21ms and the reveal
+     landed at 815ms, 794ms of it spent waiting on ten images that were still
+     undecoded 2.5 seconds later. Every other hub tab reveals in 61-72ms.
+     This is on the shared function and not on the Shop, because it is a property
+     of the wait and not of that screen: any screen anyone gives a lazy image to
+     inherits the same permanent cap. */
+  const imgs = [...root.querySelectorAll('img:not([loading="lazy"])')];
   await Promise.all(imgs.map(im => {
     if (im.decode) return im.decode().catch(() => {});
     if (im.complete) return Promise.resolve();
@@ -11958,7 +12004,17 @@ async function renderCharacter(wrap, tab, opts = {}) {
   if (floatingGear) floatingGear.hidden = tab === 'shop';
   $('#gwGear', body)?.addEventListener('click', () => { location.hash = '#/settings'; });
 
-  $$('#chTabs .chip, .ward-looks', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
+  /* THE HUB CHIPS GO THROUGH THE ROUTER, so they arrive whole like every other
+     screen. They used to call renderCharacter directly, which is the ONE tab-like
+     control in the app that reaches neither route() nor openSheet() and therefore
+     had no reveal gate at all: measured at 440x956 CPU x6, Wardrobe -> Shop threw
+     the old panel away at 34ms and then assembled the new one in front of the
+     player in four visible stages (header alone over a void at 77ms, chip row at
+     116ms, cards with empty art tiles at 151ms, art filling in until 395ms).
+     openCharacter() already routes when you are on the hub already, so this is the
+     covered path, not a new one: no second reveal, no per-screen animation, just
+     the chips using the machinery that tally/CLAUDE.md says owns this. */
+  $$('#chTabs .chip, .ward-looks', body).forEach(c => c.addEventListener('click', () => openCharacter(c.dataset.tab)));
   const content = $('#chContent', body);
   if (curtains) requestAnimationFrame(() => requestAnimationFrame(() => $$('.curt', body).forEach(x => x.classList.add('open'))));
 
