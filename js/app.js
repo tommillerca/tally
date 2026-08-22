@@ -3397,6 +3397,15 @@ async function renderToday(el) {
     entries, tot, targets: t, crates, streak, level: lvl.level, isToday,
     steps: hk?.steps || 0, dishReady: !!(cook && cook.ready), cropsRipe,
     fightsReady: pitEnergy.ready,
+    /* WHAT HE IS WEARING INTO A FIGHT. Both numbers are already computed above
+       for computeHomeUnlocks, so this costs no extra reads. They exist because
+       the Wardrobe can now take every statted piece off in one tap, and Tom's
+       condition on shipping that was that somebody tells the player: "reset
+       should strip everything but there needs to be a gwart reminder or
+       something that reminds players they will be weaker in fights if they dont
+       choose statted gear to wear." Gwart is that somebody. */
+    gearOwned: unlockGear ? unlockGear.size : 0,
+    gearWorn: unlockFighter ? Object.keys(unlockFighter.gearLo || {}).length : 0,
   };
   const gwLine = gwartLine(gwCtx);
   /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
@@ -4135,7 +4144,8 @@ const gwartLine = ctx => gwPick(gwartPool(ctx));
    line goes in the bucket whose condition it describes, not in the general pool
    at the bottom. The general pool is the only one that is pure character. */
 function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
-  steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0 }) {
+  steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0,
+  gearOwned = 0, gearWorn = 0 }) {
   const hour = new Date().getHours();
   if (crates.length) return [
     'A crate by his feet, still shut. I gave him hands for this.',
@@ -4146,6 +4156,35 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
     'Open it. I have a guess about what is in there.',
     'Whatever is in there is already yours. Go and look.',
     'A shut crate is just a box. Make it something else.',
+  ];
+  /* NOTHING WITH STATS ON HIM, AND HE OWNS SOMETHING HE COULD WEAR. This is the
+     other half of the Wardrobe's "Take it all off" (stripAll in js/loot.js): Tom
+     approved a one-tap strip that takes the statted gear too, on the condition
+     that the player is told they will be weaker for it. A toast at the moment of
+     the strip would be gone in three seconds and only reaches the player who
+     used the button; this is a STATE, so it is said on Today for as long as it
+     is true, to everyone it is true of, including the player who has simply
+     never equipped anything.
+
+     WHERE IT SITS IN THE ORDER, and each boundary is deliberate:
+       BELOW crates, because an unopened crate may hold the very gear this is
+         asking for, and a crate is a one-tap state that disappears immediately.
+       BELOW !isToday, because a warning about fights is noise on a screen where
+         you cannot fight.
+       ABOVE the garden, the pot and the ledger, which are recurring daily states
+         that would mask this one indefinitely. Being unarmed has no badge
+         anywhere on Today, unlike the Kitchen and Backpack doors, so if it loses
+         priority it is never said at all.
+     It retires itself: a player who owns no gear never sees it, and it is gone
+     the moment one piece goes on. Nothing to remember, nothing to reset. */
+  if (gearOwned > 0 && gearWorn === 0) return [
+    'Nothing statted on him. He will fight. He will lose more.',
+    'That is a look, not armour. The Wardrobe has the numbers.',
+    'Bare bones. Fine in a tavern, less so in the Pit.',
+    'No gear on him. His opponents will be delighted.',
+    'Handsome, and unarmed. The Pit does not grade handsome.',
+    'You took the numbers off him. The Wardrobe gives them back.',
+    'He is carrying no stats. I would fix that before a fight.',
   ];
   if (!isToday) return [
     'Yesterday is set. You cannot re-cut a finished thing.',

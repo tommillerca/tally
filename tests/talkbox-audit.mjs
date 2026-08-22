@@ -507,6 +507,12 @@ page.on('pageerror', e => { pageErrors.push(String(e)); console.log('PAGEERROR',
     const BUCKETS = {
       'crates': { ...base, crates: [{}] },
       'a past day': { ...base, isToday: false },
+      /* Owns gear, wearing none: the state the Wardrobe's one-tap strip leaves a
+         player in, and the reason Tom let that button take statted gear at all.
+         Registered here so its lines are MEASURED against the band like every
+         other line, not merely shipped; without this row the POOL coverage row
+         above goes red on the shortfall, which is the mechanism working. */
+      'no statted gear': { ...base, gearOwned: 3, gearWorn: 0 },
       'one ripe bed': { ...base, cropsRipe: 1 },
       'several ripe beds': { ...base, cropsRipe: 4 },
       'a dish ready': { ...base, dishReady: true },

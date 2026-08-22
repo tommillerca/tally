@@ -1,62 +1,112 @@
-/* "TAKE IT ALL OFF": THE WARDROBE'S ONE-TAP RESET.
+/* "TAKE IT ALL OFF": THE WARDROBE'S ONE-TAP STRIP.
  *
  * A player suggested a button that clears the Bonehead so a new outfit starts
- * from nothing, and Tom approved it on 2026-08-21. The feature is four lines.
- * The RISK is the whole reason this file exists: a button that touches worn
- * cosmetics sits one careless line away from touching OWNED ones, and a reset
- * that quietly bins a legendary somebody paid coins or real money for is not a
- * bug you get to apologise for. Everything here is built around that.
+ * from nothing. Tom approved it, then settled the one thing I had held back on,
+ * 2026-08-22: "reset should strip everything but there needs to be a gwart
+ * reminder or something that reminds players they will be weaker in fights if
+ * they dont choose statted gear to wear." So it takes the STATTED GEAR too, and
+ * the risk that made me build it the cautious way first (a player walks into the
+ * Pit weaker with nothing telling them why) is answered by TELLING THEM. Both
+ * halves are graded here, because either one alone is the bug.
+ *
+ * THE RISK IS THE WHOLE REASON THIS FILE EXISTS. A button that touches worn
+ * equipment sits one careless line away from touching OWNED equipment, and a
+ * strip that binned a legendary somebody paid coins or real money for is not a
+ * bug you get to apologise for.
  *
  * WHAT IT MUST DO
- *   every non-gear cosmetic slot comes off, slots with a `default` (B, SK) go
- *   back to the default rather than empty, and the transmog map clears.
+ *   every slot comes off, gear included; slots with a `default` (B, SK) go back
+ *   to the default rather than empty; the transmog map clears; and Gwart starts
+ *   saying a no-gear line on Today.
  *
  * WHAT IT MUST NEVER DO, and these are the rows that matter
- *   1. remove, sell, salvage or refund anything. The `inv` store is compared
- *      ROW BY ROW, not by count: a swap that deleted a legendary and added a
- *      common would keep the count identical.
- *   2. move stats. `gearloadout` is compared whole, and a gear slot must keep
- *      BOTH its piece and its `equipped` art, because the two desyncing is how
- *      a "look" change silently becomes a power change.
+ *   1. remove, sell, salvage or refund anything. `inv` is compared ROW BY ROW,
+ *      not by count: a swap that deleted a legendary and added a common would
+ *      keep the count identical. OWNS then pins the specific statted piece that
+ *      was just unequipped as still owned, which is the whole difference between
+ *      a strip and a theft.
+ *   2. desync `equipped` from `gearloadout`. Nothing writes them separately;
+ *      equip(slot, null) does the slot, its gear row and its transmog together.
  *   3. touch the pet. Slot C belongs to the Stable and `petWear` (v423) is its
- *      own system.
- *   4. bin the saved fits, or the paid-look receipts. transmogPrice reads
- *      `paidlooks`, and paidLooks() grandfathers v221-era purchases by seeding
- *      from the LIVE transmog map: clear the map without banking the receipts
- *      first and the player is charged dust a second time for a look they
- *      already own. FREE asserts the price of putting it back is still 0.
- *   5. commit on one tap. It arms first, the fit-rail idiom.
+ *      own system. Nor the saved fits: a fit is how you put a look BACK.
+ *   4. bin the paid-look receipts. transmogPrice reads `paidlooks`, and
+ *      paidLooks() grandfathers v221-era purchases by seeding from the LIVE
+ *      transmog map, so the seed must run before the FIRST equip() now that
+ *      equip() shreds tm entries slot by slot. FREE asserts re-wearing is 0.
+ *   5. commit on one tap. It arms first, and the confirm names the gear.
+ *   6. leave the player uninformed. WARNED drives it end to end.
  *
- * HOW IT IS DRIVEN. The REAL chip, tapped twice, in the real Wardrobe, after a
+ * HOW IT IS DRIVEN. The REAL chip, tapped twice, in the real Wardrobe, on a
  * seeded save that actually has something on. Nothing here calls stripAll()
- * directly: that would prove the function and nothing about whether the app
- * ever reaches it (tally/CLAUDE.md, the FX rule, same class of mistake).
+ * directly except the EXIT teardown: driving the function would prove the
+ * function and nothing about whether the app ever reaches it (tally/CLAUDE.md,
+ * the FX rule, same class of mistake).
  *
  * SETUP and CONTROL refuse to grade anything unless the seed really landed and
  * the doll really had several pieces on it, because "every slot is now empty"
  * passes perfectly on a Bonehead that was already naked.
  *
- * PROVEN RED in a cp -R throwaway copy, one mutation at a time, each verified
- * to have applied before the result was read:
- *   M1  stripAll() also does db.clear('inv')      -> OWNED x3 + REVERSIBLE red
- *   M2  stripAll() writes kvSet('gearloadout', {}) -> STATS, GEAR, CLEARED red
- *   M3  the plan stops excluding slot 'C'           -> PET red
- *   M4  the plan stops excluding slots holding gear -> GEAR red
- *   M5  stripAll() also does kvSet('outfits', [])  -> FITS red
- *   M6  the loop kvSets equipped to {} wholesale    -> GEAR, PET red
- *   M7  stripAllPlan() returns no slots            -> CLEARED, DEFAULT, VISIBLE red
- *   M8  the chip is wired with a plain click        -> ARM x2 red
- *   M9  stripAll() skips the paidLooks() bank      -> FREE red
- *   M10 stripAll() also does coinsAdd(-50)         -> CURRENCY red
- *   M11 the chip renders unconditionally            -> EXIT red
- *   M12 stripAll() leaves the transmog map alone   -> MOG, EXIT red
- * And the SETUP row that the chip is offered at all goes red on the parent
- * commit dafe778a, where the feature does not exist.
+ * PROVEN RED in a throwaway made with `git archive` (NOT cp -R: a linked
+ * worktree's .git is a FILE pointing at the shared gitdir, so a copy shares HEAD
+ * and a git command inside it moves the real worktree). One mutation at a time,
+ * each asserted to have applied before the result was read, exit codes from a
+ * file:
+ *   M1  stripAll() also does db.clear('inv')     -> OWNED x3, OWNS, REVERSIBLE,
+ *                                                   and both WARNED rows
+ *   M2  the plan keeps the OLD gear exclusion    -> STATS, GEAR, CLEARED red
+ *       (literally my first build: cosmetics only)
+ *   M3  the plan stops excluding slot 'C'        -> PET red
+ *   M4  stripAll() DELETES the gear it took off  -> OWNS, OWNED red (the theft)
+ *   M5  stripAll() also does kvSet('outfits',[]) -> FITS red
+ *   M6  the loop kvSets equipped {} wholesale    -> GEAR, PET red
+ *   M7  stripAllPlan() returns no slots          -> CLEARED, DEFAULT, VISIBLE,
+ *                                                   WARNED red
+ *   M8  the chip is wired with a plain click     -> ARM x2 red
+ *   M9  stripAll() skips the paidLooks() bank    -> FREE red, but only after
+ *       the row was moved: see below
+ *   M10 stripAll() also does coinsAdd(-50)       -> CURRENCY red
+ *   M11 the chip renders unconditionally         -> EXIT red
+ *   M12 stripAll() drops the wholesale tm clear -> MOG, EXIT red, but only
+ *       after the seed was strengthened: see below
+ *   M13 the no-gear bucket is deleted            -> WARNED red
+ *   M14 the no-gear bucket never retires         -> WARNED-retire red
+ * And the SETUP row that the chip is offered at all goes red on dafe778a, where
+ * the feature does not exist. tests/talkbox-audit.mjs carries the other two:
+ * unregistering the bucket in its ctx table fails POOL, and a no-gear line too
+ * long for the plaque fails TYPE.
+ *
+ * M9 CAUGHT A DEAD ROW, which is the more useful half of doing this at all.
+ * FREE originally sat straight after the strip, and there it could not fail:
+ * transmogPrice returns 0 for ANY look in a slot with no gear in it, and a full
+ * strip empties every gear slot, so it was reading a structural free rather than
+ * a banked receipt. Skipping the bank left the whole suite green. It now runs
+ * AFTER the gear goes back on, which is both the state where the money is real
+ * and the real player path (strip, re-gear, want your old look back), and it is
+ * paired with a CONTROL row asserting an unworn look in that same slot really
+ * does charge. Measured: unpaid 6 dust, previously-worn 0 dust.
+ *
+ * M12 CAUGHT A SECOND DEAD ROW, the same way. Dropping stripAll's final
+ * kvSet('transmog', {}) left the suite green, because every slot that HOLDS
+ * something is in the plan and has its own transmog cleared by equip() inside
+ * the loop. The wholesale clear exists for the case the seed did not build: a
+ * STALE entry on a gear slot holding nothing, which this codebase creates for
+ * real (unequipping gear never cleared its transmog, and equipped() carries an
+ * explicit guard so it cannot "conjure a look into a genuinely empty slot").
+ * Invisible until something fills that slot again, and then it silently changes
+ * how the player looks. The seed now plants one and a CONTROL row asserts it is
+ * really there and really unreachable by the loop.
+ *
+ * BOTH DEAD ROWS WERE FOUND BY THE MUTATION, NOT BY READING. That is the whole
+ * argument for doing this: the suite was green, the feature worked, and two of
+ * its rows had quietly stopped being able to fail.
+ *
+ * M1 to M11 were run before the stale-transmog seed was added. Adding state to a
+ * seed can only give a row more ways to fail, never fewer, so those reds stand.
  *
  * M6 is worth reading twice: wiping `equipped` wholesale does NOT red DEFAULT,
  * because equipped() merges the slot defaults back in on every read, so B and
  * SK come back on their own. DEFAULT's real job is the other direction, and M7
- * is what proves it: a reset that clears nothing leaves the seeded non-default
+ * is what proves it: a strip that clears nothing leaves the seeded non-default
  * body and skull in place, and DEFAULT and VISIBLE both go red on it.
  *
  * Run: node tests/wardrobe-reset-audit.mjs [baseUrl]
@@ -110,12 +160,18 @@ const seed = await page.evaluate(async () => {
 
   // one statted piece, level 1 so it can actually be worn, plus a disguise on it
   const gear = GEAR_ITEMS.find(g => g.minLevel <= 1 && GEAR_SLOTS.includes(g.slot));
-  let gearOn = null, mogOn = null, mogCost = null;
+  let gearOn = null, mogOn = null, mogCost = null, ctrl = null;
   if (gear) {
     await loot.grantGear(gear.id, 'test');
     await loot.equipGear(gear.slot, gear.id);
     gearOn = { slot: gear.slot, id: gear.id, art: gear.artId };
     const alt = BH_ITEMS.find(i => i.slot === gear.slot && i.id !== gear.artId);
+    /* A THIRD look in the same slot, collected but never worn, so never paid for.
+       It is the positive control for FREE: it proves the slot really does charge
+       in the state FREE is measured in, so a 0 there means "banked", not "the
+       pricing happened to be free right now". */
+    ctrl = BH_ITEMS.find(i => i.slot === gear.slot && i.id !== gear.artId && (!alt || i.id !== alt.id)) || null;
+    if (ctrl) await loot.grantCosmetic(ctrl.id, 'test');
     if (alt) {
       await loot.grantCosmetic(alt.id, 'test');
       // a disguise over a statted piece is the only transmog that costs dust,
@@ -127,10 +183,35 @@ const seed = await page.evaluate(async () => {
     }
   }
 
+  /* A STALE TRANSMOG, on a gear slot that holds NOTHING. This is a real,
+     documented state in this codebase, not a contrivance: unequipping gear never
+     cleared its transmog (see the note in equip(), js/loot.js), and equipped()
+     carries an explicit guard so a stale entry cannot "conjure a look into a
+     genuinely empty slot". It is invisible until something fills that slot again,
+     at which point it silently changes how the player looks.
+     It is here because it is the ONLY case that exercises stripAll's final
+     wholesale kvSet('transmog', {}): every slot that HOLDS something is in the
+     plan and has its entry cleared by equip() inside the loop, so without a stale
+     entry the wholesale clear is unreachable and the MOG row cannot see it going
+     missing. Measured: deleting that line left the whole suite green. */
+  let staleMog = null;
+  const STALE = 'S';                                  // Socks, a gear slot
+  if (GEAR_SLOTS.includes(STALE)) {
+    await loot.equip(STALE, null);                    // make sure it holds nothing
+    const art = BH_ITEMS.find(i => i.slot === STALE);
+    if (art) {
+      await loot.grantCosmetic(art.id, 'test');
+      const tm = (await db.kvGet('transmog', {})) || {};
+      tm[STALE] = art.id;                             // written straight in: no UI path leaves it
+      await db.kvSet('transmog', tm);
+      staleMog = { slot: STALE, art: art.id };
+    }
+  }
+
   await loot.captureFit('Audit fit');
   await db.kvSet('petWear', { PH: 'PH-audit-sentinel' });   // v423's own key, untouched by this
   return {
-    wornPlain, gearOn, mogOn, mogCost,
+    wornPlain, gearOn, mogOn, mogCost, ctrlArt: ctrl ? ctrl.id : null, staleMog,
     fits: (await loot.fits()).length,
   };
 }).catch(e => ({ error: String(e) }));
@@ -210,6 +291,13 @@ ok('CONTROL a transmog is on, so MOG and FREE have something to protect',
   Object.keys(before.transmog).length > 0, JSON.stringify(before.transmog));
 ok('CONTROL the disguise genuinely costs dust when it has not been paid for',
   seed.mogCost > 0, `cost ${seed.mogCost} dust`);
+/* Without this the MOG row cannot fail: every slot the plan touches has its own
+   transmog cleared by equip(), so only a STALE entry can prove the wholesale
+   clear still runs. */
+ok('CONTROL a stale transmog sits on a slot that holds nothing, unreachable by the slot loop',
+  !!seed.staleMog && before.transmog[seed.staleMog.slot] === seed.staleMog.art
+  && !before.equipped[seed.staleMog.slot] && !before.gearLo[seed.staleMog.slot],
+  JSON.stringify(seed.staleMog) + ' in ' + JSON.stringify(before.transmog));
 await shoot('reset-before');
 
 if (!chip0.there) { await finish(browser); }
@@ -315,15 +403,6 @@ ok('VISIBLE the doll draws the DEFAULT body and skull, not the seeded ones',
   drawn.length > 0 && wantArt.every(a => drawn.includes(a)),
   `drawn ${drawn.join(',')} want ${wantArt.join(',')}`);
 
-/* ---------- FREE: putting a look back costs nothing ---------- */
-const freeAgain = await page.evaluate(async (mog) => {
-  if (!mog) return null;
-  const loot = await import('./js/loot.js');
-  return loot.transmogPrice(mog.slot, mog.art);
-}, seed.mogOn || null);
-ok('FREE the disguise that was on can be re-worn for 0 dust (the receipt was banked)',
-  freeAgain === 0, `price ${freeAgain}`);
-
 /* ---------- REVERSIBLE: it comes straight back on, through the real UI ---- */
 const putBack = await page.evaluate(async (want) => {
   const slot = want[0], id = want[1];
@@ -350,6 +429,94 @@ await openWardrobe();
 const chip2 = await chip();
 ok('EXIT with nothing left to take off the chip is not offered', stripped && !chip2.there,
   JSON.stringify(chip2));
+
+/* ---------- WARNED: the half of this feature that makes the other half safe ----
+   Tom, 2026-08-22: "reset should strip everything but there needs to be a gwart
+   reminder or something that reminds players they will be weaker in fights if
+   they dont choose statted gear to wear." So a player who has just taken every
+   statted piece off MUST be told, and the telling is Gwart's no-gear bucket in
+   gwartPool (js/app.js). Driven end to end: strip through the real button above,
+   go to Today, and read the line the app actually put in his box. Membership in
+   the bucket is how the line is identified, because gwPick draws at random and
+   pinning one string would fail nine times in ten for the right reason.
+
+   CRATES OUTRANK THE WARNING, deliberately: an unopened crate may hold the very
+   gear this is asking for. So the crate rows are emptied first and the SETUP row
+   below refuses to grade unless they really are gone; otherwise this would pass
+   or fail on which bucket won, not on whether the warning exists. Safe here
+   because every OWNED comparison above has already been made. */
+const warnSetup = await page.evaluate(async () => {
+  const db = await import('./js/db.js');
+  const loot = await import('./js/loot.js');
+  const inv = await db.db.all('inv');
+  for (const r of inv) if (r.kind === 'crate') await db.db.del('inv', r.id);
+  return { crates: (await loot.unopenedCrates()).length,
+    gearOwned: (await loot.ownedGearIds()).size,
+    gearWorn: Object.keys(await loot.gearLoadout()).length };
+});
+ok('SETUP the player is in the exact state the warning is for: owns gear, wears none, no crate outranking it',
+  warnSetup.crates === 0 && warnSetup.gearOwned > 0 && warnSetup.gearWorn === 0,
+  JSON.stringify(warnSetup));
+
+const readGw = () => page.evaluate(async () => {
+  location.hash = '#/bonehead';
+  await new Promise(r => setTimeout(r, 700));
+  location.hash = '#/today';
+  await new Promise(r => setTimeout(r, 1600));
+  const line = document.querySelector('.talkbox.gw-box .tb-line');
+  const nogear = window.__gwartPool
+    ? window.__gwartPool({ entries: [{}], tot: { p: 0, kcal: 0 }, targets: { p: 100, kcal: 2000 },
+        crates: [], streak: 0, level: 0, isToday: true, gearOwned: 3, gearWorn: 0 })
+    : null;
+  return { said: line ? (line.dataset.tb || line.textContent || '').trim() : null,
+    pool: nogear, inPool: !!(line && nogear && nogear.includes((line.dataset.tb || '').trim())) };
+});
+const warned = await readGw();
+ok('SETUP the no-gear bucket exists and is deep enough to be a bucket',
+  Array.isArray(warned.pool) && warned.pool.length >= 5, `${warned.pool?.length} lines`);
+ok('WARNED a stripped Bonehead gets told: Gwart says a no-gear line on Today',
+  warned.inPool, `he said "${warned.said}"`);
+
+/* AND IT RETIRES. Direction and bound, not just presence: a warning that is
+   permanent is wallpaper, and this one has to be gone the moment the player does
+   the thing it asked for. One piece back on is enough. */
+const retired = await page.evaluate(async (g) => {
+  const loot = await import('./js/loot.js');
+  await loot.equipGear(g.slot, g.id);
+  return Object.keys(await loot.gearLoadout()).length;
+}, seed.gearOn);
+const after1 = await readGw();
+/* STRICT ON PURPOSE. The first version of this row asserted only "not a no-gear
+   line" and went green while Gwart was saying a CRATE line, i.e. while the
+   warning was being outranked rather than retired: a pass with the check blind,
+   which is anti-regression rule 1. So it requires the WARNED row above to have
+   genuinely seen the warning on this same page first, which is what makes
+   "it is gone now" mean anything. */
+ok('WARNED it retires the moment one statted piece goes back on',
+  retired === 1 && warned.inPool && !after1.inPool,
+  `worn ${retired}, warning was shown before: ${warned.inPool}, he now says "${after1.said}"`);
+
+/* ---------- FREE: the paid-look receipt survived the strip ----------
+   THIS ROW MOVED HERE, and the move is the finding. It used to sit straight
+   after the strip and it could not fail: transmogPrice returns 0 for ANY look in
+   a slot with no gear in it ("no stats in the slot: free"), and a full strip
+   empties every gear slot, so the row was reading a structural free rather than
+   a banked receipt. Measured: mutating stripAll() to skip paidLooks() left the
+   whole suite GREEN. A row that cannot go red is not a check (anti-regression
+   rule 1), and this one had quietly stopped being one the moment the button
+   started taking gear.
+   The real player path is the later one anyway: you strip, you gear up again,
+   and THEN you want your old look back. That is where the money is, so that is
+   where it is measured, with the gear back in the slot. */
+const price = await page.evaluate(async (mog, ctrl) => {
+  const loot = await import('./js/loot.js');
+  return { paid: await loot.transmogPrice(mog.slot, mog.art),
+    unpaid: ctrl ? await loot.transmogPrice(mog.slot, ctrl) : null };
+}, seed.mogOn, seed.ctrlArt);
+ok('CONTROL with gear back in the slot it really does charge for an unworn look',
+  price.unpaid > 0, `an unpaid look in that slot costs ${price.unpaid} dust`);
+ok('FREE the look that was on before the strip is still paid for: 0 dust to wear again',
+  price.paid === 0, `paid look ${price.paid} dust, unpaid look ${price.unpaid} dust`);
 
 ok('no page errors', errs.length === 0, errs.join(' | '));
 await finish(browser);
