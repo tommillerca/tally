@@ -46,6 +46,13 @@
  *              saying a DIFFERENT line, an idle line arriving with no input at
  *              all, and no line at all over an open sheet. SETUP rows first, so
  *              none of it can pass on a screen that never rendered.
+ *   POOL       what he has to say. Every state bucket carries enough lines that
+ *              sitting in it does not loop, and the audit's own context table
+ *              reaches every line that ships, so a bucket nobody registered
+ *              fails here instead of going unmeasured.
+ *   PICK       and that he does not repeat himself: no line twice in a row, and
+ *              the bag is spent before anything comes round again. Tom,
+ *              2026-08-22: "he just says the same line over and over".
  *
  * HOW IT IS GRADED, and why not a computed style. tally/CLAUDE.md: fire the real
  * control and assert pixels. getComputedStyle would happily report a visible
@@ -409,85 +416,200 @@ page.on('pageerror', e => { pageErrors.push(String(e)); console.log('PAGEERROR',
   await page.evaluate(() => { window.__gwIdleMs = 0; history.back(); location.hash = '#/today'; });
   await sleep(900);
 
-  /* ==================== HIS LINE IS BIG ENOUGH TO READ =====================
+  /* ============ WHAT HE SAYS, AND THAT IT FITS WHERE HE SAYS IT ===========
+     Two complaints, two releases apart, and the rows below answer both.
+
      Tom, 2026-08-21: "the gwart gwart font size is too smalll when he talks."
      It shipped at 11px, the smallest type in the app, against 16px for the same
      component in the Wanderer's encounter.
 
-     TWO ROWS, AND THEY PULL AGAINST EACH OTHER ON PURPOSE. Raising the size is
-     one declaration and it has an obvious failure on the other side: .gw-row is
-     absolutely positioned over the artwork at z-index 5 while the Bonehead is at
-     2, so a box that outgrows the plaque's band paints over his head. One row
-     fails if the type shrinks, the other fails if the box grows. Neither alone
-     is a check; the pair is.
+     Tom, 2026-08-22: "for Gwart on the today screen he just says the same line
+     over and over we need to make some cool text lines for him." Two faults
+     compounding: every early-return state in gwartPool held exactly TWO lines,
+     and the picker indexed them by a salt bumped once per line, so a state you
+     sit in all morning (an unopened crate, an empty ledger) was A, B, A, B.
 
-     MEASURED ON THE LONGEST LINE THE POOL CAN ACTUALLY PRODUCE, harvested here
-     rather than pinned: window.__gwart is the real chooser and takes a salt, so
-     sweeping salts across contexts that reach each of its early returns walks
-     the whole catalogue. A new, longer line therefore lands in this measurement
-     on the day it is written, instead of on the day somebody remembers to update
-     a constant. 393x852 is the binding width because the plaque leaves the box
-     only 176px there; the row asserts that width really is the tightest it saw.
+     FOUR THINGS ARE GRADED, and they pull against each other on purpose, which
+     is the only reason the set is worth anything:
+       TYPE   the type is big enough to read.
+       TYPE   and EVERY line still fits the plaque's band. .gw-row is absolutely
+              positioned over the artwork at z-index 5 while the Bonehead is at
+              2, so a box that outgrows the band paints over his head. Measuring
+              only the longest line was enough while the catalogue was
+              seventeen lines; at eighty-five, "the longest one fits" and "they
+              all fit" are different claims, so every line is measured.
+       POOL   every bucket carries enough lines that sitting in one state does
+              not loop, and the ctx table below reaches every line that ships.
+       PICK   the picker has a memory: no line twice in a row, and the bag is
+              spent before anything comes round again.
+     Raising the size fails the band row; thinning the pool fails POOL; a
+     picker with no memory fails PICK. No row is a check on its own.
 
-     PROVEN RED IN BOTH DIRECTIONS, 2026-08-21, each in its own `cp -R` copy with
-     the exit code read from a file:
+     THE POOL IS HARVESTED, NOT PINNED. window.__gwartPool hands back a state's
+     whole catalogue, so a line written tomorrow is measured tomorrow instead of
+     on the day somebody remembers to update a constant. 393x852 is the binding
+     width because the plaque leaves the box only 176px there.
+
+     THE HOURS ARE STUBBED. Two buckets branch on the clock (the empty ledger
+     reads differently before 11, and the late-night chatter only exists between
+     23 and 5), so a harvest at whatever time the audit happens to run would
+     miss four shipped lines and grade a catalogue the player can see but this
+     file cannot. Date.prototype.getHours is stubbed across three hours and put
+     back in a finally.
+
+     PROVEN RED, EVERY ROW, 2026-08-22, each in its own `cp -R` copy with the
+     exit code read from a file rather than through a pipe. The mutation, then
+     the line it printed:
+
        .gw-box --tb-size back to the shipped 11px
          FAIL TYPE Gwart's line is big enough to read  11px
-       .gw-box --tb-size pushed to 16px (which still wraps to three lines: the
-       ceiling here is the band, not the wrapping)
-         FAIL TYPE and the box that holds it still fits the band  box 108.9px
-              tall in a 90px band, 176.1px wide, on the longest line */
+       .gw-box --tb-size pushed to 16px
+         FAIL TYPE and every line still fits the band  86 of 89 over, worst
+              130.5px in a 90px band at 176.1px wide: "Back here the numbers are
+              done. Today is the one that pays."
+       gwPick() replaced by a memoryless pool[random]
+         FAIL PICK he never says the same line twice in a row  29 immediate
+              repeat(s) in 200 draws from "a dish ready" (6 lines)
+         FAIL PICK the bag is spent before a line comes round again  25 of 30
+              lines drawn in 60, most-repeated 5x
+       the crates bucket cut back to its two shipped lines
+         FAIL POOL every state carries enough lines that it cannot loop
+              crates 2 (floor 5)
+       a new bucket added to gwartPool with no row in BUCKETS
+         FAIL POOL the ctx table reaches every line that ships
+              89 harvested, 91 in js/app.js */
   await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await page.evaluate(() => { location.hash = '#/pit'; });
   await sleep(300);
   await page.evaluate(() => { location.hash = '#/today'; });
   await sleep(1500);
+  /* HOW MANY LINES gwartPool REALLY SHIPS, counted from the source rather than
+     from the harvest, so the two can be compared. Every literal in that function
+     IS a line (it has no other strings), so a bucket the ctx table below does
+     not reach shows up as a shortfall. Comments are stripped first or a quoted
+     word in one would be counted as a line. */
+  const appSrc = await readFile(path.join(ROOT, 'js/app.js'), 'utf8');
+  const poolSrc = (appSrc.split('\nfunction gwartPool(')[1] || '').split('\n}\n')[0]
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const shipped = (poolSrc.match(/'[^']*'|`[^`]*`/g) || []).length;
+  /* ONE ROW PER STATE, named, because "the pool is big" is not the claim: the
+     claim is that no single state loops. A state missing from here is caught by
+     the coverage row above, not by this table growing on its own. */
   const type = await page.evaluate(() => {
-    if (typeof window.__gwart !== 'function') return { err: 'no window.__gwart seam' };
-    /* Contexts chosen to reach every early return in gwartLine plus the pooled
-       chatter at the bottom, so no branch's lines are missed. */
+    if (typeof window.__gwartPool !== 'function' || typeof window.__gwart !== 'function') {
+      return { err: 'no window.__gwartPool / window.__gwart seam' };
+    }
     const base = { entries: [{}], tot: { p: 0, kcal: 0 }, targets: { p: 100, kcal: 2000 },
       crates: [], streak: 0, level: 0, isToday: true };
-    const ctxs = [
-      { ...base, crates: [{}] },
-      { ...base, isToday: false },
-      { ...base, cropsRipe: 1 }, { ...base, cropsRipe: 4 },
-      { ...base, dishReady: true },
-      { ...base, entries: [] },
-      { ...base, tot: { p: 200, kcal: 0 } },
-      { ...base, tot: { p: 0, kcal: 3000 } },
-      { ...base, tot: { p: 0, kcal: 1800 } },
-      { ...base, steps: 20000, streak: 12, level: 99, fightsReady: 6 },
-    ];
-    const pool = new Set();
-    for (const c of ctxs) for (let salt = 0; salt < 24; salt++) pool.add(window.__gwart(c, salt));
-    const longest = [...pool].sort((a, b) => b.length - a.length)[0] || '';
+    /* Reaches every early return in gwartPool plus the pooled chatter at the
+       bottom. crops is two rows because that bucket carries a ternary, and the
+       empty ledger carries another one that the hour stub opens. */
+    const BUCKETS = {
+      'crates': { ...base, crates: [{}] },
+      'a past day': { ...base, isToday: false },
+      /* Owns gear, wearing none: the state the Wardrobe's one-tap strip leaves a
+         player in, and the reason Tom let that button take statted gear at all.
+         Registered here so its lines are MEASURED against the band like every
+         other line, not merely shipped; without this row the POOL coverage row
+         above goes red on the shortfall, which is the mechanism working. */
+      'no statted gear': { ...base, gearOwned: 3, gearWorn: 0 },
+      'one ripe bed': { ...base, cropsRipe: 1 },
+      'several ripe beds': { ...base, cropsRipe: 4 },
+      'a dish ready': { ...base, dishReady: true },
+      'an empty ledger': { ...base, entries: [] },
+      'protein met': { ...base, tot: { p: 200, kcal: 0 } },
+      'over the target': { ...base, tot: { p: 0, kcal: 3000 } },
+      'close to the target': { ...base, tot: { p: 0, kcal: 1800 } },
+      'chatter': { ...base, steps: 123456, streak: 365, level: 99, fightsReady: 6 },
+    };
+    const counts = {}, all = new Set();
+    const realHours = Date.prototype.getHours;
+    try {
+      for (const h of [3, 9, 14]) {                 // late night, morning, afternoon
+        Date.prototype.getHours = () => h;
+        for (const [k, c] of Object.entries(BUCKETS)) {
+          const p = window.__gwartPool(c);
+          counts[k] = Math.max(counts[k] || 0, p.length);
+          p.forEach(l => all.add(l));
+        }
+      }
+    } finally { Date.prototype.getHours = realHours; }
+
+    /* EVERY LINE, THROUGH THE REAL BOX. The ghost lays the box out (app.css
+       .tb-line::before), so writing the line there is what the real render
+       does, not a shortcut around it. */
     const box = document.querySelector('.talkbox.gw-box');
     const line = box && box.querySelector('.tb-line');
     if (!box || !line) return { err: 'no .gw-box on Today' };
-    /* The ghost lays the box out (see app.css .tb-line::before), so writing the
-       line there is what the real render does, not a shortcut around it. */
-    const wasTb = line.dataset.tb;
-    line.dataset.tb = longest;
-    const r = box.getBoundingClientRect();
     const band = parseFloat(getComputedStyle(document.querySelector('.gw-today')).height);
-    const out = { pool: pool.size, longest, chars: longest.length,
+    const wasTb = line.dataset.tb;
+    let worst = { h: 0, text: '' }, over = 0, w = 0;
+    for (const l of all) {
+      line.dataset.tb = l;
+      const r = box.getBoundingClientRect();
+      w = +r.width.toFixed(1);
+      if (r.height > band + 1) over++;
+      if (r.height > worst.h) worst = { h: +r.height.toFixed(1), text: l };
+    }
+    line.dataset.tb = wasTb;
+
+    /* THE PICKER, DRIVEN, ON TWO DIFFERENT POOLS, and the sizes are the point.
+       A memoryless picker fails the two rows at opposite ends:
+         SMALL  200 draws from the SHALLOWEST bucket. On six lines a die repeats
+                itself about every sixth draw, so 200 draws make an immediate
+                repeat a certainty rather than a coin toss. Measured: this row
+                first ran on the thirty-line pool, where a die's chance of no
+                adjacent repeat in sixty draws is (29/30)^59, about one in seven,
+                and the memoryless mutation PASSED it. A check that a broken
+                build clears one time in seven is anti-regression rule 1.
+         BIG    60 draws from the thirty-line chatter state. Covering all thirty
+                in 2n draws is what a bag does and what a die does not: coupon
+                collector needs about n ln n = 102 draws for thirty. */
+    const shallow = Object.entries(BUCKETS)
+      .map(([k, c]) => [k, window.__gwartPool(c)])
+      .sort((a, b) => a[1].length - b[1].length)[0];
+    const small = [];
+    for (let i = 0; i < 200; i++) small.push(window.__gwart(BUCKETS[shallow[0]]));
+    let dupes = 0;
+    for (let i = 1; i < small.length; i++) if (small[i] === small[i - 1]) dupes++;
+
+    const drawPool = window.__gwartPool(BUCKETS.chatter);
+    const seq = [];
+    for (let i = 0; i < drawPool.length * 2; i++) seq.push(window.__gwart(BUCKETS.chatter));
+    const freq = {};
+    seq.forEach(l => { freq[l] = (freq[l] || 0) + 1; });
+    return { pool: all.size, counts, band: +band.toFixed(1), worst, over, w,
       fs: parseFloat(getComputedStyle(box).fontSize),
       wnd: 16,                       // .wnd-enc-box takes .talkbox's own --tb-size
-      w: +r.width.toFixed(1), h: +r.height.toFixed(1), band: +band.toFixed(1) };
-    line.dataset.tb = wasTb;
-    return out;
+      shallowName: shallow[0], shallowN: shallow[1].length, smallDraws: small.length, dupes,
+      draws: seq.length, covered: Object.keys(freq).length,
+      drawPool: drawPool.length, most: Math.max(...Object.values(freq)) };
   });
+  const bucketRows = type.counts ? Object.entries(type.counts) : [];
+  const MIN_PER_BUCKET = 5;
   ok('SETUP the line pool was harvested and a box was there to measure (an empty pool grades nothing)',
-    !type.err && type.pool >= 12 && type.chars >= 40,
-    type.err || `${type.pool} distinct lines, longest ${type.chars} chars: "${type.longest}"`);
+    !type.err && type.pool >= 40 && bucketRows.length >= 9 && type.worst.h > 0,
+    type.err || `${type.pool} distinct lines across ${bucketRows.length} states, tallest box ${type.worst.h}px`);
   if (!type.err) {
+    ok('POOL the ctx table reaches every line that ships, so a bucket nobody registered fails here',
+      type.pool >= shipped, `${type.pool} harvested, ${shipped} in js/app.js`);
+    const thin = bucketRows.filter(([, n]) => n < MIN_PER_BUCKET);
+    ok('POOL every state carries enough lines that sitting in it cannot loop',
+      thin.length === 0 && bucketRows.length > 0,
+      thin.length ? thin.map(([k, n]) => `${k} ${n} (floor ${MIN_PER_BUCKET})`).join(', ')
+        : bucketRows.map(([k, n]) => `${k} ${n}`).join(', '));
+    ok('PICK he never says the same line twice in a row, even in the shallowest state he can be in',
+      type.dupes === 0 && type.smallDraws === 200,
+      `${type.dupes} immediate repeat(s) in ${type.smallDraws} draws from "${type.shallowName}" (${type.shallowN} lines)`);
+    ok('PICK the bag is spent before a line comes round again',
+      type.covered === type.drawPool && type.most <= 3,
+      `${type.covered} of ${type.drawPool} lines drawn in ${type.draws}, most-repeated ${type.most}x`);
     ok('TYPE Gwart\'s line is big enough to read, not the smallest type in the app',
       type.fs >= 13,
       `${type.fs}px (was 11px, the same component in the Wanderer's encounter is ${type.wnd}px)`);
-    ok('TYPE and the box that holds it still fits the band, so it cannot paint over his head',
-      type.h <= type.band + 1,
-      `box ${type.h}px tall in a ${type.band}px band, ${type.w}px wide, on the longest line`);
+    ok('TYPE and every line still fits the band, so none of them can paint over his head',
+      type.over === 0 && type.worst.h <= type.band + 1,
+      `${type.over} of ${type.pool} over, worst ${type.worst.h}px in a ${type.band}px band at ${type.w}px wide: "${type.worst.text}"`);
   }
 }
 

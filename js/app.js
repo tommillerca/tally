@@ -20,6 +20,7 @@ import {
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
+  stripAll, stripAllPlan,
   DROP, buyDropItem, refundStreakFreezes,
   RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_REROLL_LADDER,
   setWornAura, ownsAura,
@@ -2865,6 +2866,22 @@ let screenCleanup = null;
  * revealWhenReady's 700ms cap, and every stale node is swept on the next
  * navigation regardless. Degrade to a hard cut, never to a frozen app.
  *
+ * AND IT LEAVES ON ONE FRAME, IT DOES NOT DISSOLVE. Tom, 2026-08-21: "switching
+ * between tabs is not smooth it's showing a staggered preview of the the
+ * existing page as you swap". The copy used to fade out over .18s and then be
+ * removed on a 260ms timer, so from the moment the new screen was ready there
+ * was a quarter of a second in which BOTH screens were on the glass at once and
+ * the outgoing one hung over the incoming one as a ghost. Measured at 440x956,
+ * CPU x6, through a CDP screencast: Boneyard -> Today held the old paint whole
+ * to 144ms and then showed the two screens superimposed until 418ms; Crew ->
+ * Today, 145ms and 503ms. That superimposed window IS the "staggered preview of
+ * the existing page", and a dissolve is the wrong grammar for a tab bar anyway:
+ * a cut reads as "you are there now", a dissolve reads as "time is passing".
+ * So the copy is REMOVED, in the same task that route() applies `screen-in`.
+ * Same task means the same paint: no frame can contain both screens, and none
+ * can contain neither (which would be the tray flash above). See
+ * tests/route-flash-audit.mjs GHOST.
+ *
  * NO REFERENCES BREAK. #screen keeps its identity: bindWordmarkPull() binds a
  * scroll listener to that exact node once at startup, so swapping in a fresh
  * element instead would have silently killed the overscroll wordmark. */
@@ -2894,8 +2911,11 @@ function holdOutgoing(el) {
     gone = true;
     clearTimeout(cap);
     if (dropHeld === drop) dropHeld = null;
-    g.classList.add('screen-held-out');
-    setTimeout(() => g.remove(), 260);   // > the .18s fade; a timer, so reduced motion still clears it
+    /* ONE FRAME, NOT A DISSOLVE (see the header). route() calls this in the same
+       task in which revealWhenReady schedules `screen-in`, and no paint happens
+       between a microtask and the rAF that follows it, so the lid comes off and
+       the new screen turns opaque in the same composited frame. */
+    g.remove();
     try { cl?.(); } catch { /* never block navigation on teardown */ }
   };
   const cap = setTimeout(drop, 1200);
@@ -2991,22 +3011,36 @@ function route({ keepScroll = false } = {}) {
     if (!isNav) { el.classList.add('screen-in'); markBooted(); child?.classList.add('route-in'); return; }
     return revealWhenReady(el, { cls: 'screen-in', cap: 700 }).then(() => {
       markBooted();
-      /* ONE FADE, NOT TWO, AND THE CLASS STAYS EITHER WAY.
+      /* NO FADE AT ALL ON A SWAP, AND THE CLASS STAYS EITHER WAY.
          `route-in` fades the new child up from transparent. Over the ground on a
          boot that is right. Under a held screen it is wrong: two crossed opacity
          fades do not add up to one, they leave the ground showing through at
-         t(1-t), a quarter of it at the midpoint, which is this bug again, dimmer.
-         So the ANIMATION is suppressed for a held swap (app.css .screen-swap) and
-         the held copy alone does the dissolve, with the new screen already whole
-         underneath it. The CLASS is still applied on every navigation, because it
-         is the router's marker that a child arrived by one and two audits read it
-         that way (tests/feel-audit.mjs ROUTE-IN, tests/screen-sweep.mjs ARRIVAL).
-         Set explicitly per navigation rather than cleared on the way out: a hold
-         that is dropped mid-fade must not leave the next screen's entrance
-         suppressed, and a boot has no hold to suppress it in the first place. */
+         t(1-t), a quarter of it at the midpoint, which is the tray flash again,
+         dimmer. So the ANIMATION is suppressed for a held swap (app.css
+         .screen-swap) and the held copy simply leaves. The CLASS is still applied
+         on every navigation, because it is the router's marker that a child
+         arrived by one and two audits read it that way (tests/feel-audit.mjs
+         ROUTE-IN, tests/screen-sweep.mjs ARRIVAL). Set explicitly per navigation
+         rather than cleared on the way out: a hold dropped by the next navigation
+         must not leave that screen's entrance suppressed, and a boot has no hold
+         to suppress it in the first place. */
       el.classList.toggle('screen-swap', !!dropHeld);
       child?.classList.add('route-in');
-      dropHeld?.();
+      /* AND THE LID COMES OFF IN THE FRAME THE SCREEN TURNS OPAQUE, NEVER BEFORE.
+         revealWhenReady applies `screen-in` from a requestAnimationFrame, and its
+         promise resolves as a MICROTASK, which is not the same thing: the decode
+         it was waiting on can settle after a frame's callbacks have already run,
+         in which case this code runs, the copy goes, and that frame paints with
+         the old screen gone and the new one still at opacity 0. That is the tray
+         flash tests/route-flash-audit.mjs exists for, and it caught it here: one
+         bare frame at 214ms on the reduced-motion pass, on the first version of
+         this hard cut. Deferring the drop by one frame puts it in the SAME rAF
+         batch as the class, registered after it, so the two land together and no
+         frame can hold either the tray or both screens. `drop` is captured rather
+         than re-read: it is bound to this navigation's copy, and by the next
+         frame `dropHeld` may already belong to a newer one. */
+      const drop = dropHeld;
+      requestAnimationFrame(() => drop?.());
     });
   });
 }
@@ -3396,6 +3430,15 @@ async function renderToday(el) {
     entries, tot, targets: t, crates, streak, level: lvl.level, isToday,
     steps: hk?.steps || 0, dishReady: !!(cook && cook.ready), cropsRipe,
     fightsReady: pitEnergy.ready,
+    /* WHAT HE IS WEARING INTO A FIGHT. Both numbers are already computed above
+       for computeHomeUnlocks, so this costs no extra reads. They exist because
+       the Wardrobe can now take every statted piece off in one tap, and Tom's
+       condition on shipping that was that somebody tells the player: "reset
+       should strip everything but there needs to be a gwart reminder or
+       something that reminds players they will be weaker in fights if they dont
+       choose statted gear to wear." Gwart is that somebody. */
+    gearOwned: unlockGear ? unlockGear.size : 0,
+    gearWorn: unlockFighter ? Object.keys(unlockFighter.gearLo || {}).length : 0,
   };
   const gwLine = gwartLine(gwCtx);
   /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
@@ -3661,15 +3704,15 @@ async function renderToday(el) {
      of one that was about to arrive by itself. */
   const gwBox = $('.gw-box', el);
   const gwSay = line => { if (gwBox) runTalkBox(gwBox, line, { name: 'GWART' }); gwIdleReset(); };
+  /* Nothing to advance here any more. gwartLine() owns "not the same one again"
+     itself now (the bag, see gwPick), so the caller that used to bump a salt was
+     the caller that decided which line came next, and both callers had to
+     remember to. */
   $('#gwartBtn', el)?.addEventListener('click', e => {
     e.stopPropagation();                       // the scene itself opens the Backpack
-    S.gwSalt = ((S.gwSalt || 0) + 1) % GW_SALT_MAX;   // the NEXT line, not the same one again
     gwSay(gwartLine(gwCtx));
   });
-  gwIdleStart(el, () => {
-    S.gwSalt = ((S.gwSalt || 0) + 1) % GW_SALT_MAX;
-    return gwartLine(gwCtx);
-  });
+  gwIdleStart(el, () => gwartLine(gwCtx));
   /* TAP THE PET. It pops, it makes a noise, and Gwart says something about it:
      she is the one thing on this card he gets asked about directly. The line
      comes from GW_PET_LINES rather than gwartLine, because "what is that" is not
@@ -4056,74 +4099,236 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
  * HE IS NOT THE BONEHEAD. speechLine() above is the Bonehead narrating himself
  * ("I am 206 bones of pure potential"), which is a different character and a
  * different job. Gwart CARVED him: he talks ABOUT the boy, in the third person,
- * and what he says is meant to be worth acting on. The seventeen lines Tom has
- * already seen are the ones in the approved R3 mockup
- * (today-preview/today-mockup.html), and they are reproduced here verbatim
- * rather than rewritten, then sorted into the same state buckets speechLine
- * uses so a line arrives because it is TRUE right now.
+ * and what he says is meant to be worth acting on. He started with the
+ * seventeen lines of the approved R3 mockup (today-preview/today-mockup.html),
+ * sorted into the same state buckets speechLine uses so a line arrives because
+ * it is TRUE right now. The buckets around them were filled out in v424 because
+ * seventeen lines across nine states is two or three per state, and a state you
+ * sit in all morning then reads as one line on a loop. Eleven of the seventeen
+ * are still here verbatim; the other six went in the tone pass below.
  *
  * COPY RULES, and they are Tom's taste contract rather than my preference: dry,
  * no exclamation marks, no hype, no ad-speak, and never a scold. Useful first
  * (what to do next, what is worth doing today, what is new), funny second.
  *
+ * AND THE REGISTER IS WRY, NOT WEARY. Tom, reading the first v424 catalogue:
+ * "the lines feel a little sad or something, let's make them a bit lighter."
+ * The brief that produced them said dry, weary, has seen every player make the
+ * same mistakes, and weary tipped into melancholy: he mourned the boy's old
+ * life ("He does not remember being a pile. I do."), pitied himself ("He has
+ * never once complained. I make up for it.") and sounded lonely ("I am old, not
+ * busy. Take your time."). Twenty-one lines were rewritten. He is an old man
+ * ENJOYING himself and fond of the thing he made: curious about what you will
+ * do next, proud of his own joinery, amused by the bonehead. The bonehead is
+ * the comic object and Gwart is the straight man who likes him. Lighter does
+ * NOT mean louder: no cheering, no praise for its own sake, nothing a marketing
+ * email would say. He can be pleased without celebrating.
+ *
  * SAME STRUCTURE AS speechLine ON PURPOSE: the urgent states return early in
  * priority order, and everything below that is chatter POOLED and picked
  * across, because trying the chatter pools in order is what once made a player
  * with a streak hear only streak lines. */
-const GW_SALT_MAX = 1e6;
-function gwartLine({ entries, tot, targets, crates, streak, level, isToday,
-  steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0 }) {
-  if (S.gwSalt == null) S.gwSalt = Math.floor(Math.random() * GW_SALT_MAX);
-  const pick = arr => arr[(S.gwSalt + arr.length) % arr.length];
+/* A BAG, NOT A DIE, and this is the reported bug rather than a refinement.
+ * Tom, 2026-08-22: "for Gwart on the today screen he just says the same line
+ * over and over we need to make some cool text lines for him". Two faults, and
+ * they compounded: the pool was thin (every early-return state below shipped
+ * exactly TWO lines), and the picker had no memory. It indexed the eligible pool
+ * by a per-session salt bumped by one per line, so a two-line bucket is
+ * A, B, A, B for as long as that state lasts, and a state like "an unopened
+ * crate" or "nothing logged yet" lasts most of a session.
+ *
+ * The pool below got the depth. The picker got a MEMORY:
+ *   gwSaid is the bag. A line is drawn only from what is not in it yet, so every
+ *   line of the eligible pool is heard before any of them comes round again.
+ *   When the bag empties it refills MINUS the line just said, so a refill cannot
+ *   hand back the line still on screen: with two or more lines eligible an
+ *   immediate repeat is not representable, which is the half of this a player
+ *   can actually see.
+ * The bag is keyed on the STRINGS, not on a bucket, so a state change
+ * mid-session (the crate gets opened) carries the memory across instead of
+ * resetting it, and an interpolated line (`Day 4.`) behaves like any other. It
+ * is bounded by the pool it is drawing from, because that is what empties it. */
+const gwSaid = new Set();
+let gwLast = '';
+function gwPick(pool) {
+  if (!pool.length) return gwLast;
+  let fresh = pool.filter(l => !gwSaid.has(l));
+  if (!fresh.length) {
+    gwSaid.clear();
+    fresh = pool.filter(l => l !== gwLast);
+    if (!fresh.length) fresh = pool;            // a one-line pool has no second choice
+  }
+  const line = fresh[Math.floor(Math.random() * fresh.length)];
+  gwSaid.add(line);
+  gwLast = line;
+  return line;
+}
+const gwartLine = ctx => gwPick(gwartPool(ctx));
+
+/* EVERY LINE HERE FITS THE BAND, and that is a hard constraint rather than a
+   style note: .gw-box is 13px in the plaque's 90px band, and at 393x852 the box
+   is 176px wide, which is THREE wrapped lines and no more. A fourth line paints
+   over the Bonehead's head. The TYPE row in tests/talkbox-audit.mjs measures
+   EVERY line in this catalogue at that width, so a line that does not fit fails
+   the audit on the day it is written. About 59 characters is the ceiling in
+   practice; measure, do not count.
+
+   THE STATE IS THE POINT. A line arrives because it is true right now, so a new
+   line goes in the bucket whose condition it describes, not in the general pool
+   at the bottom. The general pool is the only one that is pure character. */
+function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
+  steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0,
+  gearOwned = 0, gearWorn = 0 }) {
   const hour = new Date().getHours();
-  if (crates.length) return pick([
+  if (crates.length) return [
     'A crate by his feet, still shut. I gave him hands for this.',
-    'That crate has been sitting there since I got here.',
-  ]);
-  if (!isToday) return pick([
+    'That crate has been there since I arrived. I am curious.',
+    'Nobody was ever dressed by a crate that stayed shut.',
+    'The crate is not a decoration. It opens.',
+    'Open the crate. I want to see what he is wearing next.',
+    'Open it. I have a guess about what is in there.',
+    'Whatever is in there is already yours. Go and look.',
+    'A shut crate is just a box. Make it something else.',
+  ];
+  /* NOTHING WITH STATS ON HIM, AND HE OWNS SOMETHING HE COULD WEAR. This is the
+     other half of the Wardrobe's "Take it all off" (stripAll in js/loot.js): Tom
+     approved a one-tap strip that takes the statted gear too, on the condition
+     that the player is told they will be weaker for it. A toast at the moment of
+     the strip would be gone in three seconds and only reaches the player who
+     used the button; this is a STATE, so it is said on Today for as long as it
+     is true, to everyone it is true of, including the player who has simply
+     never equipped anything.
+
+     WHERE IT SITS IN THE ORDER, and each boundary is deliberate:
+       BELOW crates, because an unopened crate may hold the very gear this is
+         asking for, and a crate is a one-tap state that disappears immediately.
+       BELOW !isToday, because a warning about fights is noise on a screen where
+         you cannot fight.
+       ABOVE the garden, the pot and the ledger, which are recurring daily states
+         that would mask this one indefinitely. Being unarmed has no badge
+         anywhere on Today, unlike the Kitchen and Backpack doors, so if it loses
+         priority it is never said at all.
+     It retires itself: a player who owns no gear never sees it, and it is gone
+     the moment one piece goes on. Nothing to remember, nothing to reset. */
+  if (gearOwned > 0 && gearWorn === 0) return [
+    'Nothing statted on him. He will fight. He will lose more.',
+    'That is a look, not armour. The Wardrobe has the numbers.',
+    'Bare bones. Fine in a tavern, less so in the Pit.',
+    'No gear on him. His opponents will be delighted.',
+    'Handsome, and unarmed. The Pit does not grade handsome.',
+    'You took the numbers off him. The Wardrobe gives them back.',
+    'He is carrying no stats. I would fix that before a fight.',
+  ];
+  if (!isToday) return [
     'Yesterday is set. You cannot re-cut a finished thing.',
-    'Old ground. Nothing to log back here.',
-  ]);
-  if (cropsRipe) return pick([
+    'Nothing to log back here. Have a browse if you like.',
+    'That day is carved. Admire it, but you cannot sand it.',
+    'Back here it is all finished. Today is where the work is.',
+    'You have wandered off behind him. He is up ahead.',
+    'I keep the old days for reading, not for fixing.',
+    'History is a decent read. He is a better one.',
+  ];
+  if (cropsRipe) return [
     'The garden is ready. I watered it. You pick it.',
     cropsRipe === 1 ? 'One bed is done. Go on before something else finds it.'
       : `${cropsRipe} beds are done. Go on before something else finds them.`,
-  ]);
-  if (dishReady) return pick([
+    'Ripe. It will not get riper standing there.',
+    'The patch came up well. I take some credit for that.',
+    'Ready out the back. It keeps a while, not forever.',
+    'Pick it and it goes in the pot. That is the whole loop.',
+    'I do the growing. The carrying is yours.',
+  ];
+  if (dishReady) return [
     'Something is done in the pot. He cannot smell it. I can.',
     'The pot has finished. It will not improve from here.',
-  ]);
-  if (!entries.length) return pick([
+    'Dinner is up. Serve it before it becomes an experiment.',
+    'The cauldron is done and quietly pleased with itself.',
+    'Cooked. Take it out. He eats with his eyes anyway.',
+    'That pot has been ready a while now. I did mention it.',
+  ];
+  if (!entries.length) return [
     'Nothing logged yet. He runs on what you eat. Feed the boy.',
     'Empty ledger so far. He is patient. I am less so.',
-  ]);
-  if (targets && targets.p && tot.p >= targets.p) return pick([
+    hour < 11 ? 'Morning. The ledger is blank. It usually starts that way.'
+      : 'Half the day gone and not a crumb on the page.',
+    'Whatever you ate, write it. Accurate beats flattering.',
+    'Feed the ledger and he does the rest. Fair deal.',
+    'No entries. He will stand here all day. He is good at it.',
+    'Log the first thing. The rest tends to follow.',
+    'Nothing yet. Even a rough guess beats a blank.',
+  ];
+  if (targets && targets.p && tot.p >= targets.p) return [
     'Protein is in. That is the part I build bone out of.',
     'Good protein today. His frame will take it from here.',
-  ]);
-  if (targets && tot.kcal > targets.kcal) return pick([
+    'Protein done. The rest of the day is yours to spend.',
+    'That is the material I need. The rest of it is fuel.',
+    'Protein enough to hold his joints. He will rattle less.',
+    'Protein met. I will not pretend I am not pleased.',
+  ];
+  if (targets && tot.kcal > targets.kcal) return [
     'A big day, logged honestly. The ledger is the whole craft.',
     'Written down as it happened. That is the only rule I have.',
-  ]);
-  if (targets && targets.kcal - tot.kcal <= 350 && targets.kcal - tot.kcal > 0) return pick([
+    'Over, and recorded. I have no notes and no opinion.',
+    'A large day. They happen. The ledger does not flinch.',
+    'Big numbers, honestly kept. He is not going to argue.',
+    'Big one. Nothing to fix, nothing to explain to me.',
+  ];
+  if (targets && targets.kcal - tot.kcal <= 350 && targets.kcal - tot.kcal > 0) return [
     'You are close. Finish it the way you started.',
     'Nearly there. No need to get clever at the end.',
-  ]);
-  const chatter = [
-    ...(steps >= 12000 ? ['You covered ground today. I felt it in his ankles.'] : []),
-    ...(streak >= 3 ? [`Day ${streak}. He was a box of parts once. Look at him.`] : []),
-    ...(fightsReady >= 1 ? [`${fightsReady} fights left in him. He will not say no, so you decide.`] : []),
-    ...(hour >= 23 || hour < 5 ? ['Late. I keep these hours. He does not need to.'] : []),
-    ...(level ? [`Level ${level}. I carved the joint. You did the walking.`] : []),
+    'Room for one more thing. Make it something you like.',
+    'Almost there. This is the enjoyable part of a day.',
+    'A little left in the day. Spend it on something good.',
+    'Close enough to see it. Walk it in.',
   ];
-  return pick([
+  const chatter = [
+    ...(steps >= 12000 ? [
+      'You covered ground today. I felt it in his ankles.',
+      'A lot of walking. He does not tire. You might.',
+      'You put miles on him today. He will not thank you.',
+      `${steps.toLocaleString()} steps. I stopped counting at the first thousand.`,
+    ] : []),
+    ...(streak >= 3 ? [
+      `Day ${streak}. He was a box of parts once. Look at him.`,
+      `${streak} days running. The habit is doing the work now.`,
+      `Day ${streak}. I have seen people stop at two. You did not.`,
+      `${streak} in a row. I have started to expect it of you.`,
+    ] : []),
+    ...(fightsReady >= 1 ? [
+      `${fightsReady} fights left in him. He will not say no, so you decide.`,
+      'He has fight in him. Spend it or it sits there.',
+      'Something in the Pit is worth hitting. He volunteers.',
+    ] : []),
+    ...(hour >= 23 || hour < 5 ? [
+      'Late. He sleeps standing up. I have never seen it work.',
+      'Late log. I am always up. That is not a recommendation.',
+      'The small hours. Write it down and go to bed.',
+    ] : []),
+    ...(level ? [
+      `Level ${level}. I carved the joint. You did the walking.`,
+      `Level ${level} and the frame still holds. Good joinery.`,
+      `Level ${level}. He gets a little less wobbly each time.`,
+    ] : []),
+  ];
+  return [
     ...chatter,
     'Two hundred and six pieces. I know where every one goes.',
-    'You keep coming back, so he keeps standing up.',
+    'He does very little without you. Deliberate design.',
     'Straight back. Good. I worried about that spine.',
-    'He does not remember being a pile. I do.',
+    'He has no memory of being a pile of parts. Lucky him.',
     'The Stable is through that door. Nobody ever looks left.',
-  ]);
+    'I carve. You feed. He walks. Nobody has improved on it.',
+    'He has opinions now. I did not carve those in.',
+    'Everyone thinks the hat is the important part of him.',
+    'I have made hundreds of these. This is the one I watch.',
+    'There is a wardrobe. He is not going to dress himself.',
+    'A day you write down is a day he gets to keep.',
+    'He is not fussy. He will wear whatever you leave out.',
+    'People ask what he is made of. Mostly attendance.',
+    'Take your time. I am enjoying the view from here.',
+    'He never complains. I find that slightly suspicious.',
+    'Tap me again if you like. I have a lot of these.',
+  ];
 }
 /* GWART ON THE PET, which is the one thing he is asked about directly: tapping
    the pet already pops her, and he comments on it. Verbatim from the mockup. */
@@ -4133,7 +4338,14 @@ const GW_PET_LINES = [
   'It follows him. I have stopped asking why.',
 ];
 if (typeof window !== 'undefined' && navigator.webdriver) {
-  window.__gwart = (ctx, salt) => { S.gwSalt = salt; return gwartLine(ctx); };
+  /* TWO SEAMS, because the pool and the picker are two different things to
+     grade. __gwartPool hands back a state's WHOLE catalogue, so the audit can
+     measure every line against the band and count what each bucket holds
+     (sweeping a salt only ever sampled it). __gwart drives the real picker, so
+     the audit can call it a hundred times and watch the bag: no line twice in a
+     row, and nothing repeats until the pool is spent. */
+  window.__gwartPool = ctx => gwartPool(ctx);
+  window.__gwart = ctx => gwartLine(ctx);
 }
 
 /* HE VOLUNTEERS A LINE, AND THE CADENCE IS 30 SECONDS. Tom: "he should honestly
@@ -4450,7 +4662,20 @@ async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
     setTimeout(apply, 300);
   };
   const guard = setTimeout(show, cap);
-  const imgs = [...root.querySelectorAll('img')];
+  /* THE FIRST PICTURE DOES NOT WAIT ON IMAGES THAT ARE NOT IN IT.
+     `loading="lazy"` is the author saying "this is not first-paint content", and
+     the browser honours that literally: an offscreen lazy image never starts
+     loading, so `decode()` on it returns a promise that NEVER settles and the
+     only thing that can end the wait is the cap. Measured on this tree at
+     440x956, CPU x6: the Shop renders 64 images of which 10 are `loading="lazy"`
+     thumbnails laid out at zero width, so every arrival at the Shop, cold AND
+     warm, sat on the full cap: #screen had its content at 21ms and the reveal
+     landed at 815ms, 794ms of it spent waiting on ten images that were still
+     undecoded 2.5 seconds later. Every other hub tab reveals in 61-72ms.
+     This is on the shared function and not on the Shop, because it is a property
+     of the wait and not of that screen: any screen anyone gives a lazy image to
+     inherits the same permanent cap. */
+  const imgs = [...root.querySelectorAll('img:not([loading="lazy"])')];
   await Promise.all(imgs.map(im => {
     if (im.decode) return im.decode().catch(() => {});
     if (im.complete) return Promise.resolve();
@@ -11819,7 +12044,17 @@ async function renderCharacter(wrap, tab, opts = {}) {
   if (floatingGear) floatingGear.hidden = tab === 'shop';
   $('#gwGear', body)?.addEventListener('click', () => { location.hash = '#/settings'; });
 
-  $$('#chTabs .chip, .ward-looks', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
+  /* THE HUB CHIPS GO THROUGH THE ROUTER, so they arrive whole like every other
+     screen. They used to call renderCharacter directly, which is the ONE tab-like
+     control in the app that reaches neither route() nor openSheet() and therefore
+     had no reveal gate at all: measured at 440x956 CPU x6, Wardrobe -> Shop threw
+     the old panel away at 34ms and then assembled the new one in front of the
+     player in four visible stages (header alone over a void at 77ms, chip row at
+     116ms, cards with empty art tiles at 151ms, art filling in until 395ms).
+     openCharacter() already routes when you are on the hub already, so this is the
+     covered path, not a new one: no second reveal, no per-screen animation, just
+     the chips using the machinery that tally/CLAUDE.md says owns this. */
+  $$('#chTabs .chip, .ward-looks', body).forEach(c => c.addEventListener('click', () => openCharacter(c.dataset.tab)));
   const content = $('#chContent', body);
   if (curtains) requestAnimationFrame(() => requestAnimationFrame(() => $$('.curt', body).forEach(x => x.classList.add('open'))));
 
@@ -11829,6 +12064,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(),
     ]);
     const fitPrices = await Promise.all(fitList.map(f => fitPrice(f)));
+    // What "Take it all off" would actually take off, computed by the same
+    // function that does it, so the chip cannot offer a strip that does nothing
+    // (or hide itself while there is still something on).
+    const stripPlan = await stripAllPlan();
     // `eq` is the RAW equipment (what the grids tick as equipped); `look` is what
     // you actually appear as once transmog resolves, so the doll and the stage
     // agree with the rest of the app.
@@ -11914,6 +12153,15 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </button>`;
         }).join('')}
         ${fitList.length < MAX_FITS ? '<button class="fit-chip add" data-fit-save="1">+ Save this fit</button>' : ''}
+        ${/* A player asked for one tap that clears the doll so a new outfit starts
+              from nothing, and Tom's call on 2026-08-22 is that it takes the
+              STATTED GEAR too. It UNEQUIPS and nothing else: every piece and every
+              roll stays owned and goes straight back on. See stripAll() in loot.js.
+              Only offered when there is something to take off, and the plan comes
+              from the same function that performs it so the two cannot drift. */''}
+        ${stripPlan.slots.length || stripPlan.mogs.length
+          ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip everything, gear included. Nothing is lost: it all stays in your Backpack.">Take it all off</button>`
+          : ''}
       </div>
       ${fitList.length ? `<p class="note fit-note">Tap a fit to wear it. Fits change your look only, never your stats. Long-press a fit to rename or bin it.</p>` : ''}`;
 
@@ -12057,6 +12305,23 @@ async function renderCharacter(wrap, tab, opts = {}) {
         toast(`Saved "${res.fit.name}". Tap it any time to put it back on.`, 2600);
         renderCharacter(wrap, 'wardrobe', { instant: true });
       });
+    });
+    /* ARM-THEN-CONFIRM, the same idiom as the rack buys and the melt button. This
+       confirm is now the last thing between a player and an unbuilt Bonehead, so
+       it NAMES THE GEAR rather than saying "strip": the cosmetics coming off is
+       what they asked for, the stats coming off is the part they might not have
+       meant. The toast then says what moved and that none of it is lost. */
+    const stripChip = $('[data-fit-reset]', content);
+    if (stripChip) armToConfirm(stripChip, 'Tap again: gear comes off too', async () => {
+      const res = await stripAll();
+      S.lookPreview = null; S.wardrobePreview = null;
+      await refreshSlimedSlots();       // the slime glow follows the gear that just came off
+      popSound(S.sounds); pushProfileSoon();
+      const n = res.slots.length, g = res.gear.length;
+      toast(n
+        ? `${n} piece${n === 1 ? '' : 's'} off${g ? `, ${g} with stats on ${g === 1 ? 'it' : 'them'}` : ''}. Nothing is lost, it is all in your Backpack.`
+        : 'Cleared. Nothing is lost, it is all in your Backpack.', 3400);
+      renderCharacter(wrap, 'wardrobe', { instant: true });
     });
     /* Trim the transparent padding off every paper-doll slot, the same way the
        reveal cards do. Raw assets are only ~30-60% ink on their own canvas, so an
@@ -14171,9 +14436,9 @@ async function openStable(opts = {}) {
           <div class="cf-frame" id="cfFrame" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Your pets">
             <div class="cf-track" id="cfTrack">${cfCards}</div>
           </div>
+          ${cfWear}
           ${cfCaption}
           ${cfActs}
-          ${cfWear}
         </div>
         ${openIid && openInst ? petTalentTree(openInst, petLevel(bank[openInst.iid] || 0), openPicks) : ''}
       ` : '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
@@ -14227,6 +14492,35 @@ async function openStable(opts = {}) {
         if (card) card.classList.add('just-levelled');
       }
       focusIid = null;
+    }
+    /* TRYING CLOTHES ON REQUIRES A MIRROR. Tom, 2026-08-21: "when you put the
+       item on you have to scroll back up to see if it equipped and how it looks.
+       You need to be able to see her and the items at the same time so you know
+       how it looks trying on."
+       The panel moved up against the card above (it is the mirror, so it belongs
+       against the glass; the caption and the action row are about who she is and
+       what you do with her, and both can sit below). Measured on the render, that
+       alone puts her ink and a whole tile on screen together at 393x852 with and
+       without a 59px inset, with no scrolling at all.
+       It is NOT enough on the narrowest phone this app supports. At 320x568 the
+       Stable's own header stack -- the Paddock door, the chip row and the
+       breeding note -- ends 454.8px down, so the ring itself has always opened
+       BELOW the fold there and no arrangement inside .cf can be seen at rest.
+       So the sheet opens far enough down to hold both, and no further: scroll by
+       exactly the tile's overflow past the fold, capped at the room above the
+       ring, so the ring can never be pushed off the top to buy it. On a modern
+       phone the overflow is negative and this is a no-op, which is why the
+       Paddock door still greets you there. Idempotent, so the re-render after a
+       tap lands you back looking at her rather than at the top of the sheet. */
+    const pwPanel = $('.pet-wear', body);
+    const pwTile = pwPanel && !pwPanel.hidden && $('.pw-item', pwPanel);
+    const pwFrame = $('#cfFrame', body);
+    if (pwTile && pwFrame) {
+      const view = body.getBoundingClientRect();
+      /* 8px of clearance, not zero: scrolling by exactly the overflow lands the
+         tile's bottom border ON the fold, where sub-pixel rounding eats it. */
+      const over = pwTile.getBoundingClientRect().bottom + 8 - view.bottom;
+      if (over > 0) body.scrollTop += Math.min(over, pwFrame.getBoundingClientRect().top - view.top);
     }
     /* The ring. Painted straight to the DOM because sixty transform updates a
        second is not a job for a re-render: render() rebuilds this whole body, so
@@ -16039,20 +16333,48 @@ async function renderBoneyard(el) {
        sliding around loose on the map.
        Same binding as the ring, and for the same reason. It only touches markers
        already on screen and does no work when there are none, so it is safe to
-       run on every zoom frame. */
+       run on every zoom frame.
+       AND ON EVERY MOVE FRAME, WHICH IS WHY paintWandererCone HAS A GATE. Tom,
+       2026-08-22: "the cone shouldn't flicker or change size". A pan reprojects
+       to a size that differs in the hundredths of a pixel, so this pass asks for
+       a repaint sixty times a second while the picture is identical. The gate
+       lives in js/wanderer.js, at the one place both callers go through, and it
+       compares the ROUNDED size: keep it there rather than adding a second one
+       here. */
+    /* THE PROJECTED SIZE, OR NOTHING AT ALL, and "nothing" is the fix.
+       MEASURED, not guessed. Driving a 1.6s pan on the real Boneyard and
+       sampling the cone's rendered width every frame, v423 went 508px ->
+       200px -> 508px inside 300 ms, and a zoom went 508 -> 1226 -> 200 ->
+       1341. That 200 is not a projection wobble, it is this function's own
+       FALLBACK being painted over a correct answer: both copies of the sizing
+       code opened with `let px = 200` and both were gated on `map.loaded()`,
+       which reports FALSE for as long as any tile is still in flight, and a
+       pan or a zoom is exactly when tiles are in flight. So every few seconds
+       the 300 m beam was redrawn as a 200 px stub and then corrected. That is
+       the size flicker, and it is a 60% collapse rather than a shimmer.
+       Two changes, both of them "do not answer when you do not know":
+         - `map.loaded()` is gone from the gate. It is about TILES, not about
+           the transform, and map.project answers correctly throughout a
+           camera move. The try/catch is what covers a transform that is not
+           ready, and it is still here.
+         - no fallback number. A null tells paintWandererCone to KEEP THE SIZE
+           IT HAS, so an unanswerable frame changes nothing on screen instead
+           of overwriting a right answer with a wrong one. */
+    function coneDiameterPx(w) {
+      try {
+        const a = map.project([w.lng, w.lat]);
+        const b = map.project([w.lng, w.lat + CONE_RANGE_M / 111320]);
+        const d = Math.hypot(b.x - a.x, b.y - a.y) * 2;
+        if (isFinite(d) && d > 40) return d;
+      } catch { /* transform not ready: the caller keeps what it has */ }
+      return null;
+    }
     function sizeWandererCones() {
-      if (!wandererMarkers.size || !map || !map.loaded()) return;
+      if (!wandererMarkers.size || !map) return;
       for (const [, rec] of wandererMarkers) {
         const w = rec.w;
         if (!w) continue;
-        let px = 200;
-        try {
-          const a = map.project([w.lng, w.lat]);
-          const b = map.project([w.lng, w.lat + CONE_RANGE_M / 111320]);
-          const d = Math.hypot(b.x - a.x, b.y - a.y) * 2;
-          if (isFinite(d) && d > 40) px = d;
-        } catch { /* projection not ready: keep the fallback */ }
-        paintWandererCone(rec.el.querySelector('.wanderer-cone'), px, w.heading);
+        paintWandererCone(rec.el.querySelector('.wanderer-cone'), coneDiameterPx(w), w.heading);
       }
     }
     map.on('zoom', sizeWandererCones);
@@ -16087,16 +16409,10 @@ async function renderBoneyard(el) {
         // The lit ground is sized from the map's OWN projection (his pixel vs a
         // point CONE_RANGE_M north of him), so 90 m on screen is 90 m at every
         // zoom, the same rule sizeRadius and the Glutton's blight both use.
-        let px = 200;
-        if (map && map.loaded()) {
-          try {
-            const a = map.project([w.lng, w.lat]);
-            const b = map.project([w.lng, w.lat + CONE_RANGE_M / 111320]);
-            const d = Math.hypot(b.x - a.x, b.y - a.y) * 2;
-            if (isFinite(d) && d > 40) px = d;
-          } catch { /* projection not ready: keep the fallback */ }
-        }
-        paintWandererCone(rec.el.querySelector('.wanderer-cone'), px, w.heading);
+        // One helper, shared with the zoom/move pass above, so the two cannot
+        // answer the same question differently. See its note for why an
+        // unanswerable frame returns null rather than a fallback size.
+        paintWandererCone(rec.el.querySelector('.wanderer-cone'), coneDiameterPx(w), w.heading);
         if (!inWandererCone(w, lat, lng)) continue;
         if (wandererEngaged.has(w.id) || wandererDone.has(wandererKey(date, w))) continue;
         // the anti-cheat gate the tap handlers get, silently: being DRIVEN past
@@ -16990,7 +17306,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v423'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v424'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -17015,6 +17331,14 @@ function presentGrantDelivery(r) {
     const note = p.note || (p.gift ? `A gift${p.from ? ' from ' + p.from : ''}` : 'From the Crew');
     let hadCard = false;
     if (p.crate && CRATES[p.crate]) { cards.push({ iconHtml: crateIcon(p.crate, 120), name: CRATES[p.crate].label, rarity: p.crate === 'daily' ? 'uncommon' : 'rare', kind, stats: esc(note) }); hadCard = true; }
+    /* A PET, AND AN EGG, BOTH LANDED SILENTLY BEFORE THIS. Added 2026-08-21 with
+       the admin make-good arm: a payload carrying only a pet paid no coins and
+       no XP and built no card, so every branch below fell through and the player
+       got a Day One Lizard back with no reveal, no toast and nothing to look at.
+       That is the end of the chain and it is the only part she experiences.
+       Same shape as the crate line above; a pet is drawn from its own art. */
+    if (p.pet && BH_BY_ID[p.pet]) { const it = BH_BY_ID[p.pet]; cards.push({ imgSrc: bhAsset(it), name: it.name, rarity: it.rarity, kind, stats: esc(note) }); hadCard = true; }
+    if (p.egg) { cards.push({ iconHtml: crateIcon('egg', 120), name: CRATES.egg.label, rarity: 'rare', kind, stats: esc(note) }); hadCard = true; }
     if (p.gearId && GEAR_BY_ID[p.gearId]) { cards.push({ ...gearToCard(GEAR_BY_ID[p.gearId]), kind }); hadCard = true; }
     if (p.consumable && CONSUMABLES[p.consumable]) { cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind, stats: esc(note) }); hadCard = true; }
     if (p.gift && !hadCard && p.coins) coinGifts.push(`${p.from || 'A friend'} sent you ${p.coins} coins!`);

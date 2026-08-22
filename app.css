@@ -1454,9 +1454,13 @@ body::before {
    at 13px the shipped chrome gives 103.8px (13.8 over the band) and this gives
    89.2px (0.8 under it); the same tightening also pulls the shipped 11px box
    from 88.4px down to 76.1px. Graded by the TYPE rows in tests/talkbox-audit.mjs,
-   which harvest the real line pool through window.__gwart and measure the box
-   the longest one produces, in both directions: too small fails and too tall
-   fails.
+   which harvest the real line pool through window.__gwartPool and measure the
+   box EVERY line produces, in both directions: too small fails and too tall
+   fails. Every line, not just the longest, since v424 took the catalogue from
+   seventeen lines to eighty-nine: at that size "the longest one fits" and "they
+   all fit" stopped being the same claim. Measured there, the whole catalogue
+   comes out at 89.2px (three wrapped lines) or 71.7px (two), and nothing else
+   fits in 176px, so a fourth wrapped line is what this is guarding against.
    The border is an OPAQUE cream, see below. */
 .gw-box {
   flex: 1; min-width: 0; --tb-size: 13px;
@@ -5546,7 +5550,12 @@ body::before {
   font-style: normal; display: grid; place-items: center; width: 18px; height: 18px; margin-left: 2px;
   border-radius: 6px; background: var(--danger, #ff6b6b); color: #1b0d0d; font-size: 11px; font-weight: 900;
 }
-.fit-chip.add { color: var(--text-3); border-style: dashed; padding: 7px 13px; }
+/* "Take it all off" wears the same quiet dashed chip as "+ Save this fit": it is
+   a tidy-up, not a destruction, so it does not get the danger red the melt
+   button carries. Nothing is spent and nothing is lost. The armed state borrows
+   the gold every other arm-then-confirm control in the app uses. */
+.fit-chip.add, .fit-chip.reset { color: var(--text-3); border-style: dashed; padding: 7px 13px; }
+.fit-chip.arming { border-color: var(--gold); border-style: solid; color: var(--gold); }
 .fit-note { text-align: center; margin: 2px 0 10px; }
 
 .col-head {
@@ -7346,6 +7355,22 @@ body::before {
 /* The CONTAINER carries the hide, not the first child: screens render many
    sibling nodes (Crew nine, Today fifteen) and the first one routinely holds none
    of the art, so hiding it waited on nothing. */
+/* AND THIS GATE IS A SWITCH, NOT AN ANIMATION. #screen declares no transition,
+   but `transition-property` defaults to `all`, and the reduced-motion block near
+   the top of this file sets `transition-duration: 0.001s !important` on `*`. So
+   for a player who asks for less motion, every property change on #screen becomes
+   a one-millisecond transition, and a transition's first computed value is the
+   OLD one: the frame in which `screen-in` lands still reads opacity 0, and the
+   real value arrives on the next frame. That one frame is a hole, and the moment
+   the held copy stopped dissolving over it, it became visible. Caught by
+   tests/route-flash-audit.mjs REDUCED-MOTION, one bare frame at 214ms, which is
+   exactly what that row is for. Declaring the property away is the fix, because
+   there is nothing on #screen that is meant to transition; the alternative,
+   holding the copy an extra frame, would have paid a frame on every navigation
+   for every player to work around an accident that only exists for some.
+   This is the 0.001s trap the reduced-motion block itself warns about, one
+   element over. */
+.screen { transition-property: none; }
 .screen:not(.screen-in) { opacity: 0; }
 .screen.screen-in { opacity: 1; }
 .screen > .route-in { animation: routeIn .2s ease-out; }
@@ -7368,18 +7393,18 @@ body::before {
    `.screen--map`. overflow is clamped here so a frozen copy never grows a
    scrollbar of its own; scrollTop is still settable on it, which is how the copy
    freezes at the offset the player left.
-   THE FADE IS A TRANSITION AND THE REMOVAL IS A TIMER, deliberately. Nothing
-   waits on transitionend, so a reduced-motion player, whose transition is none,
-   gets a clean hard cut at the same moment instead of a copy that never leaves.
-   No keyframes, no iteration count: there is nothing here to collapse to 0.001s
-   and run a thousand times a second. */
+   IT LEAVES ON ONE FRAME AND HAS NO EXIT ANIMATION AT ALL. It used to fade out
+   over .18s and be removed on a 260ms timer, which put both screens on the glass
+   together for a quarter of a second: Tom, 2026-08-21, "switching between tabs is
+   not smooth it's showing a staggered preview of the the existing page as you
+   swap". js/app.js removes the node in the same task that applies `screen-in`,
+   so the swap is one composited frame with no in-between state for CSS to
+   describe. Nothing to collapse to 0.001s, nothing to wait on transitionend for,
+   and reduced motion needs no special case because there is no motion. */
 .screen-held {
   position: absolute; left: 0; right: 0;
   overflow: hidden; pointer-events: none;
-  transition: opacity .18s ease-out;
 }
-.screen-held-out { opacity: 0; }
-@media (prefers-reduced-motion: reduce) { .screen-held { transition: none; } }
 /* A held swap already has a finished picture on top, so the arriving child must
    NOT also fade up from transparent: two crossed opacity fades leave a quarter of
    the ground visible at the midpoint, which is the tray again. The class stays on
@@ -9046,10 +9071,21 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .hero-why svg { flex: 0 0 auto; color: var(--gold); }
 
 /* The first-meal nudge and its way out. The skip is quiet on purpose: it is an
-   escape hatch, not a second call to action competing with the first. */
-.ul-wrap.has-skip { display: flex; flex-direction: column; gap: 0; }
+   escape hatch, not a second call to action competing with the first.
+
+   PROXIMITY IS THE WHOLE JOB HERE, and the first version had it backwards.
+   Tom, 2026-08-21: "for some reason it says 'not right now' right above the
+   banner for the new creatures". Measured at 393x852: the button's ink sat 19px
+   under the card it belongs to (12px of inherited `.card` margin-bottom plus its
+   own 7px top padding) and 2px above the hype banner. Nine times closer to the
+   banner than to its own card, so it read as the banner's dismiss control.
+   Nothing was orphaned; the grouping was. So the card keeps NO trailing margin
+   inside this wrap, the button hugs it, and the whole wrap carries the gap
+   instead. Measured after: 4px above, 18px below. */
+.ul-wrap.has-skip { display: flex; flex-direction: column; gap: 0; margin-bottom: 18px; }
+.ul-wrap.has-skip .unlock-nudge { margin-bottom: 0; }
 .ul-skip {
-  align-self: center; background: none; border: 0; padding: 7px 12px 2px;
+  align-self: center; background: none; border: 0; padding: 4px 12px 0;
   color: var(--text-3); font-size: 12.5px; font-weight: 700;
 }
 

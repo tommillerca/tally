@@ -129,7 +129,15 @@ const ACTIONS = [
   { id: 'js/cooking.js:collectDish', sites: 1, drive: 'dish',
     transition: 'a finished pot goes from full to empty',
     authority: 'the cook slot, nulled and written BEFORE the dish is banked' },
-  { id: 'js/social.js:applyPayload', sites: 7, drive: 'grant',
+  /* RE-GRADED 2026-08-21, 7 -> 8 sites: the admin make-good gained a PET arm
+     (`grantPet(p.pet, 'social')`), so /admin/grant can hand a named player back
+     a species they lost to a mistake or a bug. The transition and the authority
+     are unchanged, and that is the point: every arm of this function, the new
+     one included, runs ONLY after awardOnce has minted the key, so a
+     re-delivered or re-pulled pet grant lands exactly one copy. The server's own
+     idempotency (INSERT OR IGNORE on grants(player_id, key)) is a second layer
+     and neither one is load-bearing alone. */
+  { id: 'js/social.js:applyPayload', sites: 8, drive: 'grant',
     transition: 'a server grant key goes from not-ingested to ingested',
     authority: "awardOnce: the ledger row IS the receipt, and minting it is the claim" },
   { id: 'js/game.js:grantLevelRewards', sites: 6, drive: 'levelRewards',
@@ -444,7 +452,21 @@ const results = await page.evaluate(async () => {
       won: r => !!r,
       count: async () => (await cooking.pantryDishes()).length,
     }),
-    grant: () => { const k = uniq(); return { act: () => social.__testApplyGrant({ key: k, type: 'crewreward', ts: Date.now(), payload: { coins: 100, dust: 20 } }), won: r => r === true }; },
+    /* The payload carries a PET as well as currency, because the admin
+       make-good arm added 2026-08-21 hands over a species by id and a species is
+       the one thing here that a second delivery could duplicate in INVENTORY
+       while paying no coins at all. `count` is copies of that species, so the
+       concurrent row grades what actually landed in the Stable rather than only
+       the authority's word. C3 is a plain catalogue pet: the exclusive is not
+       needed to prove the arm and must not be minted by a test. */
+    grant: () => {
+      const k = uniq();
+      return {
+        act: () => social.__testApplyGrant({ key: k, type: 'crewreward', ts: Date.now(), payload: { coins: 100, dust: 20, pet: 'C3' } }),
+        won: r => r === true,
+        count: async () => (await loot.petInstances()).filter(x => x.sp === 'C3').length,
+      };
+    },
     levelRewards: () => { const L = 200 + (n++ % 40); return { act: () => game.grantLevelRewards(L - 1, L), won: r => r.crates > 0 }; },
     /* A BATCH, not a single claim: evaluateBadges walks every badge and mints
        the ones now earned, so two overlapping calls legitimately SPLIT the set

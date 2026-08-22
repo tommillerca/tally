@@ -1700,6 +1700,74 @@ export async function deleteFit(id) {
   return { ok: true };
 }
 
+/* ---------- Take it all off (v424) ----------
+   A player asked for one button that takes everything off so a new outfit starts
+   from nothing. Tom approved it, and on 2026-08-22 he settled the one open
+   question against my first build: "reset should strip everything but there needs
+   to be a gwart reminder or something that reminds players they will be weaker in
+   fights if they dont choose statted gear to wear." So it strips STATTED GEAR TOO,
+   and the risk that made me hold back (a player walks into the Pit weaker with
+   nothing telling them why) is answered by telling them, not by leaving gear on.
+   Gwart's no-gear bucket is the other half of this feature and neither half is
+   complete without the other.
+
+   THE CONTRACT IS UNCHANGED AND IT IS THE IMPORTANT HALF: it UNEQUIPS. Nothing is
+   sold, melted, salvaged, refunded or deleted. The `inv` store is never written,
+   so every piece and every statted roll is still in the Backpack and goes back on
+   in one tap. It writes exactly the keys a wardrobe tap writes: 'equipped' and
+   'gearloadout' (both through equip(), so the owned/slot checks every other path
+   runs still run) and 'transmog'.
+
+   EQUIPPED AND GEARLOADOUT CANNOT DESYNC, because nothing here writes them
+   separately. equip(slot, null) with keepGear FALSE is the existing call that
+   already does all three things together for one slot: it puts the slot back to
+   its default or empties it, deletes gearloadout[slot], and drops any transmog on
+   it. Clearing the two maps by hand would be two writes that can disagree; this
+   is one call per slot, the same one the None cell makes.
+
+   STILL EXCLUDED, and each for its own reason:
+   - THE PET. Slot C belongs to the Stable, not the Wardrobe (it is not even on
+     the paper doll), and the pet wardrobe (kv petWear) is its own system.
+   - SAVED FITS (kv outfits) and the weapon aura (kv wpnaura). A fit is how you
+     put a look BACK, so binning fits during a reset would destroy the recovery
+     path; the aura is its own toggle in the rack and its own comment warns that
+     erasing the key un-buys the purchase.
+   - SLOT DEFAULTS. B and SK have `default` art that is always owned, and bare
+     there is an invisible Bonehead rather than a blank canvas, so those go back
+     to the default. equip(slot, null) already picks default-or-empty per slot. */
+export async function stripAllPlan() {
+  const [lo, eq, tm] = await Promise.all([gearLoadout(), equipped({ raw: true }), transmogMap()]);
+  /* A slot is in the plan if it holds ANYTHING: a statted piece, or a plain
+     cosmetic that is not the slot's own default. Gear used to be excluded here
+     and that one clause was the whole of the old cosmetics-only behaviour. */
+  const slots = BH_SLOTS
+    .filter(s => s.code !== 'C' && (lo[s.code] || (eq[s.code] && eq[s.code] !== s.default)))
+    .map(s => s.code);
+  return { slots, gear: Object.keys(lo).filter(c => c !== 'C'), mogs: Object.keys(tm) };
+}
+
+export async function stripAll() {
+  const { slots, gear, mogs } = await stripAllPlan();
+  /* BANK THE RECEIPTS FIRST, BEFORE ANYTHING TOUCHES THE TRANSMOG MAP, and this
+     matters MORE now than it did when only the map was cleared at the end.
+     paidLooks() writes on read and grandfathers pre-v221 purchases by seeding
+     from the LIVE transmog map; its own comment says "clearing the slot would
+     erase the only evidence and charge the player a second time for a look they
+     already bought." Now that gear slots are in the plan, equip(slot, null)
+     deletes tm[slot] itself, one slot at a time, inside the loop below. So the
+     seed has to run before the FIRST equip(), not just before the final kvSet,
+     or the receipts are shredded piecemeal and re-wearing a look you already own
+     bills you dust for it again. */
+  if (mogs.length) await paidLooks();
+  for (const code of slots) await equip(code, null);
+  /* The loop clears tm only for slots that HELD something. A stale entry on an
+     empty gear slot would survive it, and equipped() honours a transmog on any
+     slot that holds anything, so a leftover would reapply the moment the player
+     puts a fresh piece in that slot. Clear the map outright. */
+  if (mogs.length) await kvSet('transmog', {});
+  return { ok: true, slots, gear, mogs };
+}
+
 // The piece that best identifies a fit at chip size: whatever it deliberately
 // changed, most-visible slot first.
 export function fitThumbArt(fit) {
