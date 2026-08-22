@@ -12044,6 +12044,39 @@ async function renderCharacter(wrap, tab, opts = {}) {
   if (floatingGear) floatingGear.hidden = tab === 'shop';
   $('#gwGear', body)?.addEventListener('click', () => { location.hash = '#/settings'; });
 
+  /* THE GLOW LETS GO OF ITS ENTRANCE. Cam's palm glows carry a filled one-shot
+     plus an infinite loop on the same two properties, which pins the whole
+     screen to the main thread for as long as the Emporium is open. The reasoning,
+     the four spellings that do not work and the arithmetic that keeps the look
+     identical are all in app.css under `.wz-glow.idle`; the short version is that
+     only a NEW element gets a newly composited animation, so the glow is swapped
+     for a bare clone of itself at 2.4s, which is the instant zGlowIdle takes over
+     regardless. They are empty decorative divs with no id and no listener, so the
+     clone is the whole element. A late timer moves the handover by a frame.
+
+     THE NODES ARE CAPTURED NOW, NOT LOOKED UP AT 2.4s, so a stale timer can only
+     ever reach the glows it was armed for: after a re-render those are detached,
+     and replaceWith on a detached node is a no-op. Measured on this tree, and
+     the measurement is the reason this is a formulation rather than a fix: with
+     the lookup done at fire time it is ALREADY safe, because renderBonehead
+     writes a fresh `<div id="chBody">` on every hub navigation, so the stale
+     timer's `body` is detached too. Driving Shop -> Wardrobe -> Shop with all
+     three taps inside 2.4s produced exactly one swap per glow, at the second
+     arrival's own 2.4s and not at the first's, and the second arrival held .550
+     through 2.3s exactly like a clean one. Capturing here just stops that
+     depending on what a different function does with #chBody.
+
+     Under reduced motion app.css replaces both animations with a one-shot fade,
+     so there is no loop to composite and no swap to make. */
+  if (tab === 'shop' && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const glows = $$('.gw-panel .wz-glow', body);
+    setTimeout(() => glows.forEach(g => {
+      const fresh = g.cloneNode();
+      fresh.classList.add('idle');
+      g.replaceWith(fresh);
+    }), 2400);
+  }
+
   /* THE HUB CHIPS GO THROUGH THE ROUTER, so they arrive whole like every other
      screen. They used to call renderCharacter directly, which is the ONE tab-like
      control in the app that reaches neither route() nor openSheet() and therefore

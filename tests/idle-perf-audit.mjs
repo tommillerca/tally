@@ -24,6 +24,20 @@
  *    glow is now two pseudo-elements cross-fading on `opacity` (app.css), which
  *    reads the same to within half a channel and measures 0.0/s.
  *
+ * 3. AND NEITHER DID GWART'S EMPORIUM, for a different reason, found by this
+ *    file and carried in KNOWN_HOT for a day. `.wz-glow` runs TWO animations on
+ *    the same two properties: zGlowIn, a one-shot filled `both` so it never
+ *    leaves the list, plus the infinite zGlowIdle. Chrome will not composite a
+ *    property two animations claim, so the shop cost 119.9/s for as long as it
+ *    was open. Fixed by handing the element ONE animation at 2.4s, which is the
+ *    instant the idle takes over anyway, so no pixel moves: app.css under
+ *    `.wz-scene.lit`. Nulling a name in the list is NOT enough, and that is the
+ *    trap worth writing down because it looks identical in getAnimations():
+ *    `animation-name: none, zGlowIdle` keeps the same animation OBJECT at index
+ *    1, Chrome never re-decides it, and it still measures 119.9/s. Replacing the
+ *    whole shorthand starts a NEW animation, and an animation that starts alone
+ *    on its element is composited.
+ *
  * AND THE COST IS PER-SCREEN, NOT PER-ELEMENT, which is why one dot was worth
  * the change: measured here, 1 animated element = 119.9/s and 16 = 119.9/s, both
  * on a bare page and in the app. Chrome falls the whole document onto the slow
@@ -155,21 +169,11 @@ const SURFACES = [
    ceiling: the moment somebody fixes it this row goes red and the line has to
    come out, so an exemption cannot quietly outlive the bug it was written for
    and go on covering a NEW regression on the same screen. (Same shape as
-   VECTOR_OK in boneyard-icon-audit, and for the same reason.) */
-const KNOWN_HOT = {
-  'hub:shop': "Gwart's Emporium, measured 119.9 recalcs/s on 2026-08-21 and NOT "
-    + 'fixed with the Boneyard dot. Cause is different and so is the fix: .wz-glow '
-    + 'carries TWO animations targeting the same properties (zGlowIn, a filled '
-    + 'one-shot, plus the infinite zGlowIdle), and Chrome refuses to composite an '
-    + 'element whose property is claimed twice, forever, because the finished '
-    + 'one-shot never leaves the list. Measured here: the pair costs 119.9/s and '
-    + 'zGlowIdle alone costs 0.0/s. Every cheap dodge was tried and measured: '
-    + 'animation-fill-mode backwards with the end state declared statically still '
-    + 'reads 119.9/s, and nesting the two on separate elements COMPOSES them '
-    + '(0.55 x 0.35 rather than 0.35) so it changes the look. The honest fix '
-    + "re-authors Cam's inlined wizard-cast animation into one keyframe set, "
-    + 'which is a decision about his art, not a perf edit, and it is Tom\'s.',
-};
+   VECTOR_OK in boneyard-icon-audit, and for the same reason.) It is EMPTY, and
+   it has been used exactly once: hub:shop, Gwart's Emporium, at 119.9/s from
+   2026-08-21 until item 3 in the header fixed it on 2026-08-22, at which point
+   this row went red saying so and the line came out. */
+const KNOWN_HOT = {};
 
 const puppeteer = await loadPuppeteer();
 const browser = await puppeteer.launch({

@@ -9934,10 +9934,50 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .wz-stars-r { clip-path:inset(0 0 0 62%);   animation:zTwC 3s   ease-in-out 2.4s infinite; }
 .wz-glow { position:absolute; width:12%; height:9%; border-radius:50%;
   background:radial-gradient(circle,rgba(211,255,60,.55),transparent 70%);
-  filter:blur(6px); mix-blend-mode:screen;
+  filter:blur(6px); mix-blend-mode:screen; opacity:.55;
   animation:zGlowIn 1.6s cubic-bezier(0.22,1,0.36,1) both, zGlowIdle 4.5s ease-in-out 2.4s infinite; }
 .wz-glow.left  { left:16%; top:40%; }
 .wz-glow.right { left:72%; top:40%; animation-delay:0s,4.65s; }
+/* ONE ANIMATION AT A TIME, and not one keyframe, duration or easing above is
+   touched. Cam's glow carries a filled one-shot AND an infinite loop, both on
+   opacity and transform, and Chrome will not composite a property that two
+   animations claim. The one-shot is `both`, so it never leaves the list: the
+   Emporium sat at 119.9 style recalcs/second for as long as it was open while
+   every other settled screen in the app read 0.0 (tests/idle-perf-audit.mjs).
+   Measured on a bare page at 440x956: the pair 119.9/s, zGlowIdle alone 0.0/s.
+
+   AND HERE IS THE HALF THAT IS EASY TO MISS, SO IT IS WRITTEN DOWN RATHER THAN
+   LEFT TO BE REDISCOVERED: compositability is decided WHEN AN ANIMATION STARTS,
+   and it is never re-evaluated for an animation that goes on running. Taking the
+   second animation away therefore does NOT promote the element back. Nothing you
+   can do to a live animation gets it onto the compositor; only an animation that
+   starts fresh is decided fresh, and the one reliable way to start one fresh is
+   to replace the ELEMENT, because a new node has no running animation to inherit.
+
+   So at 2.4s renderCharacter REPLACES each glow with a bare clone carrying
+   `.idle`. 2.4s is the instant zGlowIdle takes over anyway. Three cheaper
+   spellings were tried on this tree and every one of them still measured 119.9/s,
+   for exactly the reason above: `animation-name: none, zGlowIdle`, and restating
+   the same shorthand under a class, both leave the SAME animation object in place
+   so Chrome never re-decides it, and both LOOK correct in getAnimations(), which
+   is what makes them expensive; an @starting-style transition in place of zGlowIn
+   does the same from the other side. (animation-fill-mode backwards and will-change were
+   measured at 119.9/s before that.) The one spelling that DOES re-decide it,
+   changing the delay under a class, slides the running timeline instead of
+   restarting it: rewriting the left glow's 2.4s to 0s put it at .740 opacity
+   100ms after the swap, near the top of the pulse, where Cam's has it at .351
+   near the bottom. A new element has no timeline to slide.
+
+   So the delays below are measured FROM THE SWAP, and the look is unchanged.
+   Before 2.4s only zGlowIn is drawing and it is untouched. The LEFT glow's idle
+   began at 2.4s and still does, which is delay 0 from the swap. The RIGHT glow's
+   began at 4.65s and still does, which is 2.25s from the swap, and until then it
+   rests on the `opacity:.55` / `scale(1)` declared above, which is the pixel
+   zGlowIn's fill was holding. Verified against the unpatched tree at thirteen
+   offsets across two pulse cycles: both glows agree to four decimals on opacity
+   and on transform at every one. */
+.wz-glow.idle       { animation: zGlowIdle 4.5s ease-in-out 0s infinite; }
+.wz-glow.idle.right { animation-delay: 2.25s; }
 
 /* Cam's README: "keep the entrance as a plain fast fade, disable the sway; the
    twinkle is low-amplitude and can stay". THE DURATIONS ARE NOT COLLAPSED. The
