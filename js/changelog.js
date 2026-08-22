@@ -10,6 +10,8 @@ export const CHANGES = [
     'Fixed: on bigger phones your Bonehead was shoved to the left with his weapon hanging off the edge, and he and his pet drifted apart. They stand together in the middle again, at every screen size.',
     'Your pet now scales with your Bonehead instead of being a fixed size, so the pair reads right on a small phone too.',
     'Gwart was talking in the smallest type in the app. His lines are readable now.',
+    'Gwart replayed his whole entrance every single time you opened Today. He does it once now, then he is just there.',
+    'The Boneyard was quietly working flat out even when you were not touching it, which costs battery and makes the phone warm. It rests now.',
   ] },
   { n: 422, date: '2026-08-21', title: 'The pet you paid for, and a faster app', items: [
     'Fixed, and this one cost real coins: a pet bought from Gwart never showed up in your Stable or your Paddock. She was yours the whole time, the game just filed her in one place instead of two. Open the app and she will be there, with no update needed after this one.',
