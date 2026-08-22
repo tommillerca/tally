@@ -15889,6 +15889,38 @@ async function renderBoneyard(el) {
        you are losing 85.8% of, which is a punishment, not an exploit. */
     const wandererEngaged = new Set();
     let wandererDone = new Set(xpRows0.filter(r => r.type === 'wanderer').map(r => r.key));
+    /* HIS LANTERN HAS TO TRACK THE GROUND, and it did not. Tom, 2026-08-22:
+       "when people zoom he moves all over the place and isnt anchored to a
+       geolocation."
+       The cone is sized in PIXELS from the map's own projection so that 300 m of
+       lit ground is 300 m at every zoom. That size was only ever recomputed
+       inside refreshWanderer, which runs on the 5s tick and on moveend. So
+       through an entire pinch the cone kept the pixel size it was handed at the
+       PREVIOUS zoom, while the collect ring beside it resized every frame
+       (map.on('zoom', sizeRadius), a few lines up). One thing on the screen
+       tracked the ground and the other did not, which reads exactly as the man
+       sliding around loose on the map.
+       Same binding as the ring, and for the same reason. It only touches markers
+       already on screen and does no work when there are none, so it is safe to
+       run on every zoom frame. */
+    function sizeWandererCones() {
+      if (!wandererMarkers.size || !map || !map.loaded()) return;
+      for (const [, rec] of wandererMarkers) {
+        const w = rec.w;
+        if (!w) continue;
+        let px = 200;
+        try {
+          const a = map.project([w.lng, w.lat]);
+          const b = map.project([w.lng, w.lat + CONE_RANGE_M / 111320]);
+          const d = Math.hypot(b.x - a.x, b.y - a.y) * 2;
+          if (isFinite(d) && d > 40) px = d;
+        } catch { /* projection not ready: keep the fallback */ }
+        paintWandererCone(rec.el.querySelector('.wanderer-cone'), px, w.heading);
+      }
+    }
+    map.on('zoom', sizeWandererCones);
+    map.on('move', sizeWandererCones);
+
     function refreshWanderer() {
       const live = wanderersNear(date, lat, lng);
       const liveIds = new Set(live.map(w => w.id));
@@ -15901,10 +15933,11 @@ async function renderBoneyard(el) {
           const el = document.createElement('div');
           el.className = 'map-wanderer-mark';
           el.innerHTML = wandererMarkHtml();
-          rec = { marker: domMarker(maplibregl, map, { lat: w.lat, lng: w.lng, el, anchor: 'center' }), el };
+          rec = { marker: domMarker(maplibregl, map, { lat: w.lat, lng: w.lng, el, anchor: 'center' }), el, w };
           wandererMarkers.set(w.id, rec);
         } else {
           rec.marker.setLngLat([w.lng, w.lat]);
+          rec.w = w;   // the zoom repaint reads his CURRENT beat, not the one he arrived on
         }
         /* NEVER placeWalkable. Every other POI is snapped onto the nearest road
            or path because it sits still and a spawn in a pond is unreachable. He
@@ -16820,7 +16853,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v422'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v423'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

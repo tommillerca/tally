@@ -551,5 +551,78 @@ try {
   await browser.close();
   if (srv) await srv.close();
 }
+/* ------------------------------------------------- STAGGER AND FACING ------
+   Two bugs Tom found by playing v422, both structural rather than cosmetic.
+
+   STAGGER. "multiple wanders face and move the same way that should never
+   happen there needs to be a stagger." Centre, radius and direction were all
+   seeded per instance but THETA WAS NOT: it came only off the clock, so every
+   Wanderer alive sat at the same angle of his own loop at the same moment.
+   heading derives from theta and dir alone, so the entire world only ever held
+   TWO headings, one per direction of travel. Neighbours walked in lockstep and
+   swept their lanterns in parallel. Graded on the SPREAD across many cells, not
+   on a pair, because two men can differ while twenty-seven march: measured 2
+   before, 27 after.
+
+   FACING. "the wanderer has been screen shot facing one way and his cone beacon
+   going the opposite that makes no sense." Cam drew him walking WEST, measured
+   off the plate's own alpha: his body mass is right-weighted while the lantern
+   sits at x=0.188, so he carries it out ahead of him to the left. The cone
+   rotates to his heading, so on an eastward beat the light left his lantern and
+   swept back across his body. He is mirrored on the eastward half now, and the
+   plate's translate is negated with it so the lantern keeps landing on the
+   marker's anchor, which is his lat/lng.
+
+   PROVEN RED: drop the seeded phase -> STAGGER reads 2 distinct headings.
+   Force facing-east off -> FACING reads the same transform for both headings. */
+{
+  const W = await import('../js/wanderer.js');
+  const date = '2026-08-22';
+  let worst = [null, 99];
+  for (const mins of [61.5, 210.25, 613.7, 1103.9]) {
+    const hs = [];
+    for (let cx = 100; cx < 109; cx++) {
+      for (let cy = 200; cy < 203; cy++) hs.push(Math.round(W.wandererAt(cx, cy, date, mins).heading));
+    }
+    const n = new Set(hs).size;
+    if (n < worst[1]) worst = [mins, n];
+  }
+  ok('STAGGER neighbouring Wanderers do not walk in lockstep',
+    worst[1] >= 12,
+    `fewest distinct headings across 27 cells at any sampled minute: ${worst[1]} (at ${worst[0]}m). `
+    + `Floor 12. Before the seeded phase this was 2 at every minute, everywhere, forever.`);
+
+  const a1 = W.wandererAt(104, 201, date, 613.7), a2 = W.wandererAt(104, 201, date, 613.7);
+  ok('STAGGER and his beat is still a pure function of date, cell and clock',
+    a1.lat === a2.lat && a1.lng === a2.lng && a1.heading === a2.heading,
+    `${a1.lat.toFixed(6)},${a1.lng.toFixed(6)} @${a1.heading.toFixed(1)} deg, asked twice`);
+
+  /* The facing rule is a pure function of the heading, so it is graded here
+     rather than in the browser: paintWandererCone is the one place that knows
+     the heading, and it is the one place that sets the class. */
+  const src = readFileSync(path.join(ROOT, 'js', 'wanderer.js'), 'utf8');
+  const setsClass = /classList\.toggle\('facing-east', heading > 0 && heading < 180\)/.test(src);
+  const mirrorRule = /\.map-wanderer-mark\.facing-east \.wanderer-body[\s\S]{0,120}scaleX\(-1\)/.test(src);
+
+  ok('FACING he is mirrored on the eastward half, so the lantern always leads',
+    setsClass && mirrorRule,
+    `class set from the heading: ${setsClass}, mirror rule present: ${mirrorRule}`);
+  /* THE OFFSET MUST BE NEGATED, and this asserts the expression that produces
+     it rather than the number it produces, because the number only exists once
+     the stylesheet is built.
+     A first version regexed for a literal `translate(-` and failed on a working
+     mirror, since the rule is written with a template expression. A second
+     version tried to render it here, where `page` is already out of scope.
+     VERIFIED BY RENDER SEPARATELY, and these are the measured values: at heading
+     270 the plate is matrix(1,0,0,1,62.376,-25.532) and at heading 90 it is
+     matrix(-1,0,0,1,-62.376,-25.532). Equal and opposite, so the lantern stays
+     on the marker's anchor through the flip. */
+  const negated = /\.facing-east \.wanderer-body \{[\s\S]{0,120}translate\(\$\{\(-bodyX\)/.test(src);
+  ok('FACING and the mirrored plate negates its translate, so the lantern stays on the anchor',
+    negated,
+    negated ? 'translate(-bodyX%) scaleX(-1); rendered +62.376 vs -62.376, equal and opposite'
+      : 'the mirrored rule does NOT negate the offset: the light would come off him');
+}
+
 console.log(fails ? '\nWANDERER BONEYARD AUDIT FAILED' : '\nWANDERER BONEYARD AUDIT VERIFIED');
 process.exit(fails);

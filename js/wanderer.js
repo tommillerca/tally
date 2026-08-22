@@ -176,7 +176,21 @@ export function wandererAt(cx, cy, date, mins = nowMins()) {
   const clng = (cy + (frac(`${seed}:lng`) - 0.5) * 0.72) * WANDER_CELL_DEG;
   const r = WANDER_R_MIN_M + frac(`${seed}:r`) * (WANDER_R_MAX_M - WANDER_R_MIN_M);
   const dir = frac(`${seed}:dir`) < 0.5 ? -1 : 1;      // +1 walks the loop clockwise
-  const theta = 2 * Math.PI * ((mins - inst * WANDER_LAP_MIN) / WANDER_LAP_MIN);
+  /* THE PHASE IS SEEDED, AND LEAVING IT OUT WAS A REAL BUG. Tom, 2026-08-22:
+     "multiple wanders face and move the same way that should never happen there
+     needs to be a stagger."
+     He is right, and it was worse than a cosmetic tell. Centre, radius and
+     direction were all seeded per instance, but theta came only off the clock,
+     so every Wanderer alive was at the SAME angle of his own loop at the same
+     moment. heading is derived from theta and dir alone, so the entire world
+     only ever held TWO headings: one per direction of travel. Two men in
+     neighbouring cells walked in lockstep and swept their lanterns in parallel,
+     which reads as a rendering fault rather than as two people.
+     One more seeded term fixes it. It changes nothing else: the path is still a
+     pure function of (date, cell, instance), still identical on every device,
+     still continuous within an instance, and still a constant-speed circle. */
+  const phase = frac(`${seed}:phase`) * 2 * Math.PI;
+  const theta = phase + 2 * Math.PI * ((mins - inst * WANDER_LAP_MIN) / WANDER_LAP_MIN);
   // metres per degree of longitude shrinks with latitude; floored so the maths
   // cannot divide by ~0 at the poles.
   const mPerDegLng = M_PER_DEG_LAT * Math.max(0.05, Math.cos(clat * RAD));
@@ -287,7 +301,23 @@ export function ensureWandererStyle() {
 /* The plate is shifted so the LANTERN lands on the marker's centre, which is the
    anchor, which is his lat/lng. Percentages of the marker's own box, so this
    stays correct at any MARK_PX. */
+/* HE FACES THE WAY HE IS WALKING. Tom, 2026-08-22: "the wanderer has been screen
+   shot facing one way and his cone beacon going the opposite that makes no
+   sense."
+   Cam drew him walking WEST: measured off the plate's own alpha, his body mass
+   is right-weighted while the lantern sits at x=0.188, so he carries it out
+   ahead of him to the left. The cone rotates to his heading, so on any eastward
+   beat the light left his lantern and swept back across his body, which reads as
+   a rendering fault rather than as a man.
+   Mirrored on the eastward half, and the translate is negated with it: the
+   lantern has to keep landing on the marker's centre, which is the anchor, which
+   is his lat/lng. Flipping without that moves the light off him.
+   The PLATE is mirrored, never the marker root, whose transform belongs to
+   MapLibre. Same rule the cone follows. */
 .wanderer-body { position: absolute; inset: 0; transform: translate(${bodyX}%, ${bodyY}%); }
+.map-wanderer-mark.facing-east .wanderer-body {
+  transform: translate(${(-bodyX).toFixed(3)}%, ${bodyY}%) scaleX(-1);
+}
 .map-wanderer-mark img {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
   filter: drop-shadow(0 5px 8px rgba(0,0,0,.7)); z-index: 2;
@@ -337,6 +367,11 @@ export function wandererMarkHtml() {
 // px is the cone's DIAMETER at CONE_RANGE_M; heading is his compass bearing.
 export function paintWandererCone(el, px, heading) {
   if (!el) return;
+  /* The one place that already knows his heading sets which way he faces, so the
+     light and the man can never be told two different things. 0-180 is the
+     eastward half on a compass bearing. */
+  const mark = el.closest ? el.closest('.map-wanderer-mark') : null;
+  if (mark) mark.classList.toggle('facing-east', heading > 0 && heading < 180);
   el.style.width = el.style.height = `${Math.round(px)}px`;
   const from = ((heading - CONE_HALF_DEG) + 360) % 360;
   const span = CONE_HALF_DEG * 2;

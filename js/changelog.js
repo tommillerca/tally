@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 423, date: '2026-08-22', title: 'The Wanderer walks like a person', items: [
+    'Two Wanderers on the map used to walk in step and swing their lanterns the same way, which looked like a glitch. They each have their own beat now.',
+    'His lantern light stayed put while you pinched the map, so he looked like he was sliding around loose. It sticks to the ground now.',
+    'He was sometimes drawn facing one way with his light pointing the other. He turns to face the way he is walking.',
+  ] },
   { n: 422, date: '2026-08-21', title: 'The pet you paid for, and a faster app', items: [
     'Fixed, and this one cost real coins: a pet bought from Gwart never showed up in your Stable or your Paddock. She was yours the whole time, the game just filed her in one place instead of two. Open the app and she will be there, with no update needed after this one.',
     'The Paddock was showing her as a locked silhouette with somebody else\'s description. That was the same bug wearing a different hat.',
