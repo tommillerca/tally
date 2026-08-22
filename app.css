@@ -5550,7 +5550,12 @@ body::before {
   font-style: normal; display: grid; place-items: center; width: 18px; height: 18px; margin-left: 2px;
   border-radius: 6px; background: var(--danger, #ff6b6b); color: #1b0d0d; font-size: 11px; font-weight: 900;
 }
-.fit-chip.add { color: var(--text-3); border-style: dashed; padding: 7px 13px; }
+/* "Take it all off" wears the same quiet dashed chip as "+ Save this fit": it is
+   a tidy-up, not a destruction, so it does not get the danger red the melt
+   button carries. Nothing is spent and nothing is lost. The armed state borrows
+   the gold every other arm-then-confirm control in the app uses. */
+.fit-chip.add, .fit-chip.reset { color: var(--text-3); border-style: dashed; padding: 7px 13px; }
+.fit-chip.arming { border-color: var(--gold); border-style: solid; color: var(--gold); }
 .fit-note { text-align: center; margin: 2px 0 10px; }
 
 .col-head {
@@ -9066,10 +9071,21 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .hero-why svg { flex: 0 0 auto; color: var(--gold); }
 
 /* The first-meal nudge and its way out. The skip is quiet on purpose: it is an
-   escape hatch, not a second call to action competing with the first. */
-.ul-wrap.has-skip { display: flex; flex-direction: column; gap: 0; }
+   escape hatch, not a second call to action competing with the first.
+
+   PROXIMITY IS THE WHOLE JOB HERE, and the first version had it backwards.
+   Tom, 2026-08-21: "for some reason it says 'not right now' right above the
+   banner for the new creatures". Measured at 393x852: the button's ink sat 19px
+   under the card it belongs to (12px of inherited `.card` margin-bottom plus its
+   own 7px top padding) and 2px above the hype banner. Nine times closer to the
+   banner than to its own card, so it read as the banner's dismiss control.
+   Nothing was orphaned; the grouping was. So the card keeps NO trailing margin
+   inside this wrap, the button hugs it, and the whole wrap carries the gap
+   instead. Measured after: 4px above, 18px below. */
+.ul-wrap.has-skip { display: flex; flex-direction: column; gap: 0; margin-bottom: 18px; }
+.ul-wrap.has-skip .unlock-nudge { margin-bottom: 0; }
 .ul-skip {
-  align-self: center; background: none; border: 0; padding: 7px 12px 2px;
+  align-self: center; background: none; border: 0; padding: 4px 12px 0;
   color: var(--text-3); font-size: 12.5px; font-weight: 700;
 }
 

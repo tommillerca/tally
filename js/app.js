@@ -20,6 +20,7 @@ import {
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
+  stripAll, stripAllPlan,
   DROP, buyDropItem, refundStreakFreezes,
   RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_REROLL_LADDER,
   setWornAura, ownsAura,
@@ -3429,6 +3430,15 @@ async function renderToday(el) {
     entries, tot, targets: t, crates, streak, level: lvl.level, isToday,
     steps: hk?.steps || 0, dishReady: !!(cook && cook.ready), cropsRipe,
     fightsReady: pitEnergy.ready,
+    /* WHAT HE IS WEARING INTO A FIGHT. Both numbers are already computed above
+       for computeHomeUnlocks, so this costs no extra reads. They exist because
+       the Wardrobe can now take every statted piece off in one tap, and Tom's
+       condition on shipping that was that somebody tells the player: "reset
+       should strip everything but there needs to be a gwart reminder or
+       something that reminds players they will be weaker in fights if they dont
+       choose statted gear to wear." Gwart is that somebody. */
+    gearOwned: unlockGear ? unlockGear.size : 0,
+    gearWorn: unlockFighter ? Object.keys(unlockFighter.gearLo || {}).length : 0,
   };
   const gwLine = gwartLine(gwCtx);
   /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
@@ -4167,7 +4177,8 @@ const gwartLine = ctx => gwPick(gwartPool(ctx));
    line goes in the bucket whose condition it describes, not in the general pool
    at the bottom. The general pool is the only one that is pure character. */
 function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
-  steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0 }) {
+  steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0,
+  gearOwned = 0, gearWorn = 0 }) {
   const hour = new Date().getHours();
   if (crates.length) return [
     'A crate by his feet, still shut. I gave him hands for this.',
@@ -4178,6 +4189,35 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
     'Open it. I have a guess about what is in there.',
     'Whatever is in there is already yours. Go and look.',
     'A shut crate is just a box. Make it something else.',
+  ];
+  /* NOTHING WITH STATS ON HIM, AND HE OWNS SOMETHING HE COULD WEAR. This is the
+     other half of the Wardrobe's "Take it all off" (stripAll in js/loot.js): Tom
+     approved a one-tap strip that takes the statted gear too, on the condition
+     that the player is told they will be weaker for it. A toast at the moment of
+     the strip would be gone in three seconds and only reaches the player who
+     used the button; this is a STATE, so it is said on Today for as long as it
+     is true, to everyone it is true of, including the player who has simply
+     never equipped anything.
+
+     WHERE IT SITS IN THE ORDER, and each boundary is deliberate:
+       BELOW crates, because an unopened crate may hold the very gear this is
+         asking for, and a crate is a one-tap state that disappears immediately.
+       BELOW !isToday, because a warning about fights is noise on a screen where
+         you cannot fight.
+       ABOVE the garden, the pot and the ledger, which are recurring daily states
+         that would mask this one indefinitely. Being unarmed has no badge
+         anywhere on Today, unlike the Kitchen and Backpack doors, so if it loses
+         priority it is never said at all.
+     It retires itself: a player who owns no gear never sees it, and it is gone
+     the moment one piece goes on. Nothing to remember, nothing to reset. */
+  if (gearOwned > 0 && gearWorn === 0) return [
+    'Nothing statted on him. He will fight. He will lose more.',
+    'That is a look, not armour. The Wardrobe has the numbers.',
+    'Bare bones. Fine in a tavern, less so in the Pit.',
+    'No gear on him. His opponents will be delighted.',
+    'Handsome, and unarmed. The Pit does not grade handsome.',
+    'You took the numbers off him. The Wardrobe gives them back.',
+    'He is carrying no stats. I would fix that before a fight.',
   ];
   if (!isToday) return [
     'Yesterday is set. You cannot re-cut a finished thing.',
@@ -12024,6 +12064,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(),
     ]);
     const fitPrices = await Promise.all(fitList.map(f => fitPrice(f)));
+    // What "Take it all off" would actually take off, computed by the same
+    // function that does it, so the chip cannot offer a strip that does nothing
+    // (or hide itself while there is still something on).
+    const stripPlan = await stripAllPlan();
     // `eq` is the RAW equipment (what the grids tick as equipped); `look` is what
     // you actually appear as once transmog resolves, so the doll and the stage
     // agree with the rest of the app.
@@ -12109,6 +12153,15 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </button>`;
         }).join('')}
         ${fitList.length < MAX_FITS ? '<button class="fit-chip add" data-fit-save="1">+ Save this fit</button>' : ''}
+        ${/* A player asked for one tap that clears the doll so a new outfit starts
+              from nothing, and Tom's call on 2026-08-22 is that it takes the
+              STATTED GEAR too. It UNEQUIPS and nothing else: every piece and every
+              roll stays owned and goes straight back on. See stripAll() in loot.js.
+              Only offered when there is something to take off, and the plan comes
+              from the same function that performs it so the two cannot drift. */''}
+        ${stripPlan.slots.length || stripPlan.mogs.length
+          ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip everything, gear included. Nothing is lost: it all stays in your Backpack.">Take it all off</button>`
+          : ''}
       </div>
       ${fitList.length ? `<p class="note fit-note">Tap a fit to wear it. Fits change your look only, never your stats. Long-press a fit to rename or bin it.</p>` : ''}`;
 
@@ -12252,6 +12305,23 @@ async function renderCharacter(wrap, tab, opts = {}) {
         toast(`Saved "${res.fit.name}". Tap it any time to put it back on.`, 2600);
         renderCharacter(wrap, 'wardrobe', { instant: true });
       });
+    });
+    /* ARM-THEN-CONFIRM, the same idiom as the rack buys and the melt button. This
+       confirm is now the last thing between a player and an unbuilt Bonehead, so
+       it NAMES THE GEAR rather than saying "strip": the cosmetics coming off is
+       what they asked for, the stats coming off is the part they might not have
+       meant. The toast then says what moved and that none of it is lost. */
+    const stripChip = $('[data-fit-reset]', content);
+    if (stripChip) armToConfirm(stripChip, 'Tap again: gear comes off too', async () => {
+      const res = await stripAll();
+      S.lookPreview = null; S.wardrobePreview = null;
+      await refreshSlimedSlots();       // the slime glow follows the gear that just came off
+      popSound(S.sounds); pushProfileSoon();
+      const n = res.slots.length, g = res.gear.length;
+      toast(n
+        ? `${n} piece${n === 1 ? '' : 's'} off${g ? `, ${g} with stats on ${g === 1 ? 'it' : 'them'}` : ''}. Nothing is lost, it is all in your Backpack.`
+        : 'Cleared. Nothing is lost, it is all in your Backpack.', 3400);
+      renderCharacter(wrap, 'wardrobe', { instant: true });
     });
     /* Trim the transparent padding off every paper-doll slot, the same way the
        reveal cards do. Raw assets are only ~30-60% ink on their own canvas, so an
