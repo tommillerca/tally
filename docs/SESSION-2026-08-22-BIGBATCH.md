@@ -4,7 +4,7 @@ Approved by Tom: WS1 (bug batch), WS9 (bot census, read-only until he eyeballs
 the purge list), WS3 Option B with mockups-before-wiring. Fan-out authorized.
 Plan: docs/PLAN-2026-08-22-v425.md. Feedback: docs/FEEDBACK-2026-08-22-v424.md.
 
-## Delegated (7 agents, launched ~same time, all off origin/main f18d479f)
+## Delegated (7 agents, launched ~same time, all off origin/main f18d479f; ALL 7 died on the usage limit mid-flight, resumed with context intact after the reset)
 
 | Branch | Scope | Status |
 |---|---|---|
