@@ -16440,6 +16440,13 @@ async function renderBoneyard(el) {
         if (!rec) {
           const el = document.createElement('div');
           el.className = 'map-wanderer-mark';
+          /* WHICH Wanderer this marker is, on the element. He is the one thing
+             out here with an identity that changes under you (cell AND
+             45-minute instance), and "a marker disappeared" and "the RIGHT
+             marker disappeared" are different facts: the despawn guard first
+             graded distance-to-a-projected-point, got null back because it
+             could not reach the map object, and passed on nothing. */
+          el.dataset.w = w.id;
           el.innerHTML = wandererMarkHtml();
           rec = { marker: domMarker(maplibregl, map, { lat: w.lat, lng: w.lng, el, anchor: 'center' }), el, w };
           wandererMarkers.set(w.id, rec);
