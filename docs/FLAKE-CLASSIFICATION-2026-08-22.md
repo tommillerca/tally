@@ -47,43 +47,48 @@ is the machine, not the code.
 
 ## Classification and the fix each one needs
 
-### 1. Implementation-coupled / STALE. `boneyard` ARRIVAL and ARRIVAL-SLOW
+### 1. Mis-timed sample, now FIXED. `boneyard` ARRIVAL and ARRIVAL-SLOW
 
-Not a flake and not a product bug. **The guard's own stated precondition is no
-longer true, and the guard says so itself.** From `tests/boneyard-audit.mjs`,
-written 2026-08-13:
+**First diagnosis in this document was wrong and is corrected here.** It read as a
+stale guard whose precondition (POI count bounded at 11-15) had been overtaken by
+rising spawn density, against a two-wave reveal that `js/map.js` documents as
+deliberate. The rising count is real, but it is not the defect.
 
-> "Not attempting a per-fraction rule, because on this app the total POI count is
-> bounded (~11-15 in Vancouver) and majority is the right shape. **If POI density
-> ever varies wildly, revisit.**"
+The decisive measurement, on clean main at `f18d479f`:
 
-The counted set is now **54 to 55**, not 11 to 15. `VIS` counts `.map-spawn`
-alongside dens, minis, spires and gluttons, and spawn density was subsequently
-raised (`boneyard-density` demands a floor of 10 visible spawn markers per
-screen). So the set the majority rule grades is now dominated by spawns and is
-roughly 4x what it was when the rule was written.
+    dom@reveal 65    vis@reveal 9    vis@reveal+400ms 65    dom@reveal+400ms 65
 
-Meanwhile `js/map.js` documents the current behaviour as deliberate, measured
-2026-08-08: placement lands in two waves about 2.6s apart (local snap, then
-network-backed), and holding the reveal for both "leaves the map blank for 6.6s
-after a pan, which is its own bug". The ~10 markers in the first wave are the
-local snap. The app is doing what it was designed to do.
+At reveal, 65 markers are placed and 9 read as visible. 400ms later all 65 are
+visible and the DOM has not grown. **Nothing was withheld and nothing arrived
+late. The map arrives whole.**
 
-So the guard demands "arrives whole" while production deliberately arrives in two
-beats, because waiting for both was itself judged the worse bug.
+`revealCount` is sampled on the polling tick that first sees `.markers-in`, which
+is BEFORE the 220ms opacity transition has run, so computed opacity reads near
+zero for everything still fading. The row was grading the first frame of an
+animation and calling it the reveal.
 
-**Fix:** revisit the majority rule exactly as its own comment instructs. Tom's
-original complaint (2026-08-08, "it looks cheap when everything staggers in") is
-about staggering, and the LATENCY and SHAPE rows already cover that: both pass,
-with every straggler fading in within 42ms against a 250ms budget. MAJORITY is
-the row that assumed a bounded POI count. This is a decision for Tom, not a
-mechanical fix.
+So its historical passes were luck, not verification. With 11-15 markers the
+handful that were already opaque cleared a majority of 15. At 65 the same
+mis-timed sample cannot clear the bar however correct the build is. The count
+rising is what EXPOSED the flaw; it was never the cause.
 
-**This is the exact failure mode `guard-provenance-lint` was built for**, and it
-is worth being honest about the limits: the guard DID carry its revisit condition,
-dated and in prose, and it still went unnoticed for nine days. A citation does not
-catch staleness automatically. It makes staleness diagnosable in one read once you
-are already looking, which is what happened here.
+**Fixed** in `tests/boneyard-audit.mjs`. MAJORITY is retired and replaced by two
+rows sampled after the fade settles, each proved red on its own defect and green
+on the other's:
+
+| Row | Mutation | Result |
+|---|---|---|
+| the reveal SHOWED every marker it already had | drop `.map-spawn` from the `.markers-in` rule | FAIL 10 visible vs 66 placed |
+| placement was essentially finished before the reveal fired | `tryReveal` drops `placedOnce && worldPassDone` | FAIL 9/68 placed at reveal |
+
+Both are environment-independent, the standard that retired the `+60ms` row in
+the same file. `finalCount` was network-dependent by construction. Suite is now
+24/24 green on an idle machine.
+
+**The lesson worth keeping:** a guard can be wrong about WHEN it looks, not just
+where. Prove-red at authoring time would not have caught this, because the row
+did go red on the bug it was written for. What exposed it was the measurement
+moving far enough from the threshold to make the reading obviously impossible.
 
 ### 2. Threshold-marginal. `boneyard-density` VISIBLE
 
