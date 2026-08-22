@@ -231,11 +231,37 @@ svg { display: block; }
    fell back on could not paint. What actually retires that risk is the device
    measurement above: the negative offset IS reported and the listener DOES fire.
 
-   NO KEYFRAMES, NO DURATION, NO ITERATION COUNT: the reveal tracks the finger 1:1
-   like a scrollbar does. prefers-reduced-motion drops the FADE (opacity pinned to
-   1) and keeps the travel, because a scroll-linked position is direct
-   manipulation and not an animation; it is one line of CSS below rather than a
-   branch in the listener. Guard: tests/overscroll-wordmark-audit.mjs */
+   NO KEYFRAMES, NO DURATION, NO ITERATION COUNT, AND STILL NONE OF THOSE. There
+   is a TRANSITION now and it is not the same thing. Tom on v421, which is the
+   first build where this mark could paint at all: "it is very clunky and glitchy,
+   there is no easing involved in the movement and it feels cheap the way you've
+   rigged it up". Two separate causes, measured before either was touched:
+     - THE MAPPING WAS LINEAR. --wm-pull was min(1, pull / 36) and the transform
+       is that number times a fixed distance, so the mark moved at exactly the
+       speed of the finger and then dead-stopped the instant the pull passed 36px.
+       Nothing accelerates, nothing settles. js/app.js runs the same t through
+       SMOOTHSTEP now (t*t*(3-2t)): quiet under a jitter-sized tug, quick through
+       the middle, decelerating into its landing. Measured off the shipped
+       listener, a 4px pull went from 0.10 to 0.05 and a 27px pull from 0.75 to
+       0.85. Guard: the CURVE row's shape bounds, which a linear mapping fails at
+       both ends.
+     - AND THE VALUE SNAPPED. It is quantised to twentieths (that quantisation is
+       what keeps a bounce from writing a custom property once per frame, see the
+       COST row), so the travel arrived in 6.4px steps, one per scroll event. That
+       stepping is the "glitchy". The 130ms transition below is the smoothing: the
+       compositor interpolates between the steps, so the mark follows the finger
+       with a little weight instead of teleporting between twenty positions.
+   A TRANSITION IS NOT A KEYFRAMED ANIMATION AND CANNOT BECOME A LOOP. There is
+   still no animation-name, no iteration count and nothing for the global reduce
+   block's `animation-duration: .001s` to act on, which is the trap this repo has
+   already shipped once. The same global block sets `transition-duration: .001s`,
+   so a player who asks for less motion gets the un-smoothed direct tracking,
+   which is the correct answer for direct manipulation, and the mark still cannot
+   park on screen because the TRAVEL is never pinned.
+   prefers-reduced-motion drops the FADE (opacity pinned to 1) and keeps the
+   travel, because a scroll-linked position is direct manipulation and not an
+   animation; it is one line of CSS below rather than a branch in the listener.
+   Guard: tests/overscroll-wordmark-audit.mjs */
 .screen--today { position: relative; }
 #app:has(.screen--today)::before {
   content: ""; position: absolute; z-index: -1; pointer-events: none;
@@ -243,6 +269,12 @@ svg { display: block; }
   background: url(assets/brand/wordmark.png) center / contain no-repeat;
   opacity: var(--wm-pull, 1);
   transform: translateY(calc(var(--wm-pull, 0) * (var(--sat) + 66px)));
+  /* the smoothing, and the only motion this feature declares. Short enough that
+     the mark never feels dragged behind the finger, long enough to swallow the
+     6.4px quantisation step. cubic-bezier(.33,1,.68,1) is ease-out-cubic: it
+     leaves immediately and lands softly, which is what a released rubber band
+     does. */
+  transition: transform 130ms cubic-bezier(.33, 1, .68, 1), opacity 130ms ease-out;
 }
 @media (prefers-reduced-motion: reduce) {
   #app:has(.screen--today)::before { opacity: 1; }
