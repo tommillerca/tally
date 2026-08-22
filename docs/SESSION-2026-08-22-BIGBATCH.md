@@ -25,3 +25,24 @@ are explicitly NOT part of rel425 until their approvals land.
 - WS2 perf (SW rework) - next after v425
 - WS4 kitchen mockups, WS5 Gwart Guide, WS6 cheers, WS7 paddocks, WS8 potion doc
 - Emporium glow: Tom's separate session owns gwart/wizard-cast.css + .wz-glow
+
+## Feedback wave 2 (mid-fan-out, 2026-08-22, verbatim)
+
+- "i just fought the wanderer and he is WAY too big in the pit and overlapping
+  with my bonehead. also it seemed like the scale of bumbleseal wihle fighitng
+  was too big. also bumble seal shouldnt have a glow in the pit like that. also
+  after defeating the wanderer he was still just there in the boneyard and didnt
+  disappear"
+- "also we need to mirror bumbleseal in the fights so she faces the enemy"
+- "im guessing what happened was you were afraid to cut off the tail of the
+  wanderer in the pit, you can that's ok" (= explicit approval to crop the
+  wanderer's tail to size him correctly in the Pit)
+
+Delegated to x425/pit (wsH-pit worktree). RUNNING.
+
+## Open question for Tom (schema gap)
+
+Production D1 lacks the 2026-08-16 hardening schema while the deployed worker
+references it; syncs still land, so the failure chain is unproven. Tom declined
+the live-API probe. Waiting on his call: tail logs, apply the migration, or
+leave it. Nothing applied.
