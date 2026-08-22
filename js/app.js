@@ -20,6 +20,7 @@ import {
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
+  resetLook, resetLookPlan,
   DROP, buyDropItem, refundStreakFreezes,
   RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_REROLL_LADDER,
   setWornAura, ownsAura,
@@ -11968,6 +11969,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(),
     ]);
     const fitPrices = await Promise.all(fitList.map(f => fitPrice(f)));
+    // What "Take it all off" would actually take off, computed by the same
+    // function that does it, so the chip cannot offer a reset that does nothing
+    // (or hide itself while there is still something on).
+    const resetPlan = await resetLookPlan();
     // `eq` is the RAW equipment (what the grids tick as equipped); `look` is what
     // you actually appear as once transmog resolves, so the doll and the stage
     // agree with the rest of the app.
@@ -12053,6 +12058,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </button>`;
         }).join('')}
         ${fitList.length < MAX_FITS ? '<button class="fit-chip add" data-fit-save="1">+ Save this fit</button>' : ''}
+        ${/* A player asked for one tap that clears the doll so a new outfit starts
+              from nothing (Tom approved 2026-08-21). It UNEQUIPS and nothing else:
+              every piece stays owned and goes straight back on. Statted gear is
+              left on deliberately, which is the same promise the fit note below
+              already makes ("never your stats"); see resetLook() in loot.js.
+              Only offered when there is something to take off, and the plan comes
+              from the same function that performs it so the two cannot drift. */''}
+        ${resetPlan.slots.length || resetPlan.mogs.length
+          ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip every cosmetic. Nothing is lost, your gear and stats stay put.">Take it all off</button>`
+          : ''}
       </div>
       ${fitList.length ? `<p class="note fit-note">Tap a fit to wear it. Fits change your look only, never your stats. Long-press a fit to rename or bin it.</p>` : ''}`;
 
@@ -12196,6 +12211,19 @@ async function renderCharacter(wrap, tab, opts = {}) {
         toast(`Saved "${res.fit.name}". Tap it any time to put it back on.`, 2600);
         renderCharacter(wrap, 'wardrobe', { instant: true });
       });
+    });
+    /* ARM-THEN-CONFIRM, the same idiom as the rack buys and the melt button: a
+       built outfit is annoying to rebuild by hand, so it takes two taps. No
+       modal, the chip says what the second tap does. */
+    const resetChip = $('[data-fit-reset]', content);
+    if (resetChip) armToConfirm(resetChip, 'Tap again to strip', async () => {
+      const res = await resetLook();
+      S.lookPreview = null; S.wardrobePreview = null;
+      popSound(S.sounds); pushProfileSoon();
+      toast(res.slots.length
+        ? `${res.slots.length} piece${res.slots.length === 1 ? '' : 's'} off. Everything is still yours, put it back any time.`
+        : 'Look cleared. Everything is still yours.', 2800);
+      renderCharacter(wrap, 'wardrobe', { instant: true });
     });
     /* Trim the transparent padding off every paper-doll slot, the same way the
        reveal cards do. Raw assets are only ~30-60% ink on their own canvas, so an
