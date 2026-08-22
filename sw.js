@@ -44,6 +44,7 @@ const PRECACHE = [
   './js/pit.js',
   './js/mimic.js',
   './js/wanderer.js',
+  './js/water.js',
   './js/talkbox.js',
   './data/boneheadz.js',
   './assets/fonts/bangers.woff2',

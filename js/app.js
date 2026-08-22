@@ -32,6 +32,7 @@ import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, rou
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
 import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, showWandererEncounter, WANDERER_FIGHT, CONE_RANGE_M } from './wanderer.js';
+import { isWater } from './water.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
 import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
@@ -16591,7 +16592,7 @@ async function renderBoneyard(el) {
          tab, and the key carries his instance (`wanderer-<date>-<cell>_i<n>`),
          so when the 45-minute clock turns over the next Wanderer has a key
          nobody has claimed and walks again. */
-      const live = wanderersNear(date, lat, lng).filter(w => !wandererDone.has(wandererKey(date, w)));
+      const live = wanderersNear(date, lat, lng, undefined, isWater).filter(w => !wandererDone.has(wandererKey(date, w)));
       const liveIds = new Set(live.map(w => w.id));
       for (const [id, rec] of wandererMarkers) {
         if (!liveIds.has(id)) { rec.marker.remove(); wandererMarkers.delete(id); }
@@ -16620,9 +16621,14 @@ async function renderBoneyard(el) {
            is not a place, he is a man walking a loop, and re-snapping a moving
            marker every 5 seconds would drag him between whichever features
            happened to be rendered and destroy both his path and his heading.
-           He walks over water. He is a ghost with a lantern.
-           ponytail: unsnapped by design; if his beat ever needs to follow roads
-           the answer is a road-aware seeded loop in wanderer.js, not a snap here. */
+           "He walks over water" was the first ruling here; Tom overruled it on
+           2026-08-22 ("The wanderer is out in the lake where I am right now. He
+           shouldn't be. He's bound to land."). The land constraint lives in the
+           DERIVATION, not in a snap: wanderersNear above is handed js/water.js's
+           fixed-zoom tile classifier and wandererAt walks a seeded fallback of
+           beat centres until the whole loop is on land, identically on every
+           device, so his path and heading stay exact and two friends still see
+           one man. An all-water cell simply has no wanderer that lap. */
         // The lit ground is sized from the map's OWN projection (his pixel vs a
         // point CONE_RANGE_M north of him), so 90 m on screen is 90 m at every
         // zoom, the same rule sizeRadius and the Glutton's blight both use.
