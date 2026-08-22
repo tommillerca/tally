@@ -9706,6 +9706,37 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pet-locked .rk-stage { opacity: .45; }
 .pet-lock { font-size: 10.5px; font-weight: 700; color: var(--text-3); text-align: center; padding: 6px 4px; }
 .rk-owned { font-size: 10.5px; font-weight: 700; color: var(--text-2); text-align: center; padding: 6px 4px; }
+
+/* ===================================================================
+   HER WARDROBE, in the Stable under the carousel's action row.
+   v422 sold five accessories and shipped nowhere to put them on.
+
+   A ROW OF TILES, NOT A GRID. Five pieces is one horizontal scroll and no
+   more, so it reads as "what she owns" rather than as another screen; the
+   shop's own .pet-row above uses the same scroll-snap for the same reason,
+   and a returning player recognises the shape.
+   ONE TAP TOGGLES, so the worn state has to be unmistakable at 96px: the
+   fill changes, the border changes AND the label changes. Colour alone
+   would leave the state invisible to anyone who cannot separate gold from
+   the panel it sits on.
+   44px is the floor for a touch target everywhere in this app; the tile is
+   96 wide and taller than that with the art in it. */
+.pet-wear { margin: 14px 0 0; }
+.pet-wear[hidden] { display: none; }
+.pw-h { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-3); margin: 0 2px 8px; }
+.pw-empty { margin: 0 2px; }
+.pw-hint { margin: 2px 2px 0; }
+.pw-row { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; }
+.pw-item { flex: none; width: 96px; scroll-snap-align: start; display: flex; flex-direction: column;
+  align-items: center; gap: 3px; padding: 8px 6px 9px; border-radius: 14px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); color: var(--text); }
+.pw-item .pw-art { display: block; height: 62px; }
+.pw-item b { font-size: 11px; line-height: 1.2; text-align: center; }
+.pw-item small { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-3); text-align: center; }
+.pw-item.on { background: rgba(255, 201, 97, .12); border-color: var(--gold); }
+.pw-item.on small { color: var(--gold); }
 /* =====================================================================   GWART'S EMPORIUM — the Shop tab's header (option A, approved 2026-08-20)
    ============================================================================
    The Shop tab drops the hub's character header entirely (no name heading, no
