@@ -1650,7 +1650,25 @@ body::before {
    tests/hero-share-audit.mjs owns both halves of that: the pair reads centred,
    and neither drawing touches the frame. */
 .hero-scene.sharing .hero-char { --bh-shift: -48px; }
-.hero-char .bh-anim { --av-fit: contain; --av-pos: bottom center; }
+/* THE FIGURE STOPS GROWING WHERE CAM'S ART STOPS. The gear masters are 640px,
+   and tests/art-resolution-audit.mjs caps any layer at 1.4x its source in
+   PHYSICAL pixels: on a DPR-2 phone that is 448 CSS px, and past it the renderer
+   is inventing detail nobody drew.
+   THIS IS A WIDTH PROBLEM, NOT A HEIGHT ONE, and I checked the height first and
+   was wrong. The layers are object-fit: contain inside .bh-anim, and the audit
+   measures the ELEMENT box, so what matters is how wide .hero-char gets.
+   Removing the playing-card frame made the scene full-bleed, which made the
+   scene wider, which made this box wider: measured at 440x956, 490 CSS px and
+   986 device px, 1.54x. Clean main sits at 1.39x, so this has always been one
+   frame's worth of padding away from the ceiling.
+   Capped, rather than shrinking the scene, so the layout the composition was
+   centred against does not move. The freed width becomes air instead of blur.
+   444 AND NOT 448, which is the arithmetic answer: bhIdle rotates the box, and a
+   rotated rect measures wider than its own width. At the arithmetic cap the
+   rendered box came back 451 and the row read 1.41x. Three px of the animation's
+   own growth, given back.
+   Raising this needs bigger masters, not a bigger number. */
+.hero-char .bh-anim { --av-fit: contain; --av-pos: bottom center; max-width: 444px; }
 .hero-char .bh-anim img { object-fit: contain; object-position: bottom center; }
 /* equipped pet trots along beside the bonehead on the home screen */
 /* width auto so a long creature (lizard) can be scaled up for equal visual mass
