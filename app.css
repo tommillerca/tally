@@ -2520,7 +2520,58 @@ body::before {
 .legend-row { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .legend-row:last-child { border-bottom: 0; }
 .blip-dot { width: 13px; height: 13px; border-radius: 50%; flex: none; box-shadow: 0 0 8px rgba(242, 233, 215, 0.35); }
-.blip-dot.rare { background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: rarePulse 1.6s ease-in-out infinite; }
+/* THE RARE DOT KEEPS ITS PULSE AND STOPS COSTING ANYTHING FOR IT.
+   MEASURED on this tree at 440x956, sitting on the settled Boneyard doing
+   nothing: 120 style recalcs per second, forever, for one 13px dot. Every other
+   idle surface in the app scored 0.0. `box-shadow` cannot be composited, so an
+   infinite box-shadow animation drags the main thread through a style recalc
+   twice a frame for as long as the screen is open, and on a phone that is
+   battery, heat, and then throttling that reads as choppiness.
+
+   THE COST IS PER-SCREEN, NOT PER-ELEMENT, which is why one dot matters as much
+   as sixteen would: measured 1 element = 120/s and 16 elements = 120/s, both on
+   a bare page and in the app. One un-compositable animation in view puts the
+   whole document on the slow path, and the same measurement says an element
+   scrolled entirely out of view costs nothing, so what matters is what is ON
+   SCREEN while the player sits still.
+
+   SAME LOOK, DIFFERENT MECHANISM: the two shadows the keyframe used to
+   interpolate between are now two pseudo-elements that CROSS-FADE on `opacity`,
+   which the compositor owns. Both endpoints are exact, and that is the point of
+   using two rather than one: a single overlay added on top of a kept 10px base
+   makes the peak brighter at the core instead of wider, which is a different
+   pulse. MEASURED, not asserted. The whole "OUT THERE TODAY" card, captured at
+   3x off the real Boneyard with every animation paused on the pulse's brightest
+   frame, is pixel-equivalent before and after: ZERO of 763,776 pixels differ by
+   more than 24 (sum of RGB deltas), max delta 19, mean 0.05. Per-frame, against
+   the shipped animation seeked to the same three times, mean luminance in
+   7-10 / 10-13 / 13-16 / 16-20 / 20-26px rings around the dot came out +0.28 of
+   a channel at the trough, +0.53 at the peak and -0.35 at the midpoint, which is
+   where a cross-fade of 10px and 18px and an interpolated 14px blur are least
+   alike and is still under half a channel out of 255. A single overlay added on
+   top of a kept base measured +16.5 channels in the inner ring at peak, which is
+   what "brighter at the core instead of wider" means. */
+.blip-dot.rare { position: relative; background: var(--accent); box-shadow: none; }
+.blip-dot.rare::before, .blip-dot.rare::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+}
+.blip-dot.rare::before { box-shadow: 0 0 10px var(--accent); animation: rareRest 1.6s ease-in-out infinite; }
+.blip-dot.rare::after { box-shadow: 0 0 18px var(--accent); opacity: 0; animation: rareBloom 1.6s ease-in-out infinite; }
+@keyframes rareRest { 50% { opacity: 0; } }
+@keyframes rareBloom { 50% { opacity: 1; } }
+/* Switched OFF BY NAME and parked on the peak frame, never shortened: a
+   duration of .001s on an infinite loop runs it a thousand times a second,
+   which this repo has already shipped once. Parked bright rather than dark
+   because this dot's whole job in the map key is to read as the rare one. The
+   animation it replaces had no reduced-motion rule at all and pulsed anyway. */
+@media (prefers-reduced-motion: reduce) {
+  .blip-dot.rare::before { animation-name: none; opacity: 0; }
+  .blip-dot.rare::after { animation-name: none; opacity: 1; }
+}
+/* rarePulse is retired but NOT deleted: .map-spawn.rare still names it, and that
+   rule is overridden to `animation: none` further down this file by the
+   pixel-art marker pass, so nothing runs it. Removing a keyframe a live selector
+   still names is a separate change from this one. */
 @keyframes rarePulse { 50% { box-shadow: 0 0 18px var(--accent); } }
 
 /* ===== character sheet: game tabs + stat pills ===== */
@@ -9798,6 +9849,18 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .wz-scene img { position:absolute; inset:0; width:100%; height:100%; }
 .wz-body { position:absolute; inset:0; transform-origin:50% 95%; animation:zBreathe 5.4s ease-in-out infinite; }
 .wz-enter { position:absolute; inset:0; transform-origin:50% 62%; animation:zEnterCine 2.4s cubic-bezier(0.22,1,0.36,1) both; }
+/* HE ALREADY ARRIVED THIS SESSION. Not a change to the cinematic: zEnterCine
+   ends at scale(1) translateY(0) opacity:1 blur(0) and is filled `both`, so an
+   element that never ran it and an element that finished it are the same
+   pixels. Only Today sets it (js/app.js, gwEntranceSeen); the Emporium's own
+   .gw-panel entrance is deliberately left replaying, because walking into the
+   shop is a place you arrive at, not the screen you keep coming back to. */
+.wz-enter.seen { animation: none; }
+/* The sway and the twinkle carry Cam's 2.4s delay so they begin as the entrance
+   lands. With no entrance to wait for, that delay is 2.4s of a frozen wizard, so
+   it is dropped HERE and nowhere else. Their durations are untouched. */
+.wz-enter.seen .wz-sway, .wz-enter.seen .wz-stars-l,
+.wz-enter.seen .wz-stars-m, .wz-enter.seen .wz-stars-r { animation-delay: 0s; }
 .wz-sway { position:absolute; inset:0; transform-origin:50% 85%; animation:zOrbitSoft 9s ease-in-out 2.4s infinite; }
 .wz-stars-l { clip-path:inset(0 62% 0 0);   animation:zTwA 3.6s ease-in-out 2.4s infinite; }
 .wz-stars-m { clip-path:inset(0 38% 0 38%); animation:zTwB 4.4s ease-in-out 2.4s infinite; }
