@@ -25,7 +25,7 @@
  *
  * Usage: node tests/garden-appetite-guard.mjs        (exits non-zero on failure)
  */
-import { measure } from './garden-sim.mjs';
+import { measure, LEVERS } from './garden-sim.mjs';
 import { RECIPES, COMMON_INGREDIENT_IDS } from '../js/cooking.js';
 import { PLOTS_FREE } from '../js/garden.js';
 import { FREE_FIGHTS } from '../js/energy.js';
@@ -72,6 +72,20 @@ check('the sim actually grew something', median.produced > 0, `${median.produced
 
 check(`median player keeps a dish up for ${(median.buffed * 100).toFixed(0)}% of fights`,
   median.buffed >= BUFFED_FLOOR, `floor ${(BUFFED_FLOOR * 100).toFixed(0)}%`);
+
+/* CONTROL. The floor is only a bound if this sim, at this cadence, can actually
+   be pushed through it. Lever 1 (every recipe's needs x2) is the cheapest of the
+   two rejected levers and the one measured at 40% buffed. If it scores above the
+   floor the sim is not reading the recipe table it was handed, and the row above
+   is green for no reason: that is the same shape as an audit grading a set that
+   cannot contain the bug. */
+const lever = measure({
+  opens: 1, beds: PLOTS_FREE, pots: 1, stack: true,
+  ...LEVERS['1. needs x2'], fightsPerDay: FREE_FIGHTS,
+});
+check('CONTROL the rejected needs-x2 table really does fall through that floor',
+  lever.buffed < BUFFED_FLOOR,
+  `${(lever.buffed * 100).toFixed(0)}% buffed, floor ${(BUFFED_FLOOR * 100).toFixed(0)}% (measured 40% when this was written)`);
 
 /* 3. The oversupply itself is REPORTED, not asserted. It is the open design
       question this branch measured, not a regression, and a guard that failed on
