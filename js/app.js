@@ -56,7 +56,7 @@ import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribut
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX } from './loot.js';
+import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -85,7 +85,7 @@ import {
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_PX, PET_SHOP } from '../data/boneheadz.js';
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -221,6 +221,11 @@ const S = {
   sounds: true,
   glow: true,      // rarity/slime glow on your Bonehead's gear (Settings > App)
   shinyPets: new Set(), // pet ids the player owns as the ultra-rare shiny variant
+  /* WHAT YOUR OWN PET IS WEARING, { slotCode: itemId }. Cached for the same
+     reason S.shinyPets is: croppedPetImg is synchronous and runs on every pet
+     render in the app, so the wardrobe cannot be an await. Refreshed before the
+     first paint and after every equip. */
+  petWear: {},
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
   wpnAura: null,   // the weapon aura bought off the rack, worn on every surface
 };
@@ -369,10 +374,33 @@ function petWornLayers(wear) {
     .filter(id => id && BH_BY_ID[id])
     .map(id => bhAsset(BH_BY_ID[id]));
 }
-function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = null) {
+/* WHOSE WARDROBE IS THIS, AND CAN THIS PET EVEN WEAR IT.
+ *
+ * The same two questions shiny already answers, and they are answered the same
+ * way, because getting this wrong the OTHER way is a bug the figure contract has
+ * already paid for once (a friend's shiny drawn in base colours because the
+ * render consulted S.shinyPets, which is the VIEWER's collection).
+ *
+ *   wear === undefined  YOUR OWN pet: S.petWear answers, cached at boot and
+ *                       after every equip so render stays synchronous.
+ *   anything else       taken verbatim. A snapshot pet (a friend, a rival, a
+ *                       defender) carries its own wear or none, and can never
+ *                       be dressed out of the viewer's wardrobe.
+ *
+ * SPECIES IS THE OTHER HALF, and it is enforced HERE rather than at the equip
+ * button, so every surface in the app inherits it instead of nine screens each
+ * remembering. Cam draws each piece positioned for one body inside the shared
+ * canvas: measured 2026-08-21, the glasses overlap Bumbleseal's own ink by
+ * 94.8% and Drizzle, Mallard and Bulldog by 0.0%, so on any other pet they
+ * would float in empty space. PET_SHOP.pet.id, not the literal 'C6': the shop
+ * already declares which pet these are drawn for.
+ */
+const petWearFor = (petId, wear) =>
+  (petId === PET_SHOP.pet.id ? (wear === undefined ? S.petWear : wear) : null);
+function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined) {
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
   const c = PET_CROP[petId];
-  const worn = petWornLayers(wear);
+  const worn = petWornLayers(petWearFor(petId, wear));
   if (!c) return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="width:${px}px;height:${px}px;object-fit:contain" alt=""></span>`;
   const FILL = 0.82;                                   // match the animated pets' ~63px fill in a 76px box
   const cw = c.x1 - c.x0, ch = c.y1 - c.y0;            // content size (fraction of the square)
@@ -383,7 +411,15 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = nul
   /* EVERY LAYER GETS THE IDENTICAL TRANSFORM. Registration is not something this
      function computes per layer; it is inherited from the shared canvas. Any
      per-layer nudge here would be a second source of truth fighting the art. */
-  const layer = u => `<img src="${u}" style="position:absolute;left:0;top:0;width:${imgSize.toFixed(1)}px;height:${imgSize.toFixed(1)}px;max-width:none;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)" alt="">`;
+  /* PERCENTAGES OF THE BOX, NOT PIXELS, and the arithmetic above is untouched:
+     every number here is already proportional to `px`, so dividing back out is a
+     re-expression and not a new layout. What it buys is a box a stylesheet can
+     resize: Today's hero sizes the pet against the Bonehead (app.css --fig), and
+     .petcrop is overflow: hidden, so a CSS resize with pixel layers inside would
+     crop the creature instead of scaling it. translate() percentages resolve
+     against the IMAGE's own border box, hence /imgSize rather than /px. */
+  const pc = n => `${(n * 100 / px).toFixed(4)}%`;
+  const layer = u => `<img src="${u}" style="position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)" alt="">`;
   return `<span class="petcrop" style="width:${px}px;height:${px}px">${layer(src)}${worn.map(layer).join('')}</span>`;
 }
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
@@ -413,7 +449,10 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = nul
  */
 function petFrom(snapshotPet, ownSpecies = null) {
   if (snapshotPet && snapshotPet.id) {
-    return { id: snapshotPet.id, shiny: !!snapshotPet.shiny, level: snapshotPet.level || 1 };
+    /* `wear` follows shiny exactly: a snapshot's own wardrobe or NONE, never
+       undefined, because undefined means "ask S.petWear", which is the viewer's
+       own and would dress a rival's Bumbleseal in your purse. */
+    return { id: snapshotPet.id, shiny: !!snapshotPet.shiny, level: snapshotPet.level || 1, wear: snapshotPet.wear || null };
   }
   if (ownSpecies && BH_BY_ID[ownSpecies]) return { id: ownSpecies, shiny: undefined, level: null };
   return null;
@@ -424,7 +463,7 @@ function petFrom(snapshotPet, ownSpecies = null) {
  * is the wrong size" cannot be re-invented per screen. */
 function petAsideHtml(pet, px) {
   if (!pet || !pet.id || !BH_BY_ID[pet.id]) return '';
-  return petSpriteHtml(pet.id, px, !petHovers(pet.id), { mass: true, shiny: pet.shiny });
+  return petSpriteHtml(pet.id, px, !petHovers(pet.id), { mass: true, shiny: pet.shiny, wear: pet.wear });
 }
 /* THE THIRD PATH. On the splash, the level-up card, the map marker and the
  * leaderboard the pet stays INSIDE the avatar stack, so it cannot go through
@@ -476,12 +515,13 @@ const petStacksOnBody = petId => {
   const c = PET_CROP[petId];
   return !!c && c.x0 >= 0.5 && c.y0 >= 0.5;
 };
-/* TEST SEAM, the same shape as window.__endlessCfg. A pet accessory has no
-   equip UI yet, so without this the only way to grade the composite is to
-   re-implement croppedPetImg's maths in the audit, and an audit that reproduces
-   the code it is grading proves nothing. This hands out the REAL markup. */
-if (typeof window !== 'undefined' && navigator.webdriver) window.__petLayerHtml = (petId, px, wear, ground) => croppedPetImg(petId, px, !!ground, null, wear);
-function petSpriteHtml(petId, px, ground = false, { mass = false, shiny } = {}) {
+/* THE TEST SEAM IS GONE, and its removal is the point. It existed because "a pet
+   accessory has no equip UI yet", so the only other way to grade the composite
+   was to re-implement croppedPetImg's maths in the audit. The Stable's wardrobe
+   is that UI, so tests/pet-wardrobe-audit.mjs taps the real tiles instead, which
+   is what tally/CLAUDE.md rule 5 asks for anyway: operate the control, do not
+   call the function behind it. */
+function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear } = {}) {
   // CX (Day One Lizard) has no shiny static variant; its amethyst art IS the
   // special look, so always render its animated self even if the instance is shiny.
   // Every path scales by the species' visual mass, so a colourway is never a
@@ -514,20 +554,21 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny } = {}) 
     // Cropped like every other pet. This used to be a raw <img> at px, which drew
     // the creature tiny inside its box because the source art sits small in a 640²
     // canvas: a shiny lizard came out a fraction of the normal one.
-    return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
+    return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
-  return animatedPetHtml(petId, S2) || croppedPetImg(petId, S2, ground);
+  return animatedPetHtml(petId, S2) || croppedPetImg(petId, S2, ground, null, wear);
 }
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
 // it's an animated/hovering/grounded species. Shiny uses its recolour, same crop.
-function petPortraitHtml(petId, px, shiny = false, { mass = false } = {}) {
+function petPortraitHtml(petId, px, shiny = false, { mass = false, wear } = {}) {
   if (petId === 'CX') shiny = false; // Day One Lizard: amethyst CX.png is the portrait (no shiny static)
   const src = shiny ? `assets/bh/C/shiny/${petId}.png` : bhAsset(BH_BY_ID[petId]);
-  const inner = croppedPetImg(petId, mass ? Math.round(px * petScale(petId)) : px, false, src);
+  const inner = croppedPetImg(petId, mass ? Math.round(px * petScale(petId)) : px, false, src, wear);
   return shiny ? `<div class="pet-shiny-wrap">${inner}<span class="shiny-spark">${sparkIco(12)}</span></div>` : inner;
 }
 async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); }
+async function refreshPetWear() { S.petWear = await petWear(); }
 /* Which avatar slots are wearing SLIMED gear. Cached the same way shiny pets are,
    because the glow has to appear on every avatar render and avatarLayersHtml has
    14 call sites: threading a parameter through all of them is how one of them
@@ -1049,6 +1090,7 @@ async function boot() {
      small IndexedDB reads each, nothing like the replay below. */
   await refreshShinyPets();
   await refreshSlimedSlots();
+  await refreshPetWear();
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
   bindWordmarkPull();
@@ -3242,6 +3284,9 @@ async function dayBudget() {
    up sometimes is worse than none at all. */
 const LOG_ONLY_LINE = '<p class="log-only">Nothing you grow or cook in the Kitchen counts as food you ate. This diary only records what you log yourself.</p>';
 
+/* Set the first time Today renders Gwart; see the note at its read site below. */
+let gwEntranceSeen = false;
+
 async function renderToday(el) {
   const entries = await entriesFor(S.date);
   const yEntries = await entriesFor(addDays(S.date, -1));
@@ -3334,6 +3379,17 @@ async function renderToday(el) {
   const sub = dObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' });
 
   const heroPet = petFrom(null, eq.C);   // yours, so S.shinyPets answers (the figure contract)
+  /* HOW BIG SHE STANDS, AS A SHARE OF THE BONEHEAD. PET_HERO_REL is a ratio, so
+     the markup still needs a pixel box (croppedPetImg lays its layers out as
+     percentages of one) and app.css rescales that box against --fig. The px
+     handed over is the ratio at the reference figure, which is the 169 that
+     shipped: nothing moves on a full-height phone, and she shrinks with him on a
+     short one. The mass scale rides along in --pet-rel because petSpriteHtml
+     applies it to the box, and CSS is replacing that box. */
+  const heroPetRel = heroPet ? (PET_HERO_REL[heroPet.id] || PET_HERO_HOUSE) : 0;
+  const heroPetBig = heroPetRel > PET_HERO_HOUSE;
+  const heroPetPx = Math.round(heroPetRel * PET_HERO_REF);
+  const heroPetBoxRel = heroPet ? Math.round(heroPetPx * petScale(heroPet.id)) / PET_HERO_REF : 0;
   /* Gwart's opening line, chosen from the state this render already has in hand
      (no extra reads). gwIdle() below re-picks from the same context. */
   const gwCtx = {
@@ -3342,6 +3398,24 @@ async function renderToday(el) {
     fightsReady: pitEnergy.ready,
   };
   const gwLine = gwartLine(gwCtx);
+  /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
+     the render that emits the markup, so the very first Today of the session
+     gets `wz-enter` bare and every later one gets `.seen` on it. Measured on
+     this tree at 440x956, three arrivals at Today driven through the real tab
+     bar: 871 style recalcs / 115ms as shipped, against 376 / 57ms once he
+     only arrives once. zEnterCine animates `filter`, which no compositor can
+     take, so its whole 2.4s is main-thread style work on the app's home screen,
+     every single time you tap Today.
+     WHERE "ONCE" LIVES, and why it is a plain module-level `let` like
+     bootSheetClaimed above: it must survive an in-place refresh() and a route()
+     back here (both re-run this function on the same document, so it does), and
+     it must NOT survive a real reload (a fresh module instance starts false, so
+     it does not). Nothing is persisted; a relaunch is a new session and he gets
+     to arrive again. The cinematic itself is untouched: .wz-enter.seen only
+     turns the animation off, and its `both` fill already ended on exactly the
+     resting state, so "seen" and "finished" are the same pixels. */
+  const gwSeen = gwEntranceSeen;
+  gwEntranceSeen = true;
   const C = 2 * Math.PI * 66;
   const prev = S.ui;
   const protHit = t.p && tot.p >= t.p;
@@ -3359,11 +3433,11 @@ async function renderToday(el) {
        .hero-card is now only the negative margin that cancels .screen's padding;
        see app.css. -->
   <div class="hero-card">
-  <div class="hero-scene ${S.justLogged ? 'bounce' : ''}${heroPet && (PET_HERO_PX[heroPet.id] || 108) > 108 ? ' sharing' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
+  <div class="hero-scene ${S.justLogged ? 'bounce' : ''}${heroPetBig ? ' sharing' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="" decoding="sync" fetchpriority="high">` : ''}
     <span class="hero-cast c-bh"></span>
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
-    ${heroPet ? `<button class="hero-companion${(PET_HERO_PX[heroPet.id] || 108) > 108 ? ' big' : ''}" id="heroPetBtn" aria-label="Your pet">${petAsideHtml(heroPet, PET_HERO_PX[heroPet.id] || 108)}</button>` : ''}
+    ${heroPet ? `<button class="hero-companion${heroPetBig ? ' big' : ''}" id="heroPetBtn" style="--pet-rel:${heroPetBoxRel.toFixed(5)}" aria-label="Your pet">${petAsideHtml(heroPet, heroPetPx)}</button>` : ''}
     <!-- The bottom of the art dissolves into the page instead of ending on the
          frame that used to be there. Sits before .hero-meta because both are
          z-index 4 and the level plate has to stay above the fade. -->
@@ -3403,7 +3477,7 @@ async function renderToday(el) {
       <button class="gw-today" id="gwartBtn" aria-label="Gwart says something">
         <span class="wz-scene" aria-hidden="true">
           <span class="wz-body"><img src="assets/gwart/gwart.png" alt=""></span>
-          <span class="wz-enter"><span class="wz-sway">
+          <span class="wz-enter${gwSeen ? ' seen' : ''}"><span class="wz-sway">
             <img class="wz-stars-l" src="assets/gwart/gwart-stars.png" alt="">
             <img class="wz-stars-m" src="assets/gwart/gwart-stars.png" alt="">
             <img class="wz-stars-r" src="assets/gwart/gwart-stars.png" alt="">
@@ -8881,7 +8955,7 @@ function nameWithAlias(f) {
 function crewCardArtHtml(f) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
-  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true })}</div>` : '';
+  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: p.pet.wear || null })}</div>` : '';
   return (eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhThumb(bhAsset(BH_BY_ID[eq.BG]))}" alt="">` : '')
     + avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 384 }) + pet;
 }
@@ -9954,7 +10028,7 @@ function openFriendProfile(f, onChange, opts = {}) {
       <div class="fp-hero${eq.BG && BH_BY_ID[eq.BG] ? ' framed' : ''}">
         ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
         <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</div>
-        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
+        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny, wear: p.pet.wear || null })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
       <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal" hidden></div></div>
@@ -13801,7 +13875,7 @@ async function openStable(opts = {}) {
     if (!body) return;
     /* eqOwn is the WORN OUTFIT (equipped()), not equippedPetIid(): the Paddock door
        below draws your own Bonehead at the gate, the same way the scene does. */
-    const [insts, eqIid, bank, st, eqOwn, nicks] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus(), equipped(), petNicks()]);
+    const [insts, eqIid, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
     /* THE PRIVATE NICKNAME, beside the species name and never instead of it.
        Same shape as nameWithAlias() for friends: the real identity stays the
@@ -13939,6 +14013,54 @@ async function openStable(opts = {}) {
         </div>`;
     })();
 
+    /* HER WARDROBE, and it lives HERE because this is where a player already
+       goes to decide things about a pet: the Stable is the only screen that
+       holds one animal at a time with its actions under it, and EQUIP is two
+       rows up. v422 sold five accessories at 3,500 to 12,000 coins each with
+       nowhere at all to put them on, which is the whole reason this exists.
+       Only for the pet the art is drawn for. Every piece is painted
+       pre-positioned for HER body inside the shared canvas, so the panel is
+       absent rather than empty on any other animal: an accessory shelf under a
+       lizard that can never wear one is a broken promise, not a tease.
+       ONE TAP TOGGLES. There is no separate remove control: the tile says WORN
+       and tapping it again takes the piece off, which is how the gear wardrobe
+       already behaves and is the only affordance small enough for a row of
+       five. One item per slot is the STORAGE shape (see petWear in js/loot.js),
+       so putting the second purse on takes the first one off with no rule here
+       to forget.
+       The tile art is petShotHtml, the shop's own product shot, so a piece
+       looks the same in the wardrobe as it did on the tile you bought it from. */
+    const cfWear = (() => {
+      if (!roster.some(x => x.sp === PET_SHOP.pet.id)) return '';
+      /* BUILT WHENEVER SHE IS IN THE ROSTER, HIDDEN WHEN SHE IS NOT IN FRONT.
+         Spinning the ring never re-runs render() (a full rebuild would fight the
+         drag), so the four action buttons are repainted in place instead, and a
+         panel that only existed for the focused pet would either be missing when
+         you spun onto her or left standing under a lizard when you spun off.
+         The content does not depend on WHICH instance is focused: there is one
+         Bumbleseal and one wardrobe. So only visibility moves, and the spin
+         handler owns it. */
+      const shown = !!focused && focused.sp === PET_SHOP.pet.id;
+      const her = (BH_BY_ID[PET_SHOP.pet.id] || {}).name || 'your pet';
+      const mine = PET_SHOP.items.filter(i => ownedCos.has(i.id) && BH_BY_ID[i.id]);
+      if (!mine.length) {
+        return `<div class="pet-wear"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+          <p class="note pw-empty">Nothing to wear yet. Gwart's Menagerie stocks ${PET_SHOP.items.length} pieces, all drawn for her.</p></div>`;
+      }
+      return `<div class="pet-wear"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+        <div class="pw-row">${mine.map(i => {
+          const a = BH_BY_ID[i.id];
+          const on = S.petWear[a.slot] === i.id;
+          const slotLbl = (PET_SLOTS.find(sl => sl.code === a.slot) || {}).label || a.slot;
+          return `<button class="pw-item r-${a.rarity}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}">
+            <span class="pw-art">${petShotHtml(i.id, 62)}</span>
+            <b>${esc(a.name)}</b>
+            <small>${on ? 'WORN' : esc(slotLbl)}</small>
+          </button>`;
+        }).join('')}</div>
+        <p class="note pw-hint">Tap to put a piece on. Tap it again to take it off. One per spot.</p></div>`;
+    })();
+
 
 
     const spChips = pair ? [a, b]
@@ -14051,6 +14173,7 @@ async function openStable(opts = {}) {
           </div>
           ${cfCaption}
           ${cfActs}
+          ${cfWear}
         </div>
         ${openIid && openInst ? petTalentTree(openInst, petLevel(bank[openInst.iid] || 0), openPicks) : ''}
       ` : '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
@@ -14453,6 +14576,9 @@ async function openStable(opts = {}) {
       if (trB) { trB.dataset.pettree = inst.iid; trB.textContent = isOpen ? 'HIDE TALENTS' : 'TALENTS'; }
       if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'BREEDING' : 'BREED'; brB.classList.toggle('on', inSel); }
       if (dsB) { dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `DESTROY ${dustVal}`; }
+      // her wardrobe follows the ring: shown only while she is the pet in front
+      const pwB = $('.pet-wear', body);
+      if (pwB) pwB.hidden = inst.sp !== PET_SHOP.pet.id;
     }
 
     // No card-click-to-open-talents any more: on a carousel a tap means "bring
@@ -14482,6 +14608,17 @@ async function openStable(opts = {}) {
        closes before it calls back, so toasting and stopping would delete their
        text and leave them with nothing to correct. Refuse with a sentence, hand
        the words back. Never silently truncate: see nickProblem in js/loot.js. */
+    /* EQUIP AND UNEQUIP ARE THE SAME TAP. refreshPetWear() before render()
+       because every pet render in the app reads the CACHE, not the row: writing
+       the row and re-rendering would repaint the Stable off a stale wardrobe and
+       leave Today wrong until the next boot. */
+    $$('[data-petwear]', body).forEach(btn => btn.addEventListener('click', async () => {
+      const r = await togglePetWear(btn.dataset.petwear);
+      if (!r.ok) { toast('That piece is not in your wardrobe.'); return; }
+      await refreshPetWear();
+      popSound(S.sounds);
+      render();
+    }));
     $$('[data-petnick]', body).forEach(btn => btn.addEventListener('click', () => {
       const iid = btn.dataset.petnick;
       const inst = insts.find(x => x.iid === iid);
@@ -15889,6 +16026,38 @@ async function renderBoneyard(el) {
        you are losing 85.8% of, which is a punishment, not an exploit. */
     const wandererEngaged = new Set();
     let wandererDone = new Set(xpRows0.filter(r => r.type === 'wanderer').map(r => r.key));
+    /* HIS LANTERN HAS TO TRACK THE GROUND, and it did not. Tom, 2026-08-22:
+       "when people zoom he moves all over the place and isnt anchored to a
+       geolocation."
+       The cone is sized in PIXELS from the map's own projection so that 300 m of
+       lit ground is 300 m at every zoom. That size was only ever recomputed
+       inside refreshWanderer, which runs on the 5s tick and on moveend. So
+       through an entire pinch the cone kept the pixel size it was handed at the
+       PREVIOUS zoom, while the collect ring beside it resized every frame
+       (map.on('zoom', sizeRadius), a few lines up). One thing on the screen
+       tracked the ground and the other did not, which reads exactly as the man
+       sliding around loose on the map.
+       Same binding as the ring, and for the same reason. It only touches markers
+       already on screen and does no work when there are none, so it is safe to
+       run on every zoom frame. */
+    function sizeWandererCones() {
+      if (!wandererMarkers.size || !map || !map.loaded()) return;
+      for (const [, rec] of wandererMarkers) {
+        const w = rec.w;
+        if (!w) continue;
+        let px = 200;
+        try {
+          const a = map.project([w.lng, w.lat]);
+          const b = map.project([w.lng, w.lat + CONE_RANGE_M / 111320]);
+          const d = Math.hypot(b.x - a.x, b.y - a.y) * 2;
+          if (isFinite(d) && d > 40) px = d;
+        } catch { /* projection not ready: keep the fallback */ }
+        paintWandererCone(rec.el.querySelector('.wanderer-cone'), px, w.heading);
+      }
+    }
+    map.on('zoom', sizeWandererCones);
+    map.on('move', sizeWandererCones);
+
     function refreshWanderer() {
       const live = wanderersNear(date, lat, lng);
       const liveIds = new Set(live.map(w => w.id));
@@ -15901,10 +16070,11 @@ async function renderBoneyard(el) {
           const el = document.createElement('div');
           el.className = 'map-wanderer-mark';
           el.innerHTML = wandererMarkHtml();
-          rec = { marker: domMarker(maplibregl, map, { lat: w.lat, lng: w.lng, el, anchor: 'center' }), el };
+          rec = { marker: domMarker(maplibregl, map, { lat: w.lat, lng: w.lng, el, anchor: 'center' }), el, w };
           wandererMarkers.set(w.id, rec);
         } else {
           rec.marker.setLngLat([w.lng, w.lat]);
+          rec.w = w;   // the zoom repaint reads his CURRENT beat, not the one he arrived on
         }
         /* NEVER placeWalkable. Every other POI is snapped onto the nearest road
            or path because it sits still and a spawn in a pond is unreachable. He
@@ -16820,7 +16990,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v422'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v423'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -1169,13 +1169,34 @@ body::before {
    with the viewport rather than through a breakpoint: 10.6vh crosses 90 at an
    849px-tall screen, so every current phone gets the full plaque and only a
    short one trades it away. */
+/* --fig IS THE FIGURE'S DRAWN SIDE, AND EVERY COMPOSITION NUMBER BELOW IS A
+   MULTIPLE OF IT. Tom, 2026-08-21, on v422: "alignment on today is still off now
+   they're too split and bonehead weapon is off edge of screen." Both halves of
+   that come from mixing units: the Bonehead's size is derived from the viewport,
+   while the pet's size and the pet's gutter were ABSOLUTE pixels, so the pair
+   drifted apart on a wide phone and the pet swelled to the Bonehead's own size
+   on a short one. A pair whose parts are measured in different units is not a
+   pair.
+
+   The Bonehead is `object-fit: contain` inside .hero-char, so the drawing is a
+   square of side min(box width, box height). Both terms are written out here
+   ONCE, and the height term reuses --scene-h so this and the scene cannot drift:
+     width   the box is the scene plus its own -16/-34 overhang, capped by the
+             444px art ceiling on .bh-anim (see there: Cam's masters are 640).
+     height  the scene minus the status column (--gw-top + --gw-h) and the 79px
+             the caption owns.
+   Verified against the rendered box rather than trusted: the FIG row of
+   tests/hero-share-audit.mjs fails if this arithmetic and the real .bh-anim
+   disagree by more than a pixel. */
 .hero-scene {
   --gw-top: 50px;                          /* .hero-top's 10px + its 32px + an 8px gap */
   --gw-h: clamp(58px, 10.6vh, 90px);
   --peek: clamp(28px, 5.2vh, 46px);
+  --scene-h: min(627px, max(280px, calc(100vh - var(--sat) - var(--sab) - 174px - var(--peek))));
+  --fig: min(calc(100vw + 50px), 444px, calc(var(--scene-h) - var(--gw-top) - var(--gw-h) - 79px));
   position: relative; overflow: hidden; cursor: pointer;
   margin: 0;
-  height: min(627px, max(280px, calc(100vh - var(--sat) - var(--sab) - 174px - var(--peek))));
+  height: var(--scene-h);
   background: var(--coral);
   text-align: left;
 }
@@ -1407,7 +1428,41 @@ body::before {
    The border is an OPAQUE cream. .talkbox's default --line-strong is a 17% cream
    chosen against --surface, and over full-bleed artwork it dissolves, which is
    the same failure .hero-bubble::before already documents. */
-.gw-box { flex: 1; min-width: 0; --tb-size: 11px; text-align: left; border-color: #e6dcc8; }
+/* 13px, AND THE 13 IS A CEILING RATHER THAN A PREFERENCE. Tom, 2026-08-21: "the
+   gwart gwart font size is too smalll when he talks." It was 11px, which is the
+   smallest type anywhere in this app and 5px under the same talk box in the
+   Wanderer's encounter (.wnd-enc-box takes .talkbox's own 16px).
+
+   WHAT BOUNDS IT, AND IT IS NOT THE WRAPPING. The box is the right half of
+   .gw-row and its band is the plaque's height (--gw-h, 90px on every phone 849px
+   tall and up); past that it starts painting over the Bonehead's head, because
+   it is z-index 5 and he is 2. The binding case is 393x852, where the plaque
+   leaves the box just 176px of width. Measured there against the longest line
+   the pool can produce (59 characters, "A crate by his feet, still shut. I gave
+   him hands for this."), which is THREE lines at every size below, because
+   BoldPixels is a narrow face and the line count does not move:
+     11px  76.1px    13px  89.2px    14px  95.8px    15px 102.3px    16px 108.9px
+   So 13 is simply the largest that still fits 90, and it only fits because the
+   chrome below pays for it. Raising it further means giving the box its own
+   band, not a bigger number here.
+
+   THE TIGHTER CHROME IS WHAT BUYS THE TWO POINTS, and it is deliberately only
+   the VERTICAL half: 1.55 line-height and 0.88em of padding-block are generous
+   for a 16px box with one or two lines and wasteful for a three-line one at this
+   size. padding-inline is untouched at .talkbox's 0.94em, so the box wraps at
+   exactly the same characters it did and the line count cannot move. Measured:
+   at 13px the shipped chrome gives 103.8px (13.8 over the band) and this gives
+   89.2px (0.8 under it); the same tightening also pulls the shipped 11px box
+   from 88.4px down to 76.1px. Graded by the TYPE rows in tests/talkbox-audit.mjs,
+   which harvest the real line pool through window.__gwart and measure the box
+   the longest one produces, in both directions: too small fails and too tall
+   fails.
+   The border is an OPAQUE cream, see below. */
+.gw-box {
+  flex: 1; min-width: 0; --tb-size: 13px;
+  line-height: 1.35; padding-block: calc(var(--tb-size) * 0.62);
+  text-align: left; border-color: #e6dcc8;
+}
 
 /* LEFT COLUMN, and the tail drops to the jaw. Tom: "people's mouths arent on top
    of their heads." It used to sit over the skull with a sideways tail. */
@@ -1637,19 +1692,30 @@ body::before {
    properties inherit and the companion runs the same animation: putting it on
    the parent would walk the pet left by the same amount.
 
-   48, NOT THE MOCKUP'S 58, AND THE 10px IS MEASURED. Tom, on the build that
-   shipped 58: "also my bonehead is kinda bigtime off centre now not like a
-   little bit?" Most of that was the pet's gutter (see .hero-companion) and the
-   frame; this is the rest of it. The mockup solved 58 against ITS Bonehead,
-   who wears a hoodie and holds nothing. Tom's own fit at the time carries a
-   BARBELL, which spreads his ink 305px wide in a 393px frame, and at 58 the
-   left tip of it was cut off by the plate edge. Measured off the render, with
-   the pair's ink taken from a difference mask:
-     58   pair 0.0..380.5, 0.0px of left gutter (the weapon is clipped)
-     48   pair 8.5..380.5, centre off by -2.0px at 393x852, +0.5 with an inset
-   tests/hero-share-audit.mjs owns both halves of that: the pair reads centred,
-   and neither drawing touches the frame. */
-.hero-scene.sharing .hero-char { --bh-shift: -48px; }
+   A FRACTION OF THE FIGURE, NOT A PIXEL COUNT, and the fraction is measured.
+   Tom, on the build that shipped 58: "also my bonehead is kinda bigtime off
+   centre now not like a little bit?", and on the 48 that replaced it: "alignment
+   on today is still off now they're too split and bonehead weapon is off edge of
+   screen." 48 absolute pixels is a sixth of a 300px figure and a ninth of a
+   440px one, so the same declaration reads as a nudge on one phone and a shove
+   on another.
+
+   THE RE-MEASUREMENT THAT PRODUCED 0.0662. The v422 numbers were taken with a
+   mask that counted a 1-to-3 pixel compositing hairline at the .hero-char box
+   edge as ink, so "pair 8.5..380.5" was the pair's BOX, not its drawing, and the
+   right-hand edge of it was a rounding artefact. Re-measured with a per-column
+   density floor (a real drawing column scores 15 and up; the hairline scores 1
+   to 3), the shipped v422 pair is 8.5..363.0 at 393x852: 8.5px of left gutter
+   against 30px of right, and the weapon lives in that 8.5px. So the pair was
+   never centred, it only measured that way.
+     v422  48px      pair 8.5..363.0, off by -10.8px, gutters 8.5 / 30.0
+     now   0.0662    pair ink centred with an even gutter at both edges
+   0.0662 is 27px against the 408px figure a full-height phone draws, and 27 is
+   what puts the pair's measured ink centre on the scene's centre line with the
+   pet anchored where .hero-companion now anchors it.
+   tests/hero-share-audit.mjs owns both halves: the pair reads centred, and
+   neither drawing touches the frame. */
+.hero-scene.sharing .hero-char { --bh-shift: calc(var(--fig) * -0.0662); }
 /* THE FIGURE STOPS GROWING WHERE CAM'S ART STOPS. The gear masters are 640px,
    and tests/art-resolution-audit.mjs caps any layer at 1.4x its source in
    PHYSICAL pixels: on a DPR-2 phone that is 448 CSS px, and past it the renderer
@@ -1668,7 +1734,17 @@ body::before {
    rendered box came back 451 and the row read 1.41x. Three px of the animation's
    own growth, given back.
    Raising this needs bigger masters, not a bigger number. */
-.hero-char .bh-anim { --av-fit: contain; --av-pos: bottom center; max-width: 444px; }
+/* AND margin-inline: auto IS HALF OF WHAT TOM REPORTED. An absolutely positioned
+   box with left, right AND a constrained width is over-constrained, and CSS
+   resolves that by DROPPING `right` (in a left-to-right document) unless the
+   margins are auto. So the cap did not centre the figure at 444, it LEFT-ANCHORED
+   him: measured, at 430x932 his ink sat at 8.5..281.5 with the scene's centre at
+   215, i.e. 70px to the left, identical in absolute terms to where it sits at
+   393 wide. That is exactly "bonehead weapon is off edge of screen", and it only
+   happens on a phone wider than 394px, which is every Plus and Pro Max.
+   `margin-inline: auto` is the documented resolution for the over-constraint and
+   puts the capped box back on the centre line. */
+.hero-char .bh-anim { --av-fit: contain; --av-pos: bottom center; max-width: 444px; margin-inline: auto; }
 .hero-char .bh-anim img { object-fit: contain; object-position: bottom center; }
 /* equipped pet trots along beside the bonehead on the home screen */
 /* width auto so a long creature (lizard) can be scaled up for equal visual mass
@@ -1679,14 +1755,20 @@ body::before {
 /* RIGHT THIRD, outer edge on the safe margin, baseline shared with the feet.
    The exact bottom offset is tuned against the MEASURED ink baselines, not the
    boxes: tests/figure-audit.mjs reports both and fails if they drift. */
-/* 14px, WHICH IS THE MOCKUP'S NUMBER (.hero-pet in today-preview/today-mockup.html).
-   It was 30 when the scene was a 347px plate inside a cream frame: 30 off that
-   plate plus the frame's own 23px put her ink 47px in from the phone's edge
-   while the Bonehead's was clipped by the left one, and that imbalance is half
-   of what Tom saw as "bigtime off centre". With the frame gone the scene IS the
-   viewport, so the gutter is measured against the phone and 14 is what the
-   approved composition uses. */
-.hero-companion { position: absolute; right: 14px; bottom: 92px;
+/* SHE IS ANCHORED TO THE CENTRE LINE, NOT TO THE PHONE'S EDGE, and that is the
+   "too split" half of Tom's 2026-08-21 report. A gutter measured from the frame
+   ties the pet to the viewport while the Bonehead is tied to the centre, so every
+   extra pixel of screen width moves her a whole pixel away from him and moves him
+   only half of one. Measured on v422: at 393 wide their drawings sit 113px apart
+   centre to centre, at 430 wide 141px, off one declaration.
+   So her OUTER edge is placed at 0.4473 of the figure's drawn side out from the
+   centre line, which reproduces the approved 393x852 composition exactly
+   (0.4473 x 408 = 182.5px out, i.e. the same 14px gutter) and keeps the pair
+   rigid at every width. The 14px floor is the safe margin and it is a floor, not
+   the anchor: on a narrow-and-tall phone the tension point would fall outside the
+   frame, and a drawing off the edge is wrong on any screen (Tom, 2026-08-07, on
+   the duck: "the duck and lizard are cut off that cant be happening"). */
+.hero-companion { position: absolute; right: max(14px, calc(50% - var(--fig) * 0.4473)); bottom: 92px;
   /* WIDTH AUTO, anchored by its right edge. A fixed width made the box grow
      RIGHTWARD when mass scaling widened a species (the duck goes 108 -> 154px),
      so it ran 14px past the plate and got clipped: Tom, 2026-08-07, "the duck and
@@ -1701,6 +1783,27 @@ body::before {
   60% { scale: 1.03; rotate: 3deg; } 100% { scale: 1; rotate: 0deg; } }
 /* let the cropped/scaled content size itself; forcing 98 squashed flat pets */
 .hero-companion .petcrop { margin-inline: auto; }
+/* AND A BIG PET IS SIZED AGAINST THE BONEHEAD, NOT AGAINST THE DEVICE. Tom's
+   ruling was a RATIO: Bumbleseal should stand "about 25% bigger" than the 135px
+   he was shown, which is 169px beside the 408px figure a full-height phone draws.
+   Shipped as 169 ABSOLUTE pixels it stopped being that ruling the moment the
+   figure changed size: on a 375x667 phone the Bonehead is drawn at 258px and she
+   was still 169, two thirds of his height, and on the 320x568 worst case she was
+   169 against a 176px figure. tests/hero-share-audit.mjs said so itself and
+   called the fix "a change to PET_HERO_PX"; this is that change.
+   --pet-rel is her share of the figure, handed down from PET_HERO_REL in
+   data/boneheadz.js (times the species' mass scale) so the catalogue still owns
+   the number. croppedPetImg lays every layer out in PERCENTAGES of this box, so
+   sizing the box is all it takes; nothing inside needs to know.
+   !important, and it is earning it rather than papering over a specificity
+   fight: croppedPetImg writes the box size as an INLINE style, because every
+   other surface in the app asks for a pet in pixels, and an inline declaration
+   outranks any selector. This is the one surface that measures the box in
+   Boneheads instead, so it overrides that default here and nowhere else. */
+.hero-companion.big .petcrop {
+  width: calc(var(--fig) * var(--pet-rel)) !important;
+  height: calc(var(--fig) * var(--pet-rel)) !important;
+}
 @keyframes petBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .hero-companion { animation: none; } }
 /* The only ground cue. A floor band was tried in the v2 mockup and Tom killed it
@@ -2417,7 +2520,58 @@ body::before {
 .legend-row { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .legend-row:last-child { border-bottom: 0; }
 .blip-dot { width: 13px; height: 13px; border-radius: 50%; flex: none; box-shadow: 0 0 8px rgba(242, 233, 215, 0.35); }
-.blip-dot.rare { background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: rarePulse 1.6s ease-in-out infinite; }
+/* THE RARE DOT KEEPS ITS PULSE AND STOPS COSTING ANYTHING FOR IT.
+   MEASURED on this tree at 440x956, sitting on the settled Boneyard doing
+   nothing: 120 style recalcs per second, forever, for one 13px dot. Every other
+   idle surface in the app scored 0.0. `box-shadow` cannot be composited, so an
+   infinite box-shadow animation drags the main thread through a style recalc
+   twice a frame for as long as the screen is open, and on a phone that is
+   battery, heat, and then throttling that reads as choppiness.
+
+   THE COST IS PER-SCREEN, NOT PER-ELEMENT, which is why one dot matters as much
+   as sixteen would: measured 1 element = 120/s and 16 elements = 120/s, both on
+   a bare page and in the app. One un-compositable animation in view puts the
+   whole document on the slow path, and the same measurement says an element
+   scrolled entirely out of view costs nothing, so what matters is what is ON
+   SCREEN while the player sits still.
+
+   SAME LOOK, DIFFERENT MECHANISM: the two shadows the keyframe used to
+   interpolate between are now two pseudo-elements that CROSS-FADE on `opacity`,
+   which the compositor owns. Both endpoints are exact, and that is the point of
+   using two rather than one: a single overlay added on top of a kept 10px base
+   makes the peak brighter at the core instead of wider, which is a different
+   pulse. MEASURED, not asserted. The whole "OUT THERE TODAY" card, captured at
+   3x off the real Boneyard with every animation paused on the pulse's brightest
+   frame, is pixel-equivalent before and after: ZERO of 763,776 pixels differ by
+   more than 24 (sum of RGB deltas), max delta 19, mean 0.05. Per-frame, against
+   the shipped animation seeked to the same three times, mean luminance in
+   7-10 / 10-13 / 13-16 / 16-20 / 20-26px rings around the dot came out +0.28 of
+   a channel at the trough, +0.53 at the peak and -0.35 at the midpoint, which is
+   where a cross-fade of 10px and 18px and an interpolated 14px blur are least
+   alike and is still under half a channel out of 255. A single overlay added on
+   top of a kept base measured +16.5 channels in the inner ring at peak, which is
+   what "brighter at the core instead of wider" means. */
+.blip-dot.rare { position: relative; background: var(--accent); box-shadow: none; }
+.blip-dot.rare::before, .blip-dot.rare::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+}
+.blip-dot.rare::before { box-shadow: 0 0 10px var(--accent); animation: rareRest 1.6s ease-in-out infinite; }
+.blip-dot.rare::after { box-shadow: 0 0 18px var(--accent); opacity: 0; animation: rareBloom 1.6s ease-in-out infinite; }
+@keyframes rareRest { 50% { opacity: 0; } }
+@keyframes rareBloom { 50% { opacity: 1; } }
+/* Switched OFF BY NAME and parked on the peak frame, never shortened: a
+   duration of .001s on an infinite loop runs it a thousand times a second,
+   which this repo has already shipped once. Parked bright rather than dark
+   because this dot's whole job in the map key is to read as the rare one. The
+   animation it replaces had no reduced-motion rule at all and pulsed anyway. */
+@media (prefers-reduced-motion: reduce) {
+  .blip-dot.rare::before { animation-name: none; opacity: 0; }
+  .blip-dot.rare::after { animation-name: none; opacity: 1; }
+}
+/* rarePulse is retired but NOT deleted: .map-spawn.rare still names it, and that
+   rule is overridden to `animation: none` further down this file by the
+   pixel-art marker pass, so nothing runs it. Removing a keyframe a live selector
+   still names is a separate change from this one. */
 @keyframes rarePulse { 50% { box-shadow: 0 0 18px var(--accent); } }
 
 /* ===== character sheet: game tabs + stat pills ===== */
@@ -9552,6 +9706,37 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pet-locked .rk-stage { opacity: .45; }
 .pet-lock { font-size: 10.5px; font-weight: 700; color: var(--text-3); text-align: center; padding: 6px 4px; }
 .rk-owned { font-size: 10.5px; font-weight: 700; color: var(--text-2); text-align: center; padding: 6px 4px; }
+
+/* ===================================================================
+   HER WARDROBE, in the Stable under the carousel's action row.
+   v422 sold five accessories and shipped nowhere to put them on.
+
+   A ROW OF TILES, NOT A GRID. Five pieces is one horizontal scroll and no
+   more, so it reads as "what she owns" rather than as another screen; the
+   shop's own .pet-row above uses the same scroll-snap for the same reason,
+   and a returning player recognises the shape.
+   ONE TAP TOGGLES, so the worn state has to be unmistakable at 96px: the
+   fill changes, the border changes AND the label changes. Colour alone
+   would leave the state invisible to anyone who cannot separate gold from
+   the panel it sits on.
+   44px is the floor for a touch target everywhere in this app; the tile is
+   96 wide and taller than that with the art in it. */
+.pet-wear { margin: 14px 0 0; }
+.pet-wear[hidden] { display: none; }
+.pw-h { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text-3); margin: 0 2px 8px; }
+.pw-empty { margin: 0 2px; }
+.pw-hint { margin: 2px 2px 0; }
+.pw-row { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; }
+.pw-item { flex: none; width: 96px; scroll-snap-align: start; display: flex; flex-direction: column;
+  align-items: center; gap: 3px; padding: 8px 6px 9px; border-radius: 14px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); color: var(--text); }
+.pw-item .pw-art { display: block; height: 62px; }
+.pw-item b { font-size: 11px; line-height: 1.2; text-align: center; }
+.pw-item small { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-3); text-align: center; }
+.pw-item.on { background: rgba(255, 201, 97, .12); border-color: var(--gold); }
+.pw-item.on small { color: var(--gold); }
 /* =====================================================================   GWART'S EMPORIUM — the Shop tab's header (option A, approved 2026-08-20)
    ============================================================================
    The Shop tab drops the hub's character header entirely (no name heading, no
@@ -9695,6 +9880,18 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .wz-scene img { position:absolute; inset:0; width:100%; height:100%; }
 .wz-body { position:absolute; inset:0; transform-origin:50% 95%; animation:zBreathe 5.4s ease-in-out infinite; }
 .wz-enter { position:absolute; inset:0; transform-origin:50% 62%; animation:zEnterCine 2.4s cubic-bezier(0.22,1,0.36,1) both; }
+/* HE ALREADY ARRIVED THIS SESSION. Not a change to the cinematic: zEnterCine
+   ends at scale(1) translateY(0) opacity:1 blur(0) and is filled `both`, so an
+   element that never ran it and an element that finished it are the same
+   pixels. Only Today sets it (js/app.js, gwEntranceSeen); the Emporium's own
+   .gw-panel entrance is deliberately left replaying, because walking into the
+   shop is a place you arrive at, not the screen you keep coming back to. */
+.wz-enter.seen { animation: none; }
+/* The sway and the twinkle carry Cam's 2.4s delay so they begin as the entrance
+   lands. With no entrance to wait for, that delay is 2.4s of a frozen wizard, so
+   it is dropped HERE and nowhere else. Their durations are untouched. */
+.wz-enter.seen .wz-sway, .wz-enter.seen .wz-stars-l,
+.wz-enter.seen .wz-stars-m, .wz-enter.seen .wz-stars-r { animation-delay: 0s; }
 .wz-sway { position:absolute; inset:0; transform-origin:50% 85%; animation:zOrbitSoft 9s ease-in-out 2.4s infinite; }
 .wz-stars-l { clip-path:inset(0 62% 0 0);   animation:zTwA 3.6s ease-in-out 2.4s infinite; }
 .wz-stars-m { clip-path:inset(0 38% 0 38%); animation:zTwB 4.4s ease-in-out 2.4s infinite; }
