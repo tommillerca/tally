@@ -8,12 +8,12 @@ Plan: docs/PLAN-2026-08-22-v425.md. Feedback: docs/FEEDBACK-2026-08-22-v424.md.
 
 | Branch | Scope | Status |
 |---|---|---|
-| x425/fits | 1a saved fit forgets gear after Take-it-all-off | RUNNING |
+| x425/fits | 1a saved fit forgets gear after Take-it-all-off | DONE, pushed b9c04f57 |
 | x425/wheel | 1b upside-down wheel labels | RUNNING |
 | x425/appcore | 1c day-strip black hole, 1i breakfast nudge + quest order, 1f crate nag, 1h double-tap tabs | RUNNING |
 | x425/css | 1d crew card crop, 1e banner icon centering, 1j dynamic-island background | RUNNING |
 | x425/wanderer | 1g water oracle, RECON-GATED (may return a no-go doc instead of code) | RUNNING |
-| x425/bots | WS9 census, READ-ONLY on remote D1; drafts is_test migration + filters, purge list for Tom | RUNNING |
+| x425/bots | WS9 census done, pushed 7abfec02; 47 certain + 19 maybe; purge list awaits Tom | DONE |
 | x425/mockup-today-b | WS3 Option B mockup variants, screenshots only, merges only on approval | RUNNING |
 
 A dead agent means its item is OUTSTANDING, not done. Aggregation: merge green
