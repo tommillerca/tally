@@ -347,6 +347,87 @@ check('ART   every wedge the module declares pixel renders decoded 48px art',
   art ? `${art.got}/${art.want} at 48px (${art.srcs})${art.bad.length ? ' BAD: ' + art.bad.join(' ') : ''}` : 'wheel never arrived');
 await page.evaluate(() => document.querySelectorAll('.dw').forEach(n => n.remove()));
 
+/* 5. LABELS LAND UPRIGHT AT EVERY REST.
+   Added 2026-08-22. Tom: "when i spun the wheel this morning some of the text
+   was upside down and hard to read." The labels ride the wheel's rotate(), so
+   any landing whose rest angle sits in the 90..270 band (3 of the 7 wedges)
+   rested EVERY label inverted, and nothing here looked at the wheel after a
+   spin. The fix is .dw-flip (js/wheel.js): a 180-degree counter-rotation of
+   each icon+label pair, applied with the landing transform.
+   This drives the REAL control (a click on #dwSpin) to five pinned landings,
+   top-half and bottom-half, via the webdriver-only __wheelIdx lever, waits for
+   the wheel to actually REST, and asserts the NET world rotation of every
+   label and icon (wheel matrix composed with the element's own matrix) lands
+   within -90..+90 degrees. Controls, because a green here must be able to go
+   red: SAMPLE (one label per wedge, wedges from the DOM, never zero), REST
+   (the wheel measurably stopped on the wedge we pinned, so a frozen transition
+   or a dead pin cannot grade a pre-spin wheel), and BAND (the driven set
+   really contained flip-band landings, so the hazard was in the sample).
+   PROVEN RED 2026-08-22 in a throwaway tree with only the two
+   `wheel.classList.add('dw-flip')` lines removed (mutation asserted applied):
+   the three flip-band landings each fail UPRIGHT with nets around +/-129..180
+   while REST stays green; this tree is green on the same rows. */
+const parseLandings = async (k) => {
+  await page.evaluate(async (k) => {
+    document.querySelectorAll('.dw').forEach(n => n.remove());
+    window.__wheelIdx = k;
+    const w = await import('./js/wheel.js');
+    window.__wheelPromise5 = w.maybeShowDailyWheel({ sounds: false, force: true });
+  }, k);
+  if (!(await waitForWheel(9000))) return { error: 'wheel never arrived' };
+  const clicked = await page.evaluate(() => {
+    const btn = document.querySelector('.dw #dwSpin');
+    if (!btn) return false;
+    btn.click();
+    return true;
+  });
+  if (!clicked) return { error: 'no #dwSpin button' };
+  await page.waitForSelector('.dw .dw-result', { timeout: 9000 }).catch(() => null);
+  /* Rest means the computed matrix holds still, not that the reveal fired: the
+     reveal has a safety-net timer, so it can arrive while the wheel still
+     turns. Poll until two reads 300ms apart agree (bounded). */
+  let still = false;
+  for (let i = 0; i < 12 && !still; i++) {
+    const a = await page.evaluate(() => getComputedStyle(document.querySelector('.dw-wheel')).transform);
+    await sleep(300);
+    still = a === await page.evaluate(() => getComputedStyle(document.querySelector('.dw-wheel')).transform);
+  }
+  return page.evaluate(() => {
+    const wheel = document.querySelector('.dw-wheel');
+    const parse = t => { const m = /matrix\(([^)]+)\)/.exec(t || ''); return m ? m[1].split(',').map(Number) : [1, 0, 0, 1, 0, 0]; };
+    const mul = (A, B) => [A[0] * B[0] + A[2] * B[1], A[1] * B[0] + A[3] * B[1], A[0] * B[2] + A[2] * B[3], A[1] * B[2] + A[3] * B[3], 0, 0];
+    const deg = M => Math.atan2(M[1], M[0]) * 180 / Math.PI;   // -180..180
+    const W = parse(getComputedStyle(wheel).transform);
+    const rows = [...wheel.querySelectorAll('svg text')].map(t =>
+      ({ kind: 'label', tag: t.textContent, net: deg(mul(W, parse(getComputedStyle(t).transform))) }));
+    rows.push(...[...wheel.querySelectorAll('.dw-ico')].map((s, i) =>
+      ({ kind: 'icon', tag: 'ico' + i, net: deg(mul(W, parse(getComputedStyle(s).transform))) })));
+    return { wheelDeg: ((deg(W) % 360) + 360) % 360, wedges: wheel.querySelectorAll('path').length,
+             labels: wheel.querySelectorAll('svg text').length, rows };
+  });
+};
+
+const LANDINGS = [0, 5, 2, 3, 4];   // rest ~334/77 (upright already) + ~231/180/129 (the flip band)
+let bandHits = 0;
+for (const k of LANDINGS) {
+  const m = await parseLandings(k);
+  if (m.error) { check(`UPRIGHT idx=${k}`, false, m.error); continue; }
+  const expected = ((360 - (k + 0.5) * 360 / m.wedges) % 360 + 360) % 360;
+  const inBand = expected > 90 && expected < 270;
+  if (inBand) bandHits++;
+  check(`SAMPLE  idx=${k}: one label per wedge, and wedges exist`, m.wedges >= 2 && m.labels === m.wedges,
+    `${m.labels} labels / ${m.wedges} wedges`);
+  check(`REST    idx=${k}: the wheel measurably stopped on the pinned wedge`, Math.abs(m.wheelDeg - expected) < 2,
+    `wheel at ${m.wheelDeg.toFixed(1)}deg, expected ${expected.toFixed(1)}deg`);
+  const down = m.rows.filter(r => r.net < -90 || r.net > 90);
+  check(`UPRIGHT idx=${k}: every label + icon nets within -90..+90 at rest`, m.rows.length > 0 && down.length === 0,
+    down.length ? down.map(r => `${r.kind}:${r.tag}@${r.net.toFixed(0)}deg`).join(' ') : `${m.rows.length} elements upright`);
+  /* the human-eyeball frame: the worst landing (rest 180) on request */
+  if (k === 3 && process.env.WHEEL_SHOT) await page.screenshot({ path: process.env.WHEEL_SHOT });
+}
+check('BAND    the driven set contained flip-band landings (the hazard was in the sample)', bandHits >= 2, `${bandHits} of ${LANDINGS.length}`);
+await page.evaluate(() => { delete window.__wheelIdx; document.querySelectorAll('.dw').forEach(n => n.remove()); });
+
 /* -------------- final -------------- */
 await browser.close();
 srv.kill();
