@@ -85,7 +85,7 @@ import {
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_PX, PET_SHOP } from '../data/boneheadz.js';
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -383,7 +383,15 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = nul
   /* EVERY LAYER GETS THE IDENTICAL TRANSFORM. Registration is not something this
      function computes per layer; it is inherited from the shared canvas. Any
      per-layer nudge here would be a second source of truth fighting the art. */
-  const layer = u => `<img src="${u}" style="position:absolute;left:0;top:0;width:${imgSize.toFixed(1)}px;height:${imgSize.toFixed(1)}px;max-width:none;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)" alt="">`;
+  /* PERCENTAGES OF THE BOX, NOT PIXELS, and the arithmetic above is untouched:
+     every number here is already proportional to `px`, so dividing back out is a
+     re-expression and not a new layout. What it buys is a box a stylesheet can
+     resize: Today's hero sizes the pet against the Bonehead (app.css --fig), and
+     .petcrop is overflow: hidden, so a CSS resize with pixel layers inside would
+     crop the creature instead of scaling it. translate() percentages resolve
+     against the IMAGE's own border box, hence /imgSize rather than /px. */
+  const pc = n => `${(n * 100 / px).toFixed(4)}%`;
+  const layer = u => `<img src="${u}" style="position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)" alt="">`;
   return `<span class="petcrop" style="width:${px}px;height:${px}px">${layer(src)}${worn.map(layer).join('')}</span>`;
 }
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
@@ -3334,6 +3342,17 @@ async function renderToday(el) {
   const sub = dObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' });
 
   const heroPet = petFrom(null, eq.C);   // yours, so S.shinyPets answers (the figure contract)
+  /* HOW BIG SHE STANDS, AS A SHARE OF THE BONEHEAD. PET_HERO_REL is a ratio, so
+     the markup still needs a pixel box (croppedPetImg lays its layers out as
+     percentages of one) and app.css rescales that box against --fig. The px
+     handed over is the ratio at the reference figure, which is the 169 that
+     shipped: nothing moves on a full-height phone, and she shrinks with him on a
+     short one. The mass scale rides along in --pet-rel because petSpriteHtml
+     applies it to the box, and CSS is replacing that box. */
+  const heroPetRel = heroPet ? (PET_HERO_REL[heroPet.id] || PET_HERO_HOUSE) : 0;
+  const heroPetBig = heroPetRel > PET_HERO_HOUSE;
+  const heroPetPx = Math.round(heroPetRel * PET_HERO_REF);
+  const heroPetBoxRel = heroPet ? Math.round(heroPetPx * petScale(heroPet.id)) / PET_HERO_REF : 0;
   /* Gwart's opening line, chosen from the state this render already has in hand
      (no extra reads). gwIdle() below re-picks from the same context. */
   const gwCtx = {
@@ -3359,11 +3378,11 @@ async function renderToday(el) {
        .hero-card is now only the negative margin that cancels .screen's padding;
        see app.css. -->
   <div class="hero-card">
-  <div class="hero-scene ${S.justLogged ? 'bounce' : ''}${heroPet && (PET_HERO_PX[heroPet.id] || 108) > 108 ? ' sharing' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
+  <div class="hero-scene ${S.justLogged ? 'bounce' : ''}${heroPetBig ? ' sharing' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="" decoding="sync" fetchpriority="high">` : ''}
     <span class="hero-cast c-bh"></span>
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
-    ${heroPet ? `<button class="hero-companion${(PET_HERO_PX[heroPet.id] || 108) > 108 ? ' big' : ''}" id="heroPetBtn" aria-label="Your pet">${petAsideHtml(heroPet, PET_HERO_PX[heroPet.id] || 108)}</button>` : ''}
+    ${heroPet ? `<button class="hero-companion${heroPetBig ? ' big' : ''}" id="heroPetBtn" style="--pet-rel:${heroPetBoxRel.toFixed(5)}" aria-label="Your pet">${petAsideHtml(heroPet, heroPetPx)}</button>` : ''}
     <!-- The bottom of the art dissolves into the page instead of ending on the
          frame that used to be there. Sits before .hero-meta because both are
          z-index 4 and the level plate has to stay above the fade. -->
