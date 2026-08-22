@@ -50,6 +50,54 @@
  * FIELD, never a class name or a copy string, so reformatting cannot drift them
  * red.
  *
+ * A KNOWN RED THAT IS NOT ABOUT THE LIGHT. VISIBLE fails on clean main and has
+ * done since before this file was last touched: it wants a Wanderer handed to
+ * the map from beyond his own 300 m cone, and at the sampled minute only one is
+ * near enough to be handed over at all, so the sample it grades is empty. It is
+ * left alone here on purpose rather than quietly widened, but it must not be
+ * allowed to hide anything: every run below states its own PASS count.
+ * Measured on this tree: clean main 40 PASS / 1 FAIL (VISIBLE), this branch
+ * 61 PASS / 1 FAIL (the same VISIBLE, same detail line).
+ *
+ * PROVE-RED, 2026-08-22, for the rows added with the beam rework. Throwaway
+ * `cp -R` of the tree with its .git removed, one mutation at a time, exit code
+ * read from a FILE and never through a pipe. Every mutation exited 1; only the
+ * rows named went red, VISIBLE excepted.
+ *   NARROW-WEDGE   the beam stops laid out over CONE_HALF_DEG - 6 instead of
+ *     CONE_HALF_DEG, so the light is drawn 48 degrees wide over a 60-degree
+ *     trap -> DRAWN "48deg of light ... against a catch wedge of +/-30" and
+ *     AGREE "60 disagreements, e.g. bearing 207 at 20m (-29.57deg off his
+ *     heading): drawn false, caught true". That is the exact failure the pair
+ *     exists for: ground that looks dark and catches you anyway.
+ *   FLAT-SLAB      BEAM replaced by the v423 profile, one alpha held flat with
+ *     a bevel at each end -> BEAM "at 3/4 out it is 100% of the peak" and
+ *     SOFT-EDGE "27 deg off his heading is 95% of the light on his axis".
+ *   NO-POOL        the radial-gradient layer deleted, so the wedge springs from
+ *     a mathematical point again -> SOURCE "0 stops in the pool layer",
+ *     SOURCE-RENDER "0.0 above ground just behind the flame" and LAMP-END
+ *     "1.59x the middle of the throw" (2.07x with the pool).
+ *   HUGE-POOL      CORE_R 0.085 -> 0.4 -> SOURCE "the pool dies 40% of the way
+ *     along the beam (120 m of a 300 m throw)" and SOURCE-RENDER "85.2 above
+ *     ground at 15% of the throw behind him". The honesty cap: a glow that big
+ *     is lit ground behind a man who catches nobody behind him.
+ *   SHORT-MASK     the distance mask taken to zero at 70% -> FALLOFF red.
+ *   PULSE-AGAIN    the 3.2s wandererLantern opacity loop put back -> STILL
+ *     "animation-name wandererLantern, opacity 0.74".
+ *   NO-GATE        the repaint gate deleted from paintWandererCone -> STEADY
+ *     "360 style assignment(s) across 120 calls" (0 with it) and HOLD.
+ *   FALLBACK-200   the null size made to fall back to 200 the way v423's caller
+ *     did -> HOLD "3 style assignment(s) from three unanswerable frames, still
+ *     200px". That 200 IS the flicker Tom reported.
+ *   VIRGIN-BLANK   the null size made to return early with no fallback at all
+ *     -> HOLD "200px, background painted: false". The other direction, and
+ *     anti-regression rule 8: never default to hidden.
+ *   MIRROR-UNNEGATED  the mirrored plate's translate left un-negated ->
+ *     APEX-MIRRORED "124.75px between the apex and the flame".
+ * A MUTATION THAT PROVED NOTHING, recorded because it is the useful half: the
+ * distance mask restored to its v423 stops moved no row at all (LAMP-END read
+ * 1.97x against 2.07x). The near-field brightness is carried by the pool, not
+ * by the mask, so the mask was left as it shipped.
+ *
  *   node tests/wanderer-boneyard-audit.mjs        (self-serves this checkout)
  *   URL=https://... node tests/wanderer-boneyard-audit.mjs
  */
@@ -275,22 +323,95 @@ try {
 
     /* WHAT IS DRAWN IS WHAT CATCHES YOU. Read the wedge back out of the REAL
        paint function rather than trusting that two numbers agree: a cone drawn
-       wider than the predicate is a player caught by ground that looked dark. */
+       wider than the predicate is a player caught by ground that looked dark.
+
+       PARSED PROPERLY NOW, because the beam is no longer a flat top. The old
+       read looked for the two stops carrying the one alpha the wedge was
+       painted with (.46) and called the outer one the edge. The profile is a
+       dome, every stop carries a different alpha, and .46 is not among them, so
+       that read would find nothing on a perfectly good cone. This one takes
+       EVERY stop out of the conic layer and derives the drawn edge from where
+       the alpha reaches zero, which is what "the edge of the light" means for
+       any profile anyone paints in future. */
+    /* CLASSED AND STYLED, not a bare div. The stylesheet carries the distance
+       falloff, so an unclassed element reports `mask: none` and the FALLOFF row
+       below grades nothing. (It did exactly that on the first run.) */
+    W.ensureWandererStyle();
     const el = document.createElement('div');
+    el.className = 'wanderer-cone';
     document.body.appendChild(el);
-    W.paintWandererCone(el, 300, 123.4);
+    const HEAD = 123.4;
+    W.paintWandererCone(el, 300, HEAD);
     const bg = el.style.background;
-    el.remove();
-    const from = /from\s+([\d.]+)deg/.exec(bg);
-    // the last fully-lit stop is the drawn edge of the wedge
+    const maskCss = getComputedStyle(el).getPropertyValue('mask-image')
+      || getComputedStyle(el).getPropertyValue('-webkit-mask-image') || '';
+    // the two layers: the flame's own pool, then the wedge
+    const iConic = bg.indexOf('conic-gradient(');
+    const conic = iConic >= 0 ? bg.slice(iConic) : '';
+    const pool = iConic > 0 ? bg.slice(0, iConic) : '';
+    const from = /from\s+([\d.]+)deg/.exec(conic);
     // the browser re-serialises rgba() with its own spacing and a leading zero,
     // so the read has to tolerate both forms rather than the string we wrote
-    const stops = [...bg.matchAll(/rgba\(\s*255,\s*228,\s*150,\s*0?\.46\s*\)\s+([\d.]+)deg/g)].map(x => +x[1]);
+    const rx = /rgba\(\s*255,\s*228,\s*150,\s*(0?\.?\d+)\s*\)\s+([\d.]+)deg/g;
+    const stops = [...conic.matchAll(rx)].map(m => ({ a: +m[1], deg: +m[2] }));
+    const lit = stops.filter(s => s.a > 0);
+    // the drawn wedge runs from the last dark stop before the light to the
+    // first dark stop after it
+    const before = stops.filter(s => s.a === 0 && s.deg <= (lit[0] || {}).deg).pop();
+    const after = stops.find(s => s.a === 0 && s.deg >= (lit[lit.length - 1] || {}).deg);
+    const peak = lit.reduce((m, s) => (s.a > m.a ? s : m), lit[0] || { a: 0, deg: 0 });
+    const axis = ((before || {}).deg + (after || {}).deg) / 2;
+    /* IS IT A DOME. Walking outward from the axis in either direction, the alpha
+       may never rise: that is what separates a beam from a slab with bevelled
+       sides. And the shoulder has to be a real fall, not a rounding: at 3/4 of
+       the way out the light must be well under the axis. */
+    const outward = (dir) => lit.filter(s => dir > 0 ? s.deg >= axis : s.deg <= axis)
+      .sort((p, q) => dir * (p.deg - q.deg)).map(s => s.a);
+    const monotone = arr => arr.every((v, i) => i === 0 || v <= arr[i - 1] + 1e-9);
+    const at = frac => {
+      const want = axis + frac * ((after || {}).deg - axis);
+      return lit.reduce((m, s) => Math.abs(s.deg - want) < Math.abs(m.deg - want) ? s : m, lit[0]).a;
+    };
+    /* THE POOL AT THE FLAME. A circle, centred, whose outermost stop is dark:
+       its radius is the % at that stop, as a fraction of the beam's radius. */
+    const poolStops = [...pool.matchAll(/rgba\([^)]*?,\s*(0?\.?\d+)\s*\)\s+([\d.]+)%/g)].map(m => ({ a: +m[1], pc: +m[2] }));
+    el.remove();
+
+    /* DRAWN == CAUGHT, ON A GRID. The rows above compare two numbers; this walks
+       a real fan of bearings and radii around a real Wanderer and asks the
+       DRAWN geometry and inWandererCone the same question about each point. Any
+       disagreement is ground that looks one way and behaves the other. */
+    const gw = W.wandererAt(7, 3, DATE, 17.5);
+    const drawnLo = gw.heading - (axis - (before || {}).deg);
+    const drawnHi = gw.heading + ((after || {}).deg - axis);
+    const grid = { n: 0, lit: 0, dark: 0, disagree: 0, worst: null };
+    for (let brg = 0; brg < 360; brg += 1) {
+      for (const dist of [20, 80, 150, 240, 297, 303, 380]) {
+        const p = dest(gw.lat, gw.lng, brg, dist);
+        const rel = ((brg - gw.heading) + 540) % 360 - 180;
+        const drawn = dist <= R && rel >= (drawnLo - gw.heading) && rel <= (drawnHi - gw.heading);
+        const caught = W.inWandererCone(gw, p.lat, p.lng);
+        grid.n++;
+        if (caught) grid.lit++; else grid.dark++;
+        if (drawn !== caught) { grid.disagree++; if (!grid.worst) grid.worst = { brg, dist, rel: +rel.toFixed(2), drawn, caught }; }
+      }
+    }
+
     return {
       n: cases.length, headings: headings.size, all_ahead: all('ahead'), all_edgeIn: all('edgeIn'), all_justIn: all('justIn'),
       all_onHim: all('onHim'), none_edgeOut: none('edgeOut'), none_side: none('side'),
       none_behind: none('behind'), none_tooFar: none('tooFar'),
-      drawnFrom: from ? +from[1] : null, drawnSpan: stops.length ? Math.max(...stops) : null,
+      drawnFrom: from ? +from[1] : null,
+      wedgeLo: before ? before.deg : null, wedgeHi: after ? after.deg : null,
+      nStops: stops.length, peakA: peak.a, peakDeg: peak.deg, axis,
+      domeUp: monotone(outward(1)), domeDown: monotone(outward(-1)),
+      shoulder: peak.a ? at(0.75) / peak.a : null,
+      pool: poolStops.length, poolInner: poolStops.length ? poolStops[0].a : null,
+      poolOuterA: poolStops.length ? poolStops[poolStops.length - 1].a : null,
+      poolRadiusPc: poolStops.length ? poolStops[poolStops.length - 1].pc : null,
+      maskEndsDark: /rgba\(\s*0,\s*0,\s*0,\s*0\s*\)\s+100%/.test(maskCss),
+      maskHead: maskCss.slice(0, 90),
+      grid, head: HEAD, gridHeading: gw.heading,
       H, R, bgLen: bg.length,
     };
   }, DATE);
@@ -303,11 +424,71 @@ try {
   ok('OUT a player outside it is not: past the light, off to the side, and behind him',
     cone.none_tooFar && cone.none_side && cone.none_behind && cone.none_edgeOut,
     `${cone.R * 1.25}m out ${cone.none_tooFar}, abreast ${cone.none_side}, behind ${cone.none_behind}, ${cone.H + 2}deg off ${cone.none_edgeOut}`);
+  ok('CONTROL the painted wedge was really read back, stop by stop',
+    cone.nStops >= 4 && cone.peakA > 0 && cone.wedgeLo !== null && cone.wedgeHi !== null,
+    `${cone.nStops} colour stops parsed out of the conic layer, peak alpha ${cone.peakA} at ${cone.peakDeg}deg`);
   ok('DRAWN the wedge the map paints is the same wedge that catches you',
-    cone.drawnFrom !== null && cone.drawnSpan !== null
-    && Math.abs(cone.drawnFrom - (123.4 - cone.H)) < 0.11
-    && Math.abs(cone.drawnSpan - cone.H * 2) < 3.01,
-    `painted from ${cone.drawnFrom}deg spanning ${cone.drawnSpan}deg for heading 123.4 +/- ${cone.H}`);
+    cone.drawnFrom !== null
+    && Math.abs(cone.drawnFrom - (cone.head - cone.H)) < 0.11
+    && Math.abs((cone.wedgeHi - cone.wedgeLo) - cone.H * 2) < 0.11
+    && Math.abs(cone.axis - cone.H) < 0.11,
+    `painted from ${cone.drawnFrom}deg, dark at ${cone.wedgeLo} and ${cone.wedgeHi}, `
+    + `so ${cone.wedgeHi - cone.wedgeLo}deg of light centred on heading ${cone.head} against a catch wedge of +/-${cone.H}`);
+
+  /* DRAWN == CAUGHT, POINT BY POINT. The row above compares the wedge's numbers.
+     This one takes 2520 real points around a real Wanderer and asks the drawn
+     geometry and inWandererCone about each of them, so "the light and the trap
+     are the same shape" is measured rather than restated. Carries its own
+     control: a grid that landed entirely inside or entirely outside the beam
+     would agree perfectly and prove nothing (rule 3). */
+  ok('CONTROL the drawn-vs-caught grid straddles the edge of the light',
+    cone.grid.n >= 1000 && cone.grid.lit > 100 && cone.grid.dark > 100,
+    `${cone.grid.n} points around a Wanderer heading ${cone.gridHeading.toFixed(1)}deg: ${cone.grid.lit} caught, ${cone.grid.dark} not`);
+  ok('AGREE every point the beam is drawn over is a point that catches you, and no other',
+    cone.grid.disagree === 0,
+    cone.grid.disagree === 0 ? `0 disagreements in ${cone.grid.n} points`
+      : `${cone.grid.disagree} disagreements, e.g. bearing ${cone.grid.worst.brg} at ${cone.grid.worst.dist}m `
+        + `(${cone.grid.worst.rel}deg off his heading): drawn ${cone.grid.worst.drawn}, caught ${cone.grid.worst.caught}`);
+
+  /* BEAM. Tom, 2026-08-22: "you need to have the cone coming out of the lantern
+     in a more believable way". The old profile held ONE alpha flat from +3deg to
+     +57deg with a 3-degree bevel at each end, which is a pane of coloured light,
+     not a beam, and it is the reason the wedge read as a shape laid on the map.
+     Light out of a lamp is brightest on its axis and dies towards its edges.
+     THE DIRECTION OF FAILURE MATTERS AT BOTH ENDS (rule 11). Too flat and it is
+     the slab again; too domed and the edges vanish, which would be worse than
+     the bug, because the edge of the light is the edge of the trap and a player
+     has to be able to see it. So the shoulder is a BAND: at three quarters of
+     the way out the light must have fallen well below the axis and must still
+     be plainly there. Measured on this tree: 0.58 of the peak. */
+  ok('BEAM the light is a dome, brightest on its axis and dimmer to both edges',
+    cone.domeUp && cone.domeDown && cone.shoulder !== null
+    && cone.shoulder < 0.75 && cone.shoulder > 0.35
+    && Math.abs(cone.peakDeg - cone.axis) < 0.11,
+    `peak alpha ${cone.peakA} sits on the axis; falls monotonically to both edges `
+    + `(${cone.domeUp}/${cone.domeDown}); at 3/4 out it is ${(cone.shoulder * 100).toFixed(0)}% of the peak`);
+
+  /* SOURCE. The other half of "coming out of the lantern": a wedge springing
+     from a mathematical point is light that appears out of nothing. There is a
+     pool at the apex now, and it is the brightest thing in the drawing.
+     AND IT IS CAPPED, which is the honesty half. The pool is a full circle, so
+     it is the only lit ground BEHIND him, and inWandererCone catches nobody
+     behind him past 5 m. A pool allowed to grow would become a second catch
+     zone that catches nothing. Held under 12% of the beam's radius, which at
+     the shipped 300 m is 36 m of glow around a man carrying a lamp. */
+  ok('SOURCE the beam grows out of a pool of light at the flame, not out of a point',
+    cone.pool >= 2 && cone.poolInner > cone.peakA && cone.poolOuterA === 0,
+    `${cone.pool} stops in the pool layer, brightest ${cone.poolInner} against a beam peak of ${cone.peakA}, dark at its rim`);
+  ok('SOURCE and the pool stays a lamp, never a second catch zone behind him',
+    cone.poolRadiusPc !== null && cone.poolRadiusPc > 2 && cone.poolRadiusPc < 12,
+    `the pool dies ${cone.poolRadiusPc}% of the way along the beam (${(cone.poolRadiusPc / 100 * cone.R).toFixed(0)} m of a ${cone.R} m throw)`);
+
+  /* THE LIGHT REACHES THE WHOLE WAY. The radial mask is what makes it fade with
+     distance, and it must reach zero at 100% and NOT before: a mask that died at
+     70% would draw a beam visibly shorter than the range that catches you, which
+     is the same dishonesty as a narrow wedge. */
+  ok('FALLOFF the beam fades out exactly at its range, not before it',
+    cone.maskEndsDark, `mask ${cone.maskHead}`);
 
   /* THE APEX IS THE LANTERN, NOT THE MIDDLE OF HIM.
    *
@@ -331,19 +512,36 @@ try {
     el.innerHTML = W.wandererMarkHtml();
     host.appendChild(el);
     document.body.appendChild(host);
-    W.paintWandererCone(el.querySelector('.wanderer-cone'), 480, 0);
+    /* MEASURED ON BOTH FACINGS. v423 mirrors the plate on his eastward half so
+       the lantern always leads, and negates the translate with it so the flame
+       stays on the marker's anchor. Its header states the two transforms it
+       expects and says "VERIFIED BY RENDER SEPARATELY", which means the shipped
+       suite never actually measured the mirrored case: a mirror that forgot to
+       negate would leave the beam coming out of his back with every row green.
+       The flame is at LANTERN.x on the unmirrored plate and at 1 - LANTERN.x on
+       the mirrored one, which is the same correction the live suite needed. */
+    const read = (heading) => {
+      W.paintWandererCone(el.querySelector('.wanderer-cone'), 480, heading);
+      const east = el.classList.contains('facing-east');
+      const body = el.querySelector('.wanderer-body').getBoundingClientRect();
+      const cone = el.querySelector('.wanderer-cone').getBoundingClientRect();
+      const lx = east ? 1 - W.LANTERN.x : W.LANTERN.x;
+      const lant = { x: body.left + lx * body.width, y: body.top + W.LANTERN.y * body.height };
+      const cc = { x: cone.left + cone.width / 2, y: cone.top + cone.height / 2 };
+      const pc = { x: body.left + body.width / 2, y: body.top + body.height / 2 };
+      return {
+        east, transform: getComputedStyle(el.querySelector('.wanderer-body')).transform,
+        dLantern: +Math.hypot(cc.x - lant.x, cc.y - lant.y).toFixed(2),
+        dPlateCentre: +Math.hypot(cc.x - pc.x, cc.y - pc.y).toFixed(2),
+      };
+    };
+    const west = read(270), east = read(90);
     const mark = el.getBoundingClientRect();
-    const body = el.querySelector('.wanderer-body').getBoundingClientRect();
-    const cone = el.querySelector('.wanderer-cone').getBoundingClientRect();
-    const lant = { x: body.left + W.LANTERN.x * body.width, y: body.top + W.LANTERN.y * body.height };
-    const cc = { x: cone.left + cone.width / 2, y: cone.top + cone.height / 2 };
-    const pc = { x: body.left + body.width / 2, y: body.top + body.height / 2 };
     const taps = getComputedStyle(el).pointerEvents;
     host.remove();
     return {
       markPx: Math.round(mark.width), MARK_PX: W.MARK_PX, taps,
-      dLantern: +Math.hypot(cc.x - lant.x, cc.y - lant.y).toFixed(2),
-      dPlateCentre: +Math.hypot(cc.x - pc.x, cc.y - pc.y).toFixed(2),
+      dLantern: west.dLantern, dPlateCentre: west.dPlateCentre, west, east,
       lantern: W.LANTERN,
     };
   });
@@ -354,8 +552,247 @@ try {
     `the plate's centre is ${apex.dPlateCentre}px from the apex (lantern at ${(apex.lantern.x * 100).toFixed(1)}%, ${(apex.lantern.y * 100).toFixed(1)}% of the plate)`);
   ok('APEX the cone springs from his LANTERN, not from the middle of the drawing',
     apex.dLantern < 1.5, `${apex.dLantern}px between the cone's apex and the flame`);
+  ok('CONTROL the mirror really fired, so APEX-MIRRORED is grading a flipped plate',
+    apex.east.east === true && apex.west.east === false && /^matrix\(-1/.test(apex.east.transform),
+    `west ${apex.west.transform}; east ${apex.east.transform}`);
+  ok('APEX-MIRRORED and it still does once he turns east and the plate is flipped',
+    apex.east.dLantern < 1.5,
+    `${apex.east.dLantern}px between the apex and the flame on the mirrored plate `
+    + `(${apex.west.dLantern}px unmirrored), so the negated translate really does keep the light on him`);
   ok('TAPTHRU a 260px marker does not swallow taps on the spawns underneath him',
     apex.taps === 'none', `pointer-events: ${apex.taps}`);
+
+  /* --------------------------------------------- THE LIGHT HOLDS STILL
+   *
+   * Tom, 2026-08-22: "the wanderer's light cone is flickering in size ... the
+   * cone shouldn't flicker or change size." Two separate faults behind one
+   * sentence, and they fail in different places, so they are graded separately.
+   *
+   *  a. IT PULSED. The cone carried a 3.2s opacity loop between .74 and .98,
+   *     added as a lantern breathing. He reads it as a fault. Graded on the
+   *     computed style, with a visibility floor beside it so "no animation"
+   *     cannot be achieved by turning the warning off.
+   *  b. IT RESIZED. Graded here as the CONTRACT of the paint function, and on
+   *     the real moving map in tests/wanderer-patrol-live-audit.mjs
+   *     (STEADY-LIVE, TRACKS-LIVE), which is the only place the real failure
+   *     could be reproduced.
+   */
+  const still = await page.evaluate(async () => {
+    const W = await import('./js/wanderer.js');
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:40px;top:40px;';
+    const el = document.createElement('div');
+    el.className = 'map-wanderer-mark';
+    el.innerHTML = W.wandererMarkHtml();
+    host.appendChild(el);
+    document.body.appendChild(host);
+    const cone = el.querySelector('.wanderer-cone');
+    const cs = getComputedStyle(cone);
+    const anim = { name: cs.animationName, opacity: +cs.opacity };
+
+    W.paintWandererCone(cone, 507.6, 42);
+    const settled = Math.round(cone.getBoundingClientRect().width);
+
+    /* THE JITTER, REPRODUCED. A pan reprojects to a size that differs in the
+       hundredths of a pixel; drive 120 of those and nothing on screen may move.
+       Counted on the STYLE ATTRIBUTE, via a MutationObserver, because "it did
+       not repaint" and "it repainted with the same string" are different
+       machines and only one of them re-rasterises a 500px beam every frame. */
+    /* COUNTED AT THE SETTER, and the first two instruments here were both
+       checks that could not fail.
+         A MutationObserver CALLBACK is a microtask, so it reports zero for
+         everything that happened inside a synchronous loop.
+         takeRecords() fixes that and is still wrong, because Chrome does not
+         dirty the style attribute when a CSS property is assigned the value it
+         already holds. Measured: with the repaint gate DELETED, so the function
+         rewrote every property on all 120 calls, the observer saw 0 mutations
+         and the row passed. That is the exact shape of anti-regression rule 1.
+       So the count is taken where the work is: a Proxy over the element's own
+       style object, which sees every assignment whether or not the value
+       changed. That is also the thing being asserted, since the cost of the
+       flicker is re-rasterising a 500px conic gradient, not the attribute. */
+    let sets = 0;
+    const realStyle = cone.style;
+    const spy = new Proxy(realStyle, {
+      get: (t, k) => { const v = t[k]; return typeof v === 'function' ? v.bind(t) : v; },
+      set: (t, k, v) => { sets++; t[k] = v; return true; },
+    });
+    Object.defineProperty(cone, 'style', { configurable: true, get: () => spy });
+    const writes = () => { const n = sets; sets = 0; return n; };
+    writes();
+    /* THE NOISE IS MODELLED ON THE REAL THING, +/- a quarter of a pixel. That is
+       what a pan actually produces: measured on the live map, a 1.6 s pan at a
+       fixed zoom held ONE rendered width across 115 frames once the gate was in
+       (tests/wanderer-patrol-live-audit.mjs, STEADY-LIVE). Deliberately NOT
+       straddling a rounding boundary, which would be asking the gate to have
+       hysteresis it does not claim: the contract is that the drawn size is the
+       rounded size, and equal rounded sizes repaint nothing. */
+    const widths = new Set();
+    for (let i = 0; i < 120; i++) {
+      W.paintWandererCone(cone, 508 + (Math.random() - 0.5) * 0.5, 42);
+      widths.add(Math.round(cone.getBoundingClientRect().width * 100) / 100);
+    }
+    const jitterWrites = writes();
+
+    /* THE CONTROLS. A gate that never lets anything through is not a gate, and
+       the two things that MUST get through are a real zoom and a real tick. */
+    W.paintWandererCone(cone, 640, 42);
+    const zoomWrites = writes(), zoomed = Math.round(cone.getBoundingClientRect().width);
+    W.paintWandererCone(cone, 640, 43.5);
+    const turnWrites = writes();
+
+    /* AND A SIZE THE MAP CANNOT ANSWER MUST CHANGE NOTHING. This is the actual
+       v423 flicker: js/app.js substituted a 200px fallback on any frame where
+       the projection was declined, which through a pan is every few seconds. */
+    W.paintWandererCone(cone, null, 43.5);
+    W.paintWandererCone(cone, 0, 43.5);
+    W.paintWandererCone(cone, undefined, 43.5);
+    const nullWrites = writes(), heldPx = Math.round(cone.getBoundingClientRect().width);
+    delete cone.style;                                   // hand the real style object back
+
+    // and a cone nobody has ever sized still draws, rather than vanishing
+    const fresh = document.createElement('div');
+    fresh.className = 'map-wanderer-mark';
+    fresh.innerHTML = W.wandererMarkHtml();
+    document.body.appendChild(fresh);
+    const fc = fresh.querySelector('.wanderer-cone');
+    W.paintWandererCone(fc, null, 42);
+    const virgin = { px: Math.round(fc.getBoundingClientRect().width), painted: /gradient/.test(fc.style.background) };
+    fresh.remove();
+    host.remove();
+    return { anim, settled, jitterWrites, widths: [...widths], zoomWrites, zoomed, turnWrites, nullWrites, heldPx, virgin };
+  });
+
+  ok('STILL the lantern does not pulse, and is still plainly visible without it',
+    still.anim.name === 'none' && still.anim.opacity >= 0.6,
+    `animation-name ${still.anim.name}, opacity ${still.anim.opacity}`);
+  ok('CONTROL the cone under test was really sized before the jitter was driven',
+    still.settled > 400, `${still.settled}px`);
+  ok('STEADY 120 sub-pixel resizes, as a pan produces, repaint nothing and move nothing',
+    still.jitterWrites === 0 && still.widths.length === 1,
+    `${still.jitterWrites} style assignment(s) across 120 calls, ${still.widths.length} rendered width(s): [${still.widths}]`);
+  ok('CONTROL and the gate still lets a real zoom and a real turn of his head through',
+    still.zoomWrites > 0 && still.turnWrites > 0 && still.zoomed === 640,
+    `zoom ${still.zoomWrites} style assignment(s) -> ${still.zoomed}px, heading change ${still.turnWrites}`);
+  ok('HOLD a frame the map cannot size keeps the beam it has, instead of collapsing to the fallback',
+    still.nullWrites === 0 && still.heldPx === 640,
+    `${still.nullWrites} style assignment(s) from three unanswerable frames, still ${still.heldPx}px`);
+  ok('HOLD and a cone nobody has ever sized is drawn anyway, rather than left invisible',
+    still.virgin.painted && still.virgin.px > 0,
+    `${still.virgin.px}px, background painted: ${still.virgin.painted}`);
+
+  /* ------------------------------------- WHAT THE LIGHT ACTUALLY LOOKS LIKE
+   *
+   * Every row above reads the gradient's own numbers, and a gradient's numbers
+   * are not a picture: masks, blend modes and a stacking context all sit
+   * between the stops and the player's eye, and this repo has a rule about
+   * grading the render rather than the source values. So this SCREENSHOTS the
+   * real cone on a flat ground and measures the pixels.
+   *
+   * THE MAN IS REMOVED FIRST, and that is not a convenience. His plate is warm
+   * green and gold with a drop shadow, and a first pass at this measured his
+   * coat as lit ground and reported a 199-degree wedge on a 60-degree cone. The
+   * light alone is the thing being graded.
+   *
+   * Decoded through a canvas in the page, the tests/crate-palette-audit.mjs
+   * pattern: screenshot to base64, load it back as an Image, getImageData.
+   */
+  const GROUND = 0x20;                                     // the flat #202020 ground this is drawn on
+  /* Laid OVER the app on its own opaque ground rather than replacing the page:
+     the money, ceiling and lint sections still have to run in this same page
+     after this, and a wiped body is a fine way to make them grade nothing. */
+  const shotBox = await page.evaluate(async () => {
+    const W = await import('./js/wanderer.js');
+    const stage = document.createElement('div');
+    stage.id = 'cone-stage';
+    stage.style.cssText = 'position:fixed;inset:0;background:#202020;z-index:99999;';
+    const el = document.createElement('div');
+    el.className = 'map-wanderer-mark';
+    el.style.cssText = 'position:absolute;left:115px;top:300px;';
+    el.innerHTML = W.wandererMarkHtml();
+    stage.appendChild(el);
+    document.body.appendChild(stage);
+    el.querySelector('.wanderer-body').remove();          // the LIGHT alone
+    W.paintWandererCone(el.querySelector('.wanderer-cone'), 360, 90);   // due east
+    const b = el.querySelector('.wanderer-cone').getBoundingClientRect();
+    return { cx: b.left + b.width / 2, cy: b.top + b.height / 2, r: b.width / 2 };
+  });
+  const b64 = await page.screenshot({
+    encoding: 'base64',
+    clip: { x: shotBox.cx - shotBox.r, y: shotBox.cy - shotBox.r, width: shotBox.r * 2, height: shotBox.r * 2 },
+  });
+  const px = await page.evaluate(async ({ b64, GROUND }) => {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = 'data:image/png;base64,' + b64; });
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data;
+    const R = c.width / 2, cx = R, cy = R;
+    // the beam was painted due east, so the axis is +x and "behind him" is -x
+    const bucket = {};
+    const add = (k, v) => { (bucket[k] = bucket[k] || []).push(v); };
+    for (let y = 0; y < c.height; y++) {
+      for (let x = 0; x < c.width; x++) {
+        const i = (y * c.width + x) * 4;
+        const lit = d[i] - GROUND;                        // the light is warm; red carries it
+        const dx = x - cx, dy = y - cy, rad = Math.hypot(dx, dy) / R;
+        if (rad > 1) continue;
+        const rel = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI);   // 0 = dead ahead, 180 = behind
+        if (rad > 0.02 && rad < 0.05 && rel > 150) add('behind', lit);
+        if (rad > 0.13 && rad < 0.18 && rel > 150) add('behindOut', lit);
+        if (rad > 0.03 && rad < 0.07 && rel < 6) add('atLamp', lit);
+        if (rad > 0.47 && rad < 0.53 && rel < 6) add('mid', lit);
+        if (rad > 0.85 && rad < 0.92 && rel < 6) add('far', lit);
+        if (rad > 0.2 && rad < 0.8 && rel > 25 && rel < 28) add('edge', lit);
+        if (rad > 0.2 && rad < 0.8 && rel < 4) add('axis', lit);
+        if (rad > 0.2 && rad < 0.8 && rel > 40 && rel < 90) add('outside', lit);
+      }
+    }
+    const mean = k => (bucket[k] || []).reduce((s, v) => s + v, 0) / ((bucket[k] || []).length || 1);
+    const n = k => (bucket[k] || []).length;
+    return {
+      w: c.width, behind: mean('behind'), behindOut: mean('behindOut'), atLamp: mean('atLamp'),
+      mid: mean('mid'), far: mean('far'), edge: mean('edge'), axis: mean('axis'), outside: mean('outside'),
+      counts: { behind: n('behind'), atLamp: n('atLamp'), mid: n('mid'), edge: n('edge'), axis: n('axis') },
+    };
+  }, { b64, GROUND });
+  await page.evaluate(() => { document.getElementById('cone-stage')?.remove(); });
+
+  ok('CONTROL the beam was really rendered and really sampled (an empty sample is a FAILURE)',
+    px.w > 300 && px.counts.axis > 200 && px.counts.edge > 200 && px.counts.atLamp > 20 && px.axis > 10,
+    `${px.w}px render; ${px.counts.axis} axis / ${px.counts.edge} edge / ${px.counts.atLamp} lamp pixels, axis reads +${px.axis.toFixed(1)} over the ground`);
+  ok('CONTROL and nothing is drawn outside the wedge, so these are the beam\'s own pixels',
+    px.outside < 1.5, `${px.outside.toFixed(2)} above ground at 40-90 deg off his heading`);
+
+  /* HOT AT THE LAMP, measured along the axis. "Brightest at the lantern" was
+     already the intent and the mask already started at full, but it started
+     FALLING from the very first pixel, so the near field was only 1.5x the
+     middle of the throw. Measured on this tree after the fix: 2.0x. */
+  ok('LAMP-END the beam is at its hottest where the flame is, not out in the field',
+    px.atLamp > px.mid * 1.7 && px.mid > px.far,
+    `axis reads ${px.atLamp.toFixed(1)} at the lamp, ${px.mid.toFixed(1)} halfway out, ${px.far.toFixed(1)} at the far end `
+    + `(${(px.atLamp / px.mid).toFixed(2)}x the middle of the throw)`);
+
+  /* THE SOURCE HAS SIZE. This is the row that grades Tom's actual complaint and
+     it is a binary: before the pool, the ground behind him was mathematically
+     dark, because a conic gradient paints nothing outside its wedge. Now his
+     lamp glows. Bounded on the other side too, and that bound is the honesty
+     one: the glow must die well before it could read as ground worth avoiding,
+     since inWandererCone catches nobody behind him past 5 m. */
+  ok('SOURCE-RENDER his lantern glows: there is light on the ground right at the flame',
+    px.behind > 8, `${px.behind.toFixed(1)} above ground just behind the flame (dead ground reads 0)`);
+  ok('SOURCE-RENDER and that glow dies at the lamp, so it can never read as lit ground',
+    px.behindOut < 2, `${px.behindOut.toFixed(1)} above ground at 15% of the throw behind him`);
+
+  /* SOFT EDGES. The old profile was one flat alpha with a 3-degree bevel, so the
+     edge sat at 84% of the axis: a hard line, and the single biggest reason it
+     read as a shape laid on the map rather than as light. Measured after: 35%.
+     Floored as well as capped, because an edge nobody can see is the edge of the
+     trap nobody can see. */
+  ok('SOFT-EDGE the sides of the beam fall away rather than ending in a line',
+    px.edge / px.axis < 0.6 && px.edge / px.axis > 0.15,
+    `the light 27 deg off his heading is ${(100 * px.edge / px.axis).toFixed(0)}% of the light on his axis `
+    + `(${px.edge.toFixed(1)} against ${px.axis.toFixed(1)})`);
 
   /* OUTWALKABLE. The range is the difficulty dial and it has a hard ceiling that
      is arithmetic, not taste: he turns one lap per WANDER_LAP_MIN, so the far tip

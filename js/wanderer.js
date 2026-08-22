@@ -335,22 +335,40 @@ export function ensureWandererStyle() {
      its length. At 90 m the old near-flat mask read as a puddle and got away
      with it; over 300 m a flat wedge reads as a coloured shape laid on the map.
      The falloff starts at the flame and never fully stops, so the far end is a
-     hint of light rather than an edge. */
+     hint of light rather than an edge.
+     LEFT ALONE ON PURPOSE, 2026-08-22, and this note is the reason. Asked
+     whether these stops put the brightness at the SOURCE rather than out in the
+     middle of the throw, I measured instead of assuming: the mask is already
+     full black at 0%, so the hottest ring is on the lamp, and the whole
+     "brightest at the lantern" complaint is carried by the beam having no
+     source, not by this. A longer bright throat (#000 held to 7%) was built and
+     rendered and moved the axis reading at the flame from 122 to 127 out of
+     255, four percent, while the pool below moved it from 76 to 122. So the
+     mask went back to what shipped. Do not re-tune it without a render that
+     says it did something. */
   -webkit-mask-image: radial-gradient(circle, #000 0%, rgba(0,0,0,.62) 34%, rgba(0,0,0,.28) 68%, rgba(0,0,0,0) 100%);
   mask-image: radial-gradient(circle, #000 0%, rgba(0,0,0,.62) 34%, rgba(0,0,0,.28) 68%, rgba(0,0,0,0) 100%);
-  animation: wandererLantern 3.2s ease-in-out infinite;
+  /* IT DOES NOT MOVE. Tom, 2026-08-22: "the wanderer's light cone is flickering
+     ... the cone shouldn't flicker or change size". It carried a 3.2s opacity
+     loop between .74 and .98, added as a lantern "breathing"; he reads it as a
+     fault, so it is gone and the opacity is the static value the reduced-motion
+     rule already used. There is no @keyframes for the cone any more, which is
+     why the reduced-motion block below no longer names it: nothing to disable.
+     DO NOT ADD MOTION HERE. Not a shimmer, not a pulse, not a travelling
+     gradient. It is a warning light on a map, and a warning that moves on its
+     own is indistinguishable from a rendering fault. */
+  opacity: .9;
 }
-@keyframes wandererLantern { 0%, 100% { opacity: .74 } 50% { opacity: .98 } }
 .map-wanderer-mark.charging img { animation: wandererCharge 700ms ease-out both; }
 @keyframes wandererCharge {
   0% { transform: scale(1) } 45% { transform: scale(1.3) } 100% { transform: scale(1.12) }
 }
 /* REDUCED MOTION DISABLES, IT DOES NOT SPEED UP: animation-duration 0.001s does
-   not stop a loop, it runs it a thousand times a second. The cone still has to
-   be VISIBLE with motion off, because it is the warning, so it keeps a static
-   opacity rather than being hidden. */
+   not stop a loop, it runs it a thousand times a second. The cone is not listed:
+   it has no animation to disable now, and it must stay VISIBLE with motion off
+   because it is the warning, which its own static opacity above already gives
+   it. */
 @media (prefers-reduced-motion: reduce) {
-  .wanderer-cone { animation: none; opacity: .9; }
   .map-wanderer-mark.charging img { animation: none; }
 }`;
   document.head.appendChild(st);
@@ -364,23 +382,89 @@ export function wandererMarkHtml() {
     `<div class="wanderer-body"><img src="${WANDERER_ART}" alt="The Wanderer"></div>`;
 }
 
-// px is the cone's DIAMETER at CONE_RANGE_M; heading is his compass bearing.
+/* THE BEAM'S CROSS-SECTION, as fractions of CONE_HALF_DEG off the axis and the
+   alpha at each. Written against the half-angle rather than in degrees so the
+   profile survives a change to the catch geometry instead of silently drifting
+   away from it.
+
+   IT IS A DOME, NOT A FLAT TOP. The old profile was one alpha (.46) held flat
+   from +3 to +57 degrees with a 3-degree ramp at each end, which is a pane of
+   coloured light with two bevelled sides, and that is exactly what Tom saw:
+   "the cone ... pointing strangely out of the lamp", a shape laid on the map.
+   Light out of a lamp is brightest along its axis and dies towards its edges,
+   so the axis carries the peak and every stop off it is dimmer.
+
+   THE OUTERMOST STOP IS STILL ALPHA 0 AT EXACTLY THE HALF-ANGLE, and the one
+   before it is at .92 of it. That is deliberate and it is the honesty
+   constraint: the drawn wedge has to end where inWandererCone ends, or a player
+   gets caught by ground that looked dark. So the dome may reshape the INSIDE of
+   the wedge as much as it likes and may never narrow it: the edge still ramps
+   over the last 8% (2.4 degrees at the shipped half-angle, about the old 3) so
+   the boundary stays legible rather than fading into nothing.
+   Graded in tests/wanderer-boneyard-audit.mjs (DRAWN, BEAM). */
+const BEAM = [[-1, 0], [-0.92, .14], [-0.75, .30], [-0.5, .43], [-0.25, .50], [0, .52],
+  [0.25, .50], [0.5, .43], [0.75, .30], [0.92, .14], [1, 0]];
+
+/* THE FLAME'S OWN POOL, as a fraction of the beam's RADIUS. A wedge springing
+   from a mathematical point is the other half of "pointing strangely out of the
+   lamp": light with no source appears out of nothing. A real lamp is an object,
+   so it has a hot pool around it that the beam grows out of.
+   SMALL ON PURPOSE, and this is the number that has to stay small. The pool is a
+   full circle, so it is the one part of the drawing that is lit BEHIND him, and
+   inWandererCone catches nobody behind him beyond 5 m. At .085 of a 300 m radius
+   it is a 25 m bloom, which at the zoom the player gets is ~20 px: it reads as
+   his lantern glowing, which is true and is why he is visible at all, and never
+   as ground worth avoiding. Do not grow it into a second catch zone.
+   Graded in tests/wanderer-boneyard-audit.mjs (SOURCE). */
+const CORE_R = 0.085;
+
+/* px is the cone's DIAMETER at CONE_RANGE_M, or NULL when the map cannot answer
+   right now; heading is his compass bearing. */
 export function paintWandererCone(el, px, heading) {
   if (!el) return;
+  /* A NULL SIZE KEEPS THE SIZE HE HAS. Tom, 2026-08-22: "the cone shouldn't
+     flicker or change size". The caller used to substitute a 200 px fallback
+     whenever the map declined to project, which through a pan is every few
+     seconds, so a 508 px beam was repeatedly redrawn as a 200 px stub and then
+     put back. Measured on the real Boneyard: 508 -> 200 -> 508 inside 300 ms.
+     The last good size is a far better answer than a constant, and the 200 is
+     kept only for a cone that has never been sized at all, so a map that can
+     never project degrades to ugly rather than to invisible (anti-regression
+     rule 8) instead of degrading a correct beam to a wrong one.
+
+     AND REPAINT ONLY WHEN THE PICTURE WOULD ACTUALLY CHANGE. v423 bound the
+     sizing pass to map.on('move') as well as map.on('zoom'), which was the right
+     fix for the cone not tracking the ground through a pinch, but it means this
+     runs on every frame of every pan, where the projected size differs in the
+     hundredths of a pixel. Rounded first, then compared, so the comparison is
+     against what is DRAWN rather than against what was asked for and sub-pixel
+     noise cannot get through. A real zoom changes the rounded size and a real
+     tick changes the heading, and both still repaint on the next frame. */
+  const size = Math.round(px > 0 ? px : (el._conePx || 200));
+  if (el._conePx === size && el._coneDeg === heading) return;
+  el._conePx = size; el._coneDeg = heading;
   /* The one place that already knows his heading sets which way he faces, so the
      light and the man can never be told two different things. 0-180 is the
      eastward half on a compass bearing. */
   const mark = el.closest ? el.closest('.map-wanderer-mark') : null;
   if (mark) mark.classList.toggle('facing-east', heading > 0 && heading < 180);
-  el.style.width = el.style.height = `${Math.round(px)}px`;
+  el.style.width = el.style.height = `${size}px`;
   const from = ((heading - CONE_HALF_DEG) + 360) % 360;
   const span = CONE_HALF_DEG * 2;
+  const stops = BEAM
+    .map(([t, a]) => ` rgba(255,228,150,${a}) ${((t + 1) * CONE_HALF_DEG).toFixed(2)}deg`)
+    .join(',');
+  /* Two layers, and the pool is painted OVER the beam so the source is the
+     brightest thing in the drawing. Both are centred on the element's centre,
+     which is the marker's anchor, which is his lat/lng, which is the flame:
+     nothing here needs an offset. */
   el.style.background =
-    `conic-gradient(from ${from.toFixed(1)}deg,` +
-    ` rgba(255,228,150,0) 0deg,` +
-    ` rgba(255,228,150,.46) 3deg,` +
-    ` rgba(255,228,150,.46) ${span - 3}deg,` +
-    ` rgba(255,228,150,0) ${span}deg,` +
+    `radial-gradient(circle closest-side at 50% 50%,` +
+    ` rgba(255,242,206,.80) 0%,` +
+    ` rgba(255,236,180,.46) ${(CORE_R * 42).toFixed(1)}%,` +
+    ` rgba(255,228,150,.16) ${(CORE_R * 72).toFixed(1)}%,` +
+    ` rgba(255,228,150,0) ${(CORE_R * 100).toFixed(1)}%),` +
+    `conic-gradient(from ${from.toFixed(1)}deg,${stops},` +
     ` rgba(255,228,150,0) 360deg)`;
 }
 

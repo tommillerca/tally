@@ -33,6 +33,26 @@
  *   Unmutated at 200: PASS, exit 0, "176x130 ... 1.39x the ring and 45% of a
  *   393px screen", VERIFIED, 13 of 13.
  *
+ * PROVE-RED, 2026-08-22, for the rows added with the beam rework. Same method,
+ * `cp -R` throwaway, exit code read from a FILE.
+ *   V423-SIZING   js/app.js put back the way it was: both sizing paths gated on
+ *     map.loaded() and both opening with a 200 px fallback -> exit 1,
+ *     STEADY-LIVE "2 distinct width(s) across 132 frames of pan and a full
+ *     world tick: [200,508]" and TRACKS-LIVE "508 -> 1341 px over 3 distinct
+ *     widths, 1 step(s) backwards, smallest seen 200". That 200 is the CSS
+ *     fallback painted over a correct answer, and it is the size flicker Tom
+ *     reported. Unmutated: pan 1 width, zoom 10 to 28 widths, 0 backwards.
+ *   PULSE-LIVE    the 3.2s opacity loop put back on the cone -> exit 1,
+ *     STILL-LIVE "animation-name wandererLantern, opacity 0.893635".
+ *
+ * A ROW THAT WAS RED ON CLEAN MAIN AND IS FIXED HERE. LANTERN-LIVE read the
+ * flame at LANTERN.x on a plate that v423 mirrors on his eastward half, so it
+ * measured 124.75 px of error on a perfectly good cone whenever his beat
+ * happened to run east, which is half the time. Reproduced on clean v423 and on
+ * this branch before the fix, identical number, exactly (1 - 2*0.188) * 200.
+ * Audit drift, fixed at the assertion, and the mirrored case is now measured
+ * rather than asserted in prose (see APEX-MIRRORED in the sibling suite).
+ *
  * NEEDS A MAP. MapLibre needs WebGL and vector tiles; on a machine with neither,
  * every row here would be graded against a blank screen and pass on nothing. So
  * it measures the capability first and reports UNPROVEN with exit 97 rather than
@@ -118,10 +138,20 @@ async function run(offsetDeg, label) {
       const hit = document.elementFromPoint(Math.round(bb.left + bb.width * 0.5), Math.round(bb.top + bb.height * 0.42));
       through = !!hit && !hit.closest('.map-wanderer-mark');
     }
-    // the apex, on the REAL map: the cone's centre must land on the flame
+    /* the apex, on the REAL map: the cone's centre must land on the flame.
+       THE MIRROR MOVES THE FLAME, and this row did not know that. v423 flipped
+       the plate on his eastward half so the lantern always leads; LANTERN.x is
+       measured on the UNMIRRORED art, so on a mirrored plate the flame is at
+       1 - x and this read was 0.624 of the marker out. It went red on a
+       perfectly good cone whenever his beat happened to be heading east, which
+       is half the time, and it was red on clean v423: measured 124.75 px on
+       both v423 and this tree before the fix, exactly (1 - 2*0.188) * 200.
+       Audit drift, fixed at the assertion. */
+    const east = mark && mark.classList.contains('facing-east');
     let dLantern = null, dPlateCentre = null;
     if (bb && cb) {
-      const l = { x: bb.left + W.LANTERN.x * bb.width, y: bb.top + W.LANTERN.y * bb.height };
+      const lx = east ? 1 - W.LANTERN.x : W.LANTERN.x;
+      const l = { x: bb.left + lx * bb.width, y: bb.top + W.LANTERN.y * bb.height };
       const c = { x: cb.left + cb.width / 2, y: cb.top + cb.height / 2 };
       dLantern = +Math.hypot(c.x - l.x, c.y - l.y).toFixed(2);
       dPlateCentre = +Math.hypot(c.x - (bb.left + bb.width / 2), c.y - (bb.top + bb.height / 2)).toFixed(2);
@@ -155,11 +185,17 @@ async function run(offsetDeg, label) {
       imgSrc: img && img.getAttribute('src'),
       conePx: cb ? Math.round(cb.width) : null,
       coneOpacity: cs ? +cs.opacity : null,
-      coneBg: cs ? cs.backgroundImage.slice(0, 120) : null,
+      /* NOT SLICED. This used to be `.slice(0, 120)` and the row below tests it
+         for `conic-gradient`. The beam is two layers now, the flame's own pool
+         first and the wedge second, and the pool alone is longer than 120
+         characters: the slice would have hidden the conic entirely and taken a
+         healthy cone red. Kept whole, and the row prints its own head. */
+      coneBg: cs ? cs.backgroundImage : null,
+      coneAnim: cs ? cs.animationName : null,
       coneRadius: cs ? cs.borderRadius : null,
       inkW: ink ? Math.round(ink.w) : null, inkH: ink ? Math.round(ink.h) : null,
       ringPx: rr ? Math.round(rr.width) : null, pinPx: pr ? Math.round(pr.width) : null,
-      through, dLantern, dPlateCentre,
+      through, dLantern, dPlateCentre, facingEast: east,
       zWanderer, zOthers, behindAll, pinsOnHim, pinsHittable,
       range: W.CONE_RANGE_M, markPx: rb ? Math.round(rb.width) : null,
       screenH: innerHeight, screenW: innerWidth,
@@ -171,10 +207,64 @@ async function run(offsetDeg, label) {
       encButtons: [...document.querySelectorAll('.wnd-enc-acts .btn')].map(b => b.textContent.trim()),
     };
   });
+  /* DOES THE BEAM HOLD STILL WHILE THE MAP MOVES. Tom, 2026-08-22: "the
+     wanderer's light cone is flickering in size ... the cone shouldn't flicker
+     or change size."
+     THIS IS THE ONLY PLACE THE BUG EXISTS. It is not in the geometry and it is
+     not in the paint function: it was in what js/app.js handed the paint
+     function on a frame where the map declined to answer, and only a real
+     MapLibre camera move under real tile loading produces those frames. So the
+     map is DRIVEN here, panBy and zoomTo, and the cone's RENDERED width is
+     sampled on every animation frame throughout.
+     Measured on v423 before the fix: a 1.6 s pan showed the width go 508 -> 200
+     -> 508 within 300 ms, and a zoom went 508 -> 1226 -> 200 -> 1341. The 200
+     is the CSS fallback, painted over a correct answer because both sizing
+     paths were gated on map.loaded(), which is false for as long as any tile is
+     in flight, which through a pan is most of the time.
+     Only on the BEHIND boot: the AHEAD boot has an encounter sheet over the map
+     and driving the camera under it measures nothing. */
+  const drive = label !== 'behind' ? null : await page.evaluate(async () => {
+    const map = window.__map;
+    const cone = document.querySelector('.wanderer-cone');
+    if (!map || !cone) return { error: !map ? 'no window.__map' : 'no cone on the map' };
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const run = async (fn, ms) => {
+      const widths = [];
+      let alive = true;
+      const tick = () => { if (!alive) return; widths.push(Math.round(cone.getBoundingClientRect().width)); requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+      fn();
+      await wait(ms);
+      alive = false;
+      return { frames: widths.length, distinct: [...new Set(widths)].sort((a, b) => a - b), widths };
+    };
+    const z0 = map.getZoom();
+    /* THE PAN WINDOW IS 5.6 SECONDS FOR A 1.6 SECOND PAN, and the extra four are
+       the point. The collapse this row exists to catch was painted by
+       refreshWanderer, which runs on the Boneyard's 5000 ms world pass, so a
+       2.1 s window contained a tick only about two runs in five: proving the row
+       red against the real v423 sizing code produced a red TRACKS-LIVE and a
+       GREEN STEADY-LIVE, purely on where the tick happened to land. One full
+       tick period plus the pan means the sample always covers the moment the
+       fault fires (anti-regression rule 12: measure in the state the player is
+       complaining about). Nothing about the assertion changes: through a pan and
+       through a tick, at one zoom, the lit ground covers the same pixels. */
+    const pan = await run(() => map.panBy([180, 130], { duration: 1600 }), 5600);
+    const zoom = await run(() => map.zoomTo(z0 + 1.4, { duration: 1600 }), 2100);
+    /* Did it grow, and did it only ever grow. A zoom IN must make the lit ground
+       cover more pixels, monotonically: a single step backwards is the flicker.
+       One tolerance, of one pixel, for the rounding at the very start. */
+    let backwards = 0;
+    for (let i = 1; i < zoom.widths.length; i++) if (zoom.widths[i] < zoom.widths[i - 1] - 1) backwards++;
+    return { pan: { frames: pan.frames, distinct: pan.distinct },
+      zoom: { frames: zoom.frames, steps: zoom.distinct.length, backwards,
+        first: zoom.widths[0], last: zoom.widths[zoom.widths.length - 1],
+        min: Math.min(...zoom.widths) } };
+  });
   // kept for the eye, not asserted on: the rows above measure the DOM
   if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/wanderer-${label}.png` });
   await browser.close();
-  return { target, seenState };
+  return { target, seenState, drive };
 }
 
 /* EVERY ROW IS NAMED IN THE UNPROVEN LIST TOO, so a machine that cannot draw the
@@ -190,6 +280,10 @@ const ROWS = [
   'TAPTHRU-LIVE a tap on his coat reaches the map underneath, not him',
   'REACH-LIVE the beam is a searchlight, not a puddle: it runs past the edge of the screen',
   'NO-AMBUSH standing behind him starts no fight',
+  'STILL-LIVE the lantern does not pulse: no animation, and still plainly visible',
+  'CONTROL the map was really driven and the cone really sampled',
+  'STEADY-LIVE panning the map does not change the size of the light',
+  'TRACKS-LIVE and zooming does, smoothly and only upwards, never via the fallback',
   'CONTROL the ahead fix was really inside his cone',
   'CHARGE-LIVE walking into the light catches you, with no tap anywhere',
   'CHARGE-LIVE and what it opens is the CHOICE, not the arena behind it',
@@ -199,7 +293,7 @@ const ROWS = [
 const behind = await run(180, 'behind');
 let cap = behind && behind.cap;
 if (behind && !cap) {
-  const { target: t, seenState: s } = behind;
+  const { target: t, seenState: s, drive: s0drive } = behind;
   ok('CONTROL the behind-him fix was really outside his cone', t.predicted === false,
     `45 m at heading+180 from ${t.w.heading.toFixed(0)} deg`);
   ok('DRAWN-LIVE he is on the real map, as Cam drew him', s.hasMark && s.markVisible && /wanderer\.png$/.test(s.imgSrc || ''),
@@ -219,7 +313,8 @@ if (behind && !cap) {
     s.dPlateCentre > s.markPx * 0.1,
     `${s.dPlateCentre}px between the plate's centre and the apex, on a ${s.markPx}px marker`);
   ok('LANTERN-LIVE on the real map the beam springs from his flame, not his chest',
-    s.dLantern !== null && s.dLantern < 2, `${s.dLantern}px between the cone's apex and the lantern`);
+    s.dLantern !== null && s.dLantern < 2,
+    `${s.dLantern}px between the cone's apex and the lantern, on a plate drawn facing ${s.facingEast ? 'east (mirrored)' : 'west'}`);
   /* HE LOOMS, AND HE STOPS. A BAND, not a floor, because this line has now been
      wrong in both directions and a one-sided check cannot see that (rule 11:
      name the direction AND the bound).
@@ -257,6 +352,45 @@ if (behind && !cap) {
     s.conePx / 2 > s.ringPx / 2 * 3 && s.conePx / 2 > s.screenW / 2,
     `${Math.round(s.conePx / 2)}px of beam (${s.range} m) against a ${Math.round(s.ringPx / 2)}px 75 m ring, on a ${s.screenW}x${s.screenH} screen`);
   ok('NO-AMBUSH standing behind him starts no fight', s.arena === false, s.foeName || 'no arena');
+
+  /* THE BEAM DOES NOT MOVE ON ITS OWN. The opacity loop is gone (Tom read the
+     breathing as a fault), so the one thing that could still animate it is a
+     stray keyframe. Graded on the COMPUTED style of the real marker on the real
+     map, and paired with a visibility floor: "no animation" must not have been
+     achieved by turning the warning off. */
+  ok('STILL-LIVE the lantern does not pulse: no animation, and still plainly visible',
+    s.coneAnim === 'none' && s.coneOpacity >= 0.6,
+    `animation-name ${s.coneAnim}, opacity ${s.coneOpacity}`);
+
+  /* AND IT DOES NOT CHANGE SIZE WHILE THE MAP MOVES. See the note on the driver.
+     TWO ROWS BECAUSE THERE ARE TWO DIRECTIONS OF FAILURE, and rule 11 says name
+     both. A pan changes no zoom, so the lit ground covers the same pixels
+     throughout and the honest answer is ONE width: more than one is the
+     flicker. A zoom DOES change it, so exactly one width there would be the
+     v423 bug at the other end (the cone not tracking the ground through a
+     pinch); it must take many values, all of them growing.
+     Measured on this tree after the fix: pan 115 frames, 1 distinct width
+     (508 px); zoom 508 -> 1341 over 26 distinct widths with 0 steps backwards.
+     Measured on v423 before it: pan 2 widths (508 and the 200 px fallback);
+     zoom 4 widths including that same 200. */
+  const d = s0drive;
+  /* The floor is 20 and 12, not 60. These are requestAnimationFrame samples and
+     the frame rate here is whatever swiftshader manages while MapLibre is
+     rasterising tiles: measured across runs on this machine at 131, 115 and 54
+     frames for the pan and 91, 59 and 20 for the zoom. What this row is for is a
+     driver that never ran at all, which reports 0 or 1 (rule 3), not a slow
+     machine, and setting the bar at the best run seen would make it flaky. */
+  ok('CONTROL the map was really driven and the cone really sampled',
+    !!d && !d.error && d.pan.frames >= 40 && d.zoom.frames >= 12,
+    d ? (d.error || `${d.pan.frames} frames over the pan, ${d.zoom.frames} over the zoom`) : 'no driver ran');
+  ok('STEADY-LIVE panning the map does not change the size of the light',
+    !!d && !d.error && d.pan.distinct.length === 1,
+    d && !d.error ? `${d.pan.distinct.length} distinct width(s) across ${d.pan.frames} frames of pan and a full world tick: [${d.pan.distinct}]` : 'not measured');
+  ok('TRACKS-LIVE and zooming does, smoothly and only upwards, never via the fallback',
+    !!d && !d.error && d.zoom.steps >= 8 && d.zoom.backwards === 0 && d.zoom.last > d.zoom.first && d.zoom.min > 200,
+    d && !d.error
+      ? `${d.zoom.first} -> ${d.zoom.last} px over ${d.zoom.steps} distinct widths, ${d.zoom.backwards} step(s) backwards, smallest seen ${d.zoom.min}`
+      : 'not measured');
 }
 
 // ---- 2. AHEAD of him, in the light: the encounter fires from the fix alone
