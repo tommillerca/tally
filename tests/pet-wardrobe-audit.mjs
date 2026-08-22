@@ -41,6 +41,12 @@
  *             equipped: Today's hero companion, the Stable's card, the Paddock
  *             scene and the fight plate, all four driven for real.
  *   REMOVE    tapping a worn tile takes that piece off and leaves the rest on.
+ *   MIRROR    you can SEE her while you dress her. Tom, 2026-08-21: "when you
+ *             put the item on you have to scroll back up to see if it equipped
+ *             and how it looks." Her drawn INK and one WHOLE tile inside the
+ *             viewport at the same time, at the position the sheet opens in,
+ *             at 393x852 and 320x568 with --sat 0 and 59. Ink rather than the
+ *             .petcrop box, per figure-contract rule 3.
  *   SNAPSHOT  static. Wear is a property of the INSTANCE, never of the viewer.
  *             Every call site that draws a SNAPSHOT pet (a friend, a rival, a
  *             defender) must name `wear`, or S.petWear answers and a rival's
@@ -84,6 +90,28 @@
  *     -> SNAPSHOT names js/app.js and the line. ONLY SNAPSHOT.
  *   PET_SHOP.items emptied
  *     -> SETUP, exit 2, and not one live row runs
+ *
+ * MIRROR got its own three, RUN the same way on 2026-08-22, each in a `cp -R`
+ * copy of the fixed tree. Both halves of the v424 fix are load-bearing and each
+ * one is red on its own:
+ *
+ *   the wardrobe put back under the action row, which IS v423 verbatim
+ *     -> MIRROR  all four: "tile 1 785.7..911.9 of 852 (+59.9px past the fold,
+ *        0 whole tiles)". The sheet still opens far enough down to hold the
+ *        strip, but the panel no longer fits under the ring at any scroll
+ *        position, so buying the tile costs the pet and the row stays red.
+ *   the scroll-to-hold-both block deleted from render()
+ *     -> MIRROR  the two 320x568 rows ONLY: "ink 514.5..615.2 OFF-SCREEN | tile
+ *        1 703..829.2 of 568". 393x852 stays green on the reorder alone, which
+ *        is the point: the narrow phone is a separate failure and is graded as
+ *        one.
+ *   both, i.e. the shipped v423 layout
+ *     -> MIRROR  all four, at +343.9 / +402.9 / +696.5 / +755.5px past the fold
+ *
+ * The four MIRROR configurations are one row on purpose, because a viewport
+ * that quietly stopped being measured would be a green pass on nothing: the
+ * SAMPLE row above it requires the wardrobe to be VISIBLE with tiles in it and
+ * a pet rendered in every one of the four before MIRROR grades anything.
  *
  * Run: node tests/pet-wardrobe-audit.mjs [baseUrl] [--shots DIR]
  * HEADLESS_MODE=shell is required for --shots on this Mac (see godmode boot).
@@ -398,6 +426,79 @@ try {
     !left.includes(takeOff) && left.join(',') === expect.filter(id => id !== takeOff).join(','),
     `removed ${takeOff}, still wearing [${left.join(',') || 'nothing'}]`);
   await shot(page, '08-after-remove', { pet: true });
+
+  /* ---- MIRROR: you cannot judge a piece you cannot see while you tap it ---- */
+  /* Tom, 2026-08-21: "when you put the item on you have to scroll back up to see
+     if it equipped and how it looks. You need to be able to see her and the
+     items at the same time so you know how it looks trying on."
+     Graded on the RENDER, at the position the sheet OPENS in, with no scrolling
+     of our own: her drawn INK and at least one WHOLE tile inside the viewport at
+     the same time. Ink, not the box, per figure-contract rule 3: .petcrop is a
+     square with a lot of transparent air in it and its rect says nothing about
+     where the animal is, so the ink is the PET_CROP fractions mapped through the
+     rendered image's geometry. A whole tile, not any part of one, because half a
+     tile is not something you can read a name off or aim a thumb at.
+     Both widths and both insets (anti-regression rule 4): 320x568 is the
+     narrowest phone this app supports and the one where the Stable's header
+     stack pushes the ring itself under the fold, and a 59px inset takes another
+     59px off the sheet. Measured on the shipped v423 tree, all four were red:
+     the first tile ended 343.9 / 402.9 / 696.5 / 755.5px past the fold, and on
+     320x568 the ring itself was off-screen before the wardrobe was reached. */
+  const MIRROR = [[393, 852, 0], [393, 852, 59], [320, 568, 0], [320, 568, 59]];
+  const seen = [];
+  for (const [w, h, sat] of MIRROR) {
+    for (let i = 0; i < 3; i++) {
+      if (!await page.evaluate(() => { const b = document.querySelector('.sheet-close'); if (b) { b.click(); return true; } return false; })) break;
+      await sleep(400);
+    }
+    await setWidth(page, w, h);
+    await page.evaluate(s => {
+      document.querySelectorAll('style[data-mirror-sat]').forEach(n => n.remove());
+      if (!s) return;
+      const st = document.createElement('style');
+      st.dataset.mirrorSat = '1';
+      st.textContent = `:root{--sat:${s}px !important}`;
+      document.head.appendChild(st);
+    }, sat);
+    await sleep(300);
+    await openStable();
+    seen.push(await page.evaluate(c => {
+      const img = document.querySelector('.cf-card.active .cf-art .petcrop img');
+      const tiles = [...document.querySelectorAll('.pw-item')];
+      const wear = document.querySelector('.pet-wear');
+      const sat2 = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0;
+      const W = window.innerWidth, H = window.innerHeight;
+      const r = img && img.getBoundingClientRect();
+      /* every worn layer carries the identical transform (croppedPetImg), so any
+         one of them maps the crop the same way; the base layer is the honest one. */
+      const ink = r ? {
+        y: +(r.top + c.y0 * r.height).toFixed(1),
+        b: +(r.top + c.y1 * r.height).toFixed(1),
+        x: +(r.left + c.x0 * r.width).toFixed(1),
+      } : null;
+      const whole = tiles.map(t => t.getBoundingClientRect())
+        .filter(b => b.top >= sat2 && b.bottom <= H && b.left >= 0 && b.right <= W);
+      const first = tiles[0] && tiles[0].getBoundingClientRect();
+      return {
+        sat: sat2, hidden: !wear || wear.hasAttribute('hidden'),
+        ink, inkIn: !!ink && ink.y >= sat2 && ink.b <= H,
+        tiles: tiles.length, whole: whole.length, H,
+        firstTile: first ? { y: +first.top.toFixed(1), b: +first.bottom.toFixed(1) } : null,
+      };
+    }, PET_CROP[PET]));
+    await shot(page, `09-mirror-${w}x${h}-sat${sat}`);
+  }
+  setup('SAMPLE the wardrobe is on screen in every viewport graded, so MIRROR is not grading a hidden panel',
+    seen.every(s => !s.hidden && s.tiles > 0 && s.ink),
+    seen.map((s, i) => `${MIRROR[i][0]}x${MIRROR[i][1]}-sat${MIRROR[i][2]}: ${s.hidden ? 'HIDDEN' : `${s.tiles} tiles`}${s.ink ? '' : ', NO PET'}`).join('; '));
+  const mirrorBad = seen.filter(s => !s.inkIn || s.whole < 1);
+  ok('MIRROR she and a whole wardrobe tile are on screen together, at the position the sheet opens in',
+    mirrorBad.length === 0,
+    seen.map((s, i) => {
+      const cfg = `${MIRROR[i][0]}x${MIRROR[i][1]}-sat${MIRROR[i][2]}`;
+      const gap = s.firstTile ? (s.firstTile.b - s.H).toFixed(1) : '?';
+      return `${cfg} ink ${s.ink.y}..${s.ink.b}${s.inkIn ? '' : ' OFF-SCREEN'} | tile 1 ${s.firstTile.y}..${s.firstTile.b} of ${s.H}${s.whole ? '' : ` (${gap > 0 ? `+${gap}` : gap}px past the fold, 0 whole tiles)`}`;
+    }).join('\n      '));
 } finally {
   await browser.close();
   if (srv) await srv.close();

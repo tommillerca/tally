@@ -14171,9 +14171,9 @@ async function openStable(opts = {}) {
           <div class="cf-frame" id="cfFrame" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Your pets">
             <div class="cf-track" id="cfTrack">${cfCards}</div>
           </div>
+          ${cfWear}
           ${cfCaption}
           ${cfActs}
-          ${cfWear}
         </div>
         ${openIid && openInst ? petTalentTree(openInst, petLevel(bank[openInst.iid] || 0), openPicks) : ''}
       ` : '<p class="note" style="text-align:center;margin-top:14px">No pets yet. Hatch eggs by walking.</p>'}
@@ -14227,6 +14227,35 @@ async function openStable(opts = {}) {
         if (card) card.classList.add('just-levelled');
       }
       focusIid = null;
+    }
+    /* TRYING CLOTHES ON REQUIRES A MIRROR. Tom, 2026-08-21: "when you put the
+       item on you have to scroll back up to see if it equipped and how it looks.
+       You need to be able to see her and the items at the same time so you know
+       how it looks trying on."
+       The panel moved up against the card above (it is the mirror, so it belongs
+       against the glass; the caption and the action row are about who she is and
+       what you do with her, and both can sit below). Measured on the render, that
+       alone puts her ink and a whole tile on screen together at 393x852 with and
+       without a 59px inset, with no scrolling at all.
+       It is NOT enough on the narrowest phone this app supports. At 320x568 the
+       Stable's own header stack -- the Paddock door, the chip row and the
+       breeding note -- ends 454.8px down, so the ring itself has always opened
+       BELOW the fold there and no arrangement inside .cf can be seen at rest.
+       So the sheet opens far enough down to hold both, and no further: scroll by
+       exactly the tile's overflow past the fold, capped at the room above the
+       ring, so the ring can never be pushed off the top to buy it. On a modern
+       phone the overflow is negative and this is a no-op, which is why the
+       Paddock door still greets you there. Idempotent, so the re-render after a
+       tap lands you back looking at her rather than at the top of the sheet. */
+    const pwPanel = $('.pet-wear', body);
+    const pwTile = pwPanel && !pwPanel.hidden && $('.pw-item', pwPanel);
+    const pwFrame = $('#cfFrame', body);
+    if (pwTile && pwFrame) {
+      const view = body.getBoundingClientRect();
+      /* 8px of clearance, not zero: scrolling by exactly the overflow lands the
+         tile's bottom border ON the fold, where sub-pixel rounding eats it. */
+      const over = pwTile.getBoundingClientRect().bottom + 8 - view.bottom;
+      if (over > 0) body.scrollTop += Math.min(over, pwFrame.getBoundingClientRect().top - view.top);
     }
     /* The ring. Painted straight to the DOM because sixty transform updates a
        second is not a job for a re-render: render() rebuilds this whole body, so
