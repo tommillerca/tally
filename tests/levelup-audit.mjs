@@ -158,7 +158,10 @@ if (pixOpen && pixOpen.err) {
      assert, which is the exact shape of vacuous green this suite exists against. */
   ok('PIX the reward row rendered pills to grade (an empty sample is a failure)',
     pills.length >= 3, JSON.stringify(pills));
-  const want = [/\+120/, /Golden Crate/, /\+30/];
+  /* "Bone Crate", not "Golden Crate": renamed in v422 because the art has been a
+     BONE chest for a while and only the word was the odd one out. The crate key
+     `golden` and the id `crate-golden` are save keys and did NOT move. */
+  const want = [/\+120/, /Bone Crate/, /\+30/];
   for (const re of want) {
     const p = pills.find(x => re.test(x.label));
     /* WHOLE STEP, not just "an img". A pixel sprite drawn at 15 or 17 is resampled
@@ -171,8 +174,8 @@ if (pixOpen && pixOpen.err) {
   /* At 16px there is one chest drawing, so gold and common would read the same.
      The rarity moved to a glow BEHIND the sprite (app.css .crate-chip.rare). */
   ok('PIX the golden crate still reads as rare, by the glow behind the sprite',
-    !!pills.find(x => /Golden Crate/.test(x.label))?.rare,
-    JSON.stringify(pills.find(x => /Golden Crate/.test(x.label))));
+    !!pills.find(x => /Bone Crate/.test(x.label))?.rare,
+    JSON.stringify(pills.find(x => /Bone Crate/.test(x.label))));
   await close();
 }
 

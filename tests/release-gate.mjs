@@ -835,6 +835,16 @@ const SERIAL = {
   'offline-boot-audit.mjs': 'binds a FIXED port (serveTree forcePort) because it '
     + 'must survive the service worker across a restart on the same origin. Two of '
     + 'anything on that port is a bind error, not a finding.',
+  /* MEASURED, not assumed. This one went red on the first parallel --all run and
+     PASSED standalone on the same tree, which is the signature the whole SERIAL
+     list exists for. It catches a takeover mid-slide by sampling PIXELS on a
+     specific frame, so it needs the frame budget it thinks it has; six browsers
+     competing for the CPU move the frame it lands on and it reports the
+     transition as broken when nothing is. A timing audit under contention
+     measures the machine, not the app. */
+  'crate-exit-flicker-audit.mjs': 'samples pixels on a specific frame of a slide, '
+    + 'so it is measuring frame timing. Red under six-way contention on the v422 '
+    + 'gate, green standalone on the identical tree.',
 };
 
 const CPUS = (await import('node:os')).cpus().length;

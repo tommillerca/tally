@@ -15,7 +15,12 @@
  *   BUDGET    at most ONE boot sheet may open per app open. Failure is UP. A
  *             second sheet is the whole defect: it tells the player that
  *             dismissing did not end it.
- *   CLAIMED   every boot sheet actually goes through claimBootSheet(). A new one
+ *   CLAIMED   every boot sheet actually goes through claimBootSheet(). Matched on
+ *             `claimBootSheet(` and NOT on `claimBootSheet()`, because the call
+ *             takes the site's own window.__xForce flag. This row was written
+ *             against the no-argument shape and went red on the v422 gate the
+ *             moment the argument was added, which is a guard pinned to a
+ *             literal going red on healthy code. Fixed at the assertion. A new one
  *             added without the claim is the regression this file exists to
  *             catch, and it is invisible to BUDGET whenever the new sheet
  *             happens to lose the race.
@@ -57,7 +62,7 @@ ok('CONTROL the boot queue was found and is not empty (an empty sample is a fail
   queued.length >= 5, `${queued.length} boot sheets: ${queued.join(', ')}`);
 
 ok('CONTROL claimBootSheet exists and is a real one-shot',
-  /function claimBootSheet\(\)\s*\{[\s\S]{0,200}bootSheetClaimed = true/.test(src),
+  /function claimBootSheet\([^)]*\)[\s\S]{0,400}bootSheetClaimed = true/.test(src),
   /function claimBootSheet/.test(src) ? 'defined' : 'NOT DEFINED');
 
 /* Every function that WRITES a seen counter and then opens something is a boot
@@ -69,11 +74,11 @@ for (const m of src.matchAll(fnRe)) {
   if (name === 'maybeShowDailyWheel') continue;
   if (!/kvSet\(|openWhatsNew\(\)/.test(body)) continue;
   if (/maybeShowGardenPopup/.test(name)) continue;      // retired, not in the boot queue
-  const hasClaim = /claimBootSheet\(\)/.test(body);
+  const hasClaim = /claimBootSheet\(/.test(body);
   (hasClaim ? claimants : unclaimed).push(name);
   if (hasClaim) {
     /* the claim must come BEFORE the counter write, or a loser is marked seen */
-    const ci = body.indexOf('claimBootSheet()');
+    const ci = body.search(/claimBootSheet\(/);
     const wi = body.search(/await kvSet\((?:DROP|TEASER|SPIRE|BOSS|MAGE|RACE|THANKS|COMMUNITY)/);
     if (wi !== -1 && wi < ci) consumesFirst.push(name);
   }
@@ -95,8 +100,10 @@ ok('BUDGET the claim is never cleared during a session, so at most one sheet ope
 
 const repeats = [...src.matchAll(/if \(seen >= (\d+)\) return;/g)].map(m => Number(m[1]));
 const boot = repeats.filter((_, i) => i !== repeats.findIndex(v => v === 5));  // garden is retired
+/* The Discord card is exempt at THREE on Tom's explicit instruction from
+   2026-08-13, quoted in tests/community-audit.mjs. The rest are capped at two. */
 ok('REPEATS no live boot sheet re-shows more than twice',
-  boot.every(n => n <= 2) && /COMMUNITY_MAX_SHOWS = [12];/.test(src),
+  boot.every(n => n <= 2) && /COMMUNITY_MAX_SHOWS = [123];/.test(src),
   `seen ceilings ${repeats.join(', ')} (the 5 is the retired garden popup)`);
 
 console.log(`\n${fails ? `${fails} FAILED` : 'all green'}, 6 checks`);

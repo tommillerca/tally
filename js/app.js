@@ -263,7 +263,18 @@ const CALM_BOOT = () => (typeof navigator !== 'undefined' && navigator.webdriver
    recovery prompt is a standing decision of Tom's that the code already records:
    players "see it each time they open until they pick one, for their own good". */
 let bootSheetClaimed = false;
-function claimBootSheet() {
+/* `forced` is the SAME window.__xForce flag the guard at the top of each
+   maybeShow* already consults, and it has to be honoured here too.
+   WHY, and it cost six red suites on the v422 gate: those flags exist so an
+   audit can drive ONE sheet deliberately, and the guard above lets them through
+   CALM_BOOT. The claim did not know about them, so the first forced sheet in a
+   run took the budget and every later one silently stood down. That is not a
+   test-only nicety: race-results-audit drives the same sheet across TWO
+   simulated opens to prove it shows twice, and it read 1 of 2. The budget is
+   about an unasked-for interruption; a sheet somebody explicitly asked for is
+   not one. */
+function claimBootSheet(forced) {
+  if (forced) return true;
   if (bootSheetClaimed) return false;
   bootSheetClaimed = true;
   return true;
@@ -1169,7 +1180,7 @@ async function maybeShowWhatsNew() {
     if (changelogUnseen(await kvGet('changelogSeen', 0)) <= 0) return;
     await new Promise(r => setTimeout(r, 1700)); // let splash/wheel settle
     if ($('#sheets')?.children.length) return;   // something already open. Try again next launch
-    if (!claimBootSheet()) return;               // another sheet already had this open
+    if (!claimBootSheet(window.__whatsNewForce)) return;   // another sheet already had this open
     openWhatsNew();
   } catch { /* never block boot */ }
 }
@@ -1342,7 +1353,7 @@ async function maybeShowCosmeticTeaser() {
       }
       if (teaserFired) return;      // one showing per app session, no matter who asks
       teaserFired = true;
-      if (!claimBootSheet()) return;   // another sheet already had this open
+      if (!claimBootSheet(window.__teaserForce)) return;   // another sheet already had this open
       await kvSet(TEASER_SEEN_KEY, seen + 1);
       openCosmeticTeaser();
     };
@@ -1361,7 +1372,7 @@ async function maybeShowSpireIntro() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
-      if (!claimBootSheet()) return;   // another sheet already had this open
+      if (!claimBootSheet(window.__spireForce)) return;   // another sheet already had this open
       await kvSet(SPIRE_SEEN_KEY, true);
       openSpireIntro();
     };
@@ -1418,7 +1429,7 @@ async function maybeShowBossIntro() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
-      if (!claimBootSheet()) return;   // another sheet already had this open
+      if (!claimBootSheet(window.__bossForce)) return;   // another sheet already had this open
       await kvSet(BOSS_SEEN_KEY, true);
       openBossIntro();
     };
@@ -1441,7 +1452,7 @@ async function maybeShowMageIntro() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
-      if (!claimBootSheet()) return;   // another sheet already had this open
+      if (!claimBootSheet(window.__mageForce)) return;   // another sheet already had this open
       await kvSet(MAGE_SEEN_KEY, true);
       openMageIntro();
     };
@@ -1712,7 +1723,7 @@ async function maybeShowRaceResults() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
-      if (!claimBootSheet()) return;   // another sheet already had this open
+      if (!claimBootSheet(window.__raceResultForce)) return;   // another sheet already had this open
       /* SPENT BEFORE IT IS DRAWN, so a crash inside the render cannot put a
          player in a loop. A showing is spent by being shown, not by being
          read: closing it with "Nice one" costs this one open and no more. */
@@ -1791,7 +1802,7 @@ async function maybeShowRaceIntro() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
-      if (!claimBootSheet()) return;   // another sheet already had this open
+      if (!claimBootSheet(window.__raceForce)) return;   // another sheet already had this open
       await kvSet(RACE_SEEN_KEY, true);
       openRaceIntro();
     };
@@ -1818,7 +1829,13 @@ const DISCORD_URL = 'https://discord.gg/HrMReZe9D';
 const COMMUNITY_SEEN_KEY = 'discordIntroSeen';     // legacy boolean, still honoured
 const COMMUNITY_SHOWN_KEY = 'discordIntroShown';   // how many times it has opened
 const COMMUNITY_JOINED_KEY = 'discordJoined';      // tapped JOIN: never show again
-const COMMUNITY_MAX_SHOWS = 2;
+/* THREE, and it stays three. Tom said so on 2026-08-13 ("make the popup happen
+   on the first three opens") and tests/community-audit.mjs quotes him. I cut it
+   to 2 in the one-per-open pass and that was scope creep on a decision he had
+   already made: his complaint was the QUEUE, which claimBootSheet fixes, not
+   this number. The drop popup and the cosmetic teaser had no such instruction on
+   them, so those did come down. */
+const COMMUNITY_MAX_SHOWS = 3;
 /* The mark, not the brand. Reg, 2026-08-12: "a lot of people recognise that
    shape before they read the word", which is the whole point for the players
    this card is written for. Drawn in currentColor so it takes the eyebrow's
@@ -1925,7 +1942,7 @@ async function maybeShowCommunityIntro() {
       /* Spend the showing BEFORE opening, not after: the card is dismissed by
          several routes (the button, the veil, history) and a counter written on
          the way out can be skipped by any of them. */
-      if (!claimBootSheet()) return;   // another sheet already had this open
+      if (!claimBootSheet(window.__communityForce)) return;   // another sheet already had this open
       await kvSet(COMMUNITY_SHOWN_KEY, shown + 1);
       await kvSet(COMMUNITY_SEEN_KEY, true);
       openCommunityCard();
@@ -2032,7 +2049,7 @@ async function maybeShowThanksCard() {
          out can be skipped by any of them. It is only spent once the overlay
          check above has passed, so it is never burned on a card that did not
          get to render. */
-      if (!claimBootSheet()) return;   // another sheet already had this open
+      if (!claimBootSheet(window.__thanksForce)) return;   // another sheet already had this open
       await kvSet(THANKS_SEEN_KEY, true);
       openThanksCard();
     };
@@ -2223,7 +2240,7 @@ async function maybeShowDropPopup() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;      // busy boot: does NOT consume one of the 5 showings
       }
-      if (!claimBootSheet()) return;   // another sheet already had this open
+      if (!claimBootSheet(window.__dropForce)) return;   // another sheet already had this open
       await kvSet(DROP_SEEN_KEY, seen + 1);
       openDropPopup();
     };
