@@ -62,6 +62,13 @@ search. Snapshotted and pushed as WIP commits before anything else:
 | x425/appcore | WIP 67898dc6 | UNVERIFIED: 4 items coded, 3 new audits, no prove-red/gate |
 | x425/css | WIP f9bf7181 | UNVERIFIED: 98 lines app.css, no prove-red/gate |
 | x425/wanderer | WIP 745fc47e | UNVERIFIED: js/water.js exists, so the recon gate evidently PASSED, but its verdict was never reported. Do not trust until re-verified. |
-| x425/pit | RUNNING | resumed, Tom approved cropping the wanderer's tail |
+| x425/pit | DONE 7dffbbfa | all 5 items, measured in painted pixels, 4 prove-reds, gate 80/81 (pre-existing notif red). Verified visually by me against before/after. |
 
 NONE of the WIP branches may merge without redoing prove-red + gate.
+
+## Release-time step nobody owns yet
+
+The pit agent flagged it and it is real: no branch renumbers APP_BUILD, sw.js
+VERSION or changelog.js, because three branches touching it would collide.
+Whoever cuts v425 does it ONCE after the merges. If this is forgotten the
+service worker serves stale modules and "my change isn't showing" comes back.
