@@ -766,6 +766,99 @@ async function sweepSieges(env, rows, now) {
   return rows;
 }
 
+/* ===========================================================================
+ * WHAT AN ADMIN MAKE-GOOD MAY EVER CONTAIN  (POST /admin/grant)
+ *
+ * The runbook, with the exact curl to run, is docs/GOD-MODE.md.
+ *
+ * Tom, 2026-08-21, after a player deleted her Day One Lizard by accident:
+ * "there will be times that we need to go god mode and fix player's mistakes by
+ * giving them a new pet etc". So this is a capability, not a one-off, and the
+ * allowlist below is the whole of it: a channel that can mint arbitrary items is
+ * the most dangerous thing in this codebase, so its rules live in ONE table that
+ * can be read in one sitting.
+ *
+ * Everything here is ADDITIVE. The client arms it feeds (js/social.js
+ * applyPayload) only ever add: coinsAdd, boneDustAdd, grantCrate,
+ * grantConsumable, grantEgg, grantPet. Nothing on this route can remove, reduce
+ * or overwrite anything a player already has, and the arms that could are
+ * refused by name below rather than left to nobody sending them.
+ *
+ * PETS are allowlisted BY ID, the whole slot-C catalogue, CX included. Handing
+ * the Day One Lizard back to a NAMED player is the entire point of this route:
+ * it is the one thing a player can lose and never earn back, because
+ * pickRandomPet filters `exclusive` out of every RANDOM grant. That filter is
+ * untouched, and 'random' is refused here, so the exclusive stays unobtainable
+ * by play and reachable only by someone holding ADMIN_TOKEN who types the id.
+ * A redeem code cannot do this job and must never be used for it: REDEEM_CODES
+ * ships inside the client bundle, so any code added there is readable by every
+ * player, and `redeemed` is per-save, so everyone could claim a Day One Lizard
+ * and the exclusive would be destroyed for everybody who earned it.
+ *
+ * DELIBERATELY NOT GRANTABLE. Each refusal is one line to lift the day a real
+ * player loses one, and every one of them is a 400 that says so:
+ *   gearId    gear is STATTED POWER and Boneheadz is cosmetic-only (locked
+ *             2026-08-07, "never sell power"). applyPayload can apply it and
+ *             nothing has ever sent it; this route is not going to be the first
+ *             thing in the game that mints power on request.
+ *   xp        XP moves a player's LEVEL, and grantLevelRewards pays coins and
+ *             crates for every level crossed. That is a second payout whose size
+ *             this route could not honestly report back, and the response saying
+ *             plainly what landed is what catches a mistake.
+ *   rename    not a gift. It writes kv 'renameRequired' and MAKES the player
+ *             change their name: the one payload arm that takes something.
+ *   pet:'random'  a make-good is targeted or it is not a make-good, and the
+ *             response has to be able to name the species that landed.
+ *
+ * The ids are duplicated from data/boneheadz.js and js/loot.js rather than
+ * imported, because this Worker does not bundle the client. Drift fails CLOSED
+ * (an unlisted pet is a 400, never a surprise grant), and admin-grant.test.mjs
+ * imports the real catalogue and grants EVERY species through this route, so a
+ * pet added to the game and missing here is a red row rather than a puzzle at
+ * 2am.
+ * ======================================================================== */
+const GRANT_MENU = {
+  coins: 20000,      // unchanged: a fat finger here must not mint a fortune
+  dust: 2000,        // ~10 top-rack transmogs (RACK_DUST tops out at 200)
+  pets: ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'CX'],
+  crates: ['daily', 'golden', 'egg'],
+  consumables: ['xp2', 'vigor'],
+};
+const GRANT_REFUSED = {
+  gearId: 'gear is statted power, and Boneheadz is cosmetic-only',
+  xp: 'XP moves a level, and a level crossing pays its own coins and crates',
+  rename: 'a rename takes something; this route can only ever give',
+};
+
+/** Build the grant payload from an /admin/grant body, or explain the refusal.
+ *  Returns { payload, got } or { error }. `got` is plain English for the
+ *  response, so a mistyped id or a wrong player is visible before it matters. */
+function adminGrantPayload(b) {
+  const p = {}, got = [];
+  const has = k => b[k] !== undefined && b[k] !== null && b[k] !== '';
+  for (const [k, why] of Object.entries(GRANT_REFUSED)) {
+    if (has(k)) return { error: `${k} is not grantable here: ${why}` };
+  }
+  for (const k of ['coins', 'dust']) {
+    if (!has(k)) continue;
+    const n = Math.floor(Number(b[k]));
+    if (!(n > 0) || n > GRANT_MENU[k]) return { error: `${k} must be 1..${GRANT_MENU[k]}` };
+    p[k] = n; got.push(`${n} ${k}`);
+  }
+  for (const [k, list] of [['pet', GRANT_MENU.pets], ['crate', GRANT_MENU.crates], ['consumable', GRANT_MENU.consumables]]) {
+    if (!has(k)) continue;
+    const v = String(b[k]);
+    if (!list.includes(v)) return { error: `${k} must be one of: ${list.join(', ')}` };
+    p[k] = v; got.push(`${k} ${v}`);
+  }
+  if (has('egg')) {
+    if (b.egg !== 'ready' && b.egg !== true) return { error: "egg must be 'ready'" };
+    p.egg = 'ready'; got.push('a ready egg');
+  }
+  if (!got.length) return { error: `nothing to grant: pass at least one of coins, dust, pet, crate, consumable, egg` };
+  return { payload: p, got };
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1884,24 +1977,59 @@ export default {
         return json({ totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, leads, errors, errorsByBuild, vault, generatedAt: Date.now() });
       }
 
-      /* Admin: hand a specific player coins through the normal grants channel, so a
-         mis-tap or a bug can be made good without touching their device. Gated on
-         ADMIN_TOKEN, the same secret the dashboard uses. Deliberately narrow:
-         coins only, a required note so the player is told WHY, an explicit key so a
-         repeated call cannot pay twice, and a cap so a fat finger here cannot mint a
-         fortune. It cannot take anything away. */
+      /* Admin: find a player by NAME. The grant route below takes a player_id and
+         support arrives as "Feisty Fang deleted her lizard", so without this half
+         the capability is unusable by hand. READ-ONLY, gated on the same secret,
+         and it returns level and last-seen next to each hit precisely so a
+         near-miss on a generated bone-name is obvious before anything is granted.
+         Matches an id or a friend code exactly, or a name/handle by substring. */
+      if (path === '/admin/players' && request.method === 'GET') {
+        const token = url.searchParams.get('token') || request.headers.get('x-admin-token') || '';
+        if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
+        const q = (url.searchParams.get('q') || '').trim();
+        if (q.length < 2) return json({ error: 'q must be at least 2 characters' }, 400);
+        // LIKE wildcards in the query are escaped: a search for "100%" is a
+        // search for that text, not for every player in the table.
+        const like = '%' + q.toLowerCase().replace(/[%_\\]/g, m => '\\' + m) + '%';
+        const rows = (await env.DB.prepare(
+          `SELECT id, name, handle, friend_code friendCode, app_v appV, last_seen lastSeen, created_at createdAt,
+                  CAST(COALESCE(json_extract(profile,'$.level'), 1) AS INTEGER) level
+             FROM players
+            WHERE id = ? OR friend_code = ?
+               OR lower(name) LIKE ? ESCAPE '\\' OR lower(handle) LIKE ? ESCAPE '\\'
+            ORDER BY last_seen DESC LIMIT 20`)
+          .bind(q, q.toUpperCase(), like, like).all()).results || [];
+        return json({ q, count: rows.length, players: rows });
+      }
+
+      /* Admin: hand a specific player a make-good through the normal grants
+         channel, so a mis-tap or a bug can be repaired without touching their
+         device. Gated on ADMIN_TOKEN, the same secret the dashboard uses.
+         Narrow on purpose, and every guardrail the coins-only version had is
+         still here: a required note so the player is told WHY, an explicit key
+         so a repeated call cannot pay twice, and a cap or an allowlist on every
+         single thing it can hand out (GRANT_MENU, above the handler, which is
+         also where the reasoning for each refusal lives). It cannot take
+         anything away.
+         The response names WHO it landed on and WHAT they got, in English, so a
+         mistyped name is caught while it is still only a row in `grants`. */
       if (path === '/admin/grant' && request.method === 'POST') {
         const token = request.headers.get('x-admin-token') || '';
         if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
         const b = await request.json().catch(() => ({}));
-        const coins = Math.floor(Number(b.coins) || 0);
         if (!b.playerId || !b.key || !b.note) return json({ error: 'playerId, key and note are required' }, 400);
-        if (!(coins > 0) || coins > 20000) return json({ error: 'coins must be 1..20000' }, 400);
+        const built = adminGrantPayload(b);
+        if (built.error) return json({ error: built.error }, 400);
         const who = await env.DB.prepare('SELECT id, name, handle FROM players WHERE id = ?').bind(String(b.playerId)).first();
         if (!who) return json({ error: 'no such player' }, 404);
+        const note = String(b.note).slice(0, 160);
         const r = await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
-          .bind(who.id, String(b.key), 'social', JSON.stringify({ coins, note: String(b.note).slice(0, 160) }), Date.now()).run();
-        return json({ ok: true, to: who.name || who.handle, coins, inserted: !!(r.meta?.changes) });
+          .bind(who.id, String(b.key), 'social', JSON.stringify({ ...built.payload, note }), Date.now()).run();
+        return json({
+          ok: true, to: who.name || who.handle, playerId: who.id,
+          granted: built.got.join(', '), payload: built.payload, note,
+          inserted: !!(r.meta?.changes),
+        });
       }
 
       // DEV-ONLY helpers for tests (env.DEV="1"; never set in production).

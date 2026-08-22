@@ -23,7 +23,7 @@
 
 import { db, kvGet, kvSet, kvUpdate, exportAll, importAll, witnessServerDay } from './db.js';
 import { awardOnce } from './game.js';
-import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd, grantEgg } from './loot.js';
+import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd, grantEgg, grantPet } from './loot.js';
 
 // Production API. Empty until the worker is deployed; the Go Online UI stays
 // hidden while unset. Overridable for tests/dev via ?api= or kv 'apiBase'.
@@ -646,7 +646,8 @@ const GIFTBOX = 'giftbox';
  *   /gift mode=spend   { coins }                      no xp
  *   /gift mode=free    { coins | crate | consumable } no xp
  *   step-race podium   { coins, dust, crate }         no xp
- *   /admin/grant       { coins, note }                no xp   <- whose own
+ *   /admin/grant       { coins|dust|pet|crate|
+ *                        consumable|egg, note }       no xp   <- whose own
  *        header promises "an explicit key so a repeated call cannot pay twice"
  *   spire notices      { note }                       no xp
  *   social-welcome     { coins: 50, xp: 10 }          the ONLY protected one
@@ -683,6 +684,17 @@ async function applyPayload(key, type, p) {
   if (p.consumable) await grantConsumable(p.consumable, 'social');
   // `egg: 'ready'` hands over one that can be cracked immediately (goal 0)
   if (p.egg) await grantEgg('social', p.egg === 'ready' ? 0 : undefined);
+  /* A PET BY NAME. The make-good arm: /admin/grant can hand a named player back
+     a species they lost to a mistake or a bug, the Day One Lizard included, and
+     this is the only way that can happen (a redeem code lives in the client
+     bundle, so it would hand CX to everybody and destroy the exclusive).
+     ALWAYS AN EXPLICIT ID, never 'random': the server's allowlist refuses it, so
+     grantPet's exclusive filter on random grants is never reached from here and
+     is left exactly as it is. grantPet is additive in both places ownership
+     lives (a petInst copy plus the idempotent `cos` row) and only equips the pet
+     if the companion slot is EMPTY, so a make-good can never displace the pet
+     the player chose. */
+  if (p.pet) await grantPet(p.pet, 'social');
   if (p.gearId) await grantGear(p.gearId, 'social');
   /* A rename we owe the player (2026-08-08). Two people held one name because
      /name had no uniqueness check. The later claimant by account age is asked to
