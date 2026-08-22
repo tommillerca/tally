@@ -376,6 +376,45 @@ export async function buyPetItem(id) {
   return { ok: true, label: art.name, cost: price, isPet, coins: await coins() };
 }
 
+/* WHAT THE PET IS WEARING. One kv row, `petWear`, shaped { slotCode: itemId }:
+ *   { CG: 'CG1', CB: 'CB2', CM: 'CM1', CE: 'CE1' }
+ *
+ * ONE ITEM PER SLOT IS THE SHAPE, not a rule anybody has to enforce. An object
+ * keyed by slot cannot hold two bags, so "equip the other purse" is one
+ * assignment and the old one is gone. A list of ids would need a filter on
+ * every write and would be wrong the first time somebody forgot it.
+ *
+ * NOT KEYED BY SPECIES, and that is deliberate rather than lazy. Every
+ * accessory is drawn pre-positioned for ONE body (measured 2026-08-21: the
+ * glasses overlap Bumbleseal's ink by 94.8% and every other pet by 0.0%), so
+ * there is exactly one pet these can be worn by and it is PET_SHOP.pet.id. The
+ * species check lives in the RENDERER (petWearFor in js/app.js), where it
+ * guards every surface at once; a second copy of it here would be a second
+ * thing to keep in step. A future second dressable pet needs its own art set,
+ * and that is the day this row becomes { species: { slot: id } }.
+ *
+ * kvUpdate, not kvGet + kvSet: two taps on two tiles in the same instant are
+ * two read-modify-writes that lose one of the two garments (tally/CLAUDE.md,
+ * rewarded actions rule 6). Nothing is paid for here, but the same interleave
+ * silently drops an equip.
+ */
+export const petWear = () => kvGet('petWear', {});
+
+export async function togglePetWear(id) {
+  const it = BH_BY_ID[id];
+  /* petSlots, not a fresh list of codes: the crate exclusion already derives it
+     from PET_SLOTS, so a sixth accessory is equippable the day its slot lands. */
+  if (!it || !petSlots.has(it.slot)) return { ok: false, reason: 'not-an-accessory' };
+  if (!(await ownedCosmeticIds()).has(id)) return { ok: false, reason: 'not-owned' };
+  const wear = await kvUpdate('petWear', cur => {
+    const w = { ...(cur || {}) };
+    if (w[it.slot] === id) delete w[it.slot];
+    else w[it.slot] = id;
+    return w;
+  }, {});
+  return { ok: true, worn: wear[it.slot] === id, slot: it.slot, wear };
+}
+
 function rng() {
   const a = new Uint32Array(1);
   crypto.getRandomValues(a);
