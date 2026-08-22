@@ -8,6 +8,8 @@ export const CHANGES = [
     'On a small phone she was off the bottom of the screen entirely while you tapped. Not any more.',
     'Gwart was saying the same two lines over and over. He has eighty-nine now, and he works through all of them before any comes round again.',
     'His lines also know what you are up to: an unopened crate, a pot that is done, a garden that is ready, a day you have not written anything down for.',
+    'The Wanderer\'s lantern light was snapping to a stub every time you moved the map and then springing back. It holds steady now.',
+    'His light also comes out of the lamp properly: a bright pool at the flame that the beam grows out of, and soft edges instead of a hard wedge.',
   ] },
   { n: 423, date: '2026-08-22', title: 'Dress your seal, and the Wanderer walks like a person', items: [
     'You can finally put Bumbleseal\'s accessories on her. Stable, under her card: tap a piece to wear it, tap it again to take it off. She wears them everywhere, on Today, out in the Paddock, and into a fight.',
