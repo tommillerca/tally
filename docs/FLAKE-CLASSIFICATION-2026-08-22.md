@@ -129,7 +129,22 @@ strategy is what is fragile.
 **Fix:** add to `SERIAL`, which is the cheap correct answer. Pinning the spawn
 seed would be better and is more work.
 
-### 5. Not reproduced. `boneyard-icon`, `day-strip`, `readiness`
+### 5a. Environment-sensitive, and honest about it. `boneyard-icon`
+
+Reclassified after the gate run. It returned rc=0 three times standalone, then
+**exit 97 (UNPROVEN)** both under the gate and standalone later the same day, on
+pristine main and on the branch alike: "did not fully run on this machine ... run
+this suite where the missing property exists".
+
+That is not a flake and not a failure. The suite detects that it cannot grade its
+surface on this machine and refuses to report a pass it cannot back. Every guard
+here should behave that way. The earlier "8% egg roll" note was a different
+failure and may still exist underneath, but it is not what is happening now.
+
+**Fix:** none. It needs a machine that can host the surface. Do not "fix" the 97
+by relaxing it into a pass.
+
+### 5b. Not reproduced. `day-strip`, `readiness`
 
 4/4 green each. Two have known conditional triggers that simply did not fire:
 `boneyard-icon` depends on an 8% egg roll, `day-strip` failed at a midnight date
