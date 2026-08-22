@@ -125,7 +125,16 @@ await page.evaluateOnNewDocument(() => {
     /* SETTLED. `revealCount` above is sampled on the tick `.markers-in` lands,
        which is BEFORE the 220ms fade has raised computed opacity, so it reads
        near zero for anything transitioning. That is what broke the old MAJORITY
-       row. Re-read once the fade has finished. */
+       row. Re-read once the fade has finished.
+       WHY 400ms, measured 2026-08-22: the fade is 220ms, so this is 180ms of
+       headroom. Verified under the contention profile that pushes the LATENCY
+       row from 42ms to 461ms (four browser suites competing), three runs:
+         run1 instant 49 -> settled 49
+         run2 instant 49 -> settled 49
+         run3 instant 10 -> settled 49   <- the artifact fired, settled corrected
+       Run 3 is the case the old row got wrong: 10 of 49 is not a majority, on a
+       build that was placing and showing all 49. If this ever reads short under
+       load, raise the headroom; do not lower the row to match it. */
     if (a.reveal != null && a.revealSettled == null && snap.t >= a.reveal + 400) {
       a.revealSettled = Object.values(KINDS).reduce((s, k) => s + snap[k], 0);
     }
