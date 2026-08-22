@@ -270,14 +270,20 @@ try {
       `${foe.w}x${foe.h} of a ${R1(ar.w)}x${R1(ar.h)} arena ` +
       `(${Math.round(foe.w / ar.w * 100)}% wide, ${Math.round(foe.h / ar.h * 100)}% tall)`);
 
-    /* THE CROP ITSELF, IN PIXELS. His painted ink has to have the CROPPED
-       body's proportions, not the whole plate's. Shrinking him without cutting
-       the tail keeps the plate's 1.35 and fails here, which is the one thing a
-       size check on its own cannot tell apart. */
+    /* THE CROP ITSELF, IN PIXELS, AND IT TAKES BOTH HALVES.
+       Proportion alone is not enough: measured, deleting the clip-path left this
+       suite GREEN, because his tail then runs into the arena's own overflow and
+       is sliced by the wall instead, which keeps the painted aspect right while
+       putting Cam's art hard against a rounded border. So the second half is the
+       MARGIN. Art that ends 7px short of the edge was cropped on purpose; art
+       that ends exactly on it was cut off by the container, and those look
+       completely different on a phone. */
     const aspect = R1(foe.w / foe.h * 100) / 100;
-    ok(tag('TAIL the tail is cropped off, not merely scaled down'),
-      Math.abs(aspect - CROPPED_ASPECT) < Math.abs(aspect - FULL_ASPECT),
-      `painted aspect ${aspect} (the whole plate is ${R1(FULL_ASPECT * 100) / 100}, the cropped body ${R1(CROPPED_ASPECT * 100) / 100})`);
+    const margin = R1(ar.r - foe.r);
+    ok(tag('TAIL the tail is cropped off on purpose, not scaled down and not sliced by the arena wall'),
+      Math.abs(aspect - CROPPED_ASPECT) < Math.abs(aspect - FULL_ASPECT) && margin >= 4,
+      `painted aspect ${aspect} (the whole plate is ${R1(FULL_ASPECT * 100) / 100}, the cropped body ` +
+      `${R1(CROPPED_ASPECT * 100) / 100}), and his ink stops ${margin}px short of the arena's right edge`);
 
     ok(tag('INSIDE nothing of him is painted outside the arena'),
       foe.l >= ar.l - 1 && foe.r <= ar.r + 1 && foe.t >= ar.t - 1 && foe.b <= ar.b + 1,
