@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS players (
   max_level INTEGER,                 -- highest level ever accepted (monotone ratchet)
   max_level_at INTEGER,              -- when max_level was last raised (the jump anchor)
   week_key TEXT,                     -- the race week the accepted week_steps belong to
-  week_steps INTEGER,               -- highest weekSteps accepted for week_key (monotone)
+  week_steps INTEGER,                -- highest weekSteps accepted for week_key (monotone)
   /* HOW FAR THIS PLAYER'S CLIENT HAS READ THE GRANTS FEED (2026-08-17).
      GET /grants is a cursor read: the client sends `since` and js/social.js
      pullGrants only advances its local grantCursor AFTER applying everything in
@@ -30,7 +30,14 @@ CREATE TABLE IF NOT EXISTS players (
      exactly why grants could not be pruned: nothing on this side could tell a
      delivered gift from one still waiting. Nullable, so every pre-existing row
      means "never acknowledged anything" and is protected by default. */
-  grants_ack INTEGER
+  grants_ack INTEGER,
+  -- TEST ACCOUNTS (2026-08-22). Any test that talks to the LIVE API must
+  -- register with {test:true} so the account lands flagged. Flagged rows are
+  -- excluded from every public surface that enumerates players, so a test run
+  -- can never again flood the Crew with dead level-1 "players". Existing DBs:
+  -- migrations/2026-08-22-test-accounts.sql, applied BEFORE deploying the
+  -- worker that filters on it.
+  is_test INTEGER DEFAULT 0
 );
 
 -- Names are one-of-a-kind, case-insensitively. /name enforces this in code too
