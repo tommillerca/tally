@@ -381,6 +381,25 @@ const DECLARED = {
     + 'scaled down in front of the Wanderer. Needs no map: it drives window.__denFight with wanderer:true, which is the field the arena '
     + 'class, the stage class and the plate all key off. Run it on any change to .arena.boss-wanderer, #foeStage.wanderer-foe, .fstage '
     + 'or the arena height. About 40s.'],
+  'pit-figures-audit.mjs': ['full', 'the three figures in the Pit, graded in PAINTED pixels rather than boxes: hide one element, screenshot, diff, '
+    + 'and what changed is what that element paints, shadow and halo included. It exists because four of Tom\'s complaints in one message '
+    + '(2026-08-22) were each invisible to a getBoundingClientRect: the Wanderer overlapping the bonehead by 78.5px of ink while both '
+    + 'stage boxes looked fine, Bumbleseal drawn 22% taller than the pet in the middle of the roster because croppedPetImg fills against '
+    + 'the LONGEST ink edge, a rarity drop-shadow painting 350 warm pixels outside her silhouette, and a mirror that changes no box at '
+    + 'all. 25 rows at 393x852 and 320x568: CLEAR, LOOMS as a BAND with the Live Wire measured as its floor, FILLS, TAIL (proportion AND '
+    + 'a margin clear of the arena wall, because an uncropped tail is sliced by the container and keeps the right proportion), INSIDE, '
+    + 'STANDS, PET-MASS, PET-GLOW, PET-FACING, PET-UNTOUCHED and MAGE-UNCHANGED. Every loop in the arena is frozen and the toast removed '
+    + 'before any diff, or the mask comes back as the whole arena. Run it on any change to .arena.boss-wanderer, #foeStage.wanderer-foe, '
+    + '.fstage.petmini or petFightPx. Needs no map. About 100s and ten seam fights, so full rather than fast.'],
+  'wanderer-despawn-audit.mjs': ['full', 'a beaten Wanderer is GONE from the Boneyard and the next instance still walks. Tom, 2026-08-22: '
+    + '"after defeating the wanderer he was still just there in the boneyard and didnt disappear." wandererDone gated the encounter but '
+    + 'never the marker. Fired for real: a GPS fix 45m into his real cone, the encounter it triggers, Fight, and the win resolved through '
+    + 'window.__bhFight.finish rather than a dispatched event. Markers are matched BY ID off el.dataset.w, because the first cut graded '
+    + 'distance to a projected point, could not reach the map object and passed on null. Five rows: BEFORE (the positive control), '
+    + 'DESPAWN (gone while the module still derives his instance as live, so a rollover cannot pass for a despawn), LEDGER, NEIGHBOURS '
+    + '(the Wanderer nobody beat is still drawn) and NEXT (the clock moved one lap, a new instance on an unclaimed key, the beaten key '
+    + 'still on the ledger). Needs WebGL and vector tiles, so it reports UNPROVEN with exit 97 rather than green on a machine that cannot '
+    + 'draw the map: full, never fast.'],
   'wanderer-patrol-sim.mjs': ['skip', "a MEASURING INSTRUMENT, not a pass/fail check, the same shape as gauntlet-sim.mjs: it prints "
     + 'catches per hour of walking against the Wanderer at a sweep of cone ranges and asserts nothing about them, so running it on '
     + 'every gate would burn a minute to prove nothing. Run it BY HAND whenever CONE_RANGE_M, CONE_HALF_DEG, WANDER_LAP_MIN or the '

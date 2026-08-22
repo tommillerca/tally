@@ -26,17 +26,31 @@
  *   - AN EMPTY MASK IS A FAILURE. CONTROL requires all three figures to paint
  *     thousands of pixels before any row below is believed.
  *
- * PROVE-RED, 2026-08-22. Throwaway `cp -R` of the tree with .git removed, one
- * mutation at a time, exit code read from a FILE and never through a pipe.
- *   PRE-FIX (app.css and js/app.js at f18d479f, the code Tom fought) ->
- *     CLEAR "his ink x8.5..319.5 against your x28.5..87: they OVERLAP by 78.5px",
- *     TAIL "aspect 1.29 (the whole plate is 1.35, the cropped body 1.20)",
- *     PET-MASS "her 82.5px against the bulldog's 62.0px, +33%",
- *     PET-GLOW "143 gold pixels painted outside her ink",
- *     PET-FACING "the left half of her is 1.35x the right: she has her back to him".
- *   NO-CLIP (the clip-path deleted, everything else fixed) -> TAIL red.
- *   NO-SHRINK (--wnd 85cqw -> 130cqw) -> CLEAR and FILLS red.
- *   The full evidence is in the branch's report; every mutation exited 1.
+ * PROVE-RED, 2026-08-22. Throwaway tree seeded with `git show <rev>:<path>`, one
+ * mutation at a time, exit code read from a FILE and never through a pipe. Both
+ * mutations exited 1.
+ *   PRE-FIX, app.css / js/app.js / js/pets.js at f18d479f, which is the build Tom
+ *   fought. Six rows red at 393x852 and five at 320x568, both CONTROLs green:
+ *     CLEAR      "his ink x24.5..335.5 against your x44.5..103: they OVERLAP by
+ *                78.5px" (61px at 320x568). This is his complaint, in one number.
+ *     TAIL       "painted aspect 1.293 (the whole plate is 1.348, the cropped
+ *                body 1.199)". Red at 393x852 only: at 320x568 the arena is
+ *                narrow enough that its own overflow already truncated him, so
+ *                the aspect came out cropped-looking on an uncropped plate. That
+ *                is the row's honest limit and it is why the margin half exists.
+ *     STANDS     his feet 17.5px below the player's.
+ *     PET-MASS   "her painted ink 92.5x82.5 against the bulldog's 85.5x63.5 and
+ *                the Mallard's 85x71.5 ... she is 22%" (28% at 320x568).
+ *     PET-GLOW   "350 gold pixels painted outside her ink, filter
+ *                drop-shadow(rgba(255, 201, 97, 0.95) 0px 0px 8px)" (299 at
+ *                320x568).
+ *     PET-FACING "her painted right half is 0.74x the luminance of her left".
+ *   NO-CLIP, the clip-path deleted and everything else left fixed -> TAIL red at
+ *   BOTH viewports and nothing else red: "his ink stops 1.5px short of the
+ *   arena's right edge" (7.5px with the crop). The first version of TAIL graded
+ *   proportion alone and passed this mutation, because an uncropped tail simply
+ *   runs into the arena's overflow and is sliced by the wall instead. Measured,
+ *   not assumed, and fixed at the assertion.
  *
  * NO MAP NEEDED: it drives window.__denFight, the webdriver-only seam js/app.js
  * already exposes, so it grades on any machine. The Wanderer's despawn on the

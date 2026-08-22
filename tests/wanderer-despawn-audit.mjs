@@ -13,25 +13,32 @@
  * THE TWO HALVES ARE ONE BUG. "He disappears" is also what a marker that never
  * drew looks like, and "he comes back" is also what a ledger that forgot the win
  * looks like, so neither half is worth anything alone:
- *   BEFORE   a marker sits on his derived position. This is the positive
- *            control, and every row below is gated on it.
- *   AFTER    the fight is won for real (window.__bhFight.finish, the game's own
- *            engine, not a dispatched event), and no marker is within 60px of
- *            where he now is, while the xp ledger carries his instance key.
+ *   BEFORE   his own marker, by id, is on the map. The positive control, and
+ *            every row below is gated on it.
+ *   DESPAWN  the fight is won for real (window.__bhFight.finish, the game's own
+ *            engine, not a dispatched event) and his marker is gone WHILE the
+ *            module still derives his instance as live, so an instance that
+ *            merely rolled over cannot pass for a despawn.
+ *   LEDGER   the win is on his instance key, which is what the map reads.
+ *   NEIGHBOURS the Wanderer nobody beat is still drawn. A filter that cleared
+ *            the map would pass DESPAWN and be a worse bug than this one.
  *   NEXT     the clock is moved on one WANDER_LAP_MIN and the page reloaded. The
- *            ledger still holds the beaten key, the next instance's key is a
- *            different one, and a marker paints again.
+ *            ledger still holds the beaten key, a new instance is drawn, and its
+ *            key is unclaimed.
  *
  * NEEDS A MAP. MapLibre needs WebGL and vector tiles; on a machine with neither,
  * every row here would be graded against a blank screen and pass on nothing, so
  * it measures the capability first and reports UNPROVEN with exit 97 rather than
  * green, the same contract tests/wanderer-patrol-live-audit.mjs runs under.
  *
- * PROVE-RED, 2026-08-22, `cp -R` throwaway with .git removed, exit read from a
- * FILE: js/app.js's refreshWanderer put back to `wanderersNear(date, lat, lng)`
- * with no filter -> exit 1, DESPAWN "a marker is still 0px from him after the
- * win", with BEFORE, LEDGER and NEXT all still green, so the red is about the
- * marker and nothing else.
+ * PROVE-RED, 2026-08-22. Throwaway tree from `git archive HEAD`, exit read from a
+ * FILE: refreshWanderer's filter deleted, back to `wanderersNear(date, lat, lng)`
+ * -> exit 1, and exactly one row red:
+ *   DESPAWN  "2 marker(s) drawn [2464_-6156_i25, 2464_-6155_i25], and he is
+ *            still a live instance at 416m"
+ * against the fixed tree's "1 marker(s) drawn [2464_-6155_i25]". BEFORE, LEDGER,
+ * NEIGHBOURS and NEXT stayed green through the mutation, so the red is about the
+ * marker and nothing else. That two-marker line IS Tom's report.
  *
  *   node tests/wanderer-despawn-audit.mjs
  */
