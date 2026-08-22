@@ -17331,6 +17331,14 @@ function presentGrantDelivery(r) {
     const note = p.note || (p.gift ? `A gift${p.from ? ' from ' + p.from : ''}` : 'From the Crew');
     let hadCard = false;
     if (p.crate && CRATES[p.crate]) { cards.push({ iconHtml: crateIcon(p.crate, 120), name: CRATES[p.crate].label, rarity: p.crate === 'daily' ? 'uncommon' : 'rare', kind, stats: esc(note) }); hadCard = true; }
+    /* A PET, AND AN EGG, BOTH LANDED SILENTLY BEFORE THIS. Added 2026-08-21 with
+       the admin make-good arm: a payload carrying only a pet paid no coins and
+       no XP and built no card, so every branch below fell through and the player
+       got a Day One Lizard back with no reveal, no toast and nothing to look at.
+       That is the end of the chain and it is the only part she experiences.
+       Same shape as the crate line above; a pet is drawn from its own art. */
+    if (p.pet && BH_BY_ID[p.pet]) { const it = BH_BY_ID[p.pet]; cards.push({ imgSrc: bhAsset(it), name: it.name, rarity: it.rarity, kind, stats: esc(note) }); hadCard = true; }
+    if (p.egg) { cards.push({ iconHtml: crateIcon('egg', 120), name: CRATES.egg.label, rarity: 'rare', kind, stats: esc(note) }); hadCard = true; }
     if (p.gearId && GEAR_BY_ID[p.gearId]) { cards.push({ ...gearToCard(GEAR_BY_ID[p.gearId]), kind }); hadCard = true; }
     if (p.consumable && CONSUMABLES[p.consumable]) { cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind, stats: esc(note) }); hadCard = true; }
     if (p.gift && !hadCard && p.coins) coinGifts.push(`${p.from || 'A friend'} sent you ${p.coins} coins!`);
