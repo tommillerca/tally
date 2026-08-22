@@ -11819,6 +11819,26 @@ async function renderCharacter(wrap, tab, opts = {}) {
   if (floatingGear) floatingGear.hidden = tab === 'shop';
   $('#gwGear', body)?.addEventListener('click', () => { location.hash = '#/settings'; });
 
+  /* THE GLOW LETS GO OF ITS ENTRANCE. Cam's palm glows carry a filled one-shot
+     plus an infinite loop on the same two properties, which pins the whole
+     screen to the main thread for as long as the Emporium is open. The reasoning,
+     the four spellings that do not work and the arithmetic that keeps the look
+     identical are all in app.css under `.wz-glow.idle`; the short version is that
+     only a NEW element gets a newly composited animation, so the glow is swapped
+     for a bare clone of itself at 2.4s, which is the instant zGlowIdle takes over
+     regardless. They are empty decorative divs with no id and no listener, so the
+     clone is the whole element. A late timer moves the handover by a frame; a
+     timer that fires on a screen the player already left resolves against a
+     detached node and does nothing. Under reduced motion app.css replaces both
+     animations with a one-shot fade, so there is no loop to composite and no
+     swap to make. */
+  if (tab === 'shop' && !matchMedia('(prefers-reduced-motion: reduce)').matches)
+    setTimeout(() => $$('.gw-panel .wz-glow', body).forEach(g => {
+      const fresh = g.cloneNode();
+      fresh.classList.add('idle');
+      g.replaceWith(fresh);
+    }), 2400);
+
   $$('#chTabs .chip, .ward-looks', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
   const content = $('#chContent', body);
   if (curtains) requestAnimationFrame(() => requestAnimationFrame(() => $$('.curt', body).forEach(x => x.classList.add('open'))));
