@@ -3242,6 +3242,9 @@ async function dayBudget() {
    up sometimes is worse than none at all. */
 const LOG_ONLY_LINE = '<p class="log-only">Nothing you grow or cook in the Kitchen counts as food you ate. This diary only records what you log yourself.</p>';
 
+/* Set the first time Today renders Gwart; see the note at its read site below. */
+let gwEntranceSeen = false;
+
 async function renderToday(el) {
   const entries = await entriesFor(S.date);
   const yEntries = await entriesFor(addDays(S.date, -1));
@@ -3342,6 +3345,24 @@ async function renderToday(el) {
     fightsReady: pitEnergy.ready,
   };
   const gwLine = gwartLine(gwCtx);
+  /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
+     the render that emits the markup, so the very first Today of the session
+     gets `wz-enter` bare and every later one gets `.seen` on it. Measured on
+     this tree at 440x956, three arrivals at Today driven through the real tab
+     bar: 871 style recalcs / 115ms as shipped, against 376 / 57ms once he
+     only arrives once. zEnterCine animates `filter`, which no compositor can
+     take, so its whole 2.4s is main-thread style work on the app's home screen,
+     every single time you tap Today.
+     WHERE "ONCE" LIVES, and why it is a plain module-level `let` like
+     bootSheetClaimed above: it must survive an in-place refresh() and a route()
+     back here (both re-run this function on the same document, so it does), and
+     it must NOT survive a real reload (a fresh module instance starts false, so
+     it does not). Nothing is persisted; a relaunch is a new session and he gets
+     to arrive again. The cinematic itself is untouched: .wz-enter.seen only
+     turns the animation off, and its `both` fill already ended on exactly the
+     resting state, so "seen" and "finished" are the same pixels. */
+  const gwSeen = gwEntranceSeen;
+  gwEntranceSeen = true;
   const C = 2 * Math.PI * 66;
   const prev = S.ui;
   const protHit = t.p && tot.p >= t.p;
@@ -3403,7 +3424,7 @@ async function renderToday(el) {
       <button class="gw-today" id="gwartBtn" aria-label="Gwart says something">
         <span class="wz-scene" aria-hidden="true">
           <span class="wz-body"><img src="assets/gwart/gwart.png" alt=""></span>
-          <span class="wz-enter"><span class="wz-sway">
+          <span class="wz-enter${gwSeen ? ' seen' : ''}"><span class="wz-sway">
             <img class="wz-stars-l" src="assets/gwart/gwart-stars.png" alt="">
             <img class="wz-stars-m" src="assets/gwart/gwart-stars.png" alt="">
             <img class="wz-stars-r" src="assets/gwart/gwart-stars.png" alt="">
