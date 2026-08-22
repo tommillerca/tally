@@ -16039,20 +16039,48 @@ async function renderBoneyard(el) {
        sliding around loose on the map.
        Same binding as the ring, and for the same reason. It only touches markers
        already on screen and does no work when there are none, so it is safe to
-       run on every zoom frame. */
+       run on every zoom frame.
+       AND ON EVERY MOVE FRAME, WHICH IS WHY paintWandererCone HAS A GATE. Tom,
+       2026-08-22: "the cone shouldn't flicker or change size". A pan reprojects
+       to a size that differs in the hundredths of a pixel, so this pass asks for
+       a repaint sixty times a second while the picture is identical. The gate
+       lives in js/wanderer.js, at the one place both callers go through, and it
+       compares the ROUNDED size: keep it there rather than adding a second one
+       here. */
+    /* THE PROJECTED SIZE, OR NOTHING AT ALL, and "nothing" is the fix.
+       MEASURED, not guessed. Driving a 1.6s pan on the real Boneyard and
+       sampling the cone's rendered width every frame, v423 went 508px ->
+       200px -> 508px inside 300 ms, and a zoom went 508 -> 1226 -> 200 ->
+       1341. That 200 is not a projection wobble, it is this function's own
+       FALLBACK being painted over a correct answer: both copies of the sizing
+       code opened with `let px = 200` and both were gated on `map.loaded()`,
+       which reports FALSE for as long as any tile is still in flight, and a
+       pan or a zoom is exactly when tiles are in flight. So every few seconds
+       the 300 m beam was redrawn as a 200 px stub and then corrected. That is
+       the size flicker, and it is a 60% collapse rather than a shimmer.
+       Two changes, both of them "do not answer when you do not know":
+         - `map.loaded()` is gone from the gate. It is about TILES, not about
+           the transform, and map.project answers correctly throughout a
+           camera move. The try/catch is what covers a transform that is not
+           ready, and it is still here.
+         - no fallback number. A null tells paintWandererCone to KEEP THE SIZE
+           IT HAS, so an unanswerable frame changes nothing on screen instead
+           of overwriting a right answer with a wrong one. */
+    function coneDiameterPx(w) {
+      try {
+        const a = map.project([w.lng, w.lat]);
+        const b = map.project([w.lng, w.lat + CONE_RANGE_M / 111320]);
+        const d = Math.hypot(b.x - a.x, b.y - a.y) * 2;
+        if (isFinite(d) && d > 40) return d;
+      } catch { /* transform not ready: the caller keeps what it has */ }
+      return null;
+    }
     function sizeWandererCones() {
-      if (!wandererMarkers.size || !map || !map.loaded()) return;
+      if (!wandererMarkers.size || !map) return;
       for (const [, rec] of wandererMarkers) {
         const w = rec.w;
         if (!w) continue;
-        let px = 200;
-        try {
-          const a = map.project([w.lng, w.lat]);
-          const b = map.project([w.lng, w.lat + CONE_RANGE_M / 111320]);
-          const d = Math.hypot(b.x - a.x, b.y - a.y) * 2;
-          if (isFinite(d) && d > 40) px = d;
-        } catch { /* projection not ready: keep the fallback */ }
-        paintWandererCone(rec.el.querySelector('.wanderer-cone'), px, w.heading);
+        paintWandererCone(rec.el.querySelector('.wanderer-cone'), coneDiameterPx(w), w.heading);
       }
     }
     map.on('zoom', sizeWandererCones);
@@ -16087,16 +16115,10 @@ async function renderBoneyard(el) {
         // The lit ground is sized from the map's OWN projection (his pixel vs a
         // point CONE_RANGE_M north of him), so 90 m on screen is 90 m at every
         // zoom, the same rule sizeRadius and the Glutton's blight both use.
-        let px = 200;
-        if (map && map.loaded()) {
-          try {
-            const a = map.project([w.lng, w.lat]);
-            const b = map.project([w.lng, w.lat + CONE_RANGE_M / 111320]);
-            const d = Math.hypot(b.x - a.x, b.y - a.y) * 2;
-            if (isFinite(d) && d > 40) px = d;
-          } catch { /* projection not ready: keep the fallback */ }
-        }
-        paintWandererCone(rec.el.querySelector('.wanderer-cone'), px, w.heading);
+        // One helper, shared with the zoom/move pass above, so the two cannot
+        // answer the same question differently. See its note for why an
+        // unanswerable frame returns null rather than a fallback size.
+        paintWandererCone(rec.el.querySelector('.wanderer-cone'), coneDiameterPx(w), w.heading);
         if (!inWandererCone(w, lat, lng)) continue;
         if (wandererEngaged.has(w.id) || wandererDone.has(wandererKey(date, w))) continue;
         // the anti-cheat gate the tap handlers get, silently: being DRIVEN past
