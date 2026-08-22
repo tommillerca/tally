@@ -810,7 +810,7 @@ test('dens: weekly claim keys + reward labels', () => {
   assert.equal(wk, '2026-W27');
   const den = poi.densNear(wk, 49.2827, -123.1207)[0];
   assert.ok(poi.denKey(wk, den).startsWith('boss-2026-W27-'));
-  assert.ok(poi.denRewardLabel({ crate: 'golden', coins: 200, xp: 100 }).includes('Golden Crate'));
+  assert.ok(poi.denRewardLabel({ crate: 'golden', coins: 200, xp: 100 }).includes('Bone Crate'));
   // iso week boundaries: Sunday belongs to the week of the preceding Monday
   assert.equal(poi.isoWeekKey(new Date('2026-01-01T12:00:00Z')), '2026-W01');
 });

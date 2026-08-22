@@ -786,6 +786,19 @@ console.log(fails ? `\n${fails} FAILED` : '\nevery screen draws one medium');
  *                        hub and no word's own wedge holds exactly one -> all
  *                        fourteen named, "words with no single picture on their
  *                        own wedge", exit 1 and the run aborts before LABEL.
+ * AND THE ROW RE-PROVEN 2026-08-21, when the crate itself was renamed. The
+ * drawing has always been a bone chest; the word 'Golden' was describing the
+ * vector treasure chest it replaced, so loot.js's SHOP and CRATES labels became
+ * 'Bone Crate' and the wedge tag became 'Bone'. ART_NAME is scraped from
+ * loot.js, so the expectation moved with the product on its own, which is the
+ * whole design of it. Same throwaway-tree and exit-code-file discipline:
+ *   js/wheel.js's gold wedge tag put back to 'Golden' while the Shop says
+ *                        'Bone Crate' -> "wheel: wedge says \"Golden\" over
+ *                        assets/crates/golden/f0.png, which this game calls a
+ *                        Bone Crate", the same hit again on wheel-reveal,
+ *                        exit 1. Unmutated: exit 0, `"Crate" = Common Crate,
+ *                        "Bone" = Bone Crate, "Charm" = Battle Charm`.
+ *
  *   CONTROL named floor  the shop rows' IDS renamed ('crate-golden' -> 'box-golden'
  *                        and so on) so ART_NAME can no longer reach the crate art
  *                        while every label still reads correctly -> "2 drawing the

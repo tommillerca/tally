@@ -32,12 +32,14 @@
  *   STEP      every pixel <img> renders at a whole 16 / 24 / 48, never in
  *             between. Failure is the fractional resample: this is the row that
  *             catches a reintroduced transform on a swatch or a marker.
- *   VECTOR    `herbs` is the ONLY spawn still drawing a vector. Failure is
- *             EITHER direction on purpose. A new type falling back to vector is
- *             the v416 bug returning; and the day someone draws the food-find
- *             icon that the Herb patch is waiting on, this row goes red and
- *             tells them to wire it and delete the exemption, instead of the
- *             asset sitting on disk unused.
+ *   VECTOR    NO key row draws a vector. VECTOR_OK is empty as of 2026-08-21 and
+ *             that emptiness is the assertion. Failure is EITHER direction on
+ *             purpose: a type falling back to vector is the v416 bug returning,
+ *             and an exemption added here has to carry a date and a reason.
+ *             It held ['Herb patch'] until the day the food-find art was wired,
+ *             and that exemption is exactly why five reports of "the herb marker
+ *             is still the old art" all met a green audit. See the note on
+ *             VECTOR_OK.
  *   MATCH     every icon in the key is byte-for-byte the same src, at the same
  *             rendered px, as the marker it claims to describe. Failure is
  *             either direction: a key showing vector icons for pixel markers is
@@ -75,13 +77,31 @@
  * On this branch the same run is all green at mini 42px, loot 42px, skull 24px,
  * every pixel icon at 24, and 5 key rows agreeing with the map.
  *
+ * PROVE-RED, 2026-08-21, for the Herb patch's pixel art. Throwaway `cp -R` of
+ * this tree with its .git removed, exit code read from a FILE, never a pipe:
+ *   js/app.js spawnIcon's herbs arm put back to `bhIcon('garden-seed', s)`
+ *   -> 2 red, exit 1, with all six CONTROL rows green (63 pixel imgs, 63
+ *      decoded; the egg sample present, candidate 2 of 8):
+ *        VECTOR "vector rows: Herb patch (expected exactly: none)"
+ *        MATCH  "Herb patch: key draws a vector, map draws
+ *                assets/icons-pix/herbs.png"
+ *   Unmutated, the same run is exit 0 with "6 rows agree with the map".
+ *
+ * THE EGG SAMPLE IS TAKEN FROM THE RENDERED MAP, NOT THE GENERATOR, and there
+ * are TWO dice rolls between a Mystery Egg existing and one being drawn. The
+ * note at the eggSpots block has the mechanism and the measurement. When an
+ * instance has no placeable rare, the Mystery Egg row is dropped from EXPECT and
+ * declared UNPROVEN by name, so this suite can exit 97 (did not fully run)
+ * instead of exiting 1 with an art-regression message about a placement
+ * outcome. It is never reported as a pass.
+ *
  * Serves the tree by default and NEVER defaults to production. Pass a URL as
  * argv[2] only to point it somewhere deliberately.
  * Usage: node tests/boneyard-icon-audit.mjs      (exits non-zero on failure)
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boot, seed, sleep, serveTree } from './godmode.js';
+import { boot, seed, sleep, serveTree, unproven, unprovenReport, exitFor } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const STEPS = [16, 24, 48];
@@ -92,6 +112,7 @@ const EXPECT = {
   'Bone cache':  'assets/icons-pix/bone.png',
   'Coin pile':   'assets/icons-pix/coin.png',
   'Buried crate':'assets/icons-pix/crate.png',
+  'Herb patch':  'assets/icons-pix/herbs.png',
   'Mystery Egg': 'assets/icons-pix/egg-basic.png',
   'Mini-boss':   'assets/icons-pix/badge-skull.png',
 };
@@ -100,11 +121,18 @@ const EXPECT = {
    would compare the constant to itself and pass through any rename. */
 const EGG_NAME = 'Mystery Egg';
 const EGG_DESC = 'Rare: walk to hatch a pet';
-/* THE ONE ROW ALLOWED TO BE A VECTOR, and the reason, so nobody has to go
-   digging: there is no pixel drawing for a food find yet. It cannot borrow one
-   of the seven ingredient icons because the spawn does not know which
-   ingredient it carries until you collect it. */
-const VECTOR_OK = ['Herb patch'];
+/* NO ROW IS ALLOWED TO BE A VECTOR ANY MORE, and the empty list is the point.
+   This carried `['Herb patch']` with a written reason ("there is no pixel
+   drawing for a food find yet") from the day the row was authored until
+   2026-08-21. The art existed the whole time, unclaimed on a rescue branch, and
+   THIS EXEMPTION IS WHY NOBODY NOTICED: the only guard that looks at that pixel
+   was told to expect the old vector, so it stayed green through five separate
+   reports from Tom that the herb marker was still the old art. A guard holding a
+   superseded instruction does not merely fail to catch the bug, it certifies it.
+   Kept as an empty list rather than deleted so the row still reads as "the set
+   of allowed vectors", and so the next exemption has to be written down here
+   with a date and a reason instead of being buried in a boolean. */
+const VECTOR_OK = [];
 /* Cam's drawn art. Never pixel art, never counted as a pixel icon here. */
 const CAM = /assets\/(brand|bh)\//;
 
@@ -142,55 +170,32 @@ try {
      below fails loudly rather than the MATCH row failing for a reason that
      reads like an art regression. */
   const HOME = { latitude: 49.2827, longitude: -123.1207 };
-  /* STAND WHERE EVERY GRADED TYPE IS ACTUALLY PRESENT, and this row has now been
-     wrong in BOTH directions, which is the useful part.
-     v421 pinned a fixed Vancouver point. The Mystery Egg is an 8% roll per cell
-     per 45-minute instance (js/hunt.js), so the egg was there in some instances
-     and not others and the row blocked a release on a dice roll. The fix moved
-     the player onto an egg cell. That immediately broke the CRATE, because
-     standing on an egg cell moves you away from whatever crate was near the old
-     pin: one flake traded for another, in the same file, by me.
-     So the sample is chosen for ALL of EXPECT at once. The generator is a pure
-     function of (date, cell, instance), so this is a search over candidates and
-     not a guess: the first position whose NEAR_M field contains every graded
-     type wins, and if none does, the fixed pin is kept and the CONTROL row below
-     says which types were missing instead of MATCH failing for a reason that
-     reads like an art regression. */
-  const spot = await page.evaluate(async (home) => {
+  /* EVERY CANDIDATE, NOT THE NEAREST ONE, and the second dice roll is why.
+     The note above is still true and still necessary; it was just not
+     sufficient. Asking the generator where an egg is answers the FIRST roll (an
+     8% chance per cell per 45-minute instance) and the app then applies a
+     SECOND, independent veto that the generator knows nothing about:
+     app.js placeWalkable() hides any spawn whose anchor snaps to no walkable
+     feature within SNAP_MAX_M (water, a backyard, a rooftop), so a perfectly
+     real egg is simply never drawn. Measured on 2026-08-21 at v421: the nearest
+     rare was 143 m away, standing on it put it at 0 m and inside NEAR_M, and the
+     map drew 43 spawn markers with no egg among them. This audit read that as
+     "no map marker draws assets/icons-pix/egg-basic.png" and blocked on it,
+     which is an art failure message for a placement outcome.
+     So collect the whole ranked list and try them in turn, and let the RENDERED
+     MAP decide when a sample has been found. */
+  const eggSpots = await page.evaluate(async (home) => {
     const hunt = await import('./js/hunt.js');
     const date = new Date().toISOString().slice(0, 10);
-    /* ONLY the types spawnsForRoute can produce. 'mini' is NOT a spawn: the
-       mini-boss is its own marker system, so asking for it here can never be
-       satisfied and the search would reject every candidate, which is exactly
-       what it did on the first attempt. The graded types that ARE spawns:
-       bones (weight 5), coins (5), crate (1) and rare, which has weight 0 and
-       is placed by its own 8% roll. The crate being 1-in-14 is why a fixed pin
-       misses it often enough to block a release. */
-    const WANT = ['bones', 'coins', 'crate', 'rare'];
-    const typesAt = (lat, lng) => {
-      const near = hunt.spawnsForRoute(date, lat, lng).filter(sp => !sp.far);
-      return new Set(near.map(sp => sp.type));
-    };
-    /* candidates: the fixed pin, then a ring of cell-sized steps around it.
-       CELL_DEG is 0.005, so this sweeps a few hundred metres either way. */
-    const cands = [[home.latitude, home.longitude]];
-    for (let dx = -3; dx <= 3; dx++) {
-      for (let dy = -3; dy <= 3; dy++) {
-        if (!dx && !dy) continue;
-        cands.push([home.latitude + dx * 0.005, home.longitude + dy * 0.005]);
-      }
-    }
-    let best = null;
-    for (const [lat, lng] of cands) {
-      const t = typesAt(lat, lng);
-      const have = WANT.filter(w => t.has(w));
-      if (!best || have.length > best.have.length) best = { lat, lng, have, missing: WANT.filter(w => !t.has(w)) };
-      if (have.length === WANT.length) break;
-    }
-    return best;
+    /* stand ON an egg's own cell so it lands inside NEAR_M and draws as a
+       full-density marker rather than a dimmed far beacon */
+    return hunt.spawnsForRoute(date, home.latitude, home.longitude)
+      .filter(sp => sp.type === 'rare')
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, 8)
+      .map(e => ({ latitude: e.lat, longitude: e.lng, was: e.dist, id: e.id }));
   }, HOME);
-  await page.setGeolocation(spot && !spot.missing.length
-    ? { latitude: spot.lat, longitude: spot.lng } : HOME);
+  await page.setGeolocation(eggSpots.length ? { latitude: eggSpots[0].latitude, longitude: eggSpots[0].longitude } : HOME);
   await page.evaluate(() => { location.hash = '#/today'; });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await sleep(1500);
@@ -206,6 +211,37 @@ try {
   })));
   await page.evaluate(() => { const b = document.querySelector('#mapStart'); if (b && b.offsetParent) b.click(); });
   await sleep(13000);
+
+  /* WALK THE CANDIDATES UNTIL THE MAP ITSELF DRAWS ONE. The authority on
+     "is there an egg to compare" is the rendered marker, never the generator:
+     placeWalkable has the last word and only the map knows what it decided.
+     Retargeting is a setGeolocation and a wait, because refreshSpawns runs off
+     the position watch on a 5s tick, so this costs one boot, not eight. */
+  const eggOnMap = () => page.evaluate(() =>
+    [...document.querySelectorAll('#mapStage .map-spawn.maplibregl-marker')]
+      .some(el => !el.classList.contains('far')
+        && [...el.querySelectorAll('img')].some(i => /egg-basic\.png$/.test(i.getAttribute('src') || ''))));
+  let eggUsed = eggSpots[0] || null;
+  let eggDrawn = eggSpots.length ? await eggOnMap() : false;
+  let eggTried = eggSpots.length ? 1 : 0;
+  for (let i = 1; i < eggSpots.length && !eggDrawn; i++) {
+    await page.setGeolocation({ latitude: eggSpots[i].latitude, longitude: eggSpots[i].longitude });
+    await sleep(6500);
+    eggUsed = eggSpots[i]; eggTried = i + 1;
+    eggDrawn = await eggOnMap();
+  }
+  /* AN UNPLACEABLE INSTANCE IS UNPROVEN, NOT A PASS AND NOT AN ART FAILURE.
+     Dropping the row from EXPECT is what stops MATCH reporting a placement
+     outcome as a regression; naming it here is what stops the drop being a
+     silent skip. exitFor turns it into 97, which the release gate reads as
+     "this did not run", so nothing is certified on an empty sample. */
+  if (!eggDrawn) {
+    delete EXPECT['Mystery Egg'];
+    unproven('MATCH    the Mystery Egg key row against its marker',
+      `none of the ${eggSpots.length} rare spawn(s) in this 45-minute instance survived the app's own `
+      + 'placeWalkable veto, so the map drew no egg to compare the key against');
+  }
+
   // the key starts hidden; it is the same markup either way, so unhide it rather
   // than hunting the button, which has moved twice
   await page.evaluate(() => { const l = document.querySelector('#mapLegend'); if (l) l.hidden = false; });
@@ -238,14 +274,17 @@ try {
   });
 
   /* ---- CONTROL first. Every row below reads from this sample. ---- */
-  /* THE SAMPLE THIS RUN ACTUALLY GOT. Without this, a missing spawn type reads
-     exactly like an art regression in the MATCH row below, which is how this
-     file blocked a release twice for reasons that had nothing to do with art. */
-  ok('CONTROL  a location was found carrying every spawn type the MATCH row grades',
-    !!spot && spot.missing.length === 0,
-    spot ? (spot.missing.length
-      ? `NO LOCATION IN RANGE HAS ${spot.missing.join(', ')} THIS 45-MINUTE INSTANCE: the MATCH row below cannot grade ${spot.missing.length} of its rows, and a failure there is about the sample, not the art`
-      : `stood where all ${spot.have.length} graded types are present`) : 'no candidate searched');
+  /* THE SAMPLE THIS RUN ACTUALLY GOT. Without this the MATCH row's egg failure
+     is ambiguous: it reads the same whether the art regressed or whether the
+     instance simply had no egg in it. */
+  if (eggDrawn) {
+    ok('CONTROL  an egg is DRAWN on the map to compare, so the MATCH row has a sample',
+      true, `stood on ${eggUsed.id} (${Math.round(eggUsed.was)}m from the fixed pin), `
+        + `candidate ${eggTried} of ${eggSpots.length}`);
+  } else {
+    out.push(`UNPRV CONTROL  no egg is drawn on the map: ${eggSpots.length} rare spawn(s) generated, `
+      + 'all vetoed by placeWalkable. The Mystery Egg row is UNGRADED this run, not passed.');
+  }
 
   ok('CONTROL  the map drew spawn markers', s.spawns.length > 0, `${s.spawns.length} spawn discs`);
   ok('CONTROL  the map drew mini-boss markers', s.minis.length > 0, `${s.minis.length} mini discs`);
@@ -301,9 +340,9 @@ try {
      the rule badgePixHtml documents. Counting any-svg-present put all three den
      rows in this list and made the row red on healthy code. ---- */
   const vectorRows = s.legend.filter(r => !r.icons.some(i => i.src)).map(r => r.name.trim());
-  ok('VECTOR   the Herb patch is the only key row still drawing a vector',
+  ok('VECTOR   no key row draws a vector where pixel art exists',
     vectorRows.length === VECTOR_OK.length && VECTOR_OK.every(n => vectorRows.includes(n)),
-    `vector rows: ${vectorRows.join(', ') || 'none'} (expected exactly: ${VECTOR_OK.join(', ')})`);
+    `vector rows: ${vectorRows.join(', ') || 'none'} (expected exactly: ${VECTOR_OK.join(', ') || 'none'})`);
 
   /* ---- MATCH. The key is the marker, or it is a lie. ---- */
   const mapSrcs = new Map();
@@ -313,7 +352,7 @@ try {
   const drift = [];
   for (const r of s.legend) {
     const want = EXPECT[r.name.trim()];
-    if (!want) continue;                        // dens are Cam's art; Herb patch is VECTOR_OK
+    if (!want) continue;                        // the three den rows are Cam's art
     const got = r.icons.find(i => i.src);
     if (!got) { drift.push(`${r.name.trim()}: key draws a vector, map draws ${want}`); continue; }
     if (got.src !== want) { drift.push(`${r.name.trim()}: key has ${got.src}, expected ${want}`); continue; }
@@ -340,5 +379,6 @@ try {
 }
 
 console.log(out.join('\n'));
+unprovenReport('boneyard-icon-audit.mjs', null);
 console.log(fails ? `\n${fails} FAILED` : '\nall good');
-process.exit(fails ? 1 : 0);
+process.exit(exitFor(fails));
