@@ -118,6 +118,19 @@ for (const frac of [0.25, 0.5, 0.75, 1]) {
   if (s.mb > peak.mb) peak = s;
 }
 await sleep(1300);
+/* REACH. Everything below claims to be measured AT THE FAR END OF THE SCROLL,
+   and the scroll is one getElementById away from being a no-op: rename #lbBody,
+   or give the list its own inner scroller, and the loop above scrolls nothing.
+   RECYCLE and the second BUDGET row then re-report the numbers from the open,
+   which is precisely the hole this file shipped with. Prove the board moved and
+   actually reached the bottom. */
+const scrolled = await page.evaluate(() => {
+  const b = document.getElementById('lbBody');
+  return b ? { top: Math.round(b.scrollTop), h: b.scrollHeight, client: b.clientHeight } : null;
+});
+ok('REACH the board really was scrolled to its far end (an unscrolled board re-reports the open)',
+  !!scrolled && scrolled.top > 0 && scrolled.top + scrolled.client >= scrolled.h - 4,
+  scrolled ? JSON.stringify(scrolled) : 'no #lbBody: nothing was scrolled at all');
 const b2 = await shot();
 ok('RECYCLE scrolling the whole board never mounts every head at once',
   peak.imgs < b2.rows, `peak ${peak.imgs} images mounted across the full scroll, ${b2.rows} rows total`);

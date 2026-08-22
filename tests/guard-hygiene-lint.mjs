@@ -70,7 +70,7 @@ const AUDIT_RE = /audit|guard|lint|\.test\.js$/i;
 const CONTROL_RE = /\bCONTROL\b|\bPOSITIVE\b|\bPREMISE\b|\bSETUP\b|\bREACH\b|\bSAMPLE\b/;
 const audits = [...src.keys()].filter(f => AUDIT_RE.test(f));
 const blind = audits.filter(f => !CONTROL_RE.test(src.get(f)));
-const CEILING = 59;
+const CEILING = 49;
 ok('SETUP the audit scan is not vacuous', audits.length >= 50, `${audits.length} audits`);
 ok(`CONTROL the number of audits with NO positive control does not rise above ${CEILING}`,
   blind.length <= CEILING,

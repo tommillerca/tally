@@ -70,6 +70,15 @@ for (const fn of OK_HELPERS) {
   }
 }
 
+/* CONTROL. Every failure this file has had was the MATCHER going blind: a shape
+   it could not classify, a look-ahead window too short, a comment it ate. So a
+   clean report is only evidence if the matcher can still see the shipped
+   exploit. One synthetic call site in exactly that shape goes through the same
+   loop as the real ones and must come back flagged; its findings are held out
+   of the real report below. */
+const CONTROL_FILE = '__control-fixture__.js';
+src.set(CONTROL_FILE, 'async function control() {\n  const spent = await spendPitFight();\n  if (!spent) return;\n}\n');
+
 // 1. every call site must reach for .ok
 /* `sites` is what was SEEN, `analysed` is what this audit actually understood.
    Only the second one is evidence (see the empty-sample guard at the bottom). */
@@ -139,6 +148,13 @@ for (const [file, text] of src) {
       problems.push(`${where} calls ${fn}() in a shape this audit cannot classify, so NOTHING checked it: ${line.trim().slice(0, 120)}`);
     }
   });
+}
+
+const caught = problems.filter(p => p.startsWith(CONTROL_FILE));
+for (const p of caught) problems.splice(problems.indexOf(p), 1);
+sites--; analysed--;   // the synthetic control site is not a real call site
+if (caught.length !== 1 || !/truthiness/.test(caught[0])) {
+  problems.push(`CONTROL the synthetic \`if (!spent)\` call site was not flagged (${caught.length} finding(s)); the matcher has gone blind, so a clean report here means nothing`);
 }
 
 /* An empty sample set is a FAILURE, never a pass, and it has to count what was
