@@ -845,7 +845,22 @@ const SERIAL = {
   'crate-exit-flicker-audit.mjs': 'samples pixels on a specific frame of a slide, '
     + 'so it is measuring frame timing. Red under six-way contention on the v422 '
     + 'gate, green standalone on the identical tree.',
+  'gift-confirm-audit.mjs': 'polls for the DIP in a coin balance during a two-tap '
+    + 'confirm, so it is sampling a value inside a window rather than reading a '
+    + 'settled one. Red under contention on the v422 gate ("lowest seen 5000, '
+    + 'expected 4500"), green standalone twice on the identical tree.',
 };
+
+/* THE SHAPE THAT NEEDS THIS LIST, so the next one takes a minute instead of an
+   hour. Both entries above sample a value AT A MOMENT rather than reading a
+   settled one: a pixel on a chosen frame, a balance during a transaction. Under
+   contention the moment moves and the sample misses, and the suite reports the
+   app as broken when nothing is.
+   THE TEST IS ALWAYS THE SAME and it is cheap: run the suite ALONE on the same
+   tree. Green alone plus red in the pack means contention, and it belongs here
+   with that measurement written down. Red both ways is a real defect and does
+   not. Never add a suite to this list without running that comparison, because
+   a genuinely broken suite parked here is a red that has been made invisible. */
 
 const CPUS = (await import('node:os')).cpus().length;
 const GB = (await import('node:os')).totalmem() / 1e9;
