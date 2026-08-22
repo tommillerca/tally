@@ -2633,8 +2633,11 @@ async function backupNudge() {
  * OPACITY to 1 and leaves the travel alone, which is the only version that still
  * works: the reveal is a transform now, so pinning --wm-pull itself to 1 would
  * park the mark permanently on screen the moment anything scrolled. There is no
- * keyframe and no duration in this feature, so nothing here can be collapsed to
- * 0.001s and run a loop a thousand times a second.
+ * KEYFRAME and no iteration count in this feature, only a 130ms transition
+ * (app.css) smoothing the quantisation step, so nothing here can be collapsed to
+ * 0.001s and run a loop a thousand times a second: the global reduce block's
+ * transition collapse simply hands a reduced-motion player the un-smoothed direct
+ * tracking, which is the right answer for direct manipulation.
  *
  * HEADLESS CANNOT SEE THE BOUNCE, BUT A DEVICE HAS. Chromium clamps scrollTop at
  * 0, so on desktop this listener is inert and no automated run can produce a
@@ -2648,16 +2651,57 @@ function bindWordmarkPull() {
   let last = -1;
   el.addEventListener('scroll', () => {
     const pull = -el.scrollTop;
-    const q = pull <= 0 ? 0 : Math.round(Math.min(1, pull / FULL) * 20) / 20;
+    const t = pull <= 0 ? 0 : Math.min(1, pull / FULL);
+    /* SMOOTHSTEP, NOT t. Tom on v421: "there is no easing involved in the
+       movement and it feels cheap". A linear map moves the mark at exactly the
+       speed of the finger and then dead-stops at 36px; t*t*(3-2t) is quiet under
+       a jitter-sized tug (4px went from 0.10 to 0.05), quick through the middle,
+       and decelerates into its landing (27px went from 0.75 to 0.85). Still
+       exactly 0 at rest and exactly 1 at FULL, so every geometry bound in
+       app.css and in the audit is untouched. The SMOOTHING of the 6.4px
+       quantisation step below is the transition in app.css, not a filter here:
+       one property write per step is what keeps this listener cheap, and the
+       compositor interpolates for free. */
+    const q = Math.round(t * t * (3 - 2 * t) * 20) / 20;
     if (q === last) return;
     last = q;
     document.documentElement.style.setProperty('--wm-pull', q);
   }, { passive: true });
 }
 
+/* A TRAY TAP IS ALWAYS A NAVIGATION, EVEN WHEN THE HASH ALREADY SAYS SO.
+ *
+ * Tom, on v421: "if i tap on the bottom bonehead icon on the home tray when im in
+ * shop it does nothign. bonehead and wardrobe are not the same part of the app but
+ * they act like it sometimes based on clicks."
+ *
+ * MEASURED, not guessed. Driving the real controls in a real page:
+ *   #/bonehead -> tap the hub's Shop chip -> hash "#/bonehead", surface Gwart
+ *   -> tap the tray's Bonehead -> hash "#/bonehead", surface STILL Gwart.
+ * Reached the same Shop by its deep link instead (#/shop) and the identical tap
+ * lands on the Wardrobe. So the bug is not in the hub and not in route(): it is
+ * that this handler navigated by ASSIGNING location.hash, and assigning a hash
+ * its current value fires no hashchange in any browser, so route() never ran.
+ *
+ * THE HASH IS NOT THE SURFACE. The hub's chips switch Wardrobe/Backpack/Shop/Build
+ * by calling renderCharacter() straight (~line 11450) and deliberately do not
+ * touch the hash, so from inside the hub the hash reports where you CAME IN, not
+ * where you are. Any handler that treats "the hash already matches" as "you are
+ * already there" is wrong for the same reason, and the tray was the only one left:
+ * openCharacter() has had the route() branch for exactly this since it was written.
+ *
+ * THE RULE, and it is deliberately the same for all four buttons: a tray tap lands
+ * you on that tab's HOME surface from anywhere, and never does nothing. Today,
+ * Boneyard and Crew have one surface each so their home is the screen itself;
+ * Bonehead's is the hub's Wardrobe, where the Bonehead actually stands, which is
+ * what makes it a destination rather than "whichever hub tab you last opened".
+ * It is also the ordinary phone convention (tap the tab you are on, get its root).
+ * Guard: tests/tray-destination-audit.mjs fires this exact control from every
+ * screen, the hub's siblings included, and asserts where it lands. */
 function bindTabs() {
   $$('#tabbar .tab').forEach(b => b.addEventListener('click', () => {
-    location.hash = '#/' + b.dataset.tab;
+    const h = '#/' + b.dataset.tab;
+    if (location.hash === h) route(); else location.hash = h;
   }));
   $('#gearBtn')?.addEventListener('click', () => { location.hash = '#/settings'; });
   $('#fab').addEventListener('click', () => {
