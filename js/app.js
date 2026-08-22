@@ -20,7 +20,7 @@ import {
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
-  resetLook, resetLookPlan,
+  stripAll, stripAllPlan,
   DROP, buyDropItem, refundStreakFreezes,
   RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_REROLL_LADDER,
   setWornAura, ownsAura,
@@ -11970,9 +11970,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
     ]);
     const fitPrices = await Promise.all(fitList.map(f => fitPrice(f)));
     // What "Take it all off" would actually take off, computed by the same
-    // function that does it, so the chip cannot offer a reset that does nothing
+    // function that does it, so the chip cannot offer a strip that does nothing
     // (or hide itself while there is still something on).
-    const resetPlan = await resetLookPlan();
+    const stripPlan = await stripAllPlan();
     // `eq` is the RAW equipment (what the grids tick as equipped); `look` is what
     // you actually appear as once transmog resolves, so the doll and the stage
     // agree with the rest of the app.
@@ -12059,14 +12059,13 @@ async function renderCharacter(wrap, tab, opts = {}) {
         }).join('')}
         ${fitList.length < MAX_FITS ? '<button class="fit-chip add" data-fit-save="1">+ Save this fit</button>' : ''}
         ${/* A player asked for one tap that clears the doll so a new outfit starts
-              from nothing (Tom approved 2026-08-21). It UNEQUIPS and nothing else:
-              every piece stays owned and goes straight back on. Statted gear is
-              left on deliberately, which is the same promise the fit note below
-              already makes ("never your stats"); see resetLook() in loot.js.
+              from nothing, and Tom's call on 2026-08-22 is that it takes the
+              STATTED GEAR too. It UNEQUIPS and nothing else: every piece and every
+              roll stays owned and goes straight back on. See stripAll() in loot.js.
               Only offered when there is something to take off, and the plan comes
               from the same function that performs it so the two cannot drift. */''}
-        ${resetPlan.slots.length || resetPlan.mogs.length
-          ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip every cosmetic. Nothing is lost, your gear and stats stay put.">Take it all off</button>`
+        ${stripPlan.slots.length || stripPlan.mogs.length
+          ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip everything, gear included. Nothing is lost: it all stays in your Backpack.">Take it all off</button>`
           : ''}
       </div>
       ${fitList.length ? `<p class="note fit-note">Tap a fit to wear it. Fits change your look only, never your stats. Long-press a fit to rename or bin it.</p>` : ''}`;
@@ -12212,17 +12211,21 @@ async function renderCharacter(wrap, tab, opts = {}) {
         renderCharacter(wrap, 'wardrobe', { instant: true });
       });
     });
-    /* ARM-THEN-CONFIRM, the same idiom as the rack buys and the melt button: a
-       built outfit is annoying to rebuild by hand, so it takes two taps. No
-       modal, the chip says what the second tap does. */
-    const resetChip = $('[data-fit-reset]', content);
-    if (resetChip) armToConfirm(resetChip, 'Tap again to strip', async () => {
-      const res = await resetLook();
+    /* ARM-THEN-CONFIRM, the same idiom as the rack buys and the melt button. This
+       confirm is now the last thing between a player and an unbuilt Bonehead, so
+       it NAMES THE GEAR rather than saying "strip": the cosmetics coming off is
+       what they asked for, the stats coming off is the part they might not have
+       meant. The toast then says what moved and that none of it is lost. */
+    const stripChip = $('[data-fit-reset]', content);
+    if (stripChip) armToConfirm(stripChip, 'Tap again: gear comes off too', async () => {
+      const res = await stripAll();
       S.lookPreview = null; S.wardrobePreview = null;
+      await refreshSlimedSlots();       // the slime glow follows the gear that just came off
       popSound(S.sounds); pushProfileSoon();
-      toast(res.slots.length
-        ? `${res.slots.length} piece${res.slots.length === 1 ? '' : 's'} off. Everything is still yours, put it back any time.`
-        : 'Look cleared. Everything is still yours.', 2800);
+      const n = res.slots.length, g = res.gear.length;
+      toast(n
+        ? `${n} piece${n === 1 ? '' : 's'} off${g ? `, ${g} with stats on ${g === 1 ? 'it' : 'them'}` : ''}. Nothing is lost, it is all in your Backpack.`
+        : 'Cleared. Nothing is lost, it is all in your Backpack.', 3400);
       renderCharacter(wrap, 'wardrobe', { instant: true });
     });
     /* Trim the transparent padding off every paper-doll slot, the same way the

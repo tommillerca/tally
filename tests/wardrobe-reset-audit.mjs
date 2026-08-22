@@ -28,7 +28,7 @@
  *   5. commit on one tap. It arms first, the fit-rail idiom.
  *
  * HOW IT IS DRIVEN. The REAL chip, tapped twice, in the real Wardrobe, after a
- * seeded save that actually has something on. Nothing here calls resetLook()
+ * seeded save that actually has something on. Nothing here calls stripAll()
  * directly: that would prove the function and nothing about whether the app
  * ever reaches it (tally/CLAUDE.md, the FX rule, same class of mistake).
  *
@@ -38,18 +38,18 @@
  *
  * PROVEN RED in a cp -R throwaway copy, one mutation at a time, each verified
  * to have applied before the result was read:
- *   M1  resetLook() also does db.clear('inv')      -> OWNED x3 + REVERSIBLE red
- *   M2  resetLook() writes kvSet('gearloadout', {}) -> STATS, GEAR, CLEARED red
+ *   M1  stripAll() also does db.clear('inv')      -> OWNED x3 + REVERSIBLE red
+ *   M2  stripAll() writes kvSet('gearloadout', {}) -> STATS, GEAR, CLEARED red
  *   M3  the plan stops excluding slot 'C'           -> PET red
  *   M4  the plan stops excluding slots holding gear -> GEAR red
- *   M5  resetLook() also does kvSet('outfits', [])  -> FITS red
+ *   M5  stripAll() also does kvSet('outfits', [])  -> FITS red
  *   M6  the loop kvSets equipped to {} wholesale    -> GEAR, PET red
- *   M7  resetLookPlan() returns no slots            -> CLEARED, DEFAULT, VISIBLE red
+ *   M7  stripAllPlan() returns no slots            -> CLEARED, DEFAULT, VISIBLE red
  *   M8  the chip is wired with a plain click        -> ARM x2 red
- *   M9  resetLook() skips the paidLooks() bank      -> FREE red
- *   M10 resetLook() also does coinsAdd(-50)         -> CURRENCY red
+ *   M9  stripAll() skips the paidLooks() bank      -> FREE red
+ *   M10 stripAll() also does coinsAdd(-50)         -> CURRENCY red
  *   M11 the chip renders unconditionally            -> EXIT red
- *   M12 resetLook() leaves the transmog map alone   -> MOG, EXIT red
+ *   M12 stripAll() leaves the transmog map alone   -> MOG, EXIT red
  * And the SETUP row that the chip is offered at all goes red on the parent
  * commit dafe778a, where the feature does not exist.
  *
@@ -162,8 +162,11 @@ const snap = () => page.evaluate(async () => {
     petWear: await db.kvGet('petWear', null),
     coins: await loot.coins(),
     dust: await loot.boneDust(),
-    // slots holding a plain cosmetic that is not the slot default, and not gear
-    dressed: BH_SLOTS.filter(s => s.code !== 'C' && !lo[s.code] && eq[s.code] && eq[s.code] !== s.default)
+    /* Every slot holding ANYTHING: a statted piece, or a plain cosmetic that is
+       not the slot's own default. Mirrors stripAllPlan's predicate, deliberately
+       re-stated here rather than imported, so a bug that widens or narrows the
+       plan cannot also widen or narrow the thing measuring it. */
+    dressed: BH_SLOTS.filter(s => s.code !== 'C' && (lo[s.code] || (eq[s.code] && eq[s.code] !== s.default)))
       .map(s => s.code),
     defaults: Object.fromEntries(BH_SLOTS.filter(s => s.default).map(s => [s.code, s.default])),
   };
@@ -228,7 +231,7 @@ ok('ARM one tap changes nothing on the Bonehead',
    map, and it WRITES on read: opening the Wardrobe prices every look in the
    slot, so by now the receipt has been re-banked as a side effect of rendering.
    Emptying it HERE puts the save back in the only state where the FREE row can
-   fail, and makes resetLook's own bank the one thing standing between the
+   fail, and makes stripAll's own bank the one thing standing between the
    player and paying twice. Nothing between this line and the tap reads a price,
    so nothing else can re-bank it. */
 const staged = await page.evaluate(async () => {
@@ -266,14 +269,27 @@ ok('CLEARED every plain cosmetic slot came off', after.dressed.length === 0,
 ok('MOG the disguises are gone', Object.keys(after.transmog).length === 0,
   JSON.stringify(after.transmog));
 
-/* ---------- STATS + GEAR: a look button must not change power ---------- */
-ok('STATS the gear loadout is untouched',
-  JSON.stringify(after.gearLo) === JSON.stringify(before.gearLo),
+/* ---------- STATS + GEAR: INVERTED 2026-08-22 on Tom's call ----------
+   These two rows used to assert that statted gear SURVIVED the strip, which was
+   my first build's behaviour. Tom: "reset should strip everything but there
+   needs to be a gwart reminder". So gear comes off, and the pair of rows now
+   guards the thing that makes that safe: it is UNEQUIPPED, not taken. STATS
+   asserts the loadout really emptied; OWNS asserts the very same piece is still
+   in the gear inventory afterwards, which is the difference between a strip and
+   a theft. Neither is a check without the other, and the row above them that
+   must never move whatever else does is OWNED, the `inv` comparison. */
+ok('STATS the gear loadout really is empty afterwards',
+  Object.keys(after.gearLo).length === 0,
   `${JSON.stringify(before.gearLo)} -> ${JSON.stringify(after.gearLo)}`);
-ok('GEAR the worn piece keeps BOTH its stats slot and its art (no desync)',
-  !!seed.gearOn && after.gearLo[seed.gearOn.slot] === seed.gearOn.id
-  && after.equipped[seed.gearOn.slot] === seed.gearOn.art,
-  `lo=${after.gearLo[seed.gearOn?.slot]} eq=${after.equipped[seed.gearOn?.slot]} want art=${seed.gearOn?.art}`);
+ok('GEAR the slot that held a statted piece is empty of BOTH its stats and its art (no desync)',
+  !!seed.gearOn && !after.gearLo[seed.gearOn.slot]
+  && after.equipped[seed.gearOn.slot] !== seed.gearOn.art,
+  `lo=${after.gearLo[seed.gearOn?.slot]} eq=${after.equipped[seed.gearOn?.slot]} was art=${seed.gearOn?.art}`);
+/* THE ROW THAT SEPARATES UNEQUIPPING FROM DESTROYING. A strip that deleted the
+   piece would satisfy both rows above perfectly. */
+ok('OWNS the statted piece that came off is STILL OWNED and re-equippable',
+  !!seed.gearOn && after.gearIds.includes(seed.gearOn.id),
+  `${seed.gearOn?.id} in ${JSON.stringify(after.gearIds)}`);
 
 /* ---------- PET + FITS: other people's systems ---------- */
 ok('PET the companion slot is untouched', after.equipped.C === before.equipped.C,
@@ -327,7 +343,7 @@ ok('REVERSIBLE a piece that came off is still on the rack and goes straight back
 await openWardrobe();
 const stripped = await page.evaluate(async () => {
   const loot = await import('./js/loot.js');
-  await loot.resetLook();
+  await loot.stripAll();
   return true;
 });
 await openWardrobe();

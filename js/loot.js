@@ -1700,59 +1700,72 @@ export async function deleteFit(id) {
   return { ok: true };
 }
 
-/* ---------- Strip the look (v424) ----------
+/* ---------- Take it all off (v424) ----------
    A player asked for one button that takes everything off so a new outfit starts
-   from nothing, and Tom approved it. The important half is what it must NEVER do:
-   it UNEQUIPS. Nothing is sold, melted, salvaged, refunded or deleted, so the
-   `inv` store is untouched and every piece is still in the Backpack, one tap from
-   going back on. It writes exactly two kv keys, the same two a wardrobe tap
-   writes: 'equipped' (via equip(), so it goes through the owned/slot checks every
-   other path does) and 'transmog'.
+   from nothing. Tom approved it, and on 2026-08-22 he settled the one open
+   question against my first build: "reset should strip everything but there needs
+   to be a gwart reminder or something that reminds players they will be weaker in
+   fights if they dont choose statted gear to wear." So it strips STATTED GEAR TOO,
+   and the risk that made me hold back (a player walks into the Pit weaker with
+   nothing telling them why) is answered by telling them, not by leaving gear on.
+   Gwart's no-gear bucket is the other half of this feature and neither half is
+   complete without the other.
 
-   THREE THINGS IT DELIBERATELY LEAVES ALONE:
+   THE CONTRACT IS UNCHANGED AND IT IS THE IMPORTANT HALF: it UNEQUIPS. Nothing is
+   sold, melted, salvaged, refunded or deleted. The `inv` store is never written,
+   so every piece and every statted roll is still in the Backpack and goes back on
+   in one tap. It writes exactly the keys a wardrobe tap writes: 'equipped' and
+   'gearloadout' (both through equip(), so the owned/slot checks every other path
+   runs still run) and 'transmog'.
 
-   1. STATTED GEAR. `gearloadout` is never written, and a gear slot holding a
-      piece is skipped entirely so its 'equipped' art cannot desync from the
-      stats behind it. This screen already prints the rule on the fit rail:
-      "Fits change your look only, never your stats." A button about how you
-      look must not quietly change how hard you hit in the Pit, and a player who
-      strips their outfit and then walks into a fight 40 stats down would have no
-      idea why. Taking gear off is one tap per slot and it is already there.
-   2. THE PET. Slot C belongs to the Stable, not the Wardrobe (it is not even on
-      the paper doll), and the pet wardrobe is its own system.
-   3. SLOT DEFAULTS. B and SK have `default: true` art (the base body and the base
-      skull) that is always owned, and "bare" there is an invisible Bonehead
-      rather than a blank canvas, so those go back to the default. equip(slot,
-      null) already picks default-or-empty per slot, so this is a loop over the
-      exact call the None cell makes.
+   EQUIPPED AND GEARLOADOUT CANNOT DESYNC, because nothing here writes them
+   separately. equip(slot, null) with keepGear FALSE is the existing call that
+   already does all three things together for one slot: it puts the slot back to
+   its default or empties it, deletes gearloadout[slot], and drops any transmog on
+   it. Clearing the two maps by hand would be two writes that can disagree; this
+   is one call per slot, the same one the None cell makes.
 
-   Transmog IS cleared: it is a pure look override with no stats on it, and every
-   entry in the map was markPaid()'d when it was applied, so putting any of it
-   back costs nothing (transmogPrice returns 0 for a paid look). */
-export async function resetLookPlan() {
+   STILL EXCLUDED, and each for its own reason:
+   - THE PET. Slot C belongs to the Stable, not the Wardrobe (it is not even on
+     the paper doll), and the pet wardrobe (kv petWear) is its own system.
+   - SAVED FITS (kv outfits) and the weapon aura (kv wpnaura). A fit is how you
+     put a look BACK, so binning fits during a reset would destroy the recovery
+     path; the aura is its own toggle in the rack and its own comment warns that
+     erasing the key un-buys the purchase.
+   - SLOT DEFAULTS. B and SK have `default` art that is always owned, and bare
+     there is an invisible Bonehead rather than a blank canvas, so those go back
+     to the default. equip(slot, null) already picks default-or-empty per slot. */
+export async function stripAllPlan() {
   const [lo, eq, tm] = await Promise.all([gearLoadout(), equipped({ raw: true }), transmogMap()]);
+  /* A slot is in the plan if it holds ANYTHING: a statted piece, or a plain
+     cosmetic that is not the slot's own default. Gear used to be excluded here
+     and that one clause was the whole of the old cosmetics-only behaviour. */
   const slots = BH_SLOTS
-    .filter(s => s.code !== 'C' && !lo[s.code] && eq[s.code] && eq[s.code] !== s.default)
+    .filter(s => s.code !== 'C' && (lo[s.code] || (eq[s.code] && eq[s.code] !== s.default)))
     .map(s => s.code);
-  return { slots, mogs: Object.keys(tm) };
+  return { slots, gear: Object.keys(lo).filter(c => c !== 'C'), mogs: Object.keys(tm) };
 }
 
-export async function resetLook() {
-  const { slots, mogs } = await resetLookPlan();
-  for (const code of slots) await equip(code, null, { keepGear: true });
-  if (mogs.length) {
-    /* BANK THE RECEIPTS BEFORE TEARING THE MAP DOWN. paidLooks() writes on read
-       and grandfathers anything worn under v221, when nothing recorded the
-       purchase, by seeding from the live transmog map. Its own comment says why
-       that matters: "clearing the slot would erase the only evidence and charge
-       the player a second time for a look they already bought." A wholesale
-       kvSet('transmog', {}) is exactly that erasure, so the seed has to run
-       first or this button quietly bills a long-time player dust for looks they
-       already own. One await, and it is the difference between free and paid. */
-    await paidLooks();
-    await kvSet('transmog', {});
-  }
-  return { ok: true, slots, mogs };
+export async function stripAll() {
+  const { slots, gear, mogs } = await stripAllPlan();
+  /* BANK THE RECEIPTS FIRST, BEFORE ANYTHING TOUCHES THE TRANSMOG MAP, and this
+     matters MORE now than it did when only the map was cleared at the end.
+     paidLooks() writes on read and grandfathers pre-v221 purchases by seeding
+     from the LIVE transmog map; its own comment says "clearing the slot would
+     erase the only evidence and charge the player a second time for a look they
+     already bought." Now that gear slots are in the plan, equip(slot, null)
+     deletes tm[slot] itself, one slot at a time, inside the loop below. So the
+     seed has to run before the FIRST equip(), not just before the final kvSet,
+     or the receipts are shredded piecemeal and re-wearing a look you already own
+     bills you dust for it again. */
+  if (mogs.length) await paidLooks();
+  for (const code of slots) await equip(code, null);
+  /* The loop clears tm only for slots that HELD something. A stale entry on an
+     empty gear slot would survive it, and equipped() honours a transmog on any
+     slot that holds anything, so a leftover would reapply the moment the player
+     puts a fresh piece in that slot. Clear the map outright. */
+  if (mogs.length) await kvSet('transmog', {});
+  return { ok: true, slots, gear, mogs };
 }
 
 // The piece that best identifies a fit at chip size: whatever it deliberately
