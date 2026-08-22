@@ -847,6 +847,10 @@ const SERIAL = {
   'crate-exit-flicker-audit.mjs': 'samples pixels on a specific frame of a slide, '
     + 'so it is measuring frame timing. Red under six-way contention on the v422 '
     + 'gate, green standalone on the identical tree.',
+  'fight-exit-audit.mjs': 'waits for the world to OFFER a spire and then a fight, so '
+    + 'it is sampling a state that has to arrive rather than reading a settled one. Its '
+    + 'own failure text says so ("no offer means the audit did not run"). Red under '
+    + 'contention on the v423 gate, green standalone twice on the identical tree.',
   'gift-confirm-audit.mjs': 'polls for the DIP in a coin balance during a two-tap '
     + 'confirm, so it is sampling a value inside a window rather than reading a '
     + 'settled one. Red under contention on the v422 gate ("lowest seen 5000, '
