@@ -1060,14 +1060,41 @@ body::before {
 }
 
 /* ---------- pogo-style hero scene ---------- */
-/* THE TRADING CARD (design_handoff_today_home, option 1d). The cream frame is
-   the card; the plate inside is the art. The frame carries the border and the
-   hard shadow, and the 20px chin at the bottom is what makes it read as a
-   printed card rather than a panel with a picture in it. */
+/* NO FRAME. THE HERO IS THE TOP OF THE SCREEN.
+   Tom, 2026-08-21: "today tab continued - why did you keep the playing card
+   style frame? that wasnt what we agreed on."
+
+   He is right and the agreed design is on disk: today-preview/today-mockup.html
+   (the R3 mockup, rendered at today-preview/renders/render-390x844-peek.png).
+   Its hero is `.hero{position:relative;height:620px;background:var(--olive)}`
+   with no fill, no border, no radius and no shadow around it: the art runs edge
+   to edge and off the top of the viewport, and dissolves into the page at the
+   bottom. Every part of the playing-card read came from the frame that used to
+   be here (a #f2e9d7 plate, a 22px radius, a 20px chin under the art and a hard
+   drop shadow), so all of it is gone rather than softened.
+
+   THIS ELEMENT IS NOW ONLY THE SIDEWAYS BLEED. The negative side margins cancel
+   .screen's own --pad exactly, which is why they are written as that term rather
+   than as a number, so the art runs to both edges of the phone the way the
+   mockup's does.
+
+   IT DOES NOT BLEED UPWARD, AND THAT IS A MEASUREMENT RATHER THAN A COMPROMISE.
+   The mockup's hero starts at the top of the viewport, and taking this one there
+   too (a negative top margin of `--sat + 14px`) was BUILT AND THEN REVERTED,
+   because it silently killed the overscroll wordmark. Tom asked for that in
+   these words: "when you scroll the phone on the today screen and can see the
+   EMPTY SPACE ABOVE THE BONEHEAD CARD it has the boneheadz word mark as a nice
+   branding touch." The mark is #app::before at z-index -1, so it paints BEHIND
+   the screen's content and is revealed in exactly that strip; an opaque hero
+   starting at y=0 covers it. Measured, on the full-bleed version:
+     FAIL UNDERNOTCH  0 ink px below the status bar at 36px of pull (floor 6000);
+          first pull with any visible ink: 72px
+     FAIL VISIBLE     0 ink px in the 44px of the mark that is clear of the card
+   which is the same shape as the bug three releases were spent on. So the strip
+   Tom named stays, and the frame he complained about is what came off. */
 .hero-card {
-  position: relative; margin: 0 0 12px;
-  background: #f2e9d7; border-radius: 22px;
-  padding: 7px 7px 20px; box-shadow: 5px 6px 0 rgba(0, 0, 0, .55);
+  position: relative;
+  margin: 0 calc(-1 * var(--pad)) 12px;
 }
 /* THE SCROLL PEEK, and it is arithmetic rather than a tuned height. Tom,
    2026-08-21: "how will the player know to scroll down and see more right now?
@@ -1079,17 +1106,26 @@ body::before {
    less, so a constant height cannot be the answer: the fold moves with the
    viewport and the notch, and the hero has to move with it.
 
-   So the SCENE gives up exactly what the peek needs, and the 201px is measured,
+   So the SCENE gives up exactly what the peek needs, and the 174px is measured,
    not chosen. From the fold upward, at both widths:
      66.2  the tab bar (plus --sab, which is why it is a separate term)
      14    .screen's own top padding, on top of --sat
-      7    .hero-card's top padding
-     20    .hero-card's chin
      12    .hero-card's bottom margin
      67.8  .hero-actions, the four doors
      14    .hero-actions' bottom margin
-   134.8 of that is below the scene and above the first card, 66.2 is the bar,
-   and the sum is 201. Whatever is left after the peek is the scene's, capped so
+   107.8 of that is below the scene and above the first card, 66.2 is the bar,
+   and the sum is 174. It was 201 while the hero was a card: 7 of those were the
+   cream frame's top padding and 20 its chin, and both went with the frame.
+
+   AND THE CAP MOVED WITH THEM, 600 to 627, which is the same 27px. It is not a
+   taste call, it is what keeps this screen identical below the hero. The cap
+   only bites at 393x852 with no inset, and there the scene stays at its ceiling
+   while the card around it got 27px shorter, so everything under it slid UP by
+   27 and a DIFFERENT card ended up straddling the fold: measured, the peek went
+   from 51px of the unlock nudge to 7.2px of the hype banner, which is the
+   hairline PEEK exists to forbid. Giving the ceiling the 27px the frame gave up
+   puts every card back where it was, at every configuration.
+   Whatever is left after the peek is the scene's, capped so
    a tall screen does not get an absurd hero and floored so a short one keeps a
    figure. Verified by measuring the peek off the render at four configurations,
    not by trusting this comment: tests/today-peek-audit.mjs.
@@ -1107,10 +1143,20 @@ body::before {
   --peek: clamp(28px, 5.2vh, 46px);
   position: relative; overflow: hidden; cursor: pointer;
   margin: 0;
-  height: min(600px, max(280px, calc(100vh - var(--sat) - var(--sab) - 201px - var(--peek))));
+  height: min(627px, max(280px, calc(100vh - var(--sat) - var(--sab) - 174px - var(--peek))));
   background: var(--coral);
-  border: 2.5px solid #17151d; border-radius: 16px;
   text-align: left;
+}
+/* THE BOTTOM DISSOLVES INTO THE PAGE. The frame used to end the art with a hard
+   2.5px edge; with the frame gone a full-bleed plate that simply stops is a
+   seam. Ported from the mockup's .hero-fade at its four stops. Written as rgba
+   literals of --bg (#0d0c12) rather than color-mix, because the iOS 15 floor
+   this project holds has no color-mix and a dropped declaration here is a hard
+   edge again, not a slightly different fade. */
+.hero-fade {
+  position: absolute; inset: 0; z-index: 4; pointer-events: none;
+  background: linear-gradient(180deg, rgba(13, 12, 18, 0) 70%,
+    rgba(13, 12, 18, .30) 86%, rgba(13, 12, 18, .82) 95%, rgba(13, 12, 18, 1) 100%);
 }
 /* a warm centre light, so the figure is lit rather than pasted onto a flat field */
 .hero-scene::before {
@@ -1133,9 +1179,9 @@ body::before {
 
 .hero-top {
   /* The scene's top edge is ALREADY below the notch: .screen pads the safe area
-     (sat+14) and the scene's negative margin cancels exactly that padding, so the
-     scene starts under the day-head. Adding var(--sat) here double-counted the
-     notch (~59px of dead space on notched phones). Anchor to the scene instead. */
+     (sat+14) and .hero-card only cancels the SIDE padding, never the top one, so
+     the scene starts below the status bar. Adding var(--sat) here would
+     double-count the notch (~59px of dead space on notched phones). */
   /* CURRENCIES AT THE TOP, AND THEY LEAD. Tom asked for the currencies at the
      top of the screen with Gwart under them, three times. They used to be a
      split row, the Trends dot pinned left and the wallet pinned right, with the
@@ -1184,16 +1230,33 @@ body::before {
    over his own near-black demo ground and 12 channels over this cream plate,
    which is invisible. They belong on the dark Emporium panel, and they are
    there. */
+/* HIM AND HIS LINE, SIDE BY SIDE, which is the mockup's arrangement (.gwrow in
+   today-preview/today-mockup.html: two halves of the row, an 8px gap). His
+   plaque keeps its measured width, so the box takes whatever is left rather
+   than being declared: at 393 that is 185 and 176, which is the mockup's split.
+   The row is where the FLOW is; .gw-today keeps its own float animation. */
+.gw-row {
+  position: absolute; left: 12px; right: 12px; top: var(--gw-top); z-index: 5;
+  display: flex; align-items: flex-start; gap: 8px; pointer-events: none;
+}
 .gw-today {
   --gw-ch: calc(var(--gw-h) - 4px);                   /* inside the 2px border */
   --gw-cw: calc(var(--gw-ch) * 1460 / 694);           /* the crop's own aspect */
-  position: absolute; left: 12px; top: var(--gw-top); z-index: 5;
+  position: relative; flex: none; padding: 0;
   width: calc(var(--gw-cw) + 4px); height: var(--gw-h);
-  overflow: hidden; pointer-events: none;
+  overflow: hidden;
+  /* HE IS THE TAP TARGET. Tom, 2026-08-21: "gwart on the today page, isnt
+     saying anything? when you tap him he should say things". Only the plaque
+     takes pointer events; the row and the box stay transparent so the rest of
+     the scene still opens the character on a tap. */
+  pointer-events: auto; cursor: pointer;
   background: #d5c8b0;
   border: 2px solid var(--ink); border-radius: var(--radius-sm); box-shadow: var(--sh);
   animation: gwFloat 6.4s ease-in-out infinite;
 }
+/* .gw-box, the talk box that sits in this row, is declared AFTER .talkbox
+   further down this file: same specificity, so source order is what makes its
+   --tb-size win. Declaring it here rendered the box at 16px. */
 /* 5.00px peak to peak, 6.4s, resting midpoint 0, so a frozen frame sits dead
    centre rather than at an extreme. */
 @keyframes gwFloat { 0%, 100% { transform: translateY(2.5px); } 50% { transform: translateY(-2.5px); } }
@@ -1209,9 +1272,9 @@ body::before {
   .gw-today { animation: none; }
 }
 /* HE STEPS OUT ON A SHORT PHONE, and the arithmetic is why. Above the fold at
-   320x568 there are 501.8px, of which 201 belong to the tab bar, the doors and
-   the card's own frame. That leaves 300.8 to be split between the scene and the
-   peek, so the figure's box is `238 - peek - plaque` px however it is sliced:
+   320x568 there are 501.8px, of which 174 belong to the tab bar, the doors and
+   the screen's own top padding. What is left is split between the scene and the
+   peek, so the figure's box is `scene - peek - plaque` px however it is sliced:
    at a 24px peek and a plaque small enough to keep his face legible there is
    nothing left, and the measured result was a 144px Bonehead standing beside a
    108px pet, which is the figure contract's own failure mode. Above 600px of
@@ -1223,7 +1286,9 @@ body::before {
    and so is the figure collapsing here. */
 @media (max-height: 600px) {
   .hero-scene { --gw-h: 0px; }
-  .gw-today { display: none; }
+  /* The whole row, not just the plaque: his LINE costs the same band he does,
+     and a talk box floating where he is not is worse than a quiet screen. */
+  .gw-row { display: none; }
 }
 /* ===== THE TALK BOX: the app's one typing-dialogue surface =====
    Approved in the canvas "The Raising and the Talk Box". Every talking surface
@@ -1301,6 +1366,16 @@ body::before {
   .tb-caret, .talkbox.tb-done.tb-hold .tb-next, .talkbox.tb-gone { animation: none; }
   .talkbox.tb-gone { opacity: 0; }
 }
+
+/* GWART'S LINE ON TODAY. PLACEMENT ONLY, the way .hero-bubble below is:
+   everything that draws the box (fill, ink, radius, shadow, caret, chevron)
+   comes from .talkbox above, so Today's dialogue cannot drift away from the rest
+   of the app's. It has to come AFTER .talkbox: both are one class, so source
+   order is the only thing that makes --tb-size 11px win.
+   The border is an OPAQUE cream. .talkbox's default --line-strong is a 17% cream
+   chosen against --surface, and over full-bleed artwork it dissolves, which is
+   the same failure .hero-bubble::before already documents. */
+.gw-box { flex: 1; min-width: 0; --tb-size: 11px; text-align: left; border-color: #e6dcc8; }
 
 /* LEFT COLUMN, and the tail drops to the jaw. Tom: "people's mouths arent on top
    of their heads." It used to sit over the skull with a sideways tail. */
@@ -1528,8 +1603,21 @@ body::before {
    bonehead off centre and to the left because it has to share the screen more
    with its pet." Set on .hero-char and NOT on the scene, because custom
    properties inherit and the companion runs the same animation: putting it on
-   the parent would walk the pet left by the same 58px. */
-.hero-scene.sharing .hero-char { --bh-shift: -58px; }
+   the parent would walk the pet left by the same amount.
+
+   48, NOT THE MOCKUP'S 58, AND THE 10px IS MEASURED. Tom, on the build that
+   shipped 58: "also my bonehead is kinda bigtime off centre now not like a
+   little bit?" Most of that was the pet's gutter (see .hero-companion) and the
+   frame; this is the rest of it. The mockup solved 58 against ITS Bonehead,
+   who wears a hoodie and holds nothing. Tom's own fit at the time carries a
+   BARBELL, which spreads his ink 305px wide in a 393px frame, and at 58 the
+   left tip of it was cut off by the plate edge. Measured off the render, with
+   the pair's ink taken from a difference mask:
+     58   pair 0.0..380.5, 0.0px of left gutter (the weapon is clipped)
+     48   pair 8.5..380.5, centre off by -2.0px at 393x852, +0.5 with an inset
+   tests/hero-share-audit.mjs owns both halves of that: the pair reads centred,
+   and neither drawing touches the frame. */
+.hero-scene.sharing .hero-char { --bh-shift: -48px; }
 .hero-char .bh-anim { --av-fit: contain; --av-pos: bottom center; }
 .hero-char .bh-anim img { object-fit: contain; object-position: bottom center; }
 /* equipped pet trots along beside the bonehead on the home screen */
@@ -1541,10 +1629,14 @@ body::before {
 /* RIGHT THIRD, outer edge on the safe margin, baseline shared with the feet.
    The exact bottom offset is tuned against the MEASURED ink baselines, not the
    boxes: tests/figure-audit.mjs reports both and fails if they drift. */
-/* Off the border. 28px from the plate edge read as "slight too close the card
-   border" once the frame is counted, so it comes in to ~44 and sits just behind
-   his ground line rather than beside his knees. */
-.hero-companion { position: absolute; right: 30px; bottom: 92px;
+/* 14px, WHICH IS THE MOCKUP'S NUMBER (.hero-pet in today-preview/today-mockup.html).
+   It was 30 when the scene was a 347px plate inside a cream frame: 30 off that
+   plate plus the frame's own 23px put her ink 47px in from the phone's edge
+   while the Bonehead's was clipped by the left one, and that imbalance is half
+   of what Tom saw as "bigtime off centre". With the frame gone the scene IS the
+   viewport, so the gutter is measured against the phone and 14 is what the
+   approved composition uses. */
+.hero-companion { position: absolute; right: 14px; bottom: 92px;
   /* WIDTH AUTO, anchored by its right edge. A fixed width made the box grow
      RIGHTWARD when mass scaling widened a species (the duck goes 108 -> 154px),
      so it ran 14px past the plate and got clipped: Tom, 2026-08-07, "the duck and

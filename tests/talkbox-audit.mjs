@@ -5,13 +5,20 @@
  * instead of the chat bubbles everywhere in the app". Approved in the canvas
  * "The Raising and the Talk Box", artboard "The talk box".
  *
- * WHAT CHANGED IN v418, and why this audit no longer drives Today. Tom: "let's
- * remove the text bubble until we have gwart in the scene floating and talking
- * that will replace the bonehead talking and gwart will be more the coach
- * character." Today's line came off, so the app currently has ZERO talkBoxHtml()
- * surfaces. js/talkbox.js still ships, still precaches, and is what Gwart will
- * speak through, so deleting this audit with the surface would hand the next
- * author an untested typewriter. It grades the MODULE instead, on a harness page
+ * WHAT CHANGED IN v418, AND WHAT CHANGED BACK. Tom: "let's remove the text
+ * bubble until we have gwart in the scene floating and talking that will replace
+ * the bonehead talking and gwart will be more the coach character." Today's line
+ * came off, and this file pinned its absence. On 2026-08-21 he asked for the
+ * other side of that sentence: "gwart on the today page, isnt saying anything?
+ * when you tap him he should say things". He is in the scene and talking, so the
+ * TODAY rows are inverted rather than deleted: they now pin his arrival with the
+ * same care they pinned the removal.
+ *
+ * IT STILL GRADES THE MODULE ON A HARNESS, and that is not redundancy: the four
+ * states are enforced by app.css rules, and Today exercises only two of them, so
+ * deleting the harness with the removal would hand the next author an untested
+ * typewriter the day they build the next surface. So: the app rows below, and
+ * then the module on a harness page
  * (tests/talkbox-harness.html) that imports js/talkbox.js and calls
  * talkBoxHtml() + runTalkBox() against the REAL app.css, because the four states
  * are enforced by those rules and a harness with its own stylesheet would grade
@@ -34,9 +41,11 @@
  *   REDUCED    prefers-reduced-motion prints the whole line at once and drops the
  *              blink. Graded from the FIRST frame after the run starts, because
  *              "it ends up complete" is true of the animated version too.
- *   TODAY      the Today screen carries no talk box. One row on the REAL app, so
- *              this removal cannot be silently undone, with a SETUP row so the
- *              absence cannot pass on a screen that never rendered.
+ *   TODAY      Gwart's line on the REAL app: one box, his own class, his plaque
+ *              a real control, the line typed into .tb-txt, a real click on him
+ *              saying a DIFFERENT line, an idle line arriving with no input at
+ *              all, and no line at all over an open sheet. SETUP rows first, so
+ *              none of it can pass on a screen that never rendered.
  *
  * HOW IT IS GRADED, and why not a computed style. tally/CLAUDE.md: fire the real
  * control and assert pixels. getComputedStyle would happily report a visible
@@ -82,8 +91,38 @@
  * COVERAGE derives the graded set from js/*.js rather than from a list somebody
  * remembers to update: every talkBoxHtml() call site in the app must appear in
  * SITES below, so the NEXT surface converted to a talk box fails this audit until
- * it is either driven or given a written reason. SITES is empty right now and
- * that is the point: Gwart's line will fail this until it is registered.
+ * it is either driven or given a written reason. It was EMPTY from v418 until
+ * v421, and it went red the moment the Wanderer shipped a box nobody had
+ * registered, which is the mechanism working. Gwart's is the third entry.
+ *
+ * PROVEN RED, 2026-08-21. Every TODAY row was driven to FAIL in a `cp -R` copy
+ * of this tree, one mutation at a time, exit codes read from a file rather than
+ * through a pipe. The mutation, then the line it printed:
+ *
+ *   the plaque's click handler made a no-op:
+ *     FAIL TODAY tapping Gwart makes him say something, and something DIFFERENT
+ *          "That crate has been sitting there..." -> "That crate has been..."
+ *   `gwIdleStart(...)` never called:
+ *     FAIL TODAY he volunteers a line on his own  0 line(s) started in 5200ms
+ *          of nothing, at a 2000ms cadence
+ *   the clear-screen test deleted from gwIdleTick, so he talks over anything:
+ *     FAIL TODAY he does not talk over an open sheet  2 line(s) started while a
+ *          sheet was up
+ *   the talkBoxHtml() call removed from renderToday altogether:
+ *     FAIL TODAY Gwart has exactly one talk box  0 .talkbox, 0 .gw-box
+ *     FAIL SETUP the opening line is a real sentence  no box
+ *     FAIL TODAY the opening line really lands in the box  typed 0 of 0 chars
+ *          (and COVERAGE's dead-key row catches the same thing from the other
+ *          side: js/app.js:gw-box would then match no call site.)
+ *
+ * TWO WRONG VERSIONS OF THE IDLE ROW, recorded because both looked right and
+ * both would have shipped a check that could not fail for the right reason:
+ * comparing the line before against the line after aliases (an eligible pool can
+ * be two lines deep, so an even number of ticks lands back where it started, and
+ * it reported "no line arrived" on a build where two had), and counting "is the
+ * box typing" rising edges undercounts (a cadence shorter than a line's typing
+ * time leaves the box permanently mid-type, so three lines score one edge). It
+ * counts ghost swaps and shrinking .tb-txt now, which is what a restart IS.
  *
  * Usage: node tests/talkbox-audit.mjs [baseUrl]   (serves this repo if omitted)
  *        --frames DIR   also writes the captured frames, for a visual strip
@@ -172,6 +211,15 @@ const SITES = {
      exercises the SYSTEM state where the Wanderer exercises the WAITING one. */
   'js/mimic.js:mimic-enc-box': { driven: true,
     why: "the Mimic's pre-fight reveal, driven end to end by tests/mimic-audit.mjs: the real overlay over the real app, the shipped line typed through runTalkBox, a real tap mid-line, and the frames sampled in pixels through the handover" },
+  /* GWART ON TODAY, and the surface this file spent three releases predicting.
+     Tom, 2026-08-21: "gwart on the today page, isnt saying anything? when you
+     tap him he should say things and he should honestly just be saying a bunch
+     of funny and useful lines on his own." Driven right here, by the TODAY rows
+     below, because both halves of that sentence are things only the real screen
+     can answer: a real mouse click on his real plaque, and an idle line arriving
+     with nobody touching anything. */
+  'js/app.js:gw-box': { driven: true,
+    why: "Gwart's line on Today, driven by the TODAY rows in this file: a real click on the plaque says a new line, and an idle line arrives on its own with no input at all" },
 };
 
 const puppeteer = await loadPuppeteer();
@@ -223,10 +271,33 @@ const page = await browser.newPage();
 const pageErrors = [];
 page.on('pageerror', e => { pageErrors.push(String(e)); console.log('PAGEERROR', e.message); });
 
-/* ==================== TODAY CARRIES NO TALK BOX ============================
-   The one row on the real app, and it comes first so a failure here is the first
-   thing printed. v418 took the line off Today; without this row putting it back
-   is silent, and the audit that used to guard it now looks at a harness. */
+/* ==================== GWART TALKS ON TODAY =================================
+   The rows on the REAL app, and they come first so a failure here is the first
+   thing printed.
+
+   THIS BLOCK USED TO ASSERT THE OPPOSITE. From v418 to v421 it pinned Today as
+   carrying NO talk box, which was Tom's own call on 2026-08-20 ("let's remove
+   the text bubble until we have gwart in the scene floating and talking"). He
+   is in the scene now and he is talking, so the row is inverted rather than
+   deleted: what protected the removal now protects the arrival.
+
+   TWO HALVES, BECAUSE TOM ASKED FOR TWO THINGS. 2026-08-21: "when you tap him
+   he should say things and he should honestly just be saying a bunch of funny
+   and useful lines on his own."
+     TAP    a real mouse click at the plaque's own coordinates puts a DIFFERENT
+            line in the box. Not the same one again, and not nothing.
+     IDLE   a line arrives with no input at all. The shipped cadence is 30
+            seconds, which no audit should sit through, so js/app.js exposes
+            window.__gwIdleMs under webdriver exactly the way the hatch exposes
+            __hatchForce; the row sets it, re-renders so the timer picks it up,
+            and then TOUCHES NOTHING while it waits.
+     QUIET  and the other direction, because "he talks on his own" is one line
+            away from "he talks over your sheet": with a sheet open, an idle
+            tick must pass without changing the line. Tom's one-interruption
+            rule is about takeovers and this is not one, but it borrows the
+            same etiquette and the etiquette is the part that can rot.
+   Every one reads the box's own .tb-txt/.tb-line, which is where the typer
+   actually puts characters. */
 {
   await page.goto(base + '?demo', { waitUntil: 'networkidle2' });
   await sleep(2400);
@@ -242,18 +313,101 @@ page.on('pageerror', e => { pageErrors.push(String(e)); console.log('PAGEERROR',
   await page.evaluate(() => { location.hash = '#/today'; });
   await sleep(1400);
   const t = await page.evaluate(() => ({
-    /* THE PREMISE. An absence passes on a screen that never rendered, so this
-       row has to be true before the next one means anything. The hero card is
-       the specific thing the box used to float over. */
+    /* THE PREMISE. Every row below is about one box on one screen, so a screen
+       that never rendered has to fail here rather than three rows further on. */
     rendered: (document.getElementById('screen')?.textContent || '').trim().length > 200,
     hero: !!document.querySelector('.hero-card #bhStage'),
     boxes: document.querySelectorAll('.talkbox').length,
+    gw: document.querySelectorAll('.talkbox.gw-box').length,
+    plaque: !!document.getElementById('gwartBtn'),
     bubbles: document.querySelectorAll('.hero-bubble').length,
   }));
-  ok('SETUP Today really rendered, with the hero card the box used to sit on (an empty screen would pass the row below for free)',
+  ok('SETUP Today really rendered, with the hero the box sits on (an empty screen would pass the rows below for free)',
     t.rendered && t.hero, JSON.stringify({ rendered: t.rendered, hero: t.hero }));
-  ok('TODAY the Today screen carries no talk box: the line is off until Gwart is in the scene to say it',
-    t.boxes === 0 && t.bubbles === 0, `${t.boxes} .talkbox, ${t.bubbles} .hero-bubble`);
+  ok('TODAY Gwart has exactly one talk box on the screen, and it is his own class',
+    t.boxes === 1 && t.gw === 1 && t.bubbles === 0,
+    `${t.boxes} .talkbox, ${t.gw} .gw-box, ${t.bubbles} .hero-bubble`);
+  ok('TODAY his plaque is a real control, not decoration',
+    t.plaque, t.plaque ? '#gwartBtn is in the document' : 'no #gwartBtn');
+
+  /* Read the box's own state: the typed text, the full line the ghost carries,
+     and where the plaque is, in one coherent moment. */
+  const say = () => page.evaluate(() => {
+    const b = document.querySelector('.talkbox.gw-box');
+    const p = document.getElementById('gwartBtn');
+    if (!b || !p) return null;
+    const r = p.getBoundingClientRect();
+    return { full: b.querySelector('.tb-line')?.dataset.tb || '',
+      typed: b.querySelector('.tb-txt')?.textContent || '',
+      name: b.querySelector('.tb-name')?.textContent || '',
+      px: r.left + r.width / 2, py: r.top + r.height / 2 };
+  });
+  const first = await say();
+  ok('SETUP the opening line is a real sentence with a speaker on it (an empty line grades TAP for free)',
+    !!first && first.full.length > 12 && first.name === 'GWART',
+    first ? `${first.name}: "${first.full}"` : 'no box');
+  await sleep(2400);                                    // let the opening line finish typing
+  const settled = await say();
+  ok('TODAY the opening line really lands in the box, character by character, not just in an attribute',
+    !!settled && settled.typed === settled.full, `typed ${settled ? settled.typed.length : 0} of ${settled ? settled.full.length : 0} chars`);
+
+  /* TAP: a real mouse click at his plaque's own coordinates. Guarded on `first`
+     because a screen with no box at all must report THAT, not die on a null: a
+     stack trace exits non-zero, so the guard still bites, but it buries the row
+     that says what is actually wrong. */
+  if (first) { await page.mouse.click(first.px, first.py); await sleep(2400); }
+  const tapped = first ? await say() : null;
+  ok('TODAY tapping Gwart makes him say something, and something DIFFERENT',
+    !!first && !!tapped && tapped.full !== first.full && tapped.typed === tapped.full,
+    first ? `"${first.full}" -> "${tapped ? tapped.full : ''}"` : 'no box to tap');
+
+  /* IDLE: nobody touches anything. The seam only shortens the wait.
+
+     COUNTED AS RESTARTS, NOT AS A STRING DIFFERENCE, and that correction is
+     worth recording. Comparing the line before against the line after aliases:
+     the pool that is eligible in a given state can be two lines deep, so an EVEN
+     number of idle ticks lands back on the string it started from, and the first
+     version of this row reported "no line arrived" on a build where two had. So
+     it counts the two things only runTalkBox starting over can do: swap the
+     ghost's whole line, or put FEWER characters in .tb-txt than were there a
+     moment ago. Watching for "is it typing" alone is not enough either, and that
+     was the second wrong version: a cadence shorter than a line's typing time
+     leaves the box permanently mid-type, so three lines score one rising edge. */
+  const watchRestarts = async ms => page.evaluate(async d => {
+    const b = document.querySelector('.talkbox.gw-box');
+    if (!b) return -1;
+    const read = () => ({ full: b.querySelector('.tb-line')?.dataset.tb || '',
+      len: (b.querySelector('.tb-txt')?.textContent || '').length });
+    let n = 0, prev = read();
+    const end = Date.now() + d;
+    while (Date.now() < end) {
+      await new Promise(r => setTimeout(r, 50));
+      const now = read();
+      if (now.full !== prev.full || now.len < prev.len) n++;
+      prev = now;
+    }
+    return n;
+  }, ms);
+  await page.evaluate(() => { window.__gwIdleMs = 2000; location.hash = '#/pit'; });
+  await sleep(600);
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(2600);                                    // the arrival line types and finishes
+  const restarts = await watchRestarts(5200);           // two idle ticks' worth, plus slack
+  ok('TODAY he volunteers a line on his own, with no input at all',
+    restarts >= 2, `${restarts} line(s) started in 5200ms of nothing, at a 2000ms cadence`);
+
+  /* QUIET: the same clock, with a real sheet over the screen. The Stable,
+     because it is one tap from Today and it is a genuine openSheet takeover. */
+  await page.evaluate(() => document.getElementById('stableBtn')?.click());
+  await sleep(1600);
+  const sheetUp = await page.evaluate(() => !!document.querySelector('#sheets .sheet'));
+  ok('SETUP a sheet really is open for the QUIET row (no sheet would pass it for free)',
+    sheetUp, sheetUp ? 'a sheet is over the screen' : 'nothing opened');
+  const quiet = await watchRestarts(4200);
+  ok('TODAY he does not talk over an open sheet: the idle ticks pass and no line starts',
+    sheetUp && quiet === 0, `${quiet} line(s) started while a sheet was up`);
+  await page.evaluate(() => { window.__gwIdleMs = 0; history.back(); location.hash = '#/today'; });
+  await sleep(900);
 }
 
 /* ==================== THE MODULE, ON ITS HARNESS ========================== */
@@ -668,5 +822,5 @@ const failed = results.filter(r => !r.pass);
 if (!results.length) { console.log('\nFAIL: no checks ran'); process.exit(1); }
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 if (failed.length) { console.log('FAILED: ' + failed.map(f => f.name).join(' | ')); }
-else console.log('the talk box types, skips, and never says "wait" twice; Today stays quiet');
+else console.log('the talk box types, skips, and never says "wait" twice; Gwart talks on Today and shuts up over a sheet');
 process.exit(exitFor(failed.length));

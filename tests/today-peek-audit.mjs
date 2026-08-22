@@ -41,8 +41,8 @@
  *           per viewport, measured on this build, not a trend.
  *
  * THE SHORT-PHONE CASE IS GRADED IN BOTH DIRECTIONS, ON PURPOSE. Above the fold
- * at 320x568 there are 501.8px, and 201 of them belong to the tab bar, the four
- * doors and the card's own frame. What is left has to cover the scene AND the
+ * at 320x568 there are 501.8px, and 174 of them belong to the tab bar, the four
+ * doors and the screen's own top padding. What is left has to cover the scene AND the
  * peek, so the figure's stage is `238 - peek - plaque` px however it is sliced,
  * and a plaque large enough for his face to read leaves a 144px Bonehead beside
  * a 108px pet. So app.css drops the plaque below 600px of viewport height and
