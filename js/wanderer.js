@@ -235,7 +235,7 @@ export function wandererKey(date, w) { return `wanderer-${date}-${w.id}`; }
    surface is one marker and one wedge. */
 // his marker's box, px. See the note on .map-wanderer-mark below for how it was
 // picked; exported so the guard grades the shipped number rather than a copy.
-export const MARK_PX = 260;
+export const MARK_PX = 200;
 
 const STYLE_ID = 'wanderer-style';
 export function ensureWandererStyle() {
@@ -245,19 +245,34 @@ export function ensureWandererStyle() {
   const bodyX = ((0.5 - LANTERN.x) * 100).toFixed(3);
   const bodyY = ((0.5 - LANTERN.y) * 100).toFixed(3);
   st.textContent = `
-/* HE IS THE BIGGEST THING ON THE MAP, and that is the point rather than a
-   flourish: he is the one POI you are meant to see coming and route around, so
-   at 78px among 42px spawn pins he read as one more collectable. MARK_PX was
-   picked by rendering at 393x852 over four sizes and measuring, not by
-   multiplying: at 180 he is merely large, at 340 his silhouette reaches the
-   screen edges and buries the pins beside him. At 260 his ink stands 169px tall
-   against a 127px collect ring and a 42px spawn pin, which is the mockup's
-   proportion, and the pins next to him are still whole.
-   POINTER-EVENTS OFF ON THE WHOLE MARKER. A 260px element anchored over the map
-   would swallow every tap in a 260px square, and the spawn pins under his coat
+/* HE IS THE BIGGEST THING ON THE MAP, AND NO BIGGER THAN THAT. Both halves are
+   the design and MARK_PX has now been wrong in both directions: at 78px among
+   42px spawn pins he read as one more collectable, and at 260 Tom's verdict on
+   the shipped v421 build was "he's too fucking big on the map".
+   PICKED FROM THE RENDER, TWICE. Five sizes drawn on the real Boneyard at
+   393x852 and measured off the RENDERED geometry, and it is his INK that is
+   measured, never his element box: the plate is a 640-square whose alpha bounds
+   are (60,88)-(622,505), so 12% of the width and 35% of the height of that box
+   is transparent air, and this repo has already reported a false "spilling off
+   screen" from measuring the wrong rectangle.
+     MARK_PX   his ink   vs 127px collect ring   vs 42px spawn pin   of a 393 screen
+       260     228x169     1.80w / 1.33h           5.4w                58%   too big
+       220     193x143     1.52w / 1.13h           4.6w                49%
+       200     176x130     1.39w / 1.02h           4.2w                45%   <- shipped
+       180     158x117     1.24w / 0.92h           3.8w                40%
+       160     141x104     1.11w / 0.82h           3.4w                36%
+   200 is the smallest of them where his ink still beats the 75 m collect ring on
+   BOTH axes, so "the biggest thing out there" survives the cut, while his drawn
+   area drops 41% from 260 and the ring, the player marker and the pins beside
+   him are readable again instead of buried under his coat. 180 and below lose
+   the ring on height and he starts reading as one more marker, which is the bug
+   at the other end of this same line.
+   POINTER-EVENTS OFF ON THE WHOLE MARKER. A 200px element anchored over the map
+   would swallow every tap in a 200px square, and the spawn pins under his coat
    are the things you are out here to collect. He has no tap interaction of his
    own: the encounter fires from the player's position, never from a thumb, so
-   nothing is lost. Asserted in tests/wanderer-patrol-live-audit.mjs (TAPTHRU). */
+   nothing is lost. Asserted in tests/wanderer-patrol-live-audit.mjs (TAPTHRU),
+   which also grades the size band above (LOOMS-LIVE). */
 .map-wanderer-mark { position: relative; width: ${MARK_PX}px; height: ${MARK_PX}px; pointer-events: none; z-index: 0; }
 /* HE GOES TO THE BACK OF THE MARKER LAYER, and this rule names other people's
    classes on purpose. MapLibre markers are DOM siblings with no z-index at all,

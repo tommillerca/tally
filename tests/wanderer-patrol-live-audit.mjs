@@ -18,6 +18,21 @@
  * reports too, so the two boots are each other's control, and each carries a
  * CONTROL row that says the fix really was on the side of the line it claims.
  *
+ * PROVE-RED for LOOMS-LIVE, 2026-08-21, when the row became a BAND. Throwaway
+ * `cp -R` of the tree with its .git removed, one mutation at a time, exit code
+ * read from a FILE and never through a pipe. TWO mutations, because a band has
+ * two ways to break and a one-sided check cannot see the other one:
+ *   js/wanderer.js MARK_PX 200 -> 260 (the shipped v421 size Tom complained
+ *     about) -> FAIL, exit 1, "his ink is 228x169 against a 127px collect ring
+ *     and a 42px spawn pin, so 1.80x the ring and 58% of a 393px screen".
+ *     The CEILING. Every other row in the suite stayed green, so the red is
+ *     about size and nothing else.
+ *   js/wanderer.js MARK_PX 200 -> 150 -> FAIL, exit 1, "his ink is 132x98 ...
+ *     so 1.04x the ring and 34% of a 393px screen". The FLOOR: he has stopped
+ *     being the biggest thing out there. Same, every other row green.
+ *   Unmutated at 200: PASS, exit 0, "176x130 ... 1.39x the ring and 45% of a
+ *   393px screen", VERIFIED, 13 of 13.
+ *
  * NEEDS A MAP. MapLibre needs WebGL and vector tiles; on a machine with neither,
  * every row here would be graded against a blank screen and pass on nothing. So
  * it measures the capability first and reports UNPROVEN with exit 97 rather than
@@ -170,7 +185,7 @@ const ROWS = [
   'CONE-LIVE his lantern is painted on the real map, as a circular sector',
   'CONTROL the lantern is nowhere near the middle of him, so LANTERN-LIVE is not vacuous',
   'LANTERN-LIVE on the real map the beam springs from his flame, not his chest',
-  'LOOMS-LIVE he is the biggest thing on the map, by a distance',
+  'LOOMS-LIVE he is the biggest thing on the map, by a distance, and no bigger',
   'PINS-SURVIVE he sits at the BACK of the marker layer, so the pins and the player clear him',
   'TAPTHRU-LIVE a tap on his coat reaches the map underneath, not him',
   'REACH-LIVE the beam is a searchlight, not a puddle: it runs past the edge of the screen',
@@ -205,13 +220,29 @@ if (behind && !cap) {
     `${s.dPlateCentre}px between the plate's centre and the apex, on a ${s.markPx}px marker`);
   ok('LANTERN-LIVE on the real map the beam springs from his flame, not his chest',
     s.dLantern !== null && s.dLantern < 2, `${s.dLantern}px between the cone's apex and the lantern`);
-  /* HE LOOMS. Tom: "needs to be much bigger". Graded against the two things on
-     that screen that set the scale, the 75 m collect ring and an ordinary spawn
-     pin, rather than against a px number that means nothing on its own. And the
-     other half of "bigger": the pins next to him must survive it. */
-  ok('LOOMS-LIVE he is the biggest thing on the map, by a distance',
-    s.inkH > s.ringPx * 1.2 && s.inkW > s.pinPx * 4,
-    `his ink is ${s.inkW}x${s.inkH} against a ${s.ringPx}px collect ring and a ${s.pinPx}px spawn pin`);
+  /* HE LOOMS, AND HE STOPS. A BAND, not a floor, because this line has now been
+     wrong in both directions and a one-sided check cannot see that (rule 11:
+     name the direction AND the bound).
+       FLOOR   Tom, when he was 78px: "needs to be much bigger". He is the one
+               POI you are meant to see coming and route around.
+       CEILING Tom, on the shipped v421 at MARK_PX 260: "he's too fucking big on
+               the map". His ink was 228 wide on a 393 screen, 58% of it, and it
+               buried the 75 m collect ring, the player marker and the pins.
+     Graded on the two things in the SAME frame that set the scale, the collect
+     ring and an ordinary spawn pin, plus the viewport, rather than on a px
+     number that means nothing on its own. Measured on the render at MARK_PX 200:
+     ink 176x130, ring 127, pin 42, screen 393. So 1.39x the ring, 4.19 pins
+     wide, 45% of the screen, and the thresholds sit either side of that with the
+     margin the measurements allow.
+     GRADED ON WIDTH, not height, against the ring. The ring is a projection of
+     75 m so its px size moves with latitude and zoom while MARK_PX does not, and
+     at 200 his height clears the ring by 2% where his width clears it by 39%.
+     A 2% margin is a coin toss, not a check.
+     PROVEN RED BOTH WAYS, see the mutation log in the header. */
+  ok('LOOMS-LIVE he is the biggest thing on the map, by a distance, and no bigger',
+    s.inkW > s.ringPx * 1.25 && s.inkW > s.pinPx * 4 && s.inkW < s.screenW * 0.5,
+    `his ink is ${s.inkW}x${s.inkH} against a ${s.ringPx}px collect ring and a ${s.pinPx}px spawn pin, `
+    + `so ${(s.inkW / s.ringPx).toFixed(2)}x the ring and ${(100 * s.inkW / s.screenW).toFixed(0)}% of a ${s.screenW}px screen`);
   ok('PINS-SURVIVE he sits at the BACK of the marker layer, so the pins and the player clear him',
     s.behindAll === true && s.pinsHittable === s.pinsOnHim,
     `wanderer z-index ${s.zWanderer} against [${s.zOthers}]; ` +

@@ -133,11 +133,13 @@ const BROWSER = [
   'dead-shell-audit.mjs',    // a dead shell recovers itself once, and never loops
   'boot-flash-audit.mjs',    // the first painted frame is never bare furniture. #tabbar and #gearBtn are static markup in index.html, so before the fix they painted at first paint on EVERY boot, ahead of the JS-built splash: an empty Today with the bottom bar on it, which is what Tom reported on 2026-08-19. Grades PIXELS off a CDP screencast started before navigation, cold AND warm, at 440x956 and 393x852, at CPU x6 so the window is ~20 frames wide instead of one. Bound is ZERO bare frames, not fewer. Carries its own controls: the capture must contain a frame from before the app had content (else the run could not hold the bug), and some frame must score a real tab bar over real content (else the detector is blind). FAILSAFE blocks a module so the app can never render and asserts app.css's 8s keyframe brings the shell back with no reload, ahead of index.html's 12s recovery, which is anti-regression rule 8 as an assertion. NAVIGATION is the regression the fix could most easily cause and pins it: the bar never blinks out on a real tab click. Self-serving, measured 54s, 35 checks. FAST because it is the app's first impression and because the failsafe row is the only thing standing between this fix and a permanently hidden shell
   'route-flash-audit.mjs',   // and no NAVIGATION shows the tray either. Same bug class one layer in, reported by Tom on 2026-08-21: route() stripped `screen-in` before the new screen existed, so every real tab change opened a hole onto the body gradient and the bare bar. Measured on pristine main at 440x956 through a CDP screencast, Boneyard -> Today: 4 bare frames / 108ms at CPU x1, 6 / 136ms at x6. Bound is ZERO, not fewer. Grades two swaps (the full-bleed `.screen--map` Boneyard, and a padded screen to one full of canvas art) plus a reduced-motion pass. CONTROL re-runs the same graded swap with `.screen-held { display: none }` injected, which puts the app back to exactly the bug, and REQUIRES bare frames: a green FLASH beside a green CONTROL is an audit grading nothing and fails. FAILSAFE and SWEEP are the regression this fix could most easily cause and the reason it is FAST, not full: the fix parks a copy of the outgoing screen over the live app on every single navigation, so a copy that is ever stranded is a frozen app, and FAILSAFE serves a revealWhenReady that never resolves to prove the 1200ms cap takes it off anyway. Self-serving, measured 119s, 39 checks
+  'nav-perf-audit.mjs',      // and a navigation does not redo work it has already done. Tom on v421: "things are buggy, choppy, not smooth moving between pages". drawTrimmedArt found a sprite's alpha box by reading the image back off a canvas and walking every pixel in JS, and nothing remembered the answer, so every arrival at the Bonehead hub re-scanned the same fifteen files: 2,789,376 source pixels, 101ms of script, 20 dropped frames and a 76ms gap between presented frames, the app's worst navigation on all four numbers. Grades a COUNT of source pixels re-scanned across a warm lap of all four tray destinations and all four hub tabs, driven by real taps, and the bound is ZERO. It is a count and not a millisecond deliberately: an absolute ms threshold was measured here (99-109ms with the bug, 12-31ms without) and REJECTED as a property of this laptop, so the one timing row is a RATIO of two laps in the same run and the machine cancels out of it. SAMPLE and DECODED are why the zero means anything: an app that scanned nothing because it had stopped DRAWING would score perfectly, and IDENTICAL pins the one regression the fix itself can cause by comparing a genuine cache miss against a hit. Self-serving, measured 46s, 6 checks, nine consecutive greens at ratio 0.32-0.44. Proven red four ways: the memo reverted (RESCAN 8,777,728 px + WARM 0.93), keyed on the canvas instead of the src (SAMPLE + DECODED), no canvas drawn at all (SAMPLE + DECODED), and a box corrupted only on a cache hit (IDENTICAL alone, which the first draft could not see)
   'news-tab-audit.mjs',      // every announcement still opens with its art
   'art-register-audit.mjs',  // cosmetics register on ink, not on boxes; node-only and half a second, and it REPLACES grill-fit-audit.mjs, which belonged to no tier and so failed the coverage assertion below on every run
   'mini-theme-audit.mjs',    // roaming mini-bosses are drawn as themed monsters
   'remote-den-audit.mjs',    // the daily free boss reads as beaten, and moves the cap
   'bestiary-audit.mjs',      // the teaser stays a teaser, and since 2026-08-21 Today names no hunt at all: its row went with the "Out there today" card, so the Today half of that file is now an ABSENCE graded against the teaser wall as its control
+  'pet-ownership-audit.mjs', // a pet you OWN must exist on the two screens that list what you own. v421 sold Bumbleseal for 50,000 coins and buyPetItem wrote the inv 'cos' row and the paper-doll slot and never a petInst row, so she drew perfectly on Today (which reads the equipped SPECIES) and was absent from the Stable and the Paddock, where the Paddock fell through to lockedCardHtml and showed a silhouette carrying the Day One Lizard's copy on a pet Tom had just bought. Nothing threw and nothing looked broken. MINT is the row that catches the NEXT one, statically: every js/loot.js function that calls grantCosmetic must mint a copy in the same function or be listed pet-proof with a reason, so a battle-pass or promo pet written next year fails before it ships. TABLES pins the same shape one module over, found the same day: C6 was missing from PET_ASSIGN, whose absence makes buildBattlePet return null, so equipping the legendary gave you NO pet in the Pit, and from PET_STATS, which silently gave her a common stat line. OWNED, STABLE and PADDOCK then drive every species in the catalogue through its REAL path (the shop for anything PET_SHOP sells, grantPet otherwise, never a hand-written petInst row) and assert the real Stable draws a card and the real Paddock an unlocked tile and a non-silhouette card. RECLAIM reproduces v421's exact broken write and requires the next boot to heal it, once, without minting a second 50,000-coin pet on the boot after that. Derived from BH_ITEMS, so a new species is covered the day it lands; SAMPLE exits 2 on an empty roster rather than passing on nothing. Self-serving, ~70s, 13 checks. Proven red in a cp -R copy: v421's buyPetItem alone gives 3 FAILED, plus a deleted reclaim gives 7 FAILED including the literal 'Check your inbox, bony buddy' silhouette Tom reported, and removing C6 from the pet tables reds TABLES on its own
   'hype-banner-audit.mjs',   // the Today hype banner, on the app's default screen: the two new Boneyard creatures and the new pet, in ONE banner above the step winner. Three ways this fails silently and none of them throw: a creature that never decodes (graded on naturalWidth after an awaited decode, because an empty box measures perfectly), the banner growing until it pushes the ring further down than the 275px banner stack it replaced did (bounded against 1133 / 973, measured on 6212e75), and the copy clipping (scrollWidth against clientWidth, not a character count). Both viewports, because the ten words and the three figures fail differently at 320 than at 393. SETUP refuses to grade anything unless Today rendered AND the banner is on it, and the two ROUTE rows drive the real buttons because the whole point of the two halves is that they land in two different places
 
   'today-peek-audit.mjs',    // the Today status column and the scroll peek, both of them things Tom asked for three times: the currencies at the TOP of the screen with Gwart UNDER them, and a card genuinely half on the screen at the bottom edge so a player knows there is more ("i have a feeling they wont know unless we show half a banner width or something to make them go look"). Measured on the shipped tree before the change, the first card below the doors cleared the fold by 60px at 393x852, by 1.2px at --sat 59, by 14.8px at 320x568 and by nothing at all with an inset there, so the peek is arithmetic against the fold rather than a tuned height and this is what stops it drifting back. Four configurations, both widths and both insets, and the peek is asked of SOMETHING with a card's shape rather than of the hype banner by name, because which card lands there depends on the account. The rows that are not ORDER or PEEK are the ways those two pass on a broken screen: an empty plate orders perfectly (GWART grades his ink off the render plus a decode on the sources), the peek is cheapest to buy by shrinking the hero until the Bonehead is a thumbnail (FIGURE floors the stage per viewport, rule 11), and the plaque is drawn OVER the figure so a collision is invisible in the composite (CLEAR differences the figure against a frame without it and pins both animations to their worst frame). PLATE and TEXT pin two corrections Tom has already had to make once: #d5c8b0 is his "split the difference between A and B", and --text must still be #f2e9d7 because the plate hex and the talk box's type colour were the same string. FAST because Today is the app's default screen and every one of these is a one-line revert
@@ -173,6 +175,7 @@ const BROWSER = [
   'garden-closed-audit.mjs', // the Hollow and the Bone Garden are off the player's path and the Kitchen stands alone without them: every known entrance (the GROW door, the compost button, the Today ripe-crop banner and its CTA, the Kitchen badge, the speech lines, the boot popup, the News row, two quests, the seed on a map collect) operated on a real boot, plus a Kitchen with ZERO seeds and ZERO plots that renders, names the Boneyard, routes there and really cooks a dish. Its CONTROL row opens the Hollow through window.__openHollow first, so it is grading closed doors and not a deleted feature; the ripe-crop rows are graded on a save seeded with three ripe crops, because on an empty save they are absent on main too. Proven red at 405b5df: 26 FAILED. FAST because every row is a player-facing route and the whole suite is a list of ABSENT selectors, which is the class that rots into a vacuous green
   'garden-retire-audit.mjs', // the garden's closing payout pays EXACTLY once. It refunds up to 5,500 coins on BOOT, which is the shape a coin printer is made of. PAYS asserts specific non-zero numbers first so the no-op rows cannot be vacuous, then ONCE, ten repeats, a real page reload and three CONCURRENT callers each measure the coin and ingredient deltas. Proven red three ways at 405b5df: absent function (1 FAILED), an unguarded payout (10 FAILED, +16,500 coins on the race), and a non-atomic kvGet/kvSet ledger that passes ONCE and BOOT and still prints 16,500 coins on the race (4 FAILED)
   'tab-chip-audit.mjs',      // the selected tab chip stays inside a BAND, because both directions are failure: a FILL ceiling (the solid coral fill made navigation 89.8% saturated by its own area, louder than every product on the Shop) and, against over-correcting, floors on dE76 separation, greyscale ring contrast and 4.5:1 label contrast selected AND unselected. Empty is a failure: all 8 states (4 tabs x 2 viewports) must yield a selected chip and three siblings before a number is graded. Takes the gate URL via argv (env.URL second), measured 23s. Proven red four ways on pristine a181b1f: the shipped fill (FILL 89.8%, TEXT 2.39:1, RING 1.25, ARIA), a neutralised selected state (MARGIN 1.2, RING 1.00), and a removed chip row (SAMPLE 0/8)
+  'tray-destination-audit.mjs', // the four bottom-tray buttons are four DESTINATIONS, and a tap on one always lands there. Tom, v421: "if i tap on the bottom bonehead icon on the home tray when im in shop it does nothign. bonehead and wardrobe are not the same part of the app but they act like it sometimes based on clicks." Root cause measured, not guessed: bindTabs() navigated by ASSIGNING location.hash, and assigning a hash its current value fires no hashchange, so route() never ran; the hub's chips move the SURFACE without touching the hash, so from inside the hub the hash reports where you came IN. Same tap, same Shop screen, opposite outcomes depending on whether you arrived by chip (#/bonehead, dead) or by deep link (#/shop, works). Grades the whole 8x4 matrix: eight start surfaces including all four hub siblings, four tray buttons, a REAL mouse click at each button's centre (godmode's own note: programmatic .click() does not reach some handlers) hit-tested with elementFromPoint first. Cannot pass blind: EXCLUSIVE requires each landing to match EXACTLY ONE of four surface predicates, so a blank screen (zero) and an over-broad predicate (two) both fail before LAND is graded, and every start surface is asserted reached before its tap. Proven red four ways on this tree: the shipped bindTabs restored (EXCLUSIVE/LAND/BONEHEAD, the three hub cells landing NOWHERE), a predicate forced true (EXCLUSIVE), a lid over the tab bar (HITTEST plus four more), and a broken chip reach (SAMPLE). FAST, 8 checks, measured 150s: it is the bottom navigation, every screen has it, and the fix is one line in the one handler every tab shares
   'dvh-fallback-audit.mjs',  // a browser that cannot parse dvh must still reach the tab bar: #app carried no height fallback, which put the navigation 2173px below the fold on Today. 24s: static coverage of every dvh/svh in the sheet, plus four boots
   'overscroll-wordmark-audit.mjs', // the Today overscroll wordmark is INVISIBLE until you pull: REST (zero ink pixels in the band at scrollTop 0, and the band byte-identical with the feature on and off), CLAMP (the engine refuses a negative scrollTop, which is why ordinary scrolling can never reach it), ABOVE, TODAY (present on Today and on none of five other screens), NO-SHIFT (all 556 element rects identical with the mark present and absent, animations frozen first and the freeze proven, because Today's idle Bonehead really does move 31 of 400 rects on an untouched tree) and INK (the revealed mark composites to rgb(142,135,126) against --text-3's rgb(143,133,120)). It does NOT test the rubber band and says so at the top: iOS overscroll is a WKWebView behaviour and no headless Chromium bounces. MECHANISM is the closest honest proxy and the row that matters most: displaced on screen, the mark's ink moves up by exactly the scroll delta, so it is proven to live in the scrolled content layer that a bounce translates. A mark that had drifted onto the viewport would sit still under a pull and reveal nothing while every other row here stayed green. Self-serving, measured 34s, 18 checks. Proven red five ways: a positive `top` (4 FAILED), position: fixed (1, and silent to every other row while the feature would be dead on the device), the class dropped from the selector so every screen gets the mark (1), opacity 1 (1), and route()'s classList.toggle deleted (7). The third of those is why TODAY grades the PAINTED pseudo-element and not the class: the first version required both, route() still applies the class on Today, and the selector rewrite that put the wordmark on all six screens left the row green at 18/18
   'talkbox-audit.mjs',       // the typing dialogue box on Today, which is the app's one talking surface and sits on the default home screen. Four pins, all on PIXELS off the box's own clipped rect because a computed style reads a visible caret off a frame nobody painted: TYPE (the ink takes 14+ intermediate amounts, so a print-at-once cannot pass, cross-checked against the DOM prefix sequence), SKIP (a real mouse click MID-LINE completes the line, with a precondition row that refuses to grade unless the tap landed between the first character and the last, and both wrong answers pinned: a no-op AND a restart), EXCLUSIVE (across every frame of a held box, never a caret and a chevron at once, which is the box saying "wait" twice) and REDUCED (every one of 39 fast samples already carries the whole line, and the caret detector that fires on the animated run sees nothing). Carries four controls because three of its rows assert a ZERO and that is the shape which passes on a blank frame: CONTROL-CARET and CONTROL-CHEVRON require each detector to fire somewhere, and CONTROL-ISOLATION requires the caret region to score zero on a finished box that HAS a name label in the same #a5e847, so a caret count is a caret and not the speaker's name bleeding in past the 2-degree rotation. Plus HITTEST in both directions (anti-regression rule 6: the box owns its centre while the line is live or it can never be skipped, and hands it back once a self-dismissing line is done or it eats a 42%-wide Backpack target) and COVERAGE, which derives the graded set from js/*.js so the NEXT chat bubble converted to a talk box fails this audit until it is driven or excused. Self-serving, measured 24s, 40 checks. FAST because it is on the app's first screen and because being unable to hurry a talking box along is, in Tom's words, the single most irritating thing about this pattern
@@ -181,7 +184,7 @@ const BROWSER = [
      gate` has been exiting 1 before a browser started, for the fourth time (see
      the crate-palette, xp-cap and nine-that-landed entries below). Declared here
      rather than left, because everything in this branch runs behind it. */
-  'boneyard-icon-audit.mjs',    // the Boneyard map and its key draw the same pixel art at whole steps and it actually decodes. Six rows and four controls, self-serving, measured 35s green at 41 decoded pixel imgs. Its VECTOR row fails in BOTH directions on purpose: a new spawn falling back to vector is the v416 bug returning, and the day the food-find drawing lands it goes red and says to wire it
+  'boneyard-icon-audit.mjs',    // the Boneyard map and its key draw the same pixel art at whole steps and it actually decodes. Six rows and four controls, self-serving, measured 35s green at 41 decoded pixel imgs. Its VECTOR row fails in BOTH directions on purpose: a new spawn falling back to vector is the v416 bug returning, and it went red on 2026-08-21 the moment the food-find drawing was wired, which is what took its exemption list to EMPTY. It can also exit 97 UNPROVEN when the map draws no Mystery Egg to compare the key against (two independent dice rolls: an 8% rare roll per cell per 45-minute instance, then app.js placeWalkable vetoing any anchor that snaps to no walkable ground); it declares that row by name rather than passing or reporting it as an art regression
   'pixel-art-swap-audit.mjs',   // the TEN screens the Boneyard audit does not reach, rendered: no screen draws a vector or an emoji at >= 16px for a concept that has pixel art on disk, no pixel <img> lands off a whole step, and no call site reserves space the snapped art loses more than a fifth of. Identifies a drawing by its own path data normalised through the page's serializer, never by a class name, because the defect is a SILENT fallback that looks right in source and right in the DOM: it is why 305 graded sites and a 7/7 green icon-inventory coexisted with three vector wedges on the daily wheel. Also pins the wheel's WORDS against its pictures (LABEL): each wedge's tag must be a whole word of the Shop's own label for the thing that wedge draws, resolved by hit-testing which sector <path> the word and the picture each sit inside. That is the defect a medium swap creates and no other row can see: the gold wedge came out of the swap with the right art, the right grant and the word GOLD over a picture of a bone chest. Carries TEN controls, including "all three media present", "no two drivers landed on the same screen" and "every wheel word paired to exactly one named picture", so a row for a medium the probe cannot see, or a screen a driver silently missed, fails instead of passing on nothing. FAST because this class has now shipped four separate times and Tom has found every instance of it by playing. Self-serving, measured 65s, 18 checks
   'nickname-private-audit.mjs', // the pet nickname is PRIVATE, and a leak is invisible from the UI: a nickname that reached the Crew would still render, still reload, still clear, so nothing would look broken and nobody would report it. Points the app at a fake API with social.js's own ?api= hook, drives the real controls, and reads the bytes off page.on('request') rather than grepping the source: WIRE asserts the nickname is in zero request bodies and zero URLs, with a POSITIVE CONTROL that the pet fields that ARE meant to upload were found in the same captured body, so a blind capture fails instead of passing. Also HOSTILE (a 23-char payload that really would fire, escaped at both innerHTML sites), REFUSE, CLEAR and reload. FAST rather than full because a privacy leak is silent and permanent once shipped. Self-serving, measured 58s, 58 checks
 ];
@@ -388,8 +391,11 @@ const DECLARED = {
   'boneyard-icon-audit.mjs': ['full', "the Boneyard and its map key draw the same pixel art at whole steps, and it decodes. "
     + 'Run it on any change to pixCur, crateIcon, the map key or the marker sizes. It is full rather than fast because it '
     + 'boots the Boneyard map, so it wants the same reachable vector tile host as boneyard-audit. '
-    + 'NOTE, worth fixing separately: unlike boneyard-audit it carries no capability probe and no UNPROVEN exit, so on a host '
-    + 'with no route to the tile server its CONTROL row is the only thing standing between a tile-less run and a vacuous pass.'],
+    + 'It has an UNPROVEN exit as of 2026-08-21, but only for the Mystery Egg sample: when no rare spawn in the running '
+    + "45-minute instance survives app.js placeWalkable's veto, the map draws no egg, and the row is declared by name and "
+    + 'the suite exits 97 instead of exiting 1 with an art-regression message about a placement outcome. '
+    + 'STILL WORTH FIXING SEPARATELY: unlike boneyard-audit it carries no capability probe, so on a host with no route to '
+    + 'the tile server its CONTROL rows are the only thing standing between a tile-less run and a vacuous pass.'],
   'purchase-write-failure-audit.mjs': ['full', "a rejected write during a rack purchase must not cost the player the coins AND the piece. "
     + 'Run it on any change to buyRackItem, grantCosmetic, markPaid or the db write paths. It makes the real db.addIfAbsent reject '
     + 'for the one row grantCosmetic writes, which is what quota, abort and the wipe-protocol freeze do to that same call, so no app '
@@ -791,8 +797,110 @@ function report(r) {
     for (const w of u.why) console.log(`        ${w}`);
   } else if (r.code !== 0) console.log(failLines(r.out));
 }
-for (const f of PURE) { const r = await run(f, []); results.push(r); report(r); }
-for (const f of BROWSER) { const r = await run(f, [base]); results.push(r); report(r); }
+/* ============================================================================
+   RUNNING THEM AT THE SAME TIME
+   ============================================================================
+   This loop was `for (const f of LIST) await run(f)`: strictly one suite at a
+   time. Measured on this Mac, --all is 174 suites averaging ~45s, so about two
+   hours of wall clock on a 16-core machine with fourteen cores idle throughout.
+   That cost is not academic. It is why `node tests/release-gate.mjs` runs the
+   FAST tier only (69 of 174), why a release is usually verified on 40% of the
+   suite, and why sixteen audits were able to rot red on main without anyone
+   noticing. The serial loop is the reason the gate stopped being run.
+
+   Each suite is already a separate PROCESS with its own browser, its own
+   IndexedDB and its own page, so nothing about them was ever ordered. Only the
+   driver was.
+
+   WHAT STOPS IT FROM BEING FAST AND FLAKY, which is worse than slow:
+
+   1. SERIAL, below, names the suites that genuinely cannot share the machine,
+      each with a reason. Adding to it is cheap; assuming everything is safe is
+      how a parallel gate starts lying.
+   2. The concurrency is bounded by MEMORY, not by cores. A Chromium under one
+      of these holds ~1.3GB (measured when eleven orphans turned a healthy tree
+      into "five suites blocked"), so the cap is derived from total RAM and then
+      clamped by cores, rather than being a number somebody liked.
+   3. The orphan reaper runs ONCE, before any of this, and only kills processes
+      whose parent is already dead. It cannot reap a live sibling.
+   4. OUTPUT STAYS IN DECLARED ORDER. Results are held until every earlier suite
+      has printed, so two runs of the same tree produce the same transcript and a
+      diff between runs means something. A gate whose output order depends on
+      which suite happened to finish first cannot be diffed, and diffing two runs
+      is exactly how "is this red mine?" gets answered.
+
+   GATE_JOBS=1 restores the old behaviour exactly, for bisecting a suite that
+   only fails with company. */
+const SERIAL = {
+  'offline-boot-audit.mjs': 'binds a FIXED port (serveTree forcePort) because it '
+    + 'must survive the service worker across a restart on the same origin. Two of '
+    + 'anything on that port is a bind error, not a finding.',
+  /* MEASURED, not assumed. This one went red on the first parallel --all run and
+     PASSED standalone on the same tree, which is the signature the whole SERIAL
+     list exists for. It catches a takeover mid-slide by sampling PIXELS on a
+     specific frame, so it needs the frame budget it thinks it has; six browsers
+     competing for the CPU move the frame it lands on and it reports the
+     transition as broken when nothing is. A timing audit under contention
+     measures the machine, not the app. */
+  'crate-exit-flicker-audit.mjs': 'samples pixels on a specific frame of a slide, '
+    + 'so it is measuring frame timing. Red under six-way contention on the v422 '
+    + 'gate, green standalone on the identical tree.',
+  'gift-confirm-audit.mjs': 'polls for the DIP in a coin balance during a two-tap '
+    + 'confirm, so it is sampling a value inside a window rather than reading a '
+    + 'settled one. Red under contention on the v422 gate ("lowest seen 5000, '
+    + 'expected 4500"), green standalone twice on the identical tree.',
+};
+
+/* THE SHAPE THAT NEEDS THIS LIST, so the next one takes a minute instead of an
+   hour. Both entries above sample a value AT A MOMENT rather than reading a
+   settled one: a pixel on a chosen frame, a balance during a transaction. Under
+   contention the moment moves and the sample misses, and the suite reports the
+   app as broken when nothing is.
+   THE TEST IS ALWAYS THE SAME and it is cheap: run the suite ALONE on the same
+   tree. Green alone plus red in the pack means contention, and it belongs here
+   with that measurement written down. Red both ways is a real defect and does
+   not. Never add a suite to this list without running that comparison, because
+   a genuinely broken suite parked here is a red that has been made invisible. */
+
+const CPUS = (await import('node:os')).cpus().length;
+const GB = (await import('node:os')).totalmem() / 1e9;
+/* ~1.3GB per browser, and leave 8GB for everything else on the machine */
+const BY_RAM = Math.max(1, Math.floor((GB - 8) / 1.3));
+const JOBS = Math.max(1, Number(process.env.GATE_JOBS) || Math.min(6, CPUS - 2, BY_RAM));
+
+async function runPool(files, args) {
+  const out = new Array(files.length);
+  const done = new Array(files.length).fill(false);
+  let next = 0, printed = 0;
+  const flush = () => {
+    while (printed < files.length && done[printed]) { results.push(out[printed]); report(out[printed]); printed++; }
+  };
+  const worker = async () => {
+    for (let i = next++; i < files.length; i = next++) {
+      out[i] = await run(files[i], args);
+      done[i] = true;
+      flush();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(JOBS, files.length) }, worker));
+  flush();
+}
+
+const isSerial = f => Object.prototype.hasOwnProperty.call(SERIAL, f);
+const purePar = PURE.filter(f => !isSerial(f)), pureSer = PURE.filter(isSerial);
+const browPar = BROWSER.filter(f => !isSerial(f)), browSer = BROWSER.filter(isSerial);
+
+console.log(`running ${PURE.length + BROWSER.length} suite(s), ${JOBS} at a time`
+  + ` (${CPUS} cores, ${GB.toFixed(0)}GB; GATE_JOBS=1 to go back to one at a time)`);
+if (pureSer.length + browSer.length) {
+  console.log(`  ${pureSer.length + browSer.length} run alone: `
+    + [...pureSer, ...browSer].join(', '));
+}
+
+await runPool(purePar, []);
+for (const f of pureSer) { const r = await run(f, []); results.push(r); report(r); }
+await runPool(browPar, [base]);
+for (const f of browSer) { const r = await run(f, [base]); results.push(r); report(r); }
 
 if (own) own.server.close();
 if (!runAll && FULL.length) {

@@ -252,10 +252,23 @@ const GAP = LAND - MARK_H; // 4px of clearance between the status bar and the ma
    grades PIXELS has to keep the scroller reporting a negative offset for as long
    as the capture takes, which is also a truer simulation of a bounce: during a
    real one the offset is negative the whole time. */
-const pullTo = (page, px, hold = false) => page.evaluate((d, keep) => {
+/* AND IT SETTLES BEFORE IT READS, WHICH IS NEW AND COST A ROUND TO UNDERSTAND.
+   The reveal is SMOOTHED by a 130ms transition now (app.css, added because Tom
+   called the un-smoothed version "clunky and glitchy"), so getComputedStyle
+   immediately after the scroll event returns the transition's FROM value, not the
+   value the pull asks for. Read that way the whole CURVE row came back as the
+   fail-open default at every pull: 1.00/0px eight times, which reads like a dead
+   listener and is actually a correct one being photographed at t=0. Every row
+   that calls this wants the value the eye ENDS on, so the wait belongs here, once,
+   rather than in each caller. The rows that assert the smoothing itself are
+   SMOOTH/EASED below, and they deliberately do NOT come through this function. */
+const WM_TRANS = 130;                 // app.css: the transition on the mark
+const WM_SETTLE = WM_TRANS + 110;     // comfortably past it, with a frame to spare
+const pullTo = (page, px, hold = false) => page.evaluate(async (d, keep, settle) => {
   const el = document.getElementById('screen');
   Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => -d });
   el.dispatchEvent(new Event('scroll'));
+  await new Promise(r => setTimeout(r, settle));
   const cs = getComputedStyle(document.getElementById('app'), '::before');
   const m = cs.transform.match(/matrix\(([^)]+)\)/);
   if (!keep) delete el.scrollTop;
@@ -264,7 +277,7 @@ const pullTo = (page, px, hold = false) => page.evaluate((d, keep) => {
     ty: m ? parseFloat(m[1].split(',')[5]) : 0,
     varSet: document.documentElement.style.getPropertyValue('--wm-pull'),
   };
-}, px, hold);
+}, px, hold, WM_SETTLE);
 const releasePull = page => page.evaluate(() => { delete document.getElementById('screen').scrollTop; });
 const clearPull = page => page.evaluate(() => document.documentElement.style.removeProperty('--wm-pull'));
 
@@ -655,6 +668,112 @@ ok(`CURVE     by ${FULL}px of pull it is at FULL opacity and has travelled its w
   atFull.op === 1 && Math.abs(atFull.ty - (SAT + LAND)) <= 0.5 && curve.find(c => -c.faked === 18).op >= 0.45,
   `${FULL}px -> opacity ${atFull.op} travel ${atFull.ty}px (want ${SAT + LAND}), 18px -> ${curve.find(c => -c.faked === 18).op}, 4px -> ${curve.find(c => -c.faked === 4).op} (a jitter-sized pull stays near invisible on purpose)`);
 
+/* ---------- EASED: the SHAPE of that curve, not just its endpoints ---------- */
+/* Tom, on v421, the first build where this mark could paint at all: "it is very
+   clunky and glitchy, there is no easing involved in the movement and it feels
+   cheap the way you've rigged it up".
+   Everything above passes on a LINEAR mapping, which is exactly what v421 shipped:
+   both endpoints are the same either way. So this row grades the middle of the
+   curve against the straight line between them, at both ends, and the bounds are
+   measured rather than invented. js/app.js runs the pull through smoothstep
+   (t*t*(3-2t)) and quantises to twentieths, so:
+        pull   linear (v421)   smoothstep (now)   bound here
+         4px       0.10             0.05           <= 0.06
+         9px       0.25             0.15           <= 0.20
+        27px       0.75             0.85           >= 0.80
+   Every bound is red on linear and green with margin on smoothstep. The FIRST two
+   are the "quiet under a jitter-sized tug" half and the third is the "decelerates
+   into its landing" half; a curve that only satisfied one of them is not eased,
+   it is offset. Nothing here re-derives the arithmetic: the numbers are read back
+   off the shipped listener through pullTo. */
+const qAt = px => curve.find(c => -c.faked === px).op;
+ok('EASED     the reveal is SHAPED, not linear: quiet under a jitter-sized tug, and decelerating into its landing. v421 tracked the finger 1:1 and Tom called it cheap',
+  qAt(4) <= 0.06 && qAt(9) <= 0.20 && qAt(27) >= 0.80,
+  `4px -> ${qAt(4)} (linear would be 0.10, bound 0.06), 9px -> ${qAt(9)} (linear 0.25, bound 0.20), 27px -> ${qAt(27)} (linear 0.75, bound 0.80)`);
+
+/* ---------- SMOOTH: PIXELS OVER TIME, off the real control ---------- */
+/* THE OTHER HALF OF TOM'S NOTE, AND THE HALF NO CSS VALUE CAN ANSWER. --wm-pull is
+   quantised to twentieths (the COST row is why: without it a bounce writes a custom
+   property once per frame), so the travel used to arrive in 6.4px steps, one per
+   scroll event, and that stepping is the "glitchy". Measured on the shipped v421
+   through a 380ms driven ramp, off compositor frames: 18 distinct rendered
+   positions across 40 frames with 22 of them repeating the previous position, i.e.
+   the mark was frozen in place for more than half the frames it was moving. The
+   same ramp after the fix: 36 distinct positions across 39 frames, 3 repeats.
+   THE TEST IS THE REPO'S OWN RULE FOR TRANSITIONS: fire the real control, sample
+   the value over time, and require INTERMEDIATE values. Two distinct values across
+   the window means it snapped. So this fires ONE scroll event that jumps the pull
+   straight from nothing to FULL and watches what the compositor actually paints:
+   an unsmoothed mark teleports and scores 2, a smoothed one is caught in flight.
+   FRAMES, NOT getComputedStyle. A CSS box reads perfectly over a blank frame
+   (tally/CLAUDE.md), and this whole feature is three releases deep in marks that
+   measured fine and painted nothing, so the position is the lowest INK ROW in the
+   top ${SMOOTH_BAND} css px of a real frame. */
+const SMOOTH_BAND = 200;
+/* Screencast frames come back at CSS scale, not at the viewport's
+   deviceScaleFactor: measured 430x932 out of a 430x932x2 viewport. Reading the
+   device scale here put the band 400 rows deep, which reached the displaced
+   content and pinned every "position" at the band's own floor. */
+const bandBottom = b64 => dec.evaluate(async (data, lum, band) => {
+  const img = new Image(); img.src = 'data:image/png;base64,' + data; await img.decode();
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, c.width, Math.min(c.height, band)).data;
+  let n = 0, bottom = -1;
+  for (let i = 0; i < d.length; i += 4) {
+    if (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2] <= lum) continue;
+    n++; bottom = Math.floor((i / 4) / c.width);
+  }
+  return { n, bottom };
+}, b64, INK_LUM, SMOOTH_BAND);
+
+/* Displace the flow content the way a real bounce does, so the whole travel band
+   is backdrop and the mark is measurable across all of it, and still the idle
+   Bonehead first: it is the only other thing on Today that moves. */
+const SMO = await page.addStyleTag({ content: contentPull(BOUNCE) });
+const SMOA = await page.addStyleTag({ content: '.bh-anim,.bh-anim *{animation:none !important}' });
+await pullTo(page, 0);
+await sleep(300);
+const scFrames = [];
+const cdp = await page.createCDPSession();
+cdp.on('Page.screencastFrame', async ({ data, sessionId }) => {
+  scFrames.push(data);
+  try { await cdp.send('Page.screencastFrameAck', { sessionId }); } catch { /* stopped */ }
+});
+await cdp.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 });
+await sleep(400);
+const warm = scFrames.length;
+scFrames.length = 0;
+/* THE REAL CONTROL: one scroll event on #screen, which is what the production
+   listener is bound to. Not a call to anything this feature owns. */
+await page.evaluate(d => {
+  const el = document.getElementById('screen');
+  Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => -d });
+  el.dispatchEvent(new Event('scroll'));
+}, FULL);
+await sleep(500);
+await cdp.send('Page.stopScreencast').catch(() => {});
+const smoPos = [];
+for (const f of scFrames) { const s = await bandBottom(f); smoPos.push(s.n ? s.bottom : null); }
+await releasePull(page);
+await SMO.evaluate(n => n.remove());
+await SMOA.evaluate(n => n.remove());
+await clearPull(page);
+await sleep(300);
+const landed = smoPos.filter(v => v !== null);
+const END = SAT + LAND - MARK_H + 0;      // the mark's box lands with its top here
+const finalPos = landed.length ? landed[landed.length - 1] : null;
+ok(`SMOOTH    SAMPLE the compositor really produced frames of this transition and the mark really arrived: warm-up ${warm}, ${scFrames.length} graded frames, ending with the mark on screen`,
+  warm > 0 && scFrames.length >= 6 && finalPos !== null && finalPos >= END,
+  `${scFrames.length} frames, positions ${landed.slice(0, 12).join(',')}${landed.length > 12 ? '...' : ''}, final ${finalPos} css px (floor ${END})`);
+/* STRICTLY BETWEEN. The two endpoints are what a SNAP also produces, so they are
+   excluded by construction and the bound is on what is left. Measured: 8 with the
+   transition, 0 without it. */
+const mid = [...new Set(landed.filter(v => v > 0 && v < finalPos))];
+ok('SMOOTH    the mark is CAUGHT IN FLIGHT: one scroll event that jumps the pull from nothing to full paints intermediate positions instead of teleporting. v421 quantised to twentieths and snapped between them, which is the "glitchy"',
+  mid.length >= 3,
+  `${mid.length} distinct intermediate positions between 0 and ${finalPos}: ${mid.sort((a, b) => a - b).join(',')}. A snap scores 0 here (both endpoints are excluded on purpose)`);
+
 /* FAILOPEN. The one way a JS-driven reveal ships blank: the listener never runs
    (a WebView that does not report the negative offset, a boot that threw before
    bindWordmarkPull) and the CSS default is transparent. Third attempt at this
@@ -941,14 +1060,18 @@ await browser.close();
 if (srv) srv.close();
 
 const failed = results.filter(r => !r.pass);
-/* 41. UNDERNOTCH is a GRADED row again (it was downgraded to a printed number for
+/* 44. UNDERNOTCH is a GRADED row again (it was downgraded to a printed number for
    one release; the block at that line carries why, and why that is over), and the
    release that moved the mark out of the scroller added the two rows that would
    have caught the dead mechanism: MECHANISM "not painted inside the scroller" and
    REST "behind the content and not hit-testable". Restoring the v421 rule verbatim
-   drops this to 37, because the REACHABLE rows skip themselves when their SAMPLE
-   row finds no mark, so the count guard goes red on that regression too. */
-if (results.length < 41) { console.log(`\nFAIL: only ${results.length} checks ran, expected 41`); process.exit(1); }
+   drops this to 40, because the REACHABLE rows skip themselves when their SAMPLE
+   row finds no mark, so the count guard goes red on that regression too.
+   41 -> 44 on 2026-08-21 with EASED and the two SMOOTH rows. Everything that was
+   here before this passes on the LINEAR, UNSMOOTHED v421 reveal, which is the
+   version Tom called "clunky and glitchy": this file graded where the mark ends
+   up and never once graded how it gets there. */
+if (results.length < 44) { console.log(`\nFAIL: only ${results.length} checks ran, expected 44`); process.exit(1); }
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 if (failed.length) { console.log('FAILED: ' + failed.map(f => f.n).join(', ')); process.exit(1); }
 console.log('overscroll-wordmark-audit clean');

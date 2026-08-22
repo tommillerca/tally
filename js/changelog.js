@@ -3,6 +3,22 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 422, date: '2026-08-21', title: 'The pet you paid for, and a faster app', items: [
+    'Fixed, and this one cost real coins: a pet bought from Gwart never showed up in your Stable or your Paddock. She was yours the whole time, the game just filed her in one place instead of two. Open the app and she will be there, with no update needed after this one.',
+    'The Paddock was showing her as a locked silhouette with somebody else\'s description. That was the same bug wearing a different hat.',
+    'Bumbleseal also had no battle stats at all, so equipping her took a pet into the Pit and gave you nothing. She fights now.',
+    'The shop tiles for her purse and her patches were framed on the wrong part of the art. They are centred on the thing you are buying.',
+    'Moving between tabs is faster. The app was re-reading every piece of your Bonehead\'s art from scratch on every single visit to that screen, about 2.8 million pixels of it, and now it remembers.',
+    'The Wanderer was too big on the map. He is 40% smaller and still the biggest thing out there.',
+    'The Herb patch on the map finally has its pixel art. It had been drawn and then left on a branch nobody was building from.',
+    'The Golden Crate is the Bone Crate now, because that is what it has looked like for a while.',
+    'Pull down on Today and the wordmark eases in properly instead of jerking with your finger.',
+    'Fixed: tapping Bonehead in the bottom bar did nothing if you were already in the Shop or the Backpack. Every tab always takes you somewhere now.',
+    'Your Bonehead was standing well off to one side on Today, with his barbell clipped off the edge. He is centred with his pet again.',
+    'The card frame around him is gone. The art runs to the edges and fades into the page, the way it was meant to.',
+    'Gwart talks. Tap him for a line, and he will offer one on his own now and then about what is worth doing.',
+    'Fixed: on a few screens the new seal was drawing across your Bonehead\'s chest at four times her size. Her art is on a bigger canvas than every other pet and nothing knew.',
+  ] },
   { n: 421, date: '2026-08-21', title: 'The Wanderer, and Gwart has a pet for sale', items: [
     'Someone else is out in the Boneyard now. The Wanderer walks a slow beat around the map with a lantern, and the light in front of him is a cone you can see on the ground. Step into it and he comes for you.',
     'He gives you a moment first. The screen goes dark, you hear heavy footsteps, and he walks in out of it carrying the lamp. Then you choose: fight him or back out of the light. Backing out costs you nothing but the moment.',

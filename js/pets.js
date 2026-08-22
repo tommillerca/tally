@@ -36,6 +36,15 @@ export const PET_ASSIGN = {
   C4: 'hound',    // Basic Pet
   C5: 'warden',   // Tidy Pet
   CX: 'hound',    // Day One Lizard (exclusive early-player reward), an amethyst C4
+  /* Bumbleseal. SAME BUG CLASS AS THE ONE SHE WAS FOUND BY: she shipped in v421
+     as a species this table had never heard of, and buildBattlePet's first line
+     is `if (!PET_ASSIGN[petId]) return null`, so equipping the 50,000-coin
+     legendary gave you NO pet in the Pit. Reachable in v421 through the 1% egg
+     even before the purchase was fixed. Hound because the wardrobe sold for her
+     includes a stinger and a sting is a bite that leaves poison, which is the
+     hound passive in one sentence. Tom owns this call; it is here so she can
+     fight at all, not because the family was designed for her. */
+  C6: 'hound',    // Bumbleseal (Gwart's Emporium, 50,000 coins)
 };
 export function familyOf(petId) { return PET_FAMILIES[PET_ASSIGN[petId] || 'hound']; }
 
@@ -120,6 +129,15 @@ export const PET_STATS = {
   // (1.36), so it's a nice pet to have without breaking the game or the balance
   // audit. A thank-you, not best-in-slot.
   CX: { rarity: 'legendary', mult: 1.15, tilt: { power: 1.04, marrow: 1.06, reflex: 1.0 } }, // Day One hound (lizard): sturdy all-rounder
+  /* Bumbleseal: THE DAY ONE LIZARD'S LINE, TO THE DIGIT, on purpose. She was
+     missing from this table too, which silently made a 50,000-coin legendary a
+     COMMON stat line (the `|| { rarity: 'common', mult: 1 }` fallback below).
+     Rather than invent a number, she reuses the one line in here that already
+     answers "a legendary GLOW that must not be best-in-slot": CX's, which is
+     documented above as deliberately below the epic C1 (1.27) and the legendary
+     C2 (1.36). Nothing new to balance, because nothing new was introduced. She is
+     sold for coins and the house rule is that money never buys power. */
+  C6: { rarity: 'legendary', mult: 1.15, tilt: { power: 1.04, marrow: 1.06, reflex: 1.0 } }, // Bumbleseal: prestige, not power
 };
 // Shiny (the ultra-rare recolour) is no longer purely cosmetic: it grants a small
 // flat bump to every stat so a shiny pull is a genuine power upgrade, not a skin.

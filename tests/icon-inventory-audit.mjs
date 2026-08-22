@@ -349,7 +349,7 @@ const PIX_CUR = pairs((pixSrc.match(/const PIX_CUR = \{([\s\S]*?)\};/) || [, '']
 const CRATE = pairs((appSrc.match(/const CRATE_ICON_PIX = \{([\s\S]*?)\};/) || [, ''])[1]);
 const PIX_KEYS = new Set(PIX_CUR.map(([k]) => k));
 const CRATE_KEYS = new Set(CRATE.map(([k]) => k));
-const SPAWN_ART = { coins: 'coin', crate: 'crate', rare: 'egg' };   // js/app.js spawnIcon
+const SPAWN_ART = { coins: 'coin', crate: 'crate', rare: 'egg', herbs: 'herbs' };   // js/app.js spawnIcon
 
 /* ==========================================================================
  * 4. DERIVE.

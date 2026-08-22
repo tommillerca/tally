@@ -64,6 +64,14 @@
  *             -> COVERAGE fails naming js/app.js:418
  *             (at the original +/-3 line window it did NOT go red: the new call
  *             borrowed petAsideHtml's claim three lines up. Window is +/-1 now.)
+ *   STACKED   (added 2026-08-21, proven in a cp -R copy) delete the
+ *             `if (s.code === 'C' && !petStacksOnBody(itemId)) return '';` line
+ *             from avatarLayersHtml, which is the shipped v421 behaviour
+ *             -> STACKED fails: "C6: drawn INSIDE the avatar stack but not as a
+ *                companion (ink starts 44px left of the stage's midline)"
+ *   CONTROL   make petStacksOnBody return false for everything, so NO pet is
+ *             ever stacked and STACKED has nothing to judge
+ *             -> CONTROL fails: "0 of 7 stacked: none"
  *
  * Usage: node tests/figure-audit.mjs        (URL=... for live)
  */
@@ -746,6 +754,34 @@ const species = await page.evaluate(async () => {
 });
 ok('CUTOFF the pet roster could be read at all (an empty list is a FAILURE)',
   Array.isArray(species) && species.length >= 3, JSON.stringify(species));
+/* ---- STACKED: the pet drawn INSIDE the avatar stack, for every species ------
+ *
+ * Tom, 2026-08-21: "also this weird top left glitch with the pet and bonehead is
+ * happening around the app", with a shot of the Bonehead hub's portrait: a huge
+ * cream shape laid across the skeleton inside a 76px card.
+ *
+ * It is a registration bug, not a layout one, and it is a WHOLE CLASS. C1-C5 and
+ * CX are painted inside the shared 640 square, in the corner beside the figure,
+ * so stacking them as one more avatar layer puts the pet where Cam drew it.
+ * Bumbleseal (C6) is a 2048 square with the pet filling the frame, because she
+ * is drawn to be PLACED, by petAsideHtml, at a size of her own. Stacked raw over
+ * a 640-registered body she lands across his chest at four times the size, on
+ * every one of the eleven surfaces that keep the C slot: the hub portrait, the
+ * map marker, the leaderboard, the friends list, the splash, the level-up card
+ * and both fight plates. Only one of them was in the screenshot.
+ *
+ * WHAT IS GRADED, and it is the RENDER rather than the rule js/app.js uses. Any
+ * pet that IS drawn inside a stack must read as a companion: its ink sits in the
+ * right-hand, lower part of the stage, beside the figure rather than over it.
+ * A pet that is NOT drawn is allowed, because that is the honest degradation for
+ * a species the stack cannot place (anti-regression rule 8: a missing garment,
+ * never a broken figure), and it is what js/app.js's petStacksOnBody now does.
+ * So if that rule ever disagrees with the art, this goes red from the pixels'
+ * side rather than agreeing with the code that produced them.
+ *
+ * CONTROL, because "no pet in any stack" would pass this for free: at least one
+ * species must actually be drawn, or nothing was measured. */
+const stacked = [], stackDrawn = [];
 const cut = [];
 for (const sp of species || []) {
   await page.evaluate(async s => {
@@ -770,12 +806,56 @@ for (const sp of species || []) {
     return { right: Math.round(c.right - p.right), left: Math.round(p.left - c.left),
       top: Math.round(p.top - c.top), w: Math.round(c.width) };
   });
-  if (!over) { cut.push(`${sp}: no pet slot rendered`); continue; }
-  const worst = Math.max(over.right, over.left, over.top);
-  if (worst > 1) cut.push(`${sp} (${over.w}px wide) escapes by ${JSON.stringify(over)}`);
+  if (!over) cut.push(`${sp}: no pet slot rendered`);
+  else {
+    const worst = Math.max(over.right, over.left, over.top);
+    if (worst > 1) cut.push(`${sp} (${over.w}px wide) escapes by ${JSON.stringify(over)}`);
+  }
+
+  /* the Bonehead hub's portrait: the surface in Tom's screenshot, and one of the
+     eleven that keep the C slot inside the stack rather than beside it. */
+  await page.evaluate(() => { location.hash = '#/bonehead'; });
+  await sleep(1100);
+  await page.evaluate(() => document.querySelector('.ch-tab[data-tab="talents"]')?.click());
+  await sleep(1200);
+  const st = await page.evaluate(() => {
+    const stage = document.querySelector('.bh-hero.mini .bh-stage.lg');
+    if (!stage) return null;
+    const r = stage.getBoundingClientRect();
+    return {
+      stage: { x: r.left, y: r.top, w: r.width, h: r.height },
+      layers: [...stage.querySelectorAll('img')].map(i => {
+        const b = i.getBoundingClientRect(), cs = getComputedStyle(i);
+        return { src: i.currentSrc || i.src, nw: i.naturalWidth, nh: i.naturalHeight,
+          x: b.left, y: b.top, w: b.width, h: b.height, fit: cs.objectFit, pos: cs.objectPosition };
+      }),
+    };
+  });
+  if (!st) { stacked.push(`${sp}: the hub portrait did not render, so nothing was measured`); continue; }
+  const petLayer = st.layers.filter(l => /\/C\/(shiny\/)?C/.test(l.src));
+  if (!petLayer.length) continue;                 // not drawn: the honest degradation
+  const ink = inkEdges(petLayer);
+  if (!ink) { stacked.push(`${sp}: its layer is in the stack and has no readable ink`); continue; }
+  stackDrawn.push(sp);
+  const midX = st.stage.x + st.stage.w / 2, midY = st.stage.y + st.stage.h / 2;
+  /* A COMPANION SITS BESIDE HIM AND BELOW HIM. Both halves, because either one
+     alone is satisfied by a full-canvas drawing: C6 raw spans the whole stage,
+     so its ink STARTS left of the midline and ABOVE it. Measured on the five
+     registered species, their crops begin at x 0.534-0.559 and y 0.592-0.639 of
+     the canvas, so the midline is a wide bar for all of them. */
+  const bad = [];
+  if (ink.l < midX - 1) bad.push(`ink starts ${Math.round(midX - ink.l)}px left of the stage's midline`);
+  if (ink.b < midY) bad.push('ink ends above the stage\'s middle');
+  if (bad.length) stacked.push(`${sp}: drawn INSIDE the avatar stack but not as a companion (${bad.join('; ')})`);
 }
 ok('CUTOFF no pet is clipped by the card, at any width',
   cut.length === 0, cut.length ? '\n      ' + cut.join('\n      ') : `${(species || []).length} species all inside the plate`);
+ok('CONTROL some species really is drawn inside an avatar stack (zero would grade STACKED for free)',
+  stackDrawn.length > 0, `${stackDrawn.length} of ${(species || []).length} stacked: ${stackDrawn.join(', ') || 'none'}`);
+ok('STACKED every pet drawn INSIDE an avatar stack reads as a companion, not as a shape over the figure',
+  stacked.length === 0,
+  stacked.length ? '\n      ' + stacked.join('\n      ')
+    : `${stackDrawn.length} stacked as companions, ${(species || []).length - stackDrawn.length} placed by petAsideHtml instead`);
 
 await browser.close();
 if (srv) srv.kill();
