@@ -10,6 +10,12 @@ export const CHANGES = [
     'His lines also know what you are up to: an unopened crate, a pot that is done, a garden that is ready, a day you have not written anything down for.',
     'The Wanderer\'s lantern light was snapping to a stub every time you moved the map and then springing back. It holds steady now.',
     'His light also comes out of the lamp properly: a bright pool at the flame that the beam grows out of, and soft edges instead of a hard wedge.',
+    'Switching tabs no longer leaves a ghost of the screen you just left sitting on top of the new one. It cuts cleanly.',
+    'The Shop used to take most of a second to appear because it was waiting on ten thumbnails that were never going to load. It opens in about a fifth of that.',
+    'New in the Wardrobe: take it all off. One control strips everything back to a bare Bonehead so you can build a look from scratch. It only takes things off, you keep everything.',
+    'Gwart will tell you when you are wearing nothing statted, because you will be softer in a fight and he would rather you knew.',
+    'Fixed: the Not right now button under the first-meal card was sitting closer to the banner below it than to the card it belongs to.',
+    'We can now hand a specific player back something they lost to a mistake or a bug, without touching their phone.',
   ] },
   { n: 423, date: '2026-08-22', title: 'Dress your seal, and the Wanderer walks like a person', items: [
     'You can finally put Bumbleseal\'s accessories on her. Stable, under her card: tap a piece to wear it, tap it again to take it off. She wears them everywhere, on Today, out in the Paddock, and into a fight.',
