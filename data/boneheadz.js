@@ -2065,6 +2065,18 @@ export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${it
  * because it is three scattered marks (flower, heart, star) rather than one
  * mass, and a tight box drops two of them out of shot.
  *
+ * THE SIZE IS A JUDGEMENT, THE CENTRE IS NOT, and shipping it as a comment
+ * rather than as a check let two of the five drift straight back off the rule.
+ * v421 sent CB1 71.7 art-px ABOVE its centroid ("rides higher than CB2") and
+ * CM1 30.8 left and 40.9 up ("nudged up-left"), which is exactly the strap-in-
+ * frame shot Tom had already rejected once: the purse's strap stretches the
+ * bounding box upward, the BAG holds the mass, and a window raised off the mass
+ * frames the strap. CE1, CB2 and CG1 were on their centroid to 0.1 art-px, so
+ * the rule was real and only these two broke it. `tests/pet-accessory-lint.mjs`
+ * row SHOT now measures every shot box against the PNG's own alpha centroid, so
+ * a nudge has to argue with a number. Widen or tighten a window freely; move its
+ * centre off the ink and the gate says so.
+ *
  * EVERY ACCESSORY BELONGS TO ONE PET, and that is a fact about the art, not a
  * rule someone chose. Measured 2026-08-21: the glasses overlap Bumbleseal's own
  * ink by 94.8% and overlap Drizzle, Mallard and Bulldog by 0.0%. Cam draws each
@@ -2097,10 +2109,10 @@ export const PET_SHOP = {
   pet: { id: 'C6', coin: 50000, blurb: 'A diva that would rather shop than fly. Let her buzz the boutique below for more accessories.' },
   items: [
     { id: 'CE1', coin: 8000,  shot: [0.1394, 0.3327, 0.3933, 0.5866] },
-    { id: 'CB1', coin: 6000,  shot: [0.4262, 0.4132, 0.7973, 0.7843] },   // rides higher than CB2: no charms on the strap to fill the top of the frame
+    { id: 'CB1', coin: 6000,  shot: [0.4262, 0.4482, 0.7973, 0.8193] },
     { id: 'CB2', coin: 9000,  shot: [0.4210, 0.4253, 0.7921, 0.7964] },
     { id: 'CG1', coin: 12000, shot: [0.7261, 0.2925, 0.9117, 0.4780] },
-    { id: 'CM1', coin: 3500,  shot: [0.1215, 0.3293, 0.4116, 0.6194] },   // 10% wider and nudged up-left: three scattered marks, not one mass
+    { id: 'CM1', coin: 3500,  shot: [0.1365, 0.3493, 0.4266, 0.6394] },   // widest window of the five: three scattered marks, not one mass
   ],
 };
 

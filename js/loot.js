@@ -321,7 +321,26 @@ export async function buyRackItem(artId, currency = 'coins') {
  *
  * BUYING THE PET EQUIPS HER. Fifty thousand coins should not end with the
  * player hunting through a menu to find what they just bought.
+ *
+ * AND BUYING THE PET PUTS A COPY IN THE STABLE, which is a separate write and
+ * was the v421 defect: `grantCosmetic` + `equip('C', id)` is ownership plus a
+ * paper-doll slot, and every screen that lists what you OWN reads `petInst`
+ * instead. See reclaimOwnedPets above for the full trace. Go through
+ * addPetInstance/setEquippedPet, the same pair hatching and grantPet use, so the
+ * level bank, the legacy anchor and the battle pet all land too: `equip('C')`
+ * alone left the fight running the old pet.
+ *
+ * Mint-if-absent in deliverPet, because reclaimOwnedPets may already have minted
+ * this species during that very petInstances() read: grantCosmetic runs first in
+ * both branches below, so by then the reclaim sees an owned pet with no copy and
+ * does its job. Minting unconditionally would hand out TWO Bumbleseals for one
+ * purchase.
  */
+async function deliverPet(sp) {
+  const inst = (await petInstances()).find(x => x.sp === sp) || await addPetInstance(sp);
+  await setEquippedPet(inst.iid);
+}
+
 export async function buyPetItem(id) {
   const isPet = id === PET_SHOP.pet.id;
   const entry = isPet ? PET_SHOP.pet : PET_SHOP.items.find(i => i.id === id);
@@ -344,13 +363,13 @@ export async function buyPetItem(id) {
        report several successes. Same reasoning as buyRackItem. */
     if ((await ownedCosmeticIds()).has(id)) return { ok: false, reason: 'owned' };
     await grantCosmetic(id, 'petshop');
-    if (isPet) await equip('C', id);
+    if (isPet) await deliverPet(id);
     return { ok: false, reason: 'owned', recovered: true };
   }
   await coinsAdd(-price);
   try {
     await grantCosmetic(id, 'petshop');
-    if (isPet) await equip('C', id);
+    if (isPet) await deliverPet(id);
   } catch {
     return { ok: false, reason: 'write', label: art.name };
   }
@@ -804,6 +823,44 @@ export function healDupIids(list) {
   return healed ? out : list;
 }
 
+/* AN OWNED PET WITH NO COPY IN THE STABLE IS A GHOST, AND THAT IS EXACTLY WHAT
+ * 50,000 COINS BOUGHT ON v421. Ownership lives in TWO places by design: an `inv`
+ * row of kind 'cos' (what the wardrobe, the shop tile and the paper-doll slot
+ * read) and a row in `petInst` (what the Stable, the Paddock, the battle pet and
+ * every per-copy map read). `hatchEgg`, `breed` and `grantPet` write both.
+ * `buyPetItem` wrote only the first, so Bumbleseal rendered perfectly on Today,
+ * which reads the equipped SPECIES, and was absent from both screens that read
+ * copies: the Paddock fell through to `lockedCardHtml`, which is why Tom saw a
+ * silhouette carrying the Day One Lizard's copy, and the accessories he then
+ * bought had no figure to hang on.
+ *
+ * Fixing the purchase does nothing for the account that already made it, so the
+ * two states are reconciled on read as well. Rules that keep this from becoming
+ * a faucet or a duplicator:
+ *   - It can only ever fire on an INVALID state. `salvageInstance` deletes the
+ *     cos row when the last copy of a species goes, so "owned cosmetic, zero
+ *     instances" is unreachable by any legitimate path.
+ *   - The iid is DERIVED (`r-<species>`), not minted from a clock and a counter,
+ *     so two tabs racing this write the byte-identical array and one pet lands,
+ *     not two (tally/CLAUDE.md, rewarded actions, rule 6: "twice" includes
+ *     "at once").
+ *   - Once per page load, so the hot path keeps its single kv read.
+ *   - Anchored to NOW, like a fresh hatch. hatchedAtSteps 0 would hand a
+ *     recovered pet the player's entire walking history as levels. */
+let _petsReclaimed = false;
+async function reclaimOwnedPets(list) {
+  if (_petsReclaimed) return list;
+  _petsReclaimed = true;
+  const owned = await ownedCosmeticIds();
+  const missing = [...owned].filter(id => (BH_BY_ID[id] || {}).slot === 'C' && !list.some(x => x.sp === id));
+  if (!missing.length) return list;
+  const anchor = await lifetimeStepsSum();
+  const next = [...list, ...missing.map(sp => ({ iid: `r-${sp}`, sp, lineage: 0, shiny: false, hatchedAtSteps: anchor }))];
+  await kvSet('petInst', next);
+  import('./analytics.js').then(a => a.track('pet_reclaim', { sp: missing.join(',') })).catch(() => {});
+  return next;
+}
+
 export async function petInstances() {
   let list = await kvGet('petInst', null);
   if (Array.isArray(list)) {
@@ -832,9 +889,9 @@ export async function petInstances() {
         n: dupIids.length,
         sample: dupIids.slice(0, 3),   // iid SHAPE is the diagnosis: m- rows point at the migration, p- rows at the mint
       })).catch(() => {});
-      return healed;
+      return reclaimOwnedPets(healed);
     }
-    return list;
+    return reclaimOwnedPets(list);
   }
   const owned = await ownedCosmeticIds();
   const ownedPets = [...owned].filter(id => (BH_BY_ID[id] || {}).slot === 'C');
