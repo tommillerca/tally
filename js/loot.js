@@ -1636,8 +1636,10 @@ export async function clearTransmog(slot) {
    outfit should survive that. Two halves, because they mean different things:
    `tm` is the transmog overrides (a gear slot missing from tm means "show
    whatever the gear itself looks like", which is not the same as pinning that
-   art), and `cos` is the plain cosmetics on non-gear slots. Pets are excluded:
-   the Stable owns that slot now. */
+   art), and `cos` is the plain cosmetics on non-gear slots. A third half since
+   v425: `gear` records the statted loadout so a fit survives Take it all off;
+   applyFit only ever fills EMPTY slots with it, so re-gearing still wins.
+   Pets are excluded: the Stable owns that slot now. */
 export const MAX_FITS = 6;
 export const FIT_COSMETIC_SLOTS = BH_SLOTS
   .map(s => s.code)
@@ -1652,7 +1654,22 @@ export async function captureFit(name) {
   const eq = await equipped({ raw: true });
   const cos = {};
   for (const s of FIT_COSMETIC_SLOTS) if (eq[s]) cos[s] = eq[s];
-  const fit = { id: newId(), name: (name || `Fit ${list.length + 1}`).slice(0, 18), tm, cos, ts: Date.now() };
+  /* `gear` (v425): the statted loadout, slot -> gear id. The look-not-stats
+     contract above assumed gear slots always HOLD something, and v424's Take it
+     all off broke that: applyFit wrote transmogs onto emptied gear slots, and
+     equipped() ignores a transmog on a slot holding nothing, so a fit applied
+     after a strip lost every gear-slot look. Recording the loadout lets applyFit
+     put the gear back where a slot is empty, which restores both the look and
+     the stats a stripped player expects. */
+  const lo = await gearLoadout();
+  const gear = {};
+  for (const s of GEAR_SLOTS) if (lo[s]) gear[s] = lo[s];
+  /* A PLAIN cosmetic on a gear slot is the other thing v222 never wrote down:
+     an un-transmogged gear slot "shows whatever the slot holds", which a strip
+     empties. It lives in cos (same id space as the other cosmetics); applyFit
+     only puts it on a slot that is still empty after the gear pass. */
+  for (const s of GEAR_SLOTS) if (!lo[s] && eq[s]) cos[s] = eq[s];
+  const fit = { id: newId(), name: (name || `Fit ${list.length + 1}`).slice(0, 18), tm, cos, gear, ts: Date.now() };
   await kvSet('outfits', [...list, fit]);
   return { ok: true, fit };
 }
@@ -1671,6 +1688,21 @@ export async function applyFit(id) {
   const cost = await fitPrice(fit);
   const bal = await boneDust();
   if (cost > bal) return { ok: false, reason: 'dust', need: cost, have: bal };
+  /* gear first (v425): a recorded piece goes back into a slot that is EMPTY
+     right now, through equipGear so the owned/level checks all run. Empty-only,
+     because the v222 contract holds for a dressed doll: a player who re-geared
+     chasing numbers keeps that gear and the transmog below still lands the look.
+     A piece no longer owned (or refused by equipGear) is skipped, the same
+     tolerance as cosmetics. A pre-v425 fit has no gear map and behaves as
+     before. */
+  if (fit.gear) {
+    const lo = await gearLoadout();
+    const gOwned = await ownedGearIds();
+    for (const [slot, gid] of Object.entries(fit.gear)) {
+      if (lo[slot] || !gOwned.has(gid)) continue;
+      await equipGear(slot, gid).catch(() => {});
+    }
+  }
   // gear slots: the fit's tm replaces the whole map, so a slot the fit does not
   // mention goes back to its gear's own look rather than keeping a stale override
   for (const slot of GEAR_SLOTS) {
@@ -1678,10 +1710,16 @@ export async function applyFit(id) {
     if (want == null) await clearTransmog(slot);
     else await applyTransmog(slot, want);
   }
-  // cosmetics: skip anything no longer owned rather than throwing
+  // cosmetics: skip anything no longer owned rather than throwing. A cos entry
+  // on a GEAR slot (v425: a plain look worn there when the fit was saved) only
+  // lands if the slot is still empty after the gear pass: statted gear the
+  // player is wearing now, or that this fit just put back, is never bumped.
   const owned = await ownedCosmeticIds();
+  const loNow = await gearLoadout();
   for (const [slot, itemId] of Object.entries(fit.cos || {})) {
-    if (owned.has(itemId)) await equip(slot, itemId, { keepGear: true });
+    if (!owned.has(itemId)) continue;
+    if (GEAR_SLOTS.includes(slot) && loNow[slot]) continue;
+    await equip(slot, itemId, { keepGear: true });
   }
   return { ok: true, cost, name: fit.name };
 }

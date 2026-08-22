@@ -70,6 +70,9 @@
  *       after the seed was strengthened: see below
  *   M13 the no-gear bucket is deleted            -> WARNED red
  *   M14 the no-gear bucket never retires         -> WARNED-retire red
+ *   M15 js/loot.js reverted to pre-v425 (fits do not record gear, cp -R copy
+ *       with the .git pointer file DELETED)      -> CONTROL-gear and both
+ *       FITBACK rows red, everything else green: the player's exact report
  * And the SETUP row that the chip is offered at all goes red on dafe778a, where
  * the feature does not exist. tests/talkbox-audit.mjs carries the other two:
  * unregistering the bucket in its ctx table fails POOL, and a no-gear line too
@@ -517,6 +520,74 @@ ok('CONTROL with gear back in the slot it really does charge for an unworn look'
   price.unpaid > 0, `an unpaid look in that slot costs ${price.unpaid} dust`);
 ok('FREE the look that was on before the strip is still paid for: 0 dust to wear again',
   price.paid === 0, `paid look ${price.paid} dust, unpaid look ${price.unpaid} dust`);
+
+/* ---------- FITBACK: a saved fit survives the strip WHOLE (v425) ----------
+   The player report, verbatim: "I saved my fit then did the take it all off
+   option and when I clicked my old fit that I saved it only remembered a couple
+   things." A fit used to store only tm + cos (v222: "a fit is a LOOK, never
+   stats"), which assumed gear slots always hold something. v424's strip broke
+   that: applyFit wrote transmogs onto emptied gear slots and equipped() ignores
+   a transmog on a slot holding nothing, so every gear-slot look silently
+   vanished and only plain cosmetics returned. Since v425 captureFit records the
+   gear loadout and applyFit re-equips it into empty slots first.
+   Driven the player's way: the REAL fit chip, tapped in the real Wardrobe, on a
+   doll stripped by the same code the real button runs. The bar is the FULL
+   pre-strip look (equipped(), transmog resolved) AND the full loadout, not
+   "some pieces came back": partial restoration IS the reported bug.
+   PROVEN RED (M15) by reverting js/loot.js to its pre-fix v424 state in a
+   throwaway copy: the fit records no gear, so CONTROL-gear, FITBACK-look and
+   FITBACK-stats all go red while the seed and strip stay healthy. */
+const fitId = await page.evaluate(async () => {
+  const loot = await import('./js/loot.js');
+  const f = (await loot.fits()).find(x => x.name === 'Audit fit');
+  return f ? { id: f.id, gear: f.gear || null } : null;
+});
+ok('CONTROL the saved fit recorded the statted loadout it was captured in',
+  !!fitId && JSON.stringify(fitId.gear) === JSON.stringify(before.gearLo),
+  `fit.gear=${JSON.stringify(fitId?.gear)} want ${JSON.stringify(before.gearLo)}`);
+const strippedAgain = await page.evaluate(async () => {
+  const loot = await import('./js/loot.js');
+  await loot.stripAll();                       // same function the real chip runs, graded above
+  return { lo: Object.keys(await loot.gearLoadout()).length,
+    tm: Object.keys(await loot.transmogMap()).length };
+});
+ok('CONTROL the doll really is bare again before the fit is tapped (else FITBACK grades nothing)',
+  strippedAgain.lo === 0 && strippedAgain.tm === 0, JSON.stringify(strippedAgain));
+await openWardrobe();
+const tapped = await page.evaluate(async (id) => {
+  const c = document.querySelector(`[data-fit="${id}"]`);
+  if (!c) return { there: false };
+  c.click();
+  await new Promise(r => setTimeout(r, 1800));
+  return { there: true };
+}, fitId?.id);
+ok('SETUP the fit chip is on the rail and was tapped', tapped.there, JSON.stringify(tapped));
+const restored = await snap();
+// key order differs between an equip-by-equip rebuild and the original save
+const normObj = o => JSON.stringify(Object.keys(o || {}).sort().map(k => [k, o[k]]));
+ok('FITBACK the FULL look is back: every slot shows what it showed when the fit was saved',
+  normObj(restored.look) === normObj(before.look),
+  `now ${JSON.stringify(restored.look)}\n      was ${JSON.stringify(before.look)}`);
+ok('FITBACK the stats came back too: the gear loadout matches the one the fit was saved in',
+  normObj(restored.gearLo) === normObj(before.gearLo),
+  `now ${JSON.stringify(restored.gearLo)} was ${JSON.stringify(before.gearLo)}`);
+/* And the compat half: a fit saved BEFORE v425 has no gear map at all. It must
+   behave exactly as it did yesterday: apply cleanly, touch no gear. */
+const legacy = await page.evaluate(async () => {
+  const db = await import('./js/db.js');
+  const loot = await import('./js/loot.js');
+  const list = await db.kvGet('outfits', []);
+  const f = { ...list[0], id: 'legacy-fit-test' };
+  delete f.gear;                               // the exact shape a v222-v424 save left behind
+  await db.kvSet('outfits', [...list, f]);
+  await loot.stripAll();
+  const r = await loot.applyFit('legacy-fit-test');
+  const lo = await loot.gearLoadout();
+  await db.kvSet('outfits', list);             // leave no test rows behind
+  return { ok: r.ok, worn: Object.keys(lo).length };
+});
+ok('LEGACY a pre-v425 fit (no gear map) still applies and equips no gear',
+  legacy.ok === true && legacy.worn === 0, JSON.stringify(legacy));
 
 ok('no page errors', errs.length === 0, errs.join(' | '));
 await finish(browser);

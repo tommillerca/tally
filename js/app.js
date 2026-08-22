@@ -12163,7 +12163,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
           ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip everything, gear included. Nothing is lost: it all stays in your Backpack.">Take it all off</button>`
           : ''}
       </div>
-      ${fitList.length ? `<p class="note fit-note">Tap a fit to wear it. Fits change your look only, never your stats. Long-press a fit to rename or bin it.</p>` : ''}`;
+      ${fitList.length ? `<p class="note fit-note">Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Long-press a fit to rename or bin it.</p>` : ''}
+      ${/* v425: fits record gear now. An older fit has no gear map, so after
+            Take it all off it can only bring back part of the look; one quiet
+            line tells the player the re-save fixes it. No migration, no modal. */''}
+      ${fitList.some(f => !f.gear) ? `<p class="note fit-note">Fits saved a while ago remember only the look. Put one on, gear up, and save it again to keep the gear with it.</p>` : ''}`;
 
     content.innerHTML = `
       ${fitRail}
