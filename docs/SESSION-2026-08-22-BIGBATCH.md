@@ -46,3 +46,22 @@ Production D1 lacks the 2026-08-16 hardening schema while the deployed worker
 references it; syncs still land, so the failure chain is unproven. Tom declined
 the live-API probe. Waiting on his call: tail logs, apply the migration, or
 leave it. Nothing applied.
+
+## Second outage, 2026-08-22 (usage limit, ~6:20pm reset)
+
+Four agents were CANCELLED, not merely paused: appcore, css, wanderer, wheel.
+Their work was uncommitted in scratch worktrees, i.e. invisible to every branch
+search. Snapshotted and pushed as WIP commits before anything else:
+
+| Branch | State | Note |
+|---|---|---|
+| x425/fits | DONE b9c04f57 | verified, gate green bar pre-existing notif-audit |
+| x425/bots | DONE 7abfec02 | census only, purge list awaits Tom |
+| x425/mockup-today-b | DONE 3059a895 | 3 variants, shots sent to Tom, awaiting pick |
+| x425/wheel | committed 82488294, pushed | agent cancelled before its gate result was read |
+| x425/appcore | WIP 67898dc6 | UNVERIFIED: 4 items coded, 3 new audits, no prove-red/gate |
+| x425/css | WIP f9bf7181 | UNVERIFIED: 98 lines app.css, no prove-red/gate |
+| x425/wanderer | WIP 745fc47e | UNVERIFIED: js/water.js exists, so the recon gate evidently PASSED, but its verdict was never reported. Do not trust until re-verified. |
+| x425/pit | RUNNING | resumed, Tom approved cropping the wanderer's tail |
+
+NONE of the WIP branches may merge without redoing prove-red + gate.
