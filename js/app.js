@@ -4058,15 +4058,28 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
  * different job. Gwart CARVED him: he talks ABOUT the boy, in the third person,
  * and what he says is meant to be worth acting on. He started with the
  * seventeen lines of the approved R3 mockup (today-preview/today-mockup.html),
- * reproduced verbatim rather than rewritten and sorted into the same state
- * buckets speechLine uses so a line arrives because it is TRUE right now. All
- * seventeen are still in here; the buckets around them were filled out in v424
- * because seventeen lines across nine states is two or three per state, and a
- * state you sit in all morning then reads as one line on a loop.
+ * sorted into the same state buckets speechLine uses so a line arrives because
+ * it is TRUE right now. The buckets around them were filled out in v424 because
+ * seventeen lines across nine states is two or three per state, and a state you
+ * sit in all morning then reads as one line on a loop. Eleven of the seventeen
+ * are still here verbatim; the other six went in the tone pass below.
  *
  * COPY RULES, and they are Tom's taste contract rather than my preference: dry,
  * no exclamation marks, no hype, no ad-speak, and never a scold. Useful first
  * (what to do next, what is worth doing today, what is new), funny second.
+ *
+ * AND THE REGISTER IS WRY, NOT WEARY. Tom, reading the first v424 catalogue:
+ * "the lines feel a little sad or something, let's make them a bit lighter."
+ * The brief that produced them said dry, weary, has seen every player make the
+ * same mistakes, and weary tipped into melancholy: he mourned the boy's old
+ * life ("He does not remember being a pile. I do."), pitied himself ("He has
+ * never once complained. I make up for it.") and sounded lonely ("I am old, not
+ * busy. Take your time."). Twenty-one lines were rewritten. He is an old man
+ * ENJOYING himself and fond of the thing he made: curious about what you will
+ * do next, proud of his own joinery, amused by the bonehead. The bonehead is
+ * the comic object and Gwart is the straight man who likes him. Lighter does
+ * NOT mean louder: no cheering, no praise for its own sake, nothing a marketing
+ * email would say. He can be pleased without celebrating.
  *
  * SAME STRUCTURE AS speechLine ON PURPOSE: the urgent states return early in
  * priority order, and everything below that is chatter POOLED and picked
@@ -4125,29 +4138,29 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
   const hour = new Date().getHours();
   if (crates.length) return [
     'A crate by his feet, still shut. I gave him hands for this.',
-    'That crate has been sitting there since I got here.',
-    'Nothing in a shut crate has ever done anybody good.',
+    'That crate has been there since I arrived. I am curious.',
+    'Nobody was ever dressed by a crate that stayed shut.',
     'The crate is not a decoration. It opens.',
     'Open the crate. I want to see what he is wearing next.',
-    'I have seen crates sit shut for weeks. Yours is shut.',
+    'Open it. I have a guess about what is in there.',
     'Whatever is in there is already yours. Go and look.',
     'A shut crate is just a box. Make it something else.',
   ];
   if (!isToday) return [
     'Yesterday is set. You cannot re-cut a finished thing.',
-    'Old ground. Nothing to log back here.',
-    'That day is carved. Look if you like. It will not move.',
-    'Back here the numbers are done. Today is the one that pays.',
-    'You are behind the boy, not beside him. Nothing to feed.',
+    'Nothing to log back here. Have a browse if you like.',
+    'That day is carved. Admire it, but you cannot sand it.',
+    'Back here it is all finished. Today is where the work is.',
+    'You have wandered off behind him. He is up ahead.',
     'I keep the old days for reading, not for fixing.',
-    'No work back here. The work is where he is standing.',
+    'History is a decent read. He is a better one.',
   ];
   if (cropsRipe) return [
     'The garden is ready. I watered it. You pick it.',
     cropsRipe === 1 ? 'One bed is done. Go on before something else finds it.'
       : `${cropsRipe} beds are done. Go on before something else finds them.`,
     'Ripe. It will not get riper standing there.',
-    'The patch is finished. Take it in before the weather turns.',
+    'The patch came up well. I take some credit for that.',
     'Ready out the back. It keeps a while, not forever.',
     'Pick it and it goes in the pot. That is the whole loop.',
     'I do the growing. The carrying is yours.',
@@ -4164,9 +4177,9 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
     'Nothing logged yet. He runs on what you eat. Feed the boy.',
     'Empty ledger so far. He is patient. I am less so.',
     hour < 11 ? 'Morning. The ledger is blank. It usually starts that way.'
-      : 'Still nothing written down. The day is getting on.',
+      : 'Half the day gone and not a crumb on the page.',
     'Whatever you ate, write it. Accurate beats flattering.',
-    'The ledger is where he came from. Nothing in it yet.',
+    'Feed the ledger and he does the rest. Fair deal.',
     'No entries. He will stand here all day. He is good at it.',
     'Log the first thing. The rest tends to follow.',
     'Nothing yet. Even a rough guess beats a blank.',
@@ -4176,7 +4189,7 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
     'Good protein today. His frame will take it from here.',
     'Protein done. The rest of the day is yours to spend.',
     'That is the material I need. The rest of it is fuel.',
-    'Enough protein in him to hold the joints together.',
+    'Protein enough to hold his joints. He will rattle less.',
     'Protein met. I will not pretend I am not pleased.',
   ];
   if (targets && tot.kcal > targets.kcal) return [
@@ -4184,14 +4197,14 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
     'Written down as it happened. That is the only rule I have.',
     'Over, and recorded. I have no notes and no opinion.',
     'A large day. They happen. The ledger does not flinch.',
-    'Numbers are numbers. You wrote them down. That is the work.',
+    'Big numbers, honestly kept. He is not going to argue.',
     'Big one. Nothing to fix, nothing to explain to me.',
   ];
   if (targets && targets.kcal - tot.kcal <= 350 && targets.kcal - tot.kcal > 0) return [
     'You are close. Finish it the way you started.',
     'Nearly there. No need to get clever at the end.',
-    'Room for one more thing. Choose it properly.',
-    'Almost there. The last stretch is the easy part to lose.',
+    'Room for one more thing. Make it something you like.',
+    'Almost there. This is the enjoyable part of a day.',
     'A little left in the day. Spend it on something good.',
     'Close enough to see it. Walk it in.',
   ];
@@ -4214,7 +4227,7 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
       'Something in the Pit is worth hitting. He volunteers.',
     ] : []),
     ...(hour >= 23 || hour < 5 ? [
-      'Late. I keep these hours. He does not need to.',
+      'Late. He sleeps standing up. I have never seen it work.',
       'Late log. I am always up. That is not a recommendation.',
       'The small hours. Write it down and go to bed.',
     ] : []),
@@ -4227,20 +4240,20 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
   return [
     ...chatter,
     'Two hundred and six pieces. I know where every one goes.',
-    'You keep coming back, so he keeps standing up.',
+    'He does very little without you. Deliberate design.',
     'Straight back. Good. I worried about that spine.',
-    'He does not remember being a pile. I do.',
+    'He has no memory of being a pile of parts. Lucky him.',
     'The Stable is through that door. Nobody ever looks left.',
     'I carve. You feed. He walks. Nobody has improved on it.',
-    'He was quieter before he could stand. Not better. Quieter.',
+    'He has opinions now. I did not carve those in.',
     'Everyone thinks the hat is the important part of him.',
     'I have made hundreds of these. This is the one I watch.',
     'There is a wardrobe. He is not going to dress himself.',
     'A day you write down is a day he gets to keep.',
     'He is not fussy. He will wear whatever you leave out.',
     'People ask what he is made of. Mostly attendance.',
-    'I am old, not busy. Take your time.',
-    'He has never once complained. I make up for it.',
+    'Take your time. I am enjoying the view from here.',
+    'He never complains. I find that slightly suspicious.',
     'Tap me again if you like. I have a lot of these.',
   ];
 }
