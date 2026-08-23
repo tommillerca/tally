@@ -3462,6 +3462,15 @@ async function renderToday(el) {
   const C = 2 * Math.PI * 66;
   const prev = S.ui;
   const protHit = t.p && tot.p >= t.p;
+  /* MOCKUP pass two (branch x425/mockup-today-v2): "the day owns everything".
+     One day header, arrows inside it, and every day-scoped section nested under
+     it. ?mockd=1 rail, 2 container, 3 band. Variant 2 evicts the promo banner
+     BELOW the day; 1 and 3 evict it UP, next to the quests. */
+  const MOCKD = new URLSearchParams(location.search).get('mockd') || '1';
+  document.body.classList.remove('mockd1', 'mockd2', 'mockd3');
+  document.body.classList.add('mockd' + MOCKD);
+  const promoUp = MOCKD !== '2';
+  const promoHtml = isToday ? `<div class="promo-slot">${hypeBannerHtml()}${'<details class="rr-banner" id="raceResultCard" hidden></details>'}</div>` : '';
 
   el.innerHTML = `
   <!-- The scene is CORAL by default (the deck's hero colour), but an equipped
@@ -3578,33 +3587,8 @@ async function renderToday(el) {
     <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(24)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
 
-  ${isToday && topNudge ? `
-  <div class="ul-wrap${topNudge.action === 'logfood' ? ' has-skip' : ''}">
-  <button class="card unlock-nudge" id="unlockNudge" data-ulaction="${topNudge.action}">
-    <span class="ul-ico">${topNudge.hero === 'food' ? ICONS.boltStroke(20) : topNudge.hero === 'ward' ? ICONS.bone(20) : ICONS.pit(24)}</span>
-    <span class="ul-txt"><b>${esc(topNudge.nudge)}</b><small>${
-      topNudge.action === 'logfood' ? 'Tap to log your first meal'
-      : topNudge.action === 'pit' ? 'Tap to enter The Pit'
-      : topNudge.hero === 'ward' ? 'Tap to open your Wardrobe'
-      : 'Tap to open Build and spend it'}</small></span>
-    <span class="ul-chev">›</span>
-  </button>
-  ${/* The way out. Not a dismissal of the card: skipping falls through to
-       whatever the next nudge is, so somebody who does not want to log right
-       now still gets pointed at the fight, the crates or their gear. */''}
-  ${topNudge.action === 'logfood' ? '<button class="ul-skip" id="ulSkip">Not right now</button>' : ''}
-  </div>` : ''}
-
-  ${isToday && hkStale ? `
-  <button class="card hk-stale" id="hkStaleFix">
-    <b>⚠️ Steps aren't syncing</b>
-    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
-  </button>` : ''}
-
-  ${isToday ? hypeBannerHtml() : ''}
-
-  ${isToday ? '<details class="rr-banner" id="raceResultCard" hidden></details>' : ''}
-
+  ${/* MOCKUP (pass-one baseline, already approved): the unlock nudge is gone and
+       quests sit directly under the four hub chips. */''}
   ${isToday ? `
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
     <summary><span class="q-sum-ico">${ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
@@ -3633,16 +3617,43 @@ async function renderToday(el) {
     </div>
   </details>` : ''}
 
-  <div class="day-strip">
-    <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
+  ${/* ===== MOCKUP pass two: the promo/announcement banner is EVICTED from the
+       day flow. Variants 1 and 3 park it here, above the day anchor, with the
+       quests it belongs beside; variant 2 sends it below everything. Either way
+       it stops interrupting the line between the day header and the day. ===== */''}
+  ${promoUp ? promoHtml : ''}
+
+  ${/* ===== MOCKUP pass two: THE DAY OWNS EVERYTHING. One header, with the day
+       arrows and the gear INSIDE it, and every day-scoped section nested under
+       it inside .dayflow. The orphan `< TODAY Aug 22 > [gear]` row is gone; this
+       IS that row, promoted to the anchor it was always governing. Nesting is
+       expressed three ways, one per variant, all in CSS:
+         mockd1  a hairline rail down the left, header pins and condenses
+         mockd2  one container well, header is its titlebar, nothing pins
+         mockd3  a full-bleed header band, content indented under it, band pins
+       ===== */''}
+  <section class="dayblk">
+  <div class="dayhdr-pin" id="dayHdrPin"></div>
+  <div class="dayhdr" id="dayHdr">
     <div class="day-title">
       <h1>${title}</h1><div class="sub">${sub}</div>
       <input type="date" id="datePick" value="${S.date}" aria-label="Pick date">
     </div>
+    ${/* the number that survives the scroll in mockd1; CSS hides it elsewhere */''}
+    <span class="dh-kcal"><b>${Math.abs(remaining).toLocaleString()}</b> ${over ? 'over' : 'left'}</span>
+    <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
     <button class="icon-btn" id="nextDay" aria-label="Next day"><svg viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></svg></button>
     <button class="icon-btn" id="todaySettings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke-width="2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
   </div>
 
+  <div class="dayflow">
+  ${isToday && hkStale ? `
+  <button class="card hk-stale" id="hkStaleFix">
+    <b>⚠️ Steps aren't syncing</b>
+    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
+  </button>` : ''}
+
+  <section class="tsec"><div class="tsec-h">Calories</div>
   <div class="card ring-card">
     <div class="ring-wrap">
       <svg viewBox="0 0 158 158">
@@ -3664,15 +3675,22 @@ async function renderToday(el) {
       ${macroRow('Fat', tot.f, t.f, 'fat', prev.macroPcts[2], false)}
     </div>
   </div>
+  </section>
 
-  ${isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday) : ''}
-  ${isToday ? kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe) : ''}
-  ${healthCardHtml(hk, isToday)}
+  ${isToday && wellness ? `<section class="tsec"><div class="tsec-h">Wellness</div>${wellnessCardHtml(wellness, routines, routinesDoneToday)}</section>` : ''}
+  ${isToday && kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe) ? `<section class="tsec"><div class="tsec-h">Kitchen</div>${kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe)}</section>` : ''}
+  ${healthCardHtml(hk, isToday) ? `<section class="tsec"><div class="tsec-h">Activity</div>${healthCardHtml(hk, isToday)}</section>` : ''}
 
+  <section class="tsec tsec-meals"><div class="tsec-h">Meals</div>
   ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
+  </section>
 
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
   ${isToday ? `<p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>` : ''}
+  </div>
+  </section>
+
+  ${promoUp ? '' : promoHtml}
   ${LOG_ONLY_LINE}
   `;
 
@@ -3689,6 +3707,23 @@ async function renderToday(el) {
   }));
   tweenNumber($('#ringBig', el), prev.remainShown ?? remaining, Math.abs(remaining), 650, v => Math.round(Math.abs(v)).toLocaleString());
   S.ui = { ringPct: pct, remainShown: Math.abs(remaining), macroPcts };
+
+  /* MOCKUP pass two: condense the day header once it actually pins (mockd1 and
+     mockd3 only; mockd2's header is a static titlebar by design, so it never
+     gets .cond and the shot capture asserts that). The sentinel keeps its flow
+     offset while the sticky header is stuck, so the threshold cannot feed back
+     on itself. The handler unhooks itself when a re-render replaces the header. */
+  if (MOCKD !== '2') {
+    const hdr = $('#dayHdr', el), pin = $('#dayHdrPin', el), scr = el.closest('.screen');
+    if (hdr && pin && scr) {
+      const onScroll = () => {
+        if (!hdr.isConnected) { scr.removeEventListener('scroll', onScroll); return; }
+        hdr.classList.toggle('cond', scr.scrollTop >= pin.offsetTop - 6);
+      };
+      scr.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    }
+  }
 
   $('#todaySettings', el)?.addEventListener('click', () => { location.hash = '#/settings'; });
   $('#prevDay').addEventListener('click', () => { S.date = addDays(S.date, -1); refresh(); });

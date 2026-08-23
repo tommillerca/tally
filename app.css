@@ -10033,3 +10033,107 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .arena.boss-wanderer .fighterG:not(.foe-side) { transform: translateX(-52px); z-index: 3; }
 .arena.boss-wanderer .fighterG:not(.foe-side) > .fstage { transform: scale(.58); transform-origin: bottom center; }
 .arena.boss-wanderer .pet-fighter { transform: translateX(14px); z-index: 4; }
+
+/* ================================================================ *
+ * MOCKUP: Today pass two, "the day owns everything".
+ * Branch x425/mockup-today-v2. Visual mockup for Tom's pick; nothing here
+ * ships unapproved and the whole block deletes wholesale if none does.
+ *
+ * Pass one unified the card SKIN and Tom's verdict was that the screen still
+ * had no ANCHOR. So: ONE day header, with the day arrows and the gear INSIDE
+ * it (the old floating `< TODAY Aug 22 > [gear]` row is that header now), and
+ * every day-scoped section nested under it in `.dayflow`. Promo banners are
+ * evicted out of the day entirely. Variants ride a body class from ?mockd=N
+ * and differ only in HOW the nesting is expressed:
+ *   mockd1  a hairline rail down the left; header pins and condenses, keeping
+ *           the day name, the arrows and kcal-left on screen
+ *   mockd2  one container well; the header is its titlebar; nothing pins
+ *   mockd3  a full-bleed header band the content steps in behind; the band
+ *           pins as day identity only, carrying no numbers
+ * No new colours, no gradients, no glows: --surface-2, --line, --line-strong,
+ * --sh-sm and the incumbent .card / .icon-btn / .sect-h idioms only.
+ * ================================================================ */
+
+.dayhdr-pin { height: 0; }
+.dayblk { margin-top: 4px; }
+
+/* the header. LEFT-ALIGNED on purpose: a centred title flanked by arrows is
+   exactly the floating-nav read Tom objected to. Title left, controls right,
+   and everything day-scoped hangs off it. */
+.dayhdr { display: flex; align-items: center; gap: 6px; }
+.dayhdr .day-title { flex: 1; text-align: left; min-width: 0; }
+.dayhdr .day-title h1 { font-size: 25px; line-height: 1.08; }
+.dayhdr .day-title .sub { font-size: 12.5px; }
+.dayhdr .icon-btn { width: 38px; height: 38px; }
+.dayhdr .dh-kcal {
+  display: none; font-size: 13px; color: var(--text-3); font-weight: 600;
+  white-space: nowrap; font-variant-numeric: tabular-nums; margin-right: 2px;
+}
+.dayhdr .dh-kcal b { color: var(--text); font-weight: 800; font-size: 15.5px; }
+
+/* the nested sections: one skin, one header idiom, one rhythm. Kept from pass
+   one, which Tom accepted as far as it went. */
+.tsec { margin-bottom: 16px; }
+.tsec-h {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-3); margin: 0 2px 6px;
+}
+.tsec .card { margin-bottom: 0; }
+.tsec .wellness-card > .sect-h:first-child,
+.tsec > .card > .card-title:first-child { display: none; }
+/* meals join the sibling set: same panel treatment as .card (the hand-inked
+   surface at app.css:972), so a meal is a section like every other one. */
+.tsec-meals .meal {
+  background-color: var(--surface); background-image: var(--grain);
+  background-size: 150px 150px; background-blend-mode: soft-light;
+  border: 2px solid var(--ink); border-radius: var(--radius);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.32), inset 0 0 0 1.5px rgba(242, 233, 215, 0.10);
+  padding: 4px var(--pad) 12px; margin-bottom: 10px;
+}
+.tsec-meals .meal:last-child { margin-bottom: 0; }
+
+/* ---- mockd1: the rail. A hairline spine down the left of the day, so every
+   section visibly hangs off the header rather than stacking beside it. ---- */
+body.mockd1 .dayhdr {
+  position: sticky; top: 0; z-index: 15;
+  background: var(--bg); margin: 0 calc(-1 * var(--pad));
+  padding: 4px var(--pad) 10px;
+}
+body.mockd1 .dayflow {
+  border-left: 2px solid var(--line-strong); padding-left: 13px; margin-left: 4px;
+}
+body.mockd1 .dayhdr.cond {
+  padding: calc(var(--sat) + 9px) var(--pad) 9px;
+  border-bottom: 1px solid var(--line-strong); box-shadow: var(--sh-sm);
+}
+body.mockd1 .dayhdr.cond .day-title { display: flex; align-items: baseline; gap: 7px; }
+body.mockd1 .dayhdr.cond .day-title h1 { font-size: 18px; }
+body.mockd1 .dayhdr.cond .day-title .sub { margin-top: 0; }
+body.mockd1 .dayhdr.cond .dh-kcal { display: block; }
+
+/* ---- mockd2: the container. The day is one well and the sections are things
+   INSIDE it; the header is its titlebar. Containment instead of indentation,
+   so nothing pins and the day has a visible end as well as a start. ---- */
+body.mockd2 .dayblk {
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius); padding: 12px 10px; margin-top: 8px;
+}
+body.mockd2 .dayhdr {
+  padding: 0 4px 10px; border-bottom: 1px solid var(--line); margin-bottom: 12px;
+}
+body.mockd2 .tsec:last-of-type { margin-bottom: 4px; }
+
+/* ---- mockd3: the band. The header runs full-bleed, wider than anything under
+   it, and the content steps in behind it. Pins as identity only: no numbers
+   ride along, which is the point of the variant. ---- */
+body.mockd3 .dayhdr {
+  position: sticky; top: 0; z-index: 15;
+  margin: 8px calc(-1 * var(--pad)) 14px; padding: 10px var(--pad);
+  background: var(--surface-2);
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+body.mockd3 .dayhdr.cond {
+  padding-top: calc(var(--sat) + 12px); box-shadow: var(--sh-sm);
+  border-top-color: transparent;
+}
+body.mockd3 .dayflow { padding-left: 12px; }
