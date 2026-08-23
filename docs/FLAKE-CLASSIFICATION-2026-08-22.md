@@ -49,6 +49,50 @@ is the machine, not the code.
 
 ### 1. Mis-timed sample, now FIXED. `boneyard` ARRIVAL and ARRIVAL-SLOW
 
+> **CORRECTION, 2026-08-23. The mechanism below is WRONG, and the rows it
+> describes cannot fail.** A second session, reading Reggie's stranded 2026-08-20
+> work on the same file, identified the constant 9 as the MAP LEGEND, not as
+> markers inside the fade. Measured inside the real audit (a standalone probe
+> cannot reproduce it: without the GL args and the geolocation override the map
+> never opens and everything reads zero):
+>
+> ```
+> #mapLegend   exists, hidden
+>   inside:    5 .map-spawn + 3 .map-den-mark + 1 .map-mini-mark = 9
+>   outside:   57 real markers
+>   legend swatch computed opacity = 1
+>   audit counts visible = 66
+> ```
+>
+> `mapLegendHtml()` builds the key out of the real marker markup on purpose so
+> the key cannot drift from the map, `#mapLegend` sits inside `#mapStage`, and
+> `getComputedStyle().opacity` does NOT return 0 for a `display:none` element: it
+> returns the specified value, which is 1 once `.markers-in` lands. The audit's
+> counters are unscoped `document.querySelectorAll`, so all nine are counted as
+> visible markers in every run.
+>
+> So `dom@reveal 65` was about 56 real markers plus the key, and `vis@reveal 9`
+> was the key alone. It was never evidence about the 220ms fade.
+>
+> **The consequence is worse than the wrong story.** Both replacement rows go
+> GREEN on a Boneyard that draws zero real markers, because the legend still
+> supplies 9: `revealDom > 0` is 9, and `revealSettled >= revealDom` is 9 >= 9.
+> A guard that cannot fail, shipped in the same PR as the ratchet built to catch
+> guards that cannot fail.
+>
+> The settled re-read is still a real improvement and the withholding row still
+> caught its prove-red, but it grades contaminated numbers. The fix is to scope
+> the selectors to `maplibregl-marker`, which MapLibre stamps only on nodes it
+> owns (`js/map.js:200`), and to add a row asserting the map drew a plausible
+> number of markers rather than merely non-zero. That work is owned by the
+> session porting Reggie's ARRIVAL changes, not by this document.
+>
+> Kept rather than rewritten, because the wrong reasoning is the useful part: I
+> read a suspiciously constant number as a timing artefact without checking what
+> was being counted, having spent the same day insisting that measurement beats
+> inference.
+
+
 **First diagnosis in this document was wrong and is corrected here.** It read as a
 stale guard whose precondition (POI count bounded at 11-15) had been overtaken by
 rising spawn density, against a two-wave reveal that `js/map.js` documents as
