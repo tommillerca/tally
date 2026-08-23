@@ -133,24 +133,48 @@ check('MERGE  notifPrefs merges stored-over-DEFAULTS so an omitted siege reads t
   `merged.siege=${merged?.siege}`);
 
 /* ------ 4. #notifTest fires notifyNow ------ */
-/* Stub Notification.requestPermission to always return 'granted' so
-   requestNotifPermission on 'web' returns true (headless permission
-   override should already do this, but the stub is a belt to the
-   overridePermissions braces). Also stub Notification constructor + the
-   SW registration's showNotification so notifyNow's success path can
-   complete without actually raising an OS notification. */
-await page.evaluate(() => {
-  window.Notification = window.Notification || function () {};
-  Notification.permission = 'granted';
+/* GRANT IT FOR REAL IF THE BROWSER WILL, AND ONLY STUB IF IT WILL NOT.
+ *
+ * WHAT WAS WRONG HERE, because this row was RED on clean main for days and the
+ * app was innocent the whole time. The old stub did:
+ *
+ *     window.Notification = window.Notification || function () {};
+ *     Notification.permission = 'granted';
+ *
+ * Chrome HAS a Notification constructor, so the `||` keeps the real one, and
+ * `permission` is a read-only ACCESSOR on it, so the plain assignment silently
+ * no-ops. Measured under HEADLESS_MODE=shell: permission stayed 'denied' before
+ * and after the stub, notifyNow correctly returned false, and this row reported
+ * it as an app failure. The app was right and the test was wrong.
+ *
+ * overridePermissions is the honest mechanism and it is tried FIRST, but it
+ * does not work here either: measured on this machine it resolves without
+ * error and leaves Notification.permission at 'denied'. So the accessor is
+ * redefined, which is the only thing that takes, and only when the real grant
+ * has not already worked.
+ *
+ * AND THE PRECONDITION IS NOW ASSERTED. That is the actual defect this row had:
+ * it graded notifyNow's answer without ever checking that its own setup had
+ * taken effect, so it could only ever say "the app is broken" when the truth
+ * was "the stub did nothing". */
+try { await browser.defaultBrowserContext().overridePermissions(new URL(base).origin, ['notifications']); }
+catch { /* not supported here; the in-page fallback below covers it */ }
+const permPath = await page.evaluate(() => {
+  const real = Notification.permission === 'granted';
+  if (!real) Object.defineProperty(Notification, 'permission', { configurable: true, get: () => 'granted' });
   Notification.requestPermission = async () => 'granted';
-  /* If a SW registration exists, wrap its showNotification. If not, the
-     web branch falls back to `new Notification(...)`, which the stubbed
-     constructor above tolerates. */
+  /* If a SW registration exists, wrap its showNotification. If not, the web
+     branch falls back to `new Notification(...)`, which is real here and does
+     not throw once permission reads granted. */
   navigator.serviceWorker?.getRegistration?.().then(r => {
     if (r) { r.showNotification = async () => true; }
   });
+  return { granted: Notification.permission === 'granted', via: real ? 'browser grant' : 'redefined accessor' };
 });
 await sleep(200);
+check('CONTROL  the permission really reads granted before notifyNow is graded',
+  permPath.granted === true,
+  `Notification.permission = ${permPath.granted ? 'granted' : 'NOT granted'} via ${permPath.via}`);
 const fired = await page.evaluate(async () => {
   const { notifyNow } = await import('./js/notify.js');
   return await notifyNow('Vlad audit', 'test body');
