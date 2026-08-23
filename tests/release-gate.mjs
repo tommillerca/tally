@@ -33,6 +33,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 import { createServer } from 'node:http';
 import { readFile, stat, readdir } from 'node:fs/promises';
 import { extname, join as pjoin, normalize } from 'node:path';
+import { resolve as presolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const repoRoot = pjoin(here, '..');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
@@ -736,13 +738,41 @@ if (runAll) BROWSER.push(...FULL);
  * skipping is a decision on the record rather than a silent default.
  * Identity via --as <name> (or GATE_OWNER), because the release has to know whose
  * claim to leave and whose to respect. */
-const lockPath = pjoin(repoRoot, '..', 'CHAT-HANDOFF.md');
+/* THE LOCK HAS TO RESOLVE TO ONE FILE FROM EVERY WORKTREE, AND IT DID NOT.
+   It was `pjoin(repoRoot, '..', 'CHAT-HANDOFF.md')`, and repoRoot is wherever the
+   suite is running from. From the main clone that is the real handoff file. From
+   a DETACHED WORKTREE it is <scratchpad>/CHAT-HANDOFF.md, which does not exist,
+   so readLock() threw, returned null, and the gate printed "no lock line found,
+   continuing (nothing to contend with)" and ran. A fail-open lock that announces
+   it is safe.
+   Every worktree therefore had its own private lock and none of them excluded any
+   other. The protocol was added 2026-08-10 after three concurrent suite runs; on
+   2026-08-23 it happened again, three sessions and two release-gate runs at once,
+   because agents work in worktrees and physically could not claim it. The suites
+   do not fail honestly under that load, they fail as if the code were broken:
+   ARRIVAL-SLOW straggler latency reads 42ms idle and 342-461ms loaded against a
+   250ms budget, and two sessions separately came close to filing the machine as a
+   defect.
+   git-common-dir is the same path from the main clone and from every worktree it
+   owns (<main>/.git), so two levels up is the handoff directory for all of them. */
+function handoffDir() {
+  try {
+    const common = execFileSync('git', ['rev-parse', '--git-common-dir'],
+      { cwd: repoRoot, encoding: 'utf8' }).trim();
+    return presolve(repoRoot, common, '..', '..');
+  } catch {
+    return pjoin(repoRoot, '..');   // not a git checkout: behave as before
+  }
+}
+const lockPath = pjoin(handoffDir(), 'CHAT-HANDOFF.md');
 const owner = (process.argv.find(a => a.startsWith('--as='))?.slice(5)) || process.env.GATE_OWNER || '';
 const noLock = process.argv.includes('--no-lock');
 const LOCK_RE = /^(\s*GATE LOCK:\s*)(.*)$/m;
 let lockClaimed = false;
+let lockReadable = true;
 async function readLock() {
-  try { return (await readFile(lockPath, 'utf8')).match(LOCK_RE)?.[2]?.trim() ?? null; } catch { return null; }
+  try { return (await readFile(lockPath, 'utf8')).match(LOCK_RE)?.[2]?.trim() ?? null; }
+  catch { lockReadable = false; return null; }
 }
 async function writeLock(text) {
   try {
@@ -756,6 +786,14 @@ async function writeLock(text) {
 const held = await readLock();
 if (noLock) {
   console.log(`GATE LOCK: SKIPPED via --no-lock (line currently reads: ${held ?? 'unreadable'})\n`);
+} else if (held === null && !lockReadable) {
+  /* NOT "nothing to contend with". The lock could not be READ, so this run is
+     serialised against nothing and the operator cannot know that from a green
+     suite. Say the path, because the whole bug was this line reassuring people. */
+  console.log(`GATE LOCK: UNREADABLE at ${lockPath}`);
+  console.log('        This run is NOT serialised against other sessions. Timing rows');
+  console.log('        on a shared machine cannot be trusted. Create the file with a');
+  console.log('        "GATE LOCK: (free)" line, or pass --no-lock deliberately.\n');
 } else if (held === null) {
   console.log('GATE LOCK: no lock line found, continuing (nothing to contend with).\n');
 } else if (!/^\(free\)/i.test(held)) {
