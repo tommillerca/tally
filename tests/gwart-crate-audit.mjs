@@ -83,13 +83,29 @@ ok('SETUP Gwart is on Today with a line on the box', opening.length > 0, `"${ope
 ok('CONTROL the opening line of the session IS the crate reminder (the state reached Gwart, and CRATE_LINES still matches the catalogue)',
   CRATE_LINES.includes(opening), `"${opening.slice(0, 70)}"`);
 
-/* Ten real taps on the plaque, one app open. */
+/* TEN REAL TAPS ON THE TALK BOX, one app open.
+   IT USED TO TAP THE PLAQUE, and the plaque stopped being this control on
+   2026-08-23: Tom, 2026-08-22, "clicking on gwart should take you to an
+   explainer FAQ page", so #gwartBtn opens Gwart's Guide now and the box he is
+   speaking out of advances the line instead (renderToday, and the .gw-row
+   .gw-box.tb-done rule in app.css). NOTHING ABOUT WHAT THIS FILE GRADES MOVED:
+   the cap still lives in gwartLine, the box tap is still one of the three real
+   callers, and this is still a real mouse click at a real control's coordinates
+   rather than a call to gwartLine. Repointing the driver is the correct response
+   to a superseded instruction; loosening ONCE would not have been.
+
+   WAIT FOR tb-done, which the old 260ms did not have to. The box only takes
+   pointer events once the typer has finished with it, so a click fired mid-type
+   lands on a pointer-events:none element and the tap silently does nothing. */
 const tap = async () => {
-  const at = await page.evaluate(() => {
-    const b = document.getElementById('gwartBtn');
-    if (!b) return null;
-    const r = b.getBoundingClientRect();
-    return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+  const at = await page.evaluate(async () => {
+    for (let i = 0; i < 40; i++) {
+      const b = document.querySelector('.gw-row .gw-box.tb-done');
+      const r = b?.getBoundingClientRect();
+      if (r && r.width) return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      await new Promise(r2 => setTimeout(r2, 100));
+    }
+    return null;
   });
   if (!at) return false;
   await page.mouse.click(at.x, at.y);
