@@ -108,8 +108,28 @@ ok(`RATCHET literal expectation constants with no dated provenance do not rise a
   undated.length <= CEILING,
   `${undated.length} of ${found.length} undated. ` +
   (undated.length > CEILING
-    ? `A pinned expectation must cite its source instruction and date within 7 lines above. For example: ${undated.slice(-3).map(c => `${c.file}:${c.line} ${c.name}`).join(', ')}`
+    ? `${undated.length - CEILING} more than the ceiling. A pinned expectation must cite its source instruction and date within 7 lines above.`
     : 'ratchet holding'));
+
+/* NAME THE CULPRITS WHEN IT TRIPS. The first person to hit this ratchet (2026-08-23,
+   scoping the boneyard marker selectors) got a bare "70 of 72" and dated the WRONG
+   constant, because the row printed three arbitrary examples in scan order and this
+   matcher only counts bracketed literals containing strings. They found the real one
+   by trial. A ratchet that says "something you touched is undated" without saying
+   what is a puzzle, not a guard, so on failure print the whole list grouped by file:
+   the offender is almost always in a file the author just edited, which makes it
+   obvious by inspection even at this length. Only on failure, so a green run stays
+   one line. */
+if (undated.length > CEILING) {
+  const byFile = new Map();
+  for (const c of undated) (byFile.get(c.file) ?? byFile.set(c.file, []).get(c.file)).push(c);
+  console.log(`\n    every undated pinned expectation (${undated.length}), grouped by file.`);
+  console.log('    Yours is almost certainly in a file you just edited:');
+  for (const [file, cs] of [...byFile].sort()) {
+    console.log(`      ${file}`);
+    for (const c of cs) console.log(`          :${c.line}  ${c.name}`);
+  }
+}
 
 /* ---- THE REVIEW LIST ---------------------------------------------------- */
 /* Not a failure. The point of a date is that it can be READ, so the oldest
