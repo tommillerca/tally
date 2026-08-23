@@ -580,6 +580,23 @@ export async function syncProfile(snapshot, appV = '') {
 // push the ciphertext. Never throws to the caller path; returns ok/false.
 export async function pushBackup(appV = '') {
   try {
+    /* THE OPT-OUT IS A WRITE GUARD, NOT JUST A RESTORE ONE. `cloudOff` used to
+       be read in exactly one place, bootSync's restore path, so Settings ->
+       Cloud backup -> Off stopped the download and left the UPLOAD running on
+       every boot and resume through autoSync. The player was told "your progress
+       will only live on this phone" and privacy.html said the same. The save is
+       end-to-end encrypted, so nothing readable was ever exposed, and that is
+       the only reason this was a broken promise rather than a leak: somebody who
+       opts out is not asking for their data to be unreadable, they are asking
+       for it not to be sent.
+
+       The guard is HERE and not in the callers because all four of them
+       (autoSync, both Go Online buttons, the cbOn toggle) converge on the one
+       `signedFetch('PUT', '/backup')` below, and gating any one caller would
+       leave the other three open. cbOn sets the flag before it calls this, so
+       turning backup back on still pushes immediately.
+       tests/cloud-optout-audit.mjs, proven red against the missing guard. */
+    if (await kvGet('cloudOff', false)) return false;
     const snapshot = await exportAll();
     const blob = await encryptBackup(snapshot);
     const r = await signedFetch('PUT', '/backup', { blob, appV });
