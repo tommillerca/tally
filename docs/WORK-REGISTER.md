@@ -47,8 +47,10 @@ See `SHIP-LEDGER.md` for what counts as LIVE.
   wordmark. Own line costs +32px.
 - **Today**: nothing below the nav cards, so the calorie ring and food log fall
   below the fold on a food tracker's home screen.
-- **README** claims "No accounts, no tracking, no server" while the app runs a
-  Worker with D1 and uploads spire coordinates.
+- ~~**README** claims "No accounts, no tracking, no server"~~ **FIXED**, PR #88
+  merged 2026-08-23 as `0bc2df8b`. `privacy.html` followed in PR #89
+  (`716f6325`). Both documents are now accurate. What is LEFT is not wording:
+  see "Cloud backup off does not stop uploads" below.
 
 ## Waiting on Tom (blocking me)
 
@@ -61,7 +63,7 @@ See `SHIP-LEDGER.md` for what counts as LIVE.
 | 5 | Today: nothing below the nav cards | A 688px hero puts the calorie ring and food log below the fold on a food tracker's home screen. Product call. |
 | 6 | Today: the pet loses its name | `PET_LINES` had the app's only named speaker. Gwart comments on the pet instead, so the pet's name no longer appears on Today. |
 | 7 | Today: retired jokes | About a third of the skeleton's best lines don't survive, because the joke is that he is talking about himself and Gwart cannot carry it. |
-| 8 | README privacy claim | It says "No accounts, no tracking, no server" and location "never stored or uploaded", while the app runs a Worker + D1 and uploads spire lat/lng. Needs fixing directly. |
+| 8 | ~~README privacy claim~~ **DONE** | Fixed in PR #88 (`0bc2df8b`), both claims traced to code and rewritten. `privacy.html` followed in PR #89 (`716f6325`) with a full "Location and the map" section. Wording is done in both documents; the live item is now the cloud-backup toggle bug below. |
 
 ## Delivered, awaiting his look
 
@@ -84,6 +86,24 @@ See `SHIP-LEDGER.md` for what counts as LIVE.
 | Emporium yellow + grain + Dynamic Island | agent running. |
 | Wanderer creature + Glutton changes | not started. Art at `~/Downloads/design_handoff_wanderer/`. |
 
+## Live on the public repo
+
+- **privacy.html location disclosure.** PR #89 squash-merged 2026-08-23 as
+  `716f6325`. New "Location and the map" section: foreground-only permissions
+  (verified in both native manifests), locally generated spawns, the `/spires`
+  ~2.2 km grid poll, the 80 m claim that sends the tower's lat/lng, and the
+  third-party tile host `tiles.openfreemap.org`. Two further false claims went
+  with it: "stay fully anonymous by not going online" (the key is registered when
+  onboarding completes, and analytics have no opt-out) and "no account".
+  Confirmed by fetching the live file from raw.githubusercontent.com.
+- **README privacy wording.** PR #88 squash-merged 2026-08-23 as `0bc2df8b`.
+  Both false claims ("No accounts, no tracking, no server"; location "never
+  stored or uploaded") are gone, replaced with wording traced through
+  `js/social.js`, `server/src/index.js`, `js/analytics.js` and `js/spires.js`.
+  Every claim that was KEPT was re-verified too, so the fix does not introduce a
+  new false one. Confirmed by fetching raw.githubusercontent.com, not from a
+  local checkout: 0 occurrences of either claim. This unblocks PR #87.
+
 ## Merged to main, NOT yet live
 
 - **Emporium idle cost.** PR #85 squash-merged 2026-08-23 as `d8819940`.
@@ -105,25 +125,51 @@ collision · v414 wordmark rule · v415 wordmark geometry.
 
 ## Known broken
 
+- ~~**Cloud backup OFF does not stop uploads.**~~ **FIX OPEN: PR #90**, branch
+  `fix/cloud-backup-optout`. One guard inside `pushBackup`, where all four
+  callers converge on the app's only `signedFetch('PUT', '/backup')`. Measured
+  before the fix: with the REAL Settings Off button pressed, the server received
+  a 116,074-byte `PUT /backup` after the player opted out. Encrypted, so it was a
+  broken promise rather than a leak. No wording changes: it makes privacy.html's
+  existing sentence and the Settings toast true as written. New guard
+  `tests/cloud-optout-audit.mjs`, FAST tier, proven red against
+  `git show origin/main:js/social.js`. Two of its own rows were thrown away for
+  being unfailable first (a reload-based BOOT row that `navigator.webdriver`
+  makes vacuous, and a source-count row that its own comment tripped).
 - **The published canvas "The Raising and the Talk Box"** shows blue with a
   missing image. The source file is fine; the seeded artifact is not. Mine to fix.
-- **A hub CHIP tap blanks the screen for ~100-200ms, and it is the same shape as
-  the "almost unplayable" tab-swap complaint.** Found sideways while measuring the
-  Emporium glow; logged here rather than fixed, and it is NOT in PR #85. Two
-  structural facts, both from a MutationObserver on real taps: hub chips route
-  through `renderBonehead` even when you are already on the hub (v421/v424 moved
-  them from `renderCharacter(wrap, tab)` to `openCharacter(tab)`, which was the
-  right call for arrival-whole), and `renderBonehead` writes a fresh
-  `<div id="chBody">`, so the screen is REBUILT wholesale rather than refilled.
-  Measured at 440x956 with CPU throttled x6, warm cache, on this Mac: the screen
-  sits unpainted 104-203ms per chip tap (shop 15-203, wardrobe 25-104, shop
-  14-122, talents 23-134), and the new screen is not painted until 116-215ms
-  after the tap. **The instrument has a positive control and needed one:** a
-  tab-bar route to Today reads 33-180ms on the same probe, and an earlier pass
-  read "never unpainted" for EVERY target including that control, because it
-  sampled `.screen > *` when app.css:7374 puts the hide on `.screen` itself. The
-  first numbers were discarded. The Gwart session owns this and asked for it to
-  be logged where Tom would see it; it is picking it up from here.
+- **A hub CHIP tap blanks the screen for ~90-200ms, and it is a COST, not a
+  regression: the blank IS the anti-ghosting fix.** Two sessions measured this
+  from opposite ends and the second one overturned the obvious conclusion, so
+  read the whole entry before touching it.
+
+  Structural, from a MutationObserver on real taps: hub chips route through
+  `renderBonehead` even when you are already on the hub, and `renderBonehead`
+  writes a fresh `<div id="chBody">`, so the screen is REBUILT wholesale rather
+  than refilled. Measured at 440x956, CPU x6, warm cache: unpainted 104-203ms per
+  chip tap, new screen not painted until 116-215ms after the tap, against a
+  tab-bar route reading 33-180ms on the same probe as a positive control.
+
+  The cause is **v424**, measured on both sides rather than recalled: on v423,
+  where chips called `renderCharacter(wrap, tab)`, chips were never unpainted
+  (control 152ms); on v424, where they call `openCharacter(tab)`, chips read
+  88-168ms on 4 of 4 (control 149ms).
+
+  **The one-word fix does not work and the next person will reach for it.**
+  Using `refresh()` instead of `route()` in `openCharacter`'s already-here branch
+  sends chips back to never-unpainted AND turns `handover-audit` red: 8 ghost
+  frames over 81ms on Wardrobe -> Shop. That audit landed in `f18d479f`, the same
+  v424, titled "the tab swap stops ghosting". Removing the blank trades a paint
+  delay for showing the player a half-built screen. Recorded as a comment-only
+  change on `perf/hub-chip-inplace`; there is no fix at that call site.
+
+  **Both probes written for this were blind at first and both were caught the
+  same way, by a positive control.** One reported "never unpainted" for every
+  target including a tab-bar route, because it sampled `.screen > *` when
+  app.css:7374 puts the hide on `.screen` itself. The other reported "never
+  unpainted" on a tree where the chip handler had been made a no-op. Any
+  re-measurement here keeps a tab-bar route in the run or it will reproduce the
+  wrong answer twice.
 - **The talk box ask is ~10% done.** Tom asked for typing dialogue "instead of the
   chat bubbles everywhere in the app". PR #69 converts ONE surface. Still bubbles:
   `.cele-bubble`, `.hlw-say`, `toast()`, and seven hint chips. The onboarding
@@ -172,7 +218,7 @@ Speed is settled and measured: **0.35 m/s, 21 m/min, 18 px/min at zoom 15.4, a
 |---|---|---|
 | C1 | Emporium settings gear | Its own line, +32px, taking the cost to 1.00 tile rows. 44.5% of its box currently lands on wordmark ink. |
 | C2 | Today: calorie ring and food log fall below the fold under a 688px hero | Needs your call. It is a food tracker's home screen. |
-| C3 | README claims "No accounts, no tracking, no server" | Fix the wording. The app runs a Worker with D1, holds a per-device identity and uploads spire lat/lng. |
+| C3 | ~~README claims "No accounts, no tracking, no server"~~ **DONE** | PR #88 merged as `0bc2df8b`. `privacy.html` followed in PR #89 (`716f6325`). |
 | C4 | Merge PR #72 (server races) | Your call: money-path write behaviour, verified locally only. Needs the D1 migration applied at deploy, not just a Worker push. |
 | C5 | Merge PR #73 (remove Today's bubble) | Merge. It also uncovers the fox mask the bubble was sitting on. |
 
@@ -213,9 +259,12 @@ audit · v420 wordmark made visible. Server races merged (PR #72).
 - **A 48px herb / food-find pixel marker.** Tom draws these in PixelLab. It
   cannot borrow an ingredient icon: the spawn does not know which ingredient it
   carries until collected.
-- **README privacy claim.** Says "No accounts, no tracking, no server" and
-  location "never stored or uploaded" while the app runs a Worker with D1, holds
-  a per-device identity and uploads spire lat/lng. Needs Tom's wording.
+- ~~**README privacy claim.**~~ **FIXED** in PR #88 (`0bc2df8b`, merged
+  2026-08-23). Verified gone from the live public repo, not just from a local
+  checkout. `privacy.html` followed in PR #89 (`716f6325`): a new
+  "Location and the map" section covering the ~2.2 km grid poll, the 80 m claim,
+  foreground-only permissions and the third-party tile host, plus two further
+  false claims removed. Wording is finished in both documents.
 - **`docs/INGEST.md`.** Nobody can ingest a new art batch from written
   instructions; the process that placed the 2048px SOL items onto the figure is
   not findable.
@@ -351,14 +400,13 @@ match his local tips exactly.
 
 ## 2026-08-22, cosmetics session: the rebuild stops eating the shop
 
-**State: PUSHED and OPEN as PR #86, awaiting merge. Tom authorised the push
-2026-08-22.** https://github.com/tommillerca/tally/pull/86 . Merge itself is
+**State: MERGED to main 2026-08-23 as #86, squash commit `2c032483`. CLOSED.** https://github.com/tommillerca/tally/pull/86 . Merge itself is
 still his call. Verified on the remote, not from the push output: `git ls-remote`
 tip matches local, and the remote's copy carries exactly the three files below.
 
 | branch | SHAs | holds |
 |---|---|---|
-| `fix/cosmetics-manifest-splice` | `074a2970`, `0a9b5c4e` | based directly on `origin/main` @ `f18d479f`. `scripts/build-cosmetics.py`, new `tests/manifest-exports-audit.mjs`, one line of `tests/release-gate.mjs`. |
+| `fix/cosmetics-manifest-splice` | `85c5c40e`, `e7b6aa1e` | REBASED 2026-08-22 onto `origin/main` @ `716f6325` (was `f18d479f`; #85, #88, #89 landed under it, none touching these files). Old SHAs `074a2970`/`0a9b5c4e` are dead. `scripts/build-cosmetics.py`, new `tests/manifest-exports-audit.mjs`, one line of `tests/release-gate.mjs`. |
 
 **THE BUG.** Re-running `scripts/build-cosmetics.py` destroyed the shop. Two
 separate halves, found in that order:
@@ -387,6 +435,12 @@ append only the new ids. `npm test` 186 + 91, pet-pool-audit and
 guard-hygiene-lint green. The new audit was prove-redded in four separate trees:
 broken import regex, empty glob, scan narrowed to ONE file (the case a bare
 not-zero bound passed), and a rebuild by the unpatched script.
+
+**RESOLVED: #84 merged as `13b3f20e`, then #86 as `2c032483`. The PURE conflict was
+resolved keeping both entries; both are on main and both lints pass. Original note:** Tom believed he had merged it; `gh pr view 84`
+reports state=OPEN, mergedAt=null, and `guard-provenance-lint.mjs` is absent from main.
+The last merges were #85, #88, #89. So #86 currently reports MERGEABLE/CLEAN, which is
+true only until #84 lands. That green is not evidence the conflict below went away.
 
 **CONFLICT, DO NOT RESOLVE BY GUESSING.** PR #84 also adds one line to the `PURE`
 array in `tests/release-gate.mjs`. Whoever merges second keeps BOTH filenames and
