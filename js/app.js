@@ -2834,10 +2834,49 @@ function bindWordmarkPull() {
  * It is also the ordinary phone convention (tap the tab you are on, get its root).
  * Guard: tests/tray-destination-audit.mjs fires this exact control from every
  * screen, the hub's siblings included, and asserts where it lands. */
+/* DOUBLE-TAP THE TAB YOU ARE ALREADY ON. Tom, 2026-08-22: "Double tapping today
+ * should bring you to the top of today. Double tapping the boneyard when you're
+ * in there should zoom in on your current location."
+ *
+ * NO NEW CAMERA MATH: the Boneyard's double-tap fires the map's OWN recentre
+ * control (#mapRecenter, openMap), which is one easeTo back to the player at
+ * MAP_START_ZOOM and also re-arms follow. It works while the button is hidden,
+ * which is its resting state until you drag the map.
+ *
+ * THE GUARD IS THE DANGEROUS HALF. A same-tab tap route()s, and route() rebuilds
+ * the screen from scratch: on the Boneyard that tears the live MapLibre instance
+ * down, so the first tap of a double would throw away the very map the second tap
+ * is meant to move. So on these two tabs a same-tab tap WAITS DBL_MS for a second
+ * one before it re-routes. Everything else is untouched: a cross-tab tap still
+ * navigates on the spot, the other two tabs still route on the spot, and a lone
+ * same-tab tap still lands exactly where tray-destination-audit says it must,
+ * 300ms later.
+ *
+ * A PENDING WAIT IS CANCELLED BY ANY TAB TAP, not just by the second of a double.
+ * Without that, tapping Today (same tab) and then Boneyard inside 300ms fires the
+ * stale timer AFTER the hashchange has already routed, and route() reads the
+ * CURRENT hash: the Boneyard would render twice and rebuild its map for nothing.
+ *
+ * And the double action falls back to route() when it cannot run (the Boneyard
+ * before the map is up is the real case, where the location gate is on screen and
+ * there is no #mapRecenter yet), because a tray tap that does nothing at all is
+ * the complaint the block above this one exists to answer. */
 function bindTabs() {
+  const TAB_DBL = {
+    today: () => { $('#screen')?.scrollTo({ top: 0, behavior: 'smooth' }); return true; },
+    boneyard: () => { const r = $('#mapRecenter'); r?.click(); return !!r; },
+  };
+  const DBL_MS = 300;
+  let dblTimer = 0;
   $$('#tabbar .tab').forEach(b => b.addEventListener('click', () => {
     const h = '#/' + b.dataset.tab;
-    if (location.hash === h) route(); else location.hash = h;
+    const second = !!dblTimer;
+    if (dblTimer) { clearTimeout(dblTimer); dblTimer = 0; }
+    if (location.hash !== h) { location.hash = h; return; }
+    const dbl = TAB_DBL[b.dataset.tab];
+    if (!dbl) { route(); return; }
+    if (second) { if (!dbl()) route(); return; }
+    dblTimer = setTimeout(() => { dblTimer = 0; route(); }, DBL_MS);
   }));
   $('#gearBtn')?.addEventListener('click', () => { location.hash = '#/settings'; });
   $('#fab').addEventListener('click', () => {
@@ -4200,7 +4239,32 @@ function gwPick(pool) {
   gwLast = line;
   return line;
 }
-const gwartLine = ctx => gwPick(gwartPool(ctx));
+/* THE CRATE REMINDER FIRES ONCE PER APP OPEN. Tom, 2026-08-22: "If you have an
+   unopened crate it's all Gwart talks about that many reminders is annoying."
+   The crate bucket is gwartPool's top early-return, so while a crate sat unopened
+   EVERY line he said was a crate line: the bag below cycles the eight of them and
+   he never reaches another subject.
+
+   WHERE THE CAP LIVES, and it is not in the pool. gwartLine is the one path all
+   three speaking callers take (the opening line renderToday emits, the tap on the
+   plaque, the idle timer), so capping here caps it wherever he speaks rather than
+   on the screen the bug was reported from. gwartPool stays PURE: it is also the
+   __gwartPool test seam, which harvests a state's whole catalogue, and a bucket
+   that deletes itself when you look at it is a seam that reports a different
+   answer every call.
+
+   ONCE PER OPEN, same idiom as gwEntranceSeen above: a module-level `let`
+   survives refresh() and route() (same document, same module instance) and dies
+   on a real reload, so the next app open is owed its one reminder again. Nothing
+   persisted. The crate context is dropped rather than the crate line skipped, so
+   he falls through to whatever else is true and keeps talking. */
+let gwCrateNagged = false;
+function gwartLine(ctx) {
+  if (!ctx.crates.length) return gwPick(gwartPool(ctx));
+  const owed = !gwCrateNagged;
+  gwCrateNagged = true;
+  return gwPick(gwartPool(owed ? ctx : { ...ctx, crates: [] }));
+}
 
 /* EVERY LINE HERE FITS THE BAND, and that is a hard constraint rather than a
    style note: .gw-box is 13px in the plaque's 90px band, and at 393x852 the box
