@@ -10080,7 +10080,7 @@ async function renderFriends(el) {
         const btn = p.you ? '<span class="lb-tag you">You</span>'
           : friendIds.has(p.playerId) ? `<span class="lb-tag crew">${ICONS.check(11)} Crew</span>`
           : outIds.has(p.playerId) ? '<span class="lb-tag sent">Sent</span>'
-          : `<button class="btn small ${inIds.has(p.playerId) ? '' : 'ghost'}" data-lbadd="${esc(p.friendCode)}">${inIds.has(p.playerId) ? 'Accept' : '+ Add'}</button>`;
+          : `<button class="btn small ${inIds.has(p.playerId) ? '' : 'ghost'}" data-lbadd="${esc(p.addToken)}">${inIds.has(p.playerId) ? 'Accept' : '+ Add'}</button>`;
         const ol = onlineLabel(p.lastSeen);
         const rank = i + 1;
         /* Top three get a bigger numeral and bigger art. The numeral is always
@@ -10160,7 +10160,7 @@ async function renderFriends(el) {
       const p = players.find(x => x.playerId === row.dataset.lbview);
       if (!p) return;
       openFriendProfile(
-        { name: p.name, playerId: p.playerId, friendCode: p.friendCode, lastSeen: p.lastSeen,
+        { name: p.name, playerId: p.playerId, addToken: p.addToken, lastSeen: p.lastSeen,
           profile: { outfit: p.outfit, pet: p.pet, level: p.level, levelName: p.levelName,
             badges: p.badges, stats: p.stats, gearCount: p.gearCount } },
         null,
@@ -10168,7 +10168,7 @@ async function renderFriends(el) {
     });
     $$('[data-lbadd]', body).forEach(b => b.addEventListener('click', async () => {
       b.disabled = true; b.textContent = '...';
-      const r = await social.friendRequest(b.dataset.lbadd);
+      const r = await social.friendAdd(b.dataset.lbadd);
       if (!r.ok) { b.disabled = false; b.textContent = '+ Add'; toast('Could not send that request. Try again.', 2600); return; }
       if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); b.outerHTML = `<span class="lb-tag crew">${ICONS.check(11)} Crew</span>`; }
       else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); b.outerHTML = '<span class="lb-tag sent">Sent</span>'; }
@@ -10353,11 +10353,11 @@ async function renderFriends(el) {
       <div class="t3-row">
         ${lbAvatar(p, 'lb-av')}
         <div class="t3-tx"><b>${esc(p.name)}</b><small>Level ${p.level}${p.badges ? ` · ${p.badges} badges` : ''} · ${esc(onlineLabel(p.lastSeen).text || 'online now')}</small></div>
-        <button class="btn ghost" data-lbadd="${esc(p.friendCode)}">+ ADD</button>
+        <button class="btn ghost" data-lbadd="${esc(p.addToken)}">+ ADD</button>
       </div>`).join('');
     $$('[data-lbadd]', list).forEach(b => b.addEventListener('click', async () => {
       b.disabled = true; b.textContent = '...';
-      const r = await social.friendRequest(b.dataset.lbadd);
+      const r = await social.friendAdd(b.dataset.lbadd);
       if (!r.ok) { b.disabled = false; b.textContent = '+ ADD'; toast('Could not send that request. Try again.', 2600); return; }
       if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
       else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); }
@@ -10445,7 +10445,7 @@ function openFriendProfile(f, onChange, opts = {}) {
           <button class="btn small" id="fpAliasSave">Save</button>
         </div>
       </div>`}
-      <p class="note" style="text-align:center;margin-top:12px">Friend code <b>${esc(f.friendCode)}</b></p>
+      ${f.friendCode ? `<p class="note" style="text-align:center;margin-top:12px">Friend code <b>${esc(f.friendCode)}</b></p>` : ''}
       ${stranger ? '' : '<button class="btn ghost danger fp-remove" id="fpRemove">Remove friend</button>'}
     </div>
   `, { cls: 'sheet-fp' });
@@ -10453,7 +10453,7 @@ function openFriendProfile(f, onChange, opts = {}) {
   $('#fpCheer', wrap)?.addEventListener('click', () => openCheerSheet(f));
   $('#fpAdd', wrap)?.addEventListener('click', async e => {
     const b = e.currentTarget; b.disabled = true; b.textContent = 'Sending...';
-    const r = await social.friendRequest(f.friendCode);
+    const r = await social.friendAdd(f.addToken);
     if (!r.ok) { b.disabled = false; b.textContent = '+ Add to my Crew'; toast(r.reached === false ? 'Could not reach the Crew server. Try again when you have signal.' : 'Could not send that request. Try again.', 3000); return; }
     if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
     else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); }
