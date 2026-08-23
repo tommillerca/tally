@@ -3352,6 +3352,33 @@ body::before {
 }
 .fp-fact b { display: block; font-size: 18px; font-weight: 800; }
 .fp-fact span { font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; }
+/* THEIR PADDOCK on a friend's profile (v425). A horizontal shelf rather than a
+   grid: the count is the brag and the row is the evidence, so it should read at
+   a glance and scroll if there is more. Crew-only, so it is simply absent on a
+   stranger opened from the leaderboard. */
+.fp-yard { margin: 14px 0 6px; }
+.fp-yard-h {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font-size: 11px; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+.fp-yard-h b { font-family: var(--display); font-weight: 400; font-size: 15px; color: var(--gold); letter-spacing: .06em; }
+/* Scrolls INSIDE its own box. The profile sheet must never scroll sideways, and
+   a 24-pet shelf is wider than any phone. */
+.fp-yard-row {
+  display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden;
+  -webkit-overflow-scrolling: touch; padding-bottom: 4px;
+}
+.fp-yard-row::-webkit-scrollbar { display: none; }
+.fp-yard-pet {
+  position: relative; flex: 0 0 auto; width: 54px; height: 54px;
+  display: grid; place-items: center; overflow: hidden;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 13px;
+}
+/* A shiny announces itself on the shelf the same way it does on a Paddock tile:
+   the rarity glow, not a badge, because at 54px a badge is bigger than the pet. */
+.fp-yard-pet.shiny { border-color: rgba(255, 201, 97, .55); box-shadow: 0 0 10px rgba(255, 201, 97, .3); }
+.fp-yard-more { margin: 6px 0 0; text-align: center; }
 .fp-real { font-size: 12px; color: var(--text-3); margin-top: 4px; }
 .fp-alias { margin-top: 16px; }
 .fp-alias .nb-lab { display: flex; align-items: baseline; gap: 6px; }

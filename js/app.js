@@ -10525,6 +10525,11 @@ async function renderFriends(el) {
 // profile needs a real friend on the server, so the pet-clipping bug in this
 // sheet was only ever reproducible by hand on Tom's phone. Now it is measurable.
 if (typeof window !== 'undefined' && navigator.webdriver) window.__openFriendProfile = (f, opts) => openFriendProfile(f, () => {}, opts || {});
+/* The PAYLOAD the app really uploads, so tests/friend-paddock-audit.mjs can
+   grade the wire rather than a re-implementation of it. A copy of the field
+   list written into the test would agree with the app by construction and
+   would stay green through exactly the change worth catching. */
+if (typeof window !== 'undefined' && navigator.webdriver) window.__socialSnapshot = () => socialSnapshot();
 /* opts.stranger: opened from the LEADERBOARD, where the player is not (yet) your
    Crew. Tom, 2026-08-08: "in the crew tab when i go into the leaderboard why
    cant i then click who's on it and see more about their profile". Same sheet,
@@ -10536,6 +10541,28 @@ function openFriendProfile(f, onChange, opts = {}) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
   const petName = p.pet ? ((BH_BY_ID[p.pet.id] || {}).name || 'Pet') : null;
+  /* THEIR PADDOCK. Tom, 2026-08-22: "lets make it so when you click on a friend
+     in the crew you can see their paddock and how many cool pets they have."
+     `yard` is crew-only (see socialSnapshot), so a STRANGER opened off the
+     leaderboard simply has none and the strip is absent rather than empty: an
+     empty paddock would read as "they own nothing", which is a different and
+     false statement.
+     WEAR COMES FROM HERE, NEVER FROM S.petWear. Leaving `wear` undefined means
+     "ask the viewer's own wardrobe", which would dress THEIR Bumbleseal in YOUR
+     purse: the figure contract's rule 1, and the shiny bug in a new coat. A
+     friend who is on an older build has no `yard` at all, so it resolves to
+     null, which draws her honestly bare. */
+  const yard = p.yard && Array.isArray(p.yard.pets) ? p.yard : null;
+  const yardWear = (yard && yard.wear) || null;
+  const yardHtml = yard && yard.pets.length ? `
+      <div class="fp-yard">
+        <div class="fp-yard-h"><span>THEIR PADDOCK</span><b>${yard.n} PET${yard.n === 1 ? '' : 'S'}</b></div>
+        <div class="fp-yard-row">${yard.pets.map(x => `
+          <span class="fp-yard-pet${x.shiny ? ' shiny' : ''}" title="${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}">
+            ${petPortraitHtml(x.sp, 54, !!x.shiny, { mass: true, wear: yardWear })}
+          </span>`).join('')}</div>
+        ${yard.n > yard.pets.length ? `<p class="note fp-yard-more">and ${yard.n - yard.pets.length} more back at the paddock</p>` : ''}
+      </div>` : '';
   const statBars = p.stats ? STAT_META.map(m => {
     const v = p.stats[m.key] ?? 0;
     return `<div class="fps-row"><span class="fps-lab">${m.label}</span><div class="fps-bar"><i style="width:${Math.max(4, Math.min(100, v))}%"></i></div><span class="fps-val">${v}</span></div>`;
@@ -10546,7 +10573,7 @@ function openFriendProfile(f, onChange, opts = {}) {
       <div class="fp-hero${eq.BG && BH_BY_ID[eq.BG] ? ' framed' : ''}">
         ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
         <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</div>
-        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny, wear: p.pet.wear || null })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
+        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny, wear: yardWear })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
       <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal" hidden></div></div>
@@ -10567,6 +10594,8 @@ function openFriendProfile(f, onChange, opts = {}) {
         <div class="fp-fact"><b>${p.gearCount ?? (p.gear ? p.gear.length : 0)}</b><span>Gear</span></div>
         <div class="fp-fact"><b>${petName ? 'Lv ' + p.pet.level : '-'}</b><span>${petName ? esc(petName) : 'No pet'}</span></div>
       </div>
+
+      ${yardHtml}
 
       ${statBars ? `<div class="fp-stats-h">Stats</div><div class="fp-statbars">${statBars}</div>` : '<p class="note" style="text-align:center">Their stats will show once they next open the app.</p>'}
 
@@ -17806,8 +17835,56 @@ async function socialSnapshot() {
      await is the whole guard: a snapshot is only ever taken of a settled level.
      A no-op (already-resolved) on every boot that has no backfill to do. */
   await gameInitSettled();
-  const [fighter, eq, xp, gOwned, earned, wk] = await Promise.all([buildFighter(), equipped(), totalXp(), ownedGearIds(), earnedBadgeIds(), weekStepsNow()]);
+  const [fighter, eq, xp, gOwned, earned, wk, insts, wear] = await Promise.all([buildFighter(), equipped(), totalXp(), ownedGearIds(), earnedBadgeIds(), weekStepsNow(), petInstances(), petWear()]);
   const lvl = levelFor(xp);
+  /* THE YARD: the first time pets have ever left this device.
+   *
+   * Tom, 2026-08-22: "lets make it so when you click on a friend in the crew you
+   * can see their paddock and how many cool pets they have it'll make people
+   * want to show off to their friends."
+   *
+   * WHERE THIS RIDES, and it is the part that is hard to undo, so it is written
+   * down rather than assumed. There are two channels to a friend's device and
+   * they are not interchangeable:
+   *
+   *   players.backups  the END-TO-END ENCRYPTED vault. The whole save, AES-GCM,
+   *                    key never leaves the phone. Nothing here goes there, and
+   *                    nothing there is readable by the server or by anyone else.
+   *   players.profile  this snapshot. PLAINTEXT JSON, and the server reads it.
+   *
+   * The yard rides the PLAINTEXT one, deliberately: a friend's device has to be
+   * able to draw it, and it is cosmetic in the same way `outfit` already is.
+   *
+   * WHY THIS FIELD IS CREW-ONLY, mechanically rather than by intention.
+   * GET /friends returns the whole profile blob, and only for rows joined
+   * through an ACCEPTED friendship. GET /leaderboard, which any authenticated
+   * player can call for the top 100, does NOT return the blob: it json_extracts
+   * a fixed list, and that list is level, levelName, badges, outfit, pet, stats
+   * and a COUNT of gear. `yard` is not in it, so it reaches accepted friends and
+   * nobody else.
+   *
+   * WHICH IS ALSO WHY WEAR IS NOT PUT ON `pet`. `pet` IS leaderboard-extracted,
+   * so hanging the wardrobe off it would publish it to every player in the game
+   * rather than to the crew. It lives here instead, and the friend profile reads
+   * it from here.
+   *
+   * NOTHING BEYOND WHAT THE FEATURE NEEDS. The Paddock draws a species and a
+   * shiny, and the card says how many. So: species, shiny, a total, and the one
+   * wardrobe. No instance ids (they key the bond and the level bank locally and
+   * are nobody else's business), no nicknames (kv 'petNick' is PRIVATE and
+   * tests/nickname-private-audit.mjs pins that against the real wire), no bonds,
+   * no lineage, no per-pet levels.
+   * Capped at 24 drawn, with the true total beside it, so a 200-pet roster
+   * cannot push the 24KB profile bound; shinies sort first so the cap shows the
+   * collection at its best rather than at its oldest. */
+  const yard = {
+    n: insts.length,
+    pets: insts.slice()
+      .sort((a, b) => (b.shiny ? 1 : 0) - (a.shiny ? 1 : 0))
+      .slice(0, 24)
+      .map(x => ({ sp: x.sp, shiny: !!x.shiny })),
+    wear: wear && Object.keys(wear).length ? wear : null,
+  };
   return {
     weekKey: wk.weekKey,
     weekSteps: wk.steps,
@@ -17824,6 +17901,7 @@ async function socialSnapshot() {
     gear: [...gOwned].slice(0, 400),
     badges: earned.size ?? [...earned].length,
     pet: fighter.petMeta ? { id: fighter.petMeta.id, level: fighter.petMeta.level, shiny: !!fighter.petMeta.shiny, lineage: fighter.petMeta.lineage || 0 } : null,
+    yard,
   };
 }
 
