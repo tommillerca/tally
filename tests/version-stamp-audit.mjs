@@ -59,6 +59,15 @@ ok('FOUND all three version stamps are where this test looks for them',
   !!sw && !!app && !!log,
   `sw.js ${sw ? 'yes' : 'NO'}, APP_BUILD ${app ? 'yes' : 'NO'}, changelog ${log ? 'yes' : 'NO'}`);
 
+/* REACH. The changelog stamp is the FIRST `n:` in the file, which is only the
+   newest entry while the file stays newest-first. Append one at the bottom, or
+   sort the array, and AGREE grades a stale entry against two live ones and can
+   agree with them at any number. This row is what makes AGREE evidence. */
+const allN = [...read('js/changelog.js').matchAll(/\{\s*n:\s*(\d+)/g)].map(m => +m[1]);
+ok('REACH the changelog stamp read is the newest entry in the file, not just the first written',
+  allN.length > 1 && log && +log[1] === Math.max(...allN),
+  `read n: ${log ? log[1] : 'none'}, newest of ${allN.length} entries is ${allN.length ? Math.max(...allN) : 'n/a'}`);
+
 if (sw && app && log) {
   const [a, b, c] = [sw[1], app[1], log[1]];
   ok('AGREE sw.js VERSION, APP_BUILD and the newest changelog entry are the same build',

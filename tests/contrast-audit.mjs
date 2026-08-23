@@ -19,6 +19,18 @@ const base = process.argv[2] || process.env.URL;
 const { browser, page } = await boot(base);
 await page.evaluate(() => { location.hash='#/today'; }); await sleep(2500);
 await page.evaluate(() => { document.querySelector('.dw')?.remove(); document.querySelector('.drop-veil')?.remove(); });
+/* CONTROL. This file reports by NOT finding failures, and a sweep that walks the
+   wrong subtree, or whose compositing quietly hands back the same colour for
+   everything, finds none either: "0 failing" and "measured nothing" print the
+   same. So plant one pair that MUST fail. #2a2a2a on #1a1a1a is a ratio of about
+   1.1 against a 4.5 floor, and it is held out of the real report below. */
+await page.evaluate(() => {
+  const p = document.createElement('div');
+  p.className = 'wcag-probe';
+  p.style.cssText = 'background:#1a1a1a;color:#2a2a2a;font-size:16px;width:120px;height:20px';
+  p.textContent = 'contrast probe';
+  document.getElementById('screen')?.appendChild(p);
+});
 const res = await page.evaluate(() => {
   const L = c => { const f=v=>{v/=255; return v<=0.03928?v/12.92:((v+0.055)/1.055)**2.4;};
     return 0.2126*f(c[0])+0.7152*f(c[1])+0.0722*f(c[2]); };
@@ -52,6 +64,9 @@ const res = await page.evaluate(() => {
   const all=[...seen.values()];
   return { pairs: all.length, fails: all.filter(p=>!p.pass) };
 });
+const probe = res.fails.find(f => f.sel === 'div.wcag-probe');
+res.fails = res.fails.filter(f => f.sel !== 'div.wcag-probe');
+res.pairs -= 1;   // the planted control pair is not one of Today's own
 console.log(`distinct text pairs: ${res.pairs}`);
 console.log(`FAILING: ${res.fails.length}`);
 for (const f of res.fails.sort((a,b)=>a.ratio-b.ratio).slice(0,10))
@@ -67,6 +82,11 @@ if (!res.pairs) {
   console.log('FAIL  no text pairs measured at all: Today did not render, so nothing was checked.');
   process.exit(1);
 }
+if (!probe) {
+  console.log('FAIL  CONTROL the planted 1.1-ratio pair was not caught, so this sweep cannot see a contrast failure and "0 failing" means nothing.');
+  process.exit(1);
+}
+console.log(`ok    CONTROL the planted 1.1-ratio pair was caught (${probe.ratio}, need ${probe.need}), so the sweep can see a failure`);
 if (res.fails.length) {
   console.log(`FAILED: ${res.fails.length} of ${res.pairs} text pairs are below the WCAG AA ratio.`);
   process.exit(1);

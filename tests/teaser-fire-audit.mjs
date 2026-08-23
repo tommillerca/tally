@@ -44,6 +44,8 @@ const res = await page.evaluate(async () => {
   return {
     shown: !!pop,
     title: pop ? (pop.querySelector('.tz-h')?.textContent || '').trim() : null,
+    named: pop ? +(pop.querySelector('.tz-h em')?.textContent || 0) : 0,
+    tiles: pop ? pop.querySelectorAll('#tzWall > *').length : 0,
     seen: (await kvGet('cosmeticTeaserSeen', 0)) || 0,
   };
 });
@@ -58,6 +60,16 @@ ok('the teaser actually reaches the screen', res.shown, res.title || 'no .tz-pop
    that was actually broken. */
 ok('and the showing is spent, so the 10-open budget advances', res.seen > 0,
   `cosmeticTeaserSeen = ${res.seen} (stuck at 0 on the broken build)`);
+
+/* SAMPLE. Every row above is satisfied by a card that fired and showed NOTHING:
+   dropCosmetics() returning an empty list gives "0 new cosmetics" over a bare
+   wall, spends the one-shot, throws nothing, and reads exactly as green as a
+   working teaser. That is failure 4 in the hygiene lint's header, a check
+   graded against a set that cannot contain the bug. The teaser's entire job is
+   naming cosmetics, so it has to be caught naming some. */
+ok('SAMPLE and the card it graded names real cosmetics over a real wall',
+  res.named > 0 && res.tiles > 0,
+  `${res.named} named, ${res.tiles} wall tiles (0 either way is a teaser that fired and showed nothing)`);
 
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nteaser fires');
