@@ -411,6 +411,19 @@ const DECLARED = {
     + 'STANDS, PET-MASS, PET-GLOW, PET-FACING, PET-UNTOUCHED and MAGE-UNCHANGED. Every loop in the arena is frozen and the toast removed '
     + 'before any diff, or the mask comes back as the whole arena. Run it on any change to .arena.boss-wanderer, #foeStage.wanderer-foe, '
     + '.fstage.petmini or petFightPx. Needs no map. About 100s and ten seam fights, so full rather than fast.'],
+  'wanderer-water-audit.mjs': ['full', "the Wanderer is BOUND TO LAND, and every device has to agree where. Tom, 2026-08-22: "
+    + '"The wanderer is out in the lake where I am right now. He shouldn\'t be." wandererAt was pure math on a lat/lng grid, so a cell '
+    + 'over a lake put his whole loop on the water; js/water.js classifies a point against the basemap\'s own z14 vector tiles and the '
+    + 'derivation walks a seeded fallback of beat centres until the lap is dry. The lake is the easy half. The half that could ship a '
+    + 'worse bug than the lake is DISAGREEMENT, because a water answer that moves with the zoom, the viewport or whichever tiles happen '
+    + 'to be loaded puts two friends\' wanderers in two different places, so the determinism rows are the headline here and each carries '
+    + 'a control: four cold child processes fetching tiles again in four different ARRIVAL ORDERS derive the same men byte-for-byte, an '
+    + 'evicted-and-refetched tile re-answers identically, and MAP-STATE classifies one fixed grid with the real MapLibre map parked at '
+    + 'four zooms and centres while CONTROL-MAP-STATE requires queryRenderedFeatures to DISAGREE with itself across those same four, '
+    + 'which is the hazard measured rather than asserted. LIVE is the end of the chain: the Boneyard open on a waterfront position picked '
+    + "at run time for today's seeds, the marker THE MAP DREW unprojected off its own centre and classified, with the same nine cells "
+    + 'under the legacy derivation as its control. Needs the tile host, and the browser rows need a drawable map; both report UNPROVEN '
+    + 'with exit 97 by name rather than green. Full rather than fast: four child processes and a browser boot, about 140s.'],
   'wanderer-despawn-audit.mjs': ['full', 'a beaten Wanderer is GONE from the Boneyard and the next instance still walks. Tom, 2026-08-22: '
     + '"after defeating the wanderer he was still just there in the boneyard and didnt disappear." wandererDone gated the encounter but '
     + 'never the marker. Fired for real: a GPS fix 45m into his real cone, the encounter it triggers, Fight, and the win resolved through '
