@@ -141,6 +141,36 @@ await test('analytics: /stats is admin-gated + aggregates', async () => {
   assert.ok(s.totalDevices >= 1 && s.totalEvents >= 3, JSON.stringify(s));
   assert.ok(s.byName.some(e => e.name === 'pit_win'), 'event names aggregated');
   assert.ok(s.dau >= 1, 'DAU counts today');
+  // Both windows travel with the numbers, so the dashboard can never label a
+  // figure with a window it was not computed over.
+  assert.equal(typeof s.windowDays, 'number', '/stats no longer reports the retention window');
+  assert.equal(typeof s.statsWindowDays, 'number', '/stats no longer reports its own reporting window');
+  assert.ok(s.statsWindowDays <= s.windowDays, '/stats reads further back than the table keeps');
+});
+
+await test('/stats keeps the rate limiter out of byName and the tester board', async () => {
+  /* rateLimitRecovery USED TO store its per-IP counters as events, keyed by an
+     IP HASH in the device column. They are not product events and they are not
+     devices:
+     on a quiet run rl_ridcheck was the most common "event name" on the dashboard
+     and an IP hash led the tester leaderboard with no label and no geo.
+     Drive the REAL limiter rather than planting a synthetic row, so this tests
+     the rows production actually writes. */
+  const probe = await fetch(BASE + `/recovery/available/statsrl${Math.random().toString(36).slice(2, 7)}`);
+  assert.ok(probe.status === 200 || probe.status === 429, `availability probe answered ${probe.status}`);
+  await probe.text();
+  // BOUND: the rows have to exist, or the assertions below pass on nothing.
+  const planted = await (await fetch(`${BASE}/dev/ratelimit-count?name=rl_ridcheck`)).json();
+  assert.ok(planted.n > 0, 'the limiter wrote no row, so this test proves nothing');
+
+  const s = await (await fetch(BASE + '/stats?token=devtoken')).json();
+  // DIRECTION: absent. Not "fewer than before": a single one is a wrong row on
+  // a dashboard somebody makes decisions from.
+  for (const rl of ['rl_recovery', 'rl_ridcheck']) {
+    assert.ok(!s.byName.some(e => e.name === rl), `${rl} is being counted as a product event`);
+  }
+  assert.ok(!s.testers.some(t => t.label === null && t.country === null && t.first === null),
+    'a device with no devices row at all is on the tester leaderboard, which is what an IP hash looks like');
 });
 
 await test('backup: PUT stores ciphertext, GET returns it verbatim', async () => {
@@ -170,6 +200,65 @@ await test('backup: PUT requires a valid signature (wrong key rejected)', async 
   const other = await makeKeys();
   const r = await signedFetch(other.kp, player.playerId, 'PUT', '/backup', JSON.stringify({ blob: 'x' }));
   assert.equal(r.status, 401);
+});
+
+/* THE 4 MB CLIFF, from both sides. Measured 2026-08-17, a real one-year save
+   encrypts to 2.23 MB at p50 and 5.20 MB at p95, so 12.7% of players are on the
+   far side of this constant after a year of daily use. Crossing it is not a
+   degraded backup, it is NO backup: the 413 below reaches js/social.js
+   pushBackup, which returns false, which autoSync discards, and nothing tells
+   the player. See the note on MAX_BACKUP_BYTES in src/index.js.
+   Both directions are asserted, because "the cap rejects everything" and "the
+   cap rejects nothing" are both failures and only one of them looks like one. */
+await test('backup: a 2 MB blob STORES, and comes back byte-for-byte', async () => {
+  const fresh = await makeKeys();
+  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: fresh.pubJwk }) })).json();
+  // 2,000,000 bytes: comfortably over the p50 one-year save (2.23 MB is p50 at
+  // 365 days, so this is roughly the median player at eleven months), and
+  // comfortably under D1's own value limit measured at 2,199,942 bytes.
+  const blob = 'A'.repeat(2_000_000);
+  const put = await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob, appV: 'v385' }));
+  assert.equal(put.status, 200, `a two-megabyte backup was refused (${put.status})`);
+  const got = await (await signedFetch(fresh.kp, reg.playerId, 'GET', '/backup')).json();
+  assert.equal(got.blob.length, blob.length, 'the stored blob changed length in the database');
+});
+
+await test('backup: a blob D1 cannot hold answers 413, not an unhandled 500', async () => {
+  const fresh = await makeKeys();
+  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: fresh.pubJwk }) })).json();
+  /* 3 MB sits in the gap nobody knew was there: under MAX_BACKUP_BYTES, so the
+     route's own check passes it, and over D1's value limit, so the INSERT throws
+     SQLITE_TOOBIG. Before 2026-08-17 that fell through to the generic handler
+     and every save between about 2.2 MB and 4 MB produced a 500. DIRECTION: a
+     deliberate 413. A 500 here means the catch has been removed and the logs are
+     back to reporting a full save as a broken worker. */
+  const blob = 'A'.repeat(3 * 1024 * 1024);
+  const put = await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob, appV: 'v385' }));
+  assert.equal(put.status, 413, `expected 413, got ${put.status} (500 means SQLITE_TOOBIG is unhandled again)`);
+  assert.equal((await put.json()).code, 'too-large');
+  const got = await signedFetch(fresh.kp, reg.playerId, 'GET', '/backup');
+  assert.equal(got.status, 404, 'a backup D1 refused left a row behind');
+});
+
+await test('backup: a blob over the cap is refused with 413, and SILENTLY on the client', async () => {
+  const fresh = await makeKeys();
+  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: fresh.pubJwk }) })).json();
+  const blob = 'A'.repeat(4 * 1024 * 1024 + 1024);
+  const put = await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob }));
+  assert.equal(put.status, 413, 'the cap is not being enforced at all');
+  // DIRECTION: nothing was stored. A partial write here would be worse than a
+  // refusal, because the restore would decrypt to garbage rather than 404.
+  const got = await signedFetch(fresh.kp, reg.playerId, 'GET', '/backup');
+  assert.equal(got.status, 404, 'a refused backup left a row behind');
+  /* And the half that no server test can see: js/social.js must still be
+     throwing this away. The day somebody makes pushBackup's failure visible,
+     this assertion is what tells them to come back and delete it. */
+  const { readFileSync } = await import('node:fs');
+  const social = readFileSync(new URL('../../js/social.js', import.meta.url), 'utf8');
+  assert.ok(/if \(now - lastBackup > BACKUP_THROTTLE_MS\) await pushBackup\(appV\);/.test(social),
+    'autoSync no longer ignores pushBackup\'s result. If the failure is now surfaced to the player, ' +
+    'delete this assertion and the "silently" in this test name; if it is surfaced somewhere else, ' +
+    're-read src/index.js MAX_BACKUP_BYTES and update the finding.');
 });
 
 // ---- curated display name ----

@@ -39,7 +39,13 @@ if ! git diff --quiet -- src/ ; then
 fi
 
 echo "== 2. tests before the deploy, not after"
-npx wrangler dev --local --port 8791 --var DEV:1 --var ADMIN_TOKEN:devtoken > /tmp/bonez-predeploy.log 2>&1 &
+# schema-plan needs no server at all: it rebuilds schema.sql in local SQLite and
+# asserts the hot routes still reach their rows through an index. A dropped index
+# changes no answer anywhere, so nothing else in this suite can see it.
+node schema-plan.test.mjs
+# --test-scheduled exposes /__scheduled, which is how retention.test.mjs drives
+# the real cron entry point rather than only the function behind it.
+npx wrangler dev --local --port 8791 --test-scheduled --var DEV:1 --var ADMIN_TOKEN:devtoken > /tmp/bonez-predeploy.log 2>&1 &
 DEV_PID=$!
 trap 'kill $DEV_PID 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do
@@ -47,6 +53,12 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 API=http://127.0.0.1:8791 node test/api.test.mjs
+BASE=http://127.0.0.1:8791 node retention.test.mjs
+# grants-retention is the one that guards PEOPLE'S GIFTS rather than counters.
+# It goes in front of the deploy for the same reason the others do, and it is
+# the last one added, so a failure here reads as "the new pruner", not "the
+# server is down".
+BASE=http://127.0.0.1:8791 node grants-retention.test.mjs
 kill $DEV_PID 2>/dev/null || true
 trap - EXIT
 
