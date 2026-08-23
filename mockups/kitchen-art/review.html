@@ -49,8 +49,10 @@ real Kitchen sheet at 393&times;852, not a contact sheet of loose PNGs.</p>
 <p>The Kitchen&rsquo;s pot grid sits under a header that literally reads <b>CAULDRONS</b>, and the card under it draws
 a red cookbook. That is <code>pixCur('recipe', 26)</code> in <code>js/app.js:6526</code>, which resolves to
 <code>assets/icons-pix/recipe.png</code> at <b>24&nbsp;CSS&nbsp;px</b> (pixCur snaps 26 down to a whole step of 48).</p>
-<figure class="shot"><img src="render/00-kitchen-as-shipped.png" style="width:393px" alt="Kitchen sheet as shipped">
-<figcaption>The Kitchen as shipped. Header: CAULDRONS. Icon: a cookbook.</figcaption></figure>
+<figure class="shot"><img src="render/00-kitchen-as-shipped.png"
+  style="width:393px;max-height:430px;object-fit:cover;object-position:top" alt="Kitchen sheet as shipped">
+<figcaption>The Kitchen as shipped, cropped to the top of the sheet. Header: CAULDRONS. Icon: a cookbook.
+The full-height capture is the same file.</figcaption></figure>
 
 <div class="note"><b>The cauldron already exists.</b> <code>assets/icons-pix/kitchen.png</code> is a 48&times;48
 three-legged cauldron, already drawn, already keyed in <code>PIX_CUR</code>, already in the service worker
@@ -87,22 +89,27 @@ of it. Nothing is scaled, so the pixel grid is intact.</p>
 <h3>Measured off the render, not estimated</h3>
 <table>
   <tr><th>Candidate</th><th>Rendered ink</th><th>Box fill</th><th>Peak contrast<br>on the card</th>
-      <th>Colours in&nbsp;@48</th><th>Colours out<br>@24 rendered</th><th>Ink centroid<br>vs box centre</th></tr>
+      <th>Colours in&nbsp;@48</th><th>Colours out<br>@24 rendered</th><th>Ink centroid off<br>frame centre</th></tr>
   <tr><td>CURRENT cookbook</td><td class="n">16&times;19 CSS</td><td class="n">17.3%</td><td class="n">16.8:1</td>
       <td class="n">49</td><td class="n">34</td><td class="n">&mdash;</td></tr>
   <tr><td>A &mdash; as shipped</td><td class="n">20&times;22 CSS</td><td class="n">35.0%</td><td class="n">15.0:1</td>
-      <td class="n">56</td><td class="n">48</td><td class="n">50.0% / 56.7%</td></tr>
+      <td class="n">56</td><td class="n">48</td><td class="n">1.6 CSS px low</td></tr>
   <tr><td>B &mdash; lit brew</td><td class="n">20&times;22 CSS</td><td class="n win">35.3%</td><td class="n">15.3:1</td>
-      <td class="n">51</td><td class="n">44</td><td class="n">50.0% / 56.7%</td></tr>
+      <td class="n">51</td><td class="n">44</td><td class="n">1.6 CSS px low</td></tr>
   <tr><td>C &mdash; cold pot</td><td class="n">20&times;18 CSS</td><td class="n">30.6%</td><td class="n">12.2:1</td>
-      <td class="n win">46</td><td class="n">37</td><td class="n win">49.9% / 48.6%</td></tr>
+      <td class="n win">46</td><td class="n">37</td><td class="n win">0.3 CSS px low</td></tr>
 </table>
 <p><b>Colours out is never higher than colours in.</b> That is the crunch test, and it says the 24&nbsp;px problem
 is not resampling: the browser is dropping colours, not inventing them. So the fix is subject and contrast, not
 resolution. All three cauldrons carry roughly <b>twice the ink</b> of the cookbook in the same 24&nbsp;px box.</p>
-<p><b>C is the only one centred in its box</b> (49.9% / 48.6% against a 50% / 50% target). A and B sit 6.7% low
-because the steam column above the pot pushes the mass down. If the glyph-centring lint being written for the
-lightning bolt is extended past circular badges, C passes it as drawn and A and B sit marginal.</p>
+<p><b>All three clear the new centring standard, C by the widest margin.</b>
+<code>tests/badge-centre-audit.mjs</code> (on <code>fix/icon-centring-herb-bumbleseal</code>) grades a glyph's ink
+centroid against its disc centre as a percentage of <b>the disc's radius</b>, capped at 25%. Scope is circular
+badges at a border-radius of 45% or more, so <em>the Kitchen's pot slot is out of that audit's scope entirely</em>:
+<code>.pot-card</code> is a 14&nbsp;px radius on a 104&nbsp;px card and the icon sits in a plain span. Measured
+anyway, in case the cauldron ever lands in a badge: A and B sit 1.6&nbsp;CSS&nbsp;px low, C sits 0.3&nbsp;px low.
+On a 40&nbsp;px disc that is 8.0% and 1.7% of the radius against a 25% cap. A and B are low because the steam
+column above the pot pushes the mass down; C has no steam, so it centres on its own.</p>
 
 <h3>What each one is</h3>
 <p><b>A &mdash; as shipped.</b> <code>pixCur('recipe', 26)</code> becomes <code>pixCur('kitchen', 26)</code>. One
