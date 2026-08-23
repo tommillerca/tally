@@ -47,7 +47,12 @@ const fails = [];
 const ok = (name, pass, detail = '') => { console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); if (!pass) fails.push(name); };
 
 /* The crate bucket, verbatim from gwartPool (js/app.js). CONTROL goes red if
-   this drifts from the catalogue. */
+   this drifts from the catalogue.
+   PROVENANCE: copied from gwartPool's crate bucket and verified against it
+   2026-08-22, when the 21 Gwart lines were rewritten from resigned to wry
+   (Tom: "the lines feel a little sad or something, let's make them a bit
+   lighter"). This is a MIRROR of production data, not a decision: when gwartPool
+   changes, this list changes with it and CONTROL is what catches the drift. */
 const CRATE_LINES = [
   'A crate by his feet, still shut. I gave him hands for this.',
   'That crate has been there since I arrived. I am curious.',
