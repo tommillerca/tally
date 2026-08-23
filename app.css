@@ -4417,6 +4417,14 @@ body::before {
 /* static pets render through croppedPetImg (.petcrop) — a content-cropped, scaled
    img whose own transform seats/centers it; the wrapper just clips to the slot. */
 .petcrop { position: relative; display: inline-block; overflow: hidden; }
+/* PRESS AND HOLD SHOWS WHAT SHE IS WEARING. Tom, 2026-08-22: "Press and hold on
+   bumble seal highlights her sunglasses." One accent halo on the worn layers and
+   nothing else: the pet is not dimmed, nothing pulses, nothing moves. The
+   callout/selection suppression is the whole reason this reads as a gesture on a
+   phone rather than as a long-press that pops the browser's image menu. */
+.petcrop.dressed { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.petcrop .pw { transition: filter .16s ease; }
+.petcrop.pw-lit .pw { filter: drop-shadow(0 0 1.5px var(--accent)) brightness(1.08); }
 /* SHE FIGHTS FACING THE ENEMY. Tom, 2026-08-22: "we need to mirror bumbleseal in
    the fights so she faces the enemy". The player's pet stands on the LEFT of the
    arena with the foe on the right, and Cam drew Bumbleseal facing left, so she
@@ -6720,7 +6728,10 @@ body::before {
   display: grid; place-items: center;
 }
 .map-act.live .ic, .map-act .ic.near { border-color: var(--accent); }
-.map-act .ic.warn { border-color: var(--gold); }
+/* `.fast`, not `.warn`: the global `.warn` banner utility at the top of this
+   file pads its box, and on a fixed-size disc that padding squeezed the bolt out
+   of the middle. See the note at the readout in js/app.js. */
+.map-act .ic.fast { border-color: var(--gold); }
 .map-act .tx { min-width: 0; }
 .map-act .tx b { display: block; font-size: var(--fs-3); font-weight: 700; }
 .map-act .tx small { display: block; font-size: var(--fs-1); color: var(--text-3); }
