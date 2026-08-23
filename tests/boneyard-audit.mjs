@@ -60,6 +60,99 @@ const origin = new URL(base).origin;
 await browser.defaultBrowserContext().overridePermissions(origin, ['geolocation']);
 await page.setGeolocation({ latitude: 49.2827, longitude: -123.1207 });
 await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+
+/* ---- BEAT RECORDER, ported from Reggie's stranded 2026-08-20 work ----------
+   Runs ALONGSIDE the recorder above, under its own global, deliberately. The
+   rows above were verified against `__arr`'s shape (#84's settled read, #94's
+   scoping and decoy guard) and rewriting five proven rows onto a new data model
+   is where bugs get introduced. This adds a second, event-driven view instead.
+
+   WHY IT IS NEEDED AT ALL. Nothing on main tests the thing Tom actually
+   complained about on 2026-08-08: "the boneyard is still loading in POIs at
+   different times ... it looks cheap when everything staggers in". Every
+   existing row measures WHAT was visible at some instant. None measures HOW MANY
+   SEPARATE WAVES the player saw.
+
+   Its clock is BONEYARD-ENTRY relative, unlike `__arr.t0` which starts at
+   document creation, before seed() and before navigation. That difference is
+   what made a fast reveal read ~16s against an 1800ms cap and is why those two
+   numbers were never comparable. `__slow` already does it this way. */
+const BEAT_RECORDER = () => {
+  const S = window.__beat = { entry: null, reveal: null, marks: [] };
+  /* The five marker classes, 2026-08-23. Same list KINDS is keyed on, restated
+     because this runs in page context where KINDS is not in scope. Not a
+     tunable: a sixth marker type belongs in both places. */
+  const POI = ['map-spawn', 'map-den-mark', 'map-mini-mark', 'map-spire', 'map-glutton-mark'];
+  const POI_RE = /map-spawn|map-den-mark|map-mini-mark|map-spire|map-glutton-mark/;
+  const now = () => S.entry == null ? null : Math.round(performance.now() - S.entry);
+  /* Same allowlist as the scoping above and for the same reason: #mapLegend is
+     built from real marker markup, sits inside #mapStage, and [hidden] does not
+     zero computed opacity. Reggie reached this independently on 2026-08-20.
+     The predicate is checked DIRECTLY at read time (see beatDecoys below), not
+     by counting rejections here. Counting here cannot work and the first draft
+     of this port shipped that bug: MutationObserver.addedNodes carries only the
+     TOP-LEVEL inserted node, and #mapLegend arrives as one innerHTML subtree, so
+     its nine swatches are never individually observed and the counter stayed 0
+     forever. A guard pinned to 9 against a counter that cannot increment is
+     permanently red, which is the same species as a guard that cannot fail. */
+  const isMarker = el => el.classList.contains('maplibregl-marker') && POI.some(c => el.classList.contains(c));
+  /* ONE SHARED POLLER, NOT ONE PER MARKER, AND THIS IS NOT A TIDY-UP.
+     Reggie's original gave every marker its own 16ms setInterval calling
+     getComputedStyle. As the ONLY recorder that was affordable. Running it
+     alongside the recorder above was not: 47 markers x ~62 ticks/s is ~2900
+     forced style recalcs per second, and MEASURED on a clear box it changed the
+     result it was there to observe. Control, main's audit on the same box:
+     44 of 45 markers placed at reveal, 26/26. With the per-marker version added:
+     1 of 47 placed at reveal, 5 rows red. Placement was delayed past the 1800ms
+     cap by the act of watching it.
+     One timer over a pending set, at 50ms. BEAT_MS is 250, so 50ms still gives
+     five samples per beat window, and grouping is a comparison between marker
+     timings rather than an absolute, so the coarser tick shifts all of them
+     alike. getComputedStyle is called only on markers not yet seen visible, and
+     a marker leaves the set the moment it is. */
+  const pending = new Map();
+  const track = el => {
+    if (!isMarker(el)) return;
+    const rec = { add: now(), kind: POI.find(c => el.classList.contains(c)), vis: null, lat: null, poiIn: false };
+    S.marks.push(rec);
+    pending.set(el, { rec, t0: performance.now() });
+  };
+  setInterval(() => {
+    if (!pending.size) return;
+    for (const [el, { rec, t0 }] of pending) {
+      if (el.classList.contains('poi-in')) rec.poiIn = true;
+      if (+getComputedStyle(el).opacity > 0.01) {
+        rec.vis = now(); rec.lat = Math.round(performance.now() - t0); pending.delete(el);
+      } else if (performance.now() - t0 > 8000) pending.delete(el);
+    }
+  }, 50);
+  const attach = () => {
+    const root = document.documentElement || document.body;
+    if (!root) { setTimeout(attach, 16); return; }
+    new MutationObserver(muts => { for (const m of muts) for (const n of m.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      const cls = n.className || '';
+      if (typeof cls === 'string' && POI_RE.test(cls)) track(n);
+    } }).observe(root, { childList: true, subtree: true });
+    /* THE REVEAL IS AN EVENT, NOT A SAMPLE. Off a 40ms poller it is quantised,
+       and the same tick decided initial-batch-vs-straggler for every marker. */
+    const watchStage = () => {
+      const st = document.querySelector('#mapStage');
+      if (!st) { setTimeout(watchStage, 16); return; }
+      if (st.classList.contains('markers-in')) { S.reveal = now(); return; }
+      const mo = new MutationObserver(() => {
+        if (!st.classList.contains('markers-in')) return;
+        mo.disconnect(); S.reveal = now();
+      });
+      mo.observe(st, { attributes: true, attributeFilter: ['class'] });
+    };
+    watchStage();
+  };
+  attach();
+};
+
+await page.evaluateOnNewDocument(BEAT_RECORDER);
+
 await page.evaluateOnNewDocument(() => {
   /* Recorder for FAST scenario. Same shape as SLOW: reveal timestamp, count
      timeline for the reveal-time-visible check, poiInEver for SHAPE, and
@@ -191,7 +284,52 @@ await page.evaluateOnNewDocument(() => {
  * the source is what is asserted, so a new assertion added without extending
  * this block fails here rather than being graded against a dead map. */
 const cls = unclassifiedRows(import.meta.url, []);
-const MAP_ROW_COUNT = 25;   // every ok() in this file except ROWS-COUNTED below
+
+/* ---- BEATS: does the map ARRIVE, or trickle? -------------------------------
+   A BEAT is every marker that becomes VISIBLE within one fade of the marker
+   that opened it. FIXED WINDOW, not a gap-linked chain: a chain lets a 40-marker
+   trickle at 240ms apiece read as one long beat, which is exactly the build the
+   retired MAJORITY row was written to worry about. With a fixed window that
+   build produces ~20 beats and fails on the count.
+
+   Deliberately REVEAL-INDEPENDENT. Measured by Reggie 2026-08-20: the first beat
+   lands 14-539ms after the reveal on a fast line and 1810-2168ms after it on a
+   slow one, so no fixed offset describes both. Beats describe both without one.
+
+   MAX_BEATS = 3 is the count of documented placement sources, not a tuned
+   number. Each is a decision this repo already made:
+     1  the reveal itself, carrying everything placeable without tiles
+     2  the tile-informed pass, once queryRenderedFeatures can see water/roads
+        (v372 fires the reveal on the 1800ms cap ahead of this on purpose)
+     3  the spire, which needs its own network round trip
+   Fast lines collapse 1 and 2 and land on two beats; a gated slow line uses all
+   three. A fourth is a trickle.
+
+   PROVENANCE 2026-08-23: ported from Reggie's stranded work and RE-MEASURED on
+   current main before landing, because his version was written against an app
+   16+ commits old. Numbers from that re-measurement are in the row output. */
+const BEAT_MS = 250;      // one 220ms opacity transition plus slack
+/* PROVENANCE 2026-08-23. A grouping claim needs enough markers to be able to
+   FAIL. The first draft of these rows floored at "not zero" and a throttled run
+   promptly passed on a sample of ONE: one marker is one beat, one beat is <= 3,
+   green. That is the vacuous pass this file keeps re-learning. Ten is the same
+   floor the ARRIVAL SAMPLE row uses and for the same reason: below it a trickle
+   is not distinguishable from a small map. Measured on this fixture the same
+   day: 44-47 markers on a healthy run, so the floor has wide clearance and only
+   bites when the sample is genuinely degenerate. */
+const BEAT_MIN_SAMPLE = 10;
+const MAX_BEATS = 3;
+const beatsOf = marks => {
+  const beats = [];
+  for (const m of marks.filter(m => m.vis != null).sort((a, b) => a.vis - b.vis)) {
+    const b = beats[beats.length - 1];
+    if (b && m.vis - b.start <= BEAT_MS) { b.n++; b.end = m.vis; }
+    else beats.push({ start: m.vis, end: m.vis, n: 1 });
+  }
+  return beats;
+};
+
+const MAP_ROW_COUNT = 31;   // every ok() in this file except ROWS-COUNTED below
 ok('ROWS-COUNTED every assertion in this file is Boneyard-dependent and accounted for',
   cls.callSites === MAP_ROW_COUNT + 1,
   `${cls.callSites} ok() rows in source, expected ${MAP_ROW_COUNT + 1}. If you added a row, it needs a line in the UNPROVEN block above it.`);
@@ -218,6 +356,10 @@ await page.evaluate(() => { location.hash = '#/boneyard'; });
 await sleep(2500);
 // the Boneyard opens on a location explainer; the map is behind its button
 await page.evaluate(() => {
+  /* The beat clock starts HERE, at the moment the player asks for the map, not
+     at document creation. See BEAT_RECORDER above for why that distinction cost
+     a wrong measurement. */
+  if (window.__beat) window.__beat.entry = performance.now();
   const b = [...document.querySelectorAll('#screen button')].find(x => /start|allow|enable|walk|open|let/i.test(x.textContent || ''));
   if (b) b.click();
 });
@@ -306,6 +448,19 @@ ok('BAR the action card is on screen exactly when something is in reach',
 /* The arrival timeline belongs to the FIRST load, so read it before the reload
    below replaces the page (and with it window.__arr). Asserted further down. */
 const arr = await page.evaluate(() => window.__arr);
+const beatDecoys = p => p.evaluate(() => {
+  /* Exercise the marker predicate against the nodes it MUST reject. `present`
+     proves the test is not vacuous (the key really is in the DOM, wearing marker
+     markup); `admitted` is the thing that must be zero. */
+  /* The five marker classes, 2026-08-23. Same list KINDS is keyed on, restated
+     because this runs in page context where KINDS is not in scope. Not a
+     tunable: a sixth marker type belongs in both places. */
+  const POI = ['map-spawn', 'map-den-mark', 'map-mini-mark', 'map-spire', 'map-glutton-mark'];
+  const inLegend = [...document.querySelectorAll('#mapLegend *')].filter(e => POI.some(c => e.classList.contains(c)));
+  return { present: inLegend.length, admitted: inLegend.filter(e => e.classList.contains('maplibregl-marker')).length };
+});
+const beat = await page.evaluate(() => window.__beat);
+beat.decoy = await beatDecoys(page);
 /* Final DOM count, read after everything has settled. Paired with revealDom it
    answers "was placement essentially finished when we revealed", which is the
    half of the old MAJORITY row worth keeping. */
@@ -490,6 +645,43 @@ ok('ARRIVAL the reveal SHOWED every marker it already had (nothing placed was wi
 ok('ARRIVAL placement was essentially finished before the reveal fired (revealing with almost nothing placed is not "arrives whole")',
   arr.finalDom > 0 && arr.revealDom * 2 > arr.finalDom,
   `${arr.revealDom}/${arr.finalDom} markers placed at reveal`);
+
+/* ---- BEATS ---------------------------------------------------------------
+   The arrival-GROUPING rows. Everything else in this file measures WHAT was
+   visible at some instant; these measure HOW MANY WAVES the player saw, which
+   is the actual 2026-08-08 complaint ("it looks cheap when everything staggers
+   in") and was untested on main until now. */
+{
+  const B = beatsOf(beat.marks || []);
+  const seen = (beat.marks || []).filter(m => m.vis != null).length;
+  /* PREMISE first. Beat rows on an empty sample are vacuously green: zero
+     markers is zero beats, which is <= 3. This is the same empty-sample trap
+     the ARRIVAL-SLOW latency row was given a guard for and its fast twin was
+     not. UNPROVEN, not FAIL, when the map drew nothing: that is a hosting fact,
+     not a code defect. */
+  if (seen < BEAT_MIN_SAMPLE) {
+    unproven('BEATS the map drew a sample to group (PREMISE: a small sample cannot fail the grouping row below)',
+      `only ${seen} marker(s) became visible, floor ${BEAT_MIN_SAMPLE} on this machine, so grouping cannot be graded. beat.marks tracked ${(beat.marks || []).length}, reveal ${beat.reveal}`);
+  } else {
+    ok('BEATS the map drew a sample to group (PREMISE: a small sample cannot fail the grouping row below)',
+      true, `${seen} of ${beat.marks.length} tracked markers became visible`);
+  }
+  /* The predicate that keeps the key out of `marks` is otherwise self-certifying:
+     a legend node it wrongly admits is indistinguishable from a marker once it is
+     in the array. Counting rejections is what makes it checkable. */
+  ok('BEATS the map key is present and the marker predicate rejects all of it',
+    beat.decoy.present === 9 && beat.decoy.admitted === 0,
+    `${beat.decoy.present} #mapLegend nodes wearing marker markup (must be 9: 5 spawn + 3 den + 1 mini, or the check is vacuous), ${beat.decoy.admitted} of them admitted by the predicate (must be 0)`);
+  if (seen >= BEAT_MIN_SAMPLE) {
+    ok(`BEATS the markers arrive in at most ${MAX_BEATS} coordinated beats, never a per-marker trickle`,
+      B.length > 0 && B.length <= MAX_BEATS,
+      `${B.length} beat(s) of [${B.map(b => b.n).join(', ')}] markers, window ${BEAT_MS}ms, fast line. Ceiling ${MAX_BEATS} is the count of documented placement sources: the reveal, the tile-informed pass, and the spire's round trip`);
+  } else {
+    unproven(`BEATS the markers arrive in at most ${MAX_BEATS} coordinated beats, never a per-marker trickle`,
+      'no visible markers to group');
+  }
+}
+
 const badFastLatencies = arr.stragglers.filter(s => s.latency == null || s.latency > 250);
 ok('ARRIVAL every straggler fades in within 250ms of DOM add (LATENCY: bounded by our 220ms opacity transition, not by tile jitter)',
   badFastLatencies.length === 0,
@@ -646,6 +838,7 @@ slowPage.on('request', req => {
   if (/openfreemap|openmaptiles|\.pbf|tiles\./.test(req.url())) setTimeout(() => req.continue(), 2000);
   else req.continue();
 });
+await slowPage.evaluateOnNewDocument(BEAT_RECORDER);
 await slowPage.evaluateOnNewDocument(() => {
   /* Recorder for the slow-tile scenario. Tracks:
        tl        opacity-based visible-count timeline (for backstop pop)
@@ -721,12 +914,15 @@ await slowPage.evaluate(() => { location.hash = '#/boneyard'; });
 await sleep(2500);
 await slowPage.evaluate(() => {
   window.__slow.entry = performance.now();
+  if (window.__beat) window.__beat.entry = performance.now();
   const b = [...document.querySelectorAll('#screen button')].find(x => /start|allow|enable|walk|open|let/i.test(x.textContent || ''));
   if (b) b.click();
 });
 await sleep(10000);
 
 const slow = await slowPage.evaluate(() => window.__slow);
+const slowBeat = await slowPage.evaluate(() => window.__beat);
+slowBeat.decoy = await beatDecoys(slowPage);
 const slowLast = slow.tl[slow.tl.length - 1] || { t: null };
 const slowPop = (slow.reveal != null && slowLast.t != null) ? slowLast.t - slow.reveal : null;
 const STRAGGLER_LATENCY_MS = 250;   // one 220ms opacity transition plus slack
@@ -739,6 +935,33 @@ const STRAGGLER_LATENCY_MS = 250;   // one 220ms opacity transition plus slack
    catching pathological cases: a hung cap or dead refresh leaves pop at
    the full sleep duration (~10000ms), which is well past 4000. */
 const POP_BACKSTOP_MS = 4000;
+
+
+/* ---- BEATS-SLOW ------------------------------------------------------------
+   Same grouping question on a throttled line, which is the case the beat model
+   exists for: v372 fires the reveal on the 1800ms cap AHEAD of the tile-informed
+   pass, so a slow line legitimately uses all three placement sources where a
+   fast line collapses two of them. If the ceiling is going to be wrong anywhere
+   it is here. */
+{
+  const B = beatsOf(slowBeat.marks || []);
+  const seen = (slowBeat.marks || []).filter(m => m.vis != null).length;
+  if (seen < BEAT_MIN_SAMPLE) {
+    unproven('BEATS-SLOW the map drew a sample to group (PREMISE: a small sample cannot fail the grouping row below)',
+      `only ${seen} marker(s) became visible, floor ${BEAT_MIN_SAMPLE} under throttled tiles. tracked ${(slowBeat.marks || []).length}, reveal ${slowBeat.reveal}`);
+    unproven(`BEATS-SLOW the markers arrive in at most ${MAX_BEATS} coordinated beats, never a per-marker trickle`,
+      'no visible markers to group');
+  } else {
+    ok('BEATS-SLOW the map drew a sample to group (PREMISE: a small sample cannot fail the grouping row below)',
+      true, `${seen} of ${slowBeat.marks.length} tracked markers became visible`);
+    ok(`BEATS-SLOW the markers arrive in at most ${MAX_BEATS} coordinated beats, never a per-marker trickle`,
+      B.length > 0 && B.length <= MAX_BEATS,
+      `${B.length} beat(s) of [${B.map(b => b.n).join(', ')}] markers, window ${BEAT_MS}ms, throttled line. All three sources are legitimate here: the 1800ms cap reveal, the tile-informed pass, and the spire`);
+  }
+  ok('BEATS-SLOW the map key is present and the marker predicate rejects all of it',
+    slowBeat.decoy.present === 9 && slowBeat.decoy.admitted === 0,
+    `${slowBeat.decoy.present} #mapLegend nodes wearing marker markup (must be 9), ${slowBeat.decoy.admitted} admitted (must be 0)`);
+}
 
 ok('ARRIVAL-SLOW the reveal happened at all under real-network tile timing (never revealing is a FAILURE)',
   slow.reveal != null, `reveal at ${slow.reveal}ms from Boneyard entry`);
