@@ -64,6 +64,14 @@ async function count(params) {
   return (await r.json()).n;
 }
 
+/** Count the LIMITER's rows. Deliberately not count(): that reads `events`, and
+ *  this change is what moved the limiter into its own `rate_limits` table. */
+async function rlCount(params) {
+  const qs = new URLSearchParams(params).toString();
+  const r = await fetch(`${BASE}/dev/ratelimit-count?${qs}`);
+  assert.equal(r.status, 200, `ratelimit-count needs DEV=1 (got ${r.status})`);
+  return (await r.json()).n;
+}
 async function prune(opts = {}) {
   const r = await postJson('/dev/prune', opts);
   assert.equal(r.status, 200, `prune failed: ${r.text}`);
@@ -131,12 +139,12 @@ await test('KEEPS a LIVE rate-limit row, written by the real limiter', async () 
   const r = await fetch(`${BASE}/recovery/available/ret${RUN}`);
   assert.ok(r.status === 200 || r.status === 429, `availability probe answered ${r.status}`);
   const liveFrom = String(Date.now() - 10 * 60 * 1000);   // the limiter's own 10-minute horizon
-  const before = await count({ name: 'rl_ridcheck', minTs: liveFrom });
+  const before = await rlCount({ name: 'rl_ridcheck', minTs: liveFrom });
   // BOUND: an empty sample set is a FAILURE. If the limiter wrote nothing there
   // is no live row to protect and the assertion below would pass on nothing.
   assert.ok(before > 0, 'the limiter wrote no live row, so this test proves nothing');
   await drain();
-  const after = await count({ name: 'rl_ridcheck', minTs: liveFrom });
+  const after = await rlCount({ name: 'rl_ridcheck', minTs: liveFrom });
   // DIRECTION: unchanged. Any drop at all means the limiter has been reset by
   // the pruner and the ciphertext endpoints are unthrottled.
   assert.equal(after, before, `the pruner ate ${before - after} live rate-limit rows`);

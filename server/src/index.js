@@ -2739,6 +2739,27 @@ export default {
           `SELECT COUNT(*) n FROM events${where.length ? ' WHERE ' + where.join(' AND ') : ''}`).bind(...bind).first();
         return json({ n: Number((row && row.n) || 0) });
       }
+      /* COUNT THE LIMITER'S OWN TABLE. This change moves the rate limiter off
+         `events` and into `rate_limits`, which is the whole point of it: on a
+         quiet run rl_ridcheck was the most common "event name" on the dashboard.
+         Two positive controls counted the limiter through /dev/events-count,
+         which reads `events`, so after the move they could never see a row and
+         both tests failed with "the limiter wrote no row, so this test proves
+         nothing". The guards were right; they were reading the pre-change table.
+         A separate endpoint rather than a `table` parameter on events-count: the
+         two tables have different time columns (events.ts vs
+         rate_limits.window_start), and a dynamic table name in a DEV endpoint is
+         a footgun for no gain. */
+      if (env.DEV === '1' && path === '/dev/ratelimit-count' && request.method === 'GET') {
+        const where = [], bind = [];
+        const rName = url.searchParams.get('name');
+        const rMinTs = url.searchParams.get('minTs');
+        if (rName) { where.push('name = ?'); bind.push(rName); }
+        if (rMinTs) { where.push('window_start >= ?'); bind.push(Number(rMinTs)); }
+        const row = await env.DB.prepare(
+          `SELECT COUNT(*) n FROM rate_limits${where.length ? ' WHERE ' + where.join(' AND ') : ''}`).bind(...bind).first();
+        return json({ n: Number((row && row.n) || 0) });
+      }
       if (env.DEV === '1' && path === '/dev/player' && request.method === 'GET') {
         const row = await env.DB.prepare('SELECT id, handle, friend_code, profile, app_v FROM players WHERE id = ?')
           .bind(url.searchParams.get('id')).first();

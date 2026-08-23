@@ -149,8 +149,9 @@ await test('analytics: /stats is admin-gated + aggregates', async () => {
 });
 
 await test('/stats keeps the rate limiter out of byName and the tester board', async () => {
-  /* rateLimitRecovery stores its per-IP counters as events, keyed by an IP HASH
-     in the device column. They are not product events and they are not devices:
+  /* rateLimitRecovery USED TO store its per-IP counters as events, keyed by an
+     IP HASH in the device column. They are not product events and they are not
+     devices:
      on a quiet run rl_ridcheck was the most common "event name" on the dashboard
      and an IP hash led the tester leaderboard with no label and no geo.
      Drive the REAL limiter rather than planting a synthetic row, so this tests
@@ -159,7 +160,7 @@ await test('/stats keeps the rate limiter out of byName and the tester board', a
   assert.ok(probe.status === 200 || probe.status === 429, `availability probe answered ${probe.status}`);
   await probe.text();
   // BOUND: the rows have to exist, or the assertions below pass on nothing.
-  const planted = await (await fetch(`${BASE}/dev/events-count?name=rl_ridcheck`)).json();
+  const planted = await (await fetch(`${BASE}/dev/ratelimit-count?name=rl_ridcheck`)).json();
   assert.ok(planted.n > 0, 'the limiter wrote no row, so this test proves nothing');
 
   const s = await (await fetch(BASE + '/stats?token=devtoken')).json();
