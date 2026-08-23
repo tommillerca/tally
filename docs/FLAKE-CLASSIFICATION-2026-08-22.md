@@ -281,3 +281,39 @@ different fixes and two of them were not flakes at all:
 A suite whose failure message contains a number should have that number read
 across at least two runs before it is called flaky. Two runs would have caught
 both of the misfiled reds above in about four minutes.
+
+## The thing worth keeping from all of this
+
+Across 2026-08-22 and 23, working this file and its neighbours, at least eight
+numbers turned out to be measuring something other than what the person reading
+them believed. Split evenly between two people who were both being careful:
+
+    the constant 9                  the map legend, not markers inside a fade
+    a 16-second reveal              a page-lifetime clock against a map-lifecycle cap
+    a process count of 0            while seven suites were running
+    "a verified clear box"          free of test suites, full of orphaned Chrome
+    an exit code of 0               from a command substitution that reset `$?`
+    two prove-red controls          invalid: one polluted tests/, one tested a patched copy
+    a floor of 10 markers           calibrated in an environment nobody could reproduce
+    a green row citing line 40      when the claim was on line 119
+
+**Not one was caught by its author.** Every single one was caught by the other
+person asking what the number actually counted. Care did not catch these, because
+each of us was being careful; the failure is stopping one step early, at a value
+that has the shape of the thing you expected.
+
+What made the corrections cheap was that the METHOD was written down beside the
+number. "Clear box" was findable as a confound in one read because the entry said
+it meant "no `tests/*.mjs` processes". Had it only said "verified clear", the
+claim would have stood, and the product bug it implied would have cost somebody a
+morning.
+
+So, for whoever reads this next:
+
+> **A measurement without its method recorded is a claim, and it will be believed
+> for exactly as long as nobody needs it to be true.**
+
+Record what you counted, where you counted it, and what state the machine was in.
+Not for rigour. So that when you are wrong, someone can find it in one read
+instead of reconstructing it from memory, and so the entry survives the
+correction with its real finding intact.
