@@ -500,7 +500,17 @@ export async function boot(base = 'https://tommillerca.github.io/tally/', opts =
    not what any check is about, so clear them once, up front. */
 export async function dismissOverlays(page, rounds = 6) {
   for (let i = 0; i < rounds; i++) {
-    if (!await click(page, /^(spin|nice|done|collect|claim|continue|ok|got it|next|skip|back to the pit)$/)) return;
+    /* NOTHING REACHABLE IS NOT NOTHING TO WAIT FOR. Before the hit-test below
+       existed, a phantom match returned true, so this loop kept going and spent
+       up to rounds*1500ms settling. Suites came to depend on that delay without
+       anyone intending it: redeem-dupe-audit read a backup-tip toast instead of
+       its redeem toast the moment the loop exited early. Removing a bug that was
+       load-bearing needs the load carried somewhere honest, so keep the settle
+       and drop only the bogus clicking. */
+    if (!await click(page, /^(spin|nice|done|collect|claim|continue|ok|got it|next|skip|back to the pit)$/)) {
+      await sleep(1500 * (rounds - i));
+      return;
+    }
     await sleep(1500);
   }
 }
@@ -512,15 +522,41 @@ export async function dismissOverlays(page, rounds = 6) {
 export async function click(page, re) {
   const hit = await page.evaluate(src => {
     const rx = new RegExp(src, 'i');
-    const b = [...document.querySelectorAll('button')]
-      .find(x => rx.test((x.textContent || '').trim()) && !x.disabled && x.getBoundingClientRect().width);
-    if (!b) return null;
     // A button below the fold measures fine but a mouse click at its coordinates
     // lands in dead space; a whole verification run once read as 7 failures
     // because of exactly this. Scroll first, like a thumb would.
+    //
+    // SCROLLING IS NOT ENOUGH, and this cost another seven. A button inside a
+    // COLLAPSED <details> matches on textContent and reports a non-zero width,
+    // but scrollIntoView cannot bring it into view because it is clipped by an
+    // ancestor with overflow:hidden. The click then fires at coordinates that
+    // belong to whatever is really there. Measured 2026-08-23: Today's quests
+    // live in <details class="q-collapse">, so its "Claim" matched while
+    // collapsed, and on one branch its phantom centre landed on the bonehead
+    // TAB. Every suite using boot() then started on the hub instead of Today,
+    // and seven unrelated audits failed at once looking like app regressions.
+    // So HIT-TEST after scrolling and skip anything that is not really there.
+    // Clicking the wrong element is worse than clicking nothing: nothing is a
+    // visible no-op, wrong is a silent navigation.
+    // FIRST MATCH ONLY, exactly as before. An earlier version of this fix hunted
+    // for the next REACHABLE match instead, which quietly changed the contract:
+    // it could now click a button the old code never would have, and
+    // redeem-dupe-audit went red because a different overlay got dismissed and
+    // it captured a backup-tip toast instead of the redeem toast. Skipping a
+    // phantom click is a bug fix; clicking a different button is a new
+    // behaviour. Do the first, never the second.
+    const b = [...document.querySelectorAll('button')]
+      .find(x => rx.test((x.textContent || '').trim()) && !x.disabled && x.getBoundingClientRect().width);
+    if (!b) return null;
     b.scrollIntoView({ block: 'center' });
     const r = b.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    if (!r.width || !r.height) return null;
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const top = document.elementFromPoint(cx, cy);
+    // Not really there: report "nothing to click" rather than clicking whatever
+    // occupies those coordinates.
+    if (!top || !(top === b || b.contains(top))) return null;
+    return { x: cx, y: cy };
   }, re.source);
   if (!hit) return false;
   await page.mouse.click(hit.x, hit.y);
