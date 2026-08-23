@@ -57,7 +57,13 @@ for (const f of files) {
     const head = l.match(/^#{2,3}\s+(\d+)\.\s+(.*)$/);
     const m = head || num;
     if (m) { cur = { n: +m[1], text: m[2], body: m[2] }; items.push(cur); continue; }
-    if (cur && l.trim() && !/^#{2,3}\s+\d+\./.test(l) && !/^\s{0,3}\d+\./.test(l)) cur.body += ' ' + l.trim();
+    /* ANY heading closes the current item. Without this, a section heading
+       between two items is swallowed into the one above it, and v421's
+       "# WHAT IS ALSO STILL OPEN FROM BEFORE" made item 9 (SHIPPED) print as
+       outstanding. An item's status must come from the item, never from the
+       prose that happens to follow it. */
+    if (/^#{1,6}\s/.test(l)) { cur = null; continue; }
+    if (cur && l.trim() && !/^\s{0,3}\d+\./.test(l)) cur.body += ' ' + l.trim();
   }
   batches.push({ f, items });
 }
@@ -67,15 +73,45 @@ for (const b of batches)
   for (const it of b.items)
     if (!STATUS.test(it.body)) unstatused.push(`${b.f}:${it.n}`);
 
+/* An item's status is its FIRST status marker. Testing /OPEN/ against the whole
+   accumulated body lets a later mention of some other item's state flip this
+   one, which is exactly how a SHIPPED item got printed as outstanding. */
+const statusOf = it => (STATUS.exec(it.body) || [])[1] || null;
+
 ok('STATUS every captured item says OPEN, SHIPPED or DROPPED',
   unstatused.length === 0,
   unstatused.length
     ? `${unstatused.length} with no status: ${unstatused.slice(0, 6).join(', ')}${unstatused.length > 6 ? ' ...' : ''}`
     : `${batches.reduce((s, b) => s + b.items.length, 0)} items across ${batches.length} batch(es)`);
 
+/* SEALED exists because the bug it catches was SILENT. The first parser let a
+   section heading ("# WHAT IS ALSO STILL OPEN FROM BEFORE") be swallowed into
+   the item above it, so a SHIPPED item printed in the standing reminder as
+   outstanding, and every row still exited 0. A reminder that quietly lies about
+   what is outstanding is worse than no reminder, and nothing here could see it.
+
+   It asserts the PARSER's own invariant rather than the prose's: an item's body
+   is the item, so no heading text may appear inside one. Stated this way it goes
+   red on the parser bug and stays quiet on healthy prose. The earlier attempt
+   ("one item, one distinct status") was wrong and went red on v424 #2, whose
+   status line legitimately reads OPEN with some parts SHIPPED in #99. */
+const bled = [];
+for (const b of batches) {
+  const headings = readFileSync(join(docs, b.f), 'utf8').split('\n')
+    .filter(l => /^#{1,6}\s/.test(l) && !/^#{2,3}\s+\d+\./.test(l))
+    .map(l => l.replace(/^#{1,6}\s+/, '').trim())
+    .filter(h => h.length > 8);
+  for (const it of b.items)
+    for (const h of headings)
+      if (it.body.includes(h)) { bled.push(`${b.f}:${it.n} swallowed "${h.slice(0, 40)}"`); break; }
+}
+ok('SEALED no item body swallowed a section heading',
+  bled.length === 0,
+  bled.length ? `${bled.length}: ${bled.slice(0, 3).join(', ')}` : `${batches.reduce((s2, b) => s2 + b.items.length, 0)} item bodies sealed`);
+
 const planless = [];
 for (const b of batches) {
-  const open = b.items.filter(it => /\bOPEN\b/.test(it.body));
+  const open = b.items.filter(it => statusOf(it) === 'OPEN');
   if (!open.length) continue;
   const stem = b.f.replace(/^FEEDBACK-/, '').replace(/\.md$/, '');
   /* EITHER its own plan file OR an explicit pointer to the one that covers it.
@@ -93,7 +129,7 @@ ok('PLAN every batch with open items has a plan beside it',
   planless.length ? `no PLAN-* for: ${planless.join(', ')}` : 'every open batch is planned');
 
 /* THE STANDING REMINDER. Not a verdict: a list, printed every run. */
-const open = batches.flatMap(b => b.items.filter(it => /\bOPEN\b/.test(it.body)).map(it => ({ f: b.f, ...it })));
+const open = batches.flatMap(b => b.items.filter(it => statusOf(it) === 'OPEN').map(it => ({ f: b.f, ...it })));
 if (open.length) {
   console.log(`\n    STILL OPEN FROM TOM (${open.length}):`);
   for (const it of open) console.log(`      ${it.f.replace(/^FEEDBACK-/, '').replace(/\.md$/, '')} #${it.n}  ${it.text.replace(/\s+/g, ' ').slice(0, 88)}`);
