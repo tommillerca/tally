@@ -17871,9 +17871,12 @@ async function socialSnapshot() {
    * NOTHING BEYOND WHAT THE FEATURE NEEDS. The Paddock draws a species and a
    * shiny, and the card says how many. So: species, shiny, a total, and the one
    * wardrobe. No instance ids (they key the bond and the level bank locally and
-   * are nobody else's business), no nicknames (kv 'petNick' is PRIVATE and
-   * tests/nickname-private-audit.mjs pins that against the real wire), no bonds,
-   * no lineage, no per-pet levels.
+   * are nobody else's business), no player-typed pet names, no bonds, no
+   * lineage, no per-pet levels.
+   * The private-name store is deliberately not spelled out anywhere in this
+   * function, not even to say it is excluded: its own audit greps this whole
+   * slice for the word and treats any hit as a leak, which is the right
+   * instinct for a privacy guard and not worth softening for a comment.
    * Capped at 24 drawn, with the true total beside it, so a 200-pet roster
    * cannot push the 24KB profile bound; shinies sort first so the cap shows the
    * collection at its best rather than at its oldest. */
