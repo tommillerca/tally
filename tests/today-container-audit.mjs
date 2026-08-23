@@ -101,7 +101,15 @@ const ok = (label, pass, detail = '') => {
    stamped with one date, so a past day reads back as zeros and one tap on the
    water button would save that zeroed record over today's. Delete this entry the
    day wellness gets a per-date store. Anything else that appears in this diff is
-   a regression, not a new exception. */
+   a regression, not a new exception.
+   PROVENANCE, 2026-08-23: verified against js/wellness.js, which keeps water,
+   bed and sleep in ONE kv record stamped with a single date and whose save()
+   overwrites it. That is a code fact rather than a product decision, so it
+   expires when the storage changes, not when someone changes their mind. It
+   traces to Tom's report that a past day "makes all the news above disappear and
+   makes the player feel like they just broke the game": everything else on Today
+   was restored for past days, and this is the one section that could not be
+   without destroying today's data. */
 const TODAY_ONLY = ['sec:wellness'];
 
 /* WAIT FOR THE DAY TO ACTUALLY CHANGE, never for a fixed sleep. renderToday is
