@@ -181,3 +181,33 @@ The agent also found two faults in its OWN audit that only appeared at
 parallelism (CDP delivering two clicks >300ms apart; a late route() zeroing the
 scroll it had just armed) and fixed them by measuring the delivered tap gap and
 reporting UNPROVEN (97) rather than by loosening an assertion.
+
+## v425 SHIPPED, four PRs open for v426, 2026-08-23
+
+v425 landed as #92 (a peer session cut it; I had stamped an identical bump and
+stood down unpushed when they messaged first). sw.js VERSION and APP_BUILD both
+read v425 on main. The cloud-backup opt-out fix is LIVE.
+
+Four PRs open, all merging clean against main e7b4ca75:
+
+| PR | Branch | What |
+|---|---|---|
+| #96 | x425/pit | 5 fight bugs, measured in painted pixels |
+| #97 | x425/fits | saved fits keep gear AND all looks |
+| #98 | x425/nag-doubletap | crate nag capped, double-tap tabs |
+| #99 | x425/today-d2 | the Today rework, past days whole, past quests read-only |
+
+**x425/appcore is SUPERSEDED — close it, do not merge.** Its four items are all
+covered: the Today ones by #99, the other two by #98, each re-verified from
+scratch rather than trusted.
+
+STILL UNVERIFIED WIP, not in any PR: x425/css, x425/wanderer. No prove-red, no
+gate run. x425/wheel is committed with its gate result never read.
+
+**A clean full gate run on a QUIET machine is owed before #99 merges.** Reds
+scale with load on unchanged code (79/81 at load 13 vs 66/81 at load 40 on a
+clean base archive), so nothing red tonight has been treated as a regression.
+
+The gate lock bug I reported (lock at `<repo>/../CHAT-HANDOFF.md`, invisible to a
+detached worktree, so worktree agents could never serialize) was fixed by a peer
+in #93.
