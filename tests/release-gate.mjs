@@ -33,6 +33,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 import { createServer } from 'node:http';
 import { readFile, stat, readdir } from 'node:fs/promises';
 import { extname, join as pjoin, normalize } from 'node:path';
+import { resolve as presolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const repoRoot = pjoin(here, '..');
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
@@ -121,8 +123,14 @@ if (own) console.log(`serving this repo at ${base}\n`);
    pet accessory revealed as a duplicate of an item the player never owned.
    Carries SAMPLE, REACH and LEAK as controls: LEAK rebuilds the pre-fix pool and
    REQUIRES it to leak, because three of its rows assert a zero. */
-const PURE = ['unit.test.js', 'first-session-audit.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs'];
+/* guard-provenance-lint is PURE for the same reason guard-hygiene-lint is: a
+   static scan of tests/, no browser, no network, well under a second. It is the
+   staleness twin of that file. Hygiene catches a guard that cannot SEE its bug;
+   provenance catches one still enforcing an instruction that was reversed. */
+const PURE = ['unit.test.js', 'first-session-audit.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs'];
 const BROWSER = [
+  'write-failure-seam-audit.mjs', // a rejected write is announced and re-thrown, and the ATOMIC primitives are in the seam: the reward SOP routes every payout through addIfAbsent/take/kvUpdate, which bypass db.put entirely
+  'write-failure-toast-audit.mjs', // the OTHER half of that seam: it ends in `if (!writeFailureSink) return;` and until now nothing in the app called onWriteFailure, so every rejection returned early and a lost meal, weight, crate or coin row stayed as silent as before the seam existed. The seam audit cannot catch that and should not: it registers its OWN sink to observe the seam, which is exactly why it stays green while the app has none. This file registers nothing, breaks a real write in the real page and reads the real #toast. REJECTS is the positive control (a write that quietly succeeded would make every other row vacuous); LOUD fails on SILENCE; QUIET, THROTTLE, QUOTA and NORECURSE cover the four ways announcing it can go wrong. Proven red against main's js/app.js: LOUD, THROTTLE and QUOTA go red together. Self-serving, ~50s, 6 checks
   'fight-tray-audit.mjs',    // move-button text inside its own box, and a scrolling tray that says it scrolls
   'fight-exit-audit.mjs',    // where a finished fight puts you; its COVERAGE half fails on any new fight mode that never declares an exit. Its six LIVE rows need a reachable vector tile host (the only route to a spire fight is a marker on the Boneyard) and report UNPROVEN with exit 97 without one: four of them used to be nested inside `if (launcher)` and simply vanish, taking the denominator with them (22 assertions instead of 26, summarised as 20/22). It stays in FAST because the static COVERAGE half needs no browser and is the half that catches a new fight mode with no exit rule
   'precache-audit.mjs',      // a module missing from PRECACHE = a blank app on one bad bar
@@ -189,6 +197,8 @@ const BROWSER = [
   'dvh-fallback-audit.mjs',  // a browser that cannot parse dvh must still reach the tab bar: #app carried no height fallback, which put the navigation 2173px below the fold on Today. 24s: static coverage of every dvh/svh in the sheet, plus four boots
   'overscroll-wordmark-audit.mjs', // the Today overscroll wordmark is INVISIBLE until you pull: REST (zero ink pixels in the band at scrollTop 0, and the band byte-identical with the feature on and off), CLAMP (the engine refuses a negative scrollTop, which is why ordinary scrolling can never reach it), ABOVE, TODAY (present on Today and on none of five other screens), NO-SHIFT (all 556 element rects identical with the mark present and absent, animations frozen first and the freeze proven, because Today's idle Bonehead really does move 31 of 400 rects on an untouched tree) and INK (the revealed mark composites to rgb(142,135,126) against --text-3's rgb(143,133,120)). It does NOT test the rubber band and says so at the top: iOS overscroll is a WKWebView behaviour and no headless Chromium bounces. MECHANISM is the closest honest proxy and the row that matters most: displaced on screen, the mark's ink moves up by exactly the scroll delta, so it is proven to live in the scrolled content layer that a bounce translates. A mark that had drifted onto the viewport would sit still under a pull and reveal nothing while every other row here stayed green. Self-serving, measured 34s, 18 checks. Proven red five ways: a positive `top` (4 FAILED), position: fixed (1, and silent to every other row while the feature would be dead on the device), the class dropped from the selector so every screen gets the mark (1), opacity 1 (1), and route()'s classList.toggle deleted (7). The third of those is why TODAY grades the PAINTED pseudo-element and not the class: the first version required both, route() still applies the class on Today, and the selector rewrite that put the wordmark on all six screens left the row green at 18/18
   'talkbox-audit.mjs',       // the typing dialogue box on Today, which is the app's one talking surface and sits on the default home screen. Four pins, all on PIXELS off the box's own clipped rect because a computed style reads a visible caret off a frame nobody painted: TYPE (the ink takes 14+ intermediate amounts, so a print-at-once cannot pass, cross-checked against the DOM prefix sequence), SKIP (a real mouse click MID-LINE completes the line, with a precondition row that refuses to grade unless the tap landed between the first character and the last, and both wrong answers pinned: a no-op AND a restart), EXCLUSIVE (across every frame of a held box, never a caret and a chevron at once, which is the box saying "wait" twice) and REDUCED (every one of 39 fast samples already carries the whole line, and the caret detector that fires on the animated run sees nothing). Carries four controls because three of its rows assert a ZERO and that is the shape which passes on a blank frame: CONTROL-CARET and CONTROL-CHEVRON require each detector to fire somewhere, and CONTROL-ISOLATION requires the caret region to score zero on a finished box that HAS a name label in the same #a5e847, so a caret count is a caret and not the speaker's name bleeding in past the 2-degree rotation. Plus HITTEST in both directions (anti-regression rule 6: the box owns its centre while the line is live or it can never be skipped, and hands it back once a self-dismissing line is done or it eats a 42%-wide Backpack target) and COVERAGE, which derives the graded set from js/*.js so the NEXT chat bubble converted to a talk box fails this audit until it is driven or excused. Self-serving, measured 24s, 40 checks. FAST because it is on the app's first screen and because being unable to hurry a talking box along is, in Tom's words, the single most irritating thing about this pattern
+  'gwart-crate-audit.mjs',   // and the wizard who talks through that box does not say the same THING all session: the unopened-crate reminder fires ONCE per app open. Tom, 2026-08-22: "If you have an unopened crate it's all Gwart talks about that many reminders is annoying." The crate bucket is gwartPool's top early-return, so a crate sitting in the bag swallowed every other state for the whole session. Grants a real crate through grantCrate, reloads so the session under test OPENS with it (the cap is module state, which is what "per app open" means), then taps the plaque ten times with real mouse clicks and reads the box's own data-tb target line. Graded in BOTH directions, because a cap that silences him is not a fix: ONCE and ONCE-TAPS bound the reminder to the opening line, VOICE requires the ten taps after it to come back from the rest of the catalogue. CONTROL is the blind-detector, requiring the opening line to BE a crate line, so a seed that never reached Gwart or a CRATE_LINES that drifted fails by name instead of letting ONCE pass on an empty search. Proven red on the pre-fix js/app.js in a git-archive throwaway: 11 crate lines out of 11 sampled, all ten taps, 0 other lines. ~25s
+  'tab-doubletap-audit.mjs', // double-tap the tab you are already on: Today scrolls to the top, the Boneyard recentres via the map's OWN #mapRecenter. Tom, 2026-08-22. The guard is the risk, not the two actions: a same-tab tap route()s, and route() rebuilds the screen, which on the Boneyard tears down the live map the second tap is meant to move. Every tap is a real mouse click on the real bar, and each position row is PAIRED with an identity row (a dataset marker on the rendered child, an expando on the map instance) because on the broken tree both position rows pass for the wrong reason: a rebuild also lands at the top and also reopens centred on you. TODAY-SINGLE is the control that a lone same-tab tap still re-routes exactly as tray-destination-audit requires. FALLBACK pins the no-map case (a tray tap that does nothing is the complaint bindTabs' header answers) and STALE pins that leaving a tab inside the 300ms window builds the next screen once, counted at the app's own window.__map assignment. Boneyard rows go UNPROVEN (97) without a live map. Proven red three ways: the pre-fix app.js, the fallback dropped, the cancel moved. ~70s
   /* THE TWO ICON-RENDER AUDITS. boneyard-icon-audit landed on main with NO
      TIER, which means the coverage assertion below has been red and `npm run
      gate` has been exiting 1 before a browser started, for the fourth time (see
@@ -197,6 +207,7 @@ const BROWSER = [
   'boneyard-icon-audit.mjs',    // the Boneyard map and its key draw the same pixel art at whole steps and it actually decodes. Six rows and four controls, self-serving, measured 35s green at 41 decoded pixel imgs. Its VECTOR row fails in BOTH directions on purpose: a new spawn falling back to vector is the v416 bug returning, and it went red on 2026-08-21 the moment the food-find drawing was wired, which is what took its exemption list to EMPTY. It can also exit 97 UNPROVEN when the map draws no Mystery Egg to compare the key against (two independent dice rolls: an 8% rare roll per cell per 45-minute instance, then app.js placeWalkable vetoing any anchor that snaps to no walkable ground); it declares that row by name rather than passing or reporting it as an art regression
   'pixel-art-swap-audit.mjs',   // the TEN screens the Boneyard audit does not reach, rendered: no screen draws a vector or an emoji at >= 16px for a concept that has pixel art on disk, no pixel <img> lands off a whole step, and no call site reserves space the snapped art loses more than a fifth of. Identifies a drawing by its own path data normalised through the page's serializer, never by a class name, because the defect is a SILENT fallback that looks right in source and right in the DOM: it is why 305 graded sites and a 7/7 green icon-inventory coexisted with three vector wedges on the daily wheel. Also pins the wheel's WORDS against its pictures (LABEL): each wedge's tag must be a whole word of the Shop's own label for the thing that wedge draws, resolved by hit-testing which sector <path> the word and the picture each sit inside. That is the defect a medium swap creates and no other row can see: the gold wedge came out of the swap with the right art, the right grant and the word GOLD over a picture of a bone chest. Carries TEN controls, including "all three media present", "no two drivers landed on the same screen" and "every wheel word paired to exactly one named picture", so a row for a medium the probe cannot see, or a screen a driver silently missed, fails instead of passing on nothing. FAST because this class has now shipped four separate times and Tom has found every instance of it by playing. Self-serving, measured 65s, 18 checks
   'nickname-private-audit.mjs', // the pet nickname is PRIVATE, and a leak is invisible from the UI: a nickname that reached the Crew would still render, still reload, still clear, so nothing would look broken and nobody would report it. Points the app at a fake API with social.js's own ?api= hook, drives the real controls, and reads the bytes off page.on('request') rather than grepping the source: WIRE asserts the nickname is in zero request bodies and zero URLs, with a POSITIVE CONTROL that the pet fields that ARE meant to upload were found in the same captured body, so a blind capture fails instead of passing. Also HOSTILE (a 23-char payload that really would fire, escaped at both innerHTML sites), REFUSE, CLEAR and reload. FAST rather than full because a privacy leak is silent and permanent once shipped. Self-serving, measured 58s, 58 checks
+  'cloud-optout-audit.mjs',    // Settings -> Cloud backup -> Off must actually STOP THE UPLOAD, and until 2026-08-23 it did not: `cloudOff` was read in exactly one place, bootSync's RESTORE path, so the encrypted save kept going up on every boot and resume through autoSync while the toast said "your progress will only live on this phone" and privacy.html said the same. FAST for the same reason nickname-private-audit is FAST: a privacy control that silently does nothing looks identical to one that works, from the UI and from the player's side, so nobody reports it. Points the app at a fake API with the ?api= hook, presses the REAL Settings toggle, and grades the SERVER's received log rather than the browser's attempts. PREMISE proves an upload happens while backup is on, so the zeros mean something; BACKON proves the guard cannot wedge a player off backup forever, which would be the worse bug. Proven red against the missing guard (OFF: 1 PUT /backup, 116 KB, after opting out). Self-serving, ~45s, 9 checks
 ];
 
 function run(file, args) {
@@ -386,6 +397,25 @@ const DECLARED = {
     + 'scaled down in front of the Wanderer. Needs no map: it drives window.__denFight with wanderer:true, which is the field the arena '
     + 'class, the stage class and the plate all key off. Run it on any change to .arena.boss-wanderer, #foeStage.wanderer-foe, .fstage '
     + 'or the arena height. About 40s.'],
+  'pit-figures-audit.mjs': ['full', 'the three figures in the Pit, graded in PAINTED pixels rather than boxes: hide one element, screenshot, diff, '
+    + 'and what changed is what that element paints, shadow and halo included. It exists because four of Tom\'s complaints in one message '
+    + '(2026-08-22) were each invisible to a getBoundingClientRect: the Wanderer overlapping the bonehead by 78.5px of ink while both '
+    + 'stage boxes looked fine, Bumbleseal drawn 22% taller than the pet in the middle of the roster because croppedPetImg fills against '
+    + 'the LONGEST ink edge, a rarity drop-shadow painting 350 warm pixels outside her silhouette, and a mirror that changes no box at '
+    + 'all. 25 rows at 393x852 and 320x568: CLEAR, LOOMS as a BAND with the Live Wire measured as its floor, FILLS, TAIL (proportion AND '
+    + 'a margin clear of the arena wall, because an uncropped tail is sliced by the container and keeps the right proportion), INSIDE, '
+    + 'STANDS, PET-MASS, PET-GLOW, PET-FACING, PET-UNTOUCHED and MAGE-UNCHANGED. Every loop in the arena is frozen and the toast removed '
+    + 'before any diff, or the mask comes back as the whole arena. Run it on any change to .arena.boss-wanderer, #foeStage.wanderer-foe, '
+    + '.fstage.petmini or petFightPx. Needs no map. About 100s and ten seam fights, so full rather than fast.'],
+  'wanderer-despawn-audit.mjs': ['full', 'a beaten Wanderer is GONE from the Boneyard and the next instance still walks. Tom, 2026-08-22: '
+    + '"after defeating the wanderer he was still just there in the boneyard and didnt disappear." wandererDone gated the encounter but '
+    + 'never the marker. Fired for real: a GPS fix 45m into his real cone, the encounter it triggers, Fight, and the win resolved through '
+    + 'window.__bhFight.finish rather than a dispatched event. Markers are matched BY ID off el.dataset.w, because the first cut graded '
+    + 'distance to a projected point, could not reach the map object and passed on null. Five rows: BEFORE (the positive control), '
+    + 'DESPAWN (gone while the module still derives his instance as live, so a rollover cannot pass for a despawn), LEDGER, NEIGHBOURS '
+    + '(the Wanderer nobody beat is still drawn) and NEXT (the clock moved one lap, a new instance on an unclaimed key, the beaten key '
+    + 'still on the ledger). Needs WebGL and vector tiles, so it reports UNPROVEN with exit 97 rather than green on a machine that cannot '
+    + 'draw the map: full, never fast.'],
   'wanderer-patrol-sim.mjs': ['skip', "a MEASURING INSTRUMENT, not a pass/fail check, the same shape as gauntlet-sim.mjs: it prints "
     + 'catches per hour of walking against the Wanderer at a sweep of cone ranges and asserts nothing about them, so running it on '
     + 'every gate would burn a minute to prove nothing. Run it BY HAND whenever CONE_RANGE_M, CONE_HALF_DEG, WANDER_LAP_MIN or the '
@@ -736,13 +766,41 @@ if (runAll) BROWSER.push(...FULL);
  * skipping is a decision on the record rather than a silent default.
  * Identity via --as <name> (or GATE_OWNER), because the release has to know whose
  * claim to leave and whose to respect. */
-const lockPath = pjoin(repoRoot, '..', 'CHAT-HANDOFF.md');
+/* THE LOCK HAS TO RESOLVE TO ONE FILE FROM EVERY WORKTREE, AND IT DID NOT.
+   It was `pjoin(repoRoot, '..', 'CHAT-HANDOFF.md')`, and repoRoot is wherever the
+   suite is running from. From the main clone that is the real handoff file. From
+   a DETACHED WORKTREE it is <scratchpad>/CHAT-HANDOFF.md, which does not exist,
+   so readLock() threw, returned null, and the gate printed "no lock line found,
+   continuing (nothing to contend with)" and ran. A fail-open lock that announces
+   it is safe.
+   Every worktree therefore had its own private lock and none of them excluded any
+   other. The protocol was added 2026-08-10 after three concurrent suite runs; on
+   2026-08-23 it happened again, three sessions and two release-gate runs at once,
+   because agents work in worktrees and physically could not claim it. The suites
+   do not fail honestly under that load, they fail as if the code were broken:
+   ARRIVAL-SLOW straggler latency reads 42ms idle and 342-461ms loaded against a
+   250ms budget, and two sessions separately came close to filing the machine as a
+   defect.
+   git-common-dir is the same path from the main clone and from every worktree it
+   owns (<main>/.git), so two levels up is the handoff directory for all of them. */
+function handoffDir() {
+  try {
+    const common = execFileSync('git', ['rev-parse', '--git-common-dir'],
+      { cwd: repoRoot, encoding: 'utf8' }).trim();
+    return presolve(repoRoot, common, '..', '..');
+  } catch {
+    return pjoin(repoRoot, '..');   // not a git checkout: behave as before
+  }
+}
+const lockPath = pjoin(handoffDir(), 'CHAT-HANDOFF.md');
 const owner = (process.argv.find(a => a.startsWith('--as='))?.slice(5)) || process.env.GATE_OWNER || '';
 const noLock = process.argv.includes('--no-lock');
 const LOCK_RE = /^(\s*GATE LOCK:\s*)(.*)$/m;
 let lockClaimed = false;
+let lockReadable = true;
 async function readLock() {
-  try { return (await readFile(lockPath, 'utf8')).match(LOCK_RE)?.[2]?.trim() ?? null; } catch { return null; }
+  try { return (await readFile(lockPath, 'utf8')).match(LOCK_RE)?.[2]?.trim() ?? null; }
+  catch { lockReadable = false; return null; }
 }
 async function writeLock(text) {
   try {
@@ -756,6 +814,14 @@ async function writeLock(text) {
 const held = await readLock();
 if (noLock) {
   console.log(`GATE LOCK: SKIPPED via --no-lock (line currently reads: ${held ?? 'unreadable'})\n`);
+} else if (held === null && !lockReadable) {
+  /* NOT "nothing to contend with". The lock could not be READ, so this run is
+     serialised against nothing and the operator cannot know that from a green
+     suite. Say the path, because the whole bug was this line reassuring people. */
+  console.log(`GATE LOCK: UNREADABLE at ${lockPath}`);
+  console.log('        This run is NOT serialised against other sessions. Timing rows');
+  console.log('        on a shared machine cannot be trusted. Create the file with a');
+  console.log('        "GATE LOCK: (free)" line, or pass --no-lock deliberately.\n');
 } else if (held === null) {
   console.log('GATE LOCK: no lock line found, continuing (nothing to contend with).\n');
 } else if (!/^\(free\)/i.test(held)) {

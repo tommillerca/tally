@@ -43,12 +43,23 @@ const readRow = () => page.evaluate(async () => {
     denWins: await poi.denWinsCount(),
     text: row ? row.innerText.replace(/\s+/g, ' ').trim() : null,
     hasFightBtn: !!document.getElementById('remoteDenBtn'),
+    btnInRow: row ? !!row.querySelector('#remoteDenBtn') : null,
     doneClass: row ? row.classList.contains('done') : null,
   };
 });
 
 const before = await readRow();
 ok('the Pit offers a remote den to fight', before.hasFightBtn && !!before.text, before.text);
+/* REACH. Every row below grades `sect.nextElementSibling`, which is a guess about
+   the markup, while hasFightBtn is a document-wide getElementById that knows
+   nothing about which element got graded. Put a wrapper round the den row and
+   this audit reads a NEIGHBOUR: "the FIGHT button is gone" and "it points at
+   tomorrow" can both still come back green off the wrong element. Tie the two
+   together once, here, while the button is still on screen: the row being graded
+   must be the row that OWNS the button the rest of this file reasons about. */
+ok('REACH the row this audit grades is the one that owns the FIGHT button',
+  before.btnInRow === true,
+  before.btnInRow === true ? '' : 'the graded row does not contain #remoteDenBtn: this is reading the wrong element');
 /* An empty reward label is a failure, not a pass. denRewardLabel takes the
    REWARD; the call site passed the whole den, so every field read undefined and
    the row rendered a bare "· · free" for months. */

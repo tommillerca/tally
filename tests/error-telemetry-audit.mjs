@@ -44,6 +44,10 @@ if (!base) {
 }
 
 const { browser, page } = await boot(base);
+/* Uncaught throws surface here as well as in the app's own hook, which is what
+   makes the CONTROL row below possible: see it. */
+const thrown = [];
+page.on('pageerror', e => thrown.push(String(e.message || e)));
 
 /* Phase 1: BOT GATE. No probe flag set: these must queue nothing. Same page and
    same database as phase 2, so the assertion is marker-scoped. */
@@ -63,6 +67,16 @@ const inject = (marker, full) => page.evaluate(([m, f]) => new Promise(res => {
 }), [marker, full]);
 await inject('bh-bot-marker', 0);
 await sleep(900);
+
+/* CONTROL. BOT GATE below asserts a ZERO, and a fixture that never executed
+   produces the same zero as a gate that held: a renamed fixture, a 404, a
+   cache-busting query the server rejects, and the row reports the gate working
+   on a phase where nothing was ever thrown. Puppeteer sees the uncaught throw
+   independently of the app's hook, so require the bot phase to have actually
+   crashed before reading anything into its empty queue. */
+ok('CONTROL the bot phase really threw, so its empty queue is a gate and not an absence',
+  thrown.some(e => /bh-bot-marker/.test(e)),
+  thrown.length ? thrown.slice(0, 2).join(' ; ') : 'nothing was thrown at all: the fixture never ran');
 
 /* Phase 2: the probe on. One error, one rejection, the SAME error repeated
    four more times (dedupe), then six distinct errors (cap).

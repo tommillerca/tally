@@ -57,7 +57,30 @@ const SPOTS = [
   [49.2490, -123.1000],
   [49.2790, -123.0680],
 ];
-const VISIBLE_FLOOR = 10;   // measured 13.75 on this branch, 4.00 on the parent
+/* THE FLOOR OF 10 DOES NOT REPRODUCE ON EVERY MACHINE. Investigated 2026-08-22
+   after this row sat in the "flaky" pile for nine days while failing every run.
+   It is not flaky and the code has not regressed. Evidence:
+     - the spawn FIELD is uniform and healthy: over 400 Vancouver points, mean
+       46.0 spawns per 3x3 cells, p10 45, p90 47. The four SPOTS below sit at
+       45, 45, 46, 46, i.e. exactly on the field mean, not a low draw.
+     - boneyard-supply-audit (pure, 25 samples over 40000 cells) reports 13.5
+       spawns per phone viewport against its floor of 8, and passes.
+     - raising the settle from 12s to 24s does not move the result (9.00 both).
+     - CHECKED OUT 5bf8af14, THE COMMIT THAT RECORDED 13.75, and ran this same
+       audit there today: 9.25. Same four locations, 4/14/9/10.
+   The code that measured 13.75 measures 9.25 on this machine. The variable is
+   the environment (tile data and software GL here versus whatever the original
+   calibration ran on), not the app. Rendered counts are stable per location and
+   vary by geography: 49.2827 is waterfront downtown and draws 3-4 every run,
+   because the walkability snap pushes spawns off the water and out of view.
+   DO NOT lower this to 9 to make the row green. "The number Tom judges is the
+   number of markers on the glass" and the glass is a phone, not this container.
+   Re-calibrating against software GL would bake in a number that represents no
+   player. This needs a floor measured on a phone-representative machine, which
+   is a decision with Tom, not a threshold nudge. Until then the red is honest:
+   it means "this machine cannot reproduce the calibration", not "the app broke".
+   See docs/FLAKE-CLASSIFICATION-2026-08-22.md. */
+const VISIBLE_FLOOR = 10;   // measured 13.75 when written; this machine gives 9.0-9.5 at EVERY commit
 const MARKER_BUDGET = 100;  // measured: 60fps to ~84 markers, first drops near 107
 
 const out = [];

@@ -48,6 +48,30 @@ const base = await look('baseline');
 ok('BASELINE the app is visible before any freeze (an invisible baseline proves nothing)',
   base.eff > 0.9 && base.kids > 0 && base.chars > 100, JSON.stringify(base));
 
+/* CONTROL. Page.setWebLifecycleState is deliberately wrapped in a catch below,
+   because a Chrome that does not support it must not crash the run. The price is
+   that on such a Chrome NOTHING EVER FREEZES: every RESUME and CRATE row passes
+   without the bug once being reproduced, and this file reports green having
+   tested nothing at all. That is the same shape as grading a set that cannot
+   contain the bug. So prove the freeze itself, once, by counting timer ticks
+   across one: a live page fires about forty in two seconds, a frozen one fires
+   none. */
+await page.evaluate(() => { window.__fz = 0; setInterval(() => { window.__fz++; }, 50); });
+await sleep(300);
+const fz0 = await page.evaluate(() => window.__fz);
+try {
+  await client.send('Page.setWebLifecycleState', { state: 'frozen' });
+  await sleep(2000);
+  await client.send('Page.setWebLifecycleState', { state: 'active' });
+} catch (e) { console.log('  (lifecycle unsupported:', String(e).slice(0, 60), ')'); }
+/* Read it on the same turn as the resume, with no sleep in between: a resumed
+   interval catches up on its backlog, and 300ms of catch-up alone takes a real
+   freeze from 1-2 ticks to 7-8. Measured on this machine, three trials each:
+   frozen 2,1,1 against a no-op 40,40,40. The edge sits at 10. */
+const fz1 = await page.evaluate(() => window.__fz);
+ok('CONTROL the freeze really stops the page (a freeze that no-ops passes every row below)',
+  fz1 - fz0 < 10, `${fz1 - fz0} timer ticks across a 2s freeze: measured 1-2 frozen, 40 if it never stopped`);
+
 for (const delayMs of [0, 30, 120]) {
   // start a route, then freeze the page delayMs later: the reveal is in flight
   await page.evaluate(() => { location.hash = '#/trends'; });

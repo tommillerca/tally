@@ -110,6 +110,17 @@ await page.reload({ waitUntil: 'networkidle2' });
 const again = await waitVeil(12000);
 ok('ONCE a second boot shows nothing, with the force flag still set', !again,
   again ? 'the poster fired twice: the one-shot is not holding' : 'stayed away for 12s');
+/* CONTROL. ONCE asserts an ABSENCE, and an app that failed to boot at all shows
+   exactly the same absence: a bad reload, a 404, a module that throws on the way
+   up, and ONCE reports the one-shot holding on a page that never ran a line of
+   the code it is grading. The absence only means something over a live app, so
+   prove the app is live in the same breath. */
+const alive = await page.evaluate(() => {
+  const sc = document.getElementById('screen');
+  return { kids: sc ? sc.children.length : -1, chars: (sc?.innerText || '').replace(/\s+/g, ' ').trim().length };
+});
+ok('CONTROL the second boot really ran the app, so that absence is the one-shot and not a dead page',
+  alive.kids > 0 && alive.chars > 100, JSON.stringify(alive));
 
 console.log(`\n${fails.length ? `${fails.length} FAILED` : 'ALL PASS'}`);
 await browser.close();
