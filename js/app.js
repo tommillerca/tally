@@ -3389,7 +3389,10 @@ async function renderToday(el) {
   const over = tot.kcal > t.kcal;
   const isToday = S.date === dateKey();
   // quest header status: how many are claimable right now (drives the accent cue)
-  const questClaimable = questTiers.reduce((n, tier) => n + tier.quests.filter(q => { const st = questState(q, tier.ctx); return st.done && !st.claimed; }).length, 0);
+  /* ...on a day you can still act on. A past day's quests are a RECORD (Tom,
+     2026-08-23: "make past day quests read-only"), so nothing there is ready for
+     anything and the badge and its accent would both be lying. */
+  const questClaimable = isToday ? questTiers.reduce((n, tier) => n + tier.quests.filter(q => { const st = questState(q, tier.ctx); return st.done && !st.claimed; }).length, 0) : 0;
   // v146 unlock guidance: surface Build/gear/weapon moments the player would miss
   /* READ ON EVERY DAY, NOT ONLY TODAY (v425). Tom, 2026-08-22: "accidentally
      changing the day on your macros makes all the news above disappear and makes
@@ -3594,9 +3597,13 @@ async function renderToday(el) {
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
     <summary><span class="q-sum-ico">${ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
     <div class="q-card-body">
+    ${isToday ? '' : `<p class="note">A record of ${esc(title)}. Quests are claimed on the day.</p>`}
     ${questTiers.map(tier => `
     <div class="q-tier ${tier.period}">
-      <div class="q-tier-h">${tier.label}</div>
+      ${/* the daily tier is labelled "TODAY'S QUESTS", which is a lie on a day
+             that is not today. The tier list is built before isToday exists, so
+             the label is corrected here rather than reordering that block. */''}
+      <div class="q-tier-h">${tier.period === 'day' && !isToday ? 'DAILY QUESTS' : tier.label}</div>
       <div class="q-list">
       ${tier.quests.map(q => {
         const st = questState(q, tier.ctx);
@@ -3607,8 +3614,15 @@ async function renderToday(el) {
             <div class="q-desc">${esc(q.desc)}</div>
             <div class="q-bar ${tier.period !== 'day' ? 'gold' : ''}"><i style="width:${pct}%"></i></div>
           </div>
+          ${/* READ-ONLY ON A PAST DAY. No new decoration: a finished row that
+                 cannot be claimed falls back to the SAME `.q-frac` the app
+                 already uses for a row you cannot act on, so it reads "3/3, that
+                 is what happened" rather than as a button that broke. The claim
+                 itself is refused at the authority either way (periodClosed in
+                 js/quests.js); this is so the screen does not offer something it
+                 will not honour. */''}
           ${st.claimed ? `<span class="q-done">${ICONS.check(13)}</span>`
-            : st.done ? `<button class="q-claim" data-claim="${q.id}" data-period="${tier.period}" data-pkey="${tier.ctx.periodKey}">Claim</button>`
+            : st.done && isToday ? `<button class="q-claim" data-claim="${q.id}" data-period="${tier.period}" data-pkey="${tier.ctx.periodKey}">Claim</button>`
             : `<span class="q-frac">${st.target > 20 ? Math.round((st.cur / st.target) * 100) + '%' : st.cur + '/' + st.target}</span>`}
         </div>`;
       }).join('')}

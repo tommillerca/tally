@@ -38,6 +38,13 @@
  *            and a DOM-only check would pass on the pre-fix tree (rule 1).
  *   SCROLL   a day change lands at the top. That is `route()` in place of
  *            `refresh()`, the known regression the contract exists for.
+ *   READONLY a past day's quests can be acted on. Graded in MONEY: the app's own
+ *            claim control is pressed with a real click, pointed at the closed
+ *            day, and the coin balance and the xp ledger are read back. A row
+ *            that only counted buttons would pass on a tree whose handler still
+ *            pays, which is the whole point of putting the guard in js/quests.js.
+ *   CONTROL  today's claim stopped paying. Without it, "refuse everything" would
+ *            pass every READONLY row while breaking quests for everybody.
  *
  * PROVEN RED, and each mutation goes red ONLY where it should, which is the
  * half that says the rows are not just noisy. Three throwaway trees, each one a
@@ -56,6 +63,17 @@
  *       impossible
  *       4 red: the two arrows in ORPHAN and in ESCAPE, each naming
  *       'todaySettings' as what answered the tap.
+ *   R4  the whole branch tip before read-only (2ecd65fd js/app.js + js/quests.js)
+ *       6 red, all READONLY: 4 live claim controls on the past day, a "4 ready"
+ *       badge, and pressing one paid 340 -> 380 coins, 3535 -> 3560 XP and minted
+ *       a quest row keyed to the closed day. CONTROL green, correctly.
+ *   R5  js/quests.js ONLY reverted to 2ecd65fd, the read-only markup kept
+ *       the isolation run: no button is drawn, and the retargeted real control
+ *       still pays. Proves the money rows are held by the AUTHORITY and not by
+ *       the absent button.
+ *   R6  periodClosed forced to always-true
+ *       CONTROL red and READONLY green: the guard cannot buy a pass by refusing
+ *       every claim in the app.
  *
  * An empty sample is a failure everywhere: SETUP refuses to grade a screen with
  * no sections on it, and PASTDAY refuses to grade an empty marker set.
@@ -102,6 +120,8 @@ async function tapDay(page, id, want) {
   await sleep(400);   // let the ring tween and the images settle before measuring
   return landed;
 }
+
+const shotPath = name => join(repo, '_feedback_shots', 'today-d2', name);
 
 const { browser, page, errors } = await boot(base);
 try {
@@ -291,6 +311,143 @@ try {
   ok('ESCAPE the next-day arrow lands back on today',
     home.h1 === 'Today' && !!todayShape.pickDate && home.pick === todayShape.pickDate,
     JSON.stringify({ ...home, expected: todayShape.pickDate }));
+
+  // ------------------------------------------------------------- READONLY
+  /* A PAST DAY'S QUESTS ARE A RECORD, NOT A THING TO ACT ON. Tom, 2026-08-23:
+     "make past day quests read-only". v425 renders the whole day on a past day,
+     which put a live Claim button on a quest finished days ago: real coins, real
+     XP, minted retroactively from a screen that exists to be read.
+
+     GRADED IN MONEY, NOT IN MARKUP. "no button is drawn" is the weakest possible
+     version of this and would pass on a tree whose handler still pays, so the
+     rows below fire the app's OWN claim control, with a real click, and read the
+     coin balance and the xp ledger back afterwards. The handler is never called
+     directly and no claim function is imported here.
+
+     HOW A PAST-DAY CLAIM IS FIRED AT ALL, given the point is that no such button
+     exists: today's live button is retargeted at the closed period by rewriting
+     the one dataset field the handler reads for it, `data-pkey`. Everything else
+     is the app's: its element, its listener, its lookup, its claim call. That is
+     also the real threat model, since a stale closure, a re-render racing a day
+     change and a hand-edited attribute all arrive at exactly this shape.
+
+     CONTROL is not optional here: a guard that refuses every claim would pass
+     the row above and break quests for everyone, so the same button, unmodified,
+     must still pay on today. */
+  const seedPast = await page.evaluate(async d => {
+    // a weighed-in past day, so at least one of its quests is genuinely finished
+    const db = await import('./js/db.js');
+    await db.db.put('weights', { date: d, kg: 80, ts: Date.now() });
+    return d;
+  }, yesterday);
+  await tapDay(page, 'prevDay', yesterday);
+  /* OPENED THE WAY A PLAYER OPENS IT. The quests are a <details>: its rows are in
+     the DOM either way, so the assertions would read fine on a collapsed card,
+     but the control being fired below has to be one that is actually on screen,
+     and the shot has to show what Tom would see. */
+  const opened = await page.evaluate(() => {
+    const d = document.querySelector('.q-collapse');
+    if (!d) return false;
+    if (!d.open) d.querySelector('summary').click();
+    d.scrollIntoView({ block: 'start' });
+    return d.open;
+  });
+  await sleep(700);
+  ok('READONLY SETUP the quests card opened on the past day', opened);
+  const ro = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.q-collapse .q-row')].map(r => ({
+      name: r.querySelector('.q-name')?.textContent.trim().split(' +')[0],
+      pct: Math.round(parseFloat(r.querySelector('.q-bar i')?.style.width || '0')),
+      claimed: !!r.querySelector('.q-done'),
+      claimBtn: !!r.querySelector('[data-claim]'),
+      inert: r.querySelector('.q-frac')?.textContent.trim() || null,
+    }));
+    return {
+      rows,
+      finishedUnclaimed: rows.filter(r => r.pct >= 100 && !r.claimed),
+      claimControls: document.querySelectorAll('.q-collapse [data-claim]').length,
+      note: document.querySelector('.q-collapse .q-card-body > .note')?.textContent.trim() || null,
+      badge: document.querySelector('.q-collapse .q-badge')?.textContent.trim() || null,
+      accent: document.querySelector('.q-collapse')?.className.includes('has-claim'),
+    };
+  });
+  console.log('READONLY past day', JSON.stringify(ro, null, 1));
+  ok('READONLY SAMPLE the past day really has a finished, unclaimed quest on it (an empty sample grades nothing)',
+    ro.finishedUnclaimed.length >= 1, `${ro.finishedUnclaimed.length} of ${ro.rows.length} rows: ${ro.rows.map(r => `${r.name} ${r.pct}%`).join(' | ')}`);
+  ok('READONLY a finished past-day quest offers no claim control at all',
+    ro.finishedUnclaimed.every(r => !r.claimBtn) && ro.claimControls === 0, `${ro.claimControls} claim controls`);
+  ok('READONLY it shows the inert idiom instead, so it reads as a record rather than a broken button',
+    ro.finishedUnclaimed.every(r => !!r.inert), JSON.stringify(ro.finishedUnclaimed));
+  ok('READONLY and the header stops advertising things to claim', !ro.badge && !ro.accent,
+    `badge ${ro.badge}, accent ${ro.accent}`);
+  ok('READONLY one line says why, in the app’s own note idiom', /record of/i.test(ro.note || ''), String(ro.note));
+  await page.screenshot({ path: shotPath('d2-7-pastday-quests.png') });
+
+  await tapDay(page, 'nextDay', todayShape.pickDate);
+  const openQuests = () => page.evaluate(() => {
+    const d = document.querySelector('.q-collapse');
+    if (d && !d.open) d.querySelector('summary').click();
+    d?.scrollIntoView({ block: 'start' });
+    return !!d?.open;
+  });
+  await openQuests();
+  await sleep(600);
+  const wallet = () => page.evaluate(async k => {
+    const [loot, game, db] = await Promise.all([import('./js/loot.js'), import('./js/game.js'), import('./js/db.js')]);
+    const rows = await db.db.all('xp');
+    return { coins: await loot.coins(), xp: await game.totalXp(),
+      pastRows: rows.filter(r => r.key.startsWith(`quest-${k}-`) || r.key === `questsall-${k}`).length,
+      questRows: rows.filter(r => r.type === 'quest').length };
+  }, yesterday);
+
+  const beforeRetro = await wallet();
+  const fired = await page.evaluate(k => {
+    const b = document.querySelector('.q-collapse [data-claim][data-period="day"]');
+    if (!b) return { ok: false };
+    const was = b.dataset.pkey;
+    b.dataset.pkey = k;                 // point the app's own control at the closed day
+    b.click();                          // ...and press it for real
+    return { ok: true, id: b.dataset.claim, was, now: b.dataset.pkey };
+  }, yesterday);
+  await sleep(2500);
+  const afterRetro = await wallet();
+  console.log('RETRO', JSON.stringify({ fired, beforeRetro, afterRetro }));
+  ok('READONLY SETUP the app really had a live daily claim control to fire (an absent button grades nothing)',
+    fired.ok && fired.was !== fired.now, JSON.stringify(fired));
+  ok('READONLY firing the real claim control at a closed day pays NOTHING',
+    afterRetro.coins === beforeRetro.coins && afterRetro.xp === beforeRetro.xp,
+    `coins ${beforeRetro.coins} -> ${afterRetro.coins}, xp ${beforeRetro.xp} -> ${afterRetro.xp}`);
+  ok('READONLY and mints no ledger row against that day',
+    afterRetro.pastRows === beforeRetro.pastRows, `${beforeRetro.pastRows} -> ${afterRetro.pastRows} rows keyed to ${yesterday}`);
+
+  /* CONTROL. Same button, this time untouched. If this stops paying, the guard
+     above did not make past days read-only, it broke quests. */
+  /* A FRESH BUTTON, not the one just sabotaged. `location.hash = '#/today'` while
+     already on #/today fires no hashchange and re-renders NOTHING, so the first
+     version of this row pressed the same retargeted control and read a refusal as
+     a broken guard. A real day round-trip through the arrows rebuilds the markup,
+     and the SETUP row below refuses to grade unless the control it is about to
+     press really is pointed at today. */
+  await tapDay(page, 'prevDay', yesterday);
+  await tapDay(page, 'nextDay', todayShape.pickDate);
+  await openQuests();
+  await sleep(600);
+  const beforeToday = await wallet();
+  const firedToday = await page.evaluate(k => {
+    const b = document.querySelector('.q-collapse [data-claim][data-period="day"]');
+    if (!b) return { ok: false };
+    if (b.dataset.pkey !== k) return { ok: false, stale: b.dataset.pkey };
+    b.click();
+    return { ok: true, id: b.dataset.claim, pkey: b.dataset.pkey };
+  }, todayShape.pickDate);
+  await sleep(3000);
+  const afterToday = await wallet();
+  console.log('CONTROL', JSON.stringify({ firedToday, beforeToday, afterToday }));
+  ok('CONTROL SETUP a FRESH claim control, pointed at today, was there to press (a stale or absent one grades nothing)',
+    firedToday.ok && firedToday.pkey === todayShape.pickDate, JSON.stringify(firedToday));
+  ok('CONTROL today’s claim still pays, so the guard closed the past and nothing else',
+    afterToday.coins > beforeToday.coins && afterToday.questRows === beforeToday.questRows + 1,
+    `coins ${beforeToday.coins} -> ${afterToday.coins}, quest rows ${beforeToday.questRows} -> ${afterToday.questRows}`);
 } finally {
   await browser.close();
   srv?.close?.();
