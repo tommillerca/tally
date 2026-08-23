@@ -86,6 +86,23 @@ const ok = (label, pass, detail = '') => {
    a regression, not a new exception. */
 const TODAY_ONLY = ['sec:wellness'];
 
+/* WAIT FOR THE DAY TO ACTUALLY CHANGE, never for a fixed sleep. renderToday is
+   async and the gate runs suites in parallel, so under load a 1.8s sleep samples
+   the frame BEFORE the re-render: the first run inside the gate read "Today" off
+   a screen that was one tick away from saying "Friday" and failed a healthy tree
+   (lessons_guard_samples_wrong_instant). Poll the value the click is supposed to
+   move instead, then grade. */
+async function tapDay(page, id, want) {
+  await page.evaluate(i => document.getElementById(i)?.click(), id);
+  /* A timeout is a graded FAILURE, not a thrown audit: an exception here would
+     stop every row below from running at all, which reads as "fewer failures". */
+  const landed = await page.waitForFunction(
+    w => document.getElementById('datePick')?.value === w, { timeout: 15000, polling: 120 }, want)
+    .then(() => true).catch(() => false);
+  await sleep(400);   // let the ring tween and the images settle before measuring
+  return landed;
+}
+
 const { browser, page, errors } = await boot(base);
 try {
   await page.evaluate(() => { location.hash = '#/today'; });
@@ -219,8 +236,14 @@ try {
     return sc.scrollTop;
   });
   await sleep(200);
-  await page.evaluate(() => document.getElementById('prevDay').click());
-  await sleep(1800);
+  const yesterday = await page.evaluate(() => {
+    const d = new Date(document.getElementById('datePick').value + 'T12:00:00');
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const wentBack = await tapDay(page, 'prevDay', yesterday);
+  ok('SCROLL the previous-day arrow really moved the day before anything was measured',
+    wentBack, `wanted ${yesterday}`);
   const after = await page.evaluate(() => document.getElementById('screen').scrollTop);
   ok('SCROLL the day change had somewhere to fall FROM (a zero start grades nothing)', scroll > 120, String(scroll));
   ok('SCROLL a day change keeps the reading position, it does not go to the top',
@@ -256,8 +279,8 @@ try {
   for (const c of escape.controls) {
     ok(`ESCAPE ${c.id} is reachable from a past day`, c.present && c.mine, JSON.stringify(c));
   }
-  await page.evaluate(() => document.getElementById('nextDay').click());
-  await sleep(1800);
+  const cameHome = await tapDay(page, 'nextDay', todayShape.pickDate);
+  ok('ESCAPE the next-day arrow moved the day at all', cameHome, `wanted ${todayShape.pickDate}`);
   const home = await page.evaluate(() => ({
     h1: document.querySelector('.dayhdr h1, .day-strip h1')?.textContent.trim(),
     pick: document.getElementById('datePick')?.value,
