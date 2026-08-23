@@ -61,6 +61,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { boot, seed, sleep, settle, serveTree } from './godmode.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -84,6 +85,38 @@ const shot = async (page, name) => {
   await page.screenshot({ path: file });
   console.log(`      shot: ${file}`);
 };
+
+/* ---- WATERMARK: static, and static ON PURPOSE ----------------------------
+ * There are two inboxes on the Crew tab now and ONE read watermark under both
+ * of them. Each painter reading the watermark and then stamping it is a race:
+ * whichever stamps first moves the line under the other, and every genuinely
+ * new row on the slower card renders as history.
+ *
+ * THIS ROW IS A LINT BECAUSE THE LIVE ROWS CANNOT GRADE IT. That is measured,
+ * not assumed: prove-red P4 below puts the per-painter read AND the per-painter
+ * stamp back, which is the bug verbatim, and the whole live suite came back
+ * GREEN, exit 0, with UNREAD passing. The interleaving simply does not fire
+ * reliably in this harness, so a live assertion on it would be a check that
+ * cannot fail (tally/CLAUDE.md anti-regression rule 1) sitting there looking
+ * like coverage. The STRUCTURE is what is actually enforceable: inside
+ * renderFriends there is exactly one read of the watermark and exactly one
+ * write of it, and neither painter may call deliverySeenTs itself.
+ */
+const APP = readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
+const renderFriendsSrc = (() => {
+  const at = APP.indexOf('async function renderFriends(');
+  if (at < 0) return '';
+  // to the next top-level function declaration, which is where this one ends
+  const next = APP.indexOf('\nasync function ', at + 10);
+  return APP.slice(at, next < 0 ? APP.length : next);
+})();
+setup('SAMPLE renderFriends was located in js/app.js, so the watermark lint has something to read',
+  renderFriendsSrc.length > 2000, `${renderFriendsSrc.length} chars`);
+const wmReads = (renderFriendsSrc.match(/deliverySeenTs\s*\(/g) || []).length;
+const wmWrites = (renderFriendsSrc.match(/kvSet\s*\(\s*'crewSeenTs'/g) || []).length;
+ok('WATERMARK the two inboxes share ONE read of the seen-watermark and ONE write of it, so neither can move the line under the other',
+  wmReads === 1 && wmWrites === 1,
+  `${wmReads} read(s) of deliverySeenTs and ${wmWrites} write(s) of crewSeenTs inside renderFriends (want 1 and 1)`);
 
 const argUrl = process.argv.slice(2).find(a => !a.startsWith('--') && /^https?:/.test(a));
 const srv = argUrl ? null : await serveTree(ROOT);
@@ -199,26 +232,35 @@ try {
   await sleep(400);
   await shot(page, '00b-cheers-rows');
 
+  /* A ROW IS FOUND BY THE NAME IT PRINTS, NEVER BY ITS REPLY BUTTON.
+     Both of these rows used to locate their row with `r.back === s.id`, i.e. by
+     the data attribute on the Cheer back control, and that quietly welded three
+     independent checks into one: the prove-red that removes ONLY the reply
+     button (P2 below) came back with WHAT and WHO red as well, reporting "no
+     row" for a row that was on screen and perfectly correct. A guard that
+     cannot tell "the text is wrong" from "the button is missing" is not three
+     guards, it is one guard wearing three labels. The name is rendered by every
+     row, including a legacy one that has no id at all, so it is the honest
+     handle. */
+  const rowFor = s => card.rows.find(r => r.who.includes(s.name));
+
   /* ---- WHAT: the phrase they actually picked, not the server's sentence ---- */
   const presetsList = await page.evaluate(() => window.__cheerPresets());
   const whatBad = [];
   for (const s of SENT) {
-    const row = card.rows.find(r => r.back === s.id);
+    const row = rowFor(s);
     const want = presetsList[s.cheer];
     if (!row) { whatBad.push(`${s.name}: no row`); continue; }
     if (row.said.trim() !== want.txt) whatBad.push(`${s.name}: said "${row.said.trim()}", sent "${want.txt}"`);
     if (!row.face.includes(want.emo)) whatBad.push(`${s.name}: face "${row.face.trim()}", sent "${want.emo}"`);
   }
-  const distinct = new Set(card.rows.filter(r => r.back).map(r => r.said.trim()));
+  const distinct = new Set(SENT.map(s => (rowFor(s) || {}).said || '').map(t => t.trim()).filter(Boolean));
   ok('WHAT each row shows the emoji and the phrase the sender actually chose, and three cheers read as three different things',
     whatBad.length === 0 && distinct.size === SENT.length,
     whatBad.length ? whatBad.join('; ') : `${[...distinct].map(t => `"${t}"`).join(' ')}`);
 
   /* ---- WHO ---- */
-  const whoBad = SENT.filter(s => {
-    const row = card.rows.find(r => r.back === s.id);
-    return !row || !row.who.includes(s.name);
-  });
+  const whoBad = SENT.filter(s => !rowFor(s));
   ok('WHO each row names the friend who sent it',
     whoBad.length === 0, whoBad.length ? whoBad.map(s => s.name).join(', ') : card.rows.map(r => r.who.trim()).join(' | '));
 
@@ -240,15 +282,18 @@ try {
     const r = b.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }, target.id);
-  setup('SAMPLE the Cheer back control is on screen and hittable', !!hit, hit ? `at ${Math.round(hit.x)},${Math.round(hit.y)}` : 'no control');
+  /* NOT a setup row. A missing Cheer back control is precisely the failure this
+     check exists to catch, so grading it as un-runnable setup would exit 2 and
+     take SPLIT, LEGACY and KEPT down with it, reporting a broken harness where
+     the truth is a broken feature. */
   /* elementFromPoint before the click: an absolutely positioned neighbour over
      the control would swallow the tap and the sheet would open for the wrong
      row, or not at all (anti-regression rule 6). */
-  const onTop = await page.evaluate(p => {
+  const onTop = hit ? await page.evaluate(p => {
     const el = document.elementFromPoint(p.x, p.y);
     return el ? (el.closest('[data-cheerback]') || {}).dataset?.cheerback || el.className : null;
-  }, hit);
-  await page.mouse.click(hit.x, hit.y);
+  }, hit) : null;
+  if (hit) await page.mouse.click(hit.x, hit.y);
   await sleep(900);
   const sheet = await page.evaluate(() => {
     const s = document.querySelector('.sheet-cheer');
@@ -256,8 +301,9 @@ try {
     return { head: (s.querySelector('.sheet-head h2') || {}).textContent || '', body: s.textContent.slice(0, 300), chips: s.querySelectorAll('[data-cheer]').length };
   });
   ok('BACK tapping Cheer back opens the send sheet aimed at that player',
-    onTop === target.id && !!sheet && sheet.chips > 0 && sheet.body.includes(target.name),
-    `hit-test ${onTop}; sheet ${sheet ? `"${sheet.head}" ${sheet.chips} chips, names target=${sheet.body.includes(target.name)}` : 'never opened'}`);
+    !!hit && onTop === target.id && !!sheet && sheet.chips > 0 && sheet.body.includes(target.name),
+    !hit ? `no Cheer back control was rendered for ${target.name}`
+         : `hit-test ${onTop}; sheet ${sheet ? `"${sheet.head}" ${sheet.chips} chips, names target=${sheet.body.includes(target.name)}` : 'never opened'}`);
   await shot(page, '01-cheer-back-sheet');
   await page.evaluate(() => { if (document.querySelector('.sheet')) history.back(); });
   await sleep(600);
@@ -307,13 +353,19 @@ try {
      would grade the cap, and would go red on correct behaviour. */
   const expanded = await page.evaluate(() => {
     const b = document.getElementById('cheersMore');
-    if (!b) return null;
+    if (!b) return false;
     b.click();
     return true;
   });
-  setup('SAMPLE the read card collapses and offers a way back into the archive',
-    !!collapsed && collapsed.rows.length < card.rows.length && expanded === true,
-    collapsed ? `${collapsed.rows.length} of ${card.rows.length} shown, Show-all control ${expanded ? 'present' : 'MISSING'}` : 'no card');
+  /* A card SHORT ENOUGH TO SHOW EVERYTHING has no Show-all control and needs
+     none: the archive is already on screen. Requiring the control unconditionally
+     made this exit 2 under prove-red P5, where hiding the legacy row left exactly
+     three cheers and nothing to collapse, so KEPT never ran and the file reported
+     a broken harness instead of the dropped row LEGACY had just caught. What has
+     to hold is that nothing is UNREACHABLE, which is the next row. */
+  setup('SAMPLE the read card is either showing everything already, or offers a way into the archive',
+    !!collapsed && (collapsed.rows.length === card.rows.length || expanded),
+    collapsed ? `${collapsed.rows.length} of ${card.rows.length} shown, Show-all control ${expanded ? 'present' : 'not needed'}` : 'no card');
   await sleep(500);
   const after = await readCard();
   ok('KEPT every cheer is still reachable after a full reload, and none of them is counted as new any more',
@@ -328,27 +380,66 @@ try {
 
 process.exit(fails);
 
-/* PROVE-RED. Each mutation was written DIRECTLY INTO A COPY of this tree that is
- * not a git worktree (a `cp -R` of a worktree keeps a .git file pointing back at
- * the original, so a `git checkout -- path` inside the copy writes to the
- * ORIGINAL and the mutation never lands), then grepped in the copy to confirm it
- * was there before the run. Run on 2026-08-23:
+/* PROVE-RED, RUN rather than predicted, 2026-08-23.
  *
- *   js/social.js applyPayload: `extra` forced to null, which IS the shipped bug
- *     -> CARRIED  "BONE JOVI sent 0, row has undefined (from -)" for all three
- *        WHAT     every row falls back to the server's sentence: three rows,
- *                 one distinct string
- *        BACK     no reply control exists at all, so SAMPLE exits 2 before it
- *   js/app.js paintCheers: `r.cheerFrom` reply button dropped
- *     -> BACK ONLY. The list still reads correctly, which is the point: WHAT and
- *        WHO stay green and only the answer half goes red
- *   js/app.js: the cheer filter left out of paintDeliveries
- *     -> SPLIT ONLY  "deliveries rows: ... GRAVE MINT cheered you ...": listed
- *        twice on one screen, and nothing else notices
- *   js/app.js: the shared seenAtOpen watermark replaced by a per-painter read
- *        and a per-painter stamp, which is the race the shared read exists for
- *     -> UNREAD  "card tag none, 0 unread rows": paintDeliveries stamped the
- *        watermark first and moved the line out from under the Cheers card
- *   js/app.js paintCheers: legacy rows filtered out with `.filter(r => r.cheer != null)`
- *     -> LEGACY ONLY  "the legacy row was dropped from the list"
+ * Each mutation was written DIRECTLY INTO A COPY of this tree with its `.git`
+ * removed, so the copy is not a git worktree: a plain `cp -R` of a worktree
+ * keeps a .git FILE pointing back at the original, and a `git checkout -- path`
+ * inside it writes to the ORIGINAL, so the mutation never lands and the run
+ * proves nothing. Every copy was grepped for the mutation, and for all three
+ * test seams (__crewCheers, __cheerPresets, __testApplyGrant), BEFORE the run:
+ * a revert that also takes out a seam makes the file fail for the wrong reason
+ * while the rows it is meant to catch pass green.
+ *
+ * THE FIRST ROUND FOUND THREE FAULTS IN THIS FILE, not in the app, and all
+ * three are fixed above. Recording them because each is a way a green row can
+ * mean nothing:
+ *
+ *   1. WHAT and WHO located their row by the reply button's data attribute, so
+ *      P2 (which removes ONLY the button) reported "no row" for three rows that
+ *      were on screen and entirely correct. Three labels, one guard. Rows are
+ *      found by the NAME they print now.
+ *   2. BACK's precondition was a `setup` row, so a missing reply control exited
+ *      2 and took SPLIT, LEGACY and KEPT with it: a broken FEATURE reported as
+ *      a broken HARNESS. It is a graded row now.
+ *   3. P4 RAN GREEN. The whole live suite passed, exit 0, with the per-painter
+ *      watermark read and stamp put back, because the interleaving does not
+ *      fire reliably under this harness. UNREAD could not fail on the bug it
+ *      was written for (tally/CLAUDE.md anti-regression rule 1). That is why
+ *      WATERMARK is now a static lint on the STRUCTURE instead.
+ *
+ * The second round, against the fixed file. Every row below is the complete
+ * FAIL list for that run, and each mutation now has its own signature:
+ *
+ *   P1  js/social.js applyPayload: `extra` forced to null. THE SHIPPED BUG.
+ *       exit 1, three rows red:
+ *         CARRIED  "BONE JOVI sent 0, row has NO ROW (from -)", all three
+ *         WHAT     "BONE JOVI: said \"BONE JOVI cheered you\", sent \"GG!\";
+ *                   BONE JOVI: face \"\", sent \"[skull]\"" and the same for the
+ *                  other two: every cheer falls back to the server's sentence
+ *                  and loses its emoji, which is exactly what Tom was reading
+ *         BACK     "no Cheer back control was rendered for MARROW MAX"
+ *       WHO stays GREEN, and that is right: the sender's name is still parsed
+ *       out of the label, so the one thing that never broke is not reported as
+ *       broken.
+ *   P2  js/app.js paintCheers: the `r.cheerFrom` reply button dropped.
+ *       exit 1, ONE row red: BACK, same message. The list still reads
+ *       perfectly, so WHAT, WHO, SPLIT, LEGACY and KEPT all stay green.
+ *   P3  js/app.js: the cheer filter left out of paintDeliveries.
+ *       exit 1, ONE row red: SPLIT, "deliveries rows: BONE JOVI cheered you...
+ *       MARROW MAX cheered you... GRAVE MINT cheered you... DUSTY LULU cheered
+ *       you... RIB TICKLER sent you 120 coins!" -- all four listed twice on one
+ *       screen, and nothing else in the file notices.
+ *   P4  js/app.js: the shared seenAtOpen watermark replaced by a per-painter
+ *       read AND a per-painter stamp, which is the race verbatim.
+ *       exit 1, ONE row red: WATERMARK, "3 read(s) of deliverySeenTs and 2
+ *       write(s) of crewSeenTs inside renderFriends (want 1 and 1)".
+ *       Every live row stays green, which is the measured fact that put this
+ *       guard in the static column.
+ *   P5  js/app.js paintCheers: legacy rows filtered out with
+ *       `.filter(r => r.cheer != null)`.
+ *       exit 1, ONE row red: LEGACY, "the legacy row was dropped from the
+ *       list". KEPT still runs and still passes, because the collapse
+ *       precondition no longer demands a Show-all button that a three-row card
+ *       correctly does not have.
  */
