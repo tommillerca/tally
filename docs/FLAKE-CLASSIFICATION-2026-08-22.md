@@ -107,6 +107,14 @@ is the machine, not the code.
 > selectors, after a run came back "0 markers at rest" and looked exactly like a
 > code defect.
 >
+> **FIXED on main at `0a569dec`.** The three unscoped counters now filter through
+> `closest('.maplibregl-marker')`, a `legendDecoys` counter makes a scoping
+> regression show up as a number rather than as two rows quietly passing again,
+> and a `MIN_PLAUSIBLE_MARKERS` row goes `unproven()` rather than FAIL when the
+> map drew nothing. Verified on the scoped tree: decoys 0/0, and 9/9 with only the
+> scoping reverted, the mutation redding exactly one row. The two rows that could
+> not fail can fail again.
+>
 > **Contention makes this suite lie in the direction of a bug**, so no timing row
 > here should be graded on a busy machine. Measured on this box: ARRIVAL-SLOW
 > straggler latency reads 42ms idle and 342-461ms under load against a 250ms
