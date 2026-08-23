@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 425, date: '2026-08-23', title: 'Backup off means off, and the Shop stops working overtime', items: [
+    'Fixed, and it is the one in here that matters: turning Cloud backup OFF in Settings did not actually stop your save being uploaded. The switch stopped the app pulling a backup DOWN, and left it still sending one up on every launch. Your save is encrypted on your phone before it leaves, with a key that never goes anywhere, so what was being sent could not be read, by us or by anyone else. But off should mean off, and now it does.',
+    'Gwart\'s Emporium was quietly working flat out for as long as you had it open, which costs battery and warms the phone. Nothing about it looks any different; it just rests now.',
+    'The privacy policy now says exactly what the map does and does not send. The short version: your GPS position never leaves your phone, and everything you find out there is worked out on the phone itself. The one exception is the spires, because other players can hold them too, so the app asks about towers near you on a grid a couple of kilometres wide, and claiming one tells us which tower it was.',
+  ] },
   { n: 424, date: '2026-08-22', title: 'A mirror to try things on in, and Gwart finds his voice', items: [
     'You can see Bumbleseal while you dress her now. Her wardrobe sits right under her instead of below the fold, so you watch a piece go on instead of scrolling up to check.',
     'On a small phone she was off the bottom of the screen entirely while you tapped. Not any more.',
