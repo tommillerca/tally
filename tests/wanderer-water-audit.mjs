@@ -65,6 +65,31 @@
  *     legacy had put 64% of laps ON the water.
  *   - first oracle pass costs under 2ms for all nine cells, then memoized.
  *
+ * PROVEN RED 2026-08-23, four mutations, each in its own throwaway `cp -R` tree
+ * with .git REMOVED (a worktree's .git is a file pointing back at the original,
+ * so a checkout inside a copy writes to the original and proves nothing), the
+ * defect written into the FILE and grepped to confirm it landed, exit codes read
+ * from a file and never through a pipe. Every one exited 1.
+ *   THE ORIGINAL DEFECT   wandererAt ignores the oracle again -> LAND "7475 water
+ *     positions ... (60 shown, 0 hidden)", HIDDEN, UNDECIDED. The LIVE rows
+ *     correctly declare themselves unproven there: with nothing able to relocate,
+ *     the before/after they grade does not exist.
+ *   THE GLUE               js/wanderer.js keeps the fix and js/app.js drops the
+ *     oracle from its one call, which is the field-dropped-in-the-mapper failure
+ *     this project keeps paying for -> LIVE "2182_-3970_i25:WATER", the marker
+ *     drawn 852 m from where the derivation had put him, on the water. Nothing
+ *     else moved: every node row stayed green, because the math was never wrong.
+ *   ASSUME LAND WHEN BLIND isWater returns false instead of undefined for a tile
+ *     that has not arrived, the plausible version of this bug -> DETERMINISM red
+ *     BY NAME ("trickle differ from forward"), plus CONTROL-WATER, SAMPLE, CACHE,
+ *     CONTROL-DETERMINISM, MAP-STATE and BROWSER-AGREES-NODE.
+ *   READ THE RENDERED MAP  isWater answers from queryRenderedFeatures when a map
+ *     is present, which is the design G2 warned about -> MAP-STATE "the map state
+ *     moved the answer" and BROWSER-AGREES-NODE.
+ * The unproven path is not theory either: on the first finished run of the day the
+ * search found no relocatable Wanderer in the band and the suite printed three
+ * UNPRV rows and exited 97 rather than green.
+ *
  * NEEDS THE TILE HOST, and the LIVE / MAP-STATE rows need a drawable map. Same
  * contract as tests/boneyard-audit.mjs: rows that could not run are reported
  * UNPROVEN with exit 97 by name, never quietly green.
@@ -96,12 +121,12 @@ const NET_ROWS = ['SETUP every tile the scan needs arrived', 'CONTROL-WATER the 
   'CACHE an evicted and refetched tile re-answers its points identically', 'SETUP all four determinism children ran',
   'DETERMINISM four cold oracle builds, four tile-arrival orders, one answer',
   'CONTROL-DETERMINISM the children graded a real sample'];
-const MAP_ROWS = ['MAP-STATE the same points classify identically at four map zooms and centres',
-  'CONTROL-MAP-STATE the rendered basemap disagrees with itself across those same states',
-  'BROWSER-AGREES-NODE the page and node classify the same grid identically',
-  'LIVE-SAMPLE the map really drew a Wanderer to grade',
+const LIVE_ROWS = ['LIVE-SAMPLE the map really drew a Wanderer to grade',
   'LIVE-CONTROL legacy would have drawn him standing on the water right here',
   'LIVE every Wanderer the map actually draws is standing on land'];
+const MAP_ROWS = [...LIVE_ROWS, 'MAP-STATE the same points classify identically at four map zooms and centres',
+  'CONTROL-MAP-STATE the rendered basemap disagrees with itself across those same states',
+  'BROWSER-AGREES-NODE the page and node classify the same grid identically'];
 const cls = unclassifiedRows(import.meta.url, [NET_ROWS, MAP_ROWS]);
 const undeclared = cls.missing.filter(n => !n.startsWith('ROWS-CLASSIFIED'));   // this row itself needs nothing
 ok('ROWS-CLASSIFIED every assertion in this file is declared under the environment it needs',
@@ -332,9 +357,13 @@ if (!cap.ok) {
     const now = new Date();
     const mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
     const inst = Math.floor(mins / W.WANDER_LAP_MIN);
+    /* THE INSTANCE THE APP WILL ACTUALLY DRAW. Requiring the next one too
+       halved the candidate pool for a rollover that only matters if the 45
+       minutes run out mid-read, so it is required only when it is close. */
+    const insts = mins - inst * W.WANDER_LAP_MIN > W.WANDER_LAP_MIN - 3 ? [inst, inst + 1] : [inst];
     for (let cx = 2179; cx <= 2183; cx++) {
       for (let cy = -3971; cy <= -3965; cy++) {
-        const good = [inst, inst + 1].every(i => {
+        const good = insts.every(i => {
           const m = i * W.WANDER_LAP_MIN + 10;
           const legacy = W.wandererAt(cx, cy, date, m);
           const fixed = W.wandererAt(cx, cy, date, m, isWater);
@@ -350,6 +379,14 @@ if (!cap.ok) {
   });
   console.log(`LIVE POSITION   ${pick ? `cell ${pick.cx}/${pick.cy} instance ${pick.inst}, standing him at ${pick.lat.toFixed(5)}, ${pick.lng.toFixed(5)}` : 'none found'}`);
 
+  /* AN EMPTY SAMPLE IS DECLARED, NEVER GRADED. The Wanderer set is date-seeded
+     and this row needs a cell today's seeds put on the water AND the fix stands
+     back on land. On a date where that band offers none, the honest answer is
+     that the row did not run: tests/wanderer-despawn-audit.mjs (#117) went red
+     on exactly this shape, an empty sample crashed rather than saying so. The
+     node rows above still grade the derivation on a pinned date, so nothing
+     about the fix goes unchecked when this happens. */
+  if (!pick) for (const n of LIVE_ROWS) unproven(n, "today's seeds put no relocatable Wanderer in the Toronto waterfront band, so there is no before/after to grade");
   if (pick) await page.setGeolocation({ latitude: pick.lat, longitude: pick.lng });
   await page.evaluate(() => { location.hash = '#/boneyard'; });
   await sleep(3000);
@@ -360,8 +397,8 @@ if (!cap.ok) {
   await sleep(9000);
 
   /* THE END OF THE CHAIN. Not "the oracle says land": the marker the map drew,
-     unprojected off its own centre anchor back into lat/lng, classified. */
-  const live = await page.evaluate(async here => {
+     put back through the map's own projection, classified. */
+  const live = !pick ? null : await page.evaluate(async here => {
     const W = await import('./js/wanderer.js');
     const { isWater } = await import('./js/water.js');
     const { dateKey } = await import('./js/nutrition.js');
@@ -396,6 +433,7 @@ if (!cap.ok) {
     }
     return { drawn, legacy };
   }, pick ? { lat: pick.lat, lng: pick.lng } : { lat: 43.6300, lng: -79.3600 });
+  if (live) {
   for (const d of live.drawn) console.log(`  DRAWN  ${d.id}  ${(d.lat ?? 0).toFixed(6)}, ${(d.lng ?? 0).toFixed(6)}  water=${d.water}  ${d.off}m off his derived point`);
   for (const l of live.legacy) console.log(`  LEGACY ${l.id}  ${l.lat.toFixed(6)}, ${l.lng.toFixed(6)}  water=${l.water}`);
   /* The read itself is grounded: a marker unprojected back to somewhere he is
@@ -408,6 +446,7 @@ if (!cap.ok) {
   ok('LIVE every Wanderer the map actually draws is standing on land',
     live.drawn.length >= 1 && live.drawn.every(d => d.water === false),
     live.drawn.map(d => `${d.id}:${d.water === false ? 'land' : d.water === true ? 'WATER' : 'undecided'}`).join(' '));
+  }
 
   /* ---- the same points, four map states ------------------------------- */
   const STATES = [['z13.5 over the open lake', 43.500, -79.000, 13.5], ['z18 inland, the points far off-screen', 43.7400, -79.4200, 18],
