@@ -693,7 +693,18 @@ const GIFTBOX = 'giftbox';
  * (db.addIfAbsent), so exactly one caller anywhere on the device is ever told
  * `claimed: true` for a key, and only that one runs the side effects below. */
 async function applyPayload(key, type, p) {
-  const claim = await awardOnce(key, type || 'social', p.xp || 0, p.note || 'From the Crew');
+  /* THE TWO FIELDS A CHEER IS ACTUALLY MADE OF. /cheer sends
+     { from, cheer, cheerFrom, note }, and until now only `note` survived the
+     trip into the ledger: the INDEX (which of the twelve phrases) and the
+     SENDER's id both stopped here, at the one line that turns a grant into a
+     row. So a cheer could be listed but never quoted, and never answered,
+     because the id you would answer it with had been dropped one hop before
+     anything read it. Both are carried verbatim, and `cheer` is coerced because
+     it is the wire format and 0 is a legitimate value that `||` would eat. */
+  const extra = type === 'cheer'
+    ? { cheer: Number.isFinite(+p.cheer) ? +p.cheer : null, cheerFrom: p.cheerFrom || null, from: p.from || null }
+    : null;
+  const claim = await awardOnce(key, type || 'social', p.xp || 0, p.note || 'From the Crew', undefined, extra);
   if (!claim.claimed) return false;            // already ingested: skip side effects too
   if (p.coins) await coinsAdd(p.coins);
   if (p.dust) await boneDustAdd(p.dust);   // step-race podium pays dust; nothing else does yet

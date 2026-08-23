@@ -224,8 +224,17 @@ export async function award(key, type, xp, label, date) {
  * first: the row is already committed by the time we get there, so totalXp()
  * includes it, and on the warm path it is the cache we just advanced rather
  * than a scan. */
-export async function awardOnce(key, type, xp, label, date) {
-  const row = { key, type, xp, label, date: date || dateKey(), ts: Date.now() };
+/* `extra` is a bag of EXTRA COLUMNS on the ledger row, and it exists because
+   the ledger is the only place a delivery survives long enough to be read back.
+   A cheer arrives carrying which of the twelve it is and who sent it; both were
+   thrown away here, because this row shape has never had anywhere to put them,
+   and the Crew inbox could then only ever say "somebody cheered you" and offer
+   no way to cheer back. It is spread FIRST so nothing a caller passes can
+   overwrite key/type/xp/ts: those five are what every reader and every dedupe in
+   the app is built on, and a caller quietly shadowing `key` would break the
+   claim this function exists to make. */
+export async function awardOnce(key, type, xp, label, date, extra = null) {
+  const row = { ...(extra || {}), key, type, xp, label, date: date || dateKey(), ts: Date.now() };
   /* Read the stamp and the cache with no await between them, so the pair is
      consistent: `live` means base IS the xp total as of epoch e0. */
   const e0 = db.epoch('xp');

@@ -86,7 +86,7 @@ import {
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP } from '../data/boneheadz.js';
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, petWornLayers } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -361,47 +361,27 @@ function petScale(petId) {
 }
 // Render a static pet image cropped to its content and scaled to ~fill a px box.
 // ground=true seats the art on the box floor; else it's vertically centered (hover).
-/* WHAT THE PET IS WEARING, resolved to an ordered list of art sources.
-   Cam draws every accessory pre-positioned in the SAME 2048 square as the pet,
-   so a layer needs no anchor and no offset: drawn with the base's own crop
-   transform it lands exactly where he drew it. That is the whole mechanism, and
-   it is why pet accessories cost no per-pet art.
-   Sorted by PET_SLOTS z, so the glasses sit on top of everything. Tom,
-   2026-08-20: "the glasses are ALWAYS on top in the hierarchy for cosmetics." */
-function petWornLayers(wear) {
-  if (!wear) return [];
-  return [...PET_SLOTS].sort((a, b) => a.z - b.z)
-    .map(sl => wear[sl.code])
-    .filter(id => id && BH_BY_ID[id])
-    .map(id => bhAsset(BH_BY_ID[id]));
-}
-/* WHOSE WARDROBE IS THIS, AND CAN THIS PET EVEN WEAR IT.
+/* WHOSE WARDROBE IS THIS.
  *
- * The same two questions shiny already answers, and they are answered the same
- * way, because getting this wrong the OTHER way is a bug the figure contract has
- * already paid for once (a friend's shiny drawn in base colours because the
- * render consulted S.shinyPets, which is the VIEWER's collection).
+ * The species half of the question (can this pet wear it at all, and in what
+ * order) moved to petWornLayers in data/boneheadz.js, so the Paddock's cards
+ * inherit it instead of re-deriving it. What is left here is the half only the
+ * app can answer, and it is the same question shiny already answers, answered
+ * the same way, because getting it wrong the OTHER way is a bug the figure
+ * contract has already paid for once (a friend's shiny drawn in base colours
+ * because the render consulted S.shinyPets, which is the VIEWER's collection).
  *
  *   wear === undefined  YOUR OWN pet: S.petWear answers, cached at boot and
  *                       after every equip so render stays synchronous.
  *   anything else       taken verbatim. A snapshot pet (a friend, a rival, a
  *                       defender) carries its own wear or none, and can never
  *                       be dressed out of the viewer's wardrobe.
- *
- * SPECIES IS THE OTHER HALF, and it is enforced HERE rather than at the equip
- * button, so every surface in the app inherits it instead of nine screens each
- * remembering. Cam draws each piece positioned for one body inside the shared
- * canvas: measured 2026-08-21, the glasses overlap Bumbleseal's own ink by
- * 94.8% and Drizzle, Mallard and Bulldog by 0.0%, so on any other pet they
- * would float in empty space. PET_SHOP.pet.id, not the literal 'C6': the shop
- * already declares which pet these are drawn for.
  */
-const petWearFor = (petId, wear) =>
-  (petId === PET_SHOP.pet.id ? (wear === undefined ? S.petWear : wear) : null);
+const wearOf = wear => (wear === undefined ? S.petWear : wear);
 function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined) {
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
   const c = PET_CROP[petId];
-  const worn = petWornLayers(petWearFor(petId, wear));
+  const worn = petWornLayers(petId, wearOf(wear));
   if (!c) return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="width:${px}px;height:${px}px;object-fit:contain" alt=""></span>`;
   const FILL = 0.82;                                   // match the animated pets' ~63px fill in a 76px box
   const cw = c.x1 - c.x0, ch = c.y1 - c.y0;            // content size (fraction of the square)
@@ -2643,6 +2623,48 @@ async function crewDeliveries(limit = 40) {
     .sort((a, b) => (b.ts || 0) - (a.ts || 0))
     .slice(0, limit);
 }
+/* CHEERS ARE THEIR OWN INBOX NOW.
+ *
+ * Tom, 2026-08-22: "there needs to be a better interface in crew where you can
+ * see the cheers that friends have sent you, right now it's very easy to pass
+ * them by."
+ *
+ * He is describing what a cheer WAS: a stacked toast at boot and, after that, one
+ * grey line in DELIVERIES, filed under a card whose own copy is about gifts
+ * ("Nothing to claim: it is already yours") and which sits below the leaderboard,
+ * the race and the add-a-friend box. A gift and a cheer are not the same news.
+ * A gift is a thing you now own; a cheer is somebody talking to you, and the only
+ * reasonable answer to it is to say something back.
+ *
+ * So they get their own card, above the fold, and it reads the SAME ledger rows
+ * DELIVERIES was reading. There is still no second store and no schema change:
+ * what changed is one hop upstream, in js/social.js applyPayload, which now keeps
+ * the cheer INDEX and the sender's id on the row instead of dropping them. That
+ * is what makes "who sent WHAT" and "cheer back" possible at all.
+ *
+ * A ROW WRITTEN BEFORE THAT FIX IS STILL A ROW. Every cheer already in the
+ * ledger has its label and its time and nothing else, so it lists with the
+ * server's own sentence and no reply button rather than being hidden. History is
+ * thinner than news here, which is honest, and it is much better than an inbox
+ * that greets a long-time player as if nobody had ever cheered them. */
+const cheerAt = i => CHEERS[i] || null;
+/* WHEN IT ARRIVED, NOT WHETHER THEY ARE AWAKE. Both inboxes stamped their rows
+   with onlineLabel, which is the PRESENCE label the Crew fan uses, so anything
+   less than six minutes old read "online now": "DUSTY LULU / cheered you /
+   online now". That is a fact about a person, printed where the time of a
+   message goes. onlineLabel itself is right for what it is for, so the fix is
+   here at the two call sites that are not asking about presence: keep its
+   buckets, swap the one that is not a time. */
+const deliveredWhen = ts => {
+  const l = onlineLabel(ts);
+  return l.on || !l.text ? 'just now' : l.text;
+};
+async function crewCheers(limit = 60) {
+  const rows = await db.all('xp');
+  return rows.filter(r => r.type === 'cheer' && r.label)
+    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+    .slice(0, limit);
+}
 /* The read watermark. It used to default to 0, which meant that the first time
    anyone opened the inbox EVERY gift they had ever received counted as new:
    Tom, 2026-08-08, "showing new gifts for past gifts from whenever you started
@@ -2692,6 +2714,17 @@ function revealGift(g) {
 // renders once you have an account, so the reader has to be checkable directly.
 if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__crewDeliveries = () => crewDeliveries();
+  window.__crewCheers = () => crewCheers();
+  /* The preset list itself, so the cheers audit grades a rendered row against
+     the phrase that was SENT rather than against a copy of the table typed into
+     the test. A second copy would agree with the app by construction and would
+     stay green through a re-order that re-labelled every cheer in the game.
+     A FUNCTION, not the array: this block runs at module load and `CHEERS` is a
+     `const` declared thousands of lines below it, so naming it here directly is
+     a temporal-dead-zone ReferenceError that would break boot for every
+     webdriver session in the project. A function body is not evaluated until it
+     is called, by which time the module has finished loading. */
+  window.__cheerPresets = () => CHEERS;
   window.__unseenDeliveries = () => unseenDeliveryCount();
   window.__refreshCrewBadge = () => refreshCrewBadge();
 }
@@ -9472,6 +9505,16 @@ async function renderFriends(el) {
       <div id="cfanLoading" class="friends-loading">Loading your Crew...</div>
     </div>
 
+    <!-- CHEERS SIT DIRECTLY UNDER THE FAN, above the leaderboard and the race.
+         Tom, 2026-08-22: "it's very easy to pass them by". Position IS the fix:
+         DELIVERIES lives at the bottom of this tab, below three other cards, and
+         a message from a person cannot be filed under the archive. This is the
+         only card in the Crew tab that is somebody talking to you. -->
+    <div class="card cheers-card" id="cheersCard" hidden>
+      <div class="card-title">CHEERS<span class="cheers-new" id="cheersNew" hidden></span></div>
+      <div id="cheersList"></div>
+    </div>
+
     ${thanksBannerHtml()}
     ${communityBannerHtml()}
     <button class="card lb-open" id="crewLeaderboard">
@@ -9522,15 +9565,30 @@ async function renderFriends(el) {
       </div>
     </div>`;
 
+  /* ONE WATERMARK READ, SHARED BY BOTH INBOXES, and it has to be this way now
+     that there are two of them. Each painter used to read the watermark and then
+     stamp it, which is fine while only one painter exists and a race the moment
+     a second one appears: whichever stamped first would move the line under the
+     other, and every genuinely new row on the slower card would render as
+     history. Read once at open, stamp once after both have painted. */
+  const seenAtOpen = deliverySeenTs();
+  const markCrewSeen = async () => { await seenAtOpen; await kvSet('crewSeenTs', Date.now()); };
+
   // Deliveries: read the ledger, mark them seen, then drop the badge. Opening
   // the tab IS the read receipt, which is the whole point of the inbox.
   const paintDeliveries = async () => {
-    const rows = await crewDeliveries();
+    /* CHEERS MOVED OUT, so they are not listed twice on one screen. This card is
+       about things you now OWN ("Nothing to claim: it is already yours"), which
+       has never been true of a cheer, and the CHEERS card above says it properly.
+       They still count toward the tab badge: unseenDeliveryCount reads the ledger
+       and is deliberately left alone, because the badge is one number for
+       "something is waiting in Crew" and a cheer is one of those things. */
+    const rows = (await crewDeliveries()).filter(r => r.type !== 'cheer');
     const sealed = await social.giftBox();
     const card = $('#deliveriesCard', el), list = $('#deliveriesList', el);
     if (!card || !list) return;
     if (!rows.length && !sealed.length) { card.hidden = true; return; }
-    const seen = await deliverySeenTs();
+    const seen = await seenAtOpen;
     const isNew = r => (r.ts || 0) > seen;
     /* Show what is actually news, not the archive. Tom, 2026-08-08: "the
        deliveries history of your gifts just spams the top of the crew tab it
@@ -9541,7 +9599,7 @@ async function renderFriends(el) {
     const rowHtml = r => `
       <div class="t3-row${isNew(r) ? ' unread' : ''}">
         <span class="t3-med">${r.type === 'spire' ? badgePixHtml('tombstone', 20) : r.type === 'cheer' ? ICONS.bone(20) : ICONS.coin(20)}</span>
-        <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(onlineLabel(r.ts).text || 'just now')}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
+        <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(deliveredWhen(r.ts))}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
         ${isNew(r) ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
       </div>`;
     /* SEALED FIRST. Tom, 2026-08-08: "its boring to just have it appear with no
@@ -9593,13 +9651,87 @@ async function renderFriends(el) {
       if (open) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     card.hidden = false;
-    await kvSet('crewSeenTs', Date.now());
   };
 
-  // The inbox is LOCAL data (the xp ledger), so it paints immediately and never
-  // waits on the friends fetch: on a bad signal your gift history is still
-  // there, which is the entire point of having an inbox.
-  paintDeliveries();
+  /* THE CHEERS INBOX. Tom, 2026-08-22: "there needs to be a better interface in
+     crew where you can see the cheers that friends have sent you, right now it's
+     very easy to pass them by."
+     Four things a cheer needs and a DELIVERIES line could not give it:
+       WHO      the sender's name, as its own line rather than buried in a
+                sentence.
+       WHAT     the actual emoji and phrase they picked. This is the half that
+                needed a fix upstream: the index never used to reach the device's
+                ledger at all (js/social.js applyPayload), so every cheer read
+                "somebody cheered you" no matter which of the twelve they sent.
+       WHEN     the same relative stamp the rest of the tab uses.
+       BACK     one tap that opens the send sheet pointed at them. This is the
+                whole reason a cheer is not a receipt, and it is built from the
+                ROW, not from the friends list, so it works before (or without)
+                the network: `cheerFrom` is the id the reply is addressed to.
+     NOTHING EXPIRES UNSEEN. There is no per-cheer dismissal and no clearing:
+     the list is the ledger, so a cheer stays findable for as long as its row
+     does, and missing the toast costs you nothing but the animation. */
+  const paintCheers = async () => {
+    const rows = await crewCheers();
+    const card = $('#cheersCard', el), list = $('#cheersList', el), tag = $('#cheersNew', el);
+    if (!card || !list) return;
+    if (!rows.length) { card.hidden = true; return; }
+    const seen = await seenAtOpen;
+    const isNew = r => (r.ts || 0) > seen;
+    const fresh = rows.filter(isNew).length;
+    if (tag) { tag.textContent = `${fresh} NEW`; tag.hidden = !fresh; }
+    /* Unread first and in full, then a few of the archive. Same rule DELIVERIES
+       settled on after Tom, 2026-08-08: "the deliveries history ... just spams
+       the top of the crew tab". News is the point; history is behind one tap. */
+    const shown = fresh ? rows.filter(isNew) : rows.slice(0, 3);
+    const rowHtml = r => {
+      const c = cheerAt(r.cheer);
+      /* A pre-fix row has no index and no sender id. It still lists, with the
+         server's own sentence and no reply button, because a cheer you cannot
+         answer is worth more than a cheer you were never shown. */
+      /* The sender's name off the row if the fix wrote one, else back out of the
+         server's own sentence, which is the only place it exists on an older
+         row. Same trick as giftSender, against a different verb: that one reads
+         a sealed gift's payload and there is no payload on a ledger row. */
+      const who = r.from || (String(r.label || '').match(/^(.+?)\s+cheered\b/i) || [])[1] || 'Someone in your Crew';
+      return `<div class="cheer-row${isNew(r) ? ' unread' : ''}">
+        <span class="cheer-face">${c ? c.emo : ICONS.bone(22)}</span>
+        <div class="cheer-tx">
+          <b>${esc(who)}</b>
+          <span class="cheer-said">${c ? esc(c.txt) : esc(r.label)}</span>
+          <small>${esc(deliveredWhen(r.ts))}</small>
+        </div>
+        ${r.cheerFrom ? `<button class="btn small ghost cheer-back" data-cheerback="${esc(r.cheerFrom)}" data-cheername="${esc(who)}">Cheer back</button>` : ''}
+      </div>`;
+    };
+    const rest = rows.length - shown.length;
+    list.innerHTML = `<div class="cheer-rows">${shown.map(rowHtml).join('')}</div>`
+      + (rest > 0 ? `<button class="btn small ghost" id="cheersMore" style="width:100%;margin-top:8px">Show all ${rows.length}</button>` : '');
+    /* Delegated, so the handler survives the Show-all rebuild below without
+       being re-attached (and cannot be attached twice, which would open two
+       sheets on one tap). */
+    list.onclick = ev => {
+      const b = ev.target.closest('[data-cheerback]');
+      if (!b) return;
+      openCheerSheet({ playerId: b.dataset.cheerback, name: b.dataset.cheername, alias: null });
+    };
+    $('#cheersMore', list)?.addEventListener('click', ev => {
+      const box = $('.cheer-rows', list), btn = ev.currentTarget;
+      const open = box.classList.toggle('all');
+      box.innerHTML = (open ? rows : shown).map(rowHtml).join('');
+      btn.textContent = open ? 'Show less' : `Show all ${rows.length}`;
+      if (!open) box.scrollTop = 0;
+      // same reach rule as DELIVERIES: the way back out must stay on screen
+      if (open) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    card.hidden = false;
+  };
+
+  // Both inboxes are LOCAL data (the xp ledger), so they paint immediately and
+  // never wait on the friends fetch: on a bad signal your gift history and your
+  // cheers are still there, which is the entire point of having an inbox.
+  // The read receipt is stamped once, after both have read the old watermark.
+  Promise.all([paintDeliveries(), paintCheers()]).then(markCrewSeen);
 
   let data = { friends: [], incoming: [], outgoing: [] };
 

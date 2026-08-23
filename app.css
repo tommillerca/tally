@@ -7789,6 +7789,48 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .t3-petcard.breedsel { box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px var(--accent), 4px 5px 0 rgba(0, 0, 0, .55); }
 /* an unread delivery, until you open the tab that lists it */
 .t3-row.unread { background: rgba(253, 104, 87, .07); }
+
+/* THE CHEERS INBOX (v425). Deliberately built out of the row idiom DELIVERIES
+   already uses (.t3-row: a medallion, a two-line text column, an action on the
+   right) rather than a new shape, because they are siblings a few hundred
+   pixels apart and two different list grammars on one tab would read as two
+   different apps. What separates them is what is IN the row, not how it is
+   drawn: a cheer leads with the emoji the sender actually chose, quotes their
+   phrase, and carries the one control that answers it. */
+.cheers-card .card-title { display: flex; align-items: center; gap: 8px; }
+/* The count rides the card's own title, not the tab badge: the tab badge is one
+   number for the whole of Crew, and by the time you are reading this card you
+   need to know how many of THESE are new. */
+.cheers-new {
+  font-family: var(--display); font-weight: 400; font-size: 12px; letter-spacing: .1em;
+  padding: 2px 8px; border-radius: 999px;
+  color: var(--ink); background: var(--coral); border: 2px solid var(--ink);
+}
+.cheer-rows { display: block; }
+/* Capped and scrollable when expanded, for the same reason DELIVERIES is: a long
+   history must not push the way out of it off the bottom of the phone. */
+.cheer-rows.all { max-height: 44vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.cheer-row {
+  display: flex; align-items: center; gap: 11px;
+  padding: 10px 0; border-top: 1px solid var(--line);
+}
+.cheer-row:first-child { border-top: 0; }
+.cheer-row.unread { background: rgba(253, 104, 87, .07); }
+/* The medallion is the cheer itself. Sized so the emoji is legible rather than
+   decorative: this is the content of the message, not an icon for it. */
+.cheer-face {
+  flex: none; width: 40px; height: 40px; display: grid; place-items: center;
+  font-size: 22px; line-height: 1;
+  background: var(--card-2, rgba(242, 233, 215, .06));
+  border: 2px solid var(--ink); border-radius: 12px; box-shadow: var(--sh-sm);
+}
+.cheer-tx { flex: 1; min-width: 0; text-align: left; }
+.cheer-tx b { display: block; font-size: var(--fs-3); font-weight: 700; color: var(--text); }
+/* Their words, set apart from the name above and the timestamp below so the row
+   reads as a quotation rather than as one run-on sentence. */
+.cheer-said { display: block; font-size: var(--fs-2); color: var(--text); opacity: .92; }
+.cheer-tx small { font-size: var(--fs-1); color: var(--text-2); }
+.cheer-row .btn.cheer-back { width: auto; flex: none; padding: 8px 13px; font-size: 15px; }
 /* a milestone level wears a stamp, so 25 does not read like 24 */
 .lvl-milestone {
   display: inline-block; margin-top: 8px; padding: 3px 12px;

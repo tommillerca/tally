@@ -2143,3 +2143,38 @@ export const PET_CROP = {
   C5: { x0: 0.5375, y0: 0.6391, x1: 0.8422, y1: 0.8797 },
   CX: { x0: 0.5375, y0: 0.6281, x1: 0.8859, y1: 0.8906 },   // Day One Lizard = C4 recolored at the same bbox
 };
+
+/* WHAT A PET IS WEARING, RESOLVED TO ORDERED ART. One function, and it lives in
+ * the data module rather than in js/app.js because it is now needed by a
+ * renderer that CANNOT import the app: js/paddock-cards.js is a pure module,
+ * unit-tested in node by tests/unit.test.js, and it draws the Paddock's
+ * collection cards and species tiles.
+ *
+ * It answers BOTH questions that dressing a pet asks, which is why they are not
+ * two functions. Splitting them is what let the Paddock's cards keep the crop
+ * maths and quietly lose the wardrobe:
+ *
+ *   CAN THIS PET WEAR IT.  Cam draws every accessory pre-positioned for ONE
+ *     body inside the shared 2048 canvas (measured 2026-08-21: the glasses
+ *     overlap Bumbleseal's ink by 94.8% and every other pet by 0.0%), so on any
+ *     other species they would hang in empty air. PET_SHOP.pet.id, not a
+ *     literal: the shop already declares which pet these are drawn for.
+ *   IN WHAT ORDER.  Sorted by PET_SLOTS z, so the glasses sit on top of
+ *     everything. Tom, 2026-08-20: "the glasses are ALWAYS on top in the
+ *     hierarchy for cosmetics."
+ *
+ * `wear` is taken VERBATIM and is never defaulted here. A caller holding
+ * somebody else's pet passes that pet's own wardrobe or nothing; only js/app.js
+ * knows about the viewer's own S.petWear cache, and it resolves that before it
+ * calls in. Defaulting inside this function would dress a rival's Bumbleseal
+ * out of your purse, which is the shiny bug in a new coat.
+ *
+ * Every layer inherits the base art's crop transform untouched, which is the
+ * whole mechanism and why pet accessories cost no per-pet art. */
+export function petWornLayers(petId, wear) {
+  if (!wear || petId !== PET_SHOP.pet.id) return [];
+  return [...PET_SLOTS].sort((a, b) => a.z - b.z)
+    .map(sl => wear[sl.code])
+    .filter(id => id && BH_BY_ID[id])
+    .map(id => bhAsset(BH_BY_ID[id]));
+}
