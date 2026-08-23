@@ -222,7 +222,7 @@ for (const cfg of CONFIGS) {
        warning all come and go, so naming one of them would make this row pass or
        fail on state rather than on layout. The question is whether SOMETHING with
        a card's shape straddles the fold. */
-    const cards = [...sc.querySelectorAll('.card, .ul-wrap, .q-collapse, .day-strip')]
+    const cards = [...sc.querySelectorAll('.card, .q-collapse, .dayblk')]
       .map(e => ({ cls: e.className, ...(() => { const r = e.getBoundingClientRect(); return { top: +r.top.toFixed(1), bottom: +r.bottom.toFixed(1) }; })() }))
       .filter(c => c.bottom > c.top + 8);
     const gw = document.querySelector('.gw-today');

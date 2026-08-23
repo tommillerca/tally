@@ -3391,18 +3391,21 @@ async function renderToday(el) {
   // quest header status: how many are claimable right now (drives the accent cue)
   const questClaimable = questTiers.reduce((n, tier) => n + tier.quests.filter(q => { const st = questState(q, tier.ctx); return st.done && !st.claimed; }).length, 0);
   // v146 unlock guidance: surface Build/gear/weapon moments the player would miss
-  const [unlockFighter, unlockGear] = isToday ? await Promise.all([buildFighter(), ownedGearIds()]) : [null, null];
-  const unlocks = isToday ? computeHomeUnlocks({
+  /* READ ON EVERY DAY, NOT ONLY TODAY (v425). Tom, 2026-08-22: "accidentally
+     changing the day on your macros makes all the news above disappear and makes
+     the player feel like they just broke the game and dont know how to go back."
+     The hero, its four doors, its "!" badges and Gwart's line are the app's
+     identity, not a property of which date you are reading, so they no longer
+     switch off when you step back a day. The toasts still only fire on today
+     (see fireUnlockToasts below): a nudge is about now. */
+  const [unlockFighter, unlockGear] = await Promise.all([buildFighter(), ownedGearIds()]);
+  const unlocks = computeHomeUnlocks({
     fighter: unlockFighter, level: lvl.level, coinBal, dustBal,
     gearOwnedCount: unlockGear.size, gearEquippedCount: Object.keys(unlockFighter.gearLo || {}).length,
     fightWins: allXp.filter(r => r.type === 'fight').length,
-    loggedToday: entries.length,
-    everLogged: allXp.some(r => r.type === 'food') ? 1 : 0,
-    mealSkipped: await kvGet('firstMealSkipped', false),
-  }) : [];
+  });
   const pitAttn = unlocks.some(u => u.hero === 'pit');
-  const topNudge = unlocks[0] || null;
-  const hkStale = isToday ? await hkStaleInfo() : null;
+  const hkStale = await hkStaleInfo();
   if (hkStale && !(await kvGet('hkStaleNotified', false))) {
     await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
     notifyNow('Steps stopped syncing', 'Apple Health has gone quiet. Your walking is not counting. Open Boneheadz and tap the banner to fix it.', 'any').catch(() => {});
@@ -3437,8 +3440,8 @@ async function renderToday(el) {
        should strip everything but there needs to be a gwart reminder or
        something that reminds players they will be weaker in fights if they dont
        choose statted gear to wear." Gwart is that somebody. */
-    gearOwned: unlockGear ? unlockGear.size : 0,
-    gearWorn: unlockFighter ? Object.keys(unlockFighter.gearLo || {}).length : 0,
+    gearOwned: unlockGear.size,
+    gearWorn: Object.keys(unlockFighter.gearLo || {}).length,
   };
   const gwLine = gwartLine(gwCtx);
   /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
@@ -3462,6 +3465,10 @@ async function renderToday(el) {
   const C = 2 * Math.PI * 66;
   const prev = S.ui;
   const protHit = t.p && tot.p >= t.p;
+  /* ONE SECTION INSIDE THE DAY: a kicker label over its card. Returns nothing
+     when the card has nothing to say (the Kitchen and Activity cards both build
+     to '' on a quiet day), so a kicker can never label an empty space. */
+  const tsec = (label, html) => (html ? `<section class="tsec"><div class="tsec-h">${label}</div>${html}</section>` : '');
 
   el.innerHTML = `
   <!-- The scene is CORAL by default (the deck's hero colour), but an equipped
@@ -3578,34 +3585,12 @@ async function renderToday(el) {
     <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(24)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
 
-  ${isToday && topNudge ? `
-  <div class="ul-wrap${topNudge.action === 'logfood' ? ' has-skip' : ''}">
-  <button class="card unlock-nudge" id="unlockNudge" data-ulaction="${topNudge.action}">
-    <span class="ul-ico">${topNudge.hero === 'food' ? ICONS.boltStroke(20) : topNudge.hero === 'ward' ? ICONS.bone(20) : ICONS.pit(24)}</span>
-    <span class="ul-txt"><b>${esc(topNudge.nudge)}</b><small>${
-      topNudge.action === 'logfood' ? 'Tap to log your first meal'
-      : topNudge.action === 'pit' ? 'Tap to enter The Pit'
-      : topNudge.hero === 'ward' ? 'Tap to open your Wardrobe'
-      : 'Tap to open Build and spend it'}</small></span>
-    <span class="ul-chev">›</span>
-  </button>
-  ${/* The way out. Not a dismissal of the card: skipping falls through to
-       whatever the next nudge is, so somebody who does not want to log right
-       now still gets pointed at the fight, the crates or their gear. */''}
-  ${topNudge.action === 'logfood' ? '<button class="ul-skip" id="ulSkip">Not right now</button>' : ''}
-  </div>` : ''}
-
-  ${isToday && hkStale ? `
-  <button class="card hk-stale" id="hkStaleFix">
-    <b>⚠️ Steps aren't syncing</b>
-    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
-  </button>` : ''}
-
-  ${isToday ? hypeBannerHtml() : ''}
-
-  ${isToday ? '<details class="rr-banner" id="raceResultCard" hidden></details>' : ''}
-
-  ${isToday ? `
+  ${/* QUESTS SIT DIRECTLY UNDER THE FOUR DOORS, ALWAYS. Tom, 2026-08-22: "have
+       quests be always under the initial 4 buttons (backpack stable kitchen
+       etc)". They used to render below a stack of nudges and banners, so their
+       position moved with whatever cards happened to be live that day. The
+       nudge card is gone entirely and the banners are evicted below the day, so
+       this is now the only thing between the doors and the day itself. */''}
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
     <summary><span class="q-sum-ico">${ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
     <div class="q-card-body">
@@ -3631,18 +3616,37 @@ async function renderToday(el) {
     </div>`).join('')}
     <button class="link" id="qProg" style="margin-top:4px">Quest progress</button>
     </div>
-  </details>` : ''}
+  </details>
 
-  <div class="day-strip">
-    <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
+  ${/* ===== THE DAY OWNS EVERYTHING (v425, variant d2, approved 2026-08-22).
+       The day is ONE container: a --surface-2 well whose titlebar is the day
+       header. The old floating `< TODAY Aug 22 > [gear]` row was that header all
+       along, governing sections it did not visibly contain, so it read as
+       free-floating navigation over a pile of unrelated cards. Now the title is
+       left, the two arrows and the gear group right inside the same bar, and
+       everything day-scoped hangs under it in .dayflow with a kicker label.
+       Nothing pins: containment gives the day a visible END as well as a start,
+       which is the whole argument of the variant.
+       PROMO BANNERS ARE NOT PART OF THE DAY and are emitted below it. ===== */''}
+  <section class="dayblk">
+  <div class="dayhdr">
     <div class="day-title">
       <h1>${title}</h1><div class="sub">${sub}</div>
       <input type="date" id="datePick" value="${S.date}" aria-label="Pick date">
     </div>
+    <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
     <button class="icon-btn" id="nextDay" aria-label="Next day"><svg viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></svg></button>
     <button class="icon-btn" id="todaySettings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke-width="2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
   </div>
 
+  <div class="dayflow">
+  ${hkStale ? `
+  <button class="card hk-stale" id="hkStaleFix">
+    <b>⚠️ Steps aren't syncing</b>
+    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
+  </button>` : ''}
+
+  <section class="tsec"><div class="tsec-h">Calories</div>
   <div class="card ring-card">
     <div class="ring-wrap">
       <svg viewBox="0 0 158 158">
@@ -3664,15 +3668,35 @@ async function renderToday(el) {
       ${macroRow('Fat', tot.f, t.f, 'fat', prev.macroPcts[2], false)}
     </div>
   </div>
+  </section>
 
-  ${isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday) : ''}
-  ${isToday ? kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe) : ''}
-  ${healthCardHtml(hk, isToday)}
+  ${/* WELLNESS IS THE ONE SECTION THAT STAYS TODAY-ONLY, and the reason is its
+       store, not its layout: js/wellness.js keeps water/bed/sleep in a SINGLE kv
+       record stamped with one date, so getWellness('2026-08-21') returns zeros
+       for a day you actually drank eight cups, and one tap on the water button
+       would save that zeroed record over today's. A card that lies about the
+       past and destroys the present on a tap is worse than a card that is not
+       there. Un-gate it the day wellness gets a per-date store. */''}
+  ${tsec('Wellness', isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday) : '')}
+  ${tsec('Kitchen', kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe))}
+  ${tsec('Activity', healthCardHtml(hk, isToday))}
 
+  <section class="tsec tsec-meals"><div class="tsec-h">Meals</div>
   ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
+  </section>
 
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
-  ${isToday ? `<p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>` : ''}
+  <p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>
+  </div>
+  </section>
+
+  ${/* EVICTED FROM THE DAY. An announcement is not something that happened on
+       Aug 21, so it stops interrupting the line between the day header and the
+       day's own numbers and queues below the whole thing instead. */''}
+  <div class="promo-slot">
+    ${hypeBannerHtml()}
+    <details class="rr-banner" id="raceResultCard" hidden></details>
+  </div>
   ${LOG_ONLY_LINE}
   `;
 
@@ -3744,24 +3768,8 @@ async function renderToday(el) {
   $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#dustBtn')?.addEventListener('click', () => openCharacter('crates'));
-  /* Skipping records the choice and re-renders, so the card immediately shows
-     whatever the NEXT nudge is rather than leaving a hole where it was. */
-  $('#ulSkip')?.addEventListener('click', async () => {
-    await kvSet('firstMealSkipped', true);
-    refresh();
-  });
   $('#vigorBtn')?.addEventListener('click', openPit);
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
-  $('#unlockNudge')?.addEventListener('click', () => {
-    const a = $('#unlockNudge')?.dataset.ulaction;
-    /* openAdd() with the meal picked from the clock, the same entry point the
-       big green + uses, so the first meal goes through the flow the player will
-       use every day rather than a special one-time path. */
-    if (a === 'logfood') { const now = new Date(); openAdd(mealForHour(now.getHours() + now.getMinutes() / 60)); }
-    else if (a === 'wardrobe') openCharacter('wardrobe');
-    else if (a === 'pit') openPit();
-    else openTalents();
-  });
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
@@ -4709,7 +4717,9 @@ function healthCardHtml(hk, isToday) {
   const goal = 10000;
   const stepPct = steps ? Math.min(100, (steps / goal) * 100) : 0;
   return `<div class="card">
-    <div class="card-title">ACTIVITY · APPLE HEALTH ${isToday ? (isNative() && S.settings.hkNative ? `<span class="link auto" title="Syncs automatically on open">Auto ${ICONS.check(12)}</span>` : '<button class="link" id="hkSync">Sync</button>') : ''}</div>
+    ${/* .ct-name is the part the day container's kicker already says; the CSS
+         hides that span only, so the Sync control beside it survives. */''}
+    <div class="card-title"><span class="ct-name">ACTIVITY · APPLE HEALTH</span> ${isToday ? (isNative() && S.settings.hkNative ? `<span class="link auto" title="Syncs automatically on open">Auto ${ICONS.check(12)}</span>` : '<button class="link" id="hkSync">Sync</button>') : ''}</div>
     ${hk ? `
       <div class="hk-rows">
         <div class="hk-row"><span class="hk-ico">${ICONS.sneaker(21)}</span>
@@ -5395,7 +5405,7 @@ function kitchenCardHtml(cook, ingCount, buffs, cropsRipe = 0) {
     ? `<b style="color:var(--accent)">${cook.readyCount} dishes are ready!</b>`
     : `<b style="color:var(--accent)">${recipeIconHtml(cook.recipe, 18)} ${esc(cook.recipe.name)} is ready!</b>`;
   return `<div class="card kitchen-card" id="kitchenCard">
-    <div class="card-title">KITCHEN <span class="link">Collect</span></div>
+    <div class="card-title"><span class="ct-name">KITCHEN</span> <span class="link">Collect</span></div>
     <div class="kc-line">${line}</div>
   </div>`;
 }
@@ -17235,29 +17245,15 @@ const ECONOMY_TALENTS = new Set(['lightfeet']);
 // were easy to miss. This surfaces them as a home nudge + a "!" on the hero button,
 // deep-linking straight to the right screen. Pure fn over already-fetched data;
 // returns active signals highest-priority first. Each: {key, hero, action, nudge, toast}.
-function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, gearEquippedCount, fightWins = 1,
-                             loggedToday = 1, everLogged = 1, mealSkipped = false }) {
+function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, gearEquippedCount, fightWins = 1 }) {
   const sig = [];
-  /* DAY ONE IS ABOUT FOOD. A non-gamer played this cold on 2026-08-13 and the
-     only glowing thing on the home screen of a food tracker was an invitation
-     to a fight, which they took, on the easiest opponent, and lost. Their words:
-     "the app never once said log your meals every day. It said Ready for your
-     first fight?"
-     So the first meal outranks the first fight. It is the thing they installed
-     this for, it is the thing that pays the energy the fight needs, and it is
-     the one action on Today that cannot be lost.
-     PRIORITY 9, above everything, but it retires the moment it stops being
-     true: as soon as they log anything today, the moment they have ever logged
-     anything at all, or the moment they say not now. Tom, 2026-08-13: "make it
-     skippable if they dont want to then point them to other things that could
-     be of interest". skipping does not blank the card, it falls straight
-     through to the fight/gear/talent nudges underneath, which is what the rest
-     of this function already computes. */
-  if (!loggedToday && !everLogged && !mealSkipped) sig.push({
-    key: 'food:first', hero: 'food', action: 'logfood', priority: 9,
-    nudge: 'Start with breakfast',
-    toast: 'Log what you eat and your Bonehead earns from it. Everything else here runs on that.',
-  });
+  /* THE 'Start with breakfast' FIRST-MEAL NUDGE lived here at priority 9 from
+     2026-08-13 until Tom removed it on 2026-08-22: "remove the 'start with
+     breakfast' button that's there". Its `loggedToday` / `everLogged` /
+     `mealSkipped` inputs, its "Not right now" skip, the `firstMealSkipped` kv it
+     wrote and the whole `.unlock-nudge` card on Today went with it: renderToday
+     reads these signals only for the Pit "!" badge and the unlock toasts now.
+     The fight/gear/talent signals below are unchanged. */
   // activation: brand-new players open the app, browse, and stall without ever
   // fighting (seen in tester telemetry). One clear invitation to the core loop.
   if (fightWins === 0) sig.push({
@@ -19736,12 +19732,10 @@ function recommendArch(fighter) {
   return 'melee';
 }
 
-async function openTalents(pitWrap) {
-  const wrap = openSheet(`
-    <div class="sheet-head"><h2>Talents</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="talBody"></div>`, { cls: 'full', onClose: () => { if (pitWrap) renderPit(pitWrap); else if (currentTab() === 'today') refresh(); } });
-  renderTalents(wrap);
-}
+/* openTalents() stood here: a six-line sheet wrapper around renderTalents whose
+   ONLY caller was the Today unlock-nudge card, removed with it on 2026-08-22.
+   The Build screen itself is untouched and is reached the way every other player
+   reaches it, through the character hub's Build tab (renderTalents(content)). */
 
 // Bar colour per stat, so the five allocators read apart at a glance (the
 // mockup's palette). Lives here, not in STAT_META: pit.js is fight logic and
