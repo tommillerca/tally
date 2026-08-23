@@ -153,3 +153,31 @@ before the peer caught it. Anything asserting on boot-time sync is grading the
 harness, not the app. New in the FAST gate tier: tests/cloud-optout-audit.mjs
 (~45s, 9 checks), which grades the SERVER's received log rather than
 page.on('request'), because an abandoned request is not an upload.
+
+## x425/nag-doubletap DONE, 2026-08-23
+
+Gwart's crate nag capped, double-tap tab actions shipped. Both prove-red'd.
+Notable: the cap lives in `gwartLine` (all three speaking callers route through
+it), NOT in `gwartPool`, because gwartPool is also the `__gwartPool` harvest seam
+two other audits read — a bucket that deletes itself when looked at makes that
+seam order-dependent. It drops the crate CONTEXT rather than skipping the line,
+so Gwart falls through and keeps talking.
+
+Rejected from the stranded x425/appcore WIP, each for a reason it reproduced:
+the flag inside gwartPool (pollutes the seam); its bindTabs cancel ordering (a
+stale timer route()s after a hashchange — reproduced as 2 map builds for one
+arrival); its no-op-when-no-map branch; and its gate row, whose comment had
+another suite's text spliced onto it.
+
+### MACHINE CONTENTION IS FALSIFYING GATE RUNS TODAY
+
+Load sat at 21-43 all session from parallel peer sessions. Under 6-way
+parallelism eight timing/screencast suites went red that ALL pass solo. Any red
+in a gate run today must be re-checked solo before it is believed. Also: the gate
+lock lives at `<repo>/../CHAT-HANDOFF.md`, which a DETACHED WORKTREE CANNOT SEE,
+so worktree-based agents cannot claim it and serialize against each other.
+
+The agent also found two faults in its OWN audit that only appeared at
+parallelism (CDP delivering two clicks >300ms apart; a late route() zeroing the
+scroll it had just armed) and fixed them by measuring the delivered tap gap and
+reporting UNPROVEN (97) rather than by loosening an assertion.
