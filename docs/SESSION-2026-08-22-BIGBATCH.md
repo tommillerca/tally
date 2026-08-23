@@ -72,3 +72,21 @@ The pit agent flagged it and it is real: no branch renumbers APP_BUILD, sw.js
 VERSION or changelog.js, because three branches touching it would collide.
 Whoever cuts v425 does it ONCE after the merges. If this is forgotten the
 service worker serves stale modules and "my change isn't showing" comes back.
+
+## Main moved, 2026-08-23: f18d479f -> d8819940
+
+A peer session's Emporium idle fix (PR #85) merged. I re-ran `git merge-tree`
+for all eight x425 branches against the new main myself rather than trusting the
+pre-merge test: ALL CLEAN, including x425/pit's app.css hunk that sits directly
+under that session's `.wz-glow` block.
+
+### The v425 cut now delivers three parties' work
+
+The single `APP_BUILD` / `sw.js VERSION` / `changelog.js` bump is the ONLY thing
+that puts any of this in front of players. It must carry:
+  1. everything merged from the x425 pile,
+  2. `x425/wanderer`'s `'./js/water.js'` PRECACHE line, if that branch lands,
+  3. `d8819940`, the Emporium fix already on main and NOT yet live.
+
+Merged is not shipped. Until that bump, the service worker serves the old
+modules and every one of these fixes reaches nobody.
