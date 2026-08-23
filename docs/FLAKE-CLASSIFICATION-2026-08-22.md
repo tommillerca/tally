@@ -97,6 +97,24 @@ is the machine, not the code.
 > number of markers rather than merely non-zero. That work is owned by the
 > session porting Reggie's ARRIVAL changes, not by this document.
 >
+> **A capability gate is not a per-run gate.** `boneyardCapability` proves a WebGL
+> context can be CREATED on this machine. It says nothing about whether placement
+> finished on THIS run. Those are different failures and only the first has a
+> top-level gate, which is the hole a degraded run walks through: WebGL works, the
+> gate passes, the map draws zero markers, and every row downstream grades an
+> empty stage. The fix is a per-row `unproven()` when the sample is empty, not a
+> harder capability check. Found 2026-08-23 by the session scoping these
+> selectors, after a run came back "0 markers at rest" and looked exactly like a
+> code defect.
+>
+> **Contention makes this suite lie in the direction of a bug**, so no timing row
+> here should be graded on a busy machine. Measured on this box: ARRIVAL-SLOW
+> straggler latency reads 42ms idle and 342-461ms under load against a 250ms
+> budget, and a full run went 24/24 idle versus 11/25 degraded. On 2026-08-23
+> three sessions ran boneyard-audit against three local servers at once while two
+> release-gate runs were also going, one of them `--all`. Two of us separately
+> came close to filing that environment as a defect.
+>
 > Kept rather than rewritten, because the wrong reasoning is the useful part: I
 > read a suspiciously constant number as a timing artefact without checking what
 > was being counted, having spent the same day insisting that measurement beats
