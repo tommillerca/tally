@@ -69,8 +69,14 @@ const closeFoe = () => page.evaluate(() => {
 
 /* EVERYTHING IS READ OFF THE INK. The alpha box is the art's own, measured from
    assets/bh/wanderer/wanderer.png with PIL, not eyeballed. */
+/* x1 IS 560, NOT 622, SINCE v425. The plate's own alpha box ends at 622, but
+   app.css now clips it at 12.5% of a square stage, which is plate x=560: Tom,
+   2026-08-22, "im guessing what happened was you were afraid to cut off the tail
+   of the wanderer in the pit, you can that's ok". Everything right of 560 is the
+   tail and is no longer painted, so measuring to 622 would credit him with 62
+   plate-px of width that is not on the screen. Measure what is PAINTED. */
 const MEASURE = async () => page.evaluate(() => {
-  const INK = { x0: 60 / 640, y0: 88 / 640, x1: 622 / 640, y1: 505 / 640 };
+  const INK = { x0: 60 / 640, y0: 88 / 640, x1: 560 / 640, y1: 505 / 640 };
   const q = s => document.querySelector(s);
   const arena = q('#arena'), foe = q('#foeStage'), you = q('#youStage');
   if (!arena || !foe || !you) return { err: 'the arena did not open' };
@@ -144,10 +150,21 @@ try {
        block aborted, and the eleven rows after it never ran at all, so a suite
        that should have gone red across the board printed two failures and
        stopped. A guard that crashes is a guard that hides the rest of itself. */
-    ok(tag('LOOMS he is more than twice the player, drawn height against drawn height'),
-      m.ratio >= 2.2, `${m.ink && m.ink.h}px of him against ${m.you && m.you.h}px of you = ${m.ratio}x`);
+    /* RE-BASED IN v425, and the direction of the change is the point. 2.2 and
+       0.72/0.6 were written against a composition that OVERLAPPED the player by
+       78.5px of painted ink, which Tom then reported ("WAY too big in the pit
+       and overlapping with my bonehead"), so those numbers were pinning the bug.
+       They come down to the floor of what still reads as a boss rather than to
+       whatever he happens to measure: 1.9x against the Live Wire's 1.76x on the
+       same stage, and 60%/55% of the arena. Measured on the fix: 2.39x and
+       74%/60% at 393x852, 2.05x and 74%/55% at 320x568. The ceiling side of
+       this now lives in tests/pit-figures-audit.mjs (CLEAR and LOOMS as a band),
+       which measures PAINTED pixels rather than mapping the art's alpha box
+       through the geometry. */
+    ok(tag('LOOMS he is a boss beside the player, drawn height against drawn height'),
+      m.ratio >= 1.9, `${m.ink && m.ink.h}px of him against ${m.you && m.you.h}px of you = ${m.ratio}x`);
     ok(tag('FILLS he takes most of the stage, which is what the mockup shows'),
-      !!m.ink && m.ink.w >= m.arenaW * 0.72 && m.ink.h >= m.arenaH * 0.6,
+      !!m.ink && m.ink.w >= m.arenaW * 0.6 && m.ink.h >= m.arenaH * 0.55,
       m.ink ? `${m.ink.w}x${m.ink.h} of a ${m.arenaW}x${m.arenaH} arena ` +
         `(${Math.round(m.ink.w / m.arenaW * 100)}% wide, ${Math.round(m.ink.h / m.arenaH * 100)}% tall)` : 'no ink to measure');
     /* THE v49 ROW. Scaling a figure in this arena is how the combat overlap

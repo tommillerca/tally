@@ -55,6 +55,22 @@ export function familyOf(petId) { return PET_FAMILIES[PET_ASSIGN[petId] || 'houn
 export const HOVER_PETS = new Set(['C2']);
 export function petHovers(petId) { return HOVER_PETS.has(petId); }
 
+/* WHICH WAY DID CAM DRAW THIS ONE. Tom, 2026-08-22: "we need to mirror
+   bumbleseal in the fights so she faces the enemy."
+   Hand-assigned like HOVER_PETS and PET_ASSIGN above, and it has to be: facing
+   is not derivable from the art. Measured on every pet plate's own alpha, the
+   horizontal centroid sits LEFT of the ink box centre on both Bumbleseal (-6.7%
+   of her width) and the Mallard (-7.1%), and the Mallard faces right, so the one
+   number that looks like it should answer this answers it wrong. What it comes
+   down to is where the face is: hers is the cream disc at the left of her plate
+   (her left half is 1.59x brighter than her right), the Mallard's bill, the
+   bulldog's muzzle and the beardie's head are all on the right.
+   The Pit puts the player's pet on the LEFT with the foe on the right, so a
+   left-facing pet fights with its back turned. Add a new pet here the day its
+   art lands, the same as adding a flyer. */
+export const FACES_LEFT = new Set(['C6']);
+export function petFacesLeft(petId) { return FACES_LEFT.has(petId); }
+
 // ---- mini-trees: 3 tiers, ONE-OF-TWO per tier, unlocked at pet level 2/4/6 ----
 export const PET_TREES = {
   hound: [

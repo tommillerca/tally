@@ -806,12 +806,21 @@ a { color: var(--accent); text-decoration: none; }
 .ward-cell.r-epic { border-color: rgba(155,146,232,0.65); box-shadow: 0 0 11px rgba(155,146,232,0.22); }
 .ward-cell.r-legendary { border-color: rgba(255, 201, 97, 0.8); box-shadow: 0 0 12px rgba(255, 201, 97, 0.25); }
 
-/* rarity glow on pets: the pet card + the in-fight battle body (epic/legendary) */
+/* rarity glow on pets: the pet CARD, and nowhere in the Pit.
+   Tom, 2026-08-22: "bumble seal shouldnt have a glow in the pit like that". The
+   halo was `.fstage.petmini.r-{rare,epic,legendary} img`, and .petmini exists in
+   exactly one place in the app, the fight arena, so those three rules WERE the
+   Pit glow and deleting them is the whole fix. Measured on the render: an 8px
+   gold drop-shadow painted 8.5px of light past her silhouette on every side, and
+   she is the one pet drawn as a solid round mass filling her canvas, so what
+   reads as a rim light on a flat lizard reads as an aura on her.
+   THE OTHER FIGHTERS KEEP THEIRS. .petmini.beast (the enemy add's red tint),
+   .petmini.is-shiny and the lineage glows are earned marks on a specific
+   creature rather than a label printed on every legendary, and none of them is
+   what Tom is looking at. A rarity is a fact about the shop, not a light
+   source. */
 .pet-card.r-epic { box-shadow: 0 0 14px rgba(155,146,232,0.28); }
 .pet-card.r-legendary { box-shadow: 0 0 16px rgba(255, 201, 97, 0.3); }
-.fstage.petmini.r-epic img { filter: drop-shadow(0 0 7px rgba(155,146,232,0.9)); }
-.fstage.petmini.r-legendary img { filter: drop-shadow(0 0 8px rgba(255, 201, 97, 0.95)); }
-.fstage.petmini.r-rare img { filter: drop-shadow(0 0 5px rgba(124, 196, 255, 0.7)); }
 /* per-meal cap + auto-sync label */
 .meal-head .kcal.over { color: var(--danger); }
 .card-title .link.auto { color: var(--accent); font-weight: 700; cursor: default; }
@@ -4411,6 +4420,20 @@ body::before {
 /* static pets render through croppedPetImg (.petcrop) — a content-cropped, scaled
    img whose own transform seats/centers it; the wrapper just clips to the slot. */
 .petcrop { position: relative; display: inline-block; overflow: hidden; }
+/* SHE FIGHTS FACING THE ENEMY. Tom, 2026-08-22: "we need to mirror bumbleseal in
+   the fights so she faces the enemy". The player's pet stands on the LEFT of the
+   arena with the foe on the right, and Cam drew Bumbleseal facing left, so she
+   fought with her back to him. Which species this is true of is an art fact and
+   is stated once, in js/pets.js beside HOVER_PETS; the class is emitted from that
+   predicate, so no other pet is touched (measured: the bulldog, the duck and the
+   beardie already face right).
+   MIRRORED ON AN INNER ELEMENT, NEVER ON A ROOT THAT ALREADY OWNS A TRANSFORM.
+   croppedPetImg gives every layer its own translate() and .pa-stage carries the
+   animated pets' scale(); .petcrop and .petanim carry neither, so a scaleX here
+   composes with the art's registration instead of overwriting it. That mistake
+   has been paid for once already on the map markers. */
+.fstage.petmini.faces-away .petcrop,
+.fstage.petmini.faces-away .petanim { transform: scaleX(-1); }
 /* pet name/HP now lives in the fight HUD (.hud-pet), not floating over the sprite */
 .petname { font-size: 9px; font-weight: 800; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
 /* 4px was the whole bug. `.bar i` is height:100% of the CONTENT box, and 4px
@@ -4563,11 +4586,13 @@ body::before {
    it in every fight?" The arena gets the same prestige as a glow on the DRAWING
    instead of an outline on its container. */
 .pet-card.is-shiny { box-shadow: 0 0 0 2px rgba(var(--gold-rgb),.6), 0 0 16px rgba(var(--gold-rgb),.35); }
-/* The glow goes on the STAGE, not the img: `.fstage.petmini.r-epic img` already
-   owns the img's filter for rarity, and a second filter rule there simply replaced
-   it (measured: the shiny lizard came out epic-violet with no gold at all). A
-   filter on the container composes over whatever the child already draws, so a
-   shiny epic reads as both. */
+/* The glow goes on the STAGE, not the img. It was written that way because
+   `.fstage.petmini.r-epic img` owned the img's filter for rarity and a second
+   filter rule there simply replaced it (measured: the shiny lizard came out
+   epic-violet with no gold at all). That rarity rule is gone as of v425 (see the
+   note by .pet-card.r-epic), so the img's filter is free again, but this stays on
+   the container: a filter there composes over whatever the child draws, which is
+   what keeps a shiny animated pet's own layer filters intact. */
 .petmini.is-shiny { box-shadow: none; filter: drop-shadow(0 0 7px rgba(var(--gold-rgb),.9)); }
 .hatch-prize.is-shiny img { filter: drop-shadow(0 0 10px rgba(var(--gold-rgb),.9)); }
 @media (prefers-reduced-motion: reduce) {
@@ -10005,26 +10030,54 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    keeps the default .fstage, which is a decision rather than an oversight: the
    Mimic is a chest that bit you and is deliberately NOT a wall.
 
-   WHY THE NUMBERS ARE WHAT THEY ARE, and they were measured off the render at
-   393x852 and 320x568, not derived on paper. His plate is a 640-square whose ink
-   only occupies 562x417 of it (the art's own alpha box), so 35% of the box is
-   transparent and the element's height says nothing about how big he looks. Two
-   consequences drive everything below:
-     - object-fit:contain renders the square at min(width, height), so WIDTH is
-       the binding constraint in a landscape arena, not height. Growing the
-       height past the arena's width buys nothing but overflow.
-     - 21% of the box hangs below his boots, so a stage sitting on the floor line
-       leaves him floating a fifth of his own height above it. The negative
-       margin below is that strip, pulled off, so his feet land on the floor. */
-.arena.boss-wanderer .fighterG.foe-side { width: 100%; transform: translateX(14px); }
+   AND THE FIRST CUT OF IT WAS TOO BIG. Tom, 2026-08-22, having fought him: "i
+   just fought the wanderer and he is WAY too big in the pit and overlapping with
+   my bonehead", then "im guessing what happened was you were afraid to cut off
+   the tail of the wanderer in the pit, you can that's ok". He is right about the
+   cause, and it is arithmetic rather than nerve. His plate is a 640-square whose
+   ink occupies 562x417, and 77px of that width is the black tail wisp hanging
+   off his right. Painting the WHOLE plate means the tail is part of the width
+   budget, and the budget does not close: measured at 393x852 in painted pixels,
+   his ink ran x8.5..319.5 of a 361px arena while the player's ran x28.5..87, so
+   the two figures OVERLAPPED BY 78.5px. There is no size at which a 562-wide
+   drawing and a 58-wide bonehead both fit a 361 arena with a gap, so the tail
+   comes off, exactly as Tom says it can.
+
+   WHY THE NUMBERS ARE WHAT THEY ARE, all measured off the render in PAINTED
+   pixels (an element is hidden and the frame diffed), never off a stage box:
+     - THE STAGE IS SQUARE. object-fit:contain paints the square at min(w, h), so
+       a square box makes the painted plate and the element box the same
+       rectangle, which is the only thing that lets a percentage clip below land
+       on a known column of Cam's drawing.
+     - THE CLIP IS 12.5%, i.e. plate x=560 of 640. Measured on the art: his body,
+       his lantern and the beast's head all end left of 560 and the only ink
+       right of it is the tail. So the crop takes the tail and nothing else.
+     - 85cqw. Width is the binding dimension in a landscape arena, so he is sized
+       off the arena's WIDTH and not its height. At 361px of arena that is 307px
+       of plate, which paints 240x200 of ink: 66% of the arena's width, 61% of
+       its height, and 2.65x the player's own painted ink height. The Live Wire,
+       the boss this composition is measured against, is 1.76x on the same
+       instrument, so the Wanderer still looms over the biggest thing that shares
+       this stage.
+     - 22% and -0.21. The first is the push right (the foe column is anchored
+       12% in from the arena's right by positionFighters, which is not far enough
+       right to leave the player a gutter); the second is the empty strip under
+       his boots (21% of the plate), pulled off so he stands on the floor rather
+       than a fifth of his own height above it. Measured result: his ink
+       x107.6..347.3, the player's x28.5..87, so a 20px gap where there was a
+       78px overlap, and his boots land within 6px of the player's. */
+.arena.boss-wanderer { --wnd: clamp(220px, 85cqw, 340px); }
+.arena.boss-wanderer .fighterG.foe-side { width: var(--wnd); transform: translateX(22%); }
 #foeStage.wanderer-foe {
-  /* Wider than the column and taller than the arena on purpose: the height is
-     what keeps WIDTH the binding dimension, so his ink grows with the arena's
-     width rather than being letterboxed by its height. */
-  width: 100%; height: clamp(300px, 130cqh, 430px); align-self: end;
+  width: var(--wnd); height: var(--wnd); align-self: end;
   /* the empty strip under his boots, pulled off so he stands on the floor */
-  margin-bottom: clamp(-120px, -35cqh, -92px);
+  margin-bottom: calc(var(--wnd) * -0.21);
 }
+/* THE TAIL COMES OFF. clip-path rather than a smaller plate: Cam's art is the
+   fixed input and is not re-exported, cropped or redrawn for this, only
+   presented differently. The stage is square above, so 12.5% of the element box
+   IS plate x=560. */
+#foeStage.wanderer-foe .mage-plate { clip-path: inset(0 12.5% 0 0); }
 /* THE PLAYER STEPS BACK AND TO THE LEFT, exactly as they do for the Live Wire,
    and further: the gap IS the design. Scaled rather than re-sized so nothing in
    the fighter's own layout (the pet, the KO pose, the lunge transforms) has to
@@ -10032,4 +10085,7 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    floor line as his. */
 .arena.boss-wanderer .fighterG:not(.foe-side) { transform: translateX(-52px); z-index: 3; }
 .arena.boss-wanderer .fighterG:not(.foe-side) > .fstage { transform: scale(.58); transform-origin: bottom center; }
-.arena.boss-wanderer .pet-fighter { transform: translateX(14px); z-index: 4; }
+/* The pet came +14px toward the middle to escape a boss who filled the whole
+   arena. He no longer does, and the middle is now HIS, so the pet tucks back
+   beside the player instead of walking into his coat. */
+.arena.boss-wanderer .pet-fighter { transform: translateX(-8px); z-index: 4; }

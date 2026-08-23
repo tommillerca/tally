@@ -58,7 +58,7 @@ import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear } from './loot.js';
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -516,6 +516,43 @@ const petStacksOnBody = petId => {
   const c = PET_CROP[petId];
   return !!c && c.x0 >= 0.5 && c.y0 >= 0.5;
 };
+/* HOW BIG A PET STANDS IN THE PIT. Tom, 2026-08-22: "the scale of bumbleseal
+ * wihle fighting was too big".
+ *
+ * The arena hands every pet the same 76px box with mass:false, and that box is
+ * fair right up until a pet arrives on a canvas of its own. croppedPetImg fills
+ * 82% of the box against the LONGEST edge of the ink, so a long flat pet spends
+ * its budget on width and lands 42-49px tall, while a pet whose ink is as tall
+ * as it is wide lands the full 62. Measured in the arena at 393x852, in painted
+ * pixels: Bumbleseal 62.3x61.7 against the bulldog's 62.3x48.8, the beardie's
+ * 62.3x46.8 and the Mallard's 62.3x42.5. Height is what the eye compares (the
+ * same argument petMassScale is built on), so she read as half again the animal
+ * everybody else brings.
+ *
+ * DERIVED FROM PET_CROP, NOT A LIST OF NAMES, and the seam is the one that
+ * already exists: petStacksOnBody separates a pet drawn as a companion inside
+ * the shared 640 square from one drawn alone on its own canvas, off the measured
+ * ink box rather than off a species id. A solo-canvas pet is brought to the
+ * MEDIAN aspect of the companion-drawn ones (0.7543 of six), so it matches the
+ * animal in the middle of the roster rather than the smallest or the largest.
+ * Bumbleseal is 0.9906, so she comes to 76 * 0.7615 = 58px and her ink to
+ * 47.4x47.0, which is the beardie's height to within half a pixel.
+ *
+ * IT CAN ONLY SHRINK (Math.min(1, ...)), so it can never inflate a pet into the
+ * bonehead beside it, and it touches nothing that stacks on the body: the
+ * cloud, the duck, the catfish, the beardie, the bulldog and the Day One Lizard
+ * all render at exactly the px they always did. The next solo-canvas pet is
+ * handled the day its crop lands. */
+function petFightPx(petId, px) {
+  const tall = id => { const c = PET_CROP[id]; return c ? (c.y1 - c.y0) / Math.max(c.x1 - c.x0, c.y1 - c.y0) : null; };
+  const mine = tall(petId);
+  if (!mine || petStacksOnBody(petId)) return px;
+  const peers = Object.keys(PET_CROP).filter(id => petStacksOnBody(id)).map(tall).filter(Boolean).sort((a, b) => a - b);
+  if (!peers.length) return px;
+  const h = peers.length / 2;
+  const mid = peers.length % 2 ? peers[Math.floor(h)] : (peers[h - 1] + peers[h]) / 2;
+  return Math.round(px * Math.min(1, mid / mine));
+}
 /* THE TEST SEAM IS GONE, and its removal is the point. It existed because "a pet
    accessory has no equip UI yet", so the only other way to grade the composite
    was to re-implement croppedPetImg's maths in the audit. The Stable's wardrobe
@@ -16414,7 +16451,19 @@ async function renderBoneyard(el) {
     map.on('move', sizeWandererCones);
 
     function refreshWanderer() {
-      const live = wanderersNear(date, lat, lng);
+      /* A BEATEN WANDERER IS GONE. Tom, 2026-08-22: "after defeating the
+         wanderer he was still just there in the boneyard and didnt disappear."
+         He was: `wandererDone` only ever gated the ENCOUNTER, so a man you had
+         just killed kept walking his loop with his lantern lit and could not be
+         fought, which reads as a broken marker rather than as a win.
+         Filtered here, at the one place the markers are built, so the removal
+         loop below takes his marker down the same way it takes down one that
+         walked out of range. No new state: `wandererDone` is rebuilt from the xp
+         ledger on every refreshWorld, so this survives a reload and a second
+         tab, and the key carries his instance (`wanderer-<date>-<cell>_i<n>`),
+         so when the 45-minute clock turns over the next Wanderer has a key
+         nobody has claimed and walks again. */
+      const live = wanderersNear(date, lat, lng).filter(w => !wandererDone.has(wandererKey(date, w)));
       const liveIds = new Set(live.map(w => w.id));
       for (const [id, rec] of wandererMarkers) {
         if (!liveIds.has(id)) { rec.marker.remove(); wandererMarkers.delete(id); }
@@ -16424,6 +16473,13 @@ async function renderBoneyard(el) {
         if (!rec) {
           const el = document.createElement('div');
           el.className = 'map-wanderer-mark';
+          /* WHICH Wanderer this marker is, on the element. He is the one thing
+             out here with an identity that changes under you (cell AND
+             45-minute instance), and "a marker disappeared" and "the RIGHT
+             marker disappeared" are different facts: the despawn guard first
+             graded distance-to-a-projected-point, got null back because it
+             could not reach the map object, and passed on nothing. */
+          el.dataset.w = w.id;
           el.innerHTML = wandererMarkHtml();
           rec = { marker: domMarker(maplibregl, map, { lat: w.lat, lng: w.lng, el, anchor: 'center' }), el, w };
           wandererMarkers.set(w.id, rec);
@@ -18108,7 +18164,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
-          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, 76, !petHovers(petArtId)) : ''}</div>
+          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''}${petArtId && petFacesLeft(petArtId) ? ' faces-away' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, petFightPx(petArtId, 76), !petHovers(petArtId)) : ''}</div>
         </div>` : ''}
       </div>
       <div id="floats"></div>
