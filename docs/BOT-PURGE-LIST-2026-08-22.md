@@ -1,5 +1,22 @@
 # Bot purge list, 2026-08-22: FOR TOM'S EYEBALL, NOTHING EXECUTED
 
+> **SUPERSEDED AS A PLAN, 2026-08-23. THESE 47 ARE FLAGGED, NOT DELETED.**
+>
+> Tom asked for "a more eloquent solution than just leaving a mess of dead
+> bots", and what he described was CLUTTER, not rows existing. So the shipped
+> answer is `players.is_test`: the same 47 ids are set to `is_test = 1` by
+> `server/migrations/2026-08-23-flag-known-test-accounts.sql`, and every public
+> surface that enumerates players excludes them. They vanish from the game and
+> stay in the database.
+>
+> Flagging is reversible with one UPDATE. Deleting is not reversible at all, and
+> a false positive in a list like this costs a real player their account.
+>
+> **The DELETE below has NOT been run and is not proposed. It stays here as the
+> record of what was considered.** If Tom ever wants the rows gone, this is the
+> statement, and the flag will already have proved for as long as he likes that
+> nobody visible was in the list.
+
 Exactly the 47 accounts recommended for deletion. Criteria: created
 inside a tight registration burst during a documented dev/test session, never
 named, zero friendships, zero non-welcome grants, no recovery phrase, no
@@ -59,7 +76,7 @@ deletion; every "maybe a human" stayed off it.
 | `be736987-a861-4a86-8c16-03c956a04e51` | Rusty Stomper | - | 2026-08-20 18:56 | 2026-08-20 19:11 | 1 | 0 | 0 | 1 | 0 |
 
 
-## The purge, drafted (DO NOT RUN until Tom approves this list)
+## The purge, drafted (NOT RUN, NOT PROPOSED: see the note at the top)
 
 ```sql
 -- 47 certain test accounts, 2026-08-22. Rows they own in dependent

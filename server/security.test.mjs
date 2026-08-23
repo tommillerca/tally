@@ -16,8 +16,12 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { flagFor } from './test-flag.mjs';
 
 const BASE = process.env.BASE || process.env.API || 'http://127.0.0.1:8788';
+/* Registrations are flagged when this run is NOT local, so a suite pointed at
+   the live API mints accounts nobody can see. See server/test-flag.mjs. */
+const IS_TEST = flagFor(BASE);
 let passed = 0, failed = 0;
 
 // The limiter outlives the process, so a second run would start throttled.
@@ -53,7 +57,7 @@ async function newPlayer(ip = rndIp()) {
   const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
   const res = await fetch(`${BASE}/register`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
-    body: JSON.stringify({ pubkey: pubJwk }),
+    body: JSON.stringify({ test: IS_TEST, pubkey: pubJwk }),
   });
   if (!res.ok) throw new Error(`register failed: ${res.status} ${await res.text()}`);
   const me = await res.json();
@@ -391,7 +395,7 @@ await test('/register is rate limited per IP, and only that IP', async () => {
     const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
     return fetch(`${BASE}/register`, {
       method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
-      body: JSON.stringify({ pubkey: pubJwk }),
+      body: JSON.stringify({ test: IS_TEST, pubkey: pubJwk }),
     });
   };
   // BOUND: 10/hour. Enough for a household setting up several phones.

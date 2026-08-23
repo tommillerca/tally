@@ -1018,16 +1018,36 @@ function siegeNameFor(id, at) {
    to accepted if the existing row was requested by the OTHER player, and leave
    my own repeat alone. RETURNING is the row's own answer, so the status the
    caller is told is the status that is stored. */
+/* A FLAGGED TEST ACCOUNT FORMS NO RELATIONSHIPS, in either direction, and the
+   rule lives HERE because this is the only place a friendship row is ever
+   written: /friends/request (by code) and /friends/add (by addToken) both land
+   on it. Filtering only the code lookup would have left the token path open,
+   and the token path is the live one: GET /leaderboard hands every caller an
+   addToken for every row it returns, so a flagged account that reads the board
+   could put a pending request in a real player's Crew. That request is exactly
+   the clutter this whole change exists to stop, and it is also the gate on
+   /gift and /cheer, both of which refuse anything but an ACCEPTED friendship.
+   One guard, four surfaces.
+
+   Folded into the INSERT rather than read before it: no extra round trip, and
+   nothing to race. With ON CONFLICT DO UPDATE, RETURNING answers for the
+   conflicting row too, so a missing row means precisely that the WHERE NOT
+   EXISTS refused this write. The caller is told 'pending' anyway: only a
+   flagged account can ever see it, and a test that is meant to be invisible
+   learns nothing from a distinct error. */
 async function requestFriendship(env, meId, otherId) {
   const [a, b] = pairKey(meId, otherId);
   const now = Date.now();
   const row = await env.DB.prepare(
-    `INSERT INTO friendships (a, b, status, requested_by, ts) VALUES (?,?,'pending',?,?)
+    `INSERT INTO friendships (a, b, status, requested_by, ts)
+     SELECT ?,?,'pending',?,?
+      WHERE NOT EXISTS (SELECT 1 FROM players WHERE id IN (?,?) AND COALESCE(is_test, 0) = 1)
      ON CONFLICT(a, b) DO UPDATE SET
        status = CASE WHEN friendships.requested_by <> excluded.requested_by THEN 'accepted' ELSE friendships.status END,
        ts     = CASE WHEN friendships.requested_by <> excluded.requested_by THEN excluded.ts   ELSE friendships.ts     END
-     RETURNING status`).bind(a, b, meId, now).first();
-  return { ok: true, status: row?.status === 'accepted' ? 'accepted' : 'pending' };
+     RETURNING status`).bind(a, b, meId, now, meId, otherId).first();
+  if (!row) return { ok: true, status: 'pending', ignored: true };
+  return { ok: true, status: row.status === 'accepted' ? 'accepted' : 'pending' };
 }
 
 /* ---------------- daily-capped grants ----------------
@@ -1819,19 +1839,38 @@ export default {
         if (auth.err) return json({ error: auth.err }, 401);
         const ids = (url.searchParams.get('ids') || '').split(',').map(x => x.trim()).filter(Boolean).slice(0, 24);
         if (!ids.length) return json({ spires: [] });
-        const q = `SELECT id, name, owner, owner_name, defender, claimed_at, tended_at, level, siege_until, siege_name FROM spires WHERE id IN (${ids.map(() => '?').join(',')})`;
+        /* owner_test rides along so a FLAGGED owner can be masked in the response.
+           The claim route already refuses a flagged account, so this can only
+           fire for one flagged AFTER it claimed something (the retroactive case:
+           migrations/2026-08-23-flag-known-test-accounts.sql). It is read here
+           and applied in the map below, NOT masked in this SELECT, because
+           sweepSieges runs in between and needs the real owner to deliver the
+           siege-lost grant. */
+        const q = `SELECT s.id, s.name, s.owner, s.owner_name, s.defender, s.claimed_at, s.tended_at,
+                          s.level, s.siege_until, s.siege_name, COALESCE(p.is_test, 0) owner_test
+                     FROM spires s LEFT JOIN players p ON p.id = s.owner
+                    WHERE s.id IN (${ids.map(() => '?').join(',')})`;
         const rs = await env.DB.prepare(q).bind(...ids).all();
         // a rival walking past a besieged tower should see it under siege too
         const swept = await sweepSieges(env, rs.results || [], Date.now());
         return json({
-          spires: swept.map(r => ({
-            id: r.id, name: r.name, owner: r.owner, ownerName: r.owner_name,
-            siegeUntil: r.siege_until || null, siegeName: r.siege_name || null,
-            claimedAt: r.claimed_at,          // so a rival's tower can show its age
-            mine: r.owner === auth.playerId,
-            defender: r.owner === auth.playerId ? null : JSON.parse(r.defender || 'null'),
-            claimedAt: r.claimed_at, tendedAt: r.tended_at, level: r.level,
-          })),
+          spires: swept.map(r => {
+            /* A flagged owner is nobody: the tower reads as unclaimed. owner,
+               ownerName and defender are masked TOGETHER, because the map
+               pennant and the "Take X from Y" button read the name while the
+               tower sheet renders the holder's whole Bonehead out of defender.
+               Masking one would have left the other. */
+            const hide = r.owner_test === 1;
+            const owner = hide ? null : r.owner;
+            return {
+              id: r.id, name: r.name, owner, ownerName: hide ? null : r.owner_name,
+              siegeUntil: r.siege_until || null, siegeName: r.siege_name || null,
+              mine: owner === auth.playerId,
+              defender: (hide || r.owner === auth.playerId) ? null : JSON.parse(r.defender || 'null'),
+              claimedAt: r.claimed_at,          // so a rival's tower can show its age
+              tendedAt: r.tended_at, level: r.level,
+            };
+          }),
         });
       }
 
@@ -1846,7 +1885,13 @@ export default {
         const b = JSON.parse(bodyText || '{}');
         if (!b.name || typeof b.lat !== 'number' || typeof b.lng !== 'number') return json({ error: 'missing spire' }, 400);
         const now = Date.now();
-        const me = await env.DB.prepare('SELECT id, name, handle, profile FROM players WHERE id = ?').bind(auth.playerId).first();
+        const me = await env.DB.prepare('SELECT id, name, handle, profile, is_test FROM players WHERE id = ?').bind(auth.playerId).first();
+        /* A FLAGGED TEST ACCOUNT HOLDS NO TOWERS. Refused rather than hidden,
+           because a spire is a real place: hiding a test-held tower on the map
+           would still have taken it out of the game for whoever walks past it,
+           and toppling one sends a NAMED grant to the player who lost it. The
+           read is free (is_test rides the SELECT that was already here). */
+        if (me && me.is_test) return json({ error: 'test accounts do not hold towers', code: 'test-account' }, 403);
         const prev = await env.DB.prepare('SELECT owner, owner_name, level, claimed_at FROM spires WHERE id = ?').bind(id).first();
         // SHIELD: a tower just taken cannot be taken straight back. Two friends at
         // one corner could otherwise ping-pong a spire for 80 coins a pass, and
@@ -2109,7 +2154,10 @@ export default {
         const paid = (await env.DB.prepare(
           `SELECT g.payload, p.name, p.handle, json_extract(p.profile,'$.outfit') outfit
              FROM grants g LEFT JOIN players p ON p.id = g.player_id
-            WHERE g.key = ?`).bind(`stepweek-${wk}`).all()).results || [];
+            WHERE g.key = ?
+              -- a flagged account never appears on a podium, not even one it was
+              -- paid on before it was flagged
+              AND COALESCE(p.is_test, 0) = 0`).bind(`stepweek-${wk}`).all()).results || [];
         const podium = paid.map(r => {
           let pl = {};
           try { pl = JSON.parse(r.payload || '{}'); } catch { /* a torn row is one missing place, not a 500 */ }
@@ -2607,6 +2655,21 @@ export default {
       }
 
       // DEV-ONLY helpers for tests (env.DEV="1"; never set in production).
+      /* Flag or unflag an EXISTING player, the way
+         migrations/2026-08-23-flag-known-test-accounts.sql does to the 47
+         already in production. There is no production route for this on purpose:
+         flagging is an operator decision made with a migration and Tom watching,
+         not something an account can do to itself. It exists here because the
+         retroactive case is the only one the born-flagged path cannot reach, and
+         it is the case that decides whether a tower a flagged account already
+         holds still names it on the map. */
+      if (env.DEV === '1' && path === '/dev/flag-player' && request.method === 'POST') {
+        const b = await request.json();
+        await env.DB.prepare('UPDATE players SET is_test = ? WHERE id = ?')
+          .bind(b.test === false ? 0 : 1, String(b.playerId || '')).run();
+        const row = await env.DB.prepare('SELECT id, is_test FROM players WHERE id = ?').bind(String(b.playerId || '')).first();
+        return json({ ok: true, row: row || null });
+      }
       if (env.DEV === '1' && path === '/dev/grant' && request.method === 'POST') {
         const b = await request.json();
         await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')

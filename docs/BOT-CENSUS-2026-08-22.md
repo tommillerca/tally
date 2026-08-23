@@ -98,6 +98,26 @@ phrase, no spires, and (register-only rows) last_seen == created_at.
 | `66ea9c4f-09a2-43d3-a1c0-0f60e1201df8` | Jolly Wrecker | - | 2026-08-20 18:50 | 2026-08-20 18:51 | 1 | 0 | 0 | 1 | 0 |
 | `be736987-a861-4a86-8c16-03c956a04e51` | Rusty Stomper | - | 2026-08-20 18:56 | 2026-08-20 19:11 | 1 | 0 | 0 | 1 | 0 |
 
+### Audited before flagging, 2026-08-23
+
+The list was re-checked against the buckets rather than taken on trust: 47 + 19
++ 21 = 87, the three buckets are disjoint, and the purge table and the drafted
+DELETE contain the same 47 ids as sets. Two observations worth Tom's eye:
+
+- **28 of the 47 were never visible in the first place.** They have a NULL
+  profile, and `/leaderboard` has always required `profile IS NOT NULL`. They
+  cannot be what Tom is looking at. Flagging them costs nothing and makes the
+  set coherent, but the accounts he actually sees are the 19 from 2026-08-20.
+- **`be736987` (Rusty Stomper, 18:56) is the weakest row on the list.** It sits
+  on the last minute of the burst window, and a REAL player (`cbf6cf65`, Blazing
+  Golem: two friends, recovery phrase, returned the next day) registered at
+  18:57, one minute later. So a human genuinely was installing in that window.
+  `be736987` has no name, no friends, no grants, no recovery phrase and has not
+  been seen since 19:11 on the day it was created, which is why it stayed on
+  the list. Under the DELETE plan that call would have been worth arguing about.
+  Under flagging it costs one UPDATE to reverse, which is precisely why the
+  reversible version is the one that shipped.
+
 ## Maybes: possibly real players who bounced (19): NOT recommended for purge
 
 ### 2026-08-07 (v279 test day): level-1, zero social, never named, but created singly over ~100 min, not machine-gun
@@ -211,22 +231,112 @@ suites reading no URL "booted godmode's default, https://tommillerca.github.io/t
 and "graded PRODUCTION"; and the newcomers card in js/app.js carries Tom's two
 prior complaints about the same symptom (2026-08-08).
 
-## The fix drafted on this branch (NOT applied, NOT deployed)
+## Every public surface that enumerates players, and what hides a flag on it
+
+Found two ways, and the two agree, which is why this list is believed complete.
+
+**Server side**, by enumerating routes rather than trusting a list: `grep "if
+(path ===\|if (path.startsWith" server/src/index.js` gives all 34 routes, and
+`grep "players" server/src/index.js` gives every statement that touches the
+table. Six routes read another player's identity. Everything else reads `me`,
+an aggregate, or an admin view.
+
+**Client side**, by sweeping js/ for anything that renders a name, avatar,
+level or count belonging to someone else: 32 distinct surfaces (crew fan cards,
+faves, request rows, the podium, the "you are #N of M" rung, the leaderboard
+sheet, stranger profiles, the Worth-Adding card, deliveries, the race lanes and
+the map race strip, the settled-race poster and its Today banner, the spire
+pennants and tower sheet, PvP arena headers, gift and cheer pickers, grant
+toasts and pushes, the crew badge). All 32 collapse onto those same six reads.
+There is no seventh source: the client has no player list of its own.
+
+| Endpoint | Client surfaces it feeds | How a flagged row is hidden |
+|---|---|---|
+| `GET /leaderboard` | podium, "#N of M", the 100-row sheet, stranger profiles, the "Worth adding" card, and the addTokens all of those carry | `AND COALESCE(is_test,0) = 0` in the board query |
+| `GET /steps/week` | the race lanes, the collapsed standing, the map's race strip | `AND COALESCE(is_test,0) = 0` in the board query |
+| `GET /steps/settled` | the results poster, the Today "X TOOK IT" banner | `AND COALESCE(p.is_test,0) = 0` on the joined player |
+| `GET /friends` | crew cards, faves, the fan strip, request rows, profiles, friend PvP, gift and cheer pickers, the crew badge | no friendship can form: `requestFriendship` refuses when EITHER side is flagged, which is the one place a friendship row is ever written |
+| `GET /spires?ids=` | map pennants, "Take X from Y", the tower sheet (which renders the holder's whole Bonehead), spire PvP | a flagged account is refused at CLAIM; a retroactively flagged owner is masked on the read (owner, ownerName and defender together) |
+| `GET /grants?since=` | gift and cheer sender names, delivery popups, OS pushes | gift and cheer both require an ACCEPTED friendship, which the line above makes impossible |
+
+Two corrections to what the brief for this work assumed:
+
+- **There is no early-bird banner count.** `thanksBannerHtml` in js/app.js is
+  static copy ("Thanks for being early") with no fetch and no number in it. The
+  count sitting near it in the same tab is the leaderboard's "you are #N of M"
+  rung, where M is `players.length` from `/leaderboard`, so it was already
+  covered by the board filter.
+- `/friends/request` (lookup by friend code) was already filtered, but that was
+  only half the door: `/leaderboard` hands every caller an opaque addToken for
+  every row, redeemed at `POST /friends/add`, so a flagged account could still
+  push a pending request into a real player's Crew. That is why the guard moved
+  into `requestFriendship`, where both routes meet.
+
+Deliberately NOT filtered, each for a reason:
+
+- `POST /name`: the unique-name index is global either way, so filtering here
+  would only let a flagged account steal a name a real player then cannot use.
+- `GET /recovery/<code>`: account recovery for your own account. It enumerates
+  nobody.
+- `GET /stats`, `GET /admin/players`: admin-token gated, never shown to players.
+
+## What now stops it happening again
+
+**Mechanism 1, the register-only night bursts (28 accounts).** Closed
+mechanically. `server/test-flag.mjs` exports `flagFor(base)`, every suite binds
+`IS_TEST = flagFor(BASE)`, and every registration passes `test: IS_TEST`. A
+local run is unflagged and behaves exactly as before (the suites' own board and
+race assertions need visible accounts); a run pointed anywhere else mints only
+invisible ones. `tests/live-api-register-lint.mjs` fails the release gate if any
+test registers without that binding, and it is proven red two ways: dropping the
+flag from a call site, and defanging the binding to `const IS_TEST = false;`
+while leaving the import in place.
+
+**Mechanism 2, the full-onboarding burst (19 accounts, 2026-08-20).** This one
+is a human procedure, not a script in this repo, and it is worth being honest
+about the difference. As the tree stands today no audit can reach it: godmode's
+`boot()` appends `?demo`, and `?demo` sets NOSOCIAL in js/app.js, so no
+automated browser session registers at all. What remains is a native build
+verified by hand in the iOS Simulator or Android emulator, where
+`navigator.webdriver` is false and `js/social.js` defaults `apiBase` to the
+production worker. A fresh install there still mints one real account.
+
+Two things make that survivable rather than a census:
+1. it is now ONE command to clean up, not an investigation:
+   `UPDATE players SET is_test = 1 WHERE id = '<id>';` (the recipe is in the
+   header of `migrations/2026-08-23-flag-known-test-accounts.sql`), and
+2. a native verification run can boot the app at `?api=http://<your-ip>:8788`
+   or `?demo`, either of which keeps it off production entirely.
+
+A client-side flag keyed on `?calm` (the existing device-check switch) was
+considered and NOT built: nothing in the repo shows the runs that minted those
+19 accounts passing `?calm`, so it would have been a guess dressed up as a
+guard.
+
+## The fix as it now stands (drafted, NOT applied, NOT deployed)
+
+**Nothing is deleted.** The 47 stay in the database and become invisible. That
+is the whole difference between this and the purge list, and it is the reason
+`docs/BOT-PURGE-LIST-2026-08-22.md` now carries a superseded banner.
 
 1. `server/migrations/2026-08-22-test-accounts.sql`: adds `players.is_test`
    (INTEGER DEFAULT 0). Apply BEFORE deploying the filtered worker.
-2. `server/src/index.js` (drafted on this branch): `/register` accepts
-   `{test:true}` and stamps `is_test=1`; every public surface then excludes
-   flagged rows: `/leaderboard` (which also feeds the Crew "New Boneheadz"
-   suggestions and add-tokens), the `/steps/week` race board, and the
-   `/friends/request` friend-code lookup. `/steps/settled` needs no filter
-   (it reads paid grants; a filtered board can never pay a test account), and
-   `/name` is deliberately unfiltered (the UNIQUE index is global either way).
-   No server-side "early bird count" surface exists; the "new Boneheadz" list
-   is derived client-side from /leaderboard, so the leaderboard filter covers it.
-3. Rule for future sessions (also in server/wrangler.toml and schema.sql):
-   any test that talks to the live API registers with `{test:true}`, so test
-   accounts are born invisible and the purge is a one-liner.
+2. `server/migrations/2026-08-23-flag-known-test-accounts.sql`: sets
+   `is_test = 1` on exactly the 47 ids above. Idempotent, and its header carries
+   the one-line UPDATE that undoes it in full or for a single account.
+3. `server/src/index.js`: `/register` accepts `{test:true}` and stamps
+   `is_test = 1`; the six reads in the table above each hide a flagged row.
+4. The standing rule is a lint, not a sentence: see "What now stops it
+   happening again".
+
+Both migrations were applied in order to a sqlite database built from
+origin/main's `schema.sql` (which, like production, has no `is_test`): the
+census bot came out flagged, Tom's account came out at 0, and running them in
+the WRONG order fails loudly with `no such column: is_test` rather than
+silently.
+
+Deploy order and the verification commands live in
+`docs/SERVER-DEPLOY-PENDING.md`, alongside the #77 deploy this rides with.
 
 ## Two side findings (flagged, untouched)
 

@@ -10,8 +10,12 @@
  * suggestion), and the player who lost a tower has to be told.
  */
 import assert from 'node:assert/strict';
+import { flagFor } from './test-flag.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8788';
+/* Registrations are flagged when this run is NOT local, so a suite pointed at
+   the live API mints accounts nobody can see. See server/test-flag.mjs. */
+const IS_TEST = flagFor(BASE);
 let passed = 0, failed = 0;
 
 async function test(name, fn) {
@@ -27,11 +31,11 @@ const b64 = buf => Buffer.from(new Uint8Array(buf)).toString('base64');
    so this only works locally, which is what makes the limiter testable. */
 const rndIp = () => `198.18.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
 
-async function newPlayer(name) {
+async function newPlayer(name, flagged = false) {
   const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
   const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
   const res = await fetch(`${BASE}/register`, {
-    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() }, body: JSON.stringify({ pubkey: pubJwk }),
+    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() }, body: JSON.stringify({ test: IS_TEST || flagged, pubkey: pubJwk }),
   });
   if (!res.ok) throw new Error(`register failed: ${res.status}`);
   const me = await res.json();
@@ -354,6 +358,54 @@ const run = async () => {
   await test('unsigned requests are refused', async () => {
     const r = await fetch(`${BASE}/spires?ids=${s1.id}`);
     assert.equal(r.status, 401);
+  });
+
+  /* TEST ACCOUNTS HOLD NO TOWERS (2026-08-22, docs/BOT-CENSUS-2026-08-22.md).
+     A spire is a real place on a real map: a tower held by a test account is
+     taken out of the game for whoever walks past it, and its owner's name is
+     painted on the pennant, in the "Take X from Y" button and in the tower sheet
+     (which renders the holder's whole Bonehead out of `defender`). So a flagged
+     account is refused at the CLAIM rather than hidden afterwards.
+     PROVE-RED: delete the `if (me && me.is_test)` line from the claim route in
+     src/index.js and REFUSED goes red. */
+  await test('a flagged test account cannot claim a tower', async () => {
+    const bot = await newPlayer('BOT', true);
+    const sx = spire(Math.floor(Math.random() * 9000) + 100);
+    const r = await bot.signed('PUT', `/spires/${sx.id}/claim`, { name: sx.name, lat: sx.lat, lng: sx.lng });
+    assert.equal(r.status, 403, `REFUSED: a flagged account claimed a tower (${r.status})`);
+    assert.equal((await r.json()).code, 'test-account');
+    // and the tower really is still free: a REAL player can take it. A fresh
+    // player, not A: A may already be at the three-tower cap by this point,
+    // which would make the control fail for a reason that is not the flag.
+    const human = await newPlayer('HUMAN');
+    const ok = await human.signed('PUT', `/spires/${sx.id}/claim`, { name: sx.name, lat: sx.lat, lng: sx.lng });
+    assert.equal(ok.status, 200, 'CONTROL: the tower must still be claimable, or the refusal proved nothing');
+  });
+
+  /* THE RETROACTIVE CASE, which the claim guard cannot reach: an account that
+     already held a tower when it was flagged (which is what
+     migrations/2026-08-23-flag-known-test-accounts.sql does to 47 rows). Its
+     tower must read as unclaimed rather than as a tower belonging to a ghost.
+     PROVE-RED: drop `owner_test` from the /spires SELECT or the `hide` branch
+     from the map, and MASKED goes red on ownerName. */
+  await test('a tower whose owner is flagged AFTER the claim reads as unclaimed', async () => {
+    const ghost = await newPlayer('GHOST');
+    const sy = spire(Math.floor(Math.random() * 9000) + 200);
+    assert.equal((await ghost.signed('PUT', `/spires/${sy.id}/claim`, { name: sy.name, lat: sy.lat, lng: sy.lng })).status, 200);
+    const before = (await (await A.signed('GET', `/spires?ids=${sy.id}`)).json()).spires[0];
+    assert.ok(before && before.ownerName, 'PRECONDITION: a rival must see the owner BEFORE the flag');
+    assert.ok(before.defender, 'PRECONDITION: and the defender snapshot too');
+
+    const fl = await fetch(`${BASE}/dev/flag-player`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ playerId: ghost.me.playerId }),
+    });
+    assert.ok(fl.ok, `dev/flag-player failed: ${fl.status} (is wrangler running with --var DEV:1?)`);
+
+    const after = (await (await A.signed('GET', `/spires?ids=${sy.id}`)).json()).spires[0];
+    assert.equal(after.ownerName, null, 'MASKED: the pennant still names a flagged holder');
+    assert.equal(after.owner, null, 'MASKED: the owner id still leaks');
+    assert.equal(after.defender, null, 'MASKED: the holder\'s Bonehead is still rendered in the tower sheet');
   });
 
   console.log(`\n${passed} passed, ${failed} failed`);

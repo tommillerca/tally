@@ -31,12 +31,14 @@ CREATE TABLE IF NOT EXISTS players (
      delivered gift from one still waiting. Nullable, so every pre-existing row
      means "never acknowledged anything" and is protected by default. */
   grants_ack INTEGER,
-  -- TEST ACCOUNTS (2026-08-22). Any test that talks to the LIVE API must
-  -- register with {test:true} so the account lands flagged. Flagged rows are
-  -- excluded from every public surface that enumerates players, so a test run
-  -- can never again flood the Crew with dead level-1 "players". Existing DBs:
-  -- migrations/2026-08-22-test-accounts.sql, applied BEFORE deploying the
-  -- worker that filters on it.
+  -- TEST ACCOUNTS (2026-08-22). A test that talks to the LIVE API registers
+  -- with {test:true} (server/test-flag.mjs decides, tests/live-api-register-lint.mjs
+  -- enforces), so the account lands flagged. Flagged rows are excluded from all
+  -- six reads that enumerate players (/leaderboard, /steps/week, /steps/settled,
+  -- /spires, and /friends via requestFriendship, which /grants sender names
+  -- depend on), so a test run can never again flood the Crew with dead level-1
+  -- "players". Existing DBs: migrations/2026-08-22-test-accounts.sql, applied
+  -- BEFORE deploying the worker that filters on it.
   is_test INTEGER DEFAULT 0
 );
 

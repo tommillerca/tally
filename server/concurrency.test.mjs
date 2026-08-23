@@ -30,8 +30,12 @@
  * on 2026-08-17.
  */
 import assert from 'node:assert/strict';
+import { flagFor } from './test-flag.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8788';
+/* Registrations are flagged when this run is NOT local, so a suite pointed at
+   the live API mints accounts nobody can see. See server/test-flag.mjs. */
+const IS_TEST = flagFor(BASE);
 const BURST_LOAD = Number(process.env.BURST_LOAD || 300);
 let passed = 0, failed = 0;
 
@@ -66,7 +70,7 @@ async function newPlayer(snapshot = { level: 9 }) {
   const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
   const res = await fetch(`${BASE}/register`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
-    body: JSON.stringify({ pubkey: pubJwk }),
+    body: JSON.stringify({ test: IS_TEST, pubkey: pubJwk }),
   });
   if (!res.ok) throw new Error(`register failed: ${res.status}`);
   const me = await res.json();
@@ -283,7 +287,7 @@ await test('concurrent registers of one pubkey all return the one account', asyn
   const ip = rndIp();
   const one = () => fetch(`${BASE}/register`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
-    body: JSON.stringify({ pubkey: pubJwk }),
+    body: JSON.stringify({ test: IS_TEST, pubkey: pubJwk }),
   });
   const res = await burst([one, one, one]);
   const bodies = await bodiesOf(res);

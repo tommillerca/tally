@@ -10,8 +10,12 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { flagFor } from './test-flag.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8788';
+/* Registrations are flagged when this run is NOT local, so a suite pointed at
+   the live API mints accounts nobody can see. See server/test-flag.mjs. */
+const IS_TEST = flagFor(BASE);
 let passed = 0, failed = 0;
 
 /* The IP rate limiter outlives the process, so a second run of this file would
@@ -57,7 +61,7 @@ async function newPlayer() {
   const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
   const res = await fetch(`${BASE}/register`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
-    body: JSON.stringify({ pubkey: pubJwk }),
+    body: JSON.stringify({ test: IS_TEST, pubkey: pubJwk }),
   });
   if (!res.ok) throw new Error(`register failed: ${res.status} ${await res.text()}`);
   const me = await res.json();
