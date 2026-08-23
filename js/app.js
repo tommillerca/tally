@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, useDbName, requestPersistence, eraseAll, watchForWipe } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -20,14 +20,18 @@ import {
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
+  stripAll, stripAllPlan,
   DROP, buyDropItem, refundStreakFreezes,
   RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_REROLL_LADDER,
   setWornAura, ownsAura,
   rack, rerollRack, buyRackItem, wornAura,
+  buyPetItem,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
+import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
+import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, showWandererEncounter, WANDERER_FIGHT, CONE_RANGE_M } from './wanderer.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
 import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
@@ -38,17 +42,23 @@ import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from '
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
 import { loadMaplibre, createBoneyardMap, domMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
 import { hlwArt } from './hollow-art.js';
+/* runTalkBox only: no screen emits talk-box markup of its own right now (Today's
+   came off in v418), and the reveal path still has to start any box that appears.
+   The emitter comes back with Gwart. Do not write the emitter's name in here: the
+   COVERAGE row in tests/talkbox-audit.mjs greps js/*.js for it and counts a
+   mention on a /* line as a real call site, on purpose. */
+import { talkBoxHtml, runTalkBox } from './talkbox.js';
 import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } from './hollow-beds.js';
 import { hollowBackdropHtml } from './hollow-scene.js';
-import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor, heldSpires,
+import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor,
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
   SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX } from './loot.js';
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
+import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear } from './loot.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -76,7 +86,7 @@ import {
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP } from '../data/boneheadz.js';
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -193,15 +203,92 @@ const S = {
   userFoods: [],
   date: dateKey(),
   demo: new URLSearchParams(location.search).has('demo'),
+  /* CALM BOOT. Every first-run sheet (the drop, the intros, the recovery-code
+     prompt, the survey) already suppresses itself under navigator.webdriver,
+     which is why no Chromium audit has ever had to dismiss one. A real device
+     opened with `xcrun simctl openurl` is NOT webdriver, so on a phone the whole
+     stack fires in a queue and there is no way to reach Today: three sheets deep
+     before the app is usable, which is what made every device check so far a
+     manual tapping exercise and is why the wordmark was only ever proven on a
+     stripped-down proxy page rather than in the app.
+     ?calm is the device-side equivalent of that same switch. It is read ONCE,
+     here, next to ?demo and ?automap, which are the app's two existing test
+     params, and it is applied ONLY to guards that already test !S.settings, i.e.
+     the "do not interrupt a fresh boot" family. It suppresses nothing else. */
+  calm: new URLSearchParams(location.search).has('calm'),
   onlineCache: new Map(),
   ui: { ringPct: 0, remainShown: null, macroPcts: [0, 0, 0] }, // last-rendered values so charts animate between states
   celebration: null,
   sounds: true,
   glow: true,      // rarity/slime glow on your Bonehead's gear (Settings > App)
   shinyPets: new Set(), // pet ids the player owns as the ultra-rare shiny variant
+  /* WHAT YOUR OWN PET IS WEARING, { slotCode: itemId }. Cached for the same
+     reason S.shinyPets is: croppedPetImg is synchronous and runs on every pet
+     render in the app, so the wardrobe cannot be an await. Refreshed before the
+     first paint and after every equip. */
+  petWear: {},
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
   wpnAura: null,   // the weapon aura bought off the rack, worn on every surface
 };
+
+/* The one thing the boot-sheet guards below ask. Named rather than inlined so
+   the set of surfaces it governs is greppable, and so ?calm can never drift away
+   from navigator.webdriver: they are the same switch, thrown from two places. */
+const CALM_BOOT = () => (typeof navigator !== 'undefined' && navigator.webdriver === true) || S.calm;
+
+/* ONE INTERRUPTION PER APP OPEN. Tom, 2026-08-21, after watching a fresh device
+   boot: "Fix the pop ups that's a night mare."
+
+   He is right and the pixels agree: opening the app on a real phone put four
+   sheets in a row on screen before Today was reachable. Nothing here was
+   overlapping, which is the part that made it feel endless: every one of these
+   already waits politely for the last to close, retrying for up to 30 seconds.
+   So they QUEUED. You dismiss one and the next slides up.
+
+   Nobody had seen it because all of them suppress themselves under
+   navigator.webdriver, so no automated check has ever rendered one. The first
+   session is the only path with no test on it, and it is the one every new
+   player takes.
+
+   THE RULE IS ONE PER OPEN, not a shorter queue. A budget that is a count
+   ("show at most three") is still a queue, just a politer one; the thing that
+   reads as a nightmare is the SECOND sheet, because it tells the player that
+   dismissing did not end it.
+
+   WHICH ONE GETS IT is already decided and is not changed here: each of these
+   fires on its own delay (rename 1200ms, teaser 1400, what's-new 1700, drop
+   2200, spires 2600, bosses 3000, race 3200, the Live Wire 3400) so the earliest
+   ready wins, which is the priority order that was already authored.
+
+   A LOSER CONSUMES NOTHING. The claim is taken immediately before the seen
+   counter is written, so a sheet that stands down this session has not been
+   marked seen and arrives next open instead. Nothing is lost, it is spread.
+
+   The daily wheel and the recovery prompt are deliberately NOT claimants. The
+   wheel is the reward for opening the app rather than an interruption, and the
+   recovery prompt is a standing decision of Tom's that the code already records:
+   players "see it each time they open until they pick one, for their own good". */
+let bootSheetClaimed = false;
+/* `forced` is the SAME window.__xForce flag the guard at the top of each
+   maybeShow* already consults, and it has to be honoured here too.
+   WHY, and it cost six red suites on the v422 gate: those flags exist so an
+   audit can drive ONE sheet deliberately, and the guard above lets them through
+   CALM_BOOT. The claim did not know about them, so the first forced sheet in a
+   run took the budget and every later one silently stood down. That is not a
+   test-only nicety: race-results-audit drives the same sheet across TWO
+   simulated opens to prove it shows twice, and it read 1 of 2. The budget is
+   about an unasked-for interruption; a sheet somebody explicitly asked for is
+   not one. */
+function claimBootSheet(forced) {
+  if (forced) return true;
+  if (bootSheetClaimed) return false;
+  bootSheetClaimed = true;
+  return true;
+}
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  window.__bootSheetClaimed = () => bootSheetClaimed;
+  window.__resetBootSheet = () => { bootSheetClaimed = false; };
+}
 
 /* SAVING A SETTING MUST WRITE THE CHANGE, NOT THE WHOLE SNAPSHOT.
  *
@@ -274,9 +361,47 @@ function petScale(petId) {
 }
 // Render a static pet image cropped to its content and scaled to ~fill a px box.
 // ground=true seats the art on the box floor; else it's vertically centered (hover).
-function croppedPetImg(petId, px, ground = false, srcOverride = null) {
+/* WHAT THE PET IS WEARING, resolved to an ordered list of art sources.
+   Cam draws every accessory pre-positioned in the SAME 2048 square as the pet,
+   so a layer needs no anchor and no offset: drawn with the base's own crop
+   transform it lands exactly where he drew it. That is the whole mechanism, and
+   it is why pet accessories cost no per-pet art.
+   Sorted by PET_SLOTS z, so the glasses sit on top of everything. Tom,
+   2026-08-20: "the glasses are ALWAYS on top in the hierarchy for cosmetics." */
+function petWornLayers(wear) {
+  if (!wear) return [];
+  return [...PET_SLOTS].sort((a, b) => a.z - b.z)
+    .map(sl => wear[sl.code])
+    .filter(id => id && BH_BY_ID[id])
+    .map(id => bhAsset(BH_BY_ID[id]));
+}
+/* WHOSE WARDROBE IS THIS, AND CAN THIS PET EVEN WEAR IT.
+ *
+ * The same two questions shiny already answers, and they are answered the same
+ * way, because getting this wrong the OTHER way is a bug the figure contract has
+ * already paid for once (a friend's shiny drawn in base colours because the
+ * render consulted S.shinyPets, which is the VIEWER's collection).
+ *
+ *   wear === undefined  YOUR OWN pet: S.petWear answers, cached at boot and
+ *                       after every equip so render stays synchronous.
+ *   anything else       taken verbatim. A snapshot pet (a friend, a rival, a
+ *                       defender) carries its own wear or none, and can never
+ *                       be dressed out of the viewer's wardrobe.
+ *
+ * SPECIES IS THE OTHER HALF, and it is enforced HERE rather than at the equip
+ * button, so every surface in the app inherits it instead of nine screens each
+ * remembering. Cam draws each piece positioned for one body inside the shared
+ * canvas: measured 2026-08-21, the glasses overlap Bumbleseal's own ink by
+ * 94.8% and Drizzle, Mallard and Bulldog by 0.0%, so on any other pet they
+ * would float in empty space. PET_SHOP.pet.id, not the literal 'C6': the shop
+ * already declares which pet these are drawn for.
+ */
+const petWearFor = (petId, wear) =>
+  (petId === PET_SHOP.pet.id ? (wear === undefined ? S.petWear : wear) : null);
+function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined) {
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
   const c = PET_CROP[petId];
+  const worn = petWornLayers(petWearFor(petId, wear));
   if (!c) return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="width:${px}px;height:${px}px;object-fit:contain" alt=""></span>`;
   const FILL = 0.82;                                   // match the animated pets' ~63px fill in a 76px box
   const cw = c.x1 - c.x0, ch = c.y1 - c.y0;            // content size (fraction of the square)
@@ -284,7 +409,19 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null) {
   const tx = (px - cw * imgSize) / 2 - c.x0 * imgSize; // center content horizontally
   const ty = ground ? (px - c.y1 * imgSize)            // seat content bottom on the floor
                      : ((px - ch * imgSize) / 2 - c.y0 * imgSize); // else center (hover)
-  return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="position:absolute;left:0;top:0;width:${imgSize.toFixed(1)}px;height:${imgSize.toFixed(1)}px;max-width:none;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)" alt=""></span>`;
+  /* EVERY LAYER GETS THE IDENTICAL TRANSFORM. Registration is not something this
+     function computes per layer; it is inherited from the shared canvas. Any
+     per-layer nudge here would be a second source of truth fighting the art. */
+  /* PERCENTAGES OF THE BOX, NOT PIXELS, and the arithmetic above is untouched:
+     every number here is already proportional to `px`, so dividing back out is a
+     re-expression and not a new layout. What it buys is a box a stylesheet can
+     resize: Today's hero sizes the pet against the Bonehead (app.css --fig), and
+     .petcrop is overflow: hidden, so a CSS resize with pixel layers inside would
+     crop the creature instead of scaling it. translate() percentages resolve
+     against the IMAGE's own border box, hence /imgSize rather than /px. */
+  const pc = n => `${(n * 100 / px).toFixed(4)}%`;
+  const layer = u => `<img src="${u}" style="position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)" alt="">`;
+  return `<span class="petcrop" style="width:${px}px;height:${px}px">${layer(src)}${worn.map(layer).join('')}</span>`;
 }
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
 // layer stack (C1/C4) or a content-cropped base image. Shiny state is cached in
@@ -313,7 +450,10 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null) {
  */
 function petFrom(snapshotPet, ownSpecies = null) {
   if (snapshotPet && snapshotPet.id) {
-    return { id: snapshotPet.id, shiny: !!snapshotPet.shiny, level: snapshotPet.level || 1 };
+    /* `wear` follows shiny exactly: a snapshot's own wardrobe or NONE, never
+       undefined, because undefined means "ask S.petWear", which is the viewer's
+       own and would dress a rival's Bumbleseal in your purse. */
+    return { id: snapshotPet.id, shiny: !!snapshotPet.shiny, level: snapshotPet.level || 1, wear: snapshotPet.wear || null };
   }
   if (ownSpecies && BH_BY_ID[ownSpecies]) return { id: ownSpecies, shiny: undefined, level: null };
   return null;
@@ -324,7 +464,7 @@ function petFrom(snapshotPet, ownSpecies = null) {
  * is the wrong size" cannot be re-invented per screen. */
 function petAsideHtml(pet, px) {
   if (!pet || !pet.id || !BH_BY_ID[pet.id]) return '';
-  return petSpriteHtml(pet.id, px, !petHovers(pet.id), { mass: true, shiny: pet.shiny });
+  return petSpriteHtml(pet.id, px, !petHovers(pet.id), { mass: true, shiny: pet.shiny, wear: pet.wear });
 }
 /* THE THIRD PATH. On the splash, the level-up card, the map marker and the
  * leaderboard the pet stays INSIDE the avatar stack, so it cannot go through
@@ -343,7 +483,83 @@ async function ownShinyPetId(eq) {
   return (await shinyPetIds()).includes(sp) ? sp : null;
 }
 const snapShinyPetId = pet => (pet && pet.shiny && pet.id !== 'CX' ? pet.id : null);
-function petSpriteHtml(petId, px, ground = false, { mass = false, shiny } = {}) {
+/* IS THIS PET DRAWN ON THE BONEHEAD'S CANVAS, OR ON ITS OWN?
+ *
+ * Tom, 2026-08-21: "also this weird top left glitch with the pet and bonehead is
+ * happening around the app", with a shot of the Bonehead hub's portrait: a huge
+ * cream blob laid over the skeleton inside a 76px card.
+ *
+ * The cause is registration, not layout. C1-C5 and CX are painted INSIDE the
+ * shared 640 square, in the corner beside the figure, so stacking them as one
+ * more avatar layer puts the pet where Cam drew it. Bumbleseal (C6) is a 2048
+ * square with the pet filling the frame, because she is drawn to be placed by
+ * petAsideHtml at a size of her own. Stacked raw over a 640-registered body she
+ * lands across his chest at four times the size, on every surface that keeps the
+ * C slot: the hub portrait, the map marker, the leaderboard, the friends list,
+ * the splash, the level-up card and both fight plates.
+ *
+ * SO THE TEST IS THE ART'S OWN GEOMETRY, read off PET_CROP, which is already the
+ * measured ink box of every species as fractions of its canvas. A pet drawn as a
+ * companion has its ink in the bottom-right quadrant (measured: x0 0.534-0.559,
+ * y0 0.592-0.639 across all five). One drawn on its own canvas does not (C6 is
+ * 0.119, 0.171). No new hand-kept list, so the NEXT solo-canvas pet is handled
+ * the day its crop lands rather than the day somebody remembers this comment.
+ *
+ * WHAT IT COSTS: a solo-canvas pet is simply not drawn inside an avatar stack.
+ * That is anti-regression rule 8 (degrade to a missing garment, never to a
+ * broken figure), and she is still drawn everywhere it matters, because every
+ * surface that shows a pet PROPERLY goes through petAsideHtml. Upgrade path if
+ * her absence from the portrait ever reads as a bug: give the stack a real
+ * companion slot with its own placement, which is a layout feature, not a
+ * one-line fix, and it needs its own row in tests/figure-audit.mjs. */
+const petStacksOnBody = petId => {
+  const c = PET_CROP[petId];
+  return !!c && c.x0 >= 0.5 && c.y0 >= 0.5;
+};
+/* HOW BIG A PET STANDS IN THE PIT. Tom, 2026-08-22: "the scale of bumbleseal
+ * wihle fighting was too big".
+ *
+ * The arena hands every pet the same 76px box with mass:false, and that box is
+ * fair right up until a pet arrives on a canvas of its own. croppedPetImg fills
+ * 82% of the box against the LONGEST edge of the ink, so a long flat pet spends
+ * its budget on width and lands 42-49px tall, while a pet whose ink is as tall
+ * as it is wide lands the full 62. Measured in the arena at 393x852, in painted
+ * pixels: Bumbleseal 62.3x61.7 against the bulldog's 62.3x48.8, the beardie's
+ * 62.3x46.8 and the Mallard's 62.3x42.5. Height is what the eye compares (the
+ * same argument petMassScale is built on), so she read as half again the animal
+ * everybody else brings.
+ *
+ * DERIVED FROM PET_CROP, NOT A LIST OF NAMES, and the seam is the one that
+ * already exists: petStacksOnBody separates a pet drawn as a companion inside
+ * the shared 640 square from one drawn alone on its own canvas, off the measured
+ * ink box rather than off a species id. A solo-canvas pet is brought to the
+ * MEDIAN aspect of the companion-drawn ones (0.7543 of six), so it matches the
+ * animal in the middle of the roster rather than the smallest or the largest.
+ * Bumbleseal is 0.9906, so she comes to 76 * 0.7615 = 58px and her ink to
+ * 47.4x47.0, which is the beardie's height to within half a pixel.
+ *
+ * IT CAN ONLY SHRINK (Math.min(1, ...)), so it can never inflate a pet into the
+ * bonehead beside it, and it touches nothing that stacks on the body: the
+ * cloud, the duck, the catfish, the beardie, the bulldog and the Day One Lizard
+ * all render at exactly the px they always did. The next solo-canvas pet is
+ * handled the day its crop lands. */
+function petFightPx(petId, px) {
+  const tall = id => { const c = PET_CROP[id]; return c ? (c.y1 - c.y0) / Math.max(c.x1 - c.x0, c.y1 - c.y0) : null; };
+  const mine = tall(petId);
+  if (!mine || petStacksOnBody(petId)) return px;
+  const peers = Object.keys(PET_CROP).filter(id => petStacksOnBody(id)).map(tall).filter(Boolean).sort((a, b) => a - b);
+  if (!peers.length) return px;
+  const h = peers.length / 2;
+  const mid = peers.length % 2 ? peers[Math.floor(h)] : (peers[h - 1] + peers[h]) / 2;
+  return Math.round(px * Math.min(1, mid / mine));
+}
+/* THE TEST SEAM IS GONE, and its removal is the point. It existed because "a pet
+   accessory has no equip UI yet", so the only other way to grade the composite
+   was to re-implement croppedPetImg's maths in the audit. The Stable's wardrobe
+   is that UI, so tests/pet-wardrobe-audit.mjs taps the real tiles instead, which
+   is what tally/CLAUDE.md rule 5 asks for anyway: operate the control, do not
+   call the function behind it. */
+function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear } = {}) {
   // CX (Day One Lizard) has no shiny static variant; its amethyst art IS the
   // special look, so always render its animated self even if the instance is shiny.
   // Every path scales by the species' visual mass, so a colourway is never a
@@ -376,20 +592,21 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny } = {}) 
     // Cropped like every other pet. This used to be a raw <img> at px, which drew
     // the creature tiny inside its box because the source art sits small in a 640²
     // canvas: a shiny lizard came out a fraction of the normal one.
-    return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
+    return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
-  return animatedPetHtml(petId, S2) || croppedPetImg(petId, S2, ground);
+  return animatedPetHtml(petId, S2) || croppedPetImg(petId, S2, ground, null, wear);
 }
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
 // it's an animated/hovering/grounded species. Shiny uses its recolour, same crop.
-function petPortraitHtml(petId, px, shiny = false, { mass = false } = {}) {
+function petPortraitHtml(petId, px, shiny = false, { mass = false, wear } = {}) {
   if (petId === 'CX') shiny = false; // Day One Lizard: amethyst CX.png is the portrait (no shiny static)
   const src = shiny ? `assets/bh/C/shiny/${petId}.png` : bhAsset(BH_BY_ID[petId]);
-  const inner = croppedPetImg(petId, mass ? Math.round(px * petScale(petId)) : px, false, src);
+  const inner = croppedPetImg(petId, mass ? Math.round(px * petScale(petId)) : px, false, src, wear);
   return shiny ? `<div class="pet-shiny-wrap">${inner}<span class="shiny-spark">${sparkIco(12)}</span></div>` : inner;
 }
 async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); }
+async function refreshPetWear() { S.petWear = await petWear(); }
 /* Which avatar slots are wearing SLIMED gear. Cached the same way shiny pets are,
    because the glow has to appear on every avatar render and avatarLayersHtml has
    14 call sites: threading a parameter through all of them is how one of them
@@ -406,8 +623,13 @@ async function refreshSlimedSlots() {
 
 // 4-point sparkle in the game's art style (flat gold fill, thick dark outline).
 // Replaces ✨/✦ emoji + text glyphs so decorations match Cam's illustrations.
-function sparkIco(s = 14, fill = '#ffe08a') {
-  return `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.5c.7 4.2 2.1 6.6 3 7.5s3.3 2.3 7.5 3c-4.2.7-6.6 2.1-7.5 3s-2.3 3.3-3 7.5c-.7-4.2-2.1-6.6-3-7.5s-3.3-2.3-7.5-3c4.2-.7 6.6-2.1 7.5-3s2.3-3.3 3-7.5z" fill="${fill}" stroke="#3a2b12" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+/* A CALLER THAT ASKS FOR A COLOUR IS ASKING FOR THE VECTOR. The level-up sparks
+   are green on purpose; a PNG cannot be recoloured, so passing `fill` keeps the
+   svg. tests/icon-inventory-audit.mjs grades those sites VECTOR from the same
+   argument rather than reporting pixel art that never renders. */
+function sparkIco(s = 14, fill) {
+  return (fill ? null : pixCur('sparkle', s))
+    || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.5c.7 4.2 2.1 6.6 3 7.5s3.3 2.3 7.5 3c-4.2.7-6.6 2.1-7.5 3s-2.3 3.3-3 7.5c-.7-4.2-2.1-6.6-3-7.5s-3.3-2.3-7.5-3c4.2-.7 6.6-2.1 7.5-3s2.3-3.3 3-7.5z" fill="${fill || '#ffe08a'}" stroke="#3a2b12" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
 }
 
 const ICONS = {
@@ -419,13 +641,17 @@ const ICONS = {
   star: (a, filled) => {
     const px = typeof a === 'number' ? a : 21;
     const on = typeof a === 'number' ? filled !== false : !!a;
+    /* Only the DECORATIVE star gets the drawing. Called with a boolean this is
+       a favourite/star TOGGLE, and one PNG cannot say "off", so the two-state
+       sites keep the outline-vs-fill svg. */
+    if (typeof a === 'number' && on) { const pix = pixCur('star', px); if (pix) return pix; }
     return `<svg class="ico" viewBox="0 0 24 24" style="width:${px}px;height:${px}px;${on ? 'fill:var(--carbs);stroke:var(--carbs)' : 'fill:none;stroke:var(--text-3)'};stroke-width:1.8"><path d="M12 3l2.7 5.8 6.3.7-4.7 4.3 1.3 6.2L12 16.9 6.4 20l1.3-6.2L3 9.5l6.3-.7z"/></svg>`;
   },
   coin: (s = 14) => pixCur('coin', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.2" fill="#ffb454" stroke="#3a2b12" stroke-width="1.6"/><circle cx="12" cy="12" r="6.9" fill="none" stroke="#3a2b12" stroke-width="1" opacity="0.45"/><g fill="#5a3f14"><circle cx="7.8" cy="10.6" r="1.6"/><circle cx="7.8" cy="13.4" r="1.6"/><circle cx="16.2" cy="10.6" r="1.6"/><circle cx="16.2" cy="13.4" r="1.6"/><rect x="7.4" y="10.7" width="9.2" height="2.6" rx="1.3"/></g></svg>`,
   flame: (s = 15) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 2.6s5.8 4.6 5.8 10.4c0 3.9-2.6 6.9-5.8 6.9s-5.8-3-5.8-6.9c0-2.4 1.2-4.6 2.4-6.1 0 1.5.6 2.6 1.6 2.6 1.3.6 1.8-2.9 1.8-6.9z" fill="#ffb454" stroke="#3a2313" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 12.3c1.4 1 2.1 2.2 2.1 3.4 0 1.6-.9 2.7-2.1 2.7s-2.1-1.1-2.1-2.7c0-1.2.7-2.4 2.1-3.4z" fill="#ffe08a"/></svg>`,
-  boltIco: (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M13 2.5L5.4 13h5l-1.6 8.5L18.6 10h-5z" fill="#ffe08a" stroke="#3a2b12" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
+  boltIco: (s = 18) => pixCur('bolt', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M13 2.5L5.4 13h5l-1.6 8.5L18.6 10h-5z" fill="#ffe08a" stroke="#3a2b12" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   sneaker: (s = 19) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M3 15.5c0-1.1.8-2 2-2h4l3-3.6c2.5 2 6.4 3 8.4 3.5.9.2 1.6 1 1.6 2v2.1H3z" fill="#ff9dc7" stroke="#33121f" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 18h19" stroke="#33121f" stroke-width="1.7" stroke-linecap="round"/><path d="M10.5 12.5l1.2 1.2M12.5 10.7l1.2 1.2" stroke="#33121f" stroke-width="1.2" stroke-linecap="round"/></svg>`,
-  paw: (s = 23) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#c084fc" stroke="#2a1c3d" stroke-width="1.2"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.6"/><ellipse cx="6.4" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="17.6" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="9.4" cy="7.4" rx="1.8" ry="2.3"/><ellipse cx="14.6" cy="7.4" rx="1.8" ry="2.3"/></g></svg>`,
+  paw: (s = 23) => pixCur('paw', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#c084fc" stroke="#2a1c3d" stroke-width="1.2"><ellipse cx="12" cy="15.5" rx="4.6" ry="3.6"/><ellipse cx="6.4" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="17.6" cy="10.4" rx="1.9" ry="2.4"/><ellipse cx="9.4" cy="7.4" rx="1.8" ry="2.3"/><ellipse cx="14.6" cy="7.4" rx="1.8" ry="2.3"/></g></svg>`,
 };
 
 /* Tier 1 additions. Stroke icons sized at the call site, so they can sit in a
@@ -450,12 +676,12 @@ ICONS.camera = (s = 18) => t1Stroke(s, `<path d="M3.4 8.4h3.4l1.6-2.4h7.2l1.6 2.
 ICONS.photos = (s = 18) => t1Stroke(s, `<rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2.4"/><path d="M3.6 16.4l4.6-4.4 3.4 3 3.2-3.6 5.6 5.4"/><circle cx="8.6" cy="9.4" r="1.5"/>`);
 ICONS.barcodeIco = (s = 19) => t1Stroke(s, `<path d="M3 6v12M7 6v12M10 6v8M13 6v12M16 6v8M19 6v12M21 6v12"/>`);
 ICONS.labelIco = (s = 19) => t1Stroke(s, `<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/>`);
-ICONS.boltStroke = (s = 19) => t1Stroke(s, `<path d="M13 2L4.5 13.5H11L9.5 22 19 10h-6.5z"/>`);
+ICONS.boltStroke = (s = 19) => pixCur('bolt', s) || t1Stroke(s, `<path d="M13 2L4.5 13.5H11L9.5 22 19 10h-6.5z"/>`);
 ICONS.searchIco = (s = 18) => t1Stroke(s, `<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>`);
 
 ICONS.pit = (s = 22) => pixCur('pit', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g stroke="#3a352a" stroke-width="1.2" fill="#f2e9d7"><g transform="rotate(45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="9.6" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="14.4" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g><g transform="rotate(-45 12 12)"><circle cx="12" cy="4.6" r="2"/><circle cx="14.4" cy="6.2" r="2"/><circle cx="12" cy="19.4" r="2"/><circle cx="9.6" cy="17.8" r="2"/><rect x="10.9" y="5.5" width="2.2" height="13" rx="1.1"/></g></g></svg>`;
 ICONS.radar = (s = 14) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.4" fill="none" stroke="#7cc4ff" stroke-width="1.7"/><circle cx="12" cy="12" r="5" fill="none" stroke="#7cc4ff" stroke-width="1.4" opacity="0.6"/><circle cx="12" cy="12" r="1.8" fill="#7cc4ff"/><path d="M12 12L18.5 5.5" stroke="#7cc4ff" stroke-width="1.7" stroke-linecap="round"/></svg>`;
-ICONS.bone = (s = 18) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#f2e9d7" stroke="#3a352a" stroke-width="1.3"><circle cx="6.2" cy="7.6" r="2.6"/><circle cx="8.8" cy="5" r="2.6"/><circle cx="17.8" cy="16.4" r="2.6"/><circle cx="15.2" cy="19" r="2.6"/><rect x="6.4" y="9.2" width="11.4" height="4" rx="2" transform="rotate(45 12 12)"/></g></svg>`;
+ICONS.bone = (s = 18) => pixCur('bone', s) || `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><g fill="#f2e9d7" stroke="#3a352a" stroke-width="1.3"><circle cx="6.2" cy="7.6" r="2.6"/><circle cx="8.8" cy="5" r="2.6"/><circle cx="17.8" cy="16.4" r="2.6"/><circle cx="15.2" cy="19" r="2.6"/><rect x="6.4" y="9.2" width="11.4" height="4" rx="2" transform="rotate(45 12 12)"/></g></svg>`;
 ICONS.water = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M12 3.2s6.2 6.6 6.2 10.8A6.2 6.2 0 0 1 5.8 14C5.8 9.8 12 3.2 12 3.2z" fill="#7cc4ff" stroke="#173a52" stroke-width="1.5" stroke-linejoin="round"/><path d="M9.4 13.6a2.6 2.6 0 0 0 2.6 2.6" fill="none" stroke="#e8f5ff" stroke-width="1.4" stroke-linecap="round"/></svg>`;
 ICONS.bed = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#f2e9d7" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-7M3 14h18v4M21 18v-4a3 3 0 0 0-3-3H9v3" fill="rgba(242,233,215,0.12)"/><path d="M5.5 11V9.4a1.6 1.6 0 0 1 1.6-1.6" /></svg>`;
 ICONS.moon = (s = 22) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.3 6.3 0 0 0 10.5 10.5z" fill="#b6a8e8" stroke="#2a2340" stroke-width="1.5" stroke-linejoin="round"/><circle cx="16.5" cy="7.5" r="0.9" fill="#f0ecff"/></svg>`;
@@ -482,11 +708,45 @@ function spawnPays(type) {
   return `${def.xp || 15} XP, plus ${ing}`;
 }
 
+/* THE HERB PATCH DRAWS PIXEL ART NOW. It was the last vector marker on the map
+   and it was waiting on ART, not on wiring: Tom, 2026-08-20, "food ingredients
+   till not pixel art", then again on 2026-08-21, "ive told you 5 times to switch
+   out the old herb art for the pixel art i gave you". The drawing existed the
+   whole time and nobody had claimed it. It was snapshotted on
+   `origin/rescue/wt/cur` as assets/icons-pix/food/herb-sprigs.png, one of a
+   24-file PixelLab batch that also holds the twins of the seven ingredients, and
+   it is now assets/icons-pix/herbs.png, keyed in PIX_CUR by the SPAWN TYPE so
+   spawnIcon can look it up directly.
+   IT IS DELIBERATELY NOT ONE OF THE SEVEN INGREDIENTS: the spawn does not know
+   which ingredient it carries until you collect it ("ingredient is a surprise on
+   collect, not previewed" in the spawn pass), so putting marrow or graveroot on
+   the marker would promise an ingredient the find may not hold. A bundle of
+   sprigs names the CATEGORY and promises nothing.
+   `garden-seed` stays as the fallback arm only: it is the wrong metaphor now
+   that the Bone Garden has left the game, but a marker must never come up bare.
+   WHY IT KEPT NOT HAPPENING, recorded so it cannot happen again:
+   tests/boneyard-icon-audit.mjs's VECTOR row carried a written exemption,
+   `VECTOR_OK = ['Herb patch']`, so the one guard that looks at this pixel
+   was TOLD to expect the old art and stayed green through five reports. The
+   exemption is gone and that row now grades this drawing. */
+
+/* ONE NAME AND ONE LINE for the rare spawn, because three hand-typed copies is
+   how it ended up with three. The map key said "Mystery egg / Rare: walk to
+   hatch a pet", the Boneyard intro card said "Mystery Egg / rare spawn · walk to
+   hatch a pet", and the gift sheet typed its own third copy. Tom: "you call
+   mystery eggs rare spawns on the map but different in the legend they should be
+   called mystery eggs in both places".
+   NOT CRATES.egg.label, which is "Step Egg" ON PURPOSE: that is the backpack
+   item you earn from a big day of walking, and it is named that in the README,
+   the quests, the level-up rewards and three shipped changelog entries. This is
+   the map-facing name of the rare spawn only. */
+const MYSTERY_EGG = { name: 'Mystery Egg', desc: 'Rare: walk to hatch a pet' };
+
 function spawnIcon(type, s = 20) {
   if (type === 'coins') return ICONS.coin(s);
   if (type === 'crate') return crateIcon('daily', s);
   if (type === 'rare') return crateIcon('egg', s); // Mystery Egg spawn
-  if (type === 'herbs') return bhIcon('garden-seed', s);
+  if (type === 'herbs') return pixCur('herbs', s) || bhIcon('garden-seed', s);
   return ICONS.bone(s);
 }
 
@@ -514,7 +774,44 @@ function spawnIcon(type, s = 20) {
    egg cluster still reads as eggs. The chests survive the same reduction because
    their silhouette is a box with a lid; a smooth ovoid has no edges to keep. */
 const CRATE_ICON_PIX = { daily: 'crates/common/f0', golden: 'crates/golden/f0', egg: 'icons-pix/egg' };
+/* THE SMALL STEPS TAKE THE BASIC DRAWING, and the reason is texture frequency,
+   not resampling. Tom, on the Boneyard: "chest does not look scaled that small
+   use the basic one", "egg stack looks bad scale that small use a basic one",
+   "some chests still dont have pixel art".
+   MEASURED, off assets, before anything was swapped. The 24px step is served by
+   a pre-made `-24` file and rendered at exactly 24 CSS px under
+   image-rendering:pixelated, so it is 1:1 with no browser resample.
+   AND THE `-24` FILES ARE NOT HAND-MADE SMALL VARIANTS, which is worth writing
+   down because their existence reads like they are, and that reading sends you
+   off to author a 24px drawing instead of fixing the real problem. Diffed pixel
+   by pixel against a Pillow NEAREST halving of their own 48: crates/common/f0-24
+   0 of 576 pixels differ, icons-pix/egg-24 0 of 576 differ. They are machine
+   halvings, and the slot exists only to save the browser the halving. So colours
+   in == colours out and NOTHING gets resampled anywhere on that path.
+   What breaks is FREQUENCY: the detailed chest
+   spends 31 colours on 333 ink pixels (9.3 per 100) at a median luminance of 53,
+   which on the Boneyard's near-black basemap is a smudge with no silhouette
+   left. icons-pix/crate.png over the same 24 box is 26 colours on 335 ink pixels
+   (7.8 per 100) at median luminance 97, so it is a third fewer colours and
+   nearly twice as bright. Same drawing Tom already picked for exactly this
+   problem in crateChip below ("just use the backpack chest icon that is
+   simpler for the crate in that screen if it doesnt work shrunken").
+   AND IT GIVES THE 16 STEP AWAY FREE, which is the other half of the bug: the
+   `-24` file is the only small art these kinds had, so crateIcon's floor was 24
+   and every site under it silently drew the old vector. That is the `far` spawn
+   beacon on the map (asks 16) and the map key (asks 20, snaps to 16), which is
+   literally "some chests still dont have pixel art". pixCur owns the snapping
+   and still returns null under 16, so the tiny inline glyphs keep their vector.
+   GOLDEN IS DELIBERATELY NOT IN HERE. It never spawns on the map (spawnIcon only
+   ever asks for 'daily'), its -24 is bright already (median luminance high
+   enough to read), and pixCur has no gold chest, so routing it here would cost
+   the gold identity to fix a screen that is not broken. */
+const CRATE_ICON_BASIC = { daily: 'crate', egg: 'egg-basic' };
 function crateIcon(kind, s = 22) {
+  if (s < 48) {
+    const basic = pixCur(CRATE_ICON_BASIC[kind], s);
+    if (basic) return `<span class="bhi-wrap">${basic}</span>`;
+  }
   const pix = CRATE_ICON_PIX[kind];
   if (pix && s >= 24) {
     const px = s >= 48 ? Math.floor(s / 48) * 48 : 24;
@@ -543,19 +840,44 @@ function crateChip(kind, s = 16) {
   return `<span class="crate-chip${kind === 'golden' ? ' rare' : ''}">${pix
     || bhIcon(kind === 'golden' ? 'crate-golden' : 'crate-daily', s)}</span>`;
 }
+/* THE MINI-BOSS SKULL, one number for the map and the key. It was 17 in both
+   places, and 17 is not a step: pixCur snaps 25..47 down to 24 and 16..24 down
+   to 16, so the request rendered 16 real px inside a 34px disc. Tom: "mini boss
+   den scale up skill it's too small". 24 is the next real step up, and the disc
+   grows to 42 with it (app.css) so the skull sits at 24-in-36-of-inner-room,
+   the same fill ratio a coin pile has had all along. A shared constant because a
+   fight marker drifting from its own legend row is the bug directly under this. */
+const MINI_SKULL_PX = 24;
 // The Boneyard map key: every marker type that can appear out there, rendered with
 // the EXACT same marker markup the map draws (so the legend and the map never drift).
 // Covers spawns + all three den looks incl. the pink secret dens.
 function mapLegendHtml() {
   const den = (cls = '') => `<div class="map-den-mark${cls}"><div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${bhIcon('badge-skull', 13, 'currentColor').repeat(2)}</span></div></div>`;
-  const spawn = (type, extra = '') => `<div class="map-spawn${extra}">${spawnIcon(type)}</div>`;
-  const mini = `<div class="map-mini-mark">${bhIcon('badge-skull', 17)}</div>`;
+  /* 24 EXPLICITLY, because that is what the map draws (the `s.far ? 16 : 24` in
+     the spawn pass below). The default was 20, which pixCur snaps DOWN to 16, so
+     every pixel swatch in the key was a step smaller than its own marker and the
+     crate and the egg fell under crateIcon's floor and drew the OLD VECTOR next
+     to a pixel map. Tom: "legend doesnt have updated pixel art icons".
+     .leg-ico lost its 0.82 transform in the same change (app.css): 42px fits a
+     44px cell without it, and scaling pixel art by 0.82 rendered a 16px sprite
+     at 13.1 real px, which is the one place on this path something WAS being
+     resampled. */
+  const spawn = (type, extra = '') => `<div class="map-spawn${extra}">${spawnIcon(type, 24)}</div>`;
+  const mini = `<div class="map-mini-mark">${badgePixHtml('badge-skull', MINI_SKULL_PX)}</div>`;
   const rows = [
     [spawn('bones'), 'Bone cache', 'XP for your bonehead'],
     [spawn('coins'), 'Coin pile', 'Coins to spend in the shop'],
     [spawn('crate'), 'Buried crate', 'A common crate of loot'],
-    [spawn('herbs'), 'Herb patch', 'Seeds for the Bone Garden'],
-    [spawn('rare', ' rare'), 'Mystery egg', 'Rare: walk to hatch a pet'],
+    /* NOT "Seeds for the Bone Garden" any more. The Bone Garden left the
+       player's path 2026-08-18 and the Boneyard supply change made the Herb
+       patch THE food spawn: SPAWN_FOOD gives it two cooking ingredients every
+       time, where everything else carries one about a fifth of the time. The row
+       was naming a screen that is gone and a payout it no longer gives.
+       ITS ICON IS PIXEL ART LIKE EVERY OTHER SPAWN ROW as of 2026-08-21
+       (assets/icons-pix/herbs.png, see the note on spawnIcon). It draws through
+       the same spawnIcon call the map uses, which is what this key is for. */
+    [spawn('herbs'), 'Herb patch', 'Two cooking ingredients'],
+    [spawn('rare', ' rare'), MYSTERY_EGG.name, MYSTERY_EGG.desc],
     [mini, 'Mini-boss', 'A quick fight for coins + XP'],
     [den(), 'Boss den', 'A landmark boss: rare gear'],
     [den(' roaming'), 'Roaming den', 'A daily den: here today, gone tomorrow'],
@@ -572,7 +894,14 @@ function consumableIcon(type, s = 20) {
 }
 // pack icons for cooking ingredients/recipes (fall back to the emoji if missing)
 function ingIconHtml(id, s = 22) { const m = INGREDIENTS[id]; const pix = pixCur(id, s); if (pix) return `<span class="bhi-wrap">${pix}</span>`; return m && m.iconId && hasBhIcon(m.iconId) ? `<span class="bhi-wrap">${bhIcon(m.iconId, s)}</span>` : (m ? m.icon : ''); }
-function recipeIconHtml(r, s = 24) { return r && r.iconId && hasBhIcon(r.iconId) ? `<span class="bhi-wrap">${bhIcon(r.iconId, s)}</span>` : (r ? r.icon : ''); }
+/* Dishes key on their iconId; the POTIONS have no iconId and all take the one
+   'potion' vial. Same shape as ingIconHtml above: pixel first, then the pack
+   vector, then the emoji. */
+function recipeIconHtml(r, s = 24) { const pix = r && pixCur(r.potion ? r.id : r.iconId, s); if (pix) return `<span class="bhi-wrap">${pix}</span>`; return r && r.iconId && hasBhIcon(r.iconId) ? `<span class="bhi-wrap">${bhIcon(r.iconId, s)}</span>` : (r ? r.icon : ''); }
+/* Pack badges that have a 48px drawing. Sites that pass bhIcon a TINT are not
+   routed here: pixel art cannot be recoloured, so they stay vector by calling
+   bhIcon directly. */
+function badgePixHtml(id, s) { return pixCur(id, s) || bhIcon(id, s); }
 // badges: map the emoji to a pack icon where we have one (else keep the emoji)
 const BADGE_ICON = {
   '💀': 'badge-skull', '👑': 'badge-crown', '🏆': 'badge-trophy', '🥊': 'badge-boxing',
@@ -722,6 +1051,39 @@ async function boot() {
   }
   requestPersistence();
   watchForWipe();   // listen for another tab wiping this save before it happens
+  /* THE OTHER HALF OF THE WRITE-FAILURE SEAM. js/db.js routes every rejected
+     write through one reporter and then RE-THROWS, so callers keep their control
+     flow, but the reporter only calls a sink and nothing registered one: the
+     seam shipped in v425 with `writeFailureSink` permanently null, so a lost
+     meal, weight, crate or coin row was still silent. This is the consumer, and
+     it lives here because js/app.js is what owns the toast.
+
+     LOUD ONLY, and the classification is db.js's, not a second opinion invented
+     here: `quiet` is already true for ambient bookkeeping the app re-derives next
+     launch, and false for anything the player did or earned and could name
+     afterwards. A key nobody classified arrives LOUD, which is the right way
+     round (anti-regression rule 8).
+
+     THROTTLED, because a failing database does not fail once. A full disk
+     rejects every write in the same second, and toast() caps its queue at four,
+     which is still four identical lectures. One message per WRITE_FAIL_QUIET_MS
+     is enough to tell the player something is wrong; the telemetry row is what
+     counts them.
+
+     THE TELEMETRY CALL CANNOT RECURSE, and that is db.js's guarantee rather than
+     luck: track() queues by writing kv 'evq', so a quota failure makes that write
+     fail too, and reportWriteFailure returns early for exactly `kv`/`evq` before
+     it reaches any sink. Checked in js/db.js before this was written. */
+  onWriteFailure(({ store, key, op, quiet, quota }) => {
+    trackEvent('write_fail', { store, key, op, quiet, quota });
+    if (quiet) return;
+    const now = Date.now();
+    if (now - lastWriteFailToast < WRITE_FAIL_QUIET_MS) return;
+    lastWriteFailToast = now;
+    toast(quota
+      ? 'Your phone is out of storage, so that did not save. Free some space, then export a backup from Settings.'
+      : 'That did not save. If it keeps happening, export a backup from Settings.', 4600);
+  });
   S.sounds = (await kvGet('sounds', true)) !== false;
   S.haptics = (await kvGet('haptics', true)) !== false;
   setHaptics(S.haptics);
@@ -799,8 +1161,10 @@ async function boot() {
      small IndexedDB reads each, nothing like the replay below. */
   await refreshShinyPets();
   await refreshSlimedSlots();
+  await refreshPetWear();
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
+  bindWordmarkPull();
   route();
   /* Paddock cards: a webdriver-only mount seam so the audit drives the REAL builders
      and handlers before the scene shell exists, and after it lands too. A no-op in
@@ -849,7 +1213,7 @@ async function boot() {
   await refreshShinyPets();
   await refreshSlimedSlots();
   const closed = await awardDayCloseIfDue(S.settings.targets);
-  if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 2400);
+  if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Bone Crate earned', 3400), 2400);
   else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 2400);
   await ingestHkPayload(hkTaken);
   backupNudge();
@@ -942,7 +1306,7 @@ async function rollDayIfNeeded() {
     if (wasOnToday) S.date = today;
     const closed = await awardDayCloseIfDue(S.settings.targets);
     if (wasOnToday) route(); // a new day starts at the top, like a fresh open
-    if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Golden Crate earned', 3400), 1400);
+    if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Bone Crate earned', 3400), 1400);
     else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 1400);
     maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
     refreshNotifSchedules();
@@ -958,10 +1322,11 @@ async function rollDayIfNeeded() {
 // sheet sets changelogSeen = latest, so it won't fire again until the next patch.
 async function maybeShowWhatsNew() {
   try {
-    if (navigator.webdriver || !S.settings) return;
+    if (CALM_BOOT() || !S.settings) return;
     if (changelogUnseen(await kvGet('changelogSeen', 0)) <= 0) return;
     await new Promise(r => setTimeout(r, 1700)); // let splash/wheel settle
     if ($('#sheets')?.children.length) return;   // something already open. Try again next launch
+    if (!claimBootSheet(window.__whatsNewForce)) return;   // another sheet already had this open
     openWhatsNew();
   } catch { /* never block boot */ }
 }
@@ -980,7 +1345,7 @@ const SPIRE_SEEN_KEY = 'spiresIntroSeen';
    finish, and it clears itself the moment the name actually changes. */
 async function maybeShowRenameNotice() {
   try {
-    if ((navigator.webdriver && !window.__renameForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__renameForce) || !S.settings) return;
     // the server is the authority (players.rename_of); the kv copy is only a
     // cache so an offline open still shows it once the server has said so
     const owed = (await social.renameOwed()) || (await kvGet('renameRequired', null));
@@ -998,6 +1363,7 @@ async function maybeShowRenameNotice() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      if (!claimBootSheet()) return;   // another sheet already had this open
       openRenameNotice({ oldName: me.name });
     };
     setTimeout(tick, 1200);
@@ -1109,7 +1475,7 @@ function openCosmeticTeaser() {
 let teaserFired = false;   // one showing per app session, no matter who asks
 async function maybeShowCosmeticTeaser() {
   try {
-    if ((navigator.webdriver && !window.__teaserForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__teaserForce) || !S.settings) return;
     if (!dropCosmetics().length) return;   // nothing to announce
     /* Tom, 2026-08-08: "let's make this popup show up on the next like 10 app
        opens." Ten, not three. This is the biggest drop the game has had and a
@@ -1117,7 +1483,7 @@ async function maybeShowCosmeticTeaser() {
        A showing is only spent when the post is ACTUALLY shown, not when boot is
        busy (see the tick below), so ten opens means ten sightings. */
     const seen = await kvGet(TEASER_SEEN_KEY, 0);
-    if (seen >= 10) return;
+    if (seen >= 2) return;
     let tries = 0;
     const tick = async () => {
       if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
@@ -1133,6 +1499,7 @@ async function maybeShowCosmeticTeaser() {
       }
       if (teaserFired) return;      // one showing per app session, no matter who asks
       teaserFired = true;
+      if (!claimBootSheet(window.__teaserForce)) return;   // another sheet already had this open
       await kvSet(TEASER_SEEN_KEY, seen + 1);
       openCosmeticTeaser();
     };
@@ -1143,7 +1510,7 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__cosmeticTease
 
 async function maybeShowSpireIntro() {
   try {
-    if ((navigator.webdriver && !window.__spireForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__spireForce) || !S.settings) return;
     if (await kvGet(SPIRE_SEEN_KEY, false)) return;
     let tries = 0;
     const tick = async () => {
@@ -1151,6 +1518,7 @@ async function maybeShowSpireIntro() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      if (!claimBootSheet(window.__spireForce)) return;   // another sheet already had this open
       await kvSet(SPIRE_SEEN_KEY, true);
       openSpireIntro();
     };
@@ -1199,7 +1567,7 @@ function openSpireIntro() {
 const BOSS_SEEN_KEY = 'bossesIntroSeen';
 async function maybeShowBossIntro() {
   try {
-    if ((navigator.webdriver && !window.__bossForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__bossForce) || !S.settings) return;
     if (await kvGet(BOSS_SEEN_KEY, false)) return;
     let tries = 0;
     const tick = async () => {
@@ -1207,6 +1575,7 @@ async function maybeShowBossIntro() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      if (!claimBootSheet(window.__bossForce)) return;   // another sheet already had this open
       await kvSet(BOSS_SEEN_KEY, true);
       openBossIntro();
     };
@@ -1221,7 +1590,7 @@ async function maybeShowBossIntro() {
 const MAGE_SEEN_KEY = 'mageIntroSeen';
 async function maybeShowMageIntro() {
   try {
-    if ((navigator.webdriver && !window.__mageForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__mageForce) || !S.settings) return;
     if (await kvGet(MAGE_SEEN_KEY, false)) return;
     let tries = 0;
     const tick = async () => {
@@ -1229,6 +1598,7 @@ async function maybeShowMageIntro() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      if (!claimBootSheet(window.__mageForce)) return;   // another sheet already had this open
       await kvSet(MAGE_SEEN_KEY, true);
       openMageIntro();
     };
@@ -1346,7 +1716,7 @@ function openRaceIntro() {
       <ul class="spire-terms">
         <li>Every step from <b>today</b> counts. Nothing to join, nothing to tap.</li>
         <li>Watch the board on the <b>Crew tab</b>: who is first, who is behind you, and by how much.</li>
-        <li>The <b>top ${RACE_PURSE.length}</b> all get paid. First takes <b>${top.coins.toLocaleString()} coins</b>, a Golden Crate and <b>${top.dust} dust</b>.</li>
+        <li>The <b>top ${RACE_PURSE.length}</b> all get paid. First takes <b>${top.coins.toLocaleString()} coins</b>, a Bone Crate and <b>${top.dust} dust</b>.</li>
       </ul>
       <button class="drop-cta" id="raceIntroGo">SEE THE BOARD</button>
       <button class="drop-later" id="raceIntroLater">Not now</button>
@@ -1424,7 +1794,7 @@ const raceLanesHtml = (podium, { prizes = false } = {}) => {
 
 const racePrizeHtml = p => `<span class="rr-prize">
   <span class="pz">${ICONS.coin(13)}${(p.coins || 0).toLocaleString()}</span>
-  ${p.crate ? `<span class="pz">${crateIcon(p.crate, 14)}${p.crate === 'golden' ? 'Golden' : 'Crate'}</span>` : ''}
+  ${p.crate ? `<span class="pz">${crateIcon(p.crate, 14)}${p.crate === 'golden' ? 'Bone' : 'Crate'}</span>` : ''}
   ${p.dust ? `<span class="pz">${ICONS.dust(12)}${p.dust}</span>` : ''}
 </span>`;
 
@@ -1448,7 +1818,7 @@ function openRaceResults(podium) {
         <div class="rr-hero">
           <span class="rr-fig">${avatarLayersHtml(w.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
           <div class="rr-who">
-            <span class="rr-crown">${bhIcon('badge-trophy', 13)} 1ST</span>
+            <span class="rr-crown">${badgePixHtml('badge-trophy', 13)} 1ST</span>
             <b>${esc(w.name)}</b>
             <span class="rr-steps">${w.steps.toLocaleString()} <i>STEPS</i></span>
           </div>
@@ -1499,6 +1869,7 @@ async function maybeShowRaceResults() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      if (!claimBootSheet(window.__raceResultForce)) return;   // another sheet already had this open
       /* SPENT BEFORE IT IS DRAWN, so a crash inside the render cannot put a
          player in a loop. A showing is spent by being shown, not by being
          read: closing it with "Nice one" costs this one open and no more. */
@@ -1521,7 +1892,7 @@ async function hydrateRaceResult(el) {
   const w = podium[0];
   card.innerHTML = `
     <summary>
-      <span class="gbn-ico rr-ico">${bhIcon('badge-trophy', 21)}</span>
+      <span class="gbn-ico rr-ico">${badgePixHtml('badge-trophy', 21)}</span>
       <span class="gbn-txt">
         <i>THE STEP RACE · SETTLED</i>
         <span class="race-h"><b>${esc(w.name).toUpperCase()} TOOK IT</b><span class="pill">PAID</span></span>
@@ -1568,7 +1939,7 @@ let raceIntroFit = { B: 'B0-1', SK: 'SK0-1' };
 async function maybeShowRaceIntro() {
   try {
     if (!RACE_LIVE) return;
-    if ((navigator.webdriver && !window.__raceForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__raceForce) || !S.settings) return;
     if (await kvGet(RACE_SEEN_KEY, false)) return;
     raceIntroFit = await equipped();       // it is YOUR bonehead on the start line
     let tries = 0;
@@ -1577,6 +1948,7 @@ async function maybeShowRaceIntro() {
         if (tries++ < 60) setTimeout(tick, 500);
         return;
       }
+      if (!claimBootSheet(window.__raceForce)) return;   // another sheet already had this open
       await kvSet(RACE_SEEN_KEY, true);
       openRaceIntro();
     };
@@ -1603,6 +1975,12 @@ const DISCORD_URL = 'https://discord.gg/HrMReZe9D';
 const COMMUNITY_SEEN_KEY = 'discordIntroSeen';     // legacy boolean, still honoured
 const COMMUNITY_SHOWN_KEY = 'discordIntroShown';   // how many times it has opened
 const COMMUNITY_JOINED_KEY = 'discordJoined';      // tapped JOIN: never show again
+/* THREE, and it stays three. Tom said so on 2026-08-13 ("make the popup happen
+   on the first three opens") and tests/community-audit.mjs quotes him. I cut it
+   to 2 in the one-per-open pass and that was scope creep on a decision he had
+   already made: his complaint was the QUEUE, which claimBootSheet fixes, not
+   this number. The drop popup and the cosmetic teaser had no such instruction on
+   them, so those did come down. */
 const COMMUNITY_MAX_SHOWS = 3;
 /* The mark, not the brand. Reg, 2026-08-12: "a lot of people recognise that
    shape before they read the word", which is the whole point for the players
@@ -1692,7 +2070,7 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
 
 async function maybeShowCommunityIntro() {
   try {
-    if ((navigator.webdriver && !window.__communityForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__communityForce) || !S.settings) return;
     /* Three strikes, and JOIN ends it early and permanently. Somebody who has
        joined must never see this again; that is the one behaviour here worth
        being careful about, so it is checked first and written the moment the
@@ -1710,6 +2088,7 @@ async function maybeShowCommunityIntro() {
       /* Spend the showing BEFORE opening, not after: the card is dismissed by
          several routes (the button, the veil, history) and a counter written on
          the way out can be skipped by any of them. */
+      if (!claimBootSheet(window.__communityForce)) return;   // another sheet already had this open
       await kvSet(COMMUNITY_SHOWN_KEY, shown + 1);
       await kvSet(COMMUNITY_SEEN_KEY, true);
       openCommunityCard();
@@ -1803,7 +2182,7 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
 
 async function maybeShowThanksCard() {
   try {
-    if ((navigator.webdriver && !window.__thanksForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__thanksForce) || !S.settings) return;
     if (await kvGet(THANKS_SEEN_KEY, false)) return;
     let tries = 0;
     const tick = async () => {
@@ -1816,6 +2195,7 @@ async function maybeShowThanksCard() {
          out can be skipped by any of them. It is only spent once the overlay
          check above has passed, so it is never burned on a card that did not
          get to render. */
+      if (!claimBootSheet(window.__thanksForce)) return;   // another sheet already had this open
       await kvSet(THANKS_SEEN_KEY, true);
       openThanksCard();
     };
@@ -1900,7 +2280,7 @@ const GARDEN_SEEN_KEY = 'gardenIntroSeen';
 
 async function maybeShowGardenPopup() {
   try {
-    if ((navigator.webdriver && !window.__gardenForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__gardenForce) || !S.settings) return;
     const seen = await kvGet(GARDEN_SEEN_KEY, 0);
     if (seen >= 5) return;
     let tries = 0;
@@ -1997,15 +2377,16 @@ function dropFitHtml(topId, hatId) {
 
 async function maybeShowDropPopup() {
   try {
-    if ((navigator.webdriver && !window.__dropForce) || !S.settings) return;
+    if ((CALM_BOOT() && !window.__dropForce) || !S.settings) return;
     const seen = await kvGet(DROP_SEEN_KEY, 0);
-    if (seen >= 5) return;
+    if (seen >= 2) return;
     let tries = 0;
     const tick = async () => {
       if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash')) {
         if (tries++ < 60) setTimeout(tick, 500);
         return;      // busy boot: does NOT consume one of the 5 showings
       }
+      if (!claimBootSheet(window.__dropForce)) return;   // another sheet already had this open
       await kvSet(DROP_SEEN_KEY, seen + 1);
       openDropPopup();
     };
@@ -2181,7 +2562,7 @@ function teaserWallHtml(n, px) {
 function dropRowIconHtml() {
   const all = dropCosmetics();
   const hero = all.find(i => i.slot === 'H' && i.rarity === 'legendary') || all[0];
-  return hero ? headshotHtml(teaserLook(hero, all), 32) : bhIcon('badge-crown', 26);
+  return hero ? headshotHtml(teaserLook(hero, all), 32) : badgePixHtml('badge-crown', 26);
 }
 
 function cosmeticTeaserBannerHtml() {
@@ -2297,7 +2678,7 @@ function giftSender(g) {
 function revealGift(g) {
   const p = (g && g.payload) || {};
   const cards = [];
-  if (p.crate) cards.push({ iconHtml: crateIcon(p.crate, 130), name: p.crate === 'golden' ? 'Golden Crate' : 'Common Crate', rarity: p.crate === 'golden' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
+  if (p.crate) cards.push({ iconHtml: crateIcon(p.crate, 130), name: p.crate === 'golden' ? 'Bone Crate' : 'Common Crate', rarity: p.crate === 'golden' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
   if (p.gearId && GEAR_BY_ID[p.gearId]) {
     const gear = GEAR_BY_ID[p.gearId];
     cards.push({ iconHtml: `<img src="${bhAsset(BH_BY_ID[gear.artId])}" alt="" style="width:130px;height:130px;object-fit:contain">`, name: gear.name, rarity: gear.rarity, kind: 'GEAR', stats: 'Equip it in the Wardrobe' });
@@ -2389,9 +2770,146 @@ async function backupNudge() {
   } catch { /* non-critical */ }
 }
 
+/* THE OVERSCROLL WORDMARK'S FADE, DRIVEN OFF SCROLL POSITION.
+ *
+ * iOS implements the rubber band by giving the scroller a NEGATIVE content
+ * offset, so during a pull #screen.scrollTop reports negative numbers and
+ * -scrollTop IS the pull distance in CSS pixels. That makes the reveal a
+ * function of how FAR you pulled rather than how hard you flicked, which is the
+ * whole point: v414 and v415 both left the look to opacity alone and Tom could
+ * not see either of them (app.css carries that history).
+ *
+ * CHEAP ON PURPOSE. Passive, so it never blocks the scroll. One property read
+ * (scrollTop) and no other layout read at all. The value is quantised to 1/20,
+ * so a full 36px pull writes a custom property at most 20 times instead of once
+ * per frame, and every event outside a bounce hits the early return because q
+ * stays 0. Measured over a scripted 4000-event burst: see the COST row in
+ * tests/overscroll-wordmark-audit.mjs.
+ *
+ * NOT GATED ON TODAY. Only `#app:has(.screen--today)::before` reads the property,
+ * so setting it elsewhere paints nothing, and a class check here would be a
+ * second place that has to agree with route() about what Today is.
+ *
+ * IT IS WRITTEN ON :root, NOT ON #screen, AND THAT IS NOT A TIDY-UP. The mark
+ * moved out of the scroller in the release that finally made it visible (app.css
+ * carries the device measurement: nothing parked above a WKWebView scroller's
+ * content origin paints into the rubber-band strip, in any of the four forms
+ * tested). #app::before is #screen's PARENT's pseudo-element, so a custom
+ * property set on #screen cannot reach it. :root is the one node both ends of
+ * this feature can see.
+ *
+ * REDUCED MOTION IS A MEDIA QUERY IN app.css NOW, NOT A BRANCH HERE. It pins the
+ * OPACITY to 1 and leaves the travel alone, which is the only version that still
+ * works: the reveal is a transform now, so pinning --wm-pull itself to 1 would
+ * park the mark permanently on screen the moment anything scrolled. There is no
+ * KEYFRAME and no iteration count in this feature, only a 130ms transition
+ * (app.css) smoothing the quantisation step, so nothing here can be collapsed to
+ * 0.001s and run a loop a thousand times a second: the global reduce block's
+ * transition collapse simply hands a reduced-motion player the un-smoothed direct
+ * tracking, which is the right answer for direct manipulation.
+ *
+ * HEADLESS CANNOT SEE THE BOUNCE, BUT A DEVICE HAS. Chromium clamps scrollTop at
+ * 0, so on desktop this listener is inert and no automated run can produce a
+ * rubber band; the audit fakes the negative offset and dispatches a real scroll
+ * event to drive this exact code. That the offset is really reported was measured
+ * on a booted iPhone 17 Pro on 2026-08-21: scrollTop bottomed out at -168 and 33
+ * scroll events fired with a negative value during one held drag. */
+function bindWordmarkPull() {
+  const el = $('#screen');
+  const FULL = 36;         // px of pull at which the mark is fully revealed
+  let last = -1;
+  el.addEventListener('scroll', () => {
+    const pull = -el.scrollTop;
+    const t = pull <= 0 ? 0 : Math.min(1, pull / FULL);
+    /* SMOOTHSTEP, NOT t. Tom on v421: "there is no easing involved in the
+       movement and it feels cheap". A linear map moves the mark at exactly the
+       speed of the finger and then dead-stops at 36px; t*t*(3-2t) is quiet under
+       a jitter-sized tug (4px went from 0.10 to 0.05), quick through the middle,
+       and decelerates into its landing (27px went from 0.75 to 0.85). Still
+       exactly 0 at rest and exactly 1 at FULL, so every geometry bound in
+       app.css and in the audit is untouched. The SMOOTHING of the 6.4px
+       quantisation step below is the transition in app.css, not a filter here:
+       one property write per step is what keeps this listener cheap, and the
+       compositor interpolates for free. */
+    const q = Math.round(t * t * (3 - 2 * t) * 20) / 20;
+    if (q === last) return;
+    last = q;
+    document.documentElement.style.setProperty('--wm-pull', q);
+  }, { passive: true });
+}
+
+/* A TRAY TAP IS ALWAYS A NAVIGATION, EVEN WHEN THE HASH ALREADY SAYS SO.
+ *
+ * Tom, on v421: "if i tap on the bottom bonehead icon on the home tray when im in
+ * shop it does nothign. bonehead and wardrobe are not the same part of the app but
+ * they act like it sometimes based on clicks."
+ *
+ * MEASURED, not guessed. Driving the real controls in a real page:
+ *   #/bonehead -> tap the hub's Shop chip -> hash "#/bonehead", surface Gwart
+ *   -> tap the tray's Bonehead -> hash "#/bonehead", surface STILL Gwart.
+ * Reached the same Shop by its deep link instead (#/shop) and the identical tap
+ * lands on the Wardrobe. So the bug is not in the hub and not in route(): it is
+ * that this handler navigated by ASSIGNING location.hash, and assigning a hash
+ * its current value fires no hashchange in any browser, so route() never ran.
+ *
+ * THE HASH IS NOT THE SURFACE. The hub's chips switch Wardrobe/Backpack/Shop/Build
+ * by calling renderCharacter() straight (~line 11450) and deliberately do not
+ * touch the hash, so from inside the hub the hash reports where you CAME IN, not
+ * where you are. Any handler that treats "the hash already matches" as "you are
+ * already there" is wrong for the same reason, and the tray was the only one left:
+ * openCharacter() has had the route() branch for exactly this since it was written.
+ *
+ * THE RULE, and it is deliberately the same for all four buttons: a tray tap lands
+ * you on that tab's HOME surface from anywhere, and never does nothing. Today,
+ * Boneyard and Crew have one surface each so their home is the screen itself;
+ * Bonehead's is the hub's Wardrobe, where the Bonehead actually stands, which is
+ * what makes it a destination rather than "whichever hub tab you last opened".
+ * It is also the ordinary phone convention (tap the tab you are on, get its root).
+ * Guard: tests/tray-destination-audit.mjs fires this exact control from every
+ * screen, the hub's siblings included, and asserts where it lands. */
+/* DOUBLE-TAP THE TAB YOU ARE ALREADY ON. Tom, 2026-08-22: "Double tapping today
+ * should bring you to the top of today. Double tapping the boneyard when you're
+ * in there should zoom in on your current location."
+ *
+ * NO NEW CAMERA MATH: the Boneyard's double-tap fires the map's OWN recentre
+ * control (#mapRecenter, openMap), which is one easeTo back to the player at
+ * MAP_START_ZOOM and also re-arms follow. It works while the button is hidden,
+ * which is its resting state until you drag the map.
+ *
+ * THE GUARD IS THE DANGEROUS HALF. A same-tab tap route()s, and route() rebuilds
+ * the screen from scratch: on the Boneyard that tears the live MapLibre instance
+ * down, so the first tap of a double would throw away the very map the second tap
+ * is meant to move. So on these two tabs a same-tab tap WAITS DBL_MS for a second
+ * one before it re-routes. Everything else is untouched: a cross-tab tap still
+ * navigates on the spot, the other two tabs still route on the spot, and a lone
+ * same-tab tap still lands exactly where tray-destination-audit says it must,
+ * 300ms later.
+ *
+ * A PENDING WAIT IS CANCELLED BY ANY TAB TAP, not just by the second of a double.
+ * Without that, tapping Today (same tab) and then Boneyard inside 300ms fires the
+ * stale timer AFTER the hashchange has already routed, and route() reads the
+ * CURRENT hash: the Boneyard would render twice and rebuild its map for nothing.
+ *
+ * And the double action falls back to route() when it cannot run (the Boneyard
+ * before the map is up is the real case, where the location gate is on screen and
+ * there is no #mapRecenter yet), because a tray tap that does nothing at all is
+ * the complaint the block above this one exists to answer. */
 function bindTabs() {
+  const TAB_DBL = {
+    today: () => { $('#screen')?.scrollTo({ top: 0, behavior: 'smooth' }); return true; },
+    boneyard: () => { const r = $('#mapRecenter'); r?.click(); return !!r; },
+  };
+  const DBL_MS = 300;
+  let dblTimer = 0;
   $$('#tabbar .tab').forEach(b => b.addEventListener('click', () => {
-    location.hash = '#/' + b.dataset.tab;
+    const h = '#/' + b.dataset.tab;
+    const second = !!dblTimer;
+    if (dblTimer) { clearTimeout(dblTimer); dblTimer = 0; }
+    if (location.hash !== h) { location.hash = h; return; }
+    const dbl = TAB_DBL[b.dataset.tab];
+    if (!dbl) { route(); return; }
+    if (second) { if (!dbl()) route(); return; }
+    dblTimer = setTimeout(() => { dblTimer = 0; route(); }, DBL_MS);
   }));
   $('#gearBtn')?.addEventListener('click', () => { location.hash = '#/settings'; });
   $('#fab').addEventListener('click', () => {
@@ -2413,6 +2931,105 @@ function currentTab() {
 // watch) registers a teardown here. Leaving the screen must release it, or the
 // map keeps running and draining battery behind whatever you opened next.
 let screenCleanup = null;
+
+/* THE OLD SCREEN HOLDS UNTIL THE NEW ONE IS READY.
+ *
+ * Tom, 2026-08-21: "swapping between boneyard and today briefly shows the empty
+ * tray that sits behind the app. feels cheap"
+ *
+ * WHAT IT WAS. route() stripped `screen-in` (app.css: `.screen:not(.screen-in)
+ * { opacity: 0 }`) BEFORE the new screen existed, and revealWhenReady put it
+ * back only once every image had decoded, up to a 700ms cap. So every real
+ * navigation opened a hole where #screen was transparent and nothing had
+ * replaced it, and what showed through was the body gradient, the grain and the
+ * bare tab bar: the tray the app sits on. Measured on this tree, Boneyard ->
+ * Today at 440x956 through a CDP screencast: 4 bare frames / 108ms at CPU x1,
+ * 6 frames / 136ms at x6. See tests/route-flash-audit.mjs.
+ *
+ * WHY A HELD COPY AND NOT A LONGER REVEAL. The reveal is not the bug and must
+ * not be weakened: it exists because screens used to assemble themselves in
+ * front of the player (see revealWhenReady). The old paint cannot simply be left
+ * alone either, because a screen renders with `el.innerHTML = ...` and that
+ * destroys it no matter what the opacity says. So the outgoing nodes are MOVED
+ * out of the way and parked over the top, and the new screen builds underneath
+ * them, invisible, exactly as it does today.
+ *
+ * MOVED, NEVER CLONED, and that is the whole reason this works on the Boneyard.
+ * cloneNode gives a canvas with a BLANK bitmap, and this app is full of canvases:
+ * the map, the wardrobe tiles, the crew fan, the shop art. A clone would have
+ * swapped a bare tray for a screen full of empty boxes, which is the same bug
+ * wearing better clothes. Reparenting a canvas keeps its bitmap.
+ *
+ * AND THE TEARDOWN RIDES WITH THE PAINT. screenCleanup is the outgoing screen's
+ * own destructor and the Boneyard's calls map.remove(), which rips the live map
+ * out of the DOM. Run at the old time it would have emptied the held copy a
+ * frame after it was made, so it is captured here and fired when the copy is
+ * dropped instead. It cannot outlive the next navigation: holdOutgoing() drops
+ * whatever is held before it holds anything new, and dropping runs the pending
+ * teardown, so a fast Boneyard -> Today -> Boneyard cannot leave one map's
+ * destructor pointed at another map.
+ *
+ * IT OWNS ITS OWN REMOVAL (anti-regression rule 8). A copy of a screen parked
+ * over the app is the worst thing to leave behind if the reveal never lands, so
+ * the drop is on a hard 1200ms timer from the moment it is created, well past
+ * revealWhenReady's 700ms cap, and every stale node is swept on the next
+ * navigation regardless. Degrade to a hard cut, never to a frozen app.
+ *
+ * AND IT LEAVES ON ONE FRAME, IT DOES NOT DISSOLVE. Tom, 2026-08-21: "switching
+ * between tabs is not smooth it's showing a staggered preview of the the
+ * existing page as you swap". The copy used to fade out over .18s and then be
+ * removed on a 260ms timer, so from the moment the new screen was ready there
+ * was a quarter of a second in which BOTH screens were on the glass at once and
+ * the outgoing one hung over the incoming one as a ghost. Measured at 440x956,
+ * CPU x6, through a CDP screencast: Boneyard -> Today held the old paint whole
+ * to 144ms and then showed the two screens superimposed until 418ms; Crew ->
+ * Today, 145ms and 503ms. That superimposed window IS the "staggered preview of
+ * the existing page", and a dissolve is the wrong grammar for a tab bar anyway:
+ * a cut reads as "you are there now", a dissolve reads as "time is passing".
+ * So the copy is REMOVED, in the same task that route() applies `screen-in`.
+ * Same task means the same paint: no frame can contain both screens, and none
+ * can contain neither (which would be the tray flash above). See
+ * tests/route-flash-audit.mjs GHOST.
+ *
+ * NO REFERENCES BREAK. #screen keeps its identity: bindWordmarkPull() binds a
+ * scroll listener to that exact node once at startup, so swapping in a fresh
+ * element instead would have silently killed the overscroll wordmark. */
+let dropHeld = null;
+function holdOutgoing(el) {
+  dropHeld?.();
+  // sweep anything a mid-fade navigation left behind: the class is the truth
+  el.parentNode.querySelectorAll('.screen-held').forEach(n => n.remove());
+  // nothing painted means nothing to hold, and holding an empty box would put a
+  // transparent lid over the boot instead of over a screen
+  if (!el.classList.contains('screen-in') || !el.firstChild) return;
+  const g = document.createElement('div');
+  // the same classes, so the copy keeps the padding it was laid out with
+  // (.screen--map drops it entirely) and the same scrollable box
+  g.className = el.className + ' screen-held';
+  g.style.top = el.offsetTop + 'px';
+  g.style.height = el.offsetHeight + 'px';
+  const top = el.scrollTop;
+  g.append(...el.childNodes);
+  g.scrollTop = top;                  // a held screen freezes where the player left it
+  el.after(g);                        // after #screen, before #tabbar: the bar stays live
+  const cl = screenCleanup;
+  screenCleanup = null;
+  let gone = false;
+  const drop = () => {
+    if (gone) return;
+    gone = true;
+    clearTimeout(cap);
+    if (dropHeld === drop) dropHeld = null;
+    /* ONE FRAME, NOT A DISSOLVE (see the header). route() calls this in the same
+       task in which revealWhenReady schedules `screen-in`, and no paint happens
+       between a microtask and the rAF that follows it, so the lid comes off and
+       the new screen turns opaque in the same composited frame. */
+    g.remove();
+    try { cl?.(); } catch { /* never block navigation on teardown */ }
+  };
+  const cap = setTimeout(drop, 1200);
+  dropHeld = drop;
+}
 
 /* THE MAP ONLY ASKS FOR LOCATION WHEN THE PLAYER ASKED FOR THE MAP.
  *
@@ -2441,6 +3058,12 @@ function route({ keepScroll = false } = {}) {
   // refresh() passes keepScroll: an in-place re-render, not a navigation
   const isNav = !keepScroll;
   closeAllSheets();
+  /* BEFORE the teardown, not after: screenCleanup is what rips the live map out
+     of the DOM, so the paint has to be taken out of its reach first. When a hold
+     is taken it adopts the teardown and nulls it, so the call below is a no-op;
+     when there is nothing to hold, the teardown runs exactly as it always did. */
+  const scr = $('#screen');
+  if (isNav) holdOutgoing(scr);
   try { screenCleanup?.(); } catch { /* never block navigation on teardown */ }
   screenCleanup = null;
   const tab = currentTab();
@@ -2454,9 +3077,9 @@ function route({ keepScroll = false } = {}) {
   // Today carries its own gear in the day strip, so the floating one stays out
   // of the way and nothing sits above the Bonehead.
   if (gear) gear.hidden = tab === 'settings' || tab === 'boneyard' || tab === 'today';
-  const el = $('#screen');
+  const el = scr;
   if (isNav) el.classList.remove('screen-in');
-  let done;
+  let done, isToday = false;
   // #/shop is a deep link into the hub's Shop tab, not a screen of its own.
   if (tab === 'shop') { pendingHubTab = 'shop'; done = renderBonehead(el); }
   else if (tab === 'bonehead') done = renderBonehead(el);
@@ -2468,9 +3091,13 @@ function route({ keepScroll = false } = {}) {
   else if (tab === 'friends') done = renderFriends(el);
   else if (tab === 'settings') done = renderSettings(el);
   else if (tab === 'boneyard') done = renderBoneyard(el);
-  else done = renderToday(el);
+  else { isToday = true; done = renderToday(el); }
   // the map fills the screen, so this route drops the usual padding and scroll
   el.classList.toggle('screen--map', tab === 'boneyard');
+  /* Today carries the overscroll wordmark above the top of its scroller (app.css).
+     Flagged by the branch that actually renders Today rather than by a second list
+     of tab names, so a new tab cannot inherit the mark by accident. */
+  el.classList.toggle('screen--today', isToday);
   if (!keepScroll) el.scrollTop = 0;
   maybeCelebrate();
   return Promise.resolve(done).catch(() => {}).then(() => {
@@ -2491,7 +3118,39 @@ function route({ keepScroll = false } = {}) {
      * flash the whole tab on every small edit. */
     const child = el.firstElementChild;
     if (!isNav) { el.classList.add('screen-in'); markBooted(); child?.classList.add('route-in'); return; }
-    return revealWhenReady(el, { cls: 'screen-in', cap: 700 }).then(() => { markBooted(); child?.classList.add('route-in'); });
+    return revealWhenReady(el, { cls: 'screen-in', cap: 700 }).then(() => {
+      markBooted();
+      /* NO FADE AT ALL ON A SWAP, AND THE CLASS STAYS EITHER WAY.
+         `route-in` fades the new child up from transparent. Over the ground on a
+         boot that is right. Under a held screen it is wrong: two crossed opacity
+         fades do not add up to one, they leave the ground showing through at
+         t(1-t), a quarter of it at the midpoint, which is the tray flash again,
+         dimmer. So the ANIMATION is suppressed for a held swap (app.css
+         .screen-swap) and the held copy simply leaves. The CLASS is still applied
+         on every navigation, because it is the router's marker that a child
+         arrived by one and two audits read it that way (tests/feel-audit.mjs
+         ROUTE-IN, tests/screen-sweep.mjs ARRIVAL). Set explicitly per navigation
+         rather than cleared on the way out: a hold dropped by the next navigation
+         must not leave that screen's entrance suppressed, and a boot has no hold
+         to suppress it in the first place. */
+      el.classList.toggle('screen-swap', !!dropHeld);
+      child?.classList.add('route-in');
+      /* AND THE LID COMES OFF IN THE FRAME THE SCREEN TURNS OPAQUE, NEVER BEFORE.
+         revealWhenReady applies `screen-in` from a requestAnimationFrame, and its
+         promise resolves as a MICROTASK, which is not the same thing: the decode
+         it was waiting on can settle after a frame's callbacks have already run,
+         in which case this code runs, the copy goes, and that frame paints with
+         the old screen gone and the new one still at opacity 0. That is the tray
+         flash tests/route-flash-audit.mjs exists for, and it caught it here: one
+         bare frame at 214ms on the reduced-motion pass, on the first version of
+         this hard cut. Deferring the drop by one frame puts it in the SAME rAF
+         batch as the class, registered after it, so the two land together and no
+         frame can hold either the tray or both screens. `drop` is captured rather
+         than re-read: it is bound to this navigation's copy, and by the next
+         frame `dropHeld` may already belong to a newer one. */
+      const drop = dropHeld;
+      requestAnimationFrame(() => drop?.());
+    });
   });
 }
 
@@ -2533,6 +3192,9 @@ function bgRefresh() {
 /* ================= shared ui ================= */
 
 let toastTimer = 0;
+/* One write-failure message per this window. See the sink in boot(). */
+const WRITE_FAIL_QUIET_MS = 8000;
+let lastWriteFailToast = 0;
 const toastQ = [];
 let toastBusy = false;
 function toast(msg, ms = 2200) {
@@ -2768,6 +3430,9 @@ async function dayBudget() {
    up sometimes is worse than none at all. */
 const LOG_ONLY_LINE = '<p class="log-only">Nothing you grow or cook in the Kitchen counts as food you ate. This diary only records what you log yourself.</p>';
 
+/* Set the first time Today renders Gwart; see the note at its read site below. */
+let gwEntranceSeen = false;
+
 async function renderToday(el) {
   const entries = await entriesFor(S.date);
   const yEntries = await entriesFor(addDays(S.date, -1));
@@ -2791,7 +3456,7 @@ async function renderToday(el) {
   const foodbuffs = await activeFoodBuffs();
   const ingCount = ingredientCount(await ingredients());
   const eq = await equipped();
-  const [coinBal, dustBal, pitEnergy, heldSpiresNow] = await Promise.all([coins(), boneDust(), refreshPitEnergy(), heldSpires()]);
+  const [coinBal, dustBal, pitEnergy] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
   const crates = await unopenedCrates();
   const allXp = await db.all('xp');
   const huntEnabled = !!(await kvGet('hunt-enabled'));
@@ -2836,20 +3501,26 @@ async function renderToday(el) {
   const over = tot.kcal > t.kcal;
   const isToday = S.date === dateKey();
   // quest header status: how many are claimable right now (drives the accent cue)
-  const questClaimable = questTiers.reduce((n, tier) => n + tier.quests.filter(q => { const st = questState(q, tier.ctx); return st.done && !st.claimed; }).length, 0);
+  /* ...on a day you can still act on. A past day's quests are a RECORD (Tom,
+     2026-08-23: "make past day quests read-only"), so nothing there is ready for
+     anything and the badge and its accent would both be lying. */
+  const questClaimable = isToday ? questTiers.reduce((n, tier) => n + tier.quests.filter(q => { const st = questState(q, tier.ctx); return st.done && !st.claimed; }).length, 0) : 0;
   // v146 unlock guidance: surface Build/gear/weapon moments the player would miss
-  const [unlockFighter, unlockGear] = isToday ? await Promise.all([buildFighter(), ownedGearIds()]) : [null, null];
-  const unlocks = isToday ? computeHomeUnlocks({
+  /* READ ON EVERY DAY, NOT ONLY TODAY (v425). Tom, 2026-08-22: "accidentally
+     changing the day on your macros makes all the news above disappear and makes
+     the player feel like they just broke the game and dont know how to go back."
+     The hero, its four doors, its "!" badges and Gwart's line are the app's
+     identity, not a property of which date you are reading, so they no longer
+     switch off when you step back a day. The toasts still only fire on today
+     (see fireUnlockToasts below): a nudge is about now. */
+  const [unlockFighter, unlockGear] = await Promise.all([buildFighter(), ownedGearIds()]);
+  const unlocks = computeHomeUnlocks({
     fighter: unlockFighter, level: lvl.level, coinBal, dustBal,
     gearOwnedCount: unlockGear.size, gearEquippedCount: Object.keys(unlockFighter.gearLo || {}).length,
     fightWins: allXp.filter(r => r.type === 'fight').length,
-    loggedToday: entries.length,
-    everLogged: allXp.some(r => r.type === 'food') ? 1 : 0,
-    mealSkipped: await kvGet('firstMealSkipped', false),
-  }) : [];
+  });
   const pitAttn = unlocks.some(u => u.hero === 'pit');
-  const topNudge = unlocks[0] || null;
-  const hkStale = isToday ? await hkStaleInfo() : null;
+  const hkStale = await hkStaleInfo();
   if (hkStale && !(await kvGet('hkStaleNotified', false))) {
     await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
     notifyNow('Steps stopped syncing', 'Apple Health has gone quiet. Your walking is not counting. Open Boneheadz and tap the banner to fix it.', 'any').catch(() => {});
@@ -2860,9 +3531,59 @@ async function renderToday(el) {
   const sub = dObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' });
 
   const heroPet = petFrom(null, eq.C);   // yours, so S.shinyPets answers (the figure contract)
+  /* HOW BIG SHE STANDS, AS A SHARE OF THE BONEHEAD. PET_HERO_REL is a ratio, so
+     the markup still needs a pixel box (croppedPetImg lays its layers out as
+     percentages of one) and app.css rescales that box against --fig. The px
+     handed over is the ratio at the reference figure, which is the 169 that
+     shipped: nothing moves on a full-height phone, and she shrinks with him on a
+     short one. The mass scale rides along in --pet-rel because petSpriteHtml
+     applies it to the box, and CSS is replacing that box. */
+  const heroPetRel = heroPet ? (PET_HERO_REL[heroPet.id] || PET_HERO_HOUSE) : 0;
+  const heroPetBig = heroPetRel > PET_HERO_HOUSE;
+  const heroPetPx = Math.round(heroPetRel * PET_HERO_REF);
+  const heroPetBoxRel = heroPet ? Math.round(heroPetPx * petScale(heroPet.id)) / PET_HERO_REF : 0;
+  /* Gwart's opening line, chosen from the state this render already has in hand
+     (no extra reads). gwIdle() below re-picks from the same context. */
+  const gwCtx = {
+    entries, tot, targets: t, crates, streak, level: lvl.level, isToday,
+    steps: hk?.steps || 0, dishReady: !!(cook && cook.ready), cropsRipe,
+    fightsReady: pitEnergy.ready,
+    /* WHAT HE IS WEARING INTO A FIGHT. Both numbers are already computed above
+       for computeHomeUnlocks, so this costs no extra reads. They exist because
+       the Wardrobe can now take every statted piece off in one tap, and Tom's
+       condition on shipping that was that somebody tells the player: "reset
+       should strip everything but there needs to be a gwart reminder or
+       something that reminds players they will be weaker in fights if they dont
+       choose statted gear to wear." Gwart is that somebody. */
+    gearOwned: unlockGear.size,
+    gearWorn: Object.keys(unlockFighter.gearLo || {}).length,
+  };
+  const gwLine = gwartLine(gwCtx);
+  /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
+     the render that emits the markup, so the very first Today of the session
+     gets `wz-enter` bare and every later one gets `.seen` on it. Measured on
+     this tree at 440x956, three arrivals at Today driven through the real tab
+     bar: 871 style recalcs / 115ms as shipped, against 376 / 57ms once he
+     only arrives once. zEnterCine animates `filter`, which no compositor can
+     take, so its whole 2.4s is main-thread style work on the app's home screen,
+     every single time you tap Today.
+     WHERE "ONCE" LIVES, and why it is a plain module-level `let` like
+     bootSheetClaimed above: it must survive an in-place refresh() and a route()
+     back here (both re-run this function on the same document, so it does), and
+     it must NOT survive a real reload (a fresh module instance starts false, so
+     it does not). Nothing is persisted; a relaunch is a new session and he gets
+     to arrive again. The cinematic itself is untouched: .wz-enter.seen only
+     turns the animation off, and its `both` fill already ended on exactly the
+     resting state, so "seen" and "finished" are the same pixels. */
+  const gwSeen = gwEntranceSeen;
+  gwEntranceSeen = true;
   const C = 2 * Math.PI * 66;
   const prev = S.ui;
   const protHit = t.p && tot.p >= t.p;
+  /* ONE SECTION INSIDE THE DAY: a kicker label over its card. Returns nothing
+     when the card has nothing to say (the Kitchen and Activity cards both build
+     to '' on a quiet day), so a kicker can never label an empty space. */
+  const tsec = (label, html) => (html ? `<section class="tsec"><div class="tsec-h">${label}</div>${html}</section>` : '');
 
   el.innerHTML = `
   <!-- The scene is CORAL by default (the deck's hero colour), but an equipped
@@ -2871,16 +3592,21 @@ async function renderToday(el) {
        colour behind my bonehead when switching tabs very briefly". So when a
        backdrop IS equipped, the ground underneath it is the app's own dark, and
        there is nothing bright to flash through. -->
-  <!-- THE TRADING CARD (design_handoff_today_home, option 1d). A cream frame
-       with a 20px chin around the art plate, so the hero reads as a collectible
-       card rather than a panel. The frame carries the border and shadow; the
-       plate inside carries the scene. -->
+  <!-- NO FRAME. Tom, 2026-08-21: "why did you keep the playing card style frame?
+       that wasnt what we agreed on." The agreed hero is the R3 mockup's, which
+       is full bleed with no plate around it (today-preview/today-mockup.html).
+       .hero-card is now only the negative margin that cancels .screen's padding;
+       see app.css. -->
   <div class="hero-card">
-  <div class="hero-scene ${S.justLogged ? 'bounce' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
+  <div class="hero-scene ${S.justLogged ? 'bounce' : ''}${heroPetBig ? ' sharing' : ''}" id="bhStage"${eq.BG && BH_BY_ID[eq.BG] ? ' style="background:var(--surface-2)"' : ''}>
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="" decoding="sync" fetchpriority="high">` : ''}
     <span class="hero-cast c-bh"></span>
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
-    ${heroPet ? `<button class="hero-companion" id="heroPetBtn" aria-label="Your pet">${petAsideHtml(heroPet, 108)}</button>` : ''}
+    ${heroPet ? `<button class="hero-companion${heroPetBig ? ' big' : ''}" id="heroPetBtn" style="--pet-rel:${heroPetBoxRel.toFixed(5)}" aria-label="Your pet">${petAsideHtml(heroPet, heroPetPx)}</button>` : ''}
+    <!-- The bottom of the art dissolves into the page instead of ending on the
+         frame that used to be there. Sits before .hero-meta because both are
+         z-index 4 and the level plate has to stay above the fade. -->
+    <div class="hero-fade"></div>
 
     <!-- Four separate chips became one wallet pill and an icon-only Trends dot:
          the top of the card was four competing plates over the art. -->
@@ -2893,7 +3619,38 @@ async function renderToday(el) {
         ${crates.length ? `<button class="wp gold" id="cratesBtn" aria-label="Crates">${crateIcon(crates[0].crate, 13)}<b>${crates.length}</b></button>` : ''}
       </div>
     </div>
-    <div class="hero-bubble ${bubbleSideCache[JSON.stringify(eq)] === 'r' ? 'side-r' : ''}">${esc(speechLine({ entries, tot, targets: t, crates, streak, isToday, steps: hk?.steps || 0, dishReady: !!(cook && cook.ready), cropsRipe, fightsReady: pitEnergy.ready, spires: heldSpiresNow.length }))}</div>
+    ${/* GWART, DIRECTLY UNDER THE CURRENCIES, AND HE TALKS NOW. Tom asked for
+         the arrangement three times (balances at the top, the wizard below
+         them), and on 2026-08-21: "gwart on the today page, isnt saying
+         anything? when you tap him he should say things and he should honestly
+         just be saying a bunch of funny and useful lines on his own."
+
+         HIM AND HIS LINE ARE ONE ROW, which is the R3 mockup's .gwrow: his
+         plaque at its measured width, his box filling the rest. The box is
+         talkBoxHtml + runTalkBox, the app's one typing path, registered in
+         tests/talkbox-audit.mjs as js/app.js:gw-box.
+
+         THE PLAQUE IS THE TAP TARGET, and only the plaque: the row and the box
+         stay pointer-transparent so the rest of the scene still opens the
+         character. A finished un-held box is pointer-events:none in app.css, so
+         it never eats a tap either. hold is FALSE on purpose: the chevron means
+         "tap the box for the next line", and the thing you tap here is him.
+
+         The art is the same untouched pair the Emporium uses (already
+         precached), cropped by CSS. */''}
+    <div class="gw-row">
+      <button class="gw-today" id="gwartBtn" aria-label="Gwart says something">
+        <span class="wz-scene" aria-hidden="true">
+          <span class="wz-body"><img src="assets/gwart/gwart.png" alt=""></span>
+          <span class="wz-enter${gwSeen ? ' seen' : ''}"><span class="wz-sway">
+            <img class="wz-stars-l" src="assets/gwart/gwart-stars.png" alt="">
+            <img class="wz-stars-m" src="assets/gwart/gwart-stars.png" alt="">
+            <img class="wz-stars-r" src="assets/gwart/gwart-stars.png" alt="">
+          </span></span>
+        </span>
+      </button>
+      ${talkBoxHtml(gwLine, { name: 'GWART', cls: 'gw-box' })}
+    </div>
     <!-- A GRADIENT CAPTION, not an opaque band. The 92px plate used to eat the
          bottom of the art; this fades into it instead. The 13px XP bar becomes
          20 pips, and the "Lv N unlocks a Golden Crate" sentence moves to
@@ -2943,40 +3700,22 @@ async function renderToday(el) {
     <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(24)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
 
-  ${isToday && topNudge ? `
-  <div class="ul-wrap${topNudge.action === 'logfood' ? ' has-skip' : ''}">
-  <button class="card unlock-nudge" id="unlockNudge" data-ulaction="${topNudge.action}">
-    <span class="ul-ico">${topNudge.hero === 'food' ? ICONS.boltStroke(20) : topNudge.hero === 'ward' ? ICONS.bone(20) : ICONS.pit(24)}</span>
-    <span class="ul-txt"><b>${esc(topNudge.nudge)}</b><small>${
-      topNudge.action === 'logfood' ? 'Tap to log your first meal'
-      : topNudge.action === 'pit' ? 'Tap to enter The Pit'
-      : topNudge.hero === 'ward' ? 'Tap to open your Wardrobe'
-      : 'Tap to open Build and spend it'}</small></span>
-    <span class="ul-chev">›</span>
-  </button>
-  ${/* The way out. Not a dismissal of the card: skipping falls through to
-       whatever the next nudge is, so somebody who does not want to log right
-       now still gets pointed at the fight, the crates or their gear. */''}
-  ${topNudge.action === 'logfood' ? '<button class="ul-skip" id="ulSkip">Not right now</button>' : ''}
-  </div>` : ''}
-
-  ${isToday && hkStale ? `
-  <button class="card hk-stale" id="hkStaleFix">
-    <b>⚠️ Steps aren't syncing</b>
-    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
-  </button>` : ''}
-
-  ${isToday ? '<details class="rr-banner" id="raceResultCard" hidden></details>' : ''}
-
-  ${isToday ? outThereHtml({ held: heldSpiresNow, cropsRipe }) : ''}
-
-  ${isToday ? `
+  ${/* QUESTS SIT DIRECTLY UNDER THE FOUR DOORS, ALWAYS. Tom, 2026-08-22: "have
+       quests be always under the initial 4 buttons (backpack stable kitchen
+       etc)". They used to render below a stack of nudges and banners, so their
+       position moved with whatever cards happened to be live that day. The
+       nudge card is gone entirely and the banners are evicted below the day, so
+       this is now the only thing between the doors and the day itself. */''}
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
     <summary><span class="q-sum-ico">${ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
     <div class="q-card-body">
+    ${isToday ? '' : `<p class="note">A record of ${esc(title)}. Quests are claimed on the day.</p>`}
     ${questTiers.map(tier => `
     <div class="q-tier ${tier.period}">
-      <div class="q-tier-h">${tier.label}</div>
+      ${/* the daily tier is labelled "TODAY'S QUESTS", which is a lie on a day
+             that is not today. The tier list is built before isToday exists, so
+             the label is corrected here rather than reordering that block. */''}
+      <div class="q-tier-h">${tier.period === 'day' && !isToday ? 'DAILY QUESTS' : tier.label}</div>
       <div class="q-list">
       ${tier.quests.map(q => {
         const st = questState(q, tier.ctx);
@@ -2987,8 +3726,15 @@ async function renderToday(el) {
             <div class="q-desc">${esc(q.desc)}</div>
             <div class="q-bar ${tier.period !== 'day' ? 'gold' : ''}"><i style="width:${pct}%"></i></div>
           </div>
+          ${/* READ-ONLY ON A PAST DAY. No new decoration: a finished row that
+                 cannot be claimed falls back to the SAME `.q-frac` the app
+                 already uses for a row you cannot act on, so it reads "3/3, that
+                 is what happened" rather than as a button that broke. The claim
+                 itself is refused at the authority either way (periodClosed in
+                 js/quests.js); this is so the screen does not offer something it
+                 will not honour. */''}
           ${st.claimed ? `<span class="q-done">${ICONS.check(13)}</span>`
-            : st.done ? `<button class="q-claim" data-claim="${q.id}" data-period="${tier.period}" data-pkey="${tier.ctx.periodKey}">Claim</button>`
+            : st.done && isToday ? `<button class="q-claim" data-claim="${q.id}" data-period="${tier.period}" data-pkey="${tier.ctx.periodKey}">Claim</button>`
             : `<span class="q-frac">${st.target > 20 ? Math.round((st.cur / st.target) * 100) + '%' : st.cur + '/' + st.target}</span>`}
         </div>`;
       }).join('')}
@@ -2996,18 +3742,37 @@ async function renderToday(el) {
     </div>`).join('')}
     <button class="link" id="qProg" style="margin-top:4px">Quest progress</button>
     </div>
-  </details>` : ''}
+  </details>
 
-  <div class="day-strip">
-    <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
+  ${/* ===== THE DAY OWNS EVERYTHING (v425, variant d2, approved 2026-08-22).
+       The day is ONE container: a --surface-2 well whose titlebar is the day
+       header. The old floating `< TODAY Aug 22 > [gear]` row was that header all
+       along, governing sections it did not visibly contain, so it read as
+       free-floating navigation over a pile of unrelated cards. Now the title is
+       left, the two arrows and the gear group right inside the same bar, and
+       everything day-scoped hangs under it in .dayflow with a kicker label.
+       Nothing pins: containment gives the day a visible END as well as a start,
+       which is the whole argument of the variant.
+       PROMO BANNERS ARE NOT PART OF THE DAY and are emitted below it. ===== */''}
+  <section class="dayblk">
+  <div class="dayhdr">
     <div class="day-title">
       <h1>${title}</h1><div class="sub">${sub}</div>
       <input type="date" id="datePick" value="${S.date}" aria-label="Pick date">
     </div>
+    <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
     <button class="icon-btn" id="nextDay" aria-label="Next day"><svg viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></svg></button>
     <button class="icon-btn" id="todaySettings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke-width="2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
   </div>
 
+  <div class="dayflow">
+  ${hkStale ? `
+  <button class="card hk-stale" id="hkStaleFix">
+    <b>⚠️ Steps aren't syncing</b>
+    <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
+  </button>` : ''}
+
+  <section class="tsec"><div class="tsec-h">Calories</div>
   <div class="card ring-card">
     <div class="ring-wrap">
       <svg viewBox="0 0 158 158">
@@ -3029,15 +3794,35 @@ async function renderToday(el) {
       ${macroRow('Fat', tot.f, t.f, 'fat', prev.macroPcts[2], false)}
     </div>
   </div>
+  </section>
 
-  ${isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday) : ''}
-  ${isToday ? kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe) : ''}
-  ${healthCardHtml(hk, isToday)}
+  ${/* WELLNESS IS THE ONE SECTION THAT STAYS TODAY-ONLY, and the reason is its
+       store, not its layout: js/wellness.js keeps water/bed/sleep in a SINGLE kv
+       record stamped with one date, so getWellness('2026-08-21') returns zeros
+       for a day you actually drank eight cups, and one tap on the water button
+       would save that zeroed record over today's. A card that lies about the
+       past and destroys the present on a tap is worse than a card that is not
+       there. Un-gate it the day wellness gets a per-date store. */''}
+  ${tsec('Wellness', isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday) : '')}
+  ${tsec('Kitchen', kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe))}
+  ${tsec('Activity', healthCardHtml(hk, isToday))}
 
+  <section class="tsec tsec-meals"><div class="tsec-h">Meals</div>
   ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
+  </section>
 
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
-  ${isToday ? `<p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>` : ''}
+  <p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>
+  </div>
+  </section>
+
+  ${/* EVICTED FROM THE DAY. An announcement is not something that happened on
+       Aug 21, so it stops interrupting the line between the day header and the
+       day's own numbers and queues below the whole thing instead. */''}
+  <div class="promo-slot">
+    ${hypeBannerHtml()}
+    <details class="rr-banner" id="raceResultCard" hidden></details>
+  </div>
   ${LOG_ONLY_LINE}
   `;
 
@@ -3061,18 +3846,34 @@ async function renderToday(el) {
   $('#datePick').addEventListener('change', e => { if (e.target.value) { S.date = e.target.value; refresh(); } });
   $('#lvlChip').addEventListener('click', () => { location.hash = '#/progress'; });
   $('#streakChip').addEventListener('click', () => { location.hash = '#/progress'; });
-  /* TAP THE PET. From the handoff: it is the one thing on the card that is alive
-     and had nothing to say. Routed through the same bubble the Bonehead uses, so
-     there is one speech component rather than two. */
+  /* GWART SPEAKS. Both halves of what Tom asked for, and they are the same one
+     line of machinery: gwSay() puts a line through the app's one typer.
+       TAP HIM     the plaque is a button, so a tap says something immediately.
+       ON HIS OWN  gwIdle() re-says on a timer while Today is up and clear.
+     A tap RESTARTS the idle clock, so tapping never stacks a second line on top
+     of one that was about to arrive by itself. */
+  const gwBox = $('.gw-box', el);
+  const gwSay = line => { if (gwBox) runTalkBox(gwBox, line, { name: 'GWART' }); gwIdleReset(); };
+  /* Nothing to advance here any more. gwartLine() owns "not the same one again"
+     itself now (the bag, see gwPick), so the caller that used to bump a salt was
+     the caller that decided which line came next, and both callers had to
+     remember to. */
+  $('#gwartBtn', el)?.addEventListener('click', e => {
+    e.stopPropagation();                       // the scene itself opens the Backpack
+    gwSay(gwartLine(gwCtx));
+  });
+  gwIdleStart(el, () => gwartLine(gwCtx));
+  /* TAP THE PET. It pops, it makes a noise, and Gwart says something about it:
+     she is the one thing on this card he gets asked about directly. The line
+     comes from GW_PET_LINES rather than gwartLine, because "what is that" is not
+     a state of the day. */
   $('#heroPetBtn')?.addEventListener('click', e => {
     e.stopPropagation();                       // the plate itself opens the Wardrobe
-    const el = e.currentTarget;
-    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    const el2 = e.currentTarget;
+    el2.classList.remove('pop'); void el2.offsetWidth; el2.classList.add('pop');
     popSound(S.sounds);
-    const b = $('.hero-bubble');
-    if (!b) return;
-    b.textContent = PET_LINES[(Math.random() * PET_LINES.length) | 0];
-    b.classList.remove('again'); void b.offsetWidth; b.classList.add('again');
+    S.gwPet = ((S.gwPet || 0) + 1) % GW_PET_LINES.length;
+    gwSay(GW_PET_LINES[S.gwPet]);
   });
   // Tapping the scene opens the Wardrobe, but the Trends chip and the
   // coin/dust/vigor/crate chips live INSIDE it, so their clicks bubbled here and
@@ -3087,69 +3888,23 @@ async function renderToday(el) {
     if (e.target.closest('button')) return;
     openCharacter('crates');
   });
-  measureBubbleSide($('#bhStage'), eq).then(side => {
-    $('.hero-bubble')?.classList.toggle('side-r', side === 'r');
-  });
   $('#charBtn')?.addEventListener('click', () => openCharacter('crates')); // Bonehead hub, landing on the Backpack the tile is named for
   $('#stableBtn')?.addEventListener('click', openStable);
   $('#pitBtn')?.addEventListener('click', openPit);
   $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#dustBtn')?.addEventListener('click', () => openCharacter('crates'));
-  /* Skipping records the choice and re-renders, so the card immediately shows
-     whatever the NEXT nudge is rather than leaving a hole where it was. */
-  $('#ulSkip')?.addEventListener('click', async () => {
-    await kvSet('firstMealSkipped', true);
-    refresh();
-  });
   $('#vigorBtn')?.addEventListener('click', openPit);
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
-  $('#unlockNudge')?.addEventListener('click', () => {
-    const a = $('#unlockNudge')?.dataset.ulaction;
-    /* openAdd() with the meal picked from the clock, the same entry point the
-       big green + uses, so the first meal goes through the flow the player will
-       use every day rather than a special one-time path. */
-    if (a === 'logfood') { const now = new Date(); openAdd(mealForHour(now.getHours() + now.getMinutes() / 60)); }
-    else if (a === 'wardrobe') openCharacter('wardrobe');
-    else if (a === 'pit') openPit();
-    else openTalents();
-  });
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
-  $('#spireToMap')?.addEventListener('click', () => { location.hash = '#/boneyard'; });
-  /* THE ROW OPENS THE TEASER. Tom has said twice that "the monster bestiary
-     popup is gone", then "clicking it is broken": tapping the day's hunt jumped
-     straight to the map with no acknowledgement, which reads as a dead button.
-     The popup's own CTA still takes you hunting, so the map is one tap further,
-     not gone. Delegated off the card rather than bound to the node, because this
-     row is rebuilt on every Today refresh and a node-bound listener dies with it. */
-  $('.out-there')?.addEventListener('click', e => {
-    if (e.target.closest('#bestiaryToMap')) openBossIntro();
-  });
-  /* The row's monster is a layered stack like any other Bonehead, so it needs
-     composing. Unlike the teaser strip this is ONE figure and it is the whole
-     reason the row is interesting, so it composes on render rather than on open
-     (an uncomposed avatar is invisible, and an invisible monster sells nothing). */
-  const bestRow = $('.bestiary-banner');
-  if (bestRow) composeAvatars(bestRow);
-  /* NEVER BUILD ART FOR A CLOSED PANEL (1C). The strip lives inside a <details>
-     that is CLOSED by default, and it used to ship its 18 stacked heads in the
-     markup: 69 images and 107.8 MB of the 129.1 MB Today measured, for something
-     the player sees as one line of text. Composing was already deferred to the
-     open; the DECODING was not, and decoding is what the renderer pays for.
-     The wall is built on the first open and then left alone, so re-opening is
-     free and a player who never taps it never pays. */
-  $('details.teaser-banner')?.addEventListener('toggle', e => {
-    if (!e.target.open) return;
-    const strip = $('.tz-strip', e.target);
-    if (strip && !strip.firstChild) strip.innerHTML = teaserWallHtml(18, 62);
-    composeAvatars(e.target);
-  });
-  $('details.garden-banner')?.addEventListener('toggle', e => {
-    if (e.target.open) $('#gardenToKitchen')?.scrollIntoView({ block: 'center' });
-  });
-  $('#gardenToKitchen')?.addEventListener('click', () => openHollow(() => refresh()));
+  /* THE HYPE BANNER'S TWO HALVES, each going where its own subject lives. The
+     handlers that used to sit here belonged to the "Out there today" rows and
+     came off with them (the spire CTA, the bestiary row's delegate and its
+     compose, the teaser strip's deferred wall, and the garden row's two). */
+  $('#hypeYard', el)?.addEventListener('click', () => { location.hash = '#/boneyard'; });
+  $('#hypeShop', el)?.addEventListener('click', () => openCharacter('shop'));
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -3303,6 +4058,13 @@ async function measureBubbleSide(stage, eq) {
 }
 
 /* What your Bonehead says on the home screen.
+ *
+ * UNSPOKEN SINCE v418, AND STILL HERE ON PURPOSE. Tom took the Bonehead's bubble
+ * off Today ("gwart will be more the coach character"), and on 2026-08-21 Gwart
+ * got the voice instead: gwartLine() below. These pools stay because they are
+ * the source material his lines are rewritten from, and because the Bonehead
+ * speaking again somewhere else is a live possibility, not because anything
+ * calls this today. PET_LINES underneath is in the same position.
  *
  * The pools used to be indexed by the DAY OF THE MONTH, which meant he said one
  * line all day no matter how many times you opened the app — nine lines read like
@@ -3462,6 +4224,340 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__speech = (ctx, salt) => { S.speechSalt = salt; return speechLine(ctx); };
 }
 
+/* ===================== GWART'S LINE ON TODAY ==============================
+ * Tom, 2026-08-21: "gwart on the today page, isnt saying anything? when you tap
+ * him he should say things and he should honestly just be saying a bunch of
+ * funny and useful lines on his own." Both halves are built: the plaque is a
+ * button (renderToday), and gwIdle() below volunteers a line on a timer.
+ *
+ * HE IS NOT THE BONEHEAD. speechLine() above is the Bonehead narrating himself
+ * ("I am 206 bones of pure potential"), which is a different character and a
+ * different job. Gwart CARVED him: he talks ABOUT the boy, in the third person,
+ * and what he says is meant to be worth acting on. He started with the
+ * seventeen lines of the approved R3 mockup (today-preview/today-mockup.html),
+ * sorted into the same state buckets speechLine uses so a line arrives because
+ * it is TRUE right now. The buckets around them were filled out in v424 because
+ * seventeen lines across nine states is two or three per state, and a state you
+ * sit in all morning then reads as one line on a loop. Eleven of the seventeen
+ * are still here verbatim; the other six went in the tone pass below.
+ *
+ * COPY RULES, and they are Tom's taste contract rather than my preference: dry,
+ * no exclamation marks, no hype, no ad-speak, and never a scold. Useful first
+ * (what to do next, what is worth doing today, what is new), funny second.
+ *
+ * AND THE REGISTER IS WRY, NOT WEARY. Tom, reading the first v424 catalogue:
+ * "the lines feel a little sad or something, let's make them a bit lighter."
+ * The brief that produced them said dry, weary, has seen every player make the
+ * same mistakes, and weary tipped into melancholy: he mourned the boy's old
+ * life ("He does not remember being a pile. I do."), pitied himself ("He has
+ * never once complained. I make up for it.") and sounded lonely ("I am old, not
+ * busy. Take your time."). Twenty-one lines were rewritten. He is an old man
+ * ENJOYING himself and fond of the thing he made: curious about what you will
+ * do next, proud of his own joinery, amused by the bonehead. The bonehead is
+ * the comic object and Gwart is the straight man who likes him. Lighter does
+ * NOT mean louder: no cheering, no praise for its own sake, nothing a marketing
+ * email would say. He can be pleased without celebrating.
+ *
+ * SAME STRUCTURE AS speechLine ON PURPOSE: the urgent states return early in
+ * priority order, and everything below that is chatter POOLED and picked
+ * across, because trying the chatter pools in order is what once made a player
+ * with a streak hear only streak lines. */
+/* A BAG, NOT A DIE, and this is the reported bug rather than a refinement.
+ * Tom, 2026-08-22: "for Gwart on the today screen he just says the same line
+ * over and over we need to make some cool text lines for him". Two faults, and
+ * they compounded: the pool was thin (every early-return state below shipped
+ * exactly TWO lines), and the picker had no memory. It indexed the eligible pool
+ * by a per-session salt bumped by one per line, so a two-line bucket is
+ * A, B, A, B for as long as that state lasts, and a state like "an unopened
+ * crate" or "nothing logged yet" lasts most of a session.
+ *
+ * The pool below got the depth. The picker got a MEMORY:
+ *   gwSaid is the bag. A line is drawn only from what is not in it yet, so every
+ *   line of the eligible pool is heard before any of them comes round again.
+ *   When the bag empties it refills MINUS the line just said, so a refill cannot
+ *   hand back the line still on screen: with two or more lines eligible an
+ *   immediate repeat is not representable, which is the half of this a player
+ *   can actually see.
+ * The bag is keyed on the STRINGS, not on a bucket, so a state change
+ * mid-session (the crate gets opened) carries the memory across instead of
+ * resetting it, and an interpolated line (`Day 4.`) behaves like any other. It
+ * is bounded by the pool it is drawing from, because that is what empties it. */
+const gwSaid = new Set();
+let gwLast = '';
+function gwPick(pool) {
+  if (!pool.length) return gwLast;
+  let fresh = pool.filter(l => !gwSaid.has(l));
+  if (!fresh.length) {
+    gwSaid.clear();
+    fresh = pool.filter(l => l !== gwLast);
+    if (!fresh.length) fresh = pool;            // a one-line pool has no second choice
+  }
+  const line = fresh[Math.floor(Math.random() * fresh.length)];
+  gwSaid.add(line);
+  gwLast = line;
+  return line;
+}
+/* THE CRATE REMINDER FIRES ONCE PER APP OPEN. Tom, 2026-08-22: "If you have an
+   unopened crate it's all Gwart talks about that many reminders is annoying."
+   The crate bucket is gwartPool's top early-return, so while a crate sat unopened
+   EVERY line he said was a crate line: the bag below cycles the eight of them and
+   he never reaches another subject.
+
+   WHERE THE CAP LIVES, and it is not in the pool. gwartLine is the one path all
+   three speaking callers take (the opening line renderToday emits, the tap on the
+   plaque, the idle timer), so capping here caps it wherever he speaks rather than
+   on the screen the bug was reported from. gwartPool stays PURE: it is also the
+   __gwartPool test seam, which harvests a state's whole catalogue, and a bucket
+   that deletes itself when you look at it is a seam that reports a different
+   answer every call.
+
+   ONCE PER OPEN, same idiom as gwEntranceSeen above: a module-level `let`
+   survives refresh() and route() (same document, same module instance) and dies
+   on a real reload, so the next app open is owed its one reminder again. Nothing
+   persisted. The crate context is dropped rather than the crate line skipped, so
+   he falls through to whatever else is true and keeps talking. */
+let gwCrateNagged = false;
+function gwartLine(ctx) {
+  if (!ctx.crates.length) return gwPick(gwartPool(ctx));
+  const owed = !gwCrateNagged;
+  gwCrateNagged = true;
+  return gwPick(gwartPool(owed ? ctx : { ...ctx, crates: [] }));
+}
+
+/* EVERY LINE HERE FITS THE BAND, and that is a hard constraint rather than a
+   style note: .gw-box is 13px in the plaque's 90px band, and at 393x852 the box
+   is 176px wide, which is THREE wrapped lines and no more. A fourth line paints
+   over the Bonehead's head. The TYPE row in tests/talkbox-audit.mjs measures
+   EVERY line in this catalogue at that width, so a line that does not fit fails
+   the audit on the day it is written. About 59 characters is the ceiling in
+   practice; measure, do not count.
+
+   THE STATE IS THE POINT. A line arrives because it is true right now, so a new
+   line goes in the bucket whose condition it describes, not in the general pool
+   at the bottom. The general pool is the only one that is pure character. */
+function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
+  steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0,
+  gearOwned = 0, gearWorn = 0 }) {
+  const hour = new Date().getHours();
+  if (crates.length) return [
+    'A crate by his feet, still shut. I gave him hands for this.',
+    'That crate has been there since I arrived. I am curious.',
+    'Nobody was ever dressed by a crate that stayed shut.',
+    'The crate is not a decoration. It opens.',
+    'Open the crate. I want to see what he is wearing next.',
+    'Open it. I have a guess about what is in there.',
+    'Whatever is in there is already yours. Go and look.',
+    'A shut crate is just a box. Make it something else.',
+  ];
+  /* NOTHING WITH STATS ON HIM, AND HE OWNS SOMETHING HE COULD WEAR. This is the
+     other half of the Wardrobe's "Take it all off" (stripAll in js/loot.js): Tom
+     approved a one-tap strip that takes the statted gear too, on the condition
+     that the player is told they will be weaker for it. A toast at the moment of
+     the strip would be gone in three seconds and only reaches the player who
+     used the button; this is a STATE, so it is said on Today for as long as it
+     is true, to everyone it is true of, including the player who has simply
+     never equipped anything.
+
+     WHERE IT SITS IN THE ORDER, and each boundary is deliberate:
+       BELOW crates, because an unopened crate may hold the very gear this is
+         asking for, and a crate is a one-tap state that disappears immediately.
+       BELOW !isToday, because a warning about fights is noise on a screen where
+         you cannot fight.
+       ABOVE the garden, the pot and the ledger, which are recurring daily states
+         that would mask this one indefinitely. Being unarmed has no badge
+         anywhere on Today, unlike the Kitchen and Backpack doors, so if it loses
+         priority it is never said at all.
+     It retires itself: a player who owns no gear never sees it, and it is gone
+     the moment one piece goes on. Nothing to remember, nothing to reset. */
+  if (gearOwned > 0 && gearWorn === 0) return [
+    'Nothing statted on him. He will fight. He will lose more.',
+    'That is a look, not armour. The Wardrobe has the numbers.',
+    'Bare bones. Fine in a tavern, less so in the Pit.',
+    'No gear on him. His opponents will be delighted.',
+    'Handsome, and unarmed. The Pit does not grade handsome.',
+    'You took the numbers off him. The Wardrobe gives them back.',
+    'He is carrying no stats. I would fix that before a fight.',
+  ];
+  if (!isToday) return [
+    'Yesterday is set. You cannot re-cut a finished thing.',
+    'Nothing to log back here. Have a browse if you like.',
+    'That day is carved. Admire it, but you cannot sand it.',
+    'Back here it is all finished. Today is where the work is.',
+    'You have wandered off behind him. He is up ahead.',
+    'I keep the old days for reading, not for fixing.',
+    'History is a decent read. He is a better one.',
+  ];
+  if (cropsRipe) return [
+    'The garden is ready. I watered it. You pick it.',
+    cropsRipe === 1 ? 'One bed is done. Go on before something else finds it.'
+      : `${cropsRipe} beds are done. Go on before something else finds them.`,
+    'Ripe. It will not get riper standing there.',
+    'The patch came up well. I take some credit for that.',
+    'Ready out the back. It keeps a while, not forever.',
+    'Pick it and it goes in the pot. That is the whole loop.',
+    'I do the growing. The carrying is yours.',
+  ];
+  if (dishReady) return [
+    'Something is done in the pot. He cannot smell it. I can.',
+    'The pot has finished. It will not improve from here.',
+    'Dinner is up. Serve it before it becomes an experiment.',
+    'The cauldron is done and quietly pleased with itself.',
+    'Cooked. Take it out. He eats with his eyes anyway.',
+    'That pot has been ready a while now. I did mention it.',
+  ];
+  if (!entries.length) return [
+    'Nothing logged yet. He runs on what you eat. Feed the boy.',
+    'Empty ledger so far. He is patient. I am less so.',
+    hour < 11 ? 'Morning. The ledger is blank. It usually starts that way.'
+      : 'Half the day gone and not a crumb on the page.',
+    'Whatever you ate, write it. Accurate beats flattering.',
+    'Feed the ledger and he does the rest. Fair deal.',
+    'No entries. He will stand here all day. He is good at it.',
+    'Log the first thing. The rest tends to follow.',
+    'Nothing yet. Even a rough guess beats a blank.',
+  ];
+  if (targets && targets.p && tot.p >= targets.p) return [
+    'Protein is in. That is the part I build bone out of.',
+    'Good protein today. His frame will take it from here.',
+    'Protein done. The rest of the day is yours to spend.',
+    'That is the material I need. The rest of it is fuel.',
+    'Protein enough to hold his joints. He will rattle less.',
+    'Protein met. I will not pretend I am not pleased.',
+  ];
+  if (targets && tot.kcal > targets.kcal) return [
+    'A big day, logged honestly. The ledger is the whole craft.',
+    'Written down as it happened. That is the only rule I have.',
+    'Over, and recorded. I have no notes and no opinion.',
+    'A large day. They happen. The ledger does not flinch.',
+    'Big numbers, honestly kept. He is not going to argue.',
+    'Big one. Nothing to fix, nothing to explain to me.',
+  ];
+  if (targets && targets.kcal - tot.kcal <= 350 && targets.kcal - tot.kcal > 0) return [
+    'You are close. Finish it the way you started.',
+    'Nearly there. No need to get clever at the end.',
+    'Room for one more thing. Make it something you like.',
+    'Almost there. This is the enjoyable part of a day.',
+    'A little left in the day. Spend it on something good.',
+    'Close enough to see it. Walk it in.',
+  ];
+  const chatter = [
+    ...(steps >= 12000 ? [
+      'You covered ground today. I felt it in his ankles.',
+      'A lot of walking. He does not tire. You might.',
+      'You put miles on him today. He will not thank you.',
+      `${steps.toLocaleString()} steps. I stopped counting at the first thousand.`,
+    ] : []),
+    ...(streak >= 3 ? [
+      `Day ${streak}. He was a box of parts once. Look at him.`,
+      `${streak} days running. The habit is doing the work now.`,
+      `Day ${streak}. I have seen people stop at two. You did not.`,
+      `${streak} in a row. I have started to expect it of you.`,
+    ] : []),
+    ...(fightsReady >= 1 ? [
+      `${fightsReady} fights left in him. He will not say no, so you decide.`,
+      'He has fight in him. Spend it or it sits there.',
+      'Something in the Pit is worth hitting. He volunteers.',
+    ] : []),
+    ...(hour >= 23 || hour < 5 ? [
+      'Late. He sleeps standing up. I have never seen it work.',
+      'Late log. I am always up. That is not a recommendation.',
+      'The small hours. Write it down and go to bed.',
+    ] : []),
+    ...(level ? [
+      `Level ${level}. I carved the joint. You did the walking.`,
+      `Level ${level} and the frame still holds. Good joinery.`,
+      `Level ${level}. He gets a little less wobbly each time.`,
+    ] : []),
+  ];
+  return [
+    ...chatter,
+    'Two hundred and six pieces. I know where every one goes.',
+    'He does very little without you. Deliberate design.',
+    'Straight back. Good. I worried about that spine.',
+    'He has no memory of being a pile of parts. Lucky him.',
+    'The Stable is through that door. Nobody ever looks left.',
+    'I carve. You feed. He walks. Nobody has improved on it.',
+    'He has opinions now. I did not carve those in.',
+    'Everyone thinks the hat is the important part of him.',
+    'I have made hundreds of these. This is the one I watch.',
+    'There is a wardrobe. He is not going to dress himself.',
+    'A day you write down is a day he gets to keep.',
+    'He is not fussy. He will wear whatever you leave out.',
+    'People ask what he is made of. Mostly attendance.',
+    'Take your time. I am enjoying the view from here.',
+    'He never complains. I find that slightly suspicious.',
+    'Tap me again if you like. I have a lot of these.',
+  ];
+}
+/* GWART ON THE PET, which is the one thing he is asked about directly: tapping
+   the pet already pops her, and he comments on it. Verbatim from the mockup. */
+const GW_PET_LINES = [
+  'That one is not my work. It turned up and stayed.',
+  'He talks to it. I have never heard it answer.',
+  'It follows him. I have stopped asking why.',
+];
+if (typeof window !== 'undefined' && navigator.webdriver) {
+  /* TWO SEAMS, because the pool and the picker are two different things to
+     grade. __gwartPool hands back a state's WHOLE catalogue, so the audit can
+     measure every line against the band and count what each bucket holds
+     (sweeping a salt only ever sampled it). __gwart drives the real picker, so
+     the audit can call it a hundred times and watch the bag: no line twice in a
+     row, and nothing repeats until the pool is spent. */
+  window.__gwartPool = ctx => gwartPool(ctx);
+  window.__gwart = ctx => gwartLine(ctx);
+}
+
+/* HE VOLUNTEERS A LINE, AND THE CADENCE IS 30 SECONDS. Tom: "he should honestly
+ * just be saying a bunch of funny and useful lines on his own", with the taste
+ * contract's restraint over it, so this is a number worth defending rather than
+ * a knob. A line is ~50 characters, which is 1.3s of typing at TALK_MS plus four
+ * or five seconds to read: at 30s he is quiet for about four fifths of the time
+ * he is on screen. A typical Today visit is under a minute, so most visits see
+ * the opening line and one more, a long visit sees him keep talking, and nothing
+ * ever arrives while you are still reading the last one. Shorter reads as a
+ * stream; much longer and "on his own" stops being observable at all.
+ *
+ * HE IS NOT A BOOT SHEET, AND HE MUST NOT BECOME ONE. Tom's one-interruption-
+ * per-app-open rule (claimBootSheet) is about takeovers, and a line typing into
+ * a box that is already on screen is not one, so this does NOT claim the boot
+ * sheet: doing that would silently cost the player their What's New or their
+ * rename notice. What it DOES borrow is the etiquette: it never speaks over a
+ * sheet, the daily wheel, the splash or a drop veil, which is the same predicate
+ * those fourteen call sites test before they open anything. A skipped tick is
+ * simply skipped; the next one comes round in another 30 seconds.
+ *
+ * ONE TIMER, OWNED BY THE RENDER. Today re-renders on every log, every sheet
+ * close and every refresh(), so the interval is cleared and re-armed each time
+ * and keyed to the box that is actually in the document. */
+const GW_IDLE_MS = 30000;
+let gwIdleTimer = 0, gwIdleTick = null, gwIdleEvery = GW_IDLE_MS;
+/* A tap has just produced a line, so the clock starts again from now. Without
+   this, tapping him three seconds before a tick lands two lines in four seconds,
+   which is exactly the "chatty enough to be annoying" this is trying to avoid. */
+function gwIdleReset() {
+  if (!gwIdleTick) return;
+  clearInterval(gwIdleTimer);
+  gwIdleTimer = setInterval(gwIdleTick, gwIdleEvery);
+}
+function gwIdleStart(scope, nextLine) {
+  clearInterval(gwIdleTimer);
+  gwIdleTimer = 0; gwIdleTick = null;
+  const box = $('.gw-box', scope);
+  if (!box) return;                             // short phone: the row is display:none
+  /* A seam, webdriver only, so a guard can watch an idle line arrive without
+     sitting through half a minute of real time. Same shape as __hatchForce. */
+  gwIdleEvery = (typeof window !== 'undefined' && navigator.webdriver && window.__gwIdleMs) || GW_IDLE_MS;
+  gwIdleTick = () => {
+    // the render this timer belongs to is gone: a newer one owns the box now
+    if (!box.isConnected) { clearInterval(gwIdleTimer); gwIdleTimer = 0; gwIdleTick = null; return; }
+    if (currentTab() !== 'today' || document.hidden) return;
+    // never over a takeover. The same test the boot sheets make before they open.
+    if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) return;
+    runTalkBox(box, nextLine(), { name: 'GWART' });
+  };
+  gwIdleTimer = setInterval(gwIdleTick, gwIdleEvery);
+}
+
 // NOTE: the `noYard` option some callers still pass is a legacy no-op — the
 // yard-decor slot was retired, so there is no anchored decor layer any more.
 /* Eye items whose ARTWORK depicts something lit, so a glow is telling the truth
@@ -3537,6 +4633,10 @@ function avatarLayersHtml(eq, opts = {}) {
     if (skip.has(s.code)) return '';
     const itemId = eq[s.code];
     if (!itemId || !BH_BY_ID[itemId]) return '';
+    /* A pet that is not registered to the body canvas cannot be a body layer.
+       One guard here rather than one per caller, because all eleven stacks that
+       keep the C slot broke the same way: see petStacksOnBody above. */
+    if (s.code === 'C' && !petStacksOnBody(itemId)) return '';
     const item = BH_BY_ID[itemId];
     // opts.shinyPetId: the ONE renderer that keeps the pet inside the stack
     // (the leaderboard) needs the shiny recolour swapped in; the shiny PNG
@@ -3692,7 +4792,28 @@ async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
      no-op. This is anti-regression rule 8 at the one place in the app that
      hides every route: whatever hides content owns un-hiding it, and owning it
      means surviving a backgrounded tab. */
-  const apply = () => { if (root.isConnected) root.classList.add(cls); };
+  const apply = () => {
+    if (!root.isConnected) return;
+    root.classList.add(cls);
+    /* DIALOGUE STARTS WHEN THE SCREEN ARRIVES, and this is the one place that
+       knows when that is. A talk box types at 26ms a character, so starting it at
+       render time would spend up to this function's whole 700ms cap typing behind
+       an invisible screen: on a cold load the player would arrive 27 characters
+       into the sentence. Sweeping here means no screen and no sheet has to
+       remember, which is the same reason the reveal itself lives in one place.
+       THE LATCH IS ON THE BOX, NOT ON root. apply() runs on both the frame and
+       the 300ms timer, so something has to stop the line restarting a third of a
+       second in. It cannot be root: #screen is the SAME element on every route,
+       so a flag there is set by the first navigation of the session and silences
+       every talk box for the rest of it (measured: the line never typed at all
+       after the first route). A box is rebuilt by its screen's innerHTML, so the
+       flag on the box is fresh exactly as often as the line is. */
+    root.querySelectorAll('.talkbox').forEach(b => {
+      if (b._tbStarted) return;
+      b._tbStarted = true;
+      runTalkBox(b);
+    });
+  };
   const show = () => {
     if (shown || !root.isConnected) return;
     shown = true;
@@ -3700,7 +4821,20 @@ async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
     setTimeout(apply, 300);
   };
   const guard = setTimeout(show, cap);
-  const imgs = [...root.querySelectorAll('img')];
+  /* THE FIRST PICTURE DOES NOT WAIT ON IMAGES THAT ARE NOT IN IT.
+     `loading="lazy"` is the author saying "this is not first-paint content", and
+     the browser honours that literally: an offscreen lazy image never starts
+     loading, so `decode()` on it returns a promise that NEVER settles and the
+     only thing that can end the wait is the cap. Measured on this tree at
+     440x956, CPU x6: the Shop renders 64 images of which 10 are `loading="lazy"`
+     thumbnails laid out at zero width, so every arrival at the Shop, cold AND
+     warm, sat on the full cap: #screen had its content at 21ms and the reveal
+     landed at 815ms, 794ms of it spent waiting on ten images that were still
+     undecoded 2.5 seconds later. Every other hub tab reveals in 61-72ms.
+     This is on the shared function and not on the Shop, because it is a property
+     of the wait and not of that screen: any screen anyone gives a lazy image to
+     inherits the same permanent cap. */
+  const imgs = [...root.querySelectorAll('img:not([loading="lazy"])')];
   await Promise.all(imgs.map(im => {
     if (im.decode) return im.decode().catch(() => {});
     if (im.complete) return Promise.resolve();
@@ -3734,7 +4868,9 @@ function healthCardHtml(hk, isToday) {
   const goal = 10000;
   const stepPct = steps ? Math.min(100, (steps / goal) * 100) : 0;
   return `<div class="card">
-    <div class="card-title">ACTIVITY · APPLE HEALTH ${isToday ? (isNative() && S.settings.hkNative ? `<span class="link auto" title="Syncs automatically on open">Auto ${ICONS.check(12)}</span>` : '<button class="link" id="hkSync">Sync</button>') : ''}</div>
+    ${/* .ct-name is the part the day container's kicker already says; the CSS
+         hides that span only, so the Sync control beside it survives. */''}
+    <div class="card-title"><span class="ct-name">ACTIVITY · APPLE HEALTH</span> ${isToday ? (isNative() && S.settings.hkNative ? `<span class="link auto" title="Syncs automatically on open">Auto ${ICONS.check(12)}</span>` : '<button class="link" id="hkSync">Sync</button>') : ''}</div>
     ${hk ? `
       <div class="hk-rows">
         <div class="hk-row"><span class="hk-ico">${ICONS.sneaker(21)}</span>
@@ -3910,6 +5046,98 @@ function bestiaryBannerHtml(den = remoteDen(dateKey())) {
   </button>`;
 }
 
+/* THE HYPE BANNER. Tom, 2026-08-21: "remove all banners on the today page except
+   the step winner but above it we need to create a new hypebanner that is bold
+   and stands out and shows the 2 new creatures that are out in the boneyard and
+   simultaneously teases bumbleseal being sold in the shop. this all needs to be
+   in the same banner and feel cohesive not like a verbose list it should just be
+   minimal wording, clean easy marketing that excites."
+   BOLD ART, ELEVEN WORDS. That is the only way both halves of the brief hold at
+   once: his standing taste rules forbid ad-speak, urgency and verbosity, so the
+   loud part has to be the picture. A banner that needs a sentence to explain its
+   own picture is a press release.
+   REVISION, from Tom's markup on the first render (2026-08-21, "something like
+   this is better for the banner, clean it up"). Three things changed and each is
+   the same idea executed better, not a new element:
+     - the tiny NEW chip became "New Creatures", a coral label that reads as the
+       banner's heading rather than a decoration;
+     - the one spanning sentence became TWO CAPTIONS, one under each half. He
+       struck "one wants your coins" out and wrote "Likes to shop" under the seal.
+       Each half now says what it is, which is honest about what they already
+       were: two different tap targets going to two different places;
+     - the creatures got BIGGER. The wide undivided strip was what made three
+       large plates read as thumbnails.
+   SECOND REVISION (2026-08-21, same day): "there shouldnt be any button thing
+   around the bee remove that. and it is meant to say ONE likes to shop not just
+   likes to shop." So:
+     - the seal's sunken plate is GONE. It was meant to set her apart and it read
+       as a button instead, which is worse than the problem it solved: her half
+       IS a button and so is the other one, and the other one has no box. She
+       stands on the banner's own ground now, told apart by the hairline and the
+       gap. See .hype-half.seal in app.css;
+     - the caption carries its COUNT. "Two want to eat you." / "One likes to
+       shop" is a pair of tallies, and dropping the number off one of them left
+       the joke doing half its work.
+   It is still ONE banner: one frame, one heading across the top, one grid. The
+   halves are columns in it, never two cards pushed together.
+   NO PRICE ON THE SEAL. Bumbleseal has no rack listing on any branch here, so a
+   number would be a promise the shop cannot keep today, and Tom has not settled
+   it. "One likes to shop" is true the day she lands and funny before it. */
+/* MEASURED ALPHA BOXES, as fractions of each file. Cam's two plates carry very
+   different amounts of empty margin (the Mimic's ink fills its file edge to edge,
+   the Wanderer leaves 21% of his file empty below his feet), so dropping both into
+   the same object-fit box drew one of them standing fifteen pixels in the air.
+   Measured off the PNGs, not guessed. Same mechanism as croppedPetImg: one box,
+   one transform per plate, and no per-art nudges anywhere else. */
+const HYPE_PLATES = {
+  'assets/bh/mimic/mimic.png':       { w: 640, h: 518, x0: 0, y0: 0, x1: 1, y1: 1 },
+  'assets/bh/wanderer/wanderer.png': { w: 640, h: 640, x0: 0.0938, y0: 0.1375, x1: 0.9719, y1: 0.7891 },
+};
+/* EVERYTHING IN PERCENT, so the BOX size belongs to the stylesheet. The first
+   version took a px argument and emitted px, which pinned the art to one size in
+   markup: Tom asked for bigger creatures and there was no way to give a 393 phone
+   more than a 320 one without rendering the banner twice. The maths is linear in
+   the box, so the ratios are the same at every size, and a CSS transform's
+   percentages are relative to the element itself, which is exactly what the
+   offsets need. */
+function hypePlateHtml(src) {
+  const p = HYPE_PLATES[src];
+  const cw = (p.x1 - p.x0) * p.w, ch = (p.y1 - p.y0) * p.h;   // the ink, in file pixels
+  const s = 0.94 / Math.max(cw, ch);                          // ink fills 94% of the box's long edge
+  const iw = p.w * s, ih = p.h * s;                           // the plate, as a fraction of the box
+  const tx = (1 - cw * s) / 2 - p.x0 * iw;                    // ink centred across the box
+  const ty = 1 - p.y1 * ih;                                   // ink SEATED on the box floor
+  const pc = n => (n * 100).toFixed(2) + '%';
+  return `<span class="hype-fig"><img src="${src}" alt=""
+    style="width:${pc(iw)};height:${pc(ih)};transform:translate(${pc(tx / iw)},${pc(ty / ih)})"></span>`;
+}
+function hypeBannerHtml() {
+  return `<div class="card hype">
+    <span class="hype-eye">New Creatures</span>
+    <button class="hype-half" id="hypeYard" type="button" aria-label="Two new creatures in the Boneyard">
+      <span class="hype-figs">
+        ${hypePlateHtml('assets/bh/mimic/mimic.png')}
+        ${hypePlateHtml('assets/bh/wanderer/wanderer.png')}
+      </span>
+      <b class="hype-cap">Two want to eat you.</b>
+    </button>
+    <button class="hype-half seal" id="hypeShop" type="button" aria-label="A new pet, in the shop">
+      <span class="hype-figs">${petAsideHtml(petFrom(null, 'C6'), 92)}</span>
+      <b class="hype-cap">One likes to shop</b>
+    </button>
+  </div>`;
+}
+
+/* RETIRED FROM TODAY (2026-08-21), NOT DELETED. The hype banner above replaced
+   the whole "Out there today" card, which is the banner stack Tom asked to be
+   gone. This builder and the four row builders it calls are left intact and
+   unreachable, the same way the garden was closed in cropsRipe: reviving the card
+   is putting the call back in renderToday, and restoring the held-spires read to
+   that function's Promise.all along with its import from js/spires.js (dropped
+   here because it was the only caller, and unit.test.js lints app.js for spires
+   names used without importing them, comments included).
+   tests/out-there-audit.mjs and tests/spire-explainer-audit.mjs are skipped in
+   the gate for the same reason, and say so there. */
 function outThereHtml({ held = [], cropsRipe = 0 } = {}) {
   const sieged = held.filter(s => s.siege).length;
   const owed = held.reduce((n, s) => n + (s.tribute ? s.tribute.coins : 0), 0);
@@ -4083,7 +5311,7 @@ async function openSpireInfoSheet(info, onAct = null) {
     : 'Never been taken';
   const inRange = s.dist != null && s.dist <= SPIRE_RADIUS_M;
   const facts = [
-    { ico: bhIcon('tombstone', 20), big: `LV ${lvl}`, lab: 'TOWER' },
+    { ico: badgePixHtml('tombstone', 20), big: `LV ${lvl}`, lab: 'TOWER' },
     heldSince ? { ico: ICONS.star(20), big: String(days), lab: days === 1 ? 'DAY HELD' : 'DAYS HELD' } : null,
     held && view.tribute && view.tribute.coins ? { ico: ICONS.coin(20), big: String(view.tribute.coins), lab: 'TRIBUTE' } : null,
   ].filter(Boolean);
@@ -4101,7 +5329,7 @@ async function openSpireInfoSheet(info, onAct = null) {
         <div class="spp${keeperFit ? (held ? ' mine' : rival ? ' rival' : '') : ' empty'}">
           <span class="spot"></span>
           <span class="tower"><img src="assets/brand/tomb.png" alt=""></span>
-          ${wt.tier ? `<span class="ribbon t${wt.tier}">${bhIcon('badge-crown', 15)}${esc(wt.name.toUpperCase())}</span>` : ''}
+          ${wt.tier ? `<span class="ribbon t${wt.tier}">${badgePixHtml('badge-crown', 16)}${esc(wt.name.toUpperCase())}</span>` : ''}
           <span class="lvchip">LV ${lvl} TOWER</span>
           <div class="keeper">
             <div class="bh">${keeperFit
@@ -4126,7 +5354,7 @@ async function openSpireInfoSheet(info, onAct = null) {
           ? 'Beat their warden and the tower flies your name instead. It keeps its level, and its level is how hard it has been fought over.'
           : 'Take it and it flies your name on the map for everyone who walks past.'}</p>
       <div class="den-walk">
-        <span class="ic">${bhIcon('badge-signpost', 20)}</span>
+        <span class="ic">${badgePixHtml('badge-signpost', 20)}</span>
         <div><div class="d">${s.dist != null ? esc(fmtDist(s.dist)) : 'Nearby'}</div><small>${inRange ? 'You are close enough' : `Get within ${SPIRE_RADIUS_M} m to act`}</small></div>
       </div>
     </div>
@@ -4171,7 +5399,7 @@ function buildDenPin(el, d) {
 function openDenSheet(den, { cleared = false, inRange = false, onFight = null } = {}) {
   const odds = denGearOdds(den.tier || 0);
   const r = den.reward || {};
-  const crateName = r.crate === 'golden' ? 'Golden' : r.crate === 'egg' ? 'Step Egg' : r.crate ? 'Common' : null;
+  const crateName = r.crate === 'golden' ? 'Bone' : r.crate === 'egg' ? 'Step Egg' : r.crate ? 'Common' : null;
   const pay = [
     crateName ? [crateIcon(r.crate, 24), crateName.toUpperCase(), 'CRATE'] : null,
     r.coins ? [ICONS.coin(22), String(r.coins), 'COINS'] : null,
@@ -4208,7 +5436,7 @@ function openDenSheet(den, { cleared = false, inRange = false, onFight = null } 
         ${odds.map(o => `<span class="${o.rarity}"><i>${o.pct}%</i>${o.rarity.toUpperCase()}</span>`).join('')}
       </div>
       <div class="den-walk">
-        <span class="ic">${bhIcon('badge-signpost', 20)}</span>
+        <span class="ic">${badgePixHtml('badge-signpost', 20)}</span>
         <div><div class="d">${den.dist != null ? esc(fmtDist(den.dist)) : 'Nearby'}</div><small>${inRange ? 'You are close enough to fight' : `Get within ${DEN_RADIUS_M} m to start`}</small></div>
       </div>
     </div>
@@ -4328,7 +5556,7 @@ function kitchenCardHtml(cook, ingCount, buffs, cropsRipe = 0) {
     ? `<b style="color:var(--accent)">${cook.readyCount} dishes are ready!</b>`
     : `<b style="color:var(--accent)">${recipeIconHtml(cook.recipe, 18)} ${esc(cook.recipe.name)} is ready!</b>`;
   return `<div class="card kitchen-card" id="kitchenCard">
-    <div class="card-title">KITCHEN <span class="link">Collect</span></div>
+    <div class="card-title"><span class="ct-name">KITCHEN</span> <span class="link">Collect</span></div>
     <div class="kc-line">${line}</div>
   </div>`;
 }
@@ -5295,7 +6523,7 @@ async function openKitchen() {
     };
     // one card per owned pot: idle / cooking (progress) / ready (serve)
     const potCard = s => {
-      if (s.empty) return `<div class="pot-card idle"><span class="pot-ico">🍲</span><small>Empty pot<br>pick a recipe below</small></div>`;
+      if (s.empty) return `<div class="pot-card idle"><span class="pot-ico">${pixCur('recipe', 26) || '🍲'}</span><small>Empty pot<br>pick a recipe below</small></div>`;
       const pct = s.ready ? 100 : Math.max(0, Math.min(100, Math.round((1 - s.remainingMs / Math.max(1, s.readyAt - s.startedAt)) * 100)));
       return `<div class="pot-card ${s.ready ? 'ready' : 'cooking'}">
         <span class="pot-ico">${recipeIconHtml(s.recipe, 26)}</span>
@@ -5317,7 +6545,7 @@ async function openKitchen() {
         ? `Pots full? Line up ${cook.queueLeft} more. Each starts on its own the moment the pot ahead of it is done, and the finished dish waits in your Pantry.`
         : 'Your line is full. The pot works through it while you are away.'}</p>` : ''}
       ${buffs.length ? `<div class="sect-h">Active dishes</div>
-        ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
+        ${buffs.map(b => `<div class="crate-row"><span class="crate-ico">${RECIPE_BY_ID[b.recipe] ? recipeIconHtml(RECIPE_BY_ID[b.recipe], 26) : b.icon}</span><div style="flex:1"><b>${esc(b.name)}</b><small>${esc(foodBuffLabel(b))}</small></div></div>`).join('')}` : ''}
       <div class="sect-h">Pantry${pantry.length ? ` · ${pantry.length} stocked` : ''}</div>
       ${pantry.length
         ? pantry.map((p, i) => { const r = RECIPE_BY_ID[p.recipeId]; return `<div class="crate-row"><span class="crate-ico">${r ? recipeIconHtml(r, 26) : (p.icon || '🍲')}</span>
@@ -5325,7 +6553,7 @@ async function openKitchen() {
             <button class="btn small" data-eat="${i}">Eat</button><button class="btn small ghost" data-toss="${i}" title="Discard" style="margin-left:6px">${ICONS.close(13)}</button></div>`; }).join('')
         : '<p class="note" style="margin:2px 2px 6px">Empty. Cook a dish and it waits here until you choose to eat it, so you can save buffs for the fight or day you want them.</p>'}
       ${potionCount(potInv) ? `<div class="sect-h">Potion satchel · drink these mid-fight</div>
-        <div class="ingredient-grid">${POTIONS.filter(p => potInv[p.id] > 0).map(p => `<div class="ing-cell"><span class="ing-ico">${p.icon}</span><span class="ing-n">${potInv[p.id]}</span><span class="ing-name">${esc(p.name)}</span></div>`).join('')}</div>` : ''}
+        <div class="ingredient-grid">${POTIONS.filter(p => potInv[p.id] > 0).map(p => `<div class="ing-cell"><span class="ing-ico">${recipeIconHtml(p, 26)}</span><span class="ing-n">${potInv[p.id]}</span><span class="ing-name">${esc(p.name)}</span></div>`).join('')}</div>` : ''}
       <div class="sect-h">Transmute · once a day</div>
       <div class="crate-row transmute ${tmute.ready && tmute.canAfford ? '' : 'lack'}">
         <span class="crate-ico">${ingIconHtml(TRANSMUTE.yields, 26)}</span>
@@ -6437,6 +7665,69 @@ function scalePer100(per100, grams) {
 // the buried Build sheet), the coin + Bone Dust shops (moved out of Backpack), a
 // route to Forage, and a placeholder for future real-money packs. Renders into
 // #screen like the other main tabs; re-renders itself after each purchase.
+
+/* GWART'S MENAGERIE, the pet shelf that sits above the rack.
+ *
+ * THE TILE IS A PRODUCT SHOT, not a picture of the pet. Framing an accessory's
+ * bounding box centres the purse's STRAP, because the strap stretches the box
+ * upward while the bag holds the ink: Tom, 2026-08-21, "your purse is focused on
+ * the strap right now in the preview not the bag." So each tile crops to the
+ * item's own measured shot box (PET_SHOP), padded, and draws the pet underneath
+ * it for context. Same transform on both layers, which is what keeps them
+ * registered: Cam draws every accessory positioned for HER body in the shared
+ * 2048 canvas.
+ */
+const PET_SHOT_PAD = 1.30;
+function petShotHtml(itemId, px) {
+  const it = PET_SHOP.items.find(i => i.id === itemId);
+  const art = BH_BY_ID[itemId];
+  if (!it || !art) return '';
+  let [x0, y0, x1, y1] = it.shot;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, half = ((x1 - x0) / 2) * PET_SHOT_PAD;
+  const img = px / (half * 2), tx = -(cx - half) * img, ty = -(cy - half) * img;
+  const layer = src => `<img src="${src}" style="position:absolute;left:0;top:0;width:${img.toFixed(1)}px;height:${img.toFixed(1)}px;max-width:none;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)" alt="">`;
+  return `<span class="petcrop" style="width:${px}px;height:${px}px">`
+    + layer(bhAsset(BH_BY_ID[PET_SHOP.pet.id])) + layer(bhAsset(art)) + `</span>`;
+}
+function petShelfHtml(ownedCos, coinBal) {
+  const pet = BH_BY_ID[PET_SHOP.pet.id];
+  if (!pet) return '';
+  const hasPet = ownedCos.has(PET_SHOP.pet.id);
+  const hero = hasPet ? '' : `
+  <div class="pet-hero">
+    <span class="pet-new">NEW ARRIVAL</span>
+    <div class="pet-hero-art">${petSpriteHtml(PET_SHOP.pet.id, 176, true)}</div>
+    <div class="pet-hero-copy">
+      <div class="pet-kind">${esc((pet.rarity || '').toUpperCase())} PET</div>
+      <div class="pet-name">${esc(pet.name)}</div>
+      <p>${esc(PET_SHOP.pet.blurb)}</p>
+      <button class="t3-price pet-buy" data-petbuy="${PET_SHOP.pet.id}" data-amt="${PET_SHOP.pet.coin}"
+        ${coinBal < PET_SHOP.pet.coin ? 'data-short="1"' : ''}>${PET_SHOP.pet.coin.toLocaleString()}</button>
+    </div>
+  </div>`;
+  /* The accessories stay visible before she is owned, but they cannot be bought:
+     each one is drawn for HER body and would hang in empty air on anything else.
+     Showing them locked is the honest version of that, and it is also the reason
+     to want her. */
+  const tile = it => {
+    const a = BH_BY_ID[it.id]; if (!a) return '';
+    const owned = ownedCos.has(it.id);
+    const locked = !hasPet;
+    return `<div class="rk r-${a.rarity}${owned ? ' owned' : ''}${locked ? ' pet-locked' : ''}">
+      <div class="rk-stage">${petShotHtml(it.id, 112)}</div>
+      <div class="rk-rar">${esc((a.rarity || '').toUpperCase())}</div>
+      <div class="rk-name">${esc(a.name)}</div>
+      ${owned ? `<div class="rk-owned">In your Wardrobe</div>`
+        : locked ? `<div class="pet-lock">Needs ${esc(pet.name)}</div>`
+        : `<button class="t3-price pet-buy" data-petbuy="${it.id}" data-amt="${it.coin}"
+             ${coinBal < it.coin ? 'data-short="1"' : ''}>${it.coin.toLocaleString()}</button>`}
+    </div>`;
+  };
+  return `<div class="pet-shelf">${hero}
+    <div class="rk-theme"><b>DECK HER OUT</b><i></i><span>${PET_SHOP.items.length} pieces</span></div>
+    <div class="pet-row">${PET_SHOP.items.map(tile).join('')}</div>
+  </div>`;
+}
 async function renderShop(el) {
   const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn] =
     await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura()]);
@@ -6680,7 +7971,7 @@ async function renderShop(el) {
      "Reroll the rack / FREE" with nothing beside it says unlimited, and an
      unlimited reroll destroys the rack: you spam it until your piece appears and
      the countdown beside the theme becomes noise. Two words carry the limit,
-     "N left today", and the small line under the label says what a reroll draws
+     "N left this week", and the small line under the label says what a reroll draws
      from, which is the thing a curated theme and a random reroll otherwise fight
      about: another nine FROM THE SAME THEME, never a random pull out of the
      whole game. */
@@ -6693,6 +7984,7 @@ async function renderShop(el) {
   const afford = { coins: allRackCoins.filter(c => c <= coinBal).length, dust: allRackDust.filter(d => d <= dustBal).length };
 
   el.innerHTML = `
+  ${petShelfHtml(ownedCos, coinBal)}
   <div class="rk-theme"><b>${esc(RACK_THEME)} · RACK ${rackNo} OF 4</b><i></i><span>New rack in ${rackDaysLeft}d</span></div>
   <!-- WHAT THIS WALLET REACHES, said in numbers rather than left to be inferred
        from which pills happen to be filled. A player at 340 coins could not buy
@@ -6711,7 +8003,7 @@ async function renderShop(el) {
     ${rackIds.slice(RACK_AURA_CELL).map((id, i) => rackTile(id, i + RACK_AURA_CELL)).join('')}
   </div>
   <button class="rk-reroll" id="rackReroll"><span class="rk-rr"><b>Reroll the rack</b><small>Another nine from ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())}</small></span>
-    <span class="rk-left">${rerollsLeft > 0 ? `${rerollsLeft} left today` : 'none left today'}</span>
+    <span class="rk-left">${rerollsLeft > 0 ? `${rerollsLeft} left this week` : 'none left this week'}</span>
     ${rerollCost == null ? '' : rerollCost ? `<span class="t3-price">${ICONS.coin(13)} ${rerollCost}</span>` : '<span class="t3-price free">FREE</span>'}</button>
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Crates, potions and weapons</b><small>Supplies ›</small></button>
   <div id="shopRestBody" hidden>
@@ -6858,9 +8150,14 @@ async function renderShop(el) {
       const r = await buyRackItem(b.dataset.buyrack, currency);
       if (!r.ok) {
         toast(r.reason === 'owned' ? 'Already in your Wardrobe.'
+          : r.reason === 'write' ? `${r.label} did not save. Your coins are safe, tap again.`
           : r.reason === 'dust' ? `Need ${amt} Bone Dust (you have ${(r.have ?? dustBal).toLocaleString()}). Melt gear at the Salvage Bench.`
           : r.reason === 'coins' ? `Not enough coins. That costs ${amt.toLocaleString()}, you have ${(r.have ?? coinBal).toLocaleString()}.`
           : 'That piece is not on the rack any more.', 2800);
+        /* A RECOVERED PURCHASE JUST CHANGED THE TILE UNDER THE PLAYER'S FINGER.
+           The early return skips the rerender every other path gets, so without
+           this the piece is theirs and the rack still shows a price. */
+        if (r.recovered) rerender();
         return;
       }
       /* S.wpnAura is read once at boot, so buying the aura has to refresh it or
@@ -6880,6 +8177,30 @@ async function renderShop(el) {
     }));
   }
   wireRackBuys(el);
+  /* THE PET BUYS. armToConfirm on every one, the app-wide rule that one tap can
+     never spend. buyPetItem does the atomic claim before the money moves and
+     recovers a receipt whose grant never landed, the same shape as the rack, so
+     nothing here needs to know about that. */
+  el.querySelectorAll('[data-petbuy]').forEach(b => armToConfirm(b, 'Buy?', async () => {
+    const id = b.dataset.petbuy, amt = +b.dataset.amt;
+    const r = await buyPetItem(id);
+    if (!r.ok) {
+      toast(r.reason === 'owned' ? 'Already in your Wardrobe.'
+        : r.reason === 'needs-pet' ? `${esc(BH_BY_ID[PET_SHOP.pet.id].name)} first. Everything she wears is drawn for her.`
+        : r.reason === 'write' ? `${esc(r.label || '')} did not save. Your coins are safe, tap again.`
+        : r.reason === 'coins' ? `Not enough coins. That costs ${amt.toLocaleString()}, you have ${(r.have ?? coinBal).toLocaleString()}.`
+        : 'That is not for sale right now.', 2800);
+      if (r.recovered) rerender();
+      return;
+    }
+    levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
+    trackEvent('buy_pet', { id, cost: r.cost });
+    toast(r.isPet
+      ? `${esc(r.label)} is yours, and she is out with you now. −${r.cost.toLocaleString()} coins.`
+      : `${esc(r.label)} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left.`, 3400);
+    if (r.isPet) S.shinyPets = new Set(await shinyPetIds());
+    rerender();
+  }));
   /* WEAR / TAKE OFF, and deliberately NOT behind armToConfirm. The two-tap arm
      exists so a stray tap cannot SPEND; this spends nothing and is free to undo,
      so a confirm step here would be friction pretending to be safety. */
@@ -6896,7 +8217,7 @@ async function renderShop(el) {
     const doReroll = async () => {
       const r = await rerollRack();
       if (!r.ok) {
-        toast(r.reason === 'limit' ? 'No rerolls left today. A fresh rack lands Monday.'
+        toast(r.reason === 'limit' ? 'No rerolls left this week. A fresh rack lands Monday.'
           : r.reason === 'coins' ? `Not enough coins. That reroll costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`
           : 'Try that again.', 2800);
         return;
@@ -8020,7 +9341,7 @@ function nameWithAlias(f) {
 function crewCardArtHtml(f) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
-  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true })}</div>` : '';
+  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: p.pet.wear || null })}</div>` : '';
   return (eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhThumb(bhAsset(BH_BY_ID[eq.BG]))}" alt="">` : '')
     + avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 384 }) + pet;
 }
@@ -8219,7 +9540,7 @@ async function renderFriends(el) {
     const shown = fresh.length ? fresh : rows.slice(0, 3);
     const rowHtml = r => `
       <div class="t3-row${isNew(r) ? ' unread' : ''}">
-        <span class="t3-med">${r.type === 'spire' ? bhIcon('tombstone', 20) : r.type === 'cheer' ? ICONS.bone(20) : ICONS.coin(20)}</span>
+        <span class="t3-med">${r.type === 'spire' ? badgePixHtml('tombstone', 20) : r.type === 'cheer' ? ICONS.bone(20) : ICONS.coin(20)}</span>
         <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(onlineLabel(r.ts).text || 'just now')}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
         ${isNew(r) ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
       </div>`;
@@ -8230,7 +9551,11 @@ async function renderFriends(el) {
        name on it. */
     const sealedHtml = sealed.slice().reverse().map(g => `
       <button class="gift-sealed" data-gift="${esc(g.key)}">
-        <span class="wrap">${bhIcon('crate-golden', 30)}</span>
+        ${/* crateIcon, not bhIcon: 30 was the one golden chest in the app still
+             drawn as a vector at a size the art covers (crateIcon serves its 24
+             step from 24 up). .gift-sealed .wrap is a centring grid, so the 6px
+             it loses costs the row nothing. */''}
+        <span class="wrap">${crateIcon('golden', 30)}</span>
         <span class="tx"><b>${esc(giftSender(g))}</b><small>sent you a gift</small></span>
         <span class="open">OPEN</span>
       </button>`).join('');
@@ -8773,7 +10098,7 @@ async function renderFriends(el) {
         return `<div class="lb-row${top3} ${p.you ? 'me' : ''}" ${p.you ? '' : `data-lbview="${esc(p.playerId)}"`}>
           <span class="lb-num r${rank}">${rank}</span>
           <span class="lb-head" data-lbhead="${i}" style="width:52px;height:52px"></span>
-          <div class="lb-who"><b>${esc(p.name)}${medal}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${bhIcon('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</small></div>
+          <div class="lb-who"><b>${esc(p.name)}${medal}</b><small>Level ${p.level}${p.levelName ? ' · ' + esc(p.levelName) : ''}${p.badges ? ` · ${p.badges} badges` : ''}${p.spires ? ` · <span class="lb-spires">${badgePixHtml('tombstone', 11)} ${p.spires} spire${p.spires === 1 ? '' : 's'}</span>` : ''}${ol.text ? ` · <span class="lb-seen ${ol.on ? 'on' : ''}">${ol.on ? '<i class="live-dot"></i> online' : ol.text}</span>` : ''}</small></div>
           ${btn}
         </div>`;
       }).join('')}`;
@@ -8891,13 +10216,18 @@ async function renderFriends(el) {
     const race = await social.fetchStepRace(wk);
     const card = $('#raceCard', el);
     if (!card || !card.isConnected) return;
+    /* THE STEP-RACE TILE ASKS 24 ON PURPOSE, in both banners below. The footprint
+       medallion has a decorative circular frame and pixCur snaps 21 down to 16,
+       where the frame mushes and a 16px mark sits corner-jammed in the 38px tile.
+       Measured in the render at 440x956: 21 -> 16px of art at inset 1,5 of the
+       tile; 24 -> 24px centred. Do not put it back to 21. */
     /* NEVER DEFAULT TO HIDDEN (anti-regression rule 8). The banner used to bail
        whenever the fetch came back empty, which is exactly the state the race
        launches in: on day one nobody has synced a step, so the announcement said
        "SEE THE BOARD" and the board did not exist. Degrade to ugly, not gone. */
     if (!race) {
       card.innerHTML = `<summary>
-        <span class="gbn-ico race-ico">${bhIcon('badge-footprint', 21)}</span>
+        <span class="gbn-ico race-ico">${badgePixHtml('badge-footprint', 24)}</span>
         <span class="gbn-txt"><span class="race-h"><b>THE STEP RACE</b></span><small>Could not reach the Crew server. Your steps are still counting.</small></span>
         <span class="gbn-chev">›</span></summary>`;
       card.hidden = false;
@@ -8939,7 +10269,7 @@ async function renderFriends(el) {
     card.innerHTML = `
       <summary>
         <span class="race-art">${avatarLayersHtml(myFit, { noYard: true, skip: ['BG', 'C'] })}</span>
-        <span class="gbn-ico race-ico">${bhIcon('badge-footprint', 21)}</span>
+        <span class="gbn-ico race-ico">${badgePixHtml('badge-footprint', 24)}</span>
         <span class="gbn-txt">
           <span class="race-h"><b>THE STEP RACE</b><span class="race-clock">${clock.toUpperCase()}</span></span>
           <small>${standing}</small>
@@ -8947,7 +10277,7 @@ async function renderFriends(el) {
         <span class="gbn-chev">›</span>
       </summary>
       <div class="gbn-body">
-        ${race.champion ? `<div class="race-champ">${bhIcon('badge-trophy', 22)}
+        ${race.champion ? `<div class="race-champ">${badgePixHtml('badge-trophy', 22)}
           <span>Last race <b>${esc(race.champion.name)}</b> took it with ${race.champion.steps.toLocaleString()} steps.</span></div>` : ''}
         ${rows.length ? `<div class="race-lanes">
           ${rows.map(p => {
@@ -8970,7 +10300,7 @@ async function renderFriends(el) {
             ${podium.map((z, i) => `<div class="row p${i + 1}">
               <span class="pl">${esc(z.place)}</span>
               <span class="t3-price">${ICONS.coin(13)} ${z.coins.toLocaleString()}</span>
-              ${z.crate ? `<span class="t3-price crate">${crateIcon(z.crate, 15)} ${z.crate === 'golden' ? 'Golden' : 'Crate'}</span>` : ''}
+              ${z.crate ? `<span class="t3-price crate">${crateIcon(z.crate, 15)} ${z.crate === 'golden' ? 'Bone' : 'Crate'}</span>` : ''}
               ${z.dust ? `<span class="t3-price dust">${ICONS.dust(12)} ${z.dust}</span>` : ''}
             </div>`).join('')}
           </div>
@@ -9084,7 +10414,7 @@ function openFriendProfile(f, onChange, opts = {}) {
       <div class="fp-hero${eq.BG && BH_BY_ID[eq.BG] ? ' framed' : ''}">
         ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
         <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</div>
-        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
+        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny, wear: p.pet.wear || null })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
       <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal" hidden></div></div>
@@ -9162,7 +10492,7 @@ function openFriendProfile(f, onChange, opts = {}) {
 
 function giftRewardLabel(reward) {
   if (!reward) return 'a gift';
-  if (reward.crate === 'egg') return 'a Mystery Egg';
+  if (reward.crate === 'egg') return `a ${MYSTERY_EGG.name}`;
   if (reward.crate) return CRATES[reward.crate] ? CRATES[reward.crate].label : 'a crate';
   if (reward.consumable) return CONSUMABLES[reward.consumable] ? CONSUMABLES[reward.consumable].label : 'an item';
   if (reward.coins) return `${reward.coins} coins`;
@@ -9392,7 +10722,7 @@ function showDayOneReveal(granted) {
 // Skips webdriver/demo.
 async function maybeShowSurvey() {
   try {
-    if (navigator.webdriver || !S.settings) return;
+    if (CALM_BOOT() || !S.settings) return;
     if (await kvGet('surveyDone', false)) return;
     // Established-player check: an account created 3+ days ago (or with a missing
     // createdAt = pre-dates the field = old account) OR already past level 2 is
@@ -9446,7 +10776,7 @@ const NEWS = [
        box (a decoded <img> or an <svg>), and an emoji in a span is neither: it
        is the exact thing ext/news-discord-art removed from the row below, so
        shipping it here would have put it straight back. */
-    thumb: () => bhIcon('badge-crown', 34),
+    thumb: () => badgePixHtml('badge-crown', 34),
     open: () => openThanksCard() },
   { id: 'discord', date: 'Aug 12', title: 'The clubhouse is open',
     blurb: 'Bone Boiz: the Discord where players and the developer decide what gets built next.',
@@ -9857,7 +11187,8 @@ async function renderSettings(el) {
   <p class="note" style="text-align:center;margin-top:18px">
     Boneheadz Gym · build ${APP_BUILD} · your data is yours: cloud backups are end-to-end encrypted, readable only on your device<br>
     Food lookups: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> · <a href="https://fdc.nal.usda.gov" target="_blank" rel="noopener">USDA FoodData Central</a><br>
-    Icons: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC-BY 3.0), including the Paddock heart by Skoll
+    Icons: <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (CC-BY 3.0), including the Paddock heart by Skoll<br>
+    Dialogue type: <a href="https://yukipixels.itch.io/boldpixels" target="_blank" rel="noopener">BoldPixels by YukiPixels</a>, used unmodified under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>
   </p>`;
 
   $('#saveTargets').addEventListener('click', async () => {
@@ -10282,7 +11613,10 @@ function renderOnboarding(step = 0, ctx = {}) {
       </div>
       <div class="onb-earns">
         <div class="onb-earn"><span class="ic">${ICONS.star(18)}</span><b>LOG FOOD</b><small>XP and coins, every meal</small></div>
-        <div class="onb-earn"><span class="ic">${bhIcon('egg', 18)}</span><b>WALK</b><small>Hatch pets, find loot</small></div>
+        ${/* pixCur first, like its two siblings: ICONS.star and ICONS.pit both ask
+             18 and both serve the 16 step, so a vector egg here left one of three
+             icons in a three-icon row drawn in a different medium. */''}
+        <div class="onb-earn"><span class="ic">${pixCur('egg', 18) || bhIcon('egg', 18)}</span><b>WALK</b><small>Hatch pets, find loot</small></div>
         <div class="onb-earn"><span class="ic">${ICONS.pit(18)}</span><b>FIGHT</b><small>Spend it all in the Pit</small></div>
       </div>
       <div class="onb-foot">
@@ -10445,7 +11779,7 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
       <div class="grainy"></div>
       <div class="reveal-eyebrow">${streakMilestone ? 'Streak milestone' : 'Badge earned'}</div>
       <div class="reveal-body">
-        <div style="font-size:44px;line-height:1">${streakMilestone ? sparkIco(40) : ICONS.star(44)}</div>
+        <div style="font-size:44px;line-height:1">${streakMilestone ? sparkIco(48) : ICONS.star(48)}</div>
         ${bits.length ? `<div style="height:10px"></div>${bits.join('<div style="height:14px"></div>')}` : ''}
       </div>
       ${note ? `<p class="cele-note">${esc(note)}</p>` : ''}
@@ -10527,7 +11861,7 @@ async function openLevelUpMoment({ levelUp, levelRewards, fromLevel, ms, extras 
         </div>
         ${levelRewards ? `<div class="lu-rewards">
           <span class="bh-pill">${ICONS.coin(16)} +${levelRewards.coins}</span>
-          <span class="bh-pill">${crateChip('golden')} ${levelRewards.crates > 1 ? levelRewards.crates + ' Golden Crates' : 'Golden Crate'}</span>
+          <span class="bh-pill">${crateChip('golden')} ${levelRewards.crates > 1 ? levelRewards.crates + ' Bone Crates' : 'Bone Crate'}</span>
           ${levelRewards.dust ? `<span class="bh-pill">${ICONS.dust(16)} +${levelRewards.dust}</span>` : ''}
           ${levelRewards.eggs ? `<span class="bh-pill">${crateIcon('egg', 15)} ${levelRewards.eggs > 1 ? levelRewards.eggs + ' Step Eggs' : 'Step Egg'}</span>` : ''}
         </div>` : ''}
@@ -10737,6 +12071,42 @@ function openHatchReveal(res, charWrap) {
   if (charWrap) setTimeout(() => renderCharacter(charWrap, 'crates'), 400);
 }
 
+/* GWART'S EMPORIUM: the Shop tab's header. Geometry, the crop and every reason
+   for it are in app.css under "GWART'S EMPORIUM"; this is only the markup.
+
+   The layer stack is Cam's, copied from tally-refs/wizard/animation/demo.html
+   and not rearranged: the NPC breathes inside .wz-body, the sparkle arc is three
+   clipped copies of the stars layer inside .wz-sway inside the one-shot .wz-enter,
+   and the two palm glows sit on top. His integration note is that the container
+   must be square and position:relative, which .wz-scene is, and that the entrance
+   replays by re-adding .wz-enter — which costs nothing here, because this markup
+   is built fresh every time the tab is opened, so walking into the shop always
+   spawns him. Nothing re-renders it mid-visit: a purchase re-renders #chContent
+   (renderShop's own `rerender`), not this.
+
+   The wordmark is the <h1>. The hub's name heading is hidden for this tab, so
+   the page still has exactly one, and it is the shop's name rather than the
+   player's. */
+const gwartHeroHtml = () => `
+  <div class="gw-hero">
+    <div class="gw-panel">
+      <div class="gw-art"><div class="wz-scene">
+        <div class="wz-body"><img src="assets/gwart/gwart.png" alt=""></div>
+        <div class="wz-enter"><div class="wz-sway">
+          <img class="wz-stars-l" src="assets/gwart/gwart-stars.png" alt="">
+          <img class="wz-stars-m" src="assets/gwart/gwart-stars.png" alt="">
+          <img class="wz-stars-r" src="assets/gwart/gwart-stars.png" alt="">
+        </div></div>
+        <div class="wz-glow left"></div><div class="wz-glow right"></div>
+      </div></div>
+      <div class="gw-floor"></div>
+      <h1 class="gw-wm">Gwart&rsquo;s Emporium</h1>
+      <button id="gwGear" class="gear-btn gw-gear" aria-label="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke-width="2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </div>`;
+
 async function renderCharacter(wrap, tab, opts = {}) {
   const body = $('#chBody', wrap);
   if (!body) return;
@@ -10782,7 +12152,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             layout; it is a <button> with an accent edge so it reads as tappable
             rather than as one more read-only tally. */''}
       <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${looksAll.filter(i => looksHave.has(i.id)).length}/${looksAll.length} looks</button>
-    </div>` : `
+    </div>` : tab === 'shop' ? gwartHeroHtml() : `
     <div class="bh-hero mini">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny })}</div>
       <div class="bh-hero-meta">
@@ -10815,7 +12185,70 @@ async function renderCharacter(wrap, tab, opts = {}) {
     ${/* the LOOKS card lived here; it is in the Wardrobe now, see the note above */''}
     <div id="chContent"></div>`;
 
-  $$('#chTabs .chip, .ward-looks', body).forEach(c => c.addEventListener('click', () => renderCharacter(wrap, c.dataset.tab)));
+  /* GWART TAKES THE WHOLE HEADER, AND ONLY ON THE SHOP TAB. The panel above
+     replaced the portrait card; these two lines take the remaining two pieces of
+     hub chrome off the same tab. Wardrobe, Backpack and Build never see either
+     line do anything except put things back.
+       - the hub's heading is the player's own NAME, which is the one thing a
+         shopfront must not be titled. It lives OUTSIDE #chBody (renderBonehead
+         writes it, and a chip click re-renders only #chBody), so it cannot be
+         handled by the template above and has to be toggled here.
+       - the floating Settings gear sits at top-right over the panel, which is
+         where Gwart's hat is. The panel carries its own, so the floating one
+         stands down.
+     BOTH ARE UN-HIDDEN BY THIS SAME CODE on any other tab (anti-regression rule
+     8: whatever hides something owns un-hiding it), and route() re-decides the
+     gear on every navigation, so leaving the hub cannot strand it either. */
+  const hubHeading = $('.hub-title', wrap);
+  if (hubHeading) hubHeading.hidden = tab === 'shop';
+  const floatingGear = $('#gearBtn');
+  if (floatingGear) floatingGear.hidden = tab === 'shop';
+  $('#gwGear', body)?.addEventListener('click', () => { location.hash = '#/settings'; });
+
+  /* THE GLOW LETS GO OF ITS ENTRANCE. Cam's palm glows carry a filled one-shot
+     plus an infinite loop on the same two properties, which pins the whole
+     screen to the main thread for as long as the Emporium is open. The reasoning,
+     the four spellings that do not work and the arithmetic that keeps the look
+     identical are all in app.css under `.wz-glow.idle`; the short version is that
+     only a NEW element gets a newly composited animation, so the glow is swapped
+     for a bare clone of itself at 2.4s, which is the instant zGlowIdle takes over
+     regardless. They are empty decorative divs with no id and no listener, so the
+     clone is the whole element. A late timer moves the handover by a frame.
+
+     THE NODES ARE CAPTURED NOW, NOT LOOKED UP AT 2.4s, so a stale timer can only
+     ever reach the glows it was armed for: after a re-render those are detached,
+     and replaceWith on a detached node is a no-op. Measured on this tree, and
+     the measurement is the reason this is a formulation rather than a fix: with
+     the lookup done at fire time it is ALREADY safe, because renderBonehead
+     writes a fresh `<div id="chBody">` on every hub navigation, so the stale
+     timer's `body` is detached too. Driving Shop -> Wardrobe -> Shop with all
+     three taps inside 2.4s produced exactly one swap per glow, at the second
+     arrival's own 2.4s and not at the first's, and the second arrival held .550
+     through 2.3s exactly like a clean one. Capturing here just stops that
+     depending on what a different function does with #chBody.
+
+     Under reduced motion app.css replaces both animations with a one-shot fade,
+     so there is no loop to composite and no swap to make. */
+  if (tab === 'shop' && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const glows = $$('.gw-panel .wz-glow', body);
+    setTimeout(() => glows.forEach(g => {
+      const fresh = g.cloneNode();
+      fresh.classList.add('idle');
+      g.replaceWith(fresh);
+    }), 2400);
+  }
+
+  /* THE HUB CHIPS GO THROUGH THE ROUTER, so they arrive whole like every other
+     screen. They used to call renderCharacter directly, which is the ONE tab-like
+     control in the app that reaches neither route() nor openSheet() and therefore
+     had no reveal gate at all: measured at 440x956 CPU x6, Wardrobe -> Shop threw
+     the old panel away at 34ms and then assembled the new one in front of the
+     player in four visible stages (header alone over a void at 77ms, chip row at
+     116ms, cards with empty art tiles at 151ms, art filling in until 395ms).
+     openCharacter() already routes when you are on the hub already, so this is the
+     covered path, not a new one: no second reveal, no per-screen animation, just
+     the chips using the machinery that tally/CLAUDE.md says owns this. */
+  $$('#chTabs .chip, .ward-looks', body).forEach(c => c.addEventListener('click', () => openCharacter(c.dataset.tab)));
   const content = $('#chContent', body);
   if (curtains) requestAnimationFrame(() => requestAnimationFrame(() => $$('.curt', body).forEach(x => x.classList.add('open'))));
 
@@ -10825,6 +12258,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(),
     ]);
     const fitPrices = await Promise.all(fitList.map(f => fitPrice(f)));
+    // What "Take it all off" would actually take off, computed by the same
+    // function that does it, so the chip cannot offer a strip that does nothing
+    // (or hide itself while there is still something on).
+    const stripPlan = await stripAllPlan();
     // `eq` is the RAW equipment (what the grids tick as equipped); `look` is what
     // you actually appear as once transmog resolves, so the doll and the stage
     // agree with the rest of the app.
@@ -10910,8 +12347,21 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </button>`;
         }).join('')}
         ${fitList.length < MAX_FITS ? '<button class="fit-chip add" data-fit-save="1">+ Save this fit</button>' : ''}
+        ${/* A player asked for one tap that clears the doll so a new outfit starts
+              from nothing, and Tom's call on 2026-08-22 is that it takes the
+              STATTED GEAR too. It UNEQUIPS and nothing else: every piece and every
+              roll stays owned and goes straight back on. See stripAll() in loot.js.
+              Only offered when there is something to take off, and the plan comes
+              from the same function that performs it so the two cannot drift. */''}
+        ${stripPlan.slots.length || stripPlan.mogs.length
+          ? `<button class="fit-chip reset" data-fit-reset="1" title="Unequip everything, gear included. Nothing is lost: it all stays in your Backpack.">Take it all off</button>`
+          : ''}
       </div>
-      ${fitList.length ? `<p class="note fit-note">Tap a fit to wear it. Fits change your look only, never your stats. Long-press a fit to rename or bin it.</p>` : ''}`;
+      ${fitList.length ? `<p class="note fit-note">Tap a fit to wear it. A fit brings its gear back to empty slots and never bumps gear you are already wearing. Long-press a fit to rename or bin it.</p>` : ''}
+      ${/* v425: fits record gear now. An older fit has no gear map, so after
+            Take it all off it can only bring back part of the look; one quiet
+            line tells the player the re-save fixes it. No migration, no modal. */''}
+      ${fitList.some(f => !f.gear) ? `<p class="note fit-note">Fits saved a while ago remember only the look. Put one on, gear up, and save it again to keep the gear with it.</p>` : ''}`;
 
     content.innerHTML = `
       ${fitRail}
@@ -11053,6 +12503,23 @@ async function renderCharacter(wrap, tab, opts = {}) {
         toast(`Saved "${res.fit.name}". Tap it any time to put it back on.`, 2600);
         renderCharacter(wrap, 'wardrobe', { instant: true });
       });
+    });
+    /* ARM-THEN-CONFIRM, the same idiom as the rack buys and the melt button. This
+       confirm is now the last thing between a player and an unbuilt Bonehead, so
+       it NAMES THE GEAR rather than saying "strip": the cosmetics coming off is
+       what they asked for, the stats coming off is the part they might not have
+       meant. The toast then says what moved and that none of it is lost. */
+    const stripChip = $('[data-fit-reset]', content);
+    if (stripChip) armToConfirm(stripChip, 'Tap again: gear comes off too', async () => {
+      const res = await stripAll();
+      S.lookPreview = null; S.wardrobePreview = null;
+      await refreshSlimedSlots();       // the slime glow follows the gear that just came off
+      popSound(S.sounds); pushProfileSoon();
+      const n = res.slots.length, g = res.gear.length;
+      toast(n
+        ? `${n} piece${n === 1 ? '' : 's'} off${g ? `, ${g} with stats on ${g === 1 ? 'it' : 'them'}` : ''}. Nothing is lost, it is all in your Backpack.`
+        : 'Cleared. Nothing is lost, it is all in your Backpack.', 3400);
+      renderCharacter(wrap, 'wardrobe', { instant: true });
     });
     /* Trim the transparent padding off every paper-doll slot, the same way the
        reveal cards do. Raw assets are only ~30-60% ink on their own canvas, so an
@@ -11300,7 +12767,13 @@ async function renderCharacter(wrap, tab, opts = {}) {
       </div>
       ${boost ? `<p class="note" style="margin:6px 2px">${consumableIcon('xp2', 14)} Charm active: ${boost} Pit win${boost === 1 ? '' : 's'} left at +25% coins</p>` : ''}
       <div class="t3-sect"><b>Kitchen · food &amp; buffs</b><i></i></div>
-      ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${b.icon || '🍲'}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
+      ${/* SAME EXPRESSION AS THE KITCHEN'S OWN "Active dishes" ROW (openKitchen,
+           above): the hub was rendering the recipe's EMOJI in a .crate-ico slot,
+           which app.css sets to font-size 24 -- so a 24px emoji sat where the
+           Kitchen, on the same buff objects, draws the 24px pixel dish. All seven
+           dishes have art. The emoji stays as the last resort for a buff whose
+           recipe id no longer resolves. */''}
+      ${(foodActive || []).length ? (foodActive.map(b => `<div class="crate-row"><span class="crate-ico">${RECIPE_BY_ID[b.recipe] ? recipeIconHtml(RECIPE_BY_ID[b.recipe], 26) : (b.icon || '🍲')}</span><div style="flex:1"><b>${esc(b.name || 'Dish')} active</b><small>${b.kind === 'combat' ? `${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left` : `${Math.max(0, Math.ceil((b.untilMs - Date.now()) / 3600e3))}h left`}</small></div></div>`).join('')) : '<p class="note" style="margin:2px 2px 6px">No dish active. Cook one in the Kitchen for a Pit or coin buff.</p>'}
       ${(() => { const busy = cook.slots.filter(s => !s.empty); if (!busy.length) return ''; const rc = cook.readyCount, cc = busy.length - rc; const label = rc && cc ? `${rc} ready · ${cc} cooking` : rc ? `${rc} dish${rc === 1 ? '' : 'es'} ready!` : `${cc} cooking...`; return `<div class="crate-row"><span class="crate-ico">${rc ? '✅' : '🍳'}</span><div style="flex:1"><b>${label}</b><small>${busy.map(s => esc(s.recipe.name)).join(', ')}</small></div></div>`; })()}
       ${(() => { const owned = INGREDIENT_IDS.filter(id => (ingInv[id] || 0) > 0); return owned.length ? `<div class="ingredient-grid" style="margin-top:6px">${owned.map(id => `<div class="ing-cell"><span class="ing-ico">${ingIconHtml(id,26)}</span><span class="ing-n">${ingInv[id]}</span><span class="ing-name">${esc(INGREDIENTS[id].name)}</span></div>`).join('')}</div>` : '<p class="note" style="margin:2px 2px">No ingredients yet. Collect them on the Boneyard map.</p>'; })()}
       <button class="btn ghost small" id="bpKitchen" style="margin-top:8px">Open the Kitchen to cook</button>
@@ -11709,21 +13182,40 @@ const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
    BELOW it was visibly blocky in the side-by-side and every item above it was
    indistinguishable between the two paths. */
 const SMALL_INK = 64;
+/* THE ALPHA BOX OF A FILE NEVER CHANGES, SO IT IS SCANNED ONCE.
+   Measured 2026-08-21 on this tree, at 440x956 / CPU x6, driving the real tab
+   bar: one navigation to the Bonehead hub calls this 15 times and scans
+   2,789,376 source pixels in JS (6 masters at 640² plus 9 thumbnails at 192²),
+   every time, for the SAME fifteen files. That was the app's single biggest
+   navigation cost: 101ms of script, 196ms from tap to reveal and 20 dropped
+   frames on the hub, against 19ms / 52ms / 5 for the cheapest tab.
+   Keyed on the src, which is what the scan reads, so a cached hit produces
+   byte-identical geometry; the first visit pays exactly what it paid before.
+   The offscreen canvas and its full-size drawImage go with it, since they exist
+   only to feed the scan.
+   ponytail: unbounded Map, but the keys are asset paths from a closed set of a
+   few hundred art files at four ints each; evict if that ever stops being true. */
+const TRIM_BOX = new Map();
 function drawTrimmedArt(canvas, src, pad = 0.08, _fromMaster = false) {
   return new Promise(res => {
     const img = new Image();
     img.onload = () => {
       const iw = img.naturalWidth, ih = img.naturalHeight;
-      const off = document.createElement('canvas'); off.width = iw; off.height = ih;
-      const octx = off.getContext('2d'); octx.drawImage(img, 0, 0);
-      let x0 = iw, y0 = ih, x1 = 0, y1 = 0, found = false;
-      try {
-        const d = octx.getImageData(0, 0, iw, ih).data;
-        for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) {
-          if (d[(y * iw + x) * 4 + 3] > 14) { found = true; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-        }
-      } catch { /* tainted; use full image */ }
-      if (!found) { x0 = 0; y0 = 0; x1 = iw - 1; y1 = ih - 1; }
+      let box = TRIM_BOX.get(src);
+      if (!box) {
+        const off = document.createElement('canvas'); off.width = iw; off.height = ih;
+        const octx = off.getContext('2d'); octx.drawImage(img, 0, 0);
+        let x0 = iw, y0 = ih, x1 = 0, y1 = 0, found = false;
+        try {
+          const d = octx.getImageData(0, 0, iw, ih).data;
+          for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) {
+            if (d[(y * iw + x) * 4 + 3] > 14) { found = true; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+          }
+        } catch { /* tainted; use full image */ }
+        if (!found) { x0 = 0; y0 = 0; x1 = iw - 1; y1 = ih - 1; }
+        TRIM_BOX.set(src, box = [x0, y0, x1, y1]);
+      }
+      const [x0, y0, x1, y1] = box;
       const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
       /* Tiny ink from a thumbnail: take the master and start again. One extra
          request, and only for the items that cannot be served by a tier. */
@@ -12846,7 +14338,7 @@ async function openStable(opts = {}) {
     if (!body) return;
     /* eqOwn is the WORN OUTFIT (equipped()), not equippedPetIid(): the Paddock door
        below draws your own Bonehead at the gate, the same way the scene does. */
-    const [insts, eqIid, bank, st, eqOwn, nicks] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus(), equipped(), petNicks()]);
+    const [insts, eqIid, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
     /* THE PRIVATE NICKNAME, beside the species name and never instead of it.
        Same shape as nameWithAlias() for friends: the real identity stays the
@@ -12984,6 +14476,54 @@ async function openStable(opts = {}) {
         </div>`;
     })();
 
+    /* HER WARDROBE, and it lives HERE because this is where a player already
+       goes to decide things about a pet: the Stable is the only screen that
+       holds one animal at a time with its actions under it, and EQUIP is two
+       rows up. v422 sold five accessories at 3,500 to 12,000 coins each with
+       nowhere at all to put them on, which is the whole reason this exists.
+       Only for the pet the art is drawn for. Every piece is painted
+       pre-positioned for HER body inside the shared canvas, so the panel is
+       absent rather than empty on any other animal: an accessory shelf under a
+       lizard that can never wear one is a broken promise, not a tease.
+       ONE TAP TOGGLES. There is no separate remove control: the tile says WORN
+       and tapping it again takes the piece off, which is how the gear wardrobe
+       already behaves and is the only affordance small enough for a row of
+       five. One item per slot is the STORAGE shape (see petWear in js/loot.js),
+       so putting the second purse on takes the first one off with no rule here
+       to forget.
+       The tile art is petShotHtml, the shop's own product shot, so a piece
+       looks the same in the wardrobe as it did on the tile you bought it from. */
+    const cfWear = (() => {
+      if (!roster.some(x => x.sp === PET_SHOP.pet.id)) return '';
+      /* BUILT WHENEVER SHE IS IN THE ROSTER, HIDDEN WHEN SHE IS NOT IN FRONT.
+         Spinning the ring never re-runs render() (a full rebuild would fight the
+         drag), so the four action buttons are repainted in place instead, and a
+         panel that only existed for the focused pet would either be missing when
+         you spun onto her or left standing under a lizard when you spun off.
+         The content does not depend on WHICH instance is focused: there is one
+         Bumbleseal and one wardrobe. So only visibility moves, and the spin
+         handler owns it. */
+      const shown = !!focused && focused.sp === PET_SHOP.pet.id;
+      const her = (BH_BY_ID[PET_SHOP.pet.id] || {}).name || 'your pet';
+      const mine = PET_SHOP.items.filter(i => ownedCos.has(i.id) && BH_BY_ID[i.id]);
+      if (!mine.length) {
+        return `<div class="pet-wear"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+          <p class="note pw-empty">Nothing to wear yet. Gwart's Menagerie stocks ${PET_SHOP.items.length} pieces, all drawn for her.</p></div>`;
+      }
+      return `<div class="pet-wear"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+        <div class="pw-row">${mine.map(i => {
+          const a = BH_BY_ID[i.id];
+          const on = S.petWear[a.slot] === i.id;
+          const slotLbl = (PET_SLOTS.find(sl => sl.code === a.slot) || {}).label || a.slot;
+          return `<button class="pw-item r-${a.rarity}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}">
+            <span class="pw-art">${petShotHtml(i.id, 62)}</span>
+            <b>${esc(a.name)}</b>
+            <small>${on ? 'WORN' : esc(slotLbl)}</small>
+          </button>`;
+        }).join('')}</div>
+        <p class="note pw-hint">Tap to put a piece on. Tap it again to take it off. One per spot.</p></div>`;
+    })();
+
 
 
     const spChips = pair ? [a, b]
@@ -13094,6 +14634,7 @@ async function openStable(opts = {}) {
           <div class="cf-frame" id="cfFrame" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Your pets">
             <div class="cf-track" id="cfTrack">${cfCards}</div>
           </div>
+          ${cfWear}
           ${cfCaption}
           ${cfActs}
         </div>
@@ -13149,6 +14690,35 @@ async function openStable(opts = {}) {
         if (card) card.classList.add('just-levelled');
       }
       focusIid = null;
+    }
+    /* TRYING CLOTHES ON REQUIRES A MIRROR. Tom, 2026-08-21: "when you put the
+       item on you have to scroll back up to see if it equipped and how it looks.
+       You need to be able to see her and the items at the same time so you know
+       how it looks trying on."
+       The panel moved up against the card above (it is the mirror, so it belongs
+       against the glass; the caption and the action row are about who she is and
+       what you do with her, and both can sit below). Measured on the render, that
+       alone puts her ink and a whole tile on screen together at 393x852 with and
+       without a 59px inset, with no scrolling at all.
+       It is NOT enough on the narrowest phone this app supports. At 320x568 the
+       Stable's own header stack -- the Paddock door, the chip row and the
+       breeding note -- ends 454.8px down, so the ring itself has always opened
+       BELOW the fold there and no arrangement inside .cf can be seen at rest.
+       So the sheet opens far enough down to hold both, and no further: scroll by
+       exactly the tile's overflow past the fold, capped at the room above the
+       ring, so the ring can never be pushed off the top to buy it. On a modern
+       phone the overflow is negative and this is a no-op, which is why the
+       Paddock door still greets you there. Idempotent, so the re-render after a
+       tap lands you back looking at her rather than at the top of the sheet. */
+    const pwPanel = $('.pet-wear', body);
+    const pwTile = pwPanel && !pwPanel.hidden && $('.pw-item', pwPanel);
+    const pwFrame = $('#cfFrame', body);
+    if (pwTile && pwFrame) {
+      const view = body.getBoundingClientRect();
+      /* 8px of clearance, not zero: scrolling by exactly the overflow lands the
+         tile's bottom border ON the fold, where sub-pixel rounding eats it. */
+      const over = pwTile.getBoundingClientRect().bottom + 8 - view.bottom;
+      if (over > 0) body.scrollTop += Math.min(over, pwFrame.getBoundingClientRect().top - view.top);
     }
     /* The ring. Painted straight to the DOM because sixty transform updates a
        second is not a job for a re-render: render() rebuilds this whole body, so
@@ -13498,6 +15068,9 @@ async function openStable(opts = {}) {
       if (trB) { trB.dataset.pettree = inst.iid; trB.textContent = isOpen ? 'HIDE TALENTS' : 'TALENTS'; }
       if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'BREEDING' : 'BREED'; brB.classList.toggle('on', inSel); }
       if (dsB) { dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `DESTROY ${dustVal}`; }
+      // her wardrobe follows the ring: shown only while she is the pet in front
+      const pwB = $('.pet-wear', body);
+      if (pwB) pwB.hidden = inst.sp !== PET_SHOP.pet.id;
     }
 
     // No card-click-to-open-talents any more: on a carousel a tap means "bring
@@ -13527,6 +15100,17 @@ async function openStable(opts = {}) {
        closes before it calls back, so toasting and stopping would delete their
        text and leave them with nothing to correct. Refuse with a sentence, hand
        the words back. Never silently truncate: see nickProblem in js/loot.js. */
+    /* EQUIP AND UNEQUIP ARE THE SAME TAP. refreshPetWear() before render()
+       because every pet render in the app reads the CACHE, not the row: writing
+       the row and re-rendering would repaint the Stable off a stale wardrobe and
+       leave Today wrong until the next boot. */
+    $$('[data-petwear]', body).forEach(btn => btn.addEventListener('click', async () => {
+      const r = await togglePetWear(btn.dataset.petwear);
+      if (!r.ok) { toast('That piece is not in your wardrobe.'); return; }
+      await refreshPetWear();
+      popSound(S.sounds);
+      render();
+    }));
     $$('[data-petnick]', body).forEach(btn => btn.addEventListener('click', () => {
       const iid = btn.dataset.petnick;
       const inst = insts.find(x => x.iid === iid);
@@ -14008,7 +15592,7 @@ async function openRestoreSheet() {
 // good." So this is NOT once-per-session: every open, until it is set.
 async function maybePromptRecovery(tries = 0) {
   try {
-    if (navigator.webdriver || !S.settings) return;
+    if (CALM_BOOT() || !S.settings) return;
     // Offline players used to be skipped here. They are the MOST exposed group,
     // with no cloud backup at all, so they get the prompt too: setRecoveryPhrase
     // now takes them online as part of saving it.
@@ -14095,7 +15679,7 @@ const APPROACH_LOCK_M = 400; // within this, a spawn is "yours": it won't move/d
 // the arena renders them as plain <img> tags at fight start, so on a cold cache
 // the boss simply was not there for the opening moves. Warmed with the map, which
 // is the screen you must be on to reach him.
-const MAP_ART = ['assets/brand/tombstone.png', 'assets/bh/glutton/idle.png',
+const MAP_ART = ['assets/brand/tombstone.png', 'assets/bh/glutton/idle.png', 'assets/bh/wanderer/wanderer.png',
   'assets/bh/glutton/combat/idle.png', 'assets/bh/glutton/combat/tongue.png', 'assets/bh/glutton/combat/middle.png'];
 let _mapArtWarm = null;
 function warmMapArt() {
@@ -14139,7 +15723,7 @@ async function renderBoneyard(el) {
             <div class="legend-row"><span class="blip-dot" style="background:#f2e9d7"></span><div><b>Bone cache</b><span class="note"> · XP for your bonehead</span></div></div>
             <div class="legend-row"><span class="blip-dot" style="background:var(--amber)"></span><div><b>Coin pile</b><span class="note"> · spend in the crate shop</span></div></div>
             <div class="legend-row"><span class="blip-dot" style="background:#b48ead"></span><div><b>Buried crate</b><span class="note"> · a wearable inside</span></div></div>
-            <div class="legend-row"><span class="blip-dot rare"></span><div><b>Mystery Egg</b><span class="note"> · rare spawn · walk to hatch a pet</span></div></div>
+            <div class="legend-row"><span class="blip-dot rare"></span><div><b>${MYSTERY_EGG.name}</b><span class="note"> · ${MYSTERY_EGG.desc}</span></div></div>
           </div>
         </div>
       </div>
@@ -14391,6 +15975,7 @@ async function renderBoneyard(el) {
       if (typeof refreshDens === 'function') refreshDens();
       if (typeof refreshMinis === 'function') refreshMinis();
       if (typeof refreshGlutton === 'function') refreshGlutton();
+      if (typeof refreshWanderer === 'function') refreshWanderer();
       /* You have looked somewhere genuinely new: resolve the layers that are not
          part of the ordinary settle pass. Gated on `scouted` because spires cost
          a network round trip; on every moveend that would be a request per pan.
@@ -14454,7 +16039,7 @@ async function renderBoneyard(el) {
     const date = dateKey();
     const week = isoWeekKey();
     const xpRows0 = await db.all('xp');
-    const collected = new Set(xpRows0.filter(r => r.type === 'spawn').map(r => r.key));
+    let collected = new Set(xpRows0.filter(r => r.type === 'spawn').map(r => r.key));
     let claimedBoss = new Set(xpRows0.filter(r => r.type === 'bossday' || r.type === 'roamboss').map(r => r.key));
     let claimedMini = new Set(xpRows0.filter(r => r.type === 'mini').map(r => r.key));
     const spawnMarkers = new Map(); // id -> {marker, el, spawn}
@@ -14825,7 +16410,7 @@ async function renderBoneyard(el) {
         if (!rec) {
           const el = document.createElement('div');
           el.className = 'map-mini-mark';
-          el.innerHTML = bhIcon('badge-skull', 17);
+          el.innerHTML = badgePixHtml('badge-skull', MINI_SKULL_PX);
           rec = { marker: domMarker(maplibregl, map, { lat: m.lat, lng: m.lng, el, anchor: 'center' }), el, mini: m };
           miniMarkers.set(m.id, rec);
         } else {
@@ -14891,6 +16476,215 @@ async function renderBoneyard(el) {
       gluttonRec.el.classList.toggle('inrange', dist <= GLUTTON_RADIUS_M);
       const gb = $('#mapGlutton', body);
       if (gb) gb.hidden = dist > GLUTTON_RADIUS_M;
+    }
+
+    /* THE WANDERER: the only thing out here that MOVES ON ITS OWN.
+     *
+     * Tom, 2026-08-21: "the wanderer walks around the boneyard slowly hunting
+     * down the player, he casts a cone of light ahead of the way he is walking
+     * and if the player steps into that light he will charge at them and start
+     * an encounter."
+     *
+     * Every other layer on this screen answers "what is at this place"; this one
+     * answers "where is he right now". js/wanderer.js does the whole derivation
+     * (pure function of date, cell and clock, so this pass is free to rebuild
+     * from scratch every 5 seconds and every GPS fix without him twitching), and
+     * this function is only the marker, the lit wedge and the trip wire.
+     *
+     * THE TRIP WIRE IS NOT A TAP, which is the whole difference between him and
+     * the Mimic. It is evaluated HERE, on the same passes that redraw him, so it
+     * fires both ways round: the player walking into the light, and the light
+     * sweeping onto a player who is standing still. Standing still is not a
+     * defence on purpose. He is hunting, and a "you must be moving" rule would
+     * be invisible, unexplainable and exploitable (park on an egg under his nose
+     * and farm it).
+     *
+     * IT ONLY RUNS WHILE THE BONEYARD IS OPEN. There is no background trigger
+     * and there never should be: refreshWorld's interval and the geolocation
+     * watch are both torn down by cleanup(), so a phone in a pocket cannot be
+     * ambushed. Coming back later finds him wherever the clock says he is by
+     * then, which is what a derived path buys.
+     */
+    const wandererMarkers = new Map();   // id -> {marker, el}
+    /* Two different "no" answers, and they are not the same no.
+       `wandererDone` is the LEDGER: an instance he has already been PAID for,
+       rebuilt from the xp rows on every refreshWorld like claimedBoss above it,
+       so a win in another tab is honoured here.
+       `wandererEngaged` is this SESSION: an instance that has already thrown a
+       fight, win, loss or flee. Without it a player who loses and is still
+       standing in the light gets a fresh fight 5 seconds later, forever. It is
+       deliberately not persisted: the ledger already caps the REWARD at one per
+       instance, so the worst a reopened map buys is the right to retake a fight
+       you are losing 85.8% of, which is a punishment, not an exploit. */
+    const wandererEngaged = new Set();
+    let wandererDone = new Set(xpRows0.filter(r => r.type === 'wanderer').map(r => r.key));
+    /* HIS LANTERN HAS TO TRACK THE GROUND, and it did not. Tom, 2026-08-22:
+       "when people zoom he moves all over the place and isnt anchored to a
+       geolocation."
+       The cone is sized in PIXELS from the map's own projection so that 300 m of
+       lit ground is 300 m at every zoom. That size was only ever recomputed
+       inside refreshWanderer, which runs on the 5s tick and on moveend. So
+       through an entire pinch the cone kept the pixel size it was handed at the
+       PREVIOUS zoom, while the collect ring beside it resized every frame
+       (map.on('zoom', sizeRadius), a few lines up). One thing on the screen
+       tracked the ground and the other did not, which reads exactly as the man
+       sliding around loose on the map.
+       Same binding as the ring, and for the same reason. It only touches markers
+       already on screen and does no work when there are none, so it is safe to
+       run on every zoom frame.
+       AND ON EVERY MOVE FRAME, WHICH IS WHY paintWandererCone HAS A GATE. Tom,
+       2026-08-22: "the cone shouldn't flicker or change size". A pan reprojects
+       to a size that differs in the hundredths of a pixel, so this pass asks for
+       a repaint sixty times a second while the picture is identical. The gate
+       lives in js/wanderer.js, at the one place both callers go through, and it
+       compares the ROUNDED size: keep it there rather than adding a second one
+       here. */
+    /* THE PROJECTED SIZE, OR NOTHING AT ALL, and "nothing" is the fix.
+       MEASURED, not guessed. Driving a 1.6s pan on the real Boneyard and
+       sampling the cone's rendered width every frame, v423 went 508px ->
+       200px -> 508px inside 300 ms, and a zoom went 508 -> 1226 -> 200 ->
+       1341. That 200 is not a projection wobble, it is this function's own
+       FALLBACK being painted over a correct answer: both copies of the sizing
+       code opened with `let px = 200` and both were gated on `map.loaded()`,
+       which reports FALSE for as long as any tile is still in flight, and a
+       pan or a zoom is exactly when tiles are in flight. So every few seconds
+       the 300 m beam was redrawn as a 200 px stub and then corrected. That is
+       the size flicker, and it is a 60% collapse rather than a shimmer.
+       Two changes, both of them "do not answer when you do not know":
+         - `map.loaded()` is gone from the gate. It is about TILES, not about
+           the transform, and map.project answers correctly throughout a
+           camera move. The try/catch is what covers a transform that is not
+           ready, and it is still here.
+         - no fallback number. A null tells paintWandererCone to KEEP THE SIZE
+           IT HAS, so an unanswerable frame changes nothing on screen instead
+           of overwriting a right answer with a wrong one. */
+    function coneDiameterPx(w) {
+      try {
+        const a = map.project([w.lng, w.lat]);
+        const b = map.project([w.lng, w.lat + CONE_RANGE_M / 111320]);
+        const d = Math.hypot(b.x - a.x, b.y - a.y) * 2;
+        if (isFinite(d) && d > 40) return d;
+      } catch { /* transform not ready: the caller keeps what it has */ }
+      return null;
+    }
+    function sizeWandererCones() {
+      if (!wandererMarkers.size || !map) return;
+      for (const [, rec] of wandererMarkers) {
+        const w = rec.w;
+        if (!w) continue;
+        paintWandererCone(rec.el.querySelector('.wanderer-cone'), coneDiameterPx(w), w.heading);
+      }
+    }
+    map.on('zoom', sizeWandererCones);
+    map.on('move', sizeWandererCones);
+
+    function refreshWanderer() {
+      /* A BEATEN WANDERER IS GONE. Tom, 2026-08-22: "after defeating the
+         wanderer he was still just there in the boneyard and didnt disappear."
+         He was: `wandererDone` only ever gated the ENCOUNTER, so a man you had
+         just killed kept walking his loop with his lantern lit and could not be
+         fought, which reads as a broken marker rather than as a win.
+         Filtered here, at the one place the markers are built, so the removal
+         loop below takes his marker down the same way it takes down one that
+         walked out of range. No new state: `wandererDone` is rebuilt from the xp
+         ledger on every refreshWorld, so this survives a reload and a second
+         tab, and the key carries his instance (`wanderer-<date>-<cell>_i<n>`),
+         so when the 45-minute clock turns over the next Wanderer has a key
+         nobody has claimed and walks again. */
+      const live = wanderersNear(date, lat, lng).filter(w => !wandererDone.has(wandererKey(date, w)));
+      const liveIds = new Set(live.map(w => w.id));
+      for (const [id, rec] of wandererMarkers) {
+        if (!liveIds.has(id)) { rec.marker.remove(); wandererMarkers.delete(id); }
+      }
+      for (const w of live) {
+        let rec = wandererMarkers.get(w.id);
+        if (!rec) {
+          const el = document.createElement('div');
+          el.className = 'map-wanderer-mark';
+          /* WHICH Wanderer this marker is, on the element. He is the one thing
+             out here with an identity that changes under you (cell AND
+             45-minute instance), and "a marker disappeared" and "the RIGHT
+             marker disappeared" are different facts: the despawn guard first
+             graded distance-to-a-projected-point, got null back because it
+             could not reach the map object, and passed on nothing. */
+          el.dataset.w = w.id;
+          el.innerHTML = wandererMarkHtml();
+          rec = { marker: domMarker(maplibregl, map, { lat: w.lat, lng: w.lng, el, anchor: 'center' }), el, w };
+          wandererMarkers.set(w.id, rec);
+        } else {
+          rec.marker.setLngLat([w.lng, w.lat]);
+          rec.w = w;   // the zoom repaint reads his CURRENT beat, not the one he arrived on
+        }
+        /* NEVER placeWalkable. Every other POI is snapped onto the nearest road
+           or path because it sits still and a spawn in a pond is unreachable. He
+           is not a place, he is a man walking a loop, and re-snapping a moving
+           marker every 5 seconds would drag him between whichever features
+           happened to be rendered and destroy both his path and his heading.
+           He walks over water. He is a ghost with a lantern.
+           ponytail: unsnapped by design; if his beat ever needs to follow roads
+           the answer is a road-aware seeded loop in wanderer.js, not a snap here. */
+        // The lit ground is sized from the map's OWN projection (his pixel vs a
+        // point CONE_RANGE_M north of him), so 90 m on screen is 90 m at every
+        // zoom, the same rule sizeRadius and the Glutton's blight both use.
+        // One helper, shared with the zoom/move pass above, so the two cannot
+        // answer the same question differently. See its note for why an
+        // unanswerable frame returns null rather than a fallback size.
+        paintWandererCone(rec.el.querySelector('.wanderer-cone'), coneDiameterPx(w), w.heading);
+        if (!inWandererCone(w, lat, lng)) continue;
+        if (wandererEngaged.has(w.id) || wandererDone.has(wandererKey(date, w))) continue;
+        // the anti-cheat gate the tap handlers get, silently: being DRIVEN past
+        // him must not start a fight, and a toast every 5 seconds from a moving
+        // car is not a message, it is a fault.
+        if (youSpeed > MAX_LOOT_SPEED) continue;
+        if (document.getElementById('arena')) continue;   // a fight is already on screen
+        wandererEngaged.add(w.id);
+        startWandererEncounter(w, rec.el);
+      }
+    }
+
+    /* THE CHARGE, then the encounter. He gets a beat on the MAP first because
+       that is where the player already is: the marker lunges so the thing that
+       caused this is the last thing seen before the screen changes. Then the
+       full-screen encounter takes over and asks (js/wanderer.js,
+       showWandererEncounter).
+
+       WHY THE TOAST IS GONE. It said the sentence, and a toast is this app's
+       interruption channel: it slides over whatever you were doing without
+       stopping it. This is the one fight on the map nobody asked for, so it is
+       the one that has to stop the screen and offer a way out.
+
+       THE OVERLAY IS TORN DOWN AFTER openFight, NOT BEFORE. On 'fight' it holds
+       on the zoom's white frame and the arena is built underneath it, so there
+       is no frame where the map comes back. */
+    async function startWandererEncounter(w, el) {
+      haptic.heavy();
+      el.classList.add('charging');
+      await new Promise(r => setTimeout(r, 700));
+      el.classList.remove('charging');
+      if (!body.isConnected) return;   // they left during the beat
+
+      const { choice, dismiss } = await showWandererEncounter({ reduced: reducedMotion });
+      if (!body.isConnected) { dismiss(); return; }
+      if (choice === 'flee') {
+        /* Fleeing costs this instance and nothing else. wandererEngaged already
+           holds him, so he will not re-charge from the same light; walk out of
+           the cone and back in later and the ledger still owes you the fight. */
+        toast('You back out of the light. He keeps walking.', 2600);
+        return;
+      }
+      haptic.heavy();
+      const fighter = await buildFighter();
+      openFight(wrap, fighter, {
+        mode: 'wanderer', name: 'The Wanderer', mult: WANDERER_FIGHT.mult,
+        aiLevel: WANDERER_FIGHT.aiLevel, talents: WANDERER_FIGHT.talents, venue: 'The Boneyard',
+        /* CARRY THE FACE. Without this flag openFight falls through to the
+           coin-flip generator and the rarest boss on the map arrives dressed as
+           a random skeleton, which is the exact drop that cost the Gauntlet its
+           roster look (see endlessFightCfg). */
+        wanderer: true, claimKey: wandererKey(date, w), date,
+        xp: WANDERER_FIGHT.xp, coins: WANDERER_FIGHT.coins,
+      });
+      dismiss();
     }
 
     // Dark Spires: permanent territory. Unclaimed ones are held by an NPC warden;
@@ -14996,7 +16790,7 @@ async function renderBoneyard(el) {
         const lvl = rival ? (rival.level || 1) : (view.level || 1);
         rec.el.classList.toggle('levelled', lvl > 1);
         const trib = besieged ? `⚔ ${fmtCookTime(siegeUntil - Date.now())}`
-          : held && view.tribute.coins ? `${ICONS.coin(11)} ${view.tribute.coins}` : '';
+          : held && view.tribute.coins ? `${ICONS.coin(16)} ${view.tribute.coins}` : '';
         $('.spire-lv', rec.el).textContent = lvl > 1 ? `LV ${lvl}` : '';
         $('.spire-tribute', rec.el).innerHTML = trib;
         // everything the tap sheet needs, captured at paint time so the sheet
@@ -15073,11 +16867,21 @@ async function renderBoneyard(el) {
       claimedBoss = new Set(rows.filter(r => r.type === 'bossday' || r.type === 'roamboss').map(r => r.key));
       claimedMini = new Set(rows.filter(r => r.type === 'mini').map(r => r.key));
       claimedSecret = new Set(rows.filter(r => r.type === 'secret').map(r => r.key));
+      /* REBUILT FROM THE LEDGER, like the three above it. It used to be seeded
+         once at map open and only ever added to by the collect handler, which
+         was fine while collecting was the only way to spend a spawn. A Mimic is
+         spent by WINNING A FIGHT, and that row is written from the fight settle
+         in another part of the file, so the only honest source is the ledger. */
+      collected = new Set(rows.filter(r => r.type === 'spawn').map(r => r.key));
+      // and the same for the Wanderer, who is paid on his OWN key rather than a
+      // spawn's: a win banked in another tab has to take him off this one.
+      wandererDone = new Set(rows.filter(r => r.type === 'wanderer').map(r => r.key));
       refreshSpawns();
       refreshDens();
       refreshMinis();
       refreshSecrets();
       refreshGlutton();
+      refreshWanderer();
       // the spire fetch must never gate the reveal: if the network hangs, the map
       // would sit blank forever behind opacity 0
       await Promise.race([refreshSpires(), new Promise(r => setTimeout(r, 2500))]);
@@ -15187,7 +16991,7 @@ async function renderBoneyard(el) {
         if (!rec) {
           const el = document.createElement('div');
           el.className = `map-spawn ${s.type === 'rare' ? 'rare' : ''} ${s.far ? 'far' : ''}`;
-          el.innerHTML = spawnIcon(s.type, 20); // ingredient is a surprise on collect, not previewed
+          el.innerHTML = spawnIcon(s.type, s.far ? 16 : 24); // ingredient is a surprise on collect, not previewed
           rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el }), el, spawn: s };
           spawnMarkers.set(s.id, rec);
         } else {
@@ -15217,8 +17021,8 @@ async function renderBoneyard(el) {
       const ro = $('#mapReadout', body);
       if (ro && showBar) {
         ro.innerHTML = tooFast
-          ? `<span class="ic warn">${ICONS.boltStroke(20)}</span><span class="tx"><b>Too fast to loot</b><small>Slow to a walk to collect.</small></span>`
-          : `<span class="ic near">${spawnIcon(nearest.type, 20)}</span><span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>${spawnPays(nearest.type)}</small></span>`;
+          ? `<span class="ic warn">${ICONS.boltStroke(24)}</span><span class="tx"><b>Too fast to loot</b><small>Slow to a walk to collect.</small></span>`
+          : `<span class="ic near">${spawnIcon(nearest.type, 24)}</span><span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>${spawnPays(nearest.type)}</small></span>`;
       }
       const card = $('#mapAct', body);
       if (card) {
@@ -15336,6 +17140,40 @@ async function renderBoneyard(el) {
       const id = $('#mapCollect', body).dataset.spawnId;
       const rec = [...spawnMarkers.values()].find(r => r.spawn.id === id);
       if (!rec || rec.spawn.dist > COLLECT_RADIUS_M) return;
+      /* ONE IN THREE BURIED CRATES BITES BACK, AND IT BRANCHES BEFORE THE
+         PAYOUT, NOT AFTER IT. Tom, 2026-08-20: "1/3 chests can trigger a fight
+         with this mimic. it should show the pixel art animation and then enter a
+         battle with him."
+         This is the seam because collectSpawn is the thing that SPENDS the
+         chest: it claims `spawn-<date>-<id>` through award -> db.addIfAbsent and
+         pays coins, a crate and an ingredient in the same breath. Branching
+         anywhere downstream of it would pay the loot AND start the fight, which
+         is the double-pay this ordering exists to make impossible. A Mimic chest
+         never reaches collectSpawn at all.
+         `collected` is re-read from the ledger on every refreshWorld, so the
+         guard below is what stops a second tab (or a very fast second tap)
+         opening a second fight for a chest that is already spent. The real
+         authority is still the addIfAbsent in the settle; this is the polite
+         door, not the lock. */
+      if (isMimicSpawn(rec.spawn)) {
+        const spawn = rec.spawn;
+        const claimKey = spawnKey(date, spawn);
+        if (collected.has(claimKey)) return;
+        /* THE REVEAL IS TORN DOWN AFTER openFight, NOT BEFORE, exactly as the
+           Wanderer's encounter is: it resolves holding on a black cover frame
+           and the arena is built underneath it, so the map never comes back
+           between the chest and the fight. */
+        const { dismiss } = await showMimicReveal({ reduced: reducedMotion });
+        if (!body.isConnected) { dismiss(); return; }
+        const fighter = await buildFighter();
+        openFight(wrap, fighter, {
+          mode: 'mimic', name: 'The Mimic', mult: MIMIC_FIGHT.mult,
+          aiLevel: MIMIC_FIGHT.aiLevel, talents: [], venue: 'The Boneyard',
+          mimic: true, claimKey, date, xp: MIMIC_FIGHT.xp, coins: MIMIC_FIGHT.coins,
+        });
+        dismiss();
+        return;
+      }
       const res = await collectSpawn(rec.spawn);
       if (!res) return;
       collected.add(spawnKey(date, rec.spawn));
@@ -15452,13 +17290,22 @@ async function renderBoneyard(el) {
       toast('The blight lifts. The Boneyard breathes again.', 3600);
     };
     addEventListener('bh-glutton-beaten', onGluttonBeaten);
+    // A beaten Mimic spends its chest from inside the fight settle, so the map
+    // has to hear about it. refreshWorld re-reads the xp ledger, so the payload
+    // is a nudge and never the authority (same rule as onGluttonBeaten).
+    const onMimicBeaten = e => { if (e?.detail?.key) collected.add(e.detail.key); refreshWorld(); };
+    addEventListener('bh-mimic-beaten', onMimicBeaten);
+    // and the same for a beaten Wanderer: his instance is spent from inside the
+    // settle, on his own ledger key, so the map has to hear about it.
+    const onWandererBeaten = e => { if (e?.detail?.key) wandererDone.add(e.detail.key); refreshWorld(); };
+    addEventListener('bh-wanderer-beaten', onWandererBeaten);
     const onSpireClaimed = async () => { await syncSpireTried(); refreshSpires({ force: true }); };
     addEventListener('bh-spire-claimed', onSpireClaimed);
     // a LOST attempt dispatches only this one, and it still has to spend the day
     const onSpireTried = async () => { await syncSpireTried(); refreshSpires({ force: true }); };
     addEventListener('bh-spire-tried', onSpireTried);
     const prevCleanupGB = cleanupExtras;
-    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); removeEventListener('bh-spire-tried', onSpireTried); };
+    cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-mimic-beaten', onMimicBeaten); removeEventListener('bh-wanderer-beaten', onWandererBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); removeEventListener('bh-spire-tried', onSpireTried); };
 
     let lastTick = 0, ema = null;
     huntWatchId = navigator.geolocation.watchPosition(pos => {
@@ -15572,29 +17419,15 @@ const ECONOMY_TALENTS = new Set(['lightfeet']);
 // were easy to miss. This surfaces them as a home nudge + a "!" on the hero button,
 // deep-linking straight to the right screen. Pure fn over already-fetched data;
 // returns active signals highest-priority first. Each: {key, hero, action, nudge, toast}.
-function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, gearEquippedCount, fightWins = 1,
-                             loggedToday = 1, everLogged = 1, mealSkipped = false }) {
+function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, gearEquippedCount, fightWins = 1 }) {
   const sig = [];
-  /* DAY ONE IS ABOUT FOOD. A non-gamer played this cold on 2026-08-13 and the
-     only glowing thing on the home screen of a food tracker was an invitation
-     to a fight, which they took, on the easiest opponent, and lost. Their words:
-     "the app never once said log your meals every day. It said Ready for your
-     first fight?"
-     So the first meal outranks the first fight. It is the thing they installed
-     this for, it is the thing that pays the energy the fight needs, and it is
-     the one action on Today that cannot be lost.
-     PRIORITY 9, above everything, but it retires the moment it stops being
-     true: as soon as they log anything today, the moment they have ever logged
-     anything at all, or the moment they say not now. Tom, 2026-08-13: "make it
-     skippable if they dont want to then point them to other things that could
-     be of interest". skipping does not blank the card, it falls straight
-     through to the fight/gear/talent nudges underneath, which is what the rest
-     of this function already computes. */
-  if (!loggedToday && !everLogged && !mealSkipped) sig.push({
-    key: 'food:first', hero: 'food', action: 'logfood', priority: 9,
-    nudge: 'Start with breakfast',
-    toast: 'Log what you eat and your Bonehead earns from it. Everything else here runs on that.',
-  });
+  /* THE 'Start with breakfast' FIRST-MEAL NUDGE lived here at priority 9 from
+     2026-08-13 until Tom removed it on 2026-08-22: "remove the 'start with
+     breakfast' button that's there". Its `loggedToday` / `everLogged` /
+     `mealSkipped` inputs, its "Not right now" skip, the `firstMealSkipped` kv it
+     wrote and the whole `.unlock-nudge` card on Today went with it: renderToday
+     reads these signals only for the Pit "!" badge and the unlock toasts now.
+     The fight/gear/talent signals below are unchanged. */
   // activation: brand-new players open the app, browse, and stall without ever
   // fighting (seen in tester telemetry). One clear invitation to the core loop.
   if (fightWins === 0) sig.push({
@@ -15676,7 +17509,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v413'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v426'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -15701,6 +17534,14 @@ function presentGrantDelivery(r) {
     const note = p.note || (p.gift ? `A gift${p.from ? ' from ' + p.from : ''}` : 'From the Crew');
     let hadCard = false;
     if (p.crate && CRATES[p.crate]) { cards.push({ iconHtml: crateIcon(p.crate, 120), name: CRATES[p.crate].label, rarity: p.crate === 'daily' ? 'uncommon' : 'rare', kind, stats: esc(note) }); hadCard = true; }
+    /* A PET, AND AN EGG, BOTH LANDED SILENTLY BEFORE THIS. Added 2026-08-21 with
+       the admin make-good arm: a payload carrying only a pet paid no coins and
+       no XP and built no card, so every branch below fell through and the player
+       got a Day One Lizard back with no reveal, no toast and nothing to look at.
+       That is the end of the chain and it is the only part she experiences.
+       Same shape as the crate line above; a pet is drawn from its own art. */
+    if (p.pet && BH_BY_ID[p.pet]) { const it = BH_BY_ID[p.pet]; cards.push({ imgSrc: bhAsset(it), name: it.name, rarity: it.rarity, kind, stats: esc(note) }); hadCard = true; }
+    if (p.egg) { cards.push({ iconHtml: crateIcon('egg', 120), name: CRATES.egg.label, rarity: 'rare', kind, stats: esc(note) }); hadCard = true; }
     if (p.gearId && GEAR_BY_ID[p.gearId]) { cards.push({ ...gearToCard(GEAR_BY_ID[p.gearId]), kind }); hadCard = true; }
     if (p.consumable && CONSUMABLES[p.consumable]) { cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind, stats: esc(note) }); hadCard = true; }
     if (p.gift && !hadCard && p.coins) coinGifts.push(`${p.from || 'A friend'} sent you ${p.coins} coins!`);
@@ -15990,7 +17831,7 @@ async function renderPit(wrap) {
   const remoteSect = `
     <div class="t3-sect"><b>Remote den · one a day</b><i></i><span class="r chip" style="font-size:11px">No walking needed</span></div>
     <div class="t3-row${rDone ? ' done' : ''}">
-      <span class="t3-med">${bhIcon('badge-skull', 20)}</span>
+      <span class="t3-med">${badgePixHtml('badge-skull', 20)}</span>
       <div class="t3-tx"><b>${esc(rDen.boss)}</b><small>${esc(rDen.name)} · ${rDone
         ? 'beaten · a new one is here tomorrow, free'
         /* denRewardLabel takes the REWARD, not the den: passing rDen read every
@@ -16003,7 +17844,7 @@ async function renderPit(wrap) {
     <div class="t3-sect"><b>After the ladder</b><i></i></div>
     <div class="t3-row${champBeaten ? ' done' : ''}">
       <span class="t3-med">${crateIcon('golden', 22)}</span>
-      <div class="t3-tx"><b>${CHAMPION.name}</b><small>${champBeaten ? `rematch · ${ICONS.coin(12)}${CHAMPION.repeatCoins}` : 'Wields the Bonecrusher · first win drops it + a Golden Crate'}</small></div>
+      <div class="t3-tx"><b>${CHAMPION.name}</b><small>${champBeaten ? `rematch · ${ICONS.coin(12)}${CHAMPION.repeatCoins}` : 'Wields the Bonecrusher · first win drops it + a Bone Crate'}</small></div>
       ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate}>${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
     </div>`;
   const endlessSect = `
@@ -16012,7 +17853,7 @@ async function renderPit(wrap) {
     ${canNewRank
       ? `<p class="note" style="margin:2px 2px 8px">Foes scale <b>forever</b>, the Pit never runs dry. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
       : `<div class="pit-gate">
-          <div class="pg-head"><span class="pg-ico">${bhIcon('tombstone', 22)}</span><b>You have hit the ceiling at rank ${ceiling}</b></div>
+          <div class="pg-head"><span class="pg-ico">${badgePixHtml('tombstone', 22)}</span><b>You have hit the ceiling at rank ${ceiling}</b></div>
           <p class="pg-why">The Gauntlet does not go higher until you beat a <b>world boss den</b>. Each one raises the ceiling by <b>3 ranks</b>. <b>The remote den above counts</b>, so this moves whether or not you can get out today.</p>
           <div class="pg-meter"><span>${denWins} boss${denWins === 1 ? '' : 'es'} beaten</span><b>cap ${ceiling}</b><span>next boss → cap ${ceiling + 3}</span></div>
           <button class="btn" id="endlessGate" style="width:100%">Find a world boss on the map</button>
@@ -16121,7 +17962,12 @@ function endlessFightCfg(f) {
        dropping one new field is the boring failure, so it is the one to check
        first. */
     foeOutfit: f.look,
-    glutton: !!f.glutton, mage: !!f.mage,
+    /* ...AND THE SAME FOR EVERY BOSS ADDED SINCE. The comment above is about
+       `look` going missing here; `mimic` and `wanderer` are the identical
+       hazard, one boss later. tests/mimic-audit.mjs reads these back through
+       window.__endlessCfg rather than trusting pit.js, because pit.js was never
+       the hop that broke. */
+    glutton: !!f.glutton, mage: !!f.mage, mimic: !!f.mimic, wanderer: !!f.wanderer,
   };
 }
 if (typeof window !== 'undefined' && navigator.webdriver) window.__endlessCfg = r => endlessFightCfg(endlessFoe(r));
@@ -16257,8 +18103,8 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="vs-inner">
           <div class="vs-name">YOU</div>
           <div class="vs-bones">
-            <span class="vs-bone l">${ICONS.bone(46)}</span>
-            <span class="vs-bone r">${ICONS.bone(46)}</span>
+            <span class="vs-bone l">${ICONS.bone(48)}</span>
+            <span class="vs-bone r">${ICONS.bone(48)}</span>
             <div class="vs-impact"></div>
           </div>
           <div class="vs-vs">VS</div>
@@ -16280,8 +18126,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
      flee toast said you slipped out of The Pit, and the exit handler below ran
      renderPit() on a screen the player had never opened. A spire is a map
      object, reached through #mapSpire, exactly like a den or a mini. */
+  /* THE TWO SPAWN AMBUSHES BELONG HERE TOO, and `mimic` was missing: a Mimic
+     is launched by tapping "Grab it" on the Boneyard map, so its Done button
+     read "Back to The Pit" and its exit ran renderPit() on a screen the player
+     never opened, the exact three-part failure the spire note above describes.
+     tests/fight-exit-audit.mjs has been red on that since the Mimic shipped.
+     The Wanderer is the identical fight one boss later, so both are named
+     rather than fixing only the path this change added. Neither launcher goes
+     stale: the marker they came from is gone on the next refreshWorld. */
   const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret'
-    || foeCfg.mode === 'glutton' || foeCfg.mode === 'spire';
+    || foeCfg.mode === 'glutton' || foeCfg.mode === 'spire'
+    || foeCfg.mode === 'mimic' || foeCfg.mode === 'wanderer';
   const seamOwner = {};   // identity token: which fight installed the test seams
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
@@ -16369,7 +18224,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     });
   }
   body.innerHTML = `
-    <div class="arena${foeCfg.mage ? ' boss-mage' : ''}" id="arena">
+    <div class="arena${foeCfg.mage ? ' boss-mage' : ''}${foeCfg.wanderer ? ' boss-wanderer' : ''}" id="arena">
     <!-- THE HUD IS A LID ON THE ARENA AGAIN, AND THIS TIME IT IS NOT A CARD.
          It lived here before, lost the argument, and moved out to its own row:
          measured at 375x667 against a mage den, 92.4px of HUD over a 292px arena
@@ -16404,10 +18259,15 @@ async function openFight(pitWrap, fighter, foeCfg) {
       <div class="pit-fog"></div>
       <div class="arena-floor"></div>
       <div class="fighterG foe-side${foeCfg.mode === 'glutton' ? ' glutton-boss' : ''}" id="foeG" data-target="f">
-        <div class="bh-stage fstage${foeCfg.mode === 'glutton' || foeCfg.glutton ? ' glutton-foe' : ''}${foeCfg.mage ? ' mage-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' || foeCfg.glutton ? gluttonStageHtml()
+        <div class="bh-stage fstage${foeCfg.mode === 'glutton' || foeCfg.glutton ? ' glutton-foe' : ''}${foeCfg.mage ? ' mage-foe' : ''}${foeCfg.wanderer ? ' wanderer-foe' : ''}" id="foeStage">${foeCfg.mode === 'glutton' || foeCfg.glutton ? gluttonStageHtml()
           /* drawn art, so it is NOT wrapped in .mirror-wrap: flipping a hand-inked
              character flips its chain, its pointing hand and its lightning. */
           : foeCfg.mage ? `<img class="mage-plate" src="assets/bh/mage/mage-fight.png" alt="">`
+          /* hand-inked too, so same rule: no .mirror-wrap. Flipping the Mimic
+             would flip his chains and his tongue, and flipping the Wanderer
+             would put his lantern in the wrong hand. */
+          : foeCfg.mimic ? mimicPlateHtml()
+          : foeCfg.wanderer ? `<img class="mage-plate" src="assets/bh/wanderer/wanderer.png" alt="">`
           : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) })}</div>`}</div>
         ${add ? `
         <div class="pet-fighter add" id="addG" data-target="fa">
@@ -16418,7 +18278,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
-          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, 76, !petHovers(petArtId)) : ''}</div>
+          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''}${petArtId && petFacesLeft(petArtId) ? ' faces-away' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, petFightPx(petArtId, 76), !petHovers(petArtId)) : ''}</div>
         </div>` : ''}
       </div>
       <div id="floats"></div>
@@ -17499,7 +19359,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
             // nothing like the gear it had just given you.
             const gArt = GEAR_BY_ID[r.gear.id] && BH_BY_ID[GEAR_BY_ID[r.gear.id].artId];
             extraCards.push({
-              ...(gArt ? { imgSrc: bhAsset(gArt) } : { iconHtml: bhIcon('tombstone', 96) }),
+              ...(gArt ? { imgSrc: bhAsset(gArt) } : { iconHtml: badgePixHtml('tombstone', 96) }),
               slimed: !!r.gear.slimed,
               name: r.gear.name, rarity: r.gear.rarity, kind: r.gear.slimed ? 'SLIMED GEAR' : 'GEAR',
               stats: r.gear.slimed ? 'Dripping with Glutton slime. Equip it in your Wardrobe.' : 'Equip it in your Wardrobe.',
@@ -17618,6 +19478,72 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // first clear of each rank pays XP + full coins; re-clears pay diminishing coins
         const g = await award(`endless-${foeCfg.rank}`, 'endless', foeCfg.xp, `Gauntlet rank ${foeCfg.rank}: ${foeCfg.name}`);
         if (g) { xp += g; coins = foeCfg.coins; } else coins = foeCfg.repeatCoins;
+      } else if (foeCfg.mode === 'mimic') {
+        /* THE CHEST IS SPENT HERE AND NOWHERE ELSE.
+           The key is the chest's OWN ledger key, `spawn-<date>-<id>`: the exact
+           key collectSpawn would have claimed had it been an ordinary crate. So
+           the Mimic and the loot he replaced compete for one row that can only
+           exist once, and `award` resolves that with db.addIfAbsent, where the
+           check and the insert are a single IndexedDB request. A kvGet/kvSet pair
+           here was measured printing 16,500 coins to three concurrent callers,
+           which is the exact class of bug that primitive exists for. Reusing the
+           spawn key rather than minting a `mimicwin-` one is not a shortcut: it
+           is what makes "a Mimic must not also pay its loot" true by
+           construction instead of by two branches agreeing with each other.
+           A LOSS OR A FLEE CLAIMS NOTHING, on purpose. The chest stays on the map
+           and can be fought again. It cannot be re-rolled into a reward, because
+           isMimicSpawn is a pure function of the spawn id: a Mimic is a Mimic for
+           the whole life of that 45-minute instance, however many times you run
+           from it. */
+        const g = await award(foeCfg.claimKey, 'spawn', foeCfg.xp, 'Boneyard: the Mimic', foeCfg.date);
+        if (g) {
+          xp += g;
+          coins = foeCfg.coins;
+          await grantCrate('daily', 'boneyard');
+          extraCards.push(crateCard('daily'));
+        }
+        // the map holds `collected` in a closure, so tell it the chest is gone
+        dispatchEvent(new CustomEvent('bh-mimic-beaten', { detail: { key: foeCfg.claimKey } }));
+      } else if (foeCfg.mode === 'wanderer') {
+        /* THE ENCOUNTER IS SPENT HERE AND NOWHERE ELSE, on his own ledger key:
+           `wanderer-<date>-<cell>_i<instance>`, built by wandererKey and carried
+           in from the map. He no longer hijacks a rare spawn, so there is no
+           spawn key for him to share and the double-pay the Mimic branch above
+           guards against cannot arise; what this key stops instead is FARMING.
+           His path is a derived loop, so a player who knows where he is can walk
+           back into the light every thirty seconds, and without a key that is
+           150 XP, 200 coins and a Step Egg every time. One payout per cell per
+           45-minute instance, resolved by db.addIfAbsent, which is a single
+           IndexedDB request rather than a read-then-write pair (a kvGet/kvSet
+           version of this exact claim was once measured paying 16,500 coins to
+           three concurrent callers).
+           A LOSS OR A FLEE CLAIMS NOTHING, on purpose, and the map's
+           `wandererEngaged` set is what stops him re-charging a player who is
+           still standing in his light. The fight can be retaken; the reward
+           cannot be re-won.
+
+           HE DOES NOT RAISE THE GAUNTLET CEILING, and that is a decision, not an
+           omission. denWinsCount() counts `bossfirst-` rows and the ceiling is
+           7 + 3 per row, so anything that mints one is progression. A Boneyard
+           Wanderer walks a beat that re-rolls every 45 minutes, which makes him
+           unlimited per day: a per-kill marker would hand out +3 ranks a fight,
+           forever, which is precisely what the doctrine written above
+           denWinsCount forbids ("daily re-clears must never inflate
+           progression"). A single lifetime `bossfirst-wanderer` would be
+           farm-proof, but the Glutton earned his because he is a scheduled world
+           event with one clear per appearance, and the Mimic, this fight's exact
+           sibling, mints nothing. So the Wanderer sits with the Mimic. Granting
+           a marker later is easy; taking one back is not. Tom confirmed this on
+           2026-08-21. Asserted by name in tests/wanderer-boneyard-audit.mjs
+           (CEILING). */
+        const g = await award(foeCfg.claimKey, 'wanderer', foeCfg.xp, 'Boneyard: the Wanderer', foeCfg.date);
+        if (g) {
+          xp += g;
+          coins = foeCfg.coins;
+          await grantCrate('egg', 'boneyard');
+          extraCards.push(crateCard('egg'));
+        }
+        dispatchEvent(new CustomEvent('bh-wanderer-beaten', { detail: { key: foeCfg.claimKey } }));
       }
       // Battle Charm: spend a charge on the win for +25% coins.
       if (coins > 0) {
@@ -17980,12 +19906,10 @@ function recommendArch(fighter) {
   return 'melee';
 }
 
-async function openTalents(pitWrap) {
-  const wrap = openSheet(`
-    <div class="sheet-head"><h2>Talents</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" id="talBody"></div>`, { cls: 'full', onClose: () => { if (pitWrap) renderPit(pitWrap); else if (currentTab() === 'today') refresh(); } });
-  renderTalents(wrap);
-}
+/* openTalents() stood here: a six-line sheet wrapper around renderTalents whose
+   ONLY caller was the Today unlock-nudge card, removed with it on 2026-08-22.
+   The Build screen itself is untouched and is reached the way every other player
+   reaches it, through the character hub's Build tab (renderTalents(content)). */
 
 // Bar colour per stat, so the five allocators read apart at a glance (the
 // mockup's palette). Lives here, not in STAT_META: pit.js is fight logic and

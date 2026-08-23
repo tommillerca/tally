@@ -360,7 +360,23 @@ not broken. This CONFIRMS `docs/FLAKE-CLASSIFICATION-2026-08-22.md` line 119 (**
 rather than contradicting it (I first misread line 40, which is the MAJORITY
 rows, and was corrected).
 
-## 4. NOT DONE: Reggie's coordinated-beats model is still unported
+## 4. DONE 2026-08-23: the beat model IS ported, PR #109
+
+**This section said NOT DONE. It is now ported and open as PR #109
+(https://github.com/tommillerca/tally/pull/109), branch
+`feat/boneyard-beat-model` @ `e94d268b`, based on `cb0f72d5`.** Verified 32/32
+clean and provably red on a trickle (19 beats). Read the PR body before the
+history below; the three things the verification changed are in it, and the one
+that matters most is that Reggie's per-marker 16ms poller CHANGED WHAT IT
+MEASURED when run alongside the existing recorder (44/45 markers at reveal
+became 1/47). It now uses one shared 50ms poller.
+
+Also note: a healthy run sits AT the ceiling, 3 of 3, where Reggie measured 2.
+No headroom. Re-derive from placement sources, never widen.
+
+The original description of the work, kept because it explains the design:
+
+### (was) NOT DONE: Reggie's coordinated-beats model is still unported
 
 This was the original task Tom gave me and **I did not complete it.** I found the
 root cause underneath it (§2) and fixed that instead.

@@ -314,12 +314,40 @@ export function questState(q, ctx) {
   return { cur, target, done: cur >= target, claimed };
 }
 
+/* A CLOSED PERIOD PAYS NOTHING. Tom, 2026-08-23: "make past day quests
+   read-only". v425 made a past day render the whole day, quests included, and
+   that put a live Claim button on a quest somebody completed days ago: real
+   money, minted retroactively, from a screen that exists to be READ.
+
+   THIS IS THE ONLY GUARD, and it sits here rather than in the click handler
+   because here is where the money is actually authorised. Exactly two places in
+   js/ mint a quest claim row, `award('quest-...')` and `award('questsall-...')`,
+   and both are in this file, so both take this. A guard in js/app.js would be a
+   guard on the BUTTON, and the button is the one part of this that a stale
+   closure, a deep link, a re-render or a day that changed mid-flight can all get
+   past. This reads the clock on every call, so none of them reach the ledger.
+
+   PAST, NOT "NOT TODAY". A claim is refused when its period has CLOSED, which is
+   what retroactive means. A future key is left alone: it is not retroactive, the
+   clock-forward case is already claimDay's job on the next line, and two audits
+   legitimately drive this function on a virgin FUTURE period to get one with no
+   history in it (tests/reward-sop-audit.mjs uses '2099-01-02').
+   String order IS chronological for all three keys: 'YYYY-MM-DD' for a day, the
+   Monday's own 'YYYY-MM-DD' for a week, 'YYYY-MM' for a month.
+
+   It returns null, which is this file's existing answer for "nothing was paid"
+   (the duplicate path below returns it too), so every caller already handles it
+   and none can mistake it for a payout. */
+const periodClosed = (period, periodKey) => periodKey < periodKeyOf(period, dateKey());
+
 export async function claimQuest(periodKey, q, period = 'day') {
 /* TWO INDEPENDENT CEILINGS, AND BOTH RUN. The day guard came from the clock-trust
    work and the per-period cap from the rotation fix; they were written against
    the same function without either knowing about the other, and they stop
    different things. Cheapest first: the day guard is a single claimDay() and
    costs no db.all(), so a distrusted clock never pays for a ledger scan. */
+  // THE CLOSED-PERIOD GUARD, see periodClosed above. First, because it is free.
+  if (periodClosed(period, periodKey)) return null;
   /* MONOTONIC DAY GUARD (js/db.js claimDay). Gated on TODAY rather than on
      periodKey, because periodKey is a week or month key for the other two
      tiers and only dayOrdinal-comparable for 'day'. Gating all three on the
@@ -360,6 +388,9 @@ export async function claimQuest(periodKey, q, period = 'day') {
 
 // Bonus daily crate when all three dailies are claimed.
 export async function claimAllBonusIfDue(date, quests, allXp) {
+  // The closed-period rule too: this is the SECOND of the two places in js/ that
+  // mints a quest claim row, so it takes the same guard.
+  if (periodClosed('day', date)) return null;
   // MONOTONIC DAY GUARD (js/db.js claimDay): the all-three bonus crate rides on
   // the same daily rollover as the claims above, so it takes the same gate.
   if (!(await claimDay(dateKey())).fresh) return null;
