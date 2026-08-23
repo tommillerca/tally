@@ -172,7 +172,7 @@ const BROWSER = [
   'notif-tier-audit.mjs',    // Essentials is a bounded strict subset of Everything, the toast copy is graded against the DEVICE QUEUE both ways, fully off queues nothing, and every notifyNow call site names its kind
   'petlevel-audit.mjs',      // openPetLevelUp: sheet renders + PWR/HP/REF deltas match petBattleStats between prev and cur, + no re-open on repeat
   'backup-roundtrip-audit.mjs', // Settings YOUR-DATA export/import: seven stores, deep-equal round trip, findings for the toast-count undercount and the non-transactional import
-  'wheel-audit.mjs',         // daily spin appears + double-dip refused + each of five silent-retirement gates named
+  'wheel-audit.mjs',         // daily spin appears + double-dip refused + each of five silent-retirement gates named + every label/icon rests upright across five pinned landings (net rotation composed from real matrices, flip-band landings in the sample)
   'den-ceiling-audit.mjs',   // every kind of boss raises the Gauntlet ceiling, or none do
   'health-intake-audit.mjs', // Apple Health intake: parseHkPayload happy + rejection, syncFromClipboard writes valid + drops malformed, overlay preserves manual sleep, and a stale clipboard re-synced across a day rollover never counts the same walk twice
   'redeem-audit.mjs',        // Settings REDEEM A CODE: rewarded-actions SOP applied to redeemCode (first grants, second pays 0, invalid rejects, dupe branch reachability)

@@ -91,7 +91,10 @@ function wheelIconsHtml() {
     const img = pixPrizeImg(p);
     if (!img) return '';
     const [mx, my] = pt(100, 100, 60, i * SEG_DEG + SEG_DEG / 2);
-    return `<span class="dw-ico" style="left:${(mx / 2).toFixed(2)}%;top:${((my - 8) / 2).toFixed(2)}%">${img}</span>`;
+    /* top rides a variable so .dw-flip can move the icon to the label's slot
+       (the pair swaps around its shared anchor; an inline top would outrank
+       the class rule). --dwt is the normal slot, --dwft the flipped one. */
+    return `<span class="dw-ico" style="left:${(mx / 2).toFixed(2)}%;--dwt:${((my - 8) / 2).toFixed(2)}%;--dwft:${((my + 17) / 2).toFixed(2)}%">${img}</span>`;
   }).join('');
 }
 
@@ -176,7 +179,12 @@ function wheelSvg() {
     const [mx, my] = pt(cx, cy, 60, mid);
     const col = p.gold ? '#e8c24d' : '#f2e9d7';
     if (!pixPrizeImg(p)) labels += iconAt(p, mx, my - 8, 26);   // the rest ride as DOM imgs, see wheelIconsHtml
-    labels += `<text x="${mx.toFixed(1)}" y="${(my + 17).toFixed(1)}" font-size="9" font-weight="800" fill="${col}" text-anchor="middle" dominant-baseline="central" style="font-family:var(--body,system-ui);letter-spacing:.02em">${p.tag}</text>`;
+    /* transform-origin: the midpoint between icon center (my-8) and label
+       center (my+17), in viewBox units (transform-box:view-box), so .dw-flip
+       can rotate the label 180° about the pair's shared anchor. Combined with
+       a wheel resting near 180°, that lands the label back upright AND back
+       below its icon. See the .dw-flip comment in spin(). */
+    labels += `<text x="${mx.toFixed(1)}" y="${(my + 17).toFixed(1)}" font-size="9" font-weight="800" fill="${col}" text-anchor="middle" dominant-baseline="central" style="font-family:var(--body,system-ui);letter-spacing:.02em;transform-box:view-box;transform-origin:${mx.toFixed(1)}px ${(my + 4.5).toFixed(1)}px">${p.tag}</text>`;
   }
   return `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
     <circle cx="100" cy="100" r="97" fill="none" stroke="#0d0c12" stroke-width="6"/>
@@ -200,8 +208,16 @@ const STYLE = `
   animation:dwFlicker 4s steps(1,end) infinite}
 .dw-wheelwrap{position:relative;width:min(80vw,320px);aspect-ratio:1;margin:2px auto}
 .dw-wheel{width:100%;height:100%;transform:rotate(0deg);filter:drop-shadow(0 12px 26px rgba(0,0,0,.6));position:relative}
-.dw-ico{position:absolute;transform:translate(-50%,-50%);line-height:0;pointer-events:none;
+.dw-ico{position:absolute;top:var(--dwt);transform:translate(-50%,-50%);line-height:0;pointer-events:none;
   filter:drop-shadow(0 2px 2px rgba(0,0,0,.5))}
+/* Landing counter-flip: labels and icons ride the wheel's rotate(), so a rest
+   angle in the 90..270 band would leave every tag upside down (Tom, 2026-08-22:
+   "some of the text was upside down and hard to read"). .dw-flip rotates each
+   icon+label pair 180 deg about its wedge anchor (the text via its baked
+   transform-origin, the icon by taking the label's slot + spinning in place),
+   which at a near-180 rest restores icon-above-label, both upright. */
+.dw-flip svg text{transform:rotate(180deg)}
+.dw-flip .dw-ico{top:var(--dwft);transform:translate(-50%,-50%) rotate(180deg)}
 .dw-result .ri img{display:block}
 .dw-wheel svg{width:100%;height:100%;display:block}
 .dw-spinning{transition:transform 4.4s cubic-bezier(.13,.72,.16,1)}
@@ -289,7 +305,12 @@ export async function maybeShowDailyWheel({ sounds = true, force = false } = {})
   if (sheetStackOpen()) return false;              // don't stack over an open sheet
 
   const rng = preview ? mulberry32((Math.random() * 1e9) | 0) : mulberry32(hashStr('wheel:' + today));
-  const idx = pickPrizeIndex(rng);
+  let idx = pickPrizeIndex(rng);
+  /* webdriver-only landing pin (same family as __wheelForce): the upright-label
+     rows in tests/wheel-audit.mjs must land CHOSEN wedges in both the top and
+     bottom half, and date-seeding gives a test no lever over idx. The prize
+     follows the pinned wedge, so grant and drawing still agree. */
+  if (navigator.webdriver && Number.isInteger(window.__wheelIdx)) idx = ((window.__wheelIdx % SEG) + SEG) % SEG;
   const prize = PRIZES[idx];
 
   // Gate + grant happen ON SPIN, not on show — so closing the wheel without
@@ -361,13 +382,22 @@ function showWheel(idx, prize, result, commit, { sounds }) {
       // consume the day + grant the prize the moment they commit to spinning
       try { const c = await commit(); result.coinDelta = c.coinDelta; } catch { /* grant best-effort */ }
       if (sounds) { try { popSound(true); } catch { /* no audio */ } }
+      /* Any landing whose rest angle sits in the 90..270 band would leave every
+         label upside down, so counter-flip them (see .dw-flip in STYLE). The
+         class goes on in the SAME frame as the landing transform: the spin's
+         fast start masks the snap, and the slow deceleration tail then settles
+         with the labels already upright, so nothing pops at rest. */
+      const rest = ((360 - (idx * SEG_DEG + SEG_DEG / 2)) % 360 + 360) % 360;
+      const flip = rest > 90 && rest < 270;
       if (reducedMotion) {
+        if (flip) wheel.classList.add('dw-flip');
         wheel.style.transform = `rotate(${360 - (idx * SEG_DEG + SEG_DEG / 2)}deg)`;
         reveal(); return;
       }
       wheel.classList.add('dw-spinning');
       // double-rAF so the transition class is live before we set the target
       requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (flip) wheel.classList.add('dw-flip');
         wheel.style.transform = `rotate(${landingRotation(idx)}deg)`;
       }));
       wheel.addEventListener('transitionend', reveal, { once: true });
