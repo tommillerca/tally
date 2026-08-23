@@ -116,19 +116,33 @@ const scrollTop = () => page.evaluate(() => document.getElementById('screen').sc
 /* ---------------- TODAY ---------------- */
 await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(1800);
-const arm = async () => {
+/* ARMING IS RETRIED AND CONFIRMED, because a route landing late wipes both
+   probes. Today is rebuilt by innerHTML and route() sets scrollTop = 0 when its
+   render resolves, so a scroll written 1.8s after the hashchange can be undone a
+   moment later: measured on this tree in the gate at load 31, this suite went
+   red on its own SETUP at scrollTop 0. Each attempt writes the scroll, marks the
+   screen, waits, then re-reads BOTH, and a machine that never holds them reports
+   UNPROVEN rather than a red about the app. */
+const settle = async (fn, tries = 20, gap = 300) => {
+  for (let i = 0; i < tries; i++) { if (await fn()) return true; await sleep(gap); }
+  return false;
+};
+const arm = () => settle(async () => {
   await page.evaluate(() => { document.getElementById('screen').scrollTop = 700; });
   await mark();
-};
-await arm();
+  await sleep(250);
+  return await scrollTop() > 200 && await marked();
+});
+const armed = await arm();
 ok('SETUP Today is scrolled well below the top and marked so a rebuild is detectable',
-  await scrollTop() > 200 && await marked(), `scrollTop ${await scrollTop()}`);
+  armed, `scrollTop ${await scrollTop()}`);
 
-const todayDbl = await doubleTap('today', arm);
-ok('SETUP the Today tab took two real taps', todayDbl.taps !== false);
+const todayDbl = armed ? await doubleTap('today', arm) : { taps: false, inWindow: false, gap: Infinity };
+if (armed) ok('SETUP the Today tab took two real taps', todayDbl.taps !== false);
 if (!todayDbl.inWindow) {
-  unproven('TODAY-DBL a double tap brings Today back to the top',
-    `this machine could not deliver two taps inside ${DBL_WINDOW}ms (best ${todayDbl.gap}ms over 3 tries), so the app was right to see two singles`);
+  unproven('TODAY-DBL a double tap brings Today back to the top', armed
+    ? `this machine could not deliver two taps inside ${DBL_WINDOW}ms (best ${todayDbl.gap}ms over 3 tries), so the app was right to see two singles`
+    : 'Today never held a scroll offset and a marker at the same time (the screen was still assembling under load)');
   unproven('TODAY-DBL and the first tap did NOT re-route: the scrolled screen survived', 'same');
 } else {
   let top = 700;
@@ -141,15 +155,21 @@ if (!todayDbl.inWindow) {
 
 /* The control. A lone same-tab tap still re-routes to Today's home, which is
    tray-destination-audit's contract and must not have moved. */
-await sleep(700);   // any route the section above left in flight lands before this is armed
-await arm();        // re-armed, not carried over: the control must not depend on the rows above
-ok('SETUP the single-tap control starts scrolled and marked', await scrollTop() > 200 && await marked());
-await tapTab('today', 1);
-await sleep(1800);
-const single = { top: await scrollTop(), probe: await marked() };
-ok('TODAY-SINGLE a lone tap still lands at the top of Today', single.top < 2, `scrollTop ${single.top}`);
-ok('TODAY-SINGLE by re-routing, exactly as before', !single.probe,
-  single.probe ? 'marker intact: route() never ran' : 'marker gone: route() ran');
+await sleep(700);              // any route the section above left in flight lands first
+const rearmed = await arm();   // re-armed, not carried over: the control must not depend on the rows above
+ok('SETUP the single-tap control starts scrolled and marked', rearmed, `scrollTop ${await scrollTop()}`);
+if (!rearmed) {
+  unproven('TODAY-SINGLE a lone tap still lands at the top of Today',
+    'Today never held a scroll offset and a marker at the same time (the screen was still assembling under load)');
+  unproven('TODAY-SINGLE by re-routing, exactly as before', 'same');
+} else {
+  await tapTab('today', 1);
+  await sleep(1800);
+  const single = { top: await scrollTop(), probe: await marked() };
+  ok('TODAY-SINGLE a lone tap still lands at the top of Today', single.top < 2, `scrollTop ${single.top}`);
+  ok('TODAY-SINGLE by re-routing, exactly as before', !single.probe,
+    single.probe ? 'marker intact: route() never ran' : 'marker gone: route() ran');
+}
 
 /* ---------------- BONEYARD ---------------- */
 await tapTab('boneyard', 1);
@@ -158,7 +178,8 @@ await sleep(1600);
    map to recentre: the fallback branch, and it needs no WebGL to grade. */
 const gate = await page.evaluate(() => !!document.getElementById('mapStart') && !document.getElementById('mapRecenter'));
 if (gate) {
-  const fb = await doubleTap('boneyard', mark);
+  const armMark = () => settle(async () => { await mark(); await sleep(250); return marked(); });
+  const fb = await armMark() ? await doubleTap('boneyard', armMark) : { taps: false, inWindow: false, gap: Infinity };
   ok('SETUP the Boneyard gate is up, marked, and took two real taps (no map yet, so no #mapRecenter)',
     fb.taps !== false);
   if (!fb.inWindow) {
