@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 426, date: '2026-08-23', title: 'If a save fails, you hear about it', items: [
+    'Until now, if the app failed to write something to your phone, it went quietly. The meal, the weigh-in, the crate, the coins: gone, with nothing on screen to tell you. The app speaks up now.',
+    'It only speaks up for things you did or earned. Bookkeeping the app can work out again by itself stays silent, so this is not a new stream of warnings.',
+    'And if the reason is that your phone is out of storage, it says that specifically, because that one you can actually do something about.',
+  ] },
   { n: 425, date: '2026-08-23', title: 'Backup off means off, and the Shop stops working overtime', items: [
     'Fixed, and it is the one in here that matters: turning Cloud backup OFF in Settings did not actually stop your save being uploaded. The switch stopped the app pulling a backup DOWN, and left it still sending one up on every launch. Your save is encrypted on your phone before it leaves, with a key that never goes anywhere, so what was being sent could not be read, by us or by anyone else. But off should mean off, and now it does.',
     'Gwart\'s Emporium was quietly working flat out for as long as you had it open, which costs battery and warms the phone. Nothing about it looks any different; it just rests now.',
