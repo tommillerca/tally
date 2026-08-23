@@ -252,3 +252,250 @@ Live is **v420**.
 
 In zsh, `"$CMT:refs/heads/x"` silently eats the `:r` as a history modifier and
 produces a mangled refspec. Always brace it: `"${CMT}:refs/heads/x"`.
+
+
+# ADDENDUM, 2026-08-23. A third session's work, handed to Gwart.
+
+_Written for a Claude with zero memory of that session. Specifics below; anything
+uncertain is in Open Questions, not guessed. Live was **v426** when this was
+written; `origin/main` was `6db729f7`._
+
+I was a third session working alongside Gwart and the Emporium session. Two
+things merged, one bug report was retracted, and one piece of work was NOT done.
+Read this before touching `scripts/build-cosmetics.py` or
+`tests/boneyard-audit.mjs`.
+
+## 1. MERGED: the cosmetics rebuild stopped deleting the shop (PR #86, `2c032483`)
+
+**The bug.** Re-running `python3 scripts/build-cosmetics.py` re-emitted
+`data/boneheadz.js` from a FOUR-EXPORT template. The shipped file has more than
+four exports, all hand-authored below the item array, and every rebuild deleted
+them: `BH_ITEMS_WITH_UNRELEASED`, `PET_CROP`, `PET_SLOTS`, `PET_SHOP`,
+`PET_HERO_REF`, `PET_HERO_HOUSE`, `PET_HERO_REL`. All seven are STATIC NAMED
+IMPORTS in `js/app.js`, `js/loot.js` and `js/paddock-cards.js`, so the module did
+not degrade, it failed to load. `PET_SHOP` is what sells Bumbleseal for 50,000
+coins.
+
+A separate earlier fix (v422-v424) had already stopped ITEM loss via `SPECIALS` +
+`_prior_items()`. That worked: zero items lost. Nobody had checked the file still
+loaded. **"No item was lost" and "the file still loads" are different claims.**
+
+**The fix.** The manifest is now EDITED, not rewritten. Only the two generated
+array literals are spliced in; every other byte, comment and table carries
+through. The four-export template survives as the bootstrap for a checkout with
+no manifest (the case `_prior_items()` already returns `{}` for). The naming
+counter is seeded from shipped `#n` names so a new drop cannot reuse a number.
+
+**Verify it still holds** (from the repo root, ~1 min):
+
+```
+python3 scripts/build-cosmetics.py && git diff --stat data/boneheadz.js
+```
+
+Expected: `0 new item(s) appended`, and **zero diff**. A rebuild with no new art
+must be byte-identical. If it is not, the splice has regressed.
+
+## 2. MERGED: the boneyard counters stopped counting the map key (PR #94, `0a569dec`)
+
+**The bug, and it is a good one.** `js/app.js mapLegendHtml()` builds `#mapLegend`
+out of the REAL marker markup on purpose, so the key cannot drift from the map.
+`#mapLegend` sits INSIDE `#mapStage`, so the marker CSS applies to its swatches,
+and it is `[hidden]` — i.e. `display:none`, which `getComputedStyle().opacity`
+does NOT report as `0`.
+
+Counted from source and confirmed live: **5 `.map-spawn` + 3 `.map-den-mark` +
+1 `.map-mini-mark` = exactly NINE** nodes counted as permanently visible markers,
+every run. `tests/boneyard-audit.mjs` counted them with unscoped
+`document.querySelectorAll`.
+
+So `vis@reveal 9` in `docs/FLAKE-CLASSIFICATION-2026-08-22.md` was never markers
+inside the 220ms fade. It was the constant. Gwart corrected that doc in #91.
+
+**Why it mattered more than the numbers.** The two rows that replaced MAJORITY are
+shaped `revealDom > 0 && <comparison>`. With the key supplying 9, a Boneyard
+drawing ZERO real markers gave `revealDom` 9, `revealSettled` 9, and `9 >= 9` and
+`9*2 > 9` both passed. **Two green rows over an empty map**, shipped in the same
+PR as the ratchet against that class.
+
+**The fix**, all in `tests/boneyard-audit.mjs`:
+- three counting sites filter through `closest('.maplibregl-marker')`. An
+  ALLOWLIST on purpose: `js/map.js:200` does
+  `new maplibregl.Marker({ element: el })`, so MapLibre stamps the class on what
+  it owns and never on the key's copies. A `#mapLegend` denylist would work today
+  and miss the next hidden thing built from marker markup.
+- a decoy row (FAIL) guarding BOTH sites. Reverting only the recorder leaves the
+  final count clean while inflating `revealDom`; a single-site check passes that.
+- a SAMPLE floor row that goes **UNPROVEN (exit 97), not FAIL**, when the map drew
+  nothing. `boneyardCapability()` proves a WebGL context can be CREATED, not that
+  placement finished, and that gap is how a degraded run reaches these rows.
+- `unprovenReport()` also called before the final exit. It only ran inside the
+  `if (!mapCap.ok)` early exit, so a row going unproven mid-run exited 97 with
+  nothing naming it: a silent 97, worse than a red.
+
+## 3. RETRACTED: the "Boneyard draws zero markers" product bug
+
+**Do not chase this. I filed it and then disproved it myself.**
+
+One audit run in four produced an empty map, and I filed it as a suspected
+product bug because a player on a bad connection would see an empty Boneyard.
+Investigated on Tom's instruction:
+
+- a repro harness (below), **15 runs, 15 healthy**: one `#mapStage`, `markers-in`
+  true, map loaded, nothing detached, 57 or 58 markers every run.
+- two full `tests/boneyard-audit.mjs` runs afterwards: **26/26 passed** both times.
+
+**The confound was mine.** I called the box "clear" on a check that counted node
+processes matching `tests/*.mjs`. It did not count BROWSERS, and I had killed two
+audit runs mid-flight shortly before, which orphans their Chrome children. The
+strongest sentence in my report was the least well-founded one.
+
+The entry survives in `docs/WORK-REGISTER.md` marked DOWNGRADED, not deleted,
+because the app did once render a map stage and never reveal, which defeats a
+`setTimeout(revealMarkers, 1800)` armed unconditionally so that cannot happen. If
+it recurs the UNPROVEN row now names the cause.
+
+**Useful by-product: 26/26 on a quiet box.** That includes the two ARRIVAL-SLOW
+straggler rows that fail on every contended run. They are contention-sensitive,
+not broken. This CONFIRMS `docs/FLAKE-CLASSIFICATION-2026-08-22.md` line 119 (**on `origin/main`; NOT present in the shared checkout, which is behind main**)
+rather than contradicting it (I first misread line 40, which is the MAJORITY
+rows, and was corrected).
+
+## 4. NOT DONE: Reggie's coordinated-beats model is still unported
+
+This was the original task Tom gave me and **I did not complete it.** I found the
+root cause underneath it (§2) and fixed that instead.
+
+**Where the three versions live, and they all differ:**
+
+| version | where | what it has |
+|---|---|---|
+| main | `origin/main:tests/boneyard-audit.mjs` | the settled-read fix + my §2 scoping. NO beat model. |
+| Reggie's | UNCOMMITTED in the working tree of the shared checkout (branch `ext/art-memory-census`), blob `23b64fa9`. Still shows as ` M tests/boneyard-audit.mjs`. | the 26-row beat model. NO settled-read, NO scoping. |
+| rescue | **LOCAL branch only** `rescue/shared-checkout-2026-08-20` @ `78b13d9d`. The REMOTE copy was deleted 2026-08-23 because the repo is PUBLIC. It exists on this Mac and nowhere else. | same as Reggie's, snapshotted |
+
+**What the beat model is.** A BEAT is every marker that becomes visible within one
+fade (`BEAT_MS = 250`, one 220ms transition plus slack) of the marker that opened
+it. It asserts the map arrives in at most `MAX_BEATS = 3`, never a per-marker
+trickle. Three because that is the count of legitimate placement sources: the
+reveal itself, the tile-informed pass once `queryRenderedFeatures` can see water
+and roads, and the spire's own network round trip.
+
+It is deliberately REVEAL-INDEPENDENT, which is the whole point: the first beat
+lands 14-539ms after the reveal on a fast line and 1810-2168ms on a slow one, so
+no fixed offset describes both. It uses a FIXED WINDOW rather than a gap-linked
+chain, because a chain lets a 40-marker trickle at 240ms apiece read as one long
+beat.
+
+It tests the thing Tom actually complained about on 2026-08-08 ("it looks cheap
+when everything staggers in") and **nothing on main tests that today.**
+
+**Before porting it, note:** it was written against an app 16+ commits old, so its
+measured windows need re-measuring, and it must keep BOTH main's settled-read and
+my scoping or it reintroduces §2.
+
+## 5. The repro harness. It is NOT in the repo, on purpose
+
+Every `.mjs` in `tests/` must belong to a tier or `release-gate` fails its
+coverage assertion before a browser starts, so adding this as a file means adding
+a `DECLARED` entry too. I did not, because nobody asked for a permanent tool.
+It lived in `/private/tmp`, which is gone. Verbatim, so it is not rebuilt:
+
+```javascript
+import { boot, seed, sleep, serveTree } from './tests/godmode.js';
+const srv = await serveTree(process.cwd());
+const base = srv.url;
+if (!/localhost|127\.0\.0\.1/.test(base)) { console.log('REFUSING, not local:', base); process.exit(2); }
+const N = Number(process.argv[2] || 3);
+for (let i = 1; i <= N; i++) {
+  const { browser, page } = await boot(base, { args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist'] });
+  try {
+    await browser.defaultBrowserContext().overridePermissions(new URL(base).origin, ['geolocation']);
+    await page.setGeolocation({ latitude: 49.2827, longitude: -123.1207 });
+    await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+
+    await seed(page, { level: 18, coins: 500 });
+    await page.evaluate(() => { location.hash = '#/boneyard'; });
+    await sleep(2500);
+    await page.evaluate(() => {
+      const b = [...document.querySelectorAll('#screen button')].find(x => /start|allow|enable|walk|open|let/i.test(x.textContent || ''));
+      if (b) b.click();
+    });
+    await sleep(9000);
+    const r = await page.evaluate(() => {
+      const live = document.querySelector('#mapStage');
+      const all = document.querySelectorAll('#mapStage');
+      const m = window.__map;
+      const canvas = document.querySelector('#mapCanvas');
+      const owned = [...document.querySelectorAll('.map-spawn,.map-den-mark,.map-mini-mark,.map-spire,.map-glutton-mark')]
+        .filter(e => e.closest('.maplibregl-marker'));
+      let loaded = null, styleLoaded = null, ctr = null;
+      try { loaded = m?.loaded?.() ?? null; styleLoaded = m?.isStyleLoaded?.() ?? null; ctr = m?.getCenter?.() ? 1 : 0; } catch (e) { loaded = 'threw:' + e.message; }
+      return {
+        stages: all.length,
+        liveAttached: live ? document.body.contains(live) : null,
+        markersIn: live ? live.classList.contains('markers-in') : null,
+        mapObj: !!m, mapLoaded: loaded, styleLoaded, canvasAttached: canvas ? document.body.contains(canvas) : null,
+        mapCanvasInLiveStage: (canvas && live) ? live.contains(canvas) : null,
+        ownedMarkers: owned.length,
+        detachedOwned: owned.filter(e => !document.body.contains(e)).length,
+      };
+    });
+    console.log(`run${i} ` + JSON.stringify(r));
+  } catch (e) { console.log(`run${i} THREW ${e.message}`); }
+  await browser.close();
+}
+await srv.close?.(); srv.kill?.();
+process.exit(0);
+```
+
+Save as `<repo root>/diag.mjs`, run `node diag.mjs 12`. ~20s per iteration versus
+~4 minutes for the full audit. It reports detached stages, detached markers,
+`markers-in`, `map.loaded()`, and the MapLibre-owned marker count.
+
+**The trap that cost me a round:** do NOT add your own `page.goto(base)`.
+`boot()` already navigates to `/?demo`, and `seed()` refuses to run on a page
+that is not in demo mode.
+
+## 6. Traps from this session, so they are not re-debugged
+
+1. **A "clear box" check that counts test processes does not count browsers.**
+   Killing a node parent orphans its Chrome children and they are invisible to
+   `pgrep -f 'tests/.*mjs'`. This produced a false product-bug report.
+2. **`pgrep -fc` and `pgrep -fl` disagreed**: the count returned 0 while the
+   listing showed seven processes, because the pattern did not match full-path
+   `node` invocations. Verify a count against a listing before trusting it.
+3. **Timing rows in `boneyard-audit` must not be graded on a busy machine.**
+   ARRIVAL-SLOW straggler latency reads 42ms idle and 342-461ms under load
+   against a 250ms budget. At one point THREE sessions were running browser
+   suites, including a full `release-gate --all`.
+4. **`x === 0` is two claims.** "x was measured" AND "x is zero", and the failure
+   output cannot separate them. `revealDecoys === 0` went red because no reveal
+   fired, so it was `undefined`. A guard must distinguish ABSENT from ZERO; give
+   the unmeasured case `unproven()` / exit 97.
+5. **A prove-red that comes back GREEN is a result, not a pass.** Mine did, and
+   the cause was that I had run the mutation inside a copy carrying my own
+   PATCHED script, so byte-identical was the correct answer to the question I had
+   accidentally asked.
+6. **`guard-provenance-lint` counts bracketed literals containing strings**, not
+   every constant. I dated the wrong one first. A `const SELS = ['.a','.b']`
+   extracted into a `page.evaluate` counts; `const N = 10` does not.
+7. **zsh ate `$R:tests/...`** as a history modifier in `git rev-parse`. Brace it.
+
+## 7. Open questions for Gwart
+
+1. **Is the beat model wanted at all now?** With §2's root cause fixed it may be
+   less necessary than it looked. Nobody has decided. Tom's call, not mine.
+2. **13 audits decide visibility from `getComputedStyle().opacity` alone** and an
+   unknown subset share the §2 bug. Gwart's finding. Needs per-call-site review,
+   NOT a grep: a file-level check reports `boneyard-audit.mjs` as guarded and we
+   proved it was not. Logged in `docs/WORK-REGISTER.md`, unstarted.
+3. **The fast path has no Boneyard-entry timestamp.** `window.__arr.t0` is set at
+   document creation (line ~71, inside `evaluateOnNewDocument`), before `seed()`
+   and before navigation, while the slow path sets `__slow.entry` at Boneyard
+   entry. So fast reveal figures include the whole harness runway and are NOT
+   comparable to the 1800ms cap. I claimed they were and withdrew it. Fixing it
+   means recording an entry timestamp on the fast path the way the slow one does.
+4. **`docs/WORK-REGISTER.md` has no owner.** Three sessions append to it
+   concurrently and it drifts from its last commit within minutes. It is on
+   `ext/art-memory-census`, which is PUSHED (Tom's informed call 2026-08-23,
+   knowing the repo is PUBLIC).
