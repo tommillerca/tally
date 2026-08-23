@@ -5524,6 +5524,75 @@ body::before {
 .look-bar .lb-txt { font-size: 12.5px; color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .look-bar .lb-txt b { color: var(--text-1, #efe9f5); }
 .look-bar .btn { flex: none; padding: 7px 12px; font-size: 12.5px; }
+
+/* ---- ?mogv2: the reworked look panel (new-player grill, 2026-08-23) --------
+   Behind a query param until Tom picks it. Everything here is presentation:
+   nothing below changes a price, a gate or what a control does. */
+.mog-panel {
+  margin-top: 14px; padding: 11px 11px 10px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+}
+.mog-panel .sect-h.mog-h {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0;
+}
+.mog-what {
+  flex: none; background: none; border: 0; padding: 2px 0; cursor: pointer;
+  font: inherit; font-size: 11px; font-weight: 700; text-transform: none; letter-spacing: 0;
+  color: var(--text-2); text-decoration: underline; text-underline-offset: 2px;
+}
+.mog-lead { margin: 5px 0 9px; font-size: 12.5px; line-height: 1.4; color: var(--text-2); }
+.mog-lead b { color: var(--text-1, #efe9f5); }
+.mog-empty { margin: 6px 2px 2px; }
+/* THE PREVIEW, AT THE DECISION. Two stages of the same figure, so the answer to
+   "what will I look like" is in the same frame as the tiles that change it. */
+.mog-figs { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+.mog-figs figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.mog-figs .mog-cap {
+  font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3);
+}
+.mog-figs figure.after .mog-cap { color: var(--accent); }
+.mog-figs .mog-arrow { color: var(--text-3); display: flex; align-items: center; padding-top: 13px; }
+.bh-stage.mog-fig { width: 130px; height: 130px; border-radius: 13px; }
+/* same fit as the big paper doll, so the small pair is the SAME picture, not a
+   differently-cropped one (.bh-stage's base rule is object-fit: cover) */
+.bh-stage.mog-fig .bh-anim { inset: 0 -14%; --av-fit: contain; --av-pos: 50% 72%; }
+.bh-stage.mog-fig img { object-fit: contain; object-position: 50% 72%; }
+/* the price tile carries the REAL dust art, so kill the Unicode stand-in */
+/* The pill carries the REAL dust art, so the Unicode stand-in goes.
+   TWO measured traps here, both found by reading the render, not the source:
+   pixCur() writes an INLINE style="width:16px;height:16px" that beats any
+   stylesheet rule (and it returns null below 16, so 16 is the floor: the app's
+   other dust marks call ICONS.dust(12) and silently get a vector diamond
+   instead). And `.ward-cell img` is position:absolute;inset:0, which pinned the
+   crystal to the tile's corner ON TOP of the digits. So the pill is sized to fit
+   a real 16px icon and the icon is put back in flow. */
+.ward-cell.look .look-cost.dust {
+  display: flex; align-items: center; gap: 3px; padding: 2px 5px; font-size: 10px; line-height: 16px;
+}
+.ward-cell.look .look-cost.dust::after { content: none; }
+.ward-cell.look .look-cost.dust img, .ward-cell.look .look-cost.dust svg {
+  position: static; inset: auto; flex: none; object-fit: contain;
+}
+.mog-panel .look-hide svg { opacity: .75; }
+/* the bar states what you keep, get and pay before the button, not after it */
+.look-bar.mog-bar { align-items: center; }
+.mog-lines { display: grid; gap: 3px; min-width: 0; }
+.mog-lines span { display: flex; align-items: baseline; gap: 6px; font-size: 12px; min-width: 0; }
+.mog-lines i {
+  flex: none; width: 56px; font-style: normal; font-size: 9.5px; font-weight: 800;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--text-3);
+}
+.mog-lines b { color: var(--text-1, #efe9f5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mog-lines em {
+  flex: none; font-style: normal; font-size: 10.5px; color: var(--text-3);
+  display: inline-flex; align-items: center; gap: 3px;
+}
+/* pixCur writes an inline 16px, so do not fight it: give the line the room */
+.mog-lines em img, .mog-lines em svg { flex: none; }
+/* .btn is width:100%, and .look-bar's flex:none does NOT undo that: the
+   shipped v1 bar has the button lying across its own status text. */
+.look-bar.mog-bar .btn.mog-go { width: auto; flex: none; padding: 10px 15px; font-size: 13.5px; }
+.mog-safe { text-align: center; margin-top: 8px; }
 /* a disguised slot on the paper doll: the doll shows the LOOK, this says so.
    Sits bottom-left, clear of the .pd-gear stat strip pinned to the slot's top
    (they collided there and the badge clipped the stat text). */

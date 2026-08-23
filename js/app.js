@@ -216,6 +216,11 @@ const S = {
      params, and it is applied ONLY to guards that already test !S.settings, i.e.
      the "do not interrupt a fresh boot" family. It suppresses nothing else. */
   calm: new URLSearchParams(location.search).has('calm'),
+  /* THE REWORKED LOOK PANEL, mockup-first per Tom's standing preference: it is a
+     reshaping of the Wardrobe's bottom half, so it ships behind ?mogv2 until he
+     picks it. Same read-once-next-to-?demo pattern as the two params above. It
+     changes ONLY presentation: no price, no gate, no yield moves with it. */
+  mogv2: new URLSearchParams(location.search).has('mogv2'),
   onlineCache: new Map(),
   ui: { ringPct: 0, remainShown: null, macroPcts: [0, 0, 0] }, // last-rendered values so charts animate between states
   celebration: null,
@@ -12423,7 +12428,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
            reason it is free below, but Tom, 2026-08-11: "it's a dumb move in game
            but the player should be able to do it for simple consistency." A panel
            that silently is not there reads as broken. */
-        if (!GEAR_SLOTS.includes(slot) || !baseArtId) return '';
+        if (!GEAR_SLOTS.includes(slot)) return '';
+        /* AN EMPTY SLOT USED TO RENDER NOTHING AT ALL, which is the fourth thing
+           the new-player grill found: walk the doll and the look section appears
+           and disappears with no explanation, which reads as a bug rather than as
+           a rule. Under v2 the section keeps its place and says the rule in one
+           line. No control, so nothing new can be tapped or spent. */
+        if (!baseArtId) return S.mogv2
+          ? `<div class="sect-h mog-h" style="margin-top:14px"><span>${esc(GEAR_SLOT_LABELS[slot])} · change how it looks</span></div>
+             <p class="note mog-empty">This slot is empty, so there is nothing to disguise yet. Put something on above and the look picker appears here.</p>`
+          : '';
         const cur = tm[slot] ?? '';                        // '' = the gear's own look
         const sel = S.lookPreview == null ? cur : S.lookPreview;
         const arts = slotArts;
@@ -12435,6 +12449,86 @@ async function renderCharacter(wrap, tab, opts = {}) {
         const cost = (sel === '' || sel === TRANSMOG_HIDE) ? 0 : (lookPriceMap[sel] || 0);
         const afford = dustBal >= cost;
         const changed = sel !== cur;
+        /* ---------------------------------------------------------------- v2
+           THE NEW-PLAYER GRILL, 2026-08-23, measured at 430x932 on a seeded
+           mid-game account. Four findings, and this branch answers them in order:
+
+           1. THE PREVIEW HAPPENS WHERE YOU CANNOT SEE IT. Tapping a look already
+              restages the paper doll, correctly. But at the moment of the tap the
+              doll's BOTTOM edge is 480px ABOVE the top of the viewport (stage rect
+              -894..-480), so the only thing that moves in the frame the thumb is in
+              is a 1px ring on a 93px tile and a text bar 200px lower. Seeing the
+              answer costs a 934px scroll up, a full viewport, then a scroll back
+              down to commit. So the figure comes to the decision instead: a
+              Now -> After pair, rendered from the SAME `look` and `stageEq` maps
+              the big doll uses, directly above the tiles.
+           2. TWO GRIDS OF THE SAME TILES, "pick your fit" and "pick your look".
+              Measured identical: both .ward-grid, 93x93 cells, 13px radius,
+              backgrounds rgb(30,28,38) vs rgb(22,21,29), a max channel delta of 9.
+              One changes your stats, one costs dust and changes only the picture.
+              So this half gets its own panel, its own name and its own first line.
+           3. THE PRICE IS DRAWN IN A CURRENCY THE SCREEN RENDERS THREE WAYS: the
+              header chip is pixCur('dust') purple crystals, the tile is a literal
+              Unicode ' ◆' from .look-cost::after, and the sentence below is
+              ICONS.dust(12), which is UNDER pixCur's 16px floor so it silently
+              falls back to a tan vector diamond. One currency, three shapes. Every
+              dust mark in here is now ICONS.dust(16), the same art as the wallet.
+           4. NOTHING SAYS WHAT YOU KEEP UNTIL AFTER THE BUTTON. The old copy does
+              say the gear keeps its stats, in 12.5px grey, BELOW the commit. The
+              bar states it in three labelled lines before the button: what you
+              keep, what you get, what you pay, plus the line that nothing is lost.
+
+           Vocabulary and the explainer are NOT mine: another workstream owns the
+           words for ectoplasm and transmute and the Guide entries behind them.
+           `[data-guide="transmog"]` below is the hook it lands on; nothing here
+           writes an explanation of its own.
+
+           NOT CHANGED, deliberately: transmogPrice, transmogCost, applyTransmog,
+           the paid-once rule, the arm-then-confirm on a paid apply, or which
+           looks are offered. This is presentation. */
+        if (S.mogv2) {
+          const slotLc = esc(GEAR_SLOT_LABELS[slot].toLowerCase());
+          const dustIco = ICONS.dust(16);
+          const figure = eqMap => `<div class="bh-stage mog-fig">${avatarLayersHtml(eqMap, { noYard: true, skip: ['C', 'BG'] })}</div>`;
+          return `
+        <div class="mog-panel">
+          <div class="sect-h mog-h"><span>${esc(GEAR_SLOT_LABELS[slot])} · change how it looks</span>
+            ${/* THE HOOK FOR GWART'S GUIDE, and it is a hook, not an explainer:
+                  the words for "transmog" as a concept belong to that workstream,
+                  not to this one. Contract, one line: define window.openGuide(topic)
+                  and this link appears here and calls it with 'transmog'. It is
+                  gated on the opener EXISTING so a visible control can never be a
+                  control that does nothing (anti-regression rule 5). */''}
+            ${typeof window.openGuide === 'function'
+              ? '<button type="button" class="mog-what" data-guide="transmog">What is this?</button>' : ''}</div>
+          <p class="mog-lead">${wornGear
+            ? `Your ${slotLc} keeps <b>${gearLabel(wornGear)}</b>. Only the picture changes.`
+            : `Nothing with stats is in this ${slotLc}, so changing the picture here is free.`}</p>
+          <div class="mog-figs">
+            <figure><span class="mog-cap">Now</span>${figure(look)}</figure>
+            <span class="mog-arrow" aria-hidden="true">${ICONS.chev(18)}</span>
+            <figure class="${changed ? 'after' : 'same'}"><span class="mog-cap">${changed ? 'After' : 'Pick one below'}</span>${figure(stageEq)}</figure>
+          </div>
+          <div class="ward-grid look-grid">
+            ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+            ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
+            ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost dust">${lookPriceMap[i.id]}${dustIco}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
+          </div>
+          <div class="look-bar mog-bar${changed ? ' armed' : ''}">
+            <div class="mog-lines">
+              <span><i>You keep</i><b>${wornGear ? gearLabel(wornGear) : 'every piece you own'}</b></span>
+              <span><i>You get</i><b>${esc(nameOf(sel))}</b></span>
+              <span><i>You pay</i><b>${cost ? `${cost} Bone Dust` : 'nothing'}</b>${cost ? `<em>${dustIco} you have ${dustBal}</em>` : ''}</span>
+            </div>
+            ${changed
+              ? (afford
+                  ? `<button class="btn mog-go" data-look-apply="${esc(sel)}" data-look-price="${cost || 0}">Wear it</button>`
+                  : `<button class="btn ghost mog-go" disabled>Need ${cost - dustBal} more dust</button>`)
+              : '<button class="btn ghost mog-go" disabled>Wear it</button>'}
+          </div>
+          <p class="note mog-safe">Nothing is destroyed. The piece stays on, keeps its stats and stays in your Backpack.${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>
+        </div>`;
+        }
         return `
         <div class="sect-h" style="margin-top:14px">${esc(GEAR_SLOT_LABELS[slot])} · pick your look</div>
         <div class="ward-grid look-grid">
@@ -12544,6 +12638,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
     }));
     // Tap a look to try it on: free, instant, no commitment. Dust is only spent
     // by the Apply button in the bar.
+    // the Guide hook. Only rendered when an opener is registered, so this can
+    // never bind a control that does nothing.
+    $$('[data-guide]', content).forEach(b => b.addEventListener('click', () => window.openGuide?.(b.dataset.guide)));
     $$('[data-look]', content).forEach(cell => cell.addEventListener('click', () => {
       S.lookPreview = cell.dataset.look;
       popSound(S.sounds);
