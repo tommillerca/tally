@@ -29,8 +29,8 @@
  * reverted. One dated line, one prevented regression. That is the whole ask.
  *
  * WHAT THIS REQUIRES. A literal expectation constant — an UPPER_SNAKE const
- * assigned an array containing string literals — must carry an ISO date within
- * the 7 lines above it. That is the minimum that makes staleness CHECKABLE by a
+ * assigned an array containing string literals — must carry an ISO date in the
+ * comment block above it. That is the minimum that makes staleness CHECKABLE by a
  * human at debug time, which is when it matters: you hit a red guard, you
  * believe your code is right, and you need to know in one glance where its
  * expectation came from and whether that instruction is still live.
@@ -81,7 +81,22 @@ for (const f of files) {
     const body = text.slice(open, end + 1);
     if (!/["'`]/.test(body)) continue;               // no string literals: not an expectation
     const line = text.slice(0, m.index).split('\n').length;
-    const ctx = lines.slice(Math.max(0, line - 7), line + 1).join('\n');
+    /* THE WHOLE COMMENT BLOCK, NOT A FIXED WINDOW. This was `line - 7` and it
+       punished thoroughness: a citation explaining WHY a value is what it is runs
+       longer than seven lines, so its date scrolled out of range and the constant
+       read as uncited. I did it to myself on today-container-audit's TODAY_ONLY.
+       A rule that fires on the careful version of the thing it asks for teaches
+       people to write the careless version.
+       Walking back line-by-line does not work either: a first attempt recognised
+       only lines starting with `*` or `//`, and this repo's block comments
+       continue with plain indented prose, so it stopped after one line. Find the
+       BLOCK: if the text above the declaration ends a comment, take from its
+       opening `/*`. Otherwise fall back to a generous line window. */
+    const before = text.slice(0, m.index).replace(/\s*$/, '');
+    const openIdx = before.endsWith('*/') ? before.lastIndexOf('/*') : -1;
+    const ctx = openIdx >= 0
+      ? text.slice(openIdx, m.index)
+      : lines.slice(Math.max(0, line - 8), line + 1).join('\n');
     const date = (ctx.match(/20\d\d-\d\d-\d\d/) || [])[0] || null;
     found.push({ file: f, line, name: m[2], date });
   }
@@ -122,12 +137,9 @@ const KNOWN_UNDATED = [
   'crate-palette-audit.mjs:CRATES',
   'crate-reveal-audit.mjs:KINDS',
   'crew-fan-audit.mjs:FRIENDS',
-  'den-ceiling-audit.mjs:WEEKS',
   'ember-cohesion-audit.mjs:CLASSES',
   'facegate-audit.mjs:HELD_SLOTS',
-  'fight-exit-audit.mjs:MAP_ROWS',
   'fight-exit-audit.mjs:NO_MAP_ROWS',
-  'fight-layout-audit.mjs:SLACK_SIZES',
   'fight-tray-audit.mjs:KNOWN',
   'figure-audit.mjs:SITES',
   'flaky-network-audit.mjs:DEADLINE_FILES',
@@ -157,7 +169,6 @@ const KNOWN_UNDATED = [
   'rebuild-lossless-audit.mjs:RANK',
   'reward-sop-audit.mjs:ACTIONS',
   'reward-sop-audit.mjs:PAY',
-  'scout-audit.mjs:MAP_ROWS',
   'selector-audit.mjs:QUERY_RE',
   'sheet-action-reachable-audit.mjs:SHEETS',
   'spawn-quiet-audit.mjs:QUIET',
@@ -165,7 +176,6 @@ const KNOWN_UNDATED = [
   'speech-audit.mjs:CASES',
   'suite-rot-audit.mjs:EMIT_RE',
   'suite-rot-audit.mjs:QUERY_RE',
-  't1-audit.mjs:MAP_ROWS',
   'tab-chip-audit.mjs:TABS',
   'tab-chip-audit.mjs:VIEWPORTS',
   'tabbar-contrast-audit.mjs:TABS',
@@ -206,7 +216,7 @@ for (const k of allKeys) {
 ok('RATCHET no NEW pinned expectation lacks dated provenance',
   novel.length === 0,
   novel.length
-    ? `${novel.length} new: ${novel.join(', ')}. Cite the source instruction and date within 7 lines above.`
+    ? `${novel.length} new: ${novel.join(', ')}. Cite the source instruction and date in the comment above it.`
     : `${undated.length} known, 0 new`);
 
 ok('RATCHET the inventory has no stale entries (fixed one? delete its line)',
