@@ -183,6 +183,18 @@ const diffPage = async browser => {
        threshold boot-flash-audit's edge detector uses; a compositor that
        re-encodes an unchanged frame scores 0.000 through it, which is what the
        STILL rows prove on every run. */
+    /* Mean brightness of one frame, used only to tell a REAL capture from an
+       UNPAINTED one. Same canvas, no image library. */
+    mean: a => p.evaluate(async A => {
+      const i = new Image(); i.src = 'data:image/png;base64,' + A; await i.decode();
+      const c = document.createElement('canvas'); c.width = i.width; c.height = i.height;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(i, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      let sum = 0;
+      for (let k = 0; k < d.length; k += 4) sum += d[k] + d[k + 1] + d[k + 2];
+      return sum / (d.length / 4) / 3;
+    }, a),
     diff: (a, b) => p.evaluate(async (A, B) => {
       const load = async s => { const i = new Image(); i.src = 'data:image/png;base64,' + s; await i.decode(); return i; };
       const [ia, ib] = [await load(A), await load(B)];
@@ -229,15 +241,56 @@ const clipOf = async (page, sel, W, H) => {
 /* Sample a surface across its window and return the LARGEST change seen against
    the first frame. Peak, not mean: a loop spends part of every cycle back where
    it started, so a mean would punish a slow animation for being slow. */
+/* A BLANK FRAME IS NOT A SAMPLE. Under headless 'shell', which this repo forces
+   because 'new' cannot screenshot on this Mac (godmode.js:450), a capture of a
+   NON-animating layer intermittently comes back unpainted: measured 2026-08-23,
+   8 of 24 captures with mean brightness ~7 against ~67 for a real frame, on a DOM
+   reporting `anims: 0` with all 130 images decoded. Zero blank frames with motion
+   ON, which is why only the REDUCE rows were red.
+   Diffing a real frame against a blank one reports ~100% changed pixels on a
+   surface that never moved, and REDUCE read peak 99.972% against a bound of 0.
+   The app was still; the camera blinked.
+   So reject a blank and take another. If every attempt is blank the sample is
+   unmeasurable and the caller is told, rather than being handed a number that
+   describes the capture pipeline instead of the art. */
+/* CALIBRATED, not picked. Measured 2026-08-23 across 63 captures on this Mac
+   under headless 'shell': the unpainted frame lands on exactly ONE value, mean
+   9.17, and every real frame is 35.8 or brighter (max 67.1). Nothing lands
+   between. 20 sits in the middle of that gap with a factor of two either side.
+   If a future row grades a genuinely dark surface this will need to become
+   relative to the brightest frame in the run rather than absolute; the REACH row
+   above already proves the element is on screen, so a dark reading would be the
+   art rather than the camera. */
+const BLANK_MEAN = 20;
+const shot = async (page, dp, clip, tries = 12) => {
+  for (let i = 0; i < tries; i++) {
+    const b = await page.screenshot({ clip, encoding: 'base64' });
+    const mv = await dp.mean(b);
+    if (process.env.MEAN_DEBUG) console.log(`      [mean] ${mv.toFixed(2)}`);
+    if (mv > BLANK_MEAN) return b;
+    /* BLANKS COME IN RUNS, they are not independent draws: 7 of 63 captures were
+       blank but six in a row still happened, which random 11% would not produce.
+       The compositor stops painting for a stretch, so waiting the same 220ms
+       twelve times is not twelve chances. Nudge it into repainting and back off
+       progressively instead. */
+    await page.evaluate(() => { void document.body.offsetHeight; });
+    await sleep(220 + i * 140);
+  }
+  return null;
+};
+
 const sampleMotion = async (page, dp, clip, windowMs) => {
   const n = 8, gap = Math.max(120, Math.round(windowMs / n));
-  const first = await page.screenshot({ clip, encoding: 'base64' });
-  let peak = 0;
+  const first = await shot(page, dp, clip);
+  if (!first) return { peak: 0, blank: true };
+  let peak = 0, blanks = 0;
   for (let i = 0; i < n; i++) {
     await sleep(gap);
-    peak = Math.max(peak, await dp.diff(first, await page.screenshot({ clip, encoding: 'base64' })));
+    const next = await shot(page, dp, clip);
+    if (!next) { blanks++; continue; }
+    peak = Math.max(peak, await dp.diff(first, next));
   }
-  return peak;
+  return { peak, blank: blanks === n };
 };
 
 /* Take the sample only while a driver elsewhere is holding still, so the number
@@ -252,8 +305,9 @@ const sampleQuiet = async (page, dp, clip, windowMs, quiet, tries = 4) => {
     if (!await held()) continue;
     await sleep(1100);                       // the .9s wall crossfade, settled
     if (!await held()) continue;
-    const peak = await sampleMotion(page, dp, clip, windowMs);
-    if (await held()) return peak;           // the beat never moved: the sample is about the art
+    const r = await sampleMotion(page, dp, clip, windowMs);
+    if (r.blank) continue;                   // every capture was unpainted: not a sample, try again
+    if (await held()) return r.peak;         // the beat never moved: the sample is about the art
   }
   return null;
 };
@@ -338,9 +392,22 @@ async function pass({ reduce }) {
       /* quietOn only applies with motion ALLOWED: under reduce the driver it
          waits on never runs, so the quiet class never arrives and the row would
          time out instead of measuring the stillness it is there to measure. */
-      const peak = (row.quietOn && !reduce)
-        ? await sampleQuiet(page, dp, clip, row.windowMs, row.quietOn)
-        : await sampleMotion(page, dp, clip, row.windowMs);
+      let blankSample = false;
+      let peak;
+      if (row.quietOn && !reduce) {
+        peak = await sampleQuiet(page, dp, clip, row.windowMs, row.quietOn);
+      } else {
+        const r = await sampleMotion(page, dp, clip, row.windowMs);
+        peak = r.peak; blankSample = r.blank;
+      }
+      /* Every capture came back unpainted, so there is no frame to grade. Say so
+         instead of reporting 0% motion, which would look like a still surface
+         passing and would be a green that graded nothing. */
+      if (blankSample) {
+        ok(`${tag}: SAMPLE ${row.key} produced a paintable frame (every capture was blank, so nothing was graded)`,
+          false, `all captures below mean brightness ${BLANK_MEAN}: the capture pipeline, not the art`);
+        continue;
+      }
       if (row.beats && !reduce) stopPoll();
       seen[row.key] = peak;
 

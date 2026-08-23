@@ -224,7 +224,16 @@ async function serveVersioned() {
 const puppeteer = await loadPuppeteer();
 async function launch() {
   return puppeteer.launch({
-    headless: process.env.HEADLESS_MODE || 'new',
+    /* THIS SUITE CANNOT RUN UNDER headless 'shell', so it pins 'new' and does
+    NOT let HEADLESS_MODE override. The global override exists because this
+    Mac cannot screenshot under 'new' (godmode.js:450), which is a real
+    constraint for suites that capture frames. This one takes no screenshots:
+    `grep -c screenshot` is 0. Under 'shell' the tab never truly backgrounds,
+    so visibilitychange never fires and the suite reports a red on a healthy
+    app. Measured 2026-08-23: ALL GREEN under 'new', red under 'shell'.
+    A false red on a green app is worse than a skipped suite, and worse still
+    here because this is the suite that grades the release road. */
+    headless: 'new',
     executablePath: chromePath(),
     defaultViewport: { width: 430, height: 932, deviceScaleFactor: 1, isMobile: true, hasTouch: true },
     args: [...sandboxArgs(), '--ignore-certificate-errors', '--host-resolver-rules=MAP tally.test 127.0.0.1'],
