@@ -9287,7 +9287,7 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    a tile is 115px at 393x852 and 129px at 440x956, against 176/198 two-wide.
    Everything below is what that width forced, and each of it was measured, not
    guessed. */
-.rk-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.rk-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 /* One tile language, four times. Rarity is the border and nothing else, so the
    tile carries a name, two prices and no third line of text. */
 .rk { background: var(--surface-2); border: 1.5px solid var(--line-strong); border-radius: 13px;

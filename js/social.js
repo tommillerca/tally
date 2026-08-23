@@ -1010,7 +1010,11 @@ export async function touchServerDay() {
   const base = await apiBase();
   if (!base) return null;
   try {
-    const r = await fetch(base + '/health', { cache: 'no-store' });
+    /* apiFetch, not bare fetch: this is fire-and-forget, so a hang costs a
+       stalled request rather than a wedged UI, but it is still a request that
+       never returns. flaky-network-audit's STATIC row has been red since v398
+       naming this exact line. */
+    const r = await apiFetch(base + '/health', { cache: 'no-store' });
     if (!r.ok) return null;
     const j = await r.json();
     return await witnessServerDay(j && j.ts);

@@ -17,6 +17,20 @@ await sleep(1800);
 await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="shop"]').click());
 await sleep(1800);
 
+/* THE DUST SHOP MOVED BEHIND A DISCLOSURE. v410 (92a8b3de, "the Shop is open")
+   put crates, potions and weapons inside #shopRestBody, which ships `hidden`.
+   A hidden ancestor gives the charm cell a 0x0 rect, so Puppeteer refused to
+   click it and this suite died on "Node is either not clickable or not an
+   Element" before its first assertion. The app is right; the audit had not
+   followed it.
+   This also un-blinds the two rows below. They read `textContent` off the cell,
+   and textContent works fine on a display:none element, so both were passing
+   while grading a cell no player could see: a green that could not fail. Same
+   family as `[hidden]` never hiding anything from an opacity-based counter.
+   Open the disclosure the way a player does. */
+await page.evaluate(() => document.querySelector('#shopRest')?.click());
+await sleep(500);
+
 const before = await dust();
 /* WHAT THE CELL MUST HAVE, not what one build's markup called it. This asked for
    `.dc-desc`, a class that only ever existed in the OLD Backpack-crates dust grid
@@ -71,11 +85,33 @@ check('the second tap actually buys', afterTwo === before - 25, `${before} -> ${
 await page.evaluate(() => { location.hash = '#/bonehead'; });
 await sleep(1500);
 await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="shop"]').click());
+/* Re-entering the shop re-renders it, so the disclosure is shut again. */
+await sleep(900);
+await page.evaluate(() => document.querySelector('#shopRest')?.click());
+await sleep(500);
 await sleep(1600);
 const d0 = await dust();
 await (await page.$('[data-dustbuy="charm"]')).click();
 await sleep(4000);
+/* The disarm re-renders the shop, which shuts the disclosure again, so the cell
+   is gone from the DOM rather than merely hidden and `?.dataset.armed` reads
+   undefined. Re-open before reading, and assert the cell is actually there so a
+   future disappearance reports as a missing cell rather than as "not cooled". */
+await page.evaluate(() => { if (!document.querySelector('[data-dustbuy="charm"]')) document.querySelector('#shopRest')?.click(); });
+await sleep(400);
+const cellBack = await page.evaluate(() => !!document.querySelector('[data-dustbuy="charm"]'));
+check('REACH the charm cell is still on screen to be graded', cellBack, String(cellBack));
 const cooled = await page.evaluate(() => document.querySelector('[data-dustbuy="charm"]')?.dataset.armed);
+/* THIS ROW CANNOT BE SALVAGED BY RELAXING IT, and I tried. The cool-off
+   RE-RENDERS the shop, so the cell being read is a fresh one with no
+   data-armed at all, and `cooled` is undefined regardless of what the disarm
+   code did. Accepting undefined as "disarmed" makes the row unable to fail:
+   PROVED 2026-08-23 by mutating all 8 `btn.dataset.armed = '0'` sites to '1',
+   i.e. never disarming, and the relaxed row still passed rc=0.
+   Left strict on purpose. It is red because it is observing a button that no
+   longer exists, and the honest fix is to observe the ARMED button across the
+   cool-off without triggering a re-render, which is a redesign rather than a
+   tweak. A red row that means something beats a green one that cannot fail. */
 check('the armed state cools off on its own', cooled === '0', String(cooled));
 check('and nothing was spent while it cooled', (await dust()) === d0);
 await browser.close();
