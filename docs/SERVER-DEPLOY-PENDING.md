@@ -80,3 +80,34 @@ believe its refusal over any local impression.
 `wrangler deploy` returning 0 is not evidence. Curl a route the change
 introduces, and check the cron actually fired by watching the prune counters
 move.
+
+## x429 (crew cheers, friend paddocks, pets keep their wear) needs NO deploy
+
+Added 2026-08-23. Recorded here because "does this branch need the Worker?" is
+exactly the question this file exists to answer, and for this one the answer is
+no. Nothing below is waiting on `server/deploy.sh`.
+
+**No migration, and no server file changed.** The branch adds one field, `yard`,
+to the profile snapshot the client PUTs to `/profile`. It rides today's deployed
+Worker untouched, because `sanitizeSnapshot` SPREADS the snapshot
+(`const snap = { ...rawSnap }`) and clamps named fields rather than allow-listing
+them. A field the server has never heard of is stored and handed back verbatim.
+That is a property worth naming, since the opposite (a DTO allow-list) is the
+usual reason a new field disappears silently between two hops.
+
+**The crew-only promise is already true of the deployed Worker**, for the same
+reason and with nothing to deploy: `GET /friends` returns the whole profile blob
+joined through an ACCEPTED friendship, while `GET /leaderboard` json_extracts a
+FIXED list (level, levelName, badges, outfit, pet, stats, and a COUNT of gear)
+for any authenticated caller. `yard` is not in that list, so it reaches accepted
+friends and nobody else. `tests/friend-paddock-audit.mjs` reads that SELECT out
+of `server/src/index.js` and goes red if `yard` is ever added to it, so this stays
+true rather than merely being true today.
+
+**If the Worker is later changed to allow-list the snapshot**, `yard` has to be
+added to the allow-list in the same change, and it must NOT be added to the
+leaderboard extract. Both halves.
+
+The pet roster and its wardrobe ride the PLAINTEXT `players.profile` column, never
+the end-to-end encrypted `backups` blob. That is deliberate: a friend cannot
+decrypt the vault either, so the vault is not a channel to another player at all.
