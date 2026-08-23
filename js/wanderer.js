@@ -286,8 +286,31 @@ export function ensureWandererStyle() {
    are the things you are out here to collect. He has no tap interaction of his
    own: the encounter fires from the player's position, never from a thumb, so
    nothing is lost. Asserted in tests/wanderer-patrol-live-audit.mjs (TAPTHRU),
-   which also grades the size band above (LOOMS-LIVE). */
-.map-wanderer-mark { position: relative; width: ${MARK_PX}px; height: ${MARK_PX}px; pointer-events: none; z-index: 0; }
+   which also grades the size band above (LOOMS-LIVE).
+   ABSOLUTE, NOT RELATIVE, AND IT IS NOT A STYLE CHOICE. 2026-08-23. MapLibre
+   places a marker by writing a transform on a root it has already taken OUT OF
+   FLOW (.maplibregl-marker sets position: absolute, left 0, top 0). This
+   stylesheet is injected at runtime and maplibre-gl.css is loaded lazily by
+   js/map.js, so this block lands AFTER it in the head; both selectors are one
+   class, so the later one won and "relative" put every Wanderer back into
+   normal flow inside the marker container. Absolute siblings take no space, so
+   the FIRST Wanderer read correct and each one after him stacked below the last
+   by his own height: measured on the real Boneyard with three of them up,
+   offsetTop 0 / 200 / 400, boxes 200px and 400px below the point MapLibre had
+   placed, which unprojects to 238 m and 474 m of ground. His cone and
+   inWandererCone both use his true position, so on every Wanderer but the
+   first the light a player could see was not the light that caught them.
+   Absolute agrees with MapLibre rather than fighting it, so this is correct
+   whichever order the two stylesheets land in, and it is still a containing
+   block for .wanderer-body / .wanderer-cone / the plate, which are all
+   position: absolute inside it. Every other marker root in this app is
+   "position: relative" in app.css and is SAFE for one reason only: app.css is
+   a <link> in the head, so maplibre-gl.css lands after it and wins. Those must
+   stay relative because the map key reuses .map-spawn / .map-den-mark /
+   .map-mini-mark off the map (legendHtml, js/app.js). Graded live in
+   tests/marker-anchor-audit.mjs (ANCHORED, GROUND), which also lints that no
+   runtime-injected stylesheet does this again. */
+.map-wanderer-mark { position: absolute; width: ${MARK_PX}px; height: ${MARK_PX}px; pointer-events: none; z-index: 0; }
 /* HE GOES TO THE BACK OF THE MARKER LAYER, and this rule names other people's
    classes on purpose. MapLibre markers are DOM siblings with no z-index at all,
    so they paint in creation order and he is created after the player: measured
