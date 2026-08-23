@@ -127,7 +127,14 @@ if (own) console.log(`serving this repo at ${base}\n`);
    static scan of tests/, no browser, no network, well under a second. It is the
    staleness twin of that file. Hygiene catches a guard that cannot SEE its bug;
    provenance catches one still enforcing an instruction that was reversed. */
-const PURE = ['unit.test.js', 'first-session-audit.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs'];
+/* xp-curve-audit is PURE for the same reason the lints are: it imports js/pit.js
+   and js/game.js, walks 200 Gauntlet ranks in arithmetic and exits, no browser
+   and well under a second. It guards the SHAPE of the Gauntlet XP curve (a rank
+   high up must not pay a bigger share of a level than a rank low down), which is
+   the ROADMAP decision "reshape the GAUNTLET XP CURVE" as an assertion. Its
+   CONTROL row rebuilds the pre-fix linear payouts and REQUIRES them to fail,
+   because SHAPE asserts an ordering and an ordering passes on any flat data. */
+const PURE = ['unit.test.js', 'first-session-audit.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs'];
 const BROWSER = [
   'write-failure-seam-audit.mjs', // a rejected write is announced and re-thrown, and the ATOMIC primitives are in the seam: the reward SOP routes every payout through addIfAbsent/take/kvUpdate, which bypass db.put entirely
   'write-failure-toast-audit.mjs', // the OTHER half of that seam: it ends in `if (!writeFailureSink) return;` and until now nothing in the app called onWriteFailure, so every rejection returned early and a lost meal, weight, crate or coin row stayed as silent as before the seam existed. The seam audit cannot catch that and should not: it registers its OWN sink to observe the seam, which is exactly why it stays green while the app has none. This file registers nothing, breaks a real write in the real page and reads the real #toast. REJECTS is the positive control (a write that quietly succeeded would make every other row vacuous); LOUD fails on SILENCE; QUIET, THROTTLE, QUOTA and NORECURSE cover the four ways announcing it can go wrong. Proven red against main's js/app.js: LOUD, THROTTLE and QUOTA go red together. Self-serving, ~50s, 6 checks
