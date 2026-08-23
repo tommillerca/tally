@@ -114,3 +114,42 @@ Both new branches are based on the NEW main d8819940, not f18d479f.
 
 NOTE: `main` is protected (PR required). This register lives on
 `docs/feedback-plan-2026-08-22`; do not try to push docs straight to main.
+
+## THE RELEASE BUMP IS NOW A PRIVACY FIX, 2026-08-23
+
+main is `ac3e73f8`. Version stamps are STILL v424 (sw.js VERSION 'tally-v424',
+APP_BUILD 'v424', changelog n: 424) — verified by me from the remote. SIX merged
+changes sit on top of that unbumped stamp and NONE has reached a player:
+
+  #85 d8819940 Emporium idle, 119.9 recalcs/s -> 0.0
+  #88 0bc2df8b README privacy claims corrected
+  #84 13b3f20e guard hardening
+  #89 716f6325 privacy.html location disclosure
+  #86 2c032483 cosmetics rebuild stops deleting seven exports
+  #90 ac3e73f8 cloud backup OFF actually stops the upload
+
+**#90 changes the priority of the bump.** Settings -> Cloud backup -> Off did not
+stop the upload: `cloudOff` was read only on bootSync's RESTORE path while
+autoSync called pushBackup() unconditionally on every boot and resume. A peer
+session measured a 116,074-byte PUT /backup (that is exportAll(): food log,
+weigh-ins, health rows, every store) arriving AFTER the real Off button was
+pressed. E2E encrypted, so a BROKEN PROMISE rather than a leak — but the toast
+said "your progress will only live on this phone" while it uploaded.
+
+The fix is a write guard inside pushBackup itself, where autoSync, both Go Online
+buttons and the cbOn toggle all converge — I read the diff, it is the root-cause
+shape, not a per-caller patch.
+
+**Every player with that toggle off is still uploading until a version bump
+ships.** The bump is therefore no longer bookkeeping; it is the delivery
+mechanism for a privacy control. It should NOT wait behind unverified WIP.
+
+### The harness trap that came with it
+
+`NOSOCIAL = S.demo || navigator.webdriver === true` in js/app.js, and puppeteer
+sets navigator.webdriver, so **boot autoSync NEVER RUNS UNDER AUTOMATION**, with
+or without ?demo. A reload-based row read a clean 0 on the BROKEN tree twice
+before the peer caught it. Anything asserting on boot-time sync is grading the
+harness, not the app. New in the FAST gate tier: tests/cloud-optout-audit.mjs
+(~45s, 9 checks), which grades the SERVER's received log rather than
+page.on('request'), because an abandoned request is not an upload.
