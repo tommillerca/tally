@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, useDbName, requestPersistence, eraseAll, watchForWipe } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -1051,6 +1051,39 @@ async function boot() {
   }
   requestPersistence();
   watchForWipe();   // listen for another tab wiping this save before it happens
+  /* THE OTHER HALF OF THE WRITE-FAILURE SEAM. js/db.js routes every rejected
+     write through one reporter and then RE-THROWS, so callers keep their control
+     flow, but the reporter only calls a sink and nothing registered one: the
+     seam shipped in v425 with `writeFailureSink` permanently null, so a lost
+     meal, weight, crate or coin row was still silent. This is the consumer, and
+     it lives here because js/app.js is what owns the toast.
+
+     LOUD ONLY, and the classification is db.js's, not a second opinion invented
+     here: `quiet` is already true for ambient bookkeeping the app re-derives next
+     launch, and false for anything the player did or earned and could name
+     afterwards. A key nobody classified arrives LOUD, which is the right way
+     round (anti-regression rule 8).
+
+     THROTTLED, because a failing database does not fail once. A full disk
+     rejects every write in the same second, and toast() caps its queue at four,
+     which is still four identical lectures. One message per WRITE_FAIL_QUIET_MS
+     is enough to tell the player something is wrong; the telemetry row is what
+     counts them.
+
+     THE TELEMETRY CALL CANNOT RECURSE, and that is db.js's guarantee rather than
+     luck: track() queues by writing kv 'evq', so a quota failure makes that write
+     fail too, and reportWriteFailure returns early for exactly `kv`/`evq` before
+     it reaches any sink. Checked in js/db.js before this was written. */
+  onWriteFailure(({ store, key, op, quiet, quota }) => {
+    trackEvent('write_fail', { store, key, op, quiet, quota });
+    if (quiet) return;
+    const now = Date.now();
+    if (now - lastWriteFailToast < WRITE_FAIL_QUIET_MS) return;
+    lastWriteFailToast = now;
+    toast(quota
+      ? 'Your phone is out of storage, so that did not save. Free some space, then export a backup from Settings.'
+      : 'That did not save. If it keeps happening, export a backup from Settings.', 4600);
+  });
   S.sounds = (await kvGet('sounds', true)) !== false;
   S.haptics = (await kvGet('haptics', true)) !== false;
   setHaptics(S.haptics);
@@ -3159,6 +3192,9 @@ function bgRefresh() {
 /* ================= shared ui ================= */
 
 let toastTimer = 0;
+/* One write-failure message per this window. See the sink in boot(). */
+const WRITE_FAIL_QUIET_MS = 8000;
+let lastWriteFailToast = 0;
 const toastQ = [];
 let toastBusy = false;
 function toast(msg, ms = 2200) {
@@ -17463,7 +17499,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v425'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v426'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
