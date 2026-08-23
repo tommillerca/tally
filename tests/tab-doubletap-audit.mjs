@@ -79,6 +79,36 @@ const tapTab = async (tab, n = 1, gap = 120) => {
   for (let i = 0; i < n; i++) { await page.mouse.click(at.x, at.y); if (i + 1 < n) await sleep(gap); }
   return true;
 };
+/* A DOUBLE TAP IS ONLY A DOUBLE TAP IF THE APP RECEIVED BOTH CLICKS INSIDE THE
+   300ms WINDOW, and under gate load (six suites sharing this machine) two CDP
+   mouse clicks can arrive further apart than that. The app is then CORRECTLY
+   seeing two singles, and grading it as a failure blames the app for the
+   harness: measured on this tree, tab-doubletap was green solo and red at 6-way
+   parallelism for exactly that reason.
+   So the delivered gap is measured in the page, at #tabbar (static markup in
+   index.html, so one capture listener survives every re-render), each double is
+   retried up to three times, and a machine that can never deliver one reports
+   UNPROVEN rather than a red. `reset` puts the state back before each attempt
+   and is given time for any route a failed attempt left in flight. */
+await page.evaluate(() => {
+  window.__tapAt = [];
+  document.getElementById('tabbar').addEventListener('click', () => window.__tapAt.push(performance.now()), true);
+});
+const DBL_WINDOW = 300;
+const doubleTap = async (tab, reset = async () => {}) => {
+  let best = Infinity;
+  for (let i = 0; i < 3; i++) {
+    await sleep(700);                       // let a previous attempt's route land
+    await reset();
+    await page.evaluate(() => { window.__tapAt = []; });
+    if (!await tapTab(tab, 2, 0)) return { taps: false, gap: best };
+    const at = await page.evaluate(() => window.__tapAt);
+    const gap = at.length >= 2 ? at[at.length - 1] - at[at.length - 2] : Infinity;
+    best = Math.min(best, gap);
+    if (gap < DBL_WINDOW - 50) return { taps: true, inWindow: true, gap: +gap.toFixed(0), tries: i + 1 };
+  }
+  return { taps: true, inWindow: false, gap: +best.toFixed(0), tries: 3 };
+};
 const mark = () => page.evaluate(() => { const c = document.getElementById('screen').firstElementChild; if (c) c.dataset.dblProbe = '1'; return !!c; });
 const marked = () => page.evaluate(() => document.getElementById('screen').firstElementChild?.dataset.dblProbe === '1');
 const scrollTop = () => page.evaluate(() => document.getElementById('screen').scrollTop);
@@ -86,27 +116,40 @@ const scrollTop = () => page.evaluate(() => document.getElementById('screen').sc
 /* ---------------- TODAY ---------------- */
 await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(1800);
-const scrolled = await page.evaluate(() => { const s = document.getElementById('screen'); s.scrollTop = 700; return s.scrollTop; });
-ok('SETUP Today is scrolled well below the top', scrolled > 200, `scrollTop ${scrolled}`);
-ok('SETUP the screen carries a marker so a rebuild is detectable', await mark());
+const arm = async () => {
+  await page.evaluate(() => { document.getElementById('screen').scrollTop = 700; });
+  await mark();
+};
+await arm();
+ok('SETUP Today is scrolled well below the top and marked so a rebuild is detectable',
+  await scrollTop() > 200 && await marked(), `scrollTop ${await scrollTop()}`);
 
-ok('SETUP the Today tab took two real taps', await tapTab('today', 2));
-let top = scrolled;
-for (let i = 0; i < 40 && top >= 2; i++) { await sleep(100); top = await scrollTop(); }
-ok('TODAY-DBL a double tap brings Today back to the top', top < 2, `scrollTop ${top}`);
-ok('TODAY-DBL and the first tap did NOT re-route: the scrolled screen survived',
-  await marked(), 'marker gone = the screen was rebuilt under the scroll');
+const todayDbl = await doubleTap('today', arm);
+ok('SETUP the Today tab took two real taps', todayDbl.taps !== false);
+if (!todayDbl.inWindow) {
+  unproven('TODAY-DBL a double tap brings Today back to the top',
+    `this machine could not deliver two taps inside ${DBL_WINDOW}ms (best ${todayDbl.gap}ms over 3 tries), so the app was right to see two singles`);
+  unproven('TODAY-DBL and the first tap did NOT re-route: the scrolled screen survived', 'same');
+} else {
+  let top = 700;
+  for (let i = 0; i < 40 && top >= 2; i++) { await sleep(100); top = await scrollTop(); }
+  ok('TODAY-DBL a double tap brings Today back to the top', top < 2, `scrollTop ${top}, taps ${todayDbl.gap}ms apart`);
+  const dblProbe = await marked();
+  ok('TODAY-DBL and the first tap did NOT re-route: the scrolled screen survived',
+    dblProbe, dblProbe ? 'marker intact' : 'marker gone: the screen was rebuilt under the scroll');
+}
 
 /* The control. A lone same-tab tap still re-routes to Today's home, which is
    tray-destination-audit's contract and must not have moved. */
-await page.evaluate(() => { document.getElementById('screen').scrollTop = 700; });
-await mark();   // re-marked, not carried over: the control must not depend on the row above passing
+await sleep(700);   // any route the section above left in flight lands before this is armed
+await arm();        // re-armed, not carried over: the control must not depend on the rows above
 ok('SETUP the single-tap control starts scrolled and marked', await scrollTop() > 200 && await marked());
 await tapTab('today', 1);
 await sleep(1800);
 const single = { top: await scrollTop(), probe: await marked() };
 ok('TODAY-SINGLE a lone tap still lands at the top of Today', single.top < 2, `scrollTop ${single.top}`);
-ok('TODAY-SINGLE by re-routing, exactly as before', !single.probe, 'marker survived = route() never ran');
+ok('TODAY-SINGLE by re-routing, exactly as before', !single.probe,
+  single.probe ? 'marker intact: route() never ran' : 'marker gone: route() ran');
 
 /* ---------------- BONEYARD ---------------- */
 await tapTab('boneyard', 1);
@@ -115,12 +158,19 @@ await sleep(1600);
    map to recentre: the fallback branch, and it needs no WebGL to grade. */
 const gate = await page.evaluate(() => !!document.getElementById('mapStart') && !document.getElementById('mapRecenter'));
 if (gate) {
-  ok('SETUP the Boneyard gate is up and marked (no map yet, so no #mapRecenter)', await mark());
-  ok('SETUP the Boneyard tab took two real taps', await tapTab('boneyard', 2));
-  await sleep(900);
-  ok('FALLBACK a double tap with no map to move still routes rather than doing nothing',
-    !await marked() && await page.evaluate(() => !!document.getElementById('mapStart')),
-    'marker survived = both taps were swallowed');
+  const fb = await doubleTap('boneyard', mark);
+  ok('SETUP the Boneyard gate is up, marked, and took two real taps (no map yet, so no #mapRecenter)',
+    fb.taps !== false);
+  if (!fb.inWindow) {
+    unproven('FALLBACK a double tap with no map to move still routes rather than doing nothing',
+      `this machine could not deliver two taps inside ${DBL_WINDOW}ms (best ${fb.gap}ms over 3 tries)`);
+  } else {
+    await sleep(900);
+    const fbProbe = await marked();
+    ok('FALLBACK a double tap with no map to move still routes rather than doing nothing',
+      !fbProbe && await page.evaluate(() => !!document.getElementById('mapStart')),
+      fbProbe ? 'marker intact: both taps were swallowed' : `marker gone: it routed, and the gate is still up (taps ${fb.gap}ms apart)`);
+  }
 } else {
   unproven('FALLBACK a double tap with no map to move still routes rather than doing nothing',
     'the Boneyard did not open on its location gate, so the no-map state was not reachable');
@@ -130,39 +180,51 @@ await page.evaluate(() => document.getElementById('mapStart')?.click());
 let hasMap = false;
 for (let i = 0; i < 40 && !hasMap; i++) { await sleep(500); hasMap = await page.evaluate(() => !!window.__map && !!document.getElementById('mapRecenter')); }
 
+let cap = null;
 if (!hasMap) {
-  const cap = await boneyardCapability(page);
+  cap = await boneyardCapability(page);
   unproven('YARD-DBL a double tap recentres the map on the player at the start zoom', 'the Boneyard map never came up on this machine');
   unproven('YARD-DBL on the SAME live map, not a rebuild', 'same');
-  unprovenReport('tab-doubletap-audit', cap);
+  unproven('STALE leaving a tab inside the double-tap window builds the next screen ONCE', 'same');
 } else {
   await sleep(2500);   // let first placement settle before shoving the camera
-  const displaced = await page.evaluate(() => {
+  /* Re-armed before every attempt: a displaced camera and a fresh expando on
+     whatever map instance is live now, so an attempt the machine failed to
+     deliver cannot leave the next one grading a stale probe. */
+  const displace = () => page.evaluate(() => {
     const m = window.__map;
+    if (!m) return null;
     m.__dblProbe = 1;            // survives easeTo, dies with the instance
     m.jumpTo({ center: [m.getCenter().lng + 0.03, m.getCenter().lat + 0.02], zoom: m.getZoom() - 2 });
     const c = m.getCenter();
     return { lng: c.lng, lat: c.lat, zoom: m.getZoom() };
   });
-  await sleep(400);
-  ok('SETUP the camera was displaced from the player', Math.abs(displaced.lng - GEO.longitude) > 0.01, JSON.stringify(displaced));
-  ok('SETUP the Boneyard tab took two real taps', await tapTab('boneyard', 2));
-  let cam = null, home = false;
-  for (let i = 0; i < 50 && !home; i++) {
-    await sleep(120);
-    cam = await page.evaluate(() => {
-      const m = window.__map;
-      if (!m) return null;
-      const c = m.getCenter();
-      return { lng: c.lng, lat: c.lat, zoom: m.getZoom(), probe: m.__dblProbe === 1 };
-    });
-    home = !!cam && Math.abs(cam.lng - GEO.longitude) < 0.002 && Math.abs(cam.lat - GEO.latitude) < 0.002
-      && Math.abs(cam.zoom - MAP_START_ZOOM) < 0.5;
+  const displaced = await displace();
+  ok('SETUP the camera was displaced from the player', !!displaced && Math.abs(displaced.lng - GEO.longitude) > 0.01, JSON.stringify(displaced));
+  const yd = await doubleTap('boneyard', displace);
+  ok('SETUP the Boneyard tab took two real taps', yd.taps !== false);
+  if (!yd.inWindow) {
+    unproven('YARD-DBL a double tap recentres the map on the player at the start zoom',
+      `this machine could not deliver two taps inside ${DBL_WINDOW}ms (best ${yd.gap}ms over 3 tries)`);
+    unproven('YARD-DBL on the SAME live map, not a rebuild', 'same');
+  } else {
+    let cam = null, home = false;
+    for (let i = 0; i < 50 && !home; i++) {
+      await sleep(120);
+      cam = await page.evaluate(() => {
+        const m = window.__map;
+        if (!m) return null;
+        const c = m.getCenter();
+        return { lng: c.lng, lat: c.lat, zoom: m.getZoom(), probe: m.__dblProbe === 1 };
+      });
+      home = !!cam && Math.abs(cam.lng - GEO.longitude) < 0.002 && Math.abs(cam.lat - GEO.latitude) < 0.002
+        && Math.abs(cam.zoom - MAP_START_ZOOM) < 0.5;
+    }
+    ok('YARD-DBL a double tap recentres the map on the player at the start zoom', home,
+      `${JSON.stringify(cam)} vs ${GEO.longitude},${GEO.latitude} @ ${MAP_START_ZOOM}, taps ${yd.gap}ms apart`);
+    ok('YARD-DBL on the SAME live map, not a rebuild', !!cam && cam.probe === true,
+      cam?.probe ? 'expando intact' : 'expando gone: the map was torn down and remade');
   }
-  ok('YARD-DBL a double tap recentres the map on the player at the start zoom', home,
-    `${JSON.stringify(cam)} vs ${GEO.longitude},${GEO.latitude} @ ${MAP_START_ZOOM}`);
-  ok('YARD-DBL on the SAME live map, not a rebuild', !!cam && cam.probe === true,
-    'expando gone = the map was torn down and remade');
 
   /* THE ARMED WAIT IS CANCELLED BY THE NEXT TAB TAP. Tap Today while on Today
      (which arms it), then leave for the Boneyard inside the window: a stale
@@ -181,15 +243,27 @@ if (!hasMap) {
   await tapTab('today', 1);
   await sleep(1600);
   await page.evaluate(() => { window.__mapBuilds = 0; });
+  await page.evaluate(() => { window.__tapAt = []; });
   await tapTab('today', 1);      // arms the same-tab wait on Today
-  await sleep(100);              // well inside the 300ms window
+  await sleep(60);
   await tapTab('boneyard', 1);   // navigates away; the armed wait must not survive it
+  const leaveGap = await page.evaluate(() => (window.__tapAt.length >= 2 ? window.__tapAt[1] - window.__tapAt[0] : Infinity));
   await sleep(2400);
   const builds = await page.evaluate(() => window.__mapBuilds);
-  ok('STALE leaving a tab inside the double-tap window builds the next screen ONCE',
-    builds === 1, `${builds} map builds on one arrival (a stale route() rebuilds it)`);
+  /* The same delivery condition as every double above, and in the same
+     direction: a stretched gap lets the armed wait fire on its own, which
+     leaves ONE build and would read as health rather than as a run that never
+     held the state. */
+  if (!(leaveGap < DBL_WINDOW - 50)) {
+    unproven('STALE leaving a tab inside the double-tap window builds the next screen ONCE',
+      `the second tap landed ${Math.round(leaveGap)}ms after the first, outside the ${DBL_WINDOW}ms window`);
+  } else {
+    ok('STALE leaving a tab inside the double-tap window builds the next screen ONCE',
+      builds === 1, `${builds} map builds on one arrival, taps ${Math.round(leaveGap)}ms apart (a stale route() rebuilds it)`);
+  }
 }
 
+unprovenReport('tab-doubletap-audit', cap);
 console.log(`\n${fails.length ? `${fails.length} FAILED` : 'ALL PASS'}`);
 await browser.close();
 srv?.close();
