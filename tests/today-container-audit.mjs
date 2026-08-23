@@ -39,11 +39,23 @@
  *   SCROLL   a day change lands at the top. That is `route()` in place of
  *            `refresh()`, the known regression the contract exists for.
  *
- * PROVEN RED. Rows are graded against the pre-fix tree (d8819940) seeded into a
- * throwaway copy with `git show <rev>:<path> > file`, and against one mutation
- * of this tree. Results in the branch report; summary:
- *   pre-fix d8819940      ORPHAN, NESTED, PASTDAY, NUDGE red
- *   day arrows -> route() SCROLL red
+ * PROVEN RED, and each mutation goes red ONLY where it should, which is the
+ * half that says the rows are not just noisy. Three throwaway trees, each one a
+ * `git archive HEAD` extract with the mutation seeded by `git show <rev>:<path>
+ * > file` (never a checkout into a worktree, which rewrote an index here once
+ * and shipped two pre-fix commits while the audits kept passing):
+ *   R1  js/app.js + app.css from the pre-fix base d8819940
+ *       24 red: SETUP, all of ORPHAN, all of NESTED, all of NUDGE, PASTDAY
+ *       (3 markers on a past day against 11 on today; quests, promo, meals and
+ *       the sign-off all gone). SCROLL and ESCAPE stay GREEN, correctly: the
+ *       pre-fix screen already refreshed in place and its arrows still worked.
+ *   R2  both day arrows call route() instead of refresh()
+ *       1 red, and only SCROLL: 900 -> 0.
+ *   R3  #todaySettings stretched to 96px over the next-day arrow, the exact
+ *       shape of the v-release bug where the gear made day-navigation
+ *       impossible
+ *       4 red: the two arrows in ORPHAN and in ESCAPE, each naming
+ *       'todaySettings' as what answered the tap.
  *
  * An empty sample is a failure everywhere: SETUP refuses to grade a screen with
  * no sections on it, and PASTDAY refuses to grade an empty marker set.
@@ -125,8 +137,12 @@ try {
         .every(id => hdr.contains(document.getElementById(id))),
       controls: ['prevDay', 'nextDay', 'todaySettings'].map(hit),
       titleFirst: !!hdr && hdr.firstElementChild?.className.includes('day-title'),
-      h1: sc.querySelector('.dayhdr h1')?.textContent.trim() || null,
-      sub: sc.querySelector('.dayhdr .sub')?.textContent.trim() || null,
+      /* Read from EITHER header. Pinning the day's title to the new class name
+         would make this row go red on a tree that simply has the old one, which
+         is a false red about the selector rather than a finding about the day
+         (lessons_audit_drift_false_red). ORPHAN owns the class-name claim. */
+      h1: sc.querySelector('.dayhdr h1, .day-strip h1')?.textContent.trim() || null,
+      sub: sc.querySelector('.dayhdr .sub, .day-strip .sub')?.textContent.trim() || null,
       pickDate: document.getElementById('datePick')?.value || null,
       // day-scoped things: inside the day block, never a sibling of it
       nested: ['.ring-card', '.tsec-meals', '.day-signoff', '.tsec']
@@ -194,7 +210,12 @@ try {
      the assertion is both "close to where we were" and "not zero". */
   const scroll = await page.evaluate(() => {
     const sc = document.getElementById('screen');
-    sc.scrollTop = Math.round(document.querySelector('.dayblk').offsetTop);
+    /* Derived from the SCROLLABLE RANGE, not from a landmark of the new layout:
+       a target read off `.dayblk` throws on any tree that does not have one, and
+       an audit that throws stops grading the rows below it instead of failing
+       them. Half the range is deep enough to be a reading position and shallow
+       enough to survive the shorter content of a past day. */
+    sc.scrollTop = Math.min(900, Math.round((sc.scrollHeight - sc.clientHeight) / 2));
     return sc.scrollTop;
   });
   await sleep(200);
@@ -225,13 +246,20 @@ try {
     /q-collapse/.test(pastShape.afterDoors || ''), String(pastShape.afterDoors));
 
   // --------------------------------------------------------------- ESCAPE
-  for (const c of pastShape.controls) {
+  /* Hit-tested with the header ON SCREEN, because that is the question: a player
+     who has read down a past day scrolls back up to the day bar and taps. Taking
+     the sample where PASTDAY left the page (mid-scroll) would read
+     elementFromPoint off the viewport and grade a healthy screen red. */
+  await page.evaluate(() => document.querySelector('.dayhdr, .day-strip')?.scrollIntoView({ block: 'center' }));
+  await sleep(500);
+  const escape = await shape();
+  for (const c of escape.controls) {
     ok(`ESCAPE ${c.id} is reachable from a past day`, c.present && c.mine, JSON.stringify(c));
   }
   await page.evaluate(() => document.getElementById('nextDay').click());
   await sleep(1800);
   const home = await page.evaluate(() => ({
-    h1: document.querySelector('.dayhdr h1')?.textContent.trim(),
+    h1: document.querySelector('.dayhdr h1, .day-strip h1')?.textContent.trim(),
     pick: document.getElementById('datePick')?.value,
   }));
   /* Compared against the date the app itself showed on the first render, not
