@@ -30,7 +30,10 @@
   .pot small{display:block;font-size:11px;color:var(--text-3)}
   .zoom{display:flex;gap:22px;flex-wrap:wrap;margin:6px 0 4px}
   .zoom figcaption{text-align:center}
-  .note{background:var(--surface);border-left:3px solid var(--gold);padding:11px 14px;border-radius:0 10px 10px 0;
+  /* Plain bordered callout, matching .pot above. It used to carry a 3px gold
+     left-stripe, which is both the standard AI-UI tell and inconsistent with
+     every other boxed element on this page. */
+  .note{background:var(--surface);border:1px solid var(--line);padding:11px 14px;border-radius:10px;
         color:var(--text-2);font-size:13.5px;margin:14px 0}
   .note b{color:var(--text)}
 </style>
