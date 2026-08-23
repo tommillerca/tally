@@ -6559,10 +6559,24 @@ async function openKitchen() {
         : '<p class="note" style="margin:2px 2px 6px">Empty. Cook a dish and it waits here until you choose to eat it, so you can save buffs for the fight or day you want them.</p>'}
       ${potionCount(potInv) ? `<div class="sect-h">Potion satchel · drink these mid-fight</div>
         <div class="ingredient-grid">${POTIONS.filter(p => potInv[p.id] > 0).map(p => `<div class="ing-cell"><span class="ing-ico">${recipeIconHtml(p, 26)}</span><span class="ing-n">${potInv[p.id]}</span><span class="ing-name">${esc(p.name)}</span></div>`).join('')}</div>` : ''}
-      <div class="sect-h">Transmute · once a day</div>
+      ${/* "once a day" WAS FALSE. TRANSMUTE.cooldownMs is 20 hours, so two
+            transmutes land inside some calendar days and a player who read the
+            label as a daily allowance was wrong about when their next one is.
+            Derived from the constant now, so the label cannot drift from the
+            rule again. */''}
+      <div class="sect-h">Transmute · every ${TRANSMUTE.cooldownMs / 3600e3} hours</div>
       <div class="crate-row transmute ${tmute.ready && tmute.canAfford ? '' : 'lack'}">
         <span class="crate-ico">${ingIconHtml(TRANSMUTE.yields, 26)}</span>
-        <div style="flex:1"><b>Transmute Ectoplasm</b><small>Merge ${TRANSMUTE.commons} common ingredients into 1 rare ${esc(INGREDIENTS[TRANSMUTE.yields].name)} (gates the Necromancer's Feast). You have ${tmute.commonsHave}.</small></div>
+        ${/* THE ROW THAT CONFUSED ALMOST EVERY TESTER (Tom, v424 item 4). "Merge"
+              did not say that the six commons are SPENT, and a player who cannot
+              tell a merge from a gamble assumes a roll. There is none: doTransmute
+              takes exactly TRANSMUTE.commons and grants exactly one Ectoplasm,
+              every time, greedily from whichever common you hold most of. So the
+              row states it as a definite price and a definite result, in the same
+              pay/get grammar the look panel uses.
+              It does NOT say "nothing is destroyed", which is what the look panel
+              says and would be a lie here: the six commons really are gone. */''}
+        <div style="flex:1"><b>Transmute Ectoplasm</b><small>Pay ${TRANSMUTE.commons} common ingredients, get 1 ${esc(INGREDIENTS[TRANSMUTE.yields].name)}. Always exactly that: no roll, nothing else taken. It uses whichever commons you hold most of. You have ${tmute.commonsHave}.</small><small class="recipe-need">Ectoplasm is what the Necromancer's Feast needs.</small></div>
         <button class="btn small ${tmute.ready && tmute.canAfford ? '' : 'ghost'}" id="transmuteBtn" ${tmute.ready && tmute.canAfford ? '' : 'disabled'}>${!tmute.ready ? `${fmtCookTime(tmute.msLeft)}` : !tmute.canAfford ? `Need ${TRANSMUTE.commons}` : 'Transmute'}</button>
       </div>
       <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Ingredients <button class="btn small ghost" id="forageBtn">Forage · 45${ICONS.coin(13)}</button></div>
@@ -12493,14 +12507,18 @@ async function renderCharacter(wrap, tab, opts = {}) {
           return `
         <div class="mog-panel">
           <div class="sect-h mog-h"><span>${esc(GEAR_SLOT_LABELS[slot])} · change how it looks</span>
-            ${/* THE HOOK FOR GWART'S GUIDE, and it is a hook, not an explainer:
-                  the words for "transmog" as a concept belong to that workstream,
-                  not to this one. Contract, one line: define window.openGuide(topic)
-                  and this link appears here and calls it with 'transmog'. It is
-                  gated on the opener EXISTING so a visible control can never be a
-                  control that does nothing (anti-regression rule 5). */''}
-            ${typeof window.openGuide === 'function'
-              ? '<button type="button" class="mog-what" data-guide="transmog">What is this?</button>' : ''}</div>
+            ${/* THE HOOK FOR GWART'S GUIDE, and it is a hook, not an explainer: the
+                  words for "transmog" as a concept belong to that workstream, not to
+                  this one. It calls THEIR helper rather than hand-rolling the markup,
+                  so the label, the class and the delegated [data-guide] listener are
+                  all theirs and cannot drift from the Kitchen's two links.
+                  Gated on the helper EXISTING because until feat/gwarts-guide merges
+                  there is no listener, and a visible control that does nothing is
+                  worse than no control (anti-regression rule 5). `typeof` on a name
+                  that is not declared at all is safe and returns 'undefined'; it
+                  becomes a function the moment that branch lands, with no edit
+                  here. */''}
+            ${typeof guideLinkHtml === 'function' ? guideLinkHtml('transmog') : ''}</div>
           <p class="mog-lead">${wornGear
             ? `Your ${slotLc} keeps <b>${gearLabel(wornGear)}</b>. Only the picture changes.`
             : `Nothing with stats is in this ${slotLc}, so changing the picture here is free.`}</p>
@@ -12638,9 +12656,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
     }));
     // Tap a look to try it on: free, instant, no commitment. Dust is only spent
     // by the Apply button in the bar.
-    // the Guide hook. Only rendered when an opener is registered, so this can
-    // never bind a control that does nothing.
-    $$('[data-guide]', content).forEach(b => b.addEventListener('click', () => window.openGuide?.(b.dataset.guide)));
     $$('[data-look]', content).forEach(cell => cell.addEventListener('click', () => {
       S.lookPreview = cell.dataset.look;
       popSound(S.sounds);

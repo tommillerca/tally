@@ -248,26 +248,84 @@ check('EVERY SLOT no gear slot leaves the look section silently missing',
   slots.length > 0 && slots.every(s => s.panel || s.line), JSON.stringify(slots.filter(s => !s.panel && !s.line)));
 
 /* -------------------------------------------------------------- NO DEAD UI ---
-   The "What is this?" link belongs to Gwart's Guide, which is a different
-   workstream. It is rendered ONLY when window.openGuide exists, so this screen
-   can never show a control that does nothing (anti-regression rule 5). Both
-   halves are asserted: absent with no opener, present AND wired with one. */
-const guide = await page.evaluate(() => ({ shownWithNoOpener: !!document.querySelector('[data-guide]') }));
-check('NO DEAD UI the guide link is absent while no opener is registered', !guide.shownWithNoOpener, JSON.stringify(guide));
-const wired = await page.evaluate(async () => {
-  window.__guideCalls = [];
-  window.openGuide = t => window.__guideCalls.push(t);
-  document.querySelector('[data-pd="H"]').click();
-  await new Promise(r => setTimeout(r, 900));
-  const link = document.querySelector('.mog-panel [data-guide]');
-  if (!link) return { rendered: false };
-  link.click();
-  await new Promise(r => setTimeout(r, 250));
-  return { rendered: true, label: link.textContent.trim(), calls: window.__guideCalls };
+   The "What is this?" link belongs to Gwart's Guide, a different workstream that
+   owns the WORDS for transmog, ectoplasm and transmute. This panel calls THEIR
+   guideLinkHtml() rather than hand-rolling the markup, and only when that helper
+   exists: until feat/gwarts-guide merges there is no delegated [data-guide]
+   listener, and a visible control that does nothing is worse than no control
+   (anti-regression rule 5).
+
+   THIS ROW SAMPLED THE WRONG INSTANT ON ITS FIRST WRITE, and it is the reason
+   this comment is long. It ran straight after the EVERY SLOT sweep, which leaves
+   the doll on the LAST gear slot, and that slot is empty, so there was no panel
+   and therefore no link to find: the row read green with the gate deliberately
+   mutated open. Put the doll back on a slot that HAS a panel before looking.
+   PROVE-RED (real, once the state is right): render the link unconditionally. */
+await page.evaluate(() => document.querySelector('[data-pd="H"]')?.click());
+await sleep(1000); await settle(page);
+const guide = await page.evaluate(() => ({
+  panelOnScreen: !!document.querySelector('.mog-panel'),          // the state the row needs
+  links: document.querySelectorAll('.mog-panel [data-guide]').length,
+}));
+console.log('guide hook:', JSON.stringify(guide));
+check('NO DEAD UI the sample was taken on a slot that HAS a panel (empty is a FAILURE)',
+  guide.panelOnScreen, JSON.stringify(guide));
+check('NO DEAD UI no guide link is shown while nothing in the app handles [data-guide]',
+  guide.panelOnScreen && guide.links === 0, JSON.stringify(guide));
+/* SOURCE, not render: the runtime row above can only see the branch that is live
+   on THIS tree. This one pins the other branch, so the hook cannot quietly become
+   a hand-rolled button that drifts from the Kitchen's two links.
+   PROVE-RED: replace guideLinkHtml('transmog') with inline markup. */
+const appSrc = readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
+check('NO DEAD UI the panel hooks the Guide through its own helper, gated on it existing',
+  /typeof guideLinkHtml === 'function' \? guideLinkHtml\('transmog'\)/.test(appSrc),
+  (appSrc.match(/.*guideLinkHtml\('transmog'\).*/) || ['not found'])[0].trim().slice(0, 110));
+
+/* -------------------------------------------------------------- TRANSMUTE ----
+   Tom, v424 item 4: "ectoplasm needs an explanation the transmute thing as
+   confused almost all of my friends". Two lies were measured on that one row.
+
+   ONE, THE LABEL. It said "once a day" while TRANSMUTE.cooldownMs is 20 HOURS, so
+   two transmutes fit inside some calendar days and a player planning around a
+   daily allowance was wrong about their next one. Derived from the constant now.
+
+   TWO, AND THIS ONE IS THE TRAP THIS SUITE EXISTS TO STOP: the look panel says
+   "nothing is destroyed", which is TRUE there (the gear keeps its stats and stays
+   owned) and FALSE here, because doTransmute really does spend the six commons.
+   Copying a reassurance across a surface where the code contradicts it is exactly
+   how a player stops trusting the interface, so this row fails if that clause
+   ever appears on the Kitchen's transmute row.
+   PROVE-RED: put "once a day" back, or paste "Nothing is destroyed" into the row. */
+await page.evaluate(() => { location.hash = '#/today'; });
+await sleep(1500);
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button, a')].find(x => /kitchen/i.test(x.textContent) && x.offsetParent);
+  b?.click();
 });
-console.log('guide hook:', JSON.stringify(wired));
-check('NO DEAD UI once an opener exists the link appears and calls it with "transmog"',
-  wired.rendered && wired.calls?.[0] === 'transmog', JSON.stringify(wired));
+await sleep(2400); await settle(page);
+const kitchen = await page.evaluate(async () => {
+  const { TRANSMUTE } = await import('./js/cooking.js');
+  const row = document.querySelector('.crate-row.transmute');
+  const head = [...document.querySelectorAll('.sect-h')].find(h => /transmute/i.test(h.textContent));
+  return { hours: TRANSMUTE.cooldownMs / 3600e3, commons: TRANSMUTE.commons,
+    heading: (head?.textContent || '').replace(/\s+/g, ' ').trim(),
+    row: (row?.textContent || '').replace(/\s+/g, ' ').trim() };
+});
+console.log('kitchen:', JSON.stringify(kitchen));
+check('TRANSMUTE the sample found the row at all (empty is a FAILURE)', !!kitchen.row, JSON.stringify(kitchen));
+check('TRANSMUTE the cooldown label matches the cooldown the code enforces',
+  kitchen.heading.includes(`${kitchen.hours} hours`) && !/once a day/i.test(kitchen.heading),
+  `${kitchen.heading}  (cooldownMs = ${kitchen.hours}h)`);
+check('TRANSMUTE the row states a definite price and a definite result, not a merge',
+  new RegExp(`Pay ${kitchen.commons} common`).test(kitchen.row) && /no roll/i.test(kitchen.row),
+  kitchen.row.slice(0, 140));
+check('TRANSMUTE it does NOT claim nothing is destroyed, because the commons ARE spent',
+  !/nothing is destroyed/i.test(kitchen.row), kitchen.row.slice(0, 140));
+await page.evaluate(() => history.back());
+await sleep(1200);
+await openWardrobe('?demo&mogv2');
+await page.evaluate(() => document.querySelector('[data-pd="H"]')?.click());
+await sleep(1000); await settle(page);
 
 /* ---------------------------------------------------------------- ECONOMY ----
    THIS WAS AN INTERFACE PASS, so the numbers must not have moved. Applying

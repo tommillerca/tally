@@ -5535,11 +5535,6 @@ body::before {
 .mog-panel .sect-h.mog-h {
   display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0;
 }
-.mog-what {
-  flex: none; background: none; border: 0; padding: 2px 0; cursor: pointer;
-  font: inherit; font-size: 11px; font-weight: 700; text-transform: none; letter-spacing: 0;
-  color: var(--text-2); text-decoration: underline; text-underline-offset: 2px;
-}
 .mog-lead { margin: 5px 0 9px; font-size: 12.5px; line-height: 1.4; color: var(--text-2); }
 .mog-lead b { color: var(--text-1, #efe9f5); }
 .mog-empty { margin: 6px 2px 2px; }
