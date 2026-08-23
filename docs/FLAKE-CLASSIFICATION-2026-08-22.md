@@ -90,16 +90,45 @@ where. Prove-red at authoring time would not have caught this, because the row
 did go red on the bug it was written for. What exposed it was the measurement
 moving far enough from the threshold to make the reading obviously impossible.
 
-### 2. Threshold-marginal. `boneyard-density` VISIBLE
+### 2. Environment-sensitive, needs a product call. `boneyard-density` VISIBLE
 
-`9.50` and `9.25` against a hard floor of `10`, with the note "the parent branch
-drew 4.00". Consistently under, by a small margin, on a stochastic mean.
+Investigated fully. **The code has not regressed and the guard is not flaky.**
 
-**Fix:** this needs a decision, not a nudge. Either spawn density genuinely
-regressed below its intended floor (a real bug), or the floor of 10 was set
-optimistically against a mean that never reliably clears it. Do not "fix" this by
-lowering the floor to 9 without establishing which. Measure the shipped density
-first.
+The decisive experiment: checked out `5bf8af14`, the commit whose source records
+`VISIBLE_FLOOR = 10;   // measured 13.75 on this branch`, and ran that audit
+there today. It measures **9.25**. Same four locations, 4/14/9/10. The code that
+recorded 13.75 produces 9.25 on this machine, so the variable is the environment,
+not the app.
+
+Everything else was ruled out first, in order:
+
+| Hypothesis | Test | Result |
+|---|---|---|
+| Spawn supply regressed | `boneyard-supply-audit` (pure) | 13.5 per viewport vs floor 8, passes |
+| `js/hunt.js` changed | diff since the audit landed | no changes |
+| The four SPOTS are a low draw today | field over 400 Vancouver points | mean 46.0/3x3 cells, p10 45, p90 47; the SPOTS sit at 45,45,46,46 |
+| Sample too small (n=4) | false-red rate by n, 20k trials | 0.0% at every n; the field is uniform |
+| Counting before placement settles | settle 12s to 24s | 9.00 both times |
+
+Rendered counts are stable per location and vary by **geography**: 49.2827 is
+waterfront downtown and draws 3 to 4 every single run, because the walkability
+snap pushes spawns off the water and out of the viewport. The pure supply model
+predicts 13.5 because it does not know about water. The renderer is right.
+
+**Do not lower the floor to 9.** The audit's own premise is that "the number Tom
+judges is the number of markers on the glass", and the glass is a phone. This
+container runs software GL against whatever tile data it can reach. Re-calibrating
+against it would bake in a number that represents no player, which is the failure
+this audit was built to replace (its predecessor modelled a screen 4x the real one
+and reported 10.2 where the map drew 4).
+
+**Needs Tom:** a floor measured on a phone-representative machine. Until then the
+red is honest. It means "this machine cannot reproduce the calibration", not "the
+app broke".
+
+Arguably it should exit 97 UNPROVEN rather than FAIL, the way `boneyard-icon`
+does, so it stops reading as a code defect. That is a change to what the guard
+claims, so it is listed here rather than made.
 
 ### 3. Timing-sensitive. `boneyard` PAN
 
