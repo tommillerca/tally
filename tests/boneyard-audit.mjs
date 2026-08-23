@@ -110,8 +110,26 @@ await page.evaluateOnNewDocument(() => {
        from a shown one. MapLibre writes `opacity: 1` inline on every marker it
        owns, which beat the hide rule outright, and only computed opacity shows
        that. Count what the player can see. */
+    /* MARKERS THE MAP OWNS, NOT EVERY NODE WEARING MARKER MARKUP. app.js
+       mapLegendHtml() builds #mapLegend out of the REAL marker markup on
+       purpose so the key cannot drift from the map, and #mapLegend sits INSIDE
+       #mapStage, so the marker CSS applies to its swatches too. It is [hidden],
+       i.e. display:none, and getComputedStyle().opacity does not return 0 for
+       that: it returns the specified value, which is 1 once .markers-in lands.
+       So the key counted as NINE permanently-visible markers, measured exactly:
+       5 .map-spawn, 3 .map-den-mark, 1 .map-mini-mark.
+       That is what "vis@reveal 9" was, in every run. Not markers inside the
+       220ms fade. See docs/FLAKE-CLASSIFICATION-2026-08-22.md, whose mechanism
+       for that number was wrong.
+       maplibregl-marker is an ALLOWLIST and that is the point: map.js:200 does
+       `new maplibregl.Marker({ element: el })`, so MapLibre stamps the class on
+       exactly the nodes it owns and never on the key's copies. Excluding
+       #mapLegend would work today and miss the next hidden thing built out of
+       marker markup. closest() checks the node itself first, which is what we
+       want, since `el` IS the .map-spawn node. */
+    const owned = sel => [...document.querySelectorAll(sel)].filter(e => e.closest('.maplibregl-marker'));
     for (const [sel, k] of Object.entries(KINDS))
-      snap[k] = [...document.querySelectorAll(sel)].filter(e => +getComputedStyle(e).opacity > 0.01).length;
+      snap[k] = owned(sel).filter(e => +getComputedStyle(e).opacity > 0.01).length;
     const last = a.tl[a.tl.length - 1];
     if (!last || Object.values(KINDS).some(k => last[k] !== snap[k])) a.tl.push(snap);
     const st = document.querySelector('#mapStage');
@@ -120,7 +138,11 @@ await page.evaluateOnNewDocument(() => {
       a.revealCount = Object.values(KINDS).reduce((s, k) => s + snap[k], 0);
       /* DOM count at the same instant. The pair is the whole assertion: what
          placement had produced, versus what the player was shown. */
-      a.revealDom = Object.keys(KINDS).reduce((s, sel) => s + document.querySelectorAll(sel).length, 0);
+      a.revealDom = Object.keys(KINDS).reduce((s, sel) => s + owned(sel).length, 0);
+      /* Decoys ADMITTED BY THE PREDICATE ABOVE, not decoys that exist. The key
+         always renders 9 swatches; the question is whether the counter took
+         them. Counting the former gives a row that can never be green. */
+      a.revealDecoys = Object.keys(KINDS).reduce((s, sel) => s + owned(sel).filter(e => e.closest('#mapLegend')).length, 0);
     }
     /* SETTLED. `revealCount` above is sampled on the tick `.markers-in` lands,
        which is BEFORE the 220ms fade has raised computed opacity, so it reads
@@ -169,7 +191,7 @@ await page.evaluateOnNewDocument(() => {
  * the source is what is asserted, so a new assertion added without extending
  * this block fails here rather than being graded against a dead map. */
 const cls = unclassifiedRows(import.meta.url, []);
-const MAP_ROW_COUNT = 23;   // every ok() in this file except ROWS-COUNTED below
+const MAP_ROW_COUNT = 25;   // every ok() in this file except ROWS-COUNTED below
 ok('ROWS-COUNTED every assertion in this file is Boneyard-dependent and accounted for',
   cls.callSites === MAP_ROW_COUNT + 1,
   `${cls.callSites} ok() rows in source, expected ${MAP_ROW_COUNT + 1}. If you added a row, it needs a line in the UNPROVEN block above it.`);
@@ -287,8 +309,23 @@ const arr = await page.evaluate(() => window.__arr);
 /* Final DOM count, read after everything has settled. Paired with revealDom it
    answers "was placement essentially finished when we revealed", which is the
    half of the old MAJORITY row worth keeping. */
-arr.finalDom = await page.evaluate(() => ['.map-spawn', '.map-den-mark', '.map-mini-mark', '.map-spire', '.map-glutton-mark']
-  .reduce((s, sel) => s + document.querySelectorAll(sel).length, 0));
+const domCounts = await page.evaluate(() => {
+  /* The five marker classes, 2026-08-23: the same list KINDS is keyed on above,
+     restated here because this runs in page context where KINDS is not in scope.
+     Not a tunable. If a sixth marker type ships it belongs in both places, and
+     ROWS-COUNTED will not catch that, so this comment is the only warning. */
+  const SELS = ['.map-spawn', '.map-den-mark', '.map-mini-mark', '.map-spire', '.map-glutton-mark'];
+  /* THE COUNTED SET, defined once, so the decoy figure below is derived from the
+     SAME predicate rather than from a parallel expression that can drift out of
+     agreement with it. The first draft counted `#mapLegend .map-spawn` directly,
+     which reports 9 whether the scoping works or not, so the row could never go
+     green and would have shipped permanently red. */
+  const counted = SELS.flatMap(sel => [...document.querySelectorAll(sel)])
+    .filter(e => e.closest('.maplibregl-marker'));
+  return { total: counted.length, decoys: counted.filter(e => e.closest('#mapLegend')).length };
+});
+arr.finalDom = domCounts.total;
+arr.legendDecoys = domCounts.decoys;
 
 /* AND THE OTHER HALF, on a FRESH LOAD. The fixture above stands next to a Bone
    cache, so it only exercises the visible branch; the bug this file exists for
@@ -390,6 +427,63 @@ ok('ARRIVAL the reveal happened at all (never revealing is a FAILURE)',
   arr.reveal != null, `reveal at ${arr.reveal}ms`);
 ok('ARRIVAL markers were actually counted (an empty timeline is a FAILURE)',
   arr.tl.length >= 2, `${arr.tl.length} count changes recorded`);
+/* TWO CHECKS, NOT ONE, BECAUSE THEY HAVE DIFFERENT CAUSES AND DIFFERENT ANSWERS.
+   The rows below are shaped `revealDom > 0 && <comparison>`. Before the scoping
+   above, #mapLegend handed them nine permanently-visible nodes, so on a Boneyard
+   that drew ZERO real markers revealDom was 9, revealSettled was 9, and `9 >= 9`
+   and `9*2 > 9` both passed. Two green rows over an empty map, shipped in the
+   same PR as the ratchet against that class.
+
+   Scoping makes the counts honest but does NOT close it, because honest zeros
+   still leave `revealDom > 0` as the only floor. So the floor is asserted here.
+
+   The FIRST draft of this was one row asserting the floor AND the decoys, as a
+   FAIL. That was wrong, and a degraded run on this box proved it within the
+   hour: real markers 0, so the row went red, and a red row says "the code is
+   broken" when the truth was "this machine could not host the map". Shipping
+   that costs a wasted investigation every time somebody runs the suite on a
+   busy laptop. The two failure modes are:
+
+     a decoy leaks back into the count  -> a CODE regression, environment
+       independent, deterministic. That is a FAIL and it is the row below.
+     the map drew nothing at all        -> a HOSTING fact, and the honest verdict
+       is UNPROVEN (exit 97), the mechanism boneyard-icon-audit already uses to
+       refuse a pass it cannot back. boneyardCapability() above does not catch
+       this: it proves a WebGL context can be created, not that placement ever
+       finished, which is exactly how the degraded run got past it.
+
+   FLOOR is deliberately low: boneyard-supply-audit owns density and measures
+   13.5 spawns per viewport against a floor of 8. This is a reach check, not a
+   second density guard. Measured on this fixture: 65 nodes carrying marker
+   markup, 9 of them the key, 56 owned by MapLibre. */
+/* PROVENANCE, 2026-08-23. Not a density bar, a reach floor, and it is set well
+   under what the map actually draws so it can only fail when the sample is
+   absent rather than merely thin. Measured on this fixture the same day, two
+   clean runs: 55 MapLibre-owned markers at rest / 54 at reveal, and 58 / 57 on
+   the run after it. boneyard-supply-audit owns density and pins 13.5 spawns per
+   viewport against a floor of 8; duplicating that here would give two rows that
+   fail together for one cause. */
+const MIN_PLAUSIBLE_MARKERS = 10;
+/* revealDecoys is only GRADEABLE if a reveal happened. On a run where it never
+   fired it is undefined, and `undefined === 0` is false, so the first draft of
+   this row went RED on a machine that simply did not draw the map. That is the
+   same mistake the SAMPLE row above exists to avoid, one row apart, and it is
+   the second time today this file has been given a guard that reports a hosting
+   fact as a code defect. legendDecoys stays hard-graded either way: the final
+   DOM is countable whether or not the reveal fired. */
+const revealMeasured = arr.revealDom != null;
+ok('ARRIVAL the legend is not counted as markers (a decoy in the count is a code regression, and it made the two rows below unable to fail)',
+  arr.legendDecoys === 0 && (!revealMeasured || arr.revealDecoys === 0),
+  `${arr.legendDecoys} decoy(s) in the final count and ${revealMeasured ? arr.revealDecoys : 'not graded (no reveal this run)'} at reveal, both must be 0 when measured. Guarding BOTH sites on purpose: reverting only the recorder's scoping leaves the final count clean and inflates revealDom, which a single-site check would pass. The key is built from real marker markup, sits inside #mapStage, and [hidden] does not zero computed opacity, so it used to supply exactly 9`);
+
+if (!(arr.finalDom > 0)) {
+  unproven('ARRIVAL the map drew a plausible sample (SAMPLE: the floor the two rows below stand on)',
+    `the map drew 0 MapLibre-owned markers on this machine, so there is no sample to grade. Not a code failure: boneyardCapability passed, meaning WebGL works, but placement never produced a marker. Seen on a contended box 2026-08-23`);
+} else {
+  ok('ARRIVAL the map drew a plausible sample (SAMPLE: the floor the two rows below stand on)',
+    arr.finalDom >= MIN_PLAUSIBLE_MARKERS && arr.revealDom >= MIN_PLAUSIBLE_MARKERS,
+    `${arr.finalDom} MapLibre-owned markers at rest and ${arr.revealDom} at reveal, floor ${MIN_PLAUSIBLE_MARKERS}`);
+}
 ok('ARRIVAL the reveal SHOWED every marker it already had (nothing placed was withheld to fade in afterwards)',
   arr.revealDom > 0 && arr.revealSettled != null && arr.revealSettled >= arr.revealDom,
   `${arr.revealSettled ?? 'null'} visible once the fade settled, against ${arr.revealDom ?? 'null'} already placed at reveal (the reveal-instant reading is ${arr.revealCount}, mid-fade, which is what the retired MAJORITY row graded)`);
@@ -751,5 +845,9 @@ await slowBrowser.close();
 if (srv) srv.kill();
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
+/* Also here, not only on the early exit above: a row can go UNPROVEN mid-run
+   (the map hosted fine, then drew nothing), and without this the suite would
+   exit 97 with no banner saying which check was not graded. */
+unprovenReport('boneyard-audit.mjs', null);
 if (!results.length) { console.log('FAIL: no checks ran'); process.exit(1); }
 process.exit(exitFor(failed));
