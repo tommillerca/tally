@@ -10133,5 +10133,59 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 }
 .tsec-meals .meal:last-child { margin-bottom: 0; }
 
+/* ================================================================ *
+ * AND THE DAY STOPS BEING A BOX OF BOXES (v427).
+ *
+ * Tom: the screen "reads as floating widgets rather than one screen". The
+ * container shipped in v425 answered that at SCREEN level, and the measurement
+ * agrees: 18 painted surfaces on the pre-rework screen, 4 once the day owned
+ * everything (390x844, ?demo, surfaces counted as elements painting their own
+ * background or keyline and not already inside one).
+ *
+ * INSIDE the day it was still 8. Calories, Wellness, Activity and all four
+ * meals each kept the full hand-inked panel (app.css:975: 2px --ink keyline,
+ * --radius corners, grain, drop edge) laid ON TOP of the day's own --surface-2
+ * well, with a kicker above each one naming it a second time. That is a box
+ * holding seven more boxes, which is the same complaint one level in, and it is
+ * the half the container could not reach.
+ *
+ * So inside .dayblk a section gives up its panel and becomes a ROW of the day:
+ * the well is the only surface, the kickers are the only section headers, and
+ * one hairline marks each seam. No new colours and no new idioms, only --line
+ * and the .tsec rhythm that is already here.
+ *
+ * EVERY RULE IS SCOPED TO .dayblk ON PURPOSE. `.card` has call sites all over
+ * the app and this is a claim about the day, not about cards: the Kitchen, the
+ * Stable and the shop keep the hand-inked skin exactly as they are. Measured
+ * after: 0 boxes drawn inside the day.
+ * ================================================================ */
+.dayblk .tsec > .card,
+.dayblk .tsec-meals .meal {
+  background: none; background-image: none; background-blend-mode: normal;
+  border: 0; border-radius: 0; box-shadow: none;
+  padding-left: 2px; padding-right: 2px; margin-bottom: 0;
+}
+/* ONE HAIRLINE PER SEAM, AND NEVER A LEADING ONE. A rule above the first
+   section would draw a second line immediately under .dayhdr's own bottom
+   border, which reads as a double rule rather than as a seam. */
+.dayblk .tsec + .tsec { border-top: 1px solid var(--line); padding-top: 14px; }
+.dayblk .tsec { margin-bottom: 14px; }
+/* meals are rows of the same ledger, so they take the same seam */
+.dayblk .tsec-meals .meal + .meal { border-top: 1px solid var(--line); padding-top: 8px; }
+
+/* AND THE SAME ARGUMENT ONE LEVEL IN. A meal that stopped being a panel cannot
+   keep serving its foods as pills: measured, flattening the sections alone took
+   the day from 8 boxes to 10, because the nine `.entry` rows that used to sit
+   INSIDE a meal card became the outermost surfaces drawn on the well. A logged
+   food is a row of the meal. :active keeps the press feedback, which is the
+   part of the pill that was doing real work, and it swaps to --surface because
+   the ground under it is now the day's --surface-2. */
+.dayblk .tsec-meals .entry {
+  background: none; border: 0; border-radius: 0; margin-bottom: 0;
+  padding-left: 2px; padding-right: 2px;
+}
+.dayblk .tsec-meals .entry + .entry { border-top: 1px solid var(--line); }
+.dayblk .tsec-meals .entry:active { background: var(--surface); }
+
 /* announcements are not part of the day, so they queue after it */
 .promo-slot { margin-top: 14px; }
