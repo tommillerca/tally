@@ -47,9 +47,20 @@
  * tree and grepped to confirm it landed (a cp -R of a worktree shares its .git
  * and a checkout inside the copy writes back to the original, which proves
  * nothing):
- *   - #gwartBtn's handler put back to gwSay(gwartLine(gwCtx))  -> REACH-TODAY,
- *     ENTRIES, INK, SCROLL, DISMISS red (7 FAILED)
- *   - TRANSMUTE.commons 6 -> 5 in js/cooking.js                -> TRUTH red alone
+ *   1. #gwartBtn's handler put back to gwSay(gwartLine(gwCtx)), i.e. the tap
+ *      before Tom asked for the Guide -> 5 FAILED: REACH-TODAY, both ENTRIES
+ *      rows, INK (score -1, there is no panel to clip) and SCROLL ("no body").
+ *   2. TRANSMUTE.commons 6 -> 5 in js/cooking.js -> 1 FAILED: TRUTH alone, and
+ *      it names the new number in its own row so the fix is the copy, not the
+ *      threshold.
+ *   3. the Emporium's <button class="gw-art"> put back to a <div>, i.e. the
+ *      shop panel as it shipped -> 3 FAILED: COVERAGE (which reports the byte
+ *      offset of the uncovered draw site), plus both REACH-SHOP rows.
+ *
+ * WHAT MUTATION 1 DID NOT RED, said plainly: DISMISS passed, because Escape on a
+ * screen with no sheet on it leaves nothing behind perfectly well. It is a
+ * regression row for the Guide that IS open, not a detector, and REACH-TODAY is
+ * what fails loudly when the tap dies. Do not read its green as coverage.
  *
  * Run: node tests/gwart-guide-audit.mjs [baseUrl]   (serves this repo if omitted)
  */
