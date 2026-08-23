@@ -95,41 +95,123 @@ ok('SETUP the scan found audit files', files.length >= 50, `${files.length} file
 ok('SETUP the matcher still finds literal expectation constants',
   found.length >= 60, `${found.length} constants; the first cut of this scan used a one-line regex and saw only 33 of them`);
 
-/* ---- THE RATCHET -------------------------------------------------------- */
-/* 69 of 71 carry no date today. Retrofitting all of them in one sweep would be
-   done badly and would mostly produce dates pasted to silence a row, which is
-   worth less than nothing. So this ratchets: the undated count may never rise.
-   A NEW pinned expectation therefore has to cite where it came from, and every
-   legacy one fixed lowers the ceiling permanently. Lower the number when you fix
-   one; never raise it. */
-const undated = found.filter(c => !c.date);
-const CEILING = 69;
-ok(`RATCHET literal expectation constants with no dated provenance do not rise above ${CEILING}`,
-  undated.length <= CEILING,
-  `${undated.length} of ${found.length} undated. ` +
-  (undated.length > CEILING
-    ? `${undated.length - CEILING} more than the ceiling. A pinned expectation must cite its source instruction and date within 7 lines above.`
-    : 'ratchet holding'));
+/* ---- THE RATCHET, ON THE SET AND NOT THE COUNT ---------------------------
+   The first version counted: "must not rise above 69". It went red on 2026-08-23
+   for a PR whose author had added ONE undated constant, because two OTHER
+   sessions had merged two more hours earlier. The count was true and the blame
+   was wrong, and the message made it worse by saying "yours is almost certainly
+   in a file you just edited". It sent the author to date two constants that were
+   neither new nor theirs.
+   A global count fires on whoever runs next rather than on whoever caused it. So
+   this ratchets the SET: every undated constant that exists today is listed
+   below, and the row fails only on one that is NOT. New offenders are named
+   exactly, and nobody inherits another session's debt.
+   Two directions, because a list like this rots otherwise:
+     NEW    an undated constant not in the inventory -> red, named
+     STALE  an inventory entry that is now dated or gone -> red, delete the line
+   Fix one, delete its line. The inventory only shrinks. */
+const KNOWN_UNDATED = [
+  'backup-roundtrip-audit.mjs:NAMES',
+  'backup-roundtrip-audit.mjs:NAMES',
+  'backup-roundtrip-audit.mjs:NAMES',
+  'backup-roundtrip-audit.mjs:STORES',
+  'balance-audit.js:FOES',
+  'balance-audit.js:WEAPONIZED',
+  'batch-audit.mjs:KIT_CASTS',
+  'crash-guard-audit.mjs:SHAPES',
+  'crate-palette-audit.mjs:CRATES',
+  'crate-reveal-audit.mjs:KINDS',
+  'crew-fan-audit.mjs:FRIENDS',
+  'den-ceiling-audit.mjs:WEEKS',
+  'ember-cohesion-audit.mjs:CLASSES',
+  'facegate-audit.mjs:HELD_SLOTS',
+  'fight-exit-audit.mjs:MAP_ROWS',
+  'fight-exit-audit.mjs:NO_MAP_ROWS',
+  'fight-layout-audit.mjs:SLACK_SIZES',
+  'fight-tray-audit.mjs:KNOWN',
+  'figure-audit.mjs:SITES',
+  'flaky-network-audit.mjs:DEADLINE_FILES',
+  'flaky-network-audit.mjs:FRIENDS',
+  'flaky-network-audit.mjs:LOCAL_ONLY',
+  'fx-audit.js:MOVES',
+  'gate-audit.mjs:OK_HELPERS',
+  'grid-min-width-audit.mjs:ROUTES',
+  'handover-audit.mjs:SWAPS',
+  'hollow-backdrop-audit.mjs:BANDS',
+  'hollow-beds-audit.mjs:BEDS',
+  'hollow-beds-audit.mjs:CHIPS',
+  'hollow-beds-audit.mjs:SIGNS',
+  'idle-perf-audit.mjs:SURFACES',
+  'input-validation-audit.mjs:MALFORMED',
+  'motion-truth-audit.mjs:REGISTER',
+  'nav-perf-audit.mjs:LAP',
+  'notif-tier-audit.mjs:PROBED',
+  'pet-pool-audit.mjs:RARITY_ORDER',
+  'pixel-art-swap-audit.mjs:SCREENS',
+  'placeholder-audit.mjs:SCREENS',
+  'precache-assets-audit.mjs:CANDIDATES',
+  'quest-daymore-audit.mjs:IMPOSSIBLE_ON_DAY_ONE',
+  'quest-pick-audit.mjs:PERIODS',
+  'race-results-audit.mjs:LIVE_BOARD_TODAY',
+  'race-results-audit.mjs:PAID',
+  'rebuild-lossless-audit.mjs:RANK',
+  'reward-sop-audit.mjs:ACTIONS',
+  'reward-sop-audit.mjs:PAY',
+  'scout-audit.mjs:MAP_ROWS',
+  'selector-audit.mjs:QUERY_RE',
+  'sheet-action-reachable-audit.mjs:SHEETS',
+  'spawn-quiet-audit.mjs:QUIET',
+  'spawn-quiet-audit.mjs:TYPES',
+  'speech-audit.mjs:CASES',
+  'suite-rot-audit.mjs:EMIT_RE',
+  'suite-rot-audit.mjs:QUERY_RE',
+  't1-audit.mjs:MAP_ROWS',
+  'tab-chip-audit.mjs:TABS',
+  'tab-chip-audit.mjs:VIEWPORTS',
+  'tabbar-contrast-audit.mjs:TABS',
+  'tray-destination-audit.mjs:STATES',
+  'tray-destination-audit.mjs:TABS',
+  'ui-audit.js:CONTROL_EXPECTATIONS',
+  'unit.test.js:CONTROLS',
+  'unit.test.js:PDK_ROSTER',
+  'unit.test.js:PROVEN_BY_PIXELS',
+  'unit.test.js:ROOTS',
+  'unit.test.js:TARGETS',
+  'v279-audit.mjs:SWEEP',
+  'wanderer-patrol-live-audit.mjs:ROWS',
+  'xp-cap-audit.mjs:SOURCES'
+];
 
-/* NAME THE CULPRITS WHEN IT TRIPS. The first person to hit this ratchet (2026-08-23,
-   scoping the boneyard marker selectors) got a bare "70 of 72" and dated the WRONG
-   constant, because the row printed three arbitrary examples in scan order and this
-   matcher only counts bracketed literals containing strings. They found the real one
-   by trial. A ratchet that says "something you touched is undated" without saying
-   what is a puzzle, not a guard, so on failure print the whole list grouped by file:
-   the offender is almost always in a file the author just edited, which makes it
-   obvious by inspection even at this length. Only on failure, so a green run stays
-   one line. */
-if (undated.length > CEILING) {
-  const byFile = new Map();
-  for (const c of undated) (byFile.get(c.file) ?? byFile.set(c.file, []).get(c.file)).push(c);
-  console.log(`\n    every undated pinned expectation (${undated.length}), grouped by file.`);
-  console.log('    Yours is almost certainly in a file you just edited:');
-  for (const [file, cs] of [...byFile].sort()) {
-    console.log(`      ${file}`);
-    for (const c of cs) console.log(`          :${c.line}  ${c.name}`);
-  }
+/* COUNTS, NOT MEMBERSHIP. `file:NAME` is NOT unique: backup-roundtrip-audit.mjs
+   has THREE constants called NAMES. A Set collapsed them to one key, so dating
+   one of the three left the key live and the STALE row never fired, and a
+   genuinely new constant sharing a name would have been waved through as known.
+   Found by prove-red on this very change. Comparing counts per key handles
+   duplicates without pinning line numbers, which would rot on every edit. */
+const key = c => `${c.file}:${c.name}`;
+const tally = xs => xs.reduce((m, k) => m.set(k, (m.get(k) || 0) + 1), new Map());
+
+const undated = found.filter(c => !c.date);
+const liveCount = tally(undated.map(key));
+const knownCount = tally(KNOWN_UNDATED);
+const allKeys = new Set([...liveCount.keys(), ...knownCount.keys()]);
+
+const novel = [], stale = [];
+for (const k of allKeys) {
+  const live = liveCount.get(k) || 0, known = knownCount.get(k) || 0;
+  if (live > known) novel.push(`${k}${live - known > 1 ? ` x${live - known}` : ''}`);
+  if (live < known) stale.push(`${k}${known - live > 1 ? ` x${known - live}` : ''}`);
 }
+
+ok('RATCHET no NEW pinned expectation lacks dated provenance',
+  novel.length === 0,
+  novel.length
+    ? `${novel.length} new: ${novel.join(', ')}. Cite the source instruction and date within 7 lines above.`
+    : `${undated.length} known, 0 new`);
+
+ok('RATCHET the inventory has no stale entries (fixed one? delete its line)',
+  stale.length === 0,
+  stale.length ? `${stale.length} now dated or gone: ${stale.join(', ')}` : 'inventory matches');
 
 /* ---- THE REVIEW LIST ---------------------------------------------------- */
 /* Not a failure. The point of a date is that it can be READ, so the oldest

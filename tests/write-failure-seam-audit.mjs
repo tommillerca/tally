@@ -128,6 +128,12 @@ ok('CONTROL those writes actually reached the database', res.control.stored === 
   `read back ${JSON.stringify(res.control.stored)}, expected 2. If the write never landed, "a successful write reports nothing" is vacuous.`);
 
 console.log('\n1. every write path reports its own rejection');
+/* PROVENANCE: this is js/db.js's WRITE SURFACE, enumerated 2026-08-23 against
+   its exports, not a product decision. Every method that can reject belongs
+   here. ADD A ROW WHEN YOU ADD A WRITE METHOD: a method missing from this list
+   is not tested for the seam at all, and the suite stays green while the new
+   path swallows its rejections silently, which is the exact bug this file
+   exists for. */
 const PATHS = ['put', 'del', 'clear', 'addIfAbsent', 'take', 'kvUpdate'];
 for (const p of PATHS) {
   ok(`${p}: rejection reported exactly once`, res.reported[p] === 1,
