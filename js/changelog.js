@@ -7,6 +7,12 @@ export const CHANGES = [
     'Until now, if the app failed to write something to your phone, it went quietly. The meal, the weigh-in, the crate, the coins: gone, with nothing on screen to tell you. The app speaks up now.',
     'It only speaks up for things you did or earned. Bookkeeping the app can work out again by itself stays silent, so this is not a new stream of warnings.',
     'And if the reason is that your phone is out of storage, it says that specifically, because that one you can actually do something about.',
+    'The Wanderer was drawn so large in the Pit that he sat on top of your Bonehead. He is sized to the arena now, and you can see who you are hitting.',
+    'Beating the Wanderer used to leave him standing out on the map as if nothing had happened. He clears off now, until the next one comes wandering by.',
+    'Pets were oversized in a fight, and some of them fought with their back to the enemy. They are scaled to each other, turned the right way round, and no longer glowing in the Pit.',
+    'Saving a fit, then taking everything off, then putting the fit back on used to return a couple of pieces and forget the rest. A saved fit now remembers the whole look, gear included, and puts all of it back.',
+    'Gwart would talk about nothing but an unopened crate until you opened it. He mentions it once now, then finds something else to say.',
+    'New: double tap Today to jump back to the top of it, and double tap the Boneyard while you are in it to snap the map back to where you are standing.',
   ] },
   { n: 425, date: '2026-08-23', title: 'Backup off means off, and the Shop stops working overtime', items: [
     'Fixed, and it is the one in here that matters: turning Cloud backup OFF in Settings did not actually stop your save being uploaded. The switch stopped the app pulling a backup DOWN, and left it still sending one up on every launch. Your save is encrypted on your phone before it leaves, with a key that never goes anywhere, so what was being sent could not be read, by us or by anyone else. But off should mean off, and now it does.',
