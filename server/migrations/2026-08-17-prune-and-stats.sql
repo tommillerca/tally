@@ -1,0 +1,100 @@
+-- Grants retention, and the two indexes that stop /stats timing out.
+--
+-- Apply local:  npx wrangler d1 execute bonez --local  --file=migrations/2026-08-17-prune-and-stats.sql
+-- Apply remote: npx wrangler d1 execute bonez --remote --file=migrations/2026-08-17-prune-and-stats.sql
+--
+-- RUN THIS BEFORE ./deploy.sh, not after. deploy.sh does not run migrations,
+-- and the cron's grants pruner reads players.grants_ack directly: without the
+-- column it throws, which shows up as a FAILED cron invocation in the
+-- Cloudflare dashboard and nothing gets pruned. GET /grants is deliberately
+-- softer about it (it falls back to delivering without recording the ack and
+-- logs why), so the worst case is a noisy log and a table that keeps growing,
+-- never a player who stops receiving gifts. Run it first anyway.
+--
+-- NOT PURELY ADDITIVE, unlike 2026-08-16-indexes.sql, and the difference is
+-- worth being explicit about: this file DROPS two indexes. No table is renamed,
+-- no column is removed and no row is rewritten, so the data-safety contract is
+-- intact; what changes is which b-tree the planner may walk. Both drops are
+-- paired with a replacement that carries the dropped index as a strict PREFIX,
+-- so there is no query anywhere in src/index.js that the old index could serve
+-- and the new one cannot.
+--
+-- ORDER MATTERS. Create before drop, so that a run interrupted between the two
+-- leaves the database with MORE indexes than it needs rather than fewer. An
+-- extra index costs bytes; a missing one costs a full table scan on the hottest
+-- route on the worker.
+--
+-- ============================================================================
+-- 1. players.grants_ack  -- how far this player's client has read the feed
+-- ============================================================================
+-- The grants table had never been pruned, and could not be: GET /grants is a
+-- cursor read whose cursor lives ONLY on the device (js/social.js grantCursor,
+-- inside the IndexedDB kv store), so the server held no record of what had
+-- actually been delivered. Without that, every rule for deleting a grant is a
+-- guess about somebody's unopened present.
+--
+-- GET /grants now records the `since` it was called with. js/social.js
+-- pullGrants advances grantCursor only AFTER applying the whole batch, so
+-- since=N is the client stating that every grant with id <= N has landed.
+-- Nullable, so every existing row means "has never acknowledged anything" and
+-- is protected by default until that player's client next syncs.
+--
+-- Re-running this ALTER errors with "duplicate column name", which is harmless.
+ALTER TABLE players ADD COLUMN grants_ack INTEGER;
+
+-- ============================================================================
+-- 2. idx_grants_ts  -- the index the grants pruner walks
+-- ============================================================================
+-- pruneGrants takes candidates OLDEST FIRST, and ts is the only column that
+-- says how old a row is. Measured against a 400,000 row grants table in local
+-- SQLite, one 1,000 row retention batch:
+--
+--   before  MULTI-INDEX OR over idx_grants_key + USE TEMP B-TREE FOR ORDER BY
+--                                                        382.0 ms
+--   after   SEARCH g USING INDEX idx_grants_ts (ts<?)      13.6 ms   28x
+--
+-- Costs 17 bytes per grants row, measured off the page_count delta (512 -> 529
+-- bytes a row all-in on a cheer-shaped fixture). One retention cycle returns
+-- that many times over: the table stops growing without bound, which is the
+-- entire point.
+CREATE INDEX IF NOT EXISTS idx_grants_ts ON grants (ts);
+
+-- ============================================================================
+-- 3. The events index swap  -- /stats stops timing out before storage fills
+-- ============================================================================
+-- MEASURED, in local SQLite on the real events DDL at 250k / 1M / 4M / 12M
+-- rows, best of three per statement. The tester leaderboard is superlinear
+-- (roughly N^1.3) and crosses D1's 30 SECOND STATEMENT LIMIT at about 12M rows,
+-- which is only 2,600 daily devices on a 60 day window:
+--
+--   rows          testers   activeByDay   byName    whole /stats route
+--   250,000        196 ms       40 ms      57 ms         460 ms
+--   1,000,000      880 ms      168 ms     213 ms       1,962 ms
+--   4,000,000    5,922 ms    1,450 ms   1,574 ms      12,357 ms
+--   12,000,000  33,883 ms    6,111 ms   5,285 ms      56,995 ms
+--
+-- With these two indexes AND the 14 day reporting window in src/index.js, on
+-- the same 12,000,000 row table:
+--
+--   testers      33,883 -> 1,890 ms      activeByDay   6,111 -> 348 ms
+--   totalEvents   4,894 ->   174 ms      dau             461 ->  13 ms
+--   whole route  56,995 -> 14,357 ms
+--
+-- WHAT THEY COST. 20 bytes per events row, measured off the page_count delta on
+-- a fresh build of each index set. The retention window was sized on 189 bytes
+-- a row, so it becomes 209: about 158 MB a day at 10,000 DAU instead of 143 MB,
+-- and 9.5 GB for sixty days of it against a 10 GB cap. The DAU ceiling for a 60
+-- day window therefore falls from roughly 8,000-9,000 to roughly 7,300-8,200.
+-- That is the deal being struck here, deliberately: the dashboard survives to
+-- about 11,700 daily devices instead of 2,600, and the storage runway gets
+-- about 10% shorter. EVENT_RETENTION_DAYS is one line and comes down when it
+-- has to.
+--
+-- REJECTED, on the measurement, so nobody has to try it twice: widening
+-- idx_events_name to (name, day) made byName worse (5,721 -> 9,001 ms) and the
+-- session_ping count worse (1,580 -> 3,301 ms). The wider entries cost more to
+-- scan than the day bound saves. idx_events_name stays as (name) alone.
+CREATE INDEX IF NOT EXISTS idx_events_day_device ON events (day, device);
+CREATE INDEX IF NOT EXISTS idx_events_device_name_day ON events (device, name, day);
+DROP INDEX IF EXISTS idx_events_day;
+DROP INDEX IF EXISTS idx_events_device_day;
