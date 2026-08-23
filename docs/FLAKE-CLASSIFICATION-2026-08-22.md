@@ -71,6 +71,16 @@ is the machine, not the code.
 > counters are unscoped `document.querySelectorAll`, so all nine are counted as
 > visible markers in every run.
 >
+> Put at its shortest: **`[hidden]` on `#mapLegend` never hid its swatches from
+> an opacity-based counter.** `display:none` hides an element from the page, not
+> from `getComputedStyle().opacity`. Any guard that decides "visible" from
+> opacity alone inherits this, so it is worth checking the other opacity-based
+> counters in tests/ rather than treating it as one file's bug.
+>
+> Confirmed independently on the scoped fix: 65 total, 9 in the legend, 56
+> outside, and 56 carrying `maplibregl-marker`, so the allowlist selects exactly
+> what a `#mapLegend` denylist would. A drop of exactly 9.
+>
 > So `dom@reveal 65` was about 56 real markers plus the key, and `vis@reveal 9`
 > was the key alone. It was never evidence about the 220ms fade.
 >
