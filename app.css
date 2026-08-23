@@ -282,15 +282,9 @@ svg { display: block; }
 
 /* ---------- header ---------- */
 .day-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 8px; }
-/* Today leads with the Bonehead and nothing above it. The day controls sit with
-   the day's LOG instead, directly above the calorie ring, where changing the date
-   actually means something. Settings rides along rather than floating over art. */
-.day-strip {
-  display: flex; align-items: center; gap: 8px; margin: 4px 0 12px;
-}
-.day-strip .day-title { flex: 1; text-align: center; }
-.day-strip .day-title h1 { font-size: 19px; }
-.day-strip .day-title .sub { font-size: 12px; }
+/* `.day-strip`, the floating `< TODAY Aug 22 > [gear]` row, lived here until
+   2026-08-22. It is the `.dayhdr` titlebar of the day container now (end of this
+   file): the same three controls, inside the thing they govern. */
 .day-title { text-align: center; flex: 1; position: relative; }
 .day-title h1 { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
 .day-title .sub { font-size: 12.5px; color: var(--text-3); margin-top: 1px; font-weight: 500; }
@@ -1566,7 +1560,15 @@ body::before {
 }
 .hero-scene.bounce .bh-anim { animation: bhbounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1), bh-idle 4s ease-in-out 0.7s infinite; }
 
-.hero-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+/* 22px, not 14: the four doors used to be followed by whatever nudge or banner
+   happened to be live, and the quests came after that stack. With the nudge gone
+   and the banners evicted below the day, the quests butt straight onto the doors,
+   so the break between "the game" and "the day" is this margin now. It is also
+   what keeps the scroll peek honest: measured at 393x852 --sat 0 the quests bar's
+   bottom edge landed 2px below the fold at 14px, against the 4px floor
+   tests/today-peek-audit.mjs holds, so the first screen showed the whole bar and
+   no sign that anything followed it. At 22px it hides 10px. */
+.hero-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 22px; }
 .hero-act {
   display: grid; justify-items: center; gap: 5px; padding: 11px 2px 9px;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
@@ -1590,15 +1592,10 @@ body::before {
 .hero-emoji { font-size: 22px; line-height: 23px; }
 .hero-badge { color: var(--accent); font-style: normal; font-weight: 900; }
 .hero-act.attn { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
-/* v146 unlock nudge: a tappable card that deep-links to Build / Wardrobe */
-.unlock-nudge { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer;
-  padding: 10px 12px; margin-top: 8px; border-left: 4px solid var(--accent); }
-.unlock-nudge .ul-ico { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 18%, transparent); flex: 0 0 auto; }
-.unlock-nudge .ul-txt { display: grid; gap: 1px; flex: 1; min-width: 0; }
-.unlock-nudge .ul-txt b { font-size: 13.5px; }
-.unlock-nudge .ul-txt small { font-size: 11.5px; color: var(--muted); }
-.unlock-nudge .ul-chev { color: var(--muted); font-size: 20px; font-weight: 700; flex: 0 0 auto; }
-.unlock-nudge:active { background: var(--surface-2); }
+/* The v146 unlock-nudge card (`.unlock-nudge`, `.ul-ico/.ul-txt/.ul-chev`) stood
+   here until 2026-08-22, when Tom removed the last nudge it carried: "remove the
+   'start with breakfast' button that's there". Its signals still drive the Pit
+   "!" badge and the unlock toasts; nothing renders the card. */
 /* v148 What's New (changelog) sheet */
 .wn-update-note {
   display: flex; flex-direction: column; gap: 5px; margin: 0 0 16px;
@@ -9095,24 +9092,9 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .hero-why b { color: var(--text); font-weight: 800; }
 .hero-why svg { flex: 0 0 auto; color: var(--gold); }
 
-/* The first-meal nudge and its way out. The skip is quiet on purpose: it is an
-   escape hatch, not a second call to action competing with the first.
-
-   PROXIMITY IS THE WHOLE JOB HERE, and the first version had it backwards.
-   Tom, 2026-08-21: "for some reason it says 'not right now' right above the
-   banner for the new creatures". Measured at 393x852: the button's ink sat 19px
-   under the card it belongs to (12px of inherited `.card` margin-bottom plus its
-   own 7px top padding) and 2px above the hype banner. Nine times closer to the
-   banner than to its own card, so it read as the banner's dismiss control.
-   Nothing was orphaned; the grouping was. So the card keeps NO trailing margin
-   inside this wrap, the button hugs it, and the whole wrap carries the gap
-   instead. Measured after: 4px above, 18px below. */
-.ul-wrap.has-skip { display: flex; flex-direction: column; gap: 0; margin-bottom: 18px; }
-.ul-wrap.has-skip .unlock-nudge { margin-bottom: 0; }
-.ul-skip {
-  align-self: center; background: none; border: 0; padding: 4px 12px 0;
-  color: var(--text-3); font-size: 12.5px; font-weight: 700;
-}
+/* The first-meal nudge and its "Not right now" way out (`.ul-wrap`, `.ul-skip`)
+   were spaced here, after Tom's 2026-08-21 grouping bug. Both came out on
+   2026-08-22 with the nudge itself. */
 
 /* The takeover celebrates a badge; this line says what the player actually did,
    because the toast that confirms it is covered 380ms later by this screen. */
@@ -10089,3 +10071,67 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    arena. He no longer does, and the middle is now HIS, so the pet tucks back
    beside the player instead of walking into his coat. */
 .arena.boss-wanderer .pet-fighter { transform: translateX(-8px); z-index: 4; }
+
+/* ================================================================ *
+ * THE DAY IS A CONTAINER (v425, approved 2026-08-22).
+ *
+ * Pass one unified the card SKIN and Tom's verdict was that Today still had no
+ * ANCHOR: a floating `< TODAY Aug 22 > [gear]` row reading as navigation, over a
+ * pile of cards that did not visibly belong to it. So the hierarchy moved, not
+ * the surfaces. The day is ONE --surface-2 well; its titlebar IS that row,
+ * promoted to the header it was always governing; and calories, wellness,
+ * kitchen, activity and meals are sections INSIDE it under kicker labels.
+ * Containment, not indentation, so the day has a visible end as well as a start.
+ * Nothing pins: this variant deliberately carries no sticky header.
+ *
+ * No new colours, no gradients, no glows: --surface-2, --line, --line-strong and
+ * the incumbent .card / .icon-btn idioms only.
+ * ================================================================ */
+
+.dayblk {
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius); padding: 12px 10px; margin-top: 8px;
+}
+
+/* LEFT-ALIGNED ON PURPOSE: a centred title flanked by arrows is exactly the
+   floating-nav read Tom objected to. Title left, the three controls grouped
+   right, and everything day-scoped hangs off it. */
+.dayhdr {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 4px 10px; border-bottom: 1px solid var(--line); margin-bottom: 12px;
+}
+.dayhdr .day-title { flex: 1; text-align: left; min-width: 0; }
+.dayhdr .day-title h1 { font-size: 25px; line-height: 1.08; }
+.dayhdr .day-title .sub { font-size: 12.5px; }
+.dayhdr .icon-btn { width: 38px; height: 38px; }
+
+/* the nested sections: one skin, one header idiom, one rhythm. */
+.tsec { margin-bottom: 16px; }
+.tsec:last-of-type { margin-bottom: 4px; }
+.tsec-h {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-3); margin: 0 2px 6px;
+}
+.tsec .card { margin-bottom: 0; }
+/* The kicker replaces the card's own NAME, so the label is not said twice. Only
+   the name: the Activity card's Sync link and the Kitchen card's Collect live in
+   that same title row, and hiding the whole row (as the mockup did) took a real
+   control off the screen with it. The row itself only goes when nothing but the
+   name was in it, which is the Activity card on a past day. */
+.tsec .wellness-card > .sect-h:first-child,
+.tsec > .card > .card-title:first-child > .ct-name { display: none; }
+.tsec > .card > .card-title:first-child { justify-content: flex-end; }
+.tsec > .card > .card-title:first-child:not(:has(> :not(.ct-name))) { display: none; }
+/* meals join the sibling set: the same hand-inked panel treatment as .card
+   (app.css:972), so a meal reads as a section like every other one. */
+.tsec-meals .meal {
+  background-color: var(--surface); background-image: var(--grain);
+  background-size: 150px 150px; background-blend-mode: soft-light;
+  border: 2px solid var(--ink); border-radius: var(--radius);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.32), inset 0 0 0 1.5px rgba(242, 233, 215, 0.10);
+  padding: 4px var(--pad) 12px; margin-bottom: 10px;
+}
+.tsec-meals .meal:last-child { margin-bottom: 0; }
+
+/* announcements are not part of the day, so they queue after it */
+.promo-slot { margin-top: 14px; }
