@@ -51,29 +51,29 @@
  * `git archive HEAD` extract with the mutation seeded by `git show <rev>:<path>
  * > file` (never a checkout into a worktree, which rewrote an index here once
  * and shipped two pre-fix commits while the audits kept passing):
- *   R1  js/app.js + app.css from the pre-fix base d8819940
- *       24 red: SETUP, all of ORPHAN, all of NESTED, all of NUDGE, PASTDAY
+ *   R1  js/app.js, app.css and js/quests.js from the pre-fix base d8819940
+ *       29 red: SETUP, all of ORPHAN, all of NESTED, all of NUDGE, PASTDAY
  *       (3 markers on a past day against 11 on today; quests, promo, meals and
- *       the sign-off all gone). SCROLL and ESCAPE stay GREEN, correctly: the
- *       pre-fix screen already refreshed in place and its arrows still worked.
+ *       the sign-off all gone) and READONLY. SCROLL and ESCAPE stay GREEN,
+ *       correctly: the pre-fix screen already refreshed in place and its arrows
+ *       still worked.
  *   R2  both day arrows call route() instead of refresh()
  *       1 red, and only SCROLL: 900 -> 0.
- *   R3  #todaySettings stretched to 96px over the next-day arrow, the exact
- *       shape of the v-release bug where the gear made day-navigation
- *       impossible
- *       4 red: the two arrows in ORPHAN and in ESCAPE, each naming
+ *   R3  #todaySettings slid back over the previous-day arrow, the exact shape of
+ *       the release where the gear made day-navigation impossible
+ *       2 red, and only the covered arrow: ORPHAN and ESCAPE, both naming
  *       'todaySettings' as what answered the tap.
  *   R4  the whole branch tip before read-only (2ecd65fd js/app.js + js/quests.js)
  *       6 red, all READONLY: 4 live claim controls on the past day, a "4 ready"
  *       badge, and pressing one paid 340 -> 380 coins, 3535 -> 3560 XP and minted
  *       a quest row keyed to the closed day. CONTROL green, correctly.
  *   R5  js/quests.js ONLY reverted to 2ecd65fd, the read-only markup kept
- *       the isolation run: no button is drawn, and the retargeted real control
- *       still pays. Proves the money rows are held by the AUTHORITY and not by
- *       the absent button.
+ *       2 red, and only the two MONEY rows: no button is drawn, and the
+ *       retargeted real control still pays 340 -> 380. This is the row that
+ *       proves the money is held by the AUTHORITY and not by the absent button.
  *   R6  periodClosed forced to always-true
- *       CONTROL red and READONLY green: the guard cannot buy a pass by refusing
- *       every claim in the app.
+ *       1 red, and only CONTROL: the guard cannot buy a pass by refusing every
+ *       claim in the app.
  *
  * An empty sample is a failure everywhere: SETUP refuses to grade a screen with
  * no sections on it, and PASTDAY refuses to grade an empty marker set.
@@ -245,6 +245,15 @@ try {
   /* Measured on the state the contract is about: scrolled DOWN, then the day
      changed. The bound has a direction: landing at the top is the failure, so
      the assertion is both "close to where we were" and "not zero". */
+  /* WAIT FOR THE SCREEN TO BE SCROLLABLE, do not assume it already is. Measured
+     straight after a render this read 0 on a contended machine, and a target of
+     0 makes the row below grade nothing at all. The SETUP row catches that, but
+     catching it as a false red on a healthy tree is still a wasted round. */
+  const scrollable = await page.waitForFunction(() => {
+    const sc = document.getElementById('screen');
+    return !!sc && sc.scrollHeight - sc.clientHeight > 240;
+  }, { timeout: 12000, polling: 150 }).then(() => true).catch(() => false);
+  ok('SCROLL SETUP the screen is long enough to have a reading position at all', scrollable);
   const scroll = await page.evaluate(() => {
     const sc = document.getElementById('screen');
     /* Derived from the SCROLLABLE RANGE, not from a landmark of the new layout:
