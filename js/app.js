@@ -11778,6 +11778,22 @@ function bindBadgeTaps(wrap) {
 // so every old caller lands in the right place.
 function openCharacter(tab = 'wardrobe') {
   pendingHubTab = tab;
+  /* route(), NOT refresh(), AND THE BLANK FRAME IS THE POINT. Tried and reverted
+     2026-08-22. refresh() is route({keepScroll:true}) and keepScroll IS the isNav
+     flag, so it skips `el.classList.remove('screen-in')` and the chip tap costs
+     no nav paint. Measured at 440x956, CPU x6, sampling .screen every frame, four
+     real chip taps with a tab-bar route in the same run as a control:
+         v423, chips called renderCharacter    chips never unpainted, control 152ms
+         v424, chips call openCharacter        chips 88-168ms (4/4), control 149ms
+         refresh() here                        chips never unpainted, control 156ms
+     So it does remove the blank window, and it is still WRONG. That window is what
+     v424 bought the ghosting fix with: handover-audit's GHOST row went red on the
+     refresh() build with 8 ghost frames over 81ms on WARDROBE->SHOP, which is the
+     exact defect v424 exists to prevent ("the tab swap stops ghosting"). Hiding the
+     screen is what stops the player seeing a mix of the old and new one.
+     The 88-168ms is therefore a COST, not a regression, and it is not removable
+     from here. Making chip taps feel better means making the render and decode
+     faster so the hide is shorter, not deleting the hide. */
   if (currentTab() === 'bonehead') return route();   // already here: just switch tabs
   location.hash = '#/bonehead';
 }
