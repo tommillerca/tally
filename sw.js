@@ -256,16 +256,54 @@ const PRECACHE = [
   './icons/apple-touch-icon.png',
 ];
 
+/* THE COMPLETENESS SENTINEL. Written LAST, and only if every entry above it
+   arrived. Its presence in cache VERSION is this worker's promise that the
+   cache holds ONE WHOLE BUILD, which is the only condition under which the
+   shell may be served from it.
+   It cannot be inferred from the cache merely existing. caches.open() creates
+   the cache on its first line and the puts land one at a time, so an install
+   that dies two thirds of the way through leaves a cache named VERSION holding
+   two thirds of a build. Serving that cache-first is the mixed-version graph
+   this whole change exists to prevent, and it is exactly the state
+   tests/sw-upgrade-audit.mjs already measures on a deploy-time 404: "the
+   half-filled cache EXISTS with N of the M listed entries". */
+const READY = './__shell-ready__';
+
+/* THE KILLSWITCH. Thirty bytes that are NEVER cached and NEVER served from
+   cache. See checkStamp() below for why this file has to exist at all. */
+const STAMP = './version.json';
+
+/* The atomic set, as absolute urls, so a fetch can be tested against it in one
+   Set lookup. ONLY these urls are ever answered from cache as shell. Anything
+   else with a .js/.css/.json name is not part of the version this worker
+   installed, so it keeps the old network-first road: a runtime-cached stray
+   served cache-first would be a file from a DIFFERENT build sitting inside the
+   atomic set, which is the mixing hole wearing a different hat. */
+const PRECACHED = new Set(PRECACHE.map(u => new URL(u, self.location.href).href));
+
 self.addEventListener('install', e => {
   // no-cache: revalidate against the server so a stale HTTP cache can't poison the precache
-  e.waitUntil(
-    caches.open(VERSION)
-      .then(c => Promise.all(PRECACHE.map(u => fetch(new Request(u, { cache: 'no-cache' })).then(r => {
-        if (r.ok) return c.put(u, r);
-        throw new Error('precache ' + u + ' -> ' + r.status);
-      }))))
-      .then(() => self.skipWaiting())
-  );
+  e.waitUntil((async () => {
+    const c = await caches.open(VERSION);
+    await Promise.all(PRECACHE.map(u => fetch(new Request(u, { cache: 'no-cache' })).then(r => {
+      if (r.ok) return c.put(u, r);
+      throw new Error('precache ' + u + ' -> ' + r.status);
+    })));
+    await c.put(READY, new Response(VERSION, { headers: { 'Content-Type': 'text/plain' } }));
+  })());
+  /* AND NO skipWaiting(), WHICH IS THE ATOMIC SWAP.
+     skipWaiting() activated the new worker underneath a page that had already
+     executed the OLD module graph. From that moment every lazy import() the
+     running page made was answered out of the NEW cache: two builds in one
+     document. It was survivable only because app.js reloads the page on
+     controllerchange, and that reload IS Tom's "it does a full reload after I
+     have been away for a minute" (js/app.js: controllerchange -> location
+     .reload, armed by reg.update() on every visibilitychange).
+     Waiting instead means the new build takes over when the last client of the
+     old one goes away, i.e. on the next open, with a document that runs one
+     build end to end. The download still happens now, in the background; only
+     the swap is deferred. Settings' "Get latest" (hardRefresh) is the manual
+     lever for anyone who does not want to wait. */
 });
 
 self.addEventListener('activate', e => {
@@ -276,44 +314,155 @@ self.addEventListener('activate', e => {
   );
 });
 
+/* IS THERE A WHOLE BUILD IN THERE. Memoised for the life of the worker: the
+   answer cannot change under a running worker, because the only thing that
+   writes READY is an install, and an install belongs to a DIFFERENT worker with
+   a different VERSION and therefore a different cache. Not memoised it would be
+   an async cache lookup in front of every single shell request, which is the
+   cost this change exists to remove. */
+let readyP = null;
+/* .catch(() => false), and it is not decoration. caches.match with a cacheName
+   that no longer exists is a REJECTION in some engines rather than an undefined,
+   and site data cleared out from under a running worker is exactly how you get
+   there. A rejection here would propagate out of shell(), respondWith would see
+   a rejected promise, and the player would get a network error for index.html:
+   a blank app, caused by the caching layer, which is the one failure this whole
+   branch must not be able to produce. Degrade to the network instead. */
+const shellReady = () => (readyP || (readyP = caches.match(READY, { cacheName: VERSION }).then(r => !!r).catch(() => false)));
+
+/* THE ONE FILE THAT ALWAYS TOUCHES THE NETWORK, AND WHY IT HAS TO EXIST.
+ *
+ * A bad service worker is the only bug that survives its own fix being
+ * deployed, because the broken worker is what decides whether the fix is ever
+ * fetched. Everything below this line is cache-first; if that machinery is ever
+ * wrong there is no lever left. So one file is carved out of it permanently.
+ *
+ * version.json is thirty bytes, is fetched with cache: 'no-store' (so neither
+ * this cache nor the browser's HTTP cache can answer it), is never written to
+ * any cache, and is excluded from the shell branch by name. When it names a
+ * build other than the one this worker IS, the worker asks the browser for a
+ * new sw.js, which is the full re-download: a new worker, a new install, a new
+ * complete cache, and the old one deleted on activate.
+ *
+ * It is deliberately not sw.js itself. sw.js is ~12KB and the point of the
+ * exercise is not paying for bytes on a bad connection; the stamp is the
+ * cheapest possible question, asked at most once a minute.
+ *
+ * It is also the backstop for the case app.js cannot cover. js/app.js calls
+ * reg.update() on visibilitychange, which does the same job, but that line
+ * lives in the build the player is stuck on: if they are stranded on a build
+ * whose app.js is broken, it is not running. This one is in the worker. */
+let stampAt = 0;
+function checkStamp() {
+  if (Date.now() - stampAt < 60000) return;   // at most once a minute, and never awaited
+  stampAt = Date.now();
+  fetch(new Request(STAMP, { cache: 'no-store' }))
+    .then(r => (r.ok ? r.json() : null))
+    .then(j => {
+      if (!j || !j.version || j.version === VERSION) return;
+      /* THE NEW BUILD IS ALREADY ON THE DEVICE, IT IS JUST WAITING FOR THE LAST
+         CLIENT OF THIS WORKER TO GO AWAY. Without this, a player who keeps the
+         app open sees the stamp disagree every minute for as long as they leave
+         it open, and every one of those calls re-fetches sw.js. That is a
+         repeating cost on exactly the bad connection this branch exists to stop
+         punishing, in service of an update that has already arrived. */
+      if (self.registration.waiting || self.registration.installing) return;
+      return self.registration.update();
+    })
+    .catch(() => { /* offline, or the stamp is not deployed yet: try again next minute */ });
+}
+
+/* THE APP SHELL, SERVED CACHE-FIRST OUT OF ONE COMPLETE VERSION.
+ *
+ * WHAT IT WAS. Every html, js, css and json file was fetched NETWORK-FIRST with
+ * cache: 'no-cache', which forces revalidation against the server and bypasses
+ * the browser's HTTP cache too. So every open of the app waited on the real
+ * network for the whole module graph, every time, and the cache was never the
+ * thing a player was served. Tom, item 18 of docs/FEEDBACK-2026-08-22-v424.md:
+ * "The app is very sluggish on a bad connection like verrrrry sluggish". On a
+ * bad connection that sentence IS this branch, and when iOS evicts the page
+ * after a minute in the background the reload pays all of it again.
+ *
+ * WHAT IT PROTECTED, AND HOW THAT IS KEPT. Network-first was not paranoia: it
+ * was there so a stale or poisoned cache entry could never get stuck being
+ * served forever, and so a release could not land as a NEW index.html running
+ * OLD modules. Both are kept, by version rather than by round trip:
+ *   - the cache is named for the build (VERSION), install fills it all or not
+ *     at all, and READY is written last, so a hit here can only ever come from
+ *     one whole build;
+ *   - only urls in PRECACHED are eligible, so a runtime-cached stray from some
+ *     other build cannot be served as if it belonged to this one;
+ *   - activate deletes every other tally-v* cache, so there is one;
+ *   - and nothing is stuck, because checkStamp() above always reaches the
+ *     network.
+ * The trade that IS accepted: the visit a release lands on is served the old
+ * build, whole, instantly, and the new one takes over on the next open. That is
+ * the atomic swap, it is deliberate, and tests/sw-upgrade-audit.mjs grades it.
+ * DO NOT "fix" that row by making the shell network-first again.
+ *
+ * Everything that follows the cache hit is the old network-first path, verbatim,
+ * and it still runs for anything not in the atomic set and for any worker that
+ * has not got a complete build yet (a first-ever open, or one whose install is
+ * still in flight). */
+async function shell(req) {
+  const nav = req.mode === 'navigate';
+  /* NAVIGATIONS ALWAYS READ './index.html', NOT THEIR OWN URL. A navigation
+     carries whatever query and hash the player arrived with (#/boneyard, and
+     index.html's dead-shell watchdog retries with ?bhgr=<now>), and none of
+     those are cache keys. The precached shell is the answer for all of them:
+     this is a single-page app and the hash is read by app.js after boot. */
+  try {
+    if ((nav || PRECACHED.has(req.url)) && await shellReady()) {
+      const hit = await caches.match(nav ? './index.html' : req.url, { cacheName: VERSION });
+      if (hit) return hit;
+    }
+  } catch { /* the cache is gone or unreadable: fall through to the network, never fail the request */ }
+  // no-cache: force revalidation against the server (bypass the browser HTTP
+  // cache) so a stale HTTP-cached copy can't keep the app pinned to old code.
+  try {
+    const res = await fetch(new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' }));
+    if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); return res; }
+    /* A 404 IS A RESPONSE, AND RETURNING IT KILLS THE APP.
+       Only a THROWN fetch reached the .catch below, so an offline device was
+       handled and an online device receiving one bad status was not: the
+       status was handed to the page as the answer. Measured by
+       tests/sw-upgrade-audit.mjs: with js/app.js answering 404 and a good
+       14,480-byte cached copy sitting unused, the player got a new
+       index.html, a new app.css, no app.js at all and #screen with zero
+       children. The SAME device with the network fully removed booted fine,
+       which is the tell: it failed BECAUSE it was online.
+       One bad file during a deploy now falls back to the last good copy of
+       that file instead of taking the app down. */
+    const hit = await caches.match(req);
+    if (hit) return hit;
+    if (nav) return (await caches.match('./index.html')) || res;
+    return res;
+  } catch {
+    return (await caches.match(req)) || (await caches.match('./index.html'));
+  }
+}
+
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return; // API calls go to network
 
   const p = url.pathname;
+  /* THE KILLSWITCH IS NOT CACHEABLE BY ANY ROUTE, including a request the PAGE
+     makes rather than this worker. Handled before anything else so no later
+     branch can ever claim it. */
+  if (p.endsWith('/version.json')) return;
+
+  /* Fire-and-forget, on any same-origin GET rather than on navigations only: a
+     resumed PWA never navigates again, and "away for a minute, come back" is
+     precisely the case this has to cover. Throttled to once a minute inside. */
+  checkStamp();
+
   const isVendor = p.includes('/vendor/');
-  // App shell = the HTML + our own JS/CSS/JSON. Served NETWORK-FIRST so a new
-  // deploy is picked up the moment the device is online, and so a stale/poisoned
-  // cache entry can never get stuck being served forever. Cache is the offline
-  // fallback only. Heavy, rarely-changing binaries (fonts, images, vendor libs)
-  // stay cache-first for speed + offline.
+  // App shell = the HTML + our own JS/CSS/JSON. Heavy, rarely-changing binaries
+  // (fonts, images, vendor libs) are cache-first below for speed + offline.
   const isShell = !isVendor && (e.request.mode === 'navigate' || /\.(?:js|mjs|css|json)$/.test(p));
 
-  if (isShell) {
-    // no-cache: force revalidation against the server (bypass the browser HTTP
-    // cache) so a stale HTTP-cached copy can't keep the app pinned to old code.
-    e.respondWith(
-      fetch(new Request(e.request.url, { cache: 'no-cache', credentials: 'same-origin' })).then(async res => {
-        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); return res; }
-        /* A 404 IS A RESPONSE, AND RETURNING IT KILLS THE APP.
-           Only a THROWN fetch reached the .catch below, so an offline device was
-           handled and an online device receiving one bad status was not: the
-           status was handed to the page as the answer. Measured by
-           tests/sw-upgrade-audit.mjs: with js/app.js answering 404 and a good
-           14,480-byte cached copy sitting unused, the player got a new
-           index.html, a new app.css, no app.js at all and #screen with zero
-           children. The SAME device with the network fully removed booted fine,
-           which is the tell: it failed BECAUSE it was online.
-           One bad file during a deploy now falls back to the last good copy of
-           that file instead of taking the app down. */
-        const hit = await caches.match(e.request);
-        if (hit) return hit;
-        if (e.request.mode === 'navigate') return (await caches.match('./index.html')) || res;
-        return res;
-      }).catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')))
-    );
-    return;
-  }
+  if (isShell) { e.respondWith(shell(e.request)); return; }
 
   // static assets: cache-first
   e.respondWith(

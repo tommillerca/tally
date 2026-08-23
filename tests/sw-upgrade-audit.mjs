@@ -64,20 +64,72 @@
  *      new files. The player is left running old modules against a new cache
  *      until they next navigate.
  *
+ * WHAT CHANGED IN v427, AND WHY THE OLD ROWS ARE GONE.
+ *
+ * This file used to assert the OPPOSITE of what it asserts now, and that is
+ * deliberate rather than a rot. Its central row was "the visit the release
+ * lands on is served the new build IMMEDIATELY, not after a self-reload",
+ * which is the network-first contract: every html, js, css and json file
+ * fetched from the real network on every open. Tom, item 18 of
+ * docs/FEEDBACK-2026-08-22-v424.md: "The app is very sluggish on a bad
+ * connection like verrrrry sluggish". That row WAS the sluggishness, and it
+ * also bought the surprise full reload (a new worker skipWaiting()s underneath
+ * a running page, controllerchange fires, app.js reloads).
+ *
+ * So the contract is now ATOMIC rather than immediate, and the rows below say
+ * so out loud because a future reader will otherwise "fix" the app to match the
+ * old ones (memory: a guard can encode a superseded instruction, and one did,
+ * for three rounds):
+ *
+ *   SAFETY, on every scenario. The three layers are always ONE build and the
+ *   app is always alive. A player is never served a new shell over old modules,
+ *   which is the failure that produces bugs nobody can reproduce. This half is
+ *   unchanged and it is what network-first was really protecting.
+ *
+ *   LIVENESS, on SECOND OPEN. The release still arrives, it just arrives on the
+ *   NEXT open rather than this one: the visit it lands on is served the whole
+ *   old build instantly out of cache while the new one downloads in the
+ *   background, and the swap happens when the last client of the old worker
+ *   goes away. Being stranded on old forever is the failure that matters here,
+ *   and SECOND OPEN is the row that catches it.
+ *
+ *   SPEED, on THROTTLED BOOT. The reason for all of it, measured rather than
+ *   asserted from the shape of the code.
+ *
+ *   THE KILLSWITCH, on KILLSWITCH. Everything above is cache-first, so if that
+ *   machinery is ever wrong there is no lever left: a bad worker is the one bug
+ *   that survives its own fix being deployed, because the broken worker decides
+ *   whether the fix is ever fetched. version.json is carved permanently out of
+ *   the caching, and this row proves it really does reach the network and
+ *   really does pull a new worker with no help from the page.
+ *
  * PROVE-RED (each names a different assertion, each read as an exit code):
- *   --prove-red=cache-first   serve a sw.js whose shell branch is cache-first,
- *                             i.e. undo the v197 network-first trade. The FIRST
- *                             PAINT rows go red: the player is served the whole
- *                             old app on the visit the release lands on, and
- *                             only recovers after the worker swap reloads it.
+ *   --prove-red=network-first  put the defect back: the shell branch never
+ *                             consults the cache. THROTTLED BOOT goes red. This
+ *                             is the falsification of the whole performance
+ *                             claim, so if this one does not go red, nothing
+ *                             here is evidence of anything.
+ *   --prove-red=stranded      activate stops deleting old caches AND the shell
+ *                             lookup drops its { cacheName: VERSION } scope, so
+ *                             caches.match finds the OLDEST cache first. The new
+ *                             worker activates and the player is served the old
+ *                             build anyway, for ever. SECOND OPEN goes red.
+ *   --prove-red=mixed         cache-first for subresources, network for the
+ *                             navigation. New index.html, old modules: the
+ *                             mixed-version module graph. The PARTIAL rows go
+ *                             red.
+ *   --prove-red=killswitch-ignored  checkStamp() returns immediately, so
+ *                             version.json is never fetched. KILLSWITCH goes
+ *                             red.
  *   --prove-red=stale-version B changes the files but does NOT bump VERSION.
  *                             Online, nothing breaks, which is itself the
  *                             finding. What goes red is the OFFLINE copy at the
  *                             explicit /index.html url: that cache key is only
  *                             ever rewritten by a fresh install, so it holds the
  *                             old shell beside the new modules.
- *   --prove-red=404           one PRECACHE entry 404s in B. Six rows go red,
- *                             including the dead shell above.
+ *   --prove-red=404           one PRECACHE entry 404s in B. The install throws,
+ *                             READY is never written, and the old worker stays
+ *                             in charge serving its own whole build.
  * Nothing in the repo is edited by any of these: the transform is applied to the
  * bytes on their way out of the server.
  *
@@ -98,8 +150,20 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argOf = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').split('=').slice(1).join('=');
 const PROVE = argOf('prove-red') || '';
 const ONLY = argOf('only') || '';
-if (PROVE && !['cache-first', 'stale-version', '404'].includes(PROVE)) {
-  console.log(`FAIL  SETUP unknown --prove-red=${PROVE} (cache-first | stale-version | 404)`);
+/* 2026-08-23. The three at the front are named in Tom's own brief for the
+   atomic-shell branch: "You must EXTEND tests/sw-upgrade-audit.mjs to go red on:
+   stranded-on-old, a mixed-version module graph, and killswitch-ignored", with
+   the ship gate attached to them ("if you cannot make that audit go RED against
+   a deliberately broken service worker, the change does not ship"). The list
+   grew a fourth, network-first, because that one is the falsification of the
+   PERFORMANCE claim rather than of a safety claim, and without it the 84ms this
+   file prints is a number with nothing to be compared against. `cache-first` was
+   REMOVED on the same date: it used to restore the pre-v197 shape as a defect,
+   and cache-first is now the shipped design, so keeping it would have pinned a
+   superseded instruction. Source: docs/FEEDBACK-2026-08-22-v424.md item 18. */
+const MODES = ['network-first', 'stranded', 'mixed', 'killswitch-ignored', 'stale-version', '404'];
+if (PROVE && !MODES.includes(PROVE)) {
+  console.log(`FAIL  SETUP unknown --prove-red=${PROVE} (${MODES.join(' | ')})`);
   process.exit(1);
 }
 
@@ -115,6 +179,8 @@ const ok = (name, pass, detail = '') => {
    so A and B differ by the marker and by nothing else: a difference that only
    exists in B would let a transform bug read as an upgrade. */
 const swVersion = src => (src.match(/tally-v(\d+)/) || [])[1];
+const APP_UPDATE_ANCHOR = 'if (!document.hidden) reg.update().catch(() => {});';
+let NO_APP_UPDATE = false;
 
 function transform(rel, buf, mode) {
   const v = mode === 'A' ? 'A' : 'B';
@@ -129,26 +195,66 @@ function transform(rel, buf, mode) {
     case 'js/app.js':
       s = buf.toString();
       if (bump) s = s.replace(/const APP_BUILD = 'v(\d+)'/, (m, n) => `const APP_BUILD = 'v${+n + 1}'`);
+      /* THE KILLSWITCH ROW HAS TO BE ABOUT THE WORKER, NOT ABOUT THE PAGE.
+         js/app.js already calls reg.update() on every visibilitychange, and it
+         would find the new build on its own, so a KILLSWITCH row run against
+         the untouched app would go green whether or not sw.js ever looked at
+         version.json. The whole point of the stamp is the player stranded on a
+         build whose app.js is NOT doing that (broken, or simply older than the
+         line). This takes that line away for that one scenario, so the only
+         thing left that can pull a new worker is the worker itself.
+         Set per-scenario, and the scenario FAILS if the strip did not land. */
+      if (NO_APP_UPDATE) s = s.replace(APP_UPDATE_ANCHOR, 'if (!document.hidden) void 0;');
       /* appended, so it runs after the module body: window is the only place a
          module-scope const can be read from outside, and the RUNNING value is
          the whole question. Identical in both versions apart from the letter. */
       return s + `\ntry { window.__tallyLayerJs = '${v}'; window.__tallyBuild = APP_BUILD; } catch (e) {}\n/*TALLY_UPGRADE_MARKER:${v}*/\n`;
+    /* THE KILLSWITCH STAMP IS A REAL FILE AND HAS TO MOVE WITH THE BUILD.
+       Left at A's number in version B, every device would call registration
+       .update() once a minute for ever, and the KILLSWITCH row would pass on a
+       permanent alarm rather than on a real one. */
+    case 'version.json':
+      s = buf.toString();
+      return bump ? s.replace(/tally-v(\d+)/, (m, n) => `tally-v${+n + 1}`) : s;
     case 'sw.js':
       s = buf.toString();
       if (bump) s = s.replace(/tally-v(\d+)/g, (m, n) => `tally-v${+n + 1}`);
-      if (PROVE === 'cache-first') {
-        /* the pre-v197 shape: shell served from cache first. Exactly one line
-           replaced, and it is replaced in BOTH versions, because a regression
-           that only appeared in the new worker could not affect the old one. */
-        s = s.replace(
-          /e\.respondWith\(\s*\n\s*fetch\(new Request\(e\.request\.url, \{ cache: 'no-cache', credentials: 'same-origin' \}\)\)\.then\(res => \{[\s\S]*?\}\)\.catch\(\(\) => caches\.match\(e\.request\)\.then\(hit => hit \|\| caches\.match\('\.\/index\.html'\)\)\)\s*\n\s*\);/,
-          `e.respondWith(caches.match(e.request).then(hit => hit || fetch(e.request)));`);
+      /* Each mutation is applied to BOTH versions, because a regression that
+         only appeared in the new worker could not affect the old one, and the
+         old one is what serves the visit a release lands on. */
+      if (PROVE === 'network-first') {
+        // the defect this branch removed: the shell branch never reads the cache
+        s = s.replace(SW_ANCHORS.gate, '    if (false) {');
+      }
+      if (PROVE === 'stranded') {
+        // old caches survive, and an unscoped caches.match finds the OLDEST first
+        s = s.replace(SW_ANCHORS.scoped,
+          "      const hit = await caches.match(nav ? './index.html' : req.url);");
+        s = s.replace(SW_ANCHORS.sweep,
+          '      .then(keys => Promise.all(keys.filter(k => false).map(k => caches.delete(k))))');
+      }
+      if (PROVE === 'mixed') {
+        // subresources from cache, the navigation from the network: new shell, old modules
+        s = s.replace(SW_ANCHORS.gate, '    if (!nav && PRECACHED.has(req.url) && await shellReady()) {');
+      }
+      if (PROVE === 'killswitch-ignored') {
+        s = s.replace(SW_ANCHORS.throttle, '  if (true) return;');
       }
       return s;
     default:
       return buf;
   }
 }
+
+/* THE FOUR LINES EVERY sw.js MUTATION ABOVE AIMS AT, named once so a prove-red
+   that has drifted off its target is caught by the SETUP check below rather
+   than passing as a green that proved nothing. */
+const SW_ANCHORS = {
+  gate:     '    if ((nav || PRECACHED.has(req.url)) && await shellReady()) {',
+  scoped:   "      const hit = await caches.match(nav ? './index.html' : req.url, { cacheName: VERSION });",
+  sweep:    '      .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))',
+  throttle: '  if (Date.now() - stampAt < 60000) return;',
+};
 
 /* ---- a self-signed cert, because the app's registration is gated on https --- */
 function certs() {
@@ -184,7 +290,7 @@ async function serveVersioned() {
     const s = net.createServer();
     s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); });
   });
-  const state = { mode: 'A', broken: null, blackhole: false };
+  const state = { mode: 'A', broken: null, blackhole: false, hits: {}, throttle: null };
   const srv = https.createServer(certs(), (req, res) => {
     /* A REAL network failure, not page.setOfflineMode. Every shell request on a
        controlled page is issued by the WORKER in its own target, and
@@ -200,15 +306,31 @@ async function serveVersioned() {
     const full = path.resolve(ROOT, rel);
     if (state.broken && state.mode === 'B' && rel === state.broken) { res.writeHead(404); return res.end('deliberately missing'); }
     if (!full.startsWith(ROOT + path.sep) || !fs.existsSync(full) || fs.statSync(full).isDirectory()) { res.writeHead(404); return res.end('not here'); }
-    const body = transform(rel, fs.readFileSync(full), state.mode);
-    res.writeHead(200, {
-      'Content-Type': TYPES[path.extname(full)] || 'application/octet-stream',
-      /* no-cache everywhere so the browser HTTP cache is not a second variable:
-         this audit is about the SERVICE WORKER's delivery, and the shell handler
-         already forces revalidation for its own fetches (sw.js:174). */
-      'Cache-Control': 'no-cache',
-    });
-    res.end(body);
+    state.hits[rel] = (state.hits[rel] || 0) + 1;
+    const body = Buffer.from(transform(rel, fs.readFileSync(full), state.mode));
+    const send = () => {
+      res.writeHead(200, {
+        'Content-Type': TYPES[path.extname(full)] || 'application/octet-stream',
+        /* no-cache everywhere so the browser HTTP cache is not a second variable:
+           this audit is about the SERVICE WORKER's delivery, and the shell handler
+           already forces revalidation for its own fetches. */
+        'Cache-Control': 'no-cache',
+      });
+      if (!state.throttle) return res.end(body);
+      const { rate } = state.throttle;
+      let i = 0;
+      const pump = () => {
+        if (res.writableEnded) return;
+        if (i >= body.length) return res.end();
+        const end = Math.min(i + 8192, body.length);
+        res.write(body.subarray(i, end));
+        const ms = ((end - i) / rate) * 1000;
+        i = end;
+        setTimeout(pump, ms);
+      };
+      pump();
+    };
+    if (state.throttle) setTimeout(send, state.throttle.latency); else send();
   });
   await new Promise(r => srv.listen(port, '127.0.0.1', r));
   return {
@@ -216,9 +338,30 @@ async function serveVersioned() {
     setMode: m => { state.mode = m; },
     setBroken: rel => { state.broken = rel; },
     setBlackhole: v => { state.blackhole = v; },
+    /* HITS ARE THE ONLY HONEST ANSWER TO "does it go to the network". Asking the
+       page, or reading the worker's caches, both grade something downstream of
+       the question; the server either got the request or it did not. */
+    hits: rel => state.hits[rel] || 0,
+    resetHits: () => { state.hits = {}; },
+    /* THE THROTTLE IS IN THE SERVER, NOT IN CDP, AND THAT IS NOT A DETAIL.
+       Network.emulateNetworkConditions is set on a TARGET, and every shell
+       request on a controlled page is issued by the SERVICE WORKER in its own
+       target: the same reason this file destroys sockets rather than calling
+       page.setOfflineMode (see blackhole above, and offline-boot-audit, which
+       measured the worker walking straight past page-level emulation). A
+       page-level throttle would have left the worker's own fetches running at
+       full speed, and THROTTLED BOOT would have been a measurement of nothing.
+       Here every response waits `latency` ms for its first byte and is then
+       written at `rate` bytes/sec, per request, for every target at once. */
+    setThrottle: t => { state.throttle = t; },
     close: () => srv.close(),
   };
 }
+
+/* CHROME DEVTOOLS "Fast 3G", the profile NAMED rather than a number invented:
+   1.6 Mbit/s down (180,000 B/s), 750 kbit/s up, 562.5 ms round trip. Quoted in
+   every number this file prints, so a later run can be compared to this one. */
+const FAST_3G = { latency: 562.5, rate: 180000, name: 'Chrome DevTools "Fast 3G": 180,000 B/s, 562.5 ms RTT, applied per request in the server' };
 
 /* ---- browser --------------------------------------------------------------- */
 const puppeteer = await loadPuppeteer();
@@ -243,8 +386,23 @@ const LAYERS = async page => page.evaluate(async () => {
   const meta = document.querySelector('meta[name="tally-upgrade-marker"]');
   const css = getComputedStyle(document.documentElement).getPropertyValue('--tally-upgrade-marker').trim().replace(/["']/g, '');
   const counts = {};
-  for (const k of await caches.keys()) counts[k] = (await (await caches.open(k)).keys()).length;
+  /* THE SENTINEL AND THE KILLSWITCH, read out of the caches themselves.
+     readyIn: which caches carry './__shell-ready__', i.e. which of them sw.js is
+     willing to serve the shell out of. A cache with entries but no sentinel is a
+     half-filled install, and telling those two apart is the whole point of it.
+     stampCached: version.json must never be in ANY cache. If it ever is, the one
+     lever that reaches a stuck worker has been put behind the thing it exists to
+     escape, and no other row in this file would notice. */
+  const readyIn = [], stampCached = [];
+  for (const k of await caches.keys()) {
+    const c = await caches.open(k);
+    counts[k] = (await c.keys()).length;
+    if (await c.match('./__shell-ready__')) readyIn.push(k);
+    if (await c.match('./version.json')) stampCached.push(k);
+  }
   return {
+    readyIn, stampCached,
+    bootMs: window.__bootMs ?? null,
     shell: meta ? meta.content : '-',
     module: window.__tallyLayerJs || '-',
     build: window.__tallyBuild || '-',
@@ -353,8 +511,9 @@ async function waitCacheSettled(page, ms = 45000) {
 /* ---- one scenario ---------------------------------------------------------- */
 const BREAK = 'js/quests.js';   // a STATIC import of app.js, so the graph dies with it
 
-async function scenario(name, srv, act, { broken = null, offlineAfter = false } = {}) {
+async function scenario(name, srv, act, { broken = null, offlineAfter = false, noAppUpdate = false } = {}) {
   console.log(`\n---- ${name} ----`);
+  NO_APP_UPDATE = noAppUpdate;
   srv.setMode('A');
   srv.setBroken(broken || (PROVE === '404' ? BREAK : null));
   const browser = await launch();
@@ -370,6 +529,19 @@ async function scenario(name, srv, act, { broken = null, offlineAfter = false } 
        precisely the distinction wanted here. */
     const track = async p => p.evaluateOnNewDocument(() => {
       try { sessionStorage.setItem('__loads', String(+(sessionStorage.getItem('__loads') || 0) + 1)); } catch { /* storage denied */ }
+      /* TIME TO FIRST CONTENT, TAKEN INSIDE THE DOCUMENT THAT EXPERIENCED IT.
+         performance.now() is zeroed at this document's navigation start, so this
+         is "from the moment the app was opened to the moment there was an app on
+         the screen" with no clock shared with the test runner and no puppeteer
+         round trip in the number. #screen having children is the same liveness
+         signal index.html's own dead-shell watchdog uses, so this measures the
+         thing the app already considers "up". */
+      window.__bootMs = null;
+      const iv = setInterval(() => {
+        const el = document.getElementById('screen');
+        if (el && el.children.length > 0) { window.__bootMs = Math.round(performance.now()); clearInterval(iv); }
+      }, 16);
+      setTimeout(() => clearInterval(iv), 180000);
     });
     await track(page);
     await page.goto(srv.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -397,7 +569,7 @@ async function scenario(name, srv, act, { broken = null, offlineAfter = false } 
        context object the reporter never sees. The first version of this dropped
        them and printed "not recorded" for a banner that had actually been
        clicked, which is a check reporting on itself instead of on the app. */
-    for (const k of ['early', 'bannerSeen', 'bannerText', 'duringSheet', 'toast', 'sheetOpen', 'diag']) {
+    for (const k of ['early', 'bannerSeen', 'bannerText', 'duringSheet', 'toast', 'sheetOpen', 'diag', 'firstOpen', 'bootMs', 'bootWall', 'stampHits', 'reg2', 'appUpdateStripped']) {
       if (ctx[k] !== undefined) out[k] = ctx[k];
     }
     // settle long enough for a controllerchange self-reload to happen and finish
@@ -436,6 +608,8 @@ async function scenario(name, srv, act, { broken = null, offlineAfter = false } 
     console.log('      ' + out.stack);
   } finally {
     await browser.close().catch(() => {});
+    NO_APP_UPDATE = false;
+    srv.setThrottle(null);
   }
   return out;
 }
@@ -450,6 +624,11 @@ const B_VERSION = (() => {
   return PROVE === 'stale-version' ? `tally-v${n}` : `tally-v${n + 1}`;
 })();
 const A_VERSION = `tally-v${swVersion(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'))}`;
+/* The bound for THROTTLED BOOT. See the row that uses it for where it comes
+   from; it is deliberately far from BOTH sides of the gap so ordinary machine
+   noise cannot move it, and --prove-red=network-first proves it can go red. */
+const BOOT_BUDGET_MS = 3000;
+
 const PRECACHE_LEN = (() => {
   const s = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
   const arr = s.slice(s.indexOf('PRECACHE'), s.indexOf('];', s.indexOf('PRECACHE')));
@@ -463,9 +642,18 @@ const PRECACHE_LEN = (() => {
 if (PROVE) {
   const swA = fs.readFileSync(path.join(ROOT, 'sw.js'));
   const raw = swA.toString();
+  const bumped = raw.replace(/tally-v(\d+)/g, (m, n) => `tally-v${+n + 1}`);
   const served = transform('sw.js', swA, 'B').toString();
+  /* THE ANCHOR MUST HAVE BEEN THERE AND MUST NOW BE GONE. Checking only that
+     the bytes changed would pass on the VERSION bump alone, and checking only
+     that the anchor is absent would pass on an anchor that had been renamed out
+     from under the mutation months ago. Both halves, every mode. */
+  const gone = a => bumped.includes(a) && !served.includes(a);
   const changed = {
-    'cache-first': served !== raw.replace(/tally-v(\d+)/g, (m, n) => `tally-v${+n + 1}`) && !/credentials: 'same-origin'/.test(served),
+    'network-first': gone(SW_ANCHORS.gate) && served.includes('    if (false) {'),
+    'stranded': gone(SW_ANCHORS.scoped) && gone(SW_ANCHORS.sweep),
+    'mixed': gone(SW_ANCHORS.gate) && served.includes('    if (!nav && PRECACHED.has(req.url)'),
+    'killswitch-ignored': gone(SW_ANCHORS.throttle) && served.includes('  if (true) return;'),
     'stale-version': swVersion(served) === swVersion(raw),
     '404': new RegExp(`['"]\\./${BREAK.replace(/[.]/g, '\\.')}['"]`).test(raw),
   }[PROVE];
@@ -490,6 +678,91 @@ const SCENARIOS = {
     ctx.early = await LAYERS(p).catch(() => null);
     await sleep(4000);
   },
+  /* THE ATOMIC SWAP, WHICH IS THE WHOLE DESIGN, IN ONE SCENARIO.
+     Open #1 is the visit the release lands on: the player is served the whole
+     OLD build instantly out of cache while the new worker downloads its whole
+     new build in the background and then WAITS (sw.js no longer calls
+     skipWaiting). Open #2 is after every client of the old worker has gone
+     away, which is when the new one activates. The player must be fully on B
+     by then, in every layer, or they are stranded. */
+  'SECOND OPEN': async ctx => {
+    await ctx.page.close();
+    let p = await ctx.browser.newPage();
+    await ctx.setPage(p);
+    await p.goto(srv.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await sleep(1500);
+    ctx.early = await LAYERS(p).catch(() => null);
+    // long enough for the whole background install of B to land and go to waiting
+    await sleep(14000);
+    ctx.firstOpen = await LAYERS(p).catch(() => null);
+    ctx.firstOpen.reg = await REG_STATE(p).catch(() => null);
+    /* EVERY client gone, not just this one: a waiting worker activates when the
+       last document the old one controls unloads. */
+    await p.close();
+    await sleep(2000);
+    p = await ctx.browser.newPage();
+    await ctx.setPage(p);
+    await p.goto(srv.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await sleep(5000);
+  },
+
+  /* THE COMPLAINT ITSELF, MEASURED. Tom: "The app is very sluggish on a bad
+     connection like verrrrry sluggish". Install on a fast link, then put the
+     bad connection in front of the SERVER (see setThrottle for why not CDP) and
+     open the app again. The number that matters is time from navigation start
+     to #screen having content, taken inside the document.
+     Note this is the honest worst case rather than a friendly one: the new
+     build B is on the server, so the whole background install is competing for
+     the same throttled link while the player is trying to boot. */
+  'THROTTLED BOOT': async ctx => {
+    await ctx.page.close();
+    srv.setThrottle(FAST_3G);
+    const p = await ctx.browser.newPage();
+    await ctx.setPage(p);
+    const t0 = Date.now();
+    await p.goto(srv.url, { waitUntil: 'domcontentloaded', timeout: 200000 }).catch(() => {});
+    for (let i = 0; i < 400; i++) {
+      const ms = await p.evaluate(() => window.__bootMs).catch(() => null);
+      if (ms != null) break;
+      await sleep(250);
+    }
+    ctx.bootMs = await p.evaluate(() => window.__bootMs).catch(() => null);
+    ctx.bootWall = Date.now() - t0;
+    srv.setThrottle(null);
+    await sleep(4000);
+  },
+
+  /* THE ONE LEVER THAT SURVIVES A BAD WORKER.
+     No navigation and no reload, because both make the BROWSER check sw.js by
+     itself and that would grade the browser rather than this worker. js/app.js's
+     own reg.update() is stripped out of the served bytes for this scenario
+     alone (see transform), because that line would find the new build too and
+     the row would pass whether or not sw.js ever looked at version.json.
+     What is left is exactly the killswitch: the worker, on its own, fetching a
+     thirty-byte stamp that no cache is allowed to answer, and pulling a new
+     worker when it disagrees. */
+  'KILLSWITCH': async ctx => {
+    /* Ask the TRANSFORM, not the server. The server speaks https on a self
+       signed cert at a hostname only Chrome resolves (--host-resolver-rules),
+       so node's own fetch cannot reach it; and the transform is what the server
+       would have returned anyway, byte for byte, so this is the more direct
+       question with fewer things able to answer it wrongly. */
+    ctx.appUpdateStripped = !transform('js/app.js', fs.readFileSync(path.join(ROOT, 'js/app.js')), 'B').includes(APP_UPDATE_ANCHOR);
+    srv.resetHits();
+    const p = ctx.page;
+    for (let i = 0; i < 45; i++) {
+      /* poke ANY same-origin request through the worker, so its fetch handler
+         runs at all: a page sitting idle issues none, and checkStamp is called
+         from the fetch handler. Query-stringed so it can never be a cache hit. */
+      await p.evaluate(() => fetch('./icons/icon-192.png?poke=' + Math.random(), { cache: 'no-store' }).catch(() => {})).catch(() => {});
+      const st = await REG_STATE(p).catch(() => ({}));
+      if (st.installing || st.waiting) break;
+      await sleep(3000);
+    }
+    ctx.stampHits = srv.hits('version.json');
+    ctx.reg2 = await REG_STATE(p).catch(() => ({}));
+  },
+
   /* the same tab, pulled down */
   'RELOAD': async ctx => {
     await ctx.page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
@@ -591,7 +864,10 @@ const SCENARIOS = {
 const results = {};
 for (const [name, act] of Object.entries(SCENARIOS)) {
   if (ONLY && !name.includes(ONLY.toUpperCase())) continue;
-  results[name] = await scenario(name, srv, act, { offlineAfter: name === 'RETURN VISIT' });
+  results[name] = await scenario(name, srv, act, {
+    offlineAfter: name === 'RETURN VISIT',
+    noAppUpdate: name === 'KILLSWITCH',
+  });
 }
 
 /* the failed install: one PRECACHE entry 404s in version B */
@@ -634,6 +910,14 @@ for (const [name, r] of Object.entries(all)) {
   console.log(pad(name, W) + pad(L.shell, 7) + pad(L.module, 8) + pad(L.css, 6) + pad(L.build, 7)
     + pad(r.after.version || 'none', 13) + pad(r.after.loads, 7) + Object.entries(L.caches).map(([k, v]) => `${k}:${v}`).join(' '));
 }
+console.log('');
+console.log('the READY sentinel (which cache sw.js is willing to serve the shell out of) and time to first content:');
+for (const [name, r] of Object.entries(all)) {
+  if (r.error) continue;
+  const L = r.after.layers;
+  console.log('  ' + pad(name, W) + `sentinel:${L.readyIn.join(',') || 'NONE'}  version.json cached in:${L.stampCached.join(',') || 'nothing'}`
+    + `  time to first content:${L.bootMs === null ? 'n/a' : L.bootMs + 'ms'}`);
+}
 console.log("\n'-' means the layer never arrived at all. shell = the meta in index.html, module = a value set by js/app.js's own body,");
 console.log('css = a custom property read off :root, build = the running APP_BUILD, worker = the VERSION the controlling worker caches into.\n');
 console.log("the worker's OWN CACHE for the same three files (this is what an OFFLINE open would get):");
@@ -675,6 +959,15 @@ if (ret && !ret.error) {
   ok('SETUP version A is in the worker cache, so the device has something to be stale WITH',
     i.cachedShell === 'A' && i.cachedModule === 'A' && i.cachedCss === 'A',
     `index.html=${i.cachedShell} js/app.js=${i.cachedModule} app.css=${i.cachedCss}`);
+  /* FRESH INSTALL. The rows above are a first-ever open on a virgin profile,
+     through the real onboarding, so they already ARE the fresh-install case;
+     these two say the part that is new in v427 out loud rather than leaving it
+     implied. */
+  ok('FRESH INSTALL: a completed install writes the READY sentinel, and writes it into the cache it just filled',
+    i.readyIn.length === 1 && i.readyIn[0] === A_VERSION,
+    `sentinel present in: ${i.readyIn.join(', ') || 'NO CACHE'} (want exactly ${A_VERSION})`);
+  ok('FRESH INSTALL: the app is alive on the build it just installed',
+    i.screenKids > 0 && i.shell === 'A', `#screen children=${i.screenKids} shell=${i.shell}`);
 } else {
   ok('SETUP the worker installs on version A and controls the page', false, ret ? ret.error : 'RETURN VISIT did not run');
 }
@@ -684,44 +977,71 @@ ok('SETUP every scenario produced a sample (an empty sample set is a failure, ne
   graded.length > 0 && graded.every(([, r]) => !r.error && r.after && r.after.layers.shell !== '-'),
   `${graded.length} scenarios, errors: ${graded.filter(([, r]) => r.error).map(([n]) => n).join(', ') || 'none'}`);
 
-/* THE CORE ONE, and the DIRECTION is stated: after a new build is on the server,
-   an ordinary return visit must leave the player on B in EVERY layer. Failure is
-   any layer still reading A. */
+/* ================= SAFETY: NEVER A MIX, NEVER A CORPSE =====================
+   This half is the one network-first was really buying, and it is unchanged in
+   direction: whatever build a player is on, they are on ALL of it. A new shell
+   over old modules is the state that produces bugs nobody can reproduce, and
+   under an atomic shell it is the ONLY way this design can fail dangerously.
+   Note what is deliberately NOT asserted here any more: which letter it is.
+   That moved to SECOND OPEN. */
 for (const [name, r] of graded) {
   if (r.error) continue;
   const L = r.after.layers;
-  ok(`${name}: the player ends up fully on the new build`,
-    L.shell === 'B' && L.module === 'B' && L.css === 'B',
-    `shell=${L.shell} module=${L.module} css=${L.css} build=${L.build}`);
-  /* the partial is the interesting failure: it is what produces errors nobody
-     can reproduce, so it is named separately from "did not update at all". */
   const set = new Set([L.shell, L.module, L.css]);
   ok(`${name}: no PARTIAL update (the three layers agree with each other)`,
-    set.size === 1, `shell=${L.shell} module=${L.module} css=${L.css}`);
+    set.size === 1 && L.shell !== '-', `shell=${L.shell} module=${L.module} css=${L.css} build=${L.build}`);
+  ok(`${name}: the app is alive`, L.screenKids > 0, `#screen children = ${L.screenKids}`);
+  /* THE KILLSWITCH MUST NOT BE BEHIND THE THING IT EXISTS TO ESCAPE. Cheap,
+     and graded on every scenario, because the day this goes wrong is the day
+     there is no way to find out that it went wrong. */
+  ok(`${name}: version.json is in no cache at all, so nothing but the network can answer it`,
+    L.stampCached.length === 0, `cached in: ${L.stampCached.join(', ') || 'nothing (correct)'}`);
 }
 
-/* index.html specifically, because the whole "existing installs keep the old
-   shell" claim is about this one file. */
-const rv = all['RETURN VISIT'];
-if (rv && !rv.error) {
-  ok('index.html updates in place, with no VERSION bump needed on the device and no site data cleared',
-    rv.after.layers.shell === 'B' && rv.early?.shell === 'B',
-    `served to the player on the first paint of the visit = ${rv.early?.shell}, settled = ${rv.after.layers.shell}`);
-}
-
-/* THE FIRST PAINT IS ITS OWN GUARD, and the prove-red is why. With a cache-first
-   shell (the pre-v197 shape) the SETTLED sample still reads B: the new worker
-   precaches B from the network, activates, claims, and the app reloads itself,
-   so everything looks fine a few seconds later. What the player actually sees on
-   the visit where the release lands is the whole OLD app, and only the first
-   paint says so. A guard that samples only the settled state grades the recovery
-   and not the delivery, which is the same "measure in the state being complained
-   about" mistake as rule 12. Failure direction: any layer reading A. */
+/* THE FIRST PAINT OF THE VISIT A RELEASE LANDS ON.
+   THIS ROW USED TO SAY THE OPPOSITE AND IT WAS CHANGED ON PURPOSE. It used to
+   require the new build here ("served the new build IMMEDIATELY, not after a
+   self-reload"), which is the network-first contract and is the sluggishness
+   Tom reported. Under the atomic shell the player is served the whole OLD build
+   on this paint, instantly, out of cache. What must still be true, and is the
+   only thing that was ever really at stake, is that it is a WHOLE build. */
 for (const [name, r] of Object.entries(all)) {
   if (r.error || !r.early) continue;
-  ok(`${name}: the visit the release lands on is served the new build IMMEDIATELY, not after a self-reload`,
-    r.early.shell === 'B' && r.early.module === 'B' && r.early.css === 'B',
+  ok(`${name}: the first paint of the visit is ONE whole build, not a mix of two`,
+    new Set([r.early.shell, r.early.module, r.early.css]).size === 1 && r.early.shell !== '-',
     `first paint: shell=${r.early.shell} module=${r.early.module} css=${r.early.css} build=${r.early.build}`);
+}
+
+/* ================= LIVENESS: THE RELEASE STILL ARRIVES =====================
+   Cache-first without this row is indistinguishable from a player stranded on
+   an old build for ever, which is the single worst outcome available here: a
+   bad worker is the one bug that survives its own fix being deployed. So the
+   swap is graded end to end, on the open AFTER the one the release landed on,
+   and --prove-red=stranded exists to prove this row can actually go red. */
+const so = all['SECOND OPEN'];
+if (so && !so.error) {
+  const f = so.firstOpen || {};
+  const L = so.after.layers;
+  console.log('');
+  console.log(`FINDING  the atomic swap. Open #1 (the visit the release landed on): shell=${f.shell} module=${f.module} css=${f.css}`
+    + ` build=${f.build}, registration ${JSON.stringify(f.reg)}, caches ${JSON.stringify(f.caches)}.`);
+  console.log(`         Open #2: shell=${L.shell} module=${L.module} css=${L.css} build=${L.build}, worker=${so.after.version}.`);
+  ok('SECOND OPEN: open #1 is served the whole OLD build (the release does not interrupt the player)',
+    f.shell === 'A' && f.module === 'A' && f.css === 'A',
+    `shell=${f.shell} module=${f.module} css=${f.css}`);
+  ok('SECOND OPEN: the new build really did download in the background during open #1',
+    !!(f.reg && (f.reg.waiting || f.reg.installing)),
+    `registration during open #1: ${JSON.stringify(f.reg)}`);
+  ok('SECOND OPEN: the player is fully on the new build by the next open (NOT stranded on old)',
+    L.shell === 'B' && L.module === 'B' && L.css === 'B',
+    `shell=${L.shell} module=${L.module} css=${L.css} build=${L.build}`);
+  ok('SECOND OPEN: the new worker is the one in charge, and exactly one tally-v* cache survives',
+    normVer(so.after.version) === B_VERSION
+      && Object.keys(L.caches).filter(k => /^tally-v/.test(k)).length === 1,
+    `worker=${so.after.version} (want ${B_VERSION}), caches=${Object.keys(L.caches).filter(k => /^tally-v/.test(k)).join(', ')}`);
+  ok('SECOND OPEN: the build being served is the one the sentinel says is complete',
+    L.readyIn.length === 1 && L.readyIn[0] === B_VERSION,
+    `sentinel in: ${L.readyIn.join(', ') || 'NO CACHE'} (want ${B_VERSION})`);
 }
 
 /* THE OFFLINE COPY, WHICH IS THE ONE THE PRECACHE ACTUALLY OWNS.
@@ -744,14 +1064,55 @@ for (const [name, r] of Object.entries(all)) {
   }
 }
 
-/* the worker itself, and the old cache */
-for (const [name, r] of graded) {
-  if (r.error) continue;
-  ok(`${name}: the new worker is the one in charge`,
-    normVer(r.after.version) === B_VERSION, `active VERSION cache = ${r.after.version || 'none'} (want ${B_VERSION})`);
-  const keys = Object.keys(r.after.layers.caches).filter(k => /^tally-v/.test(k));
-  ok(`${name}: the old cache is DELETED on activate (exactly one tally-v* cache survives)`,
-    keys.length === 1 && keys[0] === B_VERSION, `caches: ${keys.join(', ') || 'none'}`);
+/* THE WORKER AND THE OLD CACHE ARE GRADED ON 'SECOND OPEN' AND ONLY THERE.
+   They used to be graded on every scenario, which was correct while install
+   called skipWaiting(): the new worker took over the instant it finished, in
+   the middle of whatever the player was doing. It no longer does (that swap is
+   what put two builds in one document, and its controllerchange reload is Tom's
+   "full reload after I have been away for a minute"), so on RELOAD or
+   VISIBILITYCHANGE the new worker is legitimately sitting in `waiting` and
+   requiring it to be in charge would be requiring the bug back.
+   What every scenario still owes is one whole build and a live app, above. */
+
+/* ================= SPEED: THE REASON FOR ALL OF IT ========================= */
+const tb = all['THROTTLED BOOT'];
+if (tb && !tb.error) {
+  console.log('');
+  console.log(`FINDING  THROTTLED BOOT. profile: ${FAST_3G.name}.`);
+  console.log(`         time from navigation start to #screen having content: ${tb.bootMs === null ? 'NEVER ARRIVED' : tb.bootMs + ' ms'}`
+    + ` (wall clock around the whole goto + poll: ${tb.bootWall} ms).`);
+  console.log('         Measured on the open AFTER a release landed, i.e. with the entire background install of the new');
+  console.log('         build competing for the same throttled link. That is the honest worst case, not a friendly one.');
+  /* THE BOUND, AND WHERE IT COMES FROM. Network-first has to pay one 562.5 ms
+     round trip for the document and then a round trip per module wave for a
+     graph app.js reaches 41 modules deep, which is seconds, and it is what
+     --prove-red=network-first puts back. Cache-first pays none of them. The
+     threshold sits in the gap between those two, well clear of both, so it is a
+     bound and not a trend (anti-regression rule 11). */
+  ok('THROTTLED BOOT: the app puts content on the screen on a bad connection',
+    tb.bootMs !== null, `time to first content = ${tb.bootMs === null ? 'never' : tb.bootMs + ' ms'}`);
+  ok(`THROTTLED BOOT: first content within ${BOOT_BUDGET_MS} ms on ${FAST_3G.name.split(':')[0]}`,
+    tb.bootMs !== null && tb.bootMs < BOOT_BUDGET_MS,
+    `time to first content = ${tb.bootMs === null ? 'never' : tb.bootMs + ' ms'}, budget ${BOOT_BUDGET_MS} ms`);
+}
+
+/* ================= THE KILLSWITCH ========================================== */
+const ks = all['KILLSWITCH'];
+if (ks && !ks.error) {
+  console.log('');
+  console.log(`FINDING  KILLSWITCH. js/app.js's own reg.update() stripped from the served bytes: ${ks.appUpdateStripped}.`);
+  console.log(`         version.json requests that reached the SERVER after the flip: ${ks.stampHits}.`);
+  console.log(`         registration afterwards: ${JSON.stringify(ks.reg2)}.`);
+  console.log('         No navigation and no reload happened in this scenario, so nothing but sw.js itself could have pulled a new worker.');
+  /* THE SEAM FIRST. If the strip did not land, js/app.js found the update on
+     its own and the two rows below are about the page, not about the worker:
+     green, and evidence of nothing (memory: a seam with no consumer). */
+  ok('SETUP KILLSWITCH: the page\'s own reg.update() really was taken out of the served app.js',
+    ks.appUpdateStripped === true, `stripped=${ks.appUpdateStripped}`);
+  ok('KILLSWITCH: the worker reaches the NETWORK for version.json with no navigation and no help from the page',
+    ks.stampHits > 0, `${ks.stampHits} requests reached the server`);
+  ok('KILLSWITCH: a stamp naming a different build pulls a new worker all by itself',
+    !!(ks.reg2 && (ks.reg2.installing || ks.reg2.waiting)), `registration = ${JSON.stringify(ks.reg2)}`);
 }
 
 /* the failed install: a 404 must not produce a mixed shell */
@@ -773,6 +1134,16 @@ if (failedInstall && !failedInstall.error) {
   ok('a failed install does not hand control to the half-installed worker',
     normVer(failedInstall.after.version) === A_VERSION,
     `worker in charge = ${failedInstall.after.version} (want the OLD ${A_VERSION})`);
+  /* AND THE HALF-FILLED CACHE IS UNUSABLE BY CONSTRUCTION, which is the whole
+     job of the sentinel. caches.open() creates the cache on its first line and
+     the puts land one at a time, so a dead install leaves a cache NAMED for a
+     build while holding a fraction of it. Serving that cache-first would be the
+     mixed graph, delivered by the very mechanism meant to prevent it. READY is
+     written last and only on success, so it must be absent here and present
+     for the build actually in charge. */
+  ok('a half-filled cache never gets the READY sentinel, so the shell can never be served out of it',
+    L.readyIn.length === 1 && L.readyIn[0] === A_VERSION,
+    `sentinel in: ${L.readyIn.join(', ') || 'nothing'} (want only the old ${A_VERSION}; the half-filled ${B_VERSION} must not have one)`);
   /* THE DIAGNOSIS IS THE FETCH HANDLER, NOT THE INSTALL, and the row says so on
      purpose: whoever reads this red must not go and "fix" the install. sw.js:174
      returns a non-OK response as if it were the answer. Only a thrown fetch
@@ -818,9 +1189,19 @@ if (sheet && !sheet.error) {
     sheet.sheetOpen === true, `sheetOpen=${sheet.sheetOpen}, still open at the sample=${d.stillOpen}`);
   ok('SHEET OPEN: the running page is deliberately held on the old build while a sheet is up (that half of the comment is true)',
     d.module === 'A', `module running during the sheet = ${d.module}`);
-  ok('SHEET CLOSED: closing the sheet applies the update the toast promised',
-    L.shell === 'B' && L.module === 'B' && L.css === 'B',
-    `shell=${L.shell} module=${L.module} css=${L.css} loads=${sheet.after.loads}`);
+  /* THIS ROW USED TO REQUIRE THE OPPOSITE, AND THE OPPOSITE WAS THE BUG.
+     It used to require that closing the sheet applied the new build. That path
+     only existed because install called skipWaiting(): the new worker took over
+     underneath a running page, controllerchange fired, and app.js reloaded the
+     document. THAT RELOAD IS TOM'S COMPLAINT ("it does a full reload after I
+     have been away for a minute"), and the window it opened, a page running old
+     modules against a new cache, is the mixed graph this branch exists to shut.
+     With no skipWaiting there is no mid-session swap to apply, so the correct
+     behaviour is that NOTHING happens to the player mid-session, and the new
+     build arrives on the next open (graded by SECOND OPEN). */
+  ok('SHEET CLOSED: the player is NOT reloaded out from under a sheet, and stays on one whole build',
+    L.shell === 'A' && L.module === 'A' && L.css === 'A' && sheet.after.loads === 0,
+    `shell=${L.shell} module=${L.module} css=${L.css} document loads since the flip=${sheet.after.loads}`);
 }
 
 console.log(`\n${fails.length ? `FAILED (${fails.length}):\n  ` + fails.join('\n  ') : 'ALL GREEN'}`);

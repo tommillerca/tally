@@ -4834,7 +4834,27 @@ async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
      This is on the shared function and not on the Shop, because it is a property
      of the wait and not of that screen: any screen anyone gives a lazy image to
      inherits the same permanent cap. */
-  const imgs = [...root.querySelectorAll('img:not([loading="lazy"])')];
+  /* AN IMAGE THAT IS ALREADY LOADED IS NOT WORTH WAITING FOR, and on a warm tab
+     change that is most of them.
+     Tom, item 18 of docs/FEEDBACK-2026-08-22-v424.md: the old screen sits on the
+     glass for a moment before the new one appears. holdOutgoing() is what puts
+     it there and this function is what decides how long it stays, because the
+     lid comes off when this resolves. Measured at 440x956, CPU x6, through a CDP
+     screencast (tests/route-flash-audit.mjs, which prints both halves):
+         Boneyard -> Today   render 107ms + decode  31ms = 138ms
+         Today -> Bonehead   render  52ms + decode 139ms = 191ms
+     so on the screen full of art, three quarters of the freeze was this await,
+     spent on images the browser had already finished fetching.
+     `complete && naturalWidth > 0` is loaded WITH pixels, which is the same test
+     composeAvatars() a few functions down already uses to skip its own hide, for
+     the same reason. What is given up is the bitmap decode, so a already-loaded
+     image can land one frame after the reveal instead of with it. That is ~16ms
+     of one image against 139ms of the whole previous screen, and it cannot bring
+     back the "assembles in front of you" bug this cap was written for: a COLD
+     screen has no complete images, so this filter removes nothing there and the
+     full wait still applies. It only ever bites on a warm navigation. */
+  const imgs = [...root.querySelectorAll('img:not([loading="lazy"])')]
+    .filter(im => !(im.complete && im.naturalWidth > 0));
   await Promise.all(imgs.map(im => {
     if (im.decode) return im.decode().catch(() => {});
     if (im.complete) return Promise.resolve();
