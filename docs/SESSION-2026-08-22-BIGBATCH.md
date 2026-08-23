@@ -90,3 +90,27 @@ that puts any of this in front of players. It must carry:
 
 Merged is not shipped. Until that bump, the service worker serves the old
 modules and every one of these fixes reaches nobody.
+
+## Today rework: approved and being wired, 2026-08-23
+
+Tom picked variant **d2** ("the container") from x425/mockup-today-v2. His words:
+"i guess D2 is fine for now" — approved, NOT enthusiastic. Ship it faithfully,
+do not gold-plate, and expect he may want another pass on this screen later.
+
+**x425/appcore is being SPLIT rather than finished as one branch.** It was
+unverified WIP (its agent was killed by the outage) and it rewrites renderToday,
+which would collide head-on with wiring d2. The split:
+  - Today items (breakfast nudge removal, quests under chips, past-day fix) fold
+    into `x425/today-d2`. d2 SUPERSEDES the past-day fix: a day-anchored screen
+    where a past day stays whole IS that fix, so shipping both would be two
+    answers to one question.
+  - The two unrelated items (Gwart crate nag, double-tap tabs) go to
+    `x425/nag-doubletap`.
+Both agents were told to read x425/appcore, salvage what is good, and trust none
+of it unverified. When both land, **x425/appcore is superseded and should be
+CLOSED, not merged.**
+
+Both new branches are based on the NEW main d8819940, not f18d479f.
+
+NOTE: `main` is protected (PR required). This register lives on
+`docs/feedback-plan-2026-08-22`; do not try to push docs straight to main.
