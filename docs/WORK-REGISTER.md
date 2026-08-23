@@ -88,6 +88,16 @@ See `SHIP-LEDGER.md` for what counts as LIVE.
 
 ## Live on the public repo
 
+- **NOTHING SINCE v424 HAS REACHED A PLAYER.** `sw.js VERSION` is still
+  `tally-v424`, `APP_BUILD` is `'v424'` and `changelog.js` is at `n: 424`, while
+  SIX changes have merged on top of it: #85 Emporium idle, #88 README privacy,
+  #89 privacy.html location, #84 guard hardening, #86 cosmetics rebuild, #90
+  cloud-backup opt-out. Deliberate, per the v425 plan: one bump after the merges
+  so three branches do not collide on the same three lines. But the pile now
+  includes a **privacy control fix**, which is the one thing in it that should
+  not sit. Whoever cuts v425 owns the bump; skip it and the service worker keeps
+  serving the old modules.
+
 - **privacy.html location disclosure.** PR #89 squash-merged 2026-08-23 as
   `716f6325`. New "Location and the map" section: foreground-only permissions
   (verified in both native manifests), locally generated spawns, the `/spires`
@@ -125,17 +135,10 @@ collision · v414 wordmark rule · v415 wordmark geometry.
 
 ## Known broken
 
-- ~~**Cloud backup OFF does not stop uploads.**~~ **FIX OPEN: PR #90**, branch
-  `fix/cloud-backup-optout`. One guard inside `pushBackup`, where all four
-  callers converge on the app's only `signedFetch('PUT', '/backup')`. Measured
-  before the fix: with the REAL Settings Off button pressed, the server received
-  a 116,074-byte `PUT /backup` after the player opted out. Encrypted, so it was a
-  broken promise rather than a leak. No wording changes: it makes privacy.html's
-  existing sentence and the Settings toast true as written. New guard
-  `tests/cloud-optout-audit.mjs`, FAST tier, proven red against
-  `git show origin/main:js/social.js`. Two of its own rows were thrown away for
-  being unfailable first (a reload-based BOOT row that `navigator.webdriver`
-  makes vacuous, and a source-count row that its own comment tripped).
+- ~~**Cloud backup OFF does not stop uploads.**~~ **FIXED**, PR #90 merged
+  2026-08-23 as `ac3e73f8`. Re-verified after the merge against a tree seeded
+  from `git archive origin/main`: 9/9 green, 0 PUT /backup after opting out,
+  116,074 bytes while it is on (so the zero means something).
 - **The published canvas "The Raising and the Talk Box"** shows blue with a
   missing image. The source file is fine; the seeded artifact is not. Mine to fix.
 - **A hub CHIP tap blanks the screen for ~90-200ms, and it is a COST, not a
@@ -453,3 +456,116 @@ against main and the Gwart lane cannot speak to its state; and
 `tests/boneyard-audit.mjs` now has two competing ARRIVAL fixes, one in PR #84 and
 one in `rescue/shared-checkout-2026-08-20`, which must be ported deliberately
 rather than replayed.
+
+## 2026-08-23, boneyard ARRIVAL: the counters were counting the map key
+
+**State: PUSHED and OPEN as PR #94** (https://github.com/tommillerca/tally/pull/94). Tom authorised the push 2026-08-23. Merge is still his call.
+
+| branch | SHA | base |
+|---|---|---|
+| `fix/boneyard-legend-decoys` | `87287997` | `origin/main` @ `ac3e73f8`, one file: `tests/boneyard-audit.mjs` |
+
+**THE BUG, and it is not the one #84 fixed.** `mapLegendHtml()` builds `#mapLegend`
+out of the real marker markup so the key cannot drift from the map. `#mapLegend`
+sits INSIDE `#mapStage`, so marker CSS applies to it, and `[hidden]` is
+`display:none`, which `getComputedStyle().opacity` does not report as 0. Exactly
+9 swatches (5 spawn, 3 den, 1 mini) counted as permanently visible markers in
+every run. So `vis@reveal 9` in `docs/FLAKE-CLASSIFICATION-2026-08-22.md` was the
+constant, not markers mid-fade. Gwart confirmed by measurement and is correcting
+that doc in #91.
+
+**WHY IT MATTERED.** Both of #84's replacement rows are `revealDom > 0 && <cmp>`.
+With the key supplying 9, a Boneyard drawing ZERO markers gave `9 >= 9` and
+`9*2 > 9`: two green rows over an empty map, in the same PR as the ratchet
+against that class.
+
+**FIXED:** three counting sites scoped via `closest('.maplibregl-marker')` (an
+allowlist, because a `#mapLegend` denylist misses the next hidden thing built
+from marker markup); a decoy row guarding BOTH sites; a SAMPLE floor row that
+goes UNPROVEN (97) rather than FAIL when the map drew nothing; and
+`unprovenReport()` called before the final exit, which it was not, so a mid-run
+UNPROVEN exited 97 with nothing naming it.
+
+**VERIFIED on a box confirmed clear** (four earlier runs were graded on a
+contended machine and are not cited): fix = decoy PASS 0/0, SAMPLE PASS 58/57,
+24/26. Scoping reverted = decoy FAIL 9/9, 23/26. Exactly nine, both sites, one
+row moved. guard-hygiene clean; guard-provenance 69 of 72, ratchet holding.
+
+**STILL OPEN:**
+- Reggie's 26-row coordinated-beats model is NOT ported. This is the correctness
+  fix underneath it, not a replacement.
+- The pre-existing ARRIVAL-SLOW straggler pair fails on main too (Set B flake).
+- Gwart: 13 audits decide visibility from `getComputedStyle().opacity` alone and
+  an unknown subset share this bug. Needs per-call-site review, not a grep.
+
+## SUSPECTED PRODUCT BUG (not a test flake): the Boneyard can draw ZERO markers
+
+**Filed 2026-08-23 as a product item deliberately, at Gwart's request, because the
+flake queue is where this would go to be ignored.** Not diagnosed. Not assigned.
+
+**THE OBSERVATION.** Four runs of `tests/boneyard-audit.mjs` on a box checked for
+other running test suites first:
+
+| run | reveal | MapLibre-owned markers |
+|---|---|---|
+| A | never fired (`markers-in=false`) | 0 |
+| B | 17322ms | 55 |
+| C | 16120ms | 58 |
+| P2 | 16023ms | 67 |
+
+One run in four produced an empty map. At the time, `tiles.openfreemap.org`
+answered HTTP 200 in 0.088s, so it was not the tile host being down.
+
+**A SECOND CLAIM I MADE HERE WAS WRONG AND IS WITHDRAWN.** I originally wrote that
+the three successful reveals clustering near 16s was "nine times" the 1800ms cap
+v372 fires on, and asked why a working reveal takes 16 seconds. Gwart challenged
+it and the clocks do not compare. Verified in `tests/boneyard-audit.mjs` on main:
+
+- line 71 sets `window.__arr = { t0: performance.now(), ... }` inside
+  `evaluateOnNewDocument`, so it starts at DOCUMENT CREATION, before `seed()`
+  (line 215) and before `location.hash = '#/boneyard'` (line 217). Every FAST
+  reveal figure is measured from there and includes the whole harness runway.
+- line 723 sets `window.__slow.entry` at BONEYARD ENTRY, which is why the
+  throttled scenario reports ~2.4s and says "from Boneyard entry" in its name.
+
+A throttled path revealing in 2.4s while the unthrottled one reads 16s only makes
+sense if the clocks differ, and they do. So the tight 1.3s clustering is the
+expected shape of a near-constant setup runway, i.e. evidence the harness is
+reproducible, NOT evidence of a missed cap. Nobody has yet measured the fast path
+from Boneyard entry; doing so means recording an entry timestamp on the fast path
+the way line 723 does for the slow one. Small, not urgent, and it would make the
+two scenarios comparable for the first time.
+
+**WHY IT IS A PRODUCT ITEM.** If placement or the tile fetch can intermittently
+yield an empty Boneyard, a player on a bad connection sees an empty map with no
+explanation. `tests/boneyard-audit.mjs` now returns UNPROVEN (97) in that case,
+which is the right verdict for a TEST ("I could not grade this") and the wrong
+outcome for a PLAYER ("this is fine"). The new guard makes the condition visible;
+it does not make it acceptable.
+
+**HONEST LIMIT ON THE EVIDENCE.** "Clear box" meant no other `tests/*.mjs|js`
+processes were running, verified by process list. It did NOT mean a controlled
+idle machine, and earlier the same evening a naive process count reported 0 while
+seven suites were running, so treat the box state as "no competing suites" rather
+than "quiet". N=4. Nobody has looked at `js/map.js` placement or the tile path.
+
+## Lesson worth keeping: `x === 0` is two claims, and a red row cannot tell you which
+
+From the 2026-08-23 boneyard work, cost a run to learn and nearly shipped twice.
+
+Every `assert x === 0` is silently asserting BOTH "x was measured" and "x is
+zero", and the failure output cannot distinguish them. `revealDecoys === 0` went
+red because no reveal had fired, so `revealDecoys` was `undefined` and
+`undefined === 0` is false. The row said "the code is broken"; the truth was
+"this machine did not draw the map". That was written one row away from, and
+hours after, agreeing the exact same distinction for the row above it.
+
+**The general form: a guard has to separate ABSENT from ZERO, and almost none of
+them do.** Where the two mean different things, grade the value only when it was
+measured, and give the unmeasured case UNPROVEN (exit 97) rather than FAIL. See
+`unproven()` / `UNPROVEN_EXIT` in `tests/godmode.js`.
+
+Related, same day: `boneyardCapability()` proves a WebGL context can be CREATED,
+not that placement finished, so it gates "this machine cannot draw at all" and
+says nothing about "this machine drew nothing this run". Different failures, and
+only the first had a top-level gate.
