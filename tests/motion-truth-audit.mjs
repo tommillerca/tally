@@ -167,7 +167,7 @@ const REGISTER = [
 /* Which surfaces COVERAGE polices. The promo banners on Today and nothing else:
    the hero card's bonehead and its pet are ambient furniture, not an
    announcement, and sweeping them in would make this row noise. */
-const TODAY_BANNERS = '#screen .glutton-banner, #screen .hype, #screen .race-banner, #screen .rr-banner, #screen .unlock-nudge';
+const TODAY_BANNERS = '#screen .glutton-banner, #screen .hype, #screen .race-banner, #screen .rr-banner';
 
 const puppeteer = await loadPuppeteer();
 

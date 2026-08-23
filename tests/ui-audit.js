@@ -118,7 +118,7 @@ export async function uiAudit({ routes = ['today', 'bonehead', 'shop', 'friends'
   const prev = root.style.getPropertyValue('--sat');
   root.style.setProperty('--sat', SAFE_AREA_PX + 'px');
   await sleep(500);
-  const mustClearNotch = '.hero-top button, .day-strip button, .page-h1, #gearBtn, .ch-tab, .bh-coin, .bh-crates, .streak-chip';
+  const mustClearNotch = '.hero-top button, .dayhdr button, .page-h1, #gearBtn, .ch-tab, .bh-coin, .bh-crates, .streak-chip';
   for (const route of routes) {
     await goto(route);
     checked.routes++;
