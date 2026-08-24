@@ -272,7 +272,22 @@ svg { display: block; }
    in js/app.js) because the backdrop is a cosmetic; it falls back to --bg, which
    is exactly the old behaviour, if the sample ever fails. The block above
    .hero-scene carries why this shape and not the other one. */
-.screen--today { position: relative; background-color: var(--hero-edge, var(--bg)); }
+/* TWO LAYERS, AND THE SPLIT IS THE POINT. Tom, 2026-08-24: "the background is now
+   extending all down the app by the quests etc, that has changed to the background
+   colour I have for my bonehead."
+   He is right and the first version was one line too broad. The rubber band is
+   painted from the scroller's background-COLOR, which is the only thing WebKit
+   shows there, so that has to carry the art's edge. But a colour also shows
+   through every transparent gap in the page below, and Today has plenty: the four
+   doors sit on 68px of nothing and the seams between cards are more.
+   A background-IMAGE paints over the colour across the content area and stops at
+   it, so a player reading the page sees --bg everywhere, and the art's colour
+   survives only where a bounce uncovers it. */
+.screen--today {
+  position: relative;
+  background-color: var(--hero-edge, var(--bg));
+  background-image: linear-gradient(var(--bg), var(--bg));
+}
 #app:has(.screen--today)::before {
   /* z-index 3, ON TOP OF THE ART. Tom, 2026-08-24: "yeah draw the wordmark on top
      of the art instead of behind".
@@ -9233,6 +9248,10 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   animation: pdkKeeper 4s ease-in-out infinite alternate; }
 @keyframes pdkKeeper { from { transform: translateY(0); } to { transform: translateY(-7px); } }
 .pdk-keeper img { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* The visitor faces the keeper. Flipping the CONTAINER rather than each layer
+   keeps the avatar stack composited as one, which is what the Pit learned when
+   mirroring a pet turned its accessories inside out. */
+.pdk-visitor { transform: scaleX(-1); }
 /* lurker tease: hidden most of a 13s cycle, rises briefly; silhouette treatment */
 .pdk-lurker { position: absolute; z-index: 3; overflow: hidden; }
 .pdk-lurker img { filter: brightness(0); opacity: .72; display: block; width: 100%;

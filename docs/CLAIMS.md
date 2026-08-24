@@ -19,6 +19,23 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v435
+
+1. PROOF: friend-paddock-audit.mjs (CONTROL VISITOR / VISITOR x2, each proved red on its own defect: visitor absent, both figures on one side, visitor at half height) | REACH: Open Crew, tap a friend's card once to centre it and again to open their profile, then tap "Visit their paddock" under their pets. Your own Bonehead is standing in their field on the right, the same size as theirs on the left, turned to face them. Nothing about your friend has to change for this: it is your figure, drawn from your own equipment, on your own screen.
+2. PROOF: today-peek-audit.mjs (CONTROL BLEED + BLEED, proved red by removing the fix: 3 of 4 gaps bleed) | REACH: On Today, the page behind and between your quests and your day is the normal dark page again, whatever backdrop your Bonehead is wearing. This is a fix for a regression shipped in v434, so a player on v434 is the one who saw it.
+
+NOT CLAIMED IN v435, DELIBERATELY. The build also changes how the pull-down fill
+colour is sampled: it now reads the backdrop through the same `saturate(0.92)`
+the art is displayed with, which removes a five-unit blue step at the join
+(tests/today-peek-audit.mjs SEAM, proved red at delta 5). It is a real fix and it
+is in this build, but it is not in the player notes, because a smaller residual
+survives that no flat colour can remove: .hero-scene composites a 7% grain and a
+warm radial gradient over the art, lifting the rendered edge by a further
++3/+2/+4 with no hue shift. Whether that still reads as a line is a question for
+Tom's eyes, not for a measurement, and "the seam is gone" is exactly the kind of
+note this file exists to stop us writing before somebody has looked. It gets a
+note in a later build if he confirms it, and more work if he does not.
+
 ## v434
 
 1. PROOF: overscroll-wordmark-audit.mjs | REACH: On Today, pull down past the top. The strip you open up is the same colour as the art above your Bonehead instead of turning into the dark page behind the app, so pulling reveals the wordmark and not the edge of the screen. It follows whichever backdrop you have equipped.

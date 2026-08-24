@@ -324,6 +324,21 @@ try {
            left their phone, so nothing here invites a tap */
         coach: !!document.querySelector('.sheet-paddock .pdk-coach'),
         panel: !!document.querySelector('.sheet-paddock #pdkPanel'),
+        /* THE VISITOR. Tom, 2026-08-24: "can we make it so the player that is
+           visiting the paddock is on the opposite side of the paddock? bottom
+           right and they'll be same size as their friend's bonehead and then it
+           feels like they're in the same space." Geometry, not presence: two
+           figures both parked on the left would satisfy a existence check and
+           would not read as two people sharing a field. */
+        figs: ['.pdk-keeper:not(.pdk-visitor)', '.pdk-visitor'].map(sel => {
+          const el = document.querySelector('.sheet-paddock ' + sel);
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          const host = document.querySelector('.sheet-paddock .pdk-scene').getBoundingClientRect();
+          return { cx: Math.round(r.left + r.width / 2 - host.left), w: Math.round(r.width), h: Math.round(r.height),
+            decoded: [...el.querySelectorAll('img')].filter(i => i.naturalWidth > 0).length };
+        }),
+        sceneW: Math.round(document.querySelector('.sheet-paddock .pdk-scene').getBoundingClientRect().width),
       };
     }) };
   };
@@ -425,6 +440,32 @@ try {
       && !new RegExp(`\\b${fld.onWire}\\b`).test(fld.count || '')
       && (fld.note || '').includes(String(fld.figures)),
     `panel reads "${(fld.count || '').trim()}" / "${(fld.note || '').trim()}" | owned ${fld.owned}, on the wire ${fld.onWire}, in the field ${fld.figures}`);
+
+  /* TWO PEOPLE IN ONE FIELD. Tom, 2026-08-24, on the shipped single-figure scene:
+     "can we make it so the player that is visiting the paddock is on the opposite
+     side of the paddock? bottom right and they'll be same size as their friend's
+     bonehead and then it feels like they're in the same space."
+     Three things have to hold together and only the first is about existence.
+     Size: within 10% of each other, because "same size" is the whole reason it
+     reads as one shared space rather than a background figure. Sides: the host
+     left of centre and the visitor right of it, each clear of the midline, so a
+     scene that stacked both on one side cannot pass. */
+  {
+    const [host, vis] = fld.figs;
+    ok('CONTROL VISITOR both figures are on the scene at all, with their art decoded',
+      !!host && !!vis && host.decoded > 0 && vis.decoded > 0,
+      `host=${JSON.stringify(host)} visitor=${JSON.stringify(vis)}`);
+    if (host && vis) {
+      const ratio = vis.h / host.h;
+      ok('VISITOR the viewer stands in the friend\'s field at the SAME size as its owner',
+        ratio >= 0.9 && ratio <= 1.1,
+        `host ${host.w}x${host.h}, visitor ${vis.w}x${vis.h}, height ratio ${ratio.toFixed(2)}`);
+      const mid = fld.sceneW / 2;
+      ok('VISITOR they are on OPPOSITE sides of the field, not stacked on one',
+        host.cx < mid && vis.cx > mid,
+        `scene ${fld.sceneW}px wide, midline ${mid}: host centre ${host.cx}, visitor centre ${vis.cx}`);
+    }
+  }
 
   /* NOTHING THAT LIES. The friend's bonds, levels and nicknames never left their
      phone, so the scene must not carry over the chrome that promises them: the

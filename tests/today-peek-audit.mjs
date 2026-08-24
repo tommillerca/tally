@@ -399,6 +399,123 @@ for (const cfg of CONFIGS) {
   await unInject(page);
 }
 
+
+/* SEAM. Tom, 2026-08-24: "there is like a seam where you can see the line between
+   where you filled and where the boneheadz background finishes."
+   --hero-edge is sampled by drawing the backdrop into a canvas and reading its
+   top-centre pixel, but the player sees that art through `filter: saturate(0.92)`
+   on .hero-backdrop. The sampler read the source and the screen showed the
+   filtered version, so the fill sat five units of BLUE away from the art it was
+   meant to continue: rgb(107,124,56) against rgb(108,123,61). A hue step is
+   exactly the kind of edge the eye finds, which is why he saw a line.
+
+   This grades the sampler against the filtered source, and demands an EXACT match
+   rather than a tolerance. That is deliberate. The obvious alternative, comparing
+   --hero-edge to a pixel screenshotted off the rendered page, is the one I tried
+   first and it cannot be made tight: .hero-scene composites a 7% grain (::after)
+   and a warm radial gradient (::before) over the art, which lifts the rendered
+   strip to rgb(111,125,65), a further +3/+2/+4 that a flat background-color has no
+   way to reproduce. That left a ceiling of 4 against a defect of 7 and no honest
+   margin. Both sides here come from the same source image, so the reading has no
+   grain in it at all and the only thing that can move it is the bug.
+   Measured: 0 with the filter applied, 5 with it removed (prove-red: replace
+   `g.filter = HERO_ART_FILTER` with 'none' in a tar-built throwaway).
+   The +3/+2/+4 overlay residual is real and is NOT graded here: it is a uniform
+   lift with no hue shift, and it is reported to Tom rather than hidden in a
+   tolerance. Horizontal variation was ruled out by measurement, not assumed: the
+   backdrop's top row is one flat colour, spread [0,0,0] across all 640 px. */
+{
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(2800); await settle(page);
+
+  const seam = await page.evaluate(() => {
+    const img = document.querySelector('.hero-backdrop');
+    if (!img || !img.naturalWidth) return null;
+    const edge = getComputedStyle(document.documentElement).getPropertyValue('--hero-edge').trim();
+    const sheet = [...document.styleSheets].flatMap(s => { try { return [...s.cssRules]; } catch { return []; } })
+      .find(r => r.selectorText === '.hero-backdrop');
+    const filter = sheet && sheet.style.filter;
+    const read = f => {
+      const c = document.createElement('canvas'); c.width = 1; c.height = 1;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      if (f) g.filter = f;
+      g.drawImage(img, Math.floor(img.naturalWidth / 2), 0, 1, 1, 0, 0, 1, 1);
+      const d = g.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]];
+    };
+    return { edge, filter, filtered: read(filter), raw: read(null) };
+  });
+
+  ok('CONTROL SEAM the backdrop, the fill colour and the stylesheet filter were all found',
+    !!seam && !!seam.edge && !!seam.filter,
+    seam ? `edge="${seam.edge}" filter="${seam.filter}"` : 'no .hero-backdrop');
+  /* If the filter is ever dropped from the stylesheet, filtered === raw and this
+     row would pass for free while the sampler quietly grades nothing. */
+  ok('CONTROL SEAM the filter measurably changes the colour (else the match is free)',
+    !!seam && seam.filtered.join() !== seam.raw.join(),
+    seam ? `raw ${JSON.stringify(seam.raw)} vs filtered ${JSON.stringify(seam.filtered)}` : '');
+
+  if (seam && seam.edge) {
+    const m = seam.edge.match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+    const fill = m ? [+m[1], +m[2], +m[3]] : null;
+    const delta = fill ? Math.max(...fill.map((v, i) => Math.abs(v - seam.filtered[i]))) : 999;
+    ok('SEAM the fill is sampled through the same filter the art is drawn with',
+      fill !== null && delta === 0,
+      `--hero-edge ${JSON.stringify(fill)} vs filtered source ${JSON.stringify(seam.filtered)}` +
+      ` (unfiltered would be ${JSON.stringify(seam.raw)}), delta ${delta}`);
+  }
+}
+
+/* BLEED. Tom, 2026-08-24: "the background is now extending all down the app by the
+   quests etc, that has changed to the background colour I have for my bonehead."
+   The Today scroller carries the Bonehead's backdrop colour as its background-COLOR
+   so an iOS rubber-band pull shows art instead of a hard edge. That colour also
+   shows through every transparent gap in the page, which is the regression he hit.
+   The way to tell the two apart is to make the art colour something no stylesheet
+   would ever produce and see which pixels follow it: any gap that turns magenta is
+   painting from --hero-edge and is a bleed. Proved red by disabling the
+   background-image that covers the content area: 3 of 4 gaps go magenta. */
+{
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(2600); await settle(page);
+  await page.evaluate(() => document.documentElement.style.setProperty('--hero-edge', 'rgb(255,0,255)'));
+  await sleep(400);
+
+  const gaps = await page.evaluate(() => {
+    const s = document.querySelector('.screen--today');
+    if (!s) return [];
+    const out = [], kids = [...s.children];
+    for (let i = 0; i < kids.length - 1; i++) {
+      const a = kids[i].getBoundingClientRect(), b = kids[i + 1].getBoundingClientRect();
+      const g = b.top - a.bottom;
+      if (g >= 6) out.push({
+        name: `${(kids[i].className || '?').toString().split(' ')[0]}|${(kids[i + 1].className || '?').toString().split(' ')[0]}`,
+        x: 196, y: Math.round(a.bottom + g / 2) });
+    }
+    const d = document.querySelector('.hero-actions');
+    if (d) { const r = d.getBoundingClientRect(); out.push({ name: 'left-of-doors', x: 3, y: Math.round(r.top + r.height / 2) }); }
+    return out.filter(o => o.y > 0 && o.y < 830);
+  });
+
+  const bleeding = [];
+  for (const g of gaps) {
+    const shot = await page.screenshot({ encoding: 'base64', clip: { x: g.x, y: g.y, width: 4, height: 4 } });
+    const c = await page.evaluate(async d => {
+      const i = new Image(); i.src = 'data:image/png;base64,' + d; await i.decode();
+      const cv = document.createElement('canvas'); cv.width = i.width; cv.height = i.height;
+      const ctx = cv.getContext('2d'); ctx.drawImage(i, 0, 0);
+      const p = ctx.getImageData(1, 1, 1, 1).data; return [p[0], p[1], p[2]];
+    }, shot);
+    if (c[0] > 200 && c[1] < 80 && c[2] > 200) bleeding.push(`${g.name} ${JSON.stringify(c)}`);
+  }
+
+  ok('CONTROL BLEED the page really has transparent gaps to grade (an empty sample passes for free)',
+    gaps.length >= 3, `${gaps.length} gaps found, floor 3`);
+  ok('BLEED no gap between Today cards paints the Bonehead backdrop colour',
+    gaps.length >= 3 && bleeding.length === 0,
+    bleeding.length ? `bleeding: ${bleeding.join(', ')}` : `${gaps.length} gaps, none bleeding`);
+  await page.evaluate(() => document.documentElement.style.removeProperty('--hero-edge'));
+}
+
 ok('no page errors', errs.length === 0, errs.join(' | '));
 await browser.close();
 if (srvHandle) await srvHandle.close();
