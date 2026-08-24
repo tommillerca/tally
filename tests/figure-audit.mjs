@@ -168,6 +168,24 @@ const SITES = [
     },
   },
   {
+    /* The friend's PADDOCK shelf (v425): a row of their pets on their profile,
+       beside the paired hero above. Not `paired`: these are a SHELF of portraits
+       with no Bonehead standing next to them, so plane and near have nothing to
+       measure against and would be asserting a relationship the design does not
+       have. What matters here is the OTHER half of the figure contract, and the
+       static rules cover it exactly: the pets come from a snapshot, so shiny is
+       read off each instance rather than off S.shinyPets, and `wear` is named
+       from the friend's own yard rather than left undefined (which would mean
+       "ask the viewer's wardrobe" and dress their Bumbleseal in yours).
+       tests/friend-paddock-audit.mjs drives this surface for real and its THEIRS
+       row is that exact assertion, measured with the viewer deliberately wearing
+       a different item in the same slot. */
+    key: 'friend-yard', claim: 'fp-yard-pet', paired: false, undriven:
+      'a shelf of portraits with no Bonehead beside them, so paired alignment has nothing '
+      + 'to measure; driven for real by tests/friend-paddock-audit.mjs (RENDER decodes every '
+      + 'portrait, THEIRS pins that it is the FRIEND\'s wardrobe and not the viewer\'s)',
+  },
+  {
     key: 'fight-arena', claim: 'petStage', paired: false, undriven:
       'reaching it means winning into a live fight; the arena stage is covered for '
       + 'decode by tests/fx-audit.js, which drives real moves',

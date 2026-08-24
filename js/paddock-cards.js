@@ -15,7 +15,7 @@
  * which the Boneyard reused as a SCREEN class, tied on specificity, and left the map
  * blank (tally/CLAUDE.md, "Scope reveal CSS to the surface it means").
  */
-import { BH_ITEMS, bhAsset, PET_CROP } from '../data/boneheadz.js';
+import { BH_ITEMS, bhAsset, PET_CROP, petWornLayers } from '../data/boneheadz.js';
 import { bhIcon } from './icons-pack.js';
 
 export const PET_SPECIES = BH_ITEMS.filter(i => i.slot === 'C');
@@ -58,8 +58,26 @@ export function cardModel(row) {
     maxed: (row.bond | 0) >= 5,
     flavor: row.flavor || '',
     art: bhAsset(sp.id ? sp : { slot: 'C', id: row.sp }),
+    /* Her swag, on the card as well as out in the field. petWornLayers owns the
+       species check, so this is [] for every pet the accessories are not drawn
+       for and no caller here has to remember which one that is. */
+    worn: petWornLayers(row.sp, row.wear),
   };
 }
+
+/* ONE FIGURE, N LAYERS. Every accessory is painted pre-positioned inside the pet's
+   own 2048 canvas, so a layer is the base image's crop transform applied to a
+   different file: the SAME inkFitStyle string, verbatim, for all of them. That is
+   the whole mechanism, and doing it any other way (a per-layer nudge, a second
+   fit) would be a second source of truth fighting the art.
+   The wrapper is what makes the stack possible at all: the layers are absolutely
+   positioned by inkFitStyle, so without a positioned box around them they would
+   resolve against the page. Callers already wrap these in `.pdk-thumb` /
+   `.pdk-tile`, both of which are positioned, so the layers are emitted as
+   siblings of the base and inherit exactly its geometry. */
+const layeredArt = (sp, art, worn, { alt = '', eager = false } = {}) =>
+  [art, ...(worn || [])].map((src, i) =>
+    `<img src="${esc(src)}" style="${inkFitStyle(sp)}"${i === 0 ? ` alt="${esc(alt)}"` : ' alt=""'}${eager ? ' loading="eager"' : ''}>`).join('');
 
 /* The slider: every copy of ONE species, in roster order, plus the dots model. Dots
    only exist above one copy, per the handoff. */
@@ -77,11 +95,16 @@ export function gridModel(roster) {
     t.count++; t.anyShiny = t.anyShiny || !!r.shiny;
     owned.set(r.sp, t);
   }
+  /* The wardrobe is one record for the ACCOUNT, so it is read off the roster
+     rather than per tile, and a LOCKED tile never gets it: a silhouette of a pet
+     you do not own must not be wearing clothes you do. */
+  const wear = (roster || [])[0] ? (roster || [])[0].wear : null;
   return PET_SPECIES.map(s => {
     const t = owned.get(s.id);
     return {
       sp: s.id, name: s.name, rarity: s.rarity, rarityColor: PDK_RARITY[s.rarity] || PDK_RARITY.common,
       art: bhAsset(s), owned: !!t, count: t ? t.count : 0,
+      worn: t ? petWornLayers(s.id, wear) : [],
       showCount: !!t && t.count > 1, anyShiny: !!(t && t.anyShiny),
       glow: s.rarity === 'legendary' || s.rarity === 'epic',
     };
@@ -156,7 +179,7 @@ export function cardHtml(m) {
   return `<article class="pdk-card" data-iid="${esc(m.iid)}">
     <button class="pdk-x-btn" data-act="close" aria-label="Close">×</button>
     <div class="pdk-head">
-      <span class="pdk-thumb"><img src="${esc(m.art)}" style="${inkFitStyle(m.sp)}" alt="" loading="eager"></span>
+      <span class="pdk-thumb">${layeredArt(m.sp, m.art, m.worn, { eager: true })}</span>
       <div class="pdk-id">
         <b class="pdk-name">${esc(m.name)}</b>
         <span class="pdk-chips">
@@ -224,7 +247,7 @@ export function panelHtml(roster, eggs) {
         <span class="pdk-eggbar"><i style="width:${Math.round(egg.pct * 100)}%"></i></span>
       </button>
       ${tiles.map(t => `<button class="pdk-tile${t.owned ? '' : ' pdk-lockt'}${t.glow ? ' r-' + t.rarity : ''}" data-sp="${esc(t.sp)}">
-        <img src="${esc(t.art)}" style="${inkFitStyle(t.sp)}" alt="${esc(t.name)}">
+        ${layeredArt(t.sp, t.art, t.worn, { alt: t.name })}
         ${t.showCount ? `<span class="pdk-x">×${t.count}</span>` : ''}
         ${t.anyShiny ? '<span class="pdk-star" aria-hidden="true"></span>' : ''}
         ${t.owned ? '' : '<span class="pdk-q">?</span>'}

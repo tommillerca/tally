@@ -410,6 +410,93 @@ try {
     `${other} draws ${otherStack ? otherStack.length : 0} layer(s) while the wardrobe still holds ${JSON.stringify(stillStored)}`);
   await shot(page, '07-other-pet-refuses');
 
+  /* ---- BENCHED: she keeps her swag with somebody else out front ----
+   * Tom, 2026-08-22: "you should also be able to have pets unequipped but keep
+   * their custom swag on like the bumbleseal outfit and then she can wear it
+   * while idle in the paddock."
+   *
+   * THE SPECIES ROW ABOVE HAS ALREADY BENCHED HER, which is why this sits here
+   * and not in a setup of its own: `other` is equipped, she is idle, and the
+   * wardrobe is still in the kv row. So the state is free and the only question
+   * left is whether the Paddock draws it.
+   *
+   * THREE SURFACES, because they are three different renderers and only one of
+   * them was ever right. Measured on this tree 2026-08-23, benched, with a
+   * Mallard out front:
+   *   scene  five decoded layers at 87px. This ALREADY worked: the scene draws
+   *          through the app's own petSpriteHtml, which defaults wear to
+   *          S.petWear and never asked who was equipped.
+   *   tile   ONE layer. The species grid is a plain image built in
+   *          js/paddock-cards.js, a pure module that could not reach the app's
+   *          renderer and had no wear in its model at all.
+   *   card   ONE layer, same cause. So the collection panel showed her bare two
+   *          inches under a scene that showed her dressed.
+   * SURFACES above cannot catch any of this: it drives the same three-quarters
+   * of the app with her EQUIPPED, and it never opens the collection panel.
+   *
+   * The negative is carried by the OTHER species in the same sample rather than
+   * by a second run: an unowned/locked tile and a pet the clothes are not drawn
+   * for must both still measure exactly one layer in the same screenshot, so a
+   * renderer that stacked the wardrobe onto everything fails here rather than
+   * passing for the wrong reason. */
+  const benchedEquipped = await page.evaluate(async () => (await (await import('/js/loot.js')).equippedPetIid()));
+  const benchedWear = await storedWear();
+  setup('SAMPLE somebody else is out front, so "benched" is the state being graded',
+    !!benchedEquipped && !benchedEquipped.endsWith(`-${PET}`) && Object.keys(benchedWear).length === expect.length,
+    `equipped ${benchedEquipped}, ${PET} benched, wardrobe still ${JSON.stringify(benchedWear)}`);
+  await page.evaluate(() => { location.hash = '#/pets'; });
+  await sleep(900);
+  await page.evaluate(() => document.getElementById('stableBtn')?.click());
+  await sleep(1500);
+  await page.evaluate(() => document.getElementById('stableToPaddock')?.click());
+  await sleep(2400);
+  const benchScene = await stackAt(page, `.pdk-pet[data-pdk="${PET}"] .petcrop`);
+  const layersIn = sel => page.evaluate(s => {
+    const el = document.querySelector(s);
+    if (!el) return null;
+    return [...el.querySelectorAll('img')].map(i => {
+      const r = i.getBoundingClientRect();
+      return { src: i.getAttribute('src'), nw: i.naturalWidth, w: Math.round(r.width), h: Math.round(r.height) };
+    });
+  }, sel);
+  const benchTile = await layersIn(`.pdk-tile[data-sp="${PET}"]`);
+  const otherTile = await layersIn(`.pdk-tile[data-sp="${other}"]`);
+  const lockedTile = await page.evaluate(() => {
+    const el = document.querySelector('.pdk-tile.pdk-lockt[data-sp]');
+    return el ? { sp: el.dataset.sp, n: el.querySelectorAll('img').length } : null;
+  });
+  await shot(page, '07b-benched-paddock');
+  /* The card is behind a real tap on her tile, not a mounted builder: the panel
+     is the surface Tom is looking at and a model that renders correctly into
+     nothing is the seam-with-no-consumer failure. */
+  const tapped = await page.evaluate(sp => {
+    const t = document.querySelector(`.pdk-tile[data-sp="${sp}"]`);
+    if (!t) return false;
+    t.scrollIntoView({ block: 'center' });
+    const r = t.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, PET);
+  if (tapped) await page.mouse.click(tapped.x, tapped.y);
+  await sleep(1200);
+  const benchCard = await layersIn('.pdk-card .pdk-thumb');
+  await shot(page, '07c-benched-card');
+  const stackOf = st => (st || []).slice(1).map(l => (l.src.match(/([A-Z]+\d+)\.png$/) || [])[1]).filter(Boolean);
+  const benchBad = [];
+  for (const [key, st] of [['paddock-scene', benchScene], ['collection-tile', benchTile], ['collection-card', benchCard]]) {
+    if (!st || !st.length) { benchBad.push(`${key}: nothing rendered`); continue; }
+    const ids = stackOf(st);
+    if (ids.join(',') !== expect.join(',')) benchBad.push(`${key}: [${ids.join(',') || 'nothing'}] (expected ${expect.join(',')})`);
+    else if (!allDrawn(st)) benchBad.push(`${key}: stack correct but not decoded/visible`);
+  }
+  // the negative, in the same screenshot: a pet the clothes are not drawn for,
+  // and a species nobody owns, both still bare
+  if (!otherTile || otherTile.length !== 1) benchBad.push(`${other} tile draws ${otherTile ? otherTile.length : 0} layer(s), expected 1`);
+  if (!lockedTile || lockedTile.n !== 1) benchBad.push(`a locked tile draws ${lockedTile ? lockedTile.n : 'no'} layer(s), expected 1`);
+  ok('BENCHED an idle pet keeps her swag on in the Paddock: the scene, the collection tile and the card',
+    benchBad.length === 0,
+    benchBad.length ? benchBad.join('; ')
+      : `scene/tile/card all ${expect.length} layers (${expect.join(' > ')}); ${other} and a locked tile still 1 each`);
+
   /* ---- REMOVE: put her back on, then take one off ---- */
   await page.evaluate(async sp => {
     const loot = await import('/js/loot.js');

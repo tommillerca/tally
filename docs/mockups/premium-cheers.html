@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Premium cheers: five concepts</title>
+<!-- CONCEPTS ONLY. There is no purchase flow here and none is proposed. The
+     monetization decision of 2026-08-07 is COSMETIC ONLY and is not reopened by
+     this file: every concept below changes presentation and nothing else.
+
+     Palette measured off docs/brand/boneheadz-brand-deck.html and app.css, not
+     invented: coral #fd6857, violet #9b92e8, gold #ffc961, lime #a5e847,
+     mint #a2e0a6, cyan #62e5f1, yellow #fcf35e, ink #2a2d28, paper #f2e9d7.
+     Sticker shadow is a HARD offset, never blurred. Display face is Bangers. -->
+<link rel="preload" href="../../assets/fonts/bangers.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face { font-family: 'Bangers'; src: url('../../assets/fonts/bangers.woff2') format('woff2'); font-display: block; }
+:root {
+  --bg: #0d0c12; --surface: #16151d; --surface-2: #1e1c26;
+  --line: rgba(242,233,215,.09); --line-strong: rgba(242,233,215,.17);
+  --text: #f2e9d7; --text-2: #b9ac97; --text-3: #8f8578;
+  --ink: #2a2d28; --coral: #fd6857; --violet: #9b92e8; --gold: #ffc961;
+  --lime: #a5e847; --mint: #a2e0a6; --cyan: #62e5f1; --yellow: #fcf35e;
+  --display: 'Bangers','Arial Black',system-ui,sans-serif;
+  --sh: 4px 5px 0 rgba(0,0,0,.55); --sh-sm: 3px 4px 0 rgba(0,0,0,.55);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: system-ui,-apple-system,'Segoe UI',sans-serif; }
+.page { width: 393px; margin: 0 auto; padding: 20px 16px 40px; }
+h1 { font-family: var(--display); font-weight: 400; font-size: 34px; letter-spacing: .02em;
+  margin: 0 0 6px; line-height: 1.05; }
+.sub { color: var(--text-2); font-size: 13px; line-height: 1.5; margin: 0 0 4px; }
+.rule { color: var(--text-3); font-size: 11.5px; line-height: 1.55; margin: 10px 0 0;
+  border-left: 2px solid var(--line-strong); padding-left: 10px; }
+h2 { font-family: var(--display); font-weight: 400; font-size: 19px; letter-spacing: .05em;
+  margin: 26px 0 2px; }
+.tag { display: inline-block; font-family: var(--display); font-weight: 400; font-size: 11px;
+  letter-spacing: .1em; padding: 2px 9px; border-radius: 999px; border: 2px solid var(--ink);
+  color: var(--ink); vertical-align: 3px; margin-left: 6px; }
+.tag.free { background: var(--lime); }
+.tag.prem { background: var(--gold); }
+.why { color: var(--text-3); font-size: 11.5px; line-height: 1.5; margin: 4px 0 10px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
+  padding: 14px; }
+
+/* ---- the row, identical geometry in every concept ---------------------- */
+.row { display: flex; align-items: center; gap: 11px; padding: 10px 0; position: relative; }
+.face { flex: none; width: 40px; height: 40px; display: grid; place-items: center;
+  font-size: 22px; line-height: 1; background: rgba(242,233,215,.06);
+  border: 2px solid var(--ink); border-radius: 12px; box-shadow: var(--sh-sm); }
+.tx { flex: 1; min-width: 0; }
+.tx b { display: block; font-size: 15px; font-weight: 700; }
+.said { display: block; font-size: 13px; opacity: .92; }
+.tx small { font-size: 12px; color: var(--text-2); }
+.back { flex: none; font-family: var(--display); font-weight: 400; font-size: 15px;
+  letter-spacing: .04em; padding: 8px 13px; border-radius: 12px; color: var(--text);
+  background: var(--surface-2); border: 2.5px solid var(--ink); box-shadow: var(--sh-sm); }
+
+/* 1. BONE FRAME: a carved surround. Nothing moves; the row is simply mounted. */
+/* MARGIN IS NEGATIVE ON PURPOSE. Measured at 393px, a frame that padded inward
+   left its row 301px wide against the free row's 331: the premium cheer was
+   quietly NARROWER than the free one, which is both ragged in a long inbox and
+   the opposite of the claim this page makes. The frame bleeds to the card edge
+   so the row inside keeps the free row's exact geometry. */
+.c-frame { border: 3px solid var(--gold); border-radius: 16px; padding: 8px 11px; margin: 0 -14px;
+  background: linear-gradient(180deg, rgba(255,201,97,.10), rgba(255,201,97,0)); position: relative; }
+.c-frame::before, .c-frame::after { content: ''; position: absolute; width: 12px; height: 12px;
+  border: 3px solid var(--gold); }
+.c-frame::before { top: -3px; left: -3px; border-right: 0; border-bottom: 0; border-radius: 8px 0 0 0; }
+.c-frame::after { bottom: -3px; right: -3px; border-left: 0; border-top: 0; border-radius: 0 0 8px 0; }
+
+/* 2. EMBERGLOW: the medallion breathes. The only animated pixel is behind the
+      emoji, so the text never moves and the row never reflows. */
+.c-glow .face { position: relative; border-color: var(--coral); }
+.c-glow .face::after { content: ''; position: absolute; inset: -7px; border-radius: 16px;
+  background: radial-gradient(circle, rgba(253,104,87,.55), rgba(253,104,87,0) 70%);
+  animation: breathe 2.4s ease-in-out infinite; z-index: -1; }
+@keyframes breathe { 0%,100% { opacity: .35; transform: scale(.9); } 50% { opacity: .9; transform: scale(1.12); } }
+
+/* 3. TAKE A BOW: the sender's own Bonehead stands in the row and bows once on
+      arrival. Their character, not a new sticker: the flex is that it is THEM. */
+/* THE MEDALLION IS A PLINTH, NOT A WINDOW. Cropped inside a 40px box at 150%
+   this rendered as a purple square with an indistinct smudge in it: the whole
+   concept is "it is recognisably THEM" and at that size it was recognisably
+   nobody. The figure now stands on the medallion and overflows it upward, which
+   is legible at the row's real size and still costs the row no height, because
+   an absolutely positioned child does not participate in layout. */
+/* A BONEHEAD IS A STACK, NOT ONE FILE. SK is the SKULL slot on its own, so a
+   single SK image rendered as a floating head on a violet block: the concept is
+   "it is recognisably them" and a head is not a them. The app composites the
+   body and the skull as layers sharing one canvas (avatarLayersHtml), so the
+   mockup does the same, with identical geometry on both layers and the bow
+   applied to the wrapper so they move together. */
+.c-bow .face { overflow: visible; background: rgba(155,146,232,.22);
+  border-color: var(--violet); position: relative; }
+.c-bow .fig { position: absolute; left: 50%; bottom: -2px; width: 74px; height: 74px;
+  margin-left: -37px; transform-origin: 50% 100%;
+  animation: bow 3.2s ease-in-out infinite; }
+.c-bow .fig img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+@keyframes bow { 0%,70%,100% { transform: rotate(0); } 78% { transform: rotate(14deg) translateY(2px); } 88% { transform: rotate(0); } }
+
+/* 4. HARVEST: one seasonal pack of many. The frame carries the season's colour
+      and three motes drift behind the text. Same row, different weather. */
+/* CORAL, not amber. In the first render this frame read as the same gold as
+   concept 1 and the two were indistinguishable side by side. Coral is the
+   deck's lead accent and separates them at a glance. */
+.c-season { border: 3px solid var(--coral); border-radius: 16px; padding: 8px 11px; margin: 0 -14px;
+  background: linear-gradient(180deg, rgba(253,104,87,.16), rgba(226,171,54,.06));
+  position: relative; overflow: hidden; }
+.mote { position: absolute; width: 10px; height: 10px; border-radius: 3px; background: var(--yellow);
+  opacity: .9; border: 2px solid rgba(42,45,40,.55); animation: drift 5s linear infinite; }
+.mote:nth-child(1) { left: 18%; animation-delay: 0s; }
+.mote:nth-child(2) { left: 54%; background: var(--coral); animation-delay: 1.7s; }
+.mote:nth-child(3) { left: 81%; background: var(--mint); animation-delay: 3.3s; }
+@keyframes drift { 0% { top: -10px; transform: rotate(0); } 100% { top: 110%; transform: rotate(220deg); } }
+
+/* 5. MARQUEE: the cheer arrives as a banner instead of a row. The loudest of
+      the five, and still only a shape: same words, same count, same cap. */
+.c-marquee { background: linear-gradient(100deg, var(--violet), #6f66c4);
+  border: 3px solid var(--ink); border-radius: 16px; box-shadow: var(--sh);
+  padding: 8px 11px; margin: 0 -14px; transform: rotate(-1.2deg); }
+.c-marquee .tx b, .c-marquee .said { color: #14121c; }
+.c-marquee .tx small { color: rgba(20,18,28,.72); }
+.c-marquee .face { background: var(--yellow); border-color: var(--ink); }
+.c-marquee .back { background: var(--yellow); color: var(--ink); }
+
+.foot { margin-top: 30px; border-top: 1px solid var(--line); padding-top: 14px; }
+.foot h3 { font-family: var(--display); font-weight: 400; font-size: 17px; letter-spacing: .05em; margin: 0 0 8px; }
+.foot ul { margin: 0; padding-left: 18px; color: var(--text-2); font-size: 12px; line-height: 1.7; }
+.foot b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Premium cheers</h1>
+  <p class="sub">Five concepts. Presentation only, and the free cheer is the control.</p>
+  <p class="rule">Every concept changes the FRAME around a cheer. None of them adds a phrase,
+    raises a cap, or moves a number in the receiver's game. The twelve phrases stay the whole
+    vocabulary, so nobody can pay to say something a free player cannot say.</p>
+
+  <h2>The free cheer<span class="tag free">ALWAYS</span></h2>
+  <p class="why">Unchanged, and shown first on purpose. Same size, same position in the inbox,
+    same reply button, no "basic" label, no cooldown a paid one skips. This is what the other
+    five must not diminish.</p>
+  <div class="card">
+    <div class="row">
+      <span class="face">💀</span>
+      <div class="tx"><b>BONE JOVI</b><span class="said">GG!</span><small>2m ago</small></div>
+      <span class="back">CHEER BACK</span>
+    </div>
+  </div>
+
+  <h2>1 · Gilded bone frame<span class="tag prem">CONCEPT</span></h2>
+  <p class="why">A carved surround with mitred corners. Nothing animates. The quietest option
+    and the one that survives a long inbox without becoming noise.</p>
+  <div class="card"><div class="c-frame"><div class="row">
+    <span class="face">🔥</span>
+    <div class="tx"><b>MARROW MAX</b><span class="said">Nice gains!</span><small>8m ago</small></div>
+    <span class="back">CHEER BACK</span>
+  </div></div></div>
+
+  <h2>2 · Emberglow<span class="tag prem">CONCEPT</span></h2>
+  <p class="why">The medallion breathes. The animation sits BEHIND the emoji only, so the text
+    never moves and a screenful of these never reflows.</p>
+  <div class="card"><div class="c-glow"><div class="row">
+    <span class="face">⚡</span>
+    <div class="tx"><b>GRAVE MINT</b><span class="said">Boneyard run?</span><small>21m ago</small></div>
+    <span class="back">CHEER BACK</span>
+  </div></div></div>
+
+  <h2>3 · Take a bow<span class="tag prem">CONCEPT</span></h2>
+  <p class="why">The sender's own Bonehead stands in the row and bows. Their character in their
+    own fit, not a bought sticker, so the flex is that it is recognisably them.</p>
+  <div class="card"><div class="c-bow"><div class="row">
+    <span class="face"><span class="fig"><img src="../../assets/bh/B/B0-1.png" alt=""><img src="../../assets/bh/SK/SK0-1.png" alt=""></span></span>
+    <div class="tx"><b>DUSTY LULU</b><span class="said">You're crushing it!</span><small>1h ago</small></div>
+    <span class="back">CHEER BACK</span>
+  </div></div></div>
+
+  <h2>4 · Harvest pack<span class="tag prem">CONCEPT</span></h2>
+  <p class="why">One season of several. The frame takes the season's colour and three motes drift
+    behind the text. Same row underneath, different weather over it.</p>
+  <div class="card"><div class="c-season">
+    <i class="mote"></i><i class="mote"></i><i class="mote"></i>
+    <div class="row">
+      <span class="face">🦴</span>
+      <div class="tx"><b>SWOLE PHANTOM</b><span class="said">Feed the bones!</span><small>3h ago</small></div>
+      <span class="back">CHEER BACK</span>
+    </div>
+  </div></div>
+
+  <h2>5 · Marquee<span class="tag prem">CONCEPT</span></h2>
+  <p class="why">The cheer arrives as a banner rather than a row. The loudest of the five and
+    still only a shape: same words, same daily cap, same reply.</p>
+  <div class="card"><div class="c-marquee"><div class="row">
+    <span class="face">👑</span>
+    <div class="tx"><b>RIB TICKLER</b><span class="said">Respect.</span><small>5h ago</small></div>
+    <span class="back">CHEER BACK</span>
+  </div></div></div>
+
+  <div class="foot">
+    <h3>How this avoids paywalled kindness</h3>
+    <ul>
+      <li><b>The words are free.</b> Premium changes the frame, never the vocabulary. All twelve
+        phrases stay available to everyone, so nobody can buy a thing to say.</li>
+      <li><b>The free cheer is not made worse.</b> Same size, same slot, same reply button, no
+        "basic" styling and no cooldown a paid cheer skips.</li>
+      <li><b>Sending costs the same.</b> One shared daily cap per friend, enforced on the server,
+        identical for both.</li>
+      <li><b>The receiver's game does not move.</b> No coins, no XP, no dust, no streak. A cheer
+        pays nothing today and a premium one must keep paying nothing, or flair has become power.</li>
+      <li><b>Replies are symmetric.</b> A free cheer back lands in a paying player's inbox exactly
+        as a paid one lands in a free player's.</li>
+      <li><b>Nothing is gated behind being liked.</b> Premium is bought by the SENDER for their own
+        outgoing cheers. It is never earned by receiving them, so being popular is never the price.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>
