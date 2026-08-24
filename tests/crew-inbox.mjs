@@ -132,7 +132,25 @@ if (!shown.visible) {
     await new Promise(r => setTimeout(r, 200));
     return document.querySelectorAll('#deliveriesList .t3-row').length;
   });
-  ok('INBOX tapping Show all reveals the full history', all === 4, `${all} rows after expanding`);
+  /* THREE, NOT FOUR, SINCE v425. The fourth seeded delivery is a CHEER, and
+     cheers moved to their own card in the Crew tab: a gift is a thing you now
+     own ("Nothing to claim: it is already yours", which is this card's own copy)
+     and a cheer is somebody talking to you. Tom, 2026-08-22: "there needs to be
+     a better interface in crew where you can see the cheers". So this number
+     went down by exactly the number of cheers seeded, and the row below proves
+     the cheer moved rather than vanished, which is the half a bare count change
+     would have hidden. */
+  ok('INBOX tapping Show all reveals the full history', all === 3, `${all} rows after expanding`);
+  const split = await page.evaluate(() => {
+    const inCheers = [...document.querySelectorAll('#cheersList .cheer-row')]
+      .map(r => (r.querySelector('.cheer-tx b') || {}).textContent || '');
+    const inDeliveries = [...document.querySelectorAll('#deliveriesList .t3-row')]
+      .map(r => r.textContent.replace(/\s+/g, ' ').trim());
+    return { inCheers, cheersInDeliveries: inDeliveries.filter(t => /cheered you/i.test(t)) };
+  });
+  ok('INBOX the seeded cheer moved to the Cheers card rather than being dropped',
+    split.inCheers.length === 1 && split.cheersInDeliveries.length === 0,
+    `cheers card [${split.inCheers.join(', ')}], cheers still in deliveries [${split.cheersInDeliveries.join(' / ') || 'none'}]`);
   const after = await readInbox();
   ok('BADGE opening the tab clears the unread count', after.unseen === 0, `unseen=${after.unseen}`);
 

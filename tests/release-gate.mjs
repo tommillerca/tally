@@ -127,14 +127,27 @@ if (own) console.log(`serving this repo at ${base}\n`);
    static scan of tests/, no browser, no network, well under a second. It is the
    staleness twin of that file. Hygiene catches a guard that cannot SEE its bug;
    provenance catches one still enforcing an instruction that was reversed. */
-/* live-api-register-lint is PURE for the same reason guard-hygiene-lint is: it
+/* xp-curve-audit is PURE for the same reason the lints are: it imports js/pit.js
+   and js/game.js, walks 200 Gauntlet ranks in arithmetic and exits, no browser
+   and well under a second. It guards the SHAPE of the Gauntlet XP curve (a rank
+   high up must not pay a bigger share of a level than a rank low down), which is
+   the ROADMAP decision "reshape the GAUNTLET XP CURVE" as an assertion. Its
+   CONTROL row rebuilds the pre-fix linear payouts and REQUIRES them to fail,
+   because SHAPE asserts an ordering and an ordering passes on any flat data.
+
+   feedback-status-lint is PURE: a static read of docs/, no browser, instant. It
+   is in the gate rather than in a habit because the thing it guards is exactly
+   what a habit failed at. It also PRINTS what Tom is still waiting on, on every
+   run, which is the point: an open item nobody can miss.
+
+  live-api-register-lint is PURE for the same reason guard-hygiene-lint is: it
    reads server/ and tests/ and finishes instantly. It exists because four dev
    sessions each pointed a server suite at the DEPLOYED worker and left a burst
    of dead accounts in Tom's Crew (47 total, docs/BOT-CENSUS-2026-08-22.md). It
    pins the one line that makes that harmless: every POST /register in a test
    carries `test: IS_TEST`, bound to flagFor(BASE), so a non-local run mints only
    accounts players.is_test hides. */
-const PURE = ['unit.test.js', 'first-session-audit.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'live-api-register-lint.mjs'];
+const PURE = ['unit.test.js', 'first-session-audit.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs'];
 const BROWSER = [
   'write-failure-seam-audit.mjs', // a rejected write is announced and re-thrown, and the ATOMIC primitives are in the seam: the reward SOP routes every payout through addIfAbsent/take/kvUpdate, which bypass db.put entirely
   'write-failure-toast-audit.mjs', // the OTHER half of that seam: it ends in `if (!writeFailureSink) return;` and until now nothing in the app called onWriteFailure, so every rejection returned early and a lost meal, weight, crate or coin row stayed as silent as before the seam existed. The seam audit cannot catch that and should not: it registers its OWN sink to observe the seam, which is exactly why it stays green while the app has none. This file registers nothing, breaks a real write in the real page and reads the real #toast. REJECTS is the positive control (a write that quietly succeeded would make every other row vacuous); LOUD fails on SILENCE; QUIET, THROTTLE, QUOTA and NORECURSE cover the four ways announcing it can go wrong. Proven red against main's js/app.js: LOUD, THROTTLE and QUOTA go red together. Self-serving, ~50s, 6 checks
@@ -179,7 +192,7 @@ const BROWSER = [
   'notif-tier-audit.mjs',    // Essentials is a bounded strict subset of Everything, the toast copy is graded against the DEVICE QUEUE both ways, fully off queues nothing, and every notifyNow call site names its kind
   'petlevel-audit.mjs',      // openPetLevelUp: sheet renders + PWR/HP/REF deltas match petBattleStats between prev and cur, + no re-open on repeat
   'backup-roundtrip-audit.mjs', // Settings YOUR-DATA export/import: seven stores, deep-equal round trip, findings for the toast-count undercount and the non-transactional import
-  'wheel-audit.mjs',         // daily spin appears + double-dip refused + each of five silent-retirement gates named
+  'wheel-audit.mjs',         // daily spin appears + double-dip refused + each of five silent-retirement gates named + every label/icon rests upright across five pinned landings (net rotation composed from real matrices, flip-band landings in the sample)
   'den-ceiling-audit.mjs',   // every kind of boss raises the Gauntlet ceiling, or none do
   'health-intake-audit.mjs', // Apple Health intake: parseHkPayload happy + rejection, syncFromClipboard writes valid + drops malformed, overlay preserves manual sleep, and a stale clipboard re-synced across a day rollover never counts the same walk twice
   'redeem-audit.mjs',        // Settings REDEEM A CODE: rewarded-actions SOP applied to redeemCode (first grants, second pays 0, invalid rejects, dupe branch reachability)
@@ -388,6 +401,20 @@ const DECLARED = {
     + 'the ceiling decision: a Boneyard Wanderer mints NO bossfirst marker, so five wins move endlessCeiling by 0, with the '
     + 'Glutton driven in the same session as the control that the instrument can move at all. Full rather than fast because it '
     + 'boots two pages and claims against the real IndexedDB; about 30s.'],
+  'marker-anchor-audit.mjs': ['full', 'EVERY MAP MARKER LANDS WHERE MAPLIBRE PUT IT. MapLibre places a marker by writing a transform '
+    + 'onto a root it has already taken out of flow, and that rule (.maplibregl-marker) is ONE class, so any other one-class rule naming a '
+    + 'marker root that lands later in the head wins and puts the element back into normal flow. Nothing throws: the marker draws, it is '
+    + 'the right marker, it is simply on the wrong ground. Found 2026-08-23 on the Wanderer, whose stylesheet is injected at runtime and '
+    + 'so landed after the lazily-loaded maplibre-gl.css: absolute siblings take no space, so the FIRST Wanderer was correct and every one '
+    + 'after him stacked by his own height, measured 0/200/400 offsetTop with three up, which is 238 m and 474 m of ground. His cone and '
+    + 'inWandererCone use his true position, so the light a player could see was not the light that caught them, invisible whenever only '
+    + 'one is in range. ANCHORED grades every marker on the screen against MapLibres OWN transform (anchor percentages and margins '
+    + 'included), GROUND unprojects the drawn box and compares it in metres to the position js/app.js handed the marker, and CONTROL puts '
+    + 'the bug back from a later stylesheet mid-run and requires the instrument to report the stack, so a green ANCHORED cannot come from '
+    + 'a measurement that is blind. The static half runs anywhere: the marker-root classes are DERIVED from POI_CLASSES in js/map.js, no '
+    + 'runtime-injected stylesheet may give one of them a position MapLibre did not ask for, and ORDER pins the premise that lets app.css '
+    + 'keep its relatives (it is a head link, so the appended vendor sheet always wins). Needs WebGL and a tile host; reports UNPROVEN with '
+    + 'exit 97 rather than green without them. Four mutations proven red, listed in the file header. About 60s.'],
   'wanderer-patrol-live-audit.mjs': ['full', "the Wanderer's TRIP WIRE, fired for real: the sibling suite proves his derivation, his cone geometry, "
     + 'his ledger key and the ceiling by calling the module, and none of that can see the thing the feature actually IS, which is a GPS '
     + 'fix arriving on the open Boneyard, landing inside a cone nobody tapped, and a fight starting on its own. Two boots of the real app '
@@ -414,6 +441,19 @@ const DECLARED = {
     + 'STANDS, PET-MASS, PET-GLOW, PET-FACING, PET-UNTOUCHED and MAGE-UNCHANGED. Every loop in the arena is frozen and the toast removed '
     + 'before any diff, or the mask comes back as the whole arena. Run it on any change to .arena.boss-wanderer, #foeStage.wanderer-foe, '
     + '.fstage.petmini or petFightPx. Needs no map. About 100s and ten seam fights, so full rather than fast.'],
+  'wanderer-water-audit.mjs': ['full', "the Wanderer is BOUND TO LAND, and every device has to agree where. Tom, 2026-08-22: "
+    + '"The wanderer is out in the lake where I am right now. He shouldn\'t be." wandererAt was pure math on a lat/lng grid, so a cell '
+    + 'over a lake put his whole loop on the water; js/water.js classifies a point against the basemap\'s own z14 vector tiles and the '
+    + 'derivation walks a seeded fallback of beat centres until the lap is dry. The lake is the easy half. The half that could ship a '
+    + 'worse bug than the lake is DISAGREEMENT, because a water answer that moves with the zoom, the viewport or whichever tiles happen '
+    + 'to be loaded puts two friends\' wanderers in two different places, so the determinism rows are the headline here and each carries '
+    + 'a control: four cold child processes fetching tiles again in four different ARRIVAL ORDERS derive the same men byte-for-byte, an '
+    + 'evicted-and-refetched tile re-answers identically, and MAP-STATE classifies one fixed grid with the real MapLibre map parked at '
+    + 'four zooms and centres while CONTROL-MAP-STATE requires queryRenderedFeatures to DISAGREE with itself across those same four, '
+    + 'which is the hazard measured rather than asserted. LIVE is the end of the chain: the Boneyard open on a waterfront position picked '
+    + "at run time for today's seeds, the marker THE MAP DREW unprojected off its own centre and classified, with the same nine cells "
+    + 'under the legacy derivation as its control. Needs the tile host, and the browser rows need a drawable map; both report UNPROVEN '
+    + 'with exit 97 by name rather than green. Full rather than fast: four child processes and a browser boot, about 140s.'],
   'wanderer-despawn-audit.mjs': ['full', 'a beaten Wanderer is GONE from the Boneyard and the next instance still walks. Tom, 2026-08-22: '
     + '"after defeating the wanderer he was still just there in the boneyard and didnt disappear." wandererDone gated the encounter but '
     + 'never the marker. Fired for real: a GPS fix 45m into his real cone, the encounter it triggers, Fight, and the win resolved through '
@@ -520,7 +560,7 @@ const DECLARED = {
      client code, which the suite's closing FINDING states in full. */
   'clock-trust-audit.mjs': ['full', 'ASSERTS the monotonic day guard and MEASURES what is left. Installs a Date shim before any app module runs, and owns a loopback /health so the real API is never contacted. Asserts: a never-visited day below the high-water mark pays zero of every daily gate (quest coins, quest claims, free Pit fights, day-close crate, all-quests bonus) with any coin/crate movement attributed to a level-up or it is a leak; an honest forward day more than 20h later still pays the full day; the DAY_GRACE ceiling on BOTH sides of the edge; that an idle month banks no allowance; that the evening-then-morning player, the eastbound traveller, both NTP corrections and an existing player mid-migration are none of them refused; that a 14-day forward clock walk pays ZERO of those same gates past witness + WITNESS_GRACE while every day inside the allowance still pays in full; and rule 3 on its own terms against a loopback /health it owns (the wire, monotonicity, both sides of the offline allowance, the heal, and that neither import path can lower the ceiling). FINDINGs, not assertions: the pre-computable quest rotation, the per-ENTRY food-logging XP, and the redeem-code one-shot. Fails on an empty sample set. About 60s.'],
   'crew-fan-audit.mjs': ['full', 'the Crew fan acceptance suite, 42 checks, about two minutes.'],
-  'crew-pair-audit.mjs': ['full', 'the friend and crew flow with TWO real browsers against a real Worker it starts itself: add, accept, gift, the delivery-once guard, the daily caps, self-directed cases and removal, every one read from BOTH sides. FULL rather than FAST because it boots two Chrome profiles and a wrangler dev with a local D1 (about four minutes), and because a box with no wrangler cannot run it at all. Every other social audit in this directory drives one browser against a seeded fixture, so this is the only coverage of anything that needs two participants.'],
+  'crew-pair-audit.mjs': ['full', 'the friend and crew flow with TWO real browsers against a real Worker it starts itself: add, accept, gift, the delivery-once guard, the daily caps, self-directed cases, removal, and BOARD, the client/server contract for the three leaderboard-fed Add surfaces, asserted off the WIRE (route, field name and the server\'s own handle for that player) and carried to Crew membership on both sides; every one read from BOTH sides. FULL rather than FAST because it boots two Chrome profiles and a wrangler dev with a local D1 (about four minutes), and because a box with no wrangler cannot run it at all. Every other social audit in this directory drives one browser against a seeded fixture, so this is the only coverage of anything that needs two participants.'],
   'debuff-chips-audit.mjs': ['full', 'tapping a debuff chip explains it.'],
   'den-two-target-audit.mjs': ['full', 'two health bars in a two-enemy den; batch-audit gates the two-enemy read every run.'],
   'dust-safeguard-audit.mjs': ['full', 'one curious tap must not spend dust.'],
@@ -607,6 +647,8 @@ const DECLARED = {
   'spire-poster.mjs':     ['full', 'the spire poster art. Ran green.'],
   'mockup-parity.mjs':    ['full', 'every approved mockup is really in the app. Was RED on main and unseen: it is the reason this net was widened.'],
   'crew-inbox.mjs':       ['full', '15 assertions on the deliveries inbox. Green under HEADLESS_MODE=shell; its one failure under headless new is the sheet sitting un-animated, not a bug.'],
+  'friend-paddock-audit.mjs': ['full', 'a friend\'s Paddock on their profile, 15 checks, about 70s, and the guard for the FIRST TIME pets have ever left the device. Tom, 2026-08-22: "lets make it so when you click on a friend in the crew you can see their paddock and how many cool pets they have". The whole risk is that PLAINTEXT and CREW-ONLY are two different promises and only one of them is enforced by the channel the data rides. The roster rides players.profile, the plaintext social snapshot, deliberately: the alternative is players.backups, which is the end-to-end encrypted vault and is useless here because a friend cannot decrypt it either. Crew-only is then a property of WHICH ROUTE returns the blob, so it is graded as one: PUBLIC reads the real /leaderboard SELECT out of server/src/index.js and fails if `yard` ever appears in its json_extract list (that list is what any authenticated caller can read off the top 100; GET /friends, which returns the whole blob, is joined through an ACCEPTED friendship). WEARHOME pins the one-line version of the same mistake: the pet wardrobe must NOT hang off `pet`, because `pet` IS in that public list. VAULT pins that the yard is built in the snapshot and never reaches the backup path. SHAPE and MINIMAL grade the payload the app REALLY builds through a __socialSnapshot seam rather than a copy of the field list typed into the test, so a field added later fails until somebody decides it belongs on the wire: species and shiny only, no instance ids, nicknames, bonds, lineage or per-pet levels. CAP pins the 24-pet wire cap against the server\'s 24KB 413. THEIRS is the figure contract\'s rule 1 in a new coat and the one this feature could most easily ship: the VIEWER wears a different item in the same slot during the same run, so a render that reached for S.petWear dresses the friend\'s pet in the auditor\'s bag and the row names both files. OLDBUILD requires the sheet to have RENDERED before grading the strip absent, because without that a profile that threw outright passes as "no strip" (measured: a mutation that did exactly this went green). Proven red in seven isolated non-worktree copies, mutation list and full output in the file header.'],
+  'crew-cheers-audit.mjs': ['full', 'the CHEERS inbox, 14 checks, about 95s. Tom, 2026-08-22: "there needs to be a better interface in crew where you can see the cheers that friends have sent you, right now it\'s very easy to pass them by." The cause was one hop above the UI, not in it: /cheer sends { from, cheer, cheerFrom, note } and js/social.js applyPayload called awardOnce(key, type, xp, note), a signature with nowhere to put the phrase INDEX or the SENDER id, so both were dropped at the one line that turns a grant into a ledger row. Every cheer therefore read as the server\'s sentence whichever of the twelve was sent, and there was no id left to address a reply to. It grades the CHAIN through the real path: grants go in through social.__testApplyGrant, which IS applyGrant (hand-written ledger rows would be green with the transport bug still in place, which is the whole bug), then the real Crew tab, then a real mouse click on Cheer back. CARRIED is the transport row and the one the shipped bug reds; WHAT requires three different cheers to read as three different things, so a renderer printing the note passes nothing; BACK hit-tests the control with elementFromPoint before clicking and requires the send sheet to name that player; UNREAD pins the card count and the tab badge together; KEPT expands the archive after a real reload because the promise is REACHABLE, not RENDERED, and counting the collapsed list would go red on correct behaviour; SPLIT pins that cheers left DELIVERIES and the gift did not; LEGACY pins that a row written before the fix still LISTS, with the server sentence and no reply button, because a cheer you cannot answer beats a cheer you were never shown. WATERMARK is the one STATIC row and it is static because it was MEASURED to be ungradeable live: the two inboxes share one read of the seen-watermark and one write of it, and putting the per-painter read and stamp back (the race verbatim) left the entire live suite green at exit 0, so the lint pins the structure instead. Proven red in five isolated non-worktree copies (.git removed, mutation grepped in the copy, all three test seams grepped intact so nothing fails for the wrong reason); the first round found three faults in the AUDIT rather than the app, all fixed, and the second round gives every mutation its own single-row signature. Mutation list and full output in the file header.'],
 
   /* Lane C, 2026-08-13: data-safety additions. Data-store contract audits and
      a Finding-C demonstration; all self-serving via godmode.serveTree. */

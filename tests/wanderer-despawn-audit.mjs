@@ -46,6 +46,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boot, seed, sleep, serveTree, boneyardCapability, unproven, unprovenReport, exitFor, dismissOverlays } from './godmode.js';
 
+/* Thrown when the date's own Wanderer set puts nobody near HOME, so the run has
+   nothing to grade. Caught below, after the four rows have been DECLARED, which
+   keeps the suite out of the gate's failure count without letting it pass. */
+class NoWanderer extends Error {}
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const srv = process.env.URL ? null : await serveTree(ROOT);
 const base = process.env.URL || srv.url;
@@ -113,12 +118,26 @@ try {
       const W = await import('./js/wanderer.js');
       const { dateKey } = await import('./js/nutrition.js');
       const w = W.wanderersNear(dateKey(), HOME.latitude, HOME.longitude)[0];
+      /* The derived set is seeded on the DATE, so on some days nobody walks
+         within range of HOME. That is a legitimate data state, not a defect,
+         and indexing [0] on it threw a TypeError that graded ZERO rows while
+         the gate counted the suite as failing. An empty sample must be
+         DECLARED, never crashed on and never quietly passed. */
+      if (!w) return null;
       const R = 6371000, r = Math.PI / 180, dr = 45 / R;
       const f1 = w.lat * r, l1 = w.lng * r, b = w.heading * r;
       const f2 = Math.asin(Math.sin(f1) * Math.cos(dr) + Math.cos(f1) * Math.sin(dr) * Math.cos(b));
       const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(dr) * Math.cos(f1), Math.cos(dr) - Math.sin(f1) * Math.sin(f2));
       return { lat: f2 / r, lng: l2 / r, w: { id: w.id, heading: w.heading } };
     }, HOME);
+    if (!target) {
+      const why = 'no Wanderer walks within range of HOME on this date (the set is date-seeded)';
+      unproven('BEFORE his own marker is on the map before the fight', why);
+      unproven('DESPAWN he is gone from the map after the win', why);
+      unproven('LEDGER the win is recorded on his instance key', why);
+      unproven('NEXT the next instance walks again', why);
+      throw new NoWanderer(why);
+    }
     await page.setGeolocation({ latitude: target.lat, longitude: target.lng });
     await openBoneyard(page);
 
@@ -186,8 +205,13 @@ try {
          unclaimed, the beaten instance is not on the map, and the ledger has NOT
          forgotten the win, which is what would make "he walks again" trivial. */
       const fresh = next.drawn.filter(m => m.id && m.id !== him.id);
-      ok('NEXT the next instance walks again, on a key nobody has claimed, with the win still on the ledger',
-        next.ledger.includes(him.key) && fresh.length > 0 && fresh.every(m => m.visible)
+      /* An empty `fresh` is an EMPTY SAMPLE, not a failure: the comment above
+         records that a legitimate lap can leave nobody in range. Failing on it
+         reds the gate for a healthy app, and passing on it would be a row that
+         cannot fail. Declare it instead, which is what unproven is for. */
+      if (!fresh.length) unproven('NEXT the next instance walks again', 'no new instance was in range this lap (an empty sample, not a defect)');
+      else ok('NEXT the next instance walks again, on a key nobody has claimed, with the win still on the ledger',
+        next.ledger.includes(him.key) && fresh.every(m => m.visible)
         /* The key is rebuilt from the marker's own id rather than looked up in
            `near`: the derived set is sampled at HOME while the markers were
            built at the player's real fix 45 m away, so a Wanderer sitting on the
@@ -201,6 +225,9 @@ try {
     }
   }
   ok('NO PAGE ERRORS', errs.length === 0, errs.slice(0, 2).join(' | '));
+} catch (e) {
+  if (!(e instanceof NoWanderer)) throw e;
+  console.log(`  (run skipped: ${e.message})`);
 } finally {
   await browser.close();
   if (srv) await srv.close();

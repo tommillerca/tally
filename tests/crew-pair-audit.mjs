@@ -25,6 +25,11 @@
  *   SELF      adding, accepting, gifting and cheering yourself are all refused
  *   REMOVE    A removes B; the removal is visible on BOTH lists, and gift and
  *             cheer to the ex-friend are refused from either side
+ *   BOARD     the CLIENT/SERVER CONTRACT for adding somebody you did not type a
+ *             code for: all three leaderboard-fed Add surfaces must put the add
+ *             route and the server's own handle for that player on the WIRE and
+ *             be accepted, and the "+ ADD" button is carried to Crew membership
+ *             on both sides                                <- the v425 outage
  *
  * DIRECTION AND BOUND, per anti-regression rule 11. Every payout row here fails
  * in the direction of PAYING MORE, and every one is asserted as an exact equality
@@ -38,6 +43,13 @@
  * three rows (an opened gift comes back sealed, re-opening pays 100 again, a
  * re-ingested make-good pays 500 again), exit 1. Everything else stays green,
  * which is the point: this file is about the FLOW, and the flow itself is sound.
+ *
+ * PROVEN RED again, 2026-08-23, for BOARD: same throwaway `git archive` tree,
+ * js/app.js's six add sites written back to the shipped `p.friendCode` /
+ * social.friendRequest form (the copy grepped to confirm the mutation landed,
+ * and diffed byte-for-byte against origin/main). All five BOARD rows go red and
+ * nothing else moves: data-lbadd="", /friends/request carrying no token, 404
+ * "no player with that code", B's Crew empty. Exit 1.
  *
  * An empty sample set is a FAILURE: every count is asserted non-zero, and the
  * run aborts if either account fails to register or the two never become friends.
@@ -132,12 +144,26 @@ const cleanup = async (...browsers) => {
 };
 
 /* ---------------- one player ---------------- */
+/* Every friend-making POST is recorded off the WIRE, because BOARD below is a
+   contract row and the contract is what crosses the wire: which route, which
+   field name, which value. Reading the client's intent instead would have gone
+   green on the very bug that motivated it. */
+const friendPosts = [];
 async function lockToLocal(page) {
   await page.setRequestInterception(true);
   page.on('request', r => {
     const u = r.url();
+    if (r.method() === 'POST' && /\/friends\/(add|request)$/.test(u)) {
+      friendPosts.push({ route: u.replace(/^.*(\/friends\/\w+)$/, '$1'), body: r.postData() || '' });
+    }
     if (/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/)/.test(u) || u.startsWith('data:') || u.startsWith('blob:')) r.continue();
     else { console.log('BLOCKED (not 127.0.0.1)', u); r.abort(); }
+  });
+  // 204 is the CORS preflight; only a real answer counts
+  page.on('response', async r => {
+    if (/\/friends\/(add|request)$/.test(r.url()) && r.status() !== 204) {
+      friendPosts.push({ status: r.status(), answer: await r.text().catch(() => '') });
+    }
   });
 }
 async function bootPlayer() {
@@ -334,6 +360,128 @@ try {
   const exCheer = await soc(B, 'sendCheer', meA.playerId, 0);
   ok('REMOVE neither side can gift or cheer an ex-friend',
     exGift.status === 403 && exCheer.status === 403, JSON.stringify({ exGift, exCheer }));
+
+  /* ---------------- BOARD: adding somebody you did not type a code for ----
+   *
+   * THE CONTRACT ROW. Everything above adds by a friend code a human types, and
+   * that path was never broken. The three surfaces that add somebody from the
+   * LEADERBOARD were all dead in the shipped app, and nothing here noticed,
+   * because no check had ever driven one against a real server.
+   *
+   * WHAT BROKE: /leaderboard used to publish friend_code per row and stopped,
+   * replacing it with an opaque expiring `addToken` redeemed at /friends/add.
+   * The client kept reading `p.friendCode`, `esc(undefined)` renders as the
+   * empty string rather than throwing, and every "+ ADD" quietly POSTed
+   * {"code":""} to /friends/request for a 404. Measured on this tree before the
+   * fix: the button carried data-lbadd="", the wire carried {"code":""}, the
+   * server answered 404 "no player with that code", and the other player's Crew
+   * stayed empty.
+   *
+   * SO THE ASSERTIONS ARE ABOUT THE WIRE, not about intent. Each surface must
+   * put the ADD ROUTE and the SERVER'S OWN HANDLE FOR THAT PLAYER on the wire,
+   * and get a 200. A rename on either side reds this: send a code again and the
+   * route/`token` check fails; rename the server's field and the 200 becomes a
+   * 400 bad-token. A check that only asserted "a request was sent" would have
+   * been green throughout the outage.
+   *
+   * DIRECTION AND BOUND (rule 11): failure here is that FEWER friendships form
+   * than surfaces driven, so every row is an exact equality against a known
+   * playerId, never "something was posted".
+   *
+   * THREE SURFACES, because they are three separate literals in js/app.js and
+   * an edit can break one without the others: the Worth-adding card, the
+   * stranger profile sheet reached by tapping a board row (whose object is built
+   * by a hand-written field list, exactly the mapper that dropped the rename),
+   * and the board row's own "+ ADD" button. The last one is carried all the way
+   * to Crew membership on BOTH sides; the first two are wire rows, since they
+   * share one social.friendAdd() and one server route with it. */
+  const lastPost = () => {
+    const res = friendPosts.filter(p => p.status !== undefined).pop();
+    const req = friendPosts.filter(p => p.body !== undefined).pop();
+    let token = null;
+    try { token = JSON.parse(req?.body || '{}').token || null; } catch { /* not json */ }
+    return { route: req?.route || null, token, status: res?.status ?? null, answer: res?.answer || '' };
+  };
+  /* An add token is `<exp36>.<mac>.<playerId>`, so its tail is the server's own
+     statement of WHO this row adds. Checking the tail rather than the whole
+     string is deliberate: the token is minted per request and its expiry moves,
+     so comparing two fetches' strings would be a clock race, and asserting only
+     "non-empty" would pass on any garbage the client invented. */
+  const addedOnTheWire = (w, id) => w.route === '/friends/add' && w.status === 200
+    && typeof w.token === 'string' && w.token.endsWith(`.${id}`);
+
+  /* WORTH ADDING only lists players with evidence of play (past level 1, or
+     they came back on a later day), so B has to have played. This is B's real
+     syncProfile over the real signed fetch, the same call the app makes. */
+  await soc(B, 'syncProfile', { level: 5, levelName: 'Bonehead', badges: 0, outfit: { B: 'B0-1', SK: 'SK0-1' }, stats: {} }, 'audit');
+  await goCrew(A);
+  await sleep(2600);
+  /* Pick B's row by the NAME on it, not by the add attribute: if the attribute
+     ever regresses to a friend code this must still find and click the row, so
+     the wire row below can say what actually went out. */
+  const nameB = meB.name || meB.handle;
+  const worth = await A.page.evaluate(n => [...document.querySelectorAll('#newcomersList .t3-row')]
+    .filter(r => (r.querySelector('.t3-tx b')?.textContent || '').trim() === n).length, nameB);
+  if (worth !== 1) die(`the Worth-adding card must offer B exactly once, it offered ${worth}: an empty or ambiguous sample is a failure, not a pass`);
+  friendPosts.length = 0;
+  await A.page.evaluate(n => [...document.querySelectorAll('#newcomersList .t3-row')]
+    .find(r => (r.querySelector('.t3-tx b')?.textContent || '').trim() === n)
+    .querySelector('[data-lbadd]').click(), nameB);
+  await sleep(2600);
+  const wCard = lastPost();
+  ok('BOARD  the Worth-adding card adds the player it is showing',
+    addedOnTheWire(wCard, meB.playerId), JSON.stringify(wCard));
+  await soc(A, 'removeFriend', meB.playerId);
+
+  /* THE STRANGER PROFILE SHEET. Tapping a board row opens a profile built from
+     an explicit field list in openLeaderboard; its "+ Add to my Crew" can only
+     work if that list carries the add handle forward. */
+  await goCrew(A);
+  await A.page.evaluate(() => document.getElementById('crewLeaderboard').click());
+  await sleep(3400);
+  const rowCount = await A.page.evaluate(id => document.querySelectorAll(`[data-lbview="${id}"]`).length, meB.playerId);
+  if (!rowCount) die(`B has no row on A's leaderboard: nothing below could be driven`);
+  await A.page.evaluate(id => document.querySelector(`[data-lbview="${id}"] .lb-head`).click(), meB.playerId);
+  await sleep(2200);
+  const hasFpAdd = await A.page.evaluate(() => !!document.getElementById('fpAdd'));
+  if (!hasFpAdd) die('the stranger profile sheet offered no Add button: nothing to drive');
+  friendPosts.length = 0;
+  await A.page.evaluate(() => document.getElementById('fpAdd').click());
+  await sleep(2600);
+  const wSheet = lastPost();
+  ok('BOARD  a stranger\'s profile sheet adds the stranger it is showing',
+    addedOnTheWire(wSheet, meB.playerId), JSON.stringify(wSheet));
+  await soc(A, 'removeFriend', meB.playerId);
+
+  /* THE "+ ADD" BUTTON, carried to the end of the chain: not "the request now
+     carries a token" but "a real player tapped ADD and the two are Crew". */
+  await goCrew(A);
+  await A.page.evaluate(() => document.getElementById('crewLeaderboard').click());
+  await sleep(3400);
+  const handle = await A.page.evaluate(id => {
+    const b = document.querySelector(`[data-lbview="${id}"] [data-lbadd]`);
+    return b ? b.getAttribute('data-lbadd') : null;
+  }, meB.playerId);
+  if (handle === null) die('no "+ ADD" button on B\'s board row: an empty sample set is a failure');
+  ok('BOARD  the button carries the server\'s add handle for THAT player',
+    typeof handle === 'string' && handle.endsWith(`.${meB.playerId}`), `data-lbadd="${handle}"`);
+  friendPosts.length = 0;
+  await A.page.evaluate(id => document.querySelector(`[data-lbview="${id}"] [data-lbadd]`).click(), meB.playerId);
+  await sleep(2800);
+  const wBtn = lastPost();
+  ok('BOARD  "+ ADD" posts that handle to /friends/add and is accepted',
+    addedOnTheWire(wBtn, meB.playerId), JSON.stringify(wBtn));
+  await goCrew(B);
+  const boardB = await shown(B);
+  ok('BOARD  B really receives the request, and it names A',
+    boardB.accept.includes(meA.playerId), JSON.stringify(boardB));
+  if (!boardB.accept.includes(meA.playerId)) die('the board add never reached B: the rows below would prove nothing');
+  await B.page.evaluate(id => document.querySelector(`[data-accept="${id}"]`).click(), meA.playerId);
+  await sleep(2600);
+  ok('BOARD  B\'s Crew holds A after accepting a board add', (await shown(B)).crew.includes(meA.playerId));
+  await goCrew(A);
+  ok('BOARD  and A\'s Crew holds B: the whole chain, from one tap on "+ ADD"',
+    (await shown(A)).crew.includes(meB.playerId), JSON.stringify((await shown(A)).crew));
 } catch (e) {
   console.log('FAIL  the audit threw:', e && e.stack || e);
   fails = 1;

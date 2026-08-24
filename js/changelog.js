@@ -3,6 +3,21 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 428, date: '2026-08-23', title: 'The app opens fast on a bad connection, and stops reloading itself', items: [
+    'This is the big one. On a poor connection the app used to wait on the network for every single file before it could show you anything, every time you opened it. It now keeps a complete copy of itself on your phone and opens from that immediately, then quietly checks for a new version in the background. On a slow connection that is the difference between waiting and not waiting.',
+    'It no longer reloads itself out from under you. If you left the app for a minute and came back to find it starting over, sometimes losing what you had open, that was the app swapping to a new version while you were standing in the old one. New versions now download in the background and only take over the next time you open it, so nothing is yanked away mid-tap.',
+    'A new version arrives all at once or not at all. It can no longer end up half updated, with some parts new and some old, which is the kind of thing that causes strange one-off bugs that nobody can reproduce.',
+    'Switching between Today, the Boneyard and the rest is quicker: the old screen used to sit there for a moment before the new one appeared.',
+  ] },
+  { n: 427, date: '2026-08-23', title: 'You can add friends again, and the Wanderer learned to swim less', items: [
+    'Fixed, and this one was bad: adding a friend from the Crew board did not work at all. Not slowly, not sometimes. The "+ Add" button on the leaderboard, the "Worth adding" card and the button on someone\'s profile all sent the wrong thing to the wrong place, and the app told you nothing. If you tried to add someone in the last while and they never showed up, that is why, and it was not you. Try again.',
+    'The Wanderer no longer stands in the middle of lakes and rivers. He is bound to land now, and if the only place he could walk that lap is water, he simply does not appear rather than wading.',
+    'Your pets keep their outfits when they are not the one you have out. Bumbleseal stays dressed on her card and in the paddock, not just in the scene.',
+    'You can tap a friend in Crew and see their paddock: their pets, what those pets are wearing, and how many they have.',
+    'Cheers have somewhere to live. There is a Cheers panel in Crew with an unread badge, so nothing anyone sends you disappears before you see it, and you can cheer them back from the same place.',
+    'The prize wheel\'s labels are the right way up. Five of the seven wedges could land upside down before, which was most spins.',
+    'Levelling from the Gauntlet slows down the deeper you go. Nothing is capped and no fight pays less than it did at the start: the early runs are untouched and pay slightly more, while the twentieth lap stops being most of a level on its own.',
+  ] },
   { n: 426, date: '2026-08-23', title: 'If a save fails, you hear about it', items: [
     'Until now, if the app failed to write something to your phone, it went quietly. The meal, the weigh-in, the crate, the coins: gone, with nothing on screen to tell you. The app speaks up now.',
     'It only speaks up for things you did or earned. Bookkeeping the app can work out again by itself stays silent, so this is not a new stream of warnings.',

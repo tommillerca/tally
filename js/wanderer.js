@@ -157,6 +157,83 @@ export function wandererCell(lat, lng) {
   return { cx: Math.round(lat / WANDER_CELL_DEG), cy: Math.round(lng / WANDER_CELL_DEG) };
 }
 
+/* HE IS BOUND TO LAND. Tom, 2026-08-22: "The wanderer is out in the lake where
+ * I am right now. He shouldn't be. He's bound to land."
+ *
+ * The beat's centre was seeded with zero land awareness, so a cell over a lake
+ * put his whole loop on the water. The fix keeps every property the header
+ * promises (pure, derived, identical on every device) by keeping the LAND TEST
+ * itself derived data: js/water.js classifies a lat/lng against the basemap's
+ * own vector tiles at one fixed zoom (see its header for why that is the same
+ * answer on every device), and this module consumes it as a plain synchronous
+ * function passed in by the caller.
+ *
+ * THE FALLBACK IS A SEEDED SEQUENCE, NOT A SEARCH. Candidate 0 is the exact
+ * centre that has always been seeded, so every beat that was already legal does
+ * not move. If candidate k's WHOLE LAP crosses water, candidate k+1 reseeds the
+ * centre off `${seed}:altk` and tries again, up to WANDER_TRIES. Every device
+ * walks the same sequence against the same tile data and stops at the same k,
+ * so two friends still see the same man in the same place. If no candidate
+ * fits, the cell is effectively all water and there is NO wanderer that lap:
+ * hidden beats floating (changelog v-something already promised "anything with
+ * nowhere reachable nearby is hidden instead of stranded in the sea").
+ *
+ * THE WHOLE LAP IS TESTED, NOT THE CENTRE. He never stands at the centre; he
+ * stands on the circle, so the acceptance samples the circle itself at
+ * LAND_SAMPLES fixed angles (~11 m apart at the widest loop, finer than the
+ * shoreline detail z14 tiles carry). The centre being in a pond with the loop
+ * on the shore around it is legal and correct.
+ *
+ * UNDECIDED IS HIDDEN, NEVER SHOWN-AND-WRONG. While tiles are still loading the
+ * oracle answers undefined, wandererAt returns null, and the map's own 5-second
+ * refresh retries: the placeWalkable contract, minus the per-viewport snap that
+ * would have dragged a moving marker (see refreshWanderer's note in js/app.js).
+ */
+export const WANDER_TRIES = 12;
+const LAND_SAMPLES = 128;
+const landMemo = new Map();   // seed -> chosen candidate k, or -1 for "no land"
+
+function beatCenter(cx, cy, seed, k) {
+  const s = k ? `${seed}:alt${k}` : seed;
+  // 0.72 of the cell, so a beat centred at the edge still leaves his loop mostly
+  // inside its own cell and two neighbours cannot overlap their lit ground.
+  return {
+    clat: (cx + (frac(`${s}:lat`) - 0.5) * 0.72) * WANDER_CELL_DEG,
+    clng: (cy + (frac(`${s}:lng`) - 0.5) * 0.72) * WANDER_CELL_DEG,
+  };
+}
+
+// true = every sampled point of the loop is land; false = some point is water;
+// undefined = a needed tile has not arrived yet, so no verdict may be memoized.
+function lapOnLand(clat, clng, r, isWater) {
+  const mPerDegLng = M_PER_DEG_LAT * Math.max(0.05, Math.cos(clat * RAD));
+  for (let j = 0; j < LAND_SAMPLES; j++) {
+    const th = (2 * Math.PI * j) / LAND_SAMPLES;
+    const w = isWater(clat + (r * Math.cos(th)) / M_PER_DEG_LAT,
+      clng + (r * Math.sin(th)) / mPerDegLng);
+    if (w !== false) return w ? false : undefined;
+  }
+  return true;
+}
+
+function landCandidate(cx, cy, seed, r, isWater) {
+  const memo = landMemo.get(seed);
+  if (memo !== undefined) return memo;
+  for (let k = 0; k < WANDER_TRIES; k++) {
+    const c = beatCenter(cx, cy, seed, k);
+    const on = lapOnLand(c.clat, c.clng, r, isWater);
+    if (on === undefined) return undefined;          // tiles pending: decide later
+    if (on) { remember(seed, k); return k; }
+  }
+  remember(seed, -1);
+  return -1;
+}
+function remember(seed, k) {
+  // instances roll every 45 minutes; a lap's verdict is dead within the hour
+  if (landMemo.size > 256) landMemo.clear();
+  landMemo.set(seed, k);
+}
+
 /* WHERE HE IS AND WHICH WAY HE IS FACING, as a pure function of (date, cell,
    clock). No state, no storage, no randomness, no clamping to anything the map
    happens to have loaded.
@@ -167,14 +244,21 @@ export function wandererCell(lat, lng) {
    east, and the compass bearing is atan2 of those two. Exact at every point
    including the poles of the parameterisation, where a sampled bearing would
    wobble by however wide the sample was. */
-export function wandererAt(cx, cy, date, mins = nowMins()) {
+/* isWater is js/water.js's classifier (or absent: no land constraint, the shape
+   every pure-math test of the derivation uses). With it, the beat centre comes
+   from the seeded land fallback above and a null return means NO wanderer right
+   now: either the cell is effectively all water this lap, or the tiles that
+   decide are still downloading and he is hidden until they land. */
+export function wandererAt(cx, cy, date, mins = nowMins(), isWater) {
   const inst = Math.floor(mins / WANDER_LAP_MIN);
   const seed = `wander:${date}:${cx}:${cy}:i${inst}`;
-  // 0.72 of the cell, so a beat centred at the edge still leaves his loop mostly
-  // inside its own cell and two neighbours cannot overlap their lit ground.
-  const clat = (cx + (frac(`${seed}:lat`) - 0.5) * 0.72) * WANDER_CELL_DEG;
-  const clng = (cy + (frac(`${seed}:lng`) - 0.5) * 0.72) * WANDER_CELL_DEG;
   const r = WANDER_R_MIN_M + frac(`${seed}:r`) * (WANDER_R_MAX_M - WANDER_R_MIN_M);
+  let k = 0;
+  if (isWater) {
+    k = landCandidate(cx, cy, seed, r, isWater);
+    if (k === undefined || k < 0) return null;
+  }
+  const { clat, clng } = beatCenter(cx, cy, seed, k);
   const dir = frac(`${seed}:dir`) < 0.5 ? -1 : 1;      // +1 walks the loop clockwise
   /* THE PHASE IS SEEDED, AND LEAVING IT OUT WAS A REAL BUG. Tom, 2026-08-22:
      "multiple wanders face and move the same way that should never happen there
@@ -205,12 +289,13 @@ export function wandererAt(cx, cy, date, mins = nowMins()) {
 
 // Every Wanderer whose beat could be near you: his own cell and its eight
 // neighbours, because a loop centred near an edge crosses into the next one.
-export function wanderersNear(date, lat, lng, mins = nowMins()) {
+export function wanderersNear(date, lat, lng, mins = nowMins(), isWater) {
   const { cx, cy } = wandererCell(lat, lng);
   const out = [];
   for (let dx = -1; dx <= 1; dx++) {
     for (let dy = -1; dy <= 1; dy++) {
-      const w = wandererAt(cx + dx, cy + dy, date, mins);
+      const w = wandererAt(cx + dx, cy + dy, date, mins, isWater);
+      if (!w) continue;   // all-water cell, or land tiles still loading
       w.dist = distanceM(lat, lng, w.lat, w.lng);
       if (w.dist <= WANDER_SHOW_M) out.push(w);
     }
@@ -286,8 +371,31 @@ export function ensureWandererStyle() {
    are the things you are out here to collect. He has no tap interaction of his
    own: the encounter fires from the player's position, never from a thumb, so
    nothing is lost. Asserted in tests/wanderer-patrol-live-audit.mjs (TAPTHRU),
-   which also grades the size band above (LOOMS-LIVE). */
-.map-wanderer-mark { position: relative; width: ${MARK_PX}px; height: ${MARK_PX}px; pointer-events: none; z-index: 0; }
+   which also grades the size band above (LOOMS-LIVE).
+   ABSOLUTE, NOT RELATIVE, AND IT IS NOT A STYLE CHOICE. 2026-08-23. MapLibre
+   places a marker by writing a transform on a root it has already taken OUT OF
+   FLOW (.maplibregl-marker sets position: absolute, left 0, top 0). This
+   stylesheet is injected at runtime and maplibre-gl.css is loaded lazily by
+   js/map.js, so this block lands AFTER it in the head; both selectors are one
+   class, so the later one won and "relative" put every Wanderer back into
+   normal flow inside the marker container. Absolute siblings take no space, so
+   the FIRST Wanderer read correct and each one after him stacked below the last
+   by his own height: measured on the real Boneyard with three of them up,
+   offsetTop 0 / 200 / 400, boxes 200px and 400px below the point MapLibre had
+   placed, which unprojects to 238 m and 474 m of ground. His cone and
+   inWandererCone both use his true position, so on every Wanderer but the
+   first the light a player could see was not the light that caught them.
+   Absolute agrees with MapLibre rather than fighting it, so this is correct
+   whichever order the two stylesheets land in, and it is still a containing
+   block for .wanderer-body / .wanderer-cone / the plate, which are all
+   position: absolute inside it. Every other marker root in this app is
+   "position: relative" in app.css and is SAFE for one reason only: app.css is
+   a <link> in the head, so maplibre-gl.css lands after it and wins. Those must
+   stay relative because the map key reuses .map-spawn / .map-den-mark /
+   .map-mini-mark off the map (legendHtml, js/app.js). Graded live in
+   tests/marker-anchor-audit.mjs (ANCHORED, GROUND), which also lints that no
+   runtime-injected stylesheet does this again. */
+.map-wanderer-mark { position: absolute; width: ${MARK_PX}px; height: ${MARK_PX}px; pointer-events: none; z-index: 0; }
 /* HE GOES TO THE BACK OF THE MARKER LAYER, and this rule names other people's
    classes on purpose. MapLibre markers are DOM siblings with no z-index at all,
    so they paint in creation order and he is created after the player: measured

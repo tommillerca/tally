@@ -129,6 +129,17 @@ const SITES = [
   {
     key: 'friend-profile', claim: 'fp-pet', paired: true,
     bh: '.fp-hero .bh-stage', pet: '.fp-pet',
+    /* THE FIXTURE WEARS A BACKGROUND, AND THAT IS THE WHOLE POINT OF THE BG LINE.
+       `.fp-hero` only becomes a BOX when the friend owns one: `.framed` is what
+       adds the border and `overflow: hidden`, and CLIP walks up to the nearest
+       clipping ancestor, so a friend with no BG gives the hero's labels NO
+       clipper and CLIP grades nothing there at all. This fixture had no BG, so
+       the pet's "Lv 10" badge hung 8px below the hero for releases and CLIP
+       passed on it every run: the check could not fail (anti-regression rule 1)
+       because it was pointed at the unframed variant of the screen (rule 4).
+       PROVE-RED 2026-08-23: with this BG present, restoring the old
+       `.fp-pet-lvl { bottom: -14px }` (and its 13.5px line box) fails
+       `friend-profile CLIP` naming "Lv 10" 7px off the bottom. */
     drive: async page => {
       await page.evaluate(async sp => {
         await window.__friendProfile({
@@ -136,7 +147,7 @@ const SITES = [
           lastSeen: Date.now(),
           profile: {
             level: 16, levelName: 'Gainz Engineer',
-            outfit: { B: 'B6-3', SK: 'SK3-1', IL: 'IL8-2', H: 'H6-2', FW: 'FW8-3', IR: 'IR7-3', P: 'P6-1' },
+            outfit: { B: 'B6-3', SK: 'SK3-1', IL: 'IL8-2', H: 'H6-2', FW: 'FW8-3', IR: 'IR7-3', P: 'P6-1', BG: 'BG1' },
             pet: { id: sp, level: 10, shiny: true },
           },
         });
@@ -166,6 +177,24 @@ const SITES = [
       }, SP);
       await sleep(1800);
     },
+  },
+  {
+    /* The friend's PADDOCK shelf (v425): a row of their pets on their profile,
+       beside the paired hero above. Not `paired`: these are a SHELF of portraits
+       with no Bonehead standing next to them, so plane and near have nothing to
+       measure against and would be asserting a relationship the design does not
+       have. What matters here is the OTHER half of the figure contract, and the
+       static rules cover it exactly: the pets come from a snapshot, so shiny is
+       read off each instance rather than off S.shinyPets, and `wear` is named
+       from the friend's own yard rather than left undefined (which would mean
+       "ask the viewer's wardrobe" and dress their Bumbleseal in yours).
+       tests/friend-paddock-audit.mjs drives this surface for real and its THEIRS
+       row is that exact assertion, measured with the viewer deliberately wearing
+       a different item in the same slot. */
+    key: 'friend-yard', claim: 'fp-yard-pet', paired: false, undriven:
+      'a shelf of portraits with no Bonehead beside them, so paired alignment has nothing '
+      + 'to measure; driven for real by tests/friend-paddock-audit.mjs (RENDER decodes every '
+      + 'portrait, THEIRS pins that it is the FRIEND\'s wardrobe and not the viewer\'s)',
   },
   {
     key: 'fight-arena', claim: 'petStage', paired: false, undriven:

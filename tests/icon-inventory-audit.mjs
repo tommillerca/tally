@@ -238,7 +238,13 @@ const EMITTERS = {
   'js/hollow-art.js:hlwArt':        ['scene', 'a Hollow scene element, placed in stage coordinates.'],
   'js/hollow-beds.js:hlwPriceSignHtml': ['scene', 'the Hollow plot price sign.'],
   'js/hollow-scene.js:hollowBackdropHtml': ['scene', 'the Hollow backdrop.'],
-  'js/paddock-cards.js:cardHtml':       ['scene', 'a Paddock pet card portrait.'],
+  /* cardHtml no longer draws the pet itself: it and the species tiles in
+     panelHtml both hand the figure to layeredArt, which stacks the pet and
+     whatever it is wearing under ONE shared crop transform (v425, so a benched
+     Bumbleseal keeps her swag on the collection card the way she already did
+     out in the scene). The declaration moved with the drawing rather than being
+     left behind on a function that now only lays out a row. */
+  'js/paddock-cards.js:layeredArt':     ['scene', 'a Paddock pet portrait plus its worn accessories, one layer per piece.'],
   'js/paddock-cards.js:lockedCardHtml': ['scene', 'a locked Paddock card.'],
   'js/paddock-cards.js:panelHtml':      ['scene', 'the Paddock panel art.'],
   'js/wraith-fx.js:sprite':             ['scene', 'the wraith effect sprite.'],

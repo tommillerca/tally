@@ -15,7 +15,7 @@
 // 'petNick', it is never uploaded, and tests/nickname-private-audit.mjs pins
 // that against the real wire, this render site included.
 
-import { petInstances, petBonds, petLevelBank, petNicks, BOND_MAX, eggProgress, lifetimeStepsSum, inventory } from './loot.js';
+import { petInstances, petBonds, petLevelBank, petNicks, petWear, BOND_MAX, eggProgress, lifetimeStepsSum, inventory } from './loot.js';
 
 /* Nicknames, Bangers-register. Order matters: hashes index into it, so
    APPEND-ONLY once shipped (an insert re-names every pet in the world). */
@@ -82,8 +82,21 @@ export function motionFor(sp) {
 
 /* THE ROSTER. One row per owned COPY (instances, not species: figure-contract
    rule 1: shiny/level live on the copy). Sorted by iid for stable render order. */
+/* WEAR RIDES THE ROSTER. Tom, 2026-08-22: "you should also be able to have pets
+   unequipped but keep their custom swag on like the bumbleseal outfit and then
+   she can wear it while idle in the paddock."
+   The SCENE already dressed her benched (measured 2026-08-23: five decoded
+   layers on a Bumbleseal with a Mallard equipped), because it draws through the
+   app's own pet renderer. The CARDS and the species TILES did not: they are
+   plain single-image tags built here, from a model that had no idea a pet could be
+   wearing anything, so the collection panel showed her bare two inches under a
+   scene that showed her dressed. Carrying it on the row is what closes that,
+   and it is one read: the wardrobe is one kv record for the account, not one
+   per copy (see petWear in js/loot.js), so every copy of the dressable species
+   is wearing the same thing and the species check in petWornLayers is what
+   decides whether that means anything. */
 export async function paddockRoster() {
-  const [insts, bonds, bank, nicks] = await Promise.all([petInstances(), petBonds(), petLevelBank(), petNicks()]);
+  const [insts, bonds, bank, nicks, wear] = await Promise.all([petInstances(), petBonds(), petLevelBank(), petNicks(), petWear()]);
   const names = assignNames(insts.map(x => x.iid));
   return insts.map(x => ({
     iid: x.iid,
@@ -96,6 +109,7 @@ export async function paddockRoster() {
     name: nicks[x.iid] || names[x.iid],   // the player's private nickname WINS over the derived one
     flavor: flavorFor(x.iid),
     motion: motionFor(x.sp),
+    wear,
   })).sort((a, b) => a.iid < b.iid ? -1 : 1);
 }
 
