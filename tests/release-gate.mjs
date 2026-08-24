@@ -393,6 +393,20 @@ const DECLARED = {
     + 'the ceiling decision: a Boneyard Wanderer mints NO bossfirst marker, so five wins move endlessCeiling by 0, with the '
     + 'Glutton driven in the same session as the control that the instrument can move at all. Full rather than fast because it '
     + 'boots two pages and claims against the real IndexedDB; about 30s.'],
+  'marker-anchor-audit.mjs': ['full', 'EVERY MAP MARKER LANDS WHERE MAPLIBRE PUT IT. MapLibre places a marker by writing a transform '
+    + 'onto a root it has already taken out of flow, and that rule (.maplibregl-marker) is ONE class, so any other one-class rule naming a '
+    + 'marker root that lands later in the head wins and puts the element back into normal flow. Nothing throws: the marker draws, it is '
+    + 'the right marker, it is simply on the wrong ground. Found 2026-08-23 on the Wanderer, whose stylesheet is injected at runtime and '
+    + 'so landed after the lazily-loaded maplibre-gl.css: absolute siblings take no space, so the FIRST Wanderer was correct and every one '
+    + 'after him stacked by his own height, measured 0/200/400 offsetTop with three up, which is 238 m and 474 m of ground. His cone and '
+    + 'inWandererCone use his true position, so the light a player could see was not the light that caught them, invisible whenever only '
+    + 'one is in range. ANCHORED grades every marker on the screen against MapLibres OWN transform (anchor percentages and margins '
+    + 'included), GROUND unprojects the drawn box and compares it in metres to the position js/app.js handed the marker, and CONTROL puts '
+    + 'the bug back from a later stylesheet mid-run and requires the instrument to report the stack, so a green ANCHORED cannot come from '
+    + 'a measurement that is blind. The static half runs anywhere: the marker-root classes are DERIVED from POI_CLASSES in js/map.js, no '
+    + 'runtime-injected stylesheet may give one of them a position MapLibre did not ask for, and ORDER pins the premise that lets app.css '
+    + 'keep its relatives (it is a head link, so the appended vendor sheet always wins). Needs WebGL and a tile host; reports UNPROVEN with '
+    + 'exit 97 rather than green without them. Four mutations proven red, listed in the file header. About 60s.'],
   'wanderer-patrol-live-audit.mjs': ['full', "the Wanderer's TRIP WIRE, fired for real: the sibling suite proves his derivation, his cone geometry, "
     + 'his ledger key and the ceiling by calling the module, and none of that can see the thing the feature actually IS, which is a GPS '
     + 'fix arriving on the open Boneyard, landing inside a cone nobody tapped, and a fight starting on its own. Two boots of the real app '
