@@ -1657,6 +1657,35 @@ export const isMimicRung = rank =>
 // rather than printing a bare digit (the failure ENDLESS_NAMES_DEEP exists for).
 const ROMAN6 = ['II', 'III', 'IV', 'V', 'VI'];
 const cycleName = (base, tier) => (tier > 1 && ROMAN6[tier - 2]) ? `${base} ${ROMAN6[tier - 2]}` : base;
+/* THE GAUNTLET XP CURVE. Tom, 2026-08-21: "do the xp curve", against the
+   ROADMAP decision "reshaped so the later runs pay a flatter share of a level,
+   not a cap on boss XP".
+   Every xp payout below used to be `base + rank * slope`, i.e. LINEAR in rank.
+   The level cost in js/game.js grows as (L-1)^1.55, whose per-level STEP grows
+   only as L^0.55, and cumulative linear XP puts you at L ~ rank^1.29. So a
+   single Gauntlet rank's share of a level RISES with rank: measured on shipped
+   main, 35% of a level at rank 1, 62% at rank 10, 74% at rank 50, 81% at rank
+   80, i.e. three ranks per level early and one rank per level by rank 41. That
+   climb is the whole of "levelling is too fast"; nothing about it is a cap.
+   The fix is one compressed rank shared by every payout, so the SHAPE changes
+   and no boss loses its standing: every base and every slope is untouched and
+   every kind reads the same xpRank, so a Glutton still out-pays the ordinary
+   rung beside him, by MORE than before rather than less (measured against
+   origin/main: 1.75x -> 1.81x at rank 10, 1.50x -> 1.62x at rank 50, 1.47x ->
+   1.57x at rank 80). Capping boss XP was refused by name in that decision and
+   nothing here caps anything: the numbers still climb forever, they climb as
+   rank^0.6 instead of rank^1.
+   Knee at 5 means rank 5 is the pivot: ranks 1-4 pay slightly MORE than before
+   (a new player's first hour is not slower, which was a condition of the
+   change) and the flattening is all in the long tail. 0.6 was chosen by
+   measuring, not by taste: it holds a rank at 40-42% of a level from rank 1 to
+   rank 80 where main climbs 35% to 81%. tests/xp-curve-audit.mjs is the guard;
+   node tests/gauntlet-sim.mjs is the instrument. COINS ARE DELIBERATELY NOT
+   COMPRESSED: the decision was about the levelling rate. */
+export const XP_KNEE = 5;
+export const XP_EXP = 0.6;
+export const xpRank = rank => XP_KNEE * Math.pow(Math.max(0, rank) / XP_KNEE, XP_EXP);
+
 export function endlessFoe(rank) {
   if (isGluttonRung(rank)) {
     const tier = rank / GLUTTON_EVERY;
@@ -1674,7 +1703,7 @@ export function endlessFoe(rank) {
       talents: ENDLESS_TREES[(rank - 1) % ENDLESS_TREES.length],
       weaponId: 'bonecrusher',
       aiLevel: 5,
-      xp: 140 + rank * 14,
+      xp: Math.round(140 + xpRank(rank) * 14),
       coins: 260 + rank * 22,
       repeatCoins: 25 + Math.min(45, rank * 3),
     };
@@ -1692,7 +1721,7 @@ export function endlessFoe(rank) {
       talents: ENDLESS_TREES[(rank - 1) % ENDLESS_TREES.length],
       weaponId: 'starter',
       aiLevel: 4,
-      xp: 110 + rank * 12,
+      xp: Math.round(110 + xpRank(rank) * 12),
       coins: 200 + rank * 18,
       repeatCoins: 22 + Math.min(40, rank * 3),
     };
@@ -1724,7 +1753,7 @@ export function endlessFoe(rank) {
       talents: ENDLESS_TREES[5],
       weaponId: 'starter',          // he carries a lantern, not a weapon
       aiLevel: 5,
-      xp: 180 + rank * 16,
+      xp: Math.round(180 + xpRank(rank) * 16),
       coins: 320 + rank * 26,
       repeatCoins: 28 + Math.min(50, rank * 3),
     };
@@ -1753,7 +1782,7 @@ export function endlessFoe(rank) {
       talents: ENDLESS_TREES[4],
       weaponId: 'bonecrusher',      // the lid has teeth
       aiLevel: 3,
-      xp: 70 + rank * 10,
+      xp: Math.round(70 + xpRank(rank) * 10),
       coins: 130 + rank * 15,
       repeatCoins: 16 + Math.min(35, rank * 2),
     };
@@ -1779,7 +1808,7 @@ export function endlessFoe(rank) {
     talents: ENDLESS_TREES[(rank - 1) % ENDLESS_TREES.length],
     weaponId: rank % 3 === 0 ? 'bonecrusher' : 'starter',
     aiLevel: 3,
-    xp: 60 + rank * 10,
+    xp: Math.round(60 + xpRank(rank) * 10),
     coins: 120 + rank * 15,
     repeatCoins: 15 + Math.min(35, rank * 2),
   };
