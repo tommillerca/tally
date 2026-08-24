@@ -266,7 +266,22 @@ svg { display: block; }
    Guard: tests/overscroll-wordmark-audit.mjs */
 .screen--today { position: relative; }
 #app:has(.screen--today)::before {
-  content: ""; position: absolute; z-index: -1; pointer-events: none;
+  /* z-index 3, ON TOP OF THE ART. Tom, 2026-08-24: "yeah draw the wordmark on top
+     of the art instead of behind".
+
+     It was -1, and that was deliberate: behind the screen's content the mark
+     "slides out from behind the world rather than printing on top of it". That
+     look is what this trades away, and it is the ONLY way to have both things he
+     asked for. With the hero art bleeding up behind the status bar (see
+     .hero-scene) an opaque plate now sits over the strip the mark travels into,
+     so a mark painting behind it is a mark nobody sees. Measured before this
+     change: suppressing the mark at full pull altered 0 pixels un-gated, against
+     22,566 with the art where it was.
+
+     pointer-events: none was already here and is now load-bearing rather than
+     tidy: at a positive z-index this element is over real controls, and without
+     it the mark would eat taps (anti-regression rule 6). */
+  content: ""; position: absolute; z-index: 3; pointer-events: none;
   left: 50%; margin-left: -116px; bottom: 100%; width: 232px; height: 62px;
   background: url(assets/brand/wordmark.png) center / contain no-repeat;
   opacity: var(--wm-pull, 1);
@@ -1755,7 +1770,7 @@ body::before {
    Re-deriving two guards' reference points to make my own change pass is the
    exact move this repo forbids, so it waits for someone to do that deliberately,
    on its own, with prove-reds. */
-.fx-island .hero-scene {
+.hero-scene {
   --bleed: calc(var(--sat) + 14px);
   margin-top: calc(-1 * var(--bleed));
   padding-top: var(--bleed);

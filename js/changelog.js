@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 431, date: '2026-08-24', title: 'Dressing up makes sense now, and the art runs to the top of the phone', items: [
+    'Changing how a piece looks is a different screen. Your Bonehead is right there above the choices showing before and after, so you can see what you are buying instead of scrolling up to check. It says what you keep, what you get and what you pay, in that order, and nothing is taken until you confirm.',
+    'The game art now runs all the way to the top of the phone, behind the clock and the camera, instead of stopping in a line and leaving a dead strip.',
+    'The Boneheadz wordmark still appears when you pull down past the top, and now draws over the art rather than behind it, so it is not hidden by the change above.',
+  ] },
   { n: 430, date: '2026-08-23', title: 'Crew cards stop eating pets, and the wheel and wordmark behave', items: [
     'On the Crew tab, a friend with a long title or nickname used to have their pet cropped by the name plate. The plate grew instead of the text getting shorter. Names now trail off with a "..." and the plate stays put, which gives the art back the space it was losing.',
     'The icon on the "thanks for being early" banner sat in its top-left corner instead of the middle. Centred, and fixed on the shared piece so every banner icon is centred rather than just that one.',

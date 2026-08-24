@@ -218,10 +218,14 @@ const S = {
      the "do not interrupt a fresh boot" family. It suppresses nothing else. */
   calm: new URLSearchParams(location.search).has('calm'),
   /* THE REWORKED LOOK PANEL, mockup-first per Tom's standing preference: it is a
-     reshaping of the Wardrobe's bottom half, so it ships behind ?mogv2 until he
-     picks it. Same read-once-next-to-?demo pattern as the two params above. It
-     changes ONLY presentation: no price, no gate, no yield moves with it. */
-  mogv2: new URLSearchParams(location.search).has('mogv2'),
+     reshaping of the Wardrobe's bottom half, so it shipped behind ?mogv2 until he
+     picked it. He picked it, 2026-08-24: "ok fix that".
+
+     ON FOR EVERYONE NOW. The flag stays readable so ?mogv2=0 is not a thing
+     anybody needs to discover; it is simply true unless the URL says otherwise,
+     which keeps one lever for a bisect without leaving the feature dark.
+     It changes ONLY presentation: no price, no gate, no yield moves with it. */
+  mogv2: new URLSearchParams(location.search).get('mogv2') !== '0',
   /* THE ISLAND BLEED, behind ?island and NOT shipped, because measuring it turned
      up a cost Tom has to weigh rather than a bug I can fix. The art does reach
      y=0 and nothing below the hero moves, but with the scene starting at the
@@ -18050,7 +18054,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v430'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v431'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

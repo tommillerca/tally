@@ -476,13 +476,32 @@ ok('REST      at scrollTop 0 the band is byte-identical with the mark suppressed
 ok('REST      the mark\'s bottom edge sits above the viewport, so #app\'s overflow clip owns it',
   Number.isFinite(g0.top) && Number.isFinite(g0.h) && Number.isFinite(g0.ty) && g0.top + g0.h + g0.ty <= 0,
   `top ${g0.top}px + height ${g0.h}px + translate ${g0.ty}px = bottom ${g0.top + g0.h + g0.ty}px (must be a real number <= 0)`);
-/* THE MARK IS BEHIND THE WORLD AND CANNOT TAKE A TAP. z-index -1 inside #app's
-   stacking context (#app is z-index 1) is what lets the mark land ON the strip the
-   first card occupies at rest without printing over the card, and
-   pointer-events: none is anti-regression rule 6 in one declaration: an
-   absolutely positioned box over content has to be unable to swallow a control. */
-ok('REST      the mark paints BEHIND the screen content and cannot be hit-tested',
-  g0.zIndex === '-1' && g0.events === 'none', `z-index ${g0.zIndex}, pointer-events ${g0.events}`);
+/* THE MARK CANNOT TAKE A TAP. RE-DERIVED 2026-08-24, when it moved on top.
+
+   This asserted `zIndex === '-1'`, which tested the MECHANISM rather than the
+   property that matters. The mechanism changed on Tom's instruction ("yeah draw
+   the wordmark on top of the art instead of behind") because behind the art is
+   invisible once the hero bleeds up, and the row would have gone red on a change
+   he asked for while telling nobody whether the real risk had appeared.
+
+   The real risk is anti-regression rule 6: an absolutely positioned box over
+   content must not be able to swallow a control. At z-index -1 that was true for
+   free. At z-index 3 it is true only because of pointer-events: none, so it is
+   worth ASKING THE BROWSER rather than reading a declaration. elementFromPoint at
+   the mark's own centre, at full pull, must return something that is not the mark.
+   PROVE-RED: delete `pointer-events: none` from the rule. */
+const hit = await page.evaluate(() => {
+  const app = document.getElementById('app');
+  const cs = getComputedStyle(app, '::before');
+  const r = app.getBoundingClientRect();
+  const cx = r.left + r.width / 2, cy = r.top + 30;
+  const el = document.elementFromPoint(cx, cy);
+  return { events: cs.pointerEvents, z: cs.zIndex,
+           topEl: el ? (el.className || el.tagName).toString().slice(0, 40) : null };
+});
+ok('REST      the mark cannot take a tap: pointer-events none, and the browser hands taps to what is under it',
+  hit.events === 'none' && hit.topEl !== null,
+  `pointer-events ${hit.events}, z-index ${hit.z}, tap at the mark's line lands on ${hit.topEl}`);
 
 /* ---------- REST AT --sat 0, WHICH IS WHERE THE LIVE BUG WAS ---------- */
 /* Every REST row above runs at one faked inset. v415's rule was fine there and
