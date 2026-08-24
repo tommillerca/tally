@@ -82,6 +82,9 @@
  *             pull. GRADED again as of 2026-08-21, on Tom's instruction. See its
  *             own block for why it was downgraded for one release and why that
  *             is over.
+ *   STILL     the single suppressed baseline the compositor-frame rows grade
+ *             against really is valid: with the mark off, two frames ~500ms apart
+ *             are byte-identical in the band, so nothing but the mark moves in it
  *   REACHABLE two-sided per inset and against the INSET, not the origin: nothing
  *             at rest at the fail-open opacity, and the WHOLE mark below --sat at
  *             a full pull, with the same clearance on every phone.
@@ -128,10 +131,91 @@
  * the TRAVEL contains --sat on purpose, which is what lands the same clearance on
  * every phone. REACHABLE's last row grades the clearance, not the offset.
  *
+ * EVERY PIXEL ROW GRADES A DIFFERENCE NOW, 2026-08-24, AND ONE OF THEM HAD
+ * ALREADY STOPPED WORKING. The luminance selector is gone from this file (see
+ * diffStats). Four rows still used it: the MECHANISM shift row, the UNDERNOTCH
+ * sweep and its SAMPLE partner, and the compositor-frame rows SAMPLE/LINEAR/
+ * SMOOTH. Its premise, "measured backdrop max is 33", stopped being true when the
+ * hero art was allowed to bleed up behind the status bar.
+ *   THE UNDERNOTCH SWEEP WAS ALREADY VACUOUS ON MAIN, and that is the finding, not
+ *   the fill that exposed it. On origin/main it read 30960 ink pixels at a SIX
+ *   pixel pull, and 860x36 device px IS the whole sample window: every pixel of
+ *   the olive strip scored as ink. MEASURED: the m1 mutation below (the reveal
+ *   transform deleted, i.e. exactly the regression Tom reported four times and
+ *   could never see) leaves that row and its SAMPLE partner GREEN on main at
+ *   82560 px. The header's own record says m1 turned UNDERNOTCH red, and it did,
+ *   on the release where the mark travelled over navy. The island bleed retired it
+ *   quietly. With the difference selector the same mutation reads 0 at every pull
+ *   and both rows go red again.
+ *
+ * A BASELINE FOR A MOVING TARGET, which is the one part of that conversion that is
+ * not a one-line swap. The other rows cancel the background by capturing the same
+ * clip twice, once with the mark suppressed. SAMPLE/LINEAR/SMOOTH are a TIME
+ * SERIES across a running 130ms transition and no instant can be photographed
+ * twice. It does not need to be: what has to cancel is the BACKGROUND, and inside
+ * that window the background is static (contentPull pins the flow content, SMOA
+ * freezes the idle Bonehead, the backdrop is a still image). So ONE suppressed
+ * frame, taken through the same screencast at the same scale immediately before
+ * the control is fired, is a valid baseline for every frame in the series. The
+ * STILL row asserts that assumption instead of resting on it: two mark-free
+ * warm-up frames, ~500ms apart, must be byte-identical in the band.
+ *
+ * AND THE SUPPRESSOR HAD TO LEARN THE MARK'S OTHER ADDRESS. It named
+ * `#app::before` only, so under the mark-back-in-the-scroller mutation the mark
+ * painted in BOTH captures, the difference cancelled to zero, and the diff rows
+ * went red reporting "no ink" rather than reporting the ride: a guard failing for
+ * the wrong reason with its real claim untested. WM_OFF names both homes now.
+ *
  * PROVE-RED. Every mutation run in a THROWAWAY COPY of the tree (cp -R, never in
  * the worktree), each one asserting the edit really applied before the result was
  * read (guard-hygiene-lint's failure 3). Run 2026-08-21 against this file, on the
  * release that moved the mark out of the scroller. The tree is 41/41 green.
+ *
+ * PROVE-RED FOR THE CONVERTED ROWS, 2026-08-24, in throwaway trees built with tar
+ * excluding .git (a cp -R of a git WORKTREE is NOT isolated: its .git is a file
+ * pointing back at the original), each mutation grepped in the copy before the run
+ * and every exit code read from a file. Clean tree 47/47.
+ *
+ *   c1  app.css  `#app:has(.screen--today)::before` -> `#screen::before`, i.e. the
+ *                mark put back INSIDE the scroller, which is the regression that
+ *                has shipped three times.
+ *                                                       MECHANISM RED: "ink first
+ *       row 4css -> 0css, shift -4px (want 0)". CONTROL stays green at 30235 px,
+ *       so the row is red because the ink MOVED and not because the sampler went
+ *       blind. It reads -4 rather than -60 because 60px of scroll takes most of
+ *       the mark above --sat and the window's own top edge becomes the first row.
+ *
+ *   c2  app.css  the `transform: translateY(...)` line DELETED (the m1 mutation
+ *                above, re-run against the converted rows).
+ *                                                       SAMPLE and UNDERNOTCH RED:
+ *       sweep "6px:0 12px:0 18px:0 24px:0 36px:0 48px:0 72px:0 120px:0", "0 ink px
+ *       below the status bar at 36px of pull (floor 6000); first pull with any
+ *       visible ink: none up to 120px". The same mutation on main's luminance
+ *       rows: GREEN, sweep "6px:30960 ... 36px:82560".
+ *
+ *   c3  app.css  `transition: ... linear` -> `cubic-bezier(.33,1,.68,1)`, the
+ *                shipped-and-rejected ease-out.
+ *                                                       LINEAR RED, with its
+ *       SAMPLE partner red first and naming the cause: "2 frames from first ink to
+ *       arrival, spanning 7ms", "0ms:0.98 7ms:0.99". The ease-out is 98% home by
+ *       the first painted frame, so the shape window collapses. That IS the
+ *       front-loading the row exists for, caught one step earlier than the ratio.
+ *
+ *   c4  app.css  a keyframed background-color on `.screen--today`, i.e. a
+ *                background that does NOT hold still for the length of the window,
+ *                which is the one assumption the single baseline rests on.
+ *                                                       STILL RED: "86000 changed
+ *       px in the top 200css of the band (want 0)", and it fails BEFORE
+ *       SAMPLE/LINEAR/SMOOTH so the output names the cause rather than the
+ *       symptom. Synthetic on purpose: nothing in the shipped band animates today,
+ *       and that is exactly the property this row is holding still.
+ *
+ *   FLAKE, RECORDED HONESTLY. LINEAR is frame-timed and this machine drops frames
+ *   under load. One clean run in five read 2.68 with a 106ms gap between two
+ *   consecutive frames; the other four read 1.10, 1.12, 1.18 and 1.44 against a
+ *   0.55-1.9 bound. That sensitivity predates this conversion (the row's own block
+ *   argues it is anchor-free, which is true, but it cannot manufacture the frames
+ *   it needs). A red here is worth re-running under no load before it is believed.
  *
  *   m1  app.css  the `transform: translateY(...)` line DELETED, i.e. the reveal
  *                reverted to the geometry v421 shipped: the mark parked with its
@@ -228,7 +312,6 @@ const SAT = 62;            // iPhone 17 Pro Max class top inset
 const BAND = 76;           // --sat + 14px of padding: pure backdrop at rest
 const BOUNCE = 240;        // the displacement the CONTROL and INK rows simulate
 const DELTA = 60;          // scroll applied on top of it for the MECHANISM row
-const INK_LUM = 60;        // ink detector: measured backdrop max is 33
 const CREAM = [255, 243, 211];   // the wordmark PNG's own ink
 const MARK_H = 62;         // app.css: the mark's height. `bottom: 100%` does the rest
 const PAD = 14;            // .screen's padding above the first card, on top of --sat
@@ -301,35 +384,18 @@ const VW = page.viewport().width;
    (boot-flash-audit), and it keeps node dependency-free. */
 const dec = await browser.newPage();
 await dec.goto('data:text/html,<body></body>');
-const stats = b64 => dec.evaluate(async (data, lum) => {
-  const img = new Image();
-  img.src = 'data:image/png;base64,' + data;
-  await img.decode();
-  const c = document.createElement('canvas');
-  c.width = img.width; c.height = img.height;
-  const g = c.getContext('2d', { willReadFrequently: true });
-  g.drawImage(img, 0, 0);
-  const d = g.getImageData(0, 0, c.width, c.height).data;
-  let n = 0, sr = 0, sg = 0, sb = 0, top = -1, bottom = -1, maxCh = 0;
-  for (let i = 0; i < d.length; i += 4) {
-    const r = d[i], gg = d[i + 1], b = d[i + 2];
-    if (0.299 * r + 0.587 * gg + 0.114 * b <= lum) continue;
-    n++; sr += r; sg += gg; sb += b; maxCh = Math.max(maxCh, r, gg, b);
-    const y = Math.floor((i / 4) / c.width);
-    if (top < 0) top = y;
-    bottom = y;
-  }
-  return { total: d.length / 4, n, mean: n ? [sr / n | 0, sg / n | 0, sb / n | 0] : null, top, bottom, maxCh, h: c.height };
-}, b64, INK_LUM);
+/* SELECT THE MARK BY DIFFERENCE, NOT BY BRIGHTNESS. Added 2026-08-24, and it is
+   the ONLY selector in this file as of 2026-08-24: the luminance one is gone.
 
-/* SELECT THE MARK BY DIFFERENCE, NOT BY BRIGHTNESS. Added 2026-08-24.
-
-   stats() above picks "ink" with a luminance threshold whose own constant records
-   its premise: INK_LUM 60, "measured backdrop max is 33". True while the strip
-   behind the mark is page navy; false the moment the hero art is allowed to bleed
-   up behind the status bar, because olive art is far brighter than 60. The INK row
-   then reported mean rgb(136,145,91), which is the ART's olive, and called it the
-   mark's cream.
+   THE ONE IT REPLACES picked "ink" with a threshold whose own constant recorded its
+   premise: INK_LUM 60, "measured backdrop max is 33". True while the strip behind
+   the mark is page navy; false the moment the hero art is allowed to bleed up
+   behind the status bar, because olive art is far brighter than 60. The INK row
+   reported mean rgb(136,145,91), which is the ART's olive, and called it the mark's
+   cream, and the UNDERNOTCH sweep read the WHOLE window as ink at a six pixel pull.
+   RAISING THE THRESHOLD IS NOT THE FIX AND WAS MEASURED BEFORE IT WAS DISMISSED:
+   the same strip already contains pixels at luminance 252, because Gwart's plaque
+   is near-white. No single number separates the mark from the content behind it.
 
    diffStats takes the same strip twice, once with the mark suppressed, and grades
    ONLY the pixels that actually changed. Whatever is behind the mark cancels, so
@@ -341,12 +407,17 @@ const stats = b64 => dec.evaluate(async (data, lum) => {
    a channel or two). Measured on this suite: with the mark suppressed the largest
    incidental channel delta anywhere in the strip is 6, and the mark's own pixels
    move 90 or more. 12 sits an order of magnitude below the signal. */
-const diffStats = (onB64, offB64) => dec.evaluate(async (a, b, DELTA) => {
+/* `band` clips the comparison to the top N rows of the capture, which is what the
+   compositor-frame rows want: a screencast frame is the whole viewport and only
+   its top strip is the mark's travel. It replaces bandBottom(), which was the same
+   crop with the luminance selector this file is retiring. */
+const diffStats = (onB64, offB64, band = Infinity) => dec.evaluate(async (a, b, DELTA, band) => {
   const load = async d => { const i = new Image(); i.src = 'data:image/png;base64,' + d; await i.decode(); return i; };
   const [ia, ib] = await Promise.all([load(a), load(b)]);
   const px = img => { const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
     const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
-    return { d: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height }; };
+    const h = Math.min(c.height, band);
+    return { d: g.getImageData(0, 0, c.width, h).data, w: c.width, h }; };
   const A = px(ia), B = px(ib);
   if (A.w !== B.w || A.h !== B.h) return { err: 'size mismatch', n: 0 };
   let n = 0, sr = 0, sg = 0, sb = 0, top = -1, bottom = -1, maxCh = 0, worstIncidental = 0;
@@ -361,15 +432,25 @@ const diffStats = (onB64, offB64) => dec.evaluate(async (a, b, DELTA) => {
     bottom = y;
   }
   return { total: A.d.length / 4, n, mean: n ? [sr/n|0, sg/n|0, sb/n|0] : null, top, bottom, maxCh, h: A.h, worstIncidental };
-}, onB64, offB64, 12);
+}, onB64, offB64, 12, band);
 
+/* THE SUPPRESSOR HAS TO FOLLOW THE MARK, and this cost a prove-red before it was
+   understood. It named `#app::before` only, so the m2-class regression (the mark
+   put back INSIDE the scroller as `#screen::before`) left the mark painting in
+   BOTH captures, the difference cancelled to zero, and every diff row went red
+   reporting "no ink" instead of reporting the ride. That is a guard failing for
+   the wrong reason, with its real claim untested. Both homes are named now, and
+   `#screen::before` is unused on a clean tree (grepped), so naming it costs
+   nothing there and keeps the detector honest under the one regression this file
+   exists to catch. */
+const WM_OFF = '#app::before,#screen::before{content:none!important}';
 /* Capture a strip with the mark suppressed, for diffStats to cancel against. */
 const shotNoMark = async clip => {
-  await page.evaluate(() => {
+  await page.evaluate(off => {
     const st = document.createElement('style'); st.id = '__wmX';
-    st.textContent = '#app::before{content:none!important}';
+    st.textContent = off;
     document.head.appendChild(st);
-  });
+  }, WM_OFF);
   await sleep(320);
   const b = await shot(clip);
   await page.evaluate(() => document.getElementById('__wmX')?.remove());
@@ -453,12 +534,12 @@ ok('SETUP     the band above the first card is stable across time, so a pixel di
    Strictly stronger than what it replaces: the old row allowed any number of
    sub-threshold mark pixels, this one allows none at all. */
 const bandNoMark = await (async () => {
-  await page.evaluate(() => {
+  await page.evaluate(off => {
     const st = document.createElement('style');
     st.id = '__wmOff';
-    st.textContent = '#app::before{content:none!important}';
+    st.textContent = off;
     document.head.appendChild(st);
-  });
+  }, WM_OFF);
   await sleep(350);
   const b = await band();
   await page.evaluate(() => document.getElementById('__wmOff')?.remove());
@@ -535,11 +616,11 @@ ok('SAMPLE    at --sat 0 the mark is at its fail-open opacity, so the pixel row 
    hero art stops at the safe-area line. Difference instead of brightness. */
 const sat0Strip = { x: 0, y: 0, width: VW, height: PAD };
 const sat0Off = await (async () => {
-  await page.evaluate(() => {
+  await page.evaluate(off => {
     const st = document.createElement('style'); st.id = '__wmOff0';
-    st.textContent = '#app::before{content:none!important}';
+    st.textContent = off;
     document.head.appendChild(st);
-  });
+  }, WM_OFF);
   await sleep(350);
   const b = await shot(sat0Strip);
   await page.evaluate(() => document.getElementById('__wmOff0')?.remove());
@@ -650,13 +731,16 @@ const clip = { x: 0, y: SAT, width: VW, height: PAD + BOUNCE - 2 };
 const at0 = await diffStats(await shot(clip), await shotNoMark(clip));
 ok(`CONTROL   the sampler is not blind: at a full pull the mark puts thousands of ink pixels into the same band the REST rows graded as empty, and its top edge lands ${GAP}px BELOW the inset`,
   at0.n > 4000 && at0.n < 200000 && Math.abs(css(at0.top) - GAP) <= 3,
-  `${at0.n} px over lum ${INK_LUM}, first ink row y=${css(at0.top)}css inside a clip that starts at --sat (want ${GAP})`);
+  `${at0.n} px changed by the mark (worst incidental delta elsewhere ${at0.worstIncidental}), first ink row y=${css(at0.top)}css inside a clip that starts at --sat (want ${GAP})`);
 /* Scrolling must not move it. This is the same claim ABOVE makes off geometry,
    made again in PIXELS, and it is the one that goes red if the mark is put back
    in the scroller: in there its ink would shift by exactly -DELTA. */
 await page.evaluate(d => { document.getElementById('screen').scrollTop = d; }, DELTA);
 await sleep(400);
-const atD = await stats(await shot(clip));
+/* diffStats again, and against a baseline taken AT THE SCROLLED POSITION: the
+   background under the mark is what this row is trying to see past, so the
+   cancelling capture has to be of the same background, not of the pre-scroll one. */
+const atD = await diffStats(await shot(clip), await shotNoMark(clip));
 await page.evaluate(() => { document.getElementById('screen').scrollTop = 0; });
 await sleep(300);
 const shift = css(atD.top - at0.top);
@@ -747,7 +831,15 @@ for (const P of PULLS) {
      Bonehead panel that fooled the first CONTROL row, and it would have graded a
      mark that never painted at all as a triumph. The mark sits BEHIND the card
      (z-index -1), so what this counts is only what a person can actually see. */
-  const s = await stats(await shot({ x: 0, y: SAT, width: VW, height: PAD + P - 2 }));
+  /* diffStats, AND THIS ROW WAS ALREADY VACUOUS WITHOUT IT. Measured on the tree
+     this conversion landed against: the sweep read 30960 at a SIX pixel pull, and
+     860x36 device px IS the whole window, i.e. every pixel of it scored as ink.
+     The hero art bleeds up behind the status bar now, so the strip this window
+     samples is olive backdrop rather than page navy, and a luminance floor of 60
+     counts the art. The row could not have gone red on a mark that never painted.
+     The difference against a suppressed capture is the mark and nothing else. */
+  const w = { x: 0, y: SAT, width: VW, height: PAD + P - 2 };
+  const s = await diffStats(await shot(w), await shotNoMark(w));
   underInk.push({ P, n: s.n });
   await releasePull(page);
   await d.evaluate(n => n.remove());
@@ -829,25 +921,37 @@ ok('EASED     the reveal is SHAPED, not linear: quiet under a jitter-sized tug, 
    an unsmoothed mark teleports and scores 2, a smoothed one is caught in flight.
    FRAMES, NOT getComputedStyle. A CSS box reads perfectly over a blank frame
    (tally/CLAUDE.md), and this whole feature is three releases deep in marks that
-   measured fine and painted nothing, so the position is the lowest INK ROW in the
-   top ${SMOOTH_BAND} css px of a real frame. */
+   measured fine and painted nothing, so the position is the lowest ROW THE MARK
+   CHANGED in the top ${SMOOTH_BAND} css px of a real frame. */
 const SMOOTH_BAND = 200;
 /* Screencast frames come back at CSS scale, not at the viewport's
    deviceScaleFactor: measured 430x932 out of a 430x932x2 viewport. Reading the
    device scale here put the band 400 rows deep, which reached the displaced
    content and pinned every "position" at the band's own floor. */
-const bandBottom = b64 => dec.evaluate(async (data, lum, band) => {
-  const img = new Image(); img.src = 'data:image/png;base64,' + data; await img.decode();
-  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
-  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
-  const d = g.getImageData(0, 0, c.width, Math.min(c.height, band)).data;
-  let n = 0, bottom = -1;
-  for (let i = 0; i < d.length; i += 4) {
-    if (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2] <= lum) continue;
-    n++; bottom = Math.floor((i / 4) / c.width);
-  }
-  return { n, bottom };
-}, b64, INK_LUM, SMOOTH_BAND);
+/* A BASELINE FOR A MOVING TARGET, WHICH IS THE ONE HARD PART OF THIS CONVERSION.
+   The rows above cancel the background by taking each capture TWICE, once with the
+   mark suppressed. These frames are a time series across a 130ms transition and
+   there is no way to photograph the same instant twice, so a per-frame baseline
+   does not exist.
+   IT DOES NOT NEED TO. What has to be cancelled is the BACKGROUND, and inside this
+   window the background does not move: the flow content is pinned by contentPull,
+   the idle Bonehead is frozen by SMOA, and the backdrop is a static image. The
+   only thing changing between the first frame and the last is the mark. So ONE
+   suppressed frame, captured through the same screencast at the same scale
+   immediately before the control is fired, is a valid baseline for every frame in
+   the series.
+   AND THE ASSUMPTION IS ASSERTED, NOT ASSUMED, because the whole conversion rests
+   on it: STILL below diffs the first warm-up frame against the last one, with the
+   mark suppressed throughout, and requires the two to be identical. A background
+   that moves during the window makes that row red before it can quietly inflate
+   this one. */
+const suppressMark = on => page.evaluate((v, off) => {
+  document.getElementById('__wmX')?.remove();
+  if (!v) return;
+  const st = document.createElement('style'); st.id = '__wmX';
+  st.textContent = off;
+  document.head.appendChild(st);
+}, on, WM_OFF);
 
 /* Displace the flow content the way a real bounce does, so the whole travel band
    is backdrop and the mark is measurable across all of it, and still the idle
@@ -867,9 +971,16 @@ cdp.on('Page.screencastFrame', async ({ data, sessionId, metadata }) => {
   scFrames.push({ data, t: metadata.timestamp * 1000 });
   try { await cdp.send('Page.screencastFrameAck', { sessionId }); } catch { /* stopped */ }
 });
+/* THE MARK IS OFF FOR THE WHOLE WARM-UP, so the baseline is unambiguously
+   mark-free rather than relying on the rest state being empty (which the REST rows
+   own, and which this block should not have to borrow). */
+await suppressMark(true);
 await cdp.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 });
-await sleep(400);
+await sleep(500);
 const warm = scFrames.length;
+const baseFirst = scFrames[0]?.data, baseFrame = scFrames[scFrames.length - 1]?.data;
+await suppressMark(false);
+await sleep(200);
 scFrames.length = 0;
 /* THE REAL CONTROL: one scroll event on #screen, which is what the production
    listener is bound to. Not a call to anything this feature owns. */
@@ -882,7 +993,11 @@ const firedAt = await page.evaluate(d => {
 await sleep(500);
 await cdp.send('Page.stopScreencast').catch(() => {});
 const smoPos = [], smoT = [];
-for (const f of scFrames) { const s = await bandBottom(f.data); smoPos.push(s.n ? s.bottom : null); smoT.push(f.t - firedAt); }
+for (const f of scFrames) {
+  const s = baseFrame ? await diffStats(f.data, baseFrame, SMOOTH_BAND) : { n: 0, bottom: -1 };
+  smoPos.push(s.n ? s.bottom : null); smoT.push(f.t - firedAt);
+}
+const still = baseFirst && baseFrame ? await diffStats(baseFirst, baseFrame, SMOOTH_BAND) : { n: -1 };
 await releasePull(page);
 await SMO.evaluate(n => n.remove());
 await SMOA.evaluate(n => n.remove());
@@ -954,6 +1069,13 @@ if (inWindow.length >= 6) {
   const s1 = (mp - a.p) / (mt - a.t), s2 = (z.p - mp) / (z.t - mt);
   ratio = s2 > 0 ? s1 / s2 : Infinity;
 }
+/* THE BASELINE'S OWN GUARD. Every frame in the series is graded against ONE
+   suppressed frame, which is only legitimate while the background holds still for
+   the length of the window. Two warm-up frames, both mark-free, ~500ms apart:
+   anything that moves in the band shows up here as changed pixels, and a red row
+   here says the three rows below are grading motion that is not the mark. */
+ok(`STILL     the single suppressed baseline is valid for the whole window: with the mark off, the first and last of ${warm} warm-up frames hold the band byte-still, so what the rows below measure is the mark and not the scene`,
+  still.n === 0, `${still.n} changed px in the top ${SMOOTH_BAND}css of the band (want 0), worst incidental channel delta ${still.worstIncidental ?? 'n/a'}`);
 ok(`SAMPLE    the ${WM_TRANS}ms transition was photographed while it ran, so the shape row below is grading a curve and not an empty window`,
   inWindow.length >= 6 && ratio !== null && finalPos !== null,
   `${inWindow.length} frames from first ink to arrival, spanning ${inWindow.length >= 2 ? Math.round(inWindow[inWindow.length - 1].t - inWindow[0].t) : 0}ms, final ink row ${finalPos}`);
@@ -1314,7 +1436,9 @@ const failed = results.filter(r => !r.pass);
    here before this passes on the LINEAR, UNSMOOTHED v421 reveal, which is the
    version Tom called "clunky and glitchy": this file graded where the mark ends
    up and never once graded how it gets there. */
-if (results.length < 44) { console.log(`\nFAIL: only ${results.length} checks ran, expected 44`); process.exit(1); }
+/* 44 -> 47 on 2026-08-24: STILL, plus the two rows the earlier count predates.
+   The floor stays a floor: it exists to catch rows that silently stop running. */
+if (results.length < 47) { console.log(`\nFAIL: only ${results.length} checks ran, expected 47`); process.exit(1); }
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 if (failed.length) { console.log('FAILED: ' + failed.map(f => f.n).join(', ')); process.exit(1); }
 console.log('overscroll-wordmark-audit clean');

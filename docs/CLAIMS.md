@@ -19,6 +19,10 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v434
+
+1. PROOF: overscroll-wordmark-audit.mjs | REACH: On Today, pull down past the top. The strip you open up is the same colour as the art above your Bonehead instead of turning into the dark page behind the app, so pulling reveals the wordmark and not the edge of the screen. It follows whichever backdrop you have equipped.
+
 ## v433
 
 1. PROOF: friend-paddock-audit.mjs | REACH: Open Crew, tap a friend's card once to centre it and again to open their profile, then tap "Visit their paddock" under their pets. You land in their field with their herd in it. A friend still on an older build has no paddock and no button offering one, which is the honest empty state rather than an empty field.
