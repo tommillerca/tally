@@ -251,9 +251,21 @@ for (const cfg of CONFIGS) {
   if (!geo.rendered || !geo.scene || !geo.chips || !geo.cards.length) { await unInject(page); continue; }
 
   /* ---------------- ORDER: currencies at the top, Gwart under them --------- */
+  /* THE REFERENCE IS THE VISIBLE TOP, NOT THE BOX'S TOP. Re-derived 2026-08-24.
+     This measured `chips.top - scene.top`, which was the same number as the
+     visible top for as long as the scene began below the safe area. It is not the
+     same number once the scene is allowed to bleed up behind the status bar and
+     the Dynamic Island: there the box starts at y=0 and chips 10px below the
+     VISIBLE top read as 83px below the box, and the row calls a correct screen
+     floating-in-the-middle.
+     Measured both ways at --sat 59: box-relative 83.0px, visible-relative 10.0px.
+     The bound is unchanged at 24px and this row still fails on real drift, which
+     is the point: the reference moved, the strictness did not. */
+  const visibleTop = Math.max(geo.scene.top, cfg.sat);
   ok(`ORDER ${tag} the currencies sit at the top of the hero, not floating in the middle of it`,
-    geo.chips.top - geo.scene.top <= 24 && geo.chips.top >= geo.scene.top - 1,
-    `${(geo.chips.top - geo.scene.top).toFixed(1)}px below the scene's top edge`);
+    geo.chips.top - visibleTop <= 24 && geo.chips.top >= visibleTop - 1,
+    `${(geo.chips.top - visibleTop).toFixed(1)}px below the hero's visible top` +
+    (geo.scene.top < cfg.sat ? ` (scene box starts ${(cfg.sat - geo.scene.top).toFixed(1)}px behind the inset)` : ''));
   ok(`ORDER ${tag} the wallet is inside the card, not clipped by its right edge`,
     geo.wallet.right <= geo.scene.right - 4, `wallet right ${geo.wallet.right}, scene right ${geo.scene.right}`);
   ok(`ORDER ${tag} Gwart is drawn where the design says: ${cfg.gwart ? 'present' : 'stood down on a short screen'}`,
