@@ -322,6 +322,61 @@ const stats = b64 => dec.evaluate(async (data, lum) => {
   return { total: d.length / 4, n, mean: n ? [sr / n | 0, sg / n | 0, sb / n | 0] : null, top, bottom, maxCh, h: c.height };
 }, b64, INK_LUM);
 
+/* SELECT THE MARK BY DIFFERENCE, NOT BY BRIGHTNESS. Added 2026-08-24.
+
+   stats() above picks "ink" with a luminance threshold whose own constant records
+   its premise: INK_LUM 60, "measured backdrop max is 33". True while the strip
+   behind the mark is page navy; false the moment the hero art is allowed to bleed
+   up behind the status bar, because olive art is far brighter than 60. The INK row
+   then reported mean rgb(136,145,91), which is the ART's olive, and called it the
+   mark's cream.
+
+   diffStats takes the same strip twice, once with the mark suppressed, and grades
+   ONLY the pixels that actually changed. Whatever is behind the mark cancels, so
+   the answer is the mark and nothing else, at any backdrop colour. Same idea as
+   the byte-identical REST rows and as badge-centre-lib's glyph weighing.
+
+   DELTA 12 rather than 0: PNG is lossless, but the compositor is not bit-exact
+   across two captures of a live page (sub-pixel AA on the card edges below drifts
+   a channel or two). Measured on this suite: with the mark suppressed the largest
+   incidental channel delta anywhere in the strip is 6, and the mark's own pixels
+   move 90 or more. 12 sits an order of magnitude below the signal. */
+const diffStats = (onB64, offB64) => dec.evaluate(async (a, b, DELTA) => {
+  const load = async d => { const i = new Image(); i.src = 'data:image/png;base64,' + d; await i.decode(); return i; };
+  const [ia, ib] = await Promise.all([load(a), load(b)]);
+  const px = img => { const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
+    return { d: g.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height }; };
+  const A = px(ia), B = px(ib);
+  if (A.w !== B.w || A.h !== B.h) return { err: 'size mismatch', n: 0 };
+  let n = 0, sr = 0, sg = 0, sb = 0, top = -1, bottom = -1, maxCh = 0, worstIncidental = 0;
+  for (let i = 0; i < A.d.length; i += 4) {
+    const dr = Math.abs(A.d[i] - B.d[i]), dg = Math.abs(A.d[i+1] - B.d[i+1]), db = Math.abs(A.d[i+2] - B.d[i+2]);
+    const m = Math.max(dr, dg, db);
+    if (m <= DELTA) { worstIncidental = Math.max(worstIncidental, m); continue; }
+    n++; sr += A.d[i]; sg += A.d[i+1]; sb += A.d[i+2];
+    maxCh = Math.max(maxCh, A.d[i], A.d[i+1], A.d[i+2]);
+    const y = Math.floor((i / 4) / A.w);
+    if (top < 0) top = y;
+    bottom = y;
+  }
+  return { total: A.d.length / 4, n, mean: n ? [sr/n|0, sg/n|0, sb/n|0] : null, top, bottom, maxCh, h: A.h, worstIncidental };
+}, onB64, offB64, 12);
+
+/* Capture a strip with the mark suppressed, for diffStats to cancel against. */
+const shotNoMark = async clip => {
+  await page.evaluate(() => {
+    const st = document.createElement('style'); st.id = '__wmX';
+    st.textContent = '#app::before{content:none!important}';
+    document.head.appendChild(st);
+  });
+  await sleep(320);
+  const b = await shot(clip);
+  await page.evaluate(() => document.getElementById('__wmX')?.remove());
+  await sleep(320);
+  return b;
+};
+
 /* Device pixels to CSS pixels comes from the SCREENSHOT's page, never from the
    decoder's own window: reading innerWidth in the decoder put the first ink row at
    283css inside a 200css-tall clip, and the MECHANISM shift at -228 instead of
@@ -380,10 +435,40 @@ ok('SETUP     the band above the first card is stable across time, so a pixel di
   b1 === b2, `two captures 900ms apart ${b1 === b2 ? 'byte-identical' : 'DIFFER'}`);
 
 /* ---------- REST ---------- */
-const restStats = await stats(b1);
-ok('REST      at scrollTop 0 not one pixel above the ink threshold is in the band: nothing of the mark is on screen',
-  g0.scrollTop === 0 && restStats.n === 0,
-  `scrollTop ${g0.scrollTop}, ${restStats.n} of ${restStats.total} px over lum ${INK_LUM}`);
+/* RE-DERIVED 2026-08-24, from a luminance threshold to a DIFFERENCE.
+
+   This counted pixels over INK_LUM (60), a threshold whose own comment records
+   where it came from: "measured backdrop max is 33". That held for exactly as
+   long as the band above the first card was page navy. It stops holding the
+   moment the hero art is allowed to bleed up behind the status bar, because the
+   olive backdrop is far brighter than 60, so the ART trips the ink detector and
+   the row reports the mark visible at rest when nothing of it is on screen.
+
+   A brightness test cannot tell the mark's cream from bright art behind it. A
+   DIFFERENCE can, and it does not care what colour the backdrop is: suppress the
+   mark, capture, restore, capture, and require the two to be byte-identical.
+   That is the same technique this file already uses at the FROZEN comparison
+   further down, and the same one badge-centre-lib uses to weigh a glyph.
+
+   Strictly stronger than what it replaces: the old row allowed any number of
+   sub-threshold mark pixels, this one allows none at all. */
+const bandNoMark = await (async () => {
+  await page.evaluate(() => {
+    const st = document.createElement('style');
+    st.id = '__wmOff';
+    st.textContent = '#app::before{content:none!important}';
+    document.head.appendChild(st);
+  });
+  await sleep(350);
+  const b = await band();
+  await page.evaluate(() => document.getElementById('__wmOff')?.remove());
+  await sleep(350);
+  return b;
+})();
+const bandRest = await band();
+ok('REST      at scrollTop 0 the band is byte-identical with the mark suppressed and restored: nothing of it is on screen',
+  g0.scrollTop === 0 && bandRest === bandNoMark,
+  `scrollTop ${g0.scrollTop}, band ${bandRest === bandNoMark ? 'identical' : 'DIFFERS with the mark present'}`);
 /* Finite, THEN above. With the mark absent both numbers come back NaN, which
    JSON turns into null and node adds to 0: `0 <= 0` passed, and the row said
    "bottom 0px" about an element that did not exist. Caught by running the
@@ -426,10 +511,26 @@ const sat0 = await page.evaluate(() => {
 ok('SAMPLE    at --sat 0 the mark is at its fail-open opacity, so the pixel row below is grading a mark that would actually paint',
   sat0.op === 1 && Number.isFinite(sat0.top) && sat0.h > 0 && Number.isFinite(sat0.ty),
   `opacity ${sat0.op}, top ${sat0.top}px, height ${sat0.h}px, translate ${sat0.ty}px, .screen padding-top ${sat0.pad}`);
-const sat0Stats = await stats(await shot({ x: 0, y: 0, width: VW, height: PAD }));
-ok('REST      at --sat 0 nothing of the mark is on screen at rest, in pixels: no inset is the case the shipped rule got backwards',
-  sat0Stats.n === 0 && Number.isFinite(sat0.top) && sat0.top + sat0.h + sat0.ty <= 0,
-  `${sat0Stats.n} ink px in the ${PAD}px above the first card, bottom edge at ${sat0.top + sat0.h + sat0.ty}px (v415 measured +38px here, visible at every scroll position)`);
+/* Same re-derivation as the REST row above, for the same reason: an ink-pixel
+   count in this strip assumes the strip is dark, and it is only dark while the
+   hero art stops at the safe-area line. Difference instead of brightness. */
+const sat0Strip = { x: 0, y: 0, width: VW, height: PAD };
+const sat0Off = await (async () => {
+  await page.evaluate(() => {
+    const st = document.createElement('style'); st.id = '__wmOff0';
+    st.textContent = '#app::before{content:none!important}';
+    document.head.appendChild(st);
+  });
+  await sleep(350);
+  const b = await shot(sat0Strip);
+  await page.evaluate(() => document.getElementById('__wmOff0')?.remove());
+  await sleep(350);
+  return b;
+})();
+const sat0On = await shot(sat0Strip);
+ok('REST      at --sat 0 nothing of the mark is on screen at rest: the strip is byte-identical with it suppressed',
+  sat0On === sat0Off && Number.isFinite(sat0.top) && sat0.top + sat0.h + sat0.ty <= 0,
+  `strip ${sat0On === sat0Off ? 'identical' : 'DIFFERS'}, bottom edge at ${sat0.top + sat0.h + sat0.ty}px (v415 measured +38px here, visible at every scroll position)`);
 await page.evaluate(v => document.documentElement.style.setProperty('--sat', v + 'px'), SAT);
 await sleep(400);
 
@@ -525,7 +626,9 @@ await sleep(500);
    card lands. Everything between is backdrop at rest (the REST rows measure 0 ink
    there), so ink in it is the wordmark and nothing else. */
 const clip = { x: 0, y: SAT, width: VW, height: PAD + BOUNCE - 2 };
-const at0 = await stats(await shot(clip));
+/* diffStats, not stats: the brightness selector reads olive hero art as ink once
+   the scene is allowed to bleed up behind the status bar. See diffStats. */
+const at0 = await diffStats(await shot(clip), await shotNoMark(clip));
 ok(`CONTROL   the sampler is not blind: at a full pull the mark puts thousands of ink pixels into the same band the REST rows graded as empty, and its top edge lands ${GAP}px BELOW the inset`,
   at0.n > 4000 && at0.n < 200000 && Math.abs(css(at0.top) - GAP) <= 3,
   `${at0.n} px over lum ${INK_LUM}, first ink row y=${css(at0.top)}css inside a clip that starts at --sat (want ${GAP})`);
@@ -974,6 +1077,15 @@ const visGeo = await geo();
 /* Same card rule as UNDERNOTCH: from the mark's top edge down to just short of
    where the displaced first card lands. The mark's lower rows are behind the card
    and are not Tom's to see, so they are not counted. */
+/* VISIBLE stays on the brightness selector, and that is a KNOWN LIMIT rather than
+   an oversight. The difference technique that fixed REST and INK returns 0 here:
+   both captures come back with no mark in them, and re-asserting the pull between
+   them did not change that, so something about this row's state does not survive
+   the style swap. I did not isolate it.
+   CONSEQUENCE, stated plainly: this row is sound while the strip behind the mark
+   is dark, which is every shipped configuration today. It is the one row that
+   still blocks un-gating the island bleed (?island), because olive art in the
+   strip inflates its count. Whoever un-gates that owns fixing this row first. */
 const vis = await stats(await shot({ x: 0, y: SAT + GAP, width: VW, height: PAD + FULL - GAP - 2 }));
 const visOff = vis.mean ? CREAM.map((c, i) => Math.abs(vis.mean[i] - c)) : null;
 ok(`VISIBLE   a ${FULL}px pull puts thousands of bright wordmark pixels on screen BELOW the status bar: not merely present, VISIBLE`,
