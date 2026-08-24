@@ -122,5 +122,70 @@ ok('PARSES every audit is something Node will actually execute',
   unparseable.length === 0,
   unparseable.length ? `${unparseable.length}: ${unparseable.slice(0, 3).join(' | ')}` : `${files.length} files parse`);
 
+/* SEAM: A GUARD THAT ONLY EVER TOUCHES A TEST HOOK PROVES THE FEATURE RENDERS,
+   NEVER THAT ANYBODY CAN REACH IT.
+
+   Added 2026-08-24 after Tom asked "I don't see the crew tab paddock viewer, that
+   never actually got launched no?". He was right to ask and the suite could not
+   answer him: all fifteen rows of friend-paddock-audit opened the sheet through
+   `window.__openFriendProfile`, the webdriver-only hook, and not one touched the
+   control a player touches. Deleting the real tap handler left FIFTEEN ROWS GREEN
+   and only the one row added that day red. A feature can be finished, guarded and
+   entirely green while being unreachable.
+
+   A RATCHET, not a rule, and deliberately so. 21 suites here are seam-only today
+   and several are correct to be: badge-centre-lib is a library, and clock-trust,
+   backup-roundtrip and error-telemetry are about mechanisms with no control to
+   press. Demanding a real click from those would be a lint that cries wolf, which
+   this file's own CONTROL row exists to avoid becoming. So today's set is pinned
+   and anything NEW has to justify itself by driving something a player can touch:
+   a .click(), a dispatched event, or page.click.
+
+   FIXED ONE? Delete its line. The row fails on a stale entry too, so the
+   inventory cannot quietly rot into a list nobody maintains. */
+const SEAM_ONLY_KNOWN = [
+  'admin-grant-audit.mjs',
+  'backup-roundtrip-audit.mjs',
+  'badge-centre-lib.mjs',
+  'bestiary-audit.mjs',
+  'boot-backfill-audit.mjs',
+  'boot-flash-audit.mjs',
+  'clock-trust-audit.mjs',
+  'crate-advance-audit.mjs',
+  'crate-palette-audit.mjs',
+  'endless-look-audit.mjs',
+  'error-telemetry-audit.mjs',
+  'fav-skull-audit.mjs',
+  'fight-tray-audit.mjs',
+  'first-session-audit.mjs',
+  'freeze-reveal-audit.mjs',
+  'lb-profile.mjs',
+  'motion-truth-audit.mjs',
+  'nav-perf-audit.mjs',
+  'newcomers-audit.mjs',
+  'race-audit.mjs',
+  'race-you.mjs',
+  'speech-audit.mjs',
+  'spire-phase3-audit.mjs',
+  'spire-poster.mjs',
+  'sw-upgrade-audit.mjs',
+  'teaser-fire-audit.mjs',
+];
+const usesSeam = t => /window\.__[a-zA-Z]/.test(t);
+const drivesReal = t => /\.click\(\)|dispatchEvent|page\.(click|tap)/.test(t);
+const seamNow = files.filter(f => /\.mjs$/.test(f)).filter(f => {
+  const t = readFileSync(join(here, f), 'utf8');
+  return usesSeam(t) && !drivesReal(t);
+});
+const seamNew = seamNow.filter(f => !SEAM_ONLY_KNOWN.includes(f));
+const seamGone = SEAM_ONLY_KNOWN.filter(f => !seamNow.includes(f));
+ok('SEAM no NEW audit proves a feature only through a test hook',
+  seamNew.length === 0,
+  seamNew.length ? `${seamNew.length} new: ${seamNew.join(', ')}. Drive the control a player touches, or add it here with a reason.`
+                 : `${seamNow.length} known seam-only, 0 new`);
+ok('SEAM the seam-only inventory has no stale entries (fixed one? delete its line)',
+  seamGone.length === 0,
+  seamGone.length ? `${seamGone.length} no longer seam-only: ${seamGone.join(', ')}` : 'inventory matches');
+
 console.log(`\nguard-hygiene: ${fails.length ? fails.length + ' FAILED' : 'clean'}`);
 process.exit(fails.length ? 1 : 0);
