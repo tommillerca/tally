@@ -68,19 +68,37 @@ const openWardrobe = async (qs) => {
   await settle(page);
 };
 
-/* ---------------------------------------------------------------- VARIANT ----
-   The rework is behind ?mogv2 until Tom picks it, so the shipped screen must be
-   untouched without the flag. A variant that leaks is a variant nobody agreed to.
-   PROVE-RED: drop the `if (S.mogv2)` guard so the new panel renders always. */
+/* ---------------------------------------------------------------- DEFAULT ----
+   INVERTED 2026-08-24, when the rework graduated. Tom: "ok fix that".
+
+   This row used to assert the opposite: that the shipped screen was untouched
+   WITHOUT the flag, because a variant that leaks is a variant nobody agreed to.
+   That was the right assertion for as long as the panel was an experiment. It is
+   the wrong one the moment the experiment is the product, and leaving it would
+   have meant a green row guarding the feature's absence.
+
+   So it now grades the graduation itself: every player gets the new panel, and
+   ?mogv2=0 still returns the old one. The lever is kept deliberately, because a
+   feature that cannot be turned off cannot be bisected when something else breaks
+   near it, and this touches the Wardrobe's whole bottom half.
+   PROVE-RED: put `S.mogv2` back to `.has('mogv2')` and no player gets it. */
 await openWardrobe('?demo');
 const v1 = await page.evaluate(() => ({
   newPanel: !!document.querySelector('.mog-panel'),
   oldBar: !!document.querySelector('.look-bar'),
   oldHeading: [...document.querySelectorAll('#chContent .sect-h')].map(h => h.textContent.trim()).join(' | '),
 }));
-check('VARIANT without ?mogv2 the shipped panel is what renders', !v1.newPanel && v1.oldBar, JSON.stringify(v1));
+check('DEFAULT a player with no flags gets the reworked panel', v1.newPanel, JSON.stringify(v1));
 
-await openWardrobe('?demo&mogv2');
+await openWardrobe('?demo&mogv2=0');
+const v0 = await page.evaluate(() => ({
+  newPanel: !!document.querySelector('.mog-panel'),
+  oldBar: !!document.querySelector('.look-bar'),
+}));
+check('DEFAULT ?mogv2=0 still returns the old screen, so this stays bisectable',
+  !v0.newPanel && v0.oldBar, JSON.stringify(v0));
+
+await openWardrobe('?demo');
 
 /* -------------------------------------------------------------- STRUCTURE ----
    Empty sample sets are failures (anti-regression rule 3), so everything below
