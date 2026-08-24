@@ -13741,6 +13741,35 @@ const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
    BELOW it was visibly blocky in the side-by-side and every item above it was
    indistinguishable between the two paths. */
 const SMALL_INK = 64;
+/* THE NEXT SOURCE UP, ONE TIER AT A TIME. Returns null once `src` is already the
+   master (or was never a tiered thumbnail), which is what terminates the retry
+   in drawTrimmedArt: the tier strictly increases and the master is the last step.
+
+   WHY IT IS NOT A JUMP STRAIGHT TO THE MASTER, which is what it replaced.
+   Trimming MAGNIFIES, so a surface's tier is right for the FRAME and wrong for
+   the INK: a hat is a small patch of a 640 full-body square, so at 192 its
+   trimmed box lands just under this threshold and the jump handed a 200px cell
+   the whole 640x640 master.
+   METHOD, 2026-08-24, on this tree at 393x852 DPR 2, machine busy (load ~12):
+   the Wardrobe's hat slot, with window.Image hooked to log src and naturalWidth
+   at every construction rather than only to sum them. 128 canvases (71 in the
+   slot grid, 57 in the transmog look picker, which lists the same hats again),
+   402 Images built, 63 of those canvases tripped the threshold at 192 and every
+   one of the 63 pulled a master. Peak live set: 63 concurrent 640x640 bitmaps,
+   103.1 MB, reproduced twice, against the memory census's 90 MB ceiling.
+   With the step: the 384 sheet clears the threshold for 39 of the 63, only 24
+   canvases still reach a master, and the same instrument reads 38.6 MB.
+   NOT A QUALITY CUT. A cell served by 384 draws its ink into a 200px canvas at
+   roughly 1.5-1.9x, and the 65 canvases that never escalate at all already ship
+   at up to 2.9x off the 192 sheet, so the step lands inside the range this
+   screen has always drawn. Anything still too small at 384 goes on to the
+   master exactly as before. */
+const nextArtTier = src => {
+  const m = /^(.*\/thumb\/)(\d+)(\/.*)$/.exec(src || '');
+  if (!m) return null;
+  const up = BH_THUMB_TIERS.find(t => t > +m[2]);
+  return up ? `${m[1]}${up}${m[3]}` : src.replace(/\/thumb\/\d+\//, '/');
+};
 /* THE ALPHA BOX OF A FILE NEVER CHANGES, SO IT IS SCANNED ONCE.
    Measured 2026-08-21 on this tree, at 440x956 / CPU x6, driving the real tab
    bar: one navigation to the Bonehead hub calls this 15 times and scans
@@ -13755,7 +13784,7 @@ const SMALL_INK = 64;
    ponytail: unbounded Map, but the keys are asset paths from a closed set of a
    few hundred art files at four ints each; evict if that ever stops being true. */
 const TRIM_BOX = new Map();
-function drawTrimmedArt(canvas, src, pad = 0.08, _fromMaster = false) {
+function drawTrimmedArt(canvas, src, pad = 0.08) {
   return new Promise(res => {
     const img = new Image();
     img.onload = () => {
@@ -13776,10 +13805,11 @@ function drawTrimmedArt(canvas, src, pad = 0.08, _fromMaster = false) {
       }
       const [x0, y0, x1, y1] = box;
       const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
-      /* Tiny ink from a thumbnail: take the master and start again. One extra
-         request, and only for the items that cannot be served by a tier. */
-      if (!_fromMaster && Math.max(bw, bh) < SMALL_INK && /\/thumb\/\d+\//.test(src || '')) {
-        return void drawTrimmedArt(canvas, src.replace(/\/thumb\/\d+\//, '/'), pad, true).then(res);
+      /* Tiny ink from a thumbnail: step up ONE TIER and start again, and keep
+         stepping only while the ink is still too small. */
+      if (Math.max(bw, bh) < SMALL_INK) {
+        const up = nextArtTier(src);
+        if (up) return void drawTrimmedArt(canvas, up, pad).then(res);
       }
       const cw = canvas.width, ch = canvas.height, p = 1 - pad * 2;
       // Upscale cap + two-step scaling keep small source art (e.g. a 43px

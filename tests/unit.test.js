@@ -3129,8 +3129,18 @@ test('the app-wide no-select rule keeps form fields and the recovery code usable
  * SMALL_INK left it green. So this case pins the two behaviours at the source.
  * It cannot tell you the picture got better, only that neither rule was
  * deleted. Saying so plainly rather than implying more.
+ *
+ * THE ESCALATION CLIMBS, IT DOES NOT JUMP (2026-08-24). It used to go straight
+ * from any thumbnail to the 640 master, which put 62 concurrent 640x640 bitmaps
+ * (103.1 MB) on the Wardrobe's hat slot and reddened the memory census's OFF-DOM
+ * row. It now steps one tier at a time, so the 384 sheet gets the chance the
+ * jump never gave it and only art that is still tiny there reaches the master.
+ * The grep that used to stand for "the upgrade still exists" is replaced by
+ * RUNNING the ladder: a proxy could not tell a climb from a jump, and could not
+ * catch the one way this can genuinely break, which is a ladder that never
+ * terminates at the master.
  */
-test('small art takes the master and skips the nearest-neighbour step', () => {
+test('small art climbs to a bigger source and skips the nearest-neighbour step', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   const m = app.match(/const SMALL_INK = (\d+);/);
   assert.ok(m, 'SMALL_INK is gone: the small-art path has been removed entirely');
@@ -3140,11 +3150,20 @@ test('small art takes the master and skips the nearest-neighbour step', () => {
 
   const fn = app.slice(app.indexOf('function drawTrimmedArt'), app.indexOf('function hydratePackArt'));
   assert.ok(fn.length > 200, 'drawTrimmedArt not found: this check has drifted, it has not passed');
-
-  assert.match(fn, /thumb\\\/\\d\+\\\//,
-    'the thumbnail-to-master upgrade is gone: small items will be drawn from the 192 tier again');
+  assert.match(fn, /Math\.max\(bw, bh\) < SMALL_INK[\s\S]{0,120}nextArtTier\(src\)/,
+    'the small-ink upgrade is gone: small items will be drawn from the 192 tier again');
   assert.match(fn, /Math\.max\(bw, bh\) < SMALL_INK[\s\S]{0,80}Math\.min\(3, Math\.floor\(scale\)\)/,
     'the nearest-neighbour step is no longer skipped for small ink: tiny art will be drawn as squares again');
+
+  // Run the ladder itself: 192 -> 384 -> master -> stop, on the app's own tiers.
+  const src = app.slice(app.indexOf('const nextArtTier'), app.indexOf('function drawTrimmedArt'));
+  const tiers = JSON.parse(app.match(/const BH_THUMB_TIERS = (\[[^\]]*\]);/)[1]);
+  const next = new Function('BH_THUMB_TIERS', `${src}; return nextArtTier;`)(tiers);
+  const rung = ['assets/bh/thumb/192/H/H1.png'];
+  for (let i = 0; i < 6 && rung[rung.length - 1] != null; i++) rung.push(next(rung[rung.length - 1]));
+  assert.deepEqual(rung, [
+    'assets/bh/thumb/192/H/H1.png', 'assets/bh/thumb/384/H/H1.png', 'assets/bh/H/H1.png', null,
+  ], 'the small-ink ladder no longer climbs 192 -> 384 -> master and stop');
 });
 
 await runAll();

@@ -40,11 +40,20 @@
  *     Collection. The one data: source per screen is the --grain texture, and
  *     it is `150px 150px / repeat` everywhere it appears, so it is one tile the
  *     compositor rasterises once (~0.34 MB), not the painted area.
- *   - The off-DOM pile is real but small since the thumbnail tiers landed:
- *     242 Images are constructed on the Wardrobe's hat slot and every one is
- *     192x192, not the 640x640 the first census measured, so the ceiling if
- *     none were released is 34.03 MB and what stays reachable is 10.8-18.7 MB.
- *     That is what the OFF-DOM row below grades.
+ *   - The off-DOM pile is the Wardrobe's, and it is what the OFF-DOM row below
+ *     grades. THE NOTE THAT USED TO SIT HERE SAID EVERY ONE OF THOSE IMAGES WAS
+ *     192x192 AND IT WAS WRONG, which is exactly why the row could be written,
+ *     registered and then sit red for days: it graded a screen nobody had
+ *     itemised. Itemised 2026-08-24, by logging src and naturalWidth per
+ *     construction instead of only summing them: 402 Images, of which 258 were
+ *     192x192 thumbnails and 126 were 640x640 MASTERS. drawTrimmedArt escalated
+ *     any thumbnail whose trimmed ink fell under SMALL_INK straight to the
+ *     master, 31 of the 57 hats trip that test at 192, and the hat slot lists
+ *     them twice (the slot grid and the transmog look picker), so 62 concurrent
+ *     640x640 bitmaps stood at the peak: 103.1 MB, over this file's ceiling,
+ *     reproduced twice. The escalation now climbs one tier at a time, so the 384
+ *     sheet serves most of them and only 24 canvases still reach a master; the
+ *     same instrument reads 38.6 MB.
  *
  * NOT COVERED, and none of it may be read as safe:
  *   - Boneyard map. NOT a WebGL limitation: this file simply does not launch
@@ -347,6 +356,11 @@ await screen('wardrobe, hat slot', async () => {
 /* READ THE OFF-DOM PEAK NOW, while the page that recorded it is still loaded:
    the tier checks below reload, and window.__imgPeakMB does not survive that. */
 const offDom = await pe(() => window.__imgPeakMB);
+/* PROVE-RED (2026-08-24, a tar-built throwaway with the FILE mutated and the
+   copy grepped to confirm it landed): put drawTrimmedArt's small-ink escalation
+   back to a jump straight to the master and this row reports 103 MB. That is the
+   state this row was actually in when it was written, and it stayed red for days
+   because the header note beside it asserted the opposite without itemising. */
 ok('OFF-DOM  the Wardrobe\'s concurrent source bitmaps stay under 90 MB too',
   offDom > 0 && offDom < CEILING_MB, `${offDom} MB peak concurrent off-DOM (gwart measured 210.9 MB on 640px sources)`);
 
