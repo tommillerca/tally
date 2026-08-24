@@ -263,7 +263,7 @@ await screen('leaderboard, 100 rows', async () => {
     window.__testFriends = { friends: [], incoming: [], outgoing: [] };
     window.__testLb = Array.from({ length: 100 }, (_, i) => ({
       playerId: 'p' + i, name: 'Bonehead ' + i, level: 60 - Math.floor(i / 2), badges: 0,
-      outfit: fit, pet: null, friendCode: 'BONE-' + i, lastSeen: Date.now(),
+      outfit: fit, pet: null, addToken: 'ATOK-' + i, lastSeen: Date.now(),
       joinedAt: Date.now(), spires: 0, spireDays: 0, you: false }));
     location.hash = '#/friends';
   }, FIT8);

@@ -6,8 +6,8 @@
  *
  * IT IS NOT A PAYLOAD BUG, and that matters because that is where everyone
  * looked first. A fixture built from the worker's real row mapping
- * (server/src/index.js:679-694), covering every field it can emit as null
- * (levelName, outfit, stats, pet all `|| null`; friendCode, lastSeen, joinedAt
+ * (server/src/index.js:1955-1972), covering every field it can emit as null
+ * (levelName, outfit, stats, pet all `|| null`; addToken, lastSeen, joinedAt
  * with NO fallback at all), renders clean at 100 rows with zero page errors.
  * esc() is String(s ?? ''), onlineLabel() returns early on falsy, lbHeadHtml
  * falls back to a default outfit, and social.leaderboard() always returns an
@@ -61,7 +61,7 @@ await page.evaluate(fit => {
   window.__testFriends = { friends: [], incoming: [], outgoing: [] };
   window.__testLb = Array.from({ length: 100 }, (_, i) => ({
     playerId: 'p' + i, name: 'Bonehead ' + i, level: 60 - Math.floor(i / 2), badges: 0,
-    outfit: fit, pet: null, friendCode: 'BONE-' + i,
+    outfit: fit, pet: null, addToken: 'ATOK-' + i,
     lastSeen: Date.now(), joinedAt: Date.now(), spires: 0, spireDays: 0, you: false }));
   location.hash = '#/friends';
 }, FIT8);

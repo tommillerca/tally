@@ -52,7 +52,7 @@ async function scenario(label, { players, friends = [], outgoing = [] }, expectS
 
 const now = Date.now();
 const mk = (id, o = {}) => ({ playerId: id, name: 'Pal ' + id, level: 5, badges: 0,
-  outfit: { B: 'B0-1', SK: 'SK0-1' }, pet: null, friendCode: 'BONE-' + id,
+  outfit: { B: 'B0-1', SK: 'SK0-1' }, pet: null, addToken: 'ATOK-' + id,
   lastSeen: now, joinedAt: now - 3 * DAY, spires: 0, spireDays: 0, you: false, ...o });
 
 // A. players who clearly qualify: level > 1, strangers

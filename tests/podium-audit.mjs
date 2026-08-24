@@ -20,7 +20,7 @@ await page.evaluate(() => {
   window.__testLb = Array.from({ length: 9 }, (_, i) => ({
     playerId: 'p' + i, name: ['Grim Femur', 'Rowdy Kneecap', 'Feral Molar', 'Chrome Casket', 'Hollow Shovel',
       'Wicked Tibia', 'Jolly Coffin', 'Damp Molar', 'Bony Shovel'][i],
-    level: 60 - i * 5, levelName: 'Bonehead', badges: 3, friendCode: 'BONE-' + i,
+    level: 60 - i * 5, levelName: 'Bonehead', badges: 3, addToken: 'ATOK-' + i,
     outfit: { B: 'B0-1', SK: 'SK0-1', H: i % 2 ? 'H10-5' : 'H10-3', T: 'T9-5' },
     pet: i === 0 ? { id: 'C3', shiny: true } : null, you: i === 4, lastSeen: Date.now(),
   }));
