@@ -4624,6 +4624,19 @@ const GUIDE_ENTRIES = [
     'It pays for transmog, which is wearing one thing and showing another. It also buys the odd egg, crate and charm, and it is half the price of the heaviest weapons.',
     'You pay for a look once. Putting it back on in that same slot is free forever after that.',
   ] },
+  /* ADDED 2026-08-23 at integration, and it is a real defect neither branch could
+     see alone. x428 hooked guideLinkHtml('transmog') on the look panel while this
+     list, written on feat/gwarts-guide, had no such entry: the link opened the
+     Guide and landed on nothing. Every claim below is checked against js/loot.js:
+     transmogPrice returns 0 when paidLooks() already holds paidKey(slot, artId),
+     and applyTransmog writes the override without touching the gear or the
+     inventory row. */
+  { id: 'transmog', title: 'Changing how gear looks', body: [
+    'Wearing one thing and showing another. The numbers are whatever the piece really is; only the picture changes.',
+    'Nothing is destroyed and nothing comes off. The piece stays on him, keeps its stats, and stays in the Backpack where you left it.',
+    'It costs dust, and only the first time. That look in that slot is free forever after, so try things.',
+    'A look you have not paid for is priced on the tile before you commit. Nothing is taken until you say so twice.',
+  ] },
   { id: 'fits', title: 'Saved fits', body: [
     'A saved fit is a photograph of what he has on. Six of them, and taking one costs nothing.',
     'Load it and he puts that look back on. Statted gear only fills slots that are empty, so a fit will never strip off something you picked this morning.',

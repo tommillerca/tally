@@ -29,7 +29,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
-import { boot, seed, serveTree, sleep, settle } from './godmode.js';
+import { boot, seed, serveTree, sleep, settle, dismissOverlays } from './godmode.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const arg = process.argv[2] || process.env.URL;
@@ -270,8 +270,33 @@ const guide = await page.evaluate(() => ({
 console.log('guide hook:', JSON.stringify(guide));
 check('NO DEAD UI the sample was taken on a slot that HAS a panel (empty is a FAILURE)',
   guide.panelOnScreen, JSON.stringify(guide));
-check('NO DEAD UI no guide link is shown while nothing in the app handles [data-guide]',
-  guide.panelOnScreen && guide.links === 0, JSON.stringify(guide));
+/* AMENDED 2026-08-23 when feat/gwarts-guide merged alongside this branch.
+
+   The original row asserted `guide.links === 0`, which was only ever true while
+   the Guide was NOT on the tree. That is a premise, not an invariant, and the
+   merge falsified it: the panel now correctly renders one link because something
+   correctly handles it. Fixing that at the ASSERTION rather than at the app, per
+   the audit-drift rule.
+
+   The invariant this row actually wants is a BICONDITIONAL: a "What is this?"
+   renders if and only if tapping it does something. So if there is no link, there
+   is nothing dead to find; and if there IS one, it must open the Guide. That is
+   an end-of-chain check and it holds whether or not the Guide branch is present,
+   so it cannot go stale the way the count did. */
+if (guide.links === 0) {
+  check('NO DEAD UI no guide link is rendered, so there is no dead control to find',
+    guide.panelOnScreen, JSON.stringify(guide));
+} else {
+  const opened = await page.evaluate(() => {
+    document.querySelector('.mog-panel [data-guide]').click();
+    return { sheets: document.querySelectorAll('.gd-e[data-gd]').length,
+             topic: !!document.querySelector('.gd-e[data-gd="transmog"][open]') };
+  });
+  await sleep(600);
+  check('NO DEAD UI the guide link is LIVE: tapping it opens the Guide on its own topic',
+    opened.sheets > 0 && opened.topic, JSON.stringify({ ...guide, ...opened }));
+  await dismissOverlays(page);
+}
 /* SOURCE, not render: the runtime row above can only see the branch that is live
    on THIS tree. This one pins the other branch, so the hook cannot quietly become
    a hand-rolled button that drifts from the Kitchen's two links.
@@ -279,7 +304,13 @@ check('NO DEAD UI no guide link is shown while nothing in the app handles [data-
 const appSrc = readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
 check('NO DEAD UI the panel hooks the Guide through its own helper, gated on it existing',
   /typeof guideLinkHtml === 'function' \? guideLinkHtml\('transmog'\)/.test(appSrc),
-  (appSrc.match(/.*guideLinkHtml\('transmog'\).*/) || ['not found'])[0].trim().slice(0, 110));
+  /* Evidence must be the line the row ASSERTS, not merely a line mentioning the
+     helper. A comment added at integration 2026-08-23 names guideLinkHtml('transmog')
+     and sits earlier in the file, so the loose match printed the comment while the
+     strict regex above was passing on the real call site. The assertion was never
+     weakened, but evidence pointing at a different line than the one checked is how
+     a green gets misread as proof of something it did not look at. */
+  (appSrc.match(/.*typeof guideLinkHtml === 'function' \? guideLinkHtml\('transmog'\).*/) || ['not found'])[0].trim().slice(0, 110));
 
 /* -------------------------------------------------------------- TRANSMUTE ----
    Tom, v424 item 4: "ectoplasm needs an explanation the transmute thing as

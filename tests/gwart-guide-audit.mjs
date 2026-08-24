@@ -182,7 +182,12 @@ ok('REACH-TODAY a real tap on the Today plaque opens the Guide', tappedToday && 
    named as the two that carry the feature, which is why their POSITION is
    asserted and not only their presence. A tenth entry is a copy decision and
    belongs in docs/GWARTS-GUIDE-COPY.md first; add it here in the same change. */
-const WANT = ['ectoplasm', 'transmute', 'crates', 'pets', 'wanderer', 'dust', 'fits', 'wheel', 'streaks'];
+/* AMENDED 2026-08-23 at integration: 'transmog' added as the tenth, in the
+   position it ships in (after dust, before fits). Not a copy whim, a defect fix:
+   x428's look panel hooks guideLinkHtml('transmog') and without this entry that
+   link opened the Guide onto nothing. Copy landed in docs/GWARTS-GUIDE-COPY.md in
+   the same change, as the note above requires. */
+const WANT = ['ectoplasm', 'transmute', 'crates', 'pets', 'wanderer', 'dust', 'transmog', 'fits', 'wheel', 'streaks'];
 const haveIds = (fromToday?.entries || []).map(e => e.id);
 ok('ENTRIES the launch set is all there, ectoplasm and transmute first',
   WANT.every(id => haveIds.includes(id)) && haveIds[0] === 'ectoplasm' && haveIds[1] === 'transmute',

@@ -216,6 +216,42 @@ The last line is the non-obvious one and the reason it is in: a (slot, look) pai
 is paid for once and is free forever after (`paidLooks`, `js/loot.js:1563-1582`).
 Players who do not know that ration their transmogs for no reason.
 
+# 7. Changing how gear looks
+
+Added 2026-08-23 AT INTEGRATION, not in the original launch set, and it exists
+because of a defect neither branch could see alone. `x428/transmog-rework-r2`
+hooked `guideLinkHtml('transmog')` on its reworked look panel while this Guide,
+written on `feat/gwarts-guide`, had no `transmog` entry. Merged together, that
+link opened the Guide and landed on nothing. Caught by the integration run, not
+by either lane.
+
+> Wearing one thing and showing another. The numbers are whatever the piece
+> really is; only the picture changes.
+>
+> Nothing is destroyed and nothing comes off. The piece stays on him, keeps its
+> stats, and stays in the Backpack where you left it.
+>
+> It costs dust, and only the first time. That look in that slot is free forever
+> after, so try things.
+>
+> A look you have not paid for is priced on the tile before you commit. Nothing
+> is taken until you say so twice.
+
+Every claim checked against `js/loot.js` rather than against the panel's copy:
+`transmogPrice` returns 0 when `paidLooks()` already holds `paidKey(slot, artId)`
+(`js/loot.js:1593-1598`), and `applyTransmog` writes the override without touching
+the gear row or the inventory, which is what makes "nothing is destroyed" TRUE
+here. Note that it is true of transmog and FALSE of transmute, where the six
+commons really are spent, and the two entries deliberately say different things
+for that reason.
+
+The last line names the arm-then-confirm, because a player who does not know a
+price is quoted before anything is taken reads the cost as a gamble.
+
+Overlaps the Dust entry on purpose: Dust says "you pay for a look once" from the
+currency's side, this says it from the wardrobe's side, and a player arriving from
+the look panel should not have to go and read a different entry to learn it.
+
 # 7. Saved fits
 
 > A saved fit is a photograph of what he has on. Six of them, and taking one
