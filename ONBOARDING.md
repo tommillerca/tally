@@ -3,6 +3,11 @@
 Read this before your first commit. It is short on purpose; the depth is in the
 files it points at.
 
+**Taking this over from another team? Read `docs/HANDOVER-2026-08-24.md` next.**
+It carries what changed in the week this file does not cover: four process guards
+that now fail the gate, two remotes with one of them public, and the measurement
+traps that cost real days.
+
 **Live app:** https://tommillerca.github.io/tally/
 **Repo:** https://github.com/tommillerca/tally
 **Owner:** Tom Miller. He plays the live build daily and reports bugs from it.
