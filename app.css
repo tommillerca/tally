@@ -10267,3 +10267,62 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 
 /* announcements are not part of the day, so they queue after it */
 .promo-slot { margin-top: 14px; }
+
+/* ---------------- Gwart's Guide (2026-08-23) ----------------
+   Tom, 2026-08-22: "clicking on gwart should take you to an explainer FAQ page".
+   Three selectors, and two of them exist because a <button> brings defaults with
+   it that the surrounding art never asked for. */
+
+/* HE IS A BUTTON IN HIS OWN SHOP NOW, and the reset is the whole point: the box
+   .gw-art declares above (absolute, left, top, width) is what
+   tests/emporium-audit.mjs pins his geometry off, and a button's UA border,
+   padding and inline-block display would move every one of those numbers. This
+   rule is later in the file than .gw-art on purpose, same specificity, so source
+   order settles it. */
+.gw-art { display: block; padding: 0; border: 0; background: none; -webkit-appearance: none; appearance: none; color: inherit; font: inherit; text-align: inherit; cursor: pointer; }
+
+/* The inline "What is this?". It sits in a .sect-h, which is 12px uppercase and
+   already a flex row, so this is deliberately NOT a .btn: the app's button
+   carries a 2px ink border and a sticker shadow that reads as the primary action
+   of the section it is labelling, which is exactly what this must not be. It is
+   a link with a hit area. margin-left:auto matches .sect-h .spin above. */
+.gd-what {
+  margin-left: auto; flex: none;
+  padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: none;
+  font: inherit; font-size: 11px; letter-spacing: 0.04em; text-transform: none;
+  color: var(--text-3); cursor: pointer;
+}
+.gd-what:active { transform: translateY(1px); }
+
+/* NATIVE DISCLOSURE, so open/close, the keyboard and the screen-reader role all
+   come for free. Only the marker and the spacing are ours. */
+.gd-e { border-top: 1px solid var(--line); padding: 2px 2px 6px; }
+.gd-e:last-child { border-bottom: 1px solid var(--line); }
+.gd-e > summary {
+  list-style: none; cursor: pointer; padding: 12px 2px;
+  font-size: 15.5px; font-weight: 800; color: var(--text);
+  display: flex; align-items: center; gap: 8px;
+}
+.gd-e > summary::-webkit-details-marker { display: none; }
+.gd-e > summary::after {
+  content: ''; margin-left: auto; width: 8px; height: 8px;
+  border-right: 2px solid var(--text-3); border-bottom: 2px solid var(--text-3);
+  transform: rotate(45deg) translate(-2px, -2px);
+}
+.gd-e[open] > summary::after { transform: rotate(-135deg) translate(-2px, -2px); }
+.gd-e > p { font-size: 14px; line-height: 1.55; color: var(--text-2); margin: 0 2px 10px; }
+@media (prefers-reduced-motion: reduce) { .gd-what:active { transform: none; } }
+
+/* THE BOX IS THE NEXT LINE, NOW THAT THE PLAQUE IS THE GUIDE. Tom asked for both
+   things and they are one week apart: 2026-08-21 "when you tap him he should say
+   things", 2026-08-22 "clicking on gwart should take you to an explainer FAQ
+   page". Giving the tap to the Guide and leaving it there would have deleted the
+   older ask, so the two controls split: the plaque opens the Guide, the box he is
+   speaking out of advances the line. It is also what the box's own markup always
+   meant (renderToday: "the chevron means tap the box for the next line").
+   It opts back IN to pointer events over .talkbox.tb-done:not(.tb-hold) above,
+   and ONLY inside .gw-row, so no other talk box in the app changes: the rule
+   above exists because a finished box must not eat the tap target it floats
+   over, and on Today the thing underneath the box is the Bonehead stage, which
+   this row's own `pointer-events: none` already handles. */
+.gw-row .gw-box.tb-done { pointer-events: auto; cursor: pointer; }
