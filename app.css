@@ -1228,6 +1228,23 @@ body::before {
   --peek: clamp(28px, 5.2vh, 46px);
   --scene-h: min(627px, max(280px, calc(100vh - var(--sat) - var(--sab) - 174px - var(--peek))));
   --fig: min(calc(100vw + 50px), 444px, calc(var(--scene-h) - var(--gw-top) - var(--gw-h) - 79px));
+  /* THE SCENE BLEEDS UP BEHIND THE STATUS BAR AND THE ISLAND. Tom, 2026-08-22:
+     "can we have the boneheadz background extend upward into the dynamic island so
+     that it doesnt feel like it just ends abruptly and waste's screen space?"
+     Measured before: at --sat 59 the backdrop art started at y=73 (.screen's own
+     calc(--sat + 14px)) and the strip above it was flat page navy.
+
+     --bleed is exactly that padding. The box moves up by it and grows by it, so
+     the CONTENT area is still --scene-h to the pixel and nothing below the hero
+     moves: .hero-actions measured 659.7 both before and after.
+
+     Two gotchas, both found by measuring rather than by reading:
+     1. margin-top must come AFTER the `margin` shorthand. The first attempt put
+        it before and the shorthand silently reset it, so the rule was in the file,
+        matched the element, and did nothing.
+     2. padding-top does NOT hold the absolutely positioned children. .hero-top
+        and .hero-char are position:absolute off the scene's top, so they rode the
+        box up 73px and sat under the island. They are pinned below. */
   position: relative; overflow: hidden; cursor: pointer;
   margin: 0;
   height: var(--scene-h);
@@ -1275,7 +1292,7 @@ body::before {
      art showing between them; that is two floating plates rather than a status
      column. Left-aligned and grouped, they are one object with the plaque
      directly beneath, which is the whole point of the arrangement. */
-  position: absolute; top: 10px; left: 12px; right: 12px; z-index: 5;
+  position: absolute; top: calc(10px + var(--bleed, 0px)); left: 12px; right: 12px; z-index: 5;
   display: flex; justify-content: flex-start; align-items: center; gap: 7px;
 }
 .hero-top-right { display: flex; gap: 7px; }
@@ -1691,6 +1708,29 @@ body::before {
    said 520, and every number derived from the plate came out short with it: the
    figure ended up 125px above the caption instead of 20, which is what Tom saw
    as "the bonehead is floating". */
+/* THE ISLAND BLEED, behind .fx-island (?island) and deliberately NOT shipped.
+   Tom, 2026-08-22: "can we have the boneheadz background extend upward into the
+   dynamic island so that it doesnt feel like it just ends abruptly".
+
+   It works: at --sat 59 the backdrop goes from y=73 to y=0, and NOTHING below the
+   hero moves (.hero-actions measures 659.7 both ways, .hero-top 83, .hero-char
+   209, all unchanged). Two gotchas cost a round each and are recorded so the next
+   attempt does not repeat them: margin-top must come AFTER the `margin` shorthand
+   or it is silently reset, and padding-top does not hold .hero-top or .hero-char
+   because both are position:absolute off the scene's top.
+
+   WHY IT IS GATED. With the scene starting at the island, the currency chips read
+   as floating in the MIDDLE of the art rather than pinned to its top: today-peek's
+   ORDER row measures them 83.0px below the scene's top edge and reds on it. The
+   wordmark rows change meaning too, because the mark now composites over olive art
+   instead of page navy. Those are design consequences for Tom to weigh, not
+   defects to silence, so the guards stay strict and this stays behind a flag. */
+.fx-island .hero-scene {
+  --bleed: calc(var(--sat) + 14px);
+  margin-top: calc(-1 * var(--bleed));
+  padding-top: var(--bleed);
+  height: calc(var(--scene-h) + var(--bleed));
+}
 .hero-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(0.92); }
 /* CENTRED and never anywhere else (Tom: "the bonehead should always be centred").
    Full width so `contain` centres him horizontally; bottom-aligned so his feet,
@@ -1717,7 +1757,7 @@ body::before {
    coral; the chips and Gwart occupy that band now and the figure sits under it
    rather than floating inside it. */
 .hero-char { position: absolute; left: -16px; right: -34px;
-  top: calc(var(--gw-top, 50px) + var(--gw-h, 90px)); bottom: 79px;
+  top: calc(var(--gw-top, 50px) + var(--gw-h, 90px) + var(--bleed, 0px)); bottom: 79px;
   z-index: 2; display: flex; align-items: flex-end; justify-content: center;
   animation: bhIdle 4s ease-in-out infinite;
   filter: drop-shadow(0 10px 12px rgba(0, 0, 0, .4)); }
