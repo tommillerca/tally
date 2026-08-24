@@ -39,7 +39,17 @@ const srv = process.argv[2] ? null : await serveTree(ROOT);
 const base = process.argv[2] || srv.url;
 console.log(`URL UNDER TEST: ${base}`);
 
-const { browser, page } = await boot(base);
+/* THE MAP NEEDS A GL CONTEXT AND THIS CONTAINER HAS NO GPU. Without these flags
+   boneyardCapability() reports "no webgl or webgl2 context could be created at
+   all", the Boneyard swaps itself for the offline message, and every row below
+   grades an empty stage: CONTROL read "0 tile request(s) aborted" and MESSAGE
+   read "retry button false" on a perfectly healthy app. Measured 2026-08-23:
+   3/3 green with the flags, red without. Same four flags boneyard-audit.mjs
+   already passes for the same reason; they are software-rasteriser fallbacks, so
+   they change what CAN render, not what the app does. */
+const { browser, page } = await boot(base, {
+  args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+});
 
 /* Collect everything the page throws, from both channels. An uncaught TypeError
    inside a promise surfaces as unhandledrejection, not pageerror, and the bug
