@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 433, date: '2026-08-24', title: 'Walk into a friend\'s paddock', items: [
+    'A friend\'s paddock is a place you can walk into now, not a row of thumbnails. Open their profile from Crew and tap "Visit their paddock": you come out in their field, their pets grazing in it, wearing whatever your friend has put on them, with their Bonehead standing at the gate. It is the same field you see your own herd in. A friend who has not updated yet has no field to visit, and no button offering one.',
+  ] },
   { n: 432, date: '2026-08-24', title: 'The Kitchen has a cauldron in it', items: [
     'The empty pot in the Kitchen is a cauldron now instead of a cookbook. It sits under a heading that says Cauldrons on a card that says Empty pot, so a book was the one thing in that corner not telling you where you were.',
     'The currencies on Today sit properly under the top of the screen again, instead of floating with a gap above them.',
@@ -11,7 +14,6 @@ export const CHANGES = [
     'Changing how a piece looks is a different screen. Your Bonehead is right there above the choices showing before and after, so you can see what you are buying instead of scrolling up to check. It says what you keep, what you get and what you pay, in that order, and nothing is taken until you confirm.',
     'The game art now runs all the way to the top of the phone, behind the clock and the camera, instead of stopping in a line and leaving a dead strip.',
     'The Boneheadz wordmark still appears when you pull down past the top, and now draws over the art rather than behind it, so it is not hidden by the change above.',
-    'A friend\'s paddock is a place you can walk into now, not a row of thumbnails. Open their profile from Crew and tap "Visit their paddock": you come out in their field, their pets grazing in it, wearing whatever your friend has put on them, with their Bonehead standing at the gate. It is the same field you see your own herd in. A friend who has not updated yet has no field to visit, and no button offering one.',
   ] },
   { n: 430, date: '2026-08-23', title: 'Crew cards stop eating pets, and the wheel and wordmark behave', items: [
     'On the Crew tab, a friend with a long title or nickname used to have their pet cropped by the name plate. The plate grew instead of the text getting shorter. Names now trail off with a "..." and the plate stays put, which gives the art back the space it was losing.',
