@@ -233,6 +233,88 @@ try {
   ok('NESTED the promo banner is NOT inside the day', !todayShape.promoInDay);
   ok('NESTED and it comes after the whole day, not before it', todayShape.promoAfterDay);
 
+  // --------------------------------------------------------------- LEDGER
+  /* THE DAY IS A LEDGER, NOT A BOX OF BOXES. Tom's sentence is that the screen
+     "reads as floating widgets rather than one screen". NESTED above proves the
+     day CONTAINS everything, and that is only half of it: measured at 390x844
+     on the shipped v425 container, the screen drew 4 surfaces but the day drew
+     8 MORE inside itself, because Calories, Wellness, Activity and all four
+     meals each kept the full hand-inked panel (app.css:975) laid on the day's
+     own well, with a kicker above each one naming it a second time. Nine
+     `.entry` food rows sat inside those as pills.
+
+     A SURFACE IS COUNTED THE WAY AN EYE COUNTS ONE: an element that paints a
+     background different from the day's own, or carries a keyline on two or
+     more sides, and is big enough to read as a panel rather than as a chip.
+     Not a class-name list, which would go red the day somebody renames a card
+     and green the day somebody adds one (lessons_audit_drift_false_red).
+
+     THE BOUND IS ZERO, AND IT TAKES THREE ROWS TOGETHER, because on its own
+     "no panels inside the day" is satisfied by two different disasters:
+       SETUP    refuses to grade a day with nothing in it. An empty day has no
+                panels either, and that is not this passing.
+       CONTROL  a `.card` OUTSIDE the day still has the hand-inked keyline. The
+                cheap way to make the row above green is to delete .card's skin
+                app-wide, which would flatten the Kitchen, the Stable and the
+                shop as collateral. Proven: that mutation goes red HERE and
+                nowhere else.
+       SEAMS    the sections are still separated. The other cheap pass is to
+                delete every rule and let the day become one undifferentiated
+                column of text, so each section after the first has to carry a
+                real hairline. Flattening is not the same as erasing. */
+  const ledger = await page.evaluate(() => {
+    const sc = document.getElementById('screen');
+    const day = sc.querySelector('.dayblk');
+    if (!day) return { noDay: true };
+    const pageBg = getComputedStyle(document.body).backgroundColor;
+    const dayBg = getComputedStyle(day).backgroundColor;
+    const label = el => (el.className || el.tagName).toString().split(' ').filter(Boolean).slice(0, 3).join('.');
+    const paintsPanel = el => {
+      const st = getComputedStyle(el), bg = st.backgroundColor;
+      const solid = bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' && bg !== pageBg && bg !== dayBg;
+      const widths = ['Top', 'Right', 'Bottom', 'Left'].map(k => parseFloat(st['border' + k + 'Width']) || 0);
+      const keylined = widths.filter(w => w >= 1).length >= 2
+        && st.borderTopStyle !== 'none' && st.borderTopStyle !== 'hidden';
+      const r = el.getBoundingClientRect();
+      return (solid || keylined) && r.width > 150 && r.height > 40;
+    };
+    const inside = [...day.querySelectorAll('*')]
+      /* form controls are not sections: a text input is SUPPOSED to look like a
+         box you can type in, and flattening it would be a bug, not the fix. */
+      .filter(el => !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))
+      .filter(paintsPanel);
+    const outermost = inside.filter(el => !inside.some(o => o !== el && o.contains(el)));
+    const secs = [...day.querySelectorAll('.tsec')];
+    const seams = secs.slice(1).map(el => ({
+      el: label(el), w: parseFloat(getComputedStyle(el).borderTopWidth) || 0,
+      style: getComputedStyle(el).borderTopStyle,
+    }));
+    const outside = [...sc.querySelectorAll('.card')].filter(c => !day.contains(c)).map(c => {
+      const st = getComputedStyle(c);
+      return { el: label(c), bw: parseFloat(st.borderTopWidth) || 0, shadow: st.boxShadow !== 'none' };
+    });
+    return {
+      sections: secs.length,
+      cardsInDay: day.querySelectorAll('.card, .meal').length,
+      panels: outermost.map(el => ({ el: label(el), h: Math.round(el.getBoundingClientRect().height) })),
+      seams, outside,
+    };
+  });
+  console.log('LEDGER', JSON.stringify(ledger));
+  ok('LEDGER SETUP the day has sections and cards in it to grade (an empty day has no panels either)',
+    !ledger.noDay && ledger.sections >= 4 && ledger.cardsInDay >= 3,
+    JSON.stringify({ sections: ledger.sections, cardsInDay: ledger.cardsInDay }));
+  ok('LEDGER nothing inside the day paints its own panel: the well is the only surface',
+    Array.isArray(ledger.panels) && ledger.panels.length === 0,
+    `${(ledger.panels || []).length} panel(s) drawn inside the day: ` +
+    ((ledger.panels || []).map(p => `${p.el} h${p.h}`).join(', ') || 'none'));
+  ok('LEDGER SEAMS every section after the first is still separated by a real rule',
+    Array.isArray(ledger.seams) && ledger.seams.length >= 3 && ledger.seams.every(s => s.w >= 1 && s.style !== 'none'),
+    JSON.stringify(ledger.seams));
+  ok('LEDGER CONTROL a card OUTSIDE the day keeps the hand-inked skin, so this was not bought by flattening every card in the app',
+    Array.isArray(ledger.outside) && ledger.outside.length >= 1 && ledger.outside.every(c => c.bw >= 2 && c.shadow),
+    JSON.stringify(ledger.outside));
+
   // ---------------------------------------------------------------- NUDGE
   /* COMMENTS ARE NOT EVIDENCE OF LIFE, the same call tests/selector-audit.mjs
      makes and for the same reason: the removal is documented in place, so the
