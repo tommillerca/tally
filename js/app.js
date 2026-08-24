@@ -10859,6 +10859,10 @@ function openFriendProfile(f, onChange, opts = {}) {
             ${petPortraitHtml(x.sp, 54, !!x.shiny, { mass: true, wear: yardWear })}
           </span>`).join('')}</div>
         ${yard.n > yard.pets.length ? `<p class="note fp-yard-more">and ${yard.n - yard.pets.length} more back at the paddock</p>` : ''}
+        <!-- THE SHELF IS THE DOOR NOW, not the destination: openFriendPaddock
+             draws them out in their own field, the same scene the player sees
+             their own herd in. Tom, 2026-08-24. -->
+        <button class="btn ghost fp-yard-go" id="fpYardGo" type="button">Visit their paddock ›</button>
       </div>` : '';
   const statBars = p.stats ? STAT_META.map(m => {
     const v = p.stats[m.key] ?? 0;
@@ -10907,6 +10911,7 @@ function openFriendProfile(f, onChange, opts = {}) {
       ${stranger ? '' : '<button class="btn ghost danger fp-remove" id="fpRemove">Remove friend</button>'}
     </div>
   `, { cls: 'sheet-fp' });
+  $('#fpYardGo', wrap)?.addEventListener('click', () => openFriendPaddock(f));
   $('#fpGift', wrap)?.addEventListener('click', () => openGiftSheet(f));
   $('#fpCheer', wrap)?.addEventListener('click', () => openCheerSheet(f));
   $('#fpAdd', wrap)?.addEventListener('click', async e => {
@@ -13741,6 +13746,35 @@ const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
    BELOW it was visibly blocky in the side-by-side and every item above it was
    indistinguishable between the two paths. */
 const SMALL_INK = 64;
+/* THE NEXT SOURCE UP, ONE TIER AT A TIME. Returns null once `src` is already the
+   master (or was never a tiered thumbnail), which is what terminates the retry
+   in drawTrimmedArt: the tier strictly increases and the master is the last step.
+
+   WHY IT IS NOT A JUMP STRAIGHT TO THE MASTER, which is what it replaced.
+   Trimming MAGNIFIES, so a surface's tier is right for the FRAME and wrong for
+   the INK: a hat is a small patch of a 640 full-body square, so at 192 its
+   trimmed box lands just under this threshold and the jump handed a 200px cell
+   the whole 640x640 master.
+   METHOD, 2026-08-24, on this tree at 393x852 DPR 2, machine busy (load ~12):
+   the Wardrobe's hat slot, with window.Image hooked to log src and naturalWidth
+   at every construction rather than only to sum them. 128 canvases (71 in the
+   slot grid, 57 in the transmog look picker, which lists the same hats again),
+   402 Images built, 63 of those canvases tripped the threshold at 192 and every
+   one of the 63 pulled a master. Peak live set: 63 concurrent 640x640 bitmaps,
+   103.1 MB, reproduced twice, against the memory census's 90 MB ceiling.
+   With the step: the 384 sheet clears the threshold for 39 of the 63, only 24
+   canvases still reach a master, and the same instrument reads 38.6 MB.
+   NOT A QUALITY CUT. A cell served by 384 draws its ink into a 200px canvas at
+   roughly 1.5-1.9x, and the 65 canvases that never escalate at all already ship
+   at up to 2.9x off the 192 sheet, so the step lands inside the range this
+   screen has always drawn. Anything still too small at 384 goes on to the
+   master exactly as before. */
+const nextArtTier = src => {
+  const m = /^(.*\/thumb\/)(\d+)(\/.*)$/.exec(src || '');
+  if (!m) return null;
+  const up = BH_THUMB_TIERS.find(t => t > +m[2]);
+  return up ? `${m[1]}${up}${m[3]}` : src.replace(/\/thumb\/\d+\//, '/');
+};
 /* THE ALPHA BOX OF A FILE NEVER CHANGES, SO IT IS SCANNED ONCE.
    Measured 2026-08-21 on this tree, at 440x956 / CPU x6, driving the real tab
    bar: one navigation to the Bonehead hub calls this 15 times and scans
@@ -13755,7 +13789,7 @@ const SMALL_INK = 64;
    ponytail: unbounded Map, but the keys are asset paths from a closed set of a
    few hundred art files at four ints each; evict if that ever stops being true. */
 const TRIM_BOX = new Map();
-function drawTrimmedArt(canvas, src, pad = 0.08, _fromMaster = false) {
+function drawTrimmedArt(canvas, src, pad = 0.08) {
   return new Promise(res => {
     const img = new Image();
     img.onload = () => {
@@ -13776,10 +13810,11 @@ function drawTrimmedArt(canvas, src, pad = 0.08, _fromMaster = false) {
       }
       const [x0, y0, x1, y1] = box;
       const bw = x1 - x0 + 1, bh = y1 - y0 + 1;
-      /* Tiny ink from a thumbnail: take the master and start again. One extra
-         request, and only for the items that cannot be served by a tier. */
-      if (!_fromMaster && Math.max(bw, bh) < SMALL_INK && /\/thumb\/\d+\//.test(src || '')) {
-        return void drawTrimmedArt(canvas, src.replace(/\/thumb\/\d+\//, '/'), pad, true).then(res);
+      /* Tiny ink from a thumbnail: step up ONE TIER and start again, and keep
+         stepping only while the ink is still too small. */
+      if (Math.max(bw, bh) < SMALL_INK) {
+        const up = nextArtTier(src);
+        if (up) return void drawTrimmedArt(canvas, up, pad).then(res);
       }
       const cw = canvas.width, ch = canvas.height, p = 1 - pad * 2;
       // Upscale cap + two-step scaling keep small source art (e.g. a 43px
@@ -14699,45 +14734,18 @@ function openPetsHelp() {
     </div>`, { cls: 'full', name: 'pets_help' });
 }
 
-/* ================= THE PADDOCK (design_handoff_the_paddock, 2026-08-10) ====
- * Affection surface, NOT management: every owned copy wanders one haunted
- * scene; tapping a pet opens Lane W's per-copy card slider (js/paddock-cards
- * .js, loaded lazily; absent until Walt's half lands and the tap degrades to
- * a no-op rather than an error). Scene placement comes from js/paddock.js
- * (placePaddock: the exclusive x-band rule as an algorithm, unit-pinned).
- * FIDELITY DEVIATION, flagged for review: the handoff draws its own in-scene
- * back chevron; this build keeps the standard sheet-head instead, because the
- * back-swipe / history behavior of openSheet is house machinery we do not
- * fork per screen. The hanging sign stays. */
-async function openPaddock() {
-  const { paddockRoster, paddockEggs, placePaddock, PDK_SCENE, rotHash } = await import('./paddock.js');
-  const [roster, eggs, eqOwn, ownedIds] = await Promise.all([paddockRoster(), paddockEggs(), equipped(), ownedCosmeticIds()]);
-  /* THE HERD TURNS OVER WHEN THE PLAYER'S DAY DOES. placePaddock's rotation seed
-     defaults to toISOString(), which is UTC, and calling it with no day meant a
-     collection past the walk cap swapped its herd at 17:00 local here while
-     streaks, daily bosses and every other rollover in the app use the LOCAL
-     dateKey. Same class as the bug documented at the top of mini-theme-audit.mjs.
-     Pass the app's own day so there is one day boundary in the game. */
-  const places = placePaddock(roster, PDK_SCENE, dateKey());
-  /* THE BUSHES TEASE WHAT YOU ARE MISSING. Tom, 2026-08-11: "I like the hiding
-     in the bushes thing but maybe it should be uncollected shinies? It's
-     showing the day one lizard as hiding in the bushes for me but I have it."
-     Two fixes in one: ownership now reads the cosmetic inventory (the same
-     source the wardrobe trusts) instead of the instance roster, which missed
-     legacy grants like the Founder's Lizard and showed veterans their own pet;
-     and the tease is now a shiny you have NOT collected, of a species you DO
-     own (never spoils an unseen pet), rotating daily. The CX secret keeps
-     priority for players who genuinely lack it. CX has no shiny variant, so it
-     is never a shiny candidate. Nothing missing = no lurker: an empty tease
-     would be a lie. */
-  /* shiny ownership comes off the INSTANCES already in hand, not S.shinyPets:
-     that cache refreshes at boot + hatch, so a mid-session grant or restore
-     would leave the bushes teasing a shiny the player just collected */
-  const shinyOwned = new Set(roster.filter(r => r.shiny).map(r => r.sp));
-  const shinyGaps = [...ownedIds].filter(id => (BH_BY_ID[id] || {}).slot === 'C' && id !== 'CX' && !shinyOwned.has(id)).sort();
-  const lurkSp = !ownedIds.has('CX') ? 'CX'
-    : shinyGaps.length ? shinyGaps[rotHash('lurk:' + dateKey()) % shinyGaps.length] : null;
-
+/* THE SCENE, DRAWN ONCE. The player's own field (openPaddock) and a friend's
+ * (openFriendPaddock) are the same place seen from two doors, so they are one
+ * renderer with everything it needs handed in: the roster, its placement, the
+ * keeper's outfit and the egg count. A second field built beside this one is
+ * how the two quietly stop being the same game.
+ * WEAR RIDES THE ROSTER ROW and is never left undefined here: undefined means
+ * "ask S.petWear", the VIEWER's wardrobe, which would dress a friend's
+ * Bumbleseal out of your purse (the figure contract's rule 1). paddockRoster
+ * already carries the player's own wardrobe on every row, and a friend's comes
+ * off their crew snapshot, so both callers pass a real answer or an explicit
+ * null and neither can fall through to the cache. */
+function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = null, coach = null }) {
   const backdrop = `
     <svg class="pdk-ground" viewBox="0 0 390 520" aria-hidden="true">
       <g fill="#202a18">
@@ -14788,7 +14796,7 @@ async function openPaddock() {
         <path d="M304 366 h78 M308 374 h70" stroke="#5d4630" stroke-width="2"/>
         <path d="M300 356 q43 -12 86 0" stroke="#8f6d47" stroke-width="3" fill="none"/>
         <path d="M296 352 q6 -8 12 -4 M386 350 q-6 -9 -12 -5" stroke="#a98c48" stroke-width="2.4" fill="none"/>
-        ${Array.from({ length: Math.min(4, Math.max(0, eggs.count)) }, (_, i) => {
+        ${Array.from({ length: Math.min(4, Math.max(0, eggCount)) }, (_, i) => {
           const speck = ['#b8ddf0', '#c9b8e8', '#f5c9a8'][i % 3];
           const x = 326 + i * 14, tilt = i === 0 ? 0 : (i % 2 ? -12 : 12);
           return `<g transform="rotate(${tilt} ${x} 348)"><ellipse cx="${x}" cy="348" rx="11" ry="14" fill="${i === 3 ? '#e5dcc8' : '#f2e9d7'}" stroke="#17151d" stroke-width="2"/><circle cx="${x - 3}" cy="344" r="1.5" fill="${speck}"/><circle cx="${x + 3}" cy="350" r="1.3" fill="${speck}"/></g>`;
@@ -14800,7 +14808,7 @@ async function openPaddock() {
   const petHtml = r => {
     const p = places[r.iid];
     if (!p) return '';
-    const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny });
+    const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny, wear: r.wear || null });
     const rarity = (BH_BY_ID[r.sp] || {}).rarity;
     const glow = p.kind === 'fly' && rarity === 'legendary' ? ' pdk-gold' : p.kind === 'hover' && rarity === 'epic' ? ' pdk-epic' : '';
     const pos = p.kind === 'walk'
@@ -14813,11 +14821,7 @@ async function openPaddock() {
       ${p.kind === 'walk' || p.kind === 'flop' ? '<span class="pdk-shadow"></span>' : ''}
     </div>`;
   };
-
-  const K = PDK_SCENE.KEEPER;
-  const wrap = openSheet(`
-    <div class="sheet-head"><h2>The Paddock</h2><button class="sheet-close">Done</button></div>
-    <div class="sheet-body" style="padding:0">
+  return `
       <div class="pdk-scene" id="pdkScene">
         ${backdrop}
         <div class="pdk-sign">
@@ -14834,8 +14838,8 @@ async function openPaddock() {
              Your equipped outfit, rendered by the same layer stack as the Today
              hero (skip BG: the scene is the backdrop; skip C: your pets are
              already the point of the field). -->
-        <div class="pdk-keeper" style="left:${K.x - K.px / 2}px;top:${K.y - K.px / 2}px;width:${K.px}px;height:${K.px}px">
-          ${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true })}
+        <div class="pdk-keeper" style="left:${keeper.x - keeper.px / 2}px;top:${keeper.y - keeper.px / 2}px;width:${keeper.px}px;height:${keeper.px}px">
+          ${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}
         </div>
         ${roster.map(petHtml).join('')}
         ${lurkSp ? `<div class="pdk-lurker${lurkSp !== 'CX' ? ' pdk-lure-shiny' : ''}" data-pdk="${lurkSp}" style="left:296px;top:158px;width:96px;height:64px">
@@ -14845,8 +14849,54 @@ async function openPaddock() {
         <i class="pdk-fog" style="left:20px;top:172px;--pdk-dur:26s"></i>
         <i class="pdk-fog" style="left:120px;top:214px;--pdk-dur:32s"></i>
         <div class="pdk-vignette"></div>
-        <div class="pdk-coach" id="pdkCoach">Tap a pet to say hi</div>
-      </div>
+        ${coach ? `<div class="pdk-coach" id="pdkCoach">${coach}</div>` : ''}
+      </div>`;
+}
+
+/* ================= THE PADDOCK (design_handoff_the_paddock, 2026-08-10) ====
+ * Affection surface, NOT management: every owned copy wanders one haunted
+ * scene; tapping a pet opens Lane W's per-copy card slider (js/paddock-cards
+ * .js, loaded lazily; absent until Walt's half lands and the tap degrades to
+ * a no-op rather than an error). Scene placement comes from js/paddock.js
+ * (placePaddock: the exclusive x-band rule as an algorithm, unit-pinned).
+ * FIDELITY DEVIATION, flagged for review: the handoff draws its own in-scene
+ * back chevron; this build keeps the standard sheet-head instead, because the
+ * back-swipe / history behavior of openSheet is house machinery we do not
+ * fork per screen. The hanging sign stays. */
+async function openPaddock() {
+  const { paddockRoster, paddockEggs, placePaddock, PDK_SCENE, rotHash } = await import('./paddock.js');
+  const [roster, eggs, eqOwn, ownedIds] = await Promise.all([paddockRoster(), paddockEggs(), equipped(), ownedCosmeticIds()]);
+  /* THE HERD TURNS OVER WHEN THE PLAYER'S DAY DOES. placePaddock's rotation seed
+     defaults to toISOString(), which is UTC, and calling it with no day meant a
+     collection past the walk cap swapped its herd at 17:00 local here while
+     streaks, daily bosses and every other rollover in the app use the LOCAL
+     dateKey. Same class as the bug documented at the top of mini-theme-audit.mjs.
+     Pass the app's own day so there is one day boundary in the game. */
+  const places = placePaddock(roster, PDK_SCENE, dateKey());
+  /* THE BUSHES TEASE WHAT YOU ARE MISSING. Tom, 2026-08-11: "I like the hiding
+     in the bushes thing but maybe it should be uncollected shinies? It's
+     showing the day one lizard as hiding in the bushes for me but I have it."
+     Two fixes in one: ownership now reads the cosmetic inventory (the same
+     source the wardrobe trusts) instead of the instance roster, which missed
+     legacy grants like the Founder's Lizard and showed veterans their own pet;
+     and the tease is now a shiny you have NOT collected, of a species you DO
+     own (never spoils an unseen pet), rotating daily. The CX secret keeps
+     priority for players who genuinely lack it. CX has no shiny variant, so it
+     is never a shiny candidate. Nothing missing = no lurker: an empty tease
+     would be a lie. */
+  /* shiny ownership comes off the INSTANCES already in hand, not S.shinyPets:
+     that cache refreshes at boot + hatch, so a mid-session grant or restore
+     would leave the bushes teasing a shiny the player just collected */
+  const shinyOwned = new Set(roster.filter(r => r.shiny).map(r => r.sp));
+  const shinyGaps = [...ownedIds].filter(id => (BH_BY_ID[id] || {}).slot === 'C' && id !== 'CX' && !shinyOwned.has(id)).sort();
+  const lurkSp = !ownedIds.has('CX') ? 'CX'
+    : shinyGaps.length ? shinyGaps[rotHash('lurk:' + dateKey()) % shinyGaps.length] : null;
+
+  const K = PDK_SCENE.KEEPER;
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>The Paddock</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" style="padding:0">
+      ${paddockSceneHtml({ roster, places, eggCount: eggs.count, eq: eqOwn, keeper: K, lurkSp, coach: 'Tap a pet to say hi' })}
       <div class="pdk-panel" id="pdkPanel"><!-- Lane W mounts here (walt/paddock-ui) --></div>
     </div>`, { cls: 'sheet-paddock' });
 
@@ -14868,6 +14918,51 @@ async function openPaddock() {
   $('#pdkNest', wrap)?.addEventListener('click', () => {
     import('./paddock-cards.js').then(m => m.openPaddockCards('egg')).catch(() => {});
   });
+}
+
+/* THEIR FIELD, NOT A SHELF OF IT.
+ *
+ * Tom, 2026-08-24, on what v425 shipped: "you didnt really implement the paddock
+ * like i expected .. i thought you were going to show it how i see it with my guy
+ * out in the field with all the pets. i wanted to see my friends out in THEIR
+ * field with all THEIR pets if i clicked through or something."
+ *
+ * So this is the SAME scene openPaddock draws, fed from the crew snapshot instead
+ * of the local roster: their Bonehead at the gate, their pets grazing their bands,
+ * their wardrobe on the one dressable species. The profile's shelf is now the DOOR
+ * to this rather than the destination.
+ *
+ * WHAT THE SNAPSHOT DOES NOT CARRY, and what was deliberately NOT added to it to
+ * make the picture nicer. `yard` rides the PLAINTEXT profile blob and reaches
+ * every accepted friend, so a field added there is a field published:
+ *   instance ids  never sent. The herd is keyed by POSITION instead, which is all
+ *                 placePaddock needs (a stable string to band and rotate by).
+ *   eggs          not sent, so the nest stands empty rather than inventing a
+ *                 clutch. An empty nest is scenery; a guessed one is a claim.
+ *   bonds/levels  not sent, so a pet here is not a tap target: there is nothing
+ *                 true to open behind it, and the coach mark that invites the tap
+ *                 is left off for the same reason.
+ * THE COUNT IS `n`, THE NUMBER THEY OWN. The wire caps the list at 24 and the walk
+ * cap thins the herd again, so three numbers are in play and only one of them is
+ * the brag. */
+async function openFriendPaddock(f) {
+  const p = f.profile || {};
+  const yard = p.yard && Array.isArray(p.yard.pets) ? p.yard : null;
+  if (!yard || !yard.pets.length) return;
+  const { placePaddock, PDK_SCENE, motionFor } = await import('./paddock.js');
+  const wear = yard.wear || null;             // THEIRS or bare, never undefined
+  const roster = yard.pets.map((x, i) => ({ iid: `y${i}`, sp: x.sp, shiny: !!x.shiny, motion: motionFor(x.sp), wear }));
+  const places = placePaddock(roster, PDK_SCENE, dateKey());
+  const out = roster.filter(r => places[r.iid]).length;
+  openSheet(`
+    <div class="sheet-head"><h2>${esc(f.alias || f.name || 'Their')}'s Paddock</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" style="padding:0">
+      ${paddockSceneHtml({ roster, places, eggCount: 0, eq: p.outfit || { B: 'B0-1', SK: 'SK0-1' }, keeper: PDK_SCENE.KEEPER })}
+      <div class="pdk-panel fpdk-note">
+        <b>${yard.n} PET${yard.n === 1 ? '' : 'S'}</b>
+        ${out < yard.n ? `<p class="note">${out} out in the field right now</p>` : ''}
+      </div>
+    </div>`, { cls: 'sheet-paddock' });
 }
 
 async function openStable(opts = {}) {
@@ -18087,7 +18182,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v432'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v433'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

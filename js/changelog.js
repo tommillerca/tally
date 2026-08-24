@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 433, date: '2026-08-24', title: 'Walk into a friend\'s paddock', items: [
+    'A friend\'s paddock is a place you can walk into now, not a row of thumbnails. Open their profile from Crew and tap "Visit their paddock": you come out in their field, their pets grazing in it, wearing whatever your friend has put on them, with their Bonehead standing at the gate. It is the same field you see your own herd in. A friend who has not updated yet has no field to visit, and no button offering one.',
+  ] },
   { n: 432, date: '2026-08-24', title: 'The Kitchen has a cauldron in it', items: [
     'The empty pot in the Kitchen is a cauldron now instead of a cookbook. It sits under a heading that says Cauldrons on a card that says Empty pot, so a book was the one thing in that corner not telling you where you were.',
     'The currencies on Today sit properly under the top of the screen again, instead of floating with a gap above them.',
