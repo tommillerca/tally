@@ -3488,7 +3488,16 @@ body::before {
   border-top: 2px solid var(--ink); background: var(--surface);
   display: flex; flex-direction: column; gap: 1px; text-align: left;
 }
-.cfan-plate b { font-family: var(--display); font-weight: 400; font-size: 16px; letter-spacing: 0.04em; color: var(--text); white-space: nowrap; overflow: hidden; }
+/* ELLIPSIS, NOT CLIP. Tom, 2026-08-22: "the crew tab: some people's pets get cut
+   off in the crew card album layout" on long titles and nicknames. Measured on the
+   worst real case ("Bone Grand Master 113" plus a long alias) at 393x852: the
+   plate ran to 74px over three lines and ate the pet; the name overflowed with
+   text-overflow CLIP, so it was sliced mid-glyph with no signal it continued.
+   With the title in its own ellipsising span the plate measures 58px, 16px of
+   which goes back to the art, and both lines end in an ellipsis instead of a cut
+   letter. Measured 2026-08-23, before 74px / after 58px. */
+.cfan-plate b { font-family: var(--display); font-weight: 400; font-size: 16px; letter-spacing: 0.04em; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cfan-plate .cfan-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cfan-plate small {
   font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
   color: var(--text-3); display: flex; align-items: center; gap: 5px;
@@ -3496,6 +3505,19 @@ body::before {
 .cfan-plate .lv {
   margin-left: auto; background: var(--gold); color: var(--ink); border: 2px solid var(--ink);
   border-radius: 7px; padding: 0 6px; font-family: var(--display); font-size: 12px; letter-spacing: 0.03em;
+  /* nowrap and no-shrink, and this is the half that actually saves the pet.
+     The title ellipsising is not enough on its own: measured on the worst real
+     case, .cfan-title was 13.5px tall while THIS badge was 36.4px, because a long
+     title squeezed the flex row until "LV 113" broke across lines inside its own
+     pill. The plate grew to 74px over three lines and ate the art below it.
+     Measured 2026-08-23: 74px -> 57.8px, the pill 36.4px -> 20.2px.
+
+     It is `flex` and not `white-space` that does this, which is worth writing down
+     because the obvious guess is wrong. The first version set BOTH, and removing
+     nowrap while keeping this line left the guard GREEN: the pill was never
+     breaking on its own whitespace, it was being SQUEEZED, so refusing to shrink
+     is the whole fix. Removing this line takes the plate straight back to 74px. */
+  flex: 0 0 auto;
 }
 .cfan-live { position: absolute; top: 8px; right: 8px; z-index: 2; width: 11px; height: 11px; border-radius: 50%; background: var(--accent); border: 2px solid var(--ink); }
 .cfan-fstar { position: absolute; top: 5px; left: 8px; z-index: 2; display: grid; place-items: center;
@@ -5535,7 +5557,15 @@ body::before {
 .glutton-banner { background: linear-gradient(160deg, rgba(159, 176, 78, .14), rgba(22, 20, 32, .9) 55%), var(--surface); border: 1px solid rgba(159, 176, 78, .28); border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
 .glutton-banner > summary { list-style: none; display: flex; align-items: center; gap: 11px; padding: 11px 13px; cursor: pointer; }
 .glutton-banner > summary::-webkit-details-marker { display: none; }
-.gbn-ico { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 10px; background: #0d0f08; border: 1px solid rgba(159, 176, 78, .35); overflow: hidden; position: relative; }
+/* THE GLYPH IS CENTRED IN THE SLOT, AND IT IS THE SHARED SKIN THAT DOES IT.
+   Tom, 2026-08-22: "the icon on the crew banner 'thanks for bieng early' is up in
+   the top left, it should be centred like the first step foot". Measured on the
+   real banner (.gbn-ico.bt-bnr-ico) at 393x852: the glyph sat -8.0, -9.0 px from
+   the disc's centre, because the slot was `display: block` and the glyph simply
+   started at its top-left corner. `grid` + `place-items: center` fixes it for
+   every banner at once, current and future, rather than nudging this one.
+   Measured 2026-08-23: before dx -8.0 dy -9.0, after dx 0.0 dy 0.0. */
+.gbn-ico { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 10px; background: #0d0f08; border: 1px solid rgba(159, 176, 78, .35); overflow: hidden; position: relative; display: grid; place-items: center; }
 .gbn-ico .glutton-hero { position: absolute; width: 150%; left: 50%; top: 58%; transform: translate(-50%, -50%); margin: 0; }
 .gbn-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .gbn-txt i { font-style: normal; font-size: 9.5px; letter-spacing: .2em; color: var(--glutton-sick); text-transform: uppercase; font-weight: 800; }

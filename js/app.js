@@ -9640,7 +9640,7 @@ function crewCardHtml(f) {
     <div class="cfan-stage"></div>
     ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
     <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>
-    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small>${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}<span class="lv">LV ${p.level || 1}</span></small></div>
+    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small></div>
   </button>`;
 }
 

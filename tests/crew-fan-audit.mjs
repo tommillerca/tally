@@ -473,6 +473,82 @@ const noneMsg = await page.evaluate(() => {
 ok('ONLINE an empty result explains itself and says how to undo it',
   /online right now/i.test(noneMsg) && /tap online/i.test(noneMsg), noneMsg || '(nothing shown)');
 
+/* ------------------------------------------------- PLATE, and the pet ---------
+   Tom, 2026-08-22: "the crew tab: some people's pets get cut off in the crew card
+   album layout" when a title or nickname is long.
+
+   Two things did it and only fixing both helps. The name and title were
+   text-overflow: CLIP, so a long one was sliced mid-glyph; and the "LV n" pill had
+   no white-space rule, so a long title squeezed the flex row until the pill broke
+   across lines INSIDE ITSELF. Measured on the worst real case, "Bone Grand Master
+   113" plus a long alias at 393x852: the pill rendered 36.4px tall against the
+   title's 13.5px and drove the plate to 74px over three lines, and the plate is
+   what covers the art.
+
+   PROVENANCE for the 62px bound, 2026-08-23: measured, not chosen. Fixed plate on
+   that same worst case is 57.8px, and the defect state is 74px. 62 clears the fix
+   by 4px and catches the defect by 12px. A single-line plate on a short name is
+   ~40px, so this is a ceiling and not a pin.
+   PROVE-RED: drop `white-space: nowrap` from `.cfan-plate .lv`. */
+await seedCrew([{ playerId: 'plate0', name: 'Bartholomew Fitzgerald-Wellington',
+  alias: 'the Unbelievably Long Nickname', lastSeen: Date.now(),
+  profile: { level: 113, levelName: 'Bone Grand Master 113', badges: 3, gearCount: 4,
+             outfit: { B: 'B0-1', SK: 'SK0-1', BG: 'BG1' }, pet: { sp: 'bumbleseal' } } }]);
+const plate = await page.evaluate(() => {
+  const c = document.querySelector('.cfan-card'); if (!c) return null;
+  const pl = c.querySelector('.cfan-plate'); if (!pl) return null;
+  const b = pl.querySelector('b'), t = pl.querySelector('.cfan-title'), lv = pl.querySelector('.lv');
+  const h = e => e ? +e.getBoundingClientRect().height.toFixed(1) : null;
+  return { plate: h(pl), name: h(b), title: h(t), lv: h(lv),
+           nameOver: b ? getComputedStyle(b).textOverflow : null,
+           titleOver: t ? getComputedStyle(t).textOverflow : null };
+});
+ok('PLATE the worst real title and nickname still render a card to grade (empty is a FAILURE)',
+  !!plate && plate.plate > 0, JSON.stringify(plate));
+ok('PLATE a long title and nickname do not grow the plate over the art (<= 62px)',
+  !!plate && plate.plate <= 62, JSON.stringify(plate));
+ok('PLATE the LV pill stays on one line rather than breaking inside itself',
+  !!plate && plate.lv != null && plate.lv <= 24, `lv ${plate && plate.lv}px, title ${plate && plate.title}px`);
+ok('PLATE long text ends in an ellipsis rather than a cut glyph',
+  !!plate && plate.nameOver === 'ellipsis' && plate.titleOver === 'ellipsis',
+  `name ${plate && plate.nameOver}, title ${plate && plate.titleOver}`);
+
+/* --------------------------------------------- THE BANNER ICON SLOT -----------
+   Tom, 2026-08-22: "the icon on the crew banner 'thanks for bieng early' is up in
+   the top left, it should be centred like the first step foot".
+
+   Measured on the real banner at 393x852: the glyph sat -8.0, -9.0 px off the
+   38px slot's centre, because `.gbn-ico` was `display: block` and the glyph simply
+   started at its top-left corner. The fix is on the SHARED skin, so every banner
+   is centred at once rather than this one being nudged.
+
+   It is guarded HERE rather than in tests/badge-centre-audit.mjs, and that is a
+   decision with a measurement behind it: that lint's ROUND_MIN_PCT is 45% and
+   .gbn-ico is a 26% radius. Setting it to 24 does reach this element and BOX/INK
+   both pass on it, but it also pulls the Boneyard readout disc into the sample,
+   which is occluded there, reding COVERAGE for a reason unrelated to centring.
+   Note left at that constant.
+   PROVE-RED: put `.gbn-ico` back to `display: block`. */
+const bico = await page.evaluate(() => {
+  const el = [...document.querySelectorAll('.gbn-ico')].find(e => e.getBoundingClientRect().width);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  const g = [...el.children].find(c => c.getBoundingClientRect().width);
+  if (!g) return { cls: el.className, noGlyph: true };
+  const gr = g.getBoundingClientRect();
+  return { cls: el.className, size: +r.width.toFixed(1),
+    dx: +((gr.left + gr.width / 2) - (r.left + r.width / 2)).toFixed(2),
+    dy: +((gr.top + gr.height / 2) - (r.top + r.height / 2)).toFixed(2) };
+});
+ok('BANNER a banner icon slot with a glyph in it was found to grade (empty is a FAILURE)',
+  !!bico && !bico.noGlyph, JSON.stringify(bico));
+/* 2px of the 19px radius, ~10%. The fix measures 0.00 on both axes and the defect
+   measured -8.0 and -9.0, so this catches the defect by 6px and clears the fix by
+   2px. Measured 2026-08-23. */
+ok('BANNER the glyph is centred in its slot, not parked in the top-left corner',
+  !!bico && !bico.noGlyph && Math.abs(bico.dx) <= 2 && Math.abs(bico.dy) <= 2,
+  JSON.stringify(bico));
+
 await browser.close();
 if (srv) srv.kill();
 console.log(fails ? '\nCREW FAN AUDIT FAILED' : '\nCREW FAN VERIFIED');

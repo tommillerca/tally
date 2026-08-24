@@ -47,8 +47,16 @@ import { sleep } from './godmode.js';
 
 /* A CIRCLE, not a rounded rectangle. Deliberately narrow: `.gbn-ico` on the Crew
    banners is a 38px box at a 10px radius (26%) with the same top-left glyph, and
-   that is feedback item v424-7, which belongs to its own workstream. Widening
-   this lint to cover it is one number, and this comment is where to change it. */
+   that is feedback item v424-7.
+
+   TRIED AND REVERTED 2026-08-23, by the session that then fixed v424-7: setting
+   this to 24 does reach `.gbn-ico`, and BOX and INK both stay green on it (the
+   banner glyph measures 0.0%). But it also pulls the Boneyard readout disc into
+   the sample, which is OCCLUDED on that screen, so COVERAGE goes red with "found
+   and NOT graded: COVERED" for a reason that has nothing to do with centring.
+   Widening is therefore one number PLUS a decision about occluded discs, not one
+   number. v424-7 is guarded in tests/crew-fan-audit.mjs instead, on the real
+   banner, and this stays narrow. */
 export const ROUND_MIN_PCT = 45;   // border-radius as a % of the box's own size
 export const MIN_BADGE_PX = 20;    // below this a "badge" is a bullet, not a disc
 
