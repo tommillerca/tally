@@ -26,7 +26,7 @@ export const CHANGES = [
     'Fixed, and this one was bad: adding a friend from the Crew board did not work at all. Not slowly, not sometimes. The "+ Add" button on the leaderboard, the "Worth adding" card and the button on someone\'s profile all sent the wrong thing to the wrong place, and the app told you nothing. If you tried to add someone in the last while and they never showed up, that is why, and it was not you. Try again.',
     'The Wanderer no longer stands in the middle of lakes and rivers. He is bound to land now, and if the only place he could walk that lap is water, he simply does not appear rather than wading.',
     'Your pets keep their outfits when they are not the one you have out. Bumbleseal stays dressed on her card and in the paddock, not just in the scene.',
-    'You can tap a friend in Crew and see their paddock: their pets, what those pets are wearing, and how many they have.',
+    'You can tap a friend in Crew and see their paddock: their pets, what those pets are wearing, and how many they have. Their side has to open the app on this version once before their paddock has anything in it, so give it a day.',
     'Cheers have somewhere to live. There is a Cheers panel in Crew with an unread badge, so nothing anyone sends you disappears before you see it, and you can cheer them back from the same place.',
     'The prize wheel\'s labels are the right way up. Five of the seven wedges could land upside down before, which was most spins.',
     'Levelling from the Gauntlet slows down the deeper you go. Nothing is capped and no fight pays less than it did at the start: the early runs are untouched and pay slightly more, while the twentieth lap stops being most of a level on its own.',
