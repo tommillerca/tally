@@ -6800,7 +6800,7 @@ async function openKitchen() {
     };
     // one card per owned pot: idle / cooking (progress) / ready (serve)
     const potCard = s => {
-      if (s.empty) return `<div class="pot-card idle"><span class="pot-ico">${pixCur('recipe', 26) || '🍲'}</span><small>Empty pot<br>pick a recipe below</small></div>`;
+      if (s.empty) return `<div class="pot-card idle"><span class="pot-ico">${pixCur('cauldron', 26) || '🍲'}</span><small>Empty pot<br>pick a recipe below</small></div>`;
       const pct = s.ready ? 100 : Math.max(0, Math.min(100, Math.round((1 - s.remainingMs / Math.max(1, s.readyAt - s.startedAt)) * 100)));
       return `<div class="pot-card ${s.ready ? 'ready' : 'cooking'}">
         <span class="pot-ico">${recipeIconHtml(s.recipe, 26)}</span>
@@ -18087,7 +18087,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v431'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v432'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

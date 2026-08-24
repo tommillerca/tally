@@ -41,6 +41,7 @@ const closeSheets = async () => {
     await sleep(450);
   }
 };
+let potGraded = false;
 const openKitchen = async () => {
   await closeSheets();
   await page.evaluate(() => { location.hash = '#/today'; });
@@ -54,6 +55,42 @@ const openKitchen = async () => {
 };
 const openCook = async () => {
   await openKitchen();
+
+/* THE EMPTY POT SHOWS A CAULDRON, AND IT IS DECODED.
+   Tom, 2026-08-22: "swap the cookbook icon to a cauldron in the kitchen it doesnt
+   currently read" as one. He picked the cold pot on 2026-08-24, and cold is right
+   for this slot because the card beside it says "Empty pot".
+
+   Graded on the RENDER, not on the source: a swapped constant with a missing or
+   404 asset draws nothing, and "the code says cauldron" is not the claim. It
+   asserts the file the browser actually loaded, that it decoded, and the size it
+   is drawn at, because this project's recurring art bug is an image decoded far
+   larger than it is shown (PR #113, 8x oversampled, 101.9 MB to 53.9 MB).
+   PROVE-RED: put pixCur('recipe') back and the src is cookbook art again. */
+/* ONCE, ON THE FIRST VISIT. This sits inside openKitchen, which the audit calls
+   several times, and by the later visits every pot is BUSY so there is no idle
+   card to grade. The first version graded on every call and failed on the later
+   ones, correctly reporting an empty sample rather than passing on nothing, which
+   is how the placement problem announced itself. */
+if (!potGraded) {
+  potGraded = true;
+  await sleep(900);
+  const pot = await page.evaluate(() => {
+  const img = document.querySelector('.pot-card.idle .pot-ico img');
+  if (!img) return null;
+  const r = img.getBoundingClientRect();
+  return { file: (img.getAttribute('src') || '').split('/').pop(),
+           natural: [img.naturalWidth, img.naturalHeight],
+           drawn: [+r.width.toFixed(1), +r.height.toFixed(1)] };
+});
+  check('POT the empty-pot slot renders an icon at all (an empty sample is a FAILURE)',
+    !!pot, pot ? JSON.stringify(pot) : 'no .pot-card.idle .pot-ico img on the Kitchen');
+  check('POT it is the cauldron, decoded, and drawn no larger than its source',
+    !!pot && pot.file === 'cauldron.png' && pot.natural[0] === 48
+      && pot.drawn[0] > 0 && pot.drawn[0] <= pot.natural[0],
+    pot ? `${pot.file} ${pot.natural.join('x')} drawn at ${pot.drawn.join('x')}` : 'nothing to grade');
+}
+
   /* THE KITCHEN NO LONGER HAS DOORS. It landed on COOK and GROW until
      2026-08-18, when the Bone Garden left the player's path and the landing
      became the cook view itself. Tapping the door when it exists keeps this

@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 432, date: '2026-08-24', title: 'The Kitchen has a cauldron in it', items: [
+    'The empty pot in the Kitchen is a cauldron now instead of a cookbook. It sits under a heading that says Cauldrons on a card that says Empty pot, so a book was the one thing in that corner not telling you where you were.',
+    'The currencies on Today sit properly under the top of the screen again, instead of floating with a gap above them.',
+  ] },
   { n: 431, date: '2026-08-24', title: 'Dressing up makes sense now, and the art runs to the top of the phone', items: [
     'Changing how a piece looks is a different screen. Your Bonehead is right there above the choices showing before and after, so you can see what you are buying instead of scrolling up to check. It says what you keep, what you get and what you pay, in that order, and nothing is taken until you confirm.',
     'The game art now runs all the way to the top of the phone, behind the clock and the camera, instead of stopping in a line and leaving a dead strip.',
