@@ -222,6 +222,15 @@ const S = {
      picks it. Same read-once-next-to-?demo pattern as the two params above. It
      changes ONLY presentation: no price, no gate, no yield moves with it. */
   mogv2: new URLSearchParams(location.search).has('mogv2'),
+  /* THE ISLAND BLEED, behind ?island and NOT shipped, because measuring it turned
+     up a cost Tom has to weigh rather than a bug I can fix. The art does reach
+     y=0 and nothing below the hero moves, but with the scene starting at the
+     island the currency chips read as floating in the MIDDLE of the art instead
+     of pinned to its top: today-peek's ORDER row measures them 83.0px below the
+     scene's top edge and goes red on exactly that. The wordmark rows also change
+     meaning, because the mark now composites over olive art rather than page
+     navy. Both are design consequences, not defects, so this waits for his eye. */
+  island: new URLSearchParams(location.search).has('island'),
   onlineCache: new Map(),
   ui: { ringPct: 0, remainShown: null, macroPcts: [0, 0, 0] }, // last-rendered values so charts animate between states
   celebration: null,
@@ -18040,6 +18049,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
+if (S.island) document.documentElement.classList.add('fx-island');
 const APP_BUILD = 'v430'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
