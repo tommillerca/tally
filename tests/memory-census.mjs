@@ -272,10 +272,32 @@ await screen('leaderboard, 100 rows', async () => {
   await sleep(2600);
 }, { art: '.lb-row' });
 
+/* The Collection is opened through the wardrobe's own pill, and this used to read
+   `document.querySelector('.looks-card')?.click()`. That class has not existed in
+   the app for some time (0 hits in js/app.js and app.css); the control is
+   `.bh-pill.ward-looks` carrying data-tab="looks" at js/app.js:12316.
+
+   The `?.` is what made it survive: it clicked null, did nothing, threw nothing,
+   and the two rows below then graded a screen the suite had never navigated to.
+   Both reported "0 elements found", which is why they read as a memory ceiling
+   being breached when they were really a selector finding nothing. Until now the
+   Collection and looks-shelf numbers in this file were NOT-MEASURED rather than
+   clean, which is the distinction this file's own header draws.
+
+   So it throws now. A navigation that does not happen must be loud: a silent
+   miss here does not fail, it quietly re-measures the previous screen.
+   Found 2026-08-23 by a peer session while auditing why this suite was red on
+   pristine main. */
+const openCollection = () => pe(() => {
+  const b = document.querySelector('.ward-looks');
+  if (!b) throw new Error('.ward-looks not found: the Collection never opened, so anything measured after this is a different screen');
+  b.click();
+});
+
 await screen('collection / looks shelf', async () => {
   await pe(() => { location.hash = '#/bonehead'; });
   await sleep(2200);
-  await pe(() => document.querySelector('.looks-card')?.click());
+  await openCollection();
   await sleep(2400);
 }, { art: '.col-cell img' });
 
@@ -351,7 +373,7 @@ ok('TIER     the crew card backdrop is served from the 192 sheet',
 await fresh();
 await pe(() => { location.hash = '#/bonehead'; });
 await sleep(2200);
-await pe(() => document.querySelector('.looks-card')?.click());
+await openCollection();
 await sleep(2400);
 const colTier = await pe(() => [...document.querySelectorAll('.col-cell img')].filter(i => i.naturalWidth).map(i => i.naturalWidth));
 ok('TIER     the Collection\'s tiles are served from the 192 sheet',
