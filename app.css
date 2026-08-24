@@ -5560,6 +5560,70 @@ body::before {
 .look-bar .lb-txt { font-size: 12.5px; color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .look-bar .lb-txt b { color: var(--text-1, #efe9f5); }
 .look-bar .btn { flex: none; padding: 7px 12px; font-size: 12.5px; }
+
+/* ---- ?mogv2: the reworked look panel (new-player grill, 2026-08-23) --------
+   Behind a query param until Tom picks it. Everything here is presentation:
+   nothing below changes a price, a gate or what a control does. */
+.mog-panel {
+  margin-top: 14px; padding: 11px 11px 10px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+}
+.mog-panel .sect-h.mog-h {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0;
+}
+.mog-lead { margin: 5px 0 9px; font-size: 12.5px; line-height: 1.4; color: var(--text-2); }
+.mog-lead b { color: var(--text-1, #efe9f5); }
+.mog-empty { margin: 6px 2px 2px; }
+/* THE PREVIEW, AT THE DECISION. Two stages of the same figure, so the answer to
+   "what will I look like" is in the same frame as the tiles that change it. */
+.mog-figs { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px; }
+.mog-figs figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.mog-figs .mog-cap {
+  font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--text-3);
+}
+.mog-figs figure.after .mog-cap { color: var(--accent); }
+.mog-figs .mog-arrow { color: var(--text-3); display: flex; align-items: center; padding-top: 13px; }
+.bh-stage.mog-fig { width: 130px; height: 130px; border-radius: 13px; }
+/* same fit as the big paper doll, so the small pair is the SAME picture, not a
+   differently-cropped one (.bh-stage's base rule is object-fit: cover) */
+.bh-stage.mog-fig .bh-anim { inset: 0 -14%; --av-fit: contain; --av-pos: 50% 72%; }
+.bh-stage.mog-fig img { object-fit: contain; object-position: 50% 72%; }
+/* the price tile carries the REAL dust art, so kill the Unicode stand-in */
+/* The pill carries the REAL dust art, so the Unicode stand-in goes.
+   TWO measured traps here, both found by reading the render, not the source:
+   pixCur() writes an INLINE style="width:16px;height:16px" that beats any
+   stylesheet rule (and it returns null below 16, so 16 is the floor: the app's
+   other dust marks call ICONS.dust(12) and silently get a vector diamond
+   instead). And `.ward-cell img` is position:absolute;inset:0, which pinned the
+   crystal to the tile's corner ON TOP of the digits. So the pill is sized to fit
+   a real 16px icon and the icon is put back in flow. */
+.ward-cell.look .look-cost.dust {
+  display: flex; align-items: center; gap: 3px; padding: 2px 5px; font-size: 10px; line-height: 16px;
+}
+.ward-cell.look .look-cost.dust::after { content: none; }
+.ward-cell.look .look-cost.dust img, .ward-cell.look .look-cost.dust svg {
+  position: static; inset: auto; flex: none; object-fit: contain;
+}
+.mog-panel .look-hide svg { opacity: .75; }
+/* the bar states what you keep, get and pay before the button, not after it */
+.look-bar.mog-bar { align-items: center; }
+.mog-lines { display: grid; gap: 3px; min-width: 0; }
+.mog-lines span { display: flex; align-items: baseline; gap: 6px; font-size: 12px; min-width: 0; }
+.mog-lines i {
+  flex: none; width: 56px; font-style: normal; font-size: 9.5px; font-weight: 800;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--text-3);
+}
+.mog-lines b { color: var(--text-1, #efe9f5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mog-lines em {
+  flex: none; font-style: normal; font-size: 10.5px; color: var(--text-3);
+  display: inline-flex; align-items: center; gap: 3px;
+}
+/* pixCur writes an inline 16px, so do not fight it: give the line the room */
+.mog-lines em img, .mog-lines em svg { flex: none; }
+/* .btn is width:100%, and .look-bar's flex:none does NOT undo that: the
+   shipped v1 bar has the button lying across its own status text. */
+.look-bar.mog-bar .btn.mog-go { width: auto; flex: none; padding: 10px 15px; font-size: 13.5px; }
+.mog-safe { text-align: center; margin-top: 8px; }
 /* a disguised slot on the paper doll: the doll shows the LOOK, this says so.
    Sits bottom-left, clear of the .pd-gear stat strip pinned to the slot's top
    (they collided there and the badge clipped the stat text). */
@@ -10211,5 +10275,118 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 }
 .tsec-meals .meal:last-child { margin-bottom: 0; }
 
+/* ================================================================ *
+ * AND THE DAY STOPS BEING A BOX OF BOXES (v427).
+ *
+ * Tom: the screen "reads as floating widgets rather than one screen". The
+ * container shipped in v425 answered that at SCREEN level, and the measurement
+ * agrees: 18 painted surfaces on the pre-rework screen, 4 once the day owned
+ * everything (390x844, ?demo, surfaces counted as elements painting their own
+ * background or keyline and not already inside one).
+ *
+ * INSIDE the day it was still 8. Calories, Wellness, Activity and all four
+ * meals each kept the full hand-inked panel (app.css:975: 2px --ink keyline,
+ * --radius corners, grain, drop edge) laid ON TOP of the day's own --surface-2
+ * well, with a kicker above each one naming it a second time. That is a box
+ * holding seven more boxes, which is the same complaint one level in, and it is
+ * the half the container could not reach.
+ *
+ * So inside .dayblk a section gives up its panel and becomes a ROW of the day:
+ * the well is the only surface, the kickers are the only section headers, and
+ * one hairline marks each seam. No new colours and no new idioms, only --line
+ * and the .tsec rhythm that is already here.
+ *
+ * EVERY RULE IS SCOPED TO .dayblk ON PURPOSE. `.card` has call sites all over
+ * the app and this is a claim about the day, not about cards: the Kitchen, the
+ * Stable and the shop keep the hand-inked skin exactly as they are. Measured
+ * after: 0 boxes drawn inside the day.
+ * ================================================================ */
+.dayblk .tsec > .card,
+.dayblk .tsec-meals .meal {
+  background: none; background-image: none; background-blend-mode: normal;
+  border: 0; border-radius: 0; box-shadow: none;
+  padding-left: 2px; padding-right: 2px; margin-bottom: 0;
+}
+/* ONE HAIRLINE PER SEAM, AND NEVER A LEADING ONE. A rule above the first
+   section would draw a second line immediately under .dayhdr's own bottom
+   border, which reads as a double rule rather than as a seam. */
+.dayblk .tsec + .tsec { border-top: 1px solid var(--line); padding-top: 14px; }
+.dayblk .tsec { margin-bottom: 14px; }
+/* meals are rows of the same ledger, so they take the same seam */
+.dayblk .tsec-meals .meal + .meal { border-top: 1px solid var(--line); padding-top: 8px; }
+
+/* AND THE SAME ARGUMENT ONE LEVEL IN. A meal that stopped being a panel cannot
+   keep serving its foods as pills: measured, flattening the sections alone took
+   the day from 8 boxes to 10, because the nine `.entry` rows that used to sit
+   INSIDE a meal card became the outermost surfaces drawn on the well. A logged
+   food is a row of the meal. :active keeps the press feedback, which is the
+   part of the pill that was doing real work, and it swaps to --surface because
+   the ground under it is now the day's --surface-2. */
+.dayblk .tsec-meals .entry {
+  background: none; border: 0; border-radius: 0; margin-bottom: 0;
+  padding-left: 2px; padding-right: 2px;
+}
+.dayblk .tsec-meals .entry + .entry { border-top: 1px solid var(--line); }
+.dayblk .tsec-meals .entry:active { background: var(--surface); }
+
 /* announcements are not part of the day, so they queue after it */
 .promo-slot { margin-top: 14px; }
+
+/* ---------------- Gwart's Guide (2026-08-23) ----------------
+   Tom, 2026-08-22: "clicking on gwart should take you to an explainer FAQ page".
+   Three selectors, and two of them exist because a <button> brings defaults with
+   it that the surrounding art never asked for. */
+
+/* HE IS A BUTTON IN HIS OWN SHOP NOW, and the reset is the whole point: the box
+   .gw-art declares above (absolute, left, top, width) is what
+   tests/emporium-audit.mjs pins his geometry off, and a button's UA border,
+   padding and inline-block display would move every one of those numbers. This
+   rule is later in the file than .gw-art on purpose, same specificity, so source
+   order settles it. */
+.gw-art { display: block; padding: 0; border: 0; background: none; -webkit-appearance: none; appearance: none; color: inherit; font: inherit; text-align: inherit; cursor: pointer; }
+
+/* The inline "What is this?". It sits in a .sect-h, which is 12px uppercase and
+   already a flex row, so this is deliberately NOT a .btn: the app's button
+   carries a 2px ink border and a sticker shadow that reads as the primary action
+   of the section it is labelling, which is exactly what this must not be. It is
+   a link with a hit area. margin-left:auto matches .sect-h .spin above. */
+.gd-what {
+  margin-left: auto; flex: none;
+  padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: none;
+  font: inherit; font-size: 11px; letter-spacing: 0.04em; text-transform: none;
+  color: var(--text-3); cursor: pointer;
+}
+.gd-what:active { transform: translateY(1px); }
+
+/* NATIVE DISCLOSURE, so open/close, the keyboard and the screen-reader role all
+   come for free. Only the marker and the spacing are ours. */
+.gd-e { border-top: 1px solid var(--line); padding: 2px 2px 6px; }
+.gd-e:last-child { border-bottom: 1px solid var(--line); }
+.gd-e > summary {
+  list-style: none; cursor: pointer; padding: 12px 2px;
+  font-size: 15.5px; font-weight: 800; color: var(--text);
+  display: flex; align-items: center; gap: 8px;
+}
+.gd-e > summary::-webkit-details-marker { display: none; }
+.gd-e > summary::after {
+  content: ''; margin-left: auto; width: 8px; height: 8px;
+  border-right: 2px solid var(--text-3); border-bottom: 2px solid var(--text-3);
+  transform: rotate(45deg) translate(-2px, -2px);
+}
+.gd-e[open] > summary::after { transform: rotate(-135deg) translate(-2px, -2px); }
+.gd-e > p { font-size: 14px; line-height: 1.55; color: var(--text-2); margin: 0 2px 10px; }
+@media (prefers-reduced-motion: reduce) { .gd-what:active { transform: none; } }
+
+/* THE BOX IS THE NEXT LINE, NOW THAT THE PLAQUE IS THE GUIDE. Tom asked for both
+   things and they are one week apart: 2026-08-21 "when you tap him he should say
+   things", 2026-08-22 "clicking on gwart should take you to an explainer FAQ
+   page". Giving the tap to the Guide and leaving it there would have deleted the
+   older ask, so the two controls split: the plaque opens the Guide, the box he is
+   speaking out of advances the line. It is also what the box's own markup always
+   meant (renderToday: "the chevron means tap the box for the next line").
+   It opts back IN to pointer events over .talkbox.tb-done:not(.tb-hold) above,
+   and ONLY inside .gw-row, so no other talk box in the app changes: the rule
+   above exists because a finished box must not eat the tap target it floats
+   over, and on Today the thing underneath the box is the Bonehead stage, which
+   this row's own `pointer-events: none` already handles. */
+.gw-row .gw-box.tb-done { pointer-events: auto; cursor: pointer; }

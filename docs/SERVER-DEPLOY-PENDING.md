@@ -81,6 +81,81 @@ believe its refusal over any local impression.
 introduces, and check the cron actually fired by watching the prune counters
 move.
 
+---
+
+# Second thing waiting on that same deploy: the test-account flag (2026-08-23)
+
+Branch `x425/bots-invisible`. It rides the SAME deploy, deliberately: two
+deliberate deploys are two chances to get the order wrong.
+
+## What it is
+
+Tom, 2026-08-22 (`docs/FEEDBACK-2026-08-22-v424.md`, item 6): "im pretty sure
+youve somehow added a bunch of bot testers again because we have a ton of lvl 1s
+that no one plays. it's okay if you need to do this to test the game but find a
+more eloquent solution to this than just leaving a mess of dead bots in the
+actual game."
+
+He complained about CLUTTER, not about rows existing. So nothing is deleted.
+`players.is_test` flags an account and every public surface stops showing it.
+Flagging is reversible with one UPDATE; deleting is not reversible at all.
+
+**NOTHING HAS BEEN DELETED AND NOTHING WILL BE BY THIS.** The drafted DELETE in
+`docs/BOT-PURGE-LIST-2026-08-22.md` stays drafted and is Tom's call alone.
+
+## The three commands, in this order
+
+```
+cd server
+npx wrangler d1 execute bonez --remote --file=migrations/2026-08-22-test-accounts.sql
+npx wrangler d1 execute bonez --remote --file=migrations/2026-08-23-flag-known-test-accounts.sql
+./deploy.sh
+```
+
+1. **`2026-08-22-test-accounts.sql`** adds `players.is_test INTEGER DEFAULT 0`.
+   One column, additive, no data touched.
+2. **`2026-08-23-flag-known-test-accounts.sql`** sets `is_test = 1` on exactly
+   the 47 ids in the census. Idempotent. Every "maybe a human" is off the list.
+3. **`deploy.sh`** ships the worker that filters on the column.
+
+**ORDER IS NOT OPTIONAL.** Deploying the worker before step 1 breaks every
+filtered route with "no such column: is_test". Verified locally on a
+production-shaped schema (origin/main's `schema.sql`, which has no `is_test`):
+running step 2 first fails with `Parse error near line 27: no such column:
+is_test`, and running 1 then 2 flags the census bot and leaves the real player
+at 0.
+
+## After it lands, verify against the DEPLOYED worker
+
+```
+npx wrangler d1 execute bonez --remote --command \
+  "SELECT COUNT(*) flagged FROM players WHERE is_test = 1;"      # expect 47
+npx wrangler d1 execute bonez --remote --command \
+  "SELECT COUNT(*) total FROM players;"                          # expect 87, unchanged
+```
+
+87 unchanged is the row that proves nothing was deleted. Then open the Crew tab
+on a real device: the leaderboard and the "Worth adding" card should have lost
+the level-1s and kept every real player.
+
+## To undo, at any time
+
+```
+npx wrangler d1 execute bonez --remote --command "UPDATE players SET is_test = 0 WHERE is_test = 1;"
+```
+
+That is the entire rollback. The rows never went anywhere.
+
+## Still true, and still not fixed by any of this
+
+`2026-08-16-hardening.sql` has never been applied to production either (the
+census found `max_level`, `max_level_at`, `week_key`, `week_steps` missing from
+the live `players` table). That is a separate, older gap with its own risk, and
+this branch did not touch it. Whoever runs the deploy above should decide
+consciously whether that migration goes in the same window.
+
+---
+
 ## x429 (crew cheers, friend paddocks, pets keep their wear) needs NO deploy
 
 Added 2026-08-23. Recorded here because "does this branch need the Worker?" is

@@ -29,8 +29,12 @@
  */
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
+import { flagFor } from './test-flag.mjs';
 
 const BASE = process.env.BASE || process.env.API || 'http://127.0.0.1:8788';
+/* Registrations are flagged when this run is NOT local, so a suite pointed at
+   the live API mints accounts nobody can see. See server/test-flag.mjs. */
+const IS_TEST = flagFor(BASE);
 
 /* The limiter outlives the process, and this suite registers players, so a
    second run starts throttled and every case fails as "too many requests"
@@ -91,7 +95,7 @@ async function postJson(path, body) {
    A second 429 is a genuine failure and still asserts. */
 async function register(pubJwk) {
   return (await fetch(BASE + '/register', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: pubJwk }),
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ test: IS_TEST, pubkey: pubJwk }),
   })).json();
 }
 async function newPlayer() {

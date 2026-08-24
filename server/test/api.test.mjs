@@ -3,8 +3,12 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { flagFor } from '../test-flag.mjs';
 
 const BASE = process.env.API || 'http://127.0.0.1:8788';
+/* Registrations are flagged when this run is NOT local, so a suite pointed at
+   the live API mints accounts nobody can see. See server/test-flag.mjs. */
+const IS_TEST = flagFor(BASE);
 // wrangler must run from server/, not server/test/, to find wrangler.toml
 const SERVER_DIR = path.resolve(import.meta.dirname, '..');
 let passed = 0, failed = 0;
@@ -28,7 +32,7 @@ function regFetch(pubkey, ip = rndIp()) {
   return fetch(BASE + '/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
-    body: JSON.stringify({ pubkey }),
+    body: JSON.stringify({ test: IS_TEST, pubkey }),
   });
 }
 async function makeKeys() {
@@ -212,7 +216,7 @@ await test('backup: PUT requires a valid signature (wrong key rejected)', async 
    cap rejects nothing" are both failures and only one of them looks like one. */
 await test('backup: a 2 MB blob STORES, and comes back byte-for-byte', async () => {
   const fresh = await makeKeys();
-  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: fresh.pubJwk }) })).json();
+  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ test: IS_TEST, pubkey: fresh.pubJwk }) })).json();
   // 2,000,000 bytes: comfortably over the p50 one-year save (2.23 MB is p50 at
   // 365 days, so this is roughly the median player at eleven months), and
   // comfortably under D1's own value limit measured at 2,199,942 bytes.
@@ -225,7 +229,7 @@ await test('backup: a 2 MB blob STORES, and comes back byte-for-byte', async () 
 
 await test('backup: a blob D1 cannot hold answers 413, not an unhandled 500', async () => {
   const fresh = await makeKeys();
-  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: fresh.pubJwk }) })).json();
+  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ test: IS_TEST, pubkey: fresh.pubJwk }) })).json();
   /* 3 MB sits in the gap nobody knew was there: under MAX_BACKUP_BYTES, so the
      route's own check passes it, and over D1's value limit, so the INSERT throws
      SQLITE_TOOBIG. Before 2026-08-17 that fell through to the generic handler
@@ -242,7 +246,7 @@ await test('backup: a blob D1 cannot hold answers 413, not an unhandled 500', as
 
 await test('backup: a blob over the cap is refused with 413, and SILENTLY on the client', async () => {
   const fresh = await makeKeys();
-  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pubkey: fresh.pubJwk }) })).json();
+  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ test: IS_TEST, pubkey: fresh.pubJwk }) })).json();
   const blob = 'A'.repeat(4 * 1024 * 1024 + 1024);
   const put = await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob }));
   assert.equal(put.status, 413, 'the cap is not being enforced at all');
@@ -532,6 +536,40 @@ await test('settled result: an unsettled week is empty, and empty is not an erro
   assert.equal(bad.status, 400, 'a malformed week is refused, not parsed into a key');
 });
 
+/* THE PODIUM IS A PUBLIC LIST OF PLAYERS TOO, and it reads paid grants rather
+   than the live board, so the board's is_test filter does not reach it. A
+   flagged account can no longer place (and so can no longer be paid), but one
+   flagged AFTER a payout would still have its name on last week's poster and on
+   the Today banner. Both podium rows are staged directly through /dev/grant so
+   the assertion is about the FILTER and not about winning a race.
+   PROVE-RED: drop `AND COALESCE(p.is_test, 0) = 0` from /steps/settled in
+   src/index.js and HIDDEN goes red. */
+await test('the settled podium leaves out a flagged account and keeps a real one', async () => {
+  /* A fresh week per run. The local D1 keeps rows between runs, so a fixed week
+     would accumulate a podium and this would pass once and then fail forever. */
+  const wk = `2027-${String(1 + Math.floor(Math.random() * 12)).padStart(2, '0')}-${String(1 + Math.floor(Math.random() * 28)).padStart(2, '0')}`;
+  const pay = (playerId, place) => fetch(BASE + '/dev/grant', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ playerId, key: `stepweek-${wk}`, type: 'social', payload: { place, steps: 5000 + place, coins: 100 } }),
+  });
+
+  const real = await makeKeys();
+  const rp = await (await regFetch(real.pubJwk)).json();
+  const bot = await makeKeys();
+  const bp = await (await fetch(BASE + '/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
+    body: JSON.stringify({ pubkey: bot.pubJwk, test: true }),
+  })).json();
+  assert.ok((await pay(rp.playerId, 1)).ok && (await pay(bp.playerId, 2)).ok, 'PRECONDITION: both payouts must be staged');
+
+  const podium = (await (await signedFetch(real.kp, rp.playerId, 'GET', `/steps/settled?week=${wk}`)).json()).podium;
+  assert.ok(podium.some(x => x.name === rp.handle),
+    `CONTROL: the real winner must be on the poster, or nothing here is about the flag: ${JSON.stringify(podium)}`);
+  assert.ok(!podium.some(x => x.name === bp.handle),
+    `HIDDEN: a flagged account is still on the settled podium: ${JSON.stringify(podium)}`);
+});
+
 /* NAMES ARE UNIQUE. Tom, 2026-08-08: "How did you allow two people to pick the
    same name Massive coc? That was the whole point of usernames?"
    /name was a blind UPDATE with no check and players.name has no UNIQUE, so the
@@ -578,6 +616,89 @@ await test('names are unique: case-insensitive, and re-saving your OWN name stil
   // re-saving the identical name must NOT trip the guard (id <> self)
   assert.equal((await signedFetch(k.kp, p.playerId, 'POST', '/name', JSON.stringify(pick))).status, 200,
     'a player re-saving their own name must not be told it is taken');
+});
+
+/* TEST ACCOUNTS (2026-08-22). A live-API test registers with {test:true}; the
+   row lands is_test=1 and is invisible on every public surface, so test runs
+   stop flooding the Crew with dead level-1 accounts (docs/BOT-CENSUS-2026-08-22.md).
+   PROVE-RED: drop the COALESCE(is_test,0)=0 clause from /leaderboard or the
+   /friends/request lookup in src/index.js and the matching assert fails by name. */
+await test('is_test account is hidden from the leaderboard and unfriendable', async () => {
+  const bot = await makeKeys();
+  const br = await (await fetch(BASE + '/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
+    body: JSON.stringify({ pubkey: bot.pubJwk, test: true }),
+  })).json();
+  assert.ok(br.playerId, 'flagged registration still works: ' + JSON.stringify(br));
+  // give it a profile: without the filter this is exactly a leaderboard row
+  const body = JSON.stringify({ snapshot: { level: 998, outfit: { SK: 'SK0-1' }, gear: [] }, appV: 'test' });
+  assert.equal((await signedFetch(bot.kp, br.playerId, 'PUT', '/profile', body)).status, 200);
+
+  const viewer = await makeKeys();
+  const vp = await (await regFetch(viewer.pubJwk)).json();
+  const board = await (await signedFetch(viewer.kp, vp.playerId, 'GET', '/leaderboard')).json();
+  assert.ok(!board.players.some(x => x.playerId === br.playerId), 'flagged account never surfaces on the board');
+
+  const fr = await signedFetch(viewer.kp, vp.playerId, 'POST', '/friends/request', JSON.stringify({ code: br.friendCode }));
+  assert.equal(fr.status, 404, 'flagged account is unfriendable (same 404 as absent)');
+
+  /* POSITIVE CONTROL, and the row that stops every assert above being vacuous.
+     A board that returned nothing at all would satisfy "the bot is not on it".
+     So an UNflagged account with the same profile shape must BE on it: the
+     filter has to hide bots rather than hide everybody. */
+  const real = await makeKeys();
+  const rp = await (await regFetch(real.pubJwk)).json();
+  assert.ok(rp.playerId && !rp.existing, 'plain registration unaffected');
+  assert.equal((await signedFetch(real.kp, rp.playerId, 'PUT', '/profile', body)).status, 200);
+  const board2 = await (await signedFetch(viewer.kp, vp.playerId, 'GET', '/leaderboard')).json();
+  assert.ok(board2.players.some(x => x.playerId === rp.playerId),
+    'an UNflagged account with the same profile must still appear, or the board is simply empty');
+});
+
+/* THE OTHER DIRECTION, which the code filter alone did not cover. /leaderboard
+   hands every caller an opaque addToken for every row it returns, redeemed at
+   POST /friends/add. So a flagged account can read the board and try to put a
+   pending request in a REAL player's Crew, which is exactly the clutter Tom is
+   looking at. requestFriendship refuses when EITHER side is flagged.
+   PROVE-RED: delete the `WHERE NOT EXISTS (... is_test ...)` line from
+   requestFriendship in src/index.js and PENDING fails by name. */
+await test('a flagged account cannot put a friend request in a real player\'s Crew', async () => {
+  const real = await makeKeys();
+  const rp = await (await regFetch(real.pubJwk)).json();
+  assert.equal((await signedFetch(real.kp, rp.playerId, 'PUT', '/profile',
+    JSON.stringify({ snapshot: { level: 7, outfit: {}, gear: [] }, appV: 'test' }))).status, 200);
+
+  const bot = await makeKeys();
+  const bp = await (await fetch(BASE + '/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
+    body: JSON.stringify({ pubkey: bot.pubJwk, test: true }),
+  })).json();
+
+  // the bot reads the board and takes the real player's add handle off it
+  const board = await (await signedFetch(bot.kp, bp.playerId, 'GET', '/leaderboard')).json();
+  const row = board.players.find(x => x.playerId === rp.playerId);
+  assert.ok(row && row.addToken, 'PRECONDITION: the bot must actually get an addToken, or this proves nothing');
+
+  const add = await signedFetch(bot.kp, bp.playerId, 'POST', '/friends/add', JSON.stringify({ token: row.addToken }));
+  assert.equal(add.status, 200, 'the refusal is silent: a flagged caller is told the same thing either way');
+  const seen = await (await signedFetch(real.kp, rp.playerId, 'GET', '/friends')).json();
+  const all = [...(seen.friends || []), ...(seen.incoming || []), ...(seen.outgoing || []), ...(seen.pending || [])];
+  assert.ok(!all.some(x => x.playerId === bp.playerId || x.id === bp.playerId),
+    'PENDING: nothing from a flagged account may appear in a real player\'s Crew');
+
+  // CONTROL: the same call from an UNflagged account DOES land, so the assert above is about the flag
+  const other = await makeKeys();
+  const op = await (await regFetch(other.pubJwk)).json();
+  const board2 = await (await signedFetch(other.kp, op.playerId, 'GET', '/leaderboard')).json();
+  const row2 = board2.players.find(x => x.playerId === rp.playerId);
+  assert.ok(row2 && row2.addToken, 'PRECONDITION: the control needs an addToken too');
+  assert.equal((await signedFetch(other.kp, op.playerId, 'POST', '/friends/add', JSON.stringify({ token: row2.addToken }))).status, 200);
+  const seen2 = await (await signedFetch(real.kp, rp.playerId, 'GET', '/friends')).json();
+  const all2 = [...(seen2.friends || []), ...(seen2.incoming || []), ...(seen2.outgoing || []), ...(seen2.pending || [])];
+  assert.ok(all2.some(x => x.playerId === op.playerId || x.id === op.playerId),
+    'an UNflagged request must still arrive, or the guard is refusing everybody');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 429, date: '2026-08-23', title: 'Gwart explains himself, and the day stops being a box of boxes', items: [
+    'Tap Gwart, anywhere he is standing, and he will actually tell you things. Ectoplasm, transmute, crates, eggs, the Wanderer, dust, saved fits, the wheel, streaks, and how changing a piece\'s look works. There is a "What is this?" on the confusing bits too, which opens him straight to the answer.',
+    'The Kitchen said transmute was once a day. It is once every twenty hours, and it says so now.',
+    'Changing how gear looks got a clearer screen: you see your Bonehead before and after, right above the choices, instead of having to scroll up to check what you just picked.',
+    'Today reads as one day now rather than a stack of separate boxes. Same information, one container.',
+    'Test accounts left over from development no longer clutter the leaderboard, crew suggestions or anywhere else players can see. None of them were real people and no real account was touched.',
+  ] },
   { n: 428, date: '2026-08-23', title: 'The app opens fast on a bad connection, and stops reloading itself', items: [
     'This is the big one. On a poor connection the app used to wait on the network for every single file before it could show you anything, every time you opened it. It now keeps a complete copy of itself on your phone and opens from that immediately, then quietly checks for a new version in the background. On a slow connection that is the difference between waiting and not waiting.',
     'It no longer reloads itself out from under you. If you left the app for a minute and came back to find it starting over, sometimes losing what you had open, that was the app swapping to a new version while you were standing in the old one. New versions now download in the background and only take over the next time you open it, so nothing is yanked away mid-tap.',

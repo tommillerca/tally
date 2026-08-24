@@ -217,6 +217,11 @@ const S = {
      params, and it is applied ONLY to guards that already test !S.settings, i.e.
      the "do not interrupt a fresh boot" family. It suppresses nothing else. */
   calm: new URLSearchParams(location.search).has('calm'),
+  /* THE REWORKED LOOK PANEL, mockup-first per Tom's standing preference: it is a
+     reshaping of the Wardrobe's bottom half, so it ships behind ?mogv2 until he
+     picks it. Same read-once-next-to-?demo pattern as the two params above. It
+     changes ONLY presentation: no price, no gate, no yield moves with it. */
+  mogv2: new URLSearchParams(location.search).has('mogv2'),
   onlineCache: new Map(),
   ui: { ringPct: 0, remainShown: null, macroPcts: [0, 0, 0] }, // last-rendered values so charts animate between states
   celebration: null,
@@ -3673,7 +3678,7 @@ async function renderToday(el) {
          The art is the same untouched pair the Emporium uses (already
          precached), cropped by CSS. */''}
     <div class="gw-row">
-      <button class="gw-today" id="gwartBtn" aria-label="Gwart says something">
+      <button class="gw-today" id="gwartBtn" aria-label="Ask Gwart: open Gwart's Guide">
         <span class="wz-scene" aria-hidden="true">
           <span class="wz-body"><img src="assets/gwart/gwart.png" alt=""></span>
           <span class="wz-enter${gwSeen ? ' seen' : ''}"><span class="wz-sway">
@@ -3892,8 +3897,24 @@ async function renderToday(el) {
      itself now (the bag, see gwPick), so the caller that used to bump a salt was
      the caller that decided which line came next, and both callers had to
      remember to. */
+  /* THE TAP OPENS THE GUIDE NOW. Tom, 2026-08-22: "clicking on gwart should take
+     you to an explainer FAQ page". It used to say another line, which he asked
+     for on 2026-08-21, and he still says plenty without the tap: the opening
+     line renderToday emits and gwIdleStart's timer below are both untouched, so
+     the two callers that made him talk "on his own" are the two that survive.
+     What is gone is tap-for-another-line, and docs/GWARTS-GUIDE-COPY.md puts
+     that trade in front of Tom rather than burying it here. */
   $('#gwartBtn', el)?.addEventListener('click', e => {
     e.stopPropagation();                       // the scene itself opens the Backpack
+    openGwartGuide();
+  });
+  /* AND THE BOX IS THE NEXT LINE. The plaque above went to the Guide, so this is
+     where "tap him and he says things" (Tom, 2026-08-21) lives now. Same gwSay,
+     so it goes through the app's one typer and resets the idle clock exactly as
+     the plaque tap used to; app.css opts .gw-row .gw-box back into pointer
+     events. tests/gwart-crate-audit.mjs drives THIS control now. */
+  gwBox?.addEventListener('click', e => {
+    e.stopPropagation();                       // the scene itself opens the Wardrobe
     gwSay(gwartLine(gwCtx));
   });
   gwIdleStart(el, () => gwartLine(gwCtx));
@@ -4540,6 +4561,134 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__gwartPool = ctx => gwartPool(ctx);
   window.__gwart = ctx => gwartLine(ctx);
 }
+
+/* GWART'S GUIDE. Tom, 2026-08-22: "ectoplasm needs an explanation the transmute
+ * thing as confused almost all of my friends and leads to a bigger question,
+ * clicking on gwart should take you to an explainer FAQ page that can help all
+ * confuse players. Gwart is to act as a character lke Navi from the legend of
+ * zelda, an omniscient helper."
+ *
+ * THE COPY IS THE FEATURE and it lives in docs/GWARTS-GUIDE-COPY.md, which
+ * carries every line below plus the file:line the claim is true at. Edit both or
+ * neither: the doc is what Tom red-pens and this array is what ships.
+ *
+ * WHY THE ENTRIES ARE NOT THE TALK BOX'S LINES. gwartPool is 59 characters a
+ * line because .gw-box is 13px in a 90px band (tests/talkbox-audit.mjs measures
+ * every one). A Guide entry is read on purpose rather than glanced at, so the
+ * sentences stay as short as his but there are more of them. Same register: two
+ * or three short sentences, the Bonehead is "he", no ad-speak, no em dashes.
+ *
+ * INFORMATION IS STILL RATIONED. Nine entries, one confused tester behind each.
+ * No drop rates, no recipe tables, nothing a player is meant to find out there.
+ *
+ * ECTOPLASM AND TRANSMUTE ARE FIRST because they are the two that were reported.
+ * The Transmute entry says the six commons are SPENT, because they are
+ * (doTransmute, js/cooking.js), and says the spend is bounded to those six,
+ * which is the reassurance the testers actually needed. It says twenty hours
+ * rather than "once a day" because cooldownMs is 20h; the sect-h label in the
+ * Kitchen still says a day and that is the interface's call, not the copy's. */
+const GUIDE_ENTRIES = [
+  { id: 'ectoplasm', title: 'Ectoplasm', body: [
+    'The rare one. Everything else in the pot grows in dirt. This does not.',
+    'It comes off rare finds in the Boneyard and off world bosses. Nothing else out there drops it, and it cannot be composted for seed.',
+    'You never eat it. It is a key. Three things in the pot are locked behind one Ectoplasm each: the Necromancer’s Feast, the Revenant’s Draught and the Spectral Fury. They are the best things you can cook, which is the whole reason for the lock.',
+    'If none is falling, you can make some. That is what the Transmute is for.',
+  ] },
+  { id: 'transmute', title: 'Transmute', body: [
+    'A trade, and only a trade. Nothing is rolled and nothing can go wrong.',
+    'You hand over six common ingredients. Any six, from any piles: it counts your commons together, and it takes them off your biggest stack first and works down.',
+    'You get one Ectoplasm. Always one, always Ectoplasm.',
+    'Those six are spent and the rest of your bag is untouched. No dish is unmade, no gear, no seed, nothing you have cooked or planted is at risk. It only ever reaches the six.',
+    'Then it sits for twenty hours before it will do it again.',
+  ] },
+  { id: 'crates', title: 'Crates', body: [
+    'A crate is a box of things he can wear, with the odd drink or ingredient in with it. Nothing inside is a decision you can get wrong.',
+    'They come off levels, the wheel, quests and the map, and they wait in the Backpack. They never go off, so there is nothing to save one for.',
+    'Anything in there you already own turns into coins on the way out. You cannot open a crate badly.',
+    'Open it. It is already yours. I have never understood the hoarding.',
+  ] },
+  { id: 'pets', title: 'Eggs and pets', body: [
+    'An egg hatches on your feet. Eight thousand steps from the day it turns up, and then it opens. Nothing else hurries it along.',
+    'What comes out is what comes out. I do not choose it and neither do you.',
+    'A pet fights beside him: its own body in the Pit, its own turn, and it makes him better just by being out there with him.',
+    'Only the pet he has out banks your steps toward its own levels. The others wait, and they wait patiently. Pick one and walk.',
+  ] },
+  { id: 'wanderer', title: 'The Wanderer', body: [
+    'He walks a circle out there with a lantern, and he is not a find. You cannot tap him. He has to see you.',
+    'Stand in his light and he comes over. Then it is fight him or walk away, and walking away costs you nothing at all.',
+    'Beat him and he pays properly, once. He moves slower than you do, so being caught by him is always something you chose.',
+  ] },
+  { id: 'dust', title: 'Bone Dust', body: [
+    'The other currency, and the one everybody ignores. Coins buy things. Dust is for changing your mind about them.',
+    'Melting gear you are never going to wear is where most of it comes from. A piece he has outgrown is not waste, it is dust.',
+    'It pays for transmog, which is wearing one thing and showing another. It also buys the odd egg, crate and charm, and it is half the price of the heaviest weapons.',
+    'You pay for a look once. Putting it back on in that same slot is free forever after that.',
+  ] },
+  /* ADDED 2026-08-23 at integration, and it is a real defect neither branch could
+     see alone. x428 hooked guideLinkHtml('transmog') on the look panel while this
+     list, written on feat/gwarts-guide, had no such entry: the link opened the
+     Guide and landed on nothing. Every claim below is checked against js/loot.js:
+     transmogPrice returns 0 when paidLooks() already holds paidKey(slot, artId),
+     and applyTransmog writes the override without touching the gear or the
+     inventory row. */
+  { id: 'transmog', title: 'Changing how gear looks', body: [
+    'Wearing one thing and showing another. The numbers are whatever the piece really is; only the picture changes.',
+    'Nothing is destroyed and nothing comes off. The piece stays on him, keeps its stats, and stays in the Backpack where you left it.',
+    'It costs dust, and only the first time. That look in that slot is free forever after, so try things.',
+    'A look you have not paid for is priced on the tile before you commit. Nothing is taken until you say so twice.',
+  ] },
+  { id: 'fits', title: 'Saved fits', body: [
+    'A saved fit is a photograph of what he has on. Six of them, and taking one costs nothing.',
+    'Load it and he puts that look back on. Statted gear only fills slots that are empty, so a fit will never strip off something you picked this morning.',
+    'Anything you have melted since is quietly skipped. The rest still arrives.',
+    'The pet is not in it. The Stable keeps her.',
+    'Save one before you start experimenting. That is the entire point of them.',
+  ] },
+  { id: 'wheel', title: 'The wheel', body: [
+    'One spin a day, free, and it comes to you. There is no button for it anywhere.',
+    'Every wedge pays something. No blanks, no bad luck, no spin worth skipping.',
+    'The day decides the prize, not the spin, so closing the app and coming back gets you the very same thing. Do not waste your evening on it.',
+    'Shut it without spinning and it will be there next time you open. Tomorrow’s does not stack on top of it though.',
+  ] },
+  { id: 'streaks', title: 'Streaks', body: [
+    'Days in a row that you wrote food down. Not steps, not walks. Food.',
+    'Yesterday’s streak stands until a whole day goes by empty. Miss one and it starts again at one.',
+    'It is not decoration. Your streak is part of his Marrow, which is how much he can take in the Pit before he goes down. A long streak is a harder Bonehead to kill.',
+    'Nothing else goes when it breaks. Only me being pleased with you.',
+  ] },
+];
+/* <details> IS THE WHOLE ACCORDION. Native disclosure: it opens, it closes, it is
+   a button to a screen reader and it is keyboard-operable, none of which is worth
+   writing again. `topic` opens ONE entry and scrolls it up, which is what the
+   inline "What is this?" buttons need: a player at the Transmute row lands on the
+   Transmute answer rather than on a wall of nine headings. */
+function openGwartGuide(topic = null) {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>Gwart&rsquo;s Guide</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body">
+      <p class="note" style="margin:6px 2px 10px">Ask. I have been here longer than the furniture.</p>
+      ${GUIDE_ENTRIES.map(e => `<details class="gd-e" data-gd="${e.id}"${e.id === topic ? ' open' : ''}>
+        <summary>${esc(e.title)}</summary>
+        ${e.body.map(p => `<p>${esc(p)}</p>`).join('')}
+      </details>`).join('')}
+    </div>`, { name: "Gwart's Guide" });
+  if (topic) requestAnimationFrame(() =>
+    $(`.gd-e[data-gd="${topic}"]`, wrap)?.scrollIntoView({ block: 'start' }));
+  return wrap;
+}
+/* ONE LISTENER FOR EVERY "What is this?" IN THE APP, bound at the module level.
+   The affordance has to sit on surfaces that are rebuilt constantly (the Kitchen
+   re-renders on every pot tick) and inside sheets that are thrown away, so a
+   per-sheet handler is a handler somebody forgets on the next surface. Delegated
+   on the document: any markup anywhere that carries data-guide works, including
+   markup written after this line. */
+const guideLinkHtml = topic => `<button class="gd-what" data-guide="${topic}">What is this?</button>`;
+document.addEventListener('click', e => {
+  const b = e.target.closest?.('[data-guide]');
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  openGwartGuide(b.dataset.guide);
+});
 
 /* HE VOLUNTEERS A LINE, AND THE CADENCE IS 30 SECONDS. Tom: "he should honestly
  * just be saying a bunch of funny and useful lines on his own", with the taste
@@ -6412,7 +6561,7 @@ function openCompostSheet(after) {
           <div style="flex:1"><b>${esc(INGREDIENTS[id].name)}</b><small>you hold ${have} · your recipes call for ${need[id] || 0}</small></div>
           <button class="btn small ${can ? '' : 'ghost'}" data-compost="${id}" ${can ? '' : 'disabled'}>Compost 1</button></div>`;
       }).join('')}
-      <div class="sect-h">${esc(INGREDIENTS[RARE_INGREDIENT].name)}</div>
+      <div class="sect-h">${esc(INGREDIENTS[RARE_INGREDIENT].name)} ${guideLinkHtml('ectoplasm')}</div>
       <div class="crate-row lack"><span class="crate-ico">${ingIconHtml(RARE_INGREDIENT, 26)}</span>
         <div style="flex:1"><b>Cannot be composted</b><small>Spores come off rare finds and world bosses only, so the Necromancer's Feast stays something you earn out there.</small></div></div>`;
     $$('[data-compost]', body).forEach(btn => btn.addEventListener('click', async () => {
@@ -6608,10 +6757,32 @@ async function openKitchen() {
         : '<p class="note" style="margin:2px 2px 6px">Empty. Cook a dish and it waits here until you choose to eat it, so you can save buffs for the fight or day you want them.</p>'}
       ${potionCount(potInv) ? `<div class="sect-h">Potion satchel · drink these mid-fight</div>
         <div class="ingredient-grid">${POTIONS.filter(p => potInv[p.id] > 0).map(p => `<div class="ing-cell"><span class="ing-ico">${recipeIconHtml(p, 26)}</span><span class="ing-n">${potInv[p.id]}</span><span class="ing-name">${esc(p.name)}</span></div>`).join('')}</div>` : ''}
-      <div class="sect-h">Transmute · once a day</div>
+      ${/* TWO FIXES ON ONE ROW, from two branches, and they are not alternatives.
+
+            "once a day" WAS FALSE: TRANSMUTE.cooldownMs is 20 hours, so two
+            transmutes land inside some calendar days and a player reading the
+            label as a daily allowance was wrong about when their next one is.
+            Derived from the constant now, so it cannot drift from the rule again.
+
+            And the explanation sits AT THE MOMENT OF CONFUSION. This is the row
+            Tom's testers could not read ("the transmute thing as confused almost
+            all of my friends"), so the answer is on the row rather than only
+            behind the wizard on another screen. data-guide is handled by the
+            delegated listener next to openGwartGuide, so it survives the
+            Kitchen's re-render on every pot tick without wiring here. */''}
+      <div class="sect-h">Transmute · every ${TRANSMUTE.cooldownMs / 3600e3} hours ${guideLinkHtml('transmute')}</div>
       <div class="crate-row transmute ${tmute.ready && tmute.canAfford ? '' : 'lack'}">
         <span class="crate-ico">${ingIconHtml(TRANSMUTE.yields, 26)}</span>
-        <div style="flex:1"><b>Transmute Ectoplasm</b><small>Merge ${TRANSMUTE.commons} common ingredients into 1 rare ${esc(INGREDIENTS[TRANSMUTE.yields].name)} (gates the Necromancer's Feast). You have ${tmute.commonsHave}.</small></div>
+        ${/* THE ROW THAT CONFUSED ALMOST EVERY TESTER (Tom, v424 item 4). "Merge"
+              did not say that the six commons are SPENT, and a player who cannot
+              tell a merge from a gamble assumes a roll. There is none: doTransmute
+              takes exactly TRANSMUTE.commons and grants exactly one Ectoplasm,
+              every time, greedily from whichever common you hold most of. So the
+              row states it as a definite price and a definite result, in the same
+              pay/get grammar the look panel uses.
+              It does NOT say "nothing is destroyed", which is what the look panel
+              says and would be a lie here: the six commons really are gone. */''}
+        <div style="flex:1"><b>Transmute Ectoplasm</b><small>Pay ${TRANSMUTE.commons} common ingredients, get 1 ${esc(INGREDIENTS[TRANSMUTE.yields].name)}. Always exactly that: no roll, nothing else taken. It uses whichever commons you hold most of. You have ${tmute.commonsHave}.</small><small class="recipe-need">Ectoplasm is what the Necromancer's Feast needs.</small></div>
         <button class="btn small ${tmute.ready && tmute.canAfford ? '' : 'ghost'}" id="transmuteBtn" ${tmute.ready && tmute.canAfford ? '' : 'disabled'}>${!tmute.ready ? `${fmtCookTime(tmute.msLeft)}` : !tmute.canAfford ? `Need ${TRANSMUTE.commons}` : 'Transmute'}</button>
       </div>
       <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Ingredients <button class="btn small ghost" id="forageBtn">Forage · 45${ICONS.coin(13)}</button></div>
@@ -12272,7 +12443,15 @@ function openHatchReveal(res, charWrap) {
 const gwartHeroHtml = () => `
   <div class="gw-hero">
     <div class="gw-panel">
-      <div class="gw-art"><div class="wz-scene">
+      ${/* HE IS TAPPABLE IN HIS OWN SHOP TOO. "Tapping Gwart, anywhere he
+            stands, opens the Guide", and he stands in exactly two places: the
+            Today plaque and this panel. A <button> rather than a div with a
+            handler, so the keyboard and a screen reader get it for free; the
+            empty data-guide runs the same delegated listener the "What is this?"
+            links use and opens the Guide at the top rather than at an entry.
+            .gw-art keeps its class and its absolute box, so the geometry
+            tests/emporium-audit.mjs pins off R('.gw-art') is unchanged. */''}
+      <button class="gw-art" data-guide="" aria-label="Ask Gwart: open Gwart's Guide"><div class="wz-scene">
         <div class="wz-body"><img src="assets/gwart/gwart.png" alt=""></div>
         <div class="wz-enter"><div class="wz-sway">
           <img class="wz-stars-l" src="assets/gwart/gwart-stars.png" alt="">
@@ -12280,7 +12459,7 @@ const gwartHeroHtml = () => `
           <img class="wz-stars-r" src="assets/gwart/gwart-stars.png" alt="">
         </div></div>
         <div class="wz-glow left"></div><div class="wz-glow right"></div>
-      </div></div>
+      </div></button>
       <div class="gw-floor"></div>
       <h1 class="gw-wm">Gwart&rsquo;s Emporium</h1>
       <button id="gwGear" class="gear-btn gw-gear" aria-label="Settings">
@@ -12605,7 +12784,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
            reason it is free below, but Tom, 2026-08-11: "it's a dumb move in game
            but the player should be able to do it for simple consistency." A panel
            that silently is not there reads as broken. */
-        if (!GEAR_SLOTS.includes(slot) || !baseArtId) return '';
+        if (!GEAR_SLOTS.includes(slot)) return '';
+        /* AN EMPTY SLOT USED TO RENDER NOTHING AT ALL, which is the fourth thing
+           the new-player grill found: walk the doll and the look section appears
+           and disappears with no explanation, which reads as a bug rather than as
+           a rule. Under v2 the section keeps its place and says the rule in one
+           line. No control, so nothing new can be tapped or spent. */
+        if (!baseArtId) return S.mogv2
+          ? `<div class="sect-h mog-h" style="margin-top:14px"><span>${esc(GEAR_SLOT_LABELS[slot])} · change how it looks</span></div>
+             <p class="note mog-empty">This slot is empty, so there is nothing to disguise yet. Put something on above and the look picker appears here.</p>`
+          : '';
         const cur = tm[slot] ?? '';                        // '' = the gear's own look
         const sel = S.lookPreview == null ? cur : S.lookPreview;
         const arts = slotArts;
@@ -12617,6 +12805,90 @@ async function renderCharacter(wrap, tab, opts = {}) {
         const cost = (sel === '' || sel === TRANSMOG_HIDE) ? 0 : (lookPriceMap[sel] || 0);
         const afford = dustBal >= cost;
         const changed = sel !== cur;
+        /* ---------------------------------------------------------------- v2
+           THE NEW-PLAYER GRILL, 2026-08-23, measured at 430x932 on a seeded
+           mid-game account. Four findings, and this branch answers them in order:
+
+           1. THE PREVIEW HAPPENS WHERE YOU CANNOT SEE IT. Tapping a look already
+              restages the paper doll, correctly. But at the moment of the tap the
+              doll's BOTTOM edge is 480px ABOVE the top of the viewport (stage rect
+              -894..-480), so the only thing that moves in the frame the thumb is in
+              is a 1px ring on a 93px tile and a text bar 200px lower. Seeing the
+              answer costs a 934px scroll up, a full viewport, then a scroll back
+              down to commit. So the figure comes to the decision instead: a
+              Now -> After pair, rendered from the SAME `look` and `stageEq` maps
+              the big doll uses, directly above the tiles.
+           2. TWO GRIDS OF THE SAME TILES, "pick your fit" and "pick your look".
+              Measured identical: both .ward-grid, 93x93 cells, 13px radius,
+              backgrounds rgb(30,28,38) vs rgb(22,21,29), a max channel delta of 9.
+              One changes your stats, one costs dust and changes only the picture.
+              So this half gets its own panel, its own name and its own first line.
+           3. THE PRICE IS DRAWN IN A CURRENCY THE SCREEN RENDERS THREE WAYS: the
+              header chip is pixCur('dust') purple crystals, the tile is a literal
+              Unicode ' ◆' from .look-cost::after, and the sentence below is
+              ICONS.dust(12), which is UNDER pixCur's 16px floor so it silently
+              falls back to a tan vector diamond. One currency, three shapes. Every
+              dust mark in here is now ICONS.dust(16), the same art as the wallet.
+           4. NOTHING SAYS WHAT YOU KEEP UNTIL AFTER THE BUTTON. The old copy does
+              say the gear keeps its stats, in 12.5px grey, BELOW the commit. The
+              bar states it in three labelled lines before the button: what you
+              keep, what you get, what you pay, plus the line that nothing is lost.
+
+           Vocabulary and the explainer are NOT mine: another workstream owns the
+           words for ectoplasm and transmute and the Guide entries behind them.
+           `[data-guide="transmog"]` below is the hook it lands on; nothing here
+           writes an explanation of its own.
+
+           NOT CHANGED, deliberately: transmogPrice, transmogCost, applyTransmog,
+           the paid-once rule, the arm-then-confirm on a paid apply, or which
+           looks are offered. This is presentation. */
+        if (S.mogv2) {
+          const slotLc = esc(GEAR_SLOT_LABELS[slot].toLowerCase());
+          const dustIco = ICONS.dust(16);
+          const figure = eqMap => `<div class="bh-stage mog-fig">${avatarLayersHtml(eqMap, { noYard: true, skip: ['C', 'BG'] })}</div>`;
+          return `
+        <div class="mog-panel">
+          <div class="sect-h mog-h"><span>${esc(GEAR_SLOT_LABELS[slot])} · change how it looks</span>
+            ${/* THE HOOK FOR GWART'S GUIDE, and it is a hook, not an explainer: the
+                  words for "transmog" as a concept belong to that workstream, not to
+                  this one. It calls THEIR helper rather than hand-rolling the markup,
+                  so the label, the class and the delegated [data-guide] listener are
+                  all theirs and cannot drift from the Kitchen's two links.
+                  Gated on the helper EXISTING because until feat/gwarts-guide merges
+                  there is no listener, and a visible control that does nothing is
+                  worse than no control (anti-regression rule 5). `typeof` on a name
+                  that is not declared at all is safe and returns 'undefined'; it
+                  becomes a function the moment that branch lands, with no edit
+                  here. */''}
+            ${typeof guideLinkHtml === 'function' ? guideLinkHtml('transmog') : ''}</div>
+          <p class="mog-lead">${wornGear
+            ? `Your ${slotLc} keeps <b>${gearLabel(wornGear)}</b>. Only the picture changes.`
+            : `Nothing with stats is in this ${slotLc}, so changing the picture here is free.`}</p>
+          <div class="mog-figs">
+            <figure><span class="mog-cap">Now</span>${figure(look)}</figure>
+            <span class="mog-arrow" aria-hidden="true">${ICONS.chev(18)}</span>
+            <figure class="${changed ? 'after' : 'same'}"><span class="mog-cap">${changed ? 'After' : 'Pick one below'}</span>${figure(stageEq)}</figure>
+          </div>
+          <div class="ward-grid look-grid">
+            ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+            ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
+            ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost dust">${lookPriceMap[i.id]}${dustIco}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
+          </div>
+          <div class="look-bar mog-bar${changed ? ' armed' : ''}">
+            <div class="mog-lines">
+              <span><i>You keep</i><b>${wornGear ? gearLabel(wornGear) : 'every piece you own'}</b></span>
+              <span><i>You get</i><b>${esc(nameOf(sel))}</b></span>
+              <span><i>You pay</i><b>${cost ? `${cost} Bone Dust` : 'nothing'}</b>${cost ? `<em>${dustIco} you have ${dustBal}</em>` : ''}</span>
+            </div>
+            ${changed
+              ? (afford
+                  ? `<button class="btn mog-go" data-look-apply="${esc(sel)}" data-look-price="${cost || 0}">Wear it</button>`
+                  : `<button class="btn ghost mog-go" disabled>Need ${cost - dustBal} more dust</button>`)
+              : '<button class="btn ghost mog-go" disabled>Wear it</button>'}
+          </div>
+          <p class="note mog-safe">Nothing is destroyed. The piece stays on, keeps its stats and stays in your Backpack.${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>
+        </div>`;
+        }
         return `
         <div class="sect-h" style="margin-top:14px">${esc(GEAR_SLOT_LABELS[slot])} · pick your look</div>
         <div class="ward-grid look-grid">
@@ -17696,7 +17968,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v428'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v429'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

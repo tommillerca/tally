@@ -109,8 +109,12 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { BH_ITEMS } from '../data/boneheadz.js';
+import { flagFor } from './test-flag.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8788';
+/* Registrations are flagged when this run is NOT local, so a suite pointed at
+   the live API mints accounts nobody can see. See server/test-flag.mjs. */
+const IS_TEST = flagFor(BASE);
 const T = process.env.ADMIN_TOKEN || 'devtoken';   // wrangler dev sets this via --var
 let passed = 0, failed = 0;
 
@@ -148,7 +152,7 @@ async function newPlayer() {
   const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
   const res = await fetch(`${BASE}/register`, {
     method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
-    body: JSON.stringify({ pubkey: pubJwk }),
+    body: JSON.stringify({ test: IS_TEST, pubkey: pubJwk }),
   });
   if (!res.ok) throw new Error(`register failed: ${res.status} ${await res.text()}`);
   const me = await res.json();
