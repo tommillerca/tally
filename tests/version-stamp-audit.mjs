@@ -1,4 +1,4 @@
-/* tests/version-stamp-audit.mjs — THE THREE VERSION STAMPS MUST AGREE.
+/* tests/version-stamp-audit.mjs — THE FOUR VERSION STAMPS MUST AGREE.
  *
  * WHY THIS EXISTS. v391 merged with v390 stamped on it. The commit was titled
  * v391, the tree said sw.js tally-v390, APP_BUILD v390, changelog n: 390, and
@@ -16,10 +16,23 @@
  * to each other; there is nothing behavioural to observe.
  *
  * WHAT IT ASSERTS
- *   FOUND    all three stamps were located, so a rename cannot make this pass
+ *   FOUND    all four stamps were located, so a rename cannot make this pass
  *            by finding nothing to compare
- *   AGREE    sw.js VERSION, APP_BUILD and the newest changelog entry are the
- *            same number
+ *   AGREE    sw.js VERSION, APP_BUILD, the newest changelog entry and
+ *            version.json are the same number
+ *
+ * THE FOURTH STAMP, version.json, IS NOT COSMETIC. It is the service worker's
+ * killswitch: sw.js fetches it with cache: 'no-store' on any same-origin GET
+ * and, when it names a build other than the running one, calls registration
+ * .update() to pull a new worker. Everything else the worker serves is now
+ * cache-first, so this file is the ONLY lever that reaches a device whose
+ * worker is otherwise answering everything out of its own cache.
+ * Stamped a build BEHIND sw.js it is inert, and nobody would notice, because
+ * nothing else in the app reads it. Stamped a build AHEAD it is worse: every
+ * device calls registration.update() once a minute forever, on the bad
+ * connection this whole change exists to stop punishing. Neither state has any
+ * behavioural signal on a healthy tree, which is the same reason the other
+ * three are compared here rather than observed.
  *
  * WHAT IT DOES NOT CATCH, AND THIS MATTERS. It cannot see the v391 case that
  * prompted it. On that commit all three stamps agreed with each other at 390
@@ -52,12 +65,13 @@ const read = f => readFileSync(path.join(ROOT, f), 'utf8');
 const sw  = read('sw.js').match(/const VERSION = 'tally-v(\d+)'/);
 const app = read('js/app.js').match(/const APP_BUILD = 'v(\d+)'/);
 const log = read('js/changelog.js').match(/\{\s*n:\s*(\d+)/);
+const stamp = read('version.json').match(/"version"\s*:\s*"tally-v(\d+)"/);
 
 /* FOUND first. If a rename or a refactor moves one of these, the comparison
    below would be comparing undefined to undefined and passing on nothing. */
-ok('FOUND all three version stamps are where this test looks for them',
-  !!sw && !!app && !!log,
-  `sw.js ${sw ? 'yes' : 'NO'}, APP_BUILD ${app ? 'yes' : 'NO'}, changelog ${log ? 'yes' : 'NO'}`);
+ok('FOUND all four version stamps are where this test looks for them',
+  !!sw && !!app && !!log && !!stamp,
+  `sw.js ${sw ? 'yes' : 'NO'}, APP_BUILD ${app ? 'yes' : 'NO'}, changelog ${log ? 'yes' : 'NO'}, version.json ${stamp ? 'yes' : 'NO'}`);
 
 /* REACH. The changelog stamp is the FIRST `n:` in the file, which is only the
    newest entry while the file stays newest-first. Append one at the bottom, or
@@ -68,11 +82,17 @@ ok('REACH the changelog stamp read is the newest entry in the file, not just the
   allN.length > 1 && log && +log[1] === Math.max(...allN),
   `read n: ${log ? log[1] : 'none'}, newest of ${allN.length} entries is ${allN.length ? Math.max(...allN) : 'n/a'}`);
 
-if (sw && app && log) {
-  const [a, b, c] = [sw[1], app[1], log[1]];
+if (sw && app && log && stamp) {
+  const [a, b, c, d] = [sw[1], app[1], log[1], stamp[1]];
   ok('AGREE sw.js VERSION, APP_BUILD and the newest changelog entry are the same build',
     a === b && b === c,
     `sw.js tally-v${a}, APP_BUILD v${b}, changelog n: ${c}`);
+  /* NAMED SEPARATELY FROM THE OTHER THREE, on purpose. A renumber that misses
+     version.json and a renumber that misses app.js have the same shape but very
+     different consequences (see the header), and a red that says "the stamps
+     disagree" sends whoever reads it to the wrong file. */
+  ok('AGREE version.json, the service worker killswitch, names the same build as sw.js VERSION',
+    a === d, `sw.js tally-v${a}, version.json tally-v${d}`);
 }
 
 console.log(out.join('\n'));
