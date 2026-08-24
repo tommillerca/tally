@@ -207,6 +207,45 @@ try {
     await new Promise(r => setTimeout(r, 900));
   }, { y: yard, n: name, pet: PET });
 
+  /* REACH: a PLAYER can get here, not just __openFriendProfile.
+     Every row in this file opened the sheet through the test seam, so the suite
+     proved the paddock RENDERS and never once proved anybody could OPEN it. That
+     is the seam-without-consumer shape: a feature can be complete, guarded and
+     green while being unreachable, and the guard cannot tell.
+     Tom, 2026-08-24: "I don't see the crew tab paddock viewer here that never
+     actually got launched no? ... when u looked I couldn't find it."
+     He was right to ask. The tap does work with real state (proved below), but
+     nothing in this suite was checking it, so nobody could have answered him
+     without going and looking. This row answers it mechanically from now on.
+     PROVE-RED: delete the openFriendProfile call in the .cfan-card handler. */
+  const reachByTap = async () => {
+    await page.evaluate(async () => {
+      document.querySelectorAll('.sheet').forEach(() => history.back());
+      await new Promise(r => setTimeout(r, 300));
+      /* The rest of this file never populates the crew deck, because it opens the
+         sheet through the seam. A player has to have the deck in front of them, so
+         put a friend in it first. */
+      window.__testMe = { name: 'Reach', handle: 'reach', friendCode: 'BONE-0000' };
+      window.__testFriends = { friends: [{
+        playerId: 'reach-fixture', name: 'Pal One', alias: null, lastSeen: Date.now(),
+        profile: { level: 20, levelName: 'Bonehead', badges: 2, gearCount: 4,
+                   outfit: { B: 'B0-1', SK: 'SK0-1', BG: 'BG1' }, pet: null },
+      }], incoming: [], outgoing: [] };
+      location.hash = '#/today';
+      await new Promise(r => setTimeout(r, 400));
+      location.hash = '#/friends';
+      await new Promise(r => setTimeout(r, 2600));
+      const card = document.querySelector('.cfan-card');
+      if (!card) { window.__reach = { card: false }; return; }
+      card.click();                                    // the deck centres it
+      await new Promise(r => setTimeout(r, 900));
+      card.click();                                    // the centred card opens
+      await new Promise(r => setTimeout(r, 1300));
+      window.__reach = { card: true, sheet: !!document.querySelector('.sheet-fp .fp-facts') };
+    });
+    return page.evaluate(() => window.__reach);
+  };
+
   const readYard = () => page.evaluate(() => {
     const box = document.querySelector('.fp-yard');
     const hero = document.querySelector('.fp-pet .petcrop');
@@ -261,6 +300,13 @@ try {
   ok('OLDBUILD a friend whose client never sent a yard shows no paddock strip and an undressed pet, never the viewer\'s clothes',
     none.sheet && !none.present && oldHeroIds.length === 0,
     `sheet rendered=${none.sheet}, strip=${none.present}, hero layers [${oldHeroIds.join(',') || 'none'}]`);
+
+  /* The row itself. Placed last so it runs against a tree the rest has already
+     seeded, which is the state a real player is in. */
+  const reach = await reachByTap();
+  ok('REACH a PLAYER can open a friend, not just the test seam: two taps on the crew card open the profile',
+    !!reach && reach.card === true && reach.sheet === true,
+    reach ? `card found ${reach.card}, sheet opened ${reach.sheet}` : 'the deck never rendered a card');
 } finally {
   await browser.close();
   if (srv) srv.close();
