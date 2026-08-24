@@ -1340,7 +1340,13 @@ body::before {
    than being declared: at 393 that is 185 and 176, which is the mockup's split.
    The row is where the FLOW is; .gw-today keeps its own float animation. */
 .gw-row {
-  position: absolute; left: 12px; right: 12px; top: var(--gw-top); z-index: 5;
+  /* pinned against the island bleed, same as .hero-top and .hero-char. This was
+     the one I missed: the first pass pinned two absolute children, measured those
+     two, and called it unchanged, while .gw-row rode the box up 73px and took
+     Gwart and the talk box under the island with it (measured: gw-row 123 -> 50,
+     the wizard art to -6.7, i.e. off the top of the screen). The rect I measured
+     and the render I looked at disagreed because they were different elements. */
+  position: absolute; left: 12px; right: 12px; top: calc(var(--gw-top) + var(--bleed, 0px)); z-index: 5;
   display: flex; align-items: flex-start; gap: 8px; pointer-events: none;
 }
 .gw-today {
@@ -1724,7 +1730,31 @@ body::before {
    ORDER row measures them 83.0px below the scene's top edge and reds on it. The
    wordmark rows change meaning too, because the mark now composites over olive art
    instead of page navy. Those are design consequences for Tom to weigh, not
-   defects to silence, so the guards stay strict and this stays behind a flag. */
+   defects to silence, so the guards stay strict and this stays behind a flag.
+
+   UPDATED 2026-08-24. The composition is now CORRECT and the render agrees with
+   the numbers. The earlier disagreement was my own error: I pinned .hero-top and
+   .hero-char, measured those two, and called the hero unchanged, while .gw-row
+   rode the box up and took Gwart and the talk box under the island (measured:
+   gw-row 123 -> 50, the wizard art to -6.7, off the top of the screen). Three
+   absolute children, not two. Pinned, and a full element diff now shows the only
+   things that move are the four art layers: hero-card, hero-scene, hero-backdrop,
+   hero-fade, all 73 -> 0.
+
+   IT STILL DOES NOT SHIP, and this is the honest reason. Un-gated, two suites go
+   red, and BOTH are metrics whose premise this change invalidates rather than
+   defects it introduces:
+     today-peek ORDER   "the currencies sit at the top of the hero" measures them
+                        against the SCENE's top edge. That edge is now behind the
+                        island, so the chips read 83.0px down when they are 10px
+                        below the visible top. The reference wants to be the
+                        safe-area line, not the box.
+     wordmark REST      "nothing of the mark is on screen at rest" is a luminance
+                        threshold over a band that used to be page navy and is now
+                        bright olive art, so the ART trips the ink test.
+   Re-deriving two guards' reference points to make my own change pass is the
+   exact move this repo forbids, so it waits for someone to do that deliberately,
+   on its own, with prove-reds. */
 .fx-island .hero-scene {
   --bleed: calc(var(--sat) + 14px);
   margin-top: calc(-1 * var(--bleed));
