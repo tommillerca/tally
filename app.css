@@ -1307,7 +1307,17 @@ body::before {
      art showing between them; that is two floating plates rather than a status
      column. Left-aligned and grouped, they are one object with the plaque
      directly beneath, which is the whole point of the arrangement. */
-  position: absolute; top: calc(10px + var(--bleed, 0px)); left: 12px; right: 12px; z-index: 5;
+  /* 10px under the ISLAND, not under the scene's box. Tom, 2026-08-24: "the UI for
+     currencies needs to move up a bit because now there is just a weird gap
+     between the dynamic island and the currency."
+     He is right and it is arithmetic: before the bleed the scene started at
+     --sat + 14 and this sat 10px into it, so the chips were 24px below the inset
+     and that read as the top of the screen. The bleed moved the BOX to y=0 without
+     moving the inset, so the same 24px became a gap under the island with nothing
+     in it. Measured at --sat 59: chips at 83, island edge at 59.
+     Anchored to the inset now, so the rhythm is the same on every phone and on
+     none at all. */
+  position: absolute; top: calc(var(--sat) + 10px); left: 12px; right: 12px; z-index: 5;
   display: flex; justify-content: flex-start; align-items: center; gap: 7px;
 }
 .hero-top-right { display: flex; gap: 7px; }
@@ -1770,6 +1780,42 @@ body::before {
    Re-deriving two guards' reference points to make my own change pass is the
    exact move this repo forbids, so it waits for someone to do that deliberately,
    on its own, with prove-reds. */
+/* THE BOUNCE MUST NOT SHOW THE EDGE OF THE APP. Tom, 2026-08-24: "you didnt
+   extend the coloured backdrop far enough when i pull down i can see the wordmark
+   but the background colour just stops and shows that we are actually at the edge
+   of the app."
+   The scene's box reaches y=0 but an overscroll bounce drags it DOWN, and what it
+   uncovers is the scroller's own background, which was page navy. Extending the
+   box further up cannot fix it: a bounce has no fixed size.
+   So the SCROLLER carries the art's own top-edge colour. --hero-edge is sampled
+   from the equipped backdrop at render time (js/app.js), because the backdrop is a
+   cosmetic and a hard-coded olive would be wrong for every other one. It falls
+   back to --bg, which is exactly today's behaviour, if sampling ever fails. */
+/* THE BOUNCE STILL SHOWS THE EDGE OF THE APP, and it is not shipped because the
+   fix and the guard collide. Tom, 2026-08-24: "you didnt extend the coloured
+   backdrop far enough when i pull down i can see the wordmark but the background
+   colour just stops and shows that we are actually at the edge of the app."
+
+   Two shapes were built and both work visually: painting the scroller
+   (.screen--today) with the art's sampled edge colour, and hanging a 420px fill
+   off .hero-card's top edge. Measured on a faithful bounce, the revealed strip
+   goes from page navy to rgb(107,124,56), continuous with the art's rgb(112,126,68)
+   just below it.
+
+   BOTH BREAK overscroll-wordmark-audit, and for the same unavoidable reason: three
+   of its rows (MECHANISM, SAMPLE, LINEAR) find the mark by LUMINANCE, and any fill
+   bright enough to look like the art is also bright enough to read as ink. Raising
+   the threshold does not help either: measured, the top strip already contains
+   pixels at luminance 252 (the Gwart plaque is near-white), so no single number
+   separates mark from content.
+
+   The real fix is to move those three rows onto the difference technique the REST,
+   INK and VISIBLE rows already use, which is immune to what is behind the mark.
+   They are time-series rows sampled across a running transition, so it is not the
+   same one-line swap, and it is not work to rush. --hero-edge is sampled and ready
+   in js/app.js (paintHeroEdge); uncomment one of the two rules above it once those
+   rows can see past the colour. */
+
 .hero-scene {
   --bleed: calc(var(--sat) + 14px);
   margin-top: calc(-1 * var(--bleed));

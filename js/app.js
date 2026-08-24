@@ -4011,6 +4011,8 @@ async function renderToday(el) {
      the Wardrobe already has two other doors (the bottom Bonehead tab and its own
      chip), so spending the biggest tap target on it was a duplicate. The Backpack
      is where the unopened crates are, which is what people come back for. */
+  /* the bounce colour, sampled once per equipped backdrop: see paintHeroEdge */
+  paintHeroEdge($('#bhStage')?.querySelector('.hero-backdrop'));
   $('#bhStage').addEventListener('click', e => {
     if (e.target.closest('button')) return;
     openCharacter('crates');
@@ -10788,6 +10790,37 @@ async function renderFriends(el) {
 // Test hook (webdriver only), same pattern as __strikeFx / __bhFight. A friend
 // profile needs a real friend on the server, so the pet-clipping bug in this
 // sheet was only ever reproducible by hand on Tom's phone. Now it is measurable.
+/* SAMPLE THE BACKDROP'S TOP EDGE, so an overscroll bounce on Today shows more of
+   the art's colour instead of the page behind it (Tom, 2026-08-24: "the background
+   colour just stops and shows that we are actually at the edge of the app").
+   The backdrop is an equipped cosmetic, so this cannot be a constant. One 1x1
+   canvas read of the image's top-centre row, cached per source, written to
+   --hero-edge on the root for .screen--today to paint with. Same-origin, so the
+   canvas is never tainted; anything unexpected leaves the variable unset and the
+   CSS falls back to --bg, which is today's behaviour. */
+const _edgeCache = new Map();
+function paintHeroEdge(img) {
+  if (!img || !img.currentSrc && !img.src) return;
+  const key = img.currentSrc || img.src;
+  const put = v => v && document.documentElement.style.setProperty('--hero-edge', v);
+  if (_edgeCache.has(key)) return put(_edgeCache.get(key));
+  const read = () => {
+    try {
+      if (!img.naturalWidth) return;
+      const c = document.createElement('canvas');
+      c.width = 1; c.height = 1;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      /* the top-centre pixel: the edge the bounce actually reveals */
+      g.drawImage(img, Math.floor(img.naturalWidth / 2), 0, 1, 1, 0, 0, 1, 1);
+      const [r, gr, b, a] = g.getImageData(0, 0, 1, 1).data;
+      if (!a) return;
+      const v = `rgb(${r} ${gr} ${b})`;
+      _edgeCache.set(key, v); put(v);
+    } catch { /* tainted or unreadable: leave --hero-edge unset, CSS falls back */ }
+  };
+  if (img.complete) read(); else img.addEventListener('load', read, { once: true });
+}
+
 if (typeof window !== 'undefined' && navigator.webdriver) window.__openFriendProfile = (f, opts) => openFriendProfile(f, () => {}, opts || {});
 /* The PAYLOAD the app really uploads, so tests/friend-paddock-audit.mjs can
    grade the wire rather than a re-implementation of it. A copy of the field
