@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 434, date: '2026-08-24', title: 'Pulling down no longer shows the edge of the app', items: [
+    'When you pull down past the top of Today to see the wordmark, the background colour now carries all the way up with it instead of stopping and showing the dark page behind the app.',
+  ] },
   { n: 433, date: '2026-08-24', title: 'Walk into a friend\'s paddock', items: [
     'A friend\'s paddock is a place you can walk into now, not a row of thumbnails. Open their profile from Crew and tap "Visit their paddock": you come out in their field, their pets grazing in it, wearing whatever your friend has put on them, with their Bonehead standing at the gate. It is the same field you see your own herd in. A friend who has not updated yet has no field to visit, and no button offering one.',
   ] },

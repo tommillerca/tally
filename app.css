@@ -264,7 +264,15 @@ svg { display: block; }
    travel, because a scroll-linked position is direct manipulation and not an
    animation; it is one line of CSS below rather than a branch in the listener.
    Guard: tests/overscroll-wordmark-audit.mjs */
-.screen--today { position: relative; }
+/* AND THE SCROLLER CARRIES THE ART'S OWN TOP EDGE, so a bounce does not uncover
+   the page behind the app. Tom, 2026-08-24: "you didnt extend the coloured
+   backdrop far enough when i pull down i can see the wordmark but the background
+   colour just stops and shows that we are actually at the edge of the app."
+   --hero-edge is sampled from the equipped backdrop at render time (paintHeroEdge
+   in js/app.js) because the backdrop is a cosmetic; it falls back to --bg, which
+   is exactly the old behaviour, if the sample ever fails. The block above
+   .hero-scene carries why this shape and not the other one. */
+.screen--today { position: relative; background-color: var(--hero-edge, var(--bg)); }
 #app:has(.screen--today)::before {
   /* z-index 3, ON TOP OF THE ART. Tom, 2026-08-24: "yeah draw the wordmark on top
      of the art instead of behind".
@@ -1780,42 +1788,51 @@ body::before {
    Re-deriving two guards' reference points to make my own change pass is the
    exact move this repo forbids, so it waits for someone to do that deliberately,
    on its own, with prove-reds. */
-/* THE BOUNCE MUST NOT SHOW THE EDGE OF THE APP. Tom, 2026-08-24: "you didnt
-   extend the coloured backdrop far enough when i pull down i can see the wordmark
-   but the background colour just stops and shows that we are actually at the edge
-   of the app."
-   The scene's box reaches y=0 but an overscroll bounce drags it DOWN, and what it
-   uncovers is the scroller's own background, which was page navy. Extending the
-   box further up cannot fix it: a bounce has no fixed size.
-   So the SCROLLER carries the art's own top-edge colour. --hero-edge is sampled
-   from the equipped backdrop at render time (js/app.js), because the backdrop is a
-   cosmetic and a hard-coded olive would be wrong for every other one. It falls
-   back to --bg, which is exactly today's behaviour, if sampling ever fails. */
-/* THE BOUNCE STILL SHOWS THE EDGE OF THE APP, and it is not shipped because the
-   fix and the guard collide. Tom, 2026-08-24: "you didnt extend the coloured
-   backdrop far enough when i pull down i can see the wordmark but the background
-   colour just stops and shows that we are actually at the edge of the app."
+/* THE BOUNCE MUST NOT SHOW THE EDGE OF THE APP, AND AS OF 2026-08-24 IT DOES NOT.
+   Tom: "you didnt extend the coloured backdrop far enough when i pull down i can
+   see the wordmark but the background colour just stops and shows that we are
+   actually at the edge of the app."
 
-   Two shapes were built and both work visually: painting the scroller
-   (.screen--today) with the art's sampled edge colour, and hanging a 420px fill
-   off .hero-card's top edge. Measured on a faithful bounce, the revealed strip
-   goes from page navy to rgb(107,124,56), continuous with the art's rgb(112,126,68)
-   just below it.
+   The scene's box reaches y=0, but an overscroll bounce drags the content DOWN
+   and what it uncovers is the SCROLLER's own background. Extending the box
+   further up cannot fix that: a bounce has no fixed size. So the scroller carries
+   the art's own top-edge colour, and the rule is up with .screen--today.
 
-   BOTH BREAK overscroll-wordmark-audit, and for the same unavoidable reason: three
-   of its rows (MECHANISM, SAMPLE, LINEAR) find the mark by LUMINANCE, and any fill
-   bright enough to look like the art is also bright enough to read as ink. Raising
-   the threshold does not help either: measured, the top strip already contains
-   pixels at luminance 252 (the Gwart plaque is near-white), so no single number
-   separates mark from content.
+   THE COLOUR IS SAMPLED, NOT WRITTEN DOWN. The backdrop is an equipped cosmetic,
+   so a hard-coded olive would be wrong for every other one. paintHeroEdge in
+   js/app.js reads the top-centre pixel of the equipped backdrop into --hero-edge;
+   the fallback is --bg, which is exactly the old behaviour, if the sample fails.
 
-   The real fix is to move those three rows onto the difference technique the REST,
-   INK and VISIBLE rows already use, which is immune to what is behind the mark.
-   They are time-series rows sampled across a running transition, so it is not the
-   same one-line swap, and it is not work to rush. --hero-edge is sampled and ready
-   in js/app.js (paintHeroEdge); uncomment one of the two rules above it once those
-   rows can see past the colour. */
+   WHY THE SCROLLER AND NOT A FILL HUNG OFF THE CARD, which was the other shape
+   built and is the one that measures fine and would have shipped blind. A 420px
+   `.hero-card::before` at `bottom: 100%` lives INSIDE the scroller and above its
+   content origin, and this repo has already measured, on a booted iPhone 17 Pro,
+   that NOTHING parked above a WKWebView scroller's content origin paints into the
+   rubber-band strip: four forms tested in one page, including that exact one,
+   zero pixels each. WebKit fills the rubber-band region from the scrolled-contents
+   layer's solid backgroundColor, and a background COLOUR on the scroller is the
+   one thing that mechanism does honour. The card fill would have looked right in
+   Chromium and been invisible on Tom's phone, which is the same mistake that
+   shipped three times as the wordmark itself. See the block above
+   #app:has(.screen--today)::before for that measurement.
 
+   MEASURED, on a bounce that translates the scroller's CHILDREN and not the
+   scroller (translating the scroller takes its background with it and measures
+   nothing):
+     before   the revealed strip is page navy, rgb(24,20,38) fading to rgb(10,9,17)
+     after    rgb(107,124,56) edge to edge, against the art's rgb(109,124,64) to
+              rgb(113,127,69) in the rows just below it
+   AND IT COSTS NOTHING AT REST. Whole-viewport A/B with animation and transitions
+   frozen, at the top of Today, scrolled 600 and scrolled to the bottom: the fill
+   changes zero pixels the content was not already covering.
+
+   IT WAS BLOCKED FOR A RELEASE, and the blocker was the guard rather than the
+   fix. Three rows of tests/overscroll-wordmark-audit.mjs found the mark by
+   LUMINANCE, so any fill bright enough to look like the art also read as ink.
+   Raising the threshold was measured and does not work: the strip already
+   contains pixels at luminance 252 because Gwart's plaque is near-white. Those
+   rows are on difference detection now, which is immune to what is behind the
+   mark, and the audit's header carries their prove-reds. */
 .hero-scene {
   --bleed: calc(var(--sat) + 14px);
   margin-top: calc(-1 * var(--bleed));
