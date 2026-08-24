@@ -19,7 +19,11 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
-## v432 (not cut yet: the claim is written before the note, which is the point)
+## Pending, not cut yet
+
+Written before the note, which is the point. The lint finds a section by the
+newest changelog number, so this one is inert until whoever cuts the release
+moves the line under that heading.
 
 1. PROOF: overscroll-wordmark-audit.mjs | REACH: On Today, pull down past the top. The strip you open up is the same colour as the art above your Bonehead instead of turning into the dark page behind the app, so pulling reveals the wordmark and not the edge of the screen. It follows whichever backdrop you have equipped.
 
