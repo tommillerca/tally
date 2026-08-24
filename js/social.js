@@ -378,10 +378,18 @@ export async function setName(adj, noun, num) {
    2026-08-17 against a hanging server: the Add button came back with "No
    Bonehead has that code. Double-check it." for a code that was perfectly
    valid, sending the player off to re-read a code that was never the problem. */
-export async function friendRequest(code) {
-  try { const r = await signedFetch('POST', '/friends/request', { code }); const d = await r.json().catch(() => ({})); return { ok: r.ok, reached: true, ...d }; }
+/* TWO HANDLES, ONE OUTCOME. A friend code is typed by a human; an addToken is
+   what a /leaderboard row carries (see leaderboard() below). They are different
+   handles to the same idempotent friendship, and they share a body here so a
+   caller cannot post one to the route that reads the other -- which is exactly
+   what shipped: every board "+ ADD" sent `{code: undefined}` to /friends/request
+   and got a 404 for a player who was right there on the screen. */
+const friendship = async (route, body) => {
+  try { const r = await signedFetch('POST', route, body); const d = await r.json().catch(() => ({})); return { ok: r.ok, reached: true, ...d }; }
   catch { return { ok: false, reached: false }; }
-}
+};
+export async function friendRequest(code) { return friendship('/friends/request', { code }); }
+export async function friendAdd(token) { return friendship('/friends/add', { token }); }
 export async function acceptFriend(id) { try { return (await signedFetch('POST', '/friends/accept', { id })).ok; } catch { return false; } }
 export async function removeFriend(id) { try { return (await signedFetch('POST', '/friends/remove', { id })).ok; } catch { return false; } }
 
@@ -464,8 +472,10 @@ export async function newFriendRequests() {
 }
 
 // The all-players leaderboard (ranked by level, server-side). Each row carries
-// the player's friend code so the Crew tab can offer one-tap "add friend" —
-// deliberate while the community is small: everyone can find everyone.
+// an opaque, expiring `addToken` so the Crew tab can offer one-tap "add friend".
+// NOT a friend code: a code is also the GET /recovery/<code> lookup handle, so
+// publishing 100 of them published 100 wrapped identity bundles. Redeem the
+// token with friendAdd(), never friendRequest().
 /* ---------------- Dark Spires: shared territory ----------------
    The server is the authority on WHO holds a spire; the client still decides
    where towers are and what they are called (both deterministic from the map
