@@ -736,8 +736,13 @@ await pullTo(page, 0);
 await sleep(300);
 const scFrames = [];
 const cdp = await page.createCDPSession();
-cdp.on('Page.screencastFrame', async ({ data, sessionId }) => {
-  scFrames.push(data);
+/* THE FRAME'S OWN TIMESTAMP IS KEPT, because the LINEAR row below grades the
+   transition's SHAPE and a shape needs a clock. metadata.timestamp is the frame
+   swap time in epoch SECONDS, which is the same clock Date.now() reads, so the
+   scroll event's own fire time (taken INSIDE the page, so the CDP round trip
+   cannot land in the middle of the window) lines up with it directly. */
+cdp.on('Page.screencastFrame', async ({ data, sessionId, metadata }) => {
+  scFrames.push({ data, t: metadata.timestamp * 1000 });
   try { await cdp.send('Page.screencastFrameAck', { sessionId }); } catch { /* stopped */ }
 });
 await cdp.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 });
@@ -746,15 +751,16 @@ const warm = scFrames.length;
 scFrames.length = 0;
 /* THE REAL CONTROL: one scroll event on #screen, which is what the production
    listener is bound to. Not a call to anything this feature owns. */
-await page.evaluate(d => {
+const firedAt = await page.evaluate(d => {
   const el = document.getElementById('screen');
   Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => -d });
   el.dispatchEvent(new Event('scroll'));
+  return Date.now();
 }, FULL);
 await sleep(500);
 await cdp.send('Page.stopScreencast').catch(() => {});
-const smoPos = [];
-for (const f of scFrames) { const s = await bandBottom(f); smoPos.push(s.n ? s.bottom : null); }
+const smoPos = [], smoT = [];
+for (const f of scFrames) { const s = await bandBottom(f.data); smoPos.push(s.n ? s.bottom : null); smoT.push(f.t - firedAt); }
 await releasePull(page);
 await SMO.evaluate(n => n.remove());
 await SMOA.evaluate(n => n.remove());
@@ -763,6 +769,75 @@ await sleep(300);
 const landed = smoPos.filter(v => v !== null);
 const END = SAT + LAND - MARK_H + 0;      // the mark's box lands with its top here
 const finalPos = landed.length ? landed[landed.length - 1] : null;
+/* ---------- LINEAR: the SHAPE of that smoothing, which is the v424 report ----
+ * Tom, 2026-08-22, on a build where the two SMOOTH rows below were already
+ * green: "the boneheadz watermark when you scroll to reveal the top under the
+ * game exits in a jolty fashion as if it's not enough FPS."
+ *
+ * SO THE SMOOTHING EXISTED AND WAS STILL WRONG, and the rows above cannot see
+ * the difference: they ask whether the mark is caught in flight, and it was.
+ * What was wrong is the timing FUNCTION. This is a scroll-linked value, so the
+ * transition restarts on every scroll event, and an ease-out restarted mid-flight
+ * resets to its FASTEST velocity each time: fast-slow, fast-slow, which is what
+ * reads as dropped frames. app.css carries the release measurement (frame
+ * velocity CV 0.53-0.66 on ease-out against 0.28-0.34 on linear) and why neither
+ * paint cost nor deleting the transition was the answer.
+ *
+ * GRADED HERE AS THE CURVE ITSELF, NOT AS THE RELEASE, on purpose. The release
+ * numbers separate cleanly but they are frame-timing statistics and this repo has
+ * paid for clock-dependent guards twice. The curve is deterministic: ONE scroll
+ * event, ONE transition, and the shape of the travel it paints is a property of
+ * the timing function and of nothing else.
+ *
+ * PIXELS, and the SAME pixels the rows above grade: progress is the mark's own
+ * ink row in a compositor frame divided by where that ink finally lands, so a
+ * frame that painted nothing scores 0 rather than scoring well.
+ *
+ * THE STATISTIC IS A RATIO OF TWO HALVES OF ITSELF, and the first version was
+ * not, which cost a round. A trapezoidal mean anchored on the scroll event read
+ * 0.37 on a correct linear build (the first painted frame lands 20-45ms after
+ * the event, and that is start LATENCY, not curve shape), and re-anchoring it on
+ * the last empty FRAME still read 0.61 against a 0.62 bound, because the frame
+ * before the first visible one is not the true zero crossing and every ms of
+ * that gap biases the answer toward failing. Comparing the travel's own first
+ * half against its own second half has no anchor to get wrong: a constant
+ * velocity scores 1.0 whatever the offset, whatever the frame rate, and however
+ * many frames were dropped.
+ *
+ * DIRECTION AND BOUND, because "not linear" has two sides and only one of them is
+ * the bug. ABOVE 1 is front-loaded, which is the defect: cubic-bezier(.33,1,.68,1)
+ * is 0.87 of the way home at half time, so its first half runs 3 to 7 times the
+ * speed of its second. Below 1 would be an ease-IN, which nobody has shipped here
+ * but which would read as the mark lurching at the end, so it fails too. Measured
+ * on this tree across three runs: 1.17, 1.18 and 1.34 with `linear`, against
+ * 2.87 and 3.13 with the shipped bezier put back and a bound of 1.9. */
+const LIN_LO = 0.55, LIN_HI = 1.9;
+const prog = smoPos.map((v, i) => ({ t: smoT[i], p: finalPos ? Math.min(1, (v || 0) / finalPos) : 0 }))
+  .filter(f => Number.isFinite(f.t)).sort((a, b) => a.t - b.t);
+const iLast = prog.findIndex(f => f.p >= 0.98);
+const iFirst = prog.findIndex(f => f.p >= 0.02);
+const inWindow = iFirst >= 0 && iLast > iFirst ? prog.slice(iFirst, iLast + 1) : [];
+/* p at an arbitrary time, straight-line between the two frames either side of it */
+const pAt = t => {
+  for (let i = 1; i < inWindow.length; i++) {
+    if (inWindow[i].t < t) continue;
+    const a = inWindow[i - 1], b = inWindow[i];
+    return b.t === a.t ? b.p : a.p + (b.p - a.p) * (t - a.t) / (b.t - a.t);
+  }
+  return inWindow.length ? inWindow[inWindow.length - 1].p : null;
+};
+let ratio = null;
+if (inWindow.length >= 6) {
+  const a = inWindow[0], z = inWindow[inWindow.length - 1], mt = (a.t + z.t) / 2, mp = pAt(mt);
+  const s1 = (mp - a.p) / (mt - a.t), s2 = (z.p - mp) / (z.t - mt);
+  ratio = s2 > 0 ? s1 / s2 : Infinity;
+}
+ok(`SAMPLE    the ${WM_TRANS}ms transition was photographed while it ran, so the shape row below is grading a curve and not an empty window`,
+  inWindow.length >= 6 && ratio !== null && finalPos !== null,
+  `${inWindow.length} frames from first ink to arrival, spanning ${inWindow.length >= 2 ? Math.round(inWindow[inWindow.length - 1].t - inWindow[0].t) : 0}ms, final ink row ${finalPos}`);
+ok('LINEAR    the smoothing holds a CONSTANT velocity: a scroll-linked transition restarts on every event, so an ease-out resets to full speed each time and the travel arrives as a fast-slow sawtooth. Tom, on that build: "exits in a jolty fashion as if it\'s not enough FPS"',
+  ratio !== null && ratio >= LIN_LO && ratio <= LIN_HI,
+  `the travel's first half runs ${ratio === null ? 'n/a' : (Number.isFinite(ratio) ? ratio.toFixed(2) : 'inf')}x the speed of its second (linear is 1.00, want ${LIN_LO}-${LIN_HI}; the shipped ease-out measured 2.9-3.1 here): ${inWindow.map(f => `${Math.round(f.t - inWindow[0].t)}ms:${f.p.toFixed(2)}`).join(' ')}`);
 ok(`SMOOTH    SAMPLE the compositor really produced frames of this transition and the mark really arrived: warm-up ${warm}, ${scFrames.length} graded frames, ending with the mark on screen`,
   warm > 0 && scFrames.length >= 6 && finalPos !== null && finalPos >= END,
   `${scFrames.length} frames, positions ${landed.slice(0, 12).join(',')}${landed.length > 12 ? '...' : ''}, final ${finalPos} css px (floor ${END})`);

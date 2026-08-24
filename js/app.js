@@ -406,8 +406,16 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = und
      crop the creature instead of scaling it. translate() percentages resolve
      against the IMAGE's own border box, hence /imgSize rather than /px. */
   const pc = n => `${(n * 100 / px).toFixed(4)}%`;
-  const layer = u => `<img src="${u}" style="position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)" alt="">`;
-  return `<span class="petcrop" style="width:${px}px;height:${px}px">${layer(src)}${worn.map(layer).join('')}</span>`;
+  /* THE WORN LAYERS ARE MARKED, so press-and-hold can point at them. Tom,
+     2026-08-22: "Press and hold on bumble seal highlights her sunglasses." The
+     class goes on here rather than at any call site because this is the ONE
+     function that draws a dressed pet, so every surface she appears on inherits
+     it: Today, the Stable, the Paddock, the Pit. `dressed` on the wrapper is
+     what the listener selects on, so an undressed pet is never a press target
+     and cannot swallow a tap. NOT `worn.map(layer)`: map passes the index as the
+     second argument, which would land in `cls`. */
+  const layer = (u, cls = '') => `<img${cls ? ` class="${cls}"` : ''} src="${u}" style="position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)" alt="">`;
+  return `<span class="petcrop${worn.length ? ' dressed' : ''}" style="width:${px}px;height:${px}px">${layer(src)}${worn.map(u => layer(u, 'pw')).join('')}</span>`;
 }
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
 // layer stack (C1/C4) or a content-cropped base image. Shiny state is cached in
@@ -3366,6 +3374,57 @@ function closeAllSheets() {
   while (sheetStack.length) closeTopSheet();
 }
 window.addEventListener('popstate', () => { if (sheetStack.length) closeTopSheet(); });
+
+/* PRESS AND HOLD A DRESSED PET TO SEE WHAT SHE IS WEARING.
+ *
+ * Tom, 2026-08-22: "Press and hold on bumble seal highlights her sunglasses."
+ * The wardrobe is drawn as extra layers registered on the same canvas as the
+ * pet, so a piece can be perfectly on and still be hard to pick out of the
+ * drawing. This answers "which part of this is the thing I bought" and then
+ * gets out of the way: one accent halo on the worn layers, nothing on the pet,
+ * no animation, no sound. Tom's brief was a highlight, not a light show.
+ *
+ * BOUND ONCE AT THE MODULE LEVEL, delegated, for the same reason Escape is: the
+ * pet is drawn by croppedPetImg on Today, in the Stable, in the Paddock and in
+ * the Pit, and every one of those re-renders constantly. A listener per surface
+ * is four things to keep in step and four chances for the next screen to forget.
+ *
+ * The gesture matches the app's existing long-press (the map's report/nominate,
+ * and the saved-fit chips) rather than inventing a second feel: a deliberate,
+ * stationary hold. The move tolerance only cancels the PENDING hold, so once the
+ * halo is up a shifting finger does not blink it off, and it can never fight a
+ * scroll because a scrolling finger has already moved past MOVE_PX before the
+ * timer fires. Capture phase so a re-render underneath cannot orphan the state,
+ * and the lit element is remembered rather than re-queried for the same reason.
+ */
+(() => {
+  const HOLD_MS = 420, MOVE_PX = 8;
+  let timer = null, lit = null, from = null, pid = null;
+  const clear = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (lit) { lit.classList.remove('pw-lit'); lit = null; }
+    from = null; pid = null;
+  };
+  addEventListener('pointerdown', e => {
+    if ((e.button && e.button !== 0) || e.isPrimary === false || timer || lit) return;
+    const el = e.target.closest?.('.petcrop.dressed');
+    if (!el) return;
+    from = { x: e.clientX, y: e.clientY };
+    pid = e.pointerId;
+    timer = setTimeout(() => { timer = null; lit = el; el.classList.add('pw-lit'); }, HOLD_MS);
+  }, true);
+  addEventListener('pointermove', e => {
+    if (!timer || !from || (pid != null && e.pointerId !== pid)) return;
+    if (Math.abs(e.clientX - from.x) > MOVE_PX || Math.abs(e.clientY - from.y) > MOVE_PX) clear();
+  }, true);
+  for (const t of ['pointerup', 'pointercancel']) addEventListener(t, e => {
+    if (pid != null && e.pointerId !== pid) return;
+    clear();
+  }, true);
+  // a hash change tears the screen down under a held finger, which would leave
+  // the halo on a detached node and `lit` pointing at nothing.
+  addEventListener('hashchange', clear);
+})();
 
 function audioTick() {
   try {
@@ -9581,7 +9640,7 @@ function crewCardHtml(f) {
     <div class="cfan-stage"></div>
     ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
     <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>
-    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small>${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}<span class="lv">LV ${p.level || 1}</span></small></div>
+    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small></div>
   </button>`;
 }
 
@@ -17480,7 +17539,20 @@ async function renderBoneyard(el) {
       const ro = $('#mapReadout', body);
       if (ro && showBar) {
         ro.innerHTML = tooFast
-          ? `<span class="ic warn">${ICONS.boltStroke(24)}</span><span class="tx"><b>Too fast to loot</b><small>Slow to a walk to collect.</small></span>`
+          /* `fast`, NOT `warn`. app.css:637 has a global `.warn` BANNER utility
+             (padding 10px 12px, its own border and radius, margin-bottom 12px),
+             and this disc was picking it up wholesale through `class="ic warn"`.
+             The disc is 40px border-box with a 3px border, so 12px of side
+             padding and 10px of top padding left a 10x14 content box around a
+             24px bolt, and Chrome pins an oversized grid item to the START of
+             its area rather than centring it. Measured on the rendered card:
+             the bolt sat 7px right and 5px down of the disc's centre, which is
+             43% of the disc's own radius. Tom, 2026-08-22, on the same shape he
+             had already reported on the Crew banner: "Too fast to loot icon
+             doesn't have lightning bolt centred in the circle. Stop doing that
+             shit." A local modifier must not share a name with a global
+             utility. Graded from now on by tests/badge-centre-audit.mjs. */
+          ? `<span class="ic fast">${ICONS.boltStroke(24)}</span><span class="tx"><b>Too fast to loot</b><small>Slow to a walk to collect.</small></span>`
           : `<span class="ic near">${spawnIcon(nearest.type, 24)}</span><span class="tx"><b>${SPAWN_TYPES[nearest.type].label}</b><small>${spawnPays(nearest.type)}</small></span>`;
       }
       const card = $('#mapAct', body);
@@ -17968,7 +18040,7 @@ const APP_SOCIAL_V = 'v68';
 const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
-const APP_BUILD = 'v429'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v430'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

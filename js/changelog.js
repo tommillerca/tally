@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 430, date: '2026-08-23', title: 'Crew cards stop eating pets, and the wheel and wordmark behave', items: [
+    'On the Crew tab, a friend with a long title or nickname used to have their pet cropped by the name plate. The plate grew instead of the text getting shorter. Names now trail off with a "..." and the plate stays put, which gives the art back the space it was losing.',
+    'The icon on the "thanks for being early" banner sat in its top-left corner instead of the middle. Centred, and fixed on the shared piece so every banner icon is centred rather than just that one.',
+    'The Boneheadz wordmark, revealed when you pull down past the top of Today, moves smoothly now instead of stuttering.',
+    'Press and hold a pet to highlight what it is wearing.',
+    'The "too fast to loot" lightning bolt is centred in its circle.',
+  ] },
   { n: 429, date: '2026-08-23', title: 'Gwart explains himself, and the day stops being a box of boxes', items: [
     'Tap Gwart, anywhere he is standing, and he will actually tell you things. Ectoplasm, transmute, crates, eggs, the Wanderer, dust, saved fits, the wheel, streaks, and how changing a piece\'s look works. There is a "What is this?" on the confusing bits too, which opens him straight to the answer.',
     'The Kitchen said transmute was once a day. It is once every twenty hours, and it says so now.',

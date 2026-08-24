@@ -250,7 +250,9 @@ svg { display: block; }
        COST row), so the travel arrived in 6.4px steps, one per scroll event. That
        stepping is the "glitchy". The 130ms transition below is the smoothing: the
        compositor interpolates between the steps, so the mark follows the finger
-       with a little weight instead of teleporting between twenty positions.
+       with a little weight instead of teleporting between twenty positions. Its
+       TIMING FUNCTION was the second half of the same complaint and is `linear`
+       now; the block on the declaration itself carries that measurement.
    A TRANSITION IS NOT A KEYFRAMED ANIMATION AND CANNOT BECOME A LOOP. There is
    still no animation-name, no iteration count and nothing for the global reduce
    block's `animation-duration: .001s` to act on, which is the trap this repo has
@@ -271,10 +273,39 @@ svg { display: block; }
   transform: translateY(calc(var(--wm-pull, 0) * (var(--sat) + 66px)));
   /* the smoothing, and the only motion this feature declares. Short enough that
      the mark never feels dragged behind the finger, long enough to swallow the
-     6.4px quantisation step. cubic-bezier(.33,1,.68,1) is ease-out-cubic: it
-     leaves immediately and lands softly, which is what a released rubber band
-     does. */
-  transition: transform 130ms cubic-bezier(.33, 1, .68, 1), opacity 130ms ease-out;
+     6.4px quantisation step.
+     AND `linear`, WHICH IS THE WHOLE OF THE 2026-08-22 FIX. Tom reported the
+     mark a second time: "the boneheadz watermark when you scroll to reveal the
+     top under the game exits in a jolty fashion as if it's not enough FPS."
+     It shipped as cubic-bezier(.33,1,.68,1) on the reasoning that ease-out is
+     "what a released rubber band does". That reasoning is right for a transition
+     that runs ONCE and wrong for this one, and the difference is the bug: a
+     scroll-linked value restarts the transition on every scroll event, and an
+     ease-out restarted mid-flight resets to its FASTEST velocity every time.
+     The result is a fast-slow, fast-slow sawtooth, which is exactly what reads
+     as dropped frames. A linear timing function holds a constant velocity inside
+     each segment, so consecutive segments join without a step.
+     MEASURED, off compositor frames through a driven release (scrollTop decaying
+     from an 80px pull, e-fold 70ms, scroll events delivered at 60Hz and at 30Hz,
+     three runs each; the ink's own row in the frame, not a CSS box):
+       ease-out  frame velocity CV 0.53-0.66, peak 2.1-2.4x its own mean
+       linear    frame velocity CV 0.28-0.34, peak 1.3-1.6x its own mean
+     and the mark now finishes WITH the bounce (ink gone at 354-367ms against a
+     scroll ending at 357-381ms) instead of racing 60ms ahead of it.
+     TWO THINGS WERE RULED OUT BY MEASUREMENT FIRST, because the report says
+     "FPS" and that points at cost. Neither is the cause:
+       - PAINT/STYLE COST. Ten releases with the mark's rule live and with it
+         removed, off CDP Performance metrics: recalc style 158.1ms vs 127.3ms,
+         layout 6.5 vs 6.2. Three ms of style per 410ms release, spread over ~25
+         frames. The listener itself is 0.1ms across 200 events (the COST row).
+       - REMOVING THE TRANSITION ALTOGETHER, which is the obvious "put it on the
+         compositor" answer and is measurably WORSE. Scroll events are sparse
+         next to display frames: through the same release the mark's whole travel
+         arrives in 6 scroll events at 60Hz and 3 at 30Hz, so with nothing to
+         interpolate it teleports in 21px jumps, moving on 6 of 18 frames and
+         peaking at 6.2px/ms. The transition is what fills those gaps; the curve
+         was the only thing wrong with it. */
+  transition: transform 130ms linear, opacity 130ms linear;
 }
 @media (prefers-reduced-motion: reduce) {
   #app:has(.screen--today)::before { opacity: 1; }
@@ -3457,7 +3488,16 @@ body::before {
   border-top: 2px solid var(--ink); background: var(--surface);
   display: flex; flex-direction: column; gap: 1px; text-align: left;
 }
-.cfan-plate b { font-family: var(--display); font-weight: 400; font-size: 16px; letter-spacing: 0.04em; color: var(--text); white-space: nowrap; overflow: hidden; }
+/* ELLIPSIS, NOT CLIP. Tom, 2026-08-22: "the crew tab: some people's pets get cut
+   off in the crew card album layout" on long titles and nicknames. Measured on the
+   worst real case ("Bone Grand Master 113" plus a long alias) at 393x852: the
+   plate ran to 74px over three lines and ate the pet; the name overflowed with
+   text-overflow CLIP, so it was sliced mid-glyph with no signal it continued.
+   With the title in its own ellipsising span the plate measures 58px, 16px of
+   which goes back to the art, and both lines end in an ellipsis instead of a cut
+   letter. Measured 2026-08-23, before 74px / after 58px. */
+.cfan-plate b { font-family: var(--display); font-weight: 400; font-size: 16px; letter-spacing: 0.04em; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cfan-plate .cfan-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cfan-plate small {
   font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
   color: var(--text-3); display: flex; align-items: center; gap: 5px;
@@ -3465,6 +3505,19 @@ body::before {
 .cfan-plate .lv {
   margin-left: auto; background: var(--gold); color: var(--ink); border: 2px solid var(--ink);
   border-radius: 7px; padding: 0 6px; font-family: var(--display); font-size: 12px; letter-spacing: 0.03em;
+  /* nowrap and no-shrink, and this is the half that actually saves the pet.
+     The title ellipsising is not enough on its own: measured on the worst real
+     case, .cfan-title was 13.5px tall while THIS badge was 36.4px, because a long
+     title squeezed the flex row until "LV 113" broke across lines inside its own
+     pill. The plate grew to 74px over three lines and ate the art below it.
+     Measured 2026-08-23: 74px -> 57.8px, the pill 36.4px -> 20.2px.
+
+     It is `flex` and not `white-space` that does this, which is worth writing down
+     because the obvious guess is wrong. The first version set BOTH, and removing
+     nowrap while keeping this line left the guard GREEN: the pill was never
+     breaking on its own whitespace, it was being SQUEEZED, so refusing to shrink
+     is the whole fix. Removing this line takes the plate straight back to 74px. */
+  flex: 0 0 auto;
 }
 .cfan-live { position: absolute; top: 8px; right: 8px; z-index: 2; width: 11px; height: 11px; border-radius: 50%; background: var(--accent); border: 2px solid var(--ink); }
 .cfan-fstar { position: absolute; top: 5px; left: 8px; z-index: 2; display: grid; place-items: center;
@@ -4453,6 +4506,14 @@ body::before {
 /* static pets render through croppedPetImg (.petcrop) — a content-cropped, scaled
    img whose own transform seats/centers it; the wrapper just clips to the slot. */
 .petcrop { position: relative; display: inline-block; overflow: hidden; }
+/* PRESS AND HOLD SHOWS WHAT SHE IS WEARING. Tom, 2026-08-22: "Press and hold on
+   bumble seal highlights her sunglasses." One accent halo on the worn layers and
+   nothing else: the pet is not dimmed, nothing pulses, nothing moves. The
+   callout/selection suppression is the whole reason this reads as a gesture on a
+   phone rather than as a long-press that pops the browser's image menu. */
+.petcrop.dressed { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.petcrop .pw { transition: filter .16s ease; }
+.petcrop.pw-lit .pw { filter: drop-shadow(0 0 1.5px var(--accent)) brightness(1.08); }
 /* SHE FIGHTS FACING THE ENEMY. Tom, 2026-08-22: "we need to mirror bumbleseal in
    the fights so she faces the enemy". The player's pet stands on the LEFT of the
    arena with the foe on the right, and Cam drew Bumbleseal facing left, so she
@@ -5496,7 +5557,15 @@ body::before {
 .glutton-banner { background: linear-gradient(160deg, rgba(159, 176, 78, .14), rgba(22, 20, 32, .9) 55%), var(--surface); border: 1px solid rgba(159, 176, 78, .28); border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
 .glutton-banner > summary { list-style: none; display: flex; align-items: center; gap: 11px; padding: 11px 13px; cursor: pointer; }
 .glutton-banner > summary::-webkit-details-marker { display: none; }
-.gbn-ico { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 10px; background: #0d0f08; border: 1px solid rgba(159, 176, 78, .35); overflow: hidden; position: relative; }
+/* THE GLYPH IS CENTRED IN THE SLOT, AND IT IS THE SHARED SKIN THAT DOES IT.
+   Tom, 2026-08-22: "the icon on the crew banner 'thanks for bieng early' is up in
+   the top left, it should be centred like the first step foot". Measured on the
+   real banner (.gbn-ico.bt-bnr-ico) at 393x852: the glyph sat -8.0, -9.0 px from
+   the disc's centre, because the slot was `display: block` and the glyph simply
+   started at its top-left corner. `grid` + `place-items: center` fixes it for
+   every banner at once, current and future, rather than nudging this one.
+   Measured 2026-08-23: before dx -8.0 dy -9.0, after dx 0.0 dy 0.0. */
+.gbn-ico { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 10px; background: #0d0f08; border: 1px solid rgba(159, 176, 78, .35); overflow: hidden; position: relative; display: grid; place-items: center; }
 .gbn-ico .glutton-hero { position: absolute; width: 150%; left: 50%; top: 58%; transform: translate(-50%, -50%); margin: 0; }
 .gbn-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .gbn-txt i { font-style: normal; font-size: 9.5px; letter-spacing: .2em; color: var(--glutton-sick); text-transform: uppercase; font-weight: 800; }
@@ -6820,7 +6889,10 @@ body::before {
   display: grid; place-items: center;
 }
 .map-act.live .ic, .map-act .ic.near { border-color: var(--accent); }
-.map-act .ic.warn { border-color: var(--gold); }
+/* `.fast`, not `.warn`: the global `.warn` banner utility at the top of this
+   file pads its box, and on a fixed-size disc that padding squeezed the bolt out
+   of the middle. See the note at the readout in js/app.js. */
+.map-act .ic.fast { border-color: var(--gold); }
 .map-act .tx { min-width: 0; }
 .map-act .tx b { display: block; font-size: var(--fs-3); font-weight: 700; }
 .map-act .tx small { display: block; font-size: var(--fs-1); color: var(--text-3); }
@@ -9715,10 +9787,21 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    and does not resample a pixel of Cam's art, which is the same reason
    .bh-anim img.wpn-glow is allowed to use it. */
 .ton-stage .ton-fig .ton-new { filter: drop-shadow(0 0 3px rgba(242, 233, 215, 0.75)); }
-.ton-stage.r-uncommon  .ton-fig .ton-new { filter: drop-shadow(0 0 3px rgba(74, 222, 128, 0.75)); }
-.ton-stage.r-rare      .ton-fig .ton-new { filter: drop-shadow(0 0 3px rgba(111, 208, 255, 0.80)); }
-.ton-stage.r-epic      .ton-fig .ton-new { filter: drop-shadow(0 0 4px rgba(155, 146, 232, 0.80)); }
-.ton-stage.r-legendary .ton-fig .ton-new { filter: drop-shadow(0 0 4px rgba(255, 201, 97, 0.85)); }
+/* ONE COLOUR PER RARITY, READ FROM THE DECK TOKEN. These four were hand-written
+   RGB, and two of them had drifted: uncommon glowed 74,222,128 (Tailwind's
+   green-400) against a deck token of 162,224,166, and rare glowed 111,208,255
+   against 124,196,255. Epic and legendary had been migrated to their tokens and
+   the other two were missed, so two of the four rarities lit up a colour that
+   appears nowhere else in their card. t2-audit's NO-TAILWIND row has been red on
+   exactly this.
+   Reading --rar-rgb, which the .r-* rules above already set, makes the drift
+   impossible rather than merely fixed: there is now one place to change a rarity
+   colour. The radius and alpha stay per-rarity because those were deliberate,
+   epic and legendary being the louder pair. */
+.ton-stage.r-uncommon  .ton-fig .ton-new { filter: drop-shadow(0 0 3px rgba(var(--rar-rgb), 0.75)); }
+.ton-stage.r-rare      .ton-fig .ton-new { filter: drop-shadow(0 0 3px rgba(var(--rar-rgb), 0.80)); }
+.ton-stage.r-epic      .ton-fig .ton-new { filter: drop-shadow(0 0 4px rgba(var(--rar-rgb), 0.80)); }
+.ton-stage.r-legendary .ton-fig .ton-new { filter: drop-shadow(0 0 4px rgba(var(--rar-rgb), 0.85)); }
 
 /* AND THE PLAYER'S OWN GEAR STANDS DOWN WHILE THEY ARE TRYING SOMETHING ON.
    Only for a garment: on an AURA try-on the weapon's halo IS the product, which
