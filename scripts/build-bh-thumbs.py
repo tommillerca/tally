@@ -31,6 +31,46 @@ The BIG surfaces (the Today hero, the Wardrobe stage, the fight arena) keep the
 640px art. Nothing here replaces an asset; the originals are untouched and are
 still what avatarLayersHtml serves by default.
 
+A THIRD TIER, `trim/`, WHICH IS CROPPED. Tom, 2026-08-24: "cant you make the art
+small if its a small slot? and big if it's a big slot?" He is right, and the two
+square tiers above are the reason he had to ask. Every cosmetic is drawn on a
+FULL-BODY square so it registers against the body when eight layers stack, so a
+hat is a small patch near the top of its 640 canvas and the rest is transparent
+padding that still decodes. Measured on this tree, alpha > 14 (the same
+threshold drawTrimmedArt uses), longest ink side per item on the 192 sheets:
+
+    slot   n   median ink   of the 192x192 canvas that is NOT ink
+    BG    22      192 px     0.0%      <- backgrounds already fill it
+    B     32      112        66.0%
+    IR    24       97        74.0%
+    T     24       93        81.2%
+    IL    38       83        79.3%
+    C      6       66        88.9%
+    H     57       61        90.4%
+    SK    32       61        89.9%
+    FW    19       53        92.2%
+    P     13       51        93.2%
+    S     12       50        93.2%
+    U      7       41        95.4%
+    E     36       30        97.3%
+    M     24       28        96.8%
+    G     18       11        99.6%
+
+So this tier crops each master to its alpha box FIRST and only then scales the
+longest side down to TRIM. A 192px trim thumbnail is 192px OF GARMENT.
+
+ONLY FOR THE CANVASES, never for a stacked <img>. drawTrimmedArt already finds
+the alpha box and draws it centred, so it does not care where the ink sat: art
+that arrives pre-cropped comes out pixel-identical, just decoded smaller. The
+stacked layers in avatarLayersHtml (and the Collection's tiles, and the crew
+backdrop) DO care -- the square IS their registration -- and they keep the
+square tiers. js/app.js bhTrim() is the one function that serves this tier.
+
+NEVER UPSCALES. `min(TRIM, the master's own ink)` is deliberate: a grillz carries
+37 ink pixels in its 640 master, and blowing that up to 192 would be inventing
+resolution the art does not have. It writes 37 and the canvas draws exactly the
+pixels it draws today from the master, at 1/300th of the decode.
+
 Idempotent. Run after adding art:  python3 scripts/build-bh-thumbs.py
 """
 import os
@@ -39,6 +79,12 @@ import sys
 from PIL import Image
 
 SIZES = [192, 384]
+# The trimmed tier's cap. Its consumers are 200x200 and 80x80 canvases, and the
+# largest ink any of them draws is 168 backing-store pixels (a 200 canvas at
+# pad 0.08), measured by wrapping drawImage on the real Wardrobe render. 192 is
+# that with headroom, and the backing store caps the physical size whatever the
+# device pixel ratio is, so this tier is a downscale on every screen.
+TRIM = 192
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, 'assets', 'bh')
 OUT = os.path.join(SRC, 'thumb')
@@ -49,6 +95,19 @@ OUT = os.path.join(SRC, 'thumb')
 # keeps its own size.
 SLOTS = ['B', 'BG', 'C', 'E', 'FW', 'G', 'H', 'IL', 'IR', 'M', 'P', 'S', 'SK', 'T', 'U']
 KEEP = re.compile(r'^(?:%s)/(?:shiny/)?[^/]+\.png$' % '|'.join(SLOTS))
+
+
+def trimmed(im):
+    """The master cropped to its alpha box, longest side capped at TRIM.
+
+    Threshold 14 and no upscale: both mirror drawTrimmedArt. A fully
+    transparent file (there are none today) keeps its whole canvas rather than
+    becoming a zero-sized PNG."""
+    box = im.getchannel('A').point(lambda p: 255 if p > 14 else 0).getbbox()
+    cut = im.crop(box) if box else im
+    k = TRIM / max(cut.size)
+    return cut.resize((max(1, round(cut.width * k)), max(1, round(cut.height * k))),
+                      Image.LANCZOS) if k < 1 else cut
 
 
 def main():
@@ -75,7 +134,12 @@ def main():
                 im.resize((px, px), Image.LANCZOS).save(dst, optimize=True)
                 total_out += os.path.getsize(dst)
                 made += 1
-    print('%d thumbnails across tiers %s in %s'
+            dst = os.path.join(OUT, 'trim', rel)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            trimmed(im).save(dst, optimize=True)
+            total_out += os.path.getsize(dst)
+            made += 1
+    print('%d thumbnails across tiers %s + trim in %s'
           % (made, SIZES, os.path.relpath(OUT, ROOT)))
     print('%d skipped (source already <= the tier)' % skipped)
     print('source %.1f MB -> thumbnails %.1f MB on disk' % (total_src / 1048576, total_out / 1048576))

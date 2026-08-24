@@ -3166,6 +3166,44 @@ test('small art climbs to a bigger source and skips the nearest-neighbour step',
   ], 'the small-ink ladder no longer climbs 192 -> 384 -> master and stop');
 });
 
+/* EVERY PATH bhTrim() CAN PRODUCE HAS A FILE BEHIND IT.
+ *
+ * The cropped tier is served to <canvas>es through drawTrimmedArt, and that
+ * function's error path paints a blank plate: a missing trim thumbnail is an
+ * EMPTY TILE in the Wardrobe, not a soft one. The <img> tiers can afford to be
+ * sloppy about this because avatarLayersHtml carries an onerror that swaps back
+ * to the full-size art (rule 8, degrade to ugly never to invisible); a canvas
+ * has nowhere to fall back to.
+ *
+ * So this walks the masters with the app's OWN regex, lifted out of js/app.js
+ * rather than retyped, and demands the file. It goes red the moment somebody
+ * adds art and forgets `python3 scripts/build-bh-thumbs.py`, which is exactly
+ * how C6 shipped with no 192 or 384 sheet at all (found 2026-08-24, still true
+ * of those two tiers on main and written up rather than fixed here).
+ *
+ * PROVE-RED: `rm assets/bh/thumb/trim/H/H1.png` and this fails naming H/H1.png.
+ */
+test('every cosmetic the cropped tier can be asked for is on disk', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const re = new RegExp(app.match(/const BH_THUMB_RE = \/(.*)\/;/)[1]);
+  const bh = join(here, '..', 'assets', 'bh');
+  const rels = [];
+  for (const slot of readdirSync(bh)) {
+    if (slot === 'thumb') continue;
+    for (const dir of [slot, join(slot, 'shiny')]) {
+      const abs = join(bh, dir);
+      if (!existsSync(abs)) continue;
+      for (const f of readdirSync(abs)) {
+        const rel = `${dir}/${f}`.replace(/\\/g, '/');
+        if (re.test(`assets/bh/${rel}`)) rels.push(rel);
+      }
+    }
+  }
+  assert.ok(rels.length > 300, `only ${rels.length} cosmetics matched: the regex or the walk has drifted, this has not passed`);
+  const missing = rels.filter(r => !existsSync(join(bh, 'thumb', 'trim', r)));
+  assert.deepEqual(missing, [], `${missing.length} cosmetics have no cropped thumbnail; run scripts/build-bh-thumbs.py`);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

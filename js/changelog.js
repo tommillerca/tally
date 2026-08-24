@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 434, date: '2026-08-24', title: 'Wardrobe tiles are cut to the item', items: [
+    'Every piece of gear is drawn on a full-body square so it lines up when eight layers stack on your Bonehead, and the Wardrobe was showing you those squares: a hat tile was mostly empty space with a small hat in it, blown up to fill the cell. The tiles now use a copy cut down to the item itself, so a hat is drawn from about three times as many of Cam\'s pixels as before and the screen loads about a third of the picture data it used to.',
+  ] },
   { n: 433, date: '2026-08-24', title: 'Walk into a friend\'s paddock', items: [
     'A friend\'s paddock is a place you can walk into now, not a row of thumbnails. Open their profile from Crew and tap "Visit their paddock": you come out in their field, their pets grazing in it, wearing whatever your friend has put on them, with their Bonehead standing at the gate. It is the same field you see your own herd in. A friend who has not updated yet has no field to visit, and no button offering one.',
   ] },
