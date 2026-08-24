@@ -263,7 +263,13 @@ for (const cfg of CONFIGS) {
      is the point: the reference moved, the strictness did not. */
   const visibleTop = Math.max(geo.scene.top, cfg.sat);
   ok(`ORDER ${tag} the currencies sit at the top of the hero, not floating in the middle of it`,
-    geo.chips.top - visibleTop <= 24 && geo.chips.top >= visibleTop - 1,
+    /* 14px, TIGHTENED 2026-08-24. It was 24, and 24 is exactly the gap Tom
+       complained about: "the UI for currencies needs to move up a bit because now
+       there is just a weird gap between the dynamic island and the currency." The
+       row tolerated the defect it should have caught, which is worse than not
+       having it. The chips are anchored at --sat + 10 so the offset is 10.0 at
+       every inset; 14 clears that by 4 and catches 24 by 10. */
+    geo.chips.top - visibleTop <= 14 && geo.chips.top >= visibleTop - 1,
     `${(geo.chips.top - visibleTop).toFixed(1)}px below the hero's visible top` +
     (geo.scene.top < cfg.sat ? ` (scene box starts ${(cfg.sat - geo.scene.top).toFixed(1)}px behind the inset)` : ''));
   ok(`ORDER ${tag} the wallet is inside the card, not clipped by its right edge`,
