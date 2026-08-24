@@ -126,6 +126,13 @@ const { browser, page } = await boot(base);
 /* Three friends, three DIFFERENT cheers, so "it shows the phrase" cannot pass by
    printing the same string three times. The indices are picked apart in the
    preset list for the same reason. */
+/* PROVENANCE, 2026-08-23: these are not measured expectations about the app, they
+   are this suite's own FIXTURE, three phrases chosen out of the shipped cheer
+   preset list. Source: Tom, 2026-08-22, "there needs to be a better interface in
+   crew where you can see the cheers". They are pinned only so that "it shows the
+   phrase" cannot pass by printing one string three times. If the preset list is
+   re-worded, re-pick three that are still in it; nothing here asserts these
+   particular words are correct copy. */
 const SENT = [
   { id: 'cheer-fixture-0', name: 'BONE JOVI', cheer: 0 },
   { id: 'cheer-fixture-1', name: 'MARROW MAX', cheer: 6 },

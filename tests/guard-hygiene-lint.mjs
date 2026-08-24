@@ -30,6 +30,7 @@
  * than overselling it.
  */
 import { readdirSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -91,6 +92,35 @@ ok(`CONTROL the number of audits with NO positive control does not rise above ${
    mutates a file must assert the mutation applied before drawing a conclusion
    from the result. `s.count(old) == 1` before the replace, every time. If that
    ever gets a shared helper, lint the helper rather than the pattern. */
+
+/* PARSES, added 2026-08-23 after a peer session lost roughly 45 minutes and six of
+   a pre-registered twelve runs to this exact hole.
+
+   Every static check in this repo, including the two rows above, reads an audit as
+   TEXT: grep for constants, grep for control rows, regex the ok() literals. None of
+   them loads the file. So a duplicate `const` declaration is invisible to all of
+   them, and a suite can cheerfully report "32 ok() rows in source, expected 32"
+   about a file Node refuses to execute. Six runs executed zero lines while three
+   lints reported clean.
+
+   That is the exact family this whole file exists to catch, one level up: a check
+   reporting success while not examining the thing that is broken. `node --check`
+   is the smallest thing that actually parses, and an early error (a duplicate
+   declaration among them) is caught before a single line runs.
+
+   It does NOT prove a suite works, only that Node will accept it. That is the
+   floor, not the ceiling, and it is a floor nothing here had. */
+const unparseable = [];
+for (const f of files) {
+  try { execFileSync(process.execPath, ['--check', join(here, f)], { stdio: 'pipe' }); }
+  catch (e) {
+    const why = String(e.stderr || e.message).split('\n').find(l => /Error/.test(l)) || 'did not parse';
+    unparseable.push(`${f}: ${why.trim()}`);
+  }
+}
+ok('PARSES every audit is something Node will actually execute',
+  unparseable.length === 0,
+  unparseable.length ? `${unparseable.length}: ${unparseable.slice(0, 3).join(' | ')}` : `${files.length} files parse`);
 
 console.log(`\nguard-hygiene: ${fails.length ? fails.length + ' FAILED' : 'clean'}`);
 process.exit(fails.length ? 1 : 0);

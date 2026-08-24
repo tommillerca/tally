@@ -111,6 +111,12 @@ const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? ' 
 /* EVERY ROW IS CLASSIFIED, or the unproven list rots. NET rows need the tile
    host; MAP rows need the tile host AND a drawable map. A row in neither fails
    here, before anything is graded. */
+/* PROVENANCE, 2026-08-23: NET_ROWS / LIVE_ROWS / MAP_ROWS are this suite's own row
+   MANIFEST, not measured expectations about the app. They exist because of the
+   rule stated directly above: a row in neither list fails here, before anything is
+   graded, so the unproven list cannot rot into a silent pass on a machine that
+   cannot reach the tile host or draw a map. When you add a row, add its name here.
+   The names are copied from the ok() calls below and mean nothing on their own. */
 const NET_ROWS = ['SETUP every tile the scan needs arrived', 'CONTROL-WATER the middle of Lake Ontario classifies as water',
   'CONTROL-LAND inland Toronto classifies as land', 'SETUP every legacy position could be classified',
   'SAMPLE the scan really holds the bug: legacy walks him over water',
@@ -121,9 +127,16 @@ const NET_ROWS = ['SETUP every tile the scan needs arrived', 'CONTROL-WATER the 
   'CACHE an evicted and refetched tile re-answers its points identically', 'SETUP all four determinism children ran',
   'DETERMINISM four cold oracle builds, four tile-arrival orders, one answer',
   'CONTROL-DETERMINISM the children graded a real sample'];
+/* PROVENANCE, 2026-08-23: same manifest rule as NET_ROWS above. These three need
+   the tile host AND a drawable map, because they grade the Wanderer the map
+   actually DREW rather than the one the maths derived. That distinction is the
+   point of the suite: the glue mutation proved every pure row can stay green
+   while the marker stands 852 m from the derivation. */
 const LIVE_ROWS = ['LIVE-SAMPLE the map really drew a Wanderer to grade',
   'LIVE-CONTROL legacy would have drawn him standing on the water right here',
   'LIVE every Wanderer the map actually draws is standing on land'];
+/* PROVENANCE, 2026-08-23: same manifest rule again. MAP_ROWS is LIVE_ROWS plus
+   the cross-map-state row, so the two lists cannot drift apart by hand. */
 const MAP_ROWS = [...LIVE_ROWS, 'MAP-STATE the same points classify identically at four map zooms and centres',
   'CONTROL-MAP-STATE the rendered basemap disagrees with itself across those same states',
   'BROWSER-AGREES-NODE the page and node classify the same grid identically'];
@@ -305,6 +318,13 @@ for (let round = 0; round < 6; round++) {
 }
 console.log(JSON.stringify({ grid, out: cells.map(([cx, cy, m]) => res.get(cx + '/' + cy + '/' + m)) }));
 `;
+/* PROVENANCE, 2026-08-23: the four tile-ARRIVAL ORDERS the determinism proof runs
+   the oracle under. Source: the plan's grill item G2, which held that this feature
+   does not ship unless the oracle gives the same answer on every device, and named
+   tile load order as the hazard. Forward, reverse and shuffle vary the order;
+   trickle varies the timing, because a tile arriving mid-query is the case a
+   reordering alone never produces. Four cold children, one answer, or it is not
+   deterministic. */
 const MODES = ['forward', 'reverse', 'shuffle', 'trickle'];
 const kids = MODES.map(m => spawnSync(process.execPath, ['--input-type=module', '-e', CHILD],
   { encoding: 'utf8', timeout: 300000, env: { ...process.env, MODE: m } }));
@@ -449,6 +469,16 @@ if (!cap.ok) {
   }
 
   /* ---- the same points, four map states ------------------------------- */
+  /* PROVENANCE, 2026-08-23: the four MAP STATES the same points are re-classified
+     under, and they are chosen adversarially rather than for coverage. Source: the
+     plan's grill item G2, "vector-tile water polygons can classify the same point
+     differently at different zooms". z13.5 sits below the z14 tile the oracle
+     fixes on; z18 puts the graded points far OFF-SCREEN, which is the state that
+     makes queryRenderedFeatures return zero; z16 is a waterfront where the answer
+     actually matters; and a second city rules out a Toronto-shaped coincidence.
+     The control row beside this one shows queryRenderedFeatures giving THREE
+     different answers across these same four states, which is what these states
+     were picked to expose. */
   const STATES = [['z13.5 over the open lake', 43.500, -79.000, 13.5], ['z18 inland, the points far off-screen', 43.7400, -79.4200, 18],
     ['z16 on the waterfront itself', 43.6300, -79.3600, 16], ['z14 a different city entirely', 49.2827, -123.1207, 14]];
   const states = [];
