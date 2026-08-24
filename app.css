@@ -3527,8 +3527,17 @@ body::before {
 .fp-pet { position: absolute; right: 20%; bottom: 6px; width: auto; max-width: 45%; text-align: center; z-index: 1; filter: drop-shadow(0 3px 4px rgba(0,0,0,.4)); }
 .fp-pet .petanim, .fp-pet .petcrop, .fp-pet .pet-shiny-wrap { margin-inline: auto; }
 /* size comes from croppedPetImg now; forcing 70 square clipped long pets */
-/* out of flow, so the caption does not lift the pet off the Bonehead's baseline */
-.fp-pet-lvl { position: absolute; left: 0; right: 0; bottom: -14px; display: block; font-size: 10px; font-weight: 800; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; }
+/* out of flow, so the caption does not lift the pet off the Bonehead's baseline.
+   It hangs BELOW the pet's box, and the box's bottom is only 6px above the hero's
+   inner edge, so at -14px the badge's box ended 7px past a `.framed` hero (which
+   is the one with overflow: hidden), 48% of "Lv 6" was inside it and the rest was
+   sliced off. Measured 2026-08-23. It rides inside now: bottom -4px puts
+   the badge 2px clear of the frame, and line-height 1 trims the 13.5px line box
+   to the 10px glyphs so it fits the air under the pet. Measured on all 7 species:
+   the drawing's ink (drop shadow included) bottoms out 10px (Catfish) to 17.5px
+   above that edge, so the badge clears every one of them. Do NOT restore the
+   overhang: the fix is the badge's position, never the pet's. */
+.fp-pet-lvl { position: absolute; left: 0; right: 0; bottom: -4px; display: block; font-size: 10px; line-height: 1; font-weight: 800; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; }
 .fp-lvlbadge {
   position: absolute; left: 8%; top: 10px; z-index: 2; font-family: var(--display); font-size: 18px; letter-spacing: 0.5px;
   color: #12140b; background: var(--accent); border-radius: 999px; padding: 3px 12px;
