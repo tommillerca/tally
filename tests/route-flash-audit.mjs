@@ -135,8 +135,34 @@ const HOLD_CAP_MS = 1200;   // js/app.js holdOutgoing: the copy removes itself b
    nothing to skip, and its own defect state ranged 191 to 284ms across two
    quiet runs. Any bound tight enough to be useful there would go red on healthy
    code, which is worse than no bound at all. So the number is printed on every
-   run for a human to watch, and nothing is asserted about it. */
-const HOLD_BUDGET_MS = { 'BONEYARD->TODAY': 115 };
+   run for a human to watch, and nothing is asserted about it.
+
+   AMENDED 2026-08-23, same day, by the lead, when the branch was merged and the
+   suite was run on the machine the GATE actually runs on rather than a quiet one.
+
+   The 30ms gap above is real but it is a QUIET-MACHINE gap. Measured on the
+   merged tree at load 12 to 16, which is normal here with other sessions working,
+   the FIXED state read 160, 178 and 266ms. The quiet DEFECT state was 131 and
+   138ms. So under contention the fixed state OVERLAPS the defect state, and no
+   single number separates them across load conditions. A bound with a 14 to 23ms
+   margin cannot survive a machine whose noise floor is larger than its margin.
+
+   That is not a reason to widen the bound to 270, which would pass the defect. It
+   is the same conclusion this comment already reached for Today->Bonehead one
+   paragraph up: a bound that goes red on healthy code is worse than no bound at
+   all. So Boneyard->Today now follows its sibling. The number is PRINTED every
+   run for a human to watch, and nothing is asserted about it.
+
+   The improvement itself is not in doubt and is not what was withdrawn: 138ms to
+   101ms quiet, decode wait 31ms to 2ms, and the service worker half of this branch
+   is separately proven by sw-upgrade-audit at 53 checks green including three
+   deliberately-broken-worker modes.
+
+   To restore a real bound, this row needs a harness that measures under a
+   controlled load rather than whatever the machine happens to be doing, or a
+   metric that is not wall-clock. Until someone builds that, printing is honest and
+   asserting is not. */
+const HOLD_BUDGET_MS = {};   // see above: no wall-clock bound survives a shared machine
 const CPU = 6;              // the honest model of the phone Tom is holding: same bytes, slower CPU
 const W = 440, H = 956;
 
@@ -370,7 +396,15 @@ const holdRow = (tag, r) => {
     r.heldAt !== null && r.swapAt !== null, `held=${r.heldAt} swapped=${r.swapAt}`);
   if (r.swapAt === null) return;
   const budget = HOLD_BUDGET_MS[tag];
-  if (!budget) return;   // a swap with no measured budget is not graded on a number nobody took
+  if (!budget) {
+    /* PRINTED, NOT ASSERTED. Printing is the whole point of withdrawing the bound:
+       delete the number as well and the withdrawal becomes a silent loss of the
+       measurement, which is worse than a flaky row. A human watching the gate can
+       still see this move. The 1200ms hard cap below is still ASSERTED, so a
+       catastrophic regression is not invisible, only a 40ms one. */
+    console.log(`      ${tag}: HOLD the old screen held for ${r.swapAt}ms (printed, not asserted; hard cap ${HOLD_CAP_MS}ms still enforced)`);
+    return;
+  }
   ok(`${tag}: HOLD the frozen old screen is gone within ${budget}ms of the tap`,
     r.swapAt <= budget, `the player looked at the old screen for ${r.swapAt}ms (budget ${budget}ms, hard cap ${HOLD_CAP_MS}ms)`);
 };
