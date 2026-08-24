@@ -1086,7 +1086,44 @@ const visGeo = await geo();
    is dark, which is every shipped configuration today. It is the one row that
    still blocks un-gating the island bleed (?island), because olive art in the
    strip inflates its count. Whoever un-gates that owns fixing this row first. */
-const vis = await stats(await shot({ x: 0, y: SAT + GAP, width: VW, height: PAD + FULL - GAP - 2 }));
+/* DIFFERENCE, like REST and INK, and getting here took one wrong conclusion that
+   is worth writing down.
+
+   When this first moved to diffStats it returned 0 changed pixels and I called it
+   a harness failure: "both captures come back with no mark, the held pull must be
+   decaying". That was wrong. Measured afterwards at this exact point, with the
+   scene NOT bleeding, all four ways of suppressing the mark (content, opacity,
+   background-image, display) change the same 22,566 pixels. The technique was
+   never the problem.
+
+   The 0 was a REAL READING. It was measured with the island bleed un-gated, and
+   the mark is `#app::before` at z-index -1, i.e. BEHIND the screen's content. Let
+   the hero art start at y=0 and at full pull that opaque art sits over the strip
+   the mark travels into, so suppressing the mark changes nothing because the mark
+   is not on screen. The bleed hides it.
+
+   The brightness selector could not say that. It counted 75,680 "ink" pixels in
+   the same state and passed the mark off as visible, because olive art clears
+   INK_LUM 60 just as cream does. So the old row did not merely tolerate the
+   conflict, it CONCEALED it, and the honest reading only appears once the pixels
+   are attributed to the mark rather than to whatever is bright.
+
+   This row is therefore the one that says out loud what x425/css found and left in
+   a comment: the island bleed and the overscroll reveal are incompatible while the
+   mark paints behind the world. Un-gating ?island needs the mark lifted above the
+   art, not a looser threshold here. */
+const visClip = { x: 0, y: SAT + GAP, width: VW, height: PAD + FULL - GAP - 2 };
+const visOn = await shot(visClip);
+await page.evaluate(() => {
+  const st = document.createElement('style'); st.id = '__wmV';
+  st.textContent = '#app:has(.screen--today)::before{content:none!important}';
+  document.head.appendChild(st);
+});
+await pullTo(page, FULL, true); await sleep(400);
+const visNoMark = await shot(visClip);
+await page.evaluate(() => document.getElementById('__wmV')?.remove());
+await pullTo(page, FULL, true); await sleep(400);
+const vis = await diffStats(visOn, visNoMark);
 const visOff = vis.mean ? CREAM.map((c, i) => Math.abs(vis.mean[i] - c)) : null;
 ok(`VISIBLE   a ${FULL}px pull puts thousands of bright wordmark pixels on screen BELOW the status bar: not merely present, VISIBLE`,
   visGeo.opacity === 1 && Math.abs(visGeo.ty - (SAT + LAND)) <= 0.5
