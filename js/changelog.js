@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 428, date: '2026-08-23', title: 'The app opens fast on a bad connection, and stops reloading itself', items: [
+    'This is the big one. On a poor connection the app used to wait on the network for every single file before it could show you anything, every time you opened it. It now keeps a complete copy of itself on your phone and opens from that immediately, then quietly checks for a new version in the background. On a slow connection that is the difference between waiting and not waiting.',
+    'It no longer reloads itself out from under you. If you left the app for a minute and came back to find it starting over, sometimes losing what you had open, that was the app swapping to a new version while you were standing in the old one. New versions now download in the background and only take over the next time you open it, so nothing is yanked away mid-tap.',
+    'A new version arrives all at once or not at all. It can no longer end up half updated, with some parts new and some old, which is the kind of thing that causes strange one-off bugs that nobody can reproduce.',
+    'Switching between Today, the Boneyard and the rest is quicker: the old screen used to sit there for a moment before the new one appeared.',
+  ] },
   { n: 427, date: '2026-08-23', title: 'You can add friends again, and the Wanderer learned to swim less', items: [
     'Fixed, and this one was bad: adding a friend from the Crew board did not work at all. Not slowly, not sometimes. The "+ Add" button on the leaderboard, the "Worth adding" card and the button on someone\'s profile all sent the wrong thing to the wrong place, and the app told you nothing. If you tried to add someone in the last while and they never showed up, that is why, and it was not you. Try again.',
     'The Wanderer no longer stands in the middle of lakes and rivers. He is bound to land now, and if the only place he could walk that lap is water, he simply does not appear rather than wading.',
