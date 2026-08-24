@@ -162,6 +162,14 @@ try {
     yardKeys.join(',') === 'n,pets,wear' && petKeys.join(',') === 'shiny,sp',
     `yard keys [${yardKeys.join(',')}], per-pet keys [${petKeys.join(',')}]`);
 
+  /* PROVENANCE, 2026-08-23: the fields that must NEVER reach another player. Source
+     is the privacy decision taken with this feature, recorded in the PR: the pet
+     roster and wear ride the PLAINTEXT `players.profile` blob, crew-only, and
+     carry a count, a capped species list and one wardrobe and nothing else.
+     Everything named here was in the local pet record and was deliberately left
+     behind. Adding a field to the payload means deciding, on purpose, to publish
+     it to every accepted friend, so this list should GROW, never shrink, unless
+     that decision is explicitly revisited. */
   const LEAKY = ['iid', 'name', 'nick', 'bond', 'lineage', 'level', 'levelSteps', 'flavor'];
   const leaked = LEAKY.filter(k => petKeys.includes(k));
   ok('MINIMAL no instance ids, nicknames, bonds, lineage or per-pet levels ride the wire',
