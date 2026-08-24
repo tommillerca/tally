@@ -1,0 +1,16 @@
+-- Test-account flag, 2026-08-22. DRAFTED, NOT YET APPLIED TO PRODUCTION.
+--
+-- Why: repeated censuses (docs/BOT-CENSUS-2026-08-22.md) found dozens of dead
+-- level-1 accounts minted by test runs that hit the live API by default. The
+-- fix is to let a test SAY it is a test at registration ({test:true} on
+-- POST /register) and exclude flagged rows from every public surface, instead
+-- of periodically hand-purging the mess.
+--
+-- ORDER MATTERS: apply this BEFORE deploying the worker that filters on
+-- is_test, or the filtered routes 500 with "no such column". (Same landmine as
+-- 2026-08-16-hardening.sql, which as of 2026-08-22 is ALSO not applied to
+-- production; see the census doc's side findings.)
+--
+-- Run once, by hand; re-running errors with "duplicate column name" (harmless):
+--   npx wrangler d1 execute bonez --remote --file=migrations/2026-08-22-test-accounts.sql
+ALTER TABLE players ADD COLUMN is_test INTEGER DEFAULT 0;

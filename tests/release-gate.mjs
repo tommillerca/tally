@@ -138,8 +138,16 @@ if (own) console.log(`serving this repo at ${base}\n`);
    feedback-status-lint is PURE: a static read of docs/, no browser, instant. It
    is in the gate rather than in a habit because the thing it guards is exactly
    what a habit failed at. It also PRINTS what Tom is still waiting on, on every
-   run, which is the point: an open item nobody can miss. */
-const PURE = ['unit.test.js', 'first-session-audit.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs'];
+   run, which is the point: an open item nobody can miss.
+
+  live-api-register-lint is PURE for the same reason guard-hygiene-lint is: it
+   reads server/ and tests/ and finishes instantly. It exists because four dev
+   sessions each pointed a server suite at the DEPLOYED worker and left a burst
+   of dead accounts in Tom's Crew (47 total, docs/BOT-CENSUS-2026-08-22.md). It
+   pins the one line that makes that harmless: every POST /register in a test
+   carries `test: IS_TEST`, bound to flagFor(BASE), so a non-local run mints only
+   accounts players.is_test hides. */
+const PURE = ['unit.test.js', 'first-session-audit.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs'];
 const BROWSER = [
   'write-failure-seam-audit.mjs', // a rejected write is announced and re-thrown, and the ATOMIC primitives are in the seam: the reward SOP routes every payout through addIfAbsent/take/kvUpdate, which bypass db.put entirely
   'write-failure-toast-audit.mjs', // the OTHER half of that seam: it ends in `if (!writeFailureSink) return;` and until now nothing in the app called onWriteFailure, so every rejection returned early and a lost meal, weight, crate or coin row stayed as silent as before the seam existed. The seam audit cannot catch that and should not: it registers its OWN sink to observe the seam, which is exactly why it stays green while the app has none. This file registers nothing, breaks a real write in the real page and reads the real #toast. REJECTS is the positive control (a write that quietly succeeded would make every other row vacuous); LOUD fails on SILENCE; QUIET, THROTTLE, QUOTA and NORECURSE cover the four ways announcing it can go wrong. Proven red against main's js/app.js: LOUD, THROTTLE and QUOTA go red together. Self-serving, ~50s, 6 checks
