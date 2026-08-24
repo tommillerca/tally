@@ -108,6 +108,61 @@ const LIME_MIN = 200;
 const EDGE_FLOOR = 1.0;
 const MIN_FRAMES = 3;
 const HOLD_CAP_MS = 1200;   // js/app.js holdOutgoing: the copy removes itself by then
+/* THE BUDGETS ARE MEASURED, NOT CHOSEN, AND THEY ARE PER-SWAP BECAUSE THE TWO
+   SWAPS ARE NOT THE SAME PROBLEM. Every number below was taken on this tree at
+   440x956, CPU x6, on a QUIET machine (load average 6), before and after the
+   one-line change to revealWhenReady in js/app.js (2026-08-23, Tom's item 18 of
+   docs/FEEDBACK-2026-08-22-v424.md: the old screen sits there before the swap):
+
+     swap               before   after   decode wait before -> after
+     Boneyard->Today     138ms   101ms          31ms ->   2ms
+     Today->Bonehead     191ms   166ms         139ms -> 113ms
+
+   ONLY Boneyard->Today IS GRADED, AND THE OTHER ONE IS ONLY PRINTED. That is a
+   measurement result, not laziness. Repeating each state on a quiet machine:
+
+     Boneyard->Today   fixed 96, 101ms     defect 131, 138ms   (spread ~5-7ms)
+     Today->Bonehead   fixed 166ms         defect 191, 284ms   (spread ~93ms)
+
+   Boneyard->Today has a clean 30ms gap between the two states and a spread far
+   smaller than the gap, so a bound placed in the middle of it is a real guard:
+   115 passes the fixed state by 14-19ms and goes red on the defect by 16-23ms.
+   Proven both ways by hand on 2026-08-23 (delete the .filter in revealWhenReady,
+   both runs go red; put it back, both go green).
+   Today->Bonehead cannot carry a bound. It is ~54 non-lazy images freshly
+   created by innerHTML on every render, so they are genuinely still LOADING
+   when the reveal asks rather than merely undecoded, the filter has almost
+   nothing to skip, and its own defect state ranged 191 to 284ms across two
+   quiet runs. Any bound tight enough to be useful there would go red on healthy
+   code, which is worse than no bound at all. So the number is printed on every
+   run for a human to watch, and nothing is asserted about it.
+
+   AMENDED 2026-08-23, same day, by the lead, when the branch was merged and the
+   suite was run on the machine the GATE actually runs on rather than a quiet one.
+
+   The 30ms gap above is real but it is a QUIET-MACHINE gap. Measured on the
+   merged tree at load 12 to 16, which is normal here with other sessions working,
+   the FIXED state read 160, 178 and 266ms. The quiet DEFECT state was 131 and
+   138ms. So under contention the fixed state OVERLAPS the defect state, and no
+   single number separates them across load conditions. A bound with a 14 to 23ms
+   margin cannot survive a machine whose noise floor is larger than its margin.
+
+   That is not a reason to widen the bound to 270, which would pass the defect. It
+   is the same conclusion this comment already reached for Today->Bonehead one
+   paragraph up: a bound that goes red on healthy code is worse than no bound at
+   all. So Boneyard->Today now follows its sibling. The number is PRINTED every
+   run for a human to watch, and nothing is asserted about it.
+
+   The improvement itself is not in doubt and is not what was withdrawn: 138ms to
+   101ms quiet, decode wait 31ms to 2ms, and the service worker half of this branch
+   is separately proven by sw-upgrade-audit at 53 checks green including three
+   deliberately-broken-worker modes.
+
+   To restore a real bound, this row needs a harness that measures under a
+   controlled load rather than whatever the machine happens to be doing, or a
+   metric that is not wall-clock. Until someone builds that, printing is honest and
+   asserting is not. */
+const HOLD_BUDGET_MS = {};   // see above: no wall-clock bound survives a shared machine
 const CPU = 6;              // the honest model of the phone Tom is holding: same bytes, slower CPU
 const W = 440, H = 956;
 
@@ -226,7 +281,7 @@ async function gradedSwap(browser, page, { tag, from, to }) {
      without it there is no telling "no bare frames" from "captured too late". */
   await page.evaluate(() => {
     const s = document.getElementById('screen');
-    window.__swap = { content: null };
+    window.__swap = { content: null, held: null, swapped: null };
     window.__swapObs = new MutationObserver(muts => {
       for (const m of muts) {
         if (m.addedNodes.length && s.children.length && window.__swap.content === null) {
@@ -235,6 +290,27 @@ async function gradedSwap(browser, page, { tag, from, to }) {
       }
     });
     window.__swapObs.observe(s, { childList: true });
+    /* THE FROZEN FRAME, WHICH IS A DIFFERENT NUMBER FROM `content`.
+       Tom, item 18 of docs/FEEDBACK-2026-08-22-v424.md: the old screen sits
+       there for a moment before the new one appears. `content` above is when
+       the new screen entered the DOM, and at that instant it is still INVISIBLE
+       underneath the held copy (app.css: .screen:not(.screen-in){opacity:0}).
+       What the player watches is the held copy, and it is removed in the same
+       task that applies `screen-in`, so the removal of `.screen-held` IS the
+       swap. It happens on #screen's PARENT, because holdOutgoing parks the copy
+       as a sibling (el.after(g)), which is why this is a second observer and
+       not another branch of the one above. */
+    window.__heldObs = new MutationObserver(muts => {
+      for (const m of muts) {
+        for (const n of m.addedNodes) {
+          if (n.classList?.contains('screen-held') && window.__swap.held === null) window.__swap.held = Math.round(performance.now());
+        }
+        for (const n of m.removedNodes) {
+          if (n.classList?.contains('screen-held') && window.__swap.swapped === null) window.__swap.swapped = Math.round(performance.now());
+        }
+      }
+    });
+    window.__heldObs.observe(s.parentNode, { childList: true });
   });
 
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU });
@@ -254,7 +330,13 @@ async function gradedSwap(browser, page, { tag, from, to }) {
 
   const marks = await page.evaluate(() => {
     window.__swapObs?.disconnect();
-    return { origin: performance.timeOrigin, content: window.__swap?.content ?? null, hash: location.hash };
+    window.__heldObs?.disconnect();
+    return {
+      origin: performance.timeOrigin, hash: location.hash,
+      content: window.__swap?.content ?? null,
+      held: window.__swap?.held ?? null,
+      swapped: window.__swap?.swapped ?? null,
+    };
   });
 
   ok(`${tag}: SETUP the tab was tapped and the app actually navigated`,
@@ -295,8 +377,37 @@ async function gradedSwap(browser, page, { tag, from, to }) {
     `${withBar.length} frames scored lime>=${LIME_MIN}, ${real.length} of them over content; best lime=${Math.max(0, ...scored.map(s => s.lime))}, best edge=${Math.max(0, ...scored.map(s => s.edge)).toFixed(1)}%`);
 
   const bare = scored.filter(s => s.lime >= LIME_MIN && s.edge < EDGE_FLOOR);
-  return { scored, bare, contentAt };
+  const heldAt = marks.held === null ? null : marks.held - tap;
+  const swapAt = marks.swapped === null ? null : marks.swapped - tap;
+  return { scored, bare, contentAt, heldAt, swapAt };
 }
+
+/* HOW LONG THE PLAYER LOOKS AT THE OLD SCREEN.
+   Reported for every swap and BOUNDED, because the fix for the tray flash was
+   to freeze the old paint and the failure mode of a freeze is that it lasts too
+   long. contentAt is the render, swapAt is the moment the player actually sees
+   the new screen, and the gap between them is time spent inside
+   revealWhenReady waiting on img.decode(). */
+const holdRow = (tag, r) => {
+  if (!r) return;
+  console.log(`      ${tag}: held at ${r.heldAt}ms, new content in the DOM at ${r.contentAt}ms,`
+    + ` the player sees the swap at ${r.swapAt}ms (decode wait = ${r.swapAt !== null && r.contentAt !== null ? r.swapAt - r.contentAt : '?'}ms), CPU x${CPU}`);
+  ok(`${tag}: SAMPLE the swap moment was captured (the held copy was seen going on and coming off)`,
+    r.heldAt !== null && r.swapAt !== null, `held=${r.heldAt} swapped=${r.swapAt}`);
+  if (r.swapAt === null) return;
+  const budget = HOLD_BUDGET_MS[tag];
+  if (!budget) {
+    /* PRINTED, NOT ASSERTED. Printing is the whole point of withdrawing the bound:
+       delete the number as well and the withdrawal becomes a silent loss of the
+       measurement, which is worse than a flaky row. A human watching the gate can
+       still see this move. The 1200ms hard cap below is still ASSERTED, so a
+       catastrophic regression is not invisible, only a 40ms one. */
+    console.log(`      ${tag}: HOLD the old screen held for ${r.swapAt}ms (printed, not asserted; hard cap ${HOLD_CAP_MS}ms still enforced)`);
+    return;
+  }
+  ok(`${tag}: HOLD the frozen old screen is gone within ${budget}ms of the tap`,
+    r.swapAt <= budget, `the player looked at the old screen for ${r.swapAt}ms (budget ${budget}ms, hard cap ${HOLD_CAP_MS}ms)`);
+};
 
 const flashRow = (tag, r) => {
   if (!r) return;
@@ -317,12 +428,16 @@ async function mainPasses() {
     /* Tom's exact complaint. The Boneyard is full-bleed `.screen--map` with no
        padding, so it is the one screen whose held copy could be laid out wrong
        and still look plausible on a padded one. */
-    flashRow('BONEYARD->TODAY', await gradedSwap(browser, page, { tag: 'BONEYARD->TODAY', from: 'boneyard', to: 'today' }));
+    const rboneyard = await gradedSwap(browser, page, { tag: 'BONEYARD->TODAY', from: 'boneyard', to: 'today' });
+    flashRow('BONEYARD->TODAY', rboneyard);
+    holdRow('BONEYARD->TODAY', rboneyard);
 
     /* Not a Boneyard special case: a padded screen to a screen full of <canvas>
        art. This is also the pass that would go red if the copy were ever made
        with cloneNode, because a cloned canvas has a blank bitmap. */
-    flashRow('TODAY->BONEHEAD', await gradedSwap(browser, page, { tag: 'TODAY->BONEHEAD', from: 'today', to: 'bonehead' }));
+    const rtoday = await gradedSwap(browser, page, { tag: 'TODAY->BONEHEAD', from: 'today', to: 'bonehead' });
+    flashRow('TODAY->BONEHEAD', rtoday);
+    holdRow('TODAY->BONEHEAD', rtoday);
 
     /* THE COPY IS MADE OF THE REAL NODES, NOT A PICTURE OF THEM. Reparenting a
        canvas keeps its bitmap and cloning it does not, and this app draws its
