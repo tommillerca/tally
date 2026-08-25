@@ -1478,10 +1478,18 @@ test('days a freeze already protected still count toward a streak', () => {
   assert.ok(/r\.type === 'freeze'/.test(fn), 'historic freeze markers must still be honoured');
 });
 
-test('the freeze payout is idempotent and pays before it deletes', () => {
+test('the freeze payout claims atomically BEFORE it pays, and pays before it deletes', () => {
+  /* A kvGet/kvSet flag around the payout is not a claim: two boots both clear
+     the read and both pay (measured at +900 for 300 owed, see
+     tests/freeze-refund-audit.mjs). Only addIfAbsent is a test-and-set, and it
+     has to come first, so the payout can only run on the branch that won it.
+     The KEY must stay 'freeze-refunded': every already-settled install carries
+     that row, and a new key would pay all of them a second time. */
   const loot = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
   const fn = loot.match(/export async function refundStreakFreezes\([\s\S]*?\n\}/)[0];
-  assert.ok(/kvGet\('freeze-refunded'/.test(fn), 'must be guarded by a flag');
+  assert.ok(/addIfAbsent\('kv', \{ k: 'freeze-refunded'/.test(fn), 'must claim via db.addIfAbsent on the ORIGINAL kv key');
+  assert.ok(!/kvSet\('freeze-refunded'/.test(fn), 'a kvSet flag is not a claim and must not be the guard');
+  assert.ok(fn.indexOf('addIfAbsent') < fn.indexOf('coinsAdd'), 'the claim must be resolved BEFORE any coin moves');
   assert.ok(fn.indexOf('coinsAdd') < fn.indexOf('db.del'), 'coins must be credited BEFORE rows are deleted');
   assert.ok(/\* 100/.test(fn), 'must pay 100 coins each');
 });
