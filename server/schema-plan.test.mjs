@@ -300,5 +300,76 @@ test('the all-time figures read `devices`, not `events`', () => {
   }
 });
 
+/* THE TRACE TABLE MUST NOT BECOME THE PROBLEM IT DOCUMENTS.
+   prune_runs takes a row per tick, 96 a day, forever, and it is written by the
+   one job on this worker whose entire purpose is stopping tables growing
+   without a ceiling. A trim that silently stopped working would be invisible
+   for months and then embarrassing, so it is proved here rather than asserted
+   in a comment: the DELETE is lifted out of src/index.js verbatim and run
+   against a real over-full table.
+   DIRECTION: too many rows left is the failure. BOUND: the fixture is built
+   larger than the ceiling first and checked, because a trim run against an
+   already-small table would pass while doing nothing. */
+const TRIM_SQL = 'DELETE FROM prune_runs WHERE id <= (SELECT MAX(id) FROM prune_runs) - ?';
+test('the prune trace is trimmed to a fixed ceiling by the statement src/index.js runs', () => {
+  assert.ok(source.includes(TRIM_SQL),
+    'the trim statement has changed; re-read recordPruneRun and update TRIM_SQL here');
+  const m = /const PRUNE_RUNS_KEEP = (\d+)/.exec(source);
+  assert.ok(m, 'PRUNE_RUNS_KEEP is gone from src/index.js');
+  const keep = Number(m[1]);
+
+  const over = keep + 137;                       // deliberately not a round number
+  const ins = db.prepare('INSERT INTO prune_runs (ts, ms, cron, ok, ev, ev_stop, ev_by, gr, gr_stop, err) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  for (let i = 0; i < over; i++) ins.run(1000 + i, 1, '*/15 * * * *', 1, 0, null, '{}', 0, null, null);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM prune_runs').get().n, over,
+    'PRECONDITION: the fixture has to be over the ceiling or the trim proves nothing');
+  const newestBefore = db.prepare('SELECT MAX(ts) t FROM prune_runs').get().t;
+
+  db.prepare(TRIM_SQL).run(keep);
+
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM prune_runs').get().n, keep,
+    `the trim left more than PRUNE_RUNS_KEEP (${keep}) rows, so the trace grows without bound`);
+  assert.equal(db.prepare('SELECT MAX(ts) t FROM prune_runs').get().t, newestBefore,
+    'the trim deleted the NEWEST run, which is the one anybody asking "did it run" needs');
+  // And it is a no-op while the table is under the ceiling, so an early tick
+  // does not delete the only run there is.
+  db.prepare('DELETE FROM prune_runs').run();
+  ins.run(9000, 1, '*/15 * * * *', 1, 0, null, '{}', 0, null, null);
+  db.prepare(TRIM_SQL).run(keep);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM prune_runs').get().n, 1,
+    'the trim ate the first ever run, so /admin/prune would report never-ran forever');
+});
+
+/* THE TRACE MAY NEVER BREAK THE PRUNE. prune_runs arrives by migration and
+   deploy.sh does not run migrations, so there is a window in which the worker is
+   live and the table is not there. If recordPruneRun let "no such table" out,
+   observability would delete the thing it exists to observe: every tick would
+   fail and nothing would be pruned. A source read rather than a behaviour test
+   because provoking it needs the table dropped under a running worker, which
+   this suite has no worker to do it to; retention.test.mjs covers the route's
+   half of the same contract. */
+test('recordPruneRun swallows its own failure, so a missing migration cannot stop the prune', () => {
+  const i = source.indexOf('async function recordPruneRun');
+  assert.ok(i > 0, 'recordPruneRun is gone; re-read scheduled() and update this file');
+  const body = source.slice(i, source.indexOf('\n}', i));
+  assert.ok(/\btry\s*\{/.test(body) && /\bcatch\s*\(/.test(body),
+    'recordPruneRun no longer catches. A worker deployed before its migration would now fail every ' +
+    'cron tick and prune nothing, which is strictly worse than having no trace at all.');
+  assert.ok(!/\bthrow\b/.test(body), 'recordPruneRun rethrows, which is the same failure by another route');
+});
+
+test('the prune_runs migration and schema.sql agree', () => {
+  const migration = readFileSync(join(HERE, 'migrations', '2026-08-25-prune-runs.sql'), 'utf8');
+  const re = /CREATE TABLE IF NOT EXISTS prune_runs\b/;
+  assert.ok(re.test(schema), 'schema.sql is missing prune_runs');
+  assert.ok(re.test(migration), 'the migration is missing prune_runs');
+  /* Same columns in both, or a database that only ever gets the migration ends
+     up a shape schema.sql does not describe and the INSERT throws. */
+  const cols = sql => (/CREATE TABLE IF NOT EXISTS prune_runs \(([^;]*)\)/.exec(sql)[1])
+    .split('\n').map(l => (/^\s*(\w+)\s/.exec(l) || [])[1]).filter(Boolean).sort().join(',');
+  assert.equal(cols(migration), cols(schema),
+    'prune_runs has different columns in schema.sql and its migration');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

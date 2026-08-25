@@ -39,6 +39,26 @@ database_id = "703a4e46-7643-490c-8d3f-26bc4e277eba"
 [triggers]
 crons = ["*/15 * * * *"]
 
+# WORKERS LOGS. Without this block Cloudflare retains NOTHING: `wrangler tail`
+# is a live stream and everything printed while nobody is attached is gone. That
+# is exactly what happened the day the cron above was turned on. Three tail
+# sessions failed to observe a single tick and there was no second place to
+# look, so "did the pruner run last night" was unanswerable rather than merely
+# inconvenient.
+#
+# head_sampling_rate = 1 keeps every invocation, and it can afford to: this
+# worker's cron is 96 invocations a day and its fetch traffic is a handful of
+# players. Sampling exists for workers doing millions of requests; here it would
+# only introduce a chance that the one failed tick is the one that was dropped.
+#
+# This is the LIVE half. The durable half is the prune_runs table and
+# GET /admin/prune, which outlive log retention and can be queried rather than
+# read. Neither replaces the other: logs catch a worker that fails before it can
+# write a row, the table answers questions a week of log text cannot.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 [vars]
 # DEV enables /dev/* test endpoints. NEVER set in production.
 DEV = "0"

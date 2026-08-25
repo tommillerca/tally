@@ -266,5 +266,91 @@ await (async () => {
   });
 })();
 
+/* ---------------------------------------------------------------------------
+   CAN ANYONE TELL, AFTERWARDS, THAT IT RAN?
+
+   Everything above proves the pruner deletes the right rows when something
+   calls it. None of it proves a human can find out what happened last night,
+   and on 2026-08-24 nobody could: the cron was enabled and confirmed by the
+   deploy output, and three separate `wrangler tail` sessions caught zero ticks.
+   scheduled() wrote nothing durable, so once the terminal closed the question
+   had no answer at all. These four cases are that answer, and they are worth as
+   much as the delete tests: a pruner nobody can audit is one nobody will notice
+   has stopped.
+
+   ADMIN_TOKEN must be devtoken, which is what npm run dev and deploy.sh both
+   pass. A wrong token here shows up as the 401 case failing, not as silence. */
+const ADMIN = process.env.ADMIN_TOKEN || 'devtoken';
+const pruneStatus = async (token = ADMIN) => {
+  const r = await fetch(`${BASE}/admin/prune?token=${encodeURIComponent(token)}`);
+  return { status: r.status, json: await r.json().catch(() => null) };
+};
+
+await test('/admin/prune is admin-gated, like every other admin read', async () => {
+  assert.equal((await fetch(BASE + '/admin/prune')).status, 401, 'no token got in');
+  assert.equal((await pruneStatus('not-the-token')).status, 401, 'a wrong token got in');
+  const ok = await pruneStatus();
+  assert.equal(ok.status, 200, `the right token was refused (${ok.status}); is ADMIN_TOKEN devtoken?`);
+  // The header form the dashboard uses has to work too, or dashboard.html
+  // cannot read this route at all.
+  const viaHeader = await fetch(BASE + '/admin/prune', { headers: { 'x-bh-admin': ADMIN } });
+  assert.equal(viaHeader.status, 200, 'x-bh-admin is not accepted, so the dashboard cannot read this');
+  await viaHeader.text();
+});
+
+await (async () => {
+  const name = 'a cron tick leaves a DURABLE trace of what it deleted';
+  const probe = await fetch(BASE + '/__scheduled?cron=*%2F15+*+*+*+*');
+  if (probe.status === 404) {
+    await probe.text();
+    console.log(`  SKIP  ${name} (dev server not started with --test-scheduled)`);
+    skipped++;
+    return;
+  }
+  await probe.text();
+
+  await test(name, async () => {
+    const before = (await pruneStatus()).json;
+    assert.equal(before.status === 'no-table', false,
+      'prune_runs does not exist: apply migrations/2026-08-25-prune-runs.sql first');
+    const d = dev('trace');
+    await plant(d, 'food_log', 300 * DAY, 4);
+    assert.equal(await count({ device: d }), 4, 'PRECONDITION: the fixture did not land, so a trace of 0 would prove nothing');
+
+    const r = await fetch(BASE + '/__scheduled?cron=*%2F15+*+*+*+*');
+    await r.text();
+    assert.equal(r.status, 200);
+
+    const after = (await pruneStatus()).json;
+    assert.equal(after.recordedRuns, Math.min(before.recordedRuns + 1, after.keeping),
+      'the tick recorded no run, so scheduled() is not writing its trace');
+    const run = after.runs[0];
+    assert.equal(run.ok, 1, `the recorded tick failed: ${run.err}`);
+    assert.ok(run.ev >= 4, `the trace says ${run.ev} events deleted, but ${4} were planted for it to find`);
+    assert.ok(Math.abs(Date.now() - run.ts) < 120000, 'the newest run is not from just now');
+    // The per-rule breakdown is the part that makes a row worth reading rather
+    // than merely present: "50,000 rows" and "50,000 rows, all of them the
+    // 60-day window" are different findings.
+    assert.ok(JSON.parse(run.evBy).window >= 4, `evBy does not attribute the deletions: ${run.evBy}`);
+  });
+
+  await test('/admin/prune answers "is the pruner healthy" in one word and one sentence', async () => {
+    await drain();
+    const r = await fetch(BASE + '/__scheduled?cron=*%2F15+*+*+*+*');
+    await r.text();
+    const s = (await pruneStatus()).json;
+    assert.equal(s.status, 'healthy',
+      `status is "${s.status}" straight after a full drain and a successful tick: ${s.detail}`);
+    assert.equal(s.ok, true, 'ok disagrees with status');
+    assert.ok(s.detail && s.detail.length > 40, 'detail is not a sentence anybody could act on');
+    // The tail the pruner cannot touch has to be visible here, because it is
+    // invisible everywhere else: a run log only ever reports rows it DELETED.
+    assert.equal(typeof s.tables.grantsDormant, 'number',
+      'the unprunable grants tail is not reported, so nothing surfaces it at all');
+    assert.ok(s.tables.eventsOldestDay === null || s.tables.eventsOldestDay >= s.retention.eventCutoffDay,
+      `rows older than the cutoff survived a drain (oldest ${s.tables.eventsOldestDay}, cutoff ${s.retention.eventCutoffDay})`);
+  });
+})();
+
 console.log(`\n${passed} passed, ${failed} failed${skipped ? `, ${skipped} skipped` : ''}`);
 process.exit(failed ? 1 : 0);

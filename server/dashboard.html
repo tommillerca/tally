@@ -45,6 +45,16 @@
   .rmeta { color: #6f6a7a; font-size: 12px; margin-top: 6px; }
   .rmeta a { color: #7cc4ff; }
   .err { color: #ff8080; }
+  /* Retention health. Deliberately the first thing on the page and deliberately
+     colour-coded: the question it answers is "is anything deleting rows", and a
+     "no" that reads like every other number would go unread for months. */
+  .health { border-radius: 14px; padding: 14px 16px; margin: 0 0 18px; border: 1px solid; }
+  .health .hs { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+  .health .hd { color: #e8e2d6; margin-top: 4px; font-size: 13.5px; }
+  .health .hm { color: #9a94a6; font-size: 12px; margin-top: 8px; }
+  .health.ok   { background: #16210f; border-color: #2e4a19; } .health.ok .hs   { color: #a5e847; }
+  .health.warn { background: #241d0f; border-color: #4a3a19; } .health.warn .hs { color: #ffc857; }
+  .health.bad  { background: #2a1414; border-color: #4d2222; } .health.bad .hs  { color: #ff8080; }
   .tbl { width:100%; border-collapse:collapse; font-size:13px; margin:6px 0 14px; }
   .tbl th { text-align:left; opacity:.6; font-weight:600; padding:4px 8px 4px 0; border-bottom:1px solid rgba(128,128,128,.3); }
   .tbl td { padding:5px 8px 5px 0; border-bottom:1px solid rgba(128,128,128,.15); vertical-align:top; }
@@ -78,6 +88,11 @@
       const r = await fetch(api + '/stats?token=' + encodeURIComponent(tok));
       if (!r.ok) { $('#out').innerHTML = `<p class="err">${r.status === 401 ? 'Wrong admin token.' : 'Error ' + r.status}</p>`; return; }
       const s = await r.json();
+      /* RETENTION HEALTH. Separate route, separate failure: an older worker has
+         no /admin/prune, so a null here means "cannot tell" and says so rather
+         than taking the whole page down. */
+      const health = await fetch(api + '/admin/prune?limit=10&token=' + encodeURIComponent(tok))
+        .then(x => x.ok ? x.json() : null).catch(() => null);
       const actMax = Math.max(1, ...s.activeByDay.map(d => d.n));
       const nameMax = Math.max(1, ...s.byName.map(d => d.n));
       const stime = s.screenTime || [], fopen = s.featureOpens || [], ftime = s.featureTime || [], testers = s.testers || [];
@@ -128,7 +143,38 @@
       const win = Number(s.windowDays) || 0;
       const sw = Number(s.statsWindowDays) || win;
       const inWin = sw ? ` (last ${sw}d)` : '';
-      $('#out').innerHTML = `
+      /* ONE BANNER, AT THE TOP, IN WORDS. The cron was turned on and for a day
+         nobody could establish whether a single tick had fired, because the only
+         record was a console line in a stream nobody was attached to. The whole
+         point of this block is that the answer arrives without anyone knowing
+         what a cron is. */
+      const ago = ms => ms == null ? 'never' : ms < 90000 ? 'just now'
+        : ms < 5400000 ? Math.round(ms / 60000) + ' min ago' : Math.round(ms / 3600000) + ' h ago';
+      const healthHtml = (() => {
+        if (!health) return `<div class="health warn"><div class="hs">Retention: unknown</div>
+          <div class="hd">This worker does not serve <code>/admin/prune</code>, so there is no way to tell from here whether anything is deleting old rows. Deploy a build that includes it.</div></div>`;
+        const cls = health.status === 'healthy' ? 'ok' : (health.status === 'behind' ? 'warn' : 'bad');
+        const t = health.tables || {};
+        const rows = (health.runs || []).map(x => `<tr>
+            <td>${new Date(x.ts).toLocaleString()}</td>
+            <td>${x.ok ? 'ok' : '<span class="err">failed</span>'}</td>
+            <td>${(x.ev || 0).toLocaleString()}</td>
+            <td>${(x.gr || 0).toLocaleString()}</td>
+            <td>${esc(x.evStop || x.grStop || '')}</td>
+            <td>${x.ms} ms</td>
+            <td class="msg">${esc((x.err || '').split('\n')[0])}</td>
+          </tr>`).join('');
+        return `<div class="health ${cls}">
+          <div class="hs">Retention: ${esc(health.status)}</div>
+          <div class="hd">${esc(health.detail)}</div>
+          <div class="hm">Last tick ${ago(health.sinceLastMs)} &middot; events ${t.eventsRows == null ? '?' : t.eventsRows.toLocaleString()} rows, oldest ${esc(t.eventsOldestDay || '—')} &middot; grants ${t.grantsRows == null ? '?' : t.grantsRows.toLocaleString()} rows, of which <b>${t.grantsDormant == null ? '?' : t.grantsDormant.toLocaleString() + (t.grantsDormantCapped ? '+' : '')}</b> can never be pruned at any age (unopened gifts for players who have never acknowledged one).</div>
+        </div>
+        ${rows ? `<details><summary class="note">Last ${health.runs.length} ticks</summary>
+          <table class="tbl"><tr><th>when</th><th></th><th>events</th><th>grants</th><th>stopped on</th><th>took</th><th>error</th></tr>${rows}</table>
+        </details>` : ''}`;
+      })();
+
+      $('#out').innerHTML = healthHtml + `
         <div class="cards">
           <div class="card"><div class="n">${s.totalDevices}</div><div class="l">Testers seen (all time)</div></div>
           <div class="card"><div class="n">${s.dau}</div><div class="l">Active today</div></div>

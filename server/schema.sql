@@ -309,3 +309,38 @@ CREATE TABLE IF NOT EXISTS spires (
   updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_spires_owner ON spires (owner);
+
+-- ---------------------------------------------------------------------------
+-- WHAT THE PRUNER DID (2026-08-25). One row per scheduled() tick.
+--
+-- The cron went live on 2026-08-24 and NOBODY COULD CONFIRM A SINGLE TICK HAD
+-- FIRED. scheduled() only console.log'd its result, `wrangler tail` is a live
+-- stream that keeps nothing, and three separate tail sessions caught zero
+-- occurrences of the word `prune`. For a job whose only purpose is deleting
+-- rows from a live player database, "did it run last night, and what did it
+-- delete" had no answer at all after the fact. This table is that answer.
+--
+-- IT MUST NOT BECOME THE PROBLEM IT DOCUMENTS. It is written once per tick, so
+-- 96 rows a day, and scheduled() trims it to the newest PRUNE_RUNS_KEEP ids on
+-- every tick. At 2,000 rows that is roughly 21 days of history. Measured on this
+-- DDL with realistic content: 216 KB at the ceiling (111 bytes a row), 512 KB if
+-- every row also carried an error stack, and `err` is truncated to 2,000
+-- characters so even 2,000 consecutive failures cannot exceed about 4.5 MB.
+-- Fixed ceiling, no index, no growth term.
+--
+-- `ok` is stored rather than derived from `err IS NULL` so a partial tick (the
+-- events pass finished, the grants pass threw) still records the half that
+-- worked. GET /admin/prune reads this table and nothing else.
+CREATE TABLE IF NOT EXISTS prune_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts INTEGER NOT NULL,        -- ms epoch the tick started
+  ms INTEGER NOT NULL,        -- wall clock for the whole tick
+  cron TEXT,                  -- the schedule expression Cloudflare fired, e.g. "*/15 * * * *"
+  ok INTEGER NOT NULL,        -- 1 = both passes completed, 0 = something threw
+  ev INTEGER NOT NULL,        -- events rows deleted this tick
+  ev_stop TEXT,               -- NULL = drained | 'maxRows' | 'budgetMs'
+  ev_by TEXT,                 -- JSON {rule: rows}, e.g. {"window":50000,"rl_recovery":12}
+  gr INTEGER NOT NULL,        -- grants rows deleted this tick
+  gr_stop TEXT,               -- NULL = drained | 'maxRows' | 'budgetMs'
+  err TEXT                    -- the stack, when ok = 0
+);
