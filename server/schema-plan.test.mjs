@@ -174,7 +174,7 @@ const CASES = [
        query is correct, fast-looking in a small fixture, and a timeout in
        production. */
     name: 'GET /stats tester leaderboard is a COVERING scan of idx_events_device_name_day',
-    fragment: "WHERE e.day >= ? AND ${noRl('e.name')} AND ${nin('e.device')}",
+    fragment: "WHERE e.day >= ? AND ${upto('+e.day')} AND ${noRl('e.name')} AND ${nin('e.device')}",
     mustIndex: 'COVERING INDEX idx_events_device_name_day',
     mustNotScan: 'SCAN e USING INDEX idx_events_device_day',
     params: ['2026-08-01', 'rl_recovery', 'rl_ridcheck'],
@@ -184,19 +184,22 @@ const CASES = [
               d.label, d.country, d.region, d.city,
               date(d.first_seen/1000,'unixepoch') first, date(d.last_seen/1000,'unixepoch') last
        FROM events e LEFT JOIN devices d ON d.device = e.device
-       WHERE e.day >= ? AND e.name NOT IN (?,?) AND e.device NOT IN ('fb31564c-22cc-49e8-836b-2da8fbf8531f')
+       WHERE e.day >= ? AND +e.day <= '2026-08-31' AND e.name NOT IN (?,?) AND e.device NOT IN ('fb31564c-22cc-49e8-836b-2da8fbf8531f')
        GROUP BY e.device ORDER BY events DESC LIMIT 30`,
   },
   {
     /* Every day-ranged count on this route also needs `device`, and on (day)
-       alone that meant leaving the index for the row. activeByDay 6,111 -> 348
+       alone that meant leaving the index for the row. The upper bound added on
+       2026-08-25 is planned here too, and deliberately: `day` is the leading
+       column, so `>= ? AND <= 'x'` is one range seek and the COVERING plan below
+       is the proof that bounding the window cost nothing. activeByDay 6,111 -> 348
        ms, dau 461 -> 13 ms at 12M rows. */
     name: 'GET /stats activeByDay never leaves idx_events_day_device',
-    fragment: 'SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ?',
+    fragment: "SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ? AND ${upto('day')}",
     mustIndex: 'COVERING INDEX idx_events_day_device',
     mustNotScan: 'SCAN events',
     params: ['2026-08-01'],
-    sql: `SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ? AND device NOT IN ('fb31564c-22cc-49e8-836b-2da8fbf8531f') GROUP BY day ORDER BY day`,
+    sql: `SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ? AND day <= '2026-08-31' AND device NOT IN ('fb31564c-22cc-49e8-836b-2da8fbf8531f') GROUP BY day ORDER BY day`,
   },
   {
     /* The retention pruner's own window DELETE. `day` is still the leading
@@ -239,6 +242,29 @@ for (const c of CASES) {
     assert.ok(!plan.includes(c.mustNotScan), `plan still contains "${c.mustNotScan}":\n      ${plan}`);
   });
 }
+
+/* NO WINDOWED READ ON /stats MAY BE OPEN AT THE TOP END. The plan cases above
+   pin two statements; this pins ALL of them, including the ones added tomorrow.
+   715 rows dated up to three weeks ahead made WAU read 85 against a true 46,
+   because `day >= ?` with no upper bound puts a future row inside "this week"
+   and keeps it there until the calendar arrives. future-dates.test.mjs proves
+   the same thing against a live worker, but it can only see figures whose event
+   names it plants; this sees a new query the day it is written, with no fixture
+   and nothing running. Both, because neither covers the other.
+   `day = ?` is already exactly bounded (dau), so it passes on its own. */
+test('every /stats read of `events` is bounded at BOTH ends', () => {
+  const from = source.indexOf("path === '/stats'");
+  const to = source.indexOf("path === '/admin/prune'");
+  assert.ok(from > 0 && to > from, 'the /stats route moved; this guard cannot find it');
+  const route = source.slice(from, to);
+  // every template literal in the route that reads `events`
+  const queries = route.split('`').filter(t => /FROM events/.test(t));
+  assert.ok(queries.length >= 12, `only ${queries.length} events queries found in /stats; the parse is wrong`);
+  const open = queries.filter(t => !t.includes('upto(') && !t.includes('day = ?'));
+  assert.equal(open.length, 0,
+    `${open.length} of ${queries.length} /stats reads of events have no upper day bound:\n      ` +
+    open.map(t => t.replace(/\s+/g, ' ').trim().slice(0, 110)).join('\n      '));
+});
 
 test('COVERAGE: every statement above is still the one src/index.js runs', () => {
   for (const c of CASES) {
