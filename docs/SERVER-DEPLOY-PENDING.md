@@ -2,6 +2,39 @@
 
 Written 2026-08-23, after #77 merged.
 
+> ## CORRECTION, 2026-08-25 — READ THIS BEFORE THE TABLE BELOW
+>
+> **Everything under "State" was already stale when I read it, and it cost a
+> round of wrong assumptions. Derive schema truth from the LIVE DATABASE, never
+> from this file.**
+>
+> ```
+> npx wrangler d1 execute bonez --remote --json \
+>   --command "SELECT name FROM pragma_table_info('players');"
+> ```
+>
+> **What is actually true now:**
+>
+> - **All four pending migrations HAVE been applied to production D1** (2026-08-25),
+>   in order: `2026-08-22-test-accounts`, `2026-08-23-flag-known-test-accounts`,
+>   `2026-08-16-indexes`, `2026-08-17-prune-and-stats`. `is_test` and `grants_ack`
+>   both exist. The section below says none had ever been applied; in fact
+>   `2026-08-16-hardening` was ALREADY live before any of this (max_level,
+>   week_key, week_steps, rate_limits and idx_rate_limits_expiry were all present),
+>   so its `DELETE` of poisoned limiter rows had already run.
+> - **The 47 test accounts are DELETED, not flagged.** Player count 98 -> 51.
+>   Verified against live data before writing: all 47 at level 1, **zero
+>   friendships**, zero recovery codes, spires, trades or fights. Friendships
+>   still 80 afterwards, the 14 real progressed players untouched.
+> - **The Worker itself is still NOT deployed.** `server/deploy.sh` was refused by
+>   a permission gate. The gap is safe: the new columns are additive, so the older
+>   deployed Worker ignores them, `/health` is 200 and the gated routes still 401.
+>   What the deploy buys is the `is_test` filter for FUTURE test accounts; it is
+>   no longer what cleans the leaderboard, because those rows are gone.
+> - **`crons = []` is committed**, so deploying starts NO pruner. #77's 15-minute
+>   pruner deletes rows from a live database and has never run against real data.
+>   It stays off until somebody decides to watch the first tick.
+
 ## State
 
 | | |
