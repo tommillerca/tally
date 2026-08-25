@@ -344,10 +344,13 @@ page.on('pageerror', e => { pageErrors.push(String(e)); console.log('PAGEERROR',
     const p = document.getElementById('gwartBtn');
     if (!b || !p) return null;
     const r = p.getBoundingClientRect();
+    const rb = b.getBoundingClientRect();
     return { full: b.querySelector('.tb-line')?.dataset.tb || '',
       typed: b.querySelector('.tb-txt')?.textContent || '',
       name: b.querySelector('.tb-name')?.textContent || '',
-      px: r.left + r.width / 2, py: r.top + r.height / 2 };
+      px: r.left + r.width / 2, py: r.top + r.height / 2,
+      /* THE BOX, which is the control that says the next line. See the TAP row. */
+      bx: rb.left + rb.width / 2, by: rb.top + rb.height / 2 };
   });
   const first = await say();
   ok('SETUP the opening line is a real sentence with a speaker on it (an empty line grades TAP for free)',
@@ -362,9 +365,22 @@ page.on('pageerror', e => { pageErrors.push(String(e)); console.log('PAGEERROR',
      because a screen with no box at all must report THAT, not die on a null: a
      stack trace exits non-zero, so the guard still bites, but it buries the row
      that says what is actually wrong. */
-  if (first) { await page.mouse.click(first.px, first.py); await sleep(2400); }
+  /* THE BOX, NOT THE PLAQUE, and this row was red for exactly that reason. It
+     clicked #gwartBtn, which is where tap-for-another-line used to live. It does
+     not live there any more: the plaque opens Gwart's Guide now and js/app.js
+     says so in as many words ("What is gone is tap-for-another-line"), with the
+     next-line handler moved onto .gw-box. So the row was driving a control that
+     had been deliberately retired and reporting the absence of a behaviour that
+     had MOVED, on healthy code, which is the failure mode where a guard slowly
+     teaches everyone to ignore it.
+     Measured before changing it, on main at a0c10b3b: three taps on the box give
+     three different lines; the plaque's centre is not even over the box (box at
+     x205 w176, plaque at x12 w185) and what sits under that point is .wz-stars-m.
+     Coverage is not lost by moving the click: the plaque's real job is now graded
+     by the GUIDE row below. */
+  if (first) { await page.mouse.click(first.bx, first.by); await sleep(2400); }
   const tapped = first ? await say() : null;
-  ok('TODAY tapping Gwart makes him say something, and something DIFFERENT',
+  ok('TODAY tapping Gwart\'s box makes him say something, and something DIFFERENT',
     !!first && !!tapped && tapped.full !== first.full && tapped.typed === tapped.full,
     first ? `"${first.full}" -> "${tapped ? tapped.full : ''}"` : 'no box to tap');
 
@@ -413,6 +429,22 @@ page.on('pageerror', e => { pageErrors.push(String(e)); console.log('PAGEERROR',
   const quiet = await watchRestarts(4200);
   ok('TODAY he does not talk over an open sheet: the idle ticks pass and no line starts',
     sheetUp && quiet === 0, `${quiet} line(s) started while a sheet was up`);
+  await page.evaluate(() => { window.__gwIdleMs = 0; history.back(); location.hash = '#/today'; });
+  await sleep(900);
+
+  /* GUIDE: the plaque's job after the tap-for-a-line handler moved off it. Without
+     this the audit would still know his box talks and would have no idea whether
+     the thing he is standing on does anything at all. */
+  const guide = await page.evaluate(async () => {
+    const p = document.getElementById('gwartBtn');
+    if (!p) return { plaque: false };
+    p.click();
+    await new Promise(r => setTimeout(r, 1400));
+    const sh = document.querySelector('#sheets .sheet');
+    return { plaque: true, opened: !!sh, txt: (sh?.textContent || '').slice(0, 40) };
+  });
+  ok('TODAY tapping his plaque opens Gwart\'s Guide, which is what that control does now',
+    guide.plaque && guide.opened, `plaque=${guide.plaque}, a sheet opened=${guide.opened}, "${guide.txt || ''}"`);
   await page.evaluate(() => { window.__gwIdleMs = 0; history.back(); location.hash = '#/today'; });
   await sleep(900);
 

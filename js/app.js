@@ -9961,7 +9961,7 @@ async function renderFriends(el) {
          a sealed gift's payload and there is no payload on a ledger row. */
       const who = r.from || (String(r.label || '').match(/^(.+?)\s+cheered\b/i) || [])[1] || 'Someone in your Crew';
       return `<div class="cheer-row${isNew(r) ? ' unread' : ''}">
-        <span class="cheer-face">${c ? c.emo : ICONS.bone(22)}</span>
+        <span class="cheer-face">${c ? c.emo : ICONS.bone(24)}</span>
         <div class="cheer-tx">
           <b>${esc(who)}</b>
           <span class="cheer-said">${c ? esc(c.txt) : esc(r.label)}</span>
