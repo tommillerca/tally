@@ -418,7 +418,28 @@ svg { display: block; }
          interpolate it teleports in 21px jumps, moving on 6 of 18 frames and
          peaking at 6.2px/ms. The transition is what fills those gaps; the curve
          was the only thing wrong with it. */
-  transition: transform 130ms linear, opacity 130ms linear;
+  /* AND THE OPACITY LEADS THE TRAVEL OUT. Tom, 2026-08-25: "the boneheadz need to
+     be feeding out faster so when you release your thumb and the screen comes back
+     up there is never overlap with the UI."
+     The two used to run on the same 130ms, and the note above this one records
+     what that bought: the ink finished WITH the bounce (gone at 354-367ms against
+     a scroll ending at 357-381ms), so the last frames of every release had the
+     mark and the returning UI on the glass together. 130ms is the TRAVEL's
+     number, measured: it is what fills the gaps between sparse scroll events so a
+     6.4px quantisation step does not teleport. The opacity has nothing to
+     interpolate: its step is 1/20 of alpha, which is invisible at any duration.
+     So the shared duration was never a requirement, only a default, and shortening
+     it is what makes the mark clear ahead of the spring instead of alongside it.
+     WHAT THIS DOES NOT DO, said plainly so the next person does not re-report it:
+     --wm-pull is pinned at 1 for every pull past 36px, so between a 168px bounce
+     and 36px the mark is at full opacity by design and the content slides up under
+     it. That is the same reveal Tom asked for on the way IN ("v414 and v415 both
+     capped at .55 and Tom saw neither", CURVE in the audit), and no symmetric
+     change can tell the two directions apart. Removing that window needs a
+     release-detecting state, which is a new state to get wrong and which fights
+     this audit's row ordering; it is written up in ROADMAP.md as option 3 and is
+     deliberately NOT taken here. What is taken is the whole of the tail. */
+  transition: transform 130ms linear, opacity 60ms linear;
 }
 @media (prefers-reduced-motion: reduce) {
   #app:has(.screen--today)::before { opacity: 1; }

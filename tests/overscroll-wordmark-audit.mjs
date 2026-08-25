@@ -1178,6 +1178,42 @@ ok('REDUCED   under prefers-reduced-motion the fade is dropped (opacity pinned t
   rm.op === 1 && rm.ty === 0 && rmDur.name === 'none' && rmDur.iter === '1',
   `at pull 0 with reduce: opacity ${rm.op}, travel ${rm.ty}px (must be 0: a pinned travel would park the mark on screen); animation-name ${rmDur.name}, duration ${rmDur.dur}, iterations ${rmDur.iter}, transition ${rmDur.trans}`);
 
+/* ---------- LEAD: the mark clears BEFORE the UI arrives under it ---------- */
+/* Tom, 2026-08-25: "the boneheadz need to be feeding out faster so when you
+   release your thumb and the screen comes back up there is never overlap with the
+   UI."
+   MEASURED OFF COMPOSITOR FRAMES, on a driven release (80px pull, e-fold 70ms,
+   scroll events on rAF, content pinned displaced so one suppressed baseline is
+   valid, STILL 0 on every run, peak ink 8014px so the sampler is not blind):
+     v440, opacity 130ms   last ink 326 / 353 / 347ms, scroll ended 359 / 361 / 356
+                           -> the mark leads the spring by 8-33ms, i.e. it finishes
+                              WITH the bounce, which is what Tom is reporting
+     opacity 60ms          last ink 280 / 282 / 281ms, scroll ended 356 / 355 / 363
+                           -> a lead of 74-82ms
+   THAT MEASUREMENT IS NOT WHAT THIS ROW GRADES, deliberately. It is frame-timing,
+   and this repo has paid twice for guards that read the clock; the release above
+   was run on a machine at load average 8. What is deterministic, and what the
+   whole effect rests on, is that the opacity is given LESS time than the travel:
+   the travel's 130ms is measured and load-bearing (it is what fills the gaps
+   between sparse scroll events, see app.css), while the opacity has nothing to
+   interpolate, so any shared duration puts the ink and the content on the glass
+   together at the end of every release. A future edit that "tidies" the two back
+   onto one duration reverts the fix silently, and that is the regression here.
+   Prove-red: set both to 130ms and this row is red with opacity 130 vs transform
+   130; that is exactly pristine v440. */
+{
+  const lead = await page.evaluate(() => {
+    const cs = getComputedStyle(document.getElementById('app'), '::before');
+    const props = cs.transitionProperty.split(',').map(s => s.trim());
+    const durs = cs.transitionDuration.split(',').map(s => parseFloat(s) * (/ms/.test(s) ? 1 : 1000));
+    const at = n => { const i = props.indexOf(n); return i < 0 ? null : durs[i]; };
+    return { op: at('opacity'), tr: at('transform'), props: cs.transitionProperty, durs: cs.transitionDuration };
+  });
+  ok('LEAD      the fade is given LESS time than the travel, so the ink is gone before the returning content reaches it. Tom: "the boneheadz need to be feeding out faster ... there is never overlap with the UI". Both on one duration is v440, where the ink died 8-33ms before a 360ms release instead of 74-82ms',
+    lead.op !== null && lead.tr !== null && lead.op > 0 && lead.op < lead.tr,
+    `opacity ${lead.op}ms against transform ${lead.tr}ms (transition-property "${lead.props}", duration "${lead.durs}")`);
+}
+
 /* COST. A scroll listener on this element is the one thing that could make the
    feature expensive, and "it is quantised" is a comment until something counts.
    Counts STYLE WRITES rather than milliseconds: deterministic, and it is the

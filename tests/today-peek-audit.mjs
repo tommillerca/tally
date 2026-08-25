@@ -409,59 +409,88 @@ for (const cfg of CONFIGS) {
    meant to continue: rgb(107,124,56) against rgb(108,123,61). A hue step is
    exactly the kind of edge the eye finds, which is why he saw a line.
 
-   This grades the sampler against the filtered source, and demands an EXACT match
-   rather than a tolerance. That is deliberate. The obvious alternative, comparing
-   --hero-edge to a pixel screenshotted off the rendered page, is the one I tried
-   first and it cannot be made tight: .hero-scene composites a 7% grain (::after)
-   and a warm radial gradient (::before) over the art, which lifts the rendered
-   strip to rgb(111,125,65), a further +3/+2/+4 that a flat background-color has no
-   way to reproduce. That left a ceiling of 4 against a defect of 7 and no honest
-   margin. Both sides here come from the same source image, so the reading has no
-   grain in it at all and the only thing that can move it is the bug.
-   Measured: 0 with the filter applied, 5 with it removed (prove-red: replace
-   `g.filter = HERO_ART_FILTER` with 'none' in a tar-built throwaway).
-   The +3/+2/+4 overlay residual is real and is NOT graded here: it is a uniform
-   lift with no hue shift, and it is reported to Tom rather than hidden in a
-   tolerance. Horizontal variation was ruled out by measurement, not assumed: the
-   backdrop's top row is one flat colour, spread [0,0,0] across all 640 px. */
+   RE-PREMISED 2026-08-25, ON THE RENDERED STRIP, because Tom reported the seam a
+   SECOND time: "there is still a slight seam you can tell the colour of my
+   boneheadz background and the wordmark background is not identical."
+   The previous premise was "the fill equals the FILTERED SOURCE", graded exactly,
+   and it was green through the whole of the defect he was reporting. It had to be:
+   both of its sides came out of the same image, so it could not see the layers the
+   page composites on top of that image. What the player compares is the fill
+   against the art AS PAINTED, so that is what this grades now.
+
+   ITS OWN HEADER SAID THIS COULD NOT BE MADE TIGHT, and that was wrong, measured.
+   The claimed ceiling of 4 came from reading ONE screenshotted pixel, where the
+   grain is noise. Averaging the strip across 240 columns removes the noise and
+   leaves the mean: the top six rows of the rendered strip came back as
+   [110.8,125.4,65.5] +/- 0.1, against a defect of +2.8/+2.4/+4.5. So the floor is
+   a tenth of a unit and the defect is three to four, and a bound of 1.5 sits an
+   order of magnitude clear of the noise on one side and half the defect on the
+   other.
+
+   AND THE HEADER'S DIAGNOSIS WAS HALF WRONG TOO, which is why it is corrected here
+   rather than quietly replaced. It attributed the residual to TWO layers, the 7%
+   grain (`.hero-scene::after`) and the warm radial (`.hero-scene::before`).
+   Suppressing them one at a time: killing the grain alone drops the rendered strip
+   to EXACTLY rgb(108,123,61), i.e. to the fill; killing the radial changes nothing
+   at all. It cannot: that gradient is `at 50% 46%` with radii `66% 44%`, so the
+   art's top-centre pixel sits at 104.5% along its ray while its last stop is
+   transparent at 68%. One layer, not two.
+   Measured on the fix: fill rgb(111,125,65) against a rendered [110.8,125.4,65.5],
+   max delta 0.5. Prove-red on the same tree with the grain composite removed from
+   paintHeroEdge: 4.5. */
 {
   await page.evaluate(() => { location.hash = '#/today'; });
   await sleep(2800); await settle(page);
 
-  const seam = await page.evaluate(() => {
+  const geo = await page.evaluate(() => {
     const img = document.querySelector('.hero-backdrop');
     if (!img || !img.naturalWidth) return null;
-    const edge = getComputedStyle(document.documentElement).getPropertyValue('--hero-edge').trim();
-    const sheet = [...document.styleSheets].flatMap(s => { try { return [...s.cssRules]; } catch { return []; } })
-      .find(r => r.selectorText === '.hero-backdrop');
-    const filter = sheet && sheet.style.filter;
-    const read = f => {
-      const c = document.createElement('canvas'); c.width = 1; c.height = 1;
-      const g = c.getContext('2d', { willReadFrequently: true });
-      if (f) g.filter = f;
-      g.drawImage(img, Math.floor(img.naturalWidth / 2), 0, 1, 1, 0, 0, 1, 1);
-      const d = g.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]];
+    const r = img.getBoundingClientRect();
+    const el = document.querySelector('.hero-scene');
+    const gcs = el && getComputedStyle(el, '::after');
+    return {
+      edge: getComputedStyle(document.documentElement).getPropertyValue('--hero-edge').trim(),
+      x: r.x, y: r.y, w: r.width,
+      grain: gcs ? gcs.backgroundImage.slice(0, 24) : '', grainOp: gcs ? gcs.opacity : '',
     };
-    return { edge, filter, filtered: read(filter), raw: read(null) };
   });
 
-  ok('CONTROL SEAM the backdrop, the fill colour and the stylesheet filter were all found',
-    !!seam && !!seam.edge && !!seam.filter,
-    seam ? `edge="${seam.edge}" filter="${seam.filter}"` : 'no .hero-backdrop');
-  /* If the filter is ever dropped from the stylesheet, filtered === raw and this
-     row would pass for free while the sampler quietly grades nothing. */
-  ok('CONTROL SEAM the filter measurably changes the colour (else the match is free)',
-    !!seam && seam.filtered.join() !== seam.raw.join(),
-    seam ? `raw ${JSON.stringify(seam.raw)} vs filtered ${JSON.stringify(seam.filtered)}` : '');
+  /* The mean of the strip the fill is supposed to continue: the top ROWS of the
+     rendered backdrop, across the middle 240 css px, so a single noisy grain pixel
+     cannot be mistaken for a step. */
+  const stripMean = async () => {
+    const s = await shoot(page, { x: Math.max(0, Math.round(geo.x + geo.w / 2) - 120), y: Math.max(0, Math.round(geo.y)), width: 240, height: 6 });
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < s.data.length; i += 4) { r += s.data[i]; g += s.data[i + 1]; b += s.data[i + 2]; n++; }
+    return [r / n, g / n, b / n];
+  };
 
-  if (seam && seam.edge) {
-    const m = seam.edge.match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+  ok('CONTROL SEAM the backdrop, the fill colour and the grain layer were all found',
+    !!geo && !!geo.edge && /^url\(/.test(geo.grain) && parseFloat(geo.grainOp) > 0,
+    geo ? `edge="${geo.edge}" grain="${geo.grain}..." opacity=${geo.grainOp}` : 'no .hero-backdrop');
+
+  if (geo && geo.edge) {
+    const rendered = await stripMean();
+    /* WITH THE GRAIN OFF, so the row below cannot pass on a page that composites
+       nothing over the art. If suppressing the only layer between the fill and the
+       art moves the strip by less than a unit, this whole comparison is free. */
+    await inject(page, '.hero-scene::after{display:none !important}');
+    await sleep(200);
+    const bare = await stripMean();
+    await unInject(page);
+    await sleep(200);
+
+    const m = geo.edge.match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
     const fill = m ? [+m[1], +m[2], +m[3]] : null;
-    const delta = fill ? Math.max(...fill.map((v, i) => Math.abs(v - seam.filtered[i]))) : 999;
-    ok('SEAM the fill is sampled through the same filter the art is drawn with',
-      fill !== null && delta === 0,
-      `--hero-edge ${JSON.stringify(fill)} vs filtered source ${JSON.stringify(seam.filtered)}` +
-      ` (unfiltered would be ${JSON.stringify(seam.raw)}), delta ${delta}`);
+    const spread = Math.max(...rendered.map((v, i) => Math.abs(v - bare[i])));
+    ok('CONTROL SEAM the composited layers measurably move the strip (else the match is free)',
+      spread >= 1.5,
+      `rendered ${rendered.map(v => v.toFixed(1))} vs the same strip with .hero-scene::after off ${bare.map(v => v.toFixed(1))}, spread ${spread.toFixed(1)}`);
+
+    const delta = fill ? Math.max(...fill.map((v, i) => Math.abs(v - rendered[i]))) : 999;
+    ok('SEAM the fill matches the art AS RENDERED, not merely the source it is sampled from: the strip a bounce opens and the art it continues are the same colour',
+      fill !== null && delta <= 1.5,
+      `--hero-edge ${JSON.stringify(fill)} vs the rendered strip ${rendered.map(v => v.toFixed(1))}, delta ${delta.toFixed(1)} (bound 1.5; the sampler without the grain composite reads 4.5 here)`);
   }
 }
 
