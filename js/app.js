@@ -4791,7 +4791,7 @@ const GUIDE_ENTRIES = [
   { id: 'dust', title: 'Bone Dust', body: [
     'The other currency, and the one everybody ignores. Coins buy things. Dust is for changing your mind about them.',
     'Melting gear you are never going to wear is where most of it comes from. A piece he has outgrown is not waste, it is dust.',
-    'It pays for transmog, which is wearing one thing and showing another. It also buys the odd egg, crate and charm, and it is half the price of the heaviest weapons.',
+    'It pays for transmog, which is wearing one thing and showing another. It also buys the odd egg, crate and charm, and it is the only thing that still buys a crate at all.',
     'You pay for a look once. Putting it back on in that same slot is free forever after that.',
   ] },
   /* ADDED 2026-08-23 at integration, and it is a real defect neither branch could

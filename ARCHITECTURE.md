@@ -69,9 +69,13 @@ player's inventory valid. Slots and z-order live in one table in the script.
   inside game core functions. No schema migration needed beyond additive kv.
 - **Combat (The Pit) shipped V1** per the combat framework + math spec docs
   (see js/pit.js). V2/V3 from the spec remain: talent trees, Form live-buff,
-  full weapon arsenal + leveling, Pit Tokens, seasons, Boneyard Challenger
+  Pit Tokens, seasons, Boneyard Challenger
   spawns, and async ghost PvP (fights against snapshots of friends' real
   weeks; the ledger-derived stats make those snapshots one JSON blob).
+  The spec's "full weapon arsenal + leveling" is CANCELLED, not pending, as of
+  2026-08-25 (S0, docs/PLAN-remove-weapons.md): the player carries no weapon at
+  all. js/pit.js keeps two foe-only fighting STYLES so the ladder's bosses hit
+  exactly as hard as they did; nothing a player owns touches them.
 
 ## Art inventory (beyond the wardrobe)
 
