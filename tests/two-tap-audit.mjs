@@ -84,39 +84,40 @@ await page.evaluate(() => document.getElementById('forageBtn').click());
 await sleep(1400);
 check('the confirm forages', (await coins()) === f0 - 45, `${f0} -> ${await coins()}`);
 
-// ---- THE BONE MERCHANT: the priciest tap in the game ----
+/* ---- THE BONE MERCHANT stood here, and it was the priciest tap in the game:
+   up to 6,000 coins AND 350 Bone Dust behind one [data-buyweapon] button. The
+   merchant closed on 2026-08-25 (S0) and there is no weapon left to buy, so the
+   row would now be an empty sample, which this file treats as a FAILURE rather
+   than a pass.
+   THE PRICIEST SURVIVING TAP IS THE DROP, at 3,000 coins, and it is graded
+   above through [data-buydrop]. The structural sweep that holds for buttons
+   nobody has written yet lives in tests/unit.test.js ("no control that spends
+   coins or dust buys on a single tap"), and [data-buyweapon] came off its list
+   in the same change. ---- */
+
+/* AND THE MERCHANT REALLY IS GONE FROM THE SHOP, which is a different claim from
+   "the button is guarded": a leftover row that still renders would be a dead
+   control on the priciest screen in the game. Graded on the real screen. */
 await page.evaluate(() => { location.hash = '#/bonehead'; });
 await sleep(1700);
 await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="shop"]')?.click());
 await sleep(1800);
-/* The shop used to render its merchant behind a <details class="shop-fold">
-   that needed opening after the tab click. Current shape (js/app.js merchantHtml
-   at ~line 4780) renders the merchant rows and [data-buyweapon] buttons
-   directly under the shop tab, no fold. suite-rot flagged this line's
-   .shop-fold query as STALE (verified 2026-08-13: no js/ file emits
-   .shop-fold anymore; app.css has an orphaned rule block that is dead too).
-   The setAttribute was a no-op even before this cleanup; dropping the line
-   removes the dead selector and does not change the subsequent
-   [data-buyweapon] read the assertion actually depends on. */
-await sleep(500);
-const w0 = await coins();
-const wInfo = await page.evaluate(() => {
-  const b = [...document.querySelectorAll('[data-buyweapon]')].find(x => !x.disabled);
-  if (!b) return null;
-  b.dataset.probe = '1';
-  return { id: b.dataset.buyweapon, label: b.textContent.replace(/\s+/g, ' ').trim() };
-});
-console.log('weapon button:', JSON.stringify(wInfo));
-if (wInfo) {
-  await page.evaluate(() => document.querySelector('[data-probe="1"]').click());
-  await sleep(700);
-  const w1 = await coins();
-  const wArm = await page.evaluate(() => document.querySelector('[data-probe="1"]')?.textContent.trim());
-  check('one tap at the Bone Merchant spends nothing', w1 === w0, `${w0} -> ${w1}`);
-  check('and it names the price it is about to take', /Spend [\d,]+/.test(wArm || ''), wArm);
-} else {
-  check('there was a buyable weapon to test (an empty set is not a pass)', false, 'none found');
-}
+await page.evaluate(() => document.querySelector('#shopRest')?.click());
+await sleep(900);
+const merch = await page.evaluate(() => ({
+  buys: document.querySelectorAll('[data-buyweapon]').length,
+  equips: document.querySelectorAll('[data-weapon]').length,
+  heading: /Bone Merchant/.test(document.body.textContent),
+  // CONTROL: the shop really did render, so "no merchant" is not "no screen"
+  coinCells: document.querySelectorAll('[data-buy]').length,
+}));
+console.log('shop after S0:', JSON.stringify(merch));
+check('CONTROL the shop screen really rendered, so the rows below are not vacuous',
+  merch.coinCells > 0, JSON.stringify(merch));
+check('the Bone Merchant renders no buy buttons', merch.buys === 0, `${merch.buys} found`);
+check('and no equip buttons', merch.equips === 0, `${merch.equips} found`);
+check('and its heading is gone from the Shop', !merch.heading);
+
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nNO PURCHASE SPENDS ON ONE TAP');
 process.exit(bad ? 1 : 0);

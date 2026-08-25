@@ -74,9 +74,9 @@ const PLAYER_TALENTS = ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive',
 const ordinaryMult = rank => 1.32 + rank * 0.07;
 function fightRank(f, seed) {
   const rel = f.mult / ordinaryMult(f.rank);
-  const player = makeFighter({ name: 'P', stats: STATS, weaponId: 'starter', talents: PLAYER_TALENTS });
+  const player = makeFighter({ name: 'P', stats: STATS, talents: PLAYER_TALENTS });
   const foe = makeFighter({ name: f.name, stats: scaleStats(STATS, rel),
-    weaponId: f.weaponId || 'starter', talents: f.talents || [] });
+    style: f.style || 'plain', talents: f.talents || [] });
   if (f.mage) foe.wraith = true;
   if (f.wraith) foe.wraith = true;
   const fight = createFight({ player, foe, seed, aiLevel: f.aiLevel || 3 });

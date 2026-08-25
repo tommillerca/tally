@@ -825,8 +825,27 @@ the spire one, proven red.
 
 **Deliberately NOT in v1:** pets (instance model ready, breeding economy needs
 its own pass), cosmetics (append-only looks make "losing the cosmetic" a new
-revocation decision), weapons (the merchant is the designed coin sink; do not
-undercut it), price history, offers/haggling, global visibility.
+revocation decision), weapons, price history, offers/haggling, global
+visibility.
+
+> **STALE 2026-08-25 (S0).** Two lines above are no longer true and are left in
+> place rather than rewritten, because the Bazaar section is a proposal that has
+> not been built and its numbers should be re-derived, not patched:
+> - "weapons (the merchant is the designed coin sink; do not undercut it)" — the
+>   Bone Merchant is closed and there are no weapons. Weapons stay out of the
+>   Bazaar because they do not exist, not because they are a sink to protect.
+> - "**Economy fit**: merchant weapons 500-6,000" — gone with them. The coin
+>   sink question is now open and is S1's job (`docs/IAP-SCOPING.md`), so any
+>   Bazaar pricing has to wait for that answer.
+>
+> The line further down about transmog being priced in Bone Dust "because coins
+> already sink into the Bone Merchant's thousand-coin weapons" has lost its
+> reason for the same reason. Its CONCLUSION may still be right; its argument is
+> not.
+>
+> `ROADMAP.md:410`'s rule that a bought cosmetic may never be listed is
+> UNAFFECTED and is now load-bearing as a security control, per
+> `docs/IAP-SCOPING.md`.
 
 **Build notes (when Tom approves):** worktree branch; server migration replaces
 the dead `trades` table (schema.sql:38) with `listings`; endpoints

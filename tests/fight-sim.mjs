@@ -70,9 +70,9 @@ function playerTurn(fight) {
  * back does: same stats, same turns, only the talents differ. The dummy has an
  * absurd Marrow so it survives long enough to be a ruler, and it never acts, so
  * there is no AI variance in the number. */
-function damagePerTurn({ stats, talents, weaponId, pet }, { turns = 10, seed = 1 } = {}) {
-  const player = makeFighter({ name: 'P', stats, weaponId, talents, pet });
-  const dummy = makeFighter({ name: 'DUMMY', stats: { ...stats, marrow: 4000, reflex: 0 }, weaponId: 'starter' });
+function damagePerTurn({ stats, talents, pet }, { turns = 10, seed = 1 } = {}) {
+  const player = makeFighter({ name: 'P', stats, talents, pet });
+  const dummy = makeFighter({ name: 'DUMMY', stats: { ...stats, marrow: 4000, reflex: 0 } });
   const fight = createFight({ player, foe: dummy, seed, aiLevel: 1 });
   const startHp = fight.f.hp;
   let t = 0;
@@ -84,9 +84,9 @@ function damagePerTurn({ stats, talents, weaponId, pet }, { turns = 10, seed = 1
 }
 
 /* METRIC 2: win rate against a real, fighting foe scaled like a ladder rung. */
-function runFight({ stats, talents, weaponId, pet, foeMult, seed }) {
-  const player = makeFighter({ name: 'P', stats, weaponId, talents, pet });
-  const foe = makeFighter({ name: 'F', stats: scaleStats(stats, foeMult), weaponId: 'starter' });
+function runFight({ stats, talents, pet, foeMult, seed }) {
+  const player = makeFighter({ name: 'P', stats, talents, pet });
+  const foe = makeFighter({ name: 'F', stats: scaleStats(stats, foeMult) });
   const fight = createFight({ player, foe, seed, aiLevel: 4 });
   let guard = 0;
   while (!fight.over && guard++ < TURN_CAP * 4) {
@@ -117,26 +117,26 @@ export function measure(build, { foeMult = 0.8, seeds = SEEDS } = {}) {
    variable is the talent set, so any difference in the table is the talents. */
 const BASE = { power: 55, marrow: 55, wind: 55, reflex: 55, hype: 55 };
 export const BUILDS = [
-  { name: 'baseline (no talents)', stats: BASE, talents: [], weaponId: 'starter' },
+  { name: 'baseline (no talents)', stats: BASE, talents: [] },
   // #1 the multiplicative melee chain: heavy hands x follow-through x rage x sunder
-  { name: 'Slab: rage stack', stats: BASE, weaponId: 'starter',
+  { name: 'Slab: rage stack', stats: BASE,
     talents: ['heavyhands', 'followthrough', 'followthrough', 'followthrough', 'bonebreaker', 'concussive', 'rage', 'titan', 'ironjaw', 'ironjaw', 'ironjaw'] },
   // #2 the Alchemist catalyst: toxicity feeds a multiplier with no ceiling
-  { name: 'Alchemist: catalyst', stats: BASE, weaponId: 'starter',
+  { name: 'Alchemist: catalyst', stats: BASE,
     talents: ['fireflask', 'potency', 'potency', 'potency', 'potency', 'potency', 'acidvial', 'catalyst', 'catalyst', 'catalyst', 'catalyst', 'catalyst', 'overdose', 'corrode', 'deathbomb'] },
   // #3 sustain: lifesteal across trees, all multiplied by Hallowed Marrow
-  { name: 'lifesteal + hallowed', stats: BASE, weaponId: 'starter',
+  { name: 'lifesteal + hallowed', stats: BASE,
     talents: ['hallowed', 'marrowlust', 'soulsiphon', 'radiance', 'secondwind', 'lastlight', 'devotion', 'devotion'] },
   // #4 the free per-turn flock: damage AND sustain at no AP cost
-  { name: 'Crow Lord: flock', stats: BASE, weaponId: 'starter',
+  { name: 'Crow Lord: flock', stats: BASE,
     talents: ['callcrows', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'flock', 'flock', 'flock', 'carrion', 'roost', 'roost', 'frenzy', 'frenzy', 'murder'] },
   // #5 two free lives, from two different trees
-  { name: 'two free lives', stats: BASE, weaponId: 'starter', talents: ['secondwind', 'lastlight', 'hallowed'] },
+  { name: 'two free lives', stats: BASE, talents: ['secondwind', 'lastlight', 'hallowed'] },
   // #6 the stamina engine: if spells cost nothing, cost is not a resource
-  { name: 'stamina engine', stats: BASE, weaponId: 'starter',
+  { name: 'stamina engine', stats: BASE,
     talents: ['totem', 'totemic', 'pacing', 'pacing', 'pacing', 'conduits', 'conduits', 'conduits', 'conduits', 'conduits', 'deeplungs'] },
   // #7 the caster chain, for comparison against the melee one
-  { name: 'Shaman: elemental', stats: BASE, weaponId: 'starter',
+  { name: 'Shaman: elemental', stats: BASE,
     talents: ['frostbolt', 'firebolt', 'attunement', 'attunement', 'attunement', 'attunement', 'attunement', 'wildfire', 'frostbite', 'tempest', 'kindling', 'kindling'] },
 ];
 

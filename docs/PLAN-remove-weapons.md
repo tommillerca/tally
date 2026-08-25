@@ -1,7 +1,13 @@
 # Plan: retire the Bone Merchant (weapons)
 
-_Written 2026-08-08 for Tom's approval. Nothing is built yet. Every number below
-was read out of the running code, not estimated._
+_Written 2026-08-08 for Tom's approval. Every number below was read out of the
+running code, not estimated._
+
+> **BUILT 2026-08-25, as S0 of `docs/IAP-SCOPING.md`. See the STATUS section at
+> the bottom of this file for what shipped and what did not.** This document
+> opened with "Nothing is built yet" for seventeen days after Tom approved its
+> premise. That line is now false and the correction belongs at the top, where
+> the next person reads it, rather than in a commit message.
 
 Tom's brief, verbatim:
 
@@ -229,3 +235,59 @@ Roughly one focused session. Steps 1 and 2 are the ones that carry the risk;
    exclusive cosmetic plus a title, or a legendary gear piece?
 4. **Coin sink**: happy for coins to point at visible gear and cosmetics, or do
    you want to decide that separately later?
+
+---
+
+## STATUS, 2026-08-25: BUILT
+
+Branch `s0/coins-cosmetic-only`, off `origin/main` at `1e06f950`, stamped v445.
+Tom's four answers, all given 2026-08-25, closed §9's open questions:
+
+1. **Scope**: Bone Merchant only, plus crates become unpurchasable for coins. Not
+   the whole Shop tab. (§1's own recommendation.)
+2. **Refund**: full coins at the price paid, plus dust back for the prestige
+   weapons. (§5's recommendation.)
+3. **Champion prize**: an exclusive cosmetic plus a title. Not a gear piece.
+   (§6's first option.)
+4. **Coin sink**: DEFERRED to S1, a coin-priced appearance shop, 2 to 3 days, a
+   separate stage. `buyDropItem` (1,500 / 3,000) is the clean sink meanwhile.
+
+### What the build did, against §7's order
+
+| step | what happened |
+|---|---|
+| 1. measure first | `tests/gauntlet-sim.mjs`, `tests/balance-audit.js` and `tests/fight-sim.mjs` were run on pristine `origin/main` and the output kept, before a line was changed |
+| 2. fold enemy weapons into foe stats | Bonecrusher's damage curve became the foe-only `heavy` STYLE in `js/pit.js`, byte for byte. Not folded into flat stats: its Haymaker multiplier SCALES with Power and its Stamina cost is a penalty, so no flat stat block can reproduce it, and §3 said the ladder must not move. Verified: all three sims byte-identical to the step-1 baseline |
+| 3. refund migration | `retireMerchantIfNeeded` in `js/loot.js`, behind `db.addIfAbsent` on kv `merchant-retired`, with the boot notice. `tests/merchant-retire-audit.mjs` drives it twice against a real IndexedDB |
+| 4. remove the merchant UI and buy/equip flows | done; `screen-sweep` and the whole FAST gate green |
+| 5. strip weapons from combat | the three `derived()` fields (apBonus, magicBonus, critBonus) were DELETED rather than zeroed, because neither surviving style carries one |
+| 6. new Champion prize | SK15 Moonlit Skull, marked `exclusive` and now excluded from the crate pool, plus the `Marrow King` title derived from the existing `pit-champ` badge |
+| 7. tests and changelog | 188 unit assertions, 91 pit assertions, `docs/CLAIMS.md` v445, changelog entry |
+
+### §8 held
+
+Not touched: the drop, consumables, crates-as-rewards, Bone Dust (including the
+40-dust Common Crate in `DUST_SHOP`, which is not a coin path), gear, talents,
+sets, the Shop tab. **No inventory row is deleted**, which
+`tests/merchant-retire-audit.mjs` ROWS asserts directly. Nothing was rebalanced
+beyond restoring the enemy power the weapons supplied.
+
+### The one thing §8 did not anticipate
+
+Making SK15 an exclusive removes one legendary from the crate pool. There was no
+alternative that did not involve generating new art, and Cam's art is a fixed
+input, never something to regenerate to suit the code. Existing owners keep the
+piece; grants are additive. Flagged rather than assumed.
+
+### Not done, and deliberately
+
+- **The coin sink (§6's first hole) is still open.** S1 fills it. Until then the
+  only coin sinks are the drop (1,500 / 3,000), the weekly rack, the pet shop,
+  consumables and rerolls. Coins WILL inflate in the meantime, and the refund
+  puts up to 33,300 more of them into a heavy player's balance on day one.
+- **No D1 query was run** to count how many players actually hold weapons (§5
+  step one, and §7 step 1's first half). The refund is written to be correct for
+  zero holders as for all of them, and `tests/merchant-retire-audit.mjs` NOTHING
+  proves an unaffected save is untouched and its ledger row left unburned, so the
+  exposure number changes nothing about the code. It would still be worth knowing
+  before the release note goes out.

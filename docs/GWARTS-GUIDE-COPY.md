@@ -200,8 +200,8 @@ stale when somebody fixes it.
 > piece he has outgrown is not waste, it is dust.
 >
 > It pays for transmog, which is wearing one thing and showing another. It also
-> buys the odd egg, crate and charm, and it is half the price of the heaviest
-> weapons.
+> buys the odd egg, crate and charm, and it is the only thing that still buys a
+> crate at all.
 >
 > You pay for a look once. Putting it back on in that same slot is free forever
 > after that.
@@ -209,8 +209,12 @@ stale when somebody fixes it.
 Corrected: the first draft said transmog was the only thing dust buys. It is not.
 The dust shop sells a Mystery Egg at 60, a Common Crate at 40 and a Battle Charm
 at 25 (`js/loot.js:575-589`); breeding costs dust (`js/loot.js:776`); the tier-4
-weapons are dual currency, coins plus 330 to 350 dust (`js/loot.js:1483-1485`);
 and the weekly Rack is priced in dust (`js/loot.js:241-284`).
+
+Corrected again 2026-08-25 (S0): the tier-4 weapons line above is gone with the
+Bone Merchant, and coins no longer buy a crate at all, so the Bone Dust shop's
+40-dust Common Crate is now the only purchasable crate in the game. That is what
+the third line says instead.
 
 The last line is the non-obvious one and the reason it is in: a (slot, look) pair
 is paid for once and is free forever after (`paidLooks`, `js/loot.js:1563-1582`).

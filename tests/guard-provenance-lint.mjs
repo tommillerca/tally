@@ -131,7 +131,6 @@ const KNOWN_UNDATED = [
   'backup-roundtrip-audit.mjs:NAMES',
   'backup-roundtrip-audit.mjs:STORES',
   'balance-audit.js:FOES',
-  'balance-audit.js:WEAPONIZED',
   'batch-audit.mjs:KIT_CASTS',
   'crash-guard-audit.mjs:SHAPES',
   'crate-palette-audit.mjs:CRATES',

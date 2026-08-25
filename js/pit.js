@@ -235,7 +235,7 @@ export const ARMOR_K = 120;
 export const ARMOR_CAP = 0.40;
 export function armorDR(points) { return Math.min(ARMOR_CAP, Math.max(0, points) / (Math.max(0, points) + ARMOR_K)); }
 
-export function derived(stats, weapon = WEAPONS.starter, talents = null, gearArmor = null, ranks = null) {
+export function derived(stats, talents = null, gearArmor = null, ranks = null) {
   const t = talents || new Set();
   const rk = id => (ranks && ranks[id]) || 0;
   // Blend: base armor from stats (Marrow -> physical, Reflex -> spell) + gear +
@@ -245,10 +245,10 @@ export function derived(stats, weapon = WEAPONS.starter, talents = null, gearArm
   return {
     maxHp: Math.round(150 + stats.marrow * 3) + (t.has('thickskull') ? 45 : 0) + rk('densebones') * 6 + rk('soulreserve') * 5,
     maxWind: Math.round(40 + stats.wind * 0.6) + (t.has('deeplungs') ? 15 : 0) + rk('cardio') * 5,
-    ap: 2 + (weapon.apBonus || 0) + (talents && talents.has('lightfeet') ? 1 : 0),
+    ap: 2 + (talents && talents.has('lightfeet') ? 1 : 0),
     powerMult: 1 + (stats.power / 100) * 1.5,
-    magicMult: 1 + (stats.hype / 100) * 1.5 + (weapon.magicBonus || 0),
-    critChance: Math.min(0.60, 0.05 + (stats.reflex / 100) * 0.30 + (weapon.critBonus || 0) + rk('comboartist') * 0.02 + rk('frenzy') * 0.02),
+    magicMult: 1 + (stats.hype / 100) * 1.5,
+    critChance: Math.min(0.60, 0.05 + (stats.reflex / 100) * 0.30 + rk('comboartist') * 0.02 + rk('frenzy') * 0.02),
     glanceChance: (stats.reflex / 100) * 0.25 + rk('footwork') * 0.01,
     armor: armorDR(physPts),        // cuts incoming physical damage
     spellArmor: armorDR(spellPts),  // cuts incoming magic damage
@@ -256,119 +256,43 @@ export function derived(stats, weapon = WEAPONS.starter, talents = null, gearArm
   };
 }
 
-/* ================= weapons (spec §6) ================= */
+/* ================= fighting styles (was: weapons, spec §6) =================
 
-// Weapons each have a CLEAR identity tied to a stat/spec, so the choice is never
-// random: pick the weapon that amplifies the build you're growing. They MULTIPLY
-// your effort (scale off your own stats or shave Stamina), never replace it.
-// `spec` = the stat it rewards; `rarity` drives shop cost + the chip's ring.
-export const WEAPONS = {
-  starter: {
-    id: 'starter', name: 'Taped Pipe', rarity: 'common', spec: null, arch: null,
-    desc: 'Where every bonehead starts. No bonus, no penalty; the honest baseline.',
+   THE BONE MERCHANT IS CLOSED (S0, 2026-08-25). Coins used to buy 12 weapons
+   that changed your damage and nothing about how you looked, which is the one
+   power source a player cannot inspect on their own character. Tom: "strength in
+   the game should just be based on your talents skills and stats attached to
+   gear you can see." So the player carries no weapon at all now.
+
+   WHAT SURVIVES, AND WHY IT HAD TO. Foes carried weapons too: the Champion, the
+   Glutton, the Mimic and every third rung of the endless ladder all fought
+   holding Bonecrusher, and deleting that outright would have taken 40% Power
+   scaling off their Haymaker overnight and deflated the whole ladder (see
+   docs/PLAN-remove-weapons.md §3). `heavy` below IS Bonecrusher's damage curve,
+   byte for byte, moved onto the foe's own stat block where it belongs. It is not
+   an item, it cannot be owned, bought, dropped or equipped, and no player fighter
+   is ever built with it: `makeFighter` defaults to `plain`, and only the ladder
+   definitions below pass `style: 'heavy'`.
+
+   The three fields weapons used to add to `derived()` (apBonus, magicBonus,
+   critBonus) are gone rather than zeroed, because neither surviving style ever
+   carried one. tests/fight-sim.mjs and tests/balance-audit.js hold the ladder to
+   its pre-removal numbers. */
+export const STYLES = {
+  plain: {
+    id: 'plain',
     mult: () => 1.0,
     windCostMult: () => 1.0,
   },
-  rapier: {
-    id: 'rapier', name: 'Femur Rapier', rarity: 'rare', spec: 'reflex', arch: 'melee',
-    desc: 'A keen, quick edge. +12% crit chance, and Swings cost less Stamina. Rewards Reflex duelists.',
-    mult: () => 1.0,
-    windCostMult: (move) => move === 'swing' ? 0.8 : 1.0,
-    critBonus: 0.12,
-  },
-  shivs: {
-    id: 'shivs', name: 'Twin Shivs', rarity: 'rare', spec: 'wind', arch: 'melee',
-    desc: 'Two blades, endless motion. Every close strike (Jab, Swing, Haymaker) costs 20% less Stamina. Rewards high-Stamina tempo.',
-    mult: () => 1.0,
-    windCostMult: (move) => (move === 'jab' || move === 'swing' || move === 'haymaker') ? 0.8 : 1.0,
-  },
-  scepter: {
-    id: 'scepter', name: 'Skull Scepter', rarity: 'epic', spec: 'hype', arch: 'caster',
-    desc: 'A focus for bone-magic. Your spells (bolts, heals, Bone Storm) hit 30% harder. Rewards Hype casters.',
-    mult: () => 1.0,
-    windCostMult: () => 1.0,
-    magicBonus: 0.30,
-  },
-  bonecrusher: {
-    id: 'bonecrusher', name: 'Bonecrusher', rarity: 'legendary', spec: 'power', arch: 'melee',
-    desc: 'Feast-or-famine bombs. Swing and Haymaker scale off Power; Haymaker costs more Stamina. The Champion’s prize.',
+  /* The Marrow King's swing, and every boss who fights like him. Feast-or-famine:
+     Swing and Haymaker scale off Power, and the Haymaker costs more Stamina for
+     it. Identical to the retired Bonecrusher, deliberately: this is the SAME
+     number the ladder was tuned against, not a fresh one. */
+  heavy: {
+    id: 'heavy',
     mult: (move, s) => move === 'haymaker' ? 1 + 0.40 * (s.power / 100)
       : move === 'swing' ? 1 + 0.10 * (s.power / 100) : 1.0,
     windCostMult: (move) => move === 'haymaker' ? 1.3 : 1.0,
-  },
-  // ---- The Bone Merchant's stock (v71): build-specific, tiered gold sinks ----
-  // MELEE
-  cleaver: {
-    id: 'cleaver', name: 'Ribsplitter Cleaver', rarity: 'epic', spec: 'power', arch: 'melee', vendor: true, tier: 2,
-    desc: 'A butcher\'s edge. Swings bite 15% harder and Haymakers scale off Power. Rewards Power bruisers.',
-    mult: (move, s) => move === 'swing' ? 1.15 : move === 'haymaker' ? 1 + 0.25 * (s.power / 100) : 1.0,
-    windCostMult: () => 1.0,
-  },
-  maul: {
-    id: 'maul', name: 'Gravemarrow Maul', rarity: 'legendary', spec: 'power', arch: 'melee', vendor: true, tier: 3,
-    desc: 'Two-handed ruin. Haymakers scale hard off Power and land steadier, but cost more Stamina. The bruiser\'s endgame.',
-    mult: (move, s) => move === 'haymaker' ? 1 + 0.5 * (s.power / 100) : move === 'swing' ? 1.1 : 1.0,
-    windCostMult: (move) => move === 'haymaker' ? 1.25 : 1.0,
-    critBonus: 0.05,
-  },
-  // CASTER
-  wand: {
-    id: 'wand', name: 'Bonecarver Wand', rarity: 'rare', spec: 'hype', arch: 'caster', vendor: true, tier: 1,
-    desc: 'A starter focus. Spells hit 15% harder and cost a little less Stamina. An affordable step into casting.',
-    mult: () => 1.0,
-    windCostMult: (move) => 1.0,
-    magicBonus: 0.15,
-  },
-  lichfocus: {
-    id: 'lichfocus', name: 'Lich\'s Focus', rarity: 'legendary', spec: 'hype', arch: 'caster', vendor: true, tier: 3,
-    desc: 'A skull socketed with a cold star. Spells hit 45% harder with a touch more crit. The caster\'s endgame.',
-    mult: () => 1.0,
-    windCostMult: () => 1.0,
-    magicBonus: 0.45,
-    critBonus: 0.05,
-  },
-  // SUPPORT (magicBonus lifts heals + wards; cheaper sustain)
-  crook: {
-    id: 'crook', name: 'Warden\'s Crook', rarity: 'epic', spec: 'marrow', arch: 'support', vendor: true, tier: 2,
-    desc: 'A shepherd\'s staff for the dead. Heals and holy magic hit 20% harder, and Mend, Ward and Smite cost 20% less Stamina. Rewards menders.',
-    mult: () => 1.0,
-    windCostMult: (move) => (move === 'mend' || move === 'ward' || move === 'smite') ? 0.8 : 1.0,
-    magicBonus: 0.20,
-  },
-  censer: {
-    id: 'censer', name: 'Sanctifier Censer', rarity: 'legendary', spec: 'marrow', arch: 'support', vendor: true, tier: 3,
-    desc: 'Swinging incense that never gutters. Your magic hits 30% harder and every cast costs 25% less Stamina. The support endgame.',
-    mult: () => 1.0,
-    windCostMult: () => 0.75,
-    magicBonus: 0.30,
-  },
-  // ---- Tier-4 PRESTIGE row (v145): the arsenal's ceiling, priced in coins AND
-  // Bone Dust so the salvage economy feeds the endgame. Each is a clear step past
-  // its tier-3 legendary, built to pair with endless boss scaling (never a wall).
-  // MELEE prestige
-  warmaul: {
-    id: 'warmaul', name: 'Ossuary Warmaul', rarity: 'prestige', spec: 'power', arch: 'melee', vendor: true, tier: 4,
-    desc: 'A cathedral of bone on a haft. Haymakers scale ferociously off Power and Swings bite harder, yet the weight is balanced so heavy blows cost less Stamina than the Maul. The bruiser\'s ceiling.',
-    mult: (move, s) => move === 'haymaker' ? 1 + 0.62 * (s.power / 100) : move === 'swing' ? 1.18 : 1.0,
-    windCostMult: (move) => move === 'haymaker' ? 1.15 : 1.0,
-    critBonus: 0.08,
-  },
-  // CASTER prestige
-  voidstar: {
-    id: 'voidstar', name: 'Voidstar Focus', rarity: 'prestige', spec: 'hype', arch: 'caster', vendor: true, tier: 4,
-    desc: 'A dead star caged in a skull. Spells hit 60% harder with sharper crit, and the pull of the void shaves a little Stamina off every cast. The caster\'s ceiling.',
-    mult: () => 1.0,
-    windCostMult: () => 0.92,
-    magicBonus: 0.60,
-    critBonus: 0.08,
-  },
-  // SUPPORT prestige
-  reliquary: {
-    id: 'reliquary', name: 'Eternal Reliquary', rarity: 'prestige', spec: 'marrow', arch: 'support', vendor: true, tier: 4,
-    desc: 'A vessel of saints that never empties. Heals and holy magic hit 42% harder and every cast costs 32% less Stamina. The support ceiling.',
-    mult: () => 1.0,
-    windCostMult: () => 0.68,
-    magicBonus: 0.42,
   },
 };
 
@@ -569,7 +493,7 @@ export function resolveHit({ move, attacker, defender, rng }) {
   }
   let dmg = a.base;
   dmg *= a.magic ? attacker.d.magicMult : attacker.d.powerMult;
-  if (!a.magic) dmg *= attacker.weapon.mult(move, attacker.stats);
+  if (!a.magic) dmg *= attacker.style.mult(move, attacker.stats);
   dmg *= counter.mult;
   // Everything from here to the armor step is TALENT AND BUFF multipliers, and
   // they all multiply. The total is measured and capped below (BUILD_MULT_CAP):
@@ -630,7 +554,7 @@ export function expectedDamage(move, attacker, defenderState, defender) {
   const a = ACTIONS[move];
   const counter = move === 'signature' ? { mult: 1 } : counterMult(move, defenderState);
   if (counter.miss) return 0;
-  const raw = a.base * (a.magic ? attacker.d.magicMult : attacker.d.powerMult) * (a.magic ? 1 : attacker.weapon.mult(move, attacker.stats)) * counter.mult;
+  const raw = a.base * (a.magic ? attacker.d.magicMult : attacker.d.powerMult) * (a.magic ? 1 : attacker.style.mult(move, attacker.stats)) * counter.mult;
   const acc = 1 - (MISS_CHANCE[move] || 0);
   const armorCut = defender ? (1 - (a.magic ? (defender.d.spellArmor || 0) : (defender.d.armor || 0))) : 1;
   return Math.round(raw * acc * armorCut * (1 + attacker.d.critChance * 0.5) * (1 - (defender ? defender.d.glanceChance : 0) * 0.5));
@@ -638,13 +562,13 @@ export function expectedDamage(move, attacker, defenderState, defender) {
 
 /* ================= fight state ================= */
 
-export function makeFighter({ name, stats, weaponId = 'starter', outfit = null, talents = [], pet = null, food = null, gearArmor = null }) {
-  const weapon = WEAPONS[weaponId] || WEAPONS.starter;
+export function makeFighter({ name, stats, style = 'plain', outfit = null, talents = [], pet = null, food = null, gearArmor = null }) {
+  const st = STYLES[style] || STYLES.plain;
   const tset = new Set(talents);
   const tranks = talentRanks(talents instanceof Set ? [...talents] : talents); // multi-rank counts
-  const d = derived(stats, weapon, tset, gearArmor, tranks);
+  const d = derived(stats, tset, gearArmor, tranks);
   return {
-    name, stats, weapon, d, outfit, talents: tset, tranks,
+    name, stats, style: st, d, outfit, talents: tset, tranks,
     pet: pet ? { ...pet, specialCd: 0, lastStandUsed: false } : null,
     // food-dish buffs (temporary, from the kitchen); only ever on the player
     foodDamagePct: food?.damagePct || 0,
@@ -867,7 +791,7 @@ export function checkOver(fight) {
 // One source of truth for stamina costs (computed in actionsFor AND applyAction;
 // v16 lesson: never let the two drift). Ranked reductions live here.
 function windCostFor(me, id, a) {
-  let c = Math.round((a.wind || 0) * me.weapon.windCostMult(id));
+  let c = Math.round((a.wind || 0) * me.style.windCostMult(id));
   if (a.school === 'shadow') c = Math.max(0, c - rkOf(me, 'marrowtap') * 2);   // Marrow Tap
   if (a.school === 'fire' || a.school === 'frost') c = Math.max(0, c - rkOf(me, 'conduits')); // Bone Conduits
   return c;
@@ -1535,10 +1459,10 @@ export function aiTakeTurn(fight) {
 /* ================= simulation (tests + tuning) ================= */
 
 // simple player policy for pacing sims: mirrors the spec's §9 fight style
-export function simulate({ pStats, fStats, seed = 1, pWeapon = 'starter', fWeapon = 'starter', tutorial = false, aiLevel = 1 }) {
+export function simulate({ pStats, fStats, seed = 1, pStyle = 'plain', fStyle = 'plain', tutorial = false, aiLevel = 1 }) {
   const fight = createFight({
-    player: makeFighter({ name: 'A', stats: pStats, weaponId: pWeapon }),
-    foe: makeFighter({ name: 'B', stats: fStats, weaponId: fWeapon }),
+    player: makeFighter({ name: 'A', stats: pStats, style: pStyle }),
+    foe: makeFighter({ name: 'B', stats: fStats, style: fStyle }),
     seed, tutorial, aiLevel,
   });
   let guard = 0;
@@ -1579,7 +1503,7 @@ export const LADDER = [
   { rung: 7, name: 'The Bonecollector', mult: 1.18, coins: 150, repeatCoins: 30, xp: 70 },
   { rung: 8, name: 'Ribcage Ricky', mult: 1.26, coins: 175, repeatCoins: 30, xp: 80 },
 ];
-export const CHAMPION = { name: 'The Marrow King', mult: 1.32, coins: 220, repeatCoins: 40, xp: 100, weaponId: 'bonecrusher', talents: ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive', 'thickskull', 'titan'] };
+export const CHAMPION = { name: 'The Marrow King', mult: 1.32, coins: 220, repeatCoins: 40, xp: 100, style: 'heavy', talents: ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive', 'thickskull', 'titan'] };
 export const RUNG_TALENTS = {
   4: ['heavyhands'],
   5: ['heavyhands', 'marrowlust'],
@@ -1701,7 +1625,7 @@ export function endlessFoe(rank) {
          rung below, at rung 10 and at rung 100 alike. */
       mult: +((1.32 + rank * 0.07) * 1.18).toFixed(3),
       talents: ENDLESS_TREES[(rank - 1) % ENDLESS_TREES.length],
-      weaponId: 'bonecrusher',
+      style: 'heavy',
       aiLevel: 5,
       xp: Math.round(140 + xpRank(rank) * 14),
       coins: 260 + rank * 22,
@@ -1719,7 +1643,6 @@ export function endlessFoe(rank) {
       // more often, so he is a check rather than a wall.
       mult: +((1.32 + rank * 0.07) * 1.11).toFixed(3),
       talents: ENDLESS_TREES[(rank - 1) % ENDLESS_TREES.length],
-      weaponId: 'starter',
       aiLevel: 4,
       xp: Math.round(110 + xpRank(rank) * 12),
       coins: 200 + rank * 18,
@@ -1751,7 +1674,6 @@ export function endlessFoe(rank) {
          the whole drawing: you learn that the Wanderer burns you, and you can
          come back dressed for it. */
       talents: ENDLESS_TREES[5],
-      weaponId: 'starter',          // he carries a lantern, not a weapon
       aiLevel: 5,
       xp: Math.round(180 + xpRank(rank) * 16),
       coins: 320 + rank * 26,
@@ -1780,7 +1702,7 @@ export function endlessFoe(rank) {
       mult: +((1.32 + rank * 0.07) * 1.05).toFixed(3),
       // a strongbox: he wards, he turtles, and he punishes the turn you commit
       talents: ENDLESS_TREES[4],
-      weaponId: 'bonecrusher',      // the lid has teeth
+      style: 'heavy',             // the lid has teeth
       aiLevel: 3,
       xp: Math.round(70 + xpRank(rank) * 10),
       coins: 130 + rank * 15,
@@ -1806,7 +1728,7 @@ export function endlessFoe(rank) {
     look: bossLook(base + suffix) || ladderLook(rank),
     mult: 1.32 + rank * 0.07,
     talents: ENDLESS_TREES[(rank - 1) % ENDLESS_TREES.length],
-    weaponId: rank % 3 === 0 ? 'bonecrusher' : 'starter',
+    style: rank % 3 === 0 ? 'heavy' : 'plain',
     aiLevel: 3,
     xp: Math.round(60 + xpRank(rank) * 10),
     coins: 120 + rank * 15,

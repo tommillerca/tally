@@ -112,12 +112,12 @@ const POLICIES = {
   },
 };
 
-function runFight({ stats, talents, foeCfg, seed, policy, pet, weaponId }) {
-  const player = makeFighter({ name: 'P', stats, talents, weaponId: weaponId || 'starter', pet: pet ? buildBattlePet(pet.id, pet.level, pet.picks || [], { lineage: pet.lineage || 0, shiny: pet.shiny || false }) : null });
+function runFight({ stats, talents, foeCfg, seed, policy, pet }) {
+  const player = makeFighter({ name: 'P', stats, talents, pet: pet ? buildBattlePet(pet.id, pet.level, pet.picks || [], { lineage: pet.lineage || 0, shiny: pet.shiny || false }) : null });
   const foe = makeFighter({
     name: 'F',
     stats: scaleStats(stats, foeCfg.mult),
-    weaponId: foeCfg.weaponId || 'starter',
+    style: foeCfg.style || 'plain',
     talents: foeCfg.talents || [],
   });
   const add = foeCfg.add ? makeFighter({
@@ -165,10 +165,10 @@ function runFight({ stats, talents, foeCfg, seed, policy, pet, weaponId }) {
 }
 
 const N = 200;
-function cell({ stats, talents, foeCfg, policy, weaponId }) {
+function cell({ stats, talents, foeCfg, policy }) {
   let w = 0, d = 0, turns = 0, hp = 0, atk = 0, act = 0, brace = 0, fw = 0;
   for (let i = 0; i < N; i++) {
-    const r = runFight({ stats, talents, foeCfg, seed: 9000 + i * 7, policy, weaponId });
+    const r = runFight({ stats, talents, foeCfg, seed: 9000 + i * 7, policy });
     if (r.winner === 'p') { w++; hp += r.hpLeft; }
     else if (r.winner === 'draw') d++;
     turns += r.turns;
@@ -188,7 +188,7 @@ function cell({ stats, talents, foeCfg, policy, weaponId }) {
 const FOES = [
   { key: 'mirror', mult: 1.0, rung: 3 },
   ...LADDER.map(l => ({ key: 'rung' + l.rung, mult: l.mult, rung: l.rung, talents: RUNG_TALENTS[l.rung] || [] })),
-  { key: 'CHAMP', mult: CHAMPION.mult, rung: 5, talents: CHAMPION.talents, weaponId: CHAMPION.weaponId, champ: true },
+  { key: 'CHAMP', mult: CHAMPION.mult, rung: 5, talents: CHAMPION.talents, style: CHAMPION.style, champ: true },
 ];
 
 const statsName = process.argv[2] === 'tom' ? 'TOM' : 'MID';
@@ -214,31 +214,15 @@ for (const [pname, policy] of Object.entries(POLICIES)) {
   }
 }
 
-// ---- v71: the Bone Merchant's endgame weapons must not break the exploit bar ----
-// The strongest realistic weapon+build vs the Champion under the smart policy must
-// still stay under 90% (weapons multiply effort, they don't trivialise the ladder).
-const champFoe = FOES.find(f => f.champ);
-const WEAPONIZED = [
-  { name: 'maul+slab', weaponId: 'maul', talents: BUILDS.slab },
-  { name: 'lich+necro', weaponId: 'lichfocus', talents: BUILDS.gravecaller },
-  { name: 'censer+warden', weaponId: 'censer', talents: BUILDS.gravewarden },
-  { name: 'lich+shaman', weaponId: 'lichfocus', talents: BUILDS.boneshaman },
-  // v145 tier-4 prestige weapons: strongest arsenal must still stay under the bar.
-  { name: 'warmaul+slab', weaponId: 'warmaul', talents: BUILDS.slab },
-  { name: 'voidstar+necro', weaponId: 'voidstar', talents: BUILDS.gravecaller },
-  { name: 'voidstar+shaman', weaponId: 'voidstar', talents: BUILDS.boneshaman },
-  { name: 'reliquary+warden', weaponId: 'reliquary', talents: BUILDS.gravewarden },
-];
-console.log('\n--- v71 weapon exploit check (smart policy vs Champion) ---');
-let weaponBarOk = true;
-for (const b of WEAPONIZED) {
-  const r = cell({ stats, talents: b.talents, foeCfg: champFoe, policy: POLICIES.smart, weaponId: b.weaponId });
-  const flag = r.win >= 90 ? '  <<< OVER 90% BAR' : '';
-  if (r.win >= 90) weaponBarOk = false;
-  console.log(`  ${b.name.padEnd(16)} vs Champion: ${String(r.win).padStart(3)}% win${flag}`);
-}
-console.log(weaponBarOk ? '  PASS: all weaponized builds stay under the 90% exploit bar' : '  FAIL: a weaponized build exceeds 90% vs the Champion');
-if (!weaponBarOk) process.exitCode = 1;
+/* THE v71 WEAPON EXPLOIT BAR STOOD HERE. It measured the eight strongest
+   weapon+build pairs against the Champion and failed the run if any cleared 90%.
+   All twelve weapons went with the Bone Merchant on 2026-08-25 (S0), so there is
+   no weaponized build left to measure: the strongest realistic player build IS
+   the strongest talent build, which the policy table above already prints in
+   full, against the CHAMP column.
+   The property the bar protected has not gone away, it has moved: what must stay
+   under the bar now is a pure talent stack, and tests/fight-sim.mjs plus the
+   BUILD_MULT_CAP in js/pit.js are what hold it. */
 
 // v123 boss scaling: a world boss must RAMP with dens beaten so it never runs dry.
 // Model a player carrying a maxed pet (the ally body that makes 2v1 survivable) and

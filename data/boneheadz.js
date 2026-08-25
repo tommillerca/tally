@@ -1156,7 +1156,8 @@ const BH_ITEMS_ALL = [
   "id": "SK15",
   "slot": "SK",
   "rarity": "legendary",
-  "name": "Moonlit Skull"
+  "name": "Moonlit Skull",
+  "exclusive": true
  },
  {
   "id": "SK16",
@@ -2153,6 +2154,15 @@ export const PET_HERO_REL = { C6: 169 / PET_HERO_REF };
    is a lie: an equal share of today's four-deep non-common pool is 25%.
    `exclusive` is the stronger, separate flag (never obtainable at all, the Day
    One Lizard) and the two are not interchangeable. */
+
+/* `exclusive` IS NOW READ BY crateEligible TOO (js/loot.js), which it was not
+   before: the only exclusive was a slot-C pet, and pets were already filtered
+   out of the crate pool by their slot, so the flag had never had to work for a
+   wearable. SK15 Moonlit Skull is the first one that does. It is the Champion's
+   prize (S0, 2026-08-25): beating The Marrow King used to hand you Bonecrusher,
+   a weapon with stats and no art, and it now hands you the one skull nobody can
+   crack a crate for. Anyone who already pulled it from a crate keeps it; grants
+   are additive and no inventory row is ever rewritten. */
 
 export const PET_SHOP = {
   pet: { id: 'C6', coin: 50000, blurb: 'A diva that would rather shop than fly. Let her buzz the boutique below for more accessories.' },
