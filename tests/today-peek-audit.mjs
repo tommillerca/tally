@@ -465,6 +465,22 @@ for (const cfg of CONFIGS) {
     return [r / n, g / n, b / n];
   };
 
+  /* THE MEAN WAS NEVER THE PROBLEM, AND THAT IS WHY THIS FILE MISSED IT.
+     stripMean() above averages the strip, and v441 got that mean to within
+     0.5 of the fill while Tom could still see the line. Measured 2026-08-25 at
+     430x932 dpr2: the art's top row varied across x by 7 units with the grain
+     on and 0 with it off, so the eye was reading a TEXTURE discontinuity, not a
+     colour one, and an averaging row can never see it. This reads the SPREAD of
+     the boundary row instead: a flat fill can only ever continue a flat surface.
+     Five builds chased the colour before anyone measured the variance. */
+  const stripSpread = async () => {
+    const s = await shoot(page, { x: Math.max(0, Math.round(geo.x + geo.w / 2) - 120), y: Math.max(0, Math.round(geo.y)), width: 240, height: 1 });
+    let lo = [255, 255, 255], hi = [0, 0, 0];
+    for (let i = 0; i < s.data.length; i += 4)
+      for (let c = 0; c < 3; c++) { const v = s.data[i + c]; if (v < lo[c]) lo[c] = v; if (v > hi[c]) hi[c] = v; }
+    return Math.max(...hi.map((v, c) => v - lo[c]));
+  };
+
   ok('CONTROL SEAM the backdrop, the fill colour and the grain layer were all found',
     !!geo && !!geo.edge && /^url\(/.test(geo.grain) && parseFloat(geo.grainOp) > 0,
     geo ? `edge="${geo.edge}" grain="${geo.grain}..." opacity=${geo.grainOp}` : 'no .hero-backdrop');
@@ -483,14 +499,24 @@ for (const cfg of CONFIGS) {
     const m = geo.edge.match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
     const fill = m ? [+m[1], +m[2], +m[3]] : null;
     const spread = Math.max(...rendered.map((v, i) => Math.abs(v - bare[i])));
-    ok('CONTROL SEAM the composited layers measurably move the strip (else the match is free)',
-      spread >= 1.5,
+    /* INVERTED BY THE 2026-08-25 FIX, deliberately. This used to demand that the
+       grain measurably MOVES the strip, which was the right premise while the
+       fill was matching the grained art's mean. app.css now masks the grain away
+       from the top edge so the fill continues a FLAT surface, so the grain must
+       NOT reach the strip: the old assertion would now demand the bug back. */
+    ok('CONTROL SEAM the grain does NOT reach the boundary, so the flat fill has a flat surface to continue',
+      spread <= 0.6,
       `rendered ${rendered.map(v => v.toFixed(1))} vs the same strip with .hero-scene::after off ${bare.map(v => v.toFixed(1))}, spread ${spread.toFixed(1)}`);
 
     const delta = fill ? Math.max(...fill.map((v, i) => Math.abs(v - rendered[i]))) : 999;
     ok('SEAM the fill matches the art AS RENDERED, not merely the source it is sampled from: the strip a bounce opens and the art it continues are the same colour',
       fill !== null && delta <= 1.5,
       `--hero-edge ${JSON.stringify(fill)} vs the rendered strip ${rendered.map(v => v.toFixed(1))}, delta ${delta.toFixed(1)} (bound 1.5; the sampler without the grain composite reads 4.5 here)`);
+
+    const texture = await stripSpread();
+    ok('SEAM-TEXTURE the boundary row is FLAT, so a flat fill can continue it exactly (a matching MEAN over a grained surface still reads as a line)',
+      texture <= 1,
+      `boundary row varies by ${texture} units across 240 css px (bound 1; it measured 7 before the grain was masked off the top edge)`);
   }
 }
 
