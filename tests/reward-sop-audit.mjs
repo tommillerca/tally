@@ -163,7 +163,9 @@ const ACTIONS = [
   { id: 'js/cooking.js:advanceQueue', sites: 1, undriven: 'moves an already-paid-for queued dish into a pot; the dish was bought with ingredients at startCook' },
   { id: 'js/garden.js:compostIngredient', sites: 1, undriven: 'spends an ingredient and is capped at COMPOSTS_PER_DAY; a conversion, not a payout' },
   { id: 'js/loot.js:buyShopItem', sites: 1, undriven: 'a purchase: the second attempt is MEANT to charge again. Was 3 until 2026-08-25: crates came off the coin shop (S0), so the two grantCrate branches went with them and only grantConsumable is left' },
-  { id: 'js/loot.js:buyWithDust', sites: 3, undriven: 'a purchase' },
+  /* js/loot.js:buyWithDust stood here with 3 sites (grantEgg / grantCrate /
+     grantConsumable). The Bone Dust shop closed on 2026-08-25 and dust is a
+     cosmetic-only currency, so all three sites went with it. */
   { id: 'js/loot.js:buyDropItem', sites: 1, undriven: 'a purchase, and it refuses when already owned' },
   { id: 'js/loot.js:disenchantGear', sites: 1, undriven: 'melts a piece the player owns: the gear row is the input, so a second run finds nothing' },
   { id: 'js/loot.js:salvagePet', sites: 1, undriven: 'as disenchantGear, on a pet instance' },

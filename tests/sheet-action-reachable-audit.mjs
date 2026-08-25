@@ -534,7 +534,7 @@ for (const s of SHEETS) {
 }
 console.log('\n  NOT COVERED, and therefore NOT PROVEN by this file:');
 for (const [what, why] of [
-  ['[data-buy] / [data-dustbuy]',
+  ['[data-buy]  ([data-dustbuy] went with the Bone Dust shop, 2026-08-25)',
     'NOT IN THIS CLASS. The shop renders into #screen as a main tab, so its scroller is the page. A button below the page fold is normal scrolling, not a control clipped out of its own container.'],
   ['[data-look-apply] (wardrobe, spends dust)',
     'NOT IN THIS CLASS for the same reason: #chTabs wardrobe is a main-tab render, not a .sheet.'],

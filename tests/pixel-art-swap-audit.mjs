@@ -148,20 +148,36 @@ const twinOf = id => (PIX_CUR[id] ? id
     : RENAMED[id] || null);
 
 /* WHAT THE GAME CALLS THE THING IN EACH PICTURE, keyed by the art path that
-   lands in the DOM. Scraped off the Shop's own product rows (SHOP and DUST_SHOP
-   in loot.js), because the Shop is where this game NAMES the objects it hands
-   out, and the wheel hands out the same objects through the same grantCrate /
-   grantConsumable calls. Deriving it means the day a crate is renamed, the name
+   lands in the DOM. Deriving it means the day a crate is renamed, the name
    moves here on its own and the wedge that still says the old word goes red.
-   Not every drawing is a shop product: the bone-coin and the ingredients are
-   not sold, so they resolve to nothing and the LABEL row below skips them
-   rather than inventing a name for them. */
+   Not every drawing is a named product: the bone-coin and the ingredients
+   resolve to nothing and the LABEL row below skips them rather than inventing a
+   name for them.
+
+   SCRAPED FROM THE PRODUCT TABLES, NOT FROM THE SHOPS. It used to read the two
+   shop arrays (SHOP and DUST_SHOP), and a shop is the wrong authority for what
+   a thing is CALLED: it is a list of what happens to be for sale today. That
+   list shrank twice on 2026-08-25 (S0 took the crates off the coin shop, then
+   the Bone Dust shop closed outright) and each time a wedge quietly stopped
+   being graded while every row still read green: after the first, nothing named
+   the Bone Crate; after the second, nothing named the Common Crate either, and
+   the CONTROL's floor of three was the only thing standing between this file
+   and a LABEL row grading one wedge out of three.
+   CRATES and CONSUMABLES are the canonical tables. They are keyed by exactly
+   the ids CRATE_ICON_PIX and PIX_CUR key on, they name every object the wheel
+   can hand out, and a table entry does not disappear because a price did. */
 const lootSrc = readFileSync(path.join(JS, 'loot.js'), 'utf8');
 const ART_NAME = {};
-for (const m of lootSrc.matchAll(/\{\s*id:\s*'([\w-]+)',\s*label:\s*'([^']+)'/g)) {
-  const t = twinOf(m[1]);
-  const f = CRATE_ICON_PIX[m[1].replace(/^crate-/, '')] || (t && PIX_CUR[t] && `icons-pix/${PIX_CUR[t]}`);
-  if (f) ART_NAME[`assets/${f}.png`] = m[2];
+const nameRows = [
+  // shop arrays: `{ id: 'xp2', label: 'Battle Charm', ... }`
+  ...[...lootSrc.matchAll(/\{\s*id:\s*'([\w-]+)',\s*label:\s*'([^']+)'/g)].map(m => [m[1], m[2]]),
+  // CRATES / CONSUMABLES: `daily:  { label: 'Common Crate', ... }`
+  ...[...lootSrc.matchAll(/^\s{2}(\w+):\s*\{ label: '([^']+)'/gm)].map(m => [m[1], m[2]]),
+];
+for (const [id, label] of nameRows) {
+  const t = twinOf(id);
+  const f = CRATE_ICON_PIX[id.replace(/^crate-/, '')] || (t && PIX_CUR[t] && `icons-pix/${PIX_CUR[t]}`);
+  if (f) ART_NAME[`assets/${f}.png`] = label;
 }
 
 /* The pack's raw path data, per id. bhIcon emits `<svg ...>${it.p}</svg>`, so
@@ -659,8 +675,17 @@ for (const L of (inv.stdout || '').split('\n')) {
   const m = L.match(/^(\S+)\s+(js\/[\w.-]+):(\d+)\s+(\S+)\s+(\S+)\s+(\d+|DYNAMIC)\s+(PIXEL|VECTOR|VECTOR-FALLBACK|VARIES)\s*$/);
   if (m) sites.push({ screen: m[1], file: m[2], line: +m[3], drawer: m[4], concept: m[5], size: m[6], medium: m[7] });
 }
+/* THE FLOOR IS A BLIND-DETECTOR, NOT A CENSUS. It was 300 and the tree had 302,
+   so deleting one piece of markup put it red: closing the Bone Dust shop on
+   2026-08-25 took four icon calls off the Shop screen (two crateIcon, one
+   consumableIcon, one ICONS.dust) and this row failed at 299 while every real
+   assertion below it passed. A floor one below the current count is a
+   change-detector wearing a control's clothes, and the property here is only
+   "the spawn ran and its output parsed". 250 is far enough below the tree's
+   count to survive ordinary deletions and far enough above zero to catch the
+   failure this row exists for: a parse that returns nothing. */
 ok('CONTROL  the icon inventory was re-derived and parsed (an empty parse is a failure)',
-  sites.length >= 300,
+  sites.length >= 250,
   `${sites.length} call sites parsed from tests/icon-inventory-audit.mjs`);
 
 /* A drawer call that is the RHS of a `pixCur(...) ||` is the FALLBACK ARM: the
