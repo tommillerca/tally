@@ -90,6 +90,10 @@
  *       crew.
  *   1C  build teaserWallHtml eagerly in cosmeticTeaserBannerHtml instead of on
  *       first open and TODAY blows its ceiling.
+ *   1D  drop the `thumb` option from the hero-companion or the crew card's
+ *       petPortraitHtml and TODAY (120.3 MB) or CREW (592.5 MB) blows its
+ *       ceiling on the 2048px pet art, and the matching TIER row names the
+ *       width. Both halves needed: each mutation reds only its own screen.
  *
  * Usage: node tests/memory-census.mjs [url]      (self-serves this checkout)
  *        DIAG=1 node tests/memory-census.mjs     (per-screen breakdown)
@@ -198,28 +202,69 @@ async function fresh() {
   await sleep(900);
 }
 
+/* THE FRIEND CARRIES A DRESSED PET, and `pet: null` is what hid the whole pet
+   class from this file. Every friend's card draws their pet beside their
+   Bonehead, and the pet-era art is 2048x2048 rather than 640: ONE C6 layer is
+   16.0000 MB against a body cosmetic's 1.5625, and a dressed pet is five of
+   them. With pet: null this file measured 32.5 MB for a 30-friend fan and
+   called the screen clean while a single one of those layers cost half its
+   budget. Measured on this tree 2026-08-24, same instrument, before the fix:
+   560.0 MB of pet across 35 layers on the fan, 160.0 MB across 10 on Today.
+   FOUR PIECES, NOT ONE, for the same reason FIT8 wears eight: a real owner
+   dresses her, and one accessory is worth a quarter of what four are. */
+const PET6 = { id: 'C6', level: 4, shiny: false, wear: { CG: 'CG1', CB: 'CB2', CM: 'CM1', CE: 'CE1' } };
 const friendFixture = n => Array.from({ length: n }, (_, i) => ({
   playerId: 'cf' + i, name: 'Bonehead ' + i, alias: null, lastSeen: Date.now() - (i % 3) * 90000,
   profile: { level: 40 - (i % 30), levelName: 'Bonehead', badges: i % 9, gearCount: i % 12,
-    outfit: { ...FIT8, BG: 'BG1' }, pet: null },
+    outfit: { ...FIT8, BG: 'BG1' }, pet: PET6 },
 }));
 
 /* ---- the account: a completionist hoarder, which is the worst case --------
    364 cosmetics owned and 120 gear pieces is the account gwart measured. The
-   Collection and the melt bench are loops over exactly these two numbers. */
-await seed(page, { level: 40, coins: 99999, dust: 99999 });
+   Collection and the melt bench are loops over exactly these two numbers.
+
+   AND SHE OWNS THE PET AND ITS WARDROBE. The hoarder was missing the most
+   expensive object in the game: Gwart sells a 2048x2048 pet for 50,000 coins
+   and four 2048x2048 pieces to dress her in for 38,500 more, and 99,999 coins
+   is 1,499 short of the lot, so this account could never reach the state that
+   breaks Today. Bought through buyPetItem, which is the real path the money
+   goes through and the only way an accessory legitimately enters a save, then
+   worn through the real toggle: a hand-written kv row would prove the renderer
+   can draw something nobody could own. */
+await seed(page, { level: 40, coins: 250000, dust: 99999 });
 const account = await pe(async () => {
   const loot = await import('./js/loot.js');
   const { GEAR_ITEMS } = await import('./js/gear.js');
-  const { BH_ITEMS } = await import('./data/boneheadz.js');
+  const { BH_ITEMS, PET_SHOP } = await import('./data/boneheadz.js');
   let looks = 0, gear = 0;
+  /* THE SHOP RUNS FIRST, AND THE ORDER IS LOAD-BEARING. buyPetItem refuses an
+     item the save already owns, and the blanket grant below owns every row in
+     the catalogue, the pet included -- so with the loop first the purchase was
+     refused, no pet INSTANCE was ever minted, there was nothing to equip, and
+     Today drew the starter cloud while this file believed it was measuring her.
+     It cost a run to find, which is what the second ACCOUNT row is for. */
+  for (const id of [PET_SHOP.pet.id, ...PET_SHOP.items.map(i => i.id)]) await loot.buyPetItem(id);
+  for (const i of PET_SHOP.items) await loot.togglePetWear(i.id);
+  const inst = (await loot.petInstances()).find(x => x.sp === PET_SHOP.pet.id);
+  if (inst) await loot.setEquippedPet(inst.iid);
   for (const i of BH_ITEMS) { try { await loot.grantCosmetic(i.id, 'census'); looks++; } catch { /* not grantable */ } }
   for (const g of GEAR_ITEMS.slice(0, 120)) { try { await loot.grantGear(g.id, 'census'); gear++; } catch { /* not grantable */ } }
-  return { looks, gear };
+  const slots = new Set(PET_SHOP.items.map(i => (BH_ITEMS.find(b => b.id === i.id) || {}).slot));
+  return { looks, gear, pet: PET_SHOP.pet.id, slots: slots.size,
+    equipped: (await loot.equippedPetIid()) || '', wearing: Object.keys(await loot.petWear()).length };
 });
-console.log(`account seeded: ${account.looks} cosmetics granted, ${account.gear} gear pieces\n`);
+console.log(`account seeded: ${account.looks} cosmetics granted, ${account.gear} gear pieces, `
+  + `pet ${account.equipped || 'NOTHING'} wearing ${account.wearing}/${account.slots} slots\n`);
 ok('ACCOUNT the fixture really is a hoarder (an empty account measures nothing)',
   account.looks > 300 && account.gear > 100, `${account.looks} cosmetics, ${account.gear} gear`);
+/* AN UNDRESSED PET IS A DIFFERENT SCREEN, and grading a budget on it is exactly
+   the fixture bug this row makes loud: the pet layers are the largest single
+   objects in the app, so a fixture that quietly fails to buy or equip them
+   measures a Today nobody has. It went red on its first run, correctly. */
+ok('ACCOUNT the hoarder has the shop pet OUT FRONT and is wearing every slot of her wardrobe',
+  account.equipped.endsWith(`-${account.pet}`) && account.wearing === account.slots && account.slots > 0,
+  `equipped ${account.equipped || 'NOTHING'} (wanted a ${account.pet}), `
+  + `wearing ${account.wearing} of ${account.slots} accessory slots`);
 
 /* ---- the screens --------------------------------------------------------- */
 
@@ -419,6 +464,71 @@ ok('TIER     the crew card figure is served from the 384 sheet, not the 640px ar
 ok('TIER     the crew card backdrop is served from the 192 sheet',
   tiers.bg.length > 0 && tiers.bg.every(n => n === 192),
   `${tiers.bg.length} backdrops, widths ${[...new Set(tiers.bg)].join('/') || 'NONE'}`);
+
+/* THE PET AND EVERYTHING SHE IS WEARING COME OFF THE SHEET TOO.
+ *
+ * A CEILING CANNOT GRADE THIS, which is why it is a row of its own beside the
+ * budgets above. The pet-era art is the largest in the game -- C6 and the five
+ * accessories drawn for her are 2048x2048, so ONE layer is 16.0000 MB against a
+ * body cosmetic's 1.5625 -- and croppedPetImg served every one of them at full
+ * size on every surface, because it builds its layers from bhAsset() and never
+ * called bhThumb(). avatarLayersHtml could not cover for it either: it refuses
+ * the C slot for any pet petStacksOnBody() rejects, and C6 is exactly that pet.
+ * Measured on this tree 2026-08-24, 430x932 DPR 2, with the account above:
+ *
+ *     screen                 pet layers    before      after
+ *     Today                          10   160.0 MB    5.6 MB
+ *     Crew fan, 30 friends           35   560.0 MB    4.9 MB
+ *
+ * A BUDGET WOULD STAY GREEN THROUGH HALF A REVERT: drop the tier from the crew
+ * card alone and Today still clears 90 MB. So this asserts the DECODED WIDTH
+ * per surface, the same shape as the two rows above and for the same reason --
+ * croppedPetImg falls back to the master when a thumbnail 404s (rule 8), so a
+ * missing sheet otherwise reads as a clean pass with the memory quietly back.
+ *
+ * TWO SURFACES, TWO TIERS, because they are two different decisions: the fan's
+ * card asks for the geometry-derived tier and lands on 192, while Today's hero
+ * names 384 because the strict rule declines it by 0.8px (see heroPetTier).
+ * Grading only one would let the other go back to the master unnoticed.
+ *
+ * AN EMPTY SAMPLE IS A FAILURE (rule 3), and here that is not theoretical: an
+ * account that failed to buy the pet, or a fixture carrying `pet: null`, draws
+ * no pet layers at all and every "no layer is a master" test passes on nothing.
+ * Hence the counts: FIVE on the hero (the pet plus one per worn slot), and the
+ * fan's seated cards at five apiece.
+ *
+ * PROVE-RED, each mutation RUN on this tree on 2026-08-24 and reverted, and
+ * this is what each actually printed:
+ *   drop `{ thumb: heroPetTier }` from the hero-companion call
+ *     -> today "5 layers, widths 2048", and CEILING today 120.3 MB. ONLY the
+ *        Today rows; the fan stayed green at 37.4 MB, which is the half-revert
+ *        a single budget would have missed.
+ *   drop `thumb: true` from the crew card's petPortraitHtml
+ *     -> crew  "35 layers, widths 2048", and CEILING crew 592.5 MB
+ *   put `pet: null` back in friendFixture, i.e. this file before today
+ *     -> crew  "0 layers, widths NONE" while CEILING crew goes GREEN on 32.5 MB.
+ *        That pair is the whole argument for this row existing.
+ *   move assets/bh/thumb/384/{C,CB,CE,CG,CM} out of the tree
+ *     -> today "5 layers, widths 2048": the onerror fallback restores the art
+ *        and the memory with it, and only this row notices.
+ */
+await fresh();
+await pe(() => { location.hash = '#/today'; });
+await sleep(2400);
+const heroPetTiers = await pe(() => [...document.querySelectorAll('#bhStage .hero-companion .petcrop img')]
+  .filter(i => i.naturalWidth).map(i => i.naturalWidth));
+ok('TIER     Today\'s pet and her wardrobe are served from the 384 sheet, not the 2048px masters',
+  heroPetTiers.length >= 5 && heroPetTiers.every(n => n === 384),
+  `${heroPetTiers.length} layers, widths ${[...new Set(heroPetTiers)].join('/') || 'NONE'} `
+  + '(a dressed pet is the pet plus one layer per worn slot; a 2048 layer is 16.0000 MB)');
+
+await fresh();
+await crewDrive(8)();
+const fanPetTiers = await pe(() => [...document.querySelectorAll('.cfan-card .cfan-pet .petcrop img')]
+  .filter(i => i.naturalWidth).map(i => i.naturalWidth));
+ok('TIER     the crew card\'s pet is served from the 192 sheet, not the 2048px masters',
+  fanPetTiers.length >= 5 && fanPetTiers.every(n => n === 192),
+  `${fanPetTiers.length} layers, widths ${[...new Set(fanPetTiers)].join('/') || 'NONE'}`);
 
 await fresh();
 await pe(() => { location.hash = '#/bonehead'; });
