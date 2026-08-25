@@ -2948,7 +2948,9 @@ async function backupNudge() {
 function bindWordmarkPull() {
   const el = $('#screen');
   const FULL = 36;         // px of pull at which the mark is fully revealed
-  let last = -1;
+    const LEAD = 30;         // opacity is ZERO at or under this pull, so it clears FIRST
+    const FADE = 90;         // and fully opaque by here
+  let last = -1, lastF = -1;
   el.addEventListener('scroll', () => {
     const pull = -el.scrollTop;
     const t = pull <= 0 ? 0 : Math.min(1, pull / FULL);
@@ -2963,9 +2965,26 @@ function bindWordmarkPull() {
        one property write per step is what keeps this listener cheap, and the
        compositor interpolates for free. */
     const q = Math.round(t * t * (3 - 2 * t) * 20) / 20;
-    if (q === last) return;
-    last = q;
+    /* OPACITY GETS ITS OWN RAMP, AND IT LEADS THE GEOMETRY.
+       Measured on a booted iPhone 17 Pro in the NATIVE SHELL, 2026-08-25, at
+       600fps. --wm-pull is pinned at 1 for every pull past FULL, and iOS crosses
+       the last 36px of a bounce return in about 3ms, so the mark held 98-100% for
+       the ENTIRE return, was still at 100% on the frame the card reached its
+       resting position, and then went 97% -> 69.7% -> 0% in 3.3ms. That is not a
+       fade, it is a cut, and it is what Tom reported five releases running: "the
+       wordmark doesnt fade out in time before the UI snaps back". The 130ms and
+       later 60ms transitions in app.css could never fix it, because the value was
+       never ramping, it was stepping. So opacity comes off its own mapping: zero
+       at or under LEAD px of pull, full by FADE. Coming back it reaches zero while
+       the card still has LEAD px to travel, which is the "in time" half of the
+       complaint. --wm-pull is untouched, so every geometry bound in app.css and in
+       overscroll-wordmark-audit still holds. */
+    const f = pull <= LEAD ? 0 : Math.min(1, (pull - LEAD) / (FADE - LEAD));
+    const qf = Math.round(f * f * (3 - 2 * f) * 20) / 20;
+    if (q === last && qf === lastF) return;
+    last = q; lastF = qf;
     document.documentElement.style.setProperty('--wm-pull', q);
+    document.documentElement.style.setProperty('--wm-fade', qf);
   }, { passive: true });
 }
 

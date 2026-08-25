@@ -382,7 +382,7 @@ svg { display: block; }
   content: ""; position: absolute; z-index: 3; pointer-events: none;
   left: 50%; margin-left: -116px; bottom: 100%; width: 232px; height: 62px;
   background: url(assets/brand/wordmark.png) center / contain no-repeat;
-  opacity: var(--wm-pull, 1);
+  opacity: var(--wm-fade, 1);
   transform: translateY(calc(var(--wm-pull, 0) * (var(--sat) + 66px)));
   /* the smoothing, and the only motion this feature declares. Short enough that
      the mark never feels dragged behind the finger, long enough to swallow the
