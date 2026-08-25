@@ -93,7 +93,20 @@ OUT = os.path.join(SRC, 'thumb')
 # per-slot cosmetic art, plus the shiny pet recolours. Anything else (fx frames,
 # glutton plates, the mage, the pet animation strips) is not tiled anywhere and
 # keeps its own size.
-SLOTS = ['B', 'BG', 'C', 'E', 'FW', 'G', 'H', 'IL', 'IR', 'M', 'P', 'S', 'SK', 'T', 'U']
+#
+# THE PET-ACCESSORY SLOTS ARE IN HERE TOO (CB bag, CE glasses, CG stinger, CM
+# patches), and their absence was the more expensive half of the C6 bug. Those
+# five masters are 2048x2048, so ONE of them costs 16.0000 MB decoded -- ten
+# times a body cosmetic -- and they are drawn as WORN LAYERS beside the pet on
+# every surface she appears on, four at a time on a dressed pet. Measured on
+# this tree 2026-08-24, 430x932 DPR 2, an account owning her and wearing all
+# four: Today mounted 10 pet layers for 160.0 MB, the Stable 30 for 480.0 MB and
+# the Paddock 48 for 652.5 MB, against the 90 MB ceiling
+# tests/memory-census.mjs enforces. They were excluded here for the same reason
+# they were excluded from bhThumb's regex: the slots did not exist when this
+# list was written, and nothing since had a reason to walk it again.
+SLOTS = ['B', 'BG', 'C', 'CB', 'CE', 'CG', 'CM', 'E', 'FW', 'G', 'H', 'IL', 'IR',
+         'M', 'P', 'S', 'SK', 'T', 'U']
 KEEP = re.compile(r'^(?:%s)/(?:shiny/)?[^/]+\.png$' % '|'.join(SLOTS))
 
 

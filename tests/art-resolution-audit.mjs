@@ -17,6 +17,19 @@
  * It cannot see the lone-item canvases, because a canvas has no naturalWidth
  * once drawn; those are pinned by their own unit case on the SMALL_INK path.
  * Saying so here rather than implying this covers everything.
+ *
+ * PROVE-RED, both run on this tree 2026-08-24 and reverted, and this is what
+ * each printed. They matter because until that day this file swept a save
+ * wearing the starter cloud, which is animated and never reaches croppedPetImg,
+ * so the 2048px pet art -- the only art here whose master is not 640, and the
+ * art most able to be handed a tier it outgrows -- was never on screen at all.
+ *   heroPetTier forced from 384 to 192, i.e. a tier that cannot serve the box
+ *     -> RESOLUTION  "today:thumb/192/C/C6.png src 192 drawn 385 = 2.01x", and
+ *        the same for all four worn layers. This is the class, caught.
+ *   the buyPetItem loop below deleted
+ *     -> SETUP  "equipped m0-C1 wearing 0, 2 pet layers swept". Not zero: the
+ *        Today hype banner draws C6 whoever you own, which is exactly why the
+ *        bound is five layers and not one.
  */
 import { boot, sleep, serveTree } from './godmode.js';
 import path from 'node:path';
