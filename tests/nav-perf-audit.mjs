@@ -37,9 +37,12 @@
  *
  * THE DETECTOR PROVES ITSELF ON EVERY RUN. A probe hooked to the wrong function,
  * or a lap that never reaches the screen doing the work, scores zero and passes
- * everything. So SAMPLE requires the COLD pass to scan over a million pixels
- * before any zero below is believed, and REACH requires all four tray
- * destinations plus all four hub tabs to have actually been reached.
+ * everything. So SAMPLE requires the COLD pass to have scanned STRICTLY MORE
+ * than the warm one before any zero below is believed, and REACH requires all
+ * four tray destinations plus all four hub tabs to have actually been reached.
+ * SAMPLE used to carry a pixel-and-call FLOOR instead; it was a sample of one
+ * day's app, it went stale twice, and the second time it went red on healthy
+ * code. The full argument is at the constant it replaced, below.
  *
  * AND THE CACHE HAS TO BE CORRECT, not just fast. IDENTICAL reads the rendered
  * canvas back on the cold pass and again on the warm pass and requires the two
@@ -69,8 +72,32 @@
  *          Pre-cropped art is why: every source is now its own alpha box, so one
  *          item's box applied to another still lands ink on the canvas instead
  *          of missing it. That is a real loss of coverage and it is written down
- *          rather than glossed: SAMPLE's SCAN-COUNT floor is now the row that
- *          owns r2, which is the reason COLD_MIN_CALLS exists at all.
+ *          rather than glossed: SAMPLE's SCAN-COUNT floor became the row that
+ *          owned r2, which was the reason COLD_MIN_CALLS existed at all.
+ *       AND THAT FLOOR IS GONE AS OF 2026-08-25 (see SAMPLE's own note below).
+ *          It could not survive the app scanning less, and it went red on
+ *          healthy code at v435/v436.
+ *       SO NOTHING IN THIS FILE CATCHES r2 ANY MORE, and that is a real hole,
+ *          stated rather than papered over. The obvious answer -- "WARM owns it
+ *          now, on the 0.78 recorded above" -- was written here first and then
+ *          MEASURED, and the measurement killed it. Seven healthy runs on
+ *          2026-08-25, across both origin/main and this branch, machine busy
+ *          (load 4.5-6.1):
+ *              0.63  0.66  0.69  0.71  0.72  0.77  0.78
+ *          r2's recorded score is 0.78. It sits INSIDE the healthy band, at the
+ *          very top of it. WARM cannot separate r2 from a healthy app, so
+ *          claiming it as r2's owner would be a check that cannot fail dressed
+ *          up as coverage. r2 is UNCOVERED until somebody re-anchors WARM.
+ *   WARM IS ITSELF A STALE PREMISE, and it is NOT this change's doing: those
+ *       seven runs include origin/main, where WARM went 0.72 / 0.69 / 0.78 --
+ *       red on two of three, on untouched healthy code. The ceiling was set at
+ *       0.70 when the warm lap cost ~31ms against a ~101ms cold lap; the crop
+ *       made the COLD lap cheap (409,600 px in 1 scan, where it used to be
+ *       1,257,472 in 12), so the gap it was measuring has closed and the ratio
+ *       now sits at a ~0.71 median. Same disease as the floor above, one row
+ *       over. It needs its own re-anchoring against freshly measured bug states,
+ *       which is a separate job with its own prove-reds, not a number to nudge
+ *       here. Until then: main has TWO red rows in this file, not one.
  *   r3  hydratePackArt() neutered so no canvas is drawn at all
  *       -> SAMPLE red (0 px, so no zero below could have meant anything) and
  *          DECODED red (0 of 7). This is the run that shows RESCAN's green is
@@ -84,6 +111,29 @@
  *          box looked identical in the two. It reads the FIRST wardrobe render
  *          of each pass now, which on the cold lap is a genuine miss for every
  *          canvas. Anti-regression rule 1, caught by doing rule 2.
+ *   r5  (2026-08-25, the mutation the RE-ANCHORED SAMPLE has to catch. RUN, on a
+ *       throwaway `cp -R` tree at /private/tmp/navperf-red-r5, served on its own
+ *       port, with the mutation asserted present in the SERVED js/app.js before
+ *       the result was read.) drawTrimmedArt's alpha-scan block deleted, so the
+ *       existing `if (!found)` fallback supplies the full-image box: every
+ *       canvas is still drawn and still drawn CORRECTLY -- pre-cropped art's own
+ *       box IS the whole file -- but nothing is ever alpha-scanned on any lap.
+ *       -> SAMPLE red, ALONE among the rows that could see it:
+ *            SAMPLE  FAIL  cold 0 px in 0 scan(s) vs warm 0 px in 0 scan(s)
+ *            REACH   PASS  9/9 on both laps, so this is not a broken run
+ *            DECODED PASS  7 of 7 canvases carry ink -- the art is really there
+ *            RESCAN  PASS  0 px, vacuously: the exact worthless green that
+ *                          SAMPLE exists to gate
+ *            IDENTICAL PASS 7 byte-identical -- the art is also CORRECT
+ *          The app is fine and the DETECTOR has gone blind. Without SAMPLE a
+ *          dead probe scores a perfect warm lap and every zero means nothing.
+ *          (WARM also went red here at 0.84, but the machine was at load 10.1
+ *          and WARM is unreliable on healthy code anyway -- see r2 above -- so
+ *          it is NOT claimed as part of r5's signature.)
+ *       This is also the mutation that shows the relation is not vacuous. A row
+ *       that cannot be made to fail is not a guard, and `cold > warm` fails here
+ *       for the same reason the old floor did, without carrying a number that
+ *       goes stale the next time the art gets smaller.
  *
  * Usage: node tests/nav-perf-audit.mjs [baseUrl]   (serves this repo if omitted)
  */
@@ -104,20 +154,54 @@ const ok = (name, pass, detail = '') => {
 
 const W = 440, H = 956;
 const CPU = 6;                 // the honest model of the phone Tom is holding
-/* THE COLD PASS GOT SMALLER BECAUSE THE ART DID, so this floor moved with it.
-   2026-08-24: the Wardrobe's canvases moved to the cropped `thumb/trim` sheet,
-   which both shrinks each file and removes the SMALL_INK escalation, and the
-   escalation was scanning the SAME item at two or three sizes. Measured on this
-   lap, isolated tar-built trees, machine busy (load ~13):
-     before the crop  1,257,472 px across 12 scans
-     after            587,391 px across  8 scans
-   Lowering the pixel floor alone would have let a documented prove-red through:
-   r2 below (one shared box for every 200x200 slot) scores 446,464 px. So the
-   premise is now BOTH numbers, and the call count is what actually separates
-   "the lap did real work" from "two files were ever scanned": r2 makes 2 calls
-   and r3 makes 0, against 8 here. Re-proven red on r2 the same day. */
-const COLD_MIN_PX = 400_000;
-const COLD_MIN_CALLS = 6;
+/* SAMPLE HAS NO FLOOR ANY MORE, AND THAT IS THE FIX, NOT A LOOSENING.
+ *
+ * It used to require the cold lap to scan >= 400,000 px in >= 6 calls. Both
+ * numbers were samples of a particular day's app, and the app kept moving under
+ * them:
+ *     before the crop   1,257,472 px across 12 scans
+ *     after the crop      587,391 px across  8 scans   (2026-08-24, floor set here)
+ *     v435 / v436         409,600 px across  1 scan    (stable over five runs)
+ * Nothing broke to produce that last line. The Wardrobe's cropped-art tier means
+ * almost every source is now its own alpha box, so drawTrimmedArt has nothing
+ * left to walk: exactly one 640x640 master still needs a real scan. The app got
+ * better and the premise did not move, so the row went red on healthy code --
+ * the "audit drift = false RED" failure, pinned to a sample instead of to the
+ * invariant.
+ *
+ * LOWERING THE NUMBERS WOULD HAVE BEEN THE SAME BUG AGAIN, one release later.
+ * So the premise is re-anchored on the RELATION the row actually needs:
+ *
+ *     the cold lap must scan STRICTLY MORE than the warm lap.
+ *
+ * That is the whole of what SAMPLE was ever for -- "a zero on the warm pass
+ * means something" -- and it is a comparison of two measurements from the same
+ * run on the same machine, so it scales with however much alpha-scanning the app
+ * legitimately does. It cannot go stale, and it cannot be satisfied by an app
+ * that scans nothing: cold > warm >= 0 forces cold > 0, which is r3's case.
+ *
+ * WHAT THIS COSTS, stated rather than glossed. SAMPLE's call-count floor was the
+ * row that owned r2 (one shared trim box for every 200x200 slot) after the crop
+ * changed r2's signature. A relation cannot own r2: on r2 the memo still works,
+ * so warm is 0 and cold is 442,688, and cold > warm is true. r2 IS THEREFORE
+ * UNCOVERED, and it does not pass to WARM: r2's 0.78 lands inside the measured
+ * healthy band (0.63-0.78, seven runs, 2026-08-25), so WARM cannot tell them
+ * apart. The full measurement and what it means for WARM is at r2 above. This
+ * is a hole in the file, named on purpose, not a trade that came out even.
+ *
+ * Re-anchoring the call count on a measured property of the same run was tried
+ * first and does not work either: the healthy lap now makes ONE call against
+ * seven drawn canvases, so any call-per-canvas relation is red on healthy code
+ * for the same reason the raw floor was.
+ *
+ * PROVE-RED for the re-anchored row: r5 below, RUN 2026-08-25 on a throwaway
+ * `cp -R` tree at /private/tmp/navperf-red-r5, mutation asserted present in the
+ * SERVED js/app.js before the result was read. It printed exactly:
+ *     SAMPLE  FAIL  cold 0 px in 0 scan(s) vs warm 0 px in 0 scan(s)
+ *     REACH   PASS  9/9 both laps          DECODED   PASS  7 of 7 carry ink
+ *     RESCAN  PASS  0 px (vacuous)         IDENTICAL PASS  7 byte-identical
+ * The app drew, drew correctly, and scored a perfect warm lap. Only SAMPLE saw
+ * it. That is the row earning its place. */
 /* MEASURED, NOT PICKED. Six healthy runs on this tree scored 0.32 0.33 0.34 0.35
    0.38 0.44; the same lap with the memo reverted scored 0.94 and 0.95. The
    ceiling sits at 0.70 rather than halfway, because the flaky direction is
@@ -260,9 +344,10 @@ try {
     cold.reached.length === LAP.length && warm.reached.length === LAP.length,
     `cold ${cold.reached.join(',') || '(none)'} | warm ${warm.reached.join(',') || '(none)'}`);
 
-  ok(`SAMPLE the cold pass scanned real work, so a zero on the warm pass means something (>= ${COLD_MIN_PX.toLocaleString()} px in >= ${COLD_MIN_CALLS} scans)`,
-    cold.scan.px >= COLD_MIN_PX && cold.scan.calls >= COLD_MIN_CALLS,
-    `${cold.scan.px.toLocaleString()} source pixels across ${cold.scan.calls} scan(s)`);
+  ok('SAMPLE the cold pass scanned STRICTLY MORE than the warm pass, so a zero on the warm pass means something',
+    cold.scan.px > warm.scan.px,
+    `cold ${cold.scan.px.toLocaleString()} px in ${cold.scan.calls} scan(s) vs warm ${warm.scan.px.toLocaleString()} px in ${warm.scan.calls} scan(s)`
+    + ` (a relation between two measurements of the same run, not a floor: it scales with however much scanning the app legitimately does)`);
 
   ok('DECODED the wardrobe really drew its art, so "scanned nothing" cannot mean "drew nothing"',
     warm.art.length > 0 && warm.art.every(a => a.ink > 0),
