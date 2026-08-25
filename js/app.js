@@ -277,8 +277,8 @@ const CALM_BOOT = () => (typeof navigator !== 'undefined' && navigator.webdriver
    unasked-for takeover in front of the game, so on 2026-08-25 the whole class
    left the launch path (see boot()) and there is no queue left to arbitrate.
 
-   WHY THIS SURVIVES with only two claimants (the server-flagged rename notice
-   and the settled-race receipt): it is the thing that catches the NEXT one. An
+   WHY THIS SURVIVES with exactly ONE claimant left (the server-flagged rename
+   notice): it is the thing that catches the NEXT one. An
    announcement added next month that opens on boot without asking for the claim
    is exactly the regression tests/first-session-audit.mjs greps for, and a claim
    that no longer exists cannot be asked for.
