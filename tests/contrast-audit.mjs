@@ -35,10 +35,32 @@ const res = await page.evaluate(() => {
   const L = c => { const f=v=>{v/=255; return v<=0.03928?v/12.92:((v+0.055)/1.055)**2.4;};
     return 0.2126*f(c[0])+0.7152*f(c[1])+0.0722*f(c[2]); };
   const parse = s => (s.match(/[\d.]+/g)||[]).map(Number);
+  /* A GRADIENT BETWEEN TWO IDENTICAL COLOURS IS A FLAT FILL, and it paints ON TOP
+     of backgroundColor. Walking ancestors for backgroundColor alone used to read
+     straight through one and report the colour underneath, which is a background
+     no player has ever seen.
+     .screen--today is exactly that shape and it is deliberate: its background-COLOR
+     carries the Bonehead's backdrop, because an iOS rubber-band pull is painted
+     from that property and nothing else, while a flat background-IMAGE covers the
+     content area so the page below the hero stays --bg. Reading only the colour
+     scored p.log-only at 1.27 against an olive backdrop the page does not show;
+     the pixels behind that text measure rgb(13,12,18) and 5.37. This does not
+     make the sweep laxer: it still returns the first opaque thing it meets, and a
+     gradient with two DIFFERENT colours is not flat, so it is skipped rather than
+     guessed at. */
+  const flatImage = cs => {
+    const m = (cs.backgroundImage || '').match(/rgba?\([^)]*\)/g);
+    if (!m || m.length < 2 || !m.every(c => c === m[0])) return null;
+    const c = parse(m[0]);
+    return (c.length >= 3 && (c[3] === undefined || c[3] > 0.95)) ? c : null;
+  };
   const bgOf = el => { // composite through ancestors until opaque
     let n=el;
     while(n && n!==document.documentElement){
-      const c=parse(getComputedStyle(n).backgroundColor);
+      const cs=getComputedStyle(n);
+      const img=flatImage(cs);
+      if(img) return img;
+      const c=parse(cs.backgroundColor);
       if(c.length>=3 && (c[3]===undefined || c[3]>0.95)) return c;
       n=n.parentElement;
     }

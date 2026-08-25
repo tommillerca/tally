@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 435, date: '2026-08-24', title: 'Stand in your friend\'s paddock with them', items: [
+    'When you visit a friend\'s paddock you are in it now. Your Bonehead stands across the field from theirs, the same size, facing them, so it reads as the two of you in one place rather than you looking at a picture of theirs.',
+    'The colour behind Today went back to normal. Yesterday\'s update let your Bonehead\'s backdrop colour leak down the whole screen, tinting the gaps around your quests and your day. That was a mistake on our side and it is fixed.',
+  ] },
   { n: 434, date: '2026-08-24', title: 'Pulling down no longer shows the edge of the app', items: [
     'When you pull down past the top of Today to see the wordmark, the background colour now carries all the way up with it instead of stopping and showing the dark page behind the app.',
   ] },

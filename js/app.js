@@ -9961,7 +9961,7 @@ async function renderFriends(el) {
          a sealed gift's payload and there is no payload on a ledger row. */
       const who = r.from || (String(r.label || '').match(/^(.+?)\s+cheered\b/i) || [])[1] || 'Someone in your Crew';
       return `<div class="cheer-row${isNew(r) ? ' unread' : ''}">
-        <span class="cheer-face">${c ? c.emo : ICONS.bone(22)}</span>
+        <span class="cheer-face">${c ? c.emo : ICONS.bone(24)}</span>
         <div class="cheer-tx">
           <b>${esc(who)}</b>
           <span class="cheer-said">${c ? esc(c.txt) : esc(r.label)}</span>
@@ -10798,6 +10798,9 @@ async function renderFriends(el) {
    --hero-edge on the root for .screen--today to paint with. Same-origin, so the
    canvas is never tainted; anything unexpected leaves the variable unset and the
    CSS falls back to --bg, which is today's behaviour. */
+/* Kept beside the sampler and pinned to app.css by a guard row, because the two
+   drifting apart is invisible until somebody reports a seam. */
+const HERO_ART_FILTER = 'saturate(0.92)';
 const _edgeCache = new Map();
 function paintHeroEdge(img) {
   if (!img || !img.currentSrc && !img.src) return;
@@ -10810,6 +10813,20 @@ function paintHeroEdge(img) {
       const c = document.createElement('canvas');
       c.width = 1; c.height = 1;
       const g = c.getContext('2d', { willReadFrequently: true });
+      /* THROUGH THE SAME FILTER THE ART IS DRAWN WITH. Tom, 2026-08-24: "there is
+         like a seam where you can see the line between where you filled and where
+         the boneheadz background finishes."
+         He was seeing a real step. .hero-backdrop carries filter: saturate(0.92)
+         (app.css), so the pixel the player sees is not the pixel in the file. On
+         the shipped background that is rgb(107,124,56) in the source against
+         rgb(108,123,61) on screen: five units of blue, which is exactly the kind
+         of edge the eye finds and the number does not.
+         Canvas runs the same filter grammar as CSS, so this asks the browser for
+         the answer rather than reimplementing the colour matrix and letting the
+         two drift. If a browser ignores ctx.filter we get the old unfiltered
+         colour, which is the seam and not a crash. HERO_ART_FILTER is asserted
+         against the stylesheet by tests/overscroll-wordmark-audit.mjs. */
+      try { g.filter = HERO_ART_FILTER; } catch { /* unsupported: unfiltered */ }
       /* the top-centre pixel: the edge the bounce actually reveals */
       g.drawImage(img, Math.floor(img.naturalWidth / 2), 0, 1, 1, 0, 0, 1, 1);
       const [r, gr, b, a] = g.getImageData(0, 0, 1, 1).data;
@@ -14745,7 +14762,8 @@ function openPetsHelp() {
  * already carries the player's own wardrobe on every row, and a friend's comes
  * off their crew snapshot, so both callers pass a real answer or an explicit
  * null and neither can fall through to the cache. */
-function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = null, coach = null }) {
+function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = null, coach = null, visitor = null }) {
+  const SCENE_W = 390;                       // the viewBox below, and the only place it is named
   const backdrop = `
     <svg class="pdk-ground" viewBox="0 0 390 520" aria-hidden="true">
       <g fill="#202a18">
@@ -14841,6 +14859,19 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
         <div class="pdk-keeper" style="left:${keeper.x - keeper.px / 2}px;top:${keeper.y - keeper.px / 2}px;width:${keeper.px}px;height:${keeper.px}px">
           ${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}
         </div>
+        ${/* THE VISITOR STANDS OPPOSITE. Tom, 2026-08-24: "can we make it so the
+             player that is visiting the paddock is on the opposite side ... bottom
+             right and theyll be same size as their friend's bonehead and then it
+             feels like theyre in the same space."
+             Mirrored across the scene's own width rather than positioned by hand,
+             so the two stand at matching insets from their edges at every width,
+             and at keeper.px so neither reads as the bigger person. Flipped
+             horizontally so they face each other: the same trick the Pit uses to
+             turn a pet toward its opponent. Nothing here is a control, so it is
+             pointer-events: none like the keeper. */''}
+        ${visitor ? `<div class="pdk-keeper pdk-visitor" style="left:${SCENE_W - keeper.x - keeper.px / 2}px;top:${keeper.y - keeper.px / 2}px;width:${keeper.px}px;height:${keeper.px}px">
+          ${avatarLayersHtml(visitor, { skip: ['BG', 'C'], noYard: true })}
+        </div>` : ''}
         ${roster.map(petHtml).join('')}
         ${lurkSp ? `<div class="pdk-lurker${lurkSp !== 'CX' ? ' pdk-lure-shiny' : ''}" data-pdk="${lurkSp}" style="left:296px;top:158px;width:96px;height:64px">
           <img src="${bhAsset(BH_BY_ID[lurkSp])}" alt=""><span class="pdk-eyes"><i></i><i></i></span>
@@ -14950,6 +14981,7 @@ async function openFriendPaddock(f) {
   const yard = p.yard && Array.isArray(p.yard.pets) ? p.yard : null;
   if (!yard || !yard.pets.length) return;
   const { placePaddock, PDK_SCENE, motionFor } = await import('./paddock.js');
+  const eqVisitor = await equipped();        // YOUR worn look, so you are in their field too
   const wear = yard.wear || null;             // THEIRS or bare, never undefined
   const roster = yard.pets.map((x, i) => ({ iid: `y${i}`, sp: x.sp, shiny: !!x.shiny, motion: motionFor(x.sp), wear }));
   const places = placePaddock(roster, PDK_SCENE, dateKey());
@@ -14957,7 +14989,7 @@ async function openFriendPaddock(f) {
   openSheet(`
     <div class="sheet-head"><h2>${esc(f.alias || f.name || 'Their')}'s Paddock</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" style="padding:0">
-      ${paddockSceneHtml({ roster, places, eggCount: 0, eq: p.outfit || { B: 'B0-1', SK: 'SK0-1' }, keeper: PDK_SCENE.KEEPER })}
+      ${paddockSceneHtml({ roster, places, eggCount: 0, eq: p.outfit || { B: 'B0-1', SK: 'SK0-1' }, keeper: PDK_SCENE.KEEPER, visitor: eqVisitor })}
       <div class="pdk-panel fpdk-note">
         <b>${yard.n} PET${yard.n === 1 ? '' : 'S'}</b>
         ${out < yard.n ? `<p class="note">${out} out in the field right now</p>` : ''}
@@ -18182,7 +18214,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v434'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v435'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
