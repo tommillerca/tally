@@ -9,11 +9,57 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
-## 📝 Tom's notes on v438, 2026-08-25 — LOGGED, INVESTIGATED, NOT BUILT
+## 📝 Tom's notes on v438, 2026-08-25 — BOTH SHIPPED in v441
 
-Both land on the same feature (the overscroll wordmark) and neither is built.
-Tom's instruction was to log them and hand over, so this is the finding and the
-options, not a change.
+Both land on the same feature (the overscroll wordmark). Both are BUILT and
+measured in v441; the investigation below is kept verbatim because two of its
+findings turned out to be wrong and the correction is more useful next to them
+than on its own. What shipped, and where each write-up was wrong:
+
+- **1, the seam: option 1 (composite the overlays into the sample).** Chosen over
+  2 and 3 because 2 changes how the hero LOOKS and is Tom's call, not an
+  implementer's, and 3 is "accept it" on a defect he has now reported twice.
+  Its named risk (a canvas copy of the grain drifting from the CSS) is removed
+  rather than accepted: the tile and its opacity are read off
+  `.hero-scene::after`'s own computed style, so there is no second definition.
+  **The decomposition below is WRONG on two counts, measured.** It is ONE layer,
+  not two: suppressing `.hero-scene::after` alone drops the rendered strip to
+  EXACTLY the fill, and suppressing `.hero-scene::before` changes nothing at all.
+  It cannot change anything: that gradient is `at 50% 46%` with radii `66% 44%`,
+  so the art's top-centre pixel sits at 104.5% along its ray while its last stop
+  is transparent at 68%. And "a pure grain mean does not reconcile all three
+  channels" assumed the grain were opaque; feTurbulence carries ALPHA, and at a
+  mean alpha of 0.38 one greyscale layer reproduces all three channels to within
+  half a unit. Measured after: fill rgb(111,125,65) against a rendered strip of
+  110.8/125.4/65.5.
+  One more trap for anyone reading the fix: an SVG image is RASTERISED at the
+  size it is drawn at, so drawing the grain tile straight into a 1x1 canvas runs
+  feTurbulence over a single pixel and returns one arbitrary sample of the noise
+  rather than its mean. That read closed the seam only from +2.8/+2.4/+4.5 to
+  +1.8/+1.4/+2.5. The tile has to be composited at its own size and the RESULT
+  averaged.
+- **2, the exit: option 1 (shorten the opacity only), and the guard named below
+  is not the one that bites.** Option 2 (`opacity: calc(--wm-pull * --wm-pull)`)
+  is called "the safe one" because LINEAR does not measure opacity. LINEAR is not
+  the problem; CURVE and EASED are, and they grade opacity directly with numeric
+  bounds: CURVE requires 0.45 at an 18px pull and EASED requires 0.80 at 27px,
+  and squaring gives 0.25 and 0.72. Option 2 is RED on both, and those two rows
+  exist because v414 and v415 shipped a dimmed mark that Tom could not see. So it
+  was never available.
+  **And what option 1 does NOT do, said plainly so it is not re-reported as a
+  regression.** `--wm-pull` is pinned at 1 for every pull past 36px, so between a
+  deep bounce and 36px the mark is at full opacity by design and the content
+  slides up under it. That is the same reveal Tom asked for on the way in, and no
+  symmetric change can tell the two directions apart. Removing that window needs
+  option 3's release-detecting state, which also fights this audit's row ordering
+  (COST sweeps to 120px and VISIBLE then pulls to 36, which a naive "the pull is
+  shrinking" detector reads as a release and blanks the mark). What option 1 does
+  take is the whole of the tail: measured off compositor frames on a driven
+  release, the last frame carrying wordmark ink moved from 326-353ms to
+  280-282ms against a release ending at ~360ms, i.e. a lead of 74-82ms where v440
+  had 8-33ms.
+
+The original write-up follows unchanged.
 
 ### 1. The fill and the art are still not the same colour — `BUG`
 

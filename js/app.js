@@ -10975,6 +10975,44 @@ async function renderFriends(el) {
 /* Kept beside the sampler and pinned to app.css by a guard row, because the two
    drifting apart is invisible until somebody reports a seam. */
 const HERO_ART_FILTER = 'saturate(0.92)';
+/* AND THROUGH THE GRAIN THE PLAYER SEES OVER IT. Tom, 2026-08-25: "there is still
+   a slight seam you can tell the colour of my boneheadz background and the
+   wordmark background is not identical."
+   MEASURED, on the shipped backdrop at 430x932: the fill is rgb(108,123,61) and
+   the art's top row as RENDERED is rgb(110.8,125.4,65.5), averaged over 240
+   columns and stable to 0.1 across the top six rows. Killing `.hero-scene::after`
+   alone drops the rendered row to EXACTLY rgb(108,123,61), i.e. to the fill. So
+   the residual is the 7% grain and nothing else.
+   ROADMAP said it was two layers, the grain AND the warm radial `.hero-scene
+   ::before`, and that is wrong: that gradient is `at 50% 46%` with radii
+   `66% 44%` and its last stop is transparent at 68%, so the art's TOP-CENTRE
+   pixel sits at 104.5% along its ray and takes zero of it. Suppressing it changed
+   nothing, measured. Its "solving for a pure grain mean does not reconcile all
+   three channels" also assumed the grain were opaque; feTurbulence carries ALPHA,
+   and at mean alpha 0.38 one greyscale layer reproduces all three channels to
+   within half a unit.
+   READ OUT OF THE STYLESHEET, NOT COPIED INTO HERE. The tile and its opacity come
+   off `.hero-scene::after`'s own computed style, so there is no second definition
+   of the grain to drift from the CSS: the risk ROADMAP names for this option is
+   removed rather than accepted, and the browser does the alpha compositing, so no
+   magic number lands in this file either. */
+const HERO_GRAIN_SEL = '.hero-scene';
+let _grain = null;
+function heroGrain() {
+  if (_grain) return _grain;
+  const el = document.querySelector(HERO_GRAIN_SEL);
+  const cs = el && getComputedStyle(el, '::after');
+  /* ANCHORED, AND NOT `[^)]`. The tile is an SVG data URI that itself contains
+     `url(%23g)`, so a lazy "up to the first bracket" match returns a truncated,
+     undecodable URI and the composite silently never happens. Computed style
+     always hands back a single quoted url() here. */
+  const m = cs && cs.backgroundImage.trim().match(/^url\("(.+)"\)$/);
+  const alpha = cs ? parseFloat(cs.opacity) : 0;
+  if (!m || !(alpha > 0)) return null;
+  _grain = { img: new Image(), alpha };
+  _grain.img.src = m[1];
+  return _grain;
+}
 const _edgeCache = new Map();
 function paintHeroEdge(img) {
   if (!img || !img.currentSrc && !img.src) return;
@@ -11003,13 +11041,49 @@ function paintHeroEdge(img) {
       try { g.filter = HERO_ART_FILTER; } catch { /* unsupported: unfiltered */ }
       /* the top-centre pixel: the edge the bounce actually reveals */
       g.drawImage(img, Math.floor(img.naturalWidth / 2), 0, 1, 1, 0, 0, 1, 1);
-      const [r, gr, b, a] = g.getImageData(0, 0, 1, 1).data;
+      const [r0, g0, b0, a] = g.getImageData(0, 0, 1, 1).data;
       if (!a) return;
-      const v = `rgb(${r} ${gr} ${b})`;
+      /* THE ART-ONLY VALUE IS WRITTEN FIRST AND THE GRAIN IS A SEPARATE TRY, so a
+         browser that refuses to draw the SVG tile (or taints on it) loses three
+         units of colour and not the whole fill: an unset --hero-edge falls back
+         to --bg, which is v434's hard edge and a far worse regression than the
+         seam this closes. Only a composited read is cached. */
+      const flat = `rgb(${r0} ${g0} ${b0})`;
+      put(flat);
+      const gt = heroGrain();
+      if (!gt || !gt.img.complete || !gt.img.naturalWidth) return;
+      let v = flat;
+      try {
+        /* AT THE TILE'S OWN SIZE, AND NOT STRAIGHT DOWN TO 1x1. An SVG image is
+           RASTERISED at the size it is drawn at, so drawing this one into a 1x1
+           runs feTurbulence over a single pixel and returns one arbitrary sample
+           of the noise instead of its mean. Measured: that read closed the seam
+           only from +2.8/+2.4/+4.5 to +1.8/+1.4/+2.5, and it would land somewhere
+           different on another raster. Painting the flat colour, compositing the
+           tile over it at its natural size and averaging the RESULT is the mean
+           the eye sees, and the browser does the alpha compositing rather than
+           this file re-deriving it. */
+        const T = gt.img.naturalWidth || 150;
+        const c2 = document.createElement('canvas'); c2.width = T; c2.height = T;
+        const g2 = c2.getContext('2d', { willReadFrequently: true });
+        g2.fillStyle = flat; g2.fillRect(0, 0, T, T);
+        g2.globalAlpha = gt.alpha;
+        g2.drawImage(gt.img, 0, 0, T, T);
+        const d = g2.getImageData(0, 0, T, T).data;
+        let sr = 0, sg = 0, sb = 0;
+        for (let i = 0; i < d.length; i += 4) { sr += d[i]; sg += d[i + 1]; sb += d[i + 2]; }
+        const n = d.length / 4;
+        v = `rgb(${Math.round(sr / n)} ${Math.round(sg / n)} ${Math.round(sb / n)})`;
+      } catch { return; /* tainted by the tile: keep the flat value, do not cache */ }
       _edgeCache.set(key, v); put(v);
     } catch { /* tainted or unreadable: leave --hero-edge unset, CSS falls back */ }
   };
   if (img.complete) read(); else img.addEventListener('load', read, { once: true });
+  /* The tile is a data: URI and decodes in a tick, but "usually ready" is how the
+     un-composited value ships. Nothing is cached until it IS ready, so a second
+     read on its load costs one canvas op and closes the race. */
+  const gt = heroGrain();
+  if (gt && !gt.img.complete) gt.img.addEventListener('load', read, { once: true });
 }
 
 if (typeof window !== 'undefined' && navigator.webdriver) window.__openFriendProfile = (f, opts) => openFriendProfile(f, () => {}, opts || {});
@@ -18402,7 +18476,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v440'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v441'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
