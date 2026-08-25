@@ -27,6 +27,11 @@
   --line-strong: rgba(242, 233, 215, 0.17);
   --text: #f2e9d7;
   --text-2: #b9ac97;
+  --app-backdrop:
+    radial-gradient(85% 50% at 22% 8%, rgba(96,74,150,.20), transparent 58%),
+    radial-gradient(80% 48% at 90% 26%, rgba(52,80,120,.15), transparent 56%),
+    radial-gradient(120% 58% at 50% 112%, rgba(110,80,168,.20), transparent 60%),
+    linear-gradient(#08070e 0%, #0b0a15 46%, #0f0d1c 76%, #131120 100%);
   --text-3: #8f8578;   /* 5.00:1 on --surface. #7d7365 was 3.89:1 and carried 16 of the 21 failing pairs on Today */
   --accent: #a5e847;
   --accent-ink: #16210b;
@@ -99,12 +104,10 @@ input, textarea, select, [contenteditable] {
 .code-line { -webkit-touch-callout: default; }
 
 body {
-  /* Midnight backdrop: on-brand near-black with a faint purple/blue depth + glow */
-  background:
-    radial-gradient(85% 50% at 22% 8%, rgba(96,74,150,.20), transparent 58%),
-    radial-gradient(80% 48% at 90% 26%, rgba(52,80,120,.15), transparent 56%),
-    radial-gradient(120% 58% at 50% 112%, rgba(110,80,168,.20), transparent 60%),
-    linear-gradient(#08070e 0%, #0b0a15 46%, #0f0d1c 76%, #131120 100%);
+  /* Midnight backdrop: on-brand near-black with a faint purple/blue depth + glow.
+     A TOKEN because Today's scroller has to paint the identical thing over its
+     own bounce colour; see .screen--today. One declaration, so they cannot drift. */
+  background: var(--app-backdrop);
   background-attachment: fixed;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
@@ -264,7 +267,102 @@ svg { display: block; }
    travel, because a scroll-linked position is direct manipulation and not an
    animation; it is one line of CSS below rather than a branch in the listener.
    Guard: tests/overscroll-wordmark-audit.mjs */
-.screen--today { position: relative; }
+/* AND THE SCROLLER CARRIES THE ART'S OWN TOP EDGE, so a bounce does not uncover
+   the page behind the app. Tom, 2026-08-24: "you didnt extend the coloured
+   backdrop far enough when i pull down i can see the wordmark but the background
+   colour just stops and shows that we are actually at the edge of the app."
+   --hero-edge is sampled from the equipped backdrop at render time (paintHeroEdge
+   in js/app.js) because the backdrop is a cosmetic; it falls back to --bg, which
+   is exactly the old behaviour, if the sample ever fails. The block above
+   .hero-scene carries why this shape and not the other one. */
+/* TWO LAYERS, AND THE SPLIT IS THE POINT. Tom, 2026-08-24: "the background is now
+   extending all down the app by the quests etc, that has changed to the background
+   colour I have for my bonehead."
+   He is right and the first version was one line too broad. The rubber band is
+   painted from the scroller's background-COLOR, which is the only thing WebKit
+   shows there, so that has to carry the art's edge. But a colour also shows
+   through every transparent gap in the page below, and Today has plenty: the four
+   doors sit on 68px of nothing and the seams between cards are more.
+   A background-IMAGE paints over the colour across the content area and stops at
+   it, so a player reading the page sees --bg everywhere, and the art's colour
+   survives only where a bounce uncovers it. */
+/* THE BOUNCE IS PAINTED FROM background-COLOR AND NOTHING ELSE. That is not a
+   guess this time, it is the measurement already in this file at the top: on a
+   booted iPhone 17 Pro, in a 126pt-deep held bounce, the exposed strip was the
+   scroller's own background COLOUR edge to edge and ZERO px of anything else,
+   with four other forms tried in the same page (a ::before at bottom:100%, a real
+   div at bottom:100%, and a background-image at center -60px with attachment
+   local AND scroll). WebKit sizes the scrolled-contents layer to the
+   scrollable-overflow rect, which starts AT the origin, and fills the rubber-band
+   region from that layer's solid backgroundColor. Nothing above the origin is in
+   that layer.
+
+   I ignored that note and burned three builds on it:
+     v434  background-color only        -> bounce right, but the colour showed
+                                           through every transparent gap
+     v435  + an opaque background-image -> "no colour background above by the
+                                           wordmark", and the page went flat black
+     v436  no background, a ::before    -> still no colour, and the wordmark
+           strip parked above the origin   lingered on release
+   An opaque background-IMAGE is what breaks it: the layer no longer has a simple
+   solid background for the compositor to promote. background-repeat cannot save
+   that, because a gradient auto-sizes to the whole positioning area, so repeat
+   and no-repeat render identically. So this element carries a COLOUR and no image
+   at all, forever.
+
+   THE PAGE IS COVERED FROM INSIDE THE CONTENT INSTEAD. .today-plate is an in-flow
+   first child, so it begins at the scroll origin and can never reach the strip;
+   sticky keeps it over the viewport as the page scrolls, which is how it matches
+   body's fixed-attachment backdrop; and the negative margin removes its height so
+   it changes no layout. It is a sibling rather than a wrapper on purpose:
+   `.screen > .route-in` drives the route animation off DIRECT children, and
+   wrapping Today's fifteen nodes would have silently killed it. */
+/* isolation, and it is not decoration: .today-plate sits at z-index -1 so it
+   paints behind Today's content, and a negative child paints into its nearest
+   STACKING CONTEXT. Without this the scroller is not one, the plate escapes to
+   #app, and it lands behind the scroller's own background-colour instead of over
+   it. Measured: every page pixel came back as the backdrop colour, i.e. the v434
+   bleed at full strength. */
+.screen--today { position: relative; isolation: isolate; background-color: var(--hero-edge, var(--bg)); }
+.today-plate {
+  /* ZERO HEIGHT, AND THE PAINT IS IN THE PSEUDOS. The first version was 100vh
+     tall with margin-bottom: -100vh to cancel itself. Margins do not cancel, they
+     COLLAPSE: the plate's -100vh collapsed with .hero-card's own negative top
+     margin (the island bleed) and the most negative won, so the hero lost its
+     bleed and every card below shifted ~69px down. today-peek caught it, nine
+     rows at two viewports. A box with no height and no margins cannot do that.
+     Sticky still pins it to the top of the scrollport for the whole scroll, which
+     is how it matches body's fixed-attachment backdrop, and being in flow it
+     starts AT the scroll origin so it can never paint into the bounce. */
+  position: sticky; top: 0; z-index: -1; height: 0;
+  pointer-events: none;
+}
+/* THE BACKDROP. Positioned off the plate rather than inset:0, because the plate
+   has no height to inset from, and pushed out through .screen's var(--pad) side
+   padding: an in-flow child inherits that inset, which measured as a strip of the
+   Bonehead's backdrop colour down both edges of the page.
+   background-COLOR as well as the gradients, and it is load-bearing twice: it is
+   what makes the plate opaque enough to hide the bounce colour, and it is what
+   tests/contrast-audit.mjs's ancestor walk stops on, so Today's text is graded
+   against the page rather than against whatever backdrop is equipped. */
+.today-plate::before {
+  content: ''; position: absolute;
+  top: 0; height: 100vh;
+  left: calc(-1 * var(--pad)); right: calc(-1 * var(--pad));
+  background-color: var(--bg);
+  background-image: var(--app-backdrop);
+  background-attachment: fixed;
+}
+/* The film grain body paints over the whole app. body::before sits under #app, so
+   an opaque plate hides it and Today alone would go smooth: the mean colour would
+   still measure right while the texture disappeared. */
+.today-plate::after {
+  content: ''; position: absolute;
+  top: 0; height: 100vh;
+  left: calc(-1 * var(--pad)); right: calc(-1 * var(--pad));
+  background-image: var(--grain); background-size: 150px 150px;
+  opacity: .5; mix-blend-mode: soft-light;
+}
 #app:has(.screen--today)::before {
   /* z-index 3, ON TOP OF THE ART. Tom, 2026-08-24: "yeah draw the wordmark on top
      of the art instead of behind".
@@ -1780,42 +1878,51 @@ body::before {
    Re-deriving two guards' reference points to make my own change pass is the
    exact move this repo forbids, so it waits for someone to do that deliberately,
    on its own, with prove-reds. */
-/* THE BOUNCE MUST NOT SHOW THE EDGE OF THE APP. Tom, 2026-08-24: "you didnt
-   extend the coloured backdrop far enough when i pull down i can see the wordmark
-   but the background colour just stops and shows that we are actually at the edge
-   of the app."
-   The scene's box reaches y=0 but an overscroll bounce drags it DOWN, and what it
-   uncovers is the scroller's own background, which was page navy. Extending the
-   box further up cannot fix it: a bounce has no fixed size.
-   So the SCROLLER carries the art's own top-edge colour. --hero-edge is sampled
-   from the equipped backdrop at render time (js/app.js), because the backdrop is a
-   cosmetic and a hard-coded olive would be wrong for every other one. It falls
-   back to --bg, which is exactly today's behaviour, if sampling ever fails. */
-/* THE BOUNCE STILL SHOWS THE EDGE OF THE APP, and it is not shipped because the
-   fix and the guard collide. Tom, 2026-08-24: "you didnt extend the coloured
-   backdrop far enough when i pull down i can see the wordmark but the background
-   colour just stops and shows that we are actually at the edge of the app."
+/* THE BOUNCE MUST NOT SHOW THE EDGE OF THE APP, AND AS OF 2026-08-24 IT DOES NOT.
+   Tom: "you didnt extend the coloured backdrop far enough when i pull down i can
+   see the wordmark but the background colour just stops and shows that we are
+   actually at the edge of the app."
 
-   Two shapes were built and both work visually: painting the scroller
-   (.screen--today) with the art's sampled edge colour, and hanging a 420px fill
-   off .hero-card's top edge. Measured on a faithful bounce, the revealed strip
-   goes from page navy to rgb(107,124,56), continuous with the art's rgb(112,126,68)
-   just below it.
+   The scene's box reaches y=0, but an overscroll bounce drags the content DOWN
+   and what it uncovers is the SCROLLER's own background. Extending the box
+   further up cannot fix that: a bounce has no fixed size. So the scroller carries
+   the art's own top-edge colour, and the rule is up with .screen--today.
 
-   BOTH BREAK overscroll-wordmark-audit, and for the same unavoidable reason: three
-   of its rows (MECHANISM, SAMPLE, LINEAR) find the mark by LUMINANCE, and any fill
-   bright enough to look like the art is also bright enough to read as ink. Raising
-   the threshold does not help either: measured, the top strip already contains
-   pixels at luminance 252 (the Gwart plaque is near-white), so no single number
-   separates mark from content.
+   THE COLOUR IS SAMPLED, NOT WRITTEN DOWN. The backdrop is an equipped cosmetic,
+   so a hard-coded olive would be wrong for every other one. paintHeroEdge in
+   js/app.js reads the top-centre pixel of the equipped backdrop into --hero-edge;
+   the fallback is --bg, which is exactly the old behaviour, if the sample fails.
 
-   The real fix is to move those three rows onto the difference technique the REST,
-   INK and VISIBLE rows already use, which is immune to what is behind the mark.
-   They are time-series rows sampled across a running transition, so it is not the
-   same one-line swap, and it is not work to rush. --hero-edge is sampled and ready
-   in js/app.js (paintHeroEdge); uncomment one of the two rules above it once those
-   rows can see past the colour. */
+   WHY THE SCROLLER AND NOT A FILL HUNG OFF THE CARD, which was the other shape
+   built and is the one that measures fine and would have shipped blind. A 420px
+   `.hero-card::before` at `bottom: 100%` lives INSIDE the scroller and above its
+   content origin, and this repo has already measured, on a booted iPhone 17 Pro,
+   that NOTHING parked above a WKWebView scroller's content origin paints into the
+   rubber-band strip: four forms tested in one page, including that exact one,
+   zero pixels each. WebKit fills the rubber-band region from the scrolled-contents
+   layer's solid backgroundColor, and a background COLOUR on the scroller is the
+   one thing that mechanism does honour. The card fill would have looked right in
+   Chromium and been invisible on Tom's phone, which is the same mistake that
+   shipped three times as the wordmark itself. See the block above
+   #app:has(.screen--today)::before for that measurement.
 
+   MEASURED, on a bounce that translates the scroller's CHILDREN and not the
+   scroller (translating the scroller takes its background with it and measures
+   nothing):
+     before   the revealed strip is page navy, rgb(24,20,38) fading to rgb(10,9,17)
+     after    rgb(107,124,56) edge to edge, against the art's rgb(109,124,64) to
+              rgb(113,127,69) in the rows just below it
+   AND IT COSTS NOTHING AT REST. Whole-viewport A/B with animation and transitions
+   frozen, at the top of Today, scrolled 600 and scrolled to the bottom: the fill
+   changes zero pixels the content was not already covering.
+
+   IT WAS BLOCKED FOR A RELEASE, and the blocker was the guard rather than the
+   fix. Three rows of tests/overscroll-wordmark-audit.mjs found the mark by
+   LUMINANCE, so any fill bright enough to look like the art also read as ink.
+   Raising the threshold was measured and does not work: the strip already
+   contains pixels at luminance 252 because Gwart's plaque is near-white. Those
+   rows are on difference detection now, which is immune to what is behind the
+   mark, and the audit's header carries their prove-reds. */
 .hero-scene {
   --bleed: calc(var(--sat) + 14px);
   margin-top: calc(-1 * var(--bleed));
@@ -3541,6 +3648,15 @@ body::before {
    the rarity glow, not a badge, because at 54px a badge is bigger than the pet. */
 .fp-yard-pet.shiny { border-color: rgba(255, 201, 97, .55); box-shadow: 0 0 10px rgba(255, 201, 97, .3); }
 .fp-yard-more { margin: 6px 0 0; text-align: center; }
+/* The way through to their field (openFriendPaddock). The shelf above it is the
+   evidence; this is the door. */
+.fp-yard-go { width: 100%; margin-top: 10px; }
+/* A friend's paddock has no collection panel to mount (their bonds and levels
+   never leave their phone), so the panel below the scene is just the count. */
+.pdk-panel.fpdk-note { min-height: 0; padding: 18px 14px 26px; text-align: center; }
+.fpdk-note b { font-family: var(--display); font-weight: 400; font-size: 22px;
+  color: var(--gold); letter-spacing: .06em; }
+.fpdk-note .note { margin: 4px 0 0; }
 .fp-real { font-size: 12px; color: var(--text-3); margin-top: 4px; }
 .fp-alias { margin-top: 16px; }
 .fp-alias .nb-lab { display: flex; align-items: baseline; gap: 6px; }
@@ -9207,6 +9323,32 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   animation: pdkKeeper 4s ease-in-out infinite alternate; }
 @keyframes pdkKeeper { from { transform: translateY(0); } to { transform: translateY(-7px); } }
 .pdk-keeper img { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* The visitor faces the keeper. Flipping the CONTAINER rather than each layer
+   keeps the avatar stack composited as one, which is what the Pit learned when
+   mirroring a pet turned its accessories inside out. */
+/* MIRROR THE GUEST, WHO STANDS ON THE RIGHT. THE ART FACES RIGHT.
+   Tom, twice. First: "the friend bonehead should be mirrored so it looks like
+   they're hanging out not just both facing away." I flipped the HOST and got:
+   "you flipped the wrong bonehead in the paddock so theyre back to back."
+   The art faces RIGHT, so the host on the LEFT is already looking inward and must
+   not be touched; it is the guest on the right who has to turn around. Confirmed
+   in the codebase, not just from the reports: js/pets.js's FACES_LEFT set holds
+   exactly one id, which is the house convention written down.
+
+   `scale`, NOT `transform`, AND ON THE CONTAINER. Two separate traps, both hit:
+   1. v435 put `transform: scaleX(-1)` on .pdk-visitor. It did nothing, because
+      .pdk-keeper runs `animation: pdkKeeper` on TRANSFORM and an animation beats
+      a normal declaration. `scale` is its own property and composites with an
+      animated `transform` instead of being eaten by it, so it survives. Both
+      candidate containers animate transform (.bh-anim runs bh-idle), so there was
+      no un-animated container to use.
+   2. The next version moved it onto `img` to dodge trap 1. That splits the
+      figure: avatarLayersHtml emits the weapon's charge as a `<span
+      class="wpn-sheen">`, NOT an img, masked by and registered to the unflipped
+      weapon art. Flipping only the imgs sweeps the glint across the empty side of
+      the body while the blade stays dark, for anyone carrying an epic or better.
+      Flipping the CONTAINER carries the whole stack, sheen included. */
+.pdk-scene.pdk-shared .pdk-visitor { scale: -1 1; }
 /* lurker tease: hidden most of a 13s cycle, rises briefly; silhouette treatment */
 .pdk-lurker { position: absolute; z-index: 3; overflow: hidden; }
 .pdk-lurker img { filter: brightness(0); opacity: .72; display: block; width: 100%;

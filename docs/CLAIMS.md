@@ -19,6 +19,65 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v438
+
+1. PROOF: friend-paddock-audit.mjs (VISITOR: left-not-mirrored, right-mirrored, and a SPLIT row, each proved red alone on its own tree) | REACH: Open a friend's paddock from their profile. You and your friend face each other across the field. The flip is on the figure's container via the `scale` property, not on its layers and not on `transform`: `transform` is animated on that element so a mirror written there is discarded every frame (which is why v435 did nothing at all), and flipping the layers alone leaves the weapon's charge sweeping the wrong side of the body, because that glint is a masked span rather than an image.
+2. PROOF: today-peek-audit.mjs (BOUNCE + four PLATE rows + the existing magenta BLEED row; contrast-audit.mjs also reds on the same defect) | REACH: On Today the page behind and between your cards is the app's own backdrop, grain and all, and pulling down past the top opens a strip in your Bonehead's backdrop colour. Measured in one run at three scroll depths: forcing the backdrop colour to magenta changes NOTHING on the page (zero bleed), the means match the pre-v434 page exactly at every sample point, and the grain survives (luminance variance 2.72/1.70/2.91 against the old page's 2.53/1.54/3.10).
+
+THE BOUNCE HALF OF 2 IS NOT VERIFIED IN THIS SESSION, AND SAYING SO IS THE POINT.
+The scroller's background is now byte-for-byte the v434 configuration, a
+background-COLOR and no image, which is the state Tom confirmed looked "very
+good" and the only state this repo has ever measured filling the rubber band (see
+the on-device note at the top of app.css: a 126pt held bounce on a booted iPhone
+17 Pro showed the scroller's colour edge to edge and zero pixels of four other
+forms). What is new is only that the page no longer relies on that colour being
+hidden. I tried to re-measure the bounce on the simulator and could not: a drag in
+mobile Safari triggers Safari's own pull-to-refresh rather than the app's inner
+scroller, and the service worker may serve cached CSS on top of that. So this
+rests on the earlier device measurement plus Tom's own report of v434, not on
+anything I ran today.
+
+## v437
+
+1. PROOF: unit.test.js ("every cosmetic any tier can be asked for is on disk", proved red by hiding assets/bh/thumb/192/C/C6.png), thumb-freshness-lint.mjs (FRESH + the MISSING half of both CONTROL rows) | REACH: Own Bumbleseal, open your Bonehead and tap Collection. Her tile draws her instead of a broken-image icon with "Bumblesea" spilling over it. Measured in the running app on e2cb252d with 363 cells on screen: 404 on assets/bh/thumb/192/C/C6.png, naturalWidth 0, and that tile is a bare <img> with no onerror to fall back with. 200 and naturalWidth 192 after. Anyone who does not own her never saw this and sees no change.
+2. PROOF: thumb-freshness-lint.mjs (FRESH, proved red with the sixteen files restored to their pre-fix bytes: 18 drifted), memory-census.mjs (the four TIER rows, so the fix cannot have been bought by serving bigger art) | REACH: Open Collection, the Crew cards, the leaderboard or the melt bench and look at the banner, either torch, either shovel or any of the three grillz. They are the drawing Cam has had on the big screens since 2026-08-16 rather than the one before it. Measured off the render at deviceScaleFactor 3 across 16 surfaces: the eight items change, every other pixel on every surface is identical, and nothing is drawn at a different size or from a smaller source than before.
+
+## v436
+
+1. PROOF: today-peek-audit.mjs (AMBIENT + FILL, each proved red alone: a background put back on the scroller, and the strip's colour removed) | REACH: On Today, the page behind your quests and your day is the app's own dark purple again rather than flat black, and pulling down past the top opens a strip in your Bonehead's backdrop colour under the wordmark. Measured A/B in one run: byte-identical to the pre-v434 page at all four sample points, where the v435 build read rgb(13,12,18) at every one.
+2. PROOF: friend-paddock-audit.mjs (VISITOR FACING, proved red on three separate trees: host flipped, guest flipped, neither) | REACH: Open a friend's paddock from their profile. You and your friend face each other across the field instead of standing back to back. Nothing about your friend has to change.
+3. PROOF: memory-census.mjs (the OFF-DOM and TIER rows), unit.test.js ("every cosmetic the cropped tier can be asked for is on disk") | REACH: Open your Bonehead and tap Wardrobe. The hat tiles are drawn from art cut to the hat instead of a full-body square, so they are less soft. Measured per item on the rendered tiles rather than claimed: 51 of 57 hats land closer to the 640px master (RMS error 22.6 to 10.2), 52 are drawn from more source pixels, none from fewer, and no tile's art moved by more than 2px. The same screen decodes 39.8 MB of source bitmaps at once before and 10.8 MB after.
+
+## v435
+
+1. PROOF: friend-paddock-audit.mjs (CONTROL VISITOR / VISITOR x2, each proved red on its own defect: visitor absent, both figures on one side, visitor at half height) | REACH: Open Crew, tap a friend's card once to centre it and again to open their profile, then tap "Visit their paddock" under their pets. Your own Bonehead is standing in their field on the right, the same size as theirs on the left, turned to face them. Nothing about your friend has to change for this: it is your figure, drawn from your own equipment, on your own screen.
+2. PROOF: today-peek-audit.mjs (CONTROL BLEED + BLEED, proved red by removing the fix: 3 of 4 gaps bleed) | REACH: On Today, the page behind and between your quests and your day is the normal dark page again, whatever backdrop your Bonehead is wearing. This is a fix for a regression shipped in v434, so a player on v434 is the one who saw it.
+
+NOT CLAIMED IN v435, DELIBERATELY. The build also changes how the pull-down fill
+colour is sampled: it now reads the backdrop through the same `saturate(0.92)`
+the art is displayed with, which removes a five-unit blue step at the join
+(tests/today-peek-audit.mjs SEAM, proved red at delta 5). It is a real fix and it
+is in this build, but it is not in the player notes, because a smaller residual
+survives that no flat colour can remove: .hero-scene composites a 7% grain and a
+warm radial gradient over the art, lifting the rendered edge by a further
++3/+2/+4 with no hue shift. Whether that still reads as a line is a question for
+Tom's eyes, not for a measurement, and "the seam is gone" is exactly the kind of
+note this file exists to stop us writing before somebody has looked. It gets a
+note in a later build if he confirms it, and more work if he does not.
+
+## v434
+
+1. PROOF: overscroll-wordmark-audit.mjs | REACH: On Today, pull down past the top. The strip you open up is the same colour as the art above your Bonehead instead of turning into the dark page behind the app, so pulling reveals the wordmark and not the edge of the screen. It follows whichever backdrop you have equipped.
+
+## v433
+
+1. PROOF: friend-paddock-audit.mjs | REACH: Open Crew, tap a friend's card once to centre it and again to open their profile, then tap "Visit their paddock" under their pets. You land in their field with their herd in it. A friend still on an older build has no paddock and no button offering one, which is the honest empty state rather than an empty field.
+
+## v432
+
+1. PROOF: kitchen-queue-audit.mjs | REACH: Open the Kitchen from Today. The empty pot card shows a cauldron, not a cookbook.
+2. PROOF: today-peek-audit.mjs | REACH: Open Today on a phone with a notch or an island. The coins and chips sit just under the top edge instead of with a gap above them.
+
 ## v431
 
 1. PROOF: transmog-clarity-audit.mjs | REACH: Open your Bonehead, tap a gear slot, and the look panel shows your Bonehead before and after right above the tiles. On for everyone; ?mogv2=0 returns the old screen if a bisect ever needs it.

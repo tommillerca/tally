@@ -3,6 +3,33 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 438, date: '2026-08-24', title: 'The two of you face each other, and Today\'s background is right', items: [
+    'In a friend\'s paddock you and your friend now actually look at each other. Yesterday\'s update turned the wrong one around and left you back to back.',
+    'The background on Today is the app\'s own again, and the colour behind the Boneheadz wordmark is back when you pull down past the top.',
+  ] },
+  { n: 437, date: '2026-08-24', title: 'Bumbleseal has a picture again', items: [
+    'If you own Bumbleseal, her tile in your Collection was a broken image with her name spilling out over it. She is drawn in there properly now.',
+    'Eight pieces of gear were showing an older drawing in the small tiles: the banner, both torches, both shovels and the three grillz. The big screens have shown the current art since Cam redrew it, so the same item looked like two different things depending on where you saw it. They match again.',
+  ] },
+  { n: 436, date: '2026-08-24', title: 'Your friend\'s paddock, the Wardrobe, and the colour behind Today', items: [
+    'When you visit a friend\'s paddock the two of you face each other now, instead of standing back to back at opposite ends of the field.',
+    'The colour behind Today is the app\'s own again. Yesterday it went flat black and the colour stopped appearing when you pulled down past the top. Both fixed.',
+    'Every piece of gear is drawn on a full-body square so it lines up when eight layers stack on your Bonehead, and the Wardrobe was showing you those squares: a hat tile was mostly empty space with a small hat in it, blown up to fill the cell. The tiles now use a copy cut down to the item itself, so a hat is drawn from about three times as many of Cam\'s pixels as before and the screen loads about a third of the picture data it used to.',
+  ] },
+  { n: 435, date: '2026-08-24', title: 'Stand in your friend\'s paddock with them', items: [
+    'When you visit a friend\'s paddock you are in it now. Your Bonehead stands across the field from theirs, the same size, facing them, so it reads as the two of you in one place rather than you looking at a picture of theirs.',
+    'The colour behind Today went back to normal. Yesterday\'s update let your Bonehead\'s backdrop colour leak down the whole screen, tinting the gaps around your quests and your day. That was a mistake on our side and it is fixed.',
+  ] },
+  { n: 434, date: '2026-08-24', title: 'Pulling down no longer shows the edge of the app', items: [
+    'When you pull down past the top of Today to see the wordmark, the background colour now carries all the way up with it instead of stopping and showing the dark page behind the app.',
+  ] },
+  { n: 433, date: '2026-08-24', title: 'Walk into a friend\'s paddock', items: [
+    'A friend\'s paddock is a place you can walk into now, not a row of thumbnails. Open their profile from Crew and tap "Visit their paddock": you come out in their field, their pets grazing in it, wearing whatever your friend has put on them, with their Bonehead standing at the gate. It is the same field you see your own herd in. A friend who has not updated yet has no field to visit, and no button offering one.',
+  ] },
+  { n: 432, date: '2026-08-24', title: 'The Kitchen has a cauldron in it', items: [
+    'The empty pot in the Kitchen is a cauldron now instead of a cookbook. It sits under a heading that says Cauldrons on a card that says Empty pot, so a book was the one thing in that corner not telling you where you were.',
+    'The currencies on Today sit properly under the top of the screen again, instead of floating with a gap above them.',
+  ] },
   { n: 431, date: '2026-08-24', title: 'Dressing up makes sense now, and the art runs to the top of the phone', items: [
     'Changing how a piece looks is a different screen. Your Bonehead is right there above the choices showing before and after, so you can see what you are buying instead of scrolling up to check. It says what you keep, what you get and what you pay, in that order, and nothing is taken until you confirm.',
     'The game art now runs all the way to the top of the phone, behind the clock and the camera, instead of stopping in a line and leaving a dead strip.',

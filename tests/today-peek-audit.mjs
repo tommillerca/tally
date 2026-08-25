@@ -399,6 +399,199 @@ for (const cfg of CONFIGS) {
   await unInject(page);
 }
 
+
+/* SEAM. Tom, 2026-08-24: "there is like a seam where you can see the line between
+   where you filled and where the boneheadz background finishes."
+   --hero-edge is sampled by drawing the backdrop into a canvas and reading its
+   top-centre pixel, but the player sees that art through `filter: saturate(0.92)`
+   on .hero-backdrop. The sampler read the source and the screen showed the
+   filtered version, so the fill sat five units of BLUE away from the art it was
+   meant to continue: rgb(107,124,56) against rgb(108,123,61). A hue step is
+   exactly the kind of edge the eye finds, which is why he saw a line.
+
+   This grades the sampler against the filtered source, and demands an EXACT match
+   rather than a tolerance. That is deliberate. The obvious alternative, comparing
+   --hero-edge to a pixel screenshotted off the rendered page, is the one I tried
+   first and it cannot be made tight: .hero-scene composites a 7% grain (::after)
+   and a warm radial gradient (::before) over the art, which lifts the rendered
+   strip to rgb(111,125,65), a further +3/+2/+4 that a flat background-color has no
+   way to reproduce. That left a ceiling of 4 against a defect of 7 and no honest
+   margin. Both sides here come from the same source image, so the reading has no
+   grain in it at all and the only thing that can move it is the bug.
+   Measured: 0 with the filter applied, 5 with it removed (prove-red: replace
+   `g.filter = HERO_ART_FILTER` with 'none' in a tar-built throwaway).
+   The +3/+2/+4 overlay residual is real and is NOT graded here: it is a uniform
+   lift with no hue shift, and it is reported to Tom rather than hidden in a
+   tolerance. Horizontal variation was ruled out by measurement, not assumed: the
+   backdrop's top row is one flat colour, spread [0,0,0] across all 640 px. */
+{
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(2800); await settle(page);
+
+  const seam = await page.evaluate(() => {
+    const img = document.querySelector('.hero-backdrop');
+    if (!img || !img.naturalWidth) return null;
+    const edge = getComputedStyle(document.documentElement).getPropertyValue('--hero-edge').trim();
+    const sheet = [...document.styleSheets].flatMap(s => { try { return [...s.cssRules]; } catch { return []; } })
+      .find(r => r.selectorText === '.hero-backdrop');
+    const filter = sheet && sheet.style.filter;
+    const read = f => {
+      const c = document.createElement('canvas'); c.width = 1; c.height = 1;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      if (f) g.filter = f;
+      g.drawImage(img, Math.floor(img.naturalWidth / 2), 0, 1, 1, 0, 0, 1, 1);
+      const d = g.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]];
+    };
+    return { edge, filter, filtered: read(filter), raw: read(null) };
+  });
+
+  ok('CONTROL SEAM the backdrop, the fill colour and the stylesheet filter were all found',
+    !!seam && !!seam.edge && !!seam.filter,
+    seam ? `edge="${seam.edge}" filter="${seam.filter}"` : 'no .hero-backdrop');
+  /* If the filter is ever dropped from the stylesheet, filtered === raw and this
+     row would pass for free while the sampler quietly grades nothing. */
+  ok('CONTROL SEAM the filter measurably changes the colour (else the match is free)',
+    !!seam && seam.filtered.join() !== seam.raw.join(),
+    seam ? `raw ${JSON.stringify(seam.raw)} vs filtered ${JSON.stringify(seam.filtered)}` : '');
+
+  if (seam && seam.edge) {
+    const m = seam.edge.match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+    const fill = m ? [+m[1], +m[2], +m[3]] : null;
+    const delta = fill ? Math.max(...fill.map((v, i) => Math.abs(v - seam.filtered[i]))) : 999;
+    ok('SEAM the fill is sampled through the same filter the art is drawn with',
+      fill !== null && delta === 0,
+      `--hero-edge ${JSON.stringify(fill)} vs filtered source ${JSON.stringify(seam.filtered)}` +
+      ` (unfiltered would be ${JSON.stringify(seam.raw)}), delta ${delta}`);
+  }
+}
+
+/* BLEED. Tom, 2026-08-24: "the background is now extending all down the app by the
+   quests etc, that has changed to the background colour I have for my bonehead."
+   v434 gave the Today scroller the Bonehead's backdrop colour as its
+   background-COLOR so an iOS rubber-band pull would show art instead of a hard
+   edge. That colour also showed through every transparent gap in the page, which
+   is the regression he hit. The way to tell the two apart is to make the art
+   colour something no stylesheet would ever produce and see which pixels follow
+   it: any gap that turns magenta is painting from --hero-edge and is a bleed.
+
+   THE FIX THAT FOLLOWED WAS ALSO WRONG, and the second report is what taught us
+   the rule. Covering the content area with a flat background-IMAGE stopped the
+   bleed and broke two other things. Tom, later the same day: "now there is no
+   colour background above by the wordmark and the lower part of the page is just
+   black instead of the old app background." So WebKit paints an overscroll from
+   the scroller's whole background BOX rather than its background-color alone, and
+   an opaque fill over the content area also buries the app's ambient glow.
+   The scroller carries NO background at all now and the bounce colour is an
+   element parked above the content. This row survived that rewrite unaltered
+   because it never cared HOW the page is painted, only that no gap shows the
+   backdrop colour. Proved red by putting the backdrop colour back on the scroller
+   as a background-color: 3 of 4 gaps go magenta. */
+{
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(2600); await settle(page);
+  await page.evaluate(() => document.documentElement.style.setProperty('--hero-edge', 'rgb(255,0,255)'));
+  await sleep(400);
+
+  const gaps = await page.evaluate(() => {
+    const s = document.querySelector('.screen--today');
+    if (!s) return [];
+    /* the plate is a zero-height sticky backdrop, not a card: it overlaps every
+       sibling, so leaving it in the list invents gaps that do not exist */
+    const out = [], kids = [...s.children].filter(k => !k.classList.contains('today-plate'));
+    for (let i = 0; i < kids.length - 1; i++) {
+      const a = kids[i].getBoundingClientRect(), b = kids[i + 1].getBoundingClientRect();
+      const g = b.top - a.bottom;
+      if (g >= 6) out.push({
+        name: `${(kids[i].className || '?').toString().split(' ')[0]}|${(kids[i + 1].className || '?').toString().split(' ')[0]}`,
+        x: 196, y: Math.round(a.bottom + g / 2) });
+    }
+    const d = document.querySelector('.hero-actions');
+    if (d) { const r = d.getBoundingClientRect(); out.push({ name: 'left-of-doors', x: 3, y: Math.round(r.top + r.height / 2) }); }
+    return out.filter(o => o.y > 0 && o.y < 830);
+  });
+
+  const bleeding = [];
+  for (const g of gaps) {
+    const shot = await page.screenshot({ encoding: 'base64', clip: { x: g.x, y: g.y, width: 4, height: 4 } });
+    const c = await page.evaluate(async d => {
+      const i = new Image(); i.src = 'data:image/png;base64,' + d; await i.decode();
+      const cv = document.createElement('canvas'); cv.width = i.width; cv.height = i.height;
+      const ctx = cv.getContext('2d'); ctx.drawImage(i, 0, 0);
+      const p = ctx.getImageData(1, 1, 1, 1).data; return [p[0], p[1], p[2]];
+    }, shot);
+    if (c[0] > 200 && c[1] < 80 && c[2] > 200) bleeding.push(`${g.name} ${JSON.stringify(c)}`);
+  }
+
+  /* BOUNCE + PLATE. The two halves of the surface, graded apart because they fail
+     apart, and both premises come from the measurement at the top of app.css
+     rather than from reasoning: on a booted iPhone 17 Pro, a 126pt-deep held
+     bounce showed the scroller's background COLOUR edge to edge and zero pixels
+     of anything else, with a ::before, a real div, and a background-image at two
+     attachments all scoring nothing.
+     BOUNCE therefore forbids a background-IMAGE on the scroller, which is not a
+     style preference: an opaque image is what took the colour out of the strip in
+     v435, because the scrolled-contents layer no longer has a solid background
+     for the compositor to promote. background-repeat cannot rescue that, since a
+     gradient auto-sizes to the whole positioning area and repeat and no-repeat
+     render identically.
+     PLATE grades the thing that covers the page instead. It has to be the FIRST
+     child (anything above the scroll origin is outside the layer that translates,
+     so it can neither help nor hurt), opaque (or the bounce colour shows through
+     every gap), and as wide as the padding box: .screen is padded by var(--pad),
+     and an in-flow child inherits that inset, which measured as a strip of
+     backdrop colour down both edges of the page until the negative margins went
+     on. */
+  const surf = await page.evaluate(() => {
+    const s = document.querySelector('.screen--today');
+    if (!s) return null;
+    const own = getComputedStyle(s);
+    const p = document.querySelector('.today-plate');
+    const sr = s.getBoundingClientRect();
+    const pr = p && p.getBoundingClientRect();
+    const pcs = p && getComputedStyle(p);
+    const bcs = p && getComputedStyle(p, '::before');
+    return {
+      bgc: own.backgroundColor, bgi: own.backgroundImage, iso: own.isolation,
+      plate: !!p,
+      plateFirst: !!p && s.firstElementChild === p,
+      /* THE PAINT IS IN THE PSEUDO, not the element: .today-plate is a zero-height
+         sticky anchor (a real height gave it margins that collapsed with the
+         hero's bleed and shifted the page 69px). So read ::before, and read its
+         WIDTH off the used left/right rather than the element's box. */
+      plateW: pr ? Math.round(pr.width + (parseFloat(bcs.left) < 0 ? -2 * parseFloat(bcs.left) : 0)) : 0,
+      scrollerW: Math.round(sr.width),
+      plateBgc: bcs ? bcs.backgroundColor : '',
+      plateBgi: bcs ? bcs.backgroundImage : '',
+      plateH: bcs ? Math.round(parseFloat(bcs.height) || 0) : 0,
+      viewH: Math.round(sr.height),
+    };
+  });
+  const clear = c => !c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent';
+  ok('BOUNCE the Today scroller carries the backdrop as a COLOUR and no background-image',
+    !!surf && !clear(surf.bgc) && surf.bgi === 'none',
+    surf ? `background-color: ${surf.bgc}, background-image: ${surf.bgi}` : 'no scroller');
+  ok('CONTROL PLATE the page plate is on the screen at all (without it every row below grades nothing)',
+    !!surf && surf.plate, surf ? `plate present=${surf.plate}` : '');
+  ok('PLATE it is the FIRST child, so it starts at the scroll origin and can never paint into the bounce',
+    !!surf && surf.plateFirst, surf ? `first child=${surf.plateFirst}` : '');
+  ok('PLATE it is opaque, so the backdrop colour cannot show through the gaps',
+    !!surf && !clear(surf.plateBgc) && surf.plateBgi !== 'none',
+    surf ? `plate background-color ${surf.plateBgc}, image ${surf.plateBgi === 'none' ? 'none' : 'present'}` : '');
+  ok('PLATE it reaches through the scroller\'s side padding, not just the content column',
+    !!surf && surf.plateW >= surf.scrollerW,
+    surf ? `plate ${surf.plateW}px across a ${surf.scrollerW}px scroller` : '');
+  ok('PLATE it covers the viewport, so a scrolled page is never left uncovered',
+    !!surf && surf.plateH >= surf.viewH,
+    surf ? `plate ${surf.plateH}px tall over a ${surf.viewH}px viewport` : '');
+
+  ok('CONTROL BLEED the page really has transparent gaps to grade (an empty sample passes for free)',
+    gaps.length >= 3, `${gaps.length} gaps found, floor 3`);
+  ok('BLEED no gap between Today cards paints the Bonehead backdrop colour',
+    gaps.length >= 3 && bleeding.length === 0,
+    bleeding.length ? `bleeding: ${bleeding.join(', ')}` : `${gaps.length} gaps, none bleeding`);
+  await page.evaluate(() => document.documentElement.style.removeProperty('--hero-edge'));
+}
+
 ok('no page errors', errs.length === 0, errs.join(' | '));
 await browser.close();
 if (srvHandle) await srvHandle.close();

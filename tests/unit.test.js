@@ -3129,8 +3129,18 @@ test('the app-wide no-select rule keeps form fields and the recovery code usable
  * SMALL_INK left it green. So this case pins the two behaviours at the source.
  * It cannot tell you the picture got better, only that neither rule was
  * deleted. Saying so plainly rather than implying more.
+ *
+ * THE ESCALATION CLIMBS, IT DOES NOT JUMP (2026-08-24). It used to go straight
+ * from any thumbnail to the 640 master, which put 62 concurrent 640x640 bitmaps
+ * (103.1 MB) on the Wardrobe's hat slot and reddened the memory census's OFF-DOM
+ * row. It now steps one tier at a time, so the 384 sheet gets the chance the
+ * jump never gave it and only art that is still tiny there reaches the master.
+ * The grep that used to stand for "the upgrade still exists" is replaced by
+ * RUNNING the ladder: a proxy could not tell a climb from a jump, and could not
+ * catch the one way this can genuinely break, which is a ladder that never
+ * terminates at the master.
  */
-test('small art takes the master and skips the nearest-neighbour step', () => {
+test('small art climbs to a bigger source and skips the nearest-neighbour step', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   const m = app.match(/const SMALL_INK = (\d+);/);
   assert.ok(m, 'SMALL_INK is gone: the small-art path has been removed entirely');
@@ -3140,11 +3150,78 @@ test('small art takes the master and skips the nearest-neighbour step', () => {
 
   const fn = app.slice(app.indexOf('function drawTrimmedArt'), app.indexOf('function hydratePackArt'));
   assert.ok(fn.length > 200, 'drawTrimmedArt not found: this check has drifted, it has not passed');
-
-  assert.match(fn, /thumb\\\/\\d\+\\\//,
-    'the thumbnail-to-master upgrade is gone: small items will be drawn from the 192 tier again');
+  assert.match(fn, /Math\.max\(bw, bh\) < SMALL_INK[\s\S]{0,120}nextArtTier\(src\)/,
+    'the small-ink upgrade is gone: small items will be drawn from the 192 tier again');
   assert.match(fn, /Math\.max\(bw, bh\) < SMALL_INK[\s\S]{0,80}Math\.min\(3, Math\.floor\(scale\)\)/,
     'the nearest-neighbour step is no longer skipped for small ink: tiny art will be drawn as squares again');
+
+  // Run the ladder itself: 192 -> 384 -> master -> stop, on the app's own tiers.
+  const src = app.slice(app.indexOf('const nextArtTier'), app.indexOf('function drawTrimmedArt'));
+  const tiers = JSON.parse(app.match(/const BH_THUMB_TIERS = (\[[^\]]*\]);/)[1]);
+  const next = new Function('BH_THUMB_TIERS', `${src}; return nextArtTier;`)(tiers);
+  const rung = ['assets/bh/thumb/192/H/H1.png'];
+  for (let i = 0; i < 6 && rung[rung.length - 1] != null; i++) rung.push(next(rung[rung.length - 1]));
+  assert.deepEqual(rung, [
+    'assets/bh/thumb/192/H/H1.png', 'assets/bh/thumb/384/H/H1.png', 'assets/bh/H/H1.png', null,
+  ], 'the small-ink ladder no longer climbs 192 -> 384 -> master and stop');
+});
+
+/* EVERY PATH bhTrim() OR bhThumb() CAN PRODUCE HAS A FILE BEHIND IT.
+ *
+ * The cropped tier is served to <canvas>es through drawTrimmedArt, and that
+ * function's error path paints a blank plate: a missing trim thumbnail is an
+ * EMPTY TILE in the Wardrobe, not a soft one. The <img> tiers can afford to be
+ * sloppy about this because avatarLayersHtml carries an onerror that swaps back
+ * to the full-size art (rule 8, degrade to ugly never to invisible); a canvas
+ * has nowhere to fall back to.
+ *
+ * So this walks the masters with the app's OWN regex, lifted out of js/app.js
+ * rather than retyped, and demands the file. It goes red the moment somebody
+ * adds art and forgets `python3 scripts/build-bh-thumbs.py`, which is exactly
+ * how C6 shipped with no 192 or 384 sheet at all (found 2026-08-24, still true
+ * of those two tiers on main and written up rather than fixed here).
+ *
+ * PROVE-RED: `rm assets/bh/thumb/trim/H/H1.png` and this fails naming H/H1.png.
+ */
+test('every cosmetic any tier can be asked for is on disk', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const re = new RegExp(app.match(/const BH_THUMB_RE = \/(.*)\/;/)[1]);
+  const bh = join(here, '..', 'assets', 'bh');
+  const rels = [];
+  for (const slot of readdirSync(bh)) {
+    if (slot === 'thumb') continue;
+    for (const dir of [slot, join(slot, 'shiny')]) {
+      const abs = join(bh, dir);
+      if (!existsSync(abs)) continue;
+      for (const f of readdirSync(abs)) {
+        const rel = `${dir}/${f}`.replace(/\\/g, '/');
+        if (re.test(`assets/bh/${rel}`)) rels.push(rel);
+      }
+    }
+  }
+  assert.ok(rels.length > 300, `only ${rels.length} cosmetics matched: the regex or the walk has drifted, this has not passed`);
+  /* ALL THREE TIERS, not just the cropped one. Extended 2026-08-24: this test
+     was written the same week C6 shipped with no 192 or 384 sheet, and it says
+     so in the comment above while covering only `trim`, so it watched the bug
+     it was documenting go past. The square tiers are NOT a softer case: the
+     Collection's <img> carries no onerror, so a missing square tile is a
+     broken-image icon (measured on e2cb252d, alt text "Bumbleseal" over
+     Chrome's torn-page glyph), which is worse than the blank canvas plate the
+     comment above worries about.
+     A tier is only owed a file when the master is BIGGER than it, which is what
+     the generator does, hence the header read rather than a flat demand. Every
+     master today is 640 or 2048, so nothing is exempt right now and this is
+     purely so smaller art landing later cannot false-red the suite. */
+  const pngWidth = f => readFileSync(f).readUInt32BE(16);
+  const missing = [];
+  for (const r of rels) {
+    const w = pngWidth(join(bh, r));
+    for (const tier of ['192', '384', 'trim']) {
+      if (tier !== 'trim' && w <= Number(tier)) continue;
+      if (!existsSync(join(bh, 'thumb', tier, r))) missing.push(`${tier}/${r}`);
+    }
+  }
+  assert.deepEqual(missing, [], `${missing.length} tier files are absent; run scripts/build-bh-thumbs.py`);
 });
 
 await runAll();

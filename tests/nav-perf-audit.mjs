@@ -63,6 +63,14 @@
  *          (0 of 7 canvases carry ink, because six are drawn from another item's
  *          crop and land outside the canvas). WARM landed at 0.60, inside the
  *          ceiling, and that is fine: this mutation is DECODED's to catch.
+ *       RE-RUN 2026-08-24, after the Wardrobe moved to the cropped sheet, and
+ *          THE OWNERSHIP OF THIS MUTATION HAS CHANGED. Now: SAMPLE red (442,688
+ *          px across 2 scans) and WARM red (0.78), but DECODED GREEN, 7 of 7.
+ *          Pre-cropped art is why: every source is now its own alpha box, so one
+ *          item's box applied to another still lands ink on the canvas instead
+ *          of missing it. That is a real loss of coverage and it is written down
+ *          rather than glossed: SAMPLE's SCAN-COUNT floor is now the row that
+ *          owns r2, which is the reason COLD_MIN_CALLS exists at all.
  *   r3  hydratePackArt() neutered so no canvas is drawn at all
  *       -> SAMPLE red (0 px, so no zero below could have meant anything) and
  *          DECODED red (0 of 7). This is the run that shows RESCAN's green is
@@ -96,7 +104,20 @@ const ok = (name, pass, detail = '') => {
 
 const W = 440, H = 956;
 const CPU = 6;                 // the honest model of the phone Tom is holding
-const COLD_MIN_PX = 1_000_000; // the cold pass measured 2.3M-2.8M; well clear of it
+/* THE COLD PASS GOT SMALLER BECAUSE THE ART DID, so this floor moved with it.
+   2026-08-24: the Wardrobe's canvases moved to the cropped `thumb/trim` sheet,
+   which both shrinks each file and removes the SMALL_INK escalation, and the
+   escalation was scanning the SAME item at two or three sizes. Measured on this
+   lap, isolated tar-built trees, machine busy (load ~13):
+     before the crop  1,257,472 px across 12 scans
+     after            587,391 px across  8 scans
+   Lowering the pixel floor alone would have let a documented prove-red through:
+   r2 below (one shared box for every 200x200 slot) scores 446,464 px. So the
+   premise is now BOTH numbers, and the call count is what actually separates
+   "the lap did real work" from "two files were ever scanned": r2 makes 2 calls
+   and r3 makes 0, against 8 here. Re-proven red on r2 the same day. */
+const COLD_MIN_PX = 400_000;
+const COLD_MIN_CALLS = 6;
 /* MEASURED, NOT PICKED. Six healthy runs on this tree scored 0.32 0.33 0.34 0.35
    0.38 0.44; the same lap with the memo reverted scored 0.94 and 0.95. The
    ceiling sits at 0.70 rather than halfway, because the flaky direction is
@@ -239,8 +260,8 @@ try {
     cold.reached.length === LAP.length && warm.reached.length === LAP.length,
     `cold ${cold.reached.join(',') || '(none)'} | warm ${warm.reached.join(',') || '(none)'}`);
 
-  ok(`SAMPLE the cold pass scanned real work, so a zero on the warm pass means something (>= ${COLD_MIN_PX.toLocaleString()} px)`,
-    cold.scan.px >= COLD_MIN_PX,
+  ok(`SAMPLE the cold pass scanned real work, so a zero on the warm pass means something (>= ${COLD_MIN_PX.toLocaleString()} px in >= ${COLD_MIN_CALLS} scans)`,
+    cold.scan.px >= COLD_MIN_PX && cold.scan.calls >= COLD_MIN_CALLS,
     `${cold.scan.px.toLocaleString()} source pixels across ${cold.scan.calls} scan(s)`);
 
   ok('DECODED the wardrobe really drew its art, so "scanned nothing" cannot mean "drew nothing"',

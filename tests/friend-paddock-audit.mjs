@@ -57,6 +57,30 @@
  *             leaderboard, who correctly has none) shows NO paddock strip and an
  *             undressed pet, rather than an empty shelf that reads as "they own
  *             nothing" or a pet wearing the viewer's clothes.
+ *   DOOR      the way into their field is on the profile exactly when there is a
+ *             field to walk into.
+ *   FIELD     the door opens their PADDOCK, the same scene the player sees their
+ *             own herd in: their pets placed in the field, every sprite decoded,
+ *             their Bonehead standing in it. Driven by a real tap, continuing
+ *             REACH's chain, so the whole path from the crew deck to the field is
+ *             one thing a player did.
+ *   DRESSED   THEIRS one surface further in. The shelf can be right and the field
+ *             wrong: the scene is a different render path and it is the path that
+ *             used to answer S.petWear for everybody, because the player's own
+ *             field was the only one it had ever drawn.
+ *   TALLY     the count under their field is what they OWN. Three numbers are in
+ *             play (owned, on the wire, on screen after the walk cap) and the wire
+ *             cap is our bookkeeping, not their collection.
+ *   HONEST    their field borrows the scene but not its promises: no coach mark
+ *             inviting a tap onto a card slider with no data behind it, and no
+ *             collection panel to mount one in.
+ *
+ * WHAT THE SCENE DOES WITHOUT, rather than asking the wire for it: their eggs (the
+ * nest stands empty), their bonds and levels (so nothing there is tappable) and
+ * their instance ids (the herd is keyed by position). `yard` rides the plaintext
+ * blob to every accepted friend, so a field added to make the picture nicer is a
+ * field published, and SHAPE below is what makes that a decision rather than a
+ * side effect.
  *
  * PROVE-RED: see the block at the end of this file.
  *
@@ -218,8 +242,19 @@ try {
      nothing in this suite was checking it, so nobody could have answered him
      without going and looking. This row answers it mechanically from now on.
      PROVE-RED: delete the openFriendProfile call in the .cfan-card handler. */
+  /* The herd the tap-through walks into. Deliberately more walkers than the
+     scene's WALK_CAP and an `n` far past the 24 the wire carries, so FIELD
+     measures the capped path and TALLY has three different numbers to get
+     wrong. C6 is in it because C6 is the one species that can be dressed, which
+     is what DRESSED reads. */
+  const REACH_YARD = {
+    n: 37,
+    pets: [{ sp: PET, shiny: false }, { sp: 'C1', shiny: true }, { sp: 'C2', shiny: false },
+      { sp: 'C3', shiny: false }, ...Array.from({ length: 11 }, () => ({ sp: 'C4', shiny: false }))],
+    wear: THEIR_WEAR,
+  };
   const reachByTap = async () => {
-    await page.evaluate(async () => {
+    await page.evaluate(async yard => {
       document.querySelectorAll('.sheet').forEach(() => history.back());
       await new Promise(r => setTimeout(r, 300));
       /* The rest of this file never populates the crew deck, because it opens the
@@ -229,7 +264,7 @@ try {
       window.__testFriends = { friends: [{
         playerId: 'reach-fixture', name: 'Pal One', alias: null, lastSeen: Date.now(),
         profile: { level: 20, levelName: 'Bonehead', badges: 2, gearCount: 4,
-                   outfit: { B: 'B0-1', SK: 'SK0-1', BG: 'BG1' }, pet: null },
+                   outfit: { B: 'B0-1', SK: 'SK0-1', BG: 'BG1' }, pet: null, yard },
       }], incoming: [], outgoing: [] };
       location.hash = '#/today';
       await new Promise(r => setTimeout(r, 400));
@@ -242,8 +277,90 @@ try {
       card.click();                                    // the centred card opens
       await new Promise(r => setTimeout(r, 1300));
       window.__reach = { card: true, sheet: !!document.querySelector('.sheet-fp .fp-facts') };
-    });
+    }, REACH_YARD);
     return page.evaluate(() => window.__reach);
+  };
+
+  /* THE THIRD TAP: the door on the profile into their FIELD. Same real control,
+     no seam, continuing the chain reachByTap started. */
+  const walkIntoField = async () => {
+    const clicked = await page.evaluate(() => {
+      const b = document.querySelector('#fpYardGo');
+      if (!b) return false;
+      b.click();
+      return true;
+    });
+    await sleep(2200);
+    return { clicked, ...await page.evaluate(async () => {
+      const pdk = await import('/js/paddock.js');
+      const scene = document.querySelector('.sheet-paddock .pdk-scene');
+      const pets = [...document.querySelectorAll('.sheet-paddock .pdk-pet')];
+      const imgs = [...document.querySelectorAll('.sheet-paddock .pdk-pet img')];
+      const box = el => { const r = el.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; };
+      const file = i => (i.getAttribute('src').match(/([A-Z]+\d+)\.png$/) || [])[1] || null;
+      /* THE CAP ARITHMETIC COMES FROM THE APP'S OWN MODULE and the fixture on the
+         page, not from a number typed into this file: WALK_CAP and motionFor are
+         the scene's rules, and a copy of them here would agree with a broken
+         scene by construction. */
+      const wire = window.__testFriends.friends[0].profile.yard;
+      const walkers = wire.pets.filter(x => pdk.motionFor(x.sp) === 'walk').length;
+      return {
+        scene: !!scene,
+        owned: wire.n,
+        onWire: wire.pets.length,
+        expect: wire.pets.length - Math.max(0, walkers - pdk.WALK_CAP),
+        figures: pets.length,
+        drawn: pets.filter(p => { const b = box(p); return b.w > 0 && b.h > 0; }).length,
+        decoded: imgs.filter(i => i.naturalWidth > 0).length,
+        imgs: imgs.length,
+        keeper: [...document.querySelectorAll('.sheet-paddock .pdk-keeper img')].filter(i => i.naturalWidth > 0).length,
+        /* the dressable species, out in the field, and what it is wearing:
+           layer 0 is the animal, everything after it is the wardrobe */
+        wornOn: [...document.querySelectorAll('.sheet-paddock .pdk-pet img.pw')].map(file).filter(Boolean),
+        dressedBoxes: [...document.querySelectorAll('.sheet-paddock .pdk-pet .petcrop.dressed')].length,
+        count: (document.querySelector('.sheet-paddock .fpdk-note b') || {}).textContent || null,
+        note: (document.querySelector('.sheet-paddock .fpdk-note .note') || {}).textContent || null,
+        /* borrowed chrome that must NOT come along: their bonds and levels never
+           left their phone, so nothing here invites a tap */
+        coach: !!document.querySelector('.sheet-paddock .pdk-coach'),
+        panel: !!document.querySelector('.sheet-paddock #pdkPanel'),
+        /* THE VISITOR. Tom, 2026-08-24: "can we make it so the player that is
+           visiting the paddock is on the opposite side of the paddock? bottom
+           right and they'll be same size as their friend's bonehead and then it
+           feels like they're in the same space." Geometry, not presence: two
+           figures both parked on the left would satisfy a existence check and
+           would not read as two people sharing a field. */
+        figs: ['.pdk-keeper:not(.pdk-visitor)', '.pdk-visitor'].map(sel => {
+          const el = document.querySelector('.sheet-paddock ' + sel);
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          const host = document.querySelector('.sheet-paddock .pdk-scene').getBoundingClientRect();
+          /* THE FLIP, READ OFF THE COMPUTED STYLE, and it has to count TWO
+             properties. .pdk-keeper animates `transform`, so the mirror is on the
+             separate `scale` property, which composites with an animated
+             transform instead of being overwritten by it. A reader that looks at
+             `transform` alone sees the idle bob and reports "not flipped".
+             SPLIT is the other half and it is the bug that shipped: the flip was
+             briefly on `img`, which mirrors the layers but NOT the weapon charge,
+             because avatarLayersHtml emits that as a <span class="wpn-sheen">
+             masked by the unflipped weapon art. So the figure must be flipped as
+             a WHOLE: the container carries it and no descendant carries its own. */
+          const flipOf = n => {
+            if (!n) return false;
+            const cs = getComputedStyle(n);
+            const m = new DOMMatrixReadOnly(cs.transform);
+            const sc = cs.scale && cs.scale !== 'none' ? parseFloat(cs.scale.split(' ')[0]) : 1;
+            return (m.a < 0) !== (sc < 0);
+          };
+          return { cx: Math.round(r.left + r.width / 2 - host.left), w: Math.round(r.width), h: Math.round(r.height),
+            flipped: flipOf(el),
+            innerFlipped: [...el.querySelectorAll('*')].filter(flipOf).length,
+            sheens: el.querySelectorAll('.wpn-sheen').length,
+            decoded: [...el.querySelectorAll('img')].filter(i => i.naturalWidth > 0).length };
+        }),
+        sceneW: Math.round(document.querySelector('.sheet-paddock .pdk-scene').getBoundingClientRect().width),
+      };
+    }) };
   };
 
   const readYard = () => page.evaluate(() => {
@@ -264,6 +381,9 @@ try {
       count: box ? (box.querySelector('.fp-yard-h b') || {}).textContent.trim() : null,
       pets: box ? [...box.querySelectorAll('.fp-yard-pet')].map(p => layers(p.querySelector('.petcrop') || p)) : [],
       hero: layers(hero),
+      /* The way through to their FIELD. Present exactly when there is a yard to
+         walk into: a door onto nothing is worse than no door. */
+      door: !!document.querySelector('#fpYardGo'),
       bodyScrolls: document.body.scrollWidth > document.body.clientWidth,
     };
   });
@@ -301,12 +421,106 @@ try {
     none.sheet && !none.present && oldHeroIds.length === 0,
     `sheet rendered=${none.sheet}, strip=${none.present}, hero layers [${oldHeroIds.join(',') || 'none'}]`);
 
+  /* DOOR: the way into their field exists exactly where there is a field. A door
+     onto an empty scene is worse than no door: it promises a place and opens on
+     nothing, which is the same lie OLDBUILD refuses on the shelf. */
+  ok('DOOR the way into their field is on the profile when they have one, and absent when they do not',
+    shown.door === true && none.door === false,
+    `with a yard=${shown.door}, without one=${none.door}`);
+
   /* The row itself. Placed last so it runs against a tree the rest has already
      seeded, which is the state a real player is in. */
   const reach = await reachByTap();
   ok('REACH a PLAYER can open a friend, not just the test seam: two taps on the crew card open the profile',
     !!reach && reach.card === true && reach.sheet === true,
     reach ? `card found ${reach.card}, sheet opened ${reach.sheet}` : 'the deck never rendered a card');
+
+  /* ---- the field itself, walked into from that same profile ---------------- */
+  const fld = await walkIntoField();
+  await shot(page, '02-friend-field');
+  ok('FIELD the door on the profile opens their PADDOCK: their herd out in the field, drawn and decoded, their Bonehead standing in it',
+    fld.clicked && fld.scene && fld.figures > 0 && fld.figures === fld.expect
+      && fld.drawn === fld.figures && fld.imgs > 0 && fld.decoded === fld.imgs && fld.keeper > 0,
+    `door clicked=${fld.clicked}, scene=${fld.scene}, ${fld.figures} figures of ${fld.expect} expected `
+    + `(${fld.onWire} on the wire, walk cap applied), boxes drawn ${fld.drawn}, sprites decoded ${fld.decoded}/${fld.imgs}, keeper layers ${fld.keeper}`);
+
+  /* DRESSED is THEIRS again, one surface further in. The shelf could be right and
+     the field wrong: the scene is a different render path (petSpriteHtml at 76px,
+     seated on the ground) and it is the path that used to answer S.petWear for
+     everybody, because the player's own scene is the only one it ever drew. */
+  ok('DRESSED their pet is wearing THEIR wardrobe out in their field, not the viewer\'s',
+    fld.dressedBoxes > 0 && fld.wornOn.includes(DIDS[0]) && !fld.wornOn.includes(DIDS[1]),
+    `${fld.dressedBoxes} dressed pet(s) in the field wearing [${fld.wornOn.join(',') || 'nothing'}] | theirs=${DIDS[0]} viewer's=${DIDS[1]}`);
+
+  /* TALLY: three numbers are in play and only one is the brag. 37 owned, 15 on
+     the wire, 11 standing in the field after the walk cap. The count must be the
+     37: the wire cap is our bookkeeping, not their collection. */
+  ok('TALLY the count under their field is what they OWN, not the capped wire list and not the herd on screen',
+    new RegExp(`\\b${fld.owned}\\b`).test(fld.count || '')
+      && !new RegExp(`\\b${fld.onWire}\\b`).test(fld.count || '')
+      && (fld.note || '').includes(String(fld.figures)),
+    `panel reads "${(fld.count || '').trim()}" / "${(fld.note || '').trim()}" | owned ${fld.owned}, on the wire ${fld.onWire}, in the field ${fld.figures}`);
+
+  /* TWO PEOPLE IN ONE FIELD. Tom, 2026-08-24, on the shipped single-figure scene:
+     "can we make it so the player that is visiting the paddock is on the opposite
+     side of the paddock? bottom right and they'll be same size as their friend's
+     bonehead and then it feels like they're in the same space."
+     Three things have to hold together and only the first is about existence.
+     Size: within 10% of each other, because "same size" is the whole reason it
+     reads as one shared space rather than a background figure. Sides: the host
+     left of centre and the visitor right of it, each clear of the midline, so a
+     scene that stacked both on one side cannot pass. */
+  {
+    const [host, vis] = fld.figs;
+    ok('CONTROL VISITOR both figures are on the scene at all, with their art decoded',
+      !!host && !!vis && host.decoded > 0 && vis.decoded > 0,
+      `host=${JSON.stringify(host)} visitor=${JSON.stringify(vis)}`);
+    if (host && vis) {
+      const ratio = vis.h / host.h;
+      ok('VISITOR the viewer stands in the friend\'s field at the SAME size as its owner',
+        ratio >= 0.9 && ratio <= 1.1,
+        `host ${host.w}x${host.h}, visitor ${vis.w}x${vis.h}, height ratio ${ratio.toFixed(2)}`);
+      /* FACING, AND IT PINS WHICH ONE. Tom, twice on the same scene. First: "the
+         friend bonehead should be mirrored so it looks like they're hanging out
+         not just both facing away." Then, after I flipped the host: "you flipped
+         the wrong bonehead in the paddock so theyre back to back."
+         The first version of this row asked only that EXACTLY ONE of the two was
+         mirrored, on the reasoning that it would then hold whichever way the art
+         faced. That was wrong in the way that matters: back-to-back also has
+         exactly one flipped, so the row passed on the build Tom rejected. A guard
+         that cannot tell the bug from the fix is not a guard.
+         Derived from his two reports rather than assumed: the art faces RIGHT.
+         So the figure on the LEFT is already looking inward and must be
+         un-flipped, and the figure on the RIGHT must be flipped to face back at
+         him. If the art is ever redrawn facing the other way this row goes red,
+         which is correct: somebody has to re-derive it and edit this comment. */
+      ok('VISITOR the LEFT figure faces right and is not mirrored (the art faces right)',
+        host.cx < vis.cx && host.flipped === false,
+        `left figure at ${host.cx}, flipped=${host.flipped} (want false)`);
+      /* SPLIT. A figure flipped one layer at a time is not a mirrored figure: the
+         weapon's charge is a masked span rather than an img, so flipping only the
+         imgs sweeps the glint down the empty side of the body while the blade
+         stays dark. Nothing inside either figure may carry its own flip. */
+      ok('VISITOR neither figure is mirrored layer-by-layer (the weapon charge is not an img)',
+        host.innerFlipped === 0 && vis.innerFlipped === 0,
+        `host has ${host.innerFlipped} flipped descendants, visitor ${vis.innerFlipped}` +
+        ` (sheens present: host ${host.sheens}, visitor ${vis.sheens})`);
+      ok('VISITOR the RIGHT figure is mirrored, so the two look at each other',
+        vis.flipped === true,
+        `right figure at ${vis.cx}, flipped=${vis.flipped} (want true)`);
+      const mid = fld.sceneW / 2;
+      ok('VISITOR they are on OPPOSITE sides of the field, not stacked on one',
+        host.cx < mid && vis.cx > mid,
+        `scene ${fld.sceneW}px wide, midline ${mid}: host centre ${host.cx}, visitor centre ${vis.cx}`);
+    }
+  }
+
+  /* NOTHING THAT LIES. The friend's bonds, levels and nicknames never left their
+     phone, so the scene must not carry over the chrome that promises them: the
+     coach mark invites a tap onto a card slider that has no data to fill, and the
+     collection panel is that slider's mount point. */
+  ok('HONEST their field borrows the scene but not the promises: no tap-a-pet coach mark and no collection panel',
+    fld.scene && !fld.coach && !fld.panel, `scene=${fld.scene}, coach=${fld.coach}, collection panel=${fld.panel}`);
 } finally {
   await browser.close();
   if (srv) srv.close();
@@ -358,7 +572,8 @@ process.exit(fails);
  *       exit 1: OLDBUILD "sheet rendered=true, strip=true" -- a paddock reading
  *       "0 PETS" at a friend who simply has not updated. RENDER and THEIRS go
  *       with it, because this crude mutation replaces the real shelf outright.
- *   R6b THE ONE THAT EXPOSED A FAULT IN THIS FILE. Before it, OLDBUILD asserted
+ *   R6b THE ONE THAT EXPOSED A FAULT IN THIS FILE.
+ *   (see the second block below for the FIELD rows, 2026-08-24) Before it, OLDBUILD asserted
  *       only that no strip was present, so `p.yard.pets` made to throw (the
  *       whole profile sheet dies, nothing renders at all) came back GREEN: "no
  *       strip" and "no page" were the same measurement. OLDBUILD and RENDER now
@@ -367,4 +582,50 @@ process.exit(fails);
  *       properties of undefined (reading 'pets')", the stack naming
  *       openFriendProfile: a crash rather than a graded row, but non-zero and
  *       pointing at the line, which is what a harness owes you.
+ */
+
+/* PROVE-RED for the FIELD rows, RUN rather than predicted, 2026-08-24.
+ *
+ * Same method as the block above and for the same reason: each mutation written
+ * DIRECTLY INTO a tar-built copy of this tree with no `.git` at all (a cp -R of a
+ * git WORKTREE keeps a .git FILE pointing back at the original, so a checkout
+ * inside it writes to the ORIGINAL and the run proves nothing), then grepped to
+ * confirm the mutation landed AND that both seams survived it.
+ *
+ *   R7  js/app.js: the `#fpYardGo` listener deleted, i.e. a door that opens on
+ *       nothing. This is the seam-without-consumer shape one layer further in:
+ *       every earlier row still passes, because the profile and its shelf are
+ *       perfect and simply lead nowhere.
+ *       exit 1, four rows:
+ *         FIELD    "door clicked=true, scene=false, 0 figures of 11 expected"
+ *         DRESSED  "0 dressed pet(s) in the field wearing [nothing]"
+ *         TALLY    'panel reads "" / ""'
+ *         HONEST   "scene=false"
+ *       DOOR stays GREEN, correctly: the button IS on the profile. That is the
+ *       distinction between "no way in" and "a way in that goes nowhere".
+ *   R8  js/app.js: `wear: r.wear || null` dropped from the herd's petSpriteHtml
+ *       call, which is what the scene did before this change: no wear argument
+ *       means S.petWear answers, and S.petWear is the VIEWER's wardrobe. The
+ *       figure contract's rule 1, at the one surface that had never drawn
+ *       anybody else's animals.
+ *       exit 1, ONE row: DRESSED "1 dressed pet(s) in the field wearing [CB2] |
+ *       theirs=CB1 viewer's=CB2" -- the friend's Bumbleseal grazing her own
+ *       field in the auditor's bag. THEIRS stays GREEN throughout: the shelf on
+ *       the profile is a different render path and it was already correct, which
+ *       is exactly why the field needed its own row.
+ *   R9  js/app.js: the panel count changed from `yard.n` to `yard.pets.length`,
+ *       i.e. report the WIRE CAP as the collection.
+ *       exit 1, two rows (the string appears on the shelf header too, so the
+ *       crude replace hits both surfaces):
+ *         TALLY   'panel reads "15 PETS" ... owned 37, on the wire 15'
+ *         RENDER  'count "4 PETS"'
+ *   R10 js/app.js: the door lifted out of the yard ternary so EVERY profile gets
+ *       one, including a friend on an older build with no field behind it.
+ *       exit 1, ONE row: DOOR "with a yard=true, without one=true". OLDBUILD
+ *       stays green, because the shelf is still correctly absent: the lie is the
+ *       button, not the shelf.
+ *   R11 js/app.js: `coach: 'Tap a pet to say hi'` passed through to the friend's
+ *       scene, inviting a tap onto a card slider that has no data behind it
+ *       (their bonds, levels and nicknames never left their phone).
+ *       exit 1, ONE row: HONEST "scene=true, coach=true".
  */
