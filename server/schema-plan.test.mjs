@@ -45,11 +45,17 @@ db.exec(schema);
    is no ANALYZE, exactly like a D1 database nobody has ANALYZEd), so a handful
    of rows is enough to prove both the plan and that the SQL still matches the
    schema it is written against. */
+/* pa/pb/pc are ACTIVE (last_seen now) and pd is DORMANT (last_seen at the epoch).
+   The grants pruner's third arm turns on the recipient's own clock, so a fixture
+   where every player looks equally dormant could not tell the arm apart from a
+   delete-on-age rule. */
 const P = ['pa', 'pb', 'pc'];
 for (const id of P) {
   db.prepare('INSERT INTO players (id, pubkey, handle, friend_code, profile, created_at, last_seen) VALUES (?,?,?,?,?,?,?)')
-    .run(id, 'k-' + id, 'Grim Tibia', 'BONE-' + id.toUpperCase() + '-AAAA', '{"outfit":{}}', 1, 2);
+    .run(id, 'k-' + id, 'Grim Tibia', 'BONE-' + id.toUpperCase() + '-AAAA', '{"outfit":{}}', 1, Date.now());
 }
+db.prepare('INSERT INTO players (id, pubkey, handle, friend_code, profile, created_at, last_seen) VALUES (?,?,?,?,?,?,?)')
+  .run('pd', 'k-pd', 'Grim Tibia', 'BONE-PD-AAAA', '{"outfit":{}}', 1, 2);
 // pb is deliberately only ever on the b side, so the OR arm that needs
 // idx_friendships_b is the arm that has to find the row.
 db.prepare('INSERT INTO friendships (a, b, status, requested_by, ts) VALUES (?,?,?,?,?)').run('pa', 'pb', 'accepted', 'pa', 3);
@@ -61,7 +67,10 @@ for (let i = 0; i < 3; i++) {
 /* Grants old enough for the retention pruner to be interested in, and an ack on
    one of them, so the DELETE below has something to match. pa's row is
    acknowledged (id <= grants_ack), pb's is a cheer (valueless, prunable on age
-   alone), pc's is neither and must be the row the pruner leaves behind. */
+   alone), pc's is neither and must be the row the pruner leaves behind, and
+   pd's is the dormancy arm: an unacknowledged gift whose recipient's last_seen
+   is as old as the gift. Without pd the third OR arm would be planned but never
+   matched, and the BOUND assertion would be graded on the other two. */
 const OLD_TS = 1;
 db.prepare('INSERT INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
   .run('pa', 'gift-free-pz-2026-01-01', 'gift', '{"coins":50}', OLD_TS);
@@ -69,6 +78,8 @@ db.prepare('INSERT INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?
   .run('pb', 'cheer-pz-2026-01-01-0', 'cheer', '{"cheer":3}', OLD_TS);
 db.prepare('INSERT INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
   .run('pc', 'gift-free-pz-2026-01-02', 'gift', '{"coins":50}', OLD_TS);
+db.prepare('INSERT INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+  .run('pd', 'gift-free-pz-2026-01-03', 'gift', '{"coins":50}', OLD_TS);
 db.prepare('UPDATE players SET grants_ack = (SELECT MAX(id) FROM grants g WHERE g.player_id = ?) WHERE id = ?')
   .run('pa', 'pa');
 
@@ -134,22 +145,24 @@ const CASES = [
        answer at 28x the cost, on a statement the cron runs every 15 minutes,
        which is exactly the failure this file exists to see. */
     name: 'the grants pruner walks candidates through idx_grants_ts',
-    fragment: "AND (g.id <= COALESCE(p.grants_ack, 0) OR g.type = 'cheer')",
+    fragment: "OR (g.ts < ? AND p.last_seen < ?))",
     mustIndex: 'idx_grants_ts',
     mustNotScan: 'SCAN g',
-    params: [Date.now(), 'stepweek-', 'stepweek.', 10],
+    params: [Date.now(), 'stepweek-', 'stepweek.', Date.now() - 180 * 86400000, Date.now() - 180 * 86400000, 10],
     // BOUND is checked against the candidate SELECT, since a DELETE returns no rows.
     boundSql:
       `SELECT g.id FROM grants g LEFT JOIN players p ON p.id = g.player_id
         WHERE g.ts < ? AND (g.key < ? OR g.key >= ?)
-          AND (g.id <= COALESCE(p.grants_ack, 0) OR g.type = 'cheer')
+          AND (g.id <= COALESCE(p.grants_ack, 0) OR g.type = 'cheer'
+               OR (g.ts < ? AND p.last_seen < ?))
         ORDER BY g.ts LIMIT ?`,
     sql:
       `DELETE FROM grants WHERE id IN (
          SELECT g.id FROM grants g LEFT JOIN players p ON p.id = g.player_id
           WHERE g.ts < ?
             AND (g.key < ? OR g.key >= ?)
-            AND (g.id <= COALESCE(p.grants_ack, 0) OR g.type = 'cheer')
+            AND (g.id <= COALESCE(p.grants_ack, 0) OR g.type = 'cheer'
+                 OR (g.ts < ? AND p.last_seen < ?))
           ORDER BY g.ts LIMIT ?)`,
   },
   {
@@ -277,6 +290,38 @@ test('STATS_WINDOW_DAYS never exceeds EVENT_RETENTION_DAYS', () => {
   assert.ok(retention > 0, 'EVENT_RETENTION_DAYS not found in src/index.js');
   assert.ok(stats > 0, 'STATS_WINDOW_DAYS not found in src/index.js');
   assert.ok(stats <= retention, `/stats reads ${stats} days of a table that keeps ${retention}`);
+});
+
+/* The dormancy window is applied INSIDE the pruner's outer age bound, so a
+   number smaller than GRANT_RETENTION_DAYS would be silently clamped up to it
+   and the constant would be describing a rule nobody runs. pruneGrants clamps it
+   rather than trusting it; this is the assertion that says so out loud, so the
+   day somebody lowers 180 to 30 they find out here rather than from a report of
+   gifts going missing early. */
+test('GRANT_DORMANT_DAYS is never shorter than GRANT_RETENTION_DAYS', () => {
+  const grant = Number(/const GRANT_RETENTION_DAYS = (\d+)/.exec(source)?.[1]);
+  const dormant = Number(/const GRANT_DORMANT_DAYS = (\d+)/.exec(source)?.[1]);
+  assert.ok(grant > 0, 'GRANT_RETENTION_DAYS not found in src/index.js');
+  assert.ok(dormant > 0, 'GRANT_DORMANT_DAYS not found in src/index.js');
+  assert.ok(dormant >= grant, `the dormancy window (${dormant}d) is inside the age bound (${grant}d), so it is clamped`);
+});
+
+/* THE PREDICATE THAT DELETES SOMEBODY'S PRESENT, checked as SQL rather than as
+   behaviour, because the behaviour suite needs a running worker and this file
+   does not. The dormancy arm is only sound while BOTH of its clocks are in it.
+   Drop `p.last_seen < ?` and it becomes a delete-on-age rule that takes a real
+   reward off a player who is opening the app every day: an unacknowledged grant
+   means the ack never landed, not that nobody is there. */
+test('the dormancy arm still reads the RECIPIENT\'s clock, not only the gift\'s', () => {
+  const i = source.indexOf('DELETE FROM grants WHERE id IN (');
+  assert.ok(i > 0, 'the grants DELETE has moved; re-read pruneGrants and update this file');
+  const stmt = source.slice(i, source.indexOf('.bind(', i));
+  assert.ok(/OR \(g\.ts < \? AND p\.last_seen < \?\)/.test(stmt),
+    'the grants pruner no longer requires the recipient to be dormant as well as the gift to be old:\n      ' + stmt.trim());
+  // And the bind order has to match, or the two clocks are the same value read
+  // from the wrong places and nothing says so.
+  const bind = source.slice(source.indexOf('.bind(', i), source.indexOf('.run()', i));
+  assert.ok(/dormantTs, dormantTs, n/.test(bind), `the dormancy bounds are not bound to dormantTs:\n      ${bind.trim()}`);
 });
 
 /* The four figures the swap moved OFF the events table. They were wrong before

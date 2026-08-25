@@ -361,27 +361,57 @@ function rateLimitRecovery(request, env, name = 'rl_recovery') {
    grew, and D1's 10 GB per-database limit is a hard stop: it is the one number
    here that cannot be bought past, so "we will pay for more" is not an answer.
 
-   THE WINDOW: 60 days, and 90 was rejected on arithmetic, not taste.
-   Measured, by building the real events DDL in local SQLite and reading the
-   page_count delta: one events row costs 189 bytes once idx_events_day,
-   idx_events_device_day and idx_events_name are counted alongside the row
-   itself. At roughly 76 events per active device per day that is 14.4 KB per
-   device per day, so 10,000 DAU writes about 143 MB a day. Then:
+   THE WINDOW: 30 days as of 2026-08-25, down from 60, and the reason is not
+   only the arithmetic below. This is anonymous product telemetry on a
+   consumer app heading for the App Store, and Apple's review guidelines expect
+   data collection limited to what the app actually needs. What this database
+   NEEDS is what the dashboard READS, and that is STATS_WINDOW_DAYS = 14. Every
+   day kept past what anything queries is a day of retained behavioural data
+   with no consumer, which is the definition of over-collection. 30 leaves the
+   reporting window double the headroom it uses and drops the rest.
 
-     90 days x 143 MB = 12.9 GB   over the 10 GB cap on events ALONE
-     60 days x 143 MB =  8.6 GB
-     30 days x 143 MB =  4.3 GB
+   WHAT IT COSTS: three figures on /stats have no day bound at all and so are
+   the only things that lose history. `errors` and `errorsByBuild` (name='err')
+   and `vault` (vault_backfill / vault_recover) go from a 60 day view to a 30
+   day one. All three are debug surfaces read by one person, not gameplay and
+   not anything a player can see; a crash older than a month on a build nobody
+   is running is not a finding. Every other figure on that route is already
+   bounded by STATS_WINDOW_DAYS (14), `today` or `weekAgo`, and the four
+   all-time figures read `devices`, which the pruner never touches.
 
-   Everything else measured at 10,000 players comes to 578 MB (grants 531 MB at
-   1.9M rows, friendships 35 MB, players 8 MB, the rest under 4 MB), plus the
-   backups table, whose blob is a whole encrypted save and is capped at 4 MB per
-   player. Leaving a gigabyte of operational headroom (D1 does not auto-VACUUM,
-   so freed pages are reused rather than returned), 60 days holds to roughly
-   8,000 to 9,000 DAU and 90 days runs out around 5,500. 60 is the larger of the
-   two candidates that survives the arithmetic anywhere near the target.
+   THE ARITHMETIC, RE-MEASURED against production on 2026-08-25, because the
+   numbers this note was originally sized on were both wrong in the same
+   direction. Same method as before (build the real events DDL in local SQLite
+   from production's own column-length histogram, read the page_count delta):
 
-   When DAU passes that, this constant comes down. It is one line, and the
-   pruner will eat the backlog over the following ticks on its own.
+     bytes per row     256   (not the 209 the schema note assumes; 240 after a
+                              VACUUM, and 249 cross-checked top-down against
+                              D1's own reported database_size for the live DB)
+     events per active device-day
+                       228 MEAN over the last 14 days of production
+                           (118 median, but storage is a sum and a sum is the
+                            mean; the distribution is heavily right-skewed,
+                            p95 = 949)
+
+   That is 58 KB per active device per day, so 10,000 DAU writes about 584 MB a
+   day, four times the 143 MB this note used to claim. Then, against 10 GB:
+
+     60 days x 584 MB = 35.0 GB    3.5x over the cap on events ALONE
+     30 days x 584 MB = 17.5 GB
+
+   Which is to say the honest reading of the corrected numbers is that 10,000
+   DAU does not fit at any window worth having, and the constant here is a
+   runway rather than a solution. Leaving a gigabyte of operational headroom
+   (D1 does not auto-VACUUM, so freed pages are reused rather than returned),
+   30 days holds to roughly 5,100 DAU where 60 held to roughly 2,600. On the
+   more optimistic 132 events/device-day figure the same arithmetic gives 8,800
+   and 4,400. Either way the halving is the point, and the ceiling is now a
+   MEASURED quantity: /admin/prune reports the live row count and the pruner's
+   own trace, so the day the curve bends is visible rather than inferred.
+
+   When DAU passes that, this constant comes down again, or the events schema
+   stops carrying three indexes per row. It is one line, and the pruner will eat
+   the backlog over the following ticks on its own.
 
    RATE-LIMIT ROWS ARE NOT PRODUCT EVENTS, and they need the opposite treatment
    in both directions. rateLimitRecovery above stores its per-IP counters as
@@ -390,13 +420,13 @@ function rateLimitRecovery(request, env, name = 'rl_recovery') {
      1. Pruning must never remove a row the limiter is still counting. Delete
         one and the limiter quietly resets, which turns the unauthenticated
         ciphertext endpoints into an unthrottled way to harvest wrapped keys.
-     2. They must not be kept for 60 days either. They are one row per attempt
+     2. They must not be kept for 30 days either. They are one row per attempt
         per IP, they carry no product meaning, and they pollute the dashboard:
         /stats counts DISTINCT device, and an IP hash is not a device.
    Hence their own window of 24 hours. That is 144 times the limiter's 10 minute
    horizon, so no counter it can still see is ever inside the deletable set, and
-   the rows still leave 59 days earlier than everything else. */
-const EVENT_RETENTION_DAYS = 60;
+   the rows still leave 29 days earlier than everything else. */
+const EVENT_RETENTION_DAYS = 30;
 const EVENT_RETENTION_OVERRIDE_DAYS = { rl_recovery: 1, rl_ridcheck: 1 };
 /* HOW FAR BACK /stats READS, which is a different question from how far back
    the table goes. Retention is a storage decision; this is a latency one. See
@@ -546,13 +576,47 @@ async function pruneEvents(env, now = Date.now(), opts = {}) {
       question. They are also what /steps/week checks to decide a week is
       already settled. There are five a week, which is 260 rows a year, so
       keeping them forever costs nothing worth having.
-      NEVER DELETED, and this one is an admission rather than a policy: a
-      value-bearing grant for a player who has never acknowledged it. A dormant
-      account whose friends keep sending gifts accumulates rows that no rule
-      here can touch, because the only safe signal is the one the client has not
-      sent. That tail is unbounded. Capping it needs a product decision about
-      how long an unopened gift waits, which is Tom's to make, not this file's. */
+      DELETED, and this is the rule that took a product decision rather than an
+      argument from the code: a value-bearing grant that was never acknowledged,
+      once BOTH it and its recipient have gone quiet for GRANT_DORMANT_DAYS.
+      Until 2026-08-25 this row was the one thing here with no ceiling at all,
+      and the note in this place said so: a dormant account whose friends keep
+      sending gifts accumulated rows no rule could touch, because the only safe
+      signal was the one the client had not sent. Tom's decision was 180 days of
+      the GIFT's age AND 180 days of the RECIPIENT's silence, and the second half
+      is the whole rule, not an optimisation on the first.
+      WHY AGE ALONE WOULD BE WRONG. An unacknowledged grant does not mean an
+      absent player. It means the ack never landed, and there are three ordinary
+      ways for that to happen to somebody who is playing every day: an old build
+      that predates players.grants_ack entirely, a cloud restore rolling
+      grantCursor backwards (see the paragraph above), and the ack write simply
+      failing, which GET /grants tolerates by design. Deleting on age alone
+      takes a real reward off an active player in all three. The recipient's own
+      clock is what separates "nobody is coming back for this" from "the
+      bookkeeping missed".
+      WHY last_seen IS THE RIGHT SECOND CLOCK. It is written by PUT /profile,
+      and js/social.js autoSync calls syncProfile IMMEDIATELY BEFORE pullGrants
+      on the same 5 minute throttle. So every client that could acknowledge
+      anything has already moved last_seen, on every build, whether or not it
+      knows what an ack is, and whether or not there was a grant to read. It is
+      therefore strictly more recent than any acknowledgement signal, which is
+      the direction a delete rule needs to be wrong in. It is also NOT NULL and
+      has been written since the first schema, so unlike grants_ack it needs no
+      backfill: this rule is not reading a column that only started recording
+      yesterday.
+      A grant whose player row is GONE has last_seen NULL, `p.last_seen < ?` is
+      then NULL rather than true, and the row is not deleted. That is the same
+      fail-safe COALESCE(p.grants_ack, 0) buys on the rule above, and it is why
+      neither half of this predicate gets a COALESCE that would invent a date.
+      NEVER DELETED, still: a value-bearing unacknowledged grant for a player who
+      is still around. There is no age at which that becomes safe. */
 const GRANT_RETENTION_DAYS = 90;
+/* THE DORMANCY WINDOW, applied to the gift's age AND to the recipient's
+   last_seen, both of which must be past it. Must be >= GRANT_RETENTION_DAYS or
+   the constant would be a lie: the outer age bound on the DELETE below is the
+   shorter of the two, so a smaller number here would silently be clamped to it.
+   schema-plan.test.mjs asserts the ordering. */
+const GRANT_DORMANT_DAYS = 180;
 /* The stepweek- receipts, as a key RANGE rather than a LIKE. Player ids contain
    '_', which is a LIKE wildcard, and /gift already learned that lesson; a range
    is also the form the planner can drive an index with. '.' is the next
@@ -571,16 +635,26 @@ async function pruneGrants(env, now = Date.now(), opts = {}) {
   const started = Date.now();
   const days = Math.max(0, opts.retentionDays === undefined ? GRANT_RETENTION_DAYS : Number(opts.retentionDays));
   const cutoffTs = now - days * 86400000;
+  /* Never shorter than the age bound the outer predicate already applies: a
+     dormancy window inside it could not delete anything the first rule had not
+     already reached, so the constant would be reporting a window it does not
+     enforce. */
+  const dormantDays = Math.max(days, GRANT_DORMANT_DAYS);
+  const dormantTs = now - dormantDays * 86400000;
   let total = 0, stopped = null;
 
-  /* ONE statement, not two passes, because both rules share the same age bound
-     and the same never-delete carve-out, and one predicate means one walk of
-     idx_grants_ts instead of two. The index is what keeps this honest: without
-     it the planner falls back to a MULTI-INDEX OR over idx_grants_key plus a
-     temp b-tree for the ORDER BY, and a 1,000 row batch measured 382 ms against
-     400,000 rows instead of 13.6 ms. ORDER BY g.ts is not cosmetic either: it
-     is what makes a batch stop at the oldest rows and return, rather than
-     walking the whole table to find its LIMIT. */
+  /* ONE statement, not three passes, because every rule shares the same outer
+     age bound and the same never-delete carve-out, and one predicate means one
+     walk of idx_grants_ts instead of three. The index is what keeps this honest:
+     without it the planner falls back to a MULTI-INDEX OR over idx_grants_key
+     plus a temp b-tree for the ORDER BY, and a 1,000 row batch measured 382 ms
+     against 400,000 rows instead of 13.6 ms. ORDER BY g.ts is not cosmetic
+     either: it is what makes a batch stop at the oldest rows and return, rather
+     than walking the whole table to find its LIMIT.
+     The dormancy arm is the third OR and it needs BOTH of its own bounds. Drop
+     `p.last_seen < ?` and this becomes a delete-on-age rule that eats live
+     players' rewards; the KEEP test for an old gift held by an active account is
+     what says so. */
   for (;;) {
     if (total >= maxRows) { stopped = 'maxRows'; break; }
     if (Date.now() - started >= budgetMs) { stopped = 'budgetMs'; break; }
@@ -590,9 +664,10 @@ async function pruneGrants(env, now = Date.now(), opts = {}) {
          SELECT g.id FROM grants g LEFT JOIN players p ON p.id = g.player_id
           WHERE g.ts < ?
             AND (g.key < ? OR g.key >= ?)
-            AND (g.id <= COALESCE(p.grants_ack, 0) OR g.type = 'cheer')
+            AND (g.id <= COALESCE(p.grants_ack, 0) OR g.type = 'cheer'
+                 OR (g.ts < ? AND p.last_seen < ?))
           ORDER BY g.ts LIMIT ?)`)
-      .bind(cutoffTs, STEPWEEK_LO, STEPWEEK_HI, n).run();
+      .bind(cutoffTs, STEPWEEK_LO, STEPWEEK_HI, dormantTs, dormantTs, n).run();
     const c = Number(r?.meta?.changes || 0);
     total += c;
     if (c < n) break;   // caught up
@@ -602,6 +677,8 @@ async function pruneGrants(env, now = Date.now(), opts = {}) {
     total,
     retentionDays: days,
     cutoffTs,
+    dormantDays,
+    dormantTs,
     stopped,
     more: stopped !== null,
     ms: Date.now() - started,
@@ -640,6 +717,15 @@ const PRUNE_RUNS_KEEP = 2000;   // ~21 days at 96 ticks/day; 216 KB measured at 
 /* How far GET /admin/prune will count the unprunable-grants tail before giving
    up and saying "or more". See the note at its query for the measurement. */
 const DORMANT_COUNT_CAP = 100000;
+/* D1's hard per-database ceiling, and the share of it GET /admin/prune projects
+   the backups table against. 10 GB cannot be raised by paying for it; the
+   fraction is a judgement about how much of one database a single table may
+   have, and it travels in the response so nobody reads the projected player
+   count without it. Backups is the one table with NO pruning rule at all
+   (Tom, 2026-08-25: prune nothing, watch the average), so the projection IS the
+   policy: it is the thing that has to move before anything else does. */
+const D1_LIMIT_BYTES = 10 * 1024 * 1024 * 1024;
+const BACKUPS_BUDGET_FRACTION = 0.5;
 
 async function recordPruneRun(env, row) {
   try {
@@ -2742,23 +2828,31 @@ export default {
            is a table or column that is not there -- which is also what would
            break the aggregates below. Losing the counts is acceptable; losing
            "status: failing" and the recorded stack because of them is not. */
-        let oldestDay = null, eventsRows = null, grantsRows = null, grantsDormant = null, tableErr = null;
+        let oldestDay = null, eventsRows = null, grantsRows = null, grantsDormant = null,
+            backups = null, tableErr = null;
+        const dormantTs = now - GRANT_DORMANT_DAYS * 86400000;
         try {
           oldestDay = await env.DB.prepare('SELECT MIN(day) d FROM events').first('d');
           eventsRows = await env.DB.prepare('SELECT COUNT(*) n FROM events').first('n');
           grantsRows = await env.DB.prepare('SELECT COUNT(*) n FROM grants').first('n');
-          /* THE TAIL THE PRUNER ADMITS IT CANNOT TOUCH. A value-bearing grant
-             for a player who has never acknowledged anything is never deleted at
-             any age, by design (see pruneGrants). It is the only part of this
-             database with no ceiling at all, and it is invisible in a run log,
-             because a run log only ever reports rows that WERE deleted. Same
-             predicate as the pruner, negated.
+          /* THE UNOPENED-GIFT TAIL, AND IT IS NO LONGER PERMANENT. Until
+             2026-08-25 a value-bearing grant for a player who had never
+             acknowledged anything was never deleted at any age, and this figure
+             counted the only part of the database with no ceiling at all. The
+             dormancy rule capped it: what is counted here now is the part of
+             that tail the pruner still cannot touch, which is a gift that is
+             either younger than GRANT_DORMANT_DAYS or held by a recipient who
+             has been seen inside it. The two ways to leave this count are the
+             two good ones: the player comes back and reads it, or both clocks
+             run out and the pruner takes it. Same predicate as the pruner,
+             negated, including the NULL arm: a grant whose player row is gone
+             has no last_seen and the pruner will never delete it.
 
              COUNTED THROUGH A LIMIT, so the cost is bounded by the cap and not
              by the table. Measured on 8,000,000 grants: 4,333 ms uncapped
              against 329 ms capped at 100,000, and the uncapped form extrapolates
              to D1's 30 second statement limit at roughly 55M rows. "More than
-             100,000 unopened gifts are now permanent" is exactly as actionable
+             100,000 unopened gifts are still waiting" is exactly as actionable
              as an exact figure, and it cannot become the reason this route stops
              answering. A capped result is flagged so nobody reads the ceiling as
              a measurement. */
@@ -2766,9 +2860,34 @@ export default {
             `SELECT COUNT(*) n FROM (
                SELECT 1 FROM grants g LEFT JOIN players p ON p.id = g.player_id
                 WHERE g.type <> 'cheer' AND g.id > COALESCE(p.grants_ack, 0)
-                  AND (g.key < ? OR g.key >= ?) LIMIT ?)`)
-            .bind(STEPWEEK_LO, STEPWEEK_HI, DORMANT_COUNT_CAP).first('n');
+                  AND (g.key < ? OR g.key >= ?)
+                  AND (g.ts >= ? OR p.last_seen IS NULL OR p.last_seen >= ?) LIMIT ?)`)
+            .bind(STEPWEEK_LO, STEPWEEK_HI, dormantTs, dormantTs, DORMANT_COUNT_CAP).first('n');
+          /* SAVE SIZE, WATCHED RATHER THAN PRUNED. Tom's decision on backups was
+             "prune nothing, watch the average", on the condition that the average
+             becomes visible, so this is the other half of that decision and not a
+             nice-to-have. Nothing deletes from backups and nothing should: the
+             table is one row per player (player_id is the PRIMARY KEY and the
+             write is INSERT ... ON CONFLICT DO UPDATE), so it grows with PLAYER
+             COUNT alone and not at all with how often anybody syncs. There is no
+             stale row to reclaim. What there is instead is a save that gets
+             bigger as it matures, and that is a curve nobody can see without
+             this line.
+             THE PROJECTION IS AN OBSERVATION, NOT A CONSTANT. playersAtBudget
+             divides the budget by the CURRENT MEASURED average, so it falls on
+             its own as saves mature and there is no hardcoded forecast to go
+             stale. It was 55 KB per save at 33 players on the day this shipped;
+             the code's own estimate for a mature one-year save is 2.23 MB, which
+             is the same figure forty times smaller, so expect this number to
+             drop by about that much and treat the fall as the signal.
+             CHEAP: one aggregate over one row per player. At 10,000 players that
+             is 10,000 rows, three orders of magnitude under the events COUNT(*)
+             already above it, so it does not change what this route costs to
+             poll. */
+          backups = await env.DB.prepare(
+            'SELECT COUNT(*) n, COALESCE(SUM(size), 0) bytes, COALESCE(MAX(size), 0) maxBytes FROM backups').first();
         } catch (e) { tableErr = (e && e.message) || String(e); }
+        const avgBackup = backups && backups.n ? Math.round(backups.bytes / backups.n) : null;
 
         // The observed schedule: median gap between consecutive recorded ticks.
         const gaps = [];
@@ -2818,11 +2937,24 @@ export default {
           retention: {
             eventDays: EVENT_RETENTION_DAYS, eventCutoffDay: cutoffDay,
             eventOverrideDays: EVENT_RETENTION_OVERRIDE_DAYS, grantDays: GRANT_RETENTION_DAYS,
+            grantDormantDays: GRANT_DORMANT_DAYS,
+            /* backups has no rule here on purpose. Naming it as null next to the
+               windows that do exist is the difference between a decision and an
+               oversight, and the figures under tables.backups are what that
+               decision was traded for. */
+            backupDays: null,
           },
           caps: { batch: PRUNE_BATCH, maxRowsPerTick: PRUNE_MAX_ROWS, budgetMs: PRUNE_BUDGET_MS },
           tables: {
             eventsRows, eventsOldestDay: oldestDay, grantsRows, grantsDormant,
             grantsDormantCapped: grantsDormant >= DORMANT_COUNT_CAP,   // true = "at least this many"
+            backups: backups ? {
+              rows: backups.n, bytes: backups.bytes, avgBytes: avgBackup, maxBytes: backups.maxBytes,
+              /* The whole point of decision 3: a player count derived from the
+                 average measured a moment ago, so it MOVES as saves mature. */
+              budgetFraction: BACKUPS_BUDGET_FRACTION, budgetBytes: Math.round(D1_LIMIT_BYTES * BACKUPS_BUDGET_FRACTION),
+              playersAtBudget: avgBackup ? Math.round(D1_LIMIT_BYTES * BACKUPS_BUDGET_FRACTION / avgBackup) : null,
+            } : null,
             error: tableErr,
           },
           runs, generatedAt: now,

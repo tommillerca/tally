@@ -25,6 +25,7 @@ import assert from 'node:assert/strict';
 
 const BASE = process.env.BASE || process.env.API || 'http://127.0.0.1:8788';
 const DAY = 86400000;
+const RETENTION_DAYS = 30;      // must match EVENT_RETENTION_DAYS in src/index.js
 let passed = 0, failed = 0, skipped = 0;
 
 async function test(name, fn) {
@@ -97,8 +98,8 @@ await test('DEV hooks are reachable (otherwise every result below is vacuous)', 
 
 await test('the pruner reports the window it actually enforces', async () => {
   const r = await prune({ maxRows: 0 });
-  assert.equal(r.retentionDays, 60, `window is ${r.retentionDays} days, expected 60`);
-  const expected = new Date(Date.now() - 60 * DAY).toISOString().slice(0, 10);
+  assert.equal(r.retentionDays, RETENTION_DAYS, `window is ${r.retentionDays} days, expected ${RETENTION_DAYS}`);
+  const expected = new Date(Date.now() - RETENTION_DAYS * DAY).toISOString().slice(0, 10);
   assert.equal(r.cutoffDay, expected);
 });
 
@@ -109,7 +110,7 @@ await test('DELETES product events older than the window', async () => {
   // proved nothing at all.
   assert.equal(await count({ device: d }), 5, 'fixture did not land');
   await drain();
-  assert.equal(await count({ device: d }), 0, 'a 200-day-old event survived a 60-day window');
+  assert.equal(await count({ device: d }), 0, `a 200-day-old event survived a ${RETENTION_DAYS}-day window`);
 });
 
 await test('KEEPS product events inside the window', async () => {
@@ -119,18 +120,19 @@ await test('KEEPS product events inside the window', async () => {
   await drain();
   // DIRECTION: unchanged. A pruner that is too eager is worse than one that is
   // too lazy, because the data it takes does not come back.
-  assert.equal(await count({ device: d }), 5, 'a 5-day-old event was pruned by a 60-day window');
+  assert.equal(await count({ device: d }), 5, `a 5-day-old event was pruned by a ${RETENTION_DAYS}-day window`);
 });
 
-await test('the 60-day boundary: day 59 lives, day 61 dies', async () => {
-  const d59 = dev('d59'), d61 = dev('d61');
-  await plant(d59, 'app_open', 59 * DAY, 3);
-  await plant(d61, 'app_open', 61 * DAY, 3);
-  assert.equal(await count({ device: d59 }), 3, 'fixture did not land');
-  assert.equal(await count({ device: d61 }), 3, 'fixture did not land');
+await test(`the ${RETENTION_DAYS}-day boundary: one day inside lives, one day outside dies`, async () => {
+  const inside = RETENTION_DAYS - 1, outside = RETENTION_DAYS + 1;
+  const dIn = dev('din'), dOut = dev('dout');
+  await plant(dIn, 'app_open', inside * DAY, 3);
+  await plant(dOut, 'app_open', outside * DAY, 3);
+  assert.equal(await count({ device: dIn }), 3, 'fixture did not land');
+  assert.equal(await count({ device: dOut }), 3, 'fixture did not land');
   await drain();
-  assert.equal(await count({ device: d59 }), 3, 'day 59 was pruned: the window is too tight');
-  assert.equal(await count({ device: d61 }), 0, 'day 61 survived: the window is too loose');
+  assert.equal(await count({ device: dIn }), 3, `day ${inside} was pruned: the window is too tight`);
+  assert.equal(await count({ device: dOut }), 0, `day ${outside} survived: the window is too loose`);
 });
 
 await test('KEEPS a LIVE rate-limit row, written by the real limiter', async () => {
@@ -170,8 +172,8 @@ await test('the limiter still counts after a prune (429 budget is not reset)', a
   assert.equal(again.status, 429, 'the prune handed the rate limiter a fresh budget');
 });
 
-await test('DELETES stale rate-limit rows long before the 60-day window', async () => {
-  // 2 days old: far inside the 60-day product window, far outside the 1-day
+await test(`DELETES stale rate-limit rows long before the ${RETENTION_DAYS}-day window`, async () => {
+  // 2 days old: far inside the product window, far outside the 1-day
   // window these rows get. This is the test that goes red if somebody deletes
   // the override and lets rl rows ride the default retention.
   const d = dev('rlstale');
@@ -180,7 +182,7 @@ await test('DELETES stale rate-limit rows long before the 60-day window', async 
   assert.equal(await count({ device: d }), 8, 'fixture did not land');
   await drain();
   assert.equal(await count({ device: d }), 0,
-    'two-day-old rate-limit rows survived: they are being kept for 60 days like product events');
+    `two-day-old rate-limit rows survived: they are being kept for ${RETENTION_DAYS} days like product events`);
 });
 
 await test('KEEPS a rate-limit row that is stale for the limiter but inside its own window', async () => {
@@ -330,7 +332,7 @@ await (async () => {
     assert.ok(Math.abs(Date.now() - run.ts) < 120000, 'the newest run is not from just now');
     // The per-rule breakdown is the part that makes a row worth reading rather
     // than merely present: "50,000 rows" and "50,000 rows, all of them the
-    // 60-day window" are different findings.
+    // retention window" are different findings.
     assert.ok(JSON.parse(run.evBy).window >= 4, `evBy does not attribute the deletions: ${run.evBy}`);
   });
 

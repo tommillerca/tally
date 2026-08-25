@@ -155,6 +155,19 @@
           <div class="hd">This worker does not serve <code>/admin/prune</code>, so there is no way to tell from here whether anything is deleting old rows. Deploy a build that includes it.</div></div>`;
         const cls = health.status === 'healthy' ? 'ok' : (health.status === 'behind' ? 'warn' : 'bad');
         const t = health.tables || {};
+        /* SAVE SIZE. Nothing prunes the backups table and nothing should: it is
+           one row per player, so it grows with player count alone. Tom chose to
+           watch the average rather than prune it, and this line is the condition
+           that choice was made on. The projected player count comes off the
+           CURRENT measured average, so it falls on its own as saves mature; that
+           fall is the number to watch, not the absolute figure. Silently absent
+           on an older worker, like everything else in this block. */
+        const kb = b => b == null ? '?' : b >= 1048576 ? (b / 1048576).toFixed(2) + ' MB' : Math.round(b / 1024).toLocaleString() + ' KB';
+        const bk = t.backups;
+        const bkLine = !bk ? '' : `<div class="hm">Saves: <b>${bk.rows.toLocaleString()}</b> rows, ${kb(bk.bytes)} total &middot;
+          <b>${kb(bk.avgBytes)}</b> average, ${kb(bk.maxBytes)} largest &middot; nothing prunes this table (one row per player, so it grows with player count only).
+          At today's average it reaches ${Math.round(bk.budgetFraction * 100)}% of D1's 10 GB at <b>${bk.playersAtBudget == null ? '?' : bk.playersAtBudget.toLocaleString()}</b> players.
+          That figure is measured, not forecast: as saves mature it falls, and the fall is the signal.</div>`;
         const rows = (health.runs || []).map(x => `<tr>
             <td>${new Date(x.ts).toLocaleString()}</td>
             <td>${x.ok ? 'ok' : '<span class="err">failed</span>'}</td>
@@ -167,7 +180,8 @@
         return `<div class="health ${cls}">
           <div class="hs">Retention: ${esc(health.status)}</div>
           <div class="hd">${esc(health.detail)}</div>
-          <div class="hm">Last tick ${ago(health.sinceLastMs)} &middot; events ${t.eventsRows == null ? '?' : t.eventsRows.toLocaleString()} rows, oldest ${esc(t.eventsOldestDay || '—')} &middot; grants ${t.grantsRows == null ? '?' : t.grantsRows.toLocaleString()} rows, of which <b>${t.grantsDormant == null ? '?' : t.grantsDormant.toLocaleString() + (t.grantsDormantCapped ? '+' : '')}</b> can never be pruned at any age (unopened gifts for players who have never acknowledged one).</div>
+          <div class="hm">Last tick ${ago(health.sinceLastMs)} &middot; events ${t.eventsRows == null ? '?' : t.eventsRows.toLocaleString()} rows, oldest ${esc(t.eventsOldestDay || '—')} &middot; grants ${t.grantsRows == null ? '?' : t.grantsRows.toLocaleString()} rows, of which <b>${t.grantsDormant == null ? '?' : t.grantsDormant.toLocaleString() + (t.grantsDormantCapped ? '+' : '')}</b> are unopened gifts still waiting (they expire after ${(health.retention || {}).grantDormantDays ?? '?'} days of BOTH the gift's age and the recipient's silence).</div>
+          ${bkLine}
         </div>
         ${rows ? `<details><summary class="note">Last ${health.runs.length} ticks</summary>
           <table class="tbl"><tr><th>when</th><th></th><th>events</th><th>grants</th><th>stopped on</th><th>took</th><th>error</th></tr>${rows}</table>
