@@ -49,6 +49,8 @@ if (/127\.0\.0\.1|localhost/.test(BASE)) {
 }
 const DAY = 86400000;
 const RETENTION_DAYS = 90;      // must match GRANT_RETENTION_DAYS in src/index.js
+const DORMANT_DAYS = 180;       // must match GRANT_DORMANT_DAYS in src/index.js
+const ADMIN = process.env.ADMIN_TOKEN || 'devtoken';
 let passed = 0, failed = 0;
 
 async function test(name, fn) {
@@ -131,6 +133,17 @@ async function ackOf(playerId) {
   assert.equal(r.status, 200);
   return (await r.json()).ack;
 }
+/** Move a player's whole clock backwards, so "this account has not been seen in
+ *  N days" is a state a test can build. /dev/player-warp is the real fixture the
+ *  snapshot-bounds tests already use; it moves created_at, last_seen and
+ *  max_level_at together, which is the only combination the real world produces. */
+async function warpPlayer(playerId, backMs) {
+  const r = await postJson('/dev/player-warp', { id: playerId, backMs });
+  assert.equal(r.status, 200, `player-warp failed: ${r.text}`);
+  assert.ok(r.json.row, `player-warp matched no player: ${r.text}`);
+  return r.json.row;
+}
+const lastSeenOf = async playerId => (await warpPlayer(playerId, 0)).last_seen;
 async function prune(opts = {}) {
   const r = await postJson('/dev/prune-grants', opts);
   assert.equal(r.status, 200, `prune failed: ${r.text}`);
@@ -161,6 +174,8 @@ await test('the pruner reports the window it actually enforces', async () => {
   const r = await prune({ maxRows: 0 });
   assert.equal(r.retentionDays, RETENTION_DAYS, `window is ${r.retentionDays} days, expected ${RETENTION_DAYS}`);
   assert.ok(Math.abs(r.cutoffTs - (Date.now() - RETENTION_DAYS * DAY)) < 60000, 'cutoff is not the window it claims');
+  assert.equal(r.dormantDays, DORMANT_DAYS, `dormancy window is ${r.dormantDays} days, expected ${DORMANT_DAYS}`);
+  assert.ok(Math.abs(r.dormantTs - (Date.now() - DORMANT_DAYS * DAY)) < 60000, 'the dormancy cutoff is not the window it claims');
 });
 
 /* ---------------- THE ACKNOWLEDGEMENT, which everything else rests on ------ */
@@ -215,6 +230,75 @@ await test('KEEPS a 120-day-old GIFT for a player who has never acknowledged any
   // it has the row, and this player's client has never said anything.
   assert.ok(keysOf(await grantsOf(p.id)).includes(`keep-${RUN}-unread`),
     'an unread 120-day-old gift was deleted: a player just lost a present');
+});
+
+/* ---------------- DORMANCY (2026-08-25) -----------------------------------
+   Tom's decision: an unacknowledged value-bearing grant expires after 180 days
+   of the GIFT's age AND 180 days of the RECIPIENT's silence. Three tests, and
+   the two KEEPs are the important ones: the whole risk of this rule is that
+   somebody drops the second predicate as a simplification, at which point it is
+   a delete-on-age rule and it eats presents belonging to people who are playing
+   right now. An unacknowledged grant does not mean an absent player; it means
+   the ack never landed, which happens on an old build, after a cloud restore
+   rolls the cursor backwards, and whenever the ack write fails. */
+
+await test('KEEPS a 200-day-old unread GIFT for a player who is still ACTIVE', async () => {
+  const p = await newPlayer();
+  await plant(p.id, `dorm-${RUN}-active`, 'gift', (DORMANT_DAYS + 20) * DAY, { coins: 500, from: 'A Friend', gift: true });
+  // BOUND, both halves: the gift must be past the age line and the player must
+  // be inside the silence line, or this passes for the wrong reason.
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${RUN}-active`), 'fixture did not land');
+  const seen = await lastSeenOf(p.id);
+  assert.ok(seen > Date.now() - DORMANT_DAYS * DAY,
+    `fixture did not land: the player is already dormant (last_seen ${new Date(seen).toISOString()})`);
+  await drain();
+  /* DIRECTION: unchanged. THIS IS THE TEST. Age alone is not a licence to
+     delete something carrying value, at ANY age, while the recipient is still
+     opening the app. If this goes red the rule has become delete-on-age and a
+     live player has just lost 500 coins their friend sent them. */
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${RUN}-active`),
+    'a 200-day-old unread gift was deleted from an ACTIVE account: the dormancy rule is ignoring the recipient');
+});
+
+await test('KEEPS a fresh unread gift for a player who HAS gone dormant', async () => {
+  const p = await newPlayer();
+  await plant(p.id, `dorm-${RUN}-young`, 'gift', 30 * DAY, { coins: 500, from: 'A Friend', gift: true });
+  await warpPlayer(p.id, (DORMANT_DAYS + 20) * DAY);
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${RUN}-young`), 'fixture did not land');
+  assert.ok(await lastSeenOf(p.id) < Date.now() - DORMANT_DAYS * DAY, 'fixture did not land: the player is not dormant');
+  await drain();
+  // DIRECTION: unchanged. The other half of the AND. A player who stops playing
+  // does not forfeit the gift that arrived last month; they forfeit the one that
+  // has been sitting unopened for longer than they have been gone.
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${RUN}-young`),
+    'a 30-day-old gift was deleted because its recipient is dormant: the age bound is not being applied');
+});
+
+await test('DELETES a 200-day-old unread gift once its recipient has ALSO been gone 200 days', async () => {
+  const p = await newPlayer();
+  await plant(p.id, `dorm-${RUN}-gone`, 'gift', (DORMANT_DAYS + 20) * DAY, { coins: 500, from: 'A Friend', gift: true });
+  await warpPlayer(p.id, (DORMANT_DAYS + 20) * DAY);
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${RUN}-gone`), 'fixture did not land');
+  assert.ok(await lastSeenOf(p.id) < Date.now() - DORMANT_DAYS * DAY, 'fixture did not land: the player is not dormant');
+  await drain();
+  // DIRECTION: gone, and this is the only rule in the file that deletes a
+  // value-bearing row the client never read. It is sound because BOTH clocks ran
+  // out: nothing has come for this gift, and nobody has come for the account.
+  assert.ok(!keysOf(await grantsOf(p.id)).includes(`dorm-${RUN}-gone`),
+    'a 200-day-old unread gift for a 200-day-dormant account survived: the tail still has no ceiling');
+});
+
+await test('a stepweek- RECEIPT survives dormancy too, on both clocks', async () => {
+  // The carve-out is unconditional and the new rule must not have punched a hole
+  // in it: this is the receipt /steps/settled reads back for a race that paid.
+  const p = await newPlayer();
+  const week = new Date(Date.UTC(1990, 0, 1) + Math.floor(Math.random() * 9000) * DAY).toISOString().slice(0, 10);
+  await plant(p.id, `stepweek-${week}`, 'social', (DORMANT_DAYS + 400) * DAY, { coins: 5000, place: 2, steps: 70001 });
+  await warpPlayer(p.id, (DORMANT_DAYS + 400) * DAY);
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`stepweek-${week}`), 'fixture did not land');
+  await drain();
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`stepweek-${week}`),
+    'the dormancy rule ate a step-race receipt: the settled podium for that week is now unreadable');
 });
 
 await test('KEEPS an ACKNOWLEDGED grant that is still inside the window', async () => {
@@ -369,6 +453,70 @@ await test('a wall-clock bound also stops a run, and stops it cleanly', async ()
   await drain();
   assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`clock-${RUN}`)).length, 0,
     'the interrupted run did not resume to completion');
+});
+
+/* ---------------- SAVE SIZE, WATCHED RATHER THAN PRUNED -------------------
+   Tom's decision on the backups table was "prune nothing, watch the average",
+   ON THE CONDITION that the average becomes visible. So the thing that has to
+   be tested is not a deletion, it is that the number on /admin/prune is an
+   OBSERVATION and not a forecast somebody typed in: it has to move when the
+   saves move. A hardcoded projection would pass every assertion about its own
+   arithmetic and still be worthless the month saves double in size. */
+await test('/admin/prune reports the save-size trend, and it MOVES with the saves', async () => {
+  const status = async () => {
+    const r = await fetch(`${BASE}/admin/prune?token=${encodeURIComponent(ADMIN)}`);
+    assert.equal(r.status, 200, `/admin/prune answered ${r.status}; is ADMIN_TOKEN ${ADMIN}?`);
+    const b = (await r.json()).tables.backups;
+    assert.ok(b, 'no backups figures on /admin/prune at all: decision 3 is not implemented');
+    return b;
+  };
+  const pushSave = async (p, bytes) => {
+    const body = JSON.stringify({ blob: 'A'.repeat(bytes), appV: 'test' });
+    const r = await signedFetch(p.kp, p.id, 'PUT', '/backup', body);
+    const t = await r.text();
+    assert.equal(r.status, 200, `PUT /backup failed: ${t}`);
+  };
+
+  // A small save first, so the fixture exists before anything is asserted about
+  // it: on a fresh local database the table is empty and every figure below
+  // would be null, which is the empty-sample failure, not a pass.
+  await pushSave(await newPlayer(), 4096);
+  const before = await status();
+  assert.ok(before.rows > 0, 'the fixture did not land: no backup rows to average');
+  assert.equal(before.avgBytes, Math.round(before.bytes / before.rows), 'avgBytes is not bytes/rows');
+  assert.equal(before.playersAtBudget, Math.round(before.budgetBytes / before.avgBytes),
+    'playersAtBudget is not the budget divided by the CURRENT average, so it is a forecast, not a measurement');
+  assert.ok(before.budgetFraction > 0 && before.budgetFraction <= 1,
+    `the budget fraction (${before.budgetFraction}) has to travel with the projection or the number means nothing`);
+
+  // Now a save an order of magnitude bigger, which is exactly what a maturing
+  // save looks like. DIRECTION: the average and the max go UP, the projected
+  // player count goes DOWN. That fall is the signal the decision rests on.
+  const big = 400 * 1024;
+  await pushSave(await newPlayer(), big);
+  const after = await status();
+  assert.equal(after.rows, before.rows + 1, 'the second save did not land as its own row');
+  assert.ok(after.avgBytes > before.avgBytes, `the average did not move (${before.avgBytes} -> ${after.avgBytes})`);
+  assert.ok(after.maxBytes >= big, `the largest save is reported as ${after.maxBytes}, under the ${big} just written`);
+  assert.ok(after.playersAtBudget < before.playersAtBudget,
+    `the projected player count did not fall as saves grew (${before.playersAtBudget} -> ${after.playersAtBudget}): ` +
+    'it is a constant, not an observation of reality');
+});
+
+await test('nothing prunes the backups table, at any age', async () => {
+  // The other half of the decision, and the one that is easy to lose by
+  // accident: Tom explicitly chose NOT to prune saves. A rule that quietly
+  // appears here deletes the only copy of somebody's progress.
+  const p = await newPlayer();
+  const body = JSON.stringify({ blob: 'B'.repeat(2048), appV: 'test' });
+  assert.equal((await signedFetch(p.kp, p.id, 'PUT', '/backup', body)).status, 200, 'fixture did not land');
+  await drain();
+  // And through the REAL cron entry point, which is where both pruners run, so
+  // this is not only asserting that the grants pruner minds its own table.
+  await (await fetch(BASE + '/__scheduled?cron=*%2F15+*+*+*+*')).text();
+  const r = await signedFetch(p.kp, p.id, 'GET', '/backup');
+  assert.equal(r.status, 200, `the save is gone after a prune (${r.status})`);
+  assert.equal((await r.json()).blob.length, 2048, 'the save came back a different size');
 });
 
 await test('pruning grants does not disturb the EVENTS pruner or the front door', async () => {
