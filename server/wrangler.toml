@@ -29,8 +29,15 @@ database_id = "703a4e46-7643-490c-8d3f-26bc4e277eba"
 # steady-state need of roughly 760k rows a day at 10,000 DAU. The surplus is the
 # point. It means the pruner can drain a backlog rather than only keep pace with
 # one, and a tick that finds nothing to do costs three queries and exits.
+# OFF FOR THE BOT-FLAG DEPLOY, 2026-08-24. Tom: "sure split the D1 work and get
+# the bot flag done." The split is exactly this line. Hiding the 47 test accounts
+# is additive and reversible; the pruner DELETES rows from a live database with
+# real players in it and has never once run against real data. Deploying the
+# filter does not require the pruner, so the pruner waits for a deliberate
+# decision and somebody watching it.
+# TO TURN IT ON: uncomment, redeploy, and watch the first tick.
 [triggers]
-crons = ["*/15 * * * *"]
+crons = []
 
 [vars]
 # DEV enables /dev/* test endpoints. NEVER set in production.
