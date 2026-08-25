@@ -71,6 +71,37 @@ NEVER UPSCALES. `min(TRIM, the master's own ink)` is deliberate: a grillz carrie
 resolution the art does not have. It writes 37 and the canvas draws exactly the
 pixels it draws today from the master, at 1/300th of the decode.
 
+A FOURTH TIER, `shot/`, WHICH IS THE SHOP'S PRODUCT PHOTO.
+
+Gwart's Menagerie and the Stable's pet wardrobe do not show a pet accessory,
+they show a WINDOW onto one: js/app.js petShotHtml frames the item's measured
+`shot` box out of the shared 2048 square and scales that window to the tile, so
+the <img> behind a 112px tile is 464 CSS px of image. That is a ZOOM, and a
+square tier cannot serve it. Measured for CG1 at the shop's 112px tile: the
+visible window is 0.2413 of the square, so a 384 tier puts 92.7 source pixels
+behind 224 device pixels -- a 2.42x upscale, which is the exact class
+tests/art-resolution-audit.mjs exists to catch. Handing the zoom a tier would
+have traded 160 MB for visibly invented pixels.
+
+So this tier is cut to the window instead. Two files per accessory, both cut to
+the SAME padded box so they stack with no transform at all:
+
+    assets/bh/thumb/shot/<itemId>/pet.png     the pet, cut to this item's window
+    assets/bh/thumb/shot/<itemId>/item.png    the accessory, same window
+
+SHOT is 384 because the largest consumer is the shop's 112px tile, which is 336
+device pixels on a 3x phone: every window is a DOWNSCALE on every device (the
+smallest window, CG1's, is 494 source pixels), and the tile costs 0.5625 MB a
+layer instead of 16.0000. Measured on this tree: the Stable's wardrobe row and
+the shop's shelf each mount ten of these layers, 160.0 MB before and 5.6 MB
+after, against the 90 MB ceiling tests/memory-census.mjs enforces.
+
+THE BOXES ARE PARSED OUT OF data/boneheadz.js, never retyped here. PET_SHOP's
+`shot` arrays and PET_SHOT_PAD are the renderer's own numbers, and a copy of
+them in this file would show up as a product photo cut off its own centre the
+first time one was tuned. A parse that finds nothing is a hard error, not an
+empty run.
+
 Idempotent. Run after adding art:  python3 scripts/build-bh-thumbs.py
 """
 import os
@@ -85,9 +116,14 @@ SIZES = [192, 384]
 # that with headroom, and the backing store caps the physical size whatever the
 # device pixel ratio is, so this tier is a downscale on every screen.
 TRIM = 192
+# The cut product-shot tier's cap. The largest consumer is the shop's 112px
+# tile at DPR 3 = 336 device pixels, and the smallest window any item carries is
+# 494 source pixels, so 384 is a downscale for every item on every device.
+SHOT = 384
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, 'assets', 'bh')
 OUT = os.path.join(SRC, 'thumb')
+DATA = os.path.join(ROOT, 'data', 'boneheadz.js')
 
 # The SAME rule js/app.js's bhThumb() uses, so the two cannot drift: the flat
 # per-slot cosmetic art, plus the shiny pet recolours. Anything else (fx frames,
@@ -123,6 +159,60 @@ def trimmed(im):
                       Image.LANCZOS) if k < 1 else cut
 
 
+def pet_shop():
+    """PET_SHOP's pet, its accessories' shot boxes and PET_SHOT_PAD, read out of
+    data/boneheadz.js so the cut and the renderer cannot disagree. Anything it
+    fails to find raises: a silent empty parse would write no shot sheet, and
+    the app would 404 back onto the 16 MB masters and look fine doing it."""
+    src = open(DATA, encoding='utf-8').read()
+    pad = re.search(r'export const PET_SHOT_PAD\s*=\s*([0-9.]+)', src)
+    block = re.search(r'export const PET_SHOP\s*=\s*\{(.*?)\n\};', src, re.S)
+    if not pad or not block:
+        raise SystemExit('build-bh-thumbs: PET_SHOT_PAD / PET_SHOP not found in data/boneheadz.js')
+    pet = re.search(r"pet:\s*\{\s*id:\s*'([^']+)'", block.group(1))
+    items = re.findall(r"\{\s*id:\s*'([^']+)'[^}]*?shot:\s*\[([^\]]+)\]", block.group(1))
+    slots = dict(re.findall(r'"id":\s*"([^"]+)",\s*"slot":\s*"([^"]+)"', src))
+    if not pet or not items:
+        raise SystemExit('build-bh-thumbs: PET_SHOP parsed but carries no pet or no shot boxes')
+    out = []
+    for item_id, nums in items:
+        shot = [float(v) for v in nums.split(',')]
+        if len(shot) != 4:
+            raise SystemExit('build-bh-thumbs: %s has a %d-number shot box' % (item_id, len(shot)))
+        if item_id not in slots:
+            raise SystemExit('build-bh-thumbs: no slot for %s in BH_ITEMS' % item_id)
+        out.append((item_id, slots[item_id], shot))
+    return float(pad.group(1)), pet.group(1), slots.get(pet.group(1), 'C'), out
+
+
+def build_shots():
+    """The cut product shots. The window is petShotHtml's own arithmetic:
+    centre on the box, half-width padded by PET_SHOT_PAD, square."""
+    pad, pet_id, pet_slot, items = pet_shop()
+    pet_im = Image.open(os.path.join(SRC, pet_slot, pet_id + '.png')).convert('RGBA')
+    made = 0
+    for item_id, slot, (x0, y0, x1, y1) in items:
+        item_im = Image.open(os.path.join(SRC, slot, item_id + '.png')).convert('RGBA')
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        half = ((x1 - x0) / 2) * pad
+        # ONE output size for BOTH layers, taken from the pet's canvas. They are
+        # stacked with no transform, so a one-pixel difference between them is a
+        # misregistered accessory; never size each from its own crop.
+        side = min(SHOT, round(half * 2 * pet_im.width))
+        for which, im in (('pet', pet_im), ('item', item_im)):
+            w, h = im.size
+            box = (round((cx - half) * w), round((cy - half) * h),
+                   round((cx + half) * w), round((cy + half) * h))
+            cut = im.crop(box).resize((side, side), Image.LANCZOS)
+            dst = os.path.join(OUT, 'shot', item_id, which + '.png')
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            cut.save(dst, optimize=True)
+            made += 1
+    print('%d cut product shots at %dpx (%.4f MB decoded per layer) for %d accessories'
+          % (made, side, side * side * 4 / 1048576, len(items)))
+    return made
+
+
 def main():
     made = skipped = 0
     total_src = total_out = 0
@@ -152,6 +242,7 @@ def main():
             trimmed(im).save(dst, optimize=True)
             total_out += os.path.getsize(dst)
             made += 1
+    made += build_shots()
     print('%d thumbnails across tiers %s + trim in %s'
           % (made, SIZES, os.path.relpath(OUT, ROOT)))
     print('%d skipped (source already <= the tier)' % skipped)

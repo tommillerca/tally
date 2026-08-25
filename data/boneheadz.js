@@ -2024,6 +2024,43 @@ export const BH_ITEMS_WITH_UNRELEASED = BH_ITEMS_ALL;
 export const BH_BY_ID = Object.fromEntries(BH_ITEMS_ALL.map(i => [i.id, i]));
 export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${item.id}.png`; }
 
+/* ================= WHICH SHEET AN ASSET COMES OFF =================
+ *
+ * THE RULE LIVES HERE, WITH bhAsset, FOR THE REASON PET_CROP AND petWornLayers
+ * DO: a renderer that cannot import js/app.js needs it. js/paddock-cards.js is
+ * pure and is unit-tested in node by tests/unit.test.js, so reaching back into
+ * the app from there would evaluate the whole app headless -- and it draws the
+ * Paddock's species tiles, which is 5 layers of 2048x2048 pet art (80.0 MB
+ * decoded, measured 2026-08-24) that nothing was tiering. The two honest
+ * options were "pass the rule in" and "keep a second copy of the regex"; this
+ * is the third, and it is the one this file already chose twice.
+ *
+ * ONE COPY OF THE REGEX, and scripts/build-bh-thumbs.py's KEEP mirrors it
+ * deliberately (its own note says so). A path it does not match -- fx frames,
+ * glutton plates, the mage, the pet animation strips -- has no thumbnail and is
+ * returned untouched.
+ *
+ * The full argument for the tiers, the measurements behind them and the rule
+ * that they are OPT-IN rather than automatic are in js/app.js at "THE THUMBNAIL
+ * SHEET"; this is only the lookup they share.
+ */
+export const BH_THUMB_RE = /^assets\/bh\/((?:B|BG|CB|CE|CG|CM|C|E|FW|G|H|IL|IR|M|P|S|SK|T|U)\/(?:shiny\/)?[^/]+\.png)$/;
+export const BH_THUMB_TIERS = [192, 384];
+export function bhThumb(src, px = 192) {
+  const m = BH_THUMB_RE.exec(src || '');
+  return m && BH_THUMB_TIERS.includes(px) ? `assets/bh/thumb/${px}/${m[1]}` : src;
+}
+/* PICK THE TIER FROM THE GEOMETRY, not from taste. `css` is the width the WHOLE
+   square ends up occupying in CSS pixels, which for a cropped surface is the
+   post-transform figure and not the window it peeps through. Doubling for device
+   pixels is exact on a 2x phone; anything no tier can serve gets the master. */
+export const bhTierFor = css => BH_THUMB_TIERS.find(t => t >= css * 2) || 640;
+/* The fallback, as an attribute so it survives innerHTML: swap to the full-size
+   art once, then give up and remove the layer. Anti-regression rule 8, and it is
+   also why every tiered surface needs a check on the DECODED WIDTH -- a whole
+   missing sheet degrades to a clean-looking pass with the memory quietly back. */
+export const THUMB_FALLBACK = 'onerror="if(this.dataset.full){this.src=this.dataset.full;this.removeAttribute(\'data-full\');}else{this.remove();}"';
+
 /* The pet art PNGs draw the creature small in the lower-right of a 640² canvas, so a
    plain full-square image renders it tiny and off-centre: the ink is ~0.30 x 0.29 of
    the square, centred at (0.70, 0.75). These are the measured alpha bounding boxes
@@ -2127,6 +2164,21 @@ export const PET_SHOP = {
     { id: 'CM1', coin: 3500,  shot: [0.1365, 0.3493, 0.4266, 0.6394] },   // widest window of the five: three scattered marks, not one mass
   ],
 };
+
+/* THE PADDING ROUND THE SHOT BOX, and it lives beside the boxes rather than in
+ * the renderer because it is now read from TWO places and a drift between them
+ * is a misregistered product photo: js/app.js petShotHtml, and
+ * scripts/build-bh-thumbs.py, which PARSES this file to cut the `shot/` sheet.
+ * 1.30 is Tom's framing: the item's own ink mass with a little air round it. */
+export const PET_SHOT_PAD = 1.30;
+/* WHERE THE CUT PRODUCT SHOT LIVES. Two files per accessory, both cut to the
+ * SAME padded window of the shared 2048 square, so stacking them is still a
+ * plain stack with no transform at all:
+ *   pet.png   Bumbleseal, cut to this item's window (the context underneath)
+ *   item.png  the accessory, cut to the same window
+ * Never a species id in the path: the sheet is keyed by the ITEM, because the
+ * window is a property of the item and the pet is whoever PET_SHOP sells. */
+export const petShotArt = (itemId, which) => `assets/bh/thumb/shot/${itemId}/${which}.png`;
 
 export const PET_SLOTS = [
   { code: 'CG', label: 'Stinger', z: 10 },

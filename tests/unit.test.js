@@ -3140,7 +3140,7 @@ test('the app-wide no-select rule keeps form fields and the recovery code usable
  * catch the one way this can genuinely break, which is a ladder that never
  * terminates at the master.
  */
-test('small art climbs to a bigger source and skips the nearest-neighbour step', () => {
+test('small art climbs to a bigger source and skips the nearest-neighbour step', async () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   const m = app.match(/const SMALL_INK = (\d+);/);
   assert.ok(m, 'SMALL_INK is gone: the small-art path has been removed entirely');
@@ -3157,8 +3157,13 @@ test('small art climbs to a bigger source and skips the nearest-neighbour step',
 
   // Run the ladder itself: 192 -> 384 -> master -> stop, on the app's own tiers.
   const src = app.slice(app.indexOf('const nextArtTier'), app.indexOf('function drawTrimmedArt'));
-  const tiers = JSON.parse(app.match(/const BH_THUMB_TIERS = (\[[^\]]*\]);/)[1]);
-  const next = new Function('BH_THUMB_TIERS', `${src}; return nextArtTier;`)(tiers);
+  /* THE REAL ARRAY, IMPORTED, not scraped out of js/app.js. It used to be a
+     regex over this file's own source, which went red the day BH_THUMB_TIERS
+     moved to data/boneheadz.js (so js/paddock-cards.js could reach it) and
+     reported "Cannot read properties of null" rather than anything about tiers.
+     A scrape can only ever follow a definition around; an import IS it. */
+  const { BH_THUMB_TIERS } = await import('../data/boneheadz.js');
+  const next = new Function('BH_THUMB_TIERS', `${src}; return nextArtTier;`)(BH_THUMB_TIERS);
   const rung = ['assets/bh/thumb/192/H/H1.png'];
   for (let i = 0; i < 6 && rung[rung.length - 1] != null; i++) rung.push(next(rung[rung.length - 1]));
   assert.deepEqual(rung, [
@@ -3183,9 +3188,10 @@ test('small art climbs to a bigger source and skips the nearest-neighbour step',
  *
  * PROVE-RED: `rm assets/bh/thumb/trim/H/H1.png` and this fails naming H/H1.png.
  */
-test('every cosmetic the cropped tier can be asked for is on disk', () => {
-  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
-  const re = new RegExp(app.match(/const BH_THUMB_RE = \/(.*)\/;/)[1]);
+test('every cosmetic the cropped tier can be asked for is on disk', async () => {
+  // the real rule, imported from where it lives now (data/boneheadz.js), for the
+  // same reason as the ladder above: a source scrape follows a definition around.
+  const { BH_THUMB_RE: re } = await import('../data/boneheadz.js');
   const bh = join(here, '..', 'assets', 'bh');
   const rels = [];
   for (const slot of readdirSync(bh)) {

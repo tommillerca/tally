@@ -75,7 +75,11 @@
  *     and a row that goes green when tiles fail to load is a hollow check while
  *     a row that goes red is a network outage failing the gate. Which of those
  *     to accept is a product call, not this file's to make.
- *   - Stable / paddock. Another lane's unmerged work; deliberately not driven.
+ *   (The Stable and the Paddock used to be listed here as "another lane's
+ *   unmerged work; deliberately not driven". That lane merged, and the note
+ *   outlived it: the two worst screens in the app sat unmeasured behind it for
+ *   days while six cheaper ones were guarded. They are rows now, with the Shop
+ *   beside them. A "not covered" note is a debt, not a decision.)
  *
  * AN EMPTY SCREEN IS A FAILURE, NEVER A PASS (rule 3). Every row asserts the
  * screen rendered (markup length + the art the screen is about) before it
@@ -94,6 +98,16 @@
  *       petPortraitHtml and TODAY (120.3 MB) or CREW (592.5 MB) blows its
  *       ceiling on the 2048px pet art, and the matching TIER row names the
  *       width. Both halves needed: each mutation reds only its own screen.
+ *   1E  point petShotHtml's layers back at bhAsset() and STABLE (207.1 MB),
+ *       PADDOCK (232.5) and SHOP (192.5) all blow their ceiling on the ten
+ *       2048px product shots, with both SHOT rows naming 2048.
+ *   1F  drop `box` from panelHtml's layeredArt call and PADDOCK alone blows its
+ *       ceiling (155.3 MB) with TILE naming 2048, while STABLE and SHOP stay
+ *       green. That isolation is the half a single budget would have missed.
+ *   1G  drop `thumb:` from the two pdk-keeper stacks and the pdk-door-keeper and
+ *       PADDOCK goes back over at 95.0 MB while STABLE only drops to 62.7. The
+ *       keeper figures are not pet art and no SHOT/TILE row sees them, which is
+ *       why the budget is still the row that catches this one.
  *
  * Usage: node tests/memory-census.mjs [url]      (self-serves this checkout)
  *        DIAG=1 node tests/memory-census.mjs     (per-screen breakdown)
@@ -370,6 +384,59 @@ await screen('backpack melt bench', async () => {
   await sleep(2400);
 }, { art: '.melt-row' });
 
+/* ---- the Stable, the Paddock and the Shop ------------------------------- *
+ * The three screens that were never driven, and the three worst in the app.
+ * Measured 2026-08-24, 430x932 DPR 2, with the hoarder above (she owns the pet
+ * and wears all four accessories), before any of the fixes below them:
+ *
+ *     screen     peak       what it was
+ *     Stable     215.1 MB   160.0 of it = 10 petShotHtml layers at 2048
+ *     Paddock    322.8 MB   the Stable's 160.0 still mounted underneath, plus
+ *                           80.0 = 5 species-tile layers at 2048
+ *     Shop       192.3 MB   160.0 = the same ten product shots, bigger tiles
+ *
+ * THE PADDOCK CARRYING THE STABLE IS NOT A DRIVER ARTIFACT. The only way in is
+ * through the Stable's door, the Stable's sheet stays mounted below it, and
+ * that is the DOM a player standing in the Paddock actually has. Measuring the
+ * Paddock in isolation would measure a screen nobody can reach (rule 12).
+ *
+ * EVERY ENTRY IS A REAL CONTROL AND EVERY MISS THROWS (rule 5, and the lesson
+ * of `.looks-card` above): a `?.click()` that finds nothing does not fail, it
+ * silently re-measures the previous screen. */
+const openStableSheet = async () => {
+  await pe(() => { location.hash = '#/today'; });
+  await sleep(2400);
+  await pe(() => {
+    const b = document.getElementById('stableBtn');
+    if (!b) throw new Error('#stableBtn not found: the Stable never opened, so anything measured after this is a different screen');
+    b.click();
+  });
+  await sleep(2600);
+};
+
+await screen('stable', openStableSheet, { art: '.pw-art .petcrop img' });
+
+await screen('paddock', async () => {
+  await openStableSheet();
+  await pe(() => {
+    const b = document.getElementById('stableToPaddock');
+    if (!b) throw new Error('#stableToPaddock not found: the Paddock never opened');
+    b.click();
+  });
+  await sleep(2800);
+}, { art: '.pdk-tile img' });
+
+await screen("shop, gwart's menagerie", async () => {
+  await pe(() => { location.hash = '#/bonehead'; });
+  await sleep(2200);
+  await pe(() => {
+    const b = document.querySelector('#chTabs .ch-tab[data-tab="shop"]');
+    if (!b) throw new Error('#chTabs .ch-tab[data-tab="shop"] not found: the Shop never opened');
+    b.click();
+  });
+  await sleep(2800);
+}, { art: '.pet-row .rk-stage .petcrop img' });
+
 await screen('wardrobe, hat slot', async () => {
   /* THE ONE NUMBER querySelectorAll('img') CANNOT SEE. The Wardrobe's DOM is
      genuinely cheap (135 canvases at 200x200 is 20.6 MB) and the damage is
@@ -539,6 +606,114 @@ const colTier = await pe(() => [...document.querySelectorAll('.col-cell img')].f
 ok('TIER     the Collection\'s tiles are served from the 192 sheet',
   colTier.length > 100 && colTier.every(n => n === 192),
   `${colTier.length} tiles, widths ${[...new Set(colTier)].join('/') || 'NONE'}`);
+
+/* THE THREE SCREENS ABOVE, GRADED ON THE DECODED WIDTH AS WELL AS THE BUDGET.
+ *
+ * Same argument as every TIER row in this file and it is not theoretical here:
+ * BOTH renderers fall back to the master when their sheet 404s -- petShotHtml
+ * through SHOT_FALLBACK, layeredArt through THUMB_FALLBACK, both of them
+ * anti-regression rule 8 doing exactly what it is supposed to do -- so a whole
+ * missing sheet directory reads as a clean pass with all 240 MB quietly back.
+ * Only a width can see that.
+ *
+ * TWO DIFFERENT MECHANISMS, so two different rows rather than one loop:
+ *
+ *   SHOT   the shop's product photo is a ZOOM, not a stack: it scales the
+ *          item's measured window out of the 2048 square, so a square tier
+ *          would put 92.7 source pixels behind 224 device ones (2.42x, CG1 at
+ *          the shop's 112px tile). It is served from a CUT sheet instead,
+ *          assets/bh/thumb/shot/<item>/{pet,item}.png, one square 384 per
+ *          layer. Ten layers on each of the Stable and the Shop: five
+ *          accessories, each a pet layer plus an item layer.
+ *   TILE   the Paddock's species grid is a plain stack, so it takes the square
+ *          sheet -- but the TIER IS DERIVED from the box, so the number is not
+ *          the same for two pets on one screen. C6 fills her 2048 square and
+ *          lands on 384; C1-C5 and CX are painted small in a corner of a 640
+ *          canvas, so their whole square is drawn 2-3x bigger in the same tile
+ *          and bhTierFor correctly hands them their MASTER. Asserting "no
+ *          layer is 2048" would pass on a grid of six masters; asserting "every
+ *          layer is 384" would fail on art that is right. So the row grades
+ *          each half by what it is: the pet-era layers are tiered, the 640
+ *          masters stay 640, and nothing is a 2048.
+ *
+ * AN EMPTY SAMPLE IS A FAILURE (rule 3) and it is the likeliest failure here:
+ * an account that never bought the pet draws no product shots and no dressed
+ * tile at all, and every "nothing is a master" test passes on nothing. Hence
+ * the counts.
+ *
+ * PROVE-RED, each mutation RUN on this tree on 2026-08-25 and reverted, and this
+ * is what each actually printed:
+ *   point petShotHtml's two layers back at bhAsset() with the zoom style
+ *     -> stable and shop both "10 layers, widths 2048", and CEILING stable
+ *        207.1 MB, shop 192.5 MB, paddock 232.5 MB (the Stable is mounted under
+ *        it, so it pays for the same ten shots).
+ *   move assets/bh/thumb/shot out of the tree, source untouched
+ *     -> byte-for-byte the SAME numbers. SHOT_FALLBACK restores the master AND
+ *        the zoom, so the shelf still frames every item correctly (measured: the
+ *        two renders differ by MAE 2.2/255 inside the art and nowhere else) and
+ *        the whole 160 MB comes back looking like nothing happened. That is the
+ *        entire argument for grading a WIDTH here rather than only a budget.
+ *   drop `box` from panelHtml's layeredArt call
+ *     -> paddock TILE "10 pet-era layers at 192/2048", CEILING paddock 155.3 MB,
+ *        while stable and shop stay green.
+ *   delete the buyPetItem loop from the account above
+ *     -> TILE "2 pet-era layers": the hoarder has no dressed pet to draw. Plus
+ *        ACCOUNT and the Today TIER row. The COUNTS are what catch this one.
+ *   also skip granting the PET_SHOP items, i.e. an account owning no accessories
+ *     -> RENDERED stable "0 x .pw-art .petcrop img" and SHOT stable "0 layers,
+ *        widths NONE". That is the empty-sample half, and it is not theoretical.
+ *
+ * WHAT WAS NOT INDEPENDENTLY REDDENED, said plainly rather than left implied:
+ * SHOT on the SHOP cannot be emptied by any account state, because the shelf
+ * sells all five pieces whether or not you own them, so its empty-sample guard
+ * is its own `>= 10` count and the RENDERED row beside it. RENDERED paddock and
+ * RENDERED shop were likewise never seen red: their drivers THROW when the entry
+ * control is missing, which is the failure that matters, and the identical
+ * RENDERED shape was proven red on the Stable above.
+ */
+const shotWidths = () => pe(() => [...document.querySelectorAll('.pw-art .petcrop img, .pet-row .rk-stage .petcrop img')]
+  .filter(i => i.naturalWidth).map(i => i.naturalWidth));
+
+await fresh();
+await openStableSheet();
+const stableShot = await shotWidths();
+ok('SHOT     the Stable wardrobe\'s product shots are CUT to 384, not zoomed out of the 2048 masters',
+  stableShot.length >= 10 && stableShot.every(n => n === 384),
+  `${stableShot.length} layers, widths ${[...new Set(stableShot)].join('/') || 'NONE'} `
+  + '(five accessories, each a pet layer plus an item layer; a 2048 layer is 16.0000 MB)');
+
+await fresh();
+await pe(() => { location.hash = '#/bonehead'; });
+await sleep(2200);
+await pe(() => document.querySelector('#chTabs .ch-tab[data-tab="shop"]')?.click());
+await sleep(2800);
+const shopShot = await shotWidths();
+ok('SHOT     the Shop shelf\'s product shots are CUT to 384 too',
+  shopShot.length >= 10 && shopShot.every(n => n === 384),
+  `${shopShot.length} layers, widths ${[...new Set(shopShot)].join('/') || 'NONE'}`);
+
+await fresh();
+await openStableSheet();
+await pe(() => document.getElementById('stableToPaddock')?.click());
+await sleep(2800);
+/* BOTH call sites, in one screen: the grid's tile is fluid and measured, the
+   card's portrait is the fixed 54px box, and they land on different tiers. Her
+   own tile is the way in, which is the control a player uses. */
+await pe(() => {
+  const b = document.querySelector('.pdk-tile[data-sp="C6"]');
+  if (!b) throw new Error('no .pdk-tile[data-sp="C6"]: the hoarder is not showing the shop pet, so this row would grade nothing');
+  b.click();
+});
+await sleep(1600);
+const tiles = await pe(() => [...document.querySelectorAll('.pdk-tile img, .pdk-thumb img')]
+  .filter(i => i.naturalWidth)
+  .map(i => ({ n: i.naturalWidth, pet: /\/(?:C6|CB\d+|CE\d+|CG\d+|CM\d+)\.png$/.test(i.currentSrc || i.src) })));
+const petEra = tiles.filter(t => t.pet).map(t => t.n);
+const rest = tiles.filter(t => !t.pet).map(t => t.n);
+ok('TILE     the Paddock\'s dressed pet comes off the SHEET, and the 640px species keep their masters',
+  petEra.length >= 5 && petEra.every(n => n === 384 || n === 192) && rest.length > 0 && rest.every(n => n === 640),
+  `${petEra.length} pet-era layers at ${[...new Set(petEra)].join('/') || 'NONE'}, `
+  + `${rest.length} companion-drawn at ${[...new Set(rest)].join('/') || 'NONE'} (2048 anywhere is the bug)`);
 
 /* PROVE-RED: revert the .ward-art / .pd-art canvases to bhAsset() and this row
    reports ~210 MB, the number gwart measured, because every one of those 135

@@ -87,7 +87,8 @@ import {
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, petWornLayers } from '../data/boneheadz.js';
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers,
+  BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -4941,6 +4942,16 @@ const EMBER_EYES = new Set(['E4']);
    (fx frames, glutton plates, the mage) has no thumbnail and is returned
    untouched. And a thumbnail that 404s falls back to the full-size art rather
    than vanishing -- anti-regression rule 8, degrade to ugly, never to invisible. */
+/* TWO MORE TIERS EXIST AND NEITHER IS SQUARE, so neither is reachable through
+   bhThumb and neither belongs to a `thumb:` option. Both are here so the
+   inventory is in one place:
+     thumb/trim/          the art cropped to its ALPHA box. Canvases only, and
+                          bhTrim() below is its only door. Full argument there.
+     thumb/shot/<item>/   the art cropped to a shop accessory's product-shot
+                          WINDOW, pet layer and item layer cut with one box.
+                          petShotHtml is its only door; full argument there.
+   Both are keyed on something other than a pixel size, so nextArtTier's ladder
+   (`/thumb/<digits>/`) cannot see them and nothing climbs off them by accident. */
 /* THE PET-ACCESSORY SLOTS ARE IN THE ALTERNATION TOO (CB bag, CE glasses, CG
    stinger, CM patches), and leaving them out was the more expensive half of the
    C6 miss. Those five masters are 2048x2048, so ONE of them is 16.0000 MB of
@@ -4948,12 +4959,15 @@ const EMBER_EYES = new Set(['E4']);
    LAYERS beside the pet on every surface she appears on, four at a time on a
    dressed pet. They were absent for the dullest reason: the slots did not exist
    when this list was written and nothing since had cause to read it again. */
-const BH_THUMB_RE = /^assets\/bh\/((?:B|BG|CB|CE|CG|CM|C|E|FW|G|H|IL|IR|M|P|S|SK|T|U)\/(?:shiny\/)?[^/]+\.png)$/;
-const BH_THUMB_TIERS = [192, 384];
-function bhThumb(src, px = 192) {
-  const m = BH_THUMB_RE.exec(src || '');
-  return m && BH_THUMB_TIERS.includes(px) ? `assets/bh/thumb/${px}/${m[1]}` : src;
-}
+/* BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor AND THUMB_FALLBACK NOW LIVE IN
+   data/boneheadz.js, beside bhAsset, and they are imported at the top of this
+   file. They moved for the reason PET_CROP and petWornLayers moved before them:
+   js/paddock-cards.js needs the rule, is PURE (tests/unit.test.js imports it in
+   node), and cannot reach back into this file. The alternative was a second copy
+   of the regex, which is precisely what the generator's KEEP note asks nobody to
+   make. Everything ABOVE this line -- the tiers, the measurements, the opt-in
+   rule -- is still the argument for them, and it stays here where the callers
+   are. */
 /* THE CROPPED TIER, FOR THE CANVASES ONLY.
    Tom, 2026-08-24: "cant you make the art small if its a small slot? and big if
    it's a big slot?" The square tiers above cannot: a cosmetic is drawn on a
@@ -4988,18 +5002,13 @@ const bhTrim = src => {
   const m = BH_THUMB_RE.exec(src || '');
   return m ? `assets/bh/thumb/trim/${m[1]}` : src;
 };
-/* PICK THE TIER FROM THE GEOMETRY, not from taste. `css` is the width the WHOLE
-   640 canvas ends up occupying in CSS pixels, which for a cropped surface is the
-   post-transform figure, not the window it peeps through: a 62px teaser head is
-   a 154px canvas behind a 62px hole, and treating it as 62 is exactly how the
-   first pass shipped visibly blurred teeth. Doubling for device pixels is the
-   compromise: it is exact on a 2x phone and leaves a 3x phone a mild 0.75
-   upscale on the big tier, which measured as indistinguishable. Anything a tier
-   cannot serve gets the full 640px art. */
-const bhTierFor = css => BH_THUMB_TIERS.find(t => t >= css * 2) || 640;
-/* The fallback, as an attribute so it survives innerHTML: swap to the full-size
-   art once, then give up and remove the layer (the old behaviour). */
-const THUMB_FALLBACK = 'onerror="if(this.dataset.full){this.src=this.dataset.full;this.removeAttribute(\'data-full\');}else{this.remove();}"';
+/* bhTierFor picks the tier FROM THE GEOMETRY, not from taste: `css` is the width
+   the WHOLE square ends up occupying, which for a cropped surface is the
+   post-transform figure and not the window it peeps through. A 62px teaser head
+   is a 154px canvas behind a 62px hole, and treating it as 62 is exactly how the
+   first pass shipped visibly blurred teeth. Doubling for device pixels is exact
+   on a 2x phone and leaves a 3x phone a mild 0.75 upscale on the big tier, which
+   measured as indistinguishable. Definition in data/boneheadz.js. */
 
 function avatarLayersHtml(eq, opts = {}) {
   const skip = new Set(opts.skip || []);
@@ -8094,17 +8103,56 @@ function scalePer100(per100, grams) {
  * registered: Cam draws every accessory positioned for HER body in the shared
  * 2048 canvas.
  */
-const PET_SHOT_PAD = 1.30;
+/* THE SHOT IS CUT, NOT ZOOMED, AND THAT IS WHY IT IS NOT A `thumb:` FLAG.
+ *
+ * This function frames a WINDOW: it scales the item's measured `shot` box out
+ * of the shared 2048 square up to the tile, so `img` below is the whole square
+ * at 4.1x the tile. Ten of those windows stand on the Stable's wardrobe row and
+ * ten more on the shop's shelf, and every one of them was a 2048x2048 master at
+ * 16.0000 MB decoded. Measured 2026-08-24, 430x932 DPR 2, an account owning her
+ * and wearing all four pieces, with tests/memory-census.mjs's instrument:
+ *
+ *     screen     total       of which petShotHtml       after
+ *     Stable     215.1 MB    160.0 MB (10 layers)        5.6 MB
+ *     Shop       192.3 MB    160.0 MB (10 layers)        5.6 MB
+ *     Paddock    322.8 MB    160.0 MB (the Stable is still mounted under it)
+ *
+ * A SQUARE TIER CANNOT SERVE A ZOOM, and the numbers say so rather than taste:
+ * CG1's window is 0.2413 of the square, so behind the shop's 112px tile a 384
+ * tier would put 92.7 source pixels under 224 device pixels. That is a 2.42x
+ * upscale -- the exact class tests/art-resolution-audit.mjs exists to catch --
+ * and it would have traded 160 MB for pixels the browser invented.
+ *
+ * So the sheet is cut to the window instead: `assets/bh/thumb/shot/<item>/`
+ * carries the pet and the accessory CUT TO THE SAME padded box (384px, a
+ * downscale of every window on every device), built by
+ * scripts/build-bh-thumbs.py, which PARSES the boxes out of data/boneheadz.js
+ * so the cut and this function cannot drift. Cut art needs no transform at all:
+ * both layers simply fill the tile, and they stay registered because they were
+ * cut with one box.
+ *
+ * THE MASTER GEOMETRY SURVIVES BELOW FOR ONE REASON: the fallback. If the cut
+ * sheet 404s, the layer has to go back to the master AND to the zoom, or the
+ * tile would show the whole bee where an accessory belongs. That is
+ * anti-regression rule 8 (degrade to ugly, never to broken) and it is also
+ * exactly why the memory census asserts the DECODED WIDTH on these two
+ * surfaces: a missing sheet otherwise reads as a clean pass with the 160 MB
+ * quietly restored.
+ */
+const SHOT_FALLBACK = 'onerror="if(this.dataset.full){this.style.cssText=this.dataset.fs;this.src=this.dataset.full;this.removeAttribute(\'data-full\');}else{this.remove();}"';
 function petShotHtml(itemId, px) {
   const it = PET_SHOP.items.find(i => i.id === itemId);
   const art = BH_BY_ID[itemId];
   if (!it || !art) return '';
-  let [x0, y0, x1, y1] = it.shot;
+  const [x0, y0, x1, y1] = it.shot;
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, half = ((x1 - x0) / 2) * PET_SHOT_PAD;
   const img = px / (half * 2), tx = -(cx - half) * img, ty = -(cy - half) * img;
-  const layer = src => `<img src="${src}" style="position:absolute;left:0;top:0;width:${img.toFixed(1)}px;height:${img.toFixed(1)}px;max-width:none;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)" alt="">`;
+  const zoom = `position:absolute;left:0;top:0;width:${img.toFixed(1)}px;height:${img.toFixed(1)}px;max-width:none;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)`;
+  const layer = (which, master) => `<img src="${petShotArt(itemId, which)}"`
+    + ` style="position:absolute;left:0;top:0;width:${px}px;height:${px}px"`
+    + ` data-full="${master}" data-fs="${zoom}" ${SHOT_FALLBACK} alt="">`;
   return `<span class="petcrop" style="width:${px}px;height:${px}px">`
-    + layer(bhAsset(BH_BY_ID[PET_SHOP.pet.id])) + layer(bhAsset(art)) + `</span>`;
+    + layer('pet', bhAsset(BH_BY_ID[PET_SHOP.pet.id])) + layer('item', bhAsset(art)) + `</span>`;
 }
 function petShelfHtml(ownedCos, coinBal) {
   const pet = BH_BY_ID[PET_SHOP.pet.id];
@@ -14974,8 +15022,17 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
              Your equipped outfit, rendered by the same layer stack as the Today
              hero (skip BG: the scene is the backdrop; skip C: your pets are
              already the point of the field). -->
+        ${/* THE 384 SHEET, AND THE SIZE IS WHY. Measured on this tree 2026-08-24
+             at 430x932: this figure is drawn 173.9 CSS px, which is the crew
+             card's 175 to within a pixel -- the size the sheet's own note says
+             384 was chosen for, side by side at deviceScaleFactor 3. Seven
+             layers at 640 is 10.9 MB and at 384 it is 3.9, and the Paddock is
+             the screen that pays for it three times over: it is reached THROUGH
+             the Stable, so this stack, the door's and Today's hero are all in
+             one document. It was the largest thing left on that screen once the
+             pet art was tiered (tests/memory-census.mjs measures it). */''}
         <div class="pdk-keeper" style="left:${keeper.x - keeper.px / 2}px;top:${keeper.y - keeper.px / 2}px;width:${keeper.px}px;height:${keeper.px}px">
-          ${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}
+          ${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true, thumb: 384 })}
         </div>
         ${/* THE VISITOR STANDS OPPOSITE. Tom, 2026-08-24: "can we make it so the
              player that is visiting the paddock is on the opposite side ... bottom
@@ -14988,7 +15045,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
              flipping the guest turned them back to back. Nothing here is a
              control, so it is pointer-events: none like the keeper. */''}
         ${visitor ? `<div class="pdk-keeper pdk-visitor" style="left:${SCENE_W - keeper.x - keeper.px / 2}px;top:${keeper.y - keeper.px / 2}px;width:${keeper.px}px;height:${keeper.px}px">
-          ${avatarLayersHtml(visitor, { skip: ['BG', 'C'], noYard: true })}
+          ${avatarLayersHtml(visitor, { skip: ['BG', 'C'], noYard: true, thumb: 384 })}
         </div>` : ''}
         ${roster.map(petHtml).join('')}
         ${lurkSp ? `<div class="pdk-lurker${lurkSp !== 'CX' ? ' pdk-lure-shiny' : ''}" data-pdk="${lurkSp}" style="left:296px;top:158px;width:96px;height:64px">
@@ -15379,7 +15436,11 @@ async function openStable(opts = {}) {
           <i class="pdk-door-moon"></i>
           <i class="pdk-door-rail r1"></i><i class="pdk-door-rail r2"></i>
           <i class="pdk-door-post" style="left:16px"></i><i class="pdk-door-post" style="left:70px"></i><i class="pdk-door-post" style="left:124px"></i>
-          <span class="pdk-door-keeper">${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true })}</span>
+          ${/* 192, because the door draws the whole figure in a 60x78 box:
+               measured 60.2 CSS px, which is 120 device px on a 2x phone and 181
+               on a 3x, both comfortably inside the small tier. Seven layers at
+               640 was 10.9 MB standing in a thumbnail. */''}
+          <span class="pdk-door-keeper">${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true, thumb: 192 })}</span>
           <span class="pdk-door-pets">${doorSp.map(sp => `<span class="pdk-door-pet">${petAsideHtml(petFrom(null, sp), doorPx, { thumb: true })}</span>`).join('')}</span>
           <i class="pdk-door-vig"></i>
         </span>
