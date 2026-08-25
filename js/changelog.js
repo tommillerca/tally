@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 446, date: '2026-08-25', title: 'A refund that could pay twice now pays once', items: [
+    'The old Streak Freeze payout could pay you more than once if the app happened to start twice at the same moment, such as two tabs opening together. It now settles once and only once. If you were already paid, nothing changes and you keep the coins.',
+  ] },
   { n: 445, date: '2026-08-25', title: 'The Bone Merchant has closed, and your weapons are refunded', items: [
     'Weapons are gone from the game. They changed how hard you hit without changing anything you could see on your Bonehead, and that made them the one part of your fighter you could not look at and understand. Your strength is your stats, your talents and the gear you are wearing now, and all three are visible.',
     'Everything you spent at the Bone Merchant has come back in full: the coins you paid, at the price you paid, plus the Bone Dust for the prestige pieces. It lands by itself the next time you open the app, and you keep the weapons in your inventory. Nothing was deleted.',

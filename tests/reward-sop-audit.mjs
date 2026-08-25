@@ -168,7 +168,13 @@ const ACTIONS = [
   { id: 'js/loot.js:disenchantGear', sites: 1, undriven: 'melts a piece the player owns: the gear row is the input, so a second run finds nothing' },
   { id: 'js/loot.js:salvagePet', sites: 1, undriven: 'as disenchantGear, on a pet instance' },
   { id: 'js/loot.js:salvageInstance', sites: 1, undriven: 'as salvagePet, by instance id' },
-  { id: 'js/loot.js:refundStreakFreezes', sites: 1, undriven: "one-time make-good, gated on kv 'freeze-refunded' AND on the rows it pays for" },
+  /* Re-graded v441. It was registered here as "gated on kv 'freeze-refunded' AND
+     on the rows it pays for", and BOTH halves of that were false under
+     concurrency: the flag was a kvGet/kvSet pair with the payout between them,
+     and two callers read the same rows before either deleted any. It runs on
+     boot, so two tabs was all it took. Now claimed with db.addIfAbsent on the
+     same key before a coin moves, and no longer merely registered: driven. */
+  { id: 'js/loot.js:refundStreakFreezes', sites: 1, undriven: "one-time make-good behind an addIfAbsent claim on kv 'freeze-refunded'. Driven to destruction by tests/freeze-refund-audit.mjs (PAYS / ONCE / BOOT / RACE / MIGRATION / NOTHING), which is where the second-attempt proof lives rather than here" },
   { id: 'js/loot.js:grantCrate', sites: 1, undriven: 'a grant helper: it has no authority to consult, it is what the authorities call' },
   { id: 'js/loot.js:grantPet', sites: 1, undriven: 'a grant helper' },
   { id: 'js/loot.js:addPetInstance', sites: 1, undriven: 'a grant helper' },

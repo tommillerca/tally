@@ -1973,17 +1973,39 @@ export async function consumeBattleCharmCharge() {
    paid out at 100 coins each (see refundStreakFreezes). Deliberately not
    replaced: do not re-add a "protect a day" consumable without a real reason. */
 
-/* One-time payout: 100 coins per Streak Freeze still in the backpack. Idempotent
-   via a kv flag AND by deleting the rows it pays for, so a double run cannot
-   double-pay. Coins are added BEFORE the rows are deleted: if the write dies
-   halfway, a player keeps an unusable item rather than losing coins they earned. */
+/* One-time payout: 100 coins per Streak Freeze still in the backpack.
+
+   THE CLAIM IS ASKED AND ANSWERED BEFORE A COIN MOVES. Until v441 this read a kv
+   flag, paid, and set the flag afterwards, and the comment here claimed that
+   deleting the paid-for rows made a double run safe. It did not: this runs on
+   BOOT (js/app.js), two overlapping callers BOTH clear the read and BOTH read
+   the same undeleted rows, so both pay. tests/freeze-refund-audit.mjs measured
+   three concurrent callers taking 900 coins for three freezes worth 300. The
+   identical kvGet/kvSet shape was measured paying 16,500 on the merchant refund.
+   db.addIfAbsent is the one test-and-set that holds here (see js/db.js): exactly
+   one caller can ever get true for a key, no matter how many tabs ask at once.
+
+   THE KEY IS DELIBERATELY UNCHANGED. Every install that already settled carries
+   `freeze-refunded` written by the old kvSet, so the add finds that row and
+   returns false: already claimed, paid nothing. A fresh key would have read as
+   unclaimed on every existing save and paid the whole player base a second time.
+
+   A PLAYER HOLDING NOTHING STILL BURNS THE FLAG, as before, so an empty save is
+   not re-checked on every boot forever. That path pays nothing, so claiming it
+   costs nothing.
+
+   The order below is at-most-once, not at-least-once: the claim lands first, so
+   a coinsAdd killed by a quota abort loses the make-good rather than risking a
+   second one. That is the right direction for a payout nobody is waiting on.
+   Coins are still added BEFORE the rows are deleted, so a half-dead write leaves
+   an unusable item rather than taking coins somebody earned. */
 export async function refundStreakFreezes() {
-  if (await kvGet('freeze-refunded', false)) return null;
+  // THE CLAIM. Exactly one caller gets true; everybody else pays nothing.
+  if (!(await db.addIfAbsent('kv', { k: 'freeze-refunded', v: true }))) return null;
   const rows = (await inventory()).filter(r => r.kind === 'freeze');
-  if (!rows.length) { await kvSet('freeze-refunded', true); return null; }
+  if (!rows.length) return null;
   const coins = rows.length * 100;
   await coinsAdd(coins);
   for (const r of rows) await db.del('inv', r.id);
-  await kvSet('freeze-refunded', true);
   return { count: rows.length, coins };
 }
