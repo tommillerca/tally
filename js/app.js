@@ -3697,6 +3697,14 @@ async function renderToday(el) {
   const tsec = (label, html) => (html ? `<section class="tsec"><div class="tsec-h">${label}</div>${html}</section>` : '');
 
   el.innerHTML = `
+  ${/* THE PAGE BACKDROP, and it has to live INSIDE the scrolled content. The
+       scroller itself can only carry a background-COLOUR (see app.css: an image
+       there kills the rubber-band fill, measured on device), so the colour it
+       carries is the Bonehead's backdrop for the bounce, and this plate is what
+       stops that colour showing through every transparent gap on the page.
+       First child, so it starts at the scroll origin and can never paint into
+       the strip a pull opens. */''}
+  <div class="today-plate" aria-hidden="true"></div>
   <!-- The scene is CORAL by default (the deck's hero colour), but an equipped
        backdrop covers it completely, and on a tab switch the card paints a frame
        or two before that image decodes: Tom, 2026-08-08, "im seeing the coral
@@ -14900,9 +14908,10 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
              Mirrored across the scene's own width rather than positioned by hand,
              so the two stand at matching insets from their edges at every width,
              and at keeper.px so neither reads as the bigger person. WHICH ONE IS
-             FLIPPED IS IN app.css, and it is the HOST: the art faces left, so
-             flipping the guest turned them back to back. Nothing here is a
-             control, so it is pointer-events: none like the keeper. */''}
+             FLIPPED IS IN app.css, and it is the GUEST: the art faces RIGHT, so
+             the host on the left already looks inward and only this one turns.
+             Nothing here is a control, so it is pointer-events: none like the
+             keeper. */''}
         ${visitor ? `<div class="pdk-keeper pdk-visitor" style="left:${SCENE_W - keeper.x - keeper.px / 2}px;top:${keeper.y - keeper.px / 2}px;width:${keeper.px}px;height:${keeper.px}px">
           ${avatarLayersHtml(visitor, { skip: ['BG', 'C'], noYard: true })}
         </div>` : ''}
@@ -18248,7 +18257,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v437'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v438'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

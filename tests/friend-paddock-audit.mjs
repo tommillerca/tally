@@ -335,17 +335,27 @@ try {
           if (!el) return null;
           const r = el.getBoundingClientRect();
           const host = document.querySelector('.sheet-paddock .pdk-scene').getBoundingClientRect();
-          /* THE NET FLIP OF WHAT IS DRAWN, off the COMPUTED matrices rather than a
-             class name. It has to be the net of the keeper AND its art, because
-             the flip cannot live on the keeper: that element runs an animation on
-             transform, which beats a normal declaration, so the rule sits on the
-             img instead. Reading either node alone reports the wrong answer, and
-             reading the class reports what the stylesheet MEANT rather than what
-             the browser did. */
-          const flipOf = n => n ? new DOMMatrixReadOnly(getComputedStyle(n).transform).a < 0 : false;
-          const art = el.querySelector('img');
+          /* THE FLIP, READ OFF THE COMPUTED STYLE, and it has to count TWO
+             properties. .pdk-keeper animates `transform`, so the mirror is on the
+             separate `scale` property, which composites with an animated
+             transform instead of being overwritten by it. A reader that looks at
+             `transform` alone sees the idle bob and reports "not flipped".
+             SPLIT is the other half and it is the bug that shipped: the flip was
+             briefly on `img`, which mirrors the layers but NOT the weapon charge,
+             because avatarLayersHtml emits that as a <span class="wpn-sheen">
+             masked by the unflipped weapon art. So the figure must be flipped as
+             a WHOLE: the container carries it and no descendant carries its own. */
+          const flipOf = n => {
+            if (!n) return false;
+            const cs = getComputedStyle(n);
+            const m = new DOMMatrixReadOnly(cs.transform);
+            const sc = cs.scale && cs.scale !== 'none' ? parseFloat(cs.scale.split(' ')[0]) : 1;
+            return (m.a < 0) !== (sc < 0);
+          };
           return { cx: Math.round(r.left + r.width / 2 - host.left), w: Math.round(r.width), h: Math.round(r.height),
-            flipped: flipOf(el) !== flipOf(art),
+            flipped: flipOf(el),
+            innerFlipped: [...el.querySelectorAll('*')].filter(flipOf).length,
+            sheens: el.querySelectorAll('.wpn-sheen').length,
             decoded: [...el.querySelectorAll('img')].filter(i => i.naturalWidth > 0).length };
         }),
         sceneW: Math.round(document.querySelector('.sheet-paddock .pdk-scene').getBoundingClientRect().width),
@@ -470,16 +480,34 @@ try {
       ok('VISITOR the viewer stands in the friend\'s field at the SAME size as its owner',
         ratio >= 0.9 && ratio <= 1.1,
         `host ${host.w}x${host.h}, visitor ${vis.w}x${vis.h}, height ratio ${ratio.toFixed(2)}`);
-      /* FACING. Tom, 2026-08-24, on the first version: "the friend bonehead should
-         be mirrored so it looks like they're hanging out not just both facing
-         away." Graded as EXACTLY ONE of the two being mirrored, which is the
-         property that makes them face each other whichever way the source art
-         happens to point. Counting flips rather than naming which one keeps this
-         row true if the art is ever redrawn facing the other way; a version that
-         flips both, or neither, leaves two people back to back and fails. */
-      ok('VISITOR they face each other: exactly one of the two is mirrored',
-        [host.flipped, vis.flipped].filter(Boolean).length === 1,
-        `host flipped=${host.flipped}, visitor flipped=${vis.flipped}`);
+      /* FACING, AND IT PINS WHICH ONE. Tom, twice on the same scene. First: "the
+         friend bonehead should be mirrored so it looks like they're hanging out
+         not just both facing away." Then, after I flipped the host: "you flipped
+         the wrong bonehead in the paddock so theyre back to back."
+         The first version of this row asked only that EXACTLY ONE of the two was
+         mirrored, on the reasoning that it would then hold whichever way the art
+         faced. That was wrong in the way that matters: back-to-back also has
+         exactly one flipped, so the row passed on the build Tom rejected. A guard
+         that cannot tell the bug from the fix is not a guard.
+         Derived from his two reports rather than assumed: the art faces RIGHT.
+         So the figure on the LEFT is already looking inward and must be
+         un-flipped, and the figure on the RIGHT must be flipped to face back at
+         him. If the art is ever redrawn facing the other way this row goes red,
+         which is correct: somebody has to re-derive it and edit this comment. */
+      ok('VISITOR the LEFT figure faces right and is not mirrored (the art faces right)',
+        host.cx < vis.cx && host.flipped === false,
+        `left figure at ${host.cx}, flipped=${host.flipped} (want false)`);
+      /* SPLIT. A figure flipped one layer at a time is not a mirrored figure: the
+         weapon's charge is a masked span rather than an img, so flipping only the
+         imgs sweeps the glint down the empty side of the body while the blade
+         stays dark. Nothing inside either figure may carry its own flip. */
+      ok('VISITOR neither figure is mirrored layer-by-layer (the weapon charge is not an img)',
+        host.innerFlipped === 0 && vis.innerFlipped === 0,
+        `host has ${host.innerFlipped} flipped descendants, visitor ${vis.innerFlipped}` +
+        ` (sheens present: host ${host.sheens}, visitor ${vis.sheens})`);
+      ok('VISITOR the RIGHT figure is mirrored, so the two look at each other',
+        vis.flipped === true,
+        `right figure at ${vis.cx}, flipped=${vis.flipped} (want true)`);
       const mid = fld.sceneW / 2;
       ok('VISITOR they are on OPPOSITE sides of the field, not stacked on one',
         host.cx < mid && vis.cx > mid,
