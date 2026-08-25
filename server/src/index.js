@@ -2769,6 +2769,28 @@ export default {
         const EX_IDS = ['fb31564c-22cc-49e8-836b-2da8fbf8531f'];
         const inList = EX_IDS.map(id => `'${String(id).replace(/[^a-f0-9-]/gi, '')}'`).join(',') || "''";
         const nin = col => `${col} NOT IN (${inList})`;
+        /* NOTHING CAN HAVE HAPPENED AFTER TODAY, and until 2026-08-25 every
+           windowed figure below believed it could. `day >= ?` with no upper
+           bound means a row dated in the future is inside "the last 7 days"
+           and stays there until the calendar catches up. 39 devices with wrong
+           system clocks wrote 715 rows dated 2026-09-01 to 2026-09-14; WAU read
+           85 when the true figure was 46, an 85% overstatement that would have
+           persisted for three weeks and then silently corrected itself.
+           `today` is server-derived from the same UTC calendar `day` is, and it
+           is inlined rather than bound so that every existing bind list below
+           is untouched -- the same trick EX_IDS already uses two lines up. */
+        /* WHAT IT COST, measured with EXPLAIN QUERY PLAN against schema.sql on
+           2026-08-25 rather than assumed. Nothing got slower and two things got
+           faster, because a closed range is a seek where an open one is a scan:
+             wau          SCAN COVERING idx_events_device_name_day
+                       -> SEARCH COVERING idx_events_day_device (day>? AND day<?)
+             byName       SCAN idx_events_name (a row lookup per event, all 30 days)
+                       -> SEARCH idx_events_day_device (the 14 day window only)
+             totalEvents  the same seek, with the range closed at the top
+             the other nine plans are byte-identical.
+           `testers` is the one that had to be written differently to keep its
+           plan; see the note on the unary plus down there. */
+        const upto = col => `${col} <= '${today}'`;
         /* RATE-LIMIT ROWS ARE NOT PRODUCT EVENTS, and they are in this table by
            design: rateLimitRecovery stores its per-IP counters here, keyed by an
            IP HASH in the `device` column. The retention note already called out
@@ -2799,21 +2821,21 @@ export default {
         // touches that table and its upsert never overwrites first_seen.
         const totalDevices = (await q(`SELECT COUNT(*) n FROM devices WHERE ${nin('device')}`)).n;
         const dau = (await q(`SELECT COUNT(DISTINCT device) n FROM events WHERE day = ? AND ${nin('device')}`, today)).n;
-        const wau = (await q(`SELECT COUNT(DISTINCT device) n FROM events WHERE day >= ? AND ${nin('device')}`, weekAgo)).n;
-        const totalEvents = (await q(`SELECT COUNT(*) n FROM events WHERE day >= ? AND ${nin('device')}`, statsFrom)).n;
-        const byName = await all(`SELECT name, COUNT(*) n FROM events WHERE day >= ? AND ${noRl('name')} AND ${nin('device')} GROUP BY name ORDER BY n DESC LIMIT 30`, statsFrom, ...NOT_PRODUCT);
-        const activeByDay = await all(`SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ? AND ${nin('device')} GROUP BY day ORDER BY day`, statsFrom);
+        const wau = (await q(`SELECT COUNT(DISTINCT device) n FROM events WHERE day >= ? AND ${upto('day')} AND ${nin('device')}`, weekAgo)).n;
+        const totalEvents = (await q(`SELECT COUNT(*) n FROM events WHERE day >= ? AND ${upto('day')} AND ${nin('device')}`, statsFrom)).n;
+        const byName = await all(`SELECT name, COUNT(*) n FROM events WHERE day >= ? AND ${upto('day')} AND ${noRl('name')} AND ${nin('device')} GROUP BY name ORDER BY n DESC LIMIT 30`, statsFrom, ...NOT_PRODUCT);
+        const activeByDay = await all(`SELECT day, COUNT(DISTINCT device) n FROM events WHERE day >= ? AND ${upto('day')} AND ${nin('device')} GROUP BY day ORDER BY day`, statsFrom);
         // first_seen is ms epoch; date(x/1000,'unixepoch') is the same UTC day
         // string the events rows carry, so this chart keeps its x axis.
         const newByDay = await all(`SELECT day, COUNT(*) n FROM (SELECT date(first_seen/1000,'unixepoch') day FROM devices WHERE ${nin('device')} AND first_seen IS NOT NULL) GROUP BY day ORDER BY day DESC LIMIT 14`);
         // screen-dwell "heatmap": total minutes testers spent on each screen
-        const screenTime = await all(`SELECT json_extract(props,'$.s') s, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min, COUNT(*) n FROM events WHERE name='screen_time' AND day >= ? AND props IS NOT NULL AND ${nin('device')} GROUP BY s ORDER BY SUM(json_extract(props,'$.ms')) DESC`, statsFrom);
+        const screenTime = await all(`SELECT json_extract(props,'$.s') s, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min, COUNT(*) n FROM events WHERE name='screen_time' AND day >= ? AND ${upto('day')} AND props IS NOT NULL AND ${nin('device')} GROUP BY s ORDER BY SUM(json_extract(props,'$.ms')) DESC`, statsFrom);
         // feature usage: how often each feature-sheet was opened + total minutes in it
-        const featureOpens = await all(`SELECT json_extract(props,'$.f') f, COUNT(*) n FROM events WHERE name='feat_open' AND day >= ? AND props IS NOT NULL AND ${nin('device')} GROUP BY f ORDER BY n DESC LIMIT 40`, statsFrom);
-        const featureTime = await all(`SELECT json_extract(props,'$.f') f, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min FROM events WHERE name='feat_time' AND day >= ? AND props IS NOT NULL AND ${nin('device')} GROUP BY f ORDER BY SUM(json_extract(props,'$.ms')) DESC LIMIT 40`, statsFrom);
+        const featureOpens = await all(`SELECT json_extract(props,'$.f') f, COUNT(*) n FROM events WHERE name='feat_open' AND day >= ? AND ${upto('day')} AND props IS NOT NULL AND ${nin('device')} GROUP BY f ORDER BY n DESC LIMIT 40`, statsFrom);
+        const featureTime = await all(`SELECT json_extract(props,'$.f') f, ROUND(SUM(json_extract(props,'$.ms'))/60000.0,1) min FROM events WHERE name='feat_time' AND day >= ? AND ${upto('day')} AND props IS NOT NULL AND ${nin('device')} GROUP BY f ORDER BY SUM(json_extract(props,'$.ms')) DESC LIMIT 40`, statsFrom);
         // play time: one ping ≈ 45s of active play; sessions = session_start count
-        const pings = (await q(`SELECT COUNT(*) n FROM events WHERE name='session_ping' AND day >= ? AND ${nin('device')}`, statsFrom)).n || 0;
-        const sessions = (await q(`SELECT COUNT(*) n FROM events WHERE name='session_start' AND day >= ? AND ${nin('device')}`, statsFrom)).n || 0;
+        const pings = (await q(`SELECT COUNT(*) n FROM events WHERE name='session_ping' AND day >= ? AND ${upto('day')} AND ${nin('device')}`, statsFrom)).n || 0;
+        const sessions = (await q(`SELECT COUNT(*) n FROM events WHERE name='session_start' AND day >= ? AND ${upto('day')} AND ${nin('device')}`, statsFrom)).n || 0;
         const playMinutes = Math.round(pings * 45 / 60);
         const avgSessionMin = sessions ? Math.round((pings * 45 / sessions / 60) * 10) / 10 : 0;
         // return rate: share of testers who came back on a later day than their
@@ -2823,14 +2845,30 @@ export default {
         /* Per-tester leaderboard (top 30 by activity in the window), with Crew
            name + coarse geo. `first` and `last` come off devices now, so they
            are the real first and last seen rather than the oldest and newest day
-           that happens to have survived the prune. */
+           that happens to have survived the prune.
+
+           THE UNARY PLUS ON `+e.day` IS LOAD-BEARING AND IS NOT A TYPO. SQLite
+           treats `+expr` as an expression rather than a bare column, which makes
+           the term unusable for index selection while leaving it a perfectly
+           normal filter. Written as plain `e.day <= 'x'` the planner sees a
+           selective range on the LEADING column of idx_events_day_device and
+           takes it, and this query then needs `e.name` per row, which that index
+           does not carry:
+             with `+`:     SCAN e USING COVERING INDEX idx_events_device_name_day
+             without it:   SEARCH e USING INDEX idx_events_day_device (day>? AND day<?)
+                           ... USE TEMP B-TREE FOR GROUP BY
+           Measured with EXPLAIN QUERY PLAN against schema.sql on 2026-08-25.
+           This is the statement the plan test calls THE 30 SECOND STATEMENT:
+           33,883 ms at 12M rows once it leaves the covering index, which is past
+           D1's limit. schema-plan.test.mjs pins the covering plan and went red on
+           exactly this, which is why the `+` is here. */
         const testers = await all(
           `SELECT e.device, COUNT(*) events,
                   SUM(CASE WHEN e.name IN ('food_log','pit_win','boss_win','mini_win','cook','hatch','quest_claim','friend_battle','buy_weapon','transmute') THEN 1 ELSE 0 END) played,
                   d.label, d.country, d.region, d.city,
                   date(d.first_seen/1000,'unixepoch') first, date(d.last_seen/1000,'unixepoch') last
            FROM events e LEFT JOIN devices d ON d.device = e.device
-           WHERE e.day >= ? AND ${noRl('e.name')} AND ${nin('e.device')}
+           WHERE e.day >= ? AND ${upto('+e.day')} AND ${noRl('e.name')} AND ${nin('e.device')}
            GROUP BY e.device ORDER BY events DESC LIMIT 30`, statsFrom, ...NOT_PRODUCT);
         const byCountry = await all(`SELECT COALESCE(country,'?') country, COUNT(*) n FROM devices WHERE ${nin('device')} GROUP BY country ORDER BY n DESC`);
         const byCity = await all(`SELECT COALESCE(city,'?') city, COALESCE(region,'') region, COALESCE(country,'') country, COUNT(*) n FROM devices WHERE ${nin('device')} GROUP BY city, region, country ORDER BY n DESC LIMIT 30`);
@@ -2849,10 +2887,20 @@ export default {
                   MAX(app_v) build, MAX(json_extract(props,'$.k')) kind,
                   MAX(json_extract(props,'$.src')) src, MAX(json_extract(props,'$.s')) screen,
                   MAX(ts) lastTs
-           FROM events WHERE name='err' GROUP BY msg ORDER BY MAX(ts) DESC LIMIT 40`);
+           FROM events WHERE name='err' AND ${upto('day')} GROUP BY msg ORDER BY MAX(ts) DESC LIMIT 40`);
         const errorsByBuild = await all(
           `SELECT app_v build, COUNT(*) n, COUNT(DISTINCT device) devices
-           FROM events WHERE name='err' GROUP BY app_v ORDER BY app_v DESC LIMIT 10`);
+           FROM events WHERE name='err' AND ${upto('day')} GROUP BY app_v ORDER BY app_v DESC LIMIT 10`);
+        /* THE THREE FIGURES BELOW STILL HAVE NO LOWER BOUND, deliberately: what
+           they are asked is "what has this table ever seen", and the retention
+           note above already accounts for them as the only figures whose history
+           the 30 day window shortens. What they gained is an UPPER bound, which
+           is a different statement and not a narrowing: no row can be dated
+           after today, so excluding those excludes nothing real. It matters most
+           here. `errors` orders by MAX(ts) DESC, so ONE future-dated crash row
+           pins itself to the top of the list and pushes a real crash off the
+           bottom of the 40, and `vault.lastDay` would read as a date that has
+           not happened. */
         /* VAULT. Two events with opposite meanings. A backfill SPIKE is expected
            once, when the native build carrying the BhVault registration reaches
            existing iOS players. A recover TRICKLE afterwards is the net catching
@@ -2862,7 +2910,7 @@ export default {
         const vault = await all(
           `SELECT name, COUNT(*) n, COUNT(DISTINCT device) devices, MAX(app_v) build,
                   MIN(day) firstDay, MAX(day) lastDay
-           FROM events WHERE name IN ('vault_backfill','vault_recover') GROUP BY name`);
+           FROM events WHERE name IN ('vault_backfill','vault_recover') AND ${upto('day')} GROUP BY name`);
         /* BOTH windows travel with the numbers, so the dashboard cannot label a
            figure with a window it was not computed over. windowDays is what the
            events table still HOLDS; statsWindowDays is what this route READ.
@@ -3300,6 +3348,23 @@ export default {
         const row = await env.DB.prepare('SELECT grants_ack FROM players WHERE id = ?')
           .bind(url.searchParams.get('player')).first();
         return json({ ack: row ? row.grants_ack : null });
+      }
+      /* Plant an events row at a chosen ts, bypassing the /events write path.
+         DEV only. The read bounds on /stats are defence in depth for rows the
+         WRITER did not create, so the guard that proves them cannot be built out
+         of the writer: PR #170 clamps `ts` on POST /events, and the moment that
+         lands, a future-dated row is unreachable through the only other door.
+         A guard that can no longer build its own fixture is a guard that passes
+         on an empty sample, which is the failure mode this repo has been bitten
+         by most. Same shape as /dev/grant-aged and gated the same way. */
+      if (env.DEV === '1' && path === '/dev/event-at' && request.method === 'POST') {
+        const b = await request.json();
+        const ts = Number(b.ts);
+        if (!Number.isFinite(ts)) return json({ error: 'ts required' }, 400);
+        await env.DB.prepare('INSERT INTO events (device, name, props, app_v, day, ts) VALUES (?,?,?,?,?,?)')
+          .bind(String(b.device || 'dev'), String(b.name || 'dev'), b.props ? JSON.stringify(b.props) : null,
+                String(b.appV || 'test'), new Date(ts).toISOString().slice(0, 10), ts).run();
+        return json({ ok: true, day: new Date(ts).toISOString().slice(0, 10), ts });
       }
       /* Count events matching a filter. DEV only, read only. A retention test
          has to assert what SURVIVED every bit as precisely as what went, and
