@@ -15,6 +15,9 @@
  *   LOADS    the map renders and the markers get revealed (not stuck at opacity 0)
  *   BAR      with nothing in reach the action card is genuinely not visible
  *   STALE    "Reading the bones" is never left on screen after the map settles
+ *   ARRIVAL  the markers arrive in coordinated beats, on a fast line and on a
+ *            gated slow one, and anything attached after the reveal fades in
+ *            within one 220ms transition instead of popping
  *
  * PROVE-RED (confirmed 2026-08-08): delete `.map-act[hidden] { display: none; }`
  * from app.css and BAR + STALE fail.
@@ -49,10 +52,198 @@ const ok = (name, pass, detail = '') => { results.push({ name, pass }); console.
    Placement cannot finish until the tiles are loaded (the water/walkability snap
    reads queryRenderedFeatures, empty until `idle`), so the first pass places what
    it can and the idle pass places the rest.
-   This records the marker count on a timer from before navigation and fails if
-   ANY count changes after .markers-in is added, with no user action.
    PROVE-RED (confirmed 2026-08-07): reveal on worldPassDone alone and ARRIVAL
-   fails naming den 3 -> 4 at ~800ms after the reveal. */
+   fails naming den 3 -> 4 at ~800ms after the reveal.
+
+   ==== 2026-08-20, THE FLAKY ROWS, AND WHY THEY WERE NEVER MEASURING THE APP ====
+   Reported: 21/23 every run, but WHICH two rows failed alternated between runs.
+   Set A: ARRIVAL + ARRIVAL-SLOW "the reveal contained the MAJORITY of markers"
+          at 9/66 and 9/67. Set B: ARRIVAL-SLOW "at least one straggler was
+          observed" (0 tracked) + its latency twin. Mutually exclusive outcomes
+          of one race, which is the tell that both rows read the same coin flip
+          with opposite polarity.
+
+   TWO ROOT CAUSES, both measured on a pristine origin/main worktree:
+
+   1. THE COUNTER COUNTED THE MAP KEY. `querySelectorAll('.map-spawn')` was
+      unscoped, and js/app.js:mapLegendHtml() builds #mapLegend out of the EXACT
+      marker markup on purpose, so the key and the map can never drift. Those
+      nine swatches (5 spawns, 3 dens, 1 mini) live inside #mapStage, so the
+      marker CSS applies to them: `opacity: 0` until `markers-in`, then 1. They
+      are display:none behind [hidden] the whole time, and computed opacity does
+      not care. So "9 visible at reveal" was NINE LEGEND SWATCHES, the same nine,
+      in every single failing run, and the "66" and "67" totals were 9 + the
+      real markers. The row had never once measured the reveal.
+
+   2. THE REVEAL WAS SAMPLED, NOT OBSERVED. A 40ms wall-clock poller decided
+      both WHEN the reveal happened and HOW MANY markers were visible in that
+      same tick. But `#mapStage.markers-in .poi-arriving { opacity: 0 }` holds a
+      same-beat marker invisible for two rAFs BY DESIGN (map.js:holdArrival
+      gives the fade a start value that way), so a count snapped at the reveal
+      instant lands inside a deliberate hold. Measured on the fast puppet: the
+      60-marker batch is attached 40ms BEFORE the reveal in one run and 193ms
+      AFTER it in the next, and the poller graded 0/60 or 60/60 accordingly.
+      The same tick decided whether a marker was "part of the initial batch" or
+      "a straggler", which is why the straggler sample was sometimes empty.
+
+   WHAT REPLACED THEM, and why it is not a widened threshold:
+     - real markers only: MapLibre stamps `maplibregl-marker` on what it owns
+       and on nothing else, so require it. Legend contamination goes to zero
+       (measured: legend swatches seen by the recorder = 0).
+     - the reveal is read from a MutationObserver on #mapStage's class, so it is
+       an event with no quantisation. Measured reveal spread with the tile gate
+       below: 1839/1840/1841ms, N=3.
+     - "arrives whole" is asserted in BEATS, the grammar this file already uses
+       for PAN, and beats are computed from when markers became VISIBLE, not
+       from the reveal instant. Measured 8/8 runs across both scenarios: exactly
+       two beats, one of 59 markers and one of 1 (the spire, which needs a
+       network round trip). Reveal-relative windows were the flaky idea: the
+       first beat lands 14-539ms after the reveal on a fast line and 1810-2168ms
+       after it on a slow one, so no fixed offset describes both.
+     - the ARRIVAL-SLOW MAJORITY row is GONE, not widened, because with honest
+       selectors it is deterministically false and asserts against a signed-off
+       decision. Measured N=3: 0 real markers visible at the reveal, still 0 at
+       reveal+1000ms, batch at reveal+3559/4855/3883ms. That is exactly what
+       v372 was built to do (fire the reveal on the 1800ms cap rather than hide
+       the map until slow tiles land; v371 did the opposite and Tom called it
+       too slow). A row demanding the majority at reveal on a line slow enough
+       for the cap to win is demanding v371 back. It only ever went green when
+       nine display:none legend swatches were counted as revealed markers AND
+       the tile delay failed to bite, in which case its sibling straggler row
+       went red instead. The "arrives whole" claim is not lost: the beat rows
+       above assert it in both scenarios, and it passes in both. */
+
+/* THE RECORDER, one copy, both scenarios. It used to be two near-identical
+   in-page copies, each with its own 40ms count poller; that poller was the
+   flakiness (see the block above). Records, per POI MARKER:
+     add    when MapLibre attached it to the DOM
+     vis    when its computed opacity first exceeded 0.01
+     lat    vis - add, the add-to-visible latency this file's contract owns
+     poiIn  whether it ever carried `.poi-in`, the trickle-guard signature
+   plus `reveal`, the exact instant #mapStage gained `markers-in`, taken from a
+   MutationObserver on that one attribute rather than sampled off a timer.
+   `entry` is stamped by the caller at the click that opens the map, so every
+   number is relative to the moment the player asked for the Boneyard.
+   evaluateOnNewDocument survives seed()'s reload (see godmode.js:196). */
+const RECORDER = () => {
+  const S = window.__arr = { entry: null, reveal: null, marks: [] };
+  const POI = ['map-spawn', 'map-den-mark', 'map-mini-mark', 'map-spire', 'map-glutton-mark'];
+  const POI_RE = /map-spawn|map-den-mark|map-mini-mark|map-spire|map-glutton-mark/;
+  const now = () => S.entry == null ? null : Math.round(performance.now() - S.entry);
+  /* MARKERS, NEVER THE MAP KEY. js/app.js:mapLegendHtml() builds #mapLegend out
+     of the exact marker markup so the key and the map cannot drift, and it sits
+     inside #mapStage, so `#mapStage .map-spawn { opacity: 0 !important }` and
+     the `markers-in` rule both apply to its nine swatches. They are display:none
+     behind [hidden] the whole time and computed opacity does not care, so the
+     old unscoped selector counted nine invisible legend swatches as revealed
+     POIs. MapLibre stamps `maplibregl-marker` on the elements it owns and on
+     nothing else, so require it. */
+  const isMarker = el => el.classList.contains('maplibregl-marker') && POI.some(c => el.classList.contains(c));
+  const track = el => {
+    if (!isMarker(el)) return;
+    const rec = { add: now(), kind: POI.find(c => el.classList.contains(c)), vis: null, lat: null, poiIn: false };
+    S.marks.push(rec);
+    const t0 = performance.now();
+    const iv = setInterval(() => {
+      if (el.classList.contains('poi-in')) rec.poiIn = true;
+      if (+getComputedStyle(el).opacity > 0.01) {
+        rec.vis = now(); rec.lat = Math.round(performance.now() - t0); clearInterval(iv);
+      } else if (performance.now() - t0 > 8000) clearInterval(iv);   // never became visible: vis stays null
+    }, 16);
+  };
+  /* evaluateOnNewDocument fires before the DOM is parsed, so documentElement can
+     be null. Wait for it, then observe. */
+  const attach = () => {
+    const root = document.documentElement || document.body;
+    if (!root) { setTimeout(attach, 16); return; }
+    new MutationObserver(muts => { for (const m of muts) for (const n of m.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      const cls = n.className || '';
+      if (typeof cls === 'string' && POI_RE.test(cls)) track(n);
+    } }).observe(root, { childList: true, subtree: true });
+    /* THE REVEAL IS AN EVENT, NOT A SAMPLE. Read off a 40ms poller it was
+       quantised, and worse, the same tick snapshotted the marker count and
+       decided initial-batch-vs-straggler for every marker. */
+    const watchStage = () => {
+      const st = document.querySelector('#mapStage');
+      if (!st) { setTimeout(watchStage, 16); return; }
+      if (st.classList.contains('markers-in')) { S.reveal = now(); return; }
+      const mo = new MutationObserver(() => {
+        if (!st.classList.contains('markers-in')) return;
+        mo.disconnect();
+        S.reveal = now();
+      });
+      mo.observe(st, { attributes: true, attributeFilter: ['class'] });
+    };
+    watchStage();
+  };
+  attach();
+};
+
+/* BEATS: THE ARRIVAL GRAMMAR, and it is this file's own (see PAN below, which
+   has counted beats since 2026-08-08). A beat is every marker that becomes
+   VISIBLE within one fade of the marker that opened the beat.
+   FIXED WINDOW, not a gap-linked chain: a chain lets a 40-marker trickle at
+   240ms apiece read as one long beat, which is the exact hypothetical build the
+   retired MAJORITY row was written to worry about. With a fixed window that
+   build produces ~20 beats and fails on the count.
+   Deliberately reveal-independent. The reveal instant is where the old rows
+   went wrong: `#mapStage.markers-in .poi-arriving { opacity: 0 }` holds a
+   same-beat marker invisible for two rAFs by design, and measured the first
+   beat lands anywhere from 14ms to 539ms after the reveal on a fast line and
+   1810-2168ms after it on a slow one. Beats describe both without a magic
+   offset. */
+const BEAT_MS = 250;                 // one 220ms opacity transition plus slack
+const STRAGGLER_LATENCY_MS = 250;    // same budget, per marker, DOM add -> visible
+/* THREE DOCUMENTED PLACEMENT SOURCES, so three beats is the ceiling and a
+   fourth is a trickle. Not a widened number: it is the count of separate places
+   a marker can come from, each of which this repo has already decided is
+   legitimate.
+     1  the reveal itself, carrying everything placeable without tiles. On a
+        slow line that can be the Glutton alone (js/app.js:refreshGlutton places
+        him unsnapped on purpose), on a fast line it is the whole batch.
+     2  the tile-informed pass, once queryRenderedFeatures can see water and
+        roads. v372 fires the reveal on the 1800ms cap ahead of this on purpose.
+     3  the spire, which needs its own network round trip (app.css says so above
+        the reveal rules: "spires alone need a network round trip").
+   Measured: fast lines collapse 1 and 2 into one beat and land on two; a gated
+   slow line inside a Glutton window uses all three. The rows that own arrival
+   QUALITY rather than arrival grouping are NOTHING-BEFORE-THE-REVEAL, LATENCY
+   and SHAPE below, and they are what caught both mutations this file was
+   re-proven against. */
+const MAX_BEATS = 3;
+const analyse = ({ reveal, marks }) => {
+  const beats = [];
+  for (const m of marks.filter(m => m.vis != null).sort((a, b) => a.vis - b.vis)) {
+    const b = beats[beats.length - 1];
+    if (b && m.vis - b.start <= BEAT_MS) { b.n++; b.end = m.vis; } else beats.push({ start: m.vis, end: m.vis, n: 1, kinds: {} });
+    const last = beats[beats.length - 1];
+    last.kinds[m.kind] = (last.kinds[m.kind] || 0) + 1;
+  }
+  const seen = marks.filter(m => m.vis != null).length;
+  /* Stragglers are markers ATTACHED after the reveal: the ones map.js:holdArrival
+     owns via its !interacted branch. Markers attached before the reveal fade up
+     together on the `markers-in` class transition, which is a different
+     mechanism and outside this contract. */
+  const late = reveal == null ? [] : marks.filter(m => m.add != null && m.add > reveal);
+  /* NOTHING MAY BE VISIBLE BEFORE THE REVEAL. This is app.css's own contract
+     for the whole hide-then-fade block ("Hidden until the first full pass
+     completes, then everything fades up together"), and until 2026-08-20 no row
+     asserted it, which is how `.map-glutton-mark` shipped missing from all
+     three reveal rules: its marker was born opacity 1 and painted on a blank
+     map ~1.5s before anything else. `vis` can only be reported LATE (a 16ms
+     poller) and `reveal` is exact (a MutationObserver), so this needs no
+     tolerance and gets none. */
+  return {
+    beats, seen, late,
+    early: reveal == null ? [] : marks.filter(m => m.vis != null && m.vis < reveal),
+    biggest: beats.reduce((a, b) => (!a || b.n > a.n ? b : a), null),
+    badLate: late.filter(m => m.lat == null || m.lat > STRAGGLER_LATENCY_MS),
+    poiIn: late.filter(m => m.poiIn),
+    lastVis: marks.reduce((mx, m) => (m.vis != null && m.vis > mx ? m.vis : mx), null),
+  };
+};
+
 const { browser, page } = await boot(base, {
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 });
@@ -60,69 +251,7 @@ const origin = new URL(base).origin;
 await browser.defaultBrowserContext().overridePermissions(origin, ['geolocation']);
 await page.setGeolocation({ latitude: 49.2827, longitude: -123.1207 });
 await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-await page.evaluateOnNewDocument(() => {
-  /* Recorder for FAST scenario. Same shape as SLOW: reveal timestamp, count
-     timeline for the reveal-time-visible check, poiInEver for SHAPE, and
-     per-marker stragglers (addedAt/visibleAt) for LATENCY. The old +60ms
-     window has been retired: measured 2026-08-13 that both fixed and pre-fix
-     builds fail +60 whenever the environment produces a straggler, so the
-     window was measuring tile-fetch jitter, not our code. LATENCY + SHAPE
-     measure the mechanism we own and go red on the pre-fix path unchanged. */
-  window.__arr = { t0: performance.now(), reveal: null, tl: [], poiInEver: false, stragglers: [], revealCount: null };
-  const KINDS = { '.map-spawn': 'spawn', '.map-den-mark': 'den', '.map-mini-mark': 'mini',
-    '.map-spire': 'spire', '.map-glutton-mark': 'glutton' };
-  const POI_RE = /map-spawn|map-den-mark|map-mini-mark|map-spire|map-glutton-mark/;
-
-  const trackStraggler = el => {
-    const a = window.__arr;
-    if (a.reveal == null) return;   // pre-reveal marker, part of the initial batch
-    const addedAt = Math.round(performance.now() - a.t0);
-    const t0 = performance.now();
-    const iv = setInterval(() => {
-      if (+getComputedStyle(el).opacity > 0.01) {
-        clearInterval(iv);
-        a.stragglers.push({ addedAt, visibleAt: Math.round(performance.now() - a.t0), latency: Math.round(performance.now() - t0) });
-      } else if (performance.now() - t0 > 5000) {
-        clearInterval(iv);
-        a.stragglers.push({ addedAt, visibleAt: null, latency: null });
-      }
-    }, 20);
-  };
-  const attachMO = () => {
-    const root = document.documentElement || document.body;
-    if (!root) { setTimeout(attachMO, 20); return; }
-    new MutationObserver(muts => {
-      for (const m of muts) for (const n of m.addedNodes) {
-        if (n.nodeType !== 1) continue;
-        const cls = n.className || '';
-        if (typeof cls === 'string' && POI_RE.test(cls)) trackStraggler(n);
-      }
-    }).observe(root, { childList: true, subtree: true });
-  };
-  attachMO();
-
-  setInterval(() => {
-    const a = window.__arr;
-    const snap = { t: Math.round(performance.now() - a.t0) };
-    /* VISIBLE markers, not DOM ones. This is the bug that let the Boneyard get
-       reported fixed three times while it still trickled: a marker enters the DOM
-       at the same instant either way, so counting nodes cannot tell a held marker
-       from a shown one. MapLibre writes `opacity: 1` inline on every marker it
-       owns, which beat the hide rule outright, and only computed opacity shows
-       that. Count what the player can see. */
-    for (const [sel, k] of Object.entries(KINDS))
-      snap[k] = [...document.querySelectorAll(sel)].filter(e => +getComputedStyle(e).opacity > 0.01).length;
-    const last = a.tl[a.tl.length - 1];
-    if (!last || Object.values(KINDS).some(k => last[k] !== snap[k])) a.tl.push(snap);
-    const st = document.querySelector('#mapStage');
-    if (st && st.classList.contains('markers-in') && a.reveal == null) {
-      a.reveal = snap.t;
-      a.revealCount = Object.values(KINDS).reduce((s, k) => s + snap[k], 0);   // snapshot for MAJORITY assertion
-    }
-    if (!a.poiInEver && document.querySelector('#mapStage .map-spawn.poi-in, #mapStage .map-den-mark.poi-in, #mapStage .map-mini-mark.poi-in, #mapStage .map-spire.poi-in, #mapStage .map-glutton-mark.poi-in'))
-      a.poiInEver = true;
-  }, 40);
-});
+await page.evaluateOnNewDocument(RECORDER);
 
 /* EVERY ROW IN THIS FILE IS THE BONEYARD, so every row needs a reachable vector
  * tile host. Without one, js/app.js swaps the map for its offline message and
@@ -144,13 +273,17 @@ await page.evaluateOnNewDocument(() => {
  * ARRIVAL twin was never given the same guard. Same file, same author, same
  * bug class, one row apart. That is the argument for measuring the environment
  * once at the top rather than per-row vigilance forever.
+ * Both ARRIVAL twins now route an empty sample to unproven() rather than green,
+ * and the ARRIVAL-SLOW pair is held non-empty by the tile gate; the PAN baseline
+ * row could not fail at all until 2026-08-20, because its selector was counting
+ * the nine #mapLegend swatches. See the ARRIVAL block for that whole story.
  *
- * COUNT-BASED, not name-based: two of the 22 rows build their name from a
- * template literal, so a list of quoted names cannot see them. The row count in
- * the source is what is asserted, so a new assertion added without extending
+ * COUNT-BASED, not name-based: several rows build their name from a template
+ * literal or a const, so a list of quoted names cannot see them. The row count
+ * in the source is what is asserted, so a new assertion added without extending
  * this block fails here rather than being graded against a dead map. */
 const cls = unclassifiedRows(import.meta.url, []);
-const MAP_ROW_COUNT = 22;   // every ok() in this file except ROWS-COUNTED below
+const MAP_ROW_COUNT = 26;   // every ok() in this file except ROWS-COUNTED below
 ok('ROWS-COUNTED every assertion in this file is Boneyard-dependent and accounted for',
   cls.callSites === MAP_ROW_COUNT + 1,
   `${cls.callSites} ok() rows in source, expected ${MAP_ROW_COUNT + 1}. If you added a row, it needs a line in the UNPROVEN block above it.`);
@@ -158,11 +291,11 @@ ok('ROWS-COUNTED every assertion in this file is Boneyard-dependent and accounte
 const mapCap = await boneyardCapability(page);
 if (!mapCap.ok) {
   const why = 'the Boneyard could not draw on this machine';
-  /* Named where the source names them, counted where it does not: the two
-     template-literal rows are declared by their line so nothing is silent. */
+  /* Named where the source names them, counted where it does not: the rows whose
+     name is built at runtime are declared by their number so nothing is silent. */
   for (const n of cls.names.filter(n => !n.startsWith('ROWS-COUNTED'))) unproven(n, why);
   const unnamed = cls.callSites - 1 - cls.names.filter(n => !n.startsWith('ROWS-COUNTED')).length;
-  for (let i = 1; i <= unnamed; i++) unproven(`ARRIVAL-SLOW straggler-latency row ${i} of ${unnamed} (name is built from a template literal, see source)`, why);
+  for (let i = 1; i <= unnamed; i++) unproven(`ARRIVAL/ARRIVAL-SLOW beat, latency or backstop row ${i} of ${unnamed} (name is built at runtime, see source)`, why);
   await browser.close();
   if (srv) srv.kill();
   const f = results.filter(r => !r.pass).length;
@@ -177,6 +310,11 @@ await page.evaluate(() => { location.hash = '#/boneyard'; });
 await sleep(2500);
 // the Boneyard opens on a location explainer; the map is behind its button
 await page.evaluate(() => {
+  /* Stamp `entry` on the click, so every arrival number is measured from the
+     moment the player asked for the map. The fast recorder used to start its
+     clock at page load, which is why its rows printed things like
+     "reveal at 16258ms" and nobody could tell that was nonsense. */
+  window.__arr.entry = performance.now();
   const b = [...document.querySelectorAll('#screen button')].find(x => /start|allow|enable|walk|open|let/i.test(x.textContent || ''));
   if (b) b.click();
 });
@@ -311,49 +449,69 @@ ok('STALE the loading placeholder is not left on screen',
   !/reading the bones/i.test(state.screenText),
   state.screenText);
 
-/* ARRIVAL contract, retired the +60ms window on 2026-08-13.
-   The +60ms rule was measuring tile-fetch jitter, not our code: pre-fix
-   build on the fast puppet failed +60 on 10/10 runs (pop 1479-2238ms via
-   the 1200ms poi-arriving hold), the fixed build failed +60 on ~2/6 runs
-   (pop 198-239ms via the 220ms fade). Both fail when the environment
-   produces a straggler, both pass when it does not. That is measuring the
-   network, and by Gwart's own rule 5 (does the assertion change when the
-   CODE changes with the environment held constant?) it was not measuring
-   the code. Retired.
-   In its place: the same LATENCY + SHAPE + MAJORITY contract as the SLOW
-   scenario, applied to the fast puppet with the same 250ms per-marker
-   budget. Bounded by our CSS transition, not by tile latency.
-   WHAT THE +60ms ROW USED TO ENCODE, on record so the gap is not silent:
-   "on a good network, almost nothing arrives late". LATENCY + SHAPE do not
-   catch a hypothetical build that reveals stupidly early with 40 markers
-   trickling in at 240ms each: each marker would be under the LATENCY
-   budget and no `.poi-in` would appear. The MAJORITY assertion below
-   partially covers this ("the reveal must contain the majority of final
-   markers, not a handful with the rest as stragglers") but is not perfect:
-   a build with 20 real markers and 20 stragglers at 240ms each would
-   still fail majority; a build with 30 real and 10 stragglers would pass.
-   Not attempting a per-fraction rule, because on this app the total POI
-   count is bounded (~11-15 in Vancouver) and majority is the right shape.
-   If POI density ever varies wildly, revisit. */
+/* ARRIVAL contract. The +60ms window was retired 2026-08-13 because it was
+   measuring tile-fetch jitter: pre-fix builds failed it 10/10 and fixed builds
+   ~2/6, both purely on whether the environment produced a straggler. The
+   MAJORITY-at-reveal rows that replaced it were retired 2026-08-20 for the same
+   class of reason, spelled out at the top of this file: they graded nine
+   display:none legend swatches off a 40ms poller.
+   WHAT IS ASSERTED NOW, all of it reveal-independent except the reveal's own
+   row, all of it measured:
+     BEATS    the markers become visible in at most two coordinated beats.
+     MAJORITY one of those beats carries most of the markers. Together these two
+              are the "arrives whole" contract, and they are what catch both the
+              pre-fix pop-in (separate flushes 1200ms apart, so beat 1 is tiny)
+              and a hypothetical 240ms-per-marker trickle (a fixed-window beat
+              cannot absorb it, so the count blows out).
+     LATENCY  every marker attached after the reveal is visible within 250ms of
+              being attached. Bounded by our own 220ms transition, never by the
+              network: a marker attached at t=3170ms because tiles arrived at
+              t=3170ms must still be visible by t=3420ms.
+     SHAPE    no marker attached after the reveal ever carries `.poi-in`. That
+              class is the pan trickle-guard flush; seeing it on the initial load
+              means holdArrival's !interacted branch stopped owning the second
+              wave. */
+const A = analyse(arr);
 ok('ARRIVAL the reveal happened at all (never revealing is a FAILURE)',
-  arr.reveal != null, `reveal at ${arr.reveal}ms`);
-ok('ARRIVAL markers were actually counted (an empty timeline is a FAILURE)',
-  arr.tl.length >= 2, `${arr.tl.length} count changes recorded`);
-const finalCount = arr.tl.length ? Object.entries({spawn:0,den:0,mini:0,spire:0,glutton:0}).reduce((s, [k]) => s + (arr.tl[arr.tl.length - 1][k] || 0), 0) : 0;
-ok('ARRIVAL the reveal contained the MAJORITY of markers (a reveal with a handful and the rest as stragglers is not the "arrives whole" contract)',
-  arr.reveal != null && arr.revealCount != null && finalCount > 0 && arr.revealCount * 2 > finalCount,
-  `${arr.revealCount ?? 'null'}/${finalCount} visible at reveal`);
-const badFastLatencies = arr.stragglers.filter(s => s.latency == null || s.latency > 250);
-ok('ARRIVAL every straggler fades in within 250ms of DOM add (LATENCY: bounded by our 220ms opacity transition, not by tile jitter)',
-  badFastLatencies.length === 0,
-  arr.stragglers.length === 0
-    ? '0 stragglers (all POIs placed pre-reveal, the fast happy path)'
-    : badFastLatencies.length
-      ? `${badFastLatencies.length}/${arr.stragglers.length} stragglers exceeded: ${JSON.stringify(badFastLatencies.slice(0, 3))}`
-      : `all ${arr.stragglers.length} stragglers within budget: max ${Math.max(...arr.stragglers.map(s => s.latency))}ms`);
-ok('ARRIVAL stragglers appear via opacity fade, not the trickle-guard poi-in scale (SHAPE: the 1200ms poi-arriving+poi-in flush is the pre-fix bug)',
-  arr.poiInEver === false,
-  arr.poiInEver ? 'saw .poi-in class on at least one marker after reveal (holdArrival !interacted branch not owning the initial second wave)' : 'no .poi-in class seen; fade path owned the second wave');
+  arr.reveal != null, `reveal at ${arr.reveal}ms from Boneyard entry`);
+ok('ARRIVAL real POI markers were observed (an empty sample is a FAILURE)',
+  A.seen > 0, `${A.seen} of ${arr.marks.length} tracked markers became visible`);
+ok('ARRIVAL no marker is visible before the reveal (the reveal owns the first paint; a marker that paints early is the trickle, one marker at a time)',
+  arr.reveal != null && A.early.length === 0,
+  A.early.length ? `${A.early.length} painted before the ${arr.reveal}ms reveal: ${JSON.stringify(A.early.slice(0, 3))}` : `all ${A.seen} markers waited for the ${arr.reveal}ms reveal`);
+ok(`ARRIVAL the markers become visible in at most ${MAX_BEATS} coordinated beats, never a per-marker trickle`,
+  A.beats.length > 0 && A.beats.length <= MAX_BEATS,
+  `${A.beats.length} beat(s): ${JSON.stringify(A.beats)}`);
+ok('ARRIVAL one beat carries the MAJORITY of the markers (a handful now and the rest as a later wave is not the "arrives whole" contract)',
+  !!A.biggest && A.biggest.n * 2 > A.seen,
+  `biggest beat ${A.biggest ? A.biggest.n : 0}/${A.seen} at ${A.biggest ? A.biggest.start : 'n/a'}ms`);
+/* AN EMPTY SAMPLE IS NOT A PASS, AND HERE IT IS NOT A DEFECT EITHER.
+   These two rows can only be graded if this run actually produced a marker
+   attached after the reveal. On the fast puppet that is the spire, whose
+   placement needs a network round trip: measured 5/5 runs it landed ~3.4s after
+   entry, but a run where that request fails produces nothing to measure. The
+   old code let that case sail through GREEN on a sample of zero, and the
+   UNPROVEN block further up this file names it as the instructive example of
+   exactly that antipattern. So route it through godmode's third outcome: not
+   pass, not fail, exit 97. The ARRIVAL-SLOW twins below hold the tile gate that
+   makes the sample non-empty BY CONSTRUCTION, so the mechanism is still graded
+   every run; this pair is the fast-line bonus. */
+const FAST_LATENCY = `ARRIVAL every marker attached after the reveal is visible within ${STRAGGLER_LATENCY_MS}ms of DOM add (LATENCY: bounded by our 220ms opacity transition, not by tile jitter)`;
+const FAST_SHAPE = 'ARRIVAL markers attached after the reveal fade in, never via the trickle-guard poi-in scale (SHAPE: the 1200ms poi-arriving+poi-in flush is the pre-fix bug)';
+if (!A.late.length) {
+  const why = 'this run attached every POI marker before the reveal, so there was no post-reveal marker to time (the fast happy path). Nothing was learned either way; the ARRIVAL-SLOW twins grade the same mechanism against a tile gate that guarantees a sample.';
+  unproven(FAST_LATENCY, why);
+  unproven(FAST_SHAPE, why);
+} else {
+  ok(FAST_LATENCY, A.badLate.length === 0,
+    A.badLate.length
+      ? `${A.badLate.length}/${A.late.length} exceeded: ${JSON.stringify(A.badLate.slice(0, 3))}`
+      : `all ${A.late.length} within budget: max ${Math.max(...A.late.map(m => m.lat))}ms`);
+  ok(FAST_SHAPE, A.poiIn.length === 0,
+    A.poiIn.length
+      ? `${A.poiIn.length}/${A.late.length} post-reveal markers carried .poi-in (holdArrival's !interacted branch is not owning the initial second wave)`
+      : `no .poi-in on any of ${A.late.length} post-reveal markers; the fade path owned the second wave`);
+}
 
 /* ---- PANNING, which is where it actually trickles ------------------------------
    Tom, 2026-08-08: "you've told me multiple times that the boneyard doesn't load
@@ -380,7 +538,11 @@ await page.evaluate(() => {
 });
 await sleep(14000);
 
-const VIS = `[...document.querySelectorAll('.map-spawn, .map-den-mark, .map-mini-mark, .map-spire, .map-glutton-mark')].filter(e => +getComputedStyle(e).opacity > 0.01).length`;
+/* MARKERS, NOT THE MAP KEY, same reason as RECORDER above: unscoped, this
+   counted the nine #mapLegend swatches, so `panBaseline > 0` was true before a
+   single POI had been placed and the guard that exists to prove the sample is
+   not empty could not fail. */
+const VIS = `[...document.querySelectorAll('#mapStage .maplibregl-marker.map-spawn, #mapStage .maplibregl-marker.map-den-mark, #mapStage .maplibregl-marker.map-mini-mark, #mapStage .maplibregl-marker.map-spire, #mapStage .maplibregl-marker.map-glutton-mark')].filter(e => +getComputedStyle(e).opacity > 0.01).length`;
 await page.evaluate(v => {
   window.__pan = { t0: performance.now(), tl: [] };
   setInterval(() => {
@@ -392,8 +554,21 @@ await page.evaluate(v => {
 await page.evaluate(() => { const m = window.__map || window.map; if (m) m.panBy([320, 260], { duration: 700 }); });
 await sleep(12000);
 const pan = await page.evaluate(() => window.__pan.tl);
-const arrivals = pan.slice(1);   // [0] is the baseline count, not an arrival
 const panBaseline = pan.length ? pan[0].n : 0;
+/* AN ARRIVAL IS AN INCREASE, and this row used to count any change. The
+   timeline records every change in the visible count, and a marker can also
+   LEAVE it: measured 2026-08-20, one run in seven recorded 63 -> 62 -> 63 at
+   t=8568ms, a single marker dropping out of the visible set for ~33ms nearly
+   eight seconds after the pan. Two frames is the signature of a placement pass
+   removing and recreating a marker, whose replacement flashes through
+   map.js:holdArrival's two-rAF `poi-arriving` hold (panBy is programmatic, so
+   `interacted` stays false and the fade branch owns the replacement).
+   Whatever it is, it is not a POI arriving, and counting it as one made this
+   row report "a beat of -1 markers" and go red once in seven runs.
+   FILTERED, NOT HIDDEN: the raw timeline is still printed in the evidence
+   below, so a marker that vanishes and comes back is still in front of whoever
+   reads the row. */
+const arrivals = pan.slice(1).map((p, i) => ({ ...p, d: p.n - pan[i].n })).filter(a => a.d > 0);
 ok('PAN the map actually had markers to work with (an empty sample is a FAILURE)',
   panBaseline > 0, `baseline ${panBaseline} visible markers`);
 /* Placement genuinely resolves in two waves ~2.6s apart, so "one beat" would
@@ -401,7 +576,7 @@ ok('PAN the map actually had markers to work with (an empty sample is a FAILURE)
    COORDINATED BEATS rather than one at a time: at most two, never a per-marker
    trickle. Before the fix this was three separate arrivals over 1281ms and the
    count rose by one each time. */
-const perBeat = arrivals.map((a, i) => a.n - (i ? arrivals[i - 1].n : panBaseline));
+const perBeat = arrivals.map(a => a.d);
 ok('PAN new POIs arrive in coordinated beats, not one marker at a time',
   arrivals.length <= 2,
   `${arrivals.length} beat(s), ${JSON.stringify(perBeat)} markers each: ${JSON.stringify(pan)}`);
@@ -440,14 +615,24 @@ await browser.close();
        means the initial second wave took the pan-batched branch instead
        of the fade branch.
 
+   ARRIVES WHOLE, LATER  the batch that lands after the cap lands as ONE
+       beat. Added 2026-08-20 in place of a "majority visible at the reveal"
+       row, which on this scenario asserted the opposite of v372's design:
+       the cap fires the reveal with nothing placed, on purpose, so the
+       reveal is empty by construction and the thing worth asserting is that
+       the batch behind it does not arrive in pieces.
+
    Plus TWO guards against sample-degeneracy that would let a broken build
    sail through with a perfect latency score:
 
-     STRAGGLER COUNT  a slow run MUST observe at least one straggler.
-       Zero stragglers means either the map never revealed or no markers
-       were ever added, and either way the latency assertion is vacuous.
-     TOTAL POP BACKSTOP  pop <= 3000ms. NOT the contract, a screaming
-       backstop for pathological cases like the cap never firing.
+     THE GATE BIT  every marker must be attached AFTER the reveal, which is
+       what makes this run slow at all. Guaranteed by the hold-until-deadline
+       tile gate below rather than hoped for; before 2026-08-20 this row read
+       "at least one straggler was observed" and flipped a coin on how many
+       rounds of tile fetches MapLibre happened to need.
+     TOTAL POP BACKSTOP  NOT the contract, a screaming backstop for
+       pathological cases like the cap never firing. See its own comment for
+       the current number and why it moved.
 
    PROVE-RED (confirmed 2026-08-12):
      - revert `if (map.loaded()) placedOnce = true;` AND remove holdArrival's
@@ -463,7 +648,10 @@ await browser.close();
        the fast path too, not just this slow one): ARRIVAL fast row goes
        red at +961ms, SHAPE stays GREEN (fade path still working, just
        fired early), BACKSTOP stays green, so the latency-per-marker vs
-       shape distinction is doing its job. */
+       shape distinction is doing its job.
+   PROVE-RED (re-confirmed 2026-08-20 against the rewritten rows, in a
+   throwaway worktree, mutation asserted applied first): see the note at the
+   end of this file. */
 /* Fresh boot so the fast-run instrumentation and route history do not spill
    into the slow-tile measurement. boot() handles ?demo + dismissOverlays. */
 const { browser: slowBrowser, page: slowPage } = await boot(base, {
@@ -473,172 +661,120 @@ await slowBrowser.defaultBrowserContext().overridePermissions(new URL(base).orig
 await slowPage.setGeolocation({ latitude: 49.2827, longitude: -123.1207 });
 await slowPage.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 /* Interception installed AFTER boot: the initial /?demo goto has already
-   completed, and hash-routing to #/boneyard triggers map init in-page, so
-   tile fetches happen with the delay active.
-   TILE DELAY chosen so the scenario RELIABLY produces stragglers WITHOUT
-   pushing total pop past the 3000ms backstop. N=5 consecutive full-audit
-   runs per candidate:
-     SLOW_TILES=800   4/5 bite  (one run reveal=2085 pop=40   0 stragglers)
-     SLOW_TILES=1200  4/5 bite  (one run reveal=1878 pop=0    0 stragglers)
-     SLOW_TILES=2000  5/5 bite  (see below)
-     SLOW_TILES=2500  5/5 bite  BUT backstop fires every run (pop 3600-4700)
-                                because sequential tile loads sum past 3s.
-   The rule is `delay > cap`. Any tile delay less than the 1800ms cap risks
-   a race where tiles happen to complete just before or with the cap, all
-   placement finishes in one pass, and the slow-run produces zero
-   stragglers. The empty-sample and count>0 guards catch that (as they
-   should: an empty-sample slow row is a broken scenario), but a scenario
-   that only sometimes exercises the mechanism it exists to test is a
-   coin-flip guard and gets ignored inside a week.
-   2000 is the smallest value strictly greater than the cap and small
-   enough to keep total pop under the 3000ms backstop, so pick it. The
-   backstop stays what it says: a screaming pathological guard, not the
-   contract; it does not fire on this scenario. */
+   completed, and hash-routing to #/boneyard triggers map init in-page, so tile
+   fetches happen with the gate active.
+
+   A GATE, NOT A PER-REQUEST DELAY, since 2026-08-20. The old form delayed every
+   tile request by 2000ms independently, and the scenario's whole purpose (make
+   the 1800ms reveal cap fire AHEAD of placement, so the second wave exists to
+   be measured) then depended on how many sequential rounds of tile fetches
+   MapLibre happened to need. Measured on origin/main, N=3: the second wave
+   landed 3559ms, 4855ms and 3883ms after the reveal, and a fourth run produced
+   no second wave inside a 12s window at all. That is the coin flip behind the
+   "0 stragglers tracked" red: not a defect, a scenario that only sometimes ran.
+
+   The gate holds every tile request until one fixed deadline and then releases
+   the lot with no further delay. Tiles CANNOT complete before the deadline, so
+   `map.loaded()` cannot be true, so `placedOnce` cannot flip, so the cap is the
+   only thing that can fire the reveal. Guaranteed by construction rather than
+   by a five-run hope. TILE_HOLD_MS only has to exceed the app's cap; 2500 over
+   1800 leaves 700ms of margin. Measured N=3: reveal 1839/1840/1841ms, and every
+   one of the ~60 markers attached after it, so the straggler sample can no
+   longer be empty. */
+const TILE_HOLD_MS = 2500;   // > js/app.js's 1800ms reveal cap, so the cap always wins
+let tileReleaseAt = null;    // wall-clock; set at the click, null means "let it through"
 await slowPage.setRequestInterception(true);
 slowPage.on('request', req => {
-  if (/openfreemap|openmaptiles|\.pbf|tiles\./.test(req.url())) setTimeout(() => req.continue(), 2000);
-  else req.continue();
+  const go = () => req.continue().catch(() => { /* aborted while held */ });
+  if (!/openfreemap|openmaptiles|\.pbf|tiles\./.test(req.url())) return go();
+  const wait = tileReleaseAt == null ? 0 : Math.max(0, tileReleaseAt - Date.now());
+  if (wait) setTimeout(go, wait); else go();
 });
-await slowPage.evaluateOnNewDocument(() => {
-  /* Recorder for the slow-tile scenario. Tracks:
-       tl        opacity-based visible-count timeline (for backstop pop)
-       reveal    when `.markers-in` was added
-       poiInEver whether `.poi-in` was ever seen (SHAPE assertion)
-       stragglers per-marker addedAt/visibleAt for the ADD-TO-VISIBLE latency
-                  assertion. Only counted if added AFTER reveal (initial
-                  second wave); markers added pre-reveal fade in via the
-                  markers-in class transition on the whole batch, which is a
-                  different mechanism and outside this contract.
-     evaluateOnNewDocument survives seed()'s reload (see godmode.js:196). */
-  window.__slow = { entry: null, reveal: null, tl: [], poiInEver: false, stragglers: [], revealCount: null };
-  const POI = '.map-spawn, .map-den-mark, .map-mini-mark, .map-spire, .map-glutton-mark';
-  const KINDS = { '.map-spawn': 'spawn', '.map-den-mark': 'den', '.map-mini-mark': 'mini',
-    '.map-spire': 'spire', '.map-glutton-mark': 'glutton' };
-
-  const trackStraggler = el => {
-    const s = window.__slow;
-    if (s.reveal == null) return;                        // not a straggler, part of the initial batch
-    const addedAt = Math.round(performance.now() - s.entry);
-    const t0 = performance.now();
-    const iv = setInterval(() => {
-      if (+getComputedStyle(el).opacity > 0.01) {
-        clearInterval(iv);
-        s.stragglers.push({ addedAt, visibleAt: Math.round(performance.now() - s.entry), latency: Math.round(performance.now() - t0) });
-      } else if (performance.now() - t0 > 5000) {
-        clearInterval(iv);
-        s.stragglers.push({ addedAt, visibleAt: null, latency: null });    // never became visible
-      }
-    }, 20);
-  };
-  /* MutationObserver picks up MapLibre's DOM marker attachment. evaluateOnNewDocument
-     fires before the DOM is parsed so document.documentElement can be null;
-     wait for it to exist, then observe. */
-  const attachMO = () => {
-    const root = document.documentElement || document.body;
-    if (!root) { setTimeout(attachMO, 20); return; }
-    const mo = new MutationObserver(muts => {
-      for (const m of muts) for (const n of m.addedNodes) {
-        if (n.nodeType !== 1) continue;
-        const cls = n.className || '';
-        if (typeof cls !== 'string') continue;
-        if (/map-spawn|map-den-mark|map-mini-mark|map-spire|map-glutton-mark/.test(cls)) trackStraggler(n);
-      }
-    });
-    mo.observe(root, { childList: true, subtree: true });
-  };
-  attachMO();
-
-  setInterval(() => {
-    const s = window.__slow;
-    if (s.entry == null) return;
-    const snap = { t: Math.round(performance.now() - s.entry) };
-    for (const [sel, k] of Object.entries(KINDS))
-      snap[k] = [...document.querySelectorAll(sel)].filter(e => +getComputedStyle(e).opacity > 0.01).length;
-    const last = s.tl[s.tl.length - 1];
-    if (!last || Object.values(KINDS).some(k => last[k] !== snap[k])) s.tl.push(snap);
-    const st = document.querySelector('#mapStage');
-    if (st && st.classList.contains('markers-in') && s.reveal == null) {
-      s.reveal = snap.t;
-      s.revealCount = Object.values(KINDS).reduce((sum, k) => sum + snap[k], 0);
-    }
-    if (!s.poiInEver && document.querySelector('#mapStage .map-spawn.poi-in, #mapStage .map-den-mark.poi-in, #mapStage .map-mini-mark.poi-in, #mapStage .map-spire.poi-in, #mapStage .map-glutton-mark.poi-in'))
-      s.poiInEver = true;
-  }, 40);
-});
+await slowPage.evaluateOnNewDocument(RECORDER);
 await seed(slowPage, { level: 18, coins: 500 });
 await slowPage.evaluate(() => { location.hash = '#/boneyard'; });
 await sleep(2500);
+tileReleaseAt = Date.now() + TILE_HOLD_MS;   // arm the gate on the same beat as the click
 await slowPage.evaluate(() => {
-  window.__slow.entry = performance.now();
+  window.__arr.entry = performance.now();
   const b = [...document.querySelectorAll('#screen button')].find(x => /start|allow|enable|walk|open|let/i.test(x.textContent || ''));
   if (b) b.click();
 });
 await sleep(10000);
 
-const slow = await slowPage.evaluate(() => window.__slow);
-const slowLast = slow.tl[slow.tl.length - 1] || { t: null };
-const slowPop = (slow.reveal != null && slowLast.t != null) ? slowLast.t - slow.reveal : null;
-const STRAGGLER_LATENCY_MS = 250;   // one 220ms opacity transition plus slack
-/* POP_BACKSTOP is a screaming pathological guard (cap never fires, hung
-   refresh, recorder broke), not a contract. Original guess was 3000ms, but
-   measured 5/5 audit runs at SLOW_TILES=2000 sit at pop 2638-2800ms (93%
-   headroom). A backstop that sits inside jitter distance of the normal
-   scenario is one bad run from being the flaky row that gets ignored.
-   4000ms gives ~33% headroom over the audit's own scenario while still
-   catching pathological cases: a hung cap or dead refresh leaves pop at
-   the full sleep duration (~10000ms), which is well past 4000. */
-const POP_BACKSTOP_MS = 4000;
+const slow = await slowPage.evaluate(() => window.__arr);
+const S = analyse(slow);
+const slowPop = (slow.reveal != null && S.lastVis != null) ? S.lastVis - slow.reveal : null;
+/* POP_BACKSTOP is a screaming pathological guard (cap never fired, hung refresh,
+   recorder broke), NOT the contract: total pop is bounded by tile latency, which
+   is the network and not our code. Optimising it would mean hiding the map until
+   slow tiles land, which is what v371 did and Tom rejected.
+   RE-MEASURED 2026-08-20 with the tile gate and with real markers only:
+   pop 3275/3484/3517ms, N=3, and the tail of that is the SPIRE, whose placement
+   needs its own network round trip ~5.3s after entry regardless of tiles. The
+   old 4000 sat 14% above the scenario's own normal range, which is one bad run
+   from being the flaky row everybody learns to ignore. 6000 keeps ~70% headroom
+   and still catches the cases this row is for: a cap that never fires or a dead
+   refresh leaves pop at the full sleep duration, ~10000ms. */
+const POP_BACKSTOP_MS = 6000;
 
-ok('ARRIVAL-SLOW the reveal happened at all under real-network tile timing (never revealing is a FAILURE)',
+ok('ARRIVAL-SLOW the reveal happened at all under slow-tile timing (never revealing is a FAILURE)',
   slow.reveal != null, `reveal at ${slow.reveal}ms from Boneyard entry`);
-ok('ARRIVAL-SLOW markers were actually counted (an empty timeline is a FAILURE)',
-  slow.tl.length >= 2, `${slow.tl.length} count changes recorded`);
-/* At least one straggler must be observed. Zero stragglers means either the
-   map revealed with everything already placed (which would be great, but only
-   happens if the cap is above the slow-tile arrival time, which defeats the
-   point of the slow contract) OR the map never revealed at all. Either way
-   the latency assertion below would pass vacuously, so fail here first. */
-ok('ARRIVAL-SLOW at least one straggler was observed (empty sample is a FAILURE: latency assertion would pass vacuously)',
-  slow.stragglers.length > 0,
-  `${slow.stragglers.length} stragglers tracked`);
-/* MAJORITY, same symmetric check as the fast row: a reveal with a handful
-   of markers and everything else as stragglers is not the "arrives whole"
-   contract even on a slow line. Catches a broken cap fired too early. */
-const slowFinalCount = slow.tl.length ? Object.entries({spawn:0,den:0,mini:0,spire:0,glutton:0}).reduce((s, [k]) => s + (slow.tl[slow.tl.length - 1][k] || 0), 0) : 0;
-ok('ARRIVAL-SLOW the reveal contained the MAJORITY of markers (a reveal with a handful and the rest as stragglers is not "arrives whole")',
-  slow.reveal != null && slow.revealCount != null && slowFinalCount > 0 && slow.revealCount * 2 > slowFinalCount,
-  `${slow.revealCount ?? 'null'}/${slowFinalCount} visible at reveal`);
-/* THE CONTRACT: each straggler fades in within 250ms of being added. Bounded
-   by the CSS opacity transition (220ms), NOT by tile latency. A marker added
-   at t=3170ms because tiles arrived at t=3170ms must still fade in by 3420ms.
-   The pre-fix trickle path held for 1200ms before flushing, so this goes red
-   the moment holdArrival's !interacted branch stops owning the second wave. */
-const badLatencies = slow.stragglers.filter(s => s.latency == null || s.latency > STRAGGLER_LATENCY_MS);
-/* Precondition check on THIS row too, not just the row above. Two rows can
-   both be right about the same thing; that is defence in depth. Without this
-   guard `Math.max(...[])` is -Infinity, `sorted[floor(-.5)]` is undefined,
-   and the assertion prints nonsense evidence as it sails through green on a
-   sample of zero. The empty-sample row beside this is the primary guard, but
-   a latency check that CANNOT self-verify its own input is a bug in a test,
-   which is still a bug. */
-ok(`ARRIVAL-SLOW every straggler fades in within ${STRAGGLER_LATENCY_MS}ms of DOM add (bounded by our 220ms opacity transition, not by tile latency)`,
-  slow.stragglers.length > 0 && badLatencies.length === 0,
-  slow.stragglers.length === 0
-    ? 'no stragglers in the sample; latency cannot be measured on an empty set (see empty-sample row above)'
-    : badLatencies.length
-      ? `${badLatencies.length}/${slow.stragglers.length} stragglers exceeded: ${JSON.stringify(badLatencies.slice(0, 3))}`
-      : `all ${slow.stragglers.length} stragglers within budget: max ${Math.max(...slow.stragglers.map(s => s.latency))}ms, median ${slow.stragglers.map(s => s.latency).sort((a, b) => a - b)[Math.floor(slow.stragglers.length / 2)]}ms`);
+ok('ARRIVAL-SLOW real POI markers were observed (an empty sample is a FAILURE)',
+  S.seen > 0, `${S.seen} of ${slow.marks.length} tracked markers became visible`);
+ok('ARRIVAL-SLOW no marker is visible before the reveal (the reveal owns the first paint, on a slow line too)',
+  slow.reveal != null && S.early.length === 0,
+  S.early.length ? `${S.early.length} painted before the ${slow.reveal}ms reveal: ${JSON.stringify(S.early.slice(0, 3))}` : `all ${S.seen} markers waited for the ${slow.reveal}ms reveal`);
+/* THE SCENARIO'S OWN PRECONDITION, MEASURED, NOT ASSUMED. This is the row that
+   used to read "at least one straggler was observed" and flip a coin. What it
+   actually needs to be true is that the tile gate bit: the reveal fired on the
+   cap before the tile-informed placement pass ran, so the bulk of the markers
+   are stragglers and the latency and shape rows have a real sample.
+   THE MAJORITY, not every marker, and the exception is measured rather than
+   assumed: js/app.js:refreshGlutton places the world boss on the FIRST pass
+   whether or not tiles have loaded, on purpose ("ALWAYS place him, even
+   unsnapped ... gating on it made the world boss permanently invisible"), so
+   during a Glutton window one marker is legitimately attached before the cap
+   fires. Demanding every marker made this row red for four hours twice a day on
+   healthy code, which is how a guard gets ignored.
+   Guaranteed by construction otherwise: tiles cannot resolve before
+   TILE_HOLD_MS, which is past the cap, so a red row here means the gate broke,
+   not that the app regressed. */
+ok('ARRIVAL-SLOW the reveal fired on the cap ahead of placement, so this run really was slow (a straggler sample this small means the tile gate did not bite and every row below it would be vacuous)',
+  slow.reveal != null && S.late.length > 0 && S.late.length * 2 > slow.marks.length,
+  `${S.late.length}/${slow.marks.length} markers attached after the reveal`);
+ok(`ARRIVAL-SLOW the markers become visible in at most ${MAX_BEATS} coordinated beats, never a per-marker trickle`,
+  S.beats.length > 0 && S.beats.length <= MAX_BEATS,
+  `${S.beats.length} beat(s): ${JSON.stringify(S.beats)}`);
+/* "ARRIVES WHOLE" STILL HOLDS ON A SLOW LINE, it just holds LATER, and that is
+   the distinction the retired MAJORITY-at-reveal row could not draw. The map
+   appears empty at the cap and the whole batch fades up together ~2s later, as
+   one beat, which is v372's designed behaviour. What would be a defect is that
+   batch arriving in pieces, and this is the row that says so. */
+ok('ARRIVAL-SLOW one beat carries the MAJORITY of the markers (the batch lands later than on a fast line, but it still lands together)',
+  !!S.biggest && S.biggest.n * 2 > S.seen,
+  `biggest beat ${S.biggest ? S.biggest.n : 0}/${S.seen} at ${S.biggest ? S.biggest.start : 'n/a'}ms, reveal ${slow.reveal}ms`);
+/* THE CONTRACT: each straggler is visible within 250ms of being attached,
+   bounded by the CSS opacity transition, NOT by tile latency. The pre-fix
+   trickle path held for 1200ms before flushing, so this goes red the moment
+   holdArrival's !interacted branch stops owning the second wave. */
+ok(`ARRIVAL-SLOW every straggler is visible within ${STRAGGLER_LATENCY_MS}ms of DOM add (bounded by our 220ms opacity transition, not by tile latency)`,
+  S.late.length > 0 && S.badLate.length === 0,
+  S.late.length === 0
+    ? 'no post-reveal markers in the sample; see the tile-gate precondition row above'
+    : S.badLate.length
+      ? `${S.badLate.length}/${S.late.length} exceeded: ${JSON.stringify(S.badLate.slice(0, 3))}`
+      : `all ${S.late.length} within budget: max ${Math.max(...S.late.map(m => m.lat))}ms`);
 ok('ARRIVAL-SLOW stragglers appear via opacity fade, not the trickle-guard poi-in scale (no .poi-in on any POI marker during the initial load)',
-  slow.poiInEver === false,
-  slow.poiInEver ? 'saw .poi-in class on at least one marker after reveal (holdArrival !interacted branch is not owning the initial-load second wave)' : 'no .poi-in class seen; fade path owned the second wave');
-/* Backstop only. Not the contract: total pop is bounded by tile latency,
-   which is the network, not our code. Firing this means something
-   pathological (cap never fired, tiles hung past 3s, or the recorder
-   itself broke), so treat a red row here as an investigation trigger, not
-   a number to tune. */
+  S.late.length > 0 && S.poiIn.length === 0,
+  S.late.length === 0
+    ? 'no post-reveal markers in the sample; see the tile-gate precondition row above'
+    : S.poiIn.length
+      ? `${S.poiIn.length}/${S.late.length} carried .poi-in (holdArrival's !interacted branch is not owning the initial-load second wave)`
+      : `no .poi-in on any of ${S.late.length} post-reveal markers; the fade path owned the second wave`);
 ok(`ARRIVAL-SLOW total-pop backstop <=${POP_BACKSTOP_MS}ms (NOT the contract: a red row means investigate, not widen)`,
   slowPop != null && slowPop <= POP_BACKSTOP_MS,
-  `reveal=${slow.reveal}ms  last=${slowLast.t}ms  pop=${slowPop}ms  final=${JSON.stringify(slowLast)}`);
+  `reveal=${slow.reveal}ms  lastVisible=${S.lastVis}ms  pop=${slowPop}ms  beats=${JSON.stringify(S.beats)}`);
 
 /* INTERACTED GATE, both directions. Programmatic camera moves (map.easeTo,
    flyTo) must NOT flip `interacted`, or the initial second wave would land
@@ -689,6 +825,48 @@ ok('INTERACTED real user drag DOES flip interacted (so holdArrival re-engages it
 
 await slowBrowser.close();
 if (srv) srv.kill();
+
+/* ===== PROVE-RED, 2026-08-20, rewritten arrival rows ==========================
+ * Every run below is a throwaway worktree, with the mutation asserted present in
+ * the tree before the audit was started, not assumed.
+ *
+ * BASELINE, pristine origin/main (c1ea781) with the OLD audit, N=2:
+ *   21/23 both runs, "10/52 visible at reveal" on both MAJORITY rows. The 10 is
+ *   nine #mapLegend swatches plus the Glutton, which is the one real marker that
+ *   painted before the reveal. So the number the flaky row had been printing all
+ *   along was the map key plus a bug, and never the reveal.
+ *
+ * FIXED TREE, N=3: 27/27, exit 0, inside a Glutton window and outside one.
+ *
+ * MUTATION 1, js/map.js: holdArrival's `!interacted` branch deleted (the v370
+ * pre-fix path, so the initial second wave takes the batched 1200ms hold and the
+ * poiPop flush). 23/27, and the four reds are the right four:
+ *   ARRIVAL      LATENCY  1/1 exceeded, spire lat=1232ms, poiIn=true
+ *   ARRIVAL      SHAPE    1/1 post-reveal markers carried .poi-in
+ *   ARRIVAL-SLOW LATENCY  42/42 exceeded, lat=1234ms each
+ *   ARRIVAL-SLOW SHAPE    42/42 carried .poi-in
+ * The beat and majority rows stay green, correctly: a batched flush still
+ * arrives as one beat. Grouping and quality are different claims and the rows
+ * that own each of them fired independently, which is the point of splitting
+ * them.
+ *
+ * MUTATION 2, app.css reverted to origin/main (`.map-glutton-mark` absent from
+ * the three reveal rules), js/map.js untouched. The NOTHING-BEFORE-THE-REVEAL
+ * rows go red in both scenarios and name the marker:
+ *   ARRIVAL       1 painted before the 1309ms reveal: glutton, vis=300ms
+ *   ARRIVAL-SLOW  1 painted before the 1842ms reveal: glutton, vis=86ms
+ * Measured independently of the map, straight off the stylesheet: a
+ * `.map-glutton-mark` inside #mapStage computes opacity 1 before `markers-in` on
+ * origin/main and 0 after the fix, where every other marker type computes 0 then
+ * fades to 1.
+ *
+ * NOT PROVEN RED, and named so it is not mistaken for coverage: the ARRIVAL and
+ * ARRIVAL-SLOW beat-count rows. No mutation available here splits the initial
+ * load into a fourth wave, so MAX_BEATS is a ceiling this suite has never seen
+ * fire. It is the count of documented placement sources, not a measured
+ * threshold. If you want it proven, the mutation is a placement pass that emits
+ * markers one at a time.
+ * ============================================================================ */
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
 if (!results.length) { console.log('FAIL: no checks ran'); process.exit(1); }

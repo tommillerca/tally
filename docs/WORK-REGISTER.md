@@ -88,15 +88,51 @@ See `SHIP-LEDGER.md` for what counts as LIVE.
 
 ## Live on the public repo
 
-- **NOTHING SINCE v424 HAS REACHED A PLAYER.** `sw.js VERSION` is still
-  `tally-v424`, `APP_BUILD` is `'v424'` and `changelog.js` is at `n: 424`, while
-  SIX changes have merged on top of it: #85 Emporium idle, #88 README privacy,
-  #89 privacy.html location, #84 guard hardening, #86 cosmetics rebuild, #90
-  cloud-backup opt-out. Deliberate, per the v425 plan: one bump after the merges
-  so three branches do not collide on the same three lines. But the pile now
-  includes a **privacy control fix**, which is the one thing in it that should
-  not sit. Whoever cuts v425 owns the bump; skip it and the service worker keeps
-  serving the old modules.
+- **v426: the write-failure seam finally has a consumer.** PR #100 merged
+  2026-08-23 as `d49399a5`. #78 shipped the seam in v425 and it was INERT: its
+  reporter ends in `if (!writeFailureSink) return;` and nothing called
+  `onWriteFailure` (measured: 1 occurrence in the shipped tree, its own export;
+  0 in js/app.js, and 0 on the live site). So a lost meal, weigh-in, crate or
+  coin row stayed as silent as before the seam existed.
+
+  **Verified live by BEHAVIOUR, not by symbols**, which is the whole lesson of
+  this item: the earlier "#78 is live" claim was made by grepping the deployed
+  file for symbols, and the feature was dead. `tests/write-failure-toast-audit
+  .mjs` was run against `https://tommillerca.github.io/tally/` itself and is 6/6
+  green there: it breaks a real write in the real page and reads the real
+  `#toast`. PREMISE proves the write really rejects, so the silence rows are not
+  vacuous. Stamps live: `tally-v426`, `APP_BUILD v426`, changelog `n: 426`.
+
+  The existing `write-failure-seam-audit` could not have caught this and is not
+  at fault: it registers its OWN sink to observe the seam, so it stays green
+  while the app has none. A test that supplies the missing collaborator cannot
+  notice the collaborator is missing. Worth remembering as a class.
+
+
+- **v425 IS LIVE.** PR #92 merged by Tom 2026-08-23 04:58 UTC as `0eb4feb7`.
+  Verified through the REAL service worker, page confirmed controlled, not by
+  curl: `sw.js tally-v425`, `APP_BUILD v425`, changelog `n: 425`, the Emporium
+  `.wz-glow.idle` rules present, and the `cloudOff` guard present INSIDE
+  `pushBackup` and ahead of the send.
+
+  **The shell is served NETWORK-FIRST**, so the earlier claim in this file that
+  nothing had reached a player was wrong and the two fixes were already live
+  before the stamp. What the stamp added: the `APP_BUILD` string Settings shows,
+  the What's New dot and the v425 changelog entry, and a fresh precache.
+  `SHIP-LEDGER.md` still says a merge alone reaches nobody while VERSION has not
+  moved; that describes the PRECACHE path, not how the shell is served, and it is
+  the sentence that misled me. Somebody should reconcile it.
+
+  **PR #78 landed FOUR MINUTES AFTER the stamp** (`e7b4ca75`, 05:02 UTC, also
+  merged by Tom) and is therefore shipping under the v425 label with NO changelog
+  line. It is `gwart/v420-writefail`: a rejected database write is now announced
+  to the player, and it is live (4 matching symbols in the served `js/db.js`). So
+  a player can now see a save-failure message that v425's What's New does not
+  explain. Not wrong, just unlabelled. Whoever owns the copy decides whether it
+  needs a line or whether it rides silently.
+
+  **The gate evidence predates #78.** The 84-suite run and the serial re-check
+  below were taken against the stamp branch before #78 existed.
 
 - **privacy.html location disclosure.** PR #89 squash-merged 2026-08-23 as
   `716f6325`. New "Location and the map" section: foreground-only permissions
@@ -498,10 +534,66 @@ row moved. guard-hygiene clean; guard-provenance 69 of 72, ratchet holding.
 - Gwart: 13 audits decide visibility from `getComputedStyle().opacity` alone and
   an unknown subset share this bug. Needs per-call-site review, not a grep.
 
-## SUSPECTED PRODUCT BUG (not a test flake): the Boneyard can draw ZERO markers
+## DOWNGRADED 2026-08-23: the zero-marker observation did NOT reproduce (was: suspected product bug)
 
 **Filed 2026-08-23 as a product item deliberately, at Gwart's request, because the
 flake queue is where this would go to be ignored.** Not diagnosed. Not assigned.
+
+**READ THIS FIRST. The heading above used to say SUSPECTED PRODUCT BUG and I have
+downgraded it myself.** Investigated 2026-08-23 on Tom's instruction. It did not
+reproduce, and the single observation it rests on has a confound I did not
+control for at the time.
+
+**NOT REPRODUCED, 15 runs.** A harness modelled on the audit's own setup (godmode
+serveTree + boot + geolocation + seed + the location-explainer click, ~20s per
+run instead of ~4min) came back healthy 15 times out of 15: one `#mapStage`,
+`markers-in` true, map loaded, style loaded, nothing detached, and 57 or 58
+MapLibre-owned markers every single run. Zero failures.
+
+**AND THE FULL SUITE IS 26/26 ON A QUIET BOX.** Two complete
+`tests/boneyard-audit.mjs` runs after the harness work: both `markers-in=true`,
+57 markers, **26/26 passed**, no UNPROVEN row. That also clears the two
+ARRIVAL-SLOW straggler rows ("at least one straggler was observed" and its
+latency twin) which failed on every contended run today. They are not inherent
+flakes; they are contention-sensitive, and on an idle machine the whole file is
+green.
+
+CORRECTION, 2026-08-23: I first wrote that
+docs/FLAKE-CLASSIFICATION-2026-08-22.md listed that straggler pair as "never
+passing" and that this measurement contradicted it. Wrong on both counts, caught
+by Gwart and verified against the file. The "never passed" row at line 40 is
+`FAIL 10/55 | FAIL 10/54 | FAIL 10/54`, which are the MAJORITY counts, i.e. the
+mis-timed sample #94 fixed, not the stragglers. The stragglers are already filed
+under contention at line 119: "42ms idle and 342-461ms under load against a 250ms
+budget", with the standing instruction that no timing row there is to be graded
+on a busy machine. So 26/26 CONFIRMS that doc rather than contradicting it, and
+nothing in it needs editing.
+
+**THE CONFOUND, which is mine.** I described run A as happening on a "clear box".
+That check counted node processes matching `tests/*.mjs` and found none. It did
+NOT count browsers. Shortly before run A I had killed two audit runs mid-flight
+(`kill` on the node parents), and killing a node parent can orphan its Chrome
+children, which that filter would never have seen. So the box was free of
+competing SUITES; it was not verified free of browsers I had just orphaned.
+
+**THE HYPOTHESIS I TESTED AND DISPROVED.** `revealMarkers` in js/app.js closes
+over `body`, so a re-render between map init and the 1800ms cap would leave it
+adding `markers-in` to a detached stage: silently succeeding while the live map
+stayed blank. That would have explained the missing reveal and the zero markers
+from one cause. The harness measured detached stages and detached markers
+directly and found none in 15 runs.
+
+**WHAT IS STILL TRUE, and why this entry stays on record rather than being
+deleted.** It did happen once, and it is a real thing to have seen: the app
+rendered its map stage and then never revealed markers, with the tile host
+answering in 88ms. `setTimeout(revealMarkers, 1800)` is armed unconditionally
+specifically so that cannot happen (anti-regression rule 8: degrade to ugly, not
+gone), so whatever occurred defeated a guard designed to be undefeatable. If it
+recurs, `tests/boneyard-audit.mjs` now reports UNPROVEN with the cause named
+rather than passing vacuously, which is the mechanism that would catch it.
+
+**Current status: ONE unreproduced observation with a named environmental
+confound. Not a product bug on this evidence. Do not spend a morning on it.**
 
 **THE OBSERVATION.** Four runs of `tests/boneyard-audit.mjs` on a box checked for
 other running test suites first:
