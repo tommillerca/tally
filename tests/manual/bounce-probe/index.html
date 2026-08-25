@@ -1,0 +1,56 @@
+<!doctype html><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>bounce probe</title>
+<style>
+:root{ --sat: env(safe-area-inset-top, 0px); --pad:16px; --bg:#0d0c12;
+  /* the value under test: the Bonehead's backdrop colour */
+  --hero-edge: rgb(255,0,255); }
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{ background:
+    radial-gradient(85% 50% at 22% 8%, rgba(96,74,150,.20), transparent 58%),
+    linear-gradient(#08070e 0%, #0b0a15 46%, #0f0d1c 76%, #131120 100%);
+  background-attachment:fixed; color:#f2e9d7; font:14px -apple-system,system-ui; }
+#app{ position:relative; z-index:1; height:100%; display:flex; flex-direction:column; max-width:600px; margin:0 auto; }
+/* VERBATIM from app.css */
+.screen{ flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
+  padding: calc(var(--sat) + 14px) var(--pad) 24px; }
+.screen--today{ position:relative; isolation:isolate; background-color: var(--hero-edge, var(--bg)); }
+.today-plate{ position:sticky; top:0; z-index:-1; height:0; pointer-events:none; }
+.today-plate::before{ content:''; position:absolute; top:0; height:100vh;
+  left:calc(-1 * var(--pad)); right:calc(-1 * var(--pad));
+  background-color:var(--bg);
+  background-image: radial-gradient(85% 50% at 22% 8%, rgba(96,74,150,.20), transparent 58%),
+    linear-gradient(#08070e 0%, #0b0a15 46%, #0f0d1c 76%, #131120 100%);
+  background-attachment:fixed; }
+#app:has(.screen--today)::before{
+  content:""; position:absolute; z-index:3; pointer-events:none;
+  left:50%; margin-left:-116px; bottom:100%; width:232px; height:62px;
+  background:url(wordmark.png) center / contain no-repeat;
+  opacity: var(--wm-pull, 1);
+  transform: translateY(calc(var(--wm-pull, 0) * (var(--sat) + 66px)));
+  transition: transform 130ms linear, opacity 130ms linear; }
+.card{ background:#1e1c26; border-radius:16px; padding:22px; margin-bottom:14px; }
+.hero{ height:420px; background:#6c7b3d; border-radius:18px; margin-bottom:14px; }
+</style>
+<div id=app>
+  <div class="screen screen--today" id=screen>
+    <div class="today-plate"></div>
+    <div class="hero">hero art stands in for the Bonehead</div>
+    <div class=card>one</div><div class=card>two</div><div class=card>three</div>
+    <div class=card>four</div><div class=card>five</div><div class=card>six</div>
+    <div class=card>seven</div><div class=card>eight</div><div class=card>nine</div>
+  </div>
+</div>
+<script>
+/* the shipped listener's shape: drive --wm-pull off NEGATIVE scrollTop */
+const s = document.getElementById('screen');
+const PULL = 90;
+const set = () => {
+  const over = Math.max(0, -s.scrollTop);
+  document.documentElement.style.setProperty('--wm-pull', String(Math.min(1, over / PULL)));
+  document.title = 'st=' + Math.round(s.scrollTop);
+};
+s.addEventListener('scroll', set, { passive: true });
+set();
+</script>
