@@ -3,6 +3,10 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 437, date: '2026-08-24', title: 'Bumbleseal has a picture again', items: [
+    'If you own Bumbleseal, her tile in your Collection was a broken image with her name spilling out over it. She is drawn in there properly now.',
+    'Eight pieces of gear were showing an older drawing in the small tiles: the banner, both torches, both shovels and the three grillz. The big screens have shown the current art since Cam redrew it, so the same item looked like two different things depending on where you saw it. They match again.',
+  ] },
   { n: 436, date: '2026-08-24', title: 'Your friend\'s paddock, the Wardrobe, and the colour behind Today', items: [
     'When you visit a friend\'s paddock the two of you face each other now, instead of standing back to back at opposite ends of the field.',
     'The colour behind Today is the app\'s own again. Yesterday it went flat black and the colour stopped appearing when you pulled down past the top. Both fixed.',
