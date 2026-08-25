@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 439, date: '2026-08-25', title: 'The Stable, the Paddock and the Shop got a lot lighter', items: [
+    'The screens that show your pets were loading the full-size drawing of every animal at once, which is why they could stutter or blank out on a phone that was already busy. They now load a version cut to the animal. The Stable went from 215 MB of picture data to 53, the Paddock from 323 to 78, and the Shop from 192 to 38.',
+  ] },
   { n: 438, date: '2026-08-24', title: 'The two of you face each other, and Today\'s background is right', items: [
     'In a friend\'s paddock you and your friend now actually look at each other. Yesterday\'s update turned the wrong one around and left you back to back.',
     'The background on Today is the app\'s own again, and the colour behind the Boneheadz wordmark is back when you pull down past the top.',
