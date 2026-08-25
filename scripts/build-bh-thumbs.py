@@ -72,11 +72,13 @@ resolution the art does not have. It writes 37 and the canvas draws exactly the
 pixels it draws today from the master, at 1/300th of the decode.
 
 Idempotent. Run after adding art:  python3 scripts/build-bh-thumbs.py
+And `--check` rebuilds every tier IN MEMORY and diffs it against what is
+committed, writing nothing: see check() for the class of bug that needs.
 """
 import os
 import re
 import sys
-from PIL import Image
+from PIL import Image, ImageChops
 
 SIZES = [192, 384]
 # The trimmed tier's cap. Its consumers are 200x200 and 80x80 canvases, and the
@@ -88,6 +90,16 @@ TRIM = 192
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, 'assets', 'bh')
 OUT = os.path.join(SRC, 'thumb')
+
+
+def use_root(root):
+    """Point SRC/OUT at another tree. ONLY --check may do this, and only so its
+    own positive control can be a real run against a deliberately broken tree
+    rather than a claim in a comment. Refused in build mode, which would
+    otherwise write a half-populated sheet into an arbitrary directory."""
+    global SRC, OUT
+    SRC = os.path.join(root, 'assets', 'bh')
+    OUT = os.path.join(SRC, 'thumb')
 
 # The SAME rule js/app.js's bhThumb() uses, so the two cannot drift: the flat
 # per-slot cosmetic art, plus the shiny pet recolours. Anything else (fx frames,
@@ -110,9 +122,8 @@ def trimmed(im):
                       Image.LANCZOS) if k < 1 else cut
 
 
-def main():
-    made = skipped = 0
-    total_src = total_out = 0
+def sources():
+    """Every (path, path-relative-to-assets/bh) the tiers are built from."""
     for dirpath, _dirs, files in os.walk(SRC):
         if os.path.commonpath([dirpath, OUT]) == OUT:
             continue                      # never thumbnail the thumbnails
@@ -121,22 +132,35 @@ def main():
                 continue
             src = os.path.join(dirpath, f)
             rel = os.path.relpath(src, SRC)
-            if not KEEP.match(rel):
-                continue
-            im = Image.open(src).convert('RGBA')
-            total_src += os.path.getsize(src)
-            for px in SIZES:
-                if max(im.size) <= px:
-                    skipped += 1          # already smaller than this tier
-                    continue
-                dst = os.path.join(OUT, str(px), rel)
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                im.resize((px, px), Image.LANCZOS).save(dst, optimize=True)
-                total_out += os.path.getsize(dst)
-                made += 1
-            dst = os.path.join(OUT, 'trim', rel)
+            if KEEP.match(rel):
+                yield src, rel
+
+
+def wanted(im):
+    """Every (tier directory, expected image) this master should produce.
+
+    ONE definition of the whole sheet, so build() and check() cannot disagree
+    about what belongs on it. That mattered the first time this file grew a
+    check: the two walked the tree separately and a slot dropped from SLOTS
+    would have gone unbuilt AND unchecked, in lockstep, reporting clean.
+    """
+    for px in SIZES:
+        if max(im.size) > px:             # already smaller than this tier
+            yield str(px), im.resize((px, px), Image.LANCZOS)
+    yield 'trim', trimmed(im)
+
+
+def build():
+    made = skipped = 0
+    total_src = total_out = 0
+    for src, rel in sources():
+        im = Image.open(src).convert('RGBA')
+        total_src += os.path.getsize(src)
+        skipped += sum(1 for px in SIZES if max(im.size) <= px)
+        for tier, out in wanted(im):
+            dst = os.path.join(OUT, tier, rel)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
-            trimmed(im).save(dst, optimize=True)
+            out.save(dst, optimize=True)
             total_out += os.path.getsize(dst)
             made += 1
     print('%d thumbnails across tiers %s + trim in %s'
@@ -152,5 +176,77 @@ def main():
     return 0
 
 
+def check():
+    """--check: is every committed thumbnail still what this generator makes?
+
+    THE DEFECT CLASS, found 2026-08-24. A master is redrawn, committed, and
+    nobody re-runs this script, so every surface fed by the sheet keeps serving
+    the OLD artwork: eight cosmetics (GS1-3, IL9, IL10-1/2, IL17-1/2) had been
+    in that state since v385 redrew them on 2026-08-16, two days after the
+    sheet was last built. The other half of the class is a master with NO
+    thumbnail at all, and it was not theoretical: C6, the 50,000-coin
+    legendary pet, had no square tiers, and the Collection's grid (js/app.js,
+    the `looks` tab) asks bhThumb for one. That <img> carries no onerror, so
+    the tile rendered as a broken-image icon with the alt text "Bumbleseal".
+    Measured in a real browser on e2cb252d: 404, naturalWidth 0.
+
+    So: rebuild every tier IN MEMORY and compare to what is committed. Nothing
+    is written. Non-zero exit means run this script without --check.
+
+    CEILING: this pins the committed bytes against Pillow's LANCZOS. Measured
+    byte-identical across Pillow 11.3.0/Python 3.9 and 12.2.0/Python 3.13, so
+    the pin is not fragile today, but a future resampler change would read as
+    drift on the WHOLE sheet at once. The ratio is printed on every failing run
+    for exactly that reason: a handful of files is real drift, 100% is a
+    toolchain change and you should not blindly commit the rebuild.
+    """
+    missing, stale, checked = [], [], 0
+    for src, rel in sources():
+        im = Image.open(src).convert('RGBA')
+        for tier, want in wanted(im):
+            dst = os.path.join(OUT, tier, rel)
+            if not os.path.exists(dst):
+                missing.append('%s/%s' % (tier, rel))
+                continue
+            checked += 1
+            got = Image.open(dst).convert('RGBA')
+            if got.size != want.size:
+                stale.append('%s/%s  committed %dx%d, should be %dx%d'
+                             % (tier, rel, got.size[0], got.size[1], want.size[0], want.size[1]))
+                continue
+            diff = ImageChops.difference(got, want)
+            box = diff.getbbox()
+            if box:
+                stale.append('%s/%s  %dx%d px differ from (%d,%d), worst channel %d/255'
+                             % (tier, rel, box[2] - box[0], box[3] - box[1], box[0], box[1],
+                                max(hi for _lo, hi in diff.getextrema())))
+    print('checked %d committed thumbnails against a fresh render of their masters' % checked)
+    for m in missing:
+        print('MISSING  thumb/%s  (a surface asking for this tier gets a 404)' % m)
+    for s in stale:
+        print('STALE    thumb/%s' % s)
+    if not checked:
+        print('CHECKED NOTHING: that is a failure, not a clean run.', file=sys.stderr)
+        return 1
+    if missing or stale:
+        graded = checked + len(missing)
+        print('\n%d missing, %d stale, %.0f%% of the %d graded. Run: python3 scripts/build-bh-thumbs.py'
+              % (len(missing), len(stale), 100.0 * (len(missing) + len(stale)) / graded, graded),
+              file=sys.stderr)
+        if len(missing) + len(stale) == graded:
+            print('EVERY file differs, which is a Pillow/resampler change and NOT art drift. '
+                  'Do not commit a whole-sheet rebuild without saying so.', file=sys.stderr)
+        return 1
+    print('all fresh')
+    return 0
+
+
 if __name__ == '__main__':
-    sys.exit(main())
+    args = sys.argv[1:]
+    checking = '--check' in args
+    if '--root' in args:
+        if not checking:
+            print('--root is only valid with --check', file=sys.stderr)
+            sys.exit(2)
+        use_root(args[args.index('--root') + 1])
+    sys.exit(check() if checking else build())
