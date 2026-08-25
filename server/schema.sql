@@ -93,12 +93,36 @@ CREATE TABLE IF NOT EXISTS pvp_fights (
 -- stores opaque bytes (food/weight/health included, but unreadable here). One
 -- row per player, overwritten on each backup. This is what makes progress
 -- survive a reinstall / wiped device / new phone.
+--
+-- THE DAILY SLOT (2026-08-25). Tom: "i don't want a corrupted sync to destroy
+-- an account." The obvious answer, keep the last 2 or 3 revisions, is worthless
+-- here: js/social.js pushes every BACKUP_THROTTLE_MS (10 minutes), so three
+-- revisions span half an hour and a corruption that syncs three times overwrites
+-- all of them before anybody is awake. COUNT IS THE WRONG AXIS. The AGE of the
+-- oldest kept save is what saves an account, so there is exactly one archive
+-- slot and it is replaced at most once per 24 hours.
+-- Two details do the work, and both are in the ON CONFLICT clause in
+-- src/index.js, PUT /backup:
+--   1. It archives the OUTGOING blob, never the incoming one, so the FIRST
+--      corrupt push can never be the one that lands in here.
+--   2. It archives nothing at all unless daily_at is already 24h old, so the
+--      pushes after it cannot reach the slot either, for a day.
+-- What that buys, stated honestly: the archive holds a save 0 to 24h old, so a
+-- corruption starting at T destroys it somewhere in T to T+24h (expected ~12h,
+-- worst case one throttle interval). It is not a guaranteed-good save and one
+-- slot cannot be; it is a bounded window in which somebody can notice. Costs one
+-- extra copy of every save: 2x this table, projected in GET /admin/prune, which
+-- counts daily_size so the projection does not silently halve.
 CREATE TABLE IF NOT EXISTS backups (
   player_id TEXT PRIMARY KEY,
   blob TEXT NOT NULL,      -- base64(iv || AES-GCM ciphertext); opaque to the server
   app_v TEXT,
   size INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  -- Existing databases: migrations/2026-08-25-backup-daily-slot.sql
+  daily_blob TEXT,         -- the archived save, same opaque ciphertext
+  daily_size INTEGER,      -- LENGTH(daily_blob), stored so the projection stays one cheap aggregate
+  daily_at INTEGER         -- WHEN THIS COPY WAS SET ASIDE (not the age of the save in it); NULL = no archive yet
 );
 
 -- Server-issued ledger events the client ingests idempotently by key.

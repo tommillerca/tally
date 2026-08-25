@@ -492,7 +492,16 @@ await test('/admin/prune reports the save-size trend, and it MOVES with the save
   // Now a save an order of magnitude bigger, which is exactly what a maturing
   // save looks like. DIRECTION: the average and the max go UP, the projected
   // player count goes DOWN. That fall is the signal the decision rests on.
-  const big = 400 * 1024;
+  /* BIG IS MEASURED, NOT GUESSED, and it used to be a flat 400 KB. That was red
+     on origin/main before this branch touched anything, in deploy.sh's own order
+     on a fresh database: test/api.test.mjs runs first and leaves a 2 MB and a
+     3 MB save behind, so the mean was already 1.2 MB and a 400 KB "big" save
+     pulled it DOWN. The assertion was right about the direction; the fixture was
+     too small for the table it was being asserted against. Anything above the
+     current mean raises the mean, so the fixture now comes from the mean. */
+  const big = Math.min(before.avgBytes + 400 * 1024, 4 * 1024 * 1024 - 1024);
+  assert.ok(big > before.avgBytes,
+    `the 4 MB cap leaves no room above the current average (${before.avgBytes}), so this test can no longer move it`);
   await pushSave(await newPlayer(), big);
   const after = await status();
   assert.equal(after.rows, before.rows + 1, 'the second save did not land as its own row');

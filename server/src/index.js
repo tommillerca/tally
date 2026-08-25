@@ -94,6 +94,65 @@ const MAX_PROFILE_BYTES = 24 * 1024;
  *     this exactly, and no model is needed for it at all. */
 const MAX_BACKUP_BYTES = 4 * 1024 * 1024; // encrypted full save (food log grows over time)
 
+/* ---------------- the daily backup slot ----------------
+   Tom, 2026-08-25: "i don't want a corrupted sync to destroy an account."
+   He asked for 2 or 3 revisions. That is the wrong axis and it would not have
+   worked: js/social.js pushes every BACKUP_THROTTLE_MS (10 minutes), so three
+   revisions span thirty minutes, and a corruption that syncs three times inside
+   half an hour overwrites every one of them while the player is asleep. What
+   saves an account is not how MANY saves are kept, it is how OLD the oldest one
+   is. So there is one archive slot, and the rule is about time.
+
+   TWO PROPERTIES, AND BOTH LIVE IN THE STATEMENT BELOW.
+
+   1. It archives `backups.blob`, the save being REPLACED, not `excluded.blob`,
+      the one arriving. So the first corrupt push can never be the push that puts
+      corruption into the archive: what it archives is the last good save.
+   2. It archives nothing unless the stored archive is already 24h old, so the
+      corrupt pushes that follow cannot reach the slot either, for a day.
+
+   WHAT THAT ACTUALLY GUARANTEES, stated plainly because the obvious claim
+   ("always a save from yesterday") is not true of any one-slot scheme. The
+   archive holds a save between 0 and 24h old. A corruption beginning at T
+   therefore destroys it at some point in [T, T+24h]: about 12 hours on average,
+   a full day at best, one throttle interval at worst (corruption arriving just
+   before a rollover, where push 1 promotes the last good save and push 2 ten
+   minutes later promotes push 1's). That is a bounded window in which somebody
+   can notice, not a guaranteed-good save, and a hard 24h floor needs a SECOND
+   archive slot at 3x storage rather than 2x. Not built: Tom chose the plain
+   daily slot, and this is the number to revisit if the floor ever matters.
+
+   THE CONDITION COMPARES AGAINST excluded.updated_at, which is the same `now`
+   the row is being stamped with. That is not a trick for its own sake: it keeps
+   the whole upsert at the original five bound parameters instead of repeating
+   `now` once per CASE.
+
+   daily_at IS WHEN THE COPY WAS SET ASIDE, not the age of the save inside it,
+   and that distinction is the difference between this working and not. It was
+   the save's own updated_at first, and the test below it went red: for a player
+   who opens the app once a day, the save being archived is ALWAYS about 24h old,
+   so every push promoted, the archive tracked the live save ten minutes behind,
+   and the whole feature was inert for exactly the light user it protects least
+   otherwise. Measuring from the last PROMOTION makes the interval 24h no matter
+   what the push cadence is. The saved-at semantics were not worth a fourth
+   column for a reader that does not exist yet: "set aside on the 24th" is true,
+   and "you lose everything since then" is the conservative form of the only
+   question a restore screen has to answer. */
+const BACKUP_DAILY_MS = 24 * 60 * 60 * 1000;
+const PROMOTE_DAILY = `backups.daily_at IS NULL OR excluded.updated_at - backups.daily_at >= ${BACKUP_DAILY_MS}`;
+const UPSERT_BACKUP =
+  `INSERT INTO backups (player_id, blob, app_v, size, updated_at) VALUES (?,?,?,?,?)
+   ON CONFLICT(player_id) DO UPDATE SET
+     daily_blob = CASE WHEN ${PROMOTE_DAILY} THEN backups.blob       ELSE backups.daily_blob END,
+     daily_size = CASE WHEN ${PROMOTE_DAILY} THEN backups.size       ELSE backups.daily_size END,
+     daily_at   = CASE WHEN ${PROMOTE_DAILY} THEN excluded.updated_at ELSE backups.daily_at  END,
+     blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at`;
+/* The pre-migration statement, kept verbatim. Only reachable from the "no such
+   column" fallback in PUT /backup; see the note there. */
+const UPSERT_BACKUP_NO_DAILY =
+  'INSERT INTO backups (player_id, blob, app_v, size, updated_at) VALUES (?,?,?,?,?) ' +
+  'ON CONFLICT(player_id) DO UPDATE SET blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at';
+
 /* ---------------- names + friend codes ----------------
    NAME_ADJ / NAME_NOUN power the curated name builder: the client sends INDICES,
    the server reconstructs the string from these lists. No free text ever crosses
@@ -1547,10 +1606,24 @@ export default {
         if (typeof body.blob !== 'string' || !body.blob) return json({ error: 'missing blob' }, 400);
         const now = Date.now();
         try {
-          await env.DB.prepare('INSERT INTO backups (player_id, blob, app_v, size, updated_at) VALUES (?,?,?,?,?) ' +
-            'ON CONFLICT(player_id) DO UPDATE SET blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at')
+          await env.DB.prepare(UPSERT_BACKUP)
             .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now).run();
         } catch (e) {
+          /* THE MIGRATION IS NOT APPLIED YET, AND THIS IS THE ONE ROUTE WHERE
+             THAT MUST NOT MATTER. Two migrations in server/migrations/ are
+             unapplied to production as I write this, so "deployed before the
+             ALTER ran" is the normal case here, not the unlucky one. Without
+             this the upsert 500s, js/social.js pushBackup reads only r.ok, and
+             every player's cloud backup stops silently -- the exact failure the
+             daily slot exists to prevent, caused by the daily slot. So: store
+             the save the old way, skip the archive, and say so in the log. */
+          if (/no such column/i.test(String(e))) {
+            console.error('backups.daily_* missing; storing without the archive. ' +
+              'Apply migrations/2026-08-25-backup-daily-slot.sql', (e && e.message) || e);
+            await env.DB.prepare(UPSERT_BACKUP_NO_DAILY)
+              .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now).run();
+            return json({ ok: true, updatedAt: now });
+          }
           /* D1 HAS ITS OWN VALUE LIMIT, AND IT IS LOWER THAN MAX_BACKUP_BYTES.
              Measured 2026-08-17 by bisection against local D1: the largest blob
              that stores is 2,199,942 bytes, and 2,199,943 comes back
@@ -1580,12 +1653,28 @@ export default {
         return json({ ok: true, updatedAt: now });
       }
 
-      // Signed: pull the encrypted backup back down (fresh install / new phone).
+      /* Signed: pull the encrypted backup back down (fresh install / new phone).
+         `?slot=daily` returns the ARCHIVE instead, which is the whole restore
+         path for the daily slot: the blob is ciphertext the server cannot read,
+         so nothing here or in an admin route can restore anybody. Only the
+         player's own device holds the key, so the archive has to come back down
+         the same signed pipe the current save does. js/social.js
+         restoreDailyBackup() is the other end. */
       if (path === '/backup' && request.method === 'GET') {
         const auth = await verifySigned(request, env, '');
         if (auth.err) return json({ error: auth.err }, 401);
-        const row = await env.DB.prepare('SELECT blob, app_v, updated_at FROM backups WHERE player_id = ?').bind(auth.playerId).first();
-        if (!row) return json({ error: 'no backup' }, 404);
+        const daily = url.searchParams.get('slot') === 'daily';
+        let row = null;
+        try {
+          row = await env.DB.prepare(daily
+            ? 'SELECT daily_blob blob, daily_at updated_at FROM backups WHERE player_id = ?'
+            : 'SELECT blob, app_v, updated_at FROM backups WHERE player_id = ?').bind(auth.playerId).first();
+        } catch (e) {
+          // migration not applied yet: "there is no archive" is the true answer
+          if (daily && /no such column/i.test(String(e))) return json({ error: 'no backup' }, 404);
+          throw e;
+        }
+        if (!row || !row.blob) return json({ error: 'no backup' }, 404);
         return json({ blob: row.blob, appV: row.app_v, updatedAt: row.updated_at });
       }
 
@@ -2458,7 +2547,29 @@ export default {
         const ops = [];
         for (const e of batch) {
           if (!e || typeof e.name !== 'string') continue;
-          const ts = Number(e.ts) || now;
+          /* CLAMPED FORWARD ONLY, BECAUSE A FUTURE ROW IS AN UNPRUNABLE ROW.
+             `e.ts` is the CLIENT's clock and this route is unauthenticated, so
+             it was whatever the caller said. pruneEvents deletes on `day <
+             cutoffDay`, so a row dated next month survives every retention
+             window that will ever be configured: not "kept longer", kept
+             FOREVER. Measured on production 2026-08-25: 715 such rows on five
+             future days out to 2026-09-14, from 39 distinct devices whose
+             `devices` rows were all first seen on 2026-08-11 in five different
+             countries. One skewed device is an accident; 39 is a shape that
+             recurs, and one of them with a clock a year out writes a batch
+             nothing can ever remove.
+             BACKDATING IS LEFT ALONE ON PURPOSE. A device offline for three days
+             genuinely has events from those days, and forcing them to the sync
+             day would corrupt every daily figure that reads `day` (activeByDay,
+             newByDay, DAU/WAU). Forward-dating has no legitimate case: nothing
+             happens after now. So the clamp is one-sided.
+             The 0 floor is NOT about storage -- any past day is inside the
+             pruner's reach by definition -- it is about Date. ts is unbounded
+             below, and `new Date(-1e16).toISOString()` throws RangeError, which
+             would take out the whole 50-event batch as an unhandled 500. Zero is
+             the cheapest value that cannot: it lands on 1970-01-01, which the
+             very next prune tick deletes. */
+          const ts = Math.min(Math.max(Number(e.ts) || now, 0), now);
           const day = new Date(ts).toISOString().slice(0, 10);
           const props = e.props ? JSON.stringify(e.props).slice(0, 300) : null;
           ops.push(stmt.bind(device, e.name.slice(0, 40), props, appV, day, ts));
@@ -2884,8 +2995,18 @@ export default {
              is 10,000 rows, three orders of magnitude under the events COUNT(*)
              already above it, so it does not change what this route costs to
              poll. */
+          /* SIZE MEANS BOTH COPIES NOW. The daily slot doubles what a player
+             costs, so counting only `size` would have halved this projection on
+             the very day the second copy started being stored, and the number
+             everyone reads to decide whether backups fit in D1 would have been
+             wrong in the safe-looking direction. daily_size is stored (rather
+             than LENGTH(daily_blob)) precisely so this stays one cheap aggregate
+             over one row per player instead of a read of every blob. */
           backups = await env.DB.prepare(
-            'SELECT COUNT(*) n, COALESCE(SUM(size), 0) bytes, COALESCE(MAX(size), 0) maxBytes FROM backups').first();
+            `SELECT COUNT(*) n,
+                    COALESCE(SUM(size + COALESCE(daily_size, 0)), 0) bytes,
+                    COALESCE(MAX(size + COALESCE(daily_size, 0)), 0) maxBytes,
+                    COUNT(daily_at) withDaily FROM backups`).first();
         } catch (e) { tableErr = (e && e.message) || String(e); }
         const avgBackup = backups && backups.n ? Math.round(backups.bytes / backups.n) : null;
 
@@ -2950,6 +3071,10 @@ export default {
             grantsDormantCapped: grantsDormant >= DORMANT_COUNT_CAP,   // true = "at least this many"
             backups: backups ? {
               rows: backups.n, bytes: backups.bytes, avgBytes: avgBackup, maxBytes: backups.maxBytes,
+              // bytes/avgBytes/maxBytes are CURRENT + DAILY. withDaily is how many
+              // rows have an archive at all, which is what makes the doubling visible
+              // as it rolls out rather than as a step change nobody can attribute.
+              withDaily: backups.withDaily, dailyMs: BACKUP_DAILY_MS,
               /* The whole point of decision 3: a player count derived from the
                  average measured a moment ago, so it MOVES as saves mature. */
               budgetFraction: BACKUPS_BUDGET_FRACTION, budgetBytes: Math.round(D1_LIMIT_BYTES * BACKUPS_BUDGET_FRACTION),
@@ -3094,6 +3219,25 @@ export default {
         const row = await env.DB.prepare(
           'SELECT id, created_at, last_seen, max_level, max_level_at FROM players WHERE id = ?')
           .bind(String(b.id || '')).first();
+        return json({ ok: true, row: row || null });
+      }
+      /* Age a player's backup row, so a test can cross the 24h daily boundary
+         without waiting a day. Same shape and same reasoning as /dev/spire-warp
+         and /dev/player-warp above: move EVERY clock on the row together, or the
+         row describes a state the real world cannot produce (an archive somehow
+         older than the save it was promoted from). DEV only. It shifts
+         timestamps and copies nothing: it cannot fabricate an archive, so a test
+         that sees daily_blob had to have made the server promote it. */
+      if (env.DEV === '1' && path === '/dev/backup-warp' && request.method === 'POST') {
+        const b = await request.json();
+        const back = Number(b.backMs) || 0;
+        await env.DB.prepare(
+          `UPDATE backups SET updated_at = updated_at - ?,
+             daily_at = CASE WHEN daily_at IS NULL THEN NULL ELSE daily_at - ? END
+           WHERE player_id = ?`).bind(back, back, String(b.playerId || '')).run();
+        const row = await env.DB.prepare(
+          'SELECT player_id, size, updated_at, daily_size, daily_at FROM backups WHERE player_id = ?')
+          .bind(String(b.playerId || '')).first();
         return json({ ok: true, row: row || null });
       }
       /* Run the retention prune on demand, with an injectable clock and

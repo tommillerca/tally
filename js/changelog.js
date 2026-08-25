@@ -3,6 +3,12 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  /* DELIBERATELY NOT CLAIMING A RESTORE. The archive is stored and can be read
+     back, but nothing in the app offers it to you yet, so saying "you can go
+     back to yesterday" would be a patch note for a button that does not exist. */
+  { n: 444, date: '2026-08-25', title: 'Your cloud backup keeps an older copy now', items: [
+    'Your save is backed up to the cloud every few minutes, and until now each backup replaced the last one. There is now a second copy kept alongside it, from at least a day earlier, so a bad save cannot immediately overwrite every good one. Nothing changes on your phone: it is a safety net on our side.',
+  ] },
   { n: 443, date: '2026-08-25', title: 'The seam is gone', items: [
     'The line where the pull-down colour met your Bonehead backdrop is finally gone. It was never a colour mismatch: the art carried a fine grain and the fill above it could not, so the eye read the change in texture. The grain now stops before the edge, and the two are pixel-identical.',
   ] },
