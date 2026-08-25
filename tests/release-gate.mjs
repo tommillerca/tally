@@ -147,7 +147,22 @@ if (own) console.log(`serving this repo at ${base}\n`);
    pins the one line that makes that harmless: every POST /register in a test
    carries `test: IS_TEST`, bound to flagFor(BASE), so a non-local run mints only
    accounts players.is_test hides. */
-const PURE = ['unit.test.js', 'first-session-audit.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs'];
+/* thumb-freshness-lint is PURE and takes ~3s: no browser, it shells out to
+   scripts/build-bh-thumbs.py --check, which regenerates every square thumbnail
+   in memory and diffs it against the committed file. assets/bh/thumb is
+   GENERATED and committed BY HAND, so a redrawn master with no re-run leaves
+   every tiled surface serving old art with nothing thrown: eight cosmetics were
+   in that state from 2026-08-16 to 2026-08-24 (IL9 differed on 24.6% of its
+   tile) because v385 redrew the masters two days after the sheet was built.
+   And C6, the 50,000-coin pet, had no square tiers at all, which the Collection
+   asks for by name on any account that owns her: measured on e2cb252d, a 404
+   and a broken-image icon over the alt text "Bumbleseal", because that grid's
+   <img> carries no onerror to fall back with. Its two CONTROL rows run the real
+   checker against a deliberately broken three-file tree, so a blind checker
+   cannot report clean, and PARITY pins the generator's slot list against
+   js/app.js's BH_THUMB_RE, which is the enumeration both of them share and the
+   one mutation the first draft could not see. */
+const PURE = ['unit.test.js', 'first-session-audit.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs'];
 const BROWSER = [
   'write-failure-seam-audit.mjs', // a rejected write is announced and re-thrown, and the ATOMIC primitives are in the seam: the reward SOP routes every payout through addIfAbsent/take/kvUpdate, which bypass db.put entirely
   'write-failure-toast-audit.mjs', // the OTHER half of that seam: it ends in `if (!writeFailureSink) return;` and until now nothing in the app called onWriteFailure, so every rejection returned early and a lost meal, weight, crate or coin row stayed as silent as before the seam existed. The seam audit cannot catch that and should not: it registers its OWN sink to observe the seam, which is exactly why it stays green while the app has none. This file registers nothing, breaks a real write in the real page and reads the real #toast. REJECTS is the positive control (a write that quietly succeeded would make every other row vacuous); LOUD fails on SILENCE; QUIET, THROTTLE, QUOTA and NORECURSE cover the four ways announcing it can go wrong. Proven red against main's js/app.js: LOUD, THROTTLE and QUOTA go red together. Self-serving, ~50s, 6 checks

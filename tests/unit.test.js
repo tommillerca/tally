@@ -3166,7 +3166,7 @@ test('small art climbs to a bigger source and skips the nearest-neighbour step',
   ], 'the small-ink ladder no longer climbs 192 -> 384 -> master and stop');
 });
 
-/* EVERY PATH bhTrim() CAN PRODUCE HAS A FILE BEHIND IT.
+/* EVERY PATH bhTrim() OR bhThumb() CAN PRODUCE HAS A FILE BEHIND IT.
  *
  * The cropped tier is served to <canvas>es through drawTrimmedArt, and that
  * function's error path paints a blank plate: a missing trim thumbnail is an
@@ -3183,7 +3183,7 @@ test('small art climbs to a bigger source and skips the nearest-neighbour step',
  *
  * PROVE-RED: `rm assets/bh/thumb/trim/H/H1.png` and this fails naming H/H1.png.
  */
-test('every cosmetic the cropped tier can be asked for is on disk', () => {
+test('every cosmetic any tier can be asked for is on disk', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   const re = new RegExp(app.match(/const BH_THUMB_RE = \/(.*)\/;/)[1]);
   const bh = join(here, '..', 'assets', 'bh');
@@ -3200,8 +3200,28 @@ test('every cosmetic the cropped tier can be asked for is on disk', () => {
     }
   }
   assert.ok(rels.length > 300, `only ${rels.length} cosmetics matched: the regex or the walk has drifted, this has not passed`);
-  const missing = rels.filter(r => !existsSync(join(bh, 'thumb', 'trim', r)));
-  assert.deepEqual(missing, [], `${missing.length} cosmetics have no cropped thumbnail; run scripts/build-bh-thumbs.py`);
+  /* ALL THREE TIERS, not just the cropped one. Extended 2026-08-24: this test
+     was written the same week C6 shipped with no 192 or 384 sheet, and it says
+     so in the comment above while covering only `trim`, so it watched the bug
+     it was documenting go past. The square tiers are NOT a softer case: the
+     Collection's <img> carries no onerror, so a missing square tile is a
+     broken-image icon (measured on e2cb252d, alt text "Bumbleseal" over
+     Chrome's torn-page glyph), which is worse than the blank canvas plate the
+     comment above worries about.
+     A tier is only owed a file when the master is BIGGER than it, which is what
+     the generator does, hence the header read rather than a flat demand. Every
+     master today is 640 or 2048, so nothing is exempt right now and this is
+     purely so smaller art landing later cannot false-red the suite. */
+  const pngWidth = f => readFileSync(f).readUInt32BE(16);
+  const missing = [];
+  for (const r of rels) {
+    const w = pngWidth(join(bh, r));
+    for (const tier of ['192', '384', 'trim']) {
+      if (tier !== 'trim' && w <= Number(tier)) continue;
+      if (!existsSync(join(bh, 'thumb', tier, r))) missing.push(`${tier}/${r}`);
+    }
+  }
+  assert.deepEqual(missing, [], `${missing.length} tier files are absent; run scripts/build-bh-thumbs.py`);
 });
 
 await runAll();
