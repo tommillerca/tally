@@ -9,6 +9,98 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 📝 Tom's notes on v438, 2026-08-25 — LOGGED, INVESTIGATED, NOT BUILT
+
+Both land on the same feature (the overscroll wordmark) and neither is built.
+Tom's instruction was to log them and hand over, so this is the finding and the
+options, not a change.
+
+### 1. The fill and the art are still not the same colour — `BUG`
+
+> "there is still a slight seam you can tell the colour of my boneheadz
+> background and the wordmark background is not identical."
+
+**Confirmed and measured, and the number is small on purpose.** `paintHeroEdge()`
+samples the backdrop's top-centre pixel and now does it through the same
+`saturate(0.92)` the art is displayed with, which closed the first and larger
+half of this (a five-unit BLUE step, shipped in v436). What is left is what the
+sampler still cannot see: `.hero-scene` composites TWO more layers over the art
+that the flat fill has no way to carry.
+
+| | measured |
+|---|---|
+| `--hero-edge`, i.e. the fill | `rgb(108,123,61)` |
+| the art's top row as RENDERED | `rgb(111,125,65)` |
+| residual | **+3 / +2 / +4**, no hue shift |
+
+The two layers are `.hero-scene::before` (a warm radial, `rgba(255,236,180,.2)`)
+and `.hero-scene::after` (the deck's grain at `opacity: .07`). Solving for a pure
+grain mean does NOT reconcile all three channels (red and green imply ~151, blue
+implies ~118), so it is both layers, not one.
+
+**Three ways out, cheapest first. None is obviously right, which is why this is
+logged rather than done:**
+
+1. **Composite the overlays into the sample.** Draw the backdrop, then the same
+   gradient stop and grain at their real opacities, into the sampling canvas, and
+   read that. Self-calibrating, no magic number, ~10 lines. Risk: the grain is an
+   feTurbulence SVG and drawing it into a canvas is a second thing that can drift
+   from the CSS.
+2. **Stop the overlays short of the art's top edge**, so the edge the fill
+   continues is un-composited. Changes the look of the hero, so it is Tom's call
+   rather than an implementation detail.
+3. **Accept it.** A uniform +3/+2/+4 with no hue shift is roughly 1.5% luminance.
+   Tom can still see it, so this is only listed for completeness.
+
+Whoever takes it: `tests/today-peek-audit.mjs`'s SEAM row currently grades the
+sampler against the FILTERED SOURCE and demands an exact match, deliberately, and
+its header explains why it is not graded off a screenshot (the render carries
+grain, which put the noise floor at 4 against a defect of 7). Option 1 would need
+that row re-premised on the composited value, with a fresh prove-red.
+
+### 2. The wordmark must clear before the UI comes back under it — `BUG`
+
+> "the boneheadz need to be feeding out faster so when you release your thumb and
+> the screen comes back up there is never overlap with the UI"
+
+**Reproduced by reading the timing rather than the pixels, so treat the numbers
+as the shipped design's own, not as a fresh measurement.** The mark's travel is
+`transition: transform 130ms linear, opacity 130ms linear` (app.css), driven by
+`--wm-pull`, which the scroll listener writes in 1/20 steps off negative
+`scrollTop` (js/app.js). On release the spring returns the content and the mark
+chases it one scroll event at a time.
+
+app.css's own note records the shipped behaviour as the mark finishing **WITH**
+the bounce: "ink gone at 354-367ms against a scroll ending at 357-381ms". That is
+the bug Tom is describing. Finishing *with* the content means the last frames
+have both on the glass, so the mark is still there as the UI arrives under it.
+Nothing is wrong with the numbers; the target was wrong.
+
+**The fix is asymmetric timing: the mark should LEAD the spring on the way out,
+not track it.** Options:
+
+1. **Shorten opacity only** (e.g. `opacity 60ms linear`, transform left at 130ms)
+   so it is invisible well before it is home. Smallest change.
+2. **Ramp opacity off the pull non-linearly**, e.g. `opacity: calc(var(--wm-pull)
+   * var(--wm-pull))`, so it is nearly gone by the time the pull is half back.
+   No timing change at all, which keeps LINEAR's premise intact.
+3. Detect release in the listener and write a "closing" class with its own faster
+   transition. Most control, most code, and a new state to get wrong.
+
+**The trap for whoever takes this**, and it is a real one:
+`tests/overscroll-wordmark-audit.mjs`'s LINEAR row grades the travel's frame
+VELOCITY as a ratio (first half against second, band 0.55-1.9) and exists because
+an ease-out restarted by every scroll event reads as dropped frames. Tom
+reported that one too: "exits in a jolty fashion as if it's not enough FPS."
+Option 2 does not touch the timing function and is therefore the safe one;
+option 1 changes only opacity, which LINEAR does not measure; option 3 is the one
+that could re-introduce the jolt. Whatever ships, LINEAR must be re-run ALONE,
+because it is frame-timing and goes red under gate contention (it did on
+2026-08-25 at 2.07x while 93 other suites shared the machine, and was green twice
+run alone).
+
+---
+
 ## DECISION 2026-08-18: the garden refund pays the FULL 5,500, not a reduced amount
 
 Tom, asked directly after being shown what it costs: **"full refund of 5500"**.
