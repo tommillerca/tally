@@ -23,13 +23,19 @@
  *      grant Notification permission, it should return true and the
  *      toast should say "Test notification sent." Otherwise it says
  *      "Could not send. Check permission."
- *   5. maybeRequestNotifPermission is skipped under navigator.webdriver
- *      (line 1575) so a headless run cannot exercise the ASK path
- *      directly. That skip itself is worth asserting: without it, every
- *      audit that opens the app would trigger a browser permission
- *      prompt that no test can dismiss. Verify by reading the guard's
- *      source and by seeding notifAsked to false + booting + confirming
- *      no permission prompt fired.
+ *   5. NOTHING ASKS FOR NOTIFICATION PERMISSION AT LAUNCH. Until
+ *      2026-08-25 maybeRequestNotifPermission raised the OS dialog on
+ *      the boot path, 3.5s in, before the player had asked for a single
+ *      notification: it was the third of six interruptions Tom counted
+ *      on a simulator launch. That function is gone and the ask moved to
+ *      the two Settings buttons that turn notifications ON, which is
+ *      where it earns its keep. Both directions are graded, and both are
+ *      behavioural: Notification.requestPermission is spied on BEFORE
+ *      the page loads, with navigator.webdriver MASKED so the app cannot
+ *      self-suppress the way it does for every other audit here. Zero
+ *      calls across a launch, and at least one the moment #notifAll is
+ *      pressed, so "nobody asks" cannot be satisfied by an app that can
+ *      no longer ask at all.
  */
 import { boot, sleep, serveTree } from './godmode.js';
 import path from 'node:path';
@@ -224,37 +230,44 @@ check('TEST  #notifTest button toasts success (not "Could not send")',
   /test notification sent|background the app/i.test(testToast) && !/could not send/i.test(testToast),
   `toast="${testToast}"`);
 
-/* ------ 5. maybeRequestNotifPermission skips under navigator.webdriver ------ */
-/* This is a source-level assertion: line 1575 has `if (navigator.webdriver) return;`.
-   That guard is what stops every audit that opens the app from triggering
-   a browser permission prompt no test could dismiss. Read the source
-   directly and pin the exact shape; if a future edit widens the guard
-   or drops the return, this check goes red naming the drift. */
-const appSrc = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'js/app.js'), 'utf8');
-const idx = appSrc.indexOf('async function maybeRequestNotifPermission');
-const body = appSrc.slice(idx, appSrc.indexOf('\nasync function ', idx + 10));
-const webdriverGuard = /if\s*\(\s*navigator\.webdriver\s*\)\s*return\s*;/.test(body);
-check('BOOT-ASKER  maybeRequestNotifPermission has the `if (navigator.webdriver) return;` guard (protects tests from a system prompt)',
-  webdriverGuard, webdriverGuard ? '' : 'the webdriver-skip guard is MISSING from maybeRequestNotifPermission');
-
-/* And a behavioural check: seed notifAsked=false, reload, wait, then read
-   the kv. The webdriver guard should mean notifAsked is NEVER set from
-   this path (it is only set from within tick() inside the timer, and the
-   whole function returns before setting the timer). So notifAsked stays
-   false. */
-await page.evaluate(async () => {
-  const { kvSet } = await import('./js/db.js');
-  await kvSet('notifAsked', false);
+/* ------ 5. nothing asks for notification permission at launch ------ */
+/* MASKED, and it is the point of the row. Every launch-time gate in this app
+   suppresses itself under navigator.webdriver, and puppeteer IS webdriver, so an
+   unmasked page proves nothing about what a player's phone does. The spy is
+   installed in the same evaluateOnNewDocument, ahead of every app script. */
+await page.evaluateOnNewDocument(() => {
+  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
+  window.__permAsks = 0;
+  const real = Notification.requestPermission.bind(Notification);
+  Notification.requestPermission = (...a) => { window.__permAsks++; return real(...a); };
 });
 await page.reload({ waitUntil: 'networkidle2' });
-await sleep(4500);   // > 3500ms so any deferred asker would have fired
-const askedAfterBoot = await page.evaluate(async () => {
-  const { kvGet } = await import('./js/db.js');
-  return await kvGet('notifAsked', null);
-});
-check('BOOT-ASKER  under webdriver, notifAsked is not touched by maybeRequestNotifPermission (kv still false)',
-  askedAfterBoot === false,
-  `notifAsked after boot=${askedAfterBoot}`);
+await sleep(6000);   // well past the 3500ms the old boot asker used
+
+const maskedOk = await page.evaluate(() => navigator.webdriver === false && typeof window.__permAsks === 'number');
+check('BOOT-ASKER  CONTROL the spy is installed and navigator.webdriver reads false (an unmasked page grades nothing)',
+  maskedOk, maskedOk ? 'masked, spy live' : 'the mask or the spy did not survive the reload');
+
+const asksOnBoot = await page.evaluate(() => window.__permAsks);
+check('BOOT-ASKER  a launch asks for notification permission ZERO times',
+  asksOnBoot === 0, `Notification.requestPermission called ${asksOnBoot}x on boot`);
+
+/* And the other direction: the ask must still happen where somebody said yes.
+   A zero above is also what a build that CANNOT ask would report. */
+await page.evaluate(() => { location.hash = '#/settings'; });
+await sleep(2500);
+await page.evaluate(() => document.querySelector('#notifAll')?.click());
+await sleep(1200);
+const asksAfterToggle = await page.evaluate(() => window.__permAsks);
+check('BOOT-ASKER  and pressing "Everything" in Settings DOES ask, so the ask moved rather than died',
+  asksAfterToggle > asksOnBoot, `${asksAfterToggle} ask(s) after the toggle, ${asksOnBoot} before`);
+
+/* Static, and it is the row that catches a re-add before it ships: no source in
+   js/ may call requestNotifPermission from a launch-time scheduler again. */
+const appSrc = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'js/app.js'), 'utf8');
+const reAdded = /async function maybeRequestNotifPermission/.test(appSrc);
+check('BOOT-ASKER  maybeRequestNotifPermission has not come back',
+  !reAdded, reAdded ? 'js/app.js declares maybeRequestNotifPermission again' : 'absent');
 
 await browser.close();
 srv.kill();

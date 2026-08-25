@@ -4,6 +4,14 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 448, date: '2026-08-25', title: 'The pop-ups are gone', items: [
+    'Opening the app no longer puts anything in front of you. The recovery-code sheet, the early-tester thank-you, the Day One survey, the "63 new cosmetics" post, the Puffer Pack card, the Dark Spires, Bestiary, Live Wire and step-race announcements, the settled step-race poster, the Discord invite and the What\'s New sheet all used to open themselves on launch, one after another. None of them do now. The app opens on Today.',
+    'iOS will no longer ask to send you notifications when you open the app. It asks when you turn notifications on in Settings, and not before.',
+    'The step race result is now only the gold card on Today, which it always was underneath. That card carries more than the poster did: every place\'s full purse, not just the winner\'s. Prizes are paid the same way, on time, whether or not you ever look at it.',
+    'Nothing else was deleted, only the interruption. Every one of those cards is still there to read: <b>What\'s New</b> has a <b>News</b> tab listing all of them, the <b>Crew</b> tab still carries the Discord and invite links, and Settings still has What\'s New, the Discord invite and the Day One survey.',
+    'Your recovery code now lives in <b>Settings</b> only. It is the one thing on that list that matters if you lose your phone, so if you have not set one, the app will still say so from time to time, in a message that does not block anything. Setting it is worth a minute.',
+  ] },
+
   { n: 447, date: '2026-08-25', title: 'The Bone Dust shop has closed', items: [
     'The Bone Dust shop is gone, and so are the three things it sold: the Mystery Egg at 60 dust, the Common Crate at 40 and the Battle Charm at 25. You cannot buy any of them any more. This is a removal, there is nothing in its place, and there is no refund, because every scrap of dust you have earned is still in your pocket and still spends.',
     'Dust is for looks now. It pays for transmog, which is wearing one thing and showing another, and it buys pieces off the weekly Rack. Breeding two pets into one still costs dust as well, and that is the one thing dust buys that is not purely a picture. We would rather write that down than let you find it.',

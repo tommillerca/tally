@@ -17,6 +17,7 @@ const DISCORD_URL = 'https://discord.gg/HrMReZe9D';
 
 const srv = process.argv[2] ? null : await serveTree(process.cwd());
 const { browser, page } = await boot(process.argv[2] || srv.url);
+const base = (process.argv[2] || srv.url).replace(/\/?$/, '/');
 const errs = []; page.on('pageerror', e => errs.push(String(e)));
 
 /* THE WHOLE RUN HAPPENS AT THE SMALLEST PHONE IN THE BETA. 375x667 is an
@@ -130,26 +131,45 @@ const after = await page.evaluate(() => {
 ok('CLOSE closes the card', after.gone, JSON.stringify(after));
 ok('and the tab bar is tappable again (hit-tested)', after.tabReachable, JSON.stringify(after));
 
-/* ---- ONCE, through the REAL boot path ----
-   Not "the flag exists": the card has to actually appear on a cold boot and
-   actually not appear on the next one. A check that only proved the second
-   boot is quiet would pass on a card that never opens at all, so both
-   readings are asserted. */
-await page.evaluateOnNewDocument(() => { window.__thanksForce = true; });
-const bootShow = async () => {
-  await page.reload({ waitUntil: 'networkidle2' });
-  await sleep(9500);   // boot etiquette: 4.6s delay plus overlay retries
-  const up = await page.evaluate(() => !!document.querySelector('.bt-veil #thanksShare'));
-  if (up) await page.evaluate(() => document.getElementById('thanksClose')?.click());
-  return up;
-};
+/* ---- NEVER FROM BOOT, through the REAL boot path ----
+   This used to be ONCE: the card opened itself on the first launch after
+   install. On 2026-08-25 it stopped, with the rest of the launch takeovers
+   (Tom, counting six interruptions on a simulator launch: "i see in the
+   simulator you have popups showing i told you to remove all those from the
+   game?"). The card itself is untouched and every row above and below still
+   grades it; only the unasked-for showing is gone.
+   MASKED matters here for the same reason it does in first-session-audit:
+   every launch gate suppresses itself under navigator.webdriver, so an
+   unmasked page would report a quiet boot on a tree that still interrupts.
+   The mask makes the app behave the way it does on Tom's phone. */
 await page.evaluate(async () => {
   const db = await import('./js/db.js');
-  await db.kvSet('betaThanksSeen', false);
+  await db.kvSet('betaThanksSeen', false);   // the state that USED to make it fire
 });
+/* IN ITS OWN PAGE. The mask must be installed before any app script, so it is
+   evaluateOnNewDocument, so it survives every later reload on that page, and it
+   takes every window.__test* hook with it (they are all webdriver-gated). Doing
+   that to the shared page emptied the Crew tab and reddened three BANNER rows
+   below that have nothing to do with this. Same origin, same IndexedDB, thrown
+   away after. */
+const coldPage = await browser.newPage();
+await coldPage.evaluateOnNewDocument(() => {
+  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
+});
+const bootShow = async () => {
+  await coldPage.goto(base + '?demo', { waitUntil: 'networkidle2' });
+  await sleep(9500);   // past the 4.6s the old gate used, plus its retries
+  const up = await coldPage.evaluate(() => !!document.querySelector('.bt-veil #thanksShare'));
+  if (up) await coldPage.evaluate(() => document.getElementById('thanksClose')?.click());
+  return up;
+};
 const opens = [await bootShow(), await bootShow()];
-ok('ONCE the card opens on a cold boot', opens[0], JSON.stringify(opens));
-ok('ONCE-ONLY and never again on the next one', !opens[1], JSON.stringify(opens));
+const maskHeld = await coldPage.evaluate(() => navigator.webdriver === false);
+ok('MASKED navigator.webdriver reads false, so a quiet boot means something',
+  maskHeld, `navigator.webdriver = ${await coldPage.evaluate(() => navigator.webdriver)}`);
+ok('NEVER-FROM-BOOT the card does not open itself on a launch, with the seen flag cleared',
+  !opens[0] && !opens[1], JSON.stringify(opens));
+await coldPage.close();
 
 /* ---- the permanent strip on Crew, for everyone who tapped past it ---- */
 await page.evaluate(() => {

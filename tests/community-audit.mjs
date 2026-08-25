@@ -16,6 +16,7 @@ const DISCORD_URL = 'https://discord.gg/HrMReZe9D';
    costume of a missing feature. Same trap the gate fixed for itself. */
 const srv = process.argv[2] ? null : await serveTree(process.cwd());
 const { browser, page } = await boot(process.argv[2] || srv.url);
+const base = (process.argv[2] || srv.url).replace(/\/?$/, '/');
 const errs = []; page.on('pageerror', e => errs.push(String(e)));
 
 /* ---- the card itself, via the real test hook ---- */
@@ -57,23 +58,40 @@ ok('and the tab bar is tappable again (hit-tested)', after.tabReachable, JSON.st
    encourage joining". So ONCE became a counter, and the assertion has to
    follow: it is not enough that it stops, it has to show three times FIRST.
    A check that only proved "eventually stops" would pass on the old boolean. */
-await page.evaluateOnNewDocument(() => { window.__communityForce = true; });
+/* SUPERSEDED 2026-08-25. Tom, watching a simulator launch: "i see in the
+   simulator you have popups showing i told you to remove all those from the
+   game? the only news things staying are ... the ones on crew that link the
+   discord." The Discord ROUTES are the ones he named as keepers, and all three
+   are still graded below (the Crew strip, the News row, the Settings row). The
+   unasked-for showing on the first three opens is what left, so the assertion
+   inverts: this card must NEVER open itself.
+   MASKED matters for the same reason it does in first-session-audit: every
+   launch gate suppresses itself under navigator.webdriver, so without the mask
+   a quiet boot is what a broken tree reports too. */
+/* IN ITS OWN PAGE, and that is not tidiness. The mask has to be installed
+   before any app script, which means evaluateOnNewDocument, which means it
+   survives every later reload on that page. It also takes away every
+   window.__test* hook the rows BELOW depend on (they are all webdriver-gated),
+   so masking the shared page silently emptied the Crew tab and reddened four
+   BANNER rows that have nothing to do with this. A second page shares the same
+   origin and the same IndexedDB and is thrown away after. */
+const coldPage = await browser.newPage();
+await coldPage.evaluateOnNewDocument(() => {
+  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
+});
 const bootShow = async () => {
-  await page.reload({ waitUntil: 'networkidle2' });
-  await sleep(9000);   // boot etiquette: 4s delay plus overlay retries
-  const up = await page.evaluate(() => !!document.querySelector('.drop-veil #communityGo'));
-  if (up) await page.evaluate(() => document.getElementById('communityLater')?.click());
+  await coldPage.goto(base + '?demo', { waitUntil: 'networkidle2' });
+  await sleep(9000);   // past the 4s the old gate used, plus its retries
+  const up = await coldPage.evaluate(() => !!document.querySelector('.drop-veil #communityGo'));
+  if (up) await coldPage.evaluate(() => document.getElementById('communityLater')?.click());
   return up;
 };
-await page.evaluate(async () => {
-  const db = await import('./js/db.js');
-  await db.kvSet('discordIntroShown', 0);
-  await db.kvSet('discordJoined', false);
-  await db.kvSet('discordIntroSeen', false);
-});
-const opens = [await bootShow(), await bootShow(), await bootShow(), await bootShow()];
-ok('THREE the popup shows on each of the first three opens', opens[0] && opens[1] && opens[2], JSON.stringify(opens));
-ok('THEN-STOP and not on the fourth', !opens[3], JSON.stringify(opens));
+const opens = [await bootShow(), await bootShow()];
+const maskHeld = await coldPage.evaluate(() => navigator.webdriver === false);
+ok('MASKED navigator.webdriver reads false, so a quiet boot means something', maskHeld,
+  `navigator.webdriver = ${await coldPage.evaluate(() => navigator.webdriver)}`);
+ok('NEVER-FROM-BOOT the Discord card does not open itself on a launch', !opens[0] && !opens[1], JSON.stringify(opens));
+await coldPage.close();
 
 /* ---- the thin strip on Crew, for everyone who tapped past the popup ---- */
 await page.evaluate(() => {
@@ -137,22 +155,13 @@ await sleep(600);
    variable, and a visibility assertion has no business depending on how many
    tabs a previous check opened. Ordered so it does not. */
 /* ---- JOIN burns it permanently, and immediately ----
-   The one behaviour worth being careful about: somebody who has joined must
-   never see this again, however many showings they had left. */
-await page.evaluate(async () => {
-  const db = await import('./js/db.js');
-  await db.kvSet('discordIntroShown', 0);
-  await db.kvSet('discordJoined', false);
-  await db.kvSet('discordIntroSeen', false);
-});
-await page.reload({ waitUntil: 'networkidle2' });
-await sleep(9000);
-const joinUp = await page.evaluate(() => !!document.querySelector('.drop-veil #communityGo'));
-ok('JOIN-BURN precondition: the card is up with two showings still owed', joinUp, '');
-await page.evaluate(() => document.getElementById('communityGo')?.click());
-await sleep(900);
-const afterJoin = await bootShow();
-ok('JOIN-BURN tapping JOIN stops it for good, with showings unspent', !afterJoin, `next open showed=${afterJoin}`);
+   GONE 2026-08-25 with the showings it protected: JOIN-BURN existed so that
+   somebody who had already joined would not be shown the card again on their
+   next two opens. Nothing shows the card on any open now, so the counters it
+   burned (discordIntroShown, discordJoined) were write-only and left with the
+   gate. NEVER-FROM-BOOT above is the stronger version of the same promise.
+   The LINK row at the top still proves the JOIN button carries the real
+   invite, which is the half of this that was ever about the player. */
 
 /* ---- the permanent homes: News and Settings ---- */
 await page.evaluate(() => {

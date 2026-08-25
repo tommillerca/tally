@@ -315,7 +315,6 @@ const SUBFLOOR = {
      11-13px inline with a line of copy. The exceptions are named. ---- */
   'js/app.js:petSpriteHtml|sparkle':      '12 and 14px. The shiny badge pinned to the CORNER of a pet sprite: it is sized to the sprite it decorates, not to a whole step, and 14 -> 16 would push it off the 12px sibling it pairs with.',
   'js/app.js:petPortraitHtml|sparkle':    '12px shiny badge on a pet portrait, the same corner mark as petSpriteHtml.',
-  'js/app.js:openRaceResults|badge-trophy': '13px, inline in the "1ST" ribbon copy.',
   'js/app.js:renderToday|boltIco':        '13px in the ready-fights chip and the hero-why line, both inline with text.',
   'js/app.js:crewCardHtml|star':          '15px favourite marker in a friend row. CANDIDATE for 16: one step away.',
   'js/app.js:renderCharacter|bone':       '14px in the "N found" pill, inline with the count. CANDIDATE for 16: one step away.',
