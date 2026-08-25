@@ -102,12 +102,19 @@ them in this file would show up as a product photo cut off its own centre the
 first time one was tuned. A parse that finds nothing is a hard error, not an
 empty run.
 
+AND IT GOES THROUGH --check LIKE EVERY OTHER TIER, which is this file's own
+one-definition rule applied to it: `shots()` is the single description of what
+belongs on that sheet and build() and check() both consume it, so a tier only
+build() knew about cannot drift the way the square tiers did.
+
 Idempotent. Run after adding art:  python3 scripts/build-bh-thumbs.py
+And `--check` rebuilds every tier IN MEMORY and diffs it against what is
+committed, writing nothing: see check() for the class of bug that needs.
 """
 import os
 import re
 import sys
-from PIL import Image
+from PIL import Image, ImageChops
 
 SIZES = [192, 384]
 # The trimmed tier's cap. Its consumers are 200x200 and 80x80 canvases, and the
@@ -125,22 +132,27 @@ SRC = os.path.join(ROOT, 'assets', 'bh')
 OUT = os.path.join(SRC, 'thumb')
 DATA = os.path.join(ROOT, 'data', 'boneheadz.js')
 
+
+def use_root(root):
+    """Point SRC/OUT at another tree. ONLY --check may do this, and only so its
+    own positive control can be a real run against a deliberately broken tree
+    rather than a claim in a comment. Refused in build mode, which would
+    otherwise write a half-populated sheet into an arbitrary directory."""
+    global SRC, OUT
+    SRC = os.path.join(root, 'assets', 'bh')
+    OUT = os.path.join(SRC, 'thumb')
+
 # The SAME rule js/app.js's bhThumb() uses, so the two cannot drift: the flat
 # per-slot cosmetic art, plus the shiny pet recolours. Anything else (fx frames,
 # glutton plates, the mage, the pet animation strips) is not tiled anywhere and
 # keeps its own size.
 #
 # THE PET-ACCESSORY SLOTS ARE IN HERE TOO (CB bag, CE glasses, CG stinger, CM
-# patches), and their absence was the more expensive half of the C6 bug. Those
-# five masters are 2048x2048, so ONE of them costs 16.0000 MB decoded -- ten
-# times a body cosmetic -- and they are drawn as WORN LAYERS beside the pet on
-# every surface she appears on, four at a time on a dressed pet. Measured on
-# this tree 2026-08-24, 430x932 DPR 2, an account owning her and wearing all
-# four: Today mounted 10 pet layers for 160.0 MB, the Stable 30 for 480.0 MB and
-# the Paddock 48 for 652.5 MB, against the 90 MB ceiling
-# tests/memory-census.mjs enforces. They were excluded here for the same reason
-# they were excluded from bhThumb's regex: the slots did not exist when this
-# list was written, and nothing since had a reason to walk it again.
+# patches). Those five masters are 2048x2048, so ONE of them costs 16.0000 MB
+# decoded -- ten times a body cosmetic -- and they are drawn as WORN LAYERS
+# beside the pet on every surface she appears on, four at a time on a dressed
+# pet. They were excluded for the dullest reason: the slots did not exist when
+# this list was written and nothing since had a reason to walk it again.
 SLOTS = ['B', 'BG', 'C', 'CB', 'CE', 'CG', 'CM', 'E', 'FW', 'G', 'H', 'IL', 'IR',
          'M', 'P', 'S', 'SK', 'T', 'U']
 KEEP = re.compile(r'^(?:%s)/(?:shiny/)?[^/]+\.png$' % '|'.join(SLOTS))
@@ -159,11 +171,39 @@ def trimmed(im):
                       Image.LANCZOS) if k < 1 else cut
 
 
+def sources():
+    """Every (path, path-relative-to-assets/bh) the tiers are built from."""
+    for dirpath, _dirs, files in os.walk(SRC):
+        if os.path.commonpath([dirpath, OUT]) == OUT:
+            continue                      # never thumbnail the thumbnails
+        for f in sorted(files):
+            if not f.lower().endswith('.png'):
+                continue
+            src = os.path.join(dirpath, f)
+            rel = os.path.relpath(src, SRC)
+            if KEEP.match(rel):
+                yield src, rel
+
+
+def wanted(im):
+    """Every (tier directory, expected image) this master should produce.
+
+    ONE definition of the whole sheet, so build() and check() cannot disagree
+    about what belongs on it. That mattered the first time this file grew a
+    check: the two walked the tree separately and a slot dropped from SLOTS
+    would have gone unbuilt AND unchecked, in lockstep, reporting clean.
+    """
+    for px in SIZES:
+        if max(im.size) > px:             # already smaller than this tier
+            yield str(px), im.resize((px, px), Image.LANCZOS)
+    yield 'trim', trimmed(im)
+
+
 def pet_shop():
     """PET_SHOP's pet, its accessories' shot boxes and PET_SHOT_PAD, read out of
     data/boneheadz.js so the cut and the renderer cannot disagree. Anything it
-    fails to find raises: a silent empty parse would write no shot sheet, and
-    the app would 404 back onto the 16 MB masters and look fine doing it."""
+    fails to find RAISES: a silent empty parse would write no shot sheet at all,
+    and the app would 404 back onto the 16 MB masters and look fine doing it."""
     src = open(DATA, encoding='utf-8').read()
     pad = re.search(r'export const PET_SHOT_PAD\s*=\s*([0-9.]+)', src)
     block = re.search(r'export const PET_SHOP\s*=\s*\{(.*?)\n\};', src, re.S)
@@ -185,66 +225,76 @@ def pet_shop():
     return float(pad.group(1)), pet.group(1), slots.get(pet.group(1), 'C'), out
 
 
-def build_shots():
-    """The cut product shots. The window is petShotHtml's own arithmetic:
-    centre on the box, half-width padded by PET_SHOT_PAD, square."""
+def shots():
+    """Every (path under thumb/, expected image) of the cut product-shot tier.
+
+    Same contract as wanted(), and for the same reason: ONE definition, so
+    build() and check() cannot disagree about what belongs on this sheet.
+
+    The window is petShotHtml's own arithmetic -- centre on the box, half-width
+    padded by PET_SHOT_PAD, square -- and BOTH layers are sized from the PET's
+    canvas rather than from their own crop, because they are stacked with no
+    transform and a one-pixel difference between them is a misregistered
+    accessory.
+
+    YIELDS NOTHING WHEN THE PET'S MASTER IS NOT IN THIS TREE, which is only ever
+    true under --root: check's positive control builds a three-file tree, and
+    raising there would grade the control instead of the sheet. The real tree
+    cannot reach that branch quietly -- both build() and check() fail loudly if
+    the pet master is on disk and this yielded nothing.
+    """
     pad, pet_id, pet_slot, items = pet_shop()
-    pet_im = Image.open(os.path.join(SRC, pet_slot, pet_id + '.png')).convert('RGBA')
-    made = 0
+    pet_path = os.path.join(SRC, pet_slot, pet_id + '.png')
+    if not os.path.exists(pet_path):
+        return
+    pet_im = Image.open(pet_path).convert('RGBA')
     for item_id, slot, (x0, y0, x1, y1) in items:
         item_im = Image.open(os.path.join(SRC, slot, item_id + '.png')).convert('RGBA')
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         half = ((x1 - x0) / 2) * pad
-        # ONE output size for BOTH layers, taken from the pet's canvas. They are
-        # stacked with no transform, so a one-pixel difference between them is a
-        # misregistered accessory; never size each from its own crop.
         side = min(SHOT, round(half * 2 * pet_im.width))
         for which, im in (('pet', pet_im), ('item', item_im)):
             w, h = im.size
             box = (round((cx - half) * w), round((cy - half) * h),
                    round((cx + half) * w), round((cy + half) * h))
-            cut = im.crop(box).resize((side, side), Image.LANCZOS)
-            dst = os.path.join(OUT, 'shot', item_id, which + '.png')
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            cut.save(dst, optimize=True)
-            made += 1
-    print('%d cut product shots at %dpx (%.4f MB decoded per layer) for %d accessories'
-          % (made, side, side * side * 4 / 1048576, len(items)))
-    return made
+            yield os.path.join('shot', item_id, which + '.png'), im.crop(box).resize((side, side), Image.LANCZOS)
 
 
-def main():
+def shots_expected():
+    """How many cut shots this tree OUGHT to carry, so "none" can be told apart
+    from "none needed". Zero only when the pet's master is absent (--check
+    --root); anything else is two files per accessory."""
+    _pad, pet_id, pet_slot, items = pet_shop()
+    return 0 if not os.path.exists(os.path.join(SRC, pet_slot, pet_id + '.png')) else 2 * len(items)
+
+
+def build():
     made = skipped = 0
     total_src = total_out = 0
-    for dirpath, _dirs, files in os.walk(SRC):
-        if os.path.commonpath([dirpath, OUT]) == OUT:
-            continue                      # never thumbnail the thumbnails
-        for f in sorted(files):
-            if not f.lower().endswith('.png'):
-                continue
-            src = os.path.join(dirpath, f)
-            rel = os.path.relpath(src, SRC)
-            if not KEEP.match(rel):
-                continue
-            im = Image.open(src).convert('RGBA')
-            total_src += os.path.getsize(src)
-            for px in SIZES:
-                if max(im.size) <= px:
-                    skipped += 1          # already smaller than this tier
-                    continue
-                dst = os.path.join(OUT, str(px), rel)
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                im.resize((px, px), Image.LANCZOS).save(dst, optimize=True)
-                total_out += os.path.getsize(dst)
-                made += 1
-            dst = os.path.join(OUT, 'trim', rel)
+    for src, rel in sources():
+        im = Image.open(src).convert('RGBA')
+        total_src += os.path.getsize(src)
+        skipped += sum(1 for px in SIZES if max(im.size) <= px)
+        for tier, out in wanted(im):
+            dst = os.path.join(OUT, tier, rel)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
-            trimmed(im).save(dst, optimize=True)
+            out.save(dst, optimize=True)
             total_out += os.path.getsize(dst)
             made += 1
-    made += build_shots()
-    print('%d thumbnails across tiers %s + trim in %s'
-          % (made, SIZES, os.path.relpath(OUT, ROOT)))
+    cut = 0
+    for rel, out in shots():
+        dst = os.path.join(OUT, rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        out.save(dst, optimize=True)
+        total_out += os.path.getsize(dst)
+        made += 1
+        cut += 1
+    if cut != shots_expected():
+        print('the cut product-shot tier wrote %d files, expected %d: that is a failure, '
+              'not a clean run.' % (cut, shots_expected()), file=sys.stderr)
+        return 1
+    print('%d thumbnails across tiers %s + trim + %d cut product shots at %dpx in %s'
+          % (made, SIZES, cut, SHOT, os.path.relpath(OUT, ROOT)))
     print('%d skipped (source already <= the tier)' % skipped)
     print('source %.1f MB -> thumbnails %.1f MB on disk' % (total_src / 1048576, total_out / 1048576))
     for px in SIZES:
@@ -256,5 +306,95 @@ def main():
     return 0
 
 
+def check():
+    """--check: is every committed thumbnail still what this generator makes?
+
+    THE DEFECT CLASS, found 2026-08-24. A master is redrawn, committed, and
+    nobody re-runs this script, so every surface fed by the sheet keeps serving
+    the OLD artwork: eight cosmetics (GS1-3, IL9, IL10-1/2, IL17-1/2) had been
+    in that state since v385 redrew them on 2026-08-16, two days after the
+    sheet was last built. The other half of the class is a master with NO
+    thumbnail at all, and it was not theoretical: C6, the 50,000-coin
+    legendary pet, had no square tiers, and the Collection's grid (js/app.js,
+    the `looks` tab) asks bhThumb for one. That <img> carries no onerror, so
+    the tile rendered as a broken-image icon with the alt text "Bumbleseal".
+    Measured in a real browser on e2cb252d: 404, naturalWidth 0.
+
+    So: rebuild every tier IN MEMORY and compare to what is committed. Nothing
+    is written. Non-zero exit means run this script without --check.
+
+    CEILING: this pins the committed bytes against Pillow's LANCZOS. Measured
+    byte-identical across Pillow 11.3.0/Python 3.9 and 12.2.0/Python 3.13, so
+    the pin is not fragile today, but a future resampler change would read as
+    drift on the WHOLE sheet at once. The ratio is printed on every failing run
+    for exactly that reason: a handful of files is real drift, 100% is a
+    toolchain change and you should not blindly commit the rebuild.
+    """
+    missing, stale = [], []
+
+    def grade(rel, want):
+        """One expected image against what is committed. Shared by both sheets so
+        the square tiers and the cut shots are graded by identical arithmetic.
+        Returns 1 if a file was actually compared, 0 if it was simply absent."""
+        dst = os.path.join(OUT, rel)
+        if not os.path.exists(dst):
+            missing.append(rel)
+            return 0
+        got = Image.open(dst).convert('RGBA')
+        if got.size != want.size:
+            stale.append('%s  committed %dx%d, should be %dx%d'
+                         % (rel, got.size[0], got.size[1], want.size[0], want.size[1]))
+            return 1
+        diff = ImageChops.difference(got, want)
+        box = diff.getbbox()
+        if box:
+            stale.append('%s  %dx%d px differ from (%d,%d), worst channel %d/255'
+                         % (rel, box[2] - box[0], box[3] - box[1], box[0], box[1],
+                            max(hi for _lo, hi in diff.getextrema())))
+        return 1
+
+    checked = 0
+    for src, rel in sources():
+        im = Image.open(src).convert('RGBA')
+        for tier, want in wanted(im):
+            checked += grade(os.path.join(tier, rel), want)
+    # THE CUT TIER IS GRADED TOO, from the same shots() build() writes from.
+    cut = 0
+    for rel, want in shots():
+        checked += grade(rel, want)
+        cut += 1
+    if cut != shots_expected():
+        print('the cut product-shot tier described %d files, expected %d: that is a failure, '
+              'not a clean run.' % (cut, shots_expected()), file=sys.stderr)
+        return 1
+    print('checked %d committed thumbnails against a fresh render of their masters '
+          '(%d of them cut product shots)' % (checked, cut))
+    for m in missing:
+        print('MISSING  thumb/%s  (a surface asking for this tier gets a 404)' % m)
+    for s in stale:
+        print('STALE    thumb/%s' % s)
+    if not checked:
+        print('CHECKED NOTHING: that is a failure, not a clean run.', file=sys.stderr)
+        return 1
+    if missing or stale:
+        graded = checked + len(missing)
+        print('\n%d missing, %d stale, %.0f%% of the %d graded. Run: python3 scripts/build-bh-thumbs.py'
+              % (len(missing), len(stale), 100.0 * (len(missing) + len(stale)) / graded, graded),
+              file=sys.stderr)
+        if len(missing) + len(stale) == graded:
+            print('EVERY file differs, which is a Pillow/resampler change and NOT art drift. '
+                  'Do not commit a whole-sheet rebuild without saying so.', file=sys.stderr)
+        return 1
+    print('all fresh')
+    return 0
+
+
 if __name__ == '__main__':
-    sys.exit(main())
+    args = sys.argv[1:]
+    checking = '--check' in args
+    if '--root' in args:
+        if not checking:
+            print('--root is only valid with --check', file=sys.stderr)
+            sys.exit(2)
+        use_root(args[args.index('--root') + 1])
+    sys.exit(check() if checking else build())

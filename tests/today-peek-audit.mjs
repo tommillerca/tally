@@ -495,7 +495,9 @@ for (const cfg of CONFIGS) {
   const gaps = await page.evaluate(() => {
     const s = document.querySelector('.screen--today');
     if (!s) return [];
-    const out = [], kids = [...s.children];
+    /* the plate is a zero-height sticky backdrop, not a card: it overlaps every
+       sibling, so leaving it in the list invents gaps that do not exist */
+    const out = [], kids = [...s.children].filter(k => !k.classList.contains('today-plate'));
     for (let i = 0; i < kids.length - 1; i++) {
       const a = kids[i].getBoundingClientRect(), b = kids[i + 1].getBoundingClientRect();
       const g = b.top - a.bottom;
@@ -520,35 +522,67 @@ for (const cfg of CONFIGS) {
     if (c[0] > 200 && c[1] < 80 && c[2] > 200) bleeding.push(`${g.name} ${JSON.stringify(c)}`);
   }
 
-  /* AMBIENT + FILL. The two halves of Tom's second report, graded separately
-     because they fail separately.
-     AMBIENT is stated as a rule about the scroller rather than as a colour: it
-     must own no background, which is the only state in which the app's glow
-     reaches the page. Measured, all four sample points are byte-identical to the
-     pre-v434 page, and the flat version reads rgb(13,12,18) at every one of them.
-     FILL asserts the bounce colour exists and is parked ENTIRELY above the
-     content origin, so it cannot tint a pixel at rest. Whether it appears during
-     a real rubber-band pull is not gradeable in Chromium; what IS gradeable, and
-     what went wrong twice, is whether the thing painting the page is the thing
-     that should be. */
+  /* BOUNCE + PLATE. The two halves of the surface, graded apart because they fail
+     apart, and both premises come from the measurement at the top of app.css
+     rather than from reasoning: on a booted iPhone 17 Pro, a 126pt-deep held
+     bounce showed the scroller's background COLOUR edge to edge and zero pixels
+     of anything else, with a ::before, a real div, and a background-image at two
+     attachments all scoring nothing.
+     BOUNCE therefore forbids a background-IMAGE on the scroller, which is not a
+     style preference: an opaque image is what took the colour out of the strip in
+     v435, because the scrolled-contents layer no longer has a solid background
+     for the compositor to promote. background-repeat cannot rescue that, since a
+     gradient auto-sizes to the whole positioning area and repeat and no-repeat
+     render identically.
+     PLATE grades the thing that covers the page instead. It has to be the FIRST
+     child (anything above the scroll origin is outside the layer that translates,
+     so it can neither help nor hurt), opaque (or the bounce colour shows through
+     every gap), and as wide as the padding box: .screen is padded by var(--pad),
+     and an in-flow child inherits that inset, which measured as a strip of
+     backdrop colour down both edges of the page until the negative margins went
+     on. */
   const surf = await page.evaluate(() => {
     const s = document.querySelector('.screen--today');
     if (!s) return null;
-    const own = getComputedStyle(s), fill = getComputedStyle(s, '::before');
-    const host = s.getBoundingClientRect();
+    const own = getComputedStyle(s);
+    const p = document.querySelector('.today-plate');
+    const sr = s.getBoundingClientRect();
+    const pr = p && p.getBoundingClientRect();
+    const pcs = p && getComputedStyle(p);
+    const bcs = p && getComputedStyle(p, '::before');
     return {
-      bgc: own.backgroundColor, bgi: own.backgroundImage,
-      fillBg: fill.backgroundColor, fillH: parseFloat(fill.height) || 0,
-      aboveOrigin: parseFloat(fill.bottom) >= 0, hostH: Math.round(host.height),
+      bgc: own.backgroundColor, bgi: own.backgroundImage, iso: own.isolation,
+      plate: !!p,
+      plateFirst: !!p && s.firstElementChild === p,
+      /* THE PAINT IS IN THE PSEUDO, not the element: .today-plate is a zero-height
+         sticky anchor (a real height gave it margins that collapsed with the
+         hero's bleed and shifted the page 69px). So read ::before, and read its
+         WIDTH off the used left/right rather than the element's box. */
+      plateW: pr ? Math.round(pr.width + (parseFloat(bcs.left) < 0 ? -2 * parseFloat(bcs.left) : 0)) : 0,
+      scrollerW: Math.round(sr.width),
+      plateBgc: bcs ? bcs.backgroundColor : '',
+      plateBgi: bcs ? bcs.backgroundImage : '',
+      plateH: bcs ? Math.round(parseFloat(bcs.height) || 0) : 0,
+      viewH: Math.round(sr.height),
     };
   });
-  const clear = c => c === 'rgba(0, 0, 0, 0)' || c === 'transparent';
-  ok('AMBIENT the Today scroller paints no background of its own, so the app glow reaches the page',
-    !!surf && clear(surf.bgc) && surf.bgi === 'none',
+  const clear = c => !c || c === 'rgba(0, 0, 0, 0)' || c === 'transparent';
+  ok('BOUNCE the Today scroller carries the backdrop as a COLOUR and no background-image',
+    !!surf && !clear(surf.bgc) && surf.bgi === 'none',
     surf ? `background-color: ${surf.bgc}, background-image: ${surf.bgi}` : 'no scroller');
-  ok('FILL the bounce colour exists, carries the backdrop, and is parked above the content',
-    !!surf && !clear(surf.fillBg) && surf.fillH >= surf.hostH && surf.aboveOrigin,
-    surf ? `::before ${surf.fillBg}, ${Math.round(surf.fillH)}px over a ${surf.hostH}px viewport, above the origin=${surf.aboveOrigin}` : '');
+  ok('CONTROL PLATE the page plate is on the screen at all (without it every row below grades nothing)',
+    !!surf && surf.plate, surf ? `plate present=${surf.plate}` : '');
+  ok('PLATE it is the FIRST child, so it starts at the scroll origin and can never paint into the bounce',
+    !!surf && surf.plateFirst, surf ? `first child=${surf.plateFirst}` : '');
+  ok('PLATE it is opaque, so the backdrop colour cannot show through the gaps',
+    !!surf && !clear(surf.plateBgc) && surf.plateBgi !== 'none',
+    surf ? `plate background-color ${surf.plateBgc}, image ${surf.plateBgi === 'none' ? 'none' : 'present'}` : '');
+  ok('PLATE it reaches through the scroller\'s side padding, not just the content column',
+    !!surf && surf.plateW >= surf.scrollerW,
+    surf ? `plate ${surf.plateW}px across a ${surf.scrollerW}px scroller` : '');
+  ok('PLATE it covers the viewport, so a scrolled page is never left uncovered',
+    !!surf && surf.plateH >= surf.viewH,
+    surf ? `plate ${surf.plateH}px tall over a ${surf.viewH}px viewport` : '');
 
   ok('CONTROL BLEED the page really has transparent gaps to grade (an empty sample passes for free)',
     gaps.length >= 3, `${gaps.length} gaps found, floor 3`);
