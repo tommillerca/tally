@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 440, date: '2026-08-25', title: 'The Glutton waits his turn', items: [
+    'The Glutton\'s marker used to appear on the Boneyard about a second and a half before every other marker, alone on an empty map. He now fades up with the rest of them.',
+  ] },
   { n: 439, date: '2026-08-25', title: 'The Stable, the Paddock and the Shop got a lot lighter', items: [
     'The screens that show your pets were loading the full-size drawing of every animal at once, which is why they could stutter or blank out on a phone that was already busy. They now load a version cut to the animal. The Stable went from 215 MB of picture data to 53, the Paddock from 323 to 78, and the Shop from 192 to 38.',
   ] },

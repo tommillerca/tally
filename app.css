@@ -8277,11 +8277,22 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    the same moment either way, instead of computed opacity, which was always 1.
    Same family as the standing rule that MapLibre owns a marker root's transform.
    It owns opacity too. */
-#mapStage .map-spawn, #mapStage .map-den-mark, #mapStage .map-mini-mark, #mapStage .map-spire {
+/* AND THE GLUTTON IS ONE OF THEM. He was missing from all three rules here
+   while the comment above named him and js/map.js POI_CLASSES listed him, so his
+   marker was born VISIBLE and painted alone on an empty map for a second and a
+   half before anything else faded up. Measured 2026-08-20, the first time this
+   suite counted real markers rather than the map key: glutton visible at 290ms,
+   reveal at 1846ms, every other marker at 3279ms. That is precisely the "things
+   trickle in" complaint this block exists to answer, for one marker type, and it
+   shipped because no row here asserted that NOTHING paints before the reveal.
+   That row exists now, in tests/boneyard-audit.mjs. */
+#mapStage .map-spawn, #mapStage .map-den-mark, #mapStage .map-mini-mark, #mapStage .map-spire,
+#mapStage .map-glutton-mark {
   opacity: 0 !important; transition: opacity .22s ease;
 }
 #mapStage.markers-in .map-spawn, #mapStage.markers-in .map-den-mark,
-#mapStage.markers-in .map-mini-mark, #mapStage.markers-in .map-spire { opacity: 1 !important; }
+#mapStage.markers-in .map-mini-mark, #mapStage.markers-in .map-spire,
+#mapStage.markers-in .map-glutton-mark { opacity: 1 !important; }
 /* A marker that turns up after the map is already on screen waits for the rest of
    its beat (js/map.js holdArrival) so late finds fade in together instead of
    trickling. Specificity has to MATCH the .markers-in rule above or it loses. */
@@ -8293,7 +8304,8 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 @keyframes poiPop { from { transform: scale(.72); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { #mapStage .poi-in > * { animation: none; } }
 @media (prefers-reduced-motion: reduce) {
-  #mapStage .map-spawn, #mapStage .map-den-mark, #mapStage .map-mini-mark, #mapStage .map-spire { transition: none; }
+  #mapStage .map-spawn, #mapStage .map-den-mark, #mapStage .map-mini-mark, #mapStage .map-spire,
+  #mapStage .map-glutton-mark { transition: none; }
 }
 
 /* A SEALED GIFT. Tom, 2026-08-08: "otherwise deliveries reads like a receipt
