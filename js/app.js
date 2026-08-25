@@ -8317,13 +8317,55 @@ async function renderShop(el) {
      aura's ANY WEAPON strip goes back to being the only thing overlaid on a
      stage anywhere on the rack. */
   const rackTag = r => `<span class="rk-rar">${r.toUpperCase()}</span>`;
+  /* THE RACK STAGES TAKE THE MASTERS, because the rack is the one surface that
+     ZOOMS INTO the art instead of drawing all of it, and a `thumb:` tier is
+     sized against the box, not against the zoom.
+
+     They passed `thumb: 384` from v409 until 2026-08-25. Every .fit-* rule below
+     scales .bh-anim into the slot being sold, so the 384 square was drawn across
+     far more device pixels than it carries. Measured off the render on this
+     branch, 440x956 DPR 2 (the viewport tests/art-resolution-audit.mjs sweeps),
+     printed per layer rather than derived from the CSS:
+
+       fit-waist  2.8   384 src -> 653 device px = 1.70x     OVER
+       fit-shin   2.5   384 -> 583 = 1.52x                   OVER
+       fit-head   2.3   384 -> 537 = 1.40x                   on the line
+       fit-feet   2.2   384 -> 513 = 1.34x
+       fit-hips   2.0   384 -> 467 = 1.22x
+       fit-torso  1.7   384 -> 397 = 1.03x
+       fit-hand / fit-hand-l  1.6   384 -> 373 = 0.97x
+       fit-body   1.35  384 -> 315 = 0.82x
+
+     THE RATIO IS THE ZOOM, NOT THE TILE, so an over-ceiling tile has EVERY layer
+     over: the shared body and skull go through the same transform as the piece
+     for sale. Six of the rack's 26 layers, not two.
+
+     UNIFORM, and the two cheaper-looking alternatives were measured and rejected
+     rather than argued:
+       - a tier per slot (bhTierFor on box x zoom) saves 8 MB by the census
+         instrument at 440 and NOTHING at the 600px #app cap, where the same
+         probe reads 2.48x worst and 24 of 26 layers over. It also needs the
+         layout box hardcoded into JS, a second source of truth for a number
+         only layout knows.
+       - a 512 tier clears 1.40 at 440 (1.28x) but not 1.00x, needs 375 new PNGs
+         for 11 used sources, and adding 512 to BH_THUMB_TIERS changes what
+         bhTierFor picks for every OTHER caller in the app, i.e. it buys the
+         Shop's sharpness by softening surfaces that are fine today.
+     The masters cost +26.0 MB on the census instrument (per <img>) and +11.0 MB
+     as the renderer really pays it (26 elements, 11 distinct sources, and a
+     browser decodes a URL once). Both measured below the 90 MB ceiling.
+
+     AND 640 IS THE CEILING OF THE ART, not of this code. At the 600px #app cap
+     the waist tile still asks for 952 device pixels from a master that carries
+     229 across that crop (1.49x). That needs bigger source art, not a code
+     change, and it is written down rather than tuned away. */
   const rackTile = (id, i) => {
     const it = BH_BY_ID[id];
     const coin = RACK_POOLS[i][0];
     const dust = RACK_DUST[i];
     return `<div class="rk r-${it.rarity}${rackOwns(id) ? ' owned' : ''}">
       <button class="rk-stage ${RACK_FIT[it.slot] || ''}" data-tryon="${id}" data-coin="${coin}" data-dust="${dust}" aria-label="Try on ${esc(it.name)}"
-        >${avatarLayersHtml({ ...RACK_BASE, [it.slot]: id }, { thumb: 384, wpnAura: null, skip: ['C'] })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
+        >${avatarLayersHtml({ ...RACK_BASE, [it.slot]: id }, { wpnAura: null, skip: ['C'] })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
       ${rackTag(it.rarity)}<b>${esc(it.name)}</b>
       ${rackBuyRow(id, coin, dust)}
     </div>`;
@@ -8341,7 +8383,7 @@ async function renderShop(el) {
   const auraOwnedEver = await ownsAura(RACK_AURA.key);
   const rackAuraTile = () => `<div class="rk r-${RACK_AURA.rarity} aura${auraOwned ? ' owned' : ''}">
     <button class="rk-stage fit-hand" data-tryon="AURA" data-coin="${RACK_AURA.coin}" data-dust="${RACK_AURA.dust}" aria-label="Try on ${esc(RACK_AURA.name)}"
-      ><span class="rk-tag aura">ANY WEAPON</span>${avatarLayersHtml({ ...RACK_BASE, IR: RACK_AURA.carrier }, { thumb: 384, wpnAura: RACK_AURA.key, skip: ['C'] })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
+      ><span class="rk-tag aura">ANY WEAPON</span>${avatarLayersHtml({ ...RACK_BASE, IR: RACK_AURA.carrier }, { wpnAura: RACK_AURA.key, skip: ['C'] })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
     ${rackTag(RACK_AURA.rarity)}<b>${esc(RACK_AURA.name)}</b>
     ${auraOwnedEver
       ? `<div class="rk-buy"><button class="rk-aura-toggle${auraOwned ? ' on' : ''}" data-aurawear="${auraOwned ? '' : RACK_AURA.key}">${auraOwned ? `${ICONS.check(13)} Worn` : 'Wear it'}</button></div>`
@@ -18476,7 +18518,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v441'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v442'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
