@@ -317,7 +317,6 @@ const SUBFLOOR = {
   'js/app.js:petPortraitHtml|sparkle':    '12px shiny badge on a pet portrait, the same corner mark as petSpriteHtml.',
   'js/app.js:openRaceResults|badge-trophy': '13px, inline in the "1ST" ribbon copy.',
   'js/app.js:renderToday|boltIco':        '13px in the ready-fights chip and the hero-why line, both inline with text.',
-  'js/app.js:renderShop|star':            '12px, repeated once per weapon tier inside a tier tag, so the row is 12px of art whatever the tier.',
   'js/app.js:crewCardHtml|star':          '15px favourite marker in a friend row. CANDIDATE for 16: one step away.',
   'js/app.js:renderCharacter|bone':       '14px in the "N found" pill, inline with the count. CANDIDATE for 16: one step away.',
   'js/app.js:renderCharacter|boltIco':    '11-14px talent and boost marks, every one inline with a gear label or a count.',

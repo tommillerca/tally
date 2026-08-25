@@ -25,7 +25,7 @@ import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
 import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins } from '../js/game.js';
-import { STAT_META, WEAPONS } from '../js/pit.js';
+import { STAT_META, STYLES } from '../js/pit.js';
 import * as pitMod from '../js/pit.js';
 const mkFighter = pitMod.makeFighter;
 import {
@@ -1709,7 +1709,8 @@ test('no control that spends coins or dust buys on a single tap', () => {
     ['[data-buy]', 'the coin shop'],
     ['[data-dustbuy]', 'the Bone Dust shop'],
     ['[data-buydrop]', 'the featured drop'],
-    ['[data-buyweapon]', 'the Bone Merchant'],
+    // [data-buyweapon] stood here. The Bone Merchant closed on 2026-08-25 (S0);
+    // there is no weapon left to buy on any number of taps.
   ];
   const unguarded = [];
   const lines = src.split('\n');
@@ -1809,19 +1810,68 @@ test('no random pet roll can ever include an exclusive pet', () => {
   assert.ok(exclusives.length > 0, 'no exclusive pets exist, so this guard proves nothing');
 });
 
-test('every weapon rewards a stat that actually exists', () => {
-  // The vendor prints "rewards <Stat>" from WEAPONS[].spec, and the Build FAQ now
-  // tells players to match the two. A typo'd spec would silently fall back to
-  // "all-rounder" in the shop, quietly breaking that advice.
-  const keys = new Set(STAT_META.map(m => m.key));
-  for (const [id, w] of Object.entries(WEAPONS)) {
-    if (w.spec === null || w.spec === undefined) continue;
-    assert.ok(keys.has(w.spec), `weapon ${id} rewards "${w.spec}", which is not a stat`);
+/* "every weapon rewards a stat that actually exists" stood here. The Bone
+   Merchant closed on 2026-08-25 (S0) and there are no weapons to check.
+   The property that REPLACED it is the one below: coins may not buy power. */
+
+test('S0: no coin-priced sink grants a crate, gear or a weapon row', () => {
+  /* THE WHOLE POINT OF S0, ASSERTED STATICALLY. Coins bought power in two places:
+     the crate cells (150 / 400, a crate rolls a statted gear variant) and the
+     twelve Bone Merchant weapons. Both are gone. This is a LINT rather than a
+     runtime probe because the thing being asserted is an ABSENCE, and the honest
+     way to test an absence is to read the source and print the denominator.
+     docs/IAP-SCOPING.md calls for exactly this before any coin pack ships. */
+  const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
+
+  // 1. the coin shop's stock, read out of the source rather than assumed
+  const shop = [...src.matchAll(/\{ id: '([a-z0-9-]+)', label: '[^']*', icon: '[^']*', cost: (\d+) \}/g)]
+    .map(m => ({ id: m[1], cost: Number(m[2]) }));
+  assert.ok(shop.length >= 2, `SHOP parsed ${shop.length} rows; the lint is reading the wrong thing`);
+  for (const row of shop) {
+    assert.ok(!row.id.startsWith('crate-'), `coin shop still sells ${row.id} for ${row.cost}`);
   }
-  // and at least one weapon exists for every stat, so no build is left without one
-  const covered = new Set(Object.values(WEAPONS).map(w => w.spec).filter(Boolean));
-  const missing = [...keys].filter(k => !covered.has(k));
-  assert.deepEqual(missing, [], `no weapon rewards: ${missing.join(', ')}`);
+
+  // 2. buyShopItem must not be able to reach a crate at all
+  const buy = src.slice(src.indexOf('export async function buyShopItem'));
+  const body = buy.slice(0, buy.indexOf('\n}\n'));
+  assert.ok(body.length > 40, 'failed to slice buyShopItem; the lint is reading the wrong thing');
+  assert.ok(!/grantCrate|grantGear|db\.put\('inv'/.test(body),
+    'buyShopItem reaches a crate, gear or an inventory row');
+
+  // 3. the weapon buy flow is gone outright, not merely unreferenced
+  for (const gone of ['WEAPON_COST', 'export async function buyWeapon', 'weaponCoinCost', 'weaponDustCost'])
+    assert.ok(!src.includes(gone), `${gone} is still in js/loot.js`);
+
+  // 4. CONTROL. The lint above only proves anything if the strings it hunts for
+  // are the ones a violation would use, so prove each pattern fires on a forgery.
+  const forgery = "export async function buyShopItem(x) {\n  await grantCrate('daily', 'shop');\n}\n";
+  const fbody = forgery.slice(0, forgery.indexOf('\n}\n'));
+  assert.ok(/grantCrate|grantGear|db\.put\('inv'/.test(fbody), 'the crate pattern cannot detect a violation');
+});
+
+test('S0: the merchant refund knows what every withdrawn weapon cost', () => {
+  /* THE REFUND IS THE LARGEST PAYOUT THE APP MAKES, and its price table is now
+     the only surviving record of what people paid. These twelve ids and figures
+     were read off WEAPON_COST on origin/main before it was deleted; a typo here
+     short-changes a real player and nothing else in the tree can catch it. */
+  const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
+  const table = src.slice(src.indexOf('export const MERCHANT_REFUND'));
+  const rows = [...table.slice(0, table.indexOf('};')).matchAll(/(\w+): \{ coins: (\d+)(?:, dust: (\d+))? \}/g)];
+  const got = Object.fromEntries(rows.map(m => [m[1], [Number(m[2]), Number(m[3] || 0)]]));
+  assert.deepEqual(got, {
+    rapier: [500, 0], shivs: [500, 0], scepter: [900, 0],
+    wand: [700, 0], cleaver: [1500, 0], crook: [1600, 0],
+    maul: [3400, 0], lichfocus: [3400, 0], censer: [3200, 0],
+    warmaul: [6000, 350], voidstar: [6000, 350], reliquary: [5600, 330],
+  }, 'the refund prices no longer match what the Bone Merchant charged');
+  // a player who bought the full rack is owed exactly this, which is the figure
+  // docs/PLAN-remove-weapons.md §5 sized the exposure against
+  const coins = Object.values(got).reduce((a, [c]) => a + c, 0);
+  const dust = Object.values(got).reduce((a, [, d]) => a + d, 0);
+  assert.equal(coins, 33300, `full rack pays ${coins} coins`);
+  assert.equal(dust, 1030, `full rack pays ${dust} dust`);
+  // Bonecrusher was never for sale, so nothing is owed for it
+  assert.ok(!('bonecrusher' in got), 'the Champion prize was never bought and must not be refunded');
 });
 
 test('gear dust pays for stat points, not just rarity', () => {

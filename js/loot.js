@@ -33,9 +33,13 @@ export const CONSUMABLES = {
 };
 export const VIGOR_DRAUGHT_AMOUNT = 3;
 
+/* CRATES ARE NOT FOR SALE (S0, 2026-08-25). Tom, 2026-08-17: "crates are not
+   buyable, only gear for transmogging." A crate rolls a statted gear variant, so
+   coins -> crate -> gear was coins buying power in two hops, and once a coin pack
+   ships that becomes real money buying power (docs/IAP-SCOPING.md).
+   Crates as a REWARD are untouched: quests, day-close, level-ups, the Champion
+   and the Bone Dust shop all still grant them. Only the coin price is gone. */
 export const SHOP = [
-  { id: 'crate-daily', label: 'Common Crate', icon: '📦', cost: 150 },
-  { id: 'crate-golden', label: 'Bone Crate', icon: '🧰', cost: 400 },
   { id: 'vigor', label: 'Vigor Draught', icon: '⚡', cost: 90 },
   { id: 'xp2', label: 'Battle Charm', icon: '🧿', cost: 100 },
 ];
@@ -1343,7 +1347,7 @@ function rollRarity(floor = 0) {
    Wire Stinger). Derived from PET_SLOTS rather than listed, so a sixth accessory
    cannot arrive without inheriting the exclusion. */
 const petSlots = new Set(PET_SLOTS.map(s => s.code));
-export const crateEligible = i => !i.default && i.slot !== 'C' && !petSlots.has(i.slot);
+export const crateEligible = i => !i.default && !i.exclusive && i.slot !== 'C' && !petSlots.has(i.slot);
 
 function candidates(rarity, owned, slotBias) {
   let pool = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === rarity && !owned.has(i.id));
@@ -1458,59 +1462,82 @@ export async function buyShopItem(shopId) {
   const c = await coins();
   if (c < s.cost) return { ok: false, reason: 'coins', need: s.cost, have: c };
   await coinsAdd(-s.cost);
-  if (shopId === 'crate-daily') await grantCrate('daily', 'shop');
-  else if (shopId === 'crate-golden') await grantCrate('golden', 'shop');
-  else await grantConsumable(shopId, 'shop');
+  await grantConsumable(shopId, 'shop');
   // Report WHAT was bought, what it cost, the new balance and how many you now
   // hold. The old bare {ok:true} left the UI with nothing to say beyond
   // "Purchased", which reads as a no-op when you tap twice, so people kept
   // tapping and drained their coins without ever seeing a purchase land.
-  const owned = shopId.startsWith('crate-') ? (await unopenedCrates()).length : await consumableCount(shopId);
+  const owned = await consumableCount(shopId);
   return { ok: true, label: s.label, cost: s.cost, coins: await coins(), owned };
 }
 
-/* ---------- weapons (bought with coins, one-each) ---------- */
-// Bonecrusher is the Champion's prize, not for sale. The rest reward a spec.
-// The Bone Merchant's tiered stock (v71) is a deliberate gold sink: the endgame
-// pieces cost thousands, so weapons are a long-term goal, not a quick clear.
-export const WEAPON_COST = {
-  rapier: 500, shivs: 500, scepter: 900,
-  wand: 700, cleaver: 1500, crook: 1600,   // entry / mid tier
-  maul: 3400, lichfocus: 3400, censer: 3200, // legendary gold sinks
-  // tier-4 prestige (v145): dual-currency sinks — coins AND Bone Dust. Objects,
-  // not numbers, so the buy flow spends salvage too. weaponCoinCost() flattens
-  // either shape when only the coin figure is needed.
+/* ---------- the Bone Merchant's closing payout ----------
+
+   THE MERCHANT IS CLOSED (S0, 2026-08-25, docs/PLAN-remove-weapons.md §5).
+   Twelve weapons, 500 to 6,000 coins, some priced in Bone Dust too. People spent
+   real progression on those and we are withdrawing the thing they bought, so
+   they get the LISTED PRICE BACK, in full: not a discount, not store credit.
+   Same principle as the Bone Garden's closing payout on 2026-08-18, which paid
+   the whole 5,500 rather than a reduced amount.
+
+   THE PRICE TABLE IS FROZEN HERE ON PURPOSE. It is the receipt, not a live
+   catalogue. The live price table is gone from the game, so the only surviving
+   record of what a Femur Rapier cost is this list. It must never be edited to "rebalance"
+   anything; it exists to answer one question, "what did they pay", and the
+   answer stopped changing the day the merchant shut. Bonecrusher is absent
+   because it was never for sale (the Champion's prize), so nothing was paid for
+   it and nothing is owed.
+
+   THE PAYOUT IS A MONEY PATH, so it follows the rewarded-actions SOP exactly,
+   in the shape retireGardenIfNeeded already proved (js/game.js):
+   1. ONE state transition per save: "this device still holds bought weapons"
+      becomes "settled". Nothing about play can put it back; the merchant has no
+      door left and buyWeapon does not exist.
+   2. ASK THE AUTHORITY FIRST, PAY SECOND. The authority is db.addIfAbsent on
+      kv `merchant-retired`, IndexedDB's own uniqueness constraint: exactly one
+      caller is ever told true, however many tabs, boots or restores ask in the
+      same instant. A kvGet/kvSet pair here was once measured paying 16,500
+      coins to three concurrent callers, and this is the largest single payout
+      the app has ever made (a full rack is ~33,000 coins and 1,030 dust).
+   3. A NO-OP ANSWER IS NOT A SUCCESS. `false` pays nothing at all.
+   4. NOTHING IS WRITTEN when there is nothing to settle, which is most players.
+      A save restored from cloud backup then either brings the receipt with it
+      (already settled) or brings unrefunded weapons and its own pre-refund
+      balance, and settling it then is correct.
+   5. PROVEN, not asserted: tests/merchant-retire-audit.mjs drives it twice
+      against a real IndexedDB and measures the balances either side. The second
+      run moves them by 0.
+
+   THE INVENTORY ROWS STAY. Additive-only data rules: nobody's `inv` is deleted,
+   the rows are simply unreferenced by every screen. The receipt records what was
+   paid so a revival could read it back instead of guessing. */
+export const MERCHANT_REFUND = {
+  rapier: { coins: 500 }, shivs: { coins: 500 }, scepter: { coins: 900 },
+  wand: { coins: 700 }, cleaver: { coins: 1500 }, crook: { coins: 1600 },
+  maul: { coins: 3400 }, lichfocus: { coins: 3400 }, censer: { coins: 3200 },
   warmaul: { coins: 6000, dust: 350 },
   voidstar: { coins: 6000, dust: 350 },
   reliquary: { coins: 5600, dust: 330 },
 };
+export const MERCHANT_RETIRE_KEY = 'merchant-retired';
 
-// A cost entry is either a plain coin number or a {coins, dust} object. These
-// two helpers read whichever shape without the callers caring.
-export function weaponCoinCost(id) { const c = WEAPON_COST[id]; return c == null ? null : (typeof c === 'number' ? c : c.coins); }
-export function weaponDustCost(id) { const c = WEAPON_COST[id]; return (c && typeof c === 'object') ? (c.dust || 0) : 0; }
-
-export async function ownedWeaponIds() {
+export async function retireMerchantIfNeeded() {
   const inv = await db.all('inv');
-  return new Set(['starter', ...inv.filter(r => r.kind === 'weapon').map(r => r.weaponId)]);
-}
+  /* Dedupe by weapon id, not by row. buyWeapon refused a second copy, so a save
+     holding two rows for one weapon paid once and is owed once. */
+  const bought = [...new Set(inv.filter(r => r.kind === 'weapon' && MERCHANT_REFUND[r.weaponId])
+    .map(r => r.weaponId))];
+  if (!bought.length) return null;                       // nothing was ever bought
 
-export async function buyWeapon(weaponId) {
-  const coinCost = weaponCoinCost(weaponId);
-  if (coinCost == null) return { ok: false, reason: 'not-for-sale' };
-  const dustCost = weaponDustCost(weaponId);
-  const owned = await ownedWeaponIds();
-  if (owned.has(weaponId)) return { ok: false, reason: 'owned' };
-  const bal = await coins();
-  if (bal < coinCost) return { ok: false, reason: 'coins', need: coinCost, have: bal };
-  if (dustCost) {
-    const dbal = await boneDust();
-    if (dbal < dustCost) return { ok: false, reason: 'dust', need: dustCost, have: dbal };
-  }
-  await coinsAdd(-coinCost);
-  if (dustCost) await boneDustAdd(-dustCost);
-  await db.put('inv', { id: newId(), kind: 'weapon', weaponId, source: 'shop', ts: Date.now() });
-  return { ok: true, weaponId, cost: coinCost, dust: dustCost };
+  const coinsBack = bought.reduce((a, id) => a + MERCHANT_REFUND[id].coins, 0);
+  const dustBack = bought.reduce((a, id) => a + (MERCHANT_REFUND[id].dust || 0), 0);
+  const receipt = { weapons: bought, coins: coinsBack, dust: dustBack, at: Date.now() };
+  // THE CLAIM. Exactly one caller gets true; everybody else pays nothing.
+  if (!(await db.addIfAbsent('kv', { k: MERCHANT_RETIRE_KEY, v: receipt }))) return null;
+
+  if (coinsBack) await coinsAdd(coinsBack);
+  if (dustBack) await boneDustAdd(dustBack);
+  return receipt;
 }
 
 /* ---------- Transmog (v221): wear the stats, keep the look ----------

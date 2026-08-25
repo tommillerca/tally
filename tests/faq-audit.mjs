@@ -91,16 +91,26 @@ const advice = await page.evaluate(async () => {
 });
 check('no playstyle points at a stat that does not exist', advice.length === 0, JSON.stringify(advice));
 
-// weapons interact with stats, and a player could buy a caster weapon for a Power
-// build. The FAQ has to say so, and it has to name the vendor they buy from.
+/* WEAPONS ARE GONE (S0, 2026-08-25) and the FAQ has to SAY SO rather than fall
+   silent. This card used to answer "which weapon should I buy"; a returning
+   player whose Bone Merchant has vanished needs the question answered, not
+   deleted, or the missing screen reads as a bug and the refund reads as a glitch
+   in their coin balance. So the row inverted: it now fails if the FAQ still
+   sells weapons, and fails just as hard if it says nothing about them at all. */
 const weapons = await page.evaluate(() => {
   const t = document.querySelector('.faq-card').textContent;
-  return { mentionsWeapons: /weapon/i.test(t), namesVendor: /Bone Merchant/.test(t), saysMatch: /matches the stat you are stacking/i.test(t), reassures: /never a wrong answer/i.test(t) };
+  return {
+    explainsRemoval: /weapons?/i.test(t) && /gone|closed/i.test(t),
+    saysRefunded: /came back in full|refunded/i.test(t),
+    pointsAtWhatIsLeft: /stats, your talents and the gear/i.test(t),
+    stillSelling: /which weapon should i buy/i.test(t),
+  };
 });
 console.log('weapon guidance:', JSON.stringify(weapons));
-check('the FAQ covers which weapon to buy', weapons.mentionsWeapons && weapons.saysMatch, JSON.stringify(weapons));
-check('and names the vendor it comes from', weapons.namesVendor);
-check('and reassures that the plain weapon is always fine', weapons.reassures);
+check('the FAQ explains that weapons and the merchant are gone', weapons.explainsRemoval, JSON.stringify(weapons));
+check('and tells the player their coins came back', weapons.saysRefunded);
+check('and points at what carries their strength now', weapons.pointsAtWhatIsLeft);
+check('and does NOT still tell them to go buy one', !weapons.stillSelling);
 
 await guard('shooting the FAQ card', async () => {
   const el = await page.$('.faq-card');

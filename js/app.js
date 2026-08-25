@@ -10,12 +10,12 @@ import {
   awardCapped, XP_DAILY_CAP,
 } from './game.js';
 import {
-  RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, inventory, ownedCosmeticIds,
+  RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
   unopenedCrates, openCrate, buyShopItem, equipped, equip, activateBattleCharm,
   ownedGearIds, grantGear, gearLoadout, equipGear,
   migrateLegacyEggs, eggProgress, repairEggAnchors, hatchEgg, lifetimeStepsSum,
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, consumeConsumable, VIGOR_DRAUGHT_AMOUNT, redeemCode,
-  WEAPON_COST, weaponCoinCost, weaponDustCost, buyWeapon,
+  retireMerchantIfNeeded,
   boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, DUST_SHOP, buyWithDust, slimedGearIds,
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
@@ -82,7 +82,7 @@ import {
 } from './garden.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume, platformTag } from './native.js';
 import {
-  deriveStats, derived, STAT_META, WEAPONS, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
+  deriveStats, derived, STAT_META, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
   applyAction, endTurn, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
@@ -1271,6 +1271,16 @@ async function boot() {
      restore all pay nothing. */
   const settled = await retireGardenIfNeeded();
   if (settled) setTimeout(() => toast(`The Bone Garden has closed. ${settled.coins ? `${settled.coins.toLocaleString()} coins back for your beds` : 'Your beds are cleared'}${settled.ingredients ? `, and ${settled.ingredients} ingredient${settled.ingredients === 1 ? '' : 's'} moved to the Kitchen` : ''}. Ingredients come off the Boneyard now.`, 5200), init && init.xp > 0 ? 5200 : 2400);
+  /* THE BONE MERCHANT'S CLOSING PAYOUT, once per save. Same shape and the same
+     guarantee as the garden line above: retireMerchantIfNeeded claims kv
+     `merchant-retired` with db.addIfAbsent, so a second boot, a second tab and a
+     restore from backup all pay nothing.
+     THE NOTICE IS NOT OPTIONAL. This is the largest single payout the app has
+     ever made, and a coin balance that jumps by 33,000 with no explanation reads
+     as a bug at best and as a lost inventory at worst. People forgive a removal
+     they are told about. 6.4s because it is a long line carrying two numbers. */
+  const merch = await retireMerchantIfNeeded();
+  if (merch) setTimeout(() => toast(`The Bone Merchant has closed. Your ${merch.weapons.length} weapon${merch.weapons.length === 1 ? ' has' : 's have'} been refunded in full: +${merch.coins.toLocaleString()} coins${merch.dust ? ` and +${merch.dust} Bone Dust` : ''}. Strength comes from your stats, talents and the gear you can see now.`, 6400), init && init.xp > 0 ? 5600 : 3000);
   /* Give back the Gauntlet ceiling the cell-scoped gate marker swallowed. See
      backfillDenCeilingIfNeeded: a player who beat the same cell's boss week
      after week banked one marker and is owed the rest. */
@@ -5911,7 +5921,7 @@ function openSpireSheet(s, view, rival = null) {
         // the exact fields the friend-battle clone builder already reads, so a
         // rival's tower is defended by their real build, not an invented one
         foeStats: d.stats || null, foeOutfit: d.outfit || null,
-        weaponId: d.weapon || d.loadout || 'starter', talents: d.talents || [],
+        talents: d.talents || [],
       });
       return;
     }
@@ -8204,41 +8214,7 @@ function petShelfHtml(ownedCos, coinBal) {
 async function renderShop(el) {
   const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn] =
     await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura()]);
-  const recArch = recommendArch(fighter);
   const rerender = () => renderShop(el);
-
-  const weaponCard = w => {
-    const ownedW = fighter.owned.includes(w.id);
-    const on = fighter.loadout === w.id;
-    const cost = weaponCoinCost(w.id);
-    const dust = weaponDustCost(w.id);
-    const tierTag = w.tier ? `<span class="weap-tier t${w.tier}">${ICONS.star(12).repeat(w.tier)}</span>` : '';
-    const specTag = w.spec ? `<span class="weap-spec">rewards ${STAT_META.find(m => m.key === w.spec)?.label || w.spec}</span>` : '<span class="weap-spec">all-rounder</span>';
-    const priceLabel = `${ICONS.coin(13)} ${cost != null ? cost.toLocaleString() : ''}${dust ? ` <span class="cta-dust">+ <span class="dust-ico">${ICONS.dust(13)}</span> ${dust}</span>` : ''}`;
-    const cta = ownedW
-      ? `<button class="btn small ${on ? 'ghost' : ''}" data-weapon="${w.id}" ${on ? 'disabled' : ''}>${on ? 'Equipped' : 'Equip'}</button>`
-      : cost != null
-        ? `<button class="btn small" data-buyweapon="${w.id}" ${(coinBal < cost || dustBal < dust) ? 'disabled' : ''}>${priceLabel}</button>`
-        : `<span class="q-frac">Champion drop</span>`;
-    return `<div class="weap-card r-${w.rarity} ${on ? 'on' : ''} ${ownedW ? 'owned' : ''}">
-      <div class="weap-top"><b>${esc(w.name)} ${tierTag}</b>${specTag}</div>
-      <small class="weap-desc">${esc(w.desc)}</small>
-      <div class="weap-cta">${cta}</div>
-    </div>`;
-  };
-  const allW = Object.values(WEAPONS);
-  const baseline = allW.find(w => !w.arch);
-  const order = [recArch, ...['melee', 'caster', 'support'].filter(a => a !== recArch)];
-  const merchantHtml = `${baseline ? `<div class="weap-rack">${weaponCard(baseline)}</div>` : ''}
-    ${order.map(arch => {
-      const list = allW.filter(w => w.arch === arch).sort((a, b) => (a.tier || 0) - (b.tier || 0) || (weaponCoinCost(a.id) || 9999) - (weaponCoinCost(b.id) || 9999));
-      if (!list.length) return '';
-      const rec = arch === recArch;
-      return `<div class="merch-group${rec ? ' rec' : ''}">
-        <div class="merch-head"><span class="merch-ico">${ARCH_META[arch].ico}</span><b>${ARCH_META[arch].label}</b><small>${ARCH_META[arch].blurb}</small>${rec ? '<span class="merch-rec">for your build</span>' : ''}</div>
-        <div class="weap-rack">${list.map(weaponCard).join('')}</div>
-      </div>`;
-    }).join('')}`;
 
   // No page heading or back button: the Shop is a tab inside Your Bonehead now,
   // so the hub supplies both and a second title would just repeat itself.
@@ -8520,7 +8496,7 @@ async function renderShop(el) {
   <button class="rk-reroll" id="rackReroll"><span class="rk-rr"><b>Reroll the rack</b><small>Another nine from ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())}</small></span>
     <span class="rk-left">${rerollsLeft > 0 ? `${rerollsLeft} left this week` : 'none left this week'}</span>
     ${rerollCost == null ? '' : rerollCost ? `<span class="t3-price">${ICONS.coin(13)} ${rerollCost}</span>` : '<span class="t3-price free">FREE</span>'}</button>
-  <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Crates, potions and weapons</b><small>Supplies ›</small></button>
+  <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Potions and charms</b><small>Supplies ›</small></button>
   <div id="shopRestBody" hidden>
 
   <details class="t3-dropsect" id="dropSect">
@@ -8575,38 +8551,10 @@ async function renderShop(el) {
   </div>
   <button class="t3-forage" id="shopSalvage" style="margin-top:10px">${ICONS.dust(20)}<b>Melt gear for Bone Dust</b><small>Salvage Bench ›</small></button>
 
-  <div class="t3-sect"><b>Bone Merchant</b><i></i><span class="r chip" style="font-size:11px">${ARCH_META[recArch].label} suits you</span></div>
-  <p class="note" style="margin:0 2px 10px">Weapons multiply your effort; they never replace it.</p>
-  ${merchantHtml}
-
   <button class="t3-forage" id="shopForage">${ingIconHtml('graveroot', 24)}<b>Forage for ingredients</b><small>in the Kitchen ›</small></button>
   </div>
   <div class="rk-tail"></div>`;
 
-  el.querySelectorAll('[data-weapon]').forEach(b => b.addEventListener('click', async () => {
-    await kvSet('loadout', b.dataset.weapon); popSound(S.sounds); pushProfileSoon(); rerender();
-  }));
-  // the priciest single tap in the game: up to 6,000 coins AND 350 Bone Dust
-  el.querySelectorAll('[data-buyweapon]').forEach(b => armToConfirm(b, (() => {
-    const id = b.dataset.buyweapon;
-    const c = weaponCoinCost(id), d = weaponDustCost(id);
-    return c != null ? `Spend ${c.toLocaleString()}${d ? ` + ${d} dust` : ''}?` : 'Spend?';
-  })(), async () => {
-    b.disabled = true;
-    const res = await buyWeapon(b.dataset.buyweapon);
-    if (!res.ok) {
-      toast(res.reason === 'coins' ? 'Not enough coins for that weapon.'
-        : res.reason === 'dust' ? `Need ${res.need} Bone Dust (you have ${res.have}). Melt gear at the Salvage Bench.`
-        : 'Already owned.');
-      b.disabled = false; return;
-    }
-    await kvSet('loadout', res.weaponId);
-    pushProfileSoon();
-    trackEvent('buy_weapon', { id: res.weaponId });
-    levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
-    toast(`${WEAPONS[res.weaponId].name} bought and equipped.`);
-    rerender();
-  }));
   // Both shop grids use the shared arm-then-confirm helper now. They each used to
   // carry their own copy of the dance, and the coin one swapped textContent,
   // which would wipe a Tier 3 cell's art and price chip on the first tap.
@@ -9871,7 +9819,7 @@ function crewCardHtml(f) {
     <div class="cfan-stage"></div>
     ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
     <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>
-    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small></div>
+    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.title ? esc(p.title) : p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small></div>
   </button>`;
 }
 
@@ -11132,7 +11080,7 @@ function openFriendProfile(f, onChange, opts = {}) {
         ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny, wear: yardWear, thumb: true })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
-      <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal" hidden></div></div>
+      <div class="fp-title"><div class="fp-class">${p.title ? `${esc(p.title)} · ` : ''}${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal" hidden></div></div>
 
       ${p.stats && p.outfit ? `<button class="btn fp-battle" id="fpBattle">${ICONS.pit(18)} Battle their bonehead</button>` : ''}
       ${stranger ? (opts.isCrew
@@ -11187,7 +11135,6 @@ function openFriendProfile(f, onChange, opts = {}) {
       venue: `${esc(f.alias || f.name)}'s turf`,
       foeStats: p.stats,
       foeOutfit: p.outfit,
-      weaponId: p.weapon || 'starter',
       talents: p.talents || [],
       aiLevel: Math.max(1, Math.min(6, 1 + Math.floor((p.level || 1) / 4))),
     });
@@ -12847,7 +12794,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
   // content and the browser clamps the real scroller's offset.
   const scroller = body.closest('.screen') || body;
   const keepScroll = opts.instant ? scroller.scrollTop : null;
-  const [xp, eq, coinBal, inv, boost, dustBal] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges(), boneDust()]);
+  const [xp, eq, coinBal, inv, boost, dustBal, myTitle] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges(), boneDust(), championTitle()]);
   const lvl = levelFor(xp);
   const chShiny = await ownShinyPetId(eq);   // your own stack, so your own collection answers
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
@@ -12882,7 +12829,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     <div class="bh-hero mini">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny })}</div>
       <div class="bh-hero-meta">
-        <b class="bh-title">Lv ${lvl.level} · ${esc(lvl.name)}</b>
+        <b class="bh-title">Lv ${lvl.level} · ${esc(myTitle || lvl.name)}</b>
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
         <div class="bh-pills">
           <span class="bh-pill">${ICONS.coin(14)} ${coinBal.toLocaleString()}</span>
@@ -18332,10 +18279,6 @@ async function buildFighter() {
   const tpTotal = (behavior.proteinDays || 0) + (behavior.closes || 0) + Math.floor((behavior.lifetimeSteps || 0) / 25000);
   const tpSpent = STAT_META.reduce((a, m) => a + (alloc[m.key] || 0), 0);
   const tpAvail = Math.max(0, tpTotal - tpSpent);
-  const inv = await inventory();
-  const owned = ['starter', ...inv.filter(r => r.kind === 'weapon').map(r => r.weaponId)];
-  let loadout = await kvGet('loadout', 'starter');
-  if (!owned.includes(loadout)) loadout = 'starter';
   const talents = await kvGet('talents', []);
   // keep the player's talent array WITH repeats (ranks matter); gear/set talents
   // are single-rank moves, add them only if not already specced.
@@ -18361,7 +18304,7 @@ async function buildFighter() {
     battlePet = buildBattlePet(petInst.sp, pl, picks, { shiny: !!petInst.shiny, lineage: petInst.lineage || 0 });
     petMeta = { id: petInst.sp, iid: petInst.iid, level: pl, picks, steps, lineage: petInst.lineage || 0, shiny: !!petInst.shiny };
   }
-  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, owned, loadout, talents, fightTalents, battlePet, petMeta, setInfo };
+  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, talents, fightTalents, battlePet, petMeta, setInfo };
 }
 
 /* Talents that change ACTION ECONOMY rather than raw numbers. Gear and set
@@ -18408,34 +18351,6 @@ function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, 
     nudge: `${fighter.tpAvail} training point${fighter.tpAvail === 1 ? '' : 's'} to spend`,
     toast: `You earned ${fighter.tpAvail} training point${fighter.tpAvail === 1 ? '' : 's'}. Shape your build in the Pit.`,
   });
-  // affordable vendor weapon that's a genuine UPGRADE — never nudge a weapon
-  // weaker than what you already run. We ONLY ever suggest a weapon in the SAME
-  // fighting style you currently WIELD, and only if it strictly out-tiers your
-  // equipped weapon. Suggesting another archetype (a melee maul to a caster) is
-  // what read as "buy a weaker weapon" — a side-grade in a style you don't play.
-  const owned = new Set(fighter.owned || []);
-  const equipped = WEAPONS[fighter.loadout] || null;
-  const equippedArch = equipped && equipped.arch ? equipped.arch : null;    // null = still on the Taped Pipe starter
-  // treat a non-tiered found weapon (e.g. the Skull Scepter) as tier 3 so we never suggest below it.
-  const equippedTier = equipped ? (equipped.tier || (equipped.arch ? 3 : 0)) : 0;
-  let bestW = null;
-  for (const w of Object.values(WEAPONS)) {
-    if (!w.vendor || owned.has(w.id)) continue;
-    const tier = w.tier || 0;
-    if (tier < 3) continue;                                 // aspirational only, no entry weapons
-    if (equippedArch) {
-      if (w.arch !== equippedArch) continue;                // same style you actually fight in
-      if (tier <= equippedTier) continue;                   // must strictly out-tier your equipped weapon
-    }                                                        // (no real weapon yet → any endgame piece is a fair nudge)
-    const c = weaponCoinCost(w.id), d = weaponDustCost(w.id);
-    if (c == null || coinBal < c || dustBal < d) continue;
-    if (!bestW || tier > bestW.tier || (tier === bestW.tier && c < bestW.c)) bestW = { id: w.id, name: w.name, c, tier };
-  }
-  if (bestW) sig.push({
-    key: 'wpn:' + bestW.id, hero: 'pit', action: 'talents', priority: 2,
-    nudge: `You can afford the ${bestW.name}`,
-    toast: `The Bone Merchant has an upgrade you can afford: ${bestW.name}.`,
-  });
   return sig.sort((a, b) => b.priority - a.priority);
 }
 
@@ -18466,7 +18381,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v444'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v445'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -18694,7 +18609,7 @@ async function socialSnapshot() {
     levelName: lvl.name,
     stats: fighter.stats,
     talents: fighter.talents,
-    weapon: fighter.loadout,
+    title: await championTitle(),
     outfit: eq,
     gearLo: fighter.gearLo,
     gear: [...gOwned].slice(0, 400),
@@ -18781,7 +18696,7 @@ async function renderPit(wrap) {
   const canNewRank = nextRank <= ceiling;           // a fresh rank is available
   const fightRank = canNewRank ? nextRank : Math.max(1, ceiling); // else rematch the cap rank
   const fightFoe = endlessFoe(fightRank);
-  const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fighter.fightTalents || fighter.talents));
+  const d = derived(fighter.stats, new Set(fighter.fightTalents || fighter.talents));
   const wins = xpRows.filter(r => r.type === 'fight').length;
   const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
   const unspent = Math.max(0, talentPoints(lvl.level) - fighter.talents.length);
@@ -18912,7 +18827,7 @@ async function renderPit(wrap) {
         <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · take a walk to earn Vigor' : ' · walk to earn more'}</small>
       </div>
     </div>
-    <button class="t3-forage" id="buildBtn" style="margin:0 0 4px">${pixCur('build', 24) || ICONS.pit(20)}<b>Shape your build</b><small>stats, weapon &amp; talents ›</small>${unspent > 0 ? `<i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
+    <button class="t3-forage" id="buildBtn" style="margin:0 0 4px">${pixCur('build', 24) || ICONS.pit(20)}<b>Shape your build</b><small>stats &amp; talents ›</small>${unspent > 0 ? `<i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
     ${pitSections}`;
 
   $('#buildBtn', body)?.addEventListener('click', () => openCharacter('talents'));
@@ -18942,7 +18857,7 @@ async function renderPit(wrap) {
     startPit({ mode: 'rung', rung: r.rung, name: r.name, mult: r.mult, coins: r.coins, repeatCoins: r.repeatCoins, xp: r.xp, done: beaten.has(`pitrung-${r.rung}`) });
   }));
   $('#champBtn', body)?.addEventListener('click', () =>
-    startPit({ mode: 'champ', name: CHAMPION.name, mult: CHAMPION.mult, coins: CHAMPION.coins, repeatCoins: CHAMPION.repeatCoins, xp: CHAMPION.xp, weaponId: CHAMPION.weaponId, done: beaten.has('pitchamp') }));
+    startPit({ mode: 'champ', name: CHAMPION.name, mult: CHAMPION.mult, coins: CHAMPION.coins, repeatCoins: CHAMPION.repeatCoins, xp: CHAMPION.xp, style: CHAMPION.style, done: beaten.has('pitchamp') }));
   $('#endlessBtn', body)?.addEventListener('click', () =>
     startPit(endlessFightCfg(fightFoe)));
   $('#endlessGate', body)?.addEventListener('click', () => { toast('Beat a world-boss den on the map to climb higher.', 2600); location.hash = '#/boneyard'; });
@@ -18957,7 +18872,7 @@ async function renderPit(wrap) {
 function endlessFightCfg(f) {
   return {
     mode: 'endless', rank: f.rank, name: f.name, mult: f.mult, talents: f.talents,
-    weaponId: f.weaponId, aiLevel: f.aiLevel, coins: f.coins, repeatCoins: f.repeatCoins,
+    style: f.style, aiLevel: f.aiLevel, coins: f.coins, repeatCoins: f.repeatCoins,
     xp: f.xp, venue: 'The Gauntlet',
     /* CARRY THE FACE. pit.js computes a roster look for EVERY rank (bossLook ||
        ladderLook, js/pit.js:1679) and this mapper listed its fields by hand and
@@ -19039,14 +18954,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
   const food = await foodCombatBuff(); // active dish buffs (damage / hype / regen / pet-free)
   let potionInv = await potionsInv(); // brewed potions you can drink mid-fight
-  const player = makeFighter({ name: 'You', stats: fighter.stats, weaponId: fighter.loadout, outfit: eq, talents: fighter.fightTalents || fighter.talents, pet: fighter.battlePet, food, gearArmor: fighter.gearArmor });
+  const player = makeFighter({ name: 'You', stats: fighter.stats, outfit: eq, talents: fighter.fightTalents || fighter.talents, pet: fighter.battlePet, food, gearArmor: fighter.gearArmor });
   const foeTalents = foeCfg.mode === 'champ' ? CHAMPION.talents : (foeCfg.mode === 'rung' ? (RUNG_TALENTS[foeCfg.rung] || []) : (foeCfg.talents || []));
   const foe = makeFighter({
     name: foeCfg.name,
     // friend battles use the friend's REAL stats + outfit (a faithful AI clone);
     // Pit/boss foes scale off the player's stats by the tier multiplier
     stats: foeCfg.foeStats ? foeCfg.foeStats : scaleStats(fighter.stats, foeCfg.bossMult || foeCfg.mult),
-    weaponId: foeCfg.weaponId || 'starter',
+    style: foeCfg.style || 'plain',
     outfit: foeCfg.foeOutfit || foeOutfitFor(foeCfg.name),
     talents: foeTalents,
   });
@@ -20477,9 +20392,25 @@ async function openFight(pitWrap, fighter, foeCfg) {
           if (g) {
             xp += g; coins = foeCfg.coins;
             await grantCrate('golden', 'pit-champion');
-            await db.put('inv', { id: newId(), kind: 'weapon', weaponId: 'bonecrusher', source: 'pit-champion', ts: Date.now() });
+            /* THE CHAMPION'S PRIZE IS A LOOK AND A NAME, NOT A NUMBER (S0,
+               2026-08-25). This used to write a `kind:'weapon'` inv row for
+               Bonecrusher: the single strongest item in the game, invisible on
+               your character, handed out by the one fight everybody eventually
+               wins. Tom's call was that the weapon grant goes; the trophy still
+               has to feel like one, or the ladder loses its payoff.
+               So: the Moonlit Skull, the only piece in the game no crate can
+               roll (data/boneheadz.js `exclusive`), plus the Marrow King title
+               under your name wherever your crew can see it. Both are visible on
+               the Bonehead, which is the entire point of the change, and neither
+               moves a single point of damage.
+               The title needs no storage of its own: it is derived from the
+               `pit-champ` badge this same win already mints (championTitle). */
+            const skull = await grantCosmetic(CHAMP_PRIZE_ID, 'pit-champion');
             extraCards.push(
-              { iconHtml: '<img src="assets/brand/sword.png" style="width:118px;height:118px;object-fit:contain">', name: 'The Bonecrusher', rarity: 'legendary', kind: 'WEAPON', stats: 'Champion weapon · equip it in Build' },
+              { iconHtml: `<img src="${bhAsset(BH_BY_ID[CHAMP_PRIZE_ID])}" style="width:118px;height:118px;object-fit:contain">`,
+                name: BH_BY_ID[CHAMP_PRIZE_ID].name, rarity: 'legendary', kind: 'CHAMPION COSMETIC',
+                stats: skull ? `No crate can roll it. Wear it in your Wardrobe, and carry the ${CHAMP_TITLE} title.`
+                             : `You already had it. The ${CHAMP_TITLE} title is yours from here.` },
               crateCard('golden'));
           } else coins = foeCfg.repeatCoins;
         } else coins = foeCfg.repeatCoins;
@@ -20816,7 +20747,7 @@ function buildFaqHtml(fighter, openAttr = '') {
         <div class="faq-qa"><b>Should I spread points around or stack one?</b><small>Stacking one or two is stronger than spreading five thin, because each stat only helps the things it is attached to. Two is the sweet spot.</small></div>
         <div class="faq-qa"><b>Do stats matter more than gear?</b><small>Neither wins on its own. Gear adds the same kinds of points, so a good piece can cover a stat you skipped. Check what you are wearing before you respec.</small></div>
         <div class="faq-qa"><b>What is Armor?</b><small>Damage reduction. <b>${nm('marrow')}</b> gives armor against melee, <b>${nm('reflex')}</b> against magic, and worn gear adds to both. You can see both percentages just below.</small></div>
-        <div class="faq-qa"><b>Which weapon should I buy?</b><small>The one that matches the stat you are stacking. Every weapon in the <b>Bone Merchant</b> prints what it rewards, so a Power build wants a Power weapon and a ${nm('hype')} build wants a caster one. A mismatch is not wasted, it just does less for you. The plain <b>Taped Pipe</b> has no bonus and no penalty, so it is never a wrong answer.</small></div>
+        <div class="faq-qa"><b>What happened to weapons?</b><small>They are gone, and the <b>Bone Merchant</b> has closed. They changed your damage without changing how you looked, which is the one thing about your fighter you could not see. Everything you paid for them came back in full. Your strength is your stats, your talents and the gear on your Bonehead now, and all three are visible.</small></div>
         <div class="faq-qa"><b>What are talents, then?</b><small>A separate pool, one per level, spent on the trees further down this tab. Stats decide how hard you hit; talents decide what moves you get.</small></div>
       </details>
     </div>
@@ -20891,28 +20822,35 @@ function weaponSheenHtml(eq, skip) {
   return `<span class="wpn-sheen r-${w.rarity}" style="--wpn:url('${bhAsset(w)}')" aria-hidden="true"></span>`;
 }
 
-const ARCH_META = {
-  melee:   { label: 'Melee', blurb: 'Power & Marrow bruisers', ico: '🦴' },
-  caster:  { label: 'Caster', blurb: 'Hype spellcasters', ico: '☠' },
-  support: { label: 'Support', blurb: 'Menders, wards & totems', ico: '✚' },
-};
-const ARCH_SIGNALS = {
-  melee: ['heavyhands', 'marrowlust', 'bonebreaker', 'concussive', 'titan', 'rage', 'flurry', 'kite', 'bleedout', 'lightfeet'],
-  caster: ['bonebolt', 'darkstudy', 'gravechill', 'bonestorm', 'frostbolt', 'firebolt', 'attunement', 'tempest', 'raisedead', 'bonespike'],
-  support: ['mend', 'ward', 'smite', 'radiance', 'hallowed', 'blessedward', 'sanctified', 'totem', 'totemic', 'soulsiphon'],
-};
-function recommendArch(fighter) {
-  const tals = new Set(fighter.fightTalents || fighter.talents || []);
-  const score = { melee: 0, caster: 0, support: 0 };
-  for (const [arch, ids] of Object.entries(ARCH_SIGNALS)) for (const id of ids) if (tals.has(id)) score[arch]++;
-  let best = null, top = 0;
-  for (const a of ['melee', 'caster', 'support']) if (score[a] > top) { top = score[a]; best = a; }
-  if (best) return best;
-  // no talent signal yet: fall back to the dominant stat
-  const s = fighter.stats || {};
-  if ((s.hype || 0) >= (s.power || 0) && (s.hype || 0) >= (s.marrow || 0)) return 'caster';
-  if ((s.marrow || 0) > (s.power || 0)) return 'support';
-  return 'melee';
+/* THE CHAMPION'S TITLE AND COSMETIC (S0, 2026-08-25).
+
+   No title SYSTEM was built for this, deliberately. A title store, a picker and
+   a "which title are you wearing" kv is three screens of machinery for one
+   string, and the game already records exactly the fact the title asserts: the
+   `pit-champ` badge ("Kingslayer", awarded for dethroning the Marrow King) is an
+   append-only ledger row. So the title is DERIVED from that badge rather than
+   stored beside it, which means it cannot drift out of sync with the achievement
+   and a restored backup carries it automatically.
+   ponytail: one derived title, no picker. Promote to a stored choice the day
+   there is a second title to choose between. */
+const CHAMP_TITLE = 'Marrow King';
+const CHAMP_PRIZE_ID = 'SK15';
+const CHAMP_BADGE = 'pit-champ';
+/* ONE KEYED READ, NOT A SCAN. The obvious shape here is
+   `(await earnedBadgeIds()).has('pit-champ')`, which is db.all('xp'): a full
+   scan of the whole reward ledger, on every hub render and every profile push,
+   to answer a yes/no about ONE row. That is the same class of cost the long
+   comment above award() in js/game.js was written about, where a per-reward
+   totalXp() scan cost 30.6s on a one-year save. The badge's ledger row has a
+   known primary key, so ask for that row and nothing else.
+   HONESTY ABOUT WHY THIS COMMENT EXISTS: nav-perf-audit's WARM row went red on
+   the scanning version and I took that as the measurement. It was not. WARM is a
+   timing ratio and it fails on pristine origin/main too under load (measured
+   2026-08-25, three interleaved laps each: main 0.70 / 0.83 / 0.78, this tree
+   0.63 / 0.59 / 0.89, bound 0.70). The keyed read is still the right shape on
+   its own argument; it just was not that guard that proved it. */
+async function championTitle() {
+  return (await db.get('xp', 'badge-' + CHAMP_BADGE)) ? CHAMP_TITLE : null;
 }
 
 /* openTalents() stood here: a six-line sheet wrapper around renderTalents whose
@@ -20937,8 +20875,7 @@ async function renderTalents(wrap) {
   const points = talentPoints(lvl.level);
   const unspent = Math.max(0, points - takenArr.length);
   const fightArr = fighter.fightTalents || fighter.talents;
-  const d = derived(fighter.stats, WEAPONS[fighter.loadout], new Set(fightArr), fighter.gearArmor, talentRanks(fightArr));
-  const recArch = recommendArch(fighter);
+  const d = derived(fighter.stats, new Set(fightArr), fighter.gearArmor, talentRanks(fightArr));
 
   // Collapsible build sections (same <details> pattern as the talent trees /
   // quests). Open state survives the wholesale re-render on every tap.
@@ -20978,10 +20915,6 @@ async function renderTalents(wrap) {
     }).join('')}
     <p class="note" style="margin:2px 2px 10px">Points come from hitting protein, closing days on budget, and every 25,000 steps.</p>
     ${fighter.tpTotal - fighter.tpAvail > 0 ? '<button class="btn ghost small" id="tpReset" style="margin-bottom:6px">Reset training</button>' : ''}
-    <button class="card bsect-link" id="toShopMerchant">
-      <div><b>The Bone Merchant</b><span class="note" style="display:block">Buy &amp; equip weapons in the Shop · you own ${fighter.owned.length}/${Object.keys(WEAPONS).length}</span></div>
-      <span class="crew-chev">›</span>
-    </button>
     ${(() => {
       const parts = Object.entries(fighter.gearBonus || {}).filter(([, v]) => v > 0).map(([k, v]) => `+${v} ${k.toUpperCase()}`);
       const setActive = (fighter.setInfo?.sets || []).some(s => s.tiers.length);
@@ -21075,7 +21008,6 @@ async function renderTalents(wrap) {
     renderTalents(wrap);
   });
   // weapons now live in the Shop tab (v150); Build just links there
-  $('#toShopMerchant', body)?.addEventListener('click', () => openCharacter('shop'));
   /* Keep the Build tab's unspent-point badge honest without a full hub re-render.
      Recomputed from the SAME source renderCharacter uses, so the two can never
      disagree about the number. */

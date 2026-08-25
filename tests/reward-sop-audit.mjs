@@ -162,7 +162,7 @@ const ACTIONS = [
   { id: 'js/cooking.js:doTransmute', sites: 1, undriven: 'a once-a-day cooldown plus an ingredient spend; nothing is granted without both' },
   { id: 'js/cooking.js:advanceQueue', sites: 1, undriven: 'moves an already-paid-for queued dish into a pot; the dish was bought with ingredients at startCook' },
   { id: 'js/garden.js:compostIngredient', sites: 1, undriven: 'spends an ingredient and is capped at COMPOSTS_PER_DAY; a conversion, not a payout' },
-  { id: 'js/loot.js:buyShopItem', sites: 3, undriven: 'a purchase: the second attempt is MEANT to charge again' },
+  { id: 'js/loot.js:buyShopItem', sites: 1, undriven: 'a purchase: the second attempt is MEANT to charge again. Was 3 until 2026-08-25: crates came off the coin shop (S0), so the two grantCrate branches went with them and only grantConsumable is left' },
   { id: 'js/loot.js:buyWithDust', sites: 3, undriven: 'a purchase' },
   { id: 'js/loot.js:buyDropItem', sites: 1, undriven: 'a purchase, and it refuses when already owned' },
   { id: 'js/loot.js:disenchantGear', sites: 1, undriven: 'melts a piece the player owns: the gear row is the input, so a second run finds nothing' },
@@ -191,6 +191,7 @@ const ACTIONS = [
      now, so it is not merely registered here: tests/garden-retire-audit.mjs
      drives it twice, ten times, across a real reload and three-way concurrently,
      and measures the coin balance every time. */
+  { id: 'js/loot.js:retireMerchantIfNeeded', sites: 2, undriven: "the Bone Merchant's closing refund, behind an addIfAbsent claim on kv merchant-retired. THE STATE TRANSITION: 'this save still holds weapons bought from a merchant that exists' becomes 'settled', and nothing about play can put it back, because buyWeapon is gone from the tree. Driven to destruction by tests/merchant-retire-audit.mjs (PAYS / ROWS / ONCE / BOOT / RACE / PARTIAL / NOTHING / PRIZE), which is where the second-attempt proof lives rather than here. It pays coins AND Bone Dust, which is why the count is 2" },
   { id: 'js/game.js:retireGardenIfNeeded', sites: 2, undriven: 'the Bone Garden refund + conversion, behind an addIfAbsent claim on kv garden-retired. Driven to destruction by tests/garden-retire-audit.mjs (PAYS / ONCE / BOOT / RACE / NOTHING), which is where the second-attempt proof lives rather than here' },
   { id: 'js/poi.js:backfillDenCeilingIfNeeded', sites: 1, undriven: "one-time backfill behind kv 'denceil-backfill'; mints 0-XP marker rows only" },
   { id: 'js/wheel.js:PRIZES', sites: 7, undriven: "the prize table's grant thunks; the day gate is kv 'wheelLastDate', set BEFORE the grant in maybeShowDailyWheel's commit(), and tests/wheel-audit.mjs drives the wheel itself" },
@@ -205,7 +206,7 @@ const ACTIONS = [
      only create once, and both orders plus three-way concurrency are driven
      against a real IndexedDB by tests/mimic-audit.mjs and
      tests/wanderer-boneyard-audit.mjs (ONE-SHOT / ATOMIC). */
-  { id: 'js/app.js:openFight', sites: 17, undriven: 'the fight settlement: thirteen modes, every one of them delegating to a claim function registered above (claimFriendBattle, claimDenWin, claimMiniWin, claimGluttonWin) or gated on an award() key it reads before paying. The two remote branches are pinned by name by the NO-OP guards in tests/unit.test.js; tests/glutton-audit.mjs and tests/spire-phase3-audit.mjs drive the two that shipped exploits; and the two Boneyard ambushes (mimic, wanderer) are driven by tests/mimic-audit.mjs and tests/wanderer-boneyard-audit.mjs' },
+  { id: 'js/app.js:openFight', sites: 18, undriven: 'the fight settlement: thirteen modes, every one of them delegating to a claim function registered above (claimFriendBattle, claimDenWin, claimMiniWin, claimGluttonWin) or gated on an award() key it reads before paying. The two remote branches are pinned by name by the NO-OP guards in tests/unit.test.js; tests/glutton-audit.mjs and tests/spire-phase3-audit.mjs drive the two that shipped exploits; and the two Boneyard ambushes (mimic, wanderer) are driven by tests/mimic-audit.mjs and tests/wanderer-boneyard-audit.mjs' },
   { id: 'js/app.js:renderBoneyard', sites: 4, undriven: 'the map: the tribute button and the spawn button, both delegating to collectTribute and collectSpawn, which are driven above. Was 5 until 2026-08-18: a collect also paid a garden seed, and with the Bone Garden off the player\'s path a seed cannot be planted, so that grant came out' },
   { id: 'js/app.js:openKitchen', sites: 3, undriven: 'awardCapped on a served dish (driven above), plus a coin-priced forage' },
   { id: 'js/app.js:openHollow', sites: 1, undriven: 'awardCapped on a harvested bed; harvestPlot is the authority and is driven above' },

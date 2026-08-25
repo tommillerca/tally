@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 445, date: '2026-08-25', title: 'The Bone Merchant has closed, and your weapons are refunded', items: [
+    'Weapons are gone from the game. They changed how hard you hit without changing anything you could see on your Bonehead, and that made them the one part of your fighter you could not look at and understand. Your strength is your stats, your talents and the gear you are wearing now, and all three are visible.',
+    'Everything you spent at the Bone Merchant has come back in full: the coins you paid, at the price you paid, plus the Bone Dust for the prestige pieces. It lands by itself the next time you open the app, and you keep the weapons in your inventory. Nothing was deleted.',
+    'Fights have not got easier. The bosses who fought you holding a weapon still swing exactly as hard: their weapon moved into their own stats, and every rung of the ladder was re-measured to prove the numbers did not budge.',
+    'Crates are no longer for sale for coins. They are still handed out by quests, level-ups, day closes, the Champion and the Bone Dust shop, and Bone Dust still buys a Common Crate. Coins buy looks.',
+    'Beating The Marrow King now gives you the Moonlit Skull, which no crate in the game can roll, and the Marrow King title under your name where your crew can see it. It used to give a weapon nobody could see.',
+  ] },
   /* DELIBERATELY NOT CLAIMING A RESTORE. The archive is stored and can be read
      back, but nothing in the app offers it to you yet, so saying "you can go
      back to yesterday" would be a patch note for a button that does not exist. */

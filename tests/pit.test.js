@@ -1,7 +1,7 @@
 // The Pit engine vs the combat math spec's own numbers.
 import assert from 'node:assert/strict';
 import {
-  deriveStats, derived, WEAPONS, ACTIONS, counterMult, resolveHit, makeFighter,
+  deriveStats, derived, STYLES, ACTIONS, counterMult, resolveHit, makeFighter,
   createFight, actionsFor, applyAction, endTurn, aiTakeTurn,
   simulate, LADDER, CHAMPION, scaleStats, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
   petActionsFor, applyPetAction, dealDamage, armorDR, makePetBody, talentRanks, nodeRanks,
@@ -30,34 +30,42 @@ test('derived pools at stat=50 match the spec table', () => {
 });
 
 // ---- spec section 8: the worked example ----
-test('worked example: P60 Bonecrusher haymaker = base*power*weapon (vs a no-armor dummy)', () => {
-  const attacker = makeFighter({ name: 'A', stats: { power: 60, marrow: 50, wind: 50, reflex: 50, hype: 0 }, weaponId: 'bonecrusher' });
+/* THESE FOUR NUMBERS ARE THE ENEMY-POWER CONTRACT (S0, 2026-08-25). The player's
+   weapons are gone; the Champion's Bonecrusher curve survives as the foe-only
+   `heavy` style, and 94 / 46 / 65 / 122 are the damage and Stamina figures it
+   produced BEFORE the removal, measured on origin/main. If any of them moves,
+   the ladder deflated and docs/PLAN-remove-weapons.md §3 happened. */
+test('worked example: P60 heavy haymaker = base*power*style (vs a no-armor dummy)', () => {
+  const attacker = makeFighter({ name: 'A', stats: { power: 60, marrow: 50, wind: 50, reflex: 50, hype: 0 }, style: 'heavy' });
   const defender = makeFighter({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
   const r = resolveHit({ move: 'haymaker', attacker, defender, rng: noLuck });
-  // 40 base * powerMult(1.9) * bonecrusher haymaker mult(1.24) = 94.24 -> 94 (dummy has 0 armor)
+  // 40 base * powerMult(1.9) * heavy haymaker mult(1.24) = 94.24 -> 94 (dummy has 0 armor)
   assert.equal(r.damage, 94, String(r.damage));
-  // wind cost with Bonecrusher penalty: 35 * 1.3 = 45.5 -> 46
-  assert.equal(Math.round(35 * WEAPONS.bonecrusher.windCostMult('haymaker')), 46);
+  // wind cost with the heavy penalty: 35 * 1.3 = 45.5 -> 46
+  assert.equal(Math.round(35 * STYLES.heavy.windCostMult('haymaker')), 46);
 });
 
-test('weapons: each has a clear spec identity + real mechanical hook', () => {
+test('styles: exactly two, foe-only, and plain is a true neutral', () => {
   const s = { power: 40, marrow: 40, wind: 40, reflex: 40, hype: 40 };
-  // Skull Scepter: +30% magic (magicMult), no physical bonus
-  const base = derived(s, WEAPONS.starter).magicMult;
-  const scep = derived(s, WEAPONS.scepter).magicMult;
-  assert.ok(Math.abs(scep - (base + 0.30)) < 1e-9, `scepter magic ${scep} vs ${base}+0.3`);
-  assert.equal(WEAPONS.scepter.spec, 'hype');
-  // Femur Rapier: +12% crit, cheaper swing
-  assert.ok(Math.abs(derived(s, WEAPONS.rapier).critChance - (derived(s, WEAPONS.starter).critChance + 0.12)) < 1e-9);
-  assert.ok(WEAPONS.rapier.windCostMult('swing') < 1 && WEAPONS.rapier.windCostMult('jab') === 1);
-  // Twin Shivs: all close strikes cheaper, no crit/magic change
-  assert.ok(WEAPONS.shivs.windCostMult('jab') === 0.8 && WEAPONS.shivs.windCostMult('haymaker') === 0.8);
-  assert.equal(derived(s, WEAPONS.shivs).critChance, derived(s, WEAPONS.starter).critChance);
-  // Starter is a true neutral baseline
-  assert.equal(WEAPONS.starter.windCostMult('haymaker'), 1.0);
-  assert.equal(WEAPONS.starter.mult('haymaker', s), 1.0);
-  // every weapon declares a rarity
-  for (const w of Object.values(WEAPONS)) assert.ok(w.rarity, `${w.id} rarity`);
+  // TWO. A third would be a new power source, which is what S0 removed.
+  assert.deepEqual(Object.keys(STYLES).sort(), ['heavy', 'plain']);
+  // plain changes nothing at all: the player fights on this and only this.
+  assert.equal(STYLES.plain.windCostMult('haymaker'), 1.0);
+  assert.equal(STYLES.plain.mult('haymaker', s), 1.0);
+  assert.equal(STYLES.plain.mult('swing', s), 1.0);
+  // a fighter built with no style IS plain, so no caller can accidentally arm one
+  assert.equal(makeFighter({ name: 'N', stats: s }).style.id, 'plain');
+  assert.equal(makeFighter({ name: 'N', stats: s, style: 'bonecrusher' }).style.id, 'plain');
+  // NO STYLE MAY TOUCH derived(). apBonus / magicBonus / critBonus were the three
+  // fields weapons fed into the derived pools; if one comes back, an invisible
+  // stat source is back with it.
+  for (const st of Object.values(STYLES)) {
+    for (const f of ['apBonus', 'magicBonus', 'critBonus', 'rarity', 'vendor', 'tier'])
+      assert.equal(st[f], undefined, `${st.id} must not carry ${f}`);
+  }
+  // derived() takes talents in the second slot now, not a weapon
+  assert.equal(derived(s, new Set(['lightfeet'])).ap, 3);
+  assert.equal(derived(s).ap, 2);
 });
 
 // ---- spec section 7: effort vs gear guardrail rows ----
@@ -67,14 +75,14 @@ test('guardrail: X (effort, starter) swing = 50', () => {
   const r = resolveHit({ move: 'swing', attacker: x, defender: dummy, rng: noLuck });
   assert.equal(r.damage, 50, String(r.damage));
 });
-test('guardrail: Y (lazy, maxed Bonecrusher) haymaker = 65', () => {
-  const y = makeFighter({ name: 'Y', stats: { power: 30, marrow: 50, wind: 30, reflex: 40, hype: 0 }, weaponId: 'bonecrusher' });
+test('guardrail: Y (lazy, heavy foe style) haymaker = 65', () => {
+  const y = makeFighter({ name: 'Y', stats: { power: 30, marrow: 50, wind: 30, reflex: 40, hype: 0 }, style: 'heavy' });
   const dummy = makeFighter({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
   const r = resolveHit({ move: 'haymaker', attacker: y, defender: dummy, rng: noLuck });
   assert.equal(r.damage, 65, String(r.damage));
 });
-test('guardrail: Z (effort + Bonecrusher) haymaker = 122', () => {
-  const z = makeFighter({ name: 'Z', stats: { power: 85, marrow: 50, wind: 80, reflex: 70, hype: 0 }, weaponId: 'bonecrusher' });
+test('guardrail: Z (effort + heavy foe style) haymaker = 122', () => {
+  const z = makeFighter({ name: 'Z', stats: { power: 85, marrow: 50, wind: 80, reflex: 70, hype: 0 }, style: 'heavy' });
   const dummy = makeFighter({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
   const r = resolveHit({ move: 'haymaker', attacker: z, defender: dummy, rng: noLuck });
   assert.equal(r.damage, 122, String(r.damage));
@@ -303,14 +311,14 @@ test('ladder scaling floors and caps', () => {
   assert.equal(LADDER.length, 8);
   assert.ok(LADDER.every((r, i) => i === 0 || r.mult > LADDER[i - 1].mult), 'rung mults ascend');
   assert.ok(LADDER[LADDER.length - 1].mult < CHAMPION.mult, 'champion tops the ladder');
-  assert.equal(CHAMPION.weaponId, 'bonecrusher');
+  assert.equal(CHAMPION.style, 'heavy');
 });
 
 
 
 // ---- talents (framework section 7) ----
 import { TALENT_TREES, talentPoints, canTakeTalent, sigThreshold, RUNG_TALENTS } from '../js/pit.js';
-import { makeFighter as mf, createFight as cf, applyAction as apply, actionsFor as acts, endTurn as et, resolveHit as rh } from '../js/pit.js';
+import { makeFighter as mf, createFight as cf, applyAction as apply, actionsFor as acts, endTurn as et, resolveHit as rh, endlessFoe } from '../js/pit.js';
 
 const MID = { power: 50, marrow: 50, wind: 50, reflex: 40, hype: 30 };
 
@@ -733,31 +741,39 @@ test('v70 Spirit Totem: zaps enemy + restores your Stamina each of your turns', 
   assert.equal(P.wind, Math.min(P.d.maxWind, 10 + 20 + 8), 'base regen + totem +8 stamina');
 });
 
-test('v71 Bone Merchant weapons: bonuses actually hook into the engine', () => {
-  const s = { power: 80, marrow: 50, wind: 50, reflex: 40, hype: 80 };
+/* The v71 Bone Merchant test stood here: it proved the Maul, the Lich's Focus and
+   the Warden's Crook each hooked into the engine. All twelve went with the
+   merchant on 2026-08-25 (S0), so there is nothing left for it to assert. What
+   replaced it is the "styles: exactly two, foe-only" test above, which asserts
+   the OPPOSITE property: that no such hook can exist any more. */
+
+/* THE HEAVY STYLE IS FOR FOES ONLY, and this is the assertion that keeps it that
+   way. Every fighter the app builds for the PLAYER goes through makeFighter with
+   no style at all; only the ladder definitions name one. If a `style: 'heavy'`
+   ever appears on a player path, coins-to-power is back through a side door. */
+test('S0: only ladder foes carry a style, and only heavy exists to carry', () => {
+  const s = { power: 55, marrow: 55, wind: 55, reflex: 55, hype: 55 };
+  const plain = mf({ name: 'P', stats: s });
+  const heavy = mf({ name: 'H', stats: s, style: 'heavy' });
   const dummy = mf({ name: 'D', stats: { power: 0, marrow: 0, wind: 0, reflex: 0, hype: 0 } });
-  // Gravemarrow Maul: haymaker scales harder off Power than the starter pipe
-  const maulHay = rh({ move: 'haymaker', attacker: mf({ name: 'M', stats: s, weaponId: 'maul' }), defender: dummy, rng: noLuck }).damage;
-  const pipeHay = rh({ move: 'haymaker', attacker: mf({ name: 'P', stats: s, weaponId: 'starter' }), defender: dummy, rng: noLuck }).damage;
-  assert.ok(maulHay > pipeHay, `maul ${maulHay} > pipe ${pipeHay}`);
-  // Lich's Focus: +45% magic beats the +30% Skull Scepter on a bolt
-  const lich = mf({ name: 'L', stats: s, weaponId: 'lichfocus', talents: ['bonebolt'] });
-  const scep = mf({ name: 'S', stats: s, weaponId: 'scepter', talents: ['bonebolt'] });
-  const lichBolt = rh({ move: 'bonebolt', attacker: lich, defender: dummy, rng: noLuck }).damage;
-  const scepBolt = rh({ move: 'bonebolt', attacker: scep, defender: dummy, rng: noLuck }).damage;
-  assert.ok(lichBolt > scepBolt, `lich ${lichBolt} > scepter ${scepBolt}`);
-  // Warden's Crook: Mend costs 20% less Stamina
-  const crook = mf({ name: 'C', stats: s, weaponId: 'crook', talents: ['mend'] });
-  const plainMend = mf({ name: 'P2', stats: s, weaponId: 'starter', talents: ['mend'] });
-  const cf1 = cf({ player: crook, foe: mf({ name: 'F', stats: MID }), seed: 1 });
-  const cf2 = cf({ player: plainMend, foe: mf({ name: 'F', stats: MID }), seed: 1 });
-  const crookCost = acts(cf1).find(a => a.id === 'mend').windCost;
-  const plainCost = acts(cf2).find(a => a.id === 'mend').windCost;
-  assert.ok(crookCost < plainCost, `crook mend ${crookCost} < plain ${plainCost}`);
-  // every vendor weapon is registered with an archetype
-  const vendorArch = Object.values(WEAPONS).filter(w => w.vendor);
-  assert.ok(vendorArch.length >= 6, 'six+ vendor weapons');
-  assert.ok(vendorArch.every(w => ['melee', 'caster', 'support'].includes(w.arch)), 'each vendor weapon has an arch');
+  const pHay = rh({ move: 'haymaker', attacker: plain, defender: dummy, rng: noLuck }).damage;
+  const hHay = rh({ move: 'haymaker', attacker: heavy, defender: dummy, rng: noLuck }).damage;
+  // CONTROL: an empty sample here would pass vacuously, so prove the two differ
+  // before believing anything about which fighters get which.
+  assert.ok(hHay > pHay, `heavy ${hHay} must out-hit plain ${pHay}`);
+  // and it costs more Stamina, which is the half of the trade a buff would drop
+  assert.ok(heavy.style.windCostMult('haymaker') > plain.style.windCostMult('haymaker'));
+  // the ladder's own definitions: at least one heavy rung in the first ten,
+  // and the Champion is one. A sample of zero is a failure, not a pass.
+  const heavyRungs = [];
+  for (let r = 1; r <= 10; r++) if (endlessFoe(r).style === 'heavy') heavyRungs.push(r);
+  assert.ok(heavyRungs.length >= 3, `expected heavy rungs, found ${heavyRungs.length}`);
+  assert.equal(CHAMPION.style, 'heavy');
+  // nothing on the ladder carries a style that is not one of the two
+  for (let r = 1; r <= 40; r++) {
+    const st = endlessFoe(r).style;
+    assert.ok(st === undefined || st === 'plain' || st === 'heavy', `rank ${r} style ${st}`);
+  }
 });
 
 test('totemic marrow regenerates extra wind each turn', () => {
@@ -913,7 +929,7 @@ test('specced build does not trivialize the champion (foes scale off effective s
   for (let i = 0; i < n; i++) {
     const fight = createFight({
       player: makeFighter({ name: 'P', stats: eff }),
-      foe: makeFighter({ name: 'C', stats: scaleStats(eff, CHAMPION.mult), weaponId: CHAMPION.weaponId, talents: CHAMPION.talents }),
+      foe: makeFighter({ name: 'C', stats: scaleStats(eff, CHAMPION.mult), style: CHAMPION.style, talents: CHAMPION.talents }),
       seed: 40000 + i, aiLevel: 3,
     });
     let g = 0;

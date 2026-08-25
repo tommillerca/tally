@@ -71,8 +71,8 @@ ok('SCALING the Alchemist does not grow past the band at max stats', hiRatio <= 
  * the ceilings below fail.
  */
 const SUSTAIN = ['mend', 'mercy', 'mercy', 'mercy', 'hallowed', 'soulsiphon', 'marrowlust'];
-const cheatBuild = { name: 'sustain + last light', stats: BUILDS[0].stats, weaponId: 'starter', talents: [...SUSTAIN, 'lastlight'] };
-const sustainOnly = { name: 'sustain alone', stats: BUILDS[0].stats, weaponId: 'starter', talents: SUSTAIN };
+const cheatBuild = { name: 'sustain + last light', stats: BUILDS[0].stats, talents: [...SUSTAIN, 'lastlight'] };
+const sustainOnly = { name: 'sustain alone', stats: BUILDS[0].stats, talents: SUSTAIN };
 const cheatEven = measure(cheatBuild, { foeMult: 1.0, seeds: SEEDS });
 const cheatHard = measure(cheatBuild, { foeMult: 1.2, seeds: SEEDS });
 const sustEven = measure(sustainOnly, { foeMult: 1.0, seeds: SEEDS });
