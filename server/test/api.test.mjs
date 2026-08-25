@@ -313,6 +313,151 @@ await test('backup: a blob over the cap is refused with 413, and SILENTLY on the
     're-read src/index.js MAX_BACKUP_BYTES and update the finding.');
 });
 
+/* ---- the daily backup slot ----
+   Tom: "i don't want a corrupted sync to destroy an account." The rule being
+   proved here is the whole feature, and it is a rule about TIME, not about a
+   number of revisions: js/social.js pushes every ten minutes, so "keep the last
+   3" is thirty minutes of protection and a corruption sleeps through it.
+   Two of the four cases below are the ones that matter, and both are KEEP tests:
+   a push inside 24h must leave the archive alone, and the push that does replace
+   it must archive the OUTGOING save, so the first corrupt push cannot be the one
+   that poisons the slot. Every case proves its fixture landed before it asserts
+   anything about what happened to it. */
+const dailyGet = async (keys, id) => {
+  const r = await signedFetch(keys.kp, id, 'GET', '/backup?slot=daily');
+  return { status: r.status, blob: r.status === 200 ? (await r.json()).blob : null };
+};
+const warpBackup = async (id, backMs) => {
+  const r = await fetch(BASE + '/dev/backup-warp', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ playerId: id, backMs }),
+  });
+  assert.equal(r.status, 200, `/dev/backup-warp needs DEV=1 (got ${r.status})`);
+  const { row } = await r.json();
+  assert.ok(row, 'warp found no backups row for this player');
+  return row;
+};
+const DAY_MS = 24 * 60 * 60 * 1000;
+const bl = tag => tag + '-' + Math.random().toString(36).slice(2) + '-' + 'x'.repeat(64);
+
+await test('daily: one push leaves no archive (there is nothing older to keep)', async () => {
+  const fresh = await makeKeys();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
+  const put = await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: bl('one') }));
+  assert.equal(put.status, 200, 'the fixture push failed, so nothing below is about the archive');
+  assert.equal((await dailyGet(fresh, reg.playerId)).status, 404,
+    'an archive appeared out of a single save, which means it is a copy of the live one');
+});
+
+await test('daily: the second push archives the save it REPLACED, not the one it carried', async () => {
+  const fresh = await makeKeys();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
+  const first = bl('first'), second = bl('second');
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: first }));
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: second }));
+  const live = await (await signedFetch(fresh.kp, reg.playerId, 'GET', '/backup')).json();
+  assert.equal(live.blob, second, 'the live save is not the newest push');
+  /* DIRECTION, and it is the point of the whole design: `first`, never `second`.
+     Archiving the incoming blob would mean the first corrupt sync lands in both
+     slots at once and there is nothing to go back to. */
+  assert.equal((await dailyGet(fresh, reg.playerId)).blob, first,
+    'the archive holds the INCOMING save, so a corrupt push would poison both copies at once');
+});
+
+await test('daily: further pushes inside 24h do NOT touch the archive', async () => {
+  const fresh = await makeKeys();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
+  const first = bl('keep');
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: first }));
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: bl('p2') }));
+  assert.equal((await dailyGet(fresh, reg.playerId)).blob, first, 'PRECONDITION: nothing was archived to defend');
+  /* Six more pushes, which is an hour of a real client at BACKUP_THROTTLE_MS,
+     and the shape of the failure this exists to survive: a corruption syncing
+     over and over inside one day. Under "keep the last 3 revisions" the good
+     save is gone by the third. */
+  for (let i = 0; i < 6; i++) {
+    await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: bl('corrupt' + i) }));
+  }
+  assert.equal((await dailyGet(fresh, reg.playerId)).blob, first,
+    'six pushes in a row reached the archive, so a corruption that syncs repeatedly still destroys the account');
+  // The archive is not simply frozen forever, either: it is holding a save the
+  // 24h rule has not released yet, and the next test proves the release works.
+  const row = await warpBackup(reg.playerId, 0);
+  assert.ok(row.daily_at > 0 && row.daily_at <= row.updated_at,
+    `daily_at (${row.daily_at}) is not a moment at or before the newest push (${row.updated_at})`);
+});
+
+/* THE PLAYER WHO OPENS THE APP ONCE A DAY, which is the case that caught the
+   first version of this and is the reason daily_at is the promotion time rather
+   than the archived save's own updated_at. Under that first version the save
+   being archived was ALWAYS about 24h old for this player, so every push in the
+   session promoted, the archive chased the live save ten minutes behind, and the
+   feature was inert for exactly the light user it is meant to protect. RED on
+   that version, green here, and it is the strongest statement of what the slot
+   is for: what comes back is the END OF YESTERDAY, never anything from today. */
+await test('daily: a once-a-day player gets YESTERDAY back, not this morning', async () => {
+  const fresh = await makeKeys();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
+  const day1a = bl('d1-open'), day1b = bl('d1-close');
+  const day2a = bl('d2-open'), day2b = bl('d2-close'), day3a = bl('d3-open');
+  // day 1: a session of two pushes, ten minutes apart in a real client
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: day1a }));
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: day1b }));
+  assert.equal((await dailyGet(fresh, reg.playerId)).blob, day1a, 'PRECONDITION: day 1 archived nothing');
+  // ...comes back a day later
+  await warpBackup(reg.playerId, DAY_MS + 60000);
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: day2a }));
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: day2b }));
+  assert.equal((await dailyGet(fresh, reg.playerId)).blob, day1b,
+    'on day 2 the archive is not day 1\'s last save, so a corruption today has already eaten yesterday');
+  // ...and again
+  await warpBackup(reg.playerId, DAY_MS + 60000);
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: day3a }));
+  assert.equal((await dailyGet(fresh, reg.playerId)).blob, day2b,
+    'on day 3 the archive is not day 2\'s last save');
+});
+
+await test('daily: after 24h the NEXT push rolls the archive forward, one day at a time', async () => {
+  const fresh = await makeKeys();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
+  const first = bl('day1'), second = bl('day2'), third = bl('day3');
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: first }));
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: second }));
+  assert.equal((await dailyGet(fresh, reg.playerId)).blob, first, 'PRECONDITION: the first archive never happened');
+  // Age the whole row by a day and a minute, exactly as if the player came back
+  // tomorrow. Nothing is copied by the warp: it only moves timestamps, so an
+  // archive that changes below was changed by the server's own rule.
+  await warpBackup(reg.playerId, DAY_MS + 60000);
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: third }));
+  assert.equal((await dailyGet(fresh, reg.playerId)).blob, second,
+    'the 24h boundary did not release the archive, so it would hold the same save forever');
+  // ...and having just rolled, it is shut again for another day.
+  await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: bl('again') }));
+  assert.equal((await dailyGet(fresh, reg.playerId)).blob, second,
+    'the archive rolled twice in one day, so the 24h rule is not being enforced after the first roll');
+});
+
+await test('daily: the archive is what a restore reads, and it is per player', async () => {
+  const mine = await makeKeys();
+  const reg = await (await regFetch(mine.pubJwk)).json();
+  const keep = bl('mine');
+  await signedFetch(mine.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: keep }));
+  await signedFetch(mine.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob: bl('newer') }));
+  assert.equal((await dailyGet(mine, reg.playerId)).blob, keep, 'PRECONDITION: no archive to read');
+  // Somebody else's signature cannot read it. The blob is ciphertext either way,
+  // but an archive that answers to the wrong key is still an account takeover.
+  const other = await makeKeys();
+  const r = await signedFetch(other.kp, reg.playerId, 'GET', '/backup?slot=daily');
+  assert.equal(r.status, 401, 'another key read this player\'s archive');
+  /* The client half of the restore path. The server cannot decrypt any of this,
+     so getting the archive back is necessarily on-device, and this is the call
+     that does it. If it is renamed or dropped, the slot becomes decoration. */
+  const { readFileSync } = await import('node:fs');
+  const social = readFileSync(new URL('../../js/social.js', import.meta.url), 'utf8');
+  assert.ok(/export async function restoreDailyBackup\(\)\s*\{\s*return pullBackup\(\{ slot: 'daily', replace: true \}\)/.test(social),
+    'js/social.js restoreDailyBackup() is gone or changed shape, so nothing can read the archive back');
+});
+
 // ---- curated display name ----
 /* RUN-UNIQUE NUMBERS. Names became unique server-side on 2026-08-08, and the
    local D1 persists between runs, so a hardcoded name is claimed by the PREVIOUS

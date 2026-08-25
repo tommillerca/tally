@@ -617,9 +617,16 @@ export async function pushBackup(appV = '') {
 
 // Pull + decrypt the cloud backup and merge it in (additive importAll). Returns
 // { restored, counts } or { restored:false }. Used on a fresh/empty install.
-export async function pullBackup() {
+/* `slot` picks WHICH server copy: the live save, or 'daily', the archive the
+   server promotes at most once every 24 hours (see UPSERT_BACKUP in
+   server/src/index.js). `replace` decides what happens to what is already on the
+   phone. Both default to today's behaviour, which is what every existing caller
+   gets. The archive is only useful with replace:true -- merging a day-old save
+   into a corrupted one additively leaves the corruption in place -- so
+   restoreDailyBackup below is the pairing that is meant to be used. */
+export async function pullBackup({ slot = null, replace = false } = {}) {
   try {
-    const r = await signedFetch('GET', '/backup', null);
+    const r = await signedFetch('GET', '/backup' + (slot === 'daily' ? '?slot=daily' : ''), null);
     if (r.status === 404) return { restored: false, reason: 'none' };
     if (!r.ok) return { restored: false, reason: 'http-' + r.status };
     const data = await r.json();
@@ -633,11 +640,23 @@ export async function pullBackup() {
        local save the cloud snapshot has never seen. Turning that one into a
        replace would delete local-only progress, which is a product call about
        account recovery and not a security fix. Left as the documented merge
-       until Reg rules on it. */
-    const counts = await importAll(snapshot, { replace: false });
+       until Reg rules on it.
+       The daily archive is the one caller that passes replace:true, and for the
+       opposite reason: it is being used BECAUSE the local save is wrong, so
+       merging the good copy into the bad one would keep the bad one. */
+    const counts = await importAll(snapshot, { replace });
     return { restored: true, counts, updatedAt: data.updatedAt };
   } catch (e) { return { restored: false, reason: String(e && e.message || e) }; }
 }
+
+/* THE RESTORE PATH FOR THE DAILY SLOT, AND IT HAS TO LIVE HERE.
+   The blob is AES-GCM ciphertext under a key that only ever existed in this
+   device's keychain, so the server cannot decrypt it and no admin route can put
+   anybody's save back for them. Getting the archive back is necessarily a
+   client-side operation, and this is it.
+   REPLACES the local save rather than merging into it: the reason to reach for
+   yesterday's copy is that today's is wrong. */
+export async function restoreDailyBackup() { return pullBackup({ slot: 'daily', replace: true }); }
 
 // Is there a backup on the server for this identity? (cheap existence probe)
 export async function hasCloudBackup() {

@@ -165,7 +165,7 @@
         const kb = b => b == null ? '?' : b >= 1048576 ? (b / 1048576).toFixed(2) + ' MB' : Math.round(b / 1024).toLocaleString() + ' KB';
         const bk = t.backups;
         const bkLine = !bk ? '' : `<div class="hm">Saves: <b>${bk.rows.toLocaleString()}</b> rows, ${kb(bk.bytes)} total &middot;
-          <b>${kb(bk.avgBytes)}</b> average, ${kb(bk.maxBytes)} largest &middot; nothing prunes this table (one row per player, so it grows with player count only).
+          <b>${kb(bk.avgBytes)}</b> per player, ${kb(bk.maxBytes)} largest &middot; every figure here counts BOTH copies, the live save and the daily archive${bk.withDaily == null ? '' : ` (${bk.withDaily.toLocaleString()} rows have one so far)`} &middot; nothing prunes this table (one row per player, so it grows with player count only).
           At today's average it reaches ${Math.round(bk.budgetFraction * 100)}% of D1's 10 GB at <b>${bk.playersAtBudget == null ? '?' : bk.playersAtBudget.toLocaleString()}</b> players.
           That figure is measured, not forecast: as saves mature it falls, and the fall is the signal.</div>`;
         const rows = (health.runs || []).map(x => `<tr>

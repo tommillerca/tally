@@ -243,6 +243,71 @@ await test('pruning never touches rows through the front door either (/events st
   assert.equal(await count({ device: d }), 2, 'a brand new event was pruned');
 });
 
+/* ---------------------------------------------------------------------------
+   THE CLIENT'S CLOCK, AND THE ROWS NO WINDOW CAN REACH.
+
+   POST /events took `e.ts` from an unauthenticated caller and derived `day` from
+   it with no bound in either direction. The pruner deletes `day < cutoffDay`, so
+   a row dated in the FUTURE is not kept longer, it is kept forever: no retention
+   window that will ever be configured can be after it. Measured on production
+   2026-08-25: 715 rows out to 2026-09-14, from 39 devices.
+
+   BACKDATING IS THE MORE IMPORTANT HALF of these three. A device offline for
+   three days has real events from those days, and the cheap "fix" -- ignore the
+   client and stamp `now` -- would silently move all of them to the sync day and
+   corrupt every daily figure that reads `day`. So the clamp is one-sided, and
+   the second test below goes RED on that fix while the first two stay green.
+
+   These run late and DELETE OTHER ROWS: /dev/prune takes an injected clock, and
+   a clock 100 days out means a cutoff 70 days out, which is most of a local
+   database. Everything after this point plants its own fixtures first. */
+const pruneAt = async nowMs => {           // drain, at a clock of our choosing
+  for (let i = 0; i < 40; i++) { const r = await prune({ nowMs }); if (!r.more) return r; }
+  throw new Error('drain never finished in 40 ticks');
+};
+const FUTURE = dev('future'), BACK = dev('back'), TODAY = dev('today');
+
+await test('a future-dated event is STORED, but not in the future', async () => {
+  const t0 = Date.now();
+  await plant(FUTURE, 'food_log', -400 * DAY);   // negative age = 400 days ahead
+  // DIRECTION, both ways. The row must still be there (a clamp is not a drop:
+  // real telemetry from a phone with a wrong clock is still telemetry), and its
+  // ts must not be ahead of the moment the server received it.
+  assert.equal(await count({ device: FUTURE }), 1, 'the event was dropped, not clamped');
+  assert.equal(await count({ device: FUTURE, minTs: t0 + 60000 }), 0,
+    'the row is dated in the future, so no cutoff day can ever be after it');
+});
+
+await test('a genuinely backdated event KEEPS its own day', async () => {
+  const t0 = Date.now();
+  await plant(BACK, 'food_log', 3 * DAY);
+  await plant(TODAY, 'food_log', 0);
+  // Its ts is untouched: three days ago, not the sync moment.
+  assert.equal(await count({ device: BACK, minTs: t0 - 3 * DAY - 60000, maxTs: t0 - 3 * DAY + 60000 }), 1,
+    'a backdated event was moved to the sync day, which corrupts every per-day figure');
+  /* And `day` followed it, which is the column that actually matters and the one
+     nothing here can read directly. A clock 29 days out puts the cutoff at
+     YESTERDAY: a row whose day is really three days ago is behind it and dies, a
+     row from today is in front of it and lives. TODAY is the control that keeps
+     this from passing on an empty table. */
+  await pruneAt(t0 + (RETENTION_DAYS - 1) * DAY);
+  assert.equal(await count({ device: BACK }), 0, 'the backdated row kept a day that is not three days old');
+  assert.equal(await count({ device: TODAY }), 1, 'a row from today was pruned by a cutoff of yesterday');
+});
+
+await test('END OF THE CHAIN: a future-dated event is reachable by a window that passes', async () => {
+  const t0 = Date.now();
+  assert.equal(await count({ device: FUTURE }), 1, 'PRECONDITION: the fixture is gone, so a 0 below proves nothing');
+  /* A clock 100 days out, so the cutoff is 70 days out. Clamped, this row's day
+     is today, which is behind that cutoff, and it goes. UNCLAMPED its day was
+     2027-ish, which is in front of every cutoff this pruner will ever compute,
+     and it survives -- which is what makes this the test that goes red on the
+     real bug rather than on a proxy for it. */
+  await pruneAt(t0 + 100 * DAY);
+  assert.equal(await count({ device: FUTURE }), 0,
+    'a future-dated row outlived a retention window 70 days past it: nothing can ever prune this row');
+});
+
 // The real scheduled() path. wrangler only exposes it with --test-scheduled, and
 // deploy.sh starts its dev server without that flag, so this is reported as
 // SKIPPED rather than failed when the route is not there. It is the one test
