@@ -335,7 +335,17 @@ try {
           if (!el) return null;
           const r = el.getBoundingClientRect();
           const host = document.querySelector('.sheet-paddock .pdk-scene').getBoundingClientRect();
+          /* THE NET FLIP OF WHAT IS DRAWN, off the COMPUTED matrices rather than a
+             class name. It has to be the net of the keeper AND its art, because
+             the flip cannot live on the keeper: that element runs an animation on
+             transform, which beats a normal declaration, so the rule sits on the
+             img instead. Reading either node alone reports the wrong answer, and
+             reading the class reports what the stylesheet MEANT rather than what
+             the browser did. */
+          const flipOf = n => n ? new DOMMatrixReadOnly(getComputedStyle(n).transform).a < 0 : false;
+          const art = el.querySelector('img');
           return { cx: Math.round(r.left + r.width / 2 - host.left), w: Math.round(r.width), h: Math.round(r.height),
+            flipped: flipOf(el) !== flipOf(art),
             decoded: [...el.querySelectorAll('img')].filter(i => i.naturalWidth > 0).length };
         }),
         sceneW: Math.round(document.querySelector('.sheet-paddock .pdk-scene').getBoundingClientRect().width),
@@ -460,6 +470,16 @@ try {
       ok('VISITOR the viewer stands in the friend\'s field at the SAME size as its owner',
         ratio >= 0.9 && ratio <= 1.1,
         `host ${host.w}x${host.h}, visitor ${vis.w}x${vis.h}, height ratio ${ratio.toFixed(2)}`);
+      /* FACING. Tom, 2026-08-24, on the first version: "the friend bonehead should
+         be mirrored so it looks like they're hanging out not just both facing
+         away." Graded as EXACTLY ONE of the two being mirrored, which is the
+         property that makes them face each other whichever way the source art
+         happens to point. Counting flips rather than naming which one keeps this
+         row true if the art is ever redrawn facing the other way; a version that
+         flips both, or neither, leaves two people back to back and fails. */
+      ok('VISITOR they face each other: exactly one of the two is mirrored',
+        [host.flipped, vis.flipped].filter(Boolean).length === 1,
+        `host flipped=${host.flipped}, visitor flipped=${vis.flipped}`);
       const mid = fld.sceneW / 2;
       ok('VISITOR they are on OPPOSITE sides of the field, not stacked on one',
         host.cx < mid && vis.cx > mid,

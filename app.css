@@ -285,8 +285,33 @@ svg { display: block; }
    survives only where a bounce uncovers it. */
 .screen--today {
   position: relative;
-  background-color: var(--hero-edge, var(--bg));
-  background-image: linear-gradient(var(--bg), var(--bg));
+  /* NO BACKGROUND ON THE SCROLLER. Both of Tom's 2026-08-24 reports come from
+     having put one here. A background-COLOR bled through every transparent gap
+     in the page ("extending all down the app by the quests"); covering the
+     content area with a flat background-IMAGE fixed that but painted the bounce
+     too ("no colour background above by the wordmark") AND hid the app's ambient
+     glow, leaving the page flat black ("just black instead of the old app
+     background", measured: rgb(17,15,31) before, rgb(13,12,18) after).
+     Those two reports together settle how WebKit paints an overscroll: from the
+     scroller's whole background BOX, not from its background-color alone. So the
+     scroller keeps no background at all, exactly as it did before v434, and the
+     bounce colour is an ELEMENT above the content instead. See ::before. */
+}
+/* THE BOUNCE FILL, and it lives in the scrolled CONTENT rather than in the
+   scroller's background. Parked entirely above the content origin, so at rest it
+   is clipped away by the scroller's own overflow and cannot tint one pixel of the
+   page. iOS rubber-bands by translating the scrolled-contents layer DOWN, and an
+   absolutely positioned child rides that layer, so a pull walks this strip into
+   view under the wordmark. Tall enough that a hard pull cannot outrun it.
+   It fails SAFE: if a browser clips it anyway the strip simply never appears and
+   the bounce is the dark page, which is v433's behaviour, not a bleed. */
+.screen--today::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 100%;
+  height: 120vh;
+  background: var(--hero-edge, var(--bg));
+  pointer-events: none;
 }
 #app:has(.screen--today)::before {
   /* z-index 3, ON TOP OF THE ART. Tom, 2026-08-24: "yeah draw the wordmark on top
@@ -9251,7 +9276,24 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 /* The visitor faces the keeper. Flipping the CONTAINER rather than each layer
    keeps the avatar stack composited as one, which is what the Pit learned when
    mirroring a pet turned its accessories inside out. */
-.pdk-visitor { transform: scaleX(-1); }
+/* MIRROR THE HOST, NOT THE GUEST. Tom, 2026-08-24: "the friend bonehead should be
+   mirrored so it looks like they're hanging out not just both facing away."
+   The art faces LEFT. The keeper stands on the left of the field, so unflipped he
+   looks off his own edge, and flipping the guest on the right pointed her off the
+   other one: two people back to back in the same field. Flipping the HOST turns
+   him inward, and the guest's natural left is already inward from the right edge,
+   so they end up looking at each other with one transform instead of two.
+   Only when somebody is actually visiting. A player alone in their own paddock is
+   not standing opposite anyone and keeps the pose that shipped. */
+.pdk-scene.pdk-shared .pdk-keeper:not(.pdk-visitor) img { transform: scaleX(-1); }
+/* ON THE IMG, NOT THE KEEPER, and that is the whole reason the first attempt did
+   nothing. .pdk-keeper runs `animation: pdkKeeper` on TRANSFORM, and an animation
+   beats a normal declaration in the cascade, so scaleX(-1) on the keeper itself is
+   silently thrown away every frame. The first version of this shipped on
+   .pdk-visitor and neither figure was ever mirrored, which is precisely what Tom
+   saw. The layers share one box, so flipping each about its own centre flips the
+   stack together. Graded by counting flips off the COMPUTED matrix, not the class,
+   so a rule that stops applying reds instead of being assumed. */
 /* lurker tease: hidden most of a 13s cycle, rises briefly; silhouette treatment */
 .pdk-lurker { position: absolute; z-index: 3; overflow: hidden; }
 .pdk-lurker img { filter: brightness(0); opacity: .72; display: block; width: 100%;

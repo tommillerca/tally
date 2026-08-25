@@ -4870,6 +4870,40 @@ function bhThumb(src, px = 192) {
   const m = BH_THUMB_RE.exec(src || '');
   return m && BH_THUMB_TIERS.includes(px) ? `assets/bh/thumb/${px}/${m[1]}` : src;
 }
+/* THE CROPPED TIER, FOR THE CANVASES ONLY.
+   Tom, 2026-08-24: "cant you make the art small if its a small slot? and big if
+   it's a big slot?" The square tiers above cannot: a cosmetic is drawn on a
+   FULL-BODY square because that square is how eight layers register against one
+   body, so a 192px hat thumbnail is about 61px of hat (measured, alpha > 14,
+   median over all 57) and 90% transparent padding that still decodes.
+   `assets/bh/thumb/trim/` is the same art cropped to its alpha box first, so a
+   192px file is 192px OF GARMENT. scripts/build-bh-thumbs.py writes it and
+   carries the per-slot ink table.
+
+   WHY THIS IS SAFE HERE AND NOWHERE ELSE. drawTrimmedArt already finds the alpha
+   box and draws it centred, so pre-cropped art comes out of it pixel-identical:
+   the box it computes is simply the whole file. Nothing else may use this. The
+   stacked layers in avatarLayersHtml, the Collection's tiles and the crew
+   backdrop are <img>s positioned BY the square, and cropping would scatter them.
+
+   IT ALSO REMOVES THE ESCALATION RATHER THAN FEEDING IT. nextArtTier only
+   matches `/thumb/<digits>/`, so a trim path returns null: there is nothing to
+   climb to, and nothing needs to, because the ink is no longer a fraction of a
+   fraction. Measured on the Wardrobe's hat slot, 393x852 DPR 2: 422 off-DOM
+   Images (242 at 192, 132 at 384, 48 masters), 39.8 MB peak concurrent, and
+   every one of the 228 final draws was an UPSCALE, median 1.87x.
+   AFTER, same instrument, same busy machine: 242 Images, all of them trim, no
+   master at all, 10.8 MB peak, and the median draw is a 0.88x DOWNSCALE. Per
+   item rather than in aggregate, because an average can hide a loser: 52 of the
+   57 hats are drawn from more source pixels than before, 5 are drawn from
+   exactly the same ones (their master's own ink is under 192, so the crop IS the
+   master), and 0 from fewer. That is the whole safety argument for cutting the
+   escalation: it cannot be a quality cut if no item lost a pixel.
+   The memory census's TIER row is what keeps this true. */
+const bhTrim = src => {
+  const m = BH_THUMB_RE.exec(src || '');
+  return m ? `assets/bh/thumb/trim/${m[1]}` : src;
+};
 /* PICK THE TIER FROM THE GEOMETRY, not from taste. `css` is the width the WHOLE
    640 canvas ends up occupying in CSS pixels, which for a cropped surface is the
    post-transform figure, not the window it peeps through: a 62px teaser head is
@@ -10168,7 +10202,7 @@ async function renderFriends(el) {
          transparent air and every skull's ink sits somewhere different on its
          canvas, so a fixed 150%/-25%/-12% zoom left the ink small and off
          centre (Tom, 2026-08-11). Align on INK (figure contract rule 3). */
-      return `<button class="cfan-fv" data-jump="${esc(id)}" title="${esc(f.name)}"><canvas width="80" height="80" data-art="${esc(bhThumb(bhAsset(sk)))}" data-pad="0.12" role="img" aria-label="${esc(f.name)}"></canvas></button>`;
+      return `<button class="cfan-fv" data-jump="${esc(id)}" title="${esc(f.name)}"><canvas width="80" height="80" data-art="${esc(bhTrim(bhAsset(sk)))}" data-pad="0.12" role="img" aria-label="${esc(f.name)}"></canvas></button>`;
     }).join('') + '<small>FAVES</small>';
     hydratePackArt(row, '.cfan-fv canvas[data-art]');
     $$('[data-jump]', row).forEach(b => b.addEventListener('click', () => { centerId = b.dataset.jump; applyFan(); }));
@@ -12781,7 +12815,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
               ? `<span class="pd-swatch" style="background-image:url('${esc(bhThumb(bhAsset(art)))}')"></span>`
               // trim-normalize makes a compact skull render as big as a whole
               // body; extra pad keeps the skull tile from shouting (Tom, Aug 6)
-              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(art)))}"${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
+              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}"${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
           : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? ICONS.hidden(18) : '+'}</span>`}
         ${mog ? `<span class="pd-mog" title="Look changed">${sparkIco(11)}</span>` : ''}
         <span class="pd-tag">${esc(label)}</span>
@@ -12867,14 +12901,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
         ${items.map(i => `
           <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)}">
-            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(i)))}" role="img" aria-label="${esc(i.name)}"></canvas>
+            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" role="img" aria-label="${esc(i.name)}"></canvas>
           </button>`).join('')}
         ${gearItems.map(g => {
           const art = BH_BY_ID[g.artId];
           const locked = wLevel < g.minLevel;
           return `
           <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
-            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(art)))}" data-pad="0.14" role="img" aria-label="${esc(g.name)}"></canvas>
+            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}" data-pad="0.14" role="img" aria-label="${esc(g.name)}"></canvas>
             <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
           </button>`;
@@ -12997,9 +13031,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
             <figure class="${changed ? 'after' : 'same'}"><span class="mog-cap">${changed ? 'After' : 'Pick one below'}</span>${figure(stageEq)}</figure>
           </div>
           <div class="ward-grid look-grid">
-            ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+            ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
             ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
-            ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost dust">${lookPriceMap[i.id]}${dustIco}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
+            ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost dust">${lookPriceMap[i.id]}${dustIco}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
           </div>
           <div class="look-bar mog-bar${changed ? ' armed' : ''}">
             <div class="mog-lines">
@@ -13019,9 +13053,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
         return `
         <div class="sect-h" style="margin-top:14px">${esc(GEAR_SLOT_LABELS[slot])} · pick your look</div>
         <div class="ward-grid look-grid">
-          ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+          ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
           ${cell(TRANSMOG_HIDE, '<span class="look-hide">🚫</span><span class="look-tag">Hide</span>', 'Show nothing in this slot')}
-          ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhThumb(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost">${lookPriceMap[i.id]}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
+          ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost">${lookPriceMap[i.id]}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
         </div>
         <div class="look-bar${changed ? ' armed' : ''}">
           <span class="lb-txt">${changed ? 'Trying' : 'Wearing'}: <b>${esc(nameOf(sel))}</b></span>
@@ -14840,7 +14874,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
     </div>`;
   };
   return `
-      <div class="pdk-scene" id="pdkScene">
+      <div class="pdk-scene${visitor ? ' pdk-shared' : ''}" id="pdkScene">
         ${backdrop}
         <div class="pdk-sign">
           <svg width="196" height="58" viewBox="0 0 196 58">
@@ -14865,10 +14899,10 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
              feels like theyre in the same space."
              Mirrored across the scene's own width rather than positioned by hand,
              so the two stand at matching insets from their edges at every width,
-             and at keeper.px so neither reads as the bigger person. Flipped
-             horizontally so they face each other: the same trick the Pit uses to
-             turn a pet toward its opponent. Nothing here is a control, so it is
-             pointer-events: none like the keeper. */''}
+             and at keeper.px so neither reads as the bigger person. WHICH ONE IS
+             FLIPPED IS IN app.css, and it is the HOST: the art faces left, so
+             flipping the guest turned them back to back. Nothing here is a
+             control, so it is pointer-events: none like the keeper. */''}
         ${visitor ? `<div class="pdk-keeper pdk-visitor" style="left:${SCENE_W - keeper.x - keeper.px / 2}px;top:${keeper.y - keeper.px / 2}px;width:${keeper.px}px;height:${keeper.px}px">
           ${avatarLayersHtml(visitor, { skip: ['BG', 'C'], noYard: true })}
         </div>` : ''}
@@ -18214,7 +18248,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v435'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v436'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
