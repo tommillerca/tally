@@ -215,7 +215,12 @@ const EMITTERS = {
   'js/wanderer.js:showWandererEncounter': ['scene', 'the pre-fight encounter: his plate full-screen over the lantern glow. Scene and not icon on purpose: it is sized by the viewport.'],
   'js/app.js:openSpireInfoSheet':   ['scene', 'the spire explainer art.'],
   'js/app.js:openSiegeSheet':       ['scene', 'the siege art.'],
-  'js/app.js:openPaddock':          ['scene', 'the Paddock stage and its pets.'],
+  /* WAS openPaddock. v433 rebuilt the paddock from a thumbnail strip into a real
+     field, and the drawing moved into paddockSceneHtml, which both the player's
+     own field and a friend's now render through. The declaration was not moved
+     with it, so this table named a function that no longer exists and did not
+     name the one that draws. */
+  'js/app.js:paddockSceneHtml':     ['scene', 'the Paddock stage: the field, the herd standing in it, its keeper and the visiting player.'],
   'js/app.js:openHollow':           ['scene', 'the Hollow stage. Its coin price chip is an icon SITE, listed below.'],
   'js/app.js:openGardenSheet':      ['scene', 'the garden plot art. Its coin price chips are icon SITES, listed below.'],
   'js/app.js:openKitchen':          ['scene', 'the kitchen art. Its coin chips are icon SITES, listed below.'],
