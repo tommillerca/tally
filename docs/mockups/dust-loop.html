@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The dust loop: three surfaces</title>
+<!-- MOCKUP ONLY. Nothing here is app code and nothing here is wired.
+
+     IT LINKS THE SHIPPED STYLESHEET rather than reproducing it. Every class
+     below (.mog-panel, .mog-bar, .melt-lede, .melt-row, .t3-sect, .bh-stage)
+     is the real component from app.css, and every image is Cam's real art
+     read out of assets/ by its real path. Nothing under assets/ is touched.
+     So what these boards show is the shipped surface with the shipped tokens,
+     and the only invented pixels are the copy the plan proposes changing.
+
+     Three boards, each exactly 390x844 so they screenshot at the phone size
+     the plan measures at:
+       A  the look panel, given a name and one line saying where dust comes from
+       B  the Salvage Bench a NEW player meets, which today promises a list
+          that is not there
+       C  the Salvage Bench mid-game, with the exchange rate stated once
+
+     Render:  node docs/mockups/shoot-dust-loop.mjs   (writes the PNGs beside it) -->
+<link rel="stylesheet" href="../../app.css">
+<style>
+  /* HARNESS ONLY. Nothing in this block is proposed for the app: it exists so
+     three phone-sized boards can sit on one page and be clipped individually. */
+  body { margin: 0; background: #000; }
+  .board {
+    width: 390px; height: 844px; overflow: hidden; position: relative;
+    background: var(--bg); background-image: var(--app-backdrop);
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color: var(--text); padding: 14px 16px 0;
+  }
+  .board + .board { margin-top: 24px; }
+  .dust-ico img, img.dust-ico { width: 13px; height: 13px; vertical-align: -2px; image-rendering: pixelated; }
+  .mog-lines .dust-ico img { width: 16px; height: 16px; }
+  .look-cost .dust-ico img { width: 13px; height: 13px; }
+  .bh-stage.mog-fig { background: var(--surface-2); }
+  /* TYPE COMES OFF THE APP'S OWN RAMP (--fs-0 11 / --fs-1 12 / --fs-2 13 /
+     --fs-3 15), never off a size invented here, so the mockup is honest about
+     what the built version would look like.
+
+     The funding line is set at --fs-2, the SAME size as the bench's shipped
+     .melt-lede at the other end of the loop, and a step above the panel's
+     closing .note. That is deliberate: the two halves of one exchange rate
+     should be typographically the same object, and this line is a statement
+     rather than a footnote. */
+  .mog-fund { font-size: var(--fs-2); line-height: 1.45; color: var(--text-2);
+    margin: 9px 2px 0; text-align: center; }
+  .mog-fund b { color: var(--text); font-weight: 700; }
+  .mog-fund a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(165,232,71,.4); }
+  /* The empty bench: one lede at --fs-3 and one supporting line at --fs-1, a
+     1.25 step. The lede is the only sentence a new player has to read. */
+  .bench-lede { font-size: var(--fs-3); line-height: 1.4; color: var(--text-2); margin: 10px 2px 10px; }
+  .bench-lede b { color: var(--text); font-weight: 700; }
+  .bench-sub { font-size: var(--fs-1); line-height: 1.5; color: var(--text-3); margin: 0 2px 14px; }
+  /* Subordinate to the lede it qualifies, one step down, matching the shipped
+     .melt-lede (13px) / .note (12.5px) relationship rather than fighting it. */
+  .melt-lede .rate { display: block; margin-top: 5px; color: var(--text-3); font-size: var(--fs-1); font-weight: 400; }
+  .melt-lede .rate b { color: var(--text-2); }
+</style>
+</head>
+<body>
+
+<!-- =========================================================== BOARD A ===
+     THE MIRROR. This is shot 07 of the measurement pass with exactly two
+     changes and nothing else moved:
+       1. the heading gains the surface's name, so there is a noun to say
+       2. one line under the price bar says where the dust comes from
+     The Now/After pair, the tiles, the prices, the three-line bar and the
+     safety note are the shipped panel, unaltered. -->
+<div class="board" id="boardA">
+  <div class="mog-panel">
+    <div class="sect-h mog-h">
+      <span>The Mirror &middot; Hat</span>
+      <button class="gd-what">What is this?</button>
+    </div>
+    <p class="mog-lead">Your hat keeps <b>+2 HYP &middot; +1 POW</b>. Only the picture changes.</p>
+    <div class="mog-figs">
+      <figure>
+        <span class="mog-cap">Now</span>
+        <div class="bh-stage mog-fig">
+          <img src="../../assets/bh/B/B0-1.png" alt="">
+          <img src="../../assets/bh/SK/SK0-1.png" alt="">
+          <img src="../../assets/bh/H/H10-1.png" alt="">
+        </div>
+      </figure>
+      <span class="mog-arrow" aria-hidden="true">&rsaquo;</span>
+      <figure class="after">
+        <span class="mog-cap">After</span>
+        <div class="bh-stage mog-fig">
+          <img src="../../assets/bh/B/B0-1.png" alt="">
+          <img src="../../assets/bh/SK/SK0-1.png" alt="">
+          <img src="../../assets/bh/H/H11-1.png" alt="">
+        </div>
+      </figure>
+    </div>
+    <div class="ward-grid look-grid">
+      <button class="ward-cell look equipped">
+        <img src="../../assets/bh/thumb/192/H/H10-1.png" alt="" style="width:100%;height:100%;object-fit:contain">
+        <span class="look-tag">Its own look</span>
+      </button>
+      <button class="ward-cell look"><span class="look-hide">&#8856;</span><span class="look-tag">Hide</span></button>
+      <button class="ward-cell look selected">
+        <img src="../../assets/bh/thumb/192/H/H11-1.png" alt="" style="width:100%;height:100%;object-fit:contain">
+        <span class="look-cost dust">6<span class="dust-ico"><img src="../../assets/icons-pix/bone-dust.png" alt=""></span></span>
+      </button>
+      <button class="ward-cell look">
+        <img src="../../assets/bh/thumb/192/H/H10-2.png" alt="" style="width:100%;height:100%;object-fit:contain">
+        <span class="look-cost dust">12<span class="dust-ico"><img src="../../assets/icons-pix/bone-dust.png" alt=""></span></span>
+      </button>
+      <button class="ward-cell look">
+        <img src="../../assets/bh/thumb/192/H/H10-4.png" alt="" style="width:100%;height:100%;object-fit:contain">
+        <span class="look-cost dust">25<span class="dust-ico"><img src="../../assets/icons-pix/bone-dust.png" alt=""></span></span>
+      </button>
+      <button class="ward-cell look">
+        <img src="../../assets/bh/thumb/192/H/H10-6.png" alt="" style="width:100%;height:100%;object-fit:contain">
+        <span class="look-cost dust">60<span class="dust-ico"><img src="../../assets/icons-pix/bone-dust.png" alt=""></span></span>
+      </button>
+      <button class="ward-cell look">
+        <img src="../../assets/bh/thumb/192/H/H1.png" alt="" style="width:100%;height:100%;object-fit:contain">
+        <span class="look-cost dust">25<span class="dust-ico"><img src="../../assets/icons-pix/bone-dust.png" alt=""></span></span>
+      </button>
+      <button class="ward-cell look">
+        <img src="../../assets/bh/thumb/192/H/H11-2.png" alt="" style="width:100%;height:100%;object-fit:contain">
+        <span class="look-cost dust">12<span class="dust-ico"><img src="../../assets/icons-pix/bone-dust.png" alt=""></span></span>
+      </button>
+    </div>
+    <div class="look-bar mog-bar armed">
+      <div class="mog-lines">
+        <span><i>You keep</i><b>+2 HYP &middot; +1 POW</b></span>
+        <span><i>You get</i><b>Red Kitsune</b></span>
+        <span><i>You pay</i><b>6 Bone Dust</b><em><span class="dust-ico"><img src="../../assets/icons-pix/bone-dust.png" alt=""></span> you have 120</em></span>
+      </div>
+      <button class="btn mog-go">Wear it</button>
+    </div>
+    <p class="note mog-safe">Nothing is destroyed. The piece stays on, keeps its stats and stays in your Backpack.</p>
+    <p class="mog-fund">Dust comes from melting gear. You have <b>19 spare pieces</b> worth
+      <b>857</b> at the <a href="#">Salvage Bench</a>.</p>
+  </div>
+</div>
+
+<!-- =========================================================== BOARD B ===
+     THE BENCH A NEW PLAYER MEETS. Measured today (shot 03): the heading is
+     there, the wallet reads 0, and the paragraph says "melt gear you don't
+     wear straight from the list below" over no list at all. The only control
+     under the heading is "Open the Stable", which destroys the one pet the
+     player owns.
+
+     The change is copy and one suppression: say what will fill the bench and
+     when, and do not offer pet salvage as the opening move. -->
+<div class="board" id="boardB">
+  <div class="t3-sect"><b>Salvage Bench &middot; nothing wasted</b><i></i></div>
+  <div class="wallet-line">
+    <span class="note">Bone Dust</span>
+    <b><span class="dust-ico"><img src="../../assets/icons-pix/bone-dust.png" alt=""></span> 0</b>
+  </div>
+  <p class="bench-lede">
+    Spare gear melts down here into Bone Dust, which buys a different look for
+    the gear you keep. <b>Melting a piece keeps its look forever.</b>
+  </p>
+  <p class="bench-sub">
+    Nothing spare yet. Crack a crate: whatever you do not put on lands in this bench.
+  </p>
+  <button class="btn small" style="margin-top:4px">Open the Stable (1 pet)</button>
+</div>
+
+<!-- =========================================================== BOARD C ===
+     THE BENCH MID-GAME. Shot 09 measured the shipped lede as "19 spare pieces
+     you are not wearing, worth 857 in Bone Dust", which says what the pile is
+     WORTH and never what it is FOR. One sub-line states the exchange rate.
+     Everything else is the shipped bench. -->
+<div class="board" id="boardC">
+  <div class="t3-sect"><b>Salvage Bench &middot; nothing wasted</b><i></i></div>
+  <div class="wallet-line">
+    <span class="note">Bone Dust</span>
+    <b><span class="dust-ico"><img src="../../assets/icons-pix/bone-dust.png" alt=""></span> 120</b>
+  </div>
+  <div class="melt-lede">
+    <b>19 spare pieces</b> you are not wearing, worth
+    <b><span class="dust-ico"><img src="../../assets/icons-pix/bone-dust.png" alt=""></span> 857</b> in Bone Dust.
+    <span class="rate">That is about <b>eight</b> head-to-toe restyles at the Mirror.
+      Melting a piece keeps its look forever.</span>
+  </div>
+  <details class="melt-fold" open style="margin-top:12px">
+    <summary>Melt gear &middot; 20 pieces in the bench</summary>
+    <div class="melt-tools">
+      <button class="link">Select all 19 unworn</button>
+      <button class="link">Only the 5 Uncommon</button>
+      <button class="link">Clear</button>
+    </div>
+    <label class="crate-row melt-row">
+      <input type="checkbox" class="melt-pick">
+      <span class="crate-ico"><img src="../../assets/bh/thumb/192/FW/FW1.png" alt="" style="width:27px;height:27px;object-fit:contain"></span>
+      <div style="flex:1"><b>Cleric&rsquo;s Bunny Slippers</b><small>Uncommon &middot; Kicks</small><small><span class="melt-stat">+3 MAR &middot; +1 HYP</span></small></div>
+      <span class="melt-val on">+9</span>
+    </label>
+    <label class="crate-row melt-row">
+      <input type="checkbox" class="melt-pick">
+      <span class="crate-ico"><img src="../../assets/bh/thumb/192/H/H10-2.png" alt="" style="width:27px;height:27px;object-fit:contain"></span>
+      <div style="flex:1"><b>Showman&rsquo;s Rising Sun Band</b><small>Uncommon &middot; Hat</small><small><span class="melt-stat">+2 HYP &middot; +1 STA</span></small></div>
+      <span class="melt-val on">+8</span>
+    </label>
+    <label class="crate-row melt-row">
+      <input type="checkbox" class="melt-pick">
+      <span class="crate-ico"><img src="../../assets/bh/thumb/192/H/H10-4.png" alt="" style="width:27px;height:27px;object-fit:contain"></span>
+      <div style="flex:1"><b>Reaper&rsquo;s Skull Band</b><small>Rare &middot; Hat</small><small><span class="melt-stat">+5 HYP &middot; +3 POW</span></small></div>
+      <span class="melt-val on">+20</span>
+    </label>
+  </details>
+</div>
+
+</body>
+</html>
