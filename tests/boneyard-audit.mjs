@@ -354,7 +354,7 @@ const beatDecoys = p => p.evaluate(() => {
   return { present: inLegend.length, admitted: inLegend.filter(e => e.classList.contains('maplibregl-marker')).length };
 });
 
-const MAP_ROW_COUNT = 31;   // every ok() in this file except ROWS-COUNTED below
+const MAP_ROW_COUNT = 35;   // every ok() in this file except ROWS-COUNTED below
 ok('ROWS-COUNTED every assertion in this file is Boneyard-dependent and accounted for',
   cls.callSites === MAP_ROW_COUNT + 1,
   `${cls.callSites} ok() rows in source, expected ${MAP_ROW_COUNT + 1}. If you added a row, it needs a line in the UNPROVEN block above it.`);
@@ -593,6 +593,34 @@ ok('ARRIVAL the reveal happened at all (never revealing is a FAILURE)',
   arr.reveal != null, `reveal at ${arr.reveal}ms`);
 ok('ARRIVAL markers were actually counted (an empty timeline is a FAILURE)',
   arr.tl.length >= 2, `${arr.tl.length} count changes recorded`);
+
+/* NOTHING PAINTS BEFORE THE REVEAL. This suite had twelve ARRIVAL rows and not
+   one of them asked whether a marker was ALREADY LIT when the reveal fired. All
+   twelve grade what happens at or after it. That blind spot shipped a real bug:
+   .map-glutton-mark was missing from all three fade rules in app.css, so the
+   Glutton was born visible and sat alone on an otherwise empty map. Measured
+   2026-08-20: glutton lit at 290ms, reveal at 1846ms, every other marker at
+   3279ms. A second and a half of exactly the trickle those rules exist to stop.
+   The data was always here. KINDS has watched .map-glutton-mark all along and
+   the timeline records per-kind VISIBLE counts with timestamps, so this needs no
+   new sampling, only the question nobody asked.
+   PROVE-RED: drop .map-glutton-mark from the two opacity rules in app.css and
+   this goes red naming `glutton@<t>ms`, while every other ARRIVAL row stays
+   green, which is the point. */
+const KIND_NAMES = ['spawn', 'den', 'mini', 'spire', 'glutton'];
+const preReveal = arr.reveal == null ? [] : (arr.tl || []).filter(s => s.t < arr.reveal);
+const earlyLit = preReveal.flatMap(s =>
+  KIND_NAMES.filter(k => (s[k] || 0) > 0).map(k => `${k}@${s.t}ms(${s[k]})`));
+/* PREMISE, because the row above it is vacuous without one: if the timeline
+   never sampled before the reveal there is nothing to be early, and "no marker
+   painted early" would be green over an empty set. */
+ok('ARRIVAL-PREMISE the timeline sampled at least once before the reveal (no pre-reveal sample makes the row below vacuous)',
+  preReveal.length > 0,
+  `${preReveal.length} samples before the reveal at ${arr.reveal}ms`);
+ok('ARRIVAL no marker was already lit when the reveal fired (the reveal owns the first paint; anything painting earlier IS the trickle, one marker type at a time)',
+  earlyLit.length === 0,
+  earlyLit.length ? `LIT EARLY: ${[...new Set(earlyLit)].slice(0, 6).join(', ')} (reveal at ${arr.reveal}ms)`
+                  : `${preReveal.length} pre-reveal samples, all dark, reveal at ${arr.reveal}ms`);
 /* TWO CHECKS, NOT ONE, BECAUSE THEY HAVE DIFFERENT CAUSES AND DIFFERENT ANSWERS.
    The rows below are shaped `revealDom > 0 && <comparison>`. Before the scoping
    above, #mapLegend handed them nine permanently-visible nodes, so on a Boneyard
@@ -966,6 +994,29 @@ ok('ARRIVAL-SLOW the reveal happened at all under real-network tile timing (neve
   slow.reveal != null, `reveal at ${slow.reveal}ms from Boneyard entry`);
 ok('ARRIVAL-SLOW markers were actually counted (an empty timeline is a FAILURE)',
   slow.tl.length >= 2, `${slow.tl.length} count changes recorded`);
+
+/* THE SAME QUESTION WHERE IT HAS TEETH. The fast lap reveals in ~15ms, so its
+   pre-reveal window is one sample wide and "nothing was lit" there is very
+   nearly free. This lap reveals at ~1.9s, which is the window the Glutton bug
+   actually lived in (measured 1846ms). Both laps carry the row: the fast one so
+   a regression is caught in the cheap pass, this one so the assertion is real. */
+const slowPre = slow.reveal == null ? [] : (slow.tl || []).filter(x => x.t < slow.reveal);
+const slowEarly = slowPre.flatMap(x =>
+  KIND_NAMES.filter(k => (x[k] || 0) > 0).map(k => `${k}@${x.t}ms(${x[k]})`));
+/* THE PREMISE ASKS FOR A WINDOW, NOT FOR SAMPLES, and the first draft of it got
+   that backwards. The timeline pushes a snapshot only when a COUNT CHANGES, so a
+   HEALTHY build produces exactly ONE pre-reveal sample: the all-zero baseline.
+   Demanding two was demanding the bug's own signature, and it went red on a
+   correct tree. What actually makes the row below meaningful is that the reveal
+   was genuinely late, so there was real time in which a marker could have been
+   wrongly lit. 500ms is the floor; this lap measures ~1.9s. */
+ok('ARRIVAL-SLOW-PREMISE the reveal really was late, so the row below has a window to be wrong in (a fast reveal makes it nearly free)',
+  slowPre.length >= 1 && slow.reveal != null && slow.reveal >= 500,
+  `${slowPre.length} pre-reveal sample(s) across a ${slow.reveal}ms window, floor 500ms`);
+ok('ARRIVAL-SLOW no marker was already lit when the reveal fired (the window the Glutton bug actually lived in)',
+  slowEarly.length === 0,
+  slowEarly.length ? `LIT EARLY: ${[...new Set(slowEarly)].slice(0, 6).join(', ')} (reveal at ${slow.reveal}ms)`
+                   : `${slowPre.length} pre-reveal samples across ${slow.reveal}ms, all dark`);
 /* At least one straggler must be observed. Zero stragglers means either the
    map revealed with everything already placed (which would be great, but only
    happens if the cap is above the slow-tile arrival time, which defeats the
