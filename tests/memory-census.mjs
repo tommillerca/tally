@@ -54,6 +54,14 @@
  *     reproduced twice. The escalation now climbs one tier at a time, so the 384
  *     sheet serves most of them and only 24 canvases still reach a master; the
  *     same instrument reads 38.6 MB.
+ *     AND THEN THE ART STOPPED BEING MOSTLY NOTHING (2026-08-24, later the same
+ *     day). Every one of those thumbnails is a full-body SQUARE with the garment
+ *     in a patch of it: the median hat is 61 ink pixels inside a 192px canvas,
+ *     so 90% of what decoded was transparent padding. The canvases now take a
+ *     CROPPED sheet, assets/bh/thumb/trim, and this row reads 11.6-12.2 MB over
+ *     three consecutive runs on a busy machine (load ~13). 422 off-DOM Images
+ *     became 242, none of them a master, and the escalation above no longer
+ *     fires on this screen at all.
  *
  * NOT COVERED, and none of it may be read as safe:
  *   - Boneyard map. NOT a WebGL limitation: this file simply does not launch
@@ -328,6 +336,7 @@ await screen('wardrobe, hat slot', async () => {
      run, and sample the sum at every load. */
   await pe(() => {
     window.__imgPeakMB = 0;
+    window.__imgSrc = [];
     const Native = window.Image;
     const live = new Set();
     const sample = () => {
@@ -341,7 +350,12 @@ await screen('wardrobe, hat slot', async () => {
       // registered at construction, so it runs BEFORE the caller's own onload;
       // the double microtask lets that handler finish before the image is released
       const done = () => queueMicrotask(() => queueMicrotask(() => live.delete(im)));
-      im.addEventListener('load', () => { sample(); done(); }, { once: true });
+      im.addEventListener('load', () => {
+        // the DECODED url, not the attribute a renderer wrote: this is what the
+        // TIER row below grades, and a canvas has no naturalWidth to read later
+        window.__imgSrc.push((im.currentSrc || im.src).split('assets/bh/')[1] || '?');
+        sample(); done();
+      }, { once: true });
       im.addEventListener('error', done, { once: true });
       return im;
     };
@@ -356,6 +370,7 @@ await screen('wardrobe, hat slot', async () => {
 /* READ THE OFF-DOM PEAK NOW, while the page that recorded it is still loaded:
    the tier checks below reload, and window.__imgPeakMB does not survive that. */
 const offDom = await pe(() => window.__imgPeakMB);
+const wardSrc = await pe(() => window.__imgSrc);
 /* PROVE-RED (2026-08-24, a tar-built throwaway with the FILE mutated and the
    copy grepped to confirm it landed): put drawTrimmedArt's small-ink escalation
    back to a jump straight to the master and this row reports 103 MB. That is the
@@ -363,6 +378,27 @@ const offDom = await pe(() => window.__imgPeakMB);
    because the header note beside it asserted the opposite without itemising. */
 ok('OFF-DOM  the Wardrobe\'s concurrent source bitmaps stay under 90 MB too',
   offDom > 0 && offDom < CEILING_MB, `${offDom} MB peak concurrent off-DOM (gwart measured 210.9 MB on 640px sources)`);
+
+/* THE CROPPED TIER IS WHAT ACTUALLY DECODED, and the escalation never fires.
+   A CEILING CANNOT GRADE THIS. The row above passed at 38.1 MB before the crop
+   and passes at 11.6-12.2 MB after it, so it would stay green through a full
+   revert of bhTrim() back to bhThumb(); this is the row that would not. It reads
+   the srcs the hook collected AT LOAD, because the thing asserted is what the
+   browser decoded, and a canvas has no naturalWidth to read afterwards.
+
+   Only drawTrimmedArt builds off-DOM Images, so in practice this sample is 100%
+   trim and the square-tier count is 0. The bound is 0.9 anyway: a future surface
+   that legitimately hands drawTrimmedArt a square-tier source should not have to
+   come back here, and the number that carries the meaning is `masters === 0` --
+   the escalation ladder gone quiet is the whole point of cropping.
+   METHOD 2026-08-24, this file's own hook, 430x932 DPR 2, machine busy (load
+   ~13): 270 images, 100% trim, 0 masters, three consecutive runs. */
+const trimShare = wardSrc.filter(s => s.startsWith('thumb/trim/')).length / (wardSrc.length || 1);
+const masters = wardSrc.filter(s => /^(?!thumb\/)/.test(s)).length;
+ok('TIER     the Wardrobe\'s canvases decode the CROPPED sheet and never reach a master',
+  wardSrc.length > 100 && trimShare > 0.9 && masters === 0,
+  `${wardSrc.length} images: ${(trimShare * 100).toFixed(0)}% trim, ${masters} masters, `
+  + `${wardSrc.filter(s => /^thumb\/\d/.test(s)).length} square-tier`);
 
 /* THE SHEET REALLY IS BEING SERVED, tier by tier. avatarLayersHtml falls back to
    the 640px art when a thumbnail 404s (rule 8: degrade to ugly, never to

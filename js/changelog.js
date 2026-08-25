@@ -3,6 +3,11 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 436, date: '2026-08-24', title: 'Your friend\'s paddock, the Wardrobe, and the colour behind Today', items: [
+    'When you visit a friend\'s paddock the two of you face each other now, instead of standing back to back at opposite ends of the field.',
+    'The colour behind Today is the app\'s own again. Yesterday it went flat black and the colour stopped appearing when you pulled down past the top. Both fixed.',
+    'Every piece of gear is drawn on a full-body square so it lines up when eight layers stack on your Bonehead, and the Wardrobe was showing you those squares: a hat tile was mostly empty space with a small hat in it, blown up to fill the cell. The tiles now use a copy cut down to the item itself, so a hat is drawn from about three times as many of Cam\'s pixels as before and the screen loads about a third of the picture data it used to.',
+  ] },
   { n: 435, date: '2026-08-24', title: 'Stand in your friend\'s paddock with them', items: [
     'When you visit a friend\'s paddock you are in it now. Your Bonehead stands across the field from theirs, the same size, facing them, so it reads as the two of you in one place rather than you looking at a picture of theirs.',
     'The colour behind Today went back to normal. Yesterday\'s update let your Bonehead\'s backdrop colour leak down the whole screen, tinting the gaps around your quests and your day. That was a mistake on our side and it is fixed.',
