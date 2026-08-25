@@ -37,7 +37,7 @@ database_id = "703a4e46-7643-490c-8d3f-26bc4e277eba"
 # decision and somebody watching it.
 # TO TURN IT ON: uncomment, redeploy, and watch the first tick.
 [triggers]
-crons = []
+crons = ["*/15 * * * *"]
 
 [vars]
 # DEV enables /dev/* test endpoints. NEVER set in production.
