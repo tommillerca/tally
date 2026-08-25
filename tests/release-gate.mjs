@@ -596,7 +596,14 @@ const DECLARED = {
   'crew-pair-audit.mjs': ['full', 'the friend and crew flow with TWO real browsers against a real Worker it starts itself: add, accept, gift, the delivery-once guard, the daily caps, self-directed cases, removal, and BOARD, the client/server contract for the three leaderboard-fed Add surfaces, asserted off the WIRE (route, field name and the server\'s own handle for that player) and carried to Crew membership on both sides; every one read from BOTH sides. FULL rather than FAST because it boots two Chrome profiles and a wrangler dev with a local D1 (about four minutes), and because a box with no wrangler cannot run it at all. Every other social audit in this directory drives one browser against a seeded fixture, so this is the only coverage of anything that needs two participants.'],
   'debuff-chips-audit.mjs': ['full', 'tapping a debuff chip explains it.'],
   'den-two-target-audit.mjs': ['full', 'two health bars in a two-enemy den; batch-audit gates the two-enemy read every run.'],
-  'dust-safeguard-audit.mjs': ['full', 'one curious tap must not spend dust.'],
+  /* dust-safeguard-audit.mjs stood here. It graded ONE property, that the Bone
+     Dust shop's charm cell needed two taps to spend, and the Bone Dust shop
+     closed on 2026-08-25 (dust is cosmetic-only now). Deleted rather than
+     skipped: unlike the four garden suites below, the surface it drove is gone
+     for good, not parked. The one-tap rule it defended is still enforced
+     tree-wide by unit.test.js's "no control that spends coins or dust buys on a
+     single tap", which sweeps every spend control including ones not yet
+     written. */
   'ember-cohesion-audit.mjs': ['full', 'a lit cosmetic stays lit on every surface.'],
   'faq-audit.mjs': ['full', 'the FAQ copy still matches what the engine does.'],
   'feel-audit.mjs': ['full', 'toast queue, exits, dialogs, haptics.'],

@@ -199,22 +199,22 @@ stale when somebody fixes it.
 > Melting gear you are never going to wear is where most of it comes from. A
 > piece he has outgrown is not waste, it is dust.
 >
-> It pays for transmog, which is wearing one thing and showing another. It also
-> buys the odd egg, crate and charm, and it is the only thing that still buys a
-> crate at all.
+> It pays for transmog, which is wearing one thing and showing another, and it
+> pays to breed two pets into one. It used to buy eggs, crates and charms; that
+> shop is closed, so dust is for looks now.
 >
 > You pay for a look once. Putting it back on in that same slot is free forever
 > after that.
 
 Corrected: the first draft said transmog was the only thing dust buys. It is not.
-The dust shop sells a Mystery Egg at 60, a Common Crate at 40 and a Battle Charm
-at 25 (`js/loot.js:575-589`); breeding costs dust (`js/loot.js:776`); the tier-4
-and the weekly Rack is priced in dust (`js/loot.js:241-284`).
+Breeding costs dust (`js/loot.js:breedCost`), and the weekly Rack is priced in
+dust as well as coins (`RACK_DUST`, `js/loot.js`).
 
-Corrected again 2026-08-25 (S0): the tier-4 weapons line above is gone with the
-Bone Merchant, and coins no longer buy a crate at all, so the Bone Dust shop's
-40-dust Common Crate is now the only purchasable crate in the game. That is what
-the third line says instead.
+Corrected again 2026-08-25 (S0): the tier-4 weapons line is gone with the Bone
+Merchant, and the Bone Dust shop closed later the same day, so the Mystery Egg /
+Common Crate / Battle Charm line went with it. Dust is a COSMETIC currency now,
+with breeding as the one remaining exception, and this copy has to say so
+plainly rather than leave a player hunting a shop that is not there.
 
 The last line is the non-obvious one and the reason it is in: a (slot, look) pair
 is paid for once and is free forever after (`paidLooks`, `js/loot.js:1563-1582`).

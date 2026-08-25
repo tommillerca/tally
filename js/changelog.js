@@ -3,6 +3,13 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+
+  { n: 447, date: '2026-08-25', title: 'The Bone Dust shop has closed', items: [
+    'The Bone Dust shop is gone, and so are the three things it sold: the Mystery Egg at 60 dust, the Common Crate at 40 and the Battle Charm at 25. You cannot buy any of them any more. This is a removal, there is nothing in its place, and there is no refund, because every scrap of dust you have earned is still in your pocket and still spends.',
+    'Dust is for looks now. It pays for transmog, which is wearing one thing and showing another, and it buys pieces off the weekly Rack. Breeding two pets into one still costs dust as well, and that is the one thing dust buys that is not purely a picture. We would rather write that down than let you find it.',
+    'The reason is the same one that closed the Bone Merchant yesterday. An egg is a pet that fights beside you, a crate rolls a statted piece of gear, and a charm pays you more coins for a Pit win. All three are power, and no balance in this game is allowed to buy power.',
+    'Eggs and crates still come from playing, exactly as before: big step days, level-ups, quests, the daily wheel, day closes, a real workout, the Boneyard and the bosses. The shortcut is gone. The supply is not.',
+  ] },
   { n: 446, date: '2026-08-25', title: 'A refund that could pay twice now pays once', items: [
     'The old Streak Freeze payout could pay you more than once if the app happened to start twice at the same moment, such as two tabs opening together. It now settles once and only once. If you were already paid, nothing changes and you keep the coins.',
   ] },

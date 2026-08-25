@@ -6382,12 +6382,8 @@ body::before {
 .garden-card .drop-count { background: var(--accent); color: var(--accent-ink); }
 .garden-bnr-ico { display: grid; place-items: center; }
 
-/* Bone Dust shop cells: the item's own description, and an armed state, because a
-   single tap used to spend the dust with no explanation and no confirmation. */
-.dust-cell { text-align: center; }
-.dust-cell .dc-desc { color: var(--text-3); font-size: 10px; line-height: 1.25; font-weight: 600; }
-.dust-cell.arming { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(var(--gold-rgb), .45); }
-.dust-cell.arming b { color: var(--gold); }
+/* The .dust-cell rules stood here until 2026-08-25. They styled the Bone Dust
+   shop's three product cells; the shop is closed and nothing renders them. */
 
 /* ===== Build tab FAQ (v262) ===== */
 /* Two reading levels in one card: the playstyles are always legible at a glance for

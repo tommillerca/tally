@@ -575,23 +575,36 @@ export async function salvagePet(petId) {
   return { ok: true, dust, name: item.name, remaining };
 }
 
-// Bone Dust shop: spend salvage on a fresh shot at pets / crates / consumables.
-export const DUST_SHOP = [
-  { id: 'egg', label: 'Mystery Egg', cost: 60, desc: 'Incubate, then hatch a pet' },
-  { id: 'crate-daily', label: 'Common Crate', cost: 40, desc: 'A roll of loot' },
-  { id: 'charm', label: 'Battle Charm', cost: 25, desc: 'Next Pit win pays more' },
-];
-export async function buyWithDust(id) {
-  const item = DUST_SHOP.find(x => x.id === id);
-  if (!item) return { ok: false, reason: 'unknown' };
-  const bal = await boneDust();
-  if (bal < item.cost) return { ok: false, reason: 'dust', need: item.cost, have: bal };
-  await boneDustAdd(-item.cost);
-  if (id === 'egg') await grantEgg('dust');
-  else if (id === 'crate-daily') await grantCrate('daily', 'dust');
-  else await grantConsumable(id, 'dust');
-  return { ok: true, id, cost: item.cost };
-}
+/* THE BONE DUST SHOP IS CLOSED (S0 second half, 2026-08-25).
+
+   It sold three things and all three were power or economy: a 60-dust Mystery
+   Egg (a pet that fights beside you), a 40-dust Common Crate (a roll of statted
+   gear) and a 25-dust Battle Charm (a Pit win pays more). That is the same
+   two-hop shape S0 already took off the coin shop, one currency along.
+
+   THE REASON IS NOT TIDINESS. Dust's other and far larger sink is the
+   transmog/looks system and the weekly Rack, both purely cosmetic: they change
+   the picture and never a stat. With this shop gone, dust is a cosmetic
+   currency, and that is the precondition for dust ever being sold for real
+   money without reopening the cosmetic-only IAP decision of 2026-08-07. A
+   currency that buys eggs and crates is a currency that sells power.
+
+   ONE EXCEPTION SURVIVES AND IT IS WRITTEN DOWN, NOT GLOSSED OVER: breedPets
+   below charges dust and the offspring carries a permanent stat bump. It is a
+   sink on two pets you already own rather than a shop that sells one, which is
+   why it was not in scope here, but "dust is cosmetic-only" is not literally
+   true while it stands, and it is the first thing to look at if dust is ever
+   sold for money.
+
+   Nothing was taken away from a player's balance: dust already earned still
+   spends. grantEgg / grantCrate / grantConsumable are untouched and still
+   reached by quests, day-close, level-ups, milestones, the wheel, the Boneyard,
+   roam bosses and the server's make-good route.
+
+   Enforced by tests/unit.test.js "S0: dust buys looks, and every dust spend in
+   the tree is declared", which fails on a dust-priced product table, on a dust
+   spend that is not in its declaration list, and on a dust spend whose body
+   reaches a grant. */
 
 export const EGG_GOAL_STEPS = 8000;
 

@@ -32,7 +32,7 @@ import {
   dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, periodKeyOf,
   weekKeyOf, weekDates, monthKeyOf, monthDates, DAILY_POOL, WEEKLY_POOL, MONTHLY_POOL,
 } from '../js/quests.js';
-import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, DUST_SHOP, gearDustValue, gearStatPoints, petDustValue,
+import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, gearDustValue, gearStatPoints, petDustValue,
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
   removeInstance, breedParents, breedCost, transmogCost, TRANSMOG_HIDE,
   nickProblem, cleanNick, NICK_MAX } from '../js/loot.js';
@@ -1129,12 +1129,6 @@ test('v73 Bone Dust values scale with rarity, pets worth more than gear', () => 
   assert.equal(petDustValue({ rarity: 'epic' }), DUST_VALUE.pet.epic);
   assert.equal(gearDustValue(null), 3); // safe fallback
 });
-test('v73 Dust Shop loops junk back into pets/crates/consumables', () => {
-  assert.ok(DUST_SHOP.length >= 3);
-  assert.ok(DUST_SHOP.every(d => d.cost > 0 && d.id && d.label));
-  assert.ok(DUST_SHOP.some(d => d.id === 'egg'), 'dust can buy an egg (dupe pets -> new pet)');
-});
-
 test('v75 mini-bosses: deterministic per day, roam daily, keyed once/day', async () => {
   const poi = await import('../js/poi.js');
   const [lat, lng] = [49.2827, -123.1207];
@@ -1452,10 +1446,10 @@ test('no Streak Freeze remains in the shops, crates, wheel or welcome kit', () =
   const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
   const game = readFileSync(join(here, '..', 'js', 'game.js'), 'utf8');
   const shop = loot.match(/export const SHOP = \[([\s\S]*?)\];/)[1];
-  const dust = loot.match(/export const DUST_SHOP = \[([\s\S]*?)\];/)[1];
   const cons = loot.match(/export const CONSUMABLES = \{([\s\S]*?)\n\};/)[1];
   assert.ok(!/freeze/i.test(shop), 'the coin shop still sells a freeze');
-  assert.ok(!/freeze/i.test(dust), 'the dust shop still sells a freeze');
+  // the dust shop's row is gone with the dust shop itself (2026-08-25); the test
+  // below, "S0: dust buys looks", is what keeps it from coming back at all.
   assert.ok(!/freeze/i.test(cons), 'freeze is still a consumable');
   const pool = loot.match(/const pool = \[([^\]]*)\]/)[1];
   assert.ok(!/freeze/i.test(pool), 'crates can still drop a freeze');
@@ -1715,10 +1709,11 @@ test('no control that spends coins or dust buys on a single tap', () => {
     ['#buyBed', 'the extra garden bed'],
     ['#forageBtn', 'foraging'],
     ['[data-buy]', 'the coin shop'],
-    ['[data-dustbuy]', 'the Bone Dust shop'],
     ['[data-buydrop]', 'the featured drop'],
     // [data-buyweapon] stood here. The Bone Merchant closed on 2026-08-25 (S0);
-    // there is no weapon left to buy on any number of taps.
+    // there is no weapon left to buy on any number of taps. The dust shop's
+    // cell went the same way later that day, and the test above ("S0: dust buys
+    // looks") is what keeps a dust-priced product from coming back at all.
   ];
   const unguarded = [];
   const lines = src.split('\n');
@@ -1855,6 +1850,63 @@ test('S0: no coin-priced sink grants a crate, gear or a weapon row', () => {
   const forgery = "export async function buyShopItem(x) {\n  await grantCrate('daily', 'shop');\n}\n";
   const fbody = forgery.slice(0, forgery.indexOf('\n}\n'));
   assert.ok(/grantCrate|grantGear|db\.put\('inv'/.test(fbody), 'the crate pattern cannot detect a violation');
+});
+
+test('S0: dust buys looks, and every dust spend in the tree is declared', () => {
+  /* THE SECOND HALF OF S0, 2026-08-25. Coins stopped buying power; this is the
+     same property one currency along. Tom: "i dont think we want to be able to
+     buy with dust at all unless that becomes a currency you can only get from
+     spending real money". The Bone Dust shop sold an egg (a pet that fights),
+     a Common Crate (statted gear) and a Battle Charm (a Pit win pays more), and
+     all three are gone.
+
+     WHY A LINT AND NOT A PROBE: the thing asserted is an ABSENCE, so it is read
+     off the source with the denominator printed, the same shape as the coin
+     lint above. Three rows, because a shop can come back under a new name:
+       1. the old names are gone from the file outright;
+       2. EVERY dust spend in the module is enumerated and must be DECLARED
+          here, so a new one cannot appear silently;
+       3. no declared dust spend reaches a grant of an item.
+     Row 2 is the load-bearing one. It is also why breedPets is written down as
+     the one dust spend that is NOT cosmetic rather than quietly excluded: this
+     test is the register, and a register that hides its exception is a lie. */
+  const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+
+  // 1. the shop is gone from the source, not merely unrendered
+  for (const gone of ['DUST_SHOP', 'buyWithDust'])
+    assert.ok(!src.includes(gone) && !app.includes(gone), `${gone} is back in the tree`);
+
+  /* 2. every dust SPEND, by the function that makes it, against a declaration.
+        A spend is boneDustAdd with a negative argument; the positive ones are
+        income (melting, quests, the wheel) and are not this test's business. */
+  const DECLARED = {
+    buyRackItem: 'COSMETIC. Buys a piece off the rack: grantCosmetic, or the aura kv. tests/purchase-firewall.mjs asserts statically that this path cannot reach grantGear or grantCrate.',
+    applyTransmog: 'COSMETIC. Pays for a look on a slot. One changes your stats, one costs dust and changes only the picture.',
+    breedPets: 'NOT COSMETIC, and written down rather than excused. Fusing two owned pets costs 30 + 30 x lineage dust and the offspring carries a permanent stat bump. It survived the 2026-08-25 closure because it is a SINK on pets you already own, not a shop that sells one, but it is the one place dust still touches power and it is the first thing to look at if dust is ever sold for money.',
+  };
+  const owners = [...src.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/gm)].map(m => [m.index, m[1]]);
+  const ownerAt = i => { let n = '(top level)'; for (const [ix, name] of owners) { if (ix <= i) n = name; else break; } return n; };
+  const spends = [...src.matchAll(/boneDustAdd\(\s*-/g)].map(m => ownerAt(m.index));
+  assert.ok(spends.length >= 3, `found ${spends.length} dust spends; the lint is reading the wrong thing`);
+  assert.deepEqual([...new Set(spends)].sort(), Object.keys(DECLARED).sort(),
+    `an undeclared dust spend: ${spends.join(', ')}`);
+
+  // 3. and none of them hands out an item
+  const GRANTS = /grantEgg|grantCrate|grantConsumable|grantGear|grantPet\b|addPetInstance/;
+  for (const fn of Object.keys(DECLARED)) {
+    const from = src.slice(src.indexOf(`function ${fn}(`));
+    const body = from.slice(0, from.indexOf('\n}\n'));
+    assert.ok(body.length > 40, `failed to slice ${fn}; the lint is reading the wrong thing`);
+    assert.ok(!GRANTS.test(body), `${fn} spends dust and grants an item`);
+  }
+
+  /* 4. CONTROL. Each row above only proves something if it can fire, so fire
+        every pattern against a forgery of the thing it hunts for. */
+  const forgery = "function buyWithDust(id) {\n  await boneDustAdd(-60);\n  await grantEgg('dust');\n}\n";
+  assert.ok(forgery.includes('buyWithDust'), 'the name pattern cannot detect a violation');
+  assert.equal([...forgery.matchAll(/boneDustAdd\(\s*-/g)].length, 1, 'the spend pattern cannot find a spend');
+  assert.ok(GRANTS.test(forgery), 'the grant pattern cannot detect a violation');
 });
 
 test('S0: the merchant refund knows what every withdrawn weapon cost', () => {

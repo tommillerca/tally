@@ -16,7 +16,7 @@ import {
   migrateLegacyEggs, eggProgress, repairEggAnchors, hatchEgg, lifetimeStepsSum,
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, consumeConsumable, VIGOR_DRAUGHT_AMOUNT, redeemCode,
   retireMerchantIfNeeded,
-  boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, DUST_SHOP, buyWithDust, slimedGearIds,
+  boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, slimedGearIds,
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
@@ -4791,7 +4791,7 @@ const GUIDE_ENTRIES = [
   { id: 'dust', title: 'Bone Dust', body: [
     'The other currency, and the one everybody ignores. Coins buy things. Dust is for changing your mind about them.',
     'Melting gear you are never going to wear is where most of it comes from. A piece he has outgrown is not waste, it is dust.',
-    'It pays for transmog, which is wearing one thing and showing another. It also buys the odd egg, crate and charm, and it is the only thing that still buys a crate at all.',
+    'It pays for transmog, which is wearing one thing and showing another, and it pays to breed two pets into one. It used to buy eggs, crates and charms; that shop is closed, so dust is for looks now.',
     'You pay for a look once. Putting it back on in that same slot is free forever after that.',
   ] },
   /* ADDED 2026-08-23 at integration, and it is a real defect neither branch could
@@ -8540,15 +8540,10 @@ async function renderShop(el) {
     </button>`).join('')}
   </div>
 
-  <div class="t3-sect"><b>Bone Dust shop</b><i></i><span class="r chip" style="font-size:11px">Melt gear to earn it</span></div>
-  <div class="t3-cells">
-    ${DUST_SHOP.map(d => `<button class="t3-cell dust-cell" data-dustbuy="${d.id}" data-label="${esc(d.label)}" data-cost="${d.cost}" ${dustBal < d.cost ? 'disabled' : ''}>
-      <span class="art">${d.id === 'egg' ? crateIcon('egg', 54) : d.id === 'crate-daily' ? crateIcon('daily', 54) : consumableIcon(d.id, 48)}</span>
-      <b>${esc(d.label).toUpperCase()}</b>
-      <span class="t3-price dust">${ICONS.dust(13)} ${d.cost}</span>
-      <small>${esc(d.desc)}</small>
-    </button>`).join('')}
-  </div>
+  <!-- The Bone Dust shop stood here until 2026-08-25. It sold an egg, a crate
+       and a charm, all three of them power, so it closed with the coin shop's
+       crates (S0). Dust now buys looks and nothing else, which is why the only
+       dust control left on this screen is the route to EARN it. -->
   <button class="t3-forage" id="shopSalvage" style="margin-top:10px">${ICONS.dust(20)}<b>Melt gear for Bone Dust</b><small>Salvage Bench ›</small></button>
 
   <button class="t3-forage" id="shopForage">${ingIconHtml('graveroot', 24)}<b>Forage for ingredients</b><small>in the Kitchen ›</small></button>
@@ -8587,16 +8582,6 @@ async function renderShop(el) {
       toast(`${r.label} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. Equip it in your Wardrobe.`, 3200);
       rerender();
     });
-  }));
-  // A single tap used to spend on the spot. Tom lost 25 dust just looking at what
-  // a Battle Charm was, so the first tap only ARMS the cell.
-  el.querySelectorAll('[data-dustbuy]').forEach(btn => armToConfirm(btn, `Spend ${btn.dataset.cost} dust?`, async () => {
-    btn.disabled = true;
-    const res = await buyWithDust(btn.dataset.dustbuy);
-    if (!res.ok) { toast(res.reason === 'dust' ? `Need ${res.need} Bone Dust (you have ${res.have}).` : 'Could not buy that.'); btn.disabled = false; return; }
-    popSound(S.sounds);
-    toast(res.id === 'egg' ? 'Egg incubating. Walk to hatch it.' : res.id === 'crate-daily' ? 'Common Crate added. Open it in your Backpack.' : 'Added to your consumables.', 2800);
-    rerender();
   }));
   // the drop art sits small inside a 640² sprite sheet, so trim it to its ink
   // the same way the reveal cards do rather than showing a stamp in a big box
@@ -13732,30 +13717,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const nd = await boneDust();
       content.querySelectorAll('.wallet-line b').forEach(b => { if (b.querySelector('.dust-ico')) b.innerHTML = `<span class="dust-ico">${ICONS.dust(13)}</span> ${nd.toLocaleString()}`; });
     }));
-    $$('[data-dustbuy]', content).forEach(btn => btn.addEventListener('click', async () => {
-      // A single tap used to spend on the spot. Tom lost 25 dust just looking at
-      // what a Battle Charm was. Now the first tap only ARMS the cell (and the
-      // card already states what the item does), so buying takes intent.
-      if (btn.dataset.armed !== '1') {
-        btn.dataset.armed = '1';
-        btn.classList.add('arming');
-        const prev = btn.innerHTML;
-        btn.innerHTML = `<span class="crate-ico">${ICONS.coin(26)}</span><b>Spend ${btn.dataset.cost}?</b><small class="dc-desc">tap again to buy</small><small>tap elsewhere to cancel</small>`;
-        clearTimeout(btn._armT);
-        btn._armT = setTimeout(() => {
-          if (!btn.isConnected) return;
-          btn.dataset.armed = '0'; btn.classList.remove('arming'); btn.innerHTML = prev;
-        }, 3200);
-        return;
-      }
-      clearTimeout(btn._armT);
-      btn.disabled = true;
-      const res = await buyWithDust(btn.dataset.dustbuy);
-      if (!res.ok) { toast(res.reason === 'dust' ? `Need ${res.need} Bone Dust (you have ${res.have}).` : 'Could not buy that.'); btn.disabled = false; return; }
-      popSound(S.sounds);
-      toast(res.id === 'egg' ? 'Egg incubating. Walk to hatch it.' : res.id === 'crate-daily' ? 'Common Crate added. Open it above.' : 'Added to your consumables.', 2800);
-      renderCharacter(wrap, 'crates');
-    }));
+    /* The Backpack's own dust grid moved to the Shop screen in v410 and its
+       handler has bound nothing since: no dust cell is rendered into this
+       scope. It went with the shop it belonged to. */
     $('#bpKitchen', content)?.addEventListener('click', () => openKitchen());
     $$('[data-buy]', content).forEach((b => {
       let t = null;
@@ -18381,7 +18345,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v446'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v447'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
