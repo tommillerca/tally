@@ -98,7 +98,10 @@ ok('he is big enough to read', fight.w >= 120 && fight.h >= 120, `${fight.w}x${f
 /* ---- the announcement ---- */
 await page.evaluate(() => { document.querySelector('.sheet-close')?.click(); });
 await sleep(700);
-await page.evaluate(() => { window.__mageForce = 1; window.__mageIntro(); });
+/* __mageForce went with maybeShowMageIntro on 2026-08-25: nothing reads it now
+   that the card no longer shows itself. __mageIntro is the direct hook and is
+   unchanged. */
+await page.evaluate(() => { window.__mageIntro(); });
 await sleep(900); await settle(page);
 const pop = await page.evaluate(async () => {
   const v = document.querySelector('.mage-veil');
