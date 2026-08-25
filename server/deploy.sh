@@ -39,6 +39,13 @@ if ! git diff --quiet -- src/ ; then
 fi
 
 echo "== 2. tests before the deploy, not after"
+# Bring the LOCAL database up to schema.sql first. Every CREATE in there is
+# IF NOT EXISTS, so this is idempotent and cheap, and without it a local D1 made
+# before the newest table exists fails the suites for a reason that has nothing
+# to do with the code being deployed. That is exactly how this gate became
+# unpassable the first time. It does NOT touch --remote; remote migrations are
+# still run by hand, deliberately.
+npx wrangler d1 execute bonez --local --file=schema.sql > /dev/null
 # schema-plan needs no server at all: it rebuilds schema.sql in local SQLite and
 # asserts the hot routes still reach their rows through an index. A dropped index
 # changes no answer anywhere, so nothing else in this suite can see it.
@@ -91,3 +98,9 @@ if [ "$fail" != "0" ]; then
 fi
 echo
 echo "deployed and reachable: $(git log --oneline -1 HEAD)"
+echo
+echo "== 5. IS THE PRUNER ACTUALLY RUNNING? Ask, within the next 15 minutes:"
+echo "     curl -s '$API/admin/prune?token=\$ADMIN_TOKEN' | head -c 400"
+echo "  Reading 'no-table' means the migration has not been applied yet:"
+echo "     npx wrangler d1 execute bonez --remote --file=migrations/2026-08-25-prune-runs.sql"
+echo "  Nothing above this line proves a cron tick ever fired. That route does."

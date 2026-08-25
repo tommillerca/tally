@@ -608,6 +608,57 @@ async function pruneGrants(env, now = Date.now(), opts = {}) {
   };
 }
 
+/* ---------------- what the pruner did ----------------
+   THE CRON WENT LIVE ON 2026-08-24 AND NOBODY COULD PROVE A TICK HAD FIRED.
+   scheduled() console.log'd its result and nothing else. `wrangler tail` is a
+   live stream that retains nothing, so three separate tail sessions produced
+   zero occurrences of the words cron, scheduled or prune, and there was no
+   other place to look. For a job whose only purpose is deleting rows from a
+   live player database, "did it run last night, and what did it delete" is the
+   question, and it had no answer at all once the terminal was closed.
+
+   Two things fix that and they are not alternatives. wrangler.toml now carries
+   [observability], so Workers Logs retains the console lines for a week and a
+   failed invocation is visible in the dashboard. This table is the other half:
+   it is queryable by a route, it survives longer than the log retention, and it
+   is the only one of the two that can answer "how many rows, per rule, and did
+   it hit a cap" without a human reading log text.
+
+   KEPT DELIBERATELY DUMB. One INSERT and one DELETE per tick, no index, no
+   read. It is trimmed to a fixed number of newest rows rather than to an age,
+   because an age bound would still grow if the schedule got faster, and because
+   `id <= max - keep` needs no clock and no date arithmetic.
+
+   IT SWALLOWS ITS OWN FAILURE, which is the one thing in here that had to be
+   argued rather than assumed. If the migration has not been applied the INSERT
+   throws "no such table: prune_runs"; letting that propagate would turn a
+   MISSING TRACE into a FAILED PRUNE, so the observability would be deleting the
+   thing it exists to observe. The failure is not silent, it just is not fatal:
+   it goes to console.error, GET /admin/prune reports status "no-table" and
+   names the migration. schema-plan.test.mjs asserts this function still catches. */
+const PRUNE_RUNS_KEEP = 2000;   // ~21 days at 96 ticks/day; 216 KB measured at the ceiling
+
+async function recordPruneRun(env, row) {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO prune_runs (ts, ms, cron, ok, ev, ev_stop, ev_by, gr, gr_stop, err)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .bind(row.ts, row.ms, row.cron, row.ok ? 1 : 0,
+            row.ev, row.evStop, row.evBy, row.gr, row.grStop, row.err)
+      .run();
+    /* The self-prune. One statement, and it is a no-op until the table is full:
+       `id <= max - 2000` selects nothing while fewer than 2,000 rows exist.
+       AUTOINCREMENT ids never repeat, so subtracting from MAX(id) is a row
+       count only while no row is deleted out of the middle, and nothing else
+       ever deletes from this table. */
+    await env.DB.prepare(
+      'DELETE FROM prune_runs WHERE id <= (SELECT MAX(id) FROM prune_runs) - ?')
+      .bind(PRUNE_RUNS_KEEP).run();
+  } catch (e) {
+    console.error('prune trace failed (the prune itself is unaffected)', (e && e.message) || e);
+  }
+}
+
 /* ---------------- signature auth ---------------- */
 async function verifySigned(request, env, bodyText) {
   const playerId = request.headers.get('x-bh-player');
@@ -1219,9 +1270,11 @@ export default {
      dashboard. A pruner that silently stops is indistinguishable from one that
      had nothing to do, right up until the 10 GB cap arrives. */
   async scheduled(event, env) {
+    const now = Date.now();
+    const cron = (event && event.cron) || null;
+    let r = null, g = null, thrown = null;
     try {
-      const now = Date.now();
-      const r = await pruneEvents(env, now);
+      r = await pruneEvents(env, now);
       /* Grants second, and with whatever wall clock the events pass left. Events
          are the table with the 10 GB deadline and they are also the only one
          whose backlog can arrive in a burst, so they get the budget first; the
@@ -1229,12 +1282,31 @@ export default {
          short costs it nothing. Both are awaited and neither is swallowed: a
          pruner that silently stops is indistinguishable from one with nothing
          to do, right up until the cap arrives. */
-      const g = await pruneGrants(env, now, { budgetMs: Math.max(1000, PRUNE_BUDGET_MS - r.ms) });
-      console.log('prune', JSON.stringify({ cron: (event && event.cron) || null, ...r, grants: g }));
+      g = await pruneGrants(env, now, { budgetMs: Math.max(1000, PRUNE_BUDGET_MS - r.ms) });
+      console.log('prune', JSON.stringify({ cron, ...r, grants: g }));
     } catch (e) {
+      thrown = e;
       console.error('prune failed', (e && e.stack) || e);
-      throw e;
     }
+    /* THE TRACE IS WRITTEN ON BOTH PATHS, and the failing path is the one it
+       exists for. A tick that threw is exactly the tick nobody will be watching,
+       and `r` surviving while `g` is null is how "the events pass finished and
+       the grants pass died" stays legible afterwards. */
+    await recordPruneRun(env, {
+      ts: now,
+      ms: Date.now() - now,
+      cron,
+      ok: !thrown,
+      ev: r ? r.total : 0,
+      evStop: r ? r.stopped : null,
+      evBy: r ? JSON.stringify(r.deleted) : null,
+      gr: g ? g.total : 0,
+      grStop: g ? g.stopped : null,
+      err: thrown ? String((thrown && thrown.stack) || thrown).slice(0, 2000) : null,
+    });
+    // Rethrown AFTER the trace, so the invocation is still marked FAILED in the
+    // Cloudflare dashboard and Workers Logs, and the row is there to explain it.
+    if (thrown) throw thrown;
   },
 
   async fetch(request, env) {
@@ -2597,6 +2669,140 @@ export default {
            They are different questions and after 2026-08-17 they are different
            numbers, which is exactly why neither can be typed into the HTML. */
         return json({ windowDays: EVENT_RETENTION_DAYS, statsWindowDays: STATS_WINDOW_DAYS, totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, leads, errors, errorsByBuild, vault, generatedAt: Date.now() });
+      }
+
+      /* IS THE PRUNER HEALTHY. Gated by ADMIN_TOKEN, read via ?token= or the
+       * x-bh-admin header, which is the same pair /stats takes and the same
+       * secret; dashboard.html already holds it. No new auth scheme, and
+       * nothing here is reachable without the token.
+       *
+       * THE QUESTION THIS ROUTE HAS TO SURVIVE is the one that had no answer on
+       * 2026-08-24: the cron was enabled, the deploy output confirmed the
+       * schedule, and three `wrangler tail` sessions could not observe a single
+       * tick. `status` and `detail` are therefore the point of the response and
+       * the arrays are the evidence underneath them. Somebody with no context
+       * reads one word and one sentence.
+       *
+       * IT GRADES THE OUTCOME, NOT THE ACTIVITY, and that distinction is what
+       * makes it worth having. A tick that ran, reported success and deleted
+       * nothing looks identical in the run log whether it had nothing to do or
+       * whether its DELETE silently matched nothing. So `behind` is decided by
+       * MIN(day) in the events table against the retention cutoff -- the state
+       * of the data, which is what a player's storage bill actually depends on
+       * -- and not by anything the pruner said about itself.
+       *
+       * THE CADENCE IS MEASURED, NOT DECLARED. The schedule lives in
+       * wrangler.toml and a Worker cannot read its own [triggers], so a constant
+       * here would be a second copy of it, free to drift. The median gap between
+       * the recorded ticks is the schedule, observed. Under three runs there is
+       * nothing to measure and it falls back to 15 minutes.
+       *
+       * COST. Two full-table aggregates (COUNT over events, and the dormant
+       * grants scan below). Both are O(table) and this route is hit by hand a
+       * few times a day, which is the only reason that is acceptable; if it ever
+       * goes on a polling dashboard, the counts are the part to cache. */
+      if (path === '/admin/prune' && request.method === 'GET') {
+        const token = url.searchParams.get('token') || request.headers.get('x-bh-admin') || '';
+        if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
+        const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit')) || 20));
+        const now = Date.now();
+        const cutoffDay = new Date(now - EVENT_RETENTION_DAYS * 86400000).toISOString().slice(0, 10);
+
+        let runs;
+        try {
+          runs = (await env.DB.prepare(
+            `SELECT id, ts, ms, cron, ok, ev, ev_stop evStop, ev_by evBy, gr, gr_stop grStop, err
+               FROM prune_runs ORDER BY id DESC LIMIT ?`).bind(limit).all()).results || [];
+        } catch (e) {
+          /* The table is missing, which means the worker was deployed without
+             its migration. Say so, and say which file: reporting "healthy" off
+             an empty result set is the failure this whole route exists to stop. */
+          return json({
+            ok: false, status: 'no-table',
+            detail: 'The prune_runs table does not exist, so no run has ever been recorded. ' +
+                    'Apply migrations/2026-08-25-prune-runs.sql, then check again after the next tick. ' +
+                    'The pruner itself is unaffected by this and is still running.',
+            error: (e && e.message) || String(e),
+            runs: [], generatedAt: now,
+          });
+        }
+
+        /* The table figures are wrapped because THE VERDICT MUST SURVIVE A
+           BROKEN DATABASE. The single most valuable moment for this route is the
+           one where the pruner is throwing, and the likeliest reason it throws
+           is a table or column that is not there -- which is also what would
+           break the aggregates below. Losing the counts is acceptable; losing
+           "status: failing" and the recorded stack because of them is not. */
+        let oldestDay = null, eventsRows = null, grantsRows = null, grantsDormant = null, tableErr = null;
+        try {
+          oldestDay = await env.DB.prepare('SELECT MIN(day) d FROM events').first('d');
+          eventsRows = await env.DB.prepare('SELECT COUNT(*) n FROM events').first('n');
+          grantsRows = await env.DB.prepare('SELECT COUNT(*) n FROM grants').first('n');
+          /* THE TAIL THE PRUNER ADMITS IT CANNOT TOUCH. A value-bearing grant
+             for a player who has never acknowledged anything is never deleted at
+             any age, by design (see pruneGrants). It is the only part of this
+             database with no ceiling at all, and it is invisible in a run log,
+             because a run log only ever reports rows that WERE deleted. Same
+             predicate as the pruner, negated. */
+          grantsDormant = await env.DB.prepare(
+            `SELECT COUNT(*) n FROM grants g LEFT JOIN players p ON p.id = g.player_id
+              WHERE g.type <> 'cheer' AND g.id > COALESCE(p.grants_ack, 0)
+                AND (g.key < ? OR g.key >= ?)`).bind(STEPWEEK_LO, STEPWEEK_HI).first('n');
+        } catch (e) { tableErr = (e && e.message) || String(e); }
+
+        // The observed schedule: median gap between consecutive recorded ticks.
+        const gaps = [];
+        for (let i = 0; i + 1 < runs.length; i++) gaps.push(runs[i].ts - runs[i + 1].ts);
+        gaps.sort((a, b) => a - b);
+        /* A measured cadence under a minute is not a schedule, it is somebody
+           firing /__scheduled by hand in a test run, and trusting it would call
+           the pruner "stale" three minutes later. Below that floor the declared
+           15 minutes is the better guess. */
+        const median = gaps.length >= 2 ? gaps[Math.floor(gaps.length / 2)] : 0;
+        const cadenceMs = median >= 60000 ? median : 900000;
+        const last = runs[0] || null;
+        const sinceLastMs = last ? now - last.ts : null;
+        const fails = runs.filter(r => !r.ok).length;
+        const mins = ms => Math.round(ms / 60000);
+
+        let status, detail;
+        if (!last) {
+          status = 'never-ran';
+          detail = 'The prune_runs table exists but is empty: not one tick has been recorded since it was created. ' +
+                   'If the worker was deployed within the last 15 minutes this is normal and the next tick will fill it. ' +
+                   'If it is older than that, check [triggers] in wrangler.toml and the Cron Triggers tab in the Cloudflare dashboard.';
+        } else if (!last.ok) {
+          status = 'failing';
+          detail = `The most recent tick, ${mins(sinceLastMs)} minutes ago, THREW. ` +
+                   `${fails} of the last ${runs.length} recorded ticks failed. The error is in runs[0].err.`;
+        } else if (sinceLastMs > cadenceMs * 3) {
+          status = 'stale';
+          detail = `The last recorded tick was ${mins(sinceLastMs)} minutes ago and the observed schedule is every ` +
+                   `${mins(cadenceMs)} minutes, so at least three ticks have been missed. The cron is not firing.`;
+        } else if (oldestDay && oldestDay < cutoffDay) {
+          status = 'behind';
+          detail = `Ticking normally, but the oldest surviving events row is dated ${oldestDay} and the retention cutoff ` +
+                   `is ${cutoffDay}: rows past the window are still in the table. The pruner is not keeping pace with ` +
+                   `the write rate. Lower EVENT_RETENTION_DAYS or raise PRUNE_MAX_ROWS.`;
+        } else {
+          status = 'healthy';
+          detail = `Last tick ${mins(sinceLastMs)} minutes ago, on an observed schedule of every ${mins(cadenceMs)} minutes. ` +
+                   `${fails === 0 ? 'None' : fails} of the last ${runs.length} recorded ticks failed. ` +
+                   `Nothing older than the ${EVENT_RETENTION_DAYS} day cutoff is left in events.`;
+        }
+
+        return json({
+          ok: status === 'healthy', status, detail,
+          lastRunAt: last ? last.ts : null, sinceLastMs, cadenceMs,
+          recordedRuns: runs.length, failedRuns: fails, keeping: PRUNE_RUNS_KEEP,
+          retention: {
+            eventDays: EVENT_RETENTION_DAYS, eventCutoffDay: cutoffDay,
+            eventOverrideDays: EVENT_RETENTION_OVERRIDE_DAYS, grantDays: GRANT_RETENTION_DAYS,
+          },
+          caps: { batch: PRUNE_BATCH, maxRowsPerTick: PRUNE_MAX_ROWS, budgetMs: PRUNE_BUDGET_MS },
+          tables: { eventsRows, eventsOldestDay: oldestDay, grantsRows, grantsDormant, error: tableErr },
+          runs, generatedAt: now,
+        });
       }
 
       /* Admin: find a player by NAME. The grant route below takes a player_id and
