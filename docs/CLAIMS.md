@@ -19,6 +19,17 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v439
+
+1. PROOF: memory-census.mjs (the Stable, Paddock and Shop CEILING rows plus the new decoded-width SHOT/TILE rows; seven mutations proved red on the tree by the branch author, including the trap that parking the cut sheet restores the SAME numbers byte-for-byte because the onerror fallback brings the art AND the memory back, so only a width row notices) | REACH: Open the Stable, a paddock, or the Shop. The pets are drawn from art cut to the animal instead of the full-size sheet, so the screen decodes a fraction of the picture data: Stable 215.1 -> 52.7 MB, Paddock 322.8 -> 78.1 MB, Shop 192.3 -> 38.1 MB, against a 90 MB census ceiling all three used to blow through. Nothing about how the pets LOOK changes.
+
+CARRIED OVER FROM #158, NOT FIXED, AND UNOWNED: the Shop rack's mannequin tiles
+draw a 384px thumbnail at up to 653 device px, a 1.70x upscale against
+art-resolution-audit's 1.40 ceiling. Real, and the same class of problem, but it
+is not pet art and it needs its own memory-versus-resolution call rather than
+being smuggled into a memory fix. art-resolution-audit never sweeps the Shop,
+which is why nobody had seen it. Tom has a task chip for it (task_43f67ed6).
+
 ## v438
 
 1. PROOF: friend-paddock-audit.mjs (VISITOR: left-not-mirrored, right-mirrored, and a SPLIT row, each proved red alone on its own tree) | REACH: Open a friend's paddock from their profile. You and your friend face each other across the field. The flip is on the figure's container via the `scale` property, not on its layers and not on `transform`: `transform` is animated on that element so a mirror written there is discarded every frame (which is why v435 did nothing at all), and flipping the layers alone leaves the weapon's charge sweeping the wrong side of the body, because that glint is a masked span rather than an image.
