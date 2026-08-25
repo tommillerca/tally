@@ -1402,9 +1402,26 @@ body::before {
   background: radial-gradient(66% 44% at 50% 46%, rgba(255, 236, 180, .2), transparent 68%);
 }
 /* the deck's grain over the coral, pointer-transparent */
+/* THE GRAIN STOPS BEFORE THE TOP EDGE, AND THAT IS THE WHOLE SEAM FIX.
+   Five builds (v434, v435, v436, v438, v441) chased this as a COLOUR problem and
+   each one got closer without ever closing it. It was never a colour. Measured
+   2026-08-25 at 430x932 dpr2 on the shipped backdrop: with the grain on, the
+   art's top row varies across x by 7 units and no two pixels agree; with the
+   grain suppressed it varies by 0. The bounce strip is painted by the scroller's
+   background-color and section 10 proves a background-image there renders ZERO
+   pixels, so the strip can only ever be FLAT. A flat colour cannot match a
+   textured surface: it can equal the mean and nothing else, which is exactly
+   what v441 achieved (mean delta -0.2/+0.4/+0.4) and why a step was still
+   visible. The eye was reading the TEXTURE discontinuity, not the colour.
+   So the art goes flat where it meets the fill instead. The tile is at opacity
+   .07, so a 28px fade is imperceptible as texture and removes the boundary
+   entirely. Tom, 2026-08-25: "make it identical not fill lighter or darker with
+   bandaid fixes? find the root problem". */
 .hero-scene::after {
   content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none;
   background-image: var(--grain); background-size: 150px 150px; opacity: .07;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 var(--grain-fade, 28px));
+          mask-image: linear-gradient(180deg, transparent 0, #000 var(--grain-fade, 28px));
 }
 .hero-scene .bh-anim { animation-duration: 4s; }
 .hero-scene .bh-anim { --av-fit: cover; }
