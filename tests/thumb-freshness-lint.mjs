@@ -52,7 +52,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, copyFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '..');
@@ -99,10 +99,16 @@ ok('FRESH every committed thumbnail is what the generator makes from today\'s ma
    claims "the regex mirrors the generator's KEEP rule exactly", which nothing
    checked. Now something does, and it is the useful direction too: a slot the
    app serves that the generator does not build is a 404 on every item in it. */
+/* THE APP'S HALF MOVED, so this reads it from where it lives. BH_THUMB_RE left
+   js/app.js for data/boneheadz.js, because js/paddock-cards.js needs the rule,
+   is pure, and cannot import the app; scraping js/app.js after that returns
+   undefined, and the row would have reported "could not read one of the two
+   lists" rather than anything about slots. It is IMPORTED now instead of
+   pattern-matched out of a file, so the next move cannot break it at all. */
+const { BH_THUMB_RE } = await import(pathToFileURL(join(repo, 'data', 'boneheadz.js')).href);
 const genSrc = readFileSync(gen, 'utf8');
-const appSrc = readFileSync(join(repo, 'js', 'app.js'), 'utf8');
-const genSlots = (genSrc.match(/^SLOTS = \[([^\]]*)\]/m) || [])[1];
-const appSlots = (appSrc.match(/const BH_THUMB_RE = \/\^assets\\\/bh\\\/\(\(\?:([^)]*)\)/) || [])[1];
+const genSlots = (genSrc.match(/^SLOTS = \[([\s\S]*?)\]/m) || [])[1];
+const appSlots = (BH_THUMB_RE.source.match(/\(\(\?:([^)]*)\)/) || [])[1];
 const norm = t => (t || '').replace(/['\s]/g, '').split(/[,|]/).filter(Boolean).sort().join(' ');
 ok('PARITY the generator builds exactly the slots js/app.js serves a tier for',
   !!genSlots && !!appSlots && norm(genSlots) === norm(appSlots),

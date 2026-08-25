@@ -87,7 +87,8 @@ import {
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, petWornLayers } from '../data/boneheadz.js';
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers,
+  BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
@@ -397,7 +398,55 @@ function petScale(petId) {
  *                       be dressed out of the viewer's wardrobe.
  */
 const wearOf = wear => (wear === undefined ? S.petWear : wear);
-function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined) {
+/* WHICH SHEET THESE LAYERS COME OFF, AND WHY THE CALLER DECIDES.
+ *
+ * This function was untiered everywhere, which was fine while every pet was a
+ * 640 square costing 1.5625 MB a layer. Bumbleseal is not: C6 and the five
+ * accessories drawn for her are 2048x2048, so ONE layer is 16.0000 MB of
+ * decoded RGBA and a dressed pet is FIVE of them. It served masters because it
+ * builds its layers from bhAsset() and never called bhThumb(), and
+ * avatarLayersHtml could not cover for it either -- that one refuses the C slot
+ * for any pet petStacksOnBody() rejects, and C6 is exactly that pet. Measured
+ * on this tree 2026-08-24 at 430x932 DPR 2, an account owning her and wearing
+ * all four pieces, with tests/memory-census.mjs's own instrument:
+ *
+ *     Today                  10 pet layers    160.0 MB      (ceiling: 90 MB)
+ *     Crew fan, 30 friends   35               560.0 MB
+ *     Stable                 30               480.0 MB
+ *     Paddock                48               652.5 MB
+ *
+ * OPT-IN, never automatic, exactly as bhThumb's own note says, and the reason
+ * is measured rather than stylistic: the tier a surface needs is set by the box
+ * the WHOLE square ends up occupying, which for a pet is `imgSize` below and
+ * not `px`. Cam paints the companion-drawn five (C1-C5, CX) small and off to
+ * one side of their 640 canvas, so their ink is ~0.29 of it and their imgSize
+ * runs to 800 CSS px on the Stable's ring; C6 fills her 2048 square, so hers is
+ * 32-192. Measured imgSize per surface, same run:
+ *
+ *     surface                         C6      C2      C5
+ *     Today hero                   192.4   340.4   363.3
+ *     Stable ring card             141.2   283.7   804.6
+ *     Paddock scene                 88.0   274.7   208.0
+ *     Friend profile                79.7   219.6   236.8
+ *     Stable door                   31.9    87.8       -
+ *     Crew fan card                  66.0      -       -
+ *
+ * So ONE literal tier at a call site is right for her and wrong for everybody
+ * else on the same screen. Two ways to ask, and the choice is the caller's:
+ *
+ *   thumb: 192 | 384   that tier, for a surface drawing a KNOWN species at a
+ *                      known size. Greppable, which is the point of opt-in.
+ *   thumb: true        derive it with bhTierFor from the geometry below: the
+ *                      smallest tier that serves the drawn box without
+ *                      upscaling at DPR 2, and the MASTER when none does. That
+ *                      is what a loop over the roster needs, and it cannot make
+ *                      an existing pet softer than it is today.
+ *
+ * A missing thumbnail falls back to the master through THUMB_FALLBACK rather
+ * than leaving a hole (anti-regression rule 8), and only a layer that was
+ * actually tiered carries it, so the untiered path emits byte-identical markup.
+ */
+function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined, thumb = null) {
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
   const c = PET_CROP[petId];
   const worn = petWornLayers(petId, wearOf(wear));
@@ -427,7 +476,19 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = und
      what the listener selects on, so an undressed pet is never a press target
      and cannot swallow a tap. NOT `worn.map(layer)`: map passes the index as the
      second argument, which would land in `cls`. */
-  const layer = (u, cls = '') => `<img${cls ? ` class="${cls}"` : ''} src="${u}" style="position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)" alt="">`;
+  /* THE TIER IS PICKED ONCE, FROM imgSize, AND APPLIED TO EVERY LAYER. It has
+     to be every layer or none: the accessories are registered to the base by
+     sharing its canvas, so serving the bee at 384 while her glasses come off
+     the 2048 master would be two sources of truth for one transform. It is
+     geometry-neutral either way -- PET_CROP is fractions of the square, and the
+     tiers' own alpha boxes agree with the masters' to within 0.0046 of the
+     square (9.3 art px at 2048, under one thumbnail pixel), measured across all
+     six pet-era files. */
+  const tier = thumb === true ? bhTierFor(imgSize) : thumb;
+  const layer = (u, cls = '') => {
+    const s = tier ? bhThumb(u, tier) : u;
+    return `<img${cls ? ` class="${cls}"` : ''} src="${s}"${s === u ? '' : ` data-full="${u}" ${THUMB_FALLBACK}`} style="position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)" alt="">`;
+  };
   return `<span class="petcrop${worn.length ? ' dressed' : ''}" style="width:${px}px;height:${px}px">${layer(src)}${worn.map(u => layer(u, 'pw')).join('')}</span>`;
 }
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
@@ -469,9 +530,9 @@ function petFrom(snapshotPet, ownSpecies = null) {
  * mass-normalised so a flat species is not half the size of a round one. Every
  * paired figure in the app goes through this so "the pet is floating" and "the pet
  * is the wrong size" cannot be re-invented per screen. */
-function petAsideHtml(pet, px) {
+function petAsideHtml(pet, px, { thumb } = {}) {
   if (!pet || !pet.id || !BH_BY_ID[pet.id]) return '';
-  return petSpriteHtml(pet.id, px, !petHovers(pet.id), { mass: true, shiny: pet.shiny, wear: pet.wear });
+  return petSpriteHtml(pet.id, px, !petHovers(pet.id), { mass: true, shiny: pet.shiny, wear: pet.wear, thumb });
 }
 /* THE THIRD PATH. On the splash, the level-up card, the map marker and the
  * leaderboard the pet stays INSIDE the avatar stack, so it cannot go through
@@ -566,7 +627,7 @@ function petFightPx(petId, px) {
    is that UI, so tests/pet-wardrobe-audit.mjs taps the real tiles instead, which
    is what tally/CLAUDE.md rule 5 asks for anyway: operate the control, do not
    call the function behind it. */
-function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear } = {}) {
+function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, thumb } = {}) {
   // CX (Day One Lizard) has no shiny static variant; its amethyst art IS the
   // special look, so always render its animated self even if the instance is shiny.
   // Every path scales by the species' visual mass, so a colourway is never a
@@ -599,17 +660,17 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear } 
     // Cropped like every other pet. This used to be a raw <img> at px, which drew
     // the creature tiny inside its box because the source art sits small in a 640²
     // canvas: a shiny lizard came out a fraction of the normal one.
-    return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
+    return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear, thumb)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
-  return animatedPetHtml(petId, S2) || croppedPetImg(petId, S2, ground, null, wear);
+  return animatedPetHtml(petId, S2) || croppedPetImg(petId, S2, ground, null, wear, thumb);
 }
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
 // it's an animated/hovering/grounded species. Shiny uses its recolour, same crop.
-function petPortraitHtml(petId, px, shiny = false, { mass = false, wear } = {}) {
+function petPortraitHtml(petId, px, shiny = false, { mass = false, wear, thumb } = {}) {
   if (petId === 'CX') shiny = false; // Day One Lizard: amethyst CX.png is the portrait (no shiny static)
   const src = shiny ? `assets/bh/C/shiny/${petId}.png` : bhAsset(BH_BY_ID[petId]);
-  const inner = croppedPetImg(petId, mass ? Math.round(px * petScale(petId)) : px, false, src, wear);
+  const inner = croppedPetImg(petId, mass ? Math.round(px * petScale(petId)) : px, false, src, wear, thumb);
   return shiny ? `<div class="pet-shiny-wrap">${inner}<span class="shiny-spark">${sparkIco(12)}</span></div>` : inner;
 }
 async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); }
@@ -3653,6 +3714,23 @@ async function renderToday(el) {
   const heroPetBig = heroPetRel > PET_HERO_HOUSE;
   const heroPetPx = Math.round(heroPetRel * PET_HERO_REF);
   const heroPetBoxRel = heroPet ? Math.round(heroPetPx * petScale(heroPet.id)) / PET_HERO_REF : 0;
+  /* THE ONE PET SURFACE WHERE THE SHEET'S STRICT RULE IS A PIXEL SHORT, named
+     here rather than tuned into bhTierFor for the whole app.
+     Measured 430x932 DPR 2: a solo-canvas pet's whole square lands in a 192.4px
+     box on this stage, which wants 384.8 device px, and the sheet's top tier is
+     384. bhTierFor declines by 0.8px and hands back the master -- and for C6
+     that master is 16.0000 MB a layer, so Today measured 160.0 MB of pet across
+     ten layers against the memory census's 90 MB ceiling. 384 is a 1.003x draw
+     at DPR 2 and 1.50x at DPR 3, where her cream speckling softens (PSNR 32.0
+     dB against the master, composited over white; at DPR 2 it is 38.1 dB and
+     indistinguishable). A 768 tier would remove even that and is the upgrade
+     path if it ever reads soft on a phone, but it needs its own rung and
+     nextArtTier climbs the same ladder, so it is not free.
+     petStacksOnBody, NOT a species id: a companion-drawn pet is painted small
+     in one corner of its 640 square, so the SAME box is 340-363px of IMAGE for
+     C2 and C5, where 384 would be a 1.8x upscale on art drawing at 1.06x
+     today. They keep their master and are untouched. */
+  const heroPetTier = heroPet && !petStacksOnBody(heroPet.id) ? 384 : true;
   /* Gwart's opening line, chosen from the state this render already has in hand
      (no extra reads). gwIdle() below re-picks from the same context. */
   const gwCtx = {
@@ -3721,7 +3799,7 @@ async function renderToday(el) {
     ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="" decoding="sync" fetchpriority="high">` : ''}
     <span class="hero-cast c-bh"></span>
     <div class="hero-char">${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}</div>
-    ${heroPet ? `<button class="hero-companion${heroPetBig ? ' big' : ''}" id="heroPetBtn" style="--pet-rel:${heroPetBoxRel.toFixed(5)}" aria-label="Your pet">${petAsideHtml(heroPet, heroPetPx)}</button>` : ''}
+    ${heroPet ? `<button class="hero-companion${heroPetBig ? ' big' : ''}" id="heroPetBtn" style="--pet-rel:${heroPetBoxRel.toFixed(5)}" aria-label="Your pet">${petAsideHtml(heroPet, heroPetPx, { thumb: heroPetTier })}</button>` : ''}
     <!-- The bottom of the art dissolves into the page instead of ending on the
          frame that used to be there. Sits before .hero-meta because both are
          z-index 4 and the level plate has to stay above the fade. -->
@@ -4872,12 +4950,32 @@ const EMBER_EYES = new Set(['E4']);
    (fx frames, glutton plates, the mage) has no thumbnail and is returned
    untouched. And a thumbnail that 404s falls back to the full-size art rather
    than vanishing -- anti-regression rule 8, degrade to ugly, never to invisible. */
-const BH_THUMB_RE = /^assets\/bh\/((?:B|BG|C|E|FW|G|H|IL|IR|M|P|S|SK|T|U)\/(?:shiny\/)?[^/]+\.png)$/;
-const BH_THUMB_TIERS = [192, 384];
-function bhThumb(src, px = 192) {
-  const m = BH_THUMB_RE.exec(src || '');
-  return m && BH_THUMB_TIERS.includes(px) ? `assets/bh/thumb/${px}/${m[1]}` : src;
-}
+/* TWO MORE TIERS EXIST AND NEITHER IS SQUARE, so neither is reachable through
+   bhThumb and neither belongs to a `thumb:` option. Both are here so the
+   inventory is in one place:
+     thumb/trim/          the art cropped to its ALPHA box. Canvases only, and
+                          bhTrim() below is its only door. Full argument there.
+     thumb/shot/<item>/   the art cropped to a shop accessory's product-shot
+                          WINDOW, pet layer and item layer cut with one box.
+                          petShotHtml is its only door; full argument there.
+   Both are keyed on something other than a pixel size, so nextArtTier's ladder
+   (`/thumb/<digits>/`) cannot see them and nothing climbs off them by accident. */
+/* THE PET-ACCESSORY SLOTS ARE IN THE ALTERNATION TOO (CB bag, CE glasses, CG
+   stinger, CM patches), and leaving them out was the more expensive half of the
+   C6 miss. Those five masters are 2048x2048, so ONE of them is 16.0000 MB of
+   decoded RGBA -- ten times a body cosmetic -- and they are drawn as WORN
+   LAYERS beside the pet on every surface she appears on, four at a time on a
+   dressed pet. They were absent for the dullest reason: the slots did not exist
+   when this list was written and nothing since had cause to read it again. */
+/* BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor AND THUMB_FALLBACK NOW LIVE IN
+   data/boneheadz.js, beside bhAsset, and they are imported at the top of this
+   file. They moved for the reason PET_CROP and petWornLayers moved before them:
+   js/paddock-cards.js needs the rule, is PURE (tests/unit.test.js imports it in
+   node), and cannot reach back into this file. The alternative was a second copy
+   of the regex, which is precisely what the generator's KEEP note asks nobody to
+   make. Everything ABOVE this line -- the tiers, the measurements, the opt-in
+   rule -- is still the argument for them, and it stays here where the callers
+   are. */
 /* THE CROPPED TIER, FOR THE CANVASES ONLY.
    Tom, 2026-08-24: "cant you make the art small if its a small slot? and big if
    it's a big slot?" The square tiers above cannot: a cosmetic is drawn on a
@@ -4912,18 +5010,13 @@ const bhTrim = src => {
   const m = BH_THUMB_RE.exec(src || '');
   return m ? `assets/bh/thumb/trim/${m[1]}` : src;
 };
-/* PICK THE TIER FROM THE GEOMETRY, not from taste. `css` is the width the WHOLE
-   640 canvas ends up occupying in CSS pixels, which for a cropped surface is the
-   post-transform figure, not the window it peeps through: a 62px teaser head is
-   a 154px canvas behind a 62px hole, and treating it as 62 is exactly how the
-   first pass shipped visibly blurred teeth. Doubling for device pixels is the
-   compromise: it is exact on a 2x phone and leaves a 3x phone a mild 0.75
-   upscale on the big tier, which measured as indistinguishable. Anything a tier
-   cannot serve gets the full 640px art. */
-const bhTierFor = css => BH_THUMB_TIERS.find(t => t >= css * 2) || 640;
-/* The fallback, as an attribute so it survives innerHTML: swap to the full-size
-   art once, then give up and remove the layer (the old behaviour). */
-const THUMB_FALLBACK = 'onerror="if(this.dataset.full){this.src=this.dataset.full;this.removeAttribute(\'data-full\');}else{this.remove();}"';
+/* bhTierFor picks the tier FROM THE GEOMETRY, not from taste: `css` is the width
+   the WHOLE square ends up occupying, which for a cropped surface is the
+   post-transform figure and not the window it peeps through. A 62px teaser head
+   is a 154px canvas behind a 62px hole, and treating it as 62 is exactly how the
+   first pass shipped visibly blurred teeth. Doubling for device pixels is exact
+   on a 2x phone and leaves a 3x phone a mild 0.75 upscale on the big tier, which
+   measured as indistinguishable. Definition in data/boneheadz.js. */
 
 function avatarLayersHtml(eq, opts = {}) {
   const skip = new Set(opts.skip || []);
@@ -5441,7 +5534,7 @@ function hypeBannerHtml() {
       <b class="hype-cap">Two want to eat you.</b>
     </button>
     <button class="hype-half seal" id="hypeShop" type="button" aria-label="A new pet, in the shop">
-      <span class="hype-figs">${petAsideHtml(petFrom(null, 'C6'), 92)}</span>
+      <span class="hype-figs">${petAsideHtml(petFrom(null, 'C6'), 92, { thumb: true })}</span>
       <b class="hype-cap">One likes to shop</b>
     </button>
   </div>`;
@@ -5654,7 +5747,7 @@ async function openSpireInfoSheet(info, onAct = null) {
             <div class="bh">${keeperFit
               ? avatarLayersHtml(keeperFit, { noYard: true, skip: ['BG', 'C'] })
               : `<img src="assets/brand/tomb.png" alt="">`}</div>
-            ${keeperPet ? `<span class="pet">${petAsideHtml(keeperPet, 74)}</span>` : ''}
+            ${keeperPet ? `<span class="pet">${petAsideHtml(keeperPet, 74, { thumb: true })}</span>` : ''}
           </div>
         </div>
         <div class="spp-plate${held ? ' mine' : ''}">
@@ -6284,7 +6377,7 @@ function openHollow(after) {
             is left UNDEFINED so S.shinyPets answers for the viewer's own pet,
             and it is registered in tests/figure-audit.mjs SITES, which FAILS if
             a new surface draws a pet and is not listed. */''}
-      ${hlwPet && !firstEver ? `<div id="hlwPet" class="hlw-pet" style="position:absolute;left:26px;top:${HLW_H - 150}px;width:74px;height:74px;z-index:3;pointer-events:none">${petAsideHtml(hlwPet, 74)}</div>` : ''}
+      ${hlwPet && !firstEver ? `<div id="hlwPet" class="hlw-pet" style="position:absolute;left:26px;top:${HLW_H - 150}px;width:74px;height:74px;z-index:3;pointer-events:none">${petAsideHtml(hlwPet, 74, { thumb: true })}</div>` : ''}
       <div id="hlwAv" style="position:absolute;left:${av.x}px;top:${av.y}px;width:190px;height:190px;z-index:4;pointer-events:none">
         ${say ? `<span id="hlwSay" class="hlw-say" role="status" aria-live="polite">${esc(say)}</span>` : ''}
         <span style="position:absolute;left:40px;bottom:4px;width:110px;height:20px;border-radius:50%;background:radial-gradient(ellipse,rgba(30,33,26,.5),transparent 70%)"></span>
@@ -8018,17 +8111,56 @@ function scalePer100(per100, grams) {
  * registered: Cam draws every accessory positioned for HER body in the shared
  * 2048 canvas.
  */
-const PET_SHOT_PAD = 1.30;
+/* THE SHOT IS CUT, NOT ZOOMED, AND THAT IS WHY IT IS NOT A `thumb:` FLAG.
+ *
+ * This function frames a WINDOW: it scales the item's measured `shot` box out
+ * of the shared 2048 square up to the tile, so `img` below is the whole square
+ * at 4.1x the tile. Ten of those windows stand on the Stable's wardrobe row and
+ * ten more on the shop's shelf, and every one of them was a 2048x2048 master at
+ * 16.0000 MB decoded. Measured 2026-08-24, 430x932 DPR 2, an account owning her
+ * and wearing all four pieces, with tests/memory-census.mjs's instrument:
+ *
+ *     screen     total       of which petShotHtml       after
+ *     Stable     215.1 MB    160.0 MB (10 layers)        5.6 MB
+ *     Shop       192.3 MB    160.0 MB (10 layers)        5.6 MB
+ *     Paddock    322.8 MB    160.0 MB (the Stable is still mounted under it)
+ *
+ * A SQUARE TIER CANNOT SERVE A ZOOM, and the numbers say so rather than taste:
+ * CG1's window is 0.2413 of the square, so behind the shop's 112px tile a 384
+ * tier would put 92.7 source pixels under 224 device pixels. That is a 2.42x
+ * upscale -- the exact class tests/art-resolution-audit.mjs exists to catch --
+ * and it would have traded 160 MB for pixels the browser invented.
+ *
+ * So the sheet is cut to the window instead: `assets/bh/thumb/shot/<item>/`
+ * carries the pet and the accessory CUT TO THE SAME padded box (384px, a
+ * downscale of every window on every device), built by
+ * scripts/build-bh-thumbs.py, which PARSES the boxes out of data/boneheadz.js
+ * so the cut and this function cannot drift. Cut art needs no transform at all:
+ * both layers simply fill the tile, and they stay registered because they were
+ * cut with one box.
+ *
+ * THE MASTER GEOMETRY SURVIVES BELOW FOR ONE REASON: the fallback. If the cut
+ * sheet 404s, the layer has to go back to the master AND to the zoom, or the
+ * tile would show the whole bee where an accessory belongs. That is
+ * anti-regression rule 8 (degrade to ugly, never to broken) and it is also
+ * exactly why the memory census asserts the DECODED WIDTH on these two
+ * surfaces: a missing sheet otherwise reads as a clean pass with the 160 MB
+ * quietly restored.
+ */
+const SHOT_FALLBACK = 'onerror="if(this.dataset.full){this.style.cssText=this.dataset.fs;this.src=this.dataset.full;this.removeAttribute(\'data-full\');}else{this.remove();}"';
 function petShotHtml(itemId, px) {
   const it = PET_SHOP.items.find(i => i.id === itemId);
   const art = BH_BY_ID[itemId];
   if (!it || !art) return '';
-  let [x0, y0, x1, y1] = it.shot;
+  const [x0, y0, x1, y1] = it.shot;
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, half = ((x1 - x0) / 2) * PET_SHOT_PAD;
   const img = px / (half * 2), tx = -(cx - half) * img, ty = -(cy - half) * img;
-  const layer = src => `<img src="${src}" style="position:absolute;left:0;top:0;width:${img.toFixed(1)}px;height:${img.toFixed(1)}px;max-width:none;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)" alt="">`;
+  const zoom = `position:absolute;left:0;top:0;width:${img.toFixed(1)}px;height:${img.toFixed(1)}px;max-width:none;transform:translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px)`;
+  const layer = (which, master) => `<img src="${petShotArt(itemId, which)}"`
+    + ` style="position:absolute;left:0;top:0;width:${px}px;height:${px}px"`
+    + ` data-full="${master}" data-fs="${zoom}" ${SHOT_FALLBACK} alt="">`;
   return `<span class="petcrop" style="width:${px}px;height:${px}px">`
-    + layer(bhAsset(BH_BY_ID[PET_SHOP.pet.id])) + layer(bhAsset(art)) + `</span>`;
+    + layer('pet', bhAsset(BH_BY_ID[PET_SHOP.pet.id])) + layer('item', bhAsset(art)) + `</span>`;
 }
 function petShelfHtml(ownedCos, coinBal) {
   const pet = BH_BY_ID[PET_SHOP.pet.id];
@@ -8037,7 +8169,7 @@ function petShelfHtml(ownedCos, coinBal) {
   const hero = hasPet ? '' : `
   <div class="pet-hero">
     <span class="pet-new">NEW ARRIVAL</span>
-    <div class="pet-hero-art">${petSpriteHtml(PET_SHOP.pet.id, 176, true)}</div>
+    <div class="pet-hero-art">${petSpriteHtml(PET_SHOP.pet.id, 176, true, { thumb: true })}</div>
     <div class="pet-hero-copy">
       <div class="pet-kind">${esc((pet.rarity || '').toUpperCase())} PET</div>
       <div class="pet-name">${esc(pet.name)}</div>
@@ -9682,7 +9814,7 @@ function nameWithAlias(f) {
 function crewCardArtHtml(f) {
   const p = f.profile || {};
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
-  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: p.pet.wear || null })}</div>` : '';
+  const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: p.pet.wear || null, thumb: true })}</div>` : '';
   return (eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhThumb(bhAsset(BH_BY_ID[eq.BG]))}" alt="">` : '')
     + avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 384 }) + pet;
 }
@@ -10915,7 +11047,7 @@ function openFriendProfile(f, onChange, opts = {}) {
         <div class="fp-yard-h"><span>THEIR PADDOCK</span><b>${yard.n} PET${yard.n === 1 ? '' : 'S'}</b></div>
         <div class="fp-yard-row">${yard.pets.map(x => `
           <span class="fp-yard-pet${x.shiny ? ' shiny' : ''}" title="${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}">
-            ${petPortraitHtml(x.sp, 54, !!x.shiny, { mass: true, wear: yardWear })}
+            ${petPortraitHtml(x.sp, 54, !!x.shiny, { mass: true, wear: yardWear, thumb: true })}
           </span>`).join('')}</div>
         ${yard.n > yard.pets.length ? `<p class="note fp-yard-more">and ${yard.n - yard.pets.length} more back at the paddock</p>` : ''}
         <!-- THE SHELF IS THE DOOR NOW, not the destination: openFriendPaddock
@@ -10933,7 +11065,7 @@ function openFriendProfile(f, onChange, opts = {}) {
       <div class="fp-hero${eq.BG && BH_BY_ID[eq.BG] ? ' framed' : ''}">
         ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
         <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</div>
-        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny, wear: yardWear })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
+        ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny, wear: yardWear, thumb: true })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
       <div class="fp-title"><div class="fp-class">${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal" hidden></div></div>
@@ -13753,7 +13885,7 @@ function petPanelHtml(petId, fighter) {
   const statLine = `<span class="pet-stats"><b>${bs.power}</b> PWR · <b>${bs.hp}</b> HP · <b>${bs.reflex}</b> REF</span>`;
   return `
     <div class="pet-card r-${rarity} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">
-      ${petSpriteHtml(petId, 60)}
+      ${petSpriteHtml(petId, 60, false, { thumb: true })}
       <div class="pet-card-meta">
         <b>${esc(fam.name)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(10)} SHINY</span>` : ''} <span class="pet-role" style="color:${fam.color}">${fam.role}</span></b>
         <small><span class="rar-lbl r-${rarity}">${(RARITIES[rarity] || {}).label || rarity}</span> · Pet level ${lvl}${lvl < PET_MAX_LEVEL ? ` · ${toNext.toLocaleString()} steps to Lv ${lvl + 1}` : ' · maxed'}</small>
@@ -14723,7 +14855,7 @@ function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
   confettiRain(70); levelSound(S.sounds);
   const wrap = openSheet(`
     <div class="sheet-body" style="text-align:center;padding-top:12px">
-      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${(BH_BY_ID[petId] || {}).rarity || 'common'} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">${petPortraitHtml(petId, 104, shiny)}</div></div>
+      <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${(BH_BY_ID[petId] || {}).rarity || 'common'} lin-${Math.min(lineage, 6)}${shiny ? ' is-shiny' : ''}">${petPortraitHtml(petId, 104, shiny, { thumb: true })}</div></div>
       <div class="lvl-stamp" style="font-size:30px">PET LEVEL ${level}!</div>
       <div class="cele-sub" style="font-size:15px;margin-top:2px">${esc(petName)}${lineage ? ` <span class="lin-tag">${ICONS.star(11)}${lineage}</span>` : ''}${shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
       <div class="pet-gains">${gains}</div>
@@ -14868,7 +15000,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
   const petHtml = r => {
     const p = places[r.iid];
     if (!p) return '';
-    const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny, wear: r.wear || null });
+    const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny, wear: r.wear || null, thumb: true });
     const rarity = (BH_BY_ID[r.sp] || {}).rarity;
     const glow = p.kind === 'fly' && rarity === 'legendary' ? ' pdk-gold' : p.kind === 'hover' && rarity === 'epic' ? ' pdk-epic' : '';
     const pos = p.kind === 'walk'
@@ -14898,8 +15030,17 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
              Your equipped outfit, rendered by the same layer stack as the Today
              hero (skip BG: the scene is the backdrop; skip C: your pets are
              already the point of the field). -->
+        ${/* THE 384 SHEET, AND THE SIZE IS WHY. Measured on this tree 2026-08-24
+             at 430x932: this figure is drawn 173.9 CSS px, which is the crew
+             card's 175 to within a pixel -- the size the sheet's own note says
+             384 was chosen for, side by side at deviceScaleFactor 3. Seven
+             layers at 640 is 10.9 MB and at 384 it is 3.9, and the Paddock is
+             the screen that pays for it three times over: it is reached THROUGH
+             the Stable, so this stack, the door's and Today's hero are all in
+             one document. It was the largest thing left on that screen once the
+             pet art was tiered (tests/memory-census.mjs measures it). */''}
         <div class="pdk-keeper" style="left:${keeper.x - keeper.px / 2}px;top:${keeper.y - keeper.px / 2}px;width:${keeper.px}px;height:${keeper.px}px">
-          ${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true })}
+          ${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true, thumb: 384 })}
         </div>
         ${/* THE VISITOR STANDS OPPOSITE. Tom, 2026-08-24: "can we make it so the
              player that is visiting the paddock is on the opposite side ... bottom
@@ -14913,7 +15054,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
              Nothing here is a control, so it is pointer-events: none like the
              keeper. */''}
         ${visitor ? `<div class="pdk-keeper pdk-visitor" style="left:${SCENE_W - keeper.x - keeper.px / 2}px;top:${keeper.y - keeper.px / 2}px;width:${keeper.px}px;height:${keeper.px}px">
-          ${avatarLayersHtml(visitor, { skip: ['BG', 'C'], noYard: true })}
+          ${avatarLayersHtml(visitor, { skip: ['BG', 'C'], noYard: true, thumb: 384 })}
         </div>` : ''}
         ${roster.map(petHtml).join('')}
         ${lurkSp ? `<div class="pdk-lurker${lurkSp !== 'CX' ? ' pdk-lure-shiny' : ''}" data-pdk="${lurkSp}" style="left:296px;top:158px;width:96px;height:64px">
@@ -15161,7 +15302,7 @@ async function openStable(opts = {}) {
              contract -- there are no animated SHINY variants, so a shiny pet
              (except CX, whose amethyst art IS its special look) renders its
              recoloured still instead of quietly losing the shiny. -->
-        <span class="cf-art">${petSpriteHtml(x.sp, 124, false, { mass: true, shiny: x.shiny })}</span>
+        <span class="cf-art">${petSpriteHtml(x.sp, 124, false, { mass: true, shiny: x.shiny, thumb: true })}</span>
         ${isEq ? '<span class="cf-eq">Out with you</span>' : ''}
         ${inSel && !isEq ? '<span class="cf-eq sel">Breeding</span>' : ''}
       </div>`;
@@ -15304,8 +15445,12 @@ async function openStable(opts = {}) {
           <i class="pdk-door-moon"></i>
           <i class="pdk-door-rail r1"></i><i class="pdk-door-rail r2"></i>
           <i class="pdk-door-post" style="left:16px"></i><i class="pdk-door-post" style="left:70px"></i><i class="pdk-door-post" style="left:124px"></i>
-          <span class="pdk-door-keeper">${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true })}</span>
-          <span class="pdk-door-pets">${doorSp.map(sp => `<span class="pdk-door-pet">${petAsideHtml(petFrom(null, sp), doorPx)}</span>`).join('')}</span>
+          ${/* 192, because the door draws the whole figure in a 60x78 box:
+               measured 60.2 CSS px, which is 120 device px on a 2x phone and 181
+               on a 3x, both comfortably inside the small tier. Seven layers at
+               640 was 10.9 MB standing in a thumbnail. */''}
+          <span class="pdk-door-keeper">${avatarLayersHtml(eqOwn, { skip: ['BG', 'C'], noYard: true, thumb: 192 })}</span>
+          <span class="pdk-door-pets">${doorSp.map(sp => `<span class="pdk-door-pet">${petAsideHtml(petFrom(null, sp), doorPx, { thumb: true })}</span>`).join('')}</span>
           <i class="pdk-door-vig"></i>
         </span>
         <span class="pdk-door-tx">
@@ -15347,7 +15492,7 @@ async function openStable(opts = {}) {
            will always fight the row above it, so the instruction moved to the top
            of the sheet where nothing it refers to can be behind it. -->
       ${!pair && sel.length === 1 ? `<div class="breed-waiting">
-          <span class="bw-pet">${(() => { const one = insts.find(x => x.iid === sel[0]); return one ? petPortraitHtml(one.sp, 34, one.shiny) : ''; })()}</span>
+          <span class="bw-pet">${(() => { const one = insts.find(x => x.iid === sel[0]); return one ? petPortraitHtml(one.sp, 34, one.shiny, { thumb: true }) : ''; })()}</span>
           <span class="bw-say"><b>Now pick the second pet</b><small>Swipe across and tap BREED on it</small></span>
           <button class="btn ghost bw-cancel" id="breedCancel" type="button">Cancel</button>
         </div>` : ''}
@@ -15379,12 +15524,12 @@ async function openStable(opts = {}) {
           <div class="breed-h">What breeding does</div>
           <div class="breed-trade">
             <span class="bt-out">
-              <span class="bt-row"><span class="bt-pet keep">${petPortraitHtml(keeper.sp, 44, keeper.shiny)}</span></span>
+              <span class="bt-row"><span class="bt-pet keep">${petPortraitHtml(keeper.sp, 44, keeper.shiny, { thumb: true })}</span></span>
               <small>Kept &middot; lineage ${keeper.lineage || 0} &rarr; ${offLineage}</small>
             </span>
             <span class="bt-arrow">${ICONS.chev(20)}</span>
             <span class="bt-in">
-              <span class="bt-row"><span class="bt-pet">${petPortraitHtml(spare.sp, 38, spare.shiny)}</span></span>
+              <span class="bt-row"><span class="bt-pet">${petPortraitHtml(spare.sp, 38, spare.shiny, { thumb: true })}</span></span>
               <small>Fed in &middot; gone</small>
             </span>
           </div>
@@ -15977,12 +16122,12 @@ function openPetBreedResult(off) {
       <div class="reveal-stamp">Lineage ${off.lineage}</div>
       <div class="reveal-sub">${esc(it.name || off.sp)} got stronger</div>
       <div class="reveal-body">
-        <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny)}</div></div>
+        <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar r-${it.rarity || 'common'} lin-${Math.min(off.lineage, 6)}${off.shiny ? ' is-shiny' : ''}">${petPortraitHtml(off.sp, 104, off.shiny, { thumb: true })}</div></div>
         <div class="reveal-sub" style="font-size:var(--fs-3)">${esc(it.name || off.sp)}${off.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</div>
         <div class="cele-bubble">A stronger bloodline: +${Math.round(off.lineage * 5)}% to every stat, and a brighter glow.</div>
         ${parents.length ? `<div class="fused">
           <div class="fused-row">
-            <span class="gone-pet">${petPortraitHtml(parents[0].sp, 42, parents[0].shiny)}</span>
+            <span class="gone-pet">${petPortraitHtml(parents[0].sp, 42, parents[0].shiny, { thumb: true })}</span>
           </div>
           <div class="fused-note">${esc((BH_BY_ID[parents[0].sp] || {}).name || parents[0].sp)} was fed in</div>
         </div>` : ''}
@@ -19078,7 +19223,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         <div class="bh-stage fstage" id="youStage">${avatarLayersHtml(player.outfit, { noYard: true, skip: ['BG', 'C'] })}</div>
         ${petBody ? `
         <div class="pet-fighter" id="petG">
-          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''}${petArtId && petFacesLeft(petArtId) ? ' faces-away' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, petFightPx(petArtId, 76), !petHovers(petArtId)) : ''}</div>
+          <div class="bh-stage fstage petmini${petArtId && petHovers(petArtId) ? ' flyer' : ''}${petArtId && petFacesLeft(petArtId) ? ' faces-away' : ''} r-${(BH_BY_ID[petArtId] || {}).rarity || 'common'} lin-${Math.min((petBody.kit && petBody.kit.lineage) || 0, 6)}${petArtId && S.shinyPets.has(petArtId) ? ' is-shiny' : ''}" id="petStage">${petArtId && BH_BY_ID[petArtId] ? petSpriteHtml(petArtId, petFightPx(petArtId, 76), !petHovers(petArtId), { thumb: true }) : ''}</div>
         </div>` : ''}
       </div>
       <div id="floats"></div>

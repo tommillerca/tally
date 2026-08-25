@@ -75,7 +75,11 @@
  *     and a row that goes green when tiles fail to load is a hollow check while
  *     a row that goes red is a network outage failing the gate. Which of those
  *     to accept is a product call, not this file's to make.
- *   - Stable / paddock. Another lane's unmerged work; deliberately not driven.
+ *   (The Stable and the Paddock used to be listed here as "another lane's
+ *   unmerged work; deliberately not driven". That lane merged, and the note
+ *   outlived it: the two worst screens in the app sat unmeasured behind it for
+ *   days while six cheaper ones were guarded. They are rows now, with the Shop
+ *   beside them. A "not covered" note is a debt, not a decision.)
  *
  * AN EMPTY SCREEN IS A FAILURE, NEVER A PASS (rule 3). Every row asserts the
  * screen rendered (markup length + the art the screen is about) before it
@@ -90,6 +94,20 @@
  *       crew.
  *   1C  build teaserWallHtml eagerly in cosmeticTeaserBannerHtml instead of on
  *       first open and TODAY blows its ceiling.
+ *   1D  drop the `thumb` option from the hero-companion or the crew card's
+ *       petPortraitHtml and TODAY (120.3 MB) or CREW (592.5 MB) blows its
+ *       ceiling on the 2048px pet art, and the matching TIER row names the
+ *       width. Both halves needed: each mutation reds only its own screen.
+ *   1E  point petShotHtml's layers back at bhAsset() and STABLE (207.1 MB),
+ *       PADDOCK (232.5) and SHOP (192.5) all blow their ceiling on the ten
+ *       2048px product shots, with both SHOT rows naming 2048.
+ *   1F  drop `box` from panelHtml's layeredArt call and PADDOCK alone blows its
+ *       ceiling (155.3 MB) with TILE naming 2048, while STABLE and SHOP stay
+ *       green. That isolation is the half a single budget would have missed.
+ *   1G  drop `thumb:` from the two pdk-keeper stacks and the pdk-door-keeper and
+ *       PADDOCK goes back over at 95.0 MB while STABLE only drops to 62.7. The
+ *       keeper figures are not pet art and no SHOT/TILE row sees them, which is
+ *       why the budget is still the row that catches this one.
  *
  * Usage: node tests/memory-census.mjs [url]      (self-serves this checkout)
  *        DIAG=1 node tests/memory-census.mjs     (per-screen breakdown)
@@ -198,28 +216,69 @@ async function fresh() {
   await sleep(900);
 }
 
+/* THE FRIEND CARRIES A DRESSED PET, and `pet: null` is what hid the whole pet
+   class from this file. Every friend's card draws their pet beside their
+   Bonehead, and the pet-era art is 2048x2048 rather than 640: ONE C6 layer is
+   16.0000 MB against a body cosmetic's 1.5625, and a dressed pet is five of
+   them. With pet: null this file measured 32.5 MB for a 30-friend fan and
+   called the screen clean while a single one of those layers cost half its
+   budget. Measured on this tree 2026-08-24, same instrument, before the fix:
+   560.0 MB of pet across 35 layers on the fan, 160.0 MB across 10 on Today.
+   FOUR PIECES, NOT ONE, for the same reason FIT8 wears eight: a real owner
+   dresses her, and one accessory is worth a quarter of what four are. */
+const PET6 = { id: 'C6', level: 4, shiny: false, wear: { CG: 'CG1', CB: 'CB2', CM: 'CM1', CE: 'CE1' } };
 const friendFixture = n => Array.from({ length: n }, (_, i) => ({
   playerId: 'cf' + i, name: 'Bonehead ' + i, alias: null, lastSeen: Date.now() - (i % 3) * 90000,
   profile: { level: 40 - (i % 30), levelName: 'Bonehead', badges: i % 9, gearCount: i % 12,
-    outfit: { ...FIT8, BG: 'BG1' }, pet: null },
+    outfit: { ...FIT8, BG: 'BG1' }, pet: PET6 },
 }));
 
 /* ---- the account: a completionist hoarder, which is the worst case --------
    364 cosmetics owned and 120 gear pieces is the account gwart measured. The
-   Collection and the melt bench are loops over exactly these two numbers. */
-await seed(page, { level: 40, coins: 99999, dust: 99999 });
+   Collection and the melt bench are loops over exactly these two numbers.
+
+   AND SHE OWNS THE PET AND ITS WARDROBE. The hoarder was missing the most
+   expensive object in the game: Gwart sells a 2048x2048 pet for 50,000 coins
+   and four 2048x2048 pieces to dress her in for 38,500 more, and 99,999 coins
+   is 1,499 short of the lot, so this account could never reach the state that
+   breaks Today. Bought through buyPetItem, which is the real path the money
+   goes through and the only way an accessory legitimately enters a save, then
+   worn through the real toggle: a hand-written kv row would prove the renderer
+   can draw something nobody could own. */
+await seed(page, { level: 40, coins: 250000, dust: 99999 });
 const account = await pe(async () => {
   const loot = await import('./js/loot.js');
   const { GEAR_ITEMS } = await import('./js/gear.js');
-  const { BH_ITEMS } = await import('./data/boneheadz.js');
+  const { BH_ITEMS, PET_SHOP } = await import('./data/boneheadz.js');
   let looks = 0, gear = 0;
+  /* THE SHOP RUNS FIRST, AND THE ORDER IS LOAD-BEARING. buyPetItem refuses an
+     item the save already owns, and the blanket grant below owns every row in
+     the catalogue, the pet included -- so with the loop first the purchase was
+     refused, no pet INSTANCE was ever minted, there was nothing to equip, and
+     Today drew the starter cloud while this file believed it was measuring her.
+     It cost a run to find, which is what the second ACCOUNT row is for. */
+  for (const id of [PET_SHOP.pet.id, ...PET_SHOP.items.map(i => i.id)]) await loot.buyPetItem(id);
+  for (const i of PET_SHOP.items) await loot.togglePetWear(i.id);
+  const inst = (await loot.petInstances()).find(x => x.sp === PET_SHOP.pet.id);
+  if (inst) await loot.setEquippedPet(inst.iid);
   for (const i of BH_ITEMS) { try { await loot.grantCosmetic(i.id, 'census'); looks++; } catch { /* not grantable */ } }
   for (const g of GEAR_ITEMS.slice(0, 120)) { try { await loot.grantGear(g.id, 'census'); gear++; } catch { /* not grantable */ } }
-  return { looks, gear };
+  const slots = new Set(PET_SHOP.items.map(i => (BH_ITEMS.find(b => b.id === i.id) || {}).slot));
+  return { looks, gear, pet: PET_SHOP.pet.id, slots: slots.size,
+    equipped: (await loot.equippedPetIid()) || '', wearing: Object.keys(await loot.petWear()).length };
 });
-console.log(`account seeded: ${account.looks} cosmetics granted, ${account.gear} gear pieces\n`);
+console.log(`account seeded: ${account.looks} cosmetics granted, ${account.gear} gear pieces, `
+  + `pet ${account.equipped || 'NOTHING'} wearing ${account.wearing}/${account.slots} slots\n`);
 ok('ACCOUNT the fixture really is a hoarder (an empty account measures nothing)',
   account.looks > 300 && account.gear > 100, `${account.looks} cosmetics, ${account.gear} gear`);
+/* AN UNDRESSED PET IS A DIFFERENT SCREEN, and grading a budget on it is exactly
+   the fixture bug this row makes loud: the pet layers are the largest single
+   objects in the app, so a fixture that quietly fails to buy or equip them
+   measures a Today nobody has. It went red on its first run, correctly. */
+ok('ACCOUNT the hoarder has the shop pet OUT FRONT and is wearing every slot of her wardrobe',
+  account.equipped.endsWith(`-${account.pet}`) && account.wearing === account.slots && account.slots > 0,
+  `equipped ${account.equipped || 'NOTHING'} (wanted a ${account.pet}), `
+  + `wearing ${account.wearing} of ${account.slots} accessory slots`);
 
 /* ---- the screens --------------------------------------------------------- */
 
@@ -325,6 +384,59 @@ await screen('backpack melt bench', async () => {
   await sleep(2400);
 }, { art: '.melt-row' });
 
+/* ---- the Stable, the Paddock and the Shop ------------------------------- *
+ * The three screens that were never driven, and the three worst in the app.
+ * Measured 2026-08-24, 430x932 DPR 2, with the hoarder above (she owns the pet
+ * and wears all four accessories), before any of the fixes below them:
+ *
+ *     screen     peak       what it was
+ *     Stable     215.1 MB   160.0 of it = 10 petShotHtml layers at 2048
+ *     Paddock    322.8 MB   the Stable's 160.0 still mounted underneath, plus
+ *                           80.0 = 5 species-tile layers at 2048
+ *     Shop       192.3 MB   160.0 = the same ten product shots, bigger tiles
+ *
+ * THE PADDOCK CARRYING THE STABLE IS NOT A DRIVER ARTIFACT. The only way in is
+ * through the Stable's door, the Stable's sheet stays mounted below it, and
+ * that is the DOM a player standing in the Paddock actually has. Measuring the
+ * Paddock in isolation would measure a screen nobody can reach (rule 12).
+ *
+ * EVERY ENTRY IS A REAL CONTROL AND EVERY MISS THROWS (rule 5, and the lesson
+ * of `.looks-card` above): a `?.click()` that finds nothing does not fail, it
+ * silently re-measures the previous screen. */
+const openStableSheet = async () => {
+  await pe(() => { location.hash = '#/today'; });
+  await sleep(2400);
+  await pe(() => {
+    const b = document.getElementById('stableBtn');
+    if (!b) throw new Error('#stableBtn not found: the Stable never opened, so anything measured after this is a different screen');
+    b.click();
+  });
+  await sleep(2600);
+};
+
+await screen('stable', openStableSheet, { art: '.pw-art .petcrop img' });
+
+await screen('paddock', async () => {
+  await openStableSheet();
+  await pe(() => {
+    const b = document.getElementById('stableToPaddock');
+    if (!b) throw new Error('#stableToPaddock not found: the Paddock never opened');
+    b.click();
+  });
+  await sleep(2800);
+}, { art: '.pdk-tile img' });
+
+await screen("shop, gwart's menagerie", async () => {
+  await pe(() => { location.hash = '#/bonehead'; });
+  await sleep(2200);
+  await pe(() => {
+    const b = document.querySelector('#chTabs .ch-tab[data-tab="shop"]');
+    if (!b) throw new Error('#chTabs .ch-tab[data-tab="shop"] not found: the Shop never opened');
+    b.click();
+  });
+  await sleep(2800);
+}, { art: '.pet-row .rk-stage .petcrop img' });
+
 await screen('wardrobe, hat slot', async () => {
   /* THE ONE NUMBER querySelectorAll('img') CANNOT SEE. The Wardrobe's DOM is
      genuinely cheap (135 canvases at 200x200 is 20.6 MB) and the damage is
@@ -420,6 +532,71 @@ ok('TIER     the crew card backdrop is served from the 192 sheet',
   tiers.bg.length > 0 && tiers.bg.every(n => n === 192),
   `${tiers.bg.length} backdrops, widths ${[...new Set(tiers.bg)].join('/') || 'NONE'}`);
 
+/* THE PET AND EVERYTHING SHE IS WEARING COME OFF THE SHEET TOO.
+ *
+ * A CEILING CANNOT GRADE THIS, which is why it is a row of its own beside the
+ * budgets above. The pet-era art is the largest in the game -- C6 and the five
+ * accessories drawn for her are 2048x2048, so ONE layer is 16.0000 MB against a
+ * body cosmetic's 1.5625 -- and croppedPetImg served every one of them at full
+ * size on every surface, because it builds its layers from bhAsset() and never
+ * called bhThumb(). avatarLayersHtml could not cover for it either: it refuses
+ * the C slot for any pet petStacksOnBody() rejects, and C6 is exactly that pet.
+ * Measured on this tree 2026-08-24, 430x932 DPR 2, with the account above:
+ *
+ *     screen                 pet layers    before      after
+ *     Today                          10   160.0 MB    5.6 MB
+ *     Crew fan, 30 friends           35   560.0 MB    4.9 MB
+ *
+ * A BUDGET WOULD STAY GREEN THROUGH HALF A REVERT: drop the tier from the crew
+ * card alone and Today still clears 90 MB. So this asserts the DECODED WIDTH
+ * per surface, the same shape as the two rows above and for the same reason --
+ * croppedPetImg falls back to the master when a thumbnail 404s (rule 8), so a
+ * missing sheet otherwise reads as a clean pass with the memory quietly back.
+ *
+ * TWO SURFACES, TWO TIERS, because they are two different decisions: the fan's
+ * card asks for the geometry-derived tier and lands on 192, while Today's hero
+ * names 384 because the strict rule declines it by 0.8px (see heroPetTier).
+ * Grading only one would let the other go back to the master unnoticed.
+ *
+ * AN EMPTY SAMPLE IS A FAILURE (rule 3), and here that is not theoretical: an
+ * account that failed to buy the pet, or a fixture carrying `pet: null`, draws
+ * no pet layers at all and every "no layer is a master" test passes on nothing.
+ * Hence the counts: FIVE on the hero (the pet plus one per worn slot), and the
+ * fan's seated cards at five apiece.
+ *
+ * PROVE-RED, each mutation RUN on this tree on 2026-08-24 and reverted, and
+ * this is what each actually printed:
+ *   drop `{ thumb: heroPetTier }` from the hero-companion call
+ *     -> today "5 layers, widths 2048", and CEILING today 120.3 MB. ONLY the
+ *        Today rows; the fan stayed green at 37.4 MB, which is the half-revert
+ *        a single budget would have missed.
+ *   drop `thumb: true` from the crew card's petPortraitHtml
+ *     -> crew  "35 layers, widths 2048", and CEILING crew 592.5 MB
+ *   put `pet: null` back in friendFixture, i.e. this file before today
+ *     -> crew  "0 layers, widths NONE" while CEILING crew goes GREEN on 32.5 MB.
+ *        That pair is the whole argument for this row existing.
+ *   move assets/bh/thumb/384/{C,CB,CE,CG,CM} out of the tree
+ *     -> today "5 layers, widths 2048": the onerror fallback restores the art
+ *        and the memory with it, and only this row notices.
+ */
+await fresh();
+await pe(() => { location.hash = '#/today'; });
+await sleep(2400);
+const heroPetTiers = await pe(() => [...document.querySelectorAll('#bhStage .hero-companion .petcrop img')]
+  .filter(i => i.naturalWidth).map(i => i.naturalWidth));
+ok('TIER     Today\'s pet and her wardrobe are served from the 384 sheet, not the 2048px masters',
+  heroPetTiers.length >= 5 && heroPetTiers.every(n => n === 384),
+  `${heroPetTiers.length} layers, widths ${[...new Set(heroPetTiers)].join('/') || 'NONE'} `
+  + '(a dressed pet is the pet plus one layer per worn slot; a 2048 layer is 16.0000 MB)');
+
+await fresh();
+await crewDrive(8)();
+const fanPetTiers = await pe(() => [...document.querySelectorAll('.cfan-card .cfan-pet .petcrop img')]
+  .filter(i => i.naturalWidth).map(i => i.naturalWidth));
+ok('TIER     the crew card\'s pet is served from the 192 sheet, not the 2048px masters',
+  fanPetTiers.length >= 5 && fanPetTiers.every(n => n === 192),
+  `${fanPetTiers.length} layers, widths ${[...new Set(fanPetTiers)].join('/') || 'NONE'}`);
+
 await fresh();
 await pe(() => { location.hash = '#/bonehead'; });
 await sleep(2200);
@@ -429,6 +606,114 @@ const colTier = await pe(() => [...document.querySelectorAll('.col-cell img')].f
 ok('TIER     the Collection\'s tiles are served from the 192 sheet',
   colTier.length > 100 && colTier.every(n => n === 192),
   `${colTier.length} tiles, widths ${[...new Set(colTier)].join('/') || 'NONE'}`);
+
+/* THE THREE SCREENS ABOVE, GRADED ON THE DECODED WIDTH AS WELL AS THE BUDGET.
+ *
+ * Same argument as every TIER row in this file and it is not theoretical here:
+ * BOTH renderers fall back to the master when their sheet 404s -- petShotHtml
+ * through SHOT_FALLBACK, layeredArt through THUMB_FALLBACK, both of them
+ * anti-regression rule 8 doing exactly what it is supposed to do -- so a whole
+ * missing sheet directory reads as a clean pass with all 240 MB quietly back.
+ * Only a width can see that.
+ *
+ * TWO DIFFERENT MECHANISMS, so two different rows rather than one loop:
+ *
+ *   SHOT   the shop's product photo is a ZOOM, not a stack: it scales the
+ *          item's measured window out of the 2048 square, so a square tier
+ *          would put 92.7 source pixels behind 224 device ones (2.42x, CG1 at
+ *          the shop's 112px tile). It is served from a CUT sheet instead,
+ *          assets/bh/thumb/shot/<item>/{pet,item}.png, one square 384 per
+ *          layer. Ten layers on each of the Stable and the Shop: five
+ *          accessories, each a pet layer plus an item layer.
+ *   TILE   the Paddock's species grid is a plain stack, so it takes the square
+ *          sheet -- but the TIER IS DERIVED from the box, so the number is not
+ *          the same for two pets on one screen. C6 fills her 2048 square and
+ *          lands on 384; C1-C5 and CX are painted small in a corner of a 640
+ *          canvas, so their whole square is drawn 2-3x bigger in the same tile
+ *          and bhTierFor correctly hands them their MASTER. Asserting "no
+ *          layer is 2048" would pass on a grid of six masters; asserting "every
+ *          layer is 384" would fail on art that is right. So the row grades
+ *          each half by what it is: the pet-era layers are tiered, the 640
+ *          masters stay 640, and nothing is a 2048.
+ *
+ * AN EMPTY SAMPLE IS A FAILURE (rule 3) and it is the likeliest failure here:
+ * an account that never bought the pet draws no product shots and no dressed
+ * tile at all, and every "nothing is a master" test passes on nothing. Hence
+ * the counts.
+ *
+ * PROVE-RED, each mutation RUN on this tree on 2026-08-25 and reverted, and this
+ * is what each actually printed:
+ *   point petShotHtml's two layers back at bhAsset() with the zoom style
+ *     -> stable and shop both "10 layers, widths 2048", and CEILING stable
+ *        207.1 MB, shop 192.5 MB, paddock 232.5 MB (the Stable is mounted under
+ *        it, so it pays for the same ten shots).
+ *   move assets/bh/thumb/shot out of the tree, source untouched
+ *     -> byte-for-byte the SAME numbers. SHOT_FALLBACK restores the master AND
+ *        the zoom, so the shelf still frames every item correctly (measured: the
+ *        two renders differ by MAE 2.2/255 inside the art and nowhere else) and
+ *        the whole 160 MB comes back looking like nothing happened. That is the
+ *        entire argument for grading a WIDTH here rather than only a budget.
+ *   drop `box` from panelHtml's layeredArt call
+ *     -> paddock TILE "10 pet-era layers at 192/2048", CEILING paddock 155.3 MB,
+ *        while stable and shop stay green.
+ *   delete the buyPetItem loop from the account above
+ *     -> TILE "2 pet-era layers": the hoarder has no dressed pet to draw. Plus
+ *        ACCOUNT and the Today TIER row. The COUNTS are what catch this one.
+ *   also skip granting the PET_SHOP items, i.e. an account owning no accessories
+ *     -> RENDERED stable "0 x .pw-art .petcrop img" and SHOT stable "0 layers,
+ *        widths NONE". That is the empty-sample half, and it is not theoretical.
+ *
+ * WHAT WAS NOT INDEPENDENTLY REDDENED, said plainly rather than left implied:
+ * SHOT on the SHOP cannot be emptied by any account state, because the shelf
+ * sells all five pieces whether or not you own them, so its empty-sample guard
+ * is its own `>= 10` count and the RENDERED row beside it. RENDERED paddock and
+ * RENDERED shop were likewise never seen red: their drivers THROW when the entry
+ * control is missing, which is the failure that matters, and the identical
+ * RENDERED shape was proven red on the Stable above.
+ */
+const shotWidths = () => pe(() => [...document.querySelectorAll('.pw-art .petcrop img, .pet-row .rk-stage .petcrop img')]
+  .filter(i => i.naturalWidth).map(i => i.naturalWidth));
+
+await fresh();
+await openStableSheet();
+const stableShot = await shotWidths();
+ok('SHOT     the Stable wardrobe\'s product shots are CUT to 384, not zoomed out of the 2048 masters',
+  stableShot.length >= 10 && stableShot.every(n => n === 384),
+  `${stableShot.length} layers, widths ${[...new Set(stableShot)].join('/') || 'NONE'} `
+  + '(five accessories, each a pet layer plus an item layer; a 2048 layer is 16.0000 MB)');
+
+await fresh();
+await pe(() => { location.hash = '#/bonehead'; });
+await sleep(2200);
+await pe(() => document.querySelector('#chTabs .ch-tab[data-tab="shop"]')?.click());
+await sleep(2800);
+const shopShot = await shotWidths();
+ok('SHOT     the Shop shelf\'s product shots are CUT to 384 too',
+  shopShot.length >= 10 && shopShot.every(n => n === 384),
+  `${shopShot.length} layers, widths ${[...new Set(shopShot)].join('/') || 'NONE'}`);
+
+await fresh();
+await openStableSheet();
+await pe(() => document.getElementById('stableToPaddock')?.click());
+await sleep(2800);
+/* BOTH call sites, in one screen: the grid's tile is fluid and measured, the
+   card's portrait is the fixed 54px box, and they land on different tiers. Her
+   own tile is the way in, which is the control a player uses. */
+await pe(() => {
+  const b = document.querySelector('.pdk-tile[data-sp="C6"]');
+  if (!b) throw new Error('no .pdk-tile[data-sp="C6"]: the hoarder is not showing the shop pet, so this row would grade nothing');
+  b.click();
+});
+await sleep(1600);
+const tiles = await pe(() => [...document.querySelectorAll('.pdk-tile img, .pdk-thumb img')]
+  .filter(i => i.naturalWidth)
+  .map(i => ({ n: i.naturalWidth, pet: /\/(?:C6|CB\d+|CE\d+|CG\d+|CM\d+)\.png$/.test(i.currentSrc || i.src) })));
+const petEra = tiles.filter(t => t.pet).map(t => t.n);
+const rest = tiles.filter(t => !t.pet).map(t => t.n);
+ok('TILE     the Paddock\'s dressed pet comes off the SHEET, and the 640px species keep their masters',
+  petEra.length >= 5 && petEra.every(n => n === 384 || n === 192) && rest.length > 0 && rest.every(n => n === 640),
+  `${petEra.length} pet-era layers at ${[...new Set(petEra)].join('/') || 'NONE'}, `
+  + `${rest.length} companion-drawn at ${[...new Set(rest)].join('/') || 'NONE'} (2048 anywhere is the bug)`);
 
 /* PROVE-RED: revert the .ward-art / .pd-art canvases to bhAsset() and this row
    reports ~210 MB, the number gwart measured, because every one of those 135

@@ -15,7 +15,7 @@
  * which the Boneyard reused as a SCREEN class, tied on specificity, and left the map
  * blank (tally/CLAUDE.md, "Scope reveal CSS to the surface it means").
  */
-import { BH_ITEMS, bhAsset, PET_CROP, petWornLayers } from '../data/boneheadz.js';
+import { BH_ITEMS, bhAsset, PET_CROP, petWornLayers, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
 import { bhIcon } from './icons-pack.js';
 
 export const PET_SPECIES = BH_ITEMS.filter(i => i.slot === 'C');
@@ -75,9 +75,34 @@ export function cardModel(row) {
    resolve against the page. Callers already wrap these in `.pdk-thumb` /
    `.pdk-tile`, both of which are positioned, so the layers are emitted as
    siblings of the base and inherit exactly its geometry. */
-const layeredArt = (sp, art, worn, { alt = '', eager = false } = {}) =>
-  [art, ...(worn || [])].map((src, i) =>
-    `<img src="${esc(src)}" style="${inkFitStyle(sp)}"${i === 0 ? ` alt="${esc(alt)}"` : ' alt=""'}${eager ? ' loading="eager"' : ''}>`).join('');
+/* WHICH SHEET THESE LAYERS COME OFF, AND WHY IT IS A BOX AND NOT A FLAG.
+   Every layer here was a MASTER, which was harmless while a pet was a 640 square
+   and is not now: C6 and the five accessories drawn for her are 2048x2048, so one
+   layer is 16.0000 MB of decoded RGBA and a dressed pet is five of them. Measured
+   2026-08-24 at 430x932 DPR 2 with tests/memory-census.mjs's instrument, the
+   species grid alone stood at 80.0 MB inside a 322.8 MB screen.
+   THE TIER IS DERIVED, NOT NAMED, because one literal cannot be right for two
+   species on the same screen. inkFitStyle blows the square up until the INK fills
+   the box, and Cam paints the companion-drawn pets small in one corner of their
+   640 canvas: in an 84px tile C6's whole square lands at 96px and C1's at 235px,
+   so 192 is the honest tier for her and a 2.4x upscale for him. bhTierFor answers
+   with the master when no tier can serve the box, which is why C1-C5 and CX come
+   out of this byte-identical to before.
+   `box` is the tile's own CSS width, handed in by whoever mounts it. Absent (the
+   node unit tests, which have no layout) it is 0 and nothing is tiered, so the
+   markup those grade is unchanged -- and the memory census asserts the decoded
+   width on the live screen, because a box that arrives 0 in the app would look
+   exactly like a pass while restoring all 80 MB. */
+const layeredArt = (sp, art, worn, { alt = '', eager = false, box = 0 } = {}) => {
+  const tier = box ? bhTierFor(box * inkSize(sp)) : 0;
+  return [art, ...(worn || [])].map((src, i) => {
+    const use = tier ? bhThumb(src, tier) : src;
+    /* A thumbnail that 404s falls back to the master rather than leaving a hole,
+       and the fallback string is the app's own, imported rather than retyped. */
+    return `<img src="${esc(use)}"${use === src ? '' : ` data-full="${esc(src)}" ${THUMB_FALLBACK}`}`
+      + ` style="${inkFitStyle(sp)}"${i === 0 ? ` alt="${esc(alt)}"` : ' alt=""'}${eager ? ' loading="eager"' : ''}>`;
+  }).join('');
+};
 
 /* The slider: every copy of ONE species, in roster order, plus the dots model. Dots
    only exist above one copy, per the handoff. */
@@ -150,11 +175,19 @@ export function eggCardModel(eggs) {
    dropped it 0.85 of a box low. Never trust the parent's alignment for a figure.
    An unknown species returns '' and keeps the plain contain fit rather than guessing. */
 const INK_FILL = 0.82;
+/* HOW MUCH BIGGER THAN ITS BOX THE SQUARE HAS TO BE DRAWN for the ink to fill it.
+   Split out of inkFitStyle because layeredArt needs the same number to pick a
+   tier: the box a LAYER lands in is this multiple of the box the TILE occupies,
+   and using the tile's width would under-tier every companion-drawn pet by 2-3x. */
+const inkSize = (sp, fill = INK_FILL) => {
+  const c = PET_CROP[sp];
+  return c ? fill / Math.max(c.x1 - c.x0, c.y1 - c.y0) : 1;
+};
 export function inkFitStyle(sp, fill = INK_FILL) {
   const c = PET_CROP[sp];
   if (!c) return '';
   const cw = c.x1 - c.x0, ch = c.y1 - c.y0;
-  const size = fill / Math.max(cw, ch);                     // image size, fraction of the box
+  const size = inkSize(sp, fill);                           // image size, fraction of the box
   const tx = (0.5 / size - (c.x0 + cw / 2)) * 100;          // ink centre -> box centre, % of the IMAGE
   const ty = (0.5 / size - (c.y0 + ch / 2)) * 100;
   /* WIDTH ONLY, height:auto. A percentage HEIGHT resolves against a grid row that is
@@ -175,11 +208,24 @@ export function inkFitStyle(sp, fill = INK_FILL) {
 const heartsHtml = n => Array.from({ length: 5 }, (_, i) =>
   `<i class="pdk-heart${i < n ? ' on' : ''}" aria-hidden="true">${bhIcon('heart', 17)}</i>`).join('');
 
+/* THE TWO BOXES A PET LAYER LANDS IN, and both are needed before the markup
+   exists, so neither can be measured off the element it describes.
+     PDK_THUMB_PX  the card's portrait is FIXED (app.css .pdk-thumb:
+                   `flex: 0 0 54px`), so it is declared, not measured.
+     the tile      is FLUID -- a quarter of a panel whose width is the sheet's --
+                   so mountPaddockPanel measures the mounted panel and hands the
+                   number down. Gaps are deliberately NOT subtracted: an over-
+                   estimate can only choose a LARGER tier, so the error direction
+                   is toward sharpness and never toward blur. */
+const PDK_THUMB_PX = 54;
+const PDK_COLS = 4;                 // app.css .pdk-grid: repeat(4, minmax(0, 1fr))
+const pdkTileBox = el => Math.ceil((el && el.clientWidth ? el.clientWidth : 0) / PDK_COLS);
+
 export function cardHtml(m) {
   return `<article class="pdk-card" data-iid="${esc(m.iid)}">
     <button class="pdk-x-btn" data-act="close" aria-label="Close">×</button>
     <div class="pdk-head">
-      <span class="pdk-thumb">${layeredArt(m.sp, m.art, m.worn, { eager: true })}</span>
+      <span class="pdk-thumb">${layeredArt(m.sp, m.art, m.worn, { eager: true, box: PDK_THUMB_PX })}</span>
       <div class="pdk-id">
         <b class="pdk-name">${esc(m.name)}</b>
         <span class="pdk-chips">
@@ -232,7 +278,7 @@ export function sliderHtml(roster, sp) {
   </div>`;
 }
 
-export function panelHtml(roster, eggs) {
+export function panelHtml(roster, eggs, { tileBox = 0 } = {}) {
   const tiles = gridModel(roster);
   const egg = eggCardModel(eggs);
   return `<div class="pdk-inner">
@@ -247,7 +293,7 @@ export function panelHtml(roster, eggs) {
         <span class="pdk-eggbar"><i style="width:${Math.round(egg.pct * 100)}%"></i></span>
       </button>
       ${tiles.map(t => `<button class="pdk-tile${t.owned ? '' : ' pdk-lockt'}${t.glow ? ' r-' + t.rarity : ''}" data-sp="${esc(t.sp)}">
-        ${layeredArt(t.sp, t.art, t.worn, { alt: t.name })}
+        ${layeredArt(t.sp, t.art, t.worn, { alt: t.name, box: tileBox })}
         ${t.showCount ? `<span class="pdk-x">×${t.count}</span>` : ''}
         ${t.anyShiny ? '<span class="pdk-star" aria-hidden="true"></span>' : ''}
         ${t.owned ? '' : '<span class="pdk-q">?</span>'}
@@ -365,7 +411,7 @@ export async function mountPaddockPanel() {
   if (!el) return false;
   const { paddockRoster, paddockEggs } = await import('./paddock.js');
   const [roster, eggs] = await Promise.all([paddockRoster(), paddockEggs()]);
-  el.innerHTML = panelHtml(roster, eggs);
+  el.innerHTML = panelHtml(roster, eggs, { tileBox: pdkTileBox(el) });
   el.querySelectorAll('[data-sp]').forEach(b => b.addEventListener('click', () => openPaddockCards(b.dataset.sp)));
   el.querySelector('[data-egg]')?.addEventListener('click', () => openPaddockCards('egg'));
   return true;
