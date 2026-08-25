@@ -54,9 +54,31 @@ const res = await page.evaluate(() => {
     const c = parse(m[0]);
     return (c.length >= 3 && (c[3] === undefined || c[3] > 0.95)) ? c : null;
   };
+  /* THE PAGE BACKDROP IS NOT AN ANCESTOR. Today paints its page from
+     `.today-plate`, a zero-height sticky SIBLING at z-index -1 (app.css records
+     why it cannot be a wrapper: `.screen > .route-in` drives the route animation
+     off direct children). An ancestor walk runs straight past it to
+     `.screen--today`, whose background-colour is the Bonehead's backdrop, and
+     grades every line on Today against a colour that is only ever visible in a
+     rubber-band pull. Measured: p.log-only scored 1.28 that way, while the pixels
+     behind that text are rgb(13,12,18) and 5.37.
+     So the walk is told about the one sibling that paints behind it. Narrow on
+     purpose: it triggers only inside the scroller, only when the plate is really
+     on the page, and it returns the plate's own background-COLOR, which is why
+     that colour is declared there rather than left to the gradients. */
+  const plateBg = () => {
+    const p = document.querySelector('.today-plate');
+    if (!p) return null;
+    const c = parse(getComputedStyle(p, '::before').backgroundColor);
+    return (c.length >= 3 && (c[3] === undefined || c[3] > 0.95)) ? c : null;
+  };
   const bgOf = el => { // composite through ancestors until opaque
     let n=el;
     while(n && n!==document.documentElement){
+      if (n.classList && n.classList.contains('screen--today')) {
+        const p = plateBg();
+        if (p) return p;
+      }
       const cs=getComputedStyle(n);
       const img=flatImage(cs);
       if(img) return img;
