@@ -467,13 +467,25 @@ for (const cfg of CONFIGS) {
 
 /* BLEED. Tom, 2026-08-24: "the background is now extending all down the app by the
    quests etc, that has changed to the background colour I have for my bonehead."
-   The Today scroller carries the Bonehead's backdrop colour as its background-COLOR
-   so an iOS rubber-band pull shows art instead of a hard edge. That colour also
-   shows through every transparent gap in the page, which is the regression he hit.
-   The way to tell the two apart is to make the art colour something no stylesheet
-   would ever produce and see which pixels follow it: any gap that turns magenta is
-   painting from --hero-edge and is a bleed. Proved red by disabling the
-   background-image that covers the content area: 3 of 4 gaps go magenta. */
+   v434 gave the Today scroller the Bonehead's backdrop colour as its
+   background-COLOR so an iOS rubber-band pull would show art instead of a hard
+   edge. That colour also showed through every transparent gap in the page, which
+   is the regression he hit. The way to tell the two apart is to make the art
+   colour something no stylesheet would ever produce and see which pixels follow
+   it: any gap that turns magenta is painting from --hero-edge and is a bleed.
+
+   THE FIX THAT FOLLOWED WAS ALSO WRONG, and the second report is what taught us
+   the rule. Covering the content area with a flat background-IMAGE stopped the
+   bleed and broke two other things. Tom, later the same day: "now there is no
+   colour background above by the wordmark and the lower part of the page is just
+   black instead of the old app background." So WebKit paints an overscroll from
+   the scroller's whole background BOX rather than its background-color alone, and
+   an opaque fill over the content area also buries the app's ambient glow.
+   The scroller carries NO background at all now and the bounce colour is an
+   element parked above the content. This row survived that rewrite unaltered
+   because it never cared HOW the page is painted, only that no gap shows the
+   backdrop colour. Proved red by putting the backdrop colour back on the scroller
+   as a background-color: 3 of 4 gaps go magenta. */
 {
   await page.evaluate(() => { location.hash = '#/today'; });
   await sleep(2600); await settle(page);
@@ -507,6 +519,36 @@ for (const cfg of CONFIGS) {
     }, shot);
     if (c[0] > 200 && c[1] < 80 && c[2] > 200) bleeding.push(`${g.name} ${JSON.stringify(c)}`);
   }
+
+  /* AMBIENT + FILL. The two halves of Tom's second report, graded separately
+     because they fail separately.
+     AMBIENT is stated as a rule about the scroller rather than as a colour: it
+     must own no background, which is the only state in which the app's glow
+     reaches the page. Measured, all four sample points are byte-identical to the
+     pre-v434 page, and the flat version reads rgb(13,12,18) at every one of them.
+     FILL asserts the bounce colour exists and is parked ENTIRELY above the
+     content origin, so it cannot tint a pixel at rest. Whether it appears during
+     a real rubber-band pull is not gradeable in Chromium; what IS gradeable, and
+     what went wrong twice, is whether the thing painting the page is the thing
+     that should be. */
+  const surf = await page.evaluate(() => {
+    const s = document.querySelector('.screen--today');
+    if (!s) return null;
+    const own = getComputedStyle(s), fill = getComputedStyle(s, '::before');
+    const host = s.getBoundingClientRect();
+    return {
+      bgc: own.backgroundColor, bgi: own.backgroundImage,
+      fillBg: fill.backgroundColor, fillH: parseFloat(fill.height) || 0,
+      aboveOrigin: parseFloat(fill.bottom) >= 0, hostH: Math.round(host.height),
+    };
+  });
+  const clear = c => c === 'rgba(0, 0, 0, 0)' || c === 'transparent';
+  ok('AMBIENT the Today scroller paints no background of its own, so the app glow reaches the page',
+    !!surf && clear(surf.bgc) && surf.bgi === 'none',
+    surf ? `background-color: ${surf.bgc}, background-image: ${surf.bgi}` : 'no scroller');
+  ok('FILL the bounce colour exists, carries the backdrop, and is parked above the content',
+    !!surf && !clear(surf.fillBg) && surf.fillH >= surf.hostH && surf.aboveOrigin,
+    surf ? `::before ${surf.fillBg}, ${Math.round(surf.fillH)}px over a ${surf.hostH}px viewport, above the origin=${surf.aboveOrigin}` : '');
 
   ok('CONTROL BLEED the page really has transparent gaps to grade (an empty sample passes for free)',
     gaps.length >= 3, `${gaps.length} gaps found, floor 3`);

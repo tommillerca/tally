@@ -14840,7 +14840,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
     </div>`;
   };
   return `
-      <div class="pdk-scene" id="pdkScene">
+      <div class="pdk-scene${visitor ? ' pdk-shared' : ''}" id="pdkScene">
         ${backdrop}
         <div class="pdk-sign">
           <svg width="196" height="58" viewBox="0 0 196 58">
@@ -14865,10 +14865,10 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
              feels like theyre in the same space."
              Mirrored across the scene's own width rather than positioned by hand,
              so the two stand at matching insets from their edges at every width,
-             and at keeper.px so neither reads as the bigger person. Flipped
-             horizontally so they face each other: the same trick the Pit uses to
-             turn a pet toward its opponent. Nothing here is a control, so it is
-             pointer-events: none like the keeper. */''}
+             and at keeper.px so neither reads as the bigger person. WHICH ONE IS
+             FLIPPED IS IN app.css, and it is the HOST: the art faces left, so
+             flipping the guest turned them back to back. Nothing here is a
+             control, so it is pointer-events: none like the keeper. */''}
         ${visitor ? `<div class="pdk-keeper pdk-visitor" style="left:${SCENE_W - keeper.x - keeper.px / 2}px;top:${keeper.y - keeper.px / 2}px;width:${keeper.px}px;height:${keeper.px}px">
           ${avatarLayersHtml(visitor, { skip: ['BG', 'C'], noYard: true })}
         </div>` : ''}
