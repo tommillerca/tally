@@ -2700,10 +2700,16 @@ export default {
        * the recorded ticks is the schedule, observed. Under three runs there is
        * nothing to measure and it falls back to 15 minutes.
        *
-       * COST. Two full-table aggregates (COUNT over events, and the dormant
-       * grants scan below). Both are O(table) and this route is hit by hand a
-       * few times a day, which is the only reason that is acceptable; if it ever
-       * goes on a polling dashboard, the counts are the part to cache. */
+       * COST, measured rather than assumed, because a health route that times
+       * out at the size it is meant to warn about is worse than none.
+       * On a 12,000,000 row events table built from real production rows:
+       *   MIN(day)          0 ms   SEARCH ... COVERING INDEX idx_events_day_device
+       *   COUNT(*)         47 ms   SCAN ... COVERING INDEX idx_events_name
+       * COUNT(*) is the only O(table) one and at 47 ms per 12M rows it reaches
+       * D1's 30 second statement limit somewhere past a billion rows, which is
+       * two orders of magnitude beyond where the 10 GB cap kills the database
+       * anyway. The dormant-grants count was the one that did NOT scale and it
+       * is bounded by a LIMIT; see its own note below. */
       if (path === '/admin/prune' && request.method === 'GET') {
         const token = url.searchParams.get('token') || request.headers.get('x-bh-admin') || '';
         if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
