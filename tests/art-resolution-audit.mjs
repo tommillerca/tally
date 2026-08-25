@@ -51,7 +51,67 @@ const { browser, page } = await boot(base);
    So the ceiling is pinned just above the measured worst case. It cannot rise.
    It catches the class that started this (a 192 thumbnail behind a 200px canvas
    is 2.0x and up) and it will catch any NEW surface that outgrows the masters.
-   LOWER THIS when bigger art lands. Never raise it. */
+   LOWER THIS when bigger art lands. Never raise it.
+
+   AND IT IS NOT RAISED FOR THE SHOP EITHER (2026-08-25). Extending the sweep to
+   the Shop rack -- see the SURFACES note below for why it was never swept --
+   puts RESOLUTION red on a real defect that has been shipping since v409:
+
+     the rack's mannequin tiles pass `thumb: 384` to avatarLayersHtml, and then
+     CSS zooms the stage into the slot being sold. `.fit-waist` is scale(2.8),
+     so a 384px source is drawn across ~653 device pixels on a dpr-2 phone.
+     That is 1.70x, and it is the exact class this file exists to catch.
+
+   MEASURED OFF THE RENDER, 2026-08-25, 440x956 DPR 2, load 5.29, and the run
+   printed these verbatim rather than them being derived from the CSS:
+     shop:thumb/384/U/U7.png     src 384 drawn 653 = 1.70x
+     shop:thumb/384/S/S4-1.png   src 384 drawn 583 = 1.52x
+     shop:thumb/384/B/B0-1.png   src 384 drawn 653 = 1.70x  (the shared body)
+     shop:thumb/384/B/B0-1.png   src 384 drawn 583 = 1.52x  (same file, S tile)
+     shop:thumb/384/SK/SK0-1.png src 384 drawn 583 = 1.52x  (the shared skull)
+   REACH was green for all six surfaces on the same run and SETUP found 92 art
+   layers, so this is a real sweep and not an empty one.
+
+   AND IT IS DETERMINISTIC, which is what makes it guardable. RACK_POOLS is
+   eight rungs and each rung is pinned to a SLOT; the week only chooses which of
+   three ids fills it, never which slot. So the rack's nine stages (eight rungs
+   plus the aura at RACK_AURA_CELL) always show the same nine zooms:
+     U   fit-waist  2.8   1.70x   OVER      FW  fit-feet   2.2   1.34x
+     S   fit-shin   2.5   1.52x   OVER      P   fit-hips   2.0   1.21x
+     H   fit-head   2.3   1.40x   on the line    T  fit-torso 1.7  1.03x
+     IL / aura  fit-hand(-l) 1.6  0.97x     B   fit-body   1.35  0.82x
+   The ratio is the ZOOM, not the tile, so on an over tile EVERY layer is over:
+   the shared body and skull are drawn through the same transform as the piece
+   being sold. That is six layers over on a normal week, not two.
+
+   RAISING THE CEILING FOR THIS WOULD BE THE WRONG TRADE and the numbers say so
+   rather than taste. The fix is one word in js/app.js -- drop `thumb: 384` off
+   rackTile and rackAuraTile so the stages take the 640 masters -- and at 640 the
+   worst slot lands at 640/2.8 = 229 source px under 233 device px, i.e. 1.02x,
+   essentially 1:1. What that costs in memory, worked from the decoded-RGBA
+   arithmetic the census uses (384^2*4 = 0.5625 MB a layer, 640^2*4 = 1.5625 MB,
+   so +1.0 MB per layer promoted):
+     nine stages: seven of three layers (body B0-1, skull SK0-1, the piece), the
+     BODY rung of two (its piece IS the body, replacing B0-1), and the aura tile
+     of three. 26 <img> elements, but only 11 DISTINCT sources, because the base
+     pair is shared by every tile and a browser decodes a URL once.
+     counted the way memory-census counts (per <img>):  +26.0 MB
+     counted the way the renderer actually pays it:     +11.0 MB
+   The Shop reads 38.1 MB post-#158 against a 90 MB ceiling, so the worst of
+   those lands at 64.1 MB and the likely one at 49.1 MB. It clears, but 64.1 on
+   the census's own instrument is thin on a screen that also carries the ten
+   petShotHtml layers, and that instrument is documented as a FLOOR.
+   A CHEAPER VARIANT EXISTS if 64.1 turns out to be too close: promote only the
+   two over rungs (U and S) and leave the other seven on 384. That is 6 layers
+   rather than 26, +6.0 MB by the instrument, and it fixes both real breaches.
+   It costs a per-slot branch in rackTile, which is why it is the fallback and
+   not the first suggestion.
+
+   SO THIS ROW STAYS RED UNTIL SOMEBODY MEASURES IT ON A MACHINE THAT CAN RUN A
+   BROWSER. That is the honest state: the defect is real, the remedy is known and
+   cheap, and the memory side of it has been computed but NOT measured. Pinning
+   an exception at 1.71 to make the gate green would be inventing a number to
+   pass a check, which is the thing this file's own header refuses to do. */
 const MAX_UP = 1.40;
 const seen = [];
 
@@ -73,18 +133,84 @@ async function sweep(label) {
   for (const r of rows) seen.push({ ...r, screen: label });
 }
 
+/* THE SWEEP LIST WAS THREE-FIFTHS FICTION UNTIL 2026-08-25, and the row that
+ * reported its own coverage was counting LABELS, not screens.
+ *
+ * It read:
+ *     ['#/bonehead', 'wardrobe', 'wardrobe'], ['#/bonehead', 'backpack', 'backpack'],
+ *     ['#/bonehead', 'build', 'build'], ['#/today', null, 'today'], ['#/crew', null, 'crew'],
+ * and clicked `[data-tab="${tab}"]` with `?.click()`. There is no
+ * `data-tab="backpack"` and no `data-tab="build"` anywhere in the app -- the hub
+ * chips are `crates` and `talents` -- so both optional-chained into nothing and
+ * the sweep stayed on the Wardrobe and measured it again under a second and a
+ * third name. `#/crew` is not a route either: routeFromHash falls through to
+ * `else { renderToday() }`, so that lap measured TODAY a second time.
+ *
+ * Real coverage was WARDROBE and TODAY. Two screens. SETUP printed "5 screens"
+ * because it counted `new Set(seen.map(s => s.screen)).size`, which is the label
+ * it was handed, not the screen it landed on. A row cannot report its own
+ * coverage from a string the caller chose.
+ *
+ * SO EVERY SURFACE NOW CARRIES A MARKER IT MUST LAND ON, and REACH grades that
+ * separately from the art. A selector that stops matching -- a renamed chip, a
+ * retired route -- is now a RED, not a silently-skipped screen. This is the
+ * whole reason the Shop's 1.70x upscale survived: nothing ever went there.
+ *
+ * SWEPT, and each is confirmed by its own marker below:
+ *     Wardrobe, Backpack, Shop, Build (the four hub tabs), Today, Crew.
+ * NOT SWEPT, and none of it may be read as clean -- it is unmeasured, which is
+ * the state the Shop was in:
+ *     Boneyard (map), Settings, Foods, Progress/Trends, the Pit and every fight
+ *     screen, the Garden, the Stable, the Paddock, the Den, the Bestiary, the
+ *     Collection/Looks picker, the crate-reveal sequence, and every sheet or
+ *     modal (try-on, gift, crate open, transmog). Sheets are the biggest hole:
+ *     the try-on stage draws 640 MASTERS at 385 CSS px and no row here sees it.
+ *
+ * AND CREW IS REACHED BUT STILL NOT MEASURED, which is a third state worth
+ * naming: on the 2026-08-25 run REACH confirmed the Crew screen landed, and it
+ * contributed ZERO gear layers, so SETUP reported five contributing screens out
+ * of six landed. The demo profile has no friends to draw. REACH going green
+ * there is honest -- we did get to the screen -- but nobody should read it as
+ * "Crew's art is clean". It needs a fixture with a populated crew before it
+ * grades anything, and until then it is closer to the NOT SWEPT list above.
+ */
+const SURFACES = [
+  // [hash, hub chip data-tab, label, a marker that proves we actually landed]
+  ['#/bonehead', 'wardrobe', 'wardrobe', '#chTabs .ch-tab[data-tab="wardrobe"][aria-selected="true"]'],
+  ['#/bonehead', 'crates', 'backpack', '#chTabs .ch-tab[data-tab="crates"][aria-selected="true"]'],
+  ['#/bonehead', 'shop', 'shop', '#chTabs .ch-tab[data-tab="shop"][aria-selected="true"]'],
+  ['#/bonehead', 'talents', 'build', '#chTabs .ch-tab[data-tab="talents"][aria-selected="true"]'],
+  ['#/today', null, 'today', '#screen.screen--today'],
+  ['#/friends', null, 'crew', '#screen .crew-friends'],
+];
+
 await page.setViewport({ width: 440, height: 956, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
-for (const [hash, tab, label] of [
-  ['#/bonehead', 'wardrobe', 'wardrobe'], ['#/bonehead', 'backpack', 'backpack'],
-  ['#/bonehead', 'build', 'build'], ['#/today', null, 'today'], ['#/crew', null, 'crew'],
-]) {
+const reached = [], missed = [];
+for (const [hash, tab, label, marker] of SURFACES) {
   await page.evaluate(h => { location.hash = h; }, hash); await sleep(1100);
-  if (tab) { await page.evaluate(t => document.querySelector(`[data-tab="${t}"]`)?.click(), tab); await sleep(1400); }
-  await sweep(label);
+  /* A REAL CLICK ON THE REAL CHIP, and the selector is asserted to have matched
+     BEFORE the click rather than optional-chained away. `?.click()` on a typo is
+     exactly how three of these surfaces went missing for weeks. */
+  if (tab) {
+    await page.evaluate(t => {
+      const b = document.querySelector(`#chTabs .ch-tab[data-tab="${t}"]`);
+      if (!b) throw new Error(`#chTabs .ch-tab[data-tab="${t}"] does not exist: the sweep list has drifted from the app`);
+      b.click();
+    }, tab);
+    await sleep(1600);
+  }
+  const landed = await page.evaluate(m => !!document.querySelector(m), marker);
+  (landed ? reached : missed).push(label);
+  if (landed) await sweep(label);
 }
 
+ok('REACH every surface in the sweep list was really landed on, proven by a marker in its own DOM',
+  missed.length === 0,
+  missed.length ? `MISSED ${missed.join(',')} (reached ${reached.join(',') || 'none'})` : `${reached.join(', ')}`);
+
 ok('SETUP the sweep actually found gear art to measure (an empty sweep would pass every row below for free)',
-  seen.length >= 8, `${seen.length} art layers across ${new Set(seen.map(s => s.screen)).size} screens`);
+  seen.length >= 8 && new Set(seen.map(s => s.screen)).size >= 4,
+  `${seen.length} art layers across ${new Set(seen.map(s => s.screen)).size} CONFIRMED-LANDED screens: ${[...new Set(seen.map(s => s.screen))].join(', ')}`);
 
 const over = seen.filter(s => s.phys / s.nat > MAX_UP);
 ok(`RESOLUTION no gear art is drawn more than ${MAX_UP}x its source`,

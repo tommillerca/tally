@@ -3,6 +3,9 @@
 // itself) — the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
+  { n: 442, date: '2026-08-25', title: 'The Shop’s art is sharp now', items: [
+    'Every tile on the weekly rack zooms right into the piece it is selling, and it was doing that to a small copy of the artwork instead of the full-size one. The briefs, socks and hats were the worst of it. The rack now draws from the full-size art, so the outlines, the teeth and the stitching are crisp instead of blurred.',
+  ] },
   { n: 441, date: '2026-08-25', title: 'The colour behind the wordmark, and how it leaves', items: [
     'When you pull down past the top of Today, the strip that opens is now exactly the colour of your Bonehead\u2019s backdrop. It was three shades off, because the fill was copied from the picture file while the screen shows that picture under a layer of grain. The fill carries the grain now, so there is no line where one stops and the other starts.',
     'The wordmark also clears out of the way faster when you let go, so it is gone before the rest of the screen comes back up under it.',
