@@ -167,7 +167,7 @@
         return `<div class="health ${cls}">
           <div class="hs">Retention: ${esc(health.status)}</div>
           <div class="hd">${esc(health.detail)}</div>
-          <div class="hm">Last tick ${ago(health.sinceLastMs)} &middot; events ${t.eventsRows == null ? '?' : t.eventsRows.toLocaleString()} rows, oldest ${esc(t.eventsOldestDay || '—')} &middot; grants ${t.grantsRows == null ? '?' : t.grantsRows.toLocaleString()} rows, of which <b>${t.grantsDormant == null ? '?' : t.grantsDormant.toLocaleString()}</b> can never be pruned at any age (unopened gifts for players who have never acknowledged one).</div>
+          <div class="hm">Last tick ${ago(health.sinceLastMs)} &middot; events ${t.eventsRows == null ? '?' : t.eventsRows.toLocaleString()} rows, oldest ${esc(t.eventsOldestDay || '—')} &middot; grants ${t.grantsRows == null ? '?' : t.grantsRows.toLocaleString()} rows, of which <b>${t.grantsDormant == null ? '?' : t.grantsDormant.toLocaleString() + (t.grantsDormantCapped ? '+' : '')}</b> can never be pruned at any age (unopened gifts for players who have never acknowledged one).</div>
         </div>
         ${rows ? `<details><summary class="note">Last ${health.runs.length} ticks</summary>
           <table class="tbl"><tr><th>when</th><th></th><th>events</th><th>grants</th><th>stopped on</th><th>took</th><th>error</th></tr>${rows}</table>

@@ -637,6 +637,9 @@ async function pruneGrants(env, now = Date.now(), opts = {}) {
    it goes to console.error, GET /admin/prune reports status "no-table" and
    names the migration. schema-plan.test.mjs asserts this function still catches. */
 const PRUNE_RUNS_KEEP = 2000;   // ~21 days at 96 ticks/day; 216 KB measured at the ceiling
+/* How far GET /admin/prune will count the unprunable-grants tail before giving
+   up and saying "or more". See the note at its query for the measurement. */
+const DORMANT_COUNT_CAP = 100000;
 
 async function recordPruneRun(env, row) {
   try {
@@ -2743,11 +2746,22 @@ export default {
              any age, by design (see pruneGrants). It is the only part of this
              database with no ceiling at all, and it is invisible in a run log,
              because a run log only ever reports rows that WERE deleted. Same
-             predicate as the pruner, negated. */
+             predicate as the pruner, negated.
+
+             COUNTED THROUGH A LIMIT, so the cost is bounded by the cap and not
+             by the table. Measured on 8,000,000 grants: 4,333 ms uncapped
+             against 329 ms capped at 100,000, and the uncapped form extrapolates
+             to D1's 30 second statement limit at roughly 55M rows. "More than
+             100,000 unopened gifts are now permanent" is exactly as actionable
+             as an exact figure, and it cannot become the reason this route stops
+             answering. A capped result is flagged so nobody reads the ceiling as
+             a measurement. */
           grantsDormant = await env.DB.prepare(
-            `SELECT COUNT(*) n FROM grants g LEFT JOIN players p ON p.id = g.player_id
-              WHERE g.type <> 'cheer' AND g.id > COALESCE(p.grants_ack, 0)
-                AND (g.key < ? OR g.key >= ?)`).bind(STEPWEEK_LO, STEPWEEK_HI).first('n');
+            `SELECT COUNT(*) n FROM (
+               SELECT 1 FROM grants g LEFT JOIN players p ON p.id = g.player_id
+                WHERE g.type <> 'cheer' AND g.id > COALESCE(p.grants_ack, 0)
+                  AND (g.key < ? OR g.key >= ?) LIMIT ?)`)
+            .bind(STEPWEEK_LO, STEPWEEK_HI, DORMANT_COUNT_CAP).first('n');
         } catch (e) { tableErr = (e && e.message) || String(e); }
 
         // The observed schedule: median gap between consecutive recorded ticks.
@@ -2800,7 +2814,11 @@ export default {
             eventOverrideDays: EVENT_RETENTION_OVERRIDE_DAYS, grantDays: GRANT_RETENTION_DAYS,
           },
           caps: { batch: PRUNE_BATCH, maxRowsPerTick: PRUNE_MAX_ROWS, budgetMs: PRUNE_BUDGET_MS },
-          tables: { eventsRows, eventsOldestDay: oldestDay, grantsRows, grantsDormant, error: tableErr },
+          tables: {
+            eventsRows, eventsOldestDay: oldestDay, grantsRows, grantsDormant,
+            grantsDormantCapped: grantsDormant >= DORMANT_COUNT_CAP,   // true = "at least this many"
+            error: tableErr,
+          },
           runs, generatedAt: now,
         });
       }
