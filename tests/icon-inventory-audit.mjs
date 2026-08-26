@@ -187,6 +187,7 @@ const EMITTERS = {
   'js/app.js:metricSpark':        ['chart', 'the wellness sparkline.'],
   'js/app.js:metricDetailChart':  ['chart', 'the expanded wellness metric.'],
   'js/app.js:readinessHtml':      ['chart', 'the readiness dial.'],
+  'js/app.js:calorieRingCard':    ['chart', 'the calorie ring, drawn on Today AND on Trends from this one function.'],
   /* ---- scene, stage and character art: sized by layout, not by an icon size ---- */
   'js/app.js:avatarLayersHtml':     ['scene', 'the Bonehead figure: cosmetic layers stacked at stage size.'],
   'js/app.js:croppedPetImg':        ['scene', 'a pet sprite cropped to its own art box.'],

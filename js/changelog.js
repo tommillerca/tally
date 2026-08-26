@@ -4,6 +4,15 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 456, date: '2026-08-26', title: 'The seam is gone, and the calorie ring makes sense', items: [
+    'The faint line where the top of the page met your Bonehead\u2019s backdrop is gone. It was never the colour, which is what four attempts at it kept adjusting: a grain texture sat over the whole hero, and a flat fill can never match a textured surface however well the colour is computed. The texture is off the hero now and the two meet with no step at all.',
+    'The calorie ring and the number in it used to disagree. The ring filled up as you ate while the number counted down, two opposite readings in one dial. The number is now what you have eaten, so it climbs with the ring, and how much you have left sits underneath it.',
+    'That same calorie card is on the Progress tab now, under \u201cToday\u201d, so the health hub carries it too.',
+    'The herb patches on the Boneyard are green. They were drawn in the same browns as the dirt they sit on and read as dead sticks.',
+    'Five new pixel icons across wellness, sleep, quests and workouts, and Trends has a proper door in the row under your Bonehead instead of a small dot in the corner.',
+    'Double-tapping the Crew tab scrolls back to the top instead of rebuilding the screen under you, which is what Today already did.',
+  ] },
+
   { n: 455, date: '2026-08-26', title: 'The wordmark is gone, and the wallpaper runs off the top', items: [
     'The BONEHEADZ mark that slid in when you pulled down on Today has been removed. Pulling past the top now just shows more of your backdrop colour, running straight up off the screen with no line and nothing printed on it.',
     'That colour is decided from your equipped backdrop art itself rather than measured while the app runs, so it is the same on every phone. If you have no backdrop equipped it matches the scene your Bonehead stands in.',

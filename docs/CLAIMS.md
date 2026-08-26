@@ -19,6 +19,20 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v456
+
+1. PROOF: hero-edge-audit.mjs (the SEAM pair. It grades PIXELS across the fill/art boundary, BOTH mean luma and standard deviation, because four previous fixes graded colour alone and the defect was texture. MEASURED on a 90px displaced hero: with the grain layer on, fill 111.45 sd 0.00 against art 111.92 rising to 112.27 sd 0.47; with it off, 111.45 sd 0.00 on both sides. A CONTROL row refuses to grade two empty rows. Proven red by restoring the grain layer verbatim: 0.56 luma and 0.47 sd, control still green) | REACH: Open Today and look at where the page meets the art behind your Bonehead, or pull down past the top. There is no line there any more.
+
+2. PROOF: today-peek-audit.mjs, today-container-audit.mjs (both green on the merged tree, so the ring's new centre lines did not move anything around them) | REACH: Open Today. The big number in the calorie ring is what you have EATEN and it climbs as the ring fills, instead of counting down while the ring filled up.
+
+3. PROOF: icon-inventory-audit.mjs (calorieRingCard is declared as a chart in the emitter registry, which is what makes a SECOND undeclared copy of this card fail the gate rather than quietly drift from the first) | REACH: Open the Progress tab. The same calorie card is at the top under the heading "Today".
+
+4. PROOF: icon-inventory-audit.mjs (ASSETS: every pixel path a drawer can ask for exists on disk, 58 of them) | REACH: Open the Boneyard map. The herb patches are green instead of the same browns as the dirt they sit on.
+
+5. PROOF: icon-inventory-audit.mjs (EMITTERS and SUBFLOOR: 309 sites, 80 emitters, 50 declared vector fallbacks) plus art-resolution-audit.mjs (worst upscale 1.40x, unchanged from before these icons landed) | REACH: Water, sleep, bed, quests and workouts have pixel icons now. The row of doors under your Bonehead has five entries, the new one on the left opening Trends; the small dot that used to do that in the top corner is gone.
+
+6. PROOF: tab-doubletap-audit.mjs (CREW-DBL is a position row PAIRED with a marker-identity row, because a rebuild also lands at scrollTop 0 and the position row alone passed on the broken tree) | REACH: Scroll down the Crew tab and double-tap the Crew icon in the bottom bar. It scrolls back to the top instead of rebuilding the page under you.
+
 ## v455
 
 1. PROOF: hero-edge-audit.mjs (GONE grades the removal in both directions, statically and in pixels: no element paints in that strip and no code writes --wm-pull or --wm-fade. The 53-row audit that graded the wordmark is deleted with it) | REACH: On Today, pull down past the top. Nothing is printed in the space you open up. The BONEHEADZ mark that used to slide in is gone.
