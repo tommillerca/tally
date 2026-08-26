@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 451, date: '2026-08-25', title: 'One body got its name back', items: [
+    'The body piece called Odd Socks is now Sprinkle Bones. It was the only body in the game named after a different slot.',
+  ] },
+
   { n: 450, date: '2026-08-25', title: 'Small things that were quietly wrong', items: [
     'The Boneyard intro card draws the real pixel art now, the same art the map uses, instead of plain coloured dots.',
     'It also stopped telling you to spend coins in a shop that closed two builds ago.',
