@@ -87,6 +87,7 @@ import {
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
 } from './pit.js';
+import { HERO_EDGE } from '../data/hero-edge.js';
 import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers,
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
@@ -1233,7 +1234,6 @@ async function boot() {
   await refreshPetWear();
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
-  bindWordmarkPull();
   route();
   /* Paddock cards: a webdriver-only mount seam so the audit drives the REAL builders
      and handlers before the scene shell exists, and after it lands too. A no-op in
@@ -2580,145 +2580,9 @@ async function backupNudge() {
   } catch { /* non-critical */ }
 }
 
-/* THE OVERSCROLL WORDMARK'S FADE, DRIVEN OFF SCROLL POSITION.
- *
- * iOS implements the rubber band by giving the scroller a NEGATIVE content
- * offset, so during a pull #screen.scrollTop reports negative numbers and
- * -scrollTop IS the pull distance in CSS pixels. That makes the reveal a
- * function of how FAR you pulled rather than how hard you flicked, which is the
- * whole point: v414 and v415 both left the look to opacity alone and Tom could
- * not see either of them (app.css carries that history).
- *
- * CHEAP ON PURPOSE. Passive, so it never blocks the scroll. One property read
- * (scrollTop) and no other layout read at all. The value is quantised to 1/20,
- * so a full 36px pull writes a custom property at most 20 times instead of once
- * per frame, and every event outside a bounce hits the early return because q
- * stays 0. Measured over a scripted 4000-event burst: see the COST row in
- * tests/overscroll-wordmark-audit.mjs.
- *
- * NOT GATED ON TODAY. Only `#app:has(.screen--today)::before` reads the property,
- * so setting it elsewhere paints nothing, and a class check here would be a
- * second place that has to agree with route() about what Today is.
- *
- * IT IS WRITTEN ON :root, NOT ON #screen, AND THAT IS NOT A TIDY-UP. The mark
- * moved out of the scroller in the release that finally made it visible (app.css
- * carries the device measurement: nothing parked above a WKWebView scroller's
- * content origin paints into the rubber-band strip, in any of the four forms
- * tested). #app::before is #screen's PARENT's pseudo-element, so a custom
- * property set on #screen cannot reach it. :root is the one node both ends of
- * this feature can see.
- *
- * REDUCED MOTION IS A MEDIA QUERY IN app.css NOW, NOT A BRANCH HERE. It pins the
- * OPACITY to 1 and leaves the travel alone, which is the only version that still
- * works: the reveal is a transform now, so pinning --wm-pull itself to 1 would
- * park the mark permanently on screen the moment anything scrolled. There is no
- * KEYFRAME and no iteration count in this feature, only a 130ms transition
- * (app.css) smoothing the quantisation step, so nothing here can be collapsed to
- * 0.001s and run a loop a thousand times a second: the global reduce block's
- * transition collapse simply hands a reduced-motion player the un-smoothed direct
- * tracking, which is the right answer for direct manipulation.
- *
- * HEADLESS CANNOT SEE THE BOUNCE, BUT A DEVICE HAS. Chromium clamps scrollTop at
- * 0, so on desktop this listener is inert and no automated run can produce a
- * rubber band; the audit fakes the negative offset and dispatches a real scroll
- * event to drive this exact code. That the offset is really reported was measured
- * on a booted iPhone 17 Pro on 2026-08-21: scrollTop bottomed out at -168 and 33
- * scroll events fired with a negative value during one held drag. */
-function bindWordmarkPull() {
-  const el = $('#screen');
-  const FULL = 36;         // px of pull at which the mark is fully revealed
-  const LEAD = 0;          // the fade spans the WHOLE return, landing with it
-  const EXIT_EASE = 1.7;   // >1 front-loads the exit so the mark leads the screen home
-  let last = -1, lastF = -1, released = false, peak = 0;
-
-  /* THE RELEASE IS THE FINGER LIFTING. It is deliberately NOT "the pull got
-     smaller", and that distinction is the whole reason this is only landing now.
-     Tom, 2026-08-25: "the word mark doesnt fade out in time before the UI snaps
-     back", his fifth report of the same thing. The cause was never the tail: the
-     opacity already leads the travel out (60ms against 130ms, the LEAD row). It
-     is that --wm-pull is PINNED AT 1 for every pull past 36px, so between a
-     168px bounce and 36px the mark sits at full opacity while the content slides
-     up under it, and no symmetric function of the pull can tell the two
-     directions apart.
-     A pull-delta detector was the obvious answer and it is a trap this audit
-     already documents: COST sweeps 0 -> 120px and VISIBLE then pulls to 36, and
-     "the pull is shrinking" reads that as a release and blanks the mark. The
-     finger lifting is the thing Tom is actually describing, it is a real event,
-     and a synthetic scroll never fires one, so every existing row here keeps
-     seeing exactly the code it graded before. */
-  for (const ev of ['touchend', 'touchcancel', 'pointerup', 'pointercancel'])
-    el.addEventListener(ev, () => { released = true; }, { passive: true });
-
-  el.addEventListener('scroll', () => {
-    const pull = -el.scrollTop;
-    if (pull <= 0) { released = false; peak = 0; }
-    else if (pull > peak) peak = pull;
-    const t = pull <= 0 ? 0 : Math.min(1, pull / FULL);
-    /* SMOOTHSTEP, NOT t. Tom on v421: "there is no easing involved in the
-       movement and it feels cheap". A linear map moves the mark at exactly the
-       speed of the finger and then dead-stops at 36px; t*t*(3-2t) is quiet under
-       a jitter-sized tug (4px went from 0.10 to 0.05), quick through the middle,
-       and decelerates into its landing (27px went from 0.75 to 0.85). Still
-       exactly 0 at rest and exactly 1 at FULL, so every geometry bound in
-       app.css and in the audit is untouched. The SMOOTHING of the 6.4px
-       quantisation step below is the transition in app.css, not a filter here:
-       one property write per step is what keeps this listener cheap, and the
-       compositor interpolates for free. */
-    const q = Math.round(t * t * (3 - 2 * t) * 20) / 20;
-    const root = document.documentElement;
-    if (q !== last) { last = q; root.style.setProperty('--wm-pull', q); }
-
-    /* THE EXIT, and it only exists once the finger is gone. Opacity falls from
-       wherever the release caught it to ZERO while there are still LEAD px of
-       pull left to travel, so the ink is off the glass before the returning card
-       reaches the strip it was in. Scaled by the PEAK rather than by FULL so the
-       release is continuous from any depth: at the instant of release pull ===
-       peak, r === 1 and min(q, r) === q, which is exactly the value already on
-       screen. A fixed denominator would snap a shallow release from 1 to near
-       zero in one frame, which is a pop, and popping is what this feature has
-       been reported for twice.
-
-       LEAD IS 0, AND IT WAS 30 FOR ONE RELEASE. v452 shipped the ink reaching
-       zero 30px early, so it was gone with 122px of the 128px travel still to
-       run. Tom, on that build: "the boneheadz wordmark isn't bouncing back up
-       and fading at the same time as you release." He is right and the earlier
-       reading of him was wrong: "never overlap with the UI" was never a request
-       for the mark to vanish ahead of the screen, it was a request for it not to
-       still be sitting there solid when the cards land. At LEAD 0 the opacity is
-       proportional to the return from any depth, so at half way back the mark is
-       at half alpha and it reaches zero exactly as the screen does. It is
-       carried off rather than switched off.
-       min(), not r alone, because the travel keeps tracking the pull: past 36px
-       q is 1 and r governs, under it q falls too and the mark must never brighten
-       on its way out.
-       --wm-fade is UNSET while the finger is down, so the reveal writes one
-       property exactly as it always has and the fail-open default is untouched:
-       opacity is var(--wm-fade, var(--wm-pull, 1)). */
-    let f = null;
-    if (released && peak > LEAD) {
-      /* EASED, so it LEADS the screen without leaving early. Tom on the linear
-         version: "it still needs to scroll up fast and fade out faster." A raw
-         proportion has the mark at half alpha half way back, which lands together
-         but feels like it is being dragged. r^EXIT_EASE front-loads both without
-         moving either endpoint: still exactly the on-screen value at the instant
-         of release, still exactly 0 as the pull reaches 0. Half way back is 0.31
-         rather than 0.50, so the mark is 69% of the way home while the screen is
-         only half way. Not the v452 answer, which was gone at 30px with 122px of
-         travel left and read as blinking out. */
-      const r = Math.max(0, (pull - LEAD) / (peak - LEAD));
-      f = Math.round(Math.min(q, Math.pow(r, EXIT_EASE)) * 20) / 20;
-    }
-    if (f !== lastF) {
-      lastF = f;
-      if (f === null) root.style.removeProperty('--wm-fade');
-      else root.style.setProperty('--wm-fade', f);
-      /* THE TRAVEL LEADS TOO, which is the "scroll up fast" half. On the way in
-         --wm-pull is untouched, so every reveal row still grades the same curve;
-         only a real release, which no synthetic scroll can produce, moves it. */
-      if (f !== null && f !== last) { last = f; root.style.setProperty('--wm-pull', f); }
-    }
-  }, { passive: true });
-}
+/* bindWordmarkPull() lived here until 2026-08-26. The overscroll wordmark is
+   gone (Tom: "no seam, no wordmark"); the wallpaper runs to the top instead, and
+   that is a background-color on the scroller with no listener behind it. */
 
 /* A TRAY TAP IS ALWAYS A NAVIGATION, EVEN WHEN THE HASH ALREADY SAYS SO.
  *
@@ -2873,9 +2737,10 @@ let screenCleanup = null;
  * can contain neither (which would be the tray flash above). See
  * tests/route-flash-audit.mjs GHOST.
  *
- * NO REFERENCES BREAK. #screen keeps its identity: bindWordmarkPull() binds a
- * scroll listener to that exact node once at startup, so swapping in a fresh
- * element instead would have silently killed the overscroll wordmark. */
+ * NO REFERENCES BREAK. #screen keeps its identity rather than being swapped for
+ * a fresh element. It carried the overscroll wordmark's scroll listener until
+ * 2026-08-26; that is gone, but the rule stands on its own: route() and the
+ * scroll position both address this node by id. */
 let dropHeld = null;
 function holdOutgoing(el) {
   dropHeld?.();
@@ -3858,8 +3723,8 @@ async function renderToday(el) {
      the Wardrobe already has two other doors (the bottom Bonehead tab and its own
      chip), so spending the biggest tap target on it was a duplicate. The Backpack
      is where the unopened crates are, which is what people come back for. */
-  /* the bounce colour, sampled once per equipped backdrop: see paintHeroEdge */
-  paintHeroEdge($('#bhStage')?.querySelector('.hero-backdrop'));
+  /* the colour the wallpaper runs up off the top in: see paintHeroEdge */
+  paintHeroEdge(eq.BG);
   $('#bhStage').addEventListener('click', e => {
     if (e.target.closest('button')) return;
     openCharacter('crates');
@@ -10690,94 +10555,35 @@ async function renderFriends(el) {
 // Test hook (webdriver only), same pattern as __strikeFx / __bhFight. A friend
 // profile needs a real friend on the server, so the pet-clipping bug in this
 // sheet was only ever reproducible by hand on Tom's phone. Now it is measurable.
-/* SAMPLE THE BACKDROP'S TOP EDGE, so an overscroll bounce on Today shows more of
-   the art's colour instead of the page behind it (Tom, 2026-08-24: "the background
-   colour just stops and shows that we are actually at the edge of the app").
-   The backdrop is an equipped cosmetic, so this cannot be a constant. One 1x1
-   canvas read of the image's top-centre row, cached per source, written to
-   --hero-edge on the root for .screen--today to paint with. Same-origin, so the
-   canvas is never tainted; anything unexpected leaves the variable unset and the
-   CSS falls back to --bg, which is today's behaviour. */
-/* Kept beside the sampler and pinned to app.css by a guard row, because the two
-   drifting apart is invisible until somebody reports a seam. */
-const HERO_ART_FILTER = 'saturate(0.92)';
-/* ORPHANED BY THE SEAM FIX, 2026-08-25. heroGrain() read the grain tile out of
-   `.hero-scene::after`'s own computed style so paintHeroEdge could composite it
-   into --hero-edge. Nothing composites the grain any more: the grain is masked
-   away from the top edge instead, so the fill matches a FLAT surface. Removed
-   rather than left dangling. */
-const _edgeCache = new Map();
-function paintHeroEdge(img) {
-  const put = v => v && document.documentElement.style.setProperty('--hero-edge', v);
-  /* NO BACKDROP EQUIPPED IS A NORMAL STATE, NOT A MISSING IMAGE, and treating it
-     as one shipped a black band. The BG slot has NO default (BH_SLOTS), so a
-     player who has never equipped a backdrop, or who unequipped theirs, renders
-     no <img class="hero-backdrop"> at all (see the hero markup). This function
-     used to return here, --hero-edge stayed unset, and #screen fell back to
-     var(--bg). Measured on a save with BG removed: the pulled strip renders
-     rgb(13,12,18) for 110px directly on top of the scene's coral rgb(253,104,87).
-     Tom, 2026-08-26: "it's jsut black behind the boneheadz page now."
-     The scene's OWN background is the honest answer, and reading it back rather
-     than naming a colour here means the two can never drift: when a backdrop is
-     equipped the markup sets #bhStage to --surface-2 and this branch is not
-     taken, and when it is not, #bhStage is the coral the player actually sees. */
-  if (!img || !img.currentSrc && !img.src) {
-    const stage = document.getElementById('bhStage');
-    const bg = stage && getComputedStyle(stage).backgroundColor;
-    /* transparent resolves to rgba(0,0,0,0), which would paint the same black
-       this whole branch exists to stop. Leave it unset in that case: the CSS
-       fallback is then a deliberate choice rather than an accident. */
-    if (bg && !/^rgba\(0, 0, 0, 0\)$/.test(bg) && bg !== 'transparent') put(bg);
-    return;
-  }
-  const key = img.currentSrc || img.src;
-  if (_edgeCache.has(key)) return put(_edgeCache.get(key));
-  const read = () => {
-    try {
-      if (!img.naturalWidth) return;
-      const c = document.createElement('canvas');
-      c.width = 1; c.height = 1;
-      const g = c.getContext('2d', { willReadFrequently: true });
-      /* THROUGH THE SAME FILTER THE ART IS DRAWN WITH. Tom, 2026-08-24: "there is
-         like a seam where you can see the line between where you filled and where
-         the boneheadz background finishes."
-         He was seeing a real step. .hero-backdrop carries filter: saturate(0.92)
-         (app.css), so the pixel the player sees is not the pixel in the file. On
-         the shipped background that is rgb(107,124,56) in the source against
-         rgb(108,123,61) on screen: five units of blue, which is exactly the kind
-         of edge the eye finds and the number does not.
-         Canvas runs the same filter grammar as CSS, so this asks the browser for
-         the answer rather than reimplementing the colour matrix and letting the
-         two drift. If a browser ignores ctx.filter we get the old unfiltered
-         colour, which is the seam and not a crash. HERO_ART_FILTER is asserted
-         against the stylesheet by tests/overscroll-wordmark-audit.mjs. */
-      try { g.filter = HERO_ART_FILTER; } catch { /* unsupported: unfiltered */ }
-      /* the top-centre pixel: the edge the bounce actually reveals */
-      g.drawImage(img, Math.floor(img.naturalWidth / 2), 0, 1, 1, 0, 0, 1, 1);
-      const [r0, g0, b0, a] = g.getImageData(0, 0, 1, 1).data;
-      if (!a) return;
-      /* THE FLAT ART COLOUR IS THE ANSWER, because the art is now FLAT where it
-         meets the fill. app.css masks .hero-scene::after so the grain fades in
-         over the first 28px, which means the top edge carries no texture for
-         this value to have to reproduce.
-         WHAT USED TO BE HERE, and why it went: v441 painted this colour into a
-         canvas, composited the grain tile over it at the tile's own size and
-         averaged the result, so the fill matched the grained art's MEAN. It
-         worked, to -0.2/+0.4/+0.4 measured. It still left a visible step,
-         because a flat fill and a grained surface differ per PIXEL by up to 5
-         units however good the mean is, and that texture discontinuity is what
-         the eye was reading the whole time. Matching the mean harder could never
-         fix it. Removing the texture from the boundary does.
-         Keep this reading FILTERED (above): .hero-backdrop carries
-         saturate(0.92), so the pixel the player sees is not the pixel in the
-         file, and that was a real five-unit seam of its own. */
-      const flat = `rgb(${r0} ${g0} ${b0})`;
-      _edgeCache.set(key, flat); put(flat);
-    } catch { /* tainted or unreadable: leave --hero-edge unset, CSS falls back */ }
-  };
-  /* No second read on the grain tile's load any more: this value no longer
-     depends on the tile at all, so there is no race left to close. */
-  if (img.complete) read(); else img.addEventListener('load', read, { once: true });
+/* THE WALLPAPER RUNS STRAIGHT UP OFF THE TOP OF THE SCREEN.
+   Tom, 2026-08-26: "extend the boneheadz decided wallpaper colour upwards so if
+   you scroll beyond it just shows the same colour. no seam, no wordmark."
+
+   WHY THIS IS A TABLE NOW, and it is the whole point of the change. It used to
+   SAMPLE at runtime: draw the equipped backdrop into a 1x1 canvas through the
+   same filter it is displayed with, read the pixel back, write --hero-edge. That
+   works in every browser here and failed on Tom's phone twice, and every one of
+   its failure modes is SILENT and lands in the same place: the variable stays
+   unset, the scroller falls back to var(--bg), and he gets a black band. The
+   image not being there, the image not having decoded, getImageData refusing,
+   ctx.filter being ignored, the call landing before the element exists: five
+   ways to produce one symptom, none reproducible off his device.
+
+   A lookup has none of them. data/hero-edge.js holds every backdrop's top-edge
+   colour, computed from the PNG through saturate(0.92) and pinned to the art by
+   tests/hero-edge-audit.mjs, so the value is decided before the app ever runs. */
+function paintHeroEdge(bgId) {
+  const root = document.documentElement;
+  const baked = bgId && HERO_EDGE[bgId];
+  if (baked) { root.style.setProperty('--hero-edge', baked); return; }
+  /* NO BACKDROP EQUIPPED IS A NORMAL STATE, not a missing one: the BG slot has no
+     default in BH_SLOTS, so a player who never equipped one renders no backdrop
+     at all and the scene shows its own colour. Read that back rather than naming
+     it here, so the fill and the scene cannot drift apart. */
+  const stage = document.getElementById('bhStage');
+  const bg = stage && getComputedStyle(stage).backgroundColor;
+  if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') root.style.setProperty('--hero-edge', bg);
+  else root.style.removeProperty('--hero-edge');
 }
 
 if (typeof window !== 'undefined' && navigator.webdriver) window.__openFriendProfile = (f, opts) => openFriendProfile(f, () => {}, opts || {});
@@ -18123,7 +17929,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v454'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v455'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

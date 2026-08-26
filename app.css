@@ -141,132 +141,6 @@ svg { display: block; }
   padding: calc(var(--sat) + 14px) var(--pad) 24px;
 }
 
-/* THE OVERSCROLL WORDMARK. Today only, printed above the top of the world.
-   Tom: "when you scroll the phone on the today screen and can see the empty
-   space above the bonehead card it has the boneheadz word mark as a nice
-   branding touch."
-
-   FOURTH ATTEMPT, AND THE FIRST ONE THAT MEASURED WKWEBVIEW INSTEAD OF ASSUMING
-   IT. v414, v415 and v421 all parked the mark ABOVE the Today scroller's content
-   origin (`bottom: 100%` on `.screen--today::before`) on the reasoning written in
-   the version of this block they shipped with: iOS rubber-bands the nested
-   UIScrollView to a NEGATIVE content offset, the scrolled content layer
-   translates down, and an absolutely positioned descendant parked above the
-   origin rides down into view for free. Half of that is true. The half that is
-   not is the half the whole feature stood on.
-
-   MEASURED 2026-08-21 ON A BOOTED iPHONE 17 PRO (iOS 26.5), MobileSafari, a
-   sustained synthesised drag held down for ~10s so the bounce could be
-   screenshotted while it was open:
-     - the bounce is REAL: `#screen.scrollTop` bottomed out at -168, 33 scroll
-       events fired with a negative offset, and an element inside the scroller
-       moved 168px down by getBoundingClientRect. `overscroll-behavior: contain`
-       does NOT kill it. So the listener below has always been getting real data.
-     - and NOTHING PARKED ABOVE THE ORIGIN PAINTS INTO THE EXPOSED STRIP. In a
-       126pt-deep bounce, sampled at both halves of the width, the strip was the
-       scroller's own background COLOUR (#202) edge to edge and 0 px of anything
-       else. Four forms tested in one page: a `::before` at `bottom: 100%`, a real
-       `<div>` at `bottom: 100%`, and a `background-image` at `center -60px` with
-       `background-attachment: local` AND with `scroll`. Zero pixels, all four.
-       WebKit sizes the scrolled-contents layer to the scrollable-overflow rect,
-       which starts AT the scroll origin, and fills the rubber-band region from
-       the layer's solid backgroundColor. Content above the origin is outside the
-       layer and outside the fill. It is not clipped by a rule anyone can move: it
-       is not in the layer that gets translated.
-   So the mark Tom was told to pull for could not have appeared however far he
-   pulled, on any of the three builds. That, and not the pull threshold, is why he
-   never saw it. The old geometry note argued the reveal "enters THROUGH the
-   status-bar strip by definition, exactly like a pull-to-refresh spinner, and
-   that was settled in v415: it is not worth an unreachable peek." Tom has
-   overridden that: "i still have not been able to see the wordmark after
-   scrolling at any time or update despite what you say so fix that shit." The
-   peek is not unreachable now, it is landed clear of the status bar, and this is
-   the paragraph that records the override.
-
-   SO THE MARK LEFT THE SCROLLER. It is `#app::before` now, gated on Today by
-   `:has(.screen--today)` so `screen--today` stays the single source of truth and
-   route() needs no second flag. #app is `position: relative; z-index: 1;
-   overflow: hidden` (line 134 and 901), so:
-     - HIDDEN AT REST BY THE SAME CONSTRUCTION AS BEFORE, and this is the part
-       that must not regress. `bottom: 100%` against #app puts the box at
-       [-62, 0], i.e. entirely above the viewport, and #app's `overflow: hidden`
-       clips it. Zero pixels at rest at --sat 0, 47, 59, 62 alike, with no
-       arithmetic against the inset to get backwards the way v415 did. What
-       changed is only WHICH box does the clipping, and #app is a plain
-       non-scrolling clip in the ordinary paint order rather than a compositor
-       layer that stops existing above its origin.
-     - REVEALED BY A TRANSFORM, NOT BY THE BOUNCE. `translateY` off --wm-pull
-       drives it down `--sat + 66px`, so at full pull the box lands at
-       [--sat + 4, --sat + 66]: the WHOLE mark below the status bar and the
-       Dynamic Island, on every inset, instead of 0 visible pixels at 36px of pull
-       and a first pixel at 76px. Guard: the UNDERNOTCH row.
-     - z-index: -1 puts it BEHIND the screen's content inside #app's stacking
-       context. At full pull its lower ~16px are under the first card (which the
-       real bounce has itself pushed down by the pull), so the mark slides out
-       from behind the world rather than printing on top of it, and a
-       pointer-events: none element at a negative z-index cannot take a tap off
-       any control (anti-regression rule 6).
-
-   CONFIRMED ON THE DEVICE, NOT JUST IN THE AUDIT. This rule and the listener were
-   lifted verbatim into a bare page with the same #app/.screen boxes and the real
-   wordmark.png, served to the same booted iPhone 17 Pro, and the same held drag
-   was screenshotted: the wordmark painted IN FULL, entirely below the Dynamic
-   Island, during a real rubber band. Four releases in, that link gets checked
-   before the file is believed.
-
-   IT STILL COSTS NO LAYOUT. position: absolute takes it out of flow and it is no
-   longer a child of the scroller at all. Guard: the NO-SHIFT rows, which compare
-   every rect on Today with the mark present and absent.
-
-   OPACITY IS DRIVEN OFF SCROLL POSITION, not off geometry alone. --wm-pull is set
-   on :root by a passive scroll listener in js/app.js from the scroller's NEGATIVE
-   scrollTop, which on iOS is the pull distance in pixels (measured above, not
-   assumed): min(1, pull / 36), quantised to twentieths. :root and not #screen
-   because #app::before cannot inherit a property set on #screen, which is its
-   sibling's subtree.
-
-   THE OPACITY DEFAULT IS 1 AND THE TRANSFORM DEFAULT IS 0. A `var(--wm-pull, 0)`
-   opacity is the transparent-by-default trap that shipped invisible before, so
-   the default stays loud and the FAILOPEN row still goes red on it. Be honest
-   about what that no longer buys: with the reveal now a transform, a listener
-   that never fires means no reveal, full stop. The old block claimed the CSS
-   default made a silent no-op "impossible"; it never did, because the geometry it
-   fell back on could not paint. What actually retires that risk is the device
-   measurement above: the negative offset IS reported and the listener DOES fire.
-
-   NO KEYFRAMES, NO DURATION, NO ITERATION COUNT, AND STILL NONE OF THOSE. There
-   is a TRANSITION now and it is not the same thing. Tom on v421, which is the
-   first build where this mark could paint at all: "it is very clunky and glitchy,
-   there is no easing involved in the movement and it feels cheap the way you've
-   rigged it up". Two separate causes, measured before either was touched:
-     - THE MAPPING WAS LINEAR. --wm-pull was min(1, pull / 36) and the transform
-       is that number times a fixed distance, so the mark moved at exactly the
-       speed of the finger and then dead-stopped the instant the pull passed 36px.
-       Nothing accelerates, nothing settles. js/app.js runs the same t through
-       SMOOTHSTEP now (t*t*(3-2t)): quiet under a jitter-sized tug, quick through
-       the middle, decelerating into its landing. Measured off the shipped
-       listener, a 4px pull went from 0.10 to 0.05 and a 27px pull from 0.75 to
-       0.85. Guard: the CURVE row's shape bounds, which a linear mapping fails at
-       both ends.
-     - AND THE VALUE SNAPPED. It is quantised to twentieths (that quantisation is
-       what keeps a bounce from writing a custom property once per frame, see the
-       COST row), so the travel arrived in 6.4px steps, one per scroll event. That
-       stepping is the "glitchy". The 130ms transition below is the smoothing: the
-       compositor interpolates between the steps, so the mark follows the finger
-       with a little weight instead of teleporting between twenty positions. Its
-       TIMING FUNCTION was the second half of the same complaint and is `linear`
-       now; the block on the declaration itself carries that measurement.
-   A TRANSITION IS NOT A KEYFRAMED ANIMATION AND CANNOT BECOME A LOOP. There is
-   still no animation-name, no iteration count and nothing for the global reduce
-   block's `animation-duration: .001s` to act on, which is the trap this repo has
-   already shipped once. The same global block sets `transition-duration: .001s`,
-   so a player who asks for less motion gets the un-smoothed direct tracking,
-   which is the correct answer for direct manipulation, and the mark still cannot
-   park on screen because the TRAVEL is never pinned.
-   prefers-reduced-motion drops the FADE (opacity pinned to 1) and keeps the
-   travel, because a scroll-linked position is direct manipulation and not an
-   animation; it is one line of CSS below rather than a branch in the listener.
-   Guard: tests/overscroll-wordmark-audit.mjs */
 /* AND THE SCROLLER CARRIES THE ART'S OWN TOP EDGE, so a bounce does not uncover
    the page behind the app. Tom, 2026-08-24: "you didnt extend the coloured
    backdrop far enough when i pull down i can see the wordmark but the background
@@ -323,6 +197,14 @@ svg { display: block; }
    #app, and it lands behind the scroller's own background-colour instead of over
    it. Measured: every page pixel came back as the backdrop colour, i.e. the v434
    bleed at full strength. */
+/* THE WALLPAPER RUNS OFF THE TOP. This background-color is what an overscroll
+   bounce reveals, and --hero-edge is the equipped backdrop's own top-edge colour
+   (js/app.js paintHeroEdge, from the baked table in data/hero-edge.js), so
+   pulling past the top shows more of the same colour rather than the edge of the
+   app. Tom, 2026-08-26: "extend the boneheadz decided wallpaper colour upwards so
+   if you scroll beyond it just shows the same colour. no seam, no wordmark."
+   The overscroll wordmark used to print into this strip and was removed in the
+   same change; the strip itself is the whole feature now. */
 .screen--today { position: relative; isolation: isolate; background-color: var(--hero-edge, var(--bg)); }
 .today-plate {
   /* ZERO HEIGHT, AND THE PAINT IS IN THE PSEUDOS. The first version was 100vh
@@ -362,97 +244,6 @@ svg { display: block; }
   left: calc(-1 * var(--pad)); right: calc(-1 * var(--pad));
   background-image: var(--grain); background-size: 150px 150px;
   opacity: .5; mix-blend-mode: soft-light;
-}
-#app:has(.screen--today)::before {
-  /* z-index 3, ON TOP OF THE ART. Tom, 2026-08-24: "yeah draw the wordmark on top
-     of the art instead of behind".
-
-     It was -1, and that was deliberate: behind the screen's content the mark
-     "slides out from behind the world rather than printing on top of it". That
-     look is what this trades away, and it is the ONLY way to have both things he
-     asked for. With the hero art bleeding up behind the status bar (see
-     .hero-scene) an opaque plate now sits over the strip the mark travels into,
-     so a mark painting behind it is a mark nobody sees. Measured before this
-     change: suppressing the mark at full pull altered 0 pixels un-gated, against
-     22,566 with the art where it was.
-
-     pointer-events: none was already here and is now load-bearing rather than
-     tidy: at a positive z-index this element is over real controls, and without
-     it the mark would eat taps (anti-regression rule 6). */
-  content: ""; position: absolute; z-index: 3; pointer-events: none;
-  left: 50%; margin-left: -116px; bottom: 100%; width: 232px; height: 62px;
-  background: url(assets/brand/wordmark.png) center / contain no-repeat;
-  opacity: var(--wm-fade, var(--wm-pull, 1));
-  transform: translateY(calc(var(--wm-pull, 0) * (var(--sat) + 66px)));
-  /* the smoothing, and the only motion this feature declares. Short enough that
-     the mark never feels dragged behind the finger, long enough to swallow the
-     6.4px quantisation step.
-     AND `linear`, WHICH IS THE WHOLE OF THE 2026-08-22 FIX. Tom reported the
-     mark a second time: "the boneheadz watermark when you scroll to reveal the
-     top under the game exits in a jolty fashion as if it's not enough FPS."
-     It shipped as cubic-bezier(.33,1,.68,1) on the reasoning that ease-out is
-     "what a released rubber band does". That reasoning is right for a transition
-     that runs ONCE and wrong for this one, and the difference is the bug: a
-     scroll-linked value restarts the transition on every scroll event, and an
-     ease-out restarted mid-flight resets to its FASTEST velocity every time.
-     The result is a fast-slow, fast-slow sawtooth, which is exactly what reads
-     as dropped frames. A linear timing function holds a constant velocity inside
-     each segment, so consecutive segments join without a step.
-     MEASURED, off compositor frames through a driven release (scrollTop decaying
-     from an 80px pull, e-fold 70ms, scroll events delivered at 60Hz and at 30Hz,
-     three runs each; the ink's own row in the frame, not a CSS box):
-       ease-out  frame velocity CV 0.53-0.66, peak 2.1-2.4x its own mean
-       linear    frame velocity CV 0.28-0.34, peak 1.3-1.6x its own mean
-     and the mark now finishes WITH the bounce (ink gone at 354-367ms against a
-     scroll ending at 357-381ms) instead of racing 60ms ahead of it.
-     TWO THINGS WERE RULED OUT BY MEASUREMENT FIRST, because the report says
-     "FPS" and that points at cost. Neither is the cause:
-       - PAINT/STYLE COST. Ten releases with the mark's rule live and with it
-         removed, off CDP Performance metrics: recalc style 158.1ms vs 127.3ms,
-         layout 6.5 vs 6.2. Three ms of style per 410ms release, spread over ~25
-         frames. The listener itself is 0.1ms across 200 events (the COST row).
-       - REMOVING THE TRANSITION ALTOGETHER, which is the obvious "put it on the
-         compositor" answer and is measurably WORSE. Scroll events are sparse
-         next to display frames: through the same release the mark's whole travel
-         arrives in 6 scroll events at 60Hz and 3 at 30Hz, so with nothing to
-         interpolate it teleports in 21px jumps, moving on 6 of 18 frames and
-         peaking at 6.2px/ms. The transition is what fills those gaps; the curve
-         was the only thing wrong with it. */
-  /* AND THE OPACITY LEADS THE TRAVEL OUT. Tom, 2026-08-25: "the boneheadz need to
-     be feeding out faster so when you release your thumb and the screen comes back
-     up there is never overlap with the UI."
-     The two used to run on the same 130ms, and the note above this one records
-     what that bought: the ink finished WITH the bounce (gone at 354-367ms against
-     a scroll ending at 357-381ms), so the last frames of every release had the
-     mark and the returning UI on the glass together. 130ms is the TRAVEL's
-     number, measured: it is what fills the gaps between sparse scroll events so a
-     6.4px quantisation step does not teleport. The opacity has nothing to
-     interpolate: its step is 1/20 of alpha, which is invisible at any duration.
-     So the shared duration was never a requirement, only a default, and shortening
-     it is what makes the mark clear ahead of the spring instead of alongside it.
-     THE PINNED WINDOW IS GONE, and the durations came back together with it.
-     What this block used to say is that --wm-pull is pinned at 1 for every pull
-     past 36px, so between a 168px bounce and 36px the mark sat at full opacity
-     while the content slid up under it, and that removing that window needed a
-     release-detecting state. v452 built that state (bindWordmarkPull now watches
-     touchend), so the window is closed and the 60ms is no longer doing the job it
-     was hired for.
-     IT IS 130ms AGAIN, WHICH LOOKS LIKE A REVERT AND IS NOT. The 60ms existed to
-     make the ink die AHEAD of the travel, on a reading of "never overlap with the
-     UI" that turned out to be wrong. Tom, 2026-08-26, on the build that shipped
-     it: "the boneheadz wordmark isn't bouncing back up and fading at the same
-     time as you release." Together is the ask. A shorter opacity duration puts
-     the fade ~70ms ahead of the movement, so the mark blinks out while the screen
-     is still visibly travelling. Sharing the travel's measured 130ms is what makes
-     the two arrive as one motion. The overlap he originally reported is prevented
-     by the release curve now, which is where it belongs: the alpha is proportional
-     to the return, so the mark is already faint by the time the cards are close.
-     Guard: the LEAD row in tests/overscroll-wordmark-audit.mjs, re-premised on
-     this and carrying the old bound and the reason it was retired. */
-  transition: transform 130ms linear, opacity 130ms linear;
-}
-@media (prefers-reduced-motion: reduce) {
-  #app:has(.screen--today)::before { opacity: 1; }
 }
 
 /* ---------- header ---------- */
