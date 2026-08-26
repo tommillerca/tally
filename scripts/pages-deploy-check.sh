@@ -16,6 +16,25 @@
 #
 # It never touches the deployment. Its only job is to REFUSE to declare a
 # release live when it is not.
+#
+# 2026-08-26: THE VERSION CHECK ALONE WAS VACUOUS ON EVERY NON-RELEASE COMMIT,
+# which is most of them. It reads the version out of the tree and polls live for
+# it, so on a commit that does not bump the version the answer is already live
+# from the PREVIOUS release and the poll matches on attempt 1. Measured on
+# ffdd1050 (#183, a test-harness fix):
+#     == expecting 'v451' at https://tommillerca.github.io/tally
+#        attempt=1 seen=tally-v451 expected=tally-v451
+#     OK  live ... serves tally-v451.
+# 0.14 seconds, green, and no evidence whatsoever that #183's bytes had reached
+# the site. Four of the last five greens were that shape. The run it should have
+# caught is cf880477 (#185), whose Pages build was cancelled after 24m28s with
+# the site still on the old bytes.
+#
+# So the version poll is no longer the whole check. CONTENT polls the live copy
+# of every servable file THIS COMMIT CHANGED and compares sha256 against the
+# tree. That is a claim about this deploy rather than about some earlier one,
+# and it cannot pass on nothing: a commit that changed no servable file says so
+# by name instead of reporting a green.
 
 set -euo pipefail
 
@@ -83,8 +102,75 @@ while :; do
   if [ "$seen" = "$EXPECTED_VERSION" ]; then
     echo
     echo "OK  live $SITE_URL/sw.js serves tally-$EXPECTED_VERSION."
-    exit 0
+    break
   fi
 
+  sleep "$POLL_INTERVAL_SECS"
+done
+
+# --------------------------------------------------------------------------
+# CONTENT: the files THIS COMMIT changed, byte for byte, off the live origin
+# --------------------------------------------------------------------------
+# The poll above is about a version STRING, and on a commit that did not bump it
+# the string was already live before this run started (see the header). This is
+# the half that makes a claim about THIS deploy: every servable file the commit
+# touched must hash the same live as it does in the tree.
+#
+# Needs HEAD^, so the workflow checks out with fetch-depth: 2. Where there is no
+# parent (a hand run on a shallow tree, the first commit) it says so and grades
+# the release stamps instead, which is the case the version poll already covers.
+
+sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
+
+echo
+if ! git -C "$REPO" rev-parse --verify -q HEAD^ >/dev/null 2>&1; then
+  echo "CONTENT: no parent commit reachable (shallow clone or first commit)."
+  echo "  Falling back to the release stamps, which the poll above already graded."
+  CHANGED=$(cd "$REPO" && ls sw.js js/app.js app.css version.json 2>/dev/null)
+else
+  CHANGED=$(git -C "$REPO" diff --name-only --diff-filter=d HEAD^ HEAD)
+fi
+
+# Pages serves the repo root, so nearly everything counts. Only drop what the
+# site genuinely cannot serve.
+SERVABLE=$(printf '%s\n' "$CHANGED" | grep -vE '^(\.github/|\.gitignore|native/|server/)' | grep -v '^$' || true)
+
+if [ -z "$SERVABLE" ]; then
+  echo "CONTENT: this commit changed no servable file, so there is nothing on the"
+  echo "  site that should have moved. Not a pass and not a failure: no claim."
+  exit 0
+fi
+
+# NO SILENT CAP: a bounded check that quietly drops files reads as coverage.
+TOTAL=$(printf '%s\n' "$SERVABLE" | wc -l | tr -d ' ')
+MAXF="${MAX_CONTENT_FILES:-12}"
+LIST=$(printf '%s\n' "$SERVABLE" | head -n "$MAXF")
+if [ "$TOTAL" -gt "$MAXF" ]; then
+  echo "CONTENT: $TOTAL servable files changed; checking the first $MAXF. The rest are NOT graded:"
+  printf '%s\n' "$SERVABLE" | tail -n +$(( MAXF + 1 )) | sed 's/^/    ungraded  /'
+fi
+
+deadline=$(( $(date +%s) + POLL_TIMEOUT_SECS ))
+stale=""
+while :; do
+  stale=""
+  now=$(date +%s)
+  for f in $LIST; do
+    want=$(sha < "$REPO/$f")
+    got=$(curl -fsS --max-time 20 "$SITE_URL/$f?_=$now" 2>/dev/null | sha)
+    [ "$want" = "$got" ] || stale="$stale $f"
+  done
+  if [ -z "$stale" ]; then
+    echo "OK  live serves this commit's bytes for all $(printf '%s\n' "$LIST" | wc -l | tr -d ' ') changed file(s):"
+    printf '%s\n' "$LIST" | sed 's/^/      /'
+    exit 0
+  fi
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    echo "GUARD: waited ${POLL_TIMEOUT_SECS}s and the live site still serves DIFFERENT bytes for:"
+    for f in $stale; do echo "    stale  $f"; done
+    echo "  main carries this commit, the site does not. Do not tell anyone it is live."
+    exit 1
+  fi
+  echo "  content: still stale ->$stale"
   sleep "$POLL_INTERVAL_SECS"
 done
