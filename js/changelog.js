@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 452, date: '2026-08-26', title: 'The wordmark gets out of the way', items: [
+    'Pull down past the top of Today and the BONEHEADZ mark still slides in over the art. What changed is the way out. It now starts clearing the moment you lift your thumb, rather than staying solid until the screen has almost finished springing back, so it is gone before your cards arrive underneath it.',
+  ] },
+
   { n: 451, date: '2026-08-25', title: 'One body got its name back', items: [
     'The body piece called Odd Socks is now Sprinkle Bones. It was the only body in the game named after a different slot.',
   ] },
