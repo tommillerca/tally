@@ -300,6 +300,9 @@ svg { display: block; }
 .ring-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
 .ring-center .big { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1; }
 .ring-center .lbl { font-size: 12px; color: var(--text-3); font-weight: 600; margin-top: 4px; }
+/* The line that keeps "can I have dinner" answerable now the headline counts UP.
+   Smaller and quieter than the label above it: it is the detail, not the reading. */
+.ring-center .ring-sub { font-size: 10.5px; opacity: .72; margin-top: 2px; letter-spacing: .01em; }
 .ring-side { flex: 1; display: grid; gap: 10px; }
 .kv { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; color: var(--text-2); }
 .kv b { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
