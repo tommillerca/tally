@@ -430,16 +430,26 @@ svg { display: block; }
      interpolate: its step is 1/20 of alpha, which is invisible at any duration.
      So the shared duration was never a requirement, only a default, and shortening
      it is what makes the mark clear ahead of the spring instead of alongside it.
-     WHAT THIS DOES NOT DO, said plainly so the next person does not re-report it:
-     --wm-pull is pinned at 1 for every pull past 36px, so between a 168px bounce
-     and 36px the mark is at full opacity by design and the content slides up under
-     it. That is the same reveal Tom asked for on the way IN ("v414 and v415 both
-     capped at .55 and Tom saw neither", CURVE in the audit), and no symmetric
-     change can tell the two directions apart. Removing that window needs a
-     release-detecting state, which is a new state to get wrong and which fights
-     this audit's row ordering; it is written up in ROADMAP.md as option 3 and is
-     deliberately NOT taken here. What is taken is the whole of the tail. */
-  transition: transform 130ms linear, opacity 60ms linear;
+     THE PINNED WINDOW IS GONE, and the durations came back together with it.
+     What this block used to say is that --wm-pull is pinned at 1 for every pull
+     past 36px, so between a 168px bounce and 36px the mark sat at full opacity
+     while the content slid up under it, and that removing that window needed a
+     release-detecting state. v452 built that state (bindWordmarkPull now watches
+     touchend), so the window is closed and the 60ms is no longer doing the job it
+     was hired for.
+     IT IS 130ms AGAIN, WHICH LOOKS LIKE A REVERT AND IS NOT. The 60ms existed to
+     make the ink die AHEAD of the travel, on a reading of "never overlap with the
+     UI" that turned out to be wrong. Tom, 2026-08-26, on the build that shipped
+     it: "the boneheadz wordmark isn't bouncing back up and fading at the same
+     time as you release." Together is the ask. A shorter opacity duration puts
+     the fade ~70ms ahead of the movement, so the mark blinks out while the screen
+     is still visibly travelling. Sharing the travel's measured 130ms is what makes
+     the two arrive as one motion. The overlap he originally reported is prevented
+     by the release curve now, which is where it belongs: the alpha is proportional
+     to the return, so the mark is already faint by the time the cards are close.
+     Guard: the LEAD row in tests/overscroll-wordmark-audit.mjs, re-premised on
+     this and carrying the old bound and the reason it was retired. */
+  transition: transform 130ms linear, opacity 130ms linear;
 }
 @media (prefers-reduced-motion: reduce) {
   #app:has(.screen--today)::before { opacity: 1; }

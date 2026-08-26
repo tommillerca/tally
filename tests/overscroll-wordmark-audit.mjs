@@ -1209,9 +1209,19 @@ ok('REDUCED   under prefers-reduced-motion the fade is dropped (opacity pinned t
     const at = n => { const i = props.indexOf(n); return i < 0 ? null : durs[i]; };
     return { op: at('opacity'), tr: at('transform'), props: cs.transitionProperty, durs: cs.transitionDuration };
   });
-  ok('LEAD      the fade is given LESS time than the travel, so the ink is gone before the returning content reaches it. Tom: "the boneheadz need to be feeding out faster ... there is never overlap with the UI". Both on one duration is v440, where the ink died 8-33ms before a 360ms release instead of 74-82ms',
-    lead.op !== null && lead.tr !== null && lead.op > 0 && lead.op < lead.tr,
-    `opacity ${lead.op}ms against transform ${lead.tr}ms (transition-property "${lead.props}", duration "${lead.durs}")`);
+  /* RE-PREMISED 2026-08-26, and the old bound is kept in the message because the
+     reason it was retired matters more than the number. It asserted opacity < travel,
+     from "the boneheadz need to be feeding out faster ... there is never overlap with
+     the UI". That reading was wrong: it was never a request for the ink to die ahead
+     of the movement, and a shorter opacity duration puts the fade ~70ms in front of
+     the travel, so the mark blinks out while the screen is still visibly moving. Tom
+     on the build that shipped it: "isn't bouncing back up and fading at the same time
+     as you release." The overlap he originally reported is prevented by the RELEASE
+     curve now, which is the right place for it. So the two share one duration, and
+     this row exists to stop a future edit "optimising" them apart again. */
+  ok('LEAD      the fade and the travel share ONE duration, so the mark is carried off as a single motion rather than blinking out ahead of the screen. This row asserted opacity < travel until 2026-08-26; that bound came from a misreading and shipped a mark that vanished with 122px of travel left',
+    lead.op !== null && lead.tr !== null && lead.op > 0 && lead.op === lead.tr,
+    `opacity ${lead.op}ms against transform ${lead.tr}ms, want equal (the retired bound wanted opacity strictly less, and 60 vs 130 is what Tom rejected on v452). transition-property "${lead.props}", duration "${lead.durs}"`);
 }
 
 /* ---------- RELEASE: the window between a deep bounce and FULL ---------- */
@@ -1278,7 +1288,7 @@ ok('REDUCED   under prefers-reduced-motion the fade is dropped (opacity pinned t
   await pullTo(page, 0);
   const deep = await pullTo(page, 120, true);
   await touchEnd();
-  const rel = await readSweep([120, 100, 80, 60, 40, 30, 20]);
+  const rel = await readSweep([120, 100, 80, 60, 40, 30, 20, 0]);
   const monoDown = rel.every((r, i) => i === 0 || r.op <= rel[i - 1].op + 1e-9);
   ok(`POP       the release is continuous at BOTH depths: the first frame after the finger lifts holds the opacity the pull had already put on screen, and it only ever falls from there. The shallow release is the one a fixed denominator gets wrong, snapping full to nearly gone in a frame`,
     Math.abs(rel[0].op - deep.op) <= 1e-9 && monoDown
@@ -1286,12 +1296,23 @@ ok('REDUCED   under prefers-reduced-motion the fade is dropped (opacity pinned t
     `deep: at release ${deep.op.toFixed(2)} -> ${rel.map(r => `${-r.faked}px:${r.op.toFixed(2)}`).join(' ')}   |   `
     + `shallow: at release ${shallowAt.op.toFixed(2)} -> ${shallow.map(r => `${-r.faked}px:${r.op.toFixed(2)}`).join(' ')}`);
 
-  const dead = rel.find(r => r.op === 0);
-  ok('RELEASE   after a real release the ink reaches ZERO while the travel is still running, so the mark is off the glass before the returning card reaches the strip it was in. Tom, five times: "the word mark doesnt fade out in time before the UI snaps back"',
-    !!dead && dead.ty > 0 && -dead.faked >= 20,
-    dead
-      ? `opacity 0 first at ${-dead.faked}px of pull, with ${dead.ty.toFixed(0)}px of the ${SAT + LAND}px travel still on screen. Before this the mark held opacity 1 all the way down to ${FULL}px.`
-      : `never reached 0: ${rel.map(r => `${-r.faked}px:${r.op.toFixed(2)}`).join(' ')}`);
+  /* PROPORTIONAL, not early and not pinned. This row was "the ink reaches ZERO
+     while the travel is still running" for exactly one release, v452, which shipped
+     the mark gone at 30px of pull with 122px of the 128px travel left. Tom on that
+     build: "the boneheadz wordmark isn't bouncing back up and fading at the same
+     time as you release." So the bound moved from "gone early" to "goes together":
+     the alpha tracks the return from any depth, half way back is half alpha, and it
+     reaches zero as the pull does. Both wrong answers are pinned here: an unpinned
+     build that fades ahead fails HALFWAY low, and a build with no release detection
+     at all fails it high at 1.00, which is the pre-v452 defect. */
+  const half = rel.find(r => -r.faked === 60);          // half of the 120px peak
+  const at100 = rel.find(r => -r.faked === 100);
+  const landed = rel[rel.length - 1];                    // pull 0
+  ok('RELEASE   after a real release the alpha is PROPORTIONAL to the return, so the mark is carried up and faded out as one motion and lands with the screen. Tom: "isn\'t bouncing back up and fading at the same time as you release"',
+    !!half && Math.abs(half.op - 0.5) <= 0.1 && !!at100 && at100.op < 1 && !!landed && landed.op === 0,
+    `half way back (60px of a 120px peak) -> ${half ? half.op.toFixed(2) : 'n/a'} (want 0.50 +/- 0.10; pinned reads 1.00, which is the pre-v452 defect), `
+    + `100px -> ${at100 ? at100.op.toFixed(2) : 'n/a'} (must be under 1: pinned is the bug), landed -> ${landed ? landed.op.toFixed(2) : 'n/a'}. `
+    + `Full sweep ${rel.map(r => `${-r.faked}px:${r.op.toFixed(2)}`).join(' ')}`);
 
   await pullTo(page, 0);          // hand the page back with released + peak cleared
   await releasePull(page);

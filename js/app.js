@@ -2627,7 +2627,7 @@ async function backupNudge() {
 function bindWordmarkPull() {
   const el = $('#screen');
   const FULL = 36;         // px of pull at which the mark is fully revealed
-  const LEAD = 30;         // px of pull by which the ink is already gone on the way OUT
+  const LEAD = 0;          // the fade spans the WHOLE return, landing with it
   let last = -1, lastF = -1, released = false, peak = 0;
 
   /* THE RELEASE IS THE FINGER LIFTING. It is deliberately NOT "the pull got
@@ -2676,6 +2676,17 @@ function bindWordmarkPull() {
        screen. A fixed denominator would snap a shallow release from 1 to near
        zero in one frame, which is a pop, and popping is what this feature has
        been reported for twice.
+
+       LEAD IS 0, AND IT WAS 30 FOR ONE RELEASE. v452 shipped the ink reaching
+       zero 30px early, so it was gone with 122px of the 128px travel still to
+       run. Tom, on that build: "the boneheadz wordmark isn't bouncing back up
+       and fading at the same time as you release." He is right and the earlier
+       reading of him was wrong: "never overlap with the UI" was never a request
+       for the mark to vanish ahead of the screen, it was a request for it not to
+       still be sitting there solid when the cards land. At LEAD 0 the opacity is
+       proportional to the return from any depth, so at half way back the mark is
+       at half alpha and it reaches zero exactly as the screen does. It is
+       carried off rather than switched off.
        min(), not r alone, because the travel keeps tracking the pull: past 36px
        q is 1 and r governs, under it q falls too and the mark must never brighten
        on its way out.
