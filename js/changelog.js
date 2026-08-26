@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 449, date: '2026-08-25', title: 'Something is walking the Boneyard', items: [
+    'The Wanderer has a News entry now. He walks his own patch of the map, sweeps a light ahead of him, and comes for you if you step into it.',
+    'It takes you to the Boneyard rather than opening another card.',
+  ] },
+
   { n: 448, date: '2026-08-25', title: 'The pop-ups are gone', items: [
     'Opening the app no longer puts anything in front of you. The recovery-code sheet, the early-tester thank-you, the Day One survey, the "63 new cosmetics" post, the Puffer Pack card, the Dark Spires, Bestiary, Live Wire and step-race announcements, the settled step-race poster, the Discord invite and the What\'s New sheet all used to open themselves on launch, one after another. None of them do now. The app opens on Today.',
     'iOS will no longer ask to send you notifications when you open the app. It asks when you turn notifications on in Settings, and not before.',

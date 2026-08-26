@@ -193,10 +193,42 @@ for (const id of ids) {
   const here = await openNewsList();
   if (!here.includes(id)) { dead.push(`${id}: row missing`); continue; }
   const r = await page.evaluate(async i => {
+    const before = location.hash;
     document.querySelector(`[data-news="${i}"]`).click();
     await new Promise(r => setTimeout(r, 1700));
     const v = document.querySelector('.drop-veil') || document.querySelector('.tz-pop');
-    if (!v) return { why: 'no popup opened' };
+    /* A ROW MAY NAVIGATE INSTEAD OF OPENING A CARD, and that is not a dead row.
+       This used to demand a popup from EVERY row, which is not the invariant its
+       own name describes: what must be true is that the row LEADS SOMEWHERE REAL.
+       The Wanderer row goes straight to the Boneyard on Tom's call, because he is
+       a thing you find on the map rather than more reading, and v448 had just
+       finished deleting launch popups.
+       The nav branch is NOT a free pass. It asserts the hash actually CHANGED and
+       that the destination then RENDERED a screen with real content, so a row
+       pointing at a dead route still fails. A row that does neither is dead. */
+    if (!v) {
+      const hash = location.hash;
+      if (hash && hash !== before) {
+        await new Promise(r => setTimeout(r, 900));
+        const scr = document.getElementById('screen');
+        const painted = !!scr && scr.getBoundingClientRect().height > 200
+          && scr.textContent.trim().length > 40;
+        /* "SOMETHING PAINTED" IS NOT ENOUGH, and my first version of this was
+           vacuous because of it. route() falls through to renderToday for any
+           hash it does not know, so a row pointing at a dead route still paints a
+           full screen. Proven: pointing this row at '#/nonexistent-route-xyz'
+           PASSED the painted-only check.
+           The discriminator is the tab bar. route() does
+           b.classList.toggle('active', b.dataset.tab === navTab), so a real
+           destination lights exactly one tab and an unknown hash lights none. */
+        const active = [...document.querySelectorAll('#tabbar .tab.active')]
+          .map(b => b.dataset.tab);
+        if (!painted) return { why: `navigated to ${hash} but nothing rendered` };
+        if (active.length !== 1) return { why: `navigated to ${hash} but ${active.length} tabs lit, so the route is unknown` };
+        return { title: `navigated to ${hash} (tab ${active[0]})`, imgs: 0 };
+      }
+      return { why: 'no popup opened and no navigation' };
+    }
     const box = v.getBoundingClientRect();
     if (box.width < 100 || box.height < 100) return { why: `popup box ${Math.round(box.width)}x${Math.round(box.height)}` };
     if (+getComputedStyle(v).opacity < 0.9) return { why: `popup opacity ${getComputedStyle(v).opacity}` };
@@ -224,7 +256,7 @@ for (const id of ids) {
   });
   await sleep(1200);
 }
-ok('EVERY announcement opens with its real art', dead.length === 0, dead.join(' | '));
+ok('EVERY announcement leads somewhere real: art, or a destination that renders', dead.length === 0, dead.join(' | '));
 
 ok('no page errors', errs.length === 0, errs.join(' ; '));
 await browser.close();
