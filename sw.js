@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v449';
+const VERSION = 'tally-v450';
 const PRECACHE = [
   './',
   './index.html',

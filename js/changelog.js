@@ -4,6 +4,13 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 450, date: '2026-08-25', title: 'Small things that were quietly wrong', items: [
+    'The Boneyard intro card draws the real pixel art now, the same art the map uses, instead of plain coloured dots.',
+    'It also stopped telling you to spend coins in a shop that closed two builds ago.',
+    'Ingredient and crate chips in the Kitchen were asking for 13px art, which is under the floor, so they were silently falling back to the old line art.',
+    'The pixel typeface loads with the first screen again, so Gwart no longer types in a fallback font for a beat.',
+  ] },
+
   { n: 449, date: '2026-08-25', title: 'Something is walking the Boneyard', items: [
     'The Wanderer has a News entry now. He walks his own patch of the map, sweeps a light ahead of him, and comes for you if you step into it.',
     'It takes you to the Boneyard rather than opening another card.',

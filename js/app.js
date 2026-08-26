@@ -3502,7 +3502,7 @@ async function renderToday(el) {
         <button class="wp" id="coinBtn" aria-label="Coins">${ICONS.coin(16)}<b>${coinBal.toLocaleString()}</b></button>
         <button class="wp dust" id="dustBtn" aria-label="Bone Dust">${ICONS.dust(16)}<b>${dustBal.toLocaleString()}</b></button>
         <button class="wp gold" id="vigorBtn" aria-label="Pit fights ready">${ICONS.boltIco(13)}<b>${pitEnergy.ready}</b></button>
-        ${crates.length ? `<button class="wp gold" id="cratesBtn" aria-label="Crates">${crateIcon(crates[0].crate, 13)}<b>${crates.length}</b></button>` : ''}
+        ${crates.length ? `<button class="wp gold" id="cratesBtn" aria-label="Crates">${crateIcon(crates[0].crate, 16)}<b>${crates.length}</b></button>` : ''}
       </div>
     </div>
     ${/* GWART, DIRECTLY UNDER THE CURRENCIES, AND HE TALKS NOW. Tom asked for
@@ -6615,7 +6615,7 @@ async function openKitchen() {
     const canStartAny = cook.freeCount > 0 || cook.queueLeft > 0;
     const recipeCard = r => {
       const have = canCook(r, inv);
-      const needStr = Object.entries(r.needs).map(([id, n]) => `${ingIconHtml(id, 13)}${(inv[id] || 0)}/${n}`).join('  ');
+      const needStr = Object.entries(r.needs).map(([id, n]) => `${ingIconHtml(id, 16)}${(inv[id] || 0)}/${n}`).join('  ');
       const canStart = have && canStartAny;
       const verb = cook.freeCount > 0 ? (r.potion ? 'Brew' : 'Cook') : 'Line up';
       return `<div class="crate-row recipe ${have ? '' : 'lack'}"><span class="crate-ico">${recipeIconHtml(r, 26)}</span>
@@ -16249,10 +16249,10 @@ async function renderBoneyard(el) {
           <button class="btn" id="mapStart">Open the map</button>
           <div class="card" style="margin-top:16px">
             <div class="card-title">OUT THERE TODAY</div>
-            <div class="legend-row"><span class="blip-dot" style="background:#f2e9d7"></span><div><b>Bone cache</b><span class="note"> · XP for your bonehead</span></div></div>
-            <div class="legend-row"><span class="blip-dot" style="background:var(--amber)"></span><div><b>Coin pile</b><span class="note"> · spend in the crate shop</span></div></div>
-            <div class="legend-row"><span class="blip-dot" style="background:#b48ead"></span><div><b>Buried crate</b><span class="note"> · a wearable inside</span></div></div>
-            <div class="legend-row"><span class="blip-dot rare"></span><div><b>${MYSTERY_EGG.name}</b><span class="note"> · ${MYSTERY_EGG.desc}</span></div></div>
+            <div class="legend-row"><span class="legend-pix">${spawnIcon('bones', 24)}</span><div><b>Bone cache</b><span class="note"> · XP for your bonehead</span></div></div>
+            <div class="legend-row"><span class="legend-pix">${spawnIcon('coins', 24)}</span><div><b>Coin pile</b><span class="note"> · coins to spend in the shop</span></div></div>
+            <div class="legend-row"><span class="legend-pix">${spawnIcon('crate', 24)}</span><div><b>Buried crate</b><span class="note"> · a wearable inside</span></div></div>
+            <div class="legend-row"><span class="legend-pix rare">${spawnIcon('rare', 24)}</span><div><b>${MYSTERY_EGG.name}</b><span class="note"> · ${MYSTERY_EGG.desc}</span></div></div>
           </div>
         </div>
       </div>
@@ -18025,7 +18025,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v449'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v450'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
