@@ -3627,28 +3627,7 @@ async function renderToday(el) {
   </button>` : ''}
 
   <section class="tsec"><div class="tsec-h">Calories</div>
-  <div class="card ring-card">
-    <div class="ring-wrap">
-      <svg viewBox="0 0 158 158">
-        <circle class="ring-track" cx="79" cy="79" r="66" fill="none" stroke-width="13"/>
-        <circle class="ring-fill ${over ? 'over' : ''}" id="ringFill" cx="79" cy="79" r="66" fill="none" stroke-width="13" stroke-linecap="round"
-          stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - prev.ringPct)}"/>
-      </svg>
-      <div class="ring-center">
-        <div class="big" id="ringBig">${Math.abs(prev.remainShown ?? remaining).toLocaleString()}</div>
-        <div class="lbl">${over ? 'kcal over' : 'kcal left'}</div>
-      </div>
-    </div>
-    <div class="ring-side">
-      <div class="kv"><span>Eaten</span><b>${Math.round(tot.kcal).toLocaleString()}</b></div>
-      <div class="kv"><span>Target</span><b>${t.kcal.toLocaleString()}</b></div>
-      <div class="divider" style="margin:2px 0"></div>
-      ${macroRow('Protein', tot.p, t.p, 'protein', prev.macroPcts[0], protHit)}
-      ${macroRow('Carbs', tot.c, t.c, 'carbs', prev.macroPcts[1], false)}
-      ${macroRow('Fat', tot.f, t.f, 'fat', prev.macroPcts[2], false)}
-    </div>
-  </div>
-  </section>
+  ${calorieRingCard({ tot, t, over, remaining, protHit, startPct: prev.ringPct, startBig: prev.eatenShown ?? tot.kcal, macroPcts: prev.macroPcts })}</section>
 
   ${/* WELLNESS IS THE ONE SECTION THAT STAYS TODAY-ONLY, and the reason is its
        store, not its layout: js/wellness.js keeps water/bed/sleep in a SINGLE kv
@@ -3691,8 +3670,8 @@ async function renderToday(el) {
     if (ring) ring.style.strokeDashoffset = String(C * (1 - pct));
     $$('.ring-side .bar i', el).forEach((bar, i) => { bar.style.width = macroPcts[i] + '%'; });
   }));
-  tweenNumber($('#ringBig', el), prev.remainShown ?? remaining, Math.abs(remaining), 650, v => Math.round(Math.abs(v)).toLocaleString());
-  S.ui = { ringPct: pct, remainShown: Math.abs(remaining), macroPcts };
+  tweenNumber($('#ringBig', el), prev.eatenShown ?? tot.kcal, tot.kcal, 650, v => Math.round(v).toLocaleString());
+  S.ui = { ringPct: pct, eatenShown: tot.kcal, macroPcts };
 
   $('#todaySettings', el)?.addEventListener('click', () => { location.hash = '#/settings'; });
   $('#prevDay').addEventListener('click', () => { S.date = addDays(S.date, -1); refresh(); });
@@ -3894,6 +3873,61 @@ async function renderToday(el) {
   }));
 
   if (isToday) hydrateRaceResult(el);
+}
+
+/* THE CALORIE RING, ONE DEFINITION, TWO SCREENS.
+   Tom, 2026-08-26: "this should be found on the trends page too ... trends is the
+   one stop shop for all things health and wellness. it is the hub for these
+   things." Extracted rather than copied: a second hand-written copy of this card
+   is how the Boneyard's "Out there today" list drifted four markers behind the
+   map key it was duplicating.
+
+   THE NUMBER AND THE RING NOW RUN THE SAME WAY, which is the defect this fixes.
+   The ring FILLED UP while the headline number COUNTED DOWN: the lime arc grew as
+   "1,284 KCAL LEFT" shrank, two opposite frames in one component, and neither of
+   us noticed until a critique measured the card rather than looking at it. The
+   number is what you have EATEN now, so it climbs with the arc, and the figure
+   that actually answers "can I have dinner" moves to the line underneath rather
+   than being lost.
+
+   Ring stays a SINGLE LIME on Tom's instruction. A segmented macro ring was
+   proposed, mocked and rejected: the three macro colours are isoluminant
+   (measured contrast 1.06 and 1.09 between neighbours, against 9.90 for the lime
+   on the track), so with chroma stripped the segmented arc is one uniform grey
+   band with no visible divisions at all. It also collided with the bars 200px to
+   its right, where the same blue means a completely different statistic. */
+function calorieRingCard({ tot, t, over, remaining, protHit, startPct = 0, startBig = 0, macroPcts = [0, 0, 0], live = true }) {
+  const C = 2 * Math.PI * 66;
+  const eaten = Math.round(tot.kcal);
+  /* SHORT ON PURPOSE. "1,284 left of 2,570" overflowed the ring's interior and
+     collided with the arc, measured at 176px against 119px of usable width. The
+     target is already stated as "Target 2,570" in the column beside it, so
+     repeating it here cost a collision to say nothing new. */
+  const sub = over
+    ? `${Math.abs(Math.round(remaining)).toLocaleString()} over`
+    : `${Math.round(remaining).toLocaleString()} left`;
+  return `<div class="card ring-card">
+    <div class="ring-wrap">
+      <svg viewBox="0 0 158 158">
+        <circle class="ring-track" cx="79" cy="79" r="66" fill="none" stroke-width="13"/>
+        <circle class="ring-fill ${over ? 'over' : ''}"${live ? ' id="ringFill"' : ''} cx="79" cy="79" r="66" fill="none" stroke-width="13" stroke-linecap="round"
+          stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - startPct)}"/>
+      </svg>
+      <div class="ring-center">
+        <div class="big"${live ? ' id="ringBig"' : ''}>${Math.round(startBig).toLocaleString()}</div>
+        <div class="lbl">kcal eaten</div>
+        <div class="lbl ring-sub">${sub}</div>
+      </div>
+    </div>
+    <div class="ring-side">
+      <div class="kv"><span>Eaten</span><b>${Math.round(tot.kcal).toLocaleString()}</b></div>
+      <div class="kv"><span>Target</span><b>${t.kcal.toLocaleString()}</b></div>
+      <div class="divider" style="margin:2px 0"></div>
+      ${macroRow('Protein', tot.p, t.p, 'protein', macroPcts[0], protHit)}
+      ${macroRow('Carbs', tot.c, t.c, 'carbs', macroPcts[1], false)}
+      ${macroRow('Fat', tot.f, t.f, 'fat', macroPcts[2], false)}
+    </div>
+  </div>`;
 }
 
 function macroRow(label, val, target, cls, prevPct = 0, glow = false) {
@@ -8462,9 +8496,24 @@ async function renderTrends(el) {
 
   const pill = (v, sub) => `<div class="recap-pill"><span class="rp-v">${v}</span><span class="rp-s">${sub}</span></div>`;
 
+  /* TODAY'S CALORIES, ON THE HUB. Tom, 2026-08-26: "this should be found on the
+     trends page too ... trends is the one stop shop for all things health and
+     wellness." Same card as Today, from the same function, so the two can never
+     drift. It is LABELLED "Today" because everything else on this page is a
+     window of days, and an unlabelled daily ring on a weekly page reads as a
+     period summary. `live: false` drops the ids, so Today's tween keeps hunting
+     exactly one element and this copy is simply static. */
+  const tToday = dayTotals(byDate[dateKey()] || []);
+  const remToday = t.kcal - tToday.kcal;
+
   el.innerHTML = `
   <div id="updBanner"></div>
   <h1 class="page-h1">Progress<span class="sub">Your level, streak, badges and data</span></h1>
+
+  <section class="tsec"><div class="tsec-h">Today</div>
+  ${calorieRingCard({ tot: tToday, t, over: remToday < 0, remaining: remToday, protHit: t.p && tToday.p >= t.p,
+                      startPct: Math.min(1, t.kcal ? tToday.kcal / t.kcal : 0), startBig: tToday.kcal, live: false,
+                      macroPcts: [t.p ? Math.min(100, tToday.p / t.p * 100) : 0, t.c ? Math.min(100, tToday.c / t.c * 100) : 0, t.f ? Math.min(100, tToday.f / t.f * 100) : 0] })}</section>
 
   ${activityRecoveryHtml(days)}
 
