@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 455, date: '2026-08-26', title: 'The wordmark is gone, and the wallpaper runs off the top', items: [
+    'The BONEHEADZ mark that slid in when you pulled down on Today has been removed. Pulling past the top now just shows more of your backdrop colour, running straight up off the screen with no line and nothing printed on it.',
+    'That colour is decided from your equipped backdrop art itself rather than measured while the app runs, so it is the same on every phone. If you have no backdrop equipped it matches the scene your Bonehead stands in.',
+  ] },
+
   { n: 454, date: '2026-08-26', title: 'No more black band above your Bonehead', items: [
     'If you have no backdrop equipped, pulling down on Today used to show a black band sitting on top of your hero art. It now carries the same colour the scene behind your Bonehead already uses, so the top of the page runs into the art with nothing between them. If you do have a backdrop equipped, nothing changes: that case was always sampled from your art.',
     'The wordmark also gets home quicker. It still travels up and fades out with the screen, but it now leads it rather than being dragged along, so it is most of the way gone by the time the screen is half way back.',
