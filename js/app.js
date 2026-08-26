@@ -12255,6 +12255,12 @@ function bindBadgeTaps(wrap) {
 // by tapping small chips on Today. openCharacter(tab) is kept as the one way in
 // so every old caller lands in the right place.
 function openCharacter(tab = 'wardrobe') {
+  /* WHICH HUB SUB-TAB PEOPLE ACTUALLY OPEN. Sub-tabs emit no events, so when
+     Tom asked whether anyone uses Looks (2026-08-18) no number existed and none
+     could be recovered. Every hub sub-tab funnels through here, both the #chTabs
+     chips and the .ward-looks door, so one call covers all of them. Deliberately
+     the user-INTENT click and not renderBonehead, which re-runs on refresh(). */
+  try { trackEvent('hub_tab', { t: tab }); } catch { /* analytics never breaks the app */ }
   pendingHubTab = tab;
   if (currentTab() === 'bonehead') return route();   // already here: just switch tabs
   location.hash = '#/bonehead';
