@@ -115,8 +115,21 @@ async function startWorker() {
   const seed = spawn(process.execPath, [bin, 'd1', 'execute', 'bonez', '--local', '--file=schema.sql'],
     { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise(r => seed.on('exit', r));
+  /* detached puts wrangler in its OWN process group, so the kill below reaches
+     the workerd GRANDCHILDREN too. SIGKILL on wrangler alone cannot: it is
+     untrappable, so wrangler never runs the handler that reaps its workerd, and
+     each workerd is left with PPID 1 retrying the loopback address of the parent
+     that just died. Measured 2026-08-25: 38 such orphans had eaten 16,171 of the
+     16,384 ephemeral ports, which fails every later Chrome audit with
+     EADDRNOTAVAIL and breaks `git push` with "can't assign requested address". */
   const p = spawn(process.execPath, [bin, 'dev', '--local', '--port', String(port),
-    '--var', 'DEV:1', '--var', 'ADMIN_TOKEN:devtoken'], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
+    '--var', 'DEV:1', '--var', 'ADMIN_TOKEN:devtoken'],
+    { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+  const killTree = () => { try { process.kill(-p.pid, 'SIGKILL'); } catch { /* group already gone */ } };
+  /* An interrupted run (Ctrl-C, a torn-down session) never reaches close(),
+     which is how these leaked in the first place. */
+  process.once('exit', killTree);
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(sig, () => { killTree(); process.exit(1); });
   let err = '';
   p.stderr.on('data', d => { err += d; });
   p.stdout.on('data', d => { err += d; });
@@ -127,10 +140,10 @@ async function startWorker() {
   for (;;) {
     if (exited) die(`the Worker died before serving ${url} (${exited}). ${err.trim().split('\n').pop() || ''}`);
     try { if ((await fetch(url + '/health')).ok) break; } catch { /* not up */ }
-    if (Date.now() - t0 > 60000) { p.kill('SIGKILL'); die(`nothing answered on ${url}/health within 60s. ${err.trim() || '(silent)'}`); }
+    if (Date.now() - t0 > 60000) { killTree(); die(`nothing answered on ${url}/health within 60s. ${err.trim() || '(silent)'}`); }
     await sleep(400);
   }
-  return { url, close: () => { try { p.kill('SIGKILL'); } catch { /* gone */ } } };
+  return { url, close: killTree };
 }
 
 const api = await startWorker();
