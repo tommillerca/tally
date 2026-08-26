@@ -481,9 +481,23 @@ for (const cfg of CONFIGS) {
     return Math.max(...hi.map((v, c) => v - lo[c]));
   };
 
-  ok('CONTROL SEAM the backdrop, the fill colour and the grain layer were all found',
-    !!geo && !!geo.edge && /^url\(/.test(geo.grain) && parseFloat(geo.grainOp) > 0,
-    geo ? `edge="${geo.edge}" grain="${geo.grain}..." opacity=${geo.grainOp}` : 'no .hero-backdrop');
+  /* RE-PREMISED 2026-08-26, and the old bound is kept in the message because this
+     row is a small monument to the thing it got wrong. It required the grain
+     layer to EXIST, which was reasonable while the fix was "fade the grain out
+     over the first 28px so the boundary is flat-on-flat". The block above already
+     knew the mean was never the problem and that the eye was reading TEXTURE; the
+     28px mask did not remove that boundary, it moved it 28px down and turned a
+     step into a ramp. Tom, having raised it once already: "im 99% sure it's
+     because youve added a grainy noise layer on top of the whole bonehead
+     section ... ive already brought this up to you but you glossed over it."
+     The grain is gone from the hero now, so requiring it here would hold the
+     defect in place with a green gate. What the control still has to do is prove
+     the sampler found a real surface, which is the half that keeps the rows below
+     honest. The ABSENCE of the grain is asserted too, in the same row, so this
+     cannot quietly pass on a build that puts it back. */
+  ok('CONTROL SEAM the backdrop and the fill colour were found, and the hero carries NO grain layer (it was the seam, removed 2026-08-26; this row wanted it PRESENT until then)',
+    !!geo && !!geo.edge && !/^url\(/.test(geo.grain),
+    geo ? `edge="${geo.edge}" grain=${geo.grain === 'none' ? 'none' : `"${geo.grain}..." opacity=${geo.grainOp} (A GRAIN LAYER IS BACK ON THE HERO)`}` : 'no .hero-backdrop');
 
   if (geo && geo.edge) {
     const rendered = await stripMean();
