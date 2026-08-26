@@ -107,6 +107,12 @@ const PIX_CUR = {
   /* the general marks. `bolt` serves BOTH ICONS.boltIco and ICONS.boltStroke,
      which were two drawings of one idea. */
   star: 'star', bone: 'bone', paw: 'paw', bolt: 'bolt', sparkle: 'sparkle',
+  /* THE WELLNESS SET, 2026-08-26. Water and the bed are the two Daily wellness
+     rows, the moon is the sleep row, the scroll is the QUESTS header and the
+     dumbbell is anything fitness: the Apple Health workout row and the Trends
+     door on Today. Every site asks 24, which is a whole step, so none of them
+     falls through to the vector it replaced. */
+  water: 'water', bed: 'bed', moon: 'moon', scroll: 'scroll', dumbbell: 'dumbbell',
 };
 export function pixCur(kind, s) {
   const f = PIX_CUR[kind];

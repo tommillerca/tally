@@ -24,7 +24,7 @@ const SAFE_AREA_PX = 59;          // iPhone 14 Pro Dynamic Island
 
 // Where each control must land. Add a row whenever you add a control.
 const CONTROL_EXPECTATIONS = [
-  { id: 'streakChip', on: 'today', expect: { hash: '#/progress' } },
+  { id: 'trendsBtn', on: 'today', expect: { hash: '#/progress' } },
   { id: 'coinBtn', on: 'today', expect: { hash: '#/bonehead', hubTab: 'crates' } },
   { id: 'dustBtn', on: 'today', expect: { hash: '#/bonehead', hubTab: 'crates' } },
   { id: 'cratesBtn', on: 'today', expect: { hash: '#/bonehead', hubTab: 'crates' } },

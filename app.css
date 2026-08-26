@@ -1256,6 +1256,14 @@ body::before {
      none at all. */
   position: absolute; top: calc(var(--sat) + 10px); left: 12px; right: 12px; z-index: 5;
   display: flex; justify-content: flex-start; align-items: center; gap: 7px;
+  /* 32px WAS THE TRENDS DOT'S HEIGHT, and --gw-top above is 10 + that 32 + 8.
+     The dot moved into .hero-actions on 2026-08-26 and the row collapsed to the
+     wallet pill's 28px, which pushed Gwart 4px off the currencies and put the
+     ORDER row of tests/today-peek-audit.mjs red at 24.5px against its 22 bound.
+     Pinned rather than retuning --gw-top down to 46, because --fig is derived
+     from --gw-top and 4px more Bonehead takes the Today hero past the 1.40x
+     ceiling tests/art-resolution-audit.mjs pins on Cam's 640 masters. */
+  min-height: 32px;
 }
 .hero-top-right { display: flex; gap: 7px; }
 .hero-top .streak-chip, .hero-top .bh-coin, .hero-top .bh-crates {
@@ -3696,7 +3704,7 @@ body::before {
 .q-collapse > summary::after { content: '▸'; margin-left: auto; color: var(--text-3); transition: transform 0.2s; }
 .q-collapse[open] > summary::after { transform: rotate(90deg); }
 .q-collapse[open] > summary { color: var(--accent); }
-.q-sum-ico { display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; font-size: 16px; opacity: .9; }
+.q-sum-ico { display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; font-size: 16px; opacity: .9; }
 .q-sum-ico svg { width: 18px; height: 18px; fill: currentColor; }
 /* when a quest is claimable: warm the header + a soft accent edge so the eye
    catches it, WITHOUT a loud always-on treatment that unbalances the home feed */
@@ -8284,13 +8292,9 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .kd-back .ico { transform: rotate(180deg); }
 
 /* ---- Today hero, option 1d chrome (design_handoff_today_home) ---------------
-   Four chips competing over the art became one wallet pill and an icon-only
-   Trends dot. Nothing new was introduced: same icons, same handlers. */
-.trend-dot {
-  width: 32px; height: 32px; display: grid; place-items: center; flex: none;
-  border-radius: 999px; background: rgba(13, 12, 18, .45);
-  border: 1.5px solid rgba(242, 233, 215, .2); color: var(--text);
-}
+   Four chips competing over the art became one wallet pill. The icon-only Trends
+   dot that used to lead this row is gone (2026-08-26): it is a labelled door in
+   .hero-actions now. */
 .wallet-pill {
   display: inline-flex; align-items: center; gap: 12px;
   padding: 6px 12px; border-radius: 999px;
