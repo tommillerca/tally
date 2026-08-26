@@ -11070,6 +11070,22 @@ function richLine(str) {
    missed, and there is no second copy to drift. The thumbnail is a small piece of
    that same popup's art for the same reason. */
 const NEWS = [
+  /* THE WANDERER. Tom kept this row when every other launch interstitial went in
+     v448: "the only news things staying are the new one with the wanderer on it
+     and the ones on crew that link the discord". It had never been written.
+     THE COPY IS TRUE TO THE MECHANIC, and my first draft was not. I wrote "he
+     wants nothing from you" off a stale note saying he was lore only; Tom caught
+     it. js/wanderer.js walks him across the Boneyard HUNTING the player, sweeps a
+     cone of light ahead of him, and CHARGES if the player steps into it. So the
+     blurb is a warning, and "Do not stand in it" is the one thing a player needs
+     and cannot guess.
+     It opens the BONEYARD, not a card: he is a thing you find on the map, and
+     v448 had just finished deleting launch popups. It is the only row without a
+     card, deliberately, and news-tab-audit was re-premised to allow that. */
+  { id: 'wanderer', date: 'Aug 25', title: 'You hear him first',
+    blurb: 'Heavy footsteps, and a light sweeping the ground ahead of him. Do not stand in it.',
+    thumb: () => `<img class="nw-img" src="assets/bh/wanderer/wanderer.png" alt="">`,
+    open: () => { location.hash = '#/boneyard'; } },
   { id: 'thanks', date: 'Aug 15', title: 'Thanks for being early',
     blurb: 'The invite link to pass on, and how Android players get added.',
     /* An ICON, not an emoji. news-tab-audit requires every row to draw a real
@@ -18009,7 +18025,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v448'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v449'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
