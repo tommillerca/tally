@@ -37,7 +37,11 @@ async function deviceId() {
 // of the kv queue and clobber each other, silently dropping events.
 let writeChain = Promise.resolve();
 export function track(name, props) {
-  if (BOT) return writeChain;
+  /* window.__evProbe is the same webdriver-only escape hatch pushErr() carries,
+     for the same reason: an audit has to be able to prove an event is QUEUED.
+     Nothing else sets it, and flush() keeps its own BOT gate with no apiBase in
+     a test, so a probe row can never leave the device. */
+  if (BOT && !(typeof window !== 'undefined' && window.__evProbe)) return writeChain;
   writeChain = writeChain.then(async () => {
     const q = (await kvGet('evq', [])) || [];
     q.push({ name, props: props || undefined, ts: Date.now() });
