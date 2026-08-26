@@ -1214,6 +1214,91 @@ ok('REDUCED   under prefers-reduced-motion the fade is dropped (opacity pinned t
     `opacity ${lead.op}ms against transform ${lead.tr}ms (transition-property "${lead.props}", duration "${lead.durs}")`);
 }
 
+/* ---------- RELEASE: the window between a deep bounce and FULL ---------- */
+/* THE HALF THE LEAD ROW ABOVE CANNOT REACH, and the reason Tom has reported this
+   five times against four different fixes. LEAD grades the TAIL: once the pull is
+   under FULL the opacity is given 60ms against the travel's 130ms and the ink
+   dies first. What it cannot grade is everything ABOVE FULL. --wm-pull is pinned
+   at 1 for every pull past 36px, so from a 168px bounce down to 36px the mark sat
+   at full opacity while the returning content slid up underneath it, which is the
+   overlap he keeps seeing. app.css and ROADMAP.md both say so in as many words,
+   and both say the only cure is a release-detecting state.
+
+   THE DETECTOR IS THE FINGER LIFTING, NOT A SHRINKING PULL, and HELD below is
+   why. ROADMAP.md names the trap: COST sweeps 0 -> 120px and VISIBLE then pulls
+   to 36, so a "the pull got smaller" detector reads the gap between two graded
+   rows as a release and blanks the mark for the row that photographs it. A real
+   touchend cannot be produced by a synthetic scroll, so every other row in this
+   file still drives exactly the code it always did.
+
+   HELD  the same DESCENDING sweep with no release keeps the mark lit. This is the
+         control, and it is pinned at 36px because that is the pull VISIBLE
+         photographs immediately after COST has swept to 120.
+   POP   at the instant of release the opacity does not jump, graded at TWO
+         depths. The shallow one is the row that bites: the exit is scaled by the
+         PEAK, so min(q, r) is exactly the value already on screen at any depth,
+         while a FIXED denominator only looks right on a deep release. Releasing
+         at 36px with the 60px denominator of the abandoned first attempt gives
+         r = 0.1 against a q of 1, i.e. the mark snaps from full to nearly gone in
+         one frame. That build was measured on a simulator, read as "fixed"
+         because its tail was right, and was still wrong.
+   RELEASE the ink reaches ZERO while there is still real travel left to run, so
+         it is off the glass before the card arrives under it. Failure is the ink
+         outliving the travel, which is the defect.
+
+   PROVE-RED, both measured in cp -R copies, each reddening a different row:
+     touchend listeners dropped (no release is ever detected)
+       -> RELEASE red at "never reached 0", HELD and POP green. POP green is
+          correct and is why the shallow depth was added: a build with no exit at
+          all has no pop in it.
+     (pull - LEAD) / (peak - LEAD) replaced by a fixed 60px denominator
+       -> POP red on the shallow release, snapping 1.00 -> 0.10 in one frame. */
+{
+  const readSweep = async (pulls, hold = true) => {
+    const out = [];
+    for (const px of pulls) out.push(await pullTo(page, px, hold));
+    return out;
+  };
+  const touchEnd = () => page.evaluate(() => document.getElementById('screen').dispatchEvent(new Event('touchend')));
+
+  await pullTo(page, 0);                                  // pull 0 resets released + peak
+  const held = await readSweep([120, 100, 80, 60, FULL]);
+  const heldAtFull = held[held.length - 1];
+  ok(`HELD      a DESCENDING sweep with no release leaves the mark lit: at ${FULL}px it is still at full opacity, so COST's 0->120px sweep followed by VISIBLE's pull to ${FULL} cannot blank it`,
+    heldAtFull.op === 1 && held.every(h => h.op === 1),
+    held.map(h => `${-h.faked}px:${h.op.toFixed(2)}`).join(' '));
+
+  /* SHALLOW first, because it is the one a fixed denominator fails. */
+  await pullTo(page, 0);
+  const shallowAt = await pullTo(page, FULL, true);
+  await touchEnd();
+  const shallow = await readSweep([FULL, 33, 30, 20]);
+  const shallowMono = shallow.every((r, i) => i === 0 || r.op <= shallow[i - 1].op + 1e-9);
+
+  await pullTo(page, 0);
+  const deep = await pullTo(page, 120, true);
+  await touchEnd();
+  const rel = await readSweep([120, 100, 80, 60, 40, 30, 20]);
+  const monoDown = rel.every((r, i) => i === 0 || r.op <= rel[i - 1].op + 1e-9);
+  ok(`POP       the release is continuous at BOTH depths: the first frame after the finger lifts holds the opacity the pull had already put on screen, and it only ever falls from there. The shallow release is the one a fixed denominator gets wrong, snapping full to nearly gone in a frame`,
+    Math.abs(rel[0].op - deep.op) <= 1e-9 && monoDown
+      && Math.abs(shallow[0].op - shallowAt.op) <= 1e-9 && shallowMono,
+    `deep: at release ${deep.op.toFixed(2)} -> ${rel.map(r => `${-r.faked}px:${r.op.toFixed(2)}`).join(' ')}   |   `
+    + `shallow: at release ${shallowAt.op.toFixed(2)} -> ${shallow.map(r => `${-r.faked}px:${r.op.toFixed(2)}`).join(' ')}`);
+
+  const dead = rel.find(r => r.op === 0);
+  ok('RELEASE   after a real release the ink reaches ZERO while the travel is still running, so the mark is off the glass before the returning card reaches the strip it was in. Tom, five times: "the word mark doesnt fade out in time before the UI snaps back"',
+    !!dead && dead.ty > 0 && -dead.faked >= 20,
+    dead
+      ? `opacity 0 first at ${-dead.faked}px of pull, with ${dead.ty.toFixed(0)}px of the ${SAT + LAND}px travel still on screen. Before this the mark held opacity 1 all the way down to ${FULL}px.`
+      : `never reached 0: ${rel.map(r => `${-r.faked}px:${r.op.toFixed(2)}`).join(' ')}`);
+
+  await pullTo(page, 0);          // hand the page back with released + peak cleared
+  await releasePull(page);
+  await clearPull(page);
+  await page.evaluate(() => document.documentElement.style.removeProperty('--wm-fade'));
+}
+
 /* COST. A scroll listener on this element is the one thing that could make the
    feature expensive, and "it is quantised" is a comment until something counts.
    Counts STYLE WRITES rather than milliseconds: deterministic, and it is the

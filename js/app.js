@@ -2627,9 +2627,31 @@ async function backupNudge() {
 function bindWordmarkPull() {
   const el = $('#screen');
   const FULL = 36;         // px of pull at which the mark is fully revealed
-  let last = -1;
+  const LEAD = 30;         // px of pull by which the ink is already gone on the way OUT
+  let last = -1, lastF = -1, released = false, peak = 0;
+
+  /* THE RELEASE IS THE FINGER LIFTING. It is deliberately NOT "the pull got
+     smaller", and that distinction is the whole reason this is only landing now.
+     Tom, 2026-08-25: "the word mark doesnt fade out in time before the UI snaps
+     back", his fifth report of the same thing. The cause was never the tail: the
+     opacity already leads the travel out (60ms against 130ms, the LEAD row). It
+     is that --wm-pull is PINNED AT 1 for every pull past 36px, so between a
+     168px bounce and 36px the mark sits at full opacity while the content slides
+     up under it, and no symmetric function of the pull can tell the two
+     directions apart.
+     A pull-delta detector was the obvious answer and it is a trap this audit
+     already documents: COST sweeps 0 -> 120px and VISIBLE then pulls to 36, and
+     "the pull is shrinking" reads that as a release and blanks the mark. The
+     finger lifting is the thing Tom is actually describing, it is a real event,
+     and a synthetic scroll never fires one, so every existing row here keeps
+     seeing exactly the code it graded before. */
+  for (const ev of ['touchend', 'touchcancel', 'pointerup', 'pointercancel'])
+    el.addEventListener(ev, () => { released = true; }, { passive: true });
+
   el.addEventListener('scroll', () => {
     const pull = -el.scrollTop;
+    if (pull <= 0) { released = false; peak = 0; }
+    else if (pull > peak) peak = pull;
     const t = pull <= 0 ? 0 : Math.min(1, pull / FULL);
     /* SMOOTHSTEP, NOT t. Tom on v421: "there is no easing involved in the
        movement and it feels cheap". A linear map moves the mark at exactly the
@@ -2642,9 +2664,31 @@ function bindWordmarkPull() {
        one property write per step is what keeps this listener cheap, and the
        compositor interpolates for free. */
     const q = Math.round(t * t * (3 - 2 * t) * 20) / 20;
-    if (q === last) return;
-    last = q;
-    document.documentElement.style.setProperty('--wm-pull', q);
+    const root = document.documentElement;
+    if (q !== last) { last = q; root.style.setProperty('--wm-pull', q); }
+
+    /* THE EXIT, and it only exists once the finger is gone. Opacity falls from
+       wherever the release caught it to ZERO while there are still LEAD px of
+       pull left to travel, so the ink is off the glass before the returning card
+       reaches the strip it was in. Scaled by the PEAK rather than by FULL so the
+       release is continuous from any depth: at the instant of release pull ===
+       peak, r === 1 and min(q, r) === q, which is exactly the value already on
+       screen. A fixed denominator would snap a shallow release from 1 to near
+       zero in one frame, which is a pop, and popping is what this feature has
+       been reported for twice.
+       min(), not r alone, because the travel keeps tracking the pull: past 36px
+       q is 1 and r governs, under it q falls too and the mark must never brighten
+       on its way out.
+       --wm-fade is UNSET while the finger is down, so the reveal writes one
+       property exactly as it always has and the fail-open default is untouched:
+       opacity is var(--wm-fade, var(--wm-pull, 1)). */
+    let f = null;
+    if (released && peak > LEAD) f = Math.round(Math.min(q, Math.max(0, (pull - LEAD) / (peak - LEAD))) * 20) / 20;
+    if (f !== lastF) {
+      lastF = f;
+      if (f === null) root.style.removeProperty('--wm-fade');
+      else root.style.setProperty('--wm-fade', f);
+    }
   }, { passive: true });
 }
 
