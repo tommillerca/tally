@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 454, date: '2026-08-26', title: 'No more black band above your Bonehead', items: [
+    'If you have no backdrop equipped, pulling down on Today used to show a black band sitting on top of your hero art. It now carries the same colour the scene behind your Bonehead already uses, so the top of the page runs into the art with nothing between them. If you do have a backdrop equipped, nothing changes: that case was always sampled from your art.',
+    'The wordmark also gets home quicker. It still travels up and fades out with the screen, but it now leads it rather than being dragged along, so it is most of the way gone by the time the screen is half way back.',
+  ] },
+
   { n: 453, date: '2026-08-26', title: 'The wordmark rides the screen back up', items: [
     'Pull down past the top of Today and let go. The BONEHEADZ mark now travels back up with the screen and fades as it goes, so the two land together. The last build had it clearing out early, which left it disappearing while the screen was still visibly moving.',
   ] },
