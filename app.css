@@ -1203,27 +1203,26 @@ body::before {
   background: radial-gradient(66% 44% at 50% 46%, rgba(255, 236, 180, .2), transparent 68%);
 }
 /* the deck's grain over the coral, pointer-transparent */
-/* THE GRAIN STOPS BEFORE THE TOP EDGE, AND THAT IS THE WHOLE SEAM FIX.
-   Five builds (v434, v435, v436, v438, v441) chased this as a COLOUR problem and
-   each one got closer without ever closing it. It was never a colour. Measured
-   2026-08-25 at 430x932 dpr2 on the shipped backdrop: with the grain on, the
-   art's top row varies across x by 7 units and no two pixels agree; with the
-   grain suppressed it varies by 0. The bounce strip is painted by the scroller's
-   background-color and section 10 proves a background-image there renders ZERO
-   pixels, so the strip can only ever be FLAT. A flat colour cannot match a
-   textured surface: it can equal the mean and nothing else, which is exactly
-   what v441 achieved (mean delta -0.2/+0.4/+0.4) and why a step was still
-   visible. The eye was reading the TEXTURE discontinuity, not the colour.
-   So the art goes flat where it meets the fill instead. The tile is at opacity
-   .07, so a 28px fade is imperceptible as texture and removes the boundary
-   entirely. Tom, 2026-08-25: "make it identical not fill lighter or darker with
-   bandaid fixes? find the root problem". */
-.hero-scene::after {
-  content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none;
-  background-image: var(--grain); background-size: 150px 150px; opacity: .07;
-  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 var(--grain-fade, 28px));
-          mask-image: linear-gradient(180deg, transparent 0, #000 var(--grain-fade, 28px));
-}
+/* THE HERO CARRIES NO GRAIN, and that is the seam fix rather than a look choice.
+   Tom, 2026-08-26: "there's still a slight seam and im 99% sure it's because
+   youve added a grainy noise layer on top of the whole bonehead section. ive
+   already brought this up to you but you glossed over it" and "to me it looks
+   like the grain is not fading out it covers the entire block". Both correct.
+
+   WHAT WAS HERE: .hero-scene::after painted var(--grain) at opacity .07, masked
+   transparent for the first 28px so the top edge met the flat fill flat-on-flat.
+   Its own comment claimed that "removes the boundary entirely". It did not. It
+   MOVED the boundary 28px down and turned a step into a ramp.
+
+   MEASURED, on a 90px displaced hero, luma averaged across the row:
+     grain OFF   fill 111.45   art 111.45   identical, no seam anywhere
+     grain ON    fill 111.45   art 111.92 rising to 112.27 further down
+   The strip a bounce reveals is a background-COLOR on the scroller and it can
+   never carry texture: v435 measured that an opaque background-image there stops
+   the compositor promoting the layer and the page went flat black. So a grained
+   hero and a flat strip cannot be reconciled by any colour, however well
+   computed, which is exactly what four attempts at this kept rediscovering.
+   Guard: the SEAM row in tests/hero-edge-audit.mjs. */
 .hero-scene .bh-anim { animation-duration: 4s; }
 .hero-scene .bh-anim { --av-fit: cover; }
 .hero-scene .bh-anim img { object-fit: cover; }

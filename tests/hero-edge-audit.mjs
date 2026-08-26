@@ -163,5 +163,69 @@ ok('GONE     the overscroll wordmark is removed, not hidden: nothing paints in t
     && !/setProperty\('--wm-(pull|fade)'/.test(src) && !/function bindWordmarkPull/.test(src),
   `#app::before background-image ${gone.bgImage}, --wm-pull "${gone.pull}", --wm-fade "${gone.fade}", listener in source: ${/function bindWordmarkPull/.test(src)}`);
 
+/* SEAM: the boundary the last five attempts kept missing.
+   Every earlier fix graded the fill's COLOUR and the strip stayed wrong, because
+   the defect was TEXTURE. .hero-scene::after painted grain over the hero at
+   opacity .07, masked transparent for 28px so the top edge met the flat fill
+   flat-on-flat; that comment claimed it "removes the boundary entirely" and it
+   only moved it 28px down and turned a step into a ramp. Tom, having raised it
+   before and been talked past: "im 99% sure it's because youve added a grainy
+   noise layer on top of the whole bonehead section" and "to me it looks like the
+   grain is not fading out it covers the entire block."
+
+   The strip a bounce reveals is a background-COLOR and can never carry texture
+   (v435: an opaque background-image there stopped the compositor promoting the
+   layer and the page went flat black), so a grained hero cannot be reconciled
+   with it by any colour however well computed.
+
+   This grades PIXELS across the boundary rather than a stylesheet property, so
+   it fails on any future layer that reintroduces a difference, not just on the
+   one that did it this time. It requires BOTH means and BOTH texture readings to
+   match: a colour-only check is what let the grain through.
+   MEASURED before the fix: fill 111.45 flat, art 111.92 rising to 112.27 and a
+   texture delta of +0.47 sd. After: identical on both, 0.00 and 0.00. */
+{
+  await page.evaluate(async () => {
+    const db = await import('./js/db.js');
+    const eq = (await db.kvGet('equipped', {})) || {};
+    eq.BG = 'BG2-1'; await db.kvSet('equipped', eq);
+    location.hash = '#/foods'; await new Promise(r => setTimeout(r, 300));
+    location.hash = '#/today'; await new Promise(r => setTimeout(r, 1400));
+  });
+  const tag = await page.addStyleTag({ content: '.screen--today > * { transform: translateY(90px); }' });
+  await sleep(500);
+  const shot = await page.screenshot({ clip: { x: 0, y: 0, width: 402, height: 200 } });
+  await page.evaluate(el => el.remove(), tag);
+  const stats = await page.evaluate(async b64 => {
+    const img = new Image();
+    img.src = 'data:image/png;base64,' + b64;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0);
+    const dpr = img.naturalWidth / 402;
+    const row = ycss => {
+      const y = Math.round(ycss * dpr);
+      const d = g.getImageData(Math.round(40 * dpr), y, Math.round(322 * dpr), 1).data;
+      const l = [];
+      for (let i = 0; i < d.length; i += 4) l.push(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+      const m = l.reduce((a, x) => a + x, 0) / l.length;
+      const sd = Math.sqrt(l.reduce((a, x) => a + (x - m) * (x - m), 0) / l.length);
+      return { m, sd };
+    };
+    return { fill: row(86), art: row(96), deep: row(60) };
+  }, shot.toString('base64'));
+  const dMean = Math.abs(stats.art.m - stats.fill.m);
+  const dSd = Math.abs(stats.art.sd - stats.fill.sd);
+  /* CONTROL: the sampler must be reading a real surface, not a blank capture. */
+  ok('SEAM     CONTROL: the strip really carries the backdrop colour, so the row below is not comparing two empty rows',
+    stats.fill.m > 20 && stats.fill.m < 240 && Math.abs(stats.deep.m - stats.fill.m) < 0.5,
+    `fill luma ${stats.fill.m.toFixed(2)}, and 26px higher in the same strip ${stats.deep.m.toFixed(2)}`);
+  ok('SEAM     the fill and the art meet with NO step in colour AND none in texture. Five fixes graded colour alone and the defect was a grain layer over the hero; a flat strip cannot be reconciled with a textured one by any colour',
+    dMean <= 0.05 && dSd <= 0.05,
+    `fill ${stats.fill.m.toFixed(2)} sd ${stats.fill.sd.toFixed(2)} | art ${stats.art.m.toFixed(2)} sd ${stats.art.sd.toFixed(2)} | step ${dMean.toFixed(2)} luma, ${dSd.toFixed(2)} sd (before the grain came off: 0.47 and 0.47)`);
+}
+
 console.log(`\nhero-edge: ${bad ? bad + ' FAILED' : 'clean'}`);
 await done(bad ? 1 : 0);
