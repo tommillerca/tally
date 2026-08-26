@@ -233,7 +233,6 @@ for (const cfg of CONFIGS) {
       scene: box(document.querySelector('.hero-scene')),
       chips: box(document.querySelector('.hero-top')),
       wallet: box(document.querySelector('.wallet-pill')),
-      trend: box(document.querySelector('.trend-dot')),
       gw: gwShown ? box(gw) : null,
       gwShown,
       gwImgs: gw ? [...gw.querySelectorAll('img')].map(i => ({ src: i.getAttribute('src'), nw: i.naturalWidth })) : [],

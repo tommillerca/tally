@@ -3449,10 +3449,15 @@ async function renderToday(el) {
          z-index 4 and the level plate has to stay above the fade. -->
     <div class="hero-fade"></div>
 
-    <!-- Four separate chips became one wallet pill and an icon-only Trends dot:
-         the top of the card was four competing plates over the art. -->
+    <!-- Four separate chips became one wallet pill: the top of the card was
+         four competing plates over the art. The Trends dot that stood beside it
+         moved into .hero-actions on 2026-08-26, see below. -->
     <div class="hero-top">
-      <button class="trend-dot" id="streakChip" aria-label="Open your trends and progress">${ICONS.trend(15)}</button>
+      ${/* THE TRENDS DOT IS GONE. Tom, 2026-08-26: the fitness door in the row
+           under the Bonehead "will take you to the trends tab instead of the
+           icon in the top left". It is the same destination (#/progress) and
+           the same handler, moved to a labelled door; two entrances to one
+           screen was the thing being removed, so the dot does not stay. */''}
       <div class="wallet-pill">
         <button class="wp" id="coinBtn" aria-label="Coins">${ICONS.coin(16)}<b>${coinBal.toLocaleString()}</b></button>
         <button class="wp dust" id="dustBtn" aria-label="Bone Dust">${ICONS.dust(16)}<b>${dustBal.toLocaleString()}</b></button>
@@ -3521,13 +3526,21 @@ async function renderToday(el) {
        for too much attention above the food. */''}
   ${lvl.level < 3 ? `<p class="hero-why">${ICONS.boltIco(13)} <b>${pitEnergy.ready} fights ready.</b> Walking earns more.</p>` : ''}
 
-  <!-- FOUR DOORS. A fifth Garden tile shipped in v304 and came straight back out
+  <!-- FIVE DOORS since 2026-08-26, and the fifth is a MOVE, not an addition:
+       Trends came down off the hero art (see .trend-dot's removal above). The
+       Garden tile that shipped in v304 and came straight back out is still out
        (Tom, 2026-08-07): "we dont need the garden icon on Today because if you
        click kitchen it's gonna basically take you there." He is right, the GROW
        door is one tap in and carries the same count, so a second entrance was
        paying for itself twice. The Kitchen's badge covers BOTH systems now: a
        dish ready or a crop ready lights the same dot. -->
-  <div class="hero-actions four">
+  <div class="hero-actions five">
+    ${/* TRENDS, ON THE FAR LEFT. Tom, 2026-08-26: "i think we should make the
+         bar under your bonhead with kitchen etc also have one on the far left
+         that will take you to the trends tab instead of the icon in the top
+         left". It replaces the .trend-dot that used to float over the art, so
+         this is a MOVE, not a second door: same #/progress, same handler. */''}
+    <button class="hero-act" id="trendsBtn">${pixCur('dumbbell', 24) || ICONS.trend(23)}<span>Trends</span></button>
     ${/* BACKPACK, not "Character". Tom, 2026-08-17: the avatar tap already went
          to the Backpack and this door still landed on the Wardrobe, so the same
          hub opened on two different tabs depending on where you pressed. It is
@@ -3548,7 +3561,7 @@ async function renderToday(el) {
        nudge card is gone entirely and the banners are evicted below the day, so
        this is now the only thing between the doors and the day itself. */''}
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
-    <summary><span class="q-sum-ico">${ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
+    <summary><span class="q-sum-ico">${pixCur('scroll', 24) || ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
     <div class="q-card-body">
     ${isToday ? '' : `<p class="note">A record of ${esc(title)}. Quests are claimed on the day.</p>`}
     ${questTiers.map(tier => `
@@ -3686,7 +3699,7 @@ async function renderToday(el) {
   $('#nextDay').addEventListener('click', () => { S.date = addDays(S.date, 1); refresh(); });
   $('#datePick').addEventListener('change', e => { if (e.target.value) { S.date = e.target.value; refresh(); } });
   $('#lvlChip').addEventListener('click', () => { location.hash = '#/progress'; });
-  $('#streakChip').addEventListener('click', () => { location.hash = '#/progress'; });
+  $('#trendsBtn').addEventListener('click', () => { location.hash = '#/progress'; });
   /* GWART SPEAKS. Both halves of what Tom asked for, and they are the same one
      line of machinery: gwSay() puts a line through the app's one typer.
        TAP HIM     the plaque is a button, so a tap says something immediately.
@@ -4942,7 +4955,7 @@ function healthCardHtml(hk, isToday) {
             : `<span style="color:var(--text-3);font-weight:500">· within your activity baseline</span>`;
           return `<div class="hk-row"><span class="hk-ico">${ICONS.boltIco(19)}</span><div style="font-size:13.5px;font-weight:600">${active.toLocaleString()} kcal active burn ${note}</div></div>`;
         })() : ''}
-        ${(hk.workouts || hk.exerciseMin) ? `<div class="hk-row"><span class="hk-ico">🏋️</span><div style="font-size:13.5px;font-weight:600">${[
+        ${(hk.workouts || hk.exerciseMin) ? `<div class="hk-row"><span class="hk-ico">${pixCur('dumbbell', 24) || bhIcon('badge-muscle', 21)}</span><div style="font-size:13.5px;font-weight:600">${[
           hk.workouts ? `${hk.workouts} workout${hk.workouts === 1 ? '' : 's'}` : '',
           hk.exerciseMin ? `${hk.exerciseMin} min` : '',
         ].filter(Boolean).join(' · ')}${hk.wtypes && hk.wtypes.length ? ` <span style="color:var(--text-3);font-weight:500">${hk.wtypes.slice(0, 3).join(', ')}</span>` : ''}</div></div>` : ''}
@@ -4984,8 +4997,8 @@ function wellnessCardHtml(w, routines = [], done = new Set()) {
   const waterBar = `<div class="well-bar"><i style="width:${Math.round(w.water / WATER_GOAL * 100)}%"></i></div>`;
   return `<div class="card wellness-card">
     <div class="sect-h" style="margin:0 0 4px">Daily wellness</div>
-    ${row('', ICONS.water(22), 'Water', `${WATER_GOAL} cups down. Hydrated.`, `${w.water} / ${WATER_GOAL} cups`, waterDone, 'wWater', '+1 cup', waterBar)}
-    ${row('ghost', ICONS.bed(22), 'Make your bed', 'Done. A small win banked.', 'Start the day with a small win', w.bed, 'wBed', 'Mark done')}
+    ${row('', pixCur('water', 24) || ICONS.water(22), 'Water', `${WATER_GOAL} cups down. Hydrated.`, `${w.water} / ${WATER_GOAL} cups`, waterDone, 'wWater', '+1 cup', waterBar)}
+    ${row('ghost', pixCur('bed', 24) || ICONS.bed(22), 'Make your bed', 'Done. A small win banked.', 'Start the day with a small win', w.bed, 'wBed', 'Mark done')}
     ${sleepRowHtml(w)}
     ${/* YOUR OWN routines, under the three the game has opinions about. Same row
          language, same ledger, so they count toward the wellness quest too. */''}
@@ -5019,7 +5032,7 @@ function sleepRowHtml(w) {
     : logged ? `${w.sleepHours} h logged. Rest is training too.` : 'How many hours did you get?';
   return `
     <div class="well-row ${logged ? 'done' : ''}">
-      <span class="well-ico">${ICONS.moon(22)}</span>
+      <span class="well-ico">${pixCur('moon', 24) || ICONS.moon(22)}</span>
       <div class="well-body">
         <b>Sleep</b>
         <small>${line}</small>
