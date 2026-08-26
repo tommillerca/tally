@@ -4,12 +4,17 @@
  * Double tapping the boneyard when you're in there should zoom in on your
  * current location."
  *
- * THE DANGEROUS HALF IS THE GUARD, not the two actions. A same-tab tap used to
+ * And 2026-08-25, on the tab that was left out of that: "double tapping on the
+ * crew tab doesnt take you back up to the top like it should (same as today tab)
+ * instead it refreshes it in annoying way."
+ *
+ * THE DANGEROUS HALF IS THE GUARD, not the three actions. A same-tab tap used to
  * route() on the spot, and route() rebuilds the screen from scratch: on the
  * Boneyard that tears down the live MapLibre instance, so the first tap of a
- * double would throw away the map the second tap is meant to move. The fix makes
- * a same-tab tap on these two tabs wait 300ms for a second one. Everything else
- * must be untouched, which is what the SINGLE rows are for.
+ * double would throw away the map the second tap is meant to move, and on Today
+ * and Crew it throws away the scroll offset the second tap is meant to animate.
+ * The fix makes a same-tab tap on those tabs wait 300ms for a second one.
+ * Everything else must be untouched, which is what the SINGLE rows are for.
  *
  * EVERY TAP HERE IS A REAL MOUSE CLICK on the real tab bar at the button's own
  * coordinates. Nothing calls the handler, and nothing calls scrollTo or the map.
@@ -169,6 +174,85 @@ if (!rearmed) {
   ok('TODAY-SINGLE a lone tap still lands at the top of Today', single.top < 2, `scrollTop ${single.top}`);
   ok('TODAY-SINGLE by re-routing, exactly as before', !single.probe,
     single.probe ? 'marker intact: route() never ran' : 'marker gone: route() ran');
+}
+
+/* ---------------- CREW ----------------
+ * Tom, 2026-08-25: "double tapping on the crew tab doesnt take you back up to
+ * the top like it should (same as today tab) instead it refreshes it in annoying
+ * way". Crew was left out of TAB_DBL, so both taps went straight to route().
+ *
+ * SAME PAIR AS TODAY, and for the same reason: a rebuild ALSO lands at scrollTop
+ * 0, so the position row alone passes on the bug. The marker row is the one that
+ * separates "it scrolled up" from "it was thrown away and rebuilt underneath
+ * you". Measured on the pre-fix tree, signed in and scrolled: 62 childList
+ * mutations on #screen, 0 of 12 rendered children survived, and scrollTop went
+ * 933 -> 0 in ONE frame.
+ *
+ * THE TAB MUST BE SCROLLABLE OR NOTHING IS GRADED (anti-regression rule 3). The
+ * signed-out Crew is one screenful, so a "scrolls to the top" row taken there is
+ * vacuous: it starts at 0 and ends at 0 whatever the app does. So the audit signs
+ * in through the same webdriver fixtures renderFriends already carries and
+ * asserts real scrollable overflow before it taps anything. */
+await page.evaluate(() => {
+  window.__testMe = { playerId: 'me', name: 'Hollow Shovel', friendCode: 'BONE-4K7Q', handle: 'hollow' };
+  window.__testFriends = { friends: [], incoming: [], outgoing: [] };
+  window.__testLb = Array.from({ length: 9 }, (_, i) => ({
+    playerId: 'p' + i, name: 'Crew ' + i, level: 60 - i * 5, levelName: 'Bonehead', badges: 3,
+    outfit: { B: 'B0-1', SK: 'SK0-1', H: i % 2 ? 'H10-5' : 'H10-3', T: 'T9-5' },
+    pet: null, you: i === 4, lastSeen: Date.now(),
+  }));
+  location.hash = '#/friends';
+});
+await sleep(2600);
+/* Scrolled to the BOTTOM rather than to a pinned offset: the Crew tab's height
+   depends on how much the fixtures render, and a hardcoded 700 would silently
+   arm at the top the day that shrinks. */
+const armCrew = () => settle(async () => {
+  await page.evaluate(() => { document.getElementById('screen').scrollTop = 99999; });
+  await mark();
+  await sleep(250);
+  return await scrollTop() > 200 && await marked();
+});
+const crewArmed = await armCrew();
+const crewOverflow = await page.evaluate(() => {
+  const s = document.getElementById('screen');
+  return { over: s.scrollHeight - s.clientHeight, crew: /The Crew/.test(s.querySelector('.page-h1')?.textContent || '') };
+});
+ok('SETUP the Crew tab is signed in, really scrollable, scrolled off the top and marked so a rebuild is detectable',
+  crewArmed && crewOverflow.crew && crewOverflow.over > 200,
+  `scrollTop ${await scrollTop()}, ${crewOverflow.over}px of overflow, heading ${crewOverflow.crew ? 'found' : 'MISSING'}`);
+
+const crewDbl = crewArmed ? await doubleTap('friends', armCrew) : { taps: false, inWindow: false, gap: Infinity };
+if (crewArmed) ok('SETUP the Crew tab took two real taps', crewDbl.taps !== false);
+if (!crewDbl.inWindow) {
+  unproven('CREW-DBL a double tap brings Crew back to the top', crewArmed
+    ? `this machine could not deliver two taps inside ${DBL_WINDOW}ms (best ${crewDbl.gap}ms over 3 tries), so the app was right to see two singles`
+    : 'the Crew tab never held a scroll offset and a marker at the same time');
+  unproven('CREW-DBL and the first tap did NOT re-route: the scrolled screen survived', 'same');
+} else {
+  let crewTop = await scrollTop();
+  for (let i = 0; i < 40 && crewTop >= 2; i++) { await sleep(100); crewTop = await scrollTop(); }
+  ok('CREW-DBL a double tap brings Crew back to the top', crewTop < 2, `scrollTop ${crewTop}, taps ${crewDbl.gap}ms apart`);
+  const crewProbe = await marked();
+  ok('CREW-DBL and the first tap did NOT re-route: the scrolled screen survived',
+    crewProbe, crewProbe ? 'marker intact' : 'marker gone: the screen was rebuilt under the scroll (the reported "refreshes it in annoying way")');
+}
+
+/* The control, exactly as Today's: a lone same-tab tap still re-routes to Crew's
+   home, which is tray-destination-audit's contract and must not have moved. */
+await sleep(700);
+const crewRearmed = await armCrew();
+ok('SETUP the Crew single-tap control starts scrolled and marked', crewRearmed, `scrollTop ${await scrollTop()}`);
+if (!crewRearmed) {
+  unproven('CREW-SINGLE a lone tap still lands at the top of Crew', 'the Crew tab never held a scroll offset and a marker at the same time');
+  unproven('CREW-SINGLE by re-routing, exactly as before', 'same');
+} else {
+  await tapTab('friends', 1);
+  await sleep(1800);
+  const crewSingle = { top: await scrollTop(), probe: await marked() };
+  ok('CREW-SINGLE a lone tap still lands at the top of Crew', crewSingle.top < 2, `scrollTop ${crewSingle.top}`);
+  ok('CREW-SINGLE by re-routing, exactly as before', !crewSingle.probe,
+    crewSingle.probe ? 'marker intact: route() never ran' : 'marker gone: route() ran');
 }
 
 /* ---------------- BONEYARD ---------------- */
