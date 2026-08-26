@@ -525,7 +525,7 @@ const BH_ITEMS_ALL = [
   "id": "B17",
   "slot": "B",
   "rarity": "common",
-  "name": "Odd Socks"
+  "name": "Sprinkle Bones"
  },
  {
   "id": "B18",
