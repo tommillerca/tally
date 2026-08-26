@@ -17,10 +17,14 @@
      the stylesheet asks for it, or "EAT." renders in the fallback face and swaps
      a beat later. -->
 <link rel="preload" href="assets/fonts/bangers.woff2" as="font" type="font/woff2" crossorigin>
-<!-- BoldPixels (the talk box's face) is NOT preloaded any more: v418 took the box
-     off Today, so nothing on the first screen has a glyph to draw and a preload
-     fetches 4KB for a face nobody uses. It stays in @font-face and in the service
-     worker's PRECACHE, ready for Gwart; put the preload back with the surface. -->
+<!-- BoldPixels (the talk box's face) IS preloaded again, and the comment that
+     stood here is why it had to come back. v418 removed it because the box had
+     left Today, so nothing on the first screen had a glyph to draw. The surface
+     returned on 2026-08-21 with Gwart in the scene and the preload did not come
+     with it, so the very first line a player reads typed in a fallback monospace
+     and swapped a beat later. The old note ended "put the preload back with the
+     surface"; nobody did. -->
+<link rel="preload" href="assets/fonts/boldpixels.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
