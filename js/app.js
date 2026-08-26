@@ -2761,11 +2761,27 @@ function bindWordmarkPull() {
  * THE GUARD IS THE DANGEROUS HALF. A same-tab tap route()s, and route() rebuilds
  * the screen from scratch: on the Boneyard that tears the live MapLibre instance
  * down, so the first tap of a double would throw away the very map the second tap
- * is meant to move. So on these two tabs a same-tab tap WAITS DBL_MS for a second
+ * is meant to move. So on these tabs a same-tab tap WAITS DBL_MS for a second
  * one before it re-routes. Everything else is untouched: a cross-tab tap still
- * navigates on the spot, the other two tabs still route on the spot, and a lone
+ * navigates on the spot, Bonehead still routes on the spot, and a lone
  * same-tab tap still lands exactly where tray-destination-audit says it must,
  * 300ms later.
+ *
+ * CREW SCROLLS TO THE TOP TOO, and by the SAME function as Today rather than a
+ * lookalike. Tom, 2026-08-25: "double tapping on the crew tab doesnt take you
+ * back up to the top like it should (same as today tab) instead it refreshes it
+ * in annoying way". Measured on this tree before the change, signed in with a
+ * scrolled Crew: two taps 120ms apart produced 62 childList mutations on #screen
+ * and 0 of 12 rendered children survived, and scrollTop went 933 -> 0 in ONE
+ * frame. Today, same drive: 0 mutations, 7 of 7 children survived, 90 distinct
+ * scroll values on the way down. That one-frame snap under a full rebuild IS the
+ * "annoying refresh".
+ *
+ * AND CREW NEEDS THE WAIT FOR THE SAME REASON THE BONEYARD DOES, only the live
+ * resource is the scroll offset rather than a map: measured above, the first
+ * tap's route() had already put scrollTop at 0 by 37ms, well before the second
+ * tap at 120ms, so without the wait a Crew double-tap would have nothing left to
+ * scroll and would read as doing nothing.
  *
  * A PENDING WAIT IS CANCELLED BY ANY TAB TAP, not just by the second of a double.
  * Without that, tapping Today (same tab) and then Boneyard inside 300ms fires the
@@ -2777,8 +2793,10 @@ function bindWordmarkPull() {
  * there is no #mapRecenter yet), because a tray tap that does nothing at all is
  * the complaint the block above this one exists to answer. */
 function bindTabs() {
+  const toTop = () => { $('#screen')?.scrollTo({ top: 0, behavior: 'smooth' }); return true; };
   const TAB_DBL = {
-    today: () => { $('#screen')?.scrollTo({ top: 0, behavior: 'smooth' }); return true; },
+    today: toTop,
+    friends: toTop,   // the Crew tab (index.html data-tab="friends")
     boneyard: () => { const r = $('#mapRecenter'); r?.click(); return !!r; },
   };
   const DBL_MS = 300;
