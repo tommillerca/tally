@@ -270,24 +270,25 @@ const CALM_BOOT = () => (typeof navigator !== 'undefined' && navigator.webdriver
    session is the only path with no test on it, and it is the one every new
    player takes.
 
-   THE RULE IS ONE PER OPEN, not a shorter queue. A budget that is a count
-   ("show at most three") is still a queue, just a politer one; the thing that
-   reads as a nightmare is the SECOND sheet, because it tells the player that
-   dismissing did not end it.
+   THE RULE WAS ONE PER OPEN, and one per open was still not the answer. Tom,
+   2026-08-25, four days later, counting six interruptions on a simulator launch:
+   "i see in the simulator you have popups showing i told you to remove all those
+   from the game?" A budget that is a count ("show at most one") is still an
+   unasked-for takeover in front of the game, so on 2026-08-25 the whole class
+   left the launch path (see boot()) and there is no queue left to arbitrate.
 
-   WHICH ONE GETS IT is already decided and is not changed here: each of these
-   fires on its own delay (rename 1200ms, teaser 1400, what's-new 1700, drop
-   2200, spires 2600, bosses 3000, race 3200, the Live Wire 3400) so the earliest
-   ready wins, which is the priority order that was already authored.
+   WHY THIS SURVIVES with exactly ONE claimant left (the server-flagged rename
+   notice): it is the thing that catches the NEXT one. An
+   announcement added next month that opens on boot without asking for the claim
+   is exactly the regression tests/first-session-audit.mjs greps for, and a claim
+   that no longer exists cannot be asked for.
 
    A LOSER CONSUMES NOTHING. The claim is taken immediately before the seen
    counter is written, so a sheet that stands down this session has not been
    marked seen and arrives next open instead. Nothing is lost, it is spread.
 
-   The daily wheel and the recovery prompt are deliberately NOT claimants. The
-   wheel is the reward for opening the app rather than an interruption, and the
-   recovery prompt is a standing decision of Tom's that the code already records:
-   players "see it each time they open until they pick one, for their own good". */
+   The daily wheel is deliberately NOT a claimant: it is the reward for opening
+   the app rather than an interruption, and there is no other button for it. */
 let bootSheetClaimed = false;
 /* `forced` is the SAME window.__xForce flag the guard at the top of each
    maybeShow* already consults, and it has to be honoured here too.
@@ -1333,29 +1334,46 @@ async function boot() {
   refundStreakFreezes().then(r => {
     if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
   }).catch(() => {});
-  /* Fired together, each self-gating. Tom, 2026-08-08: my v336 queue put a
-     shared "wait for a clear screen" gate in FRONT of these, which stalled the
-     whole line behind the daily wheel for up to 16s and cost him the teaser on
-     his second open. Every one of these already waits for its own clear screen
-     with its own retry budget, and they cannot stack because each checks
-     sheetStack before opening. The extra gate only fought the ones underneath. */
+  /* THE BOOT TAKEOVERS ARE GONE. Tom, 2026-08-25, watching a real simulator
+     launch: "i see in the simulator you have popups showing i told you to remove
+     all those from the game? the only news things staying are the new one with
+     the wanderer on it and the ones on crew that link the discord."
+     He had said it once already (2026-08-21, "Fix the pop ups that's a night
+     mare"), and the answer that time was a BUDGET: one takeover per open, which
+     is still a takeover per open, so the same complaint came back four days
+     later with six interruptions counted before Today was reachable.
+     So the whole class leaves the launch path. Not one of them, all of them:
+     the cosmetic teaser, the drop, the spire / bestiary / Live Wire / race
+     intros, the settled-race poster, the Discord card, the TestFlight card,
+     the What's New sheet, the recovery sheet, the name builder, the iOS
+     notification ask and the Day One survey. NOTHING here opens a sheet, a veil
+     or an OS dialog on its own any more.
+     WHAT WAS NOT DELETED. Every card still exists and every one is still
+     reachable, on purpose: the News tab in What's New lists all of them (Tom
+     asked for that list himself, 2026-08-09, "so people can catch up if they
+     missed it"), the Crew tab carries the Discord and invite strips, Settings
+     carries What's New, Discord, the survey and the recovery code, and the
+     Today banners carry the spires and the settled race. A removal here is a
+     removal of the INTERRUPTION, not of the thing.
+     maybeShowRenameNotice stays: it is not an announcement. It fires only when
+     the SERVER has flagged this one device with a `rename` grant, it clears
+     itself the moment the name changes, it has no other route, and it cannot
+     fire on a first run at all.
+     maybeShowDailyWheel above stays for the same reason it was already exempt
+     from the budget: it is the day's free reward and there is no button for it
+     anywhere else in the game.
+     THE SETTLED-RACE POSTER WENT TOO, and it is the one I nearly kept. The
+     argument for keeping it was that it is a receipt rather than an ad, and
+     that a fresh install could not see one. MEASURED ON A SIMULATOR, on a
+     level-1 account two minutes old that had never walked a step, it was the
+     FIRST thing on the screen after the daily wheel: the podium comes off the
+     server, not off your own history, so "cannot fire on a first run" was
+     simply wrong. It is a full-screen veil twice a week for everybody. The
+     result keeps its permanent home in hydrateRaceResult's Today banner, which
+     was built for this and carries MORE than the poster did (every place's full
+     purse, not just the winner's haul). */
   maybeShowRenameNotice();
-  maybeShowCosmeticTeaser();
-  maybeShowWhatsNew();
-  maybeShowDropPopup();
-  /* maybeShowGardenPopup() is NOT called: the Bone Garden left the player's path
-     on 2026-08-18. The function and its card are kept for revival. */
-  maybeShowSpireIntro();
-  maybeShowBossIntro();
-  maybeShowMageIntro();
-  maybeShowRaceIntro();
-  maybeShowRaceResults();
-  maybeShowCommunityIntro();
-  maybeShowThanksCard();
-  maybePromptRecovery();
-  maybePromptName();
-  maybeRequestNotifPermission();
-  maybeShowSurvey();
+  maybeNudgeRecovery();
   setTimeout(checkFriendRequests, 3000);
 }
 
@@ -1392,27 +1410,11 @@ async function rollDayIfNeeded() {
   } finally { _rolling = false; }
 }
 
-// R2 (v151): the first time the app opens after an update, pop the What's New
-// sheet once so players (and friends) actually see what changed. Gated so it
-// never nags: only when there ARE unseen entries, never over onboarding / the
-// daily wheel / any open sheet (retries next boot), and new players are seeded
-// caught-up at onboarding so they don't get the historical backlog. Opening the
-// sheet sets changelogSeen = latest, so it won't fire again until the next patch.
-async function maybeShowWhatsNew() {
-  try {
-    if (CALM_BOOT() || !S.settings) return;
-    if (changelogUnseen(await kvGet('changelogSeen', 0)) <= 0) return;
-    await new Promise(r => setTimeout(r, 1700)); // let splash/wheel settle
-    if ($('#sheets')?.children.length) return;   // something already open. Try again next launch
-    if (!claimBootSheet(window.__whatsNewForce)) return;   // another sheet already had this open
-    openWhatsNew();
-  } catch { /* never block boot */ }
-}
+/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowWhatsNew opened the What's New sheet over the app on the first launch after every update. What's New is still reachable from Settings and from the Crew tab, and the unseen-entry dot still points at it */
 
 /* ---------- Dark Spires: the announcement + the pinned explainer ---------- */
 // Shown once (kv flag), then the Today banner carries it, same etiquette as the
 // drop: never over the splash, the wheel, or an open sheet.
-const SPIRE_SEEN_KEY = 'spiresIntroSeen';
 
 /* The rename we owe one player (2026-08-08, approved by Tom). Fires only when the
    server has flagged this device via a `rename` grant AND the name it complains
@@ -1539,70 +1541,14 @@ function openCosmeticTeaser() {
   teaserOpen = wrap;
   return wrap;
 }
-/* FOUND BY THE ERROR TELEMETRY, twelve minutes after v360 went live: two real
-   iOS devices reported `Can't find variable: teaserFired`. It was read at the
-   line below and DECLARED NOWHERE. ES modules are strict mode, so reading an
-   undeclared binding throws, and the throw happens inside `tick`, which runs
-   from a setTimeout: the try/catch around the scheduling code never saw it. So
-   the automatic "63 new cosmetics" showing has been dying silently on every
-   device that got that far, TEASER_SEEN_KEY never incremented, and nothing said
-   so. The News-tab route still worked because it calls openCosmeticTeaser()
-   directly, which is why this looked fine to everyone.
-   This is exactly the class of bug the telemetry was built for: uncaught,
-   invisible, and in the one branch nobody watches. */
-let teaserFired = false;   // one showing per app session, no matter who asks
-async function maybeShowCosmeticTeaser() {
-  try {
-    if ((CALM_BOOT() && !window.__teaserForce) || !S.settings) return;
-    if (!dropCosmetics().length) return;   // nothing to announce
-    /* Tom, 2026-08-08: "let's make this popup show up on the next like 10 app
-       opens." Ten, not three. This is the biggest drop the game has had and a
-       single showing is easy to miss or dismiss on the way to something else.
-       A showing is only spent when the post is ACTUALLY shown, not when boot is
-       busy (see the tick below), so ten opens means ten sightings. */
-    const seen = await kvGet(TEASER_SEEN_KEY, 0);
-    if (seen >= 2) return;
-    let tries = 0;
-    const tick = async () => {
-      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
-        /* Tom, 2026-08-08: "I didn't see the popup on my second open? I said
-           first 10 opens." 60 tries was 30 seconds, after which this gave up
-           SILENTLY, so any open where he read the patch notes or the daily wheel
-           for half a minute simply lost its showing and nothing said so. Waiting
-           is correct (a showing must never be spent while the screen is busy),
-           abandoning is not. Ten minutes of patience, which outlasts anything
-           that legitimately sits in front of it. */
-        if (tries++ < 1200) setTimeout(tick, 500);
-        return;
-      }
-      if (teaserFired) return;      // one showing per app session, no matter who asks
-      teaserFired = true;
-      if (!claimBootSheet(window.__teaserForce)) return;   // another sheet already had this open
-      await kvSet(TEASER_SEEN_KEY, seen + 1);
-      openCosmeticTeaser();
-    };
-    setTimeout(tick, 1400);
-  } catch { /* a teaser must never block boot */ }
-}
+/* `teaserFired` and its telemetry note went with the automatic showing on
+   2026-08-25: it was the one-per-session latch for the BOOT fire, and the News
+   row has always called openCosmeticTeaser() directly (openCosmeticTeaser's own
+   `teaserOpen` guard is what stops a second card, and it stays). */
+/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowCosmeticTeaser fired the '63 new cosmetics' post twice per install. openCosmeticTeaser is unchanged and still opens from the News tab */
 if (typeof window !== 'undefined' && navigator.webdriver) window.__cosmeticTeaser = openCosmeticTeaser;
 
-async function maybeShowSpireIntro() {
-  try {
-    if ((CALM_BOOT() && !window.__spireForce) || !S.settings) return;
-    if (await kvGet(SPIRE_SEEN_KEY, false)) return;
-    let tries = 0;
-    const tick = async () => {
-      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
-        if (tries++ < 60) setTimeout(tick, 500);
-        return;
-      }
-      if (!claimBootSheet(window.__spireForce)) return;   // another sheet already had this open
-      await kvSet(SPIRE_SEEN_KEY, true);
-      openSpireIntro();
-    };
-    setTimeout(tick, 2600);
-  } catch { /* never block boot */ }
-}
+/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowSpireIntro fired the Dark Spires poster once. openSpireIntro is unchanged and still opens from the News tab; the pinned Today banner (spireBannerHtml) is the permanent explainer it always was */
 
 function openSpireIntro() {
   const veil = document.createElement('div');
@@ -1640,49 +1586,15 @@ function openSpireIntro() {
  * then composeAvatars). A screenshot of the actual thing beats any adjective,
  * and it can never drift from what you meet, because it IS what you meet.
  *
- * Same etiquette as Dark Spires and the Step Race: once, via a kv flag, never
- * over the splash, the wheel or an open sheet. */
-const BOSS_SEEN_KEY = 'bossesIntroSeen';
-async function maybeShowBossIntro() {
-  try {
-    if ((CALM_BOOT() && !window.__bossForce) || !S.settings) return;
-    if (await kvGet(BOSS_SEEN_KEY, false)) return;
-    let tries = 0;
-    const tick = async () => {
-      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
-        if (tries++ < 60) setTimeout(tick, 500);
-        return;
-      }
-      if (!claimBootSheet(window.__bossForce)) return;   // another sheet already had this open
-      await kvSet(BOSS_SEEN_KEY, true);
-      openBossIntro();
-    };
-    setTimeout(tick, 3000);
-  } catch { /* never block boot */ }
-}
+ * It NO LONGER SHOWS ITSELF (2026-08-25): the card is opened from the News tab
+ * and from nowhere else. */
+/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowBossIntro fired the Bestiary teaser once. openBossIntro is unchanged and still opens from the News tab */
 
 /* THE MAGE. Tom, 2026-08-09: "we need a popup for the new boss art. i want some
    dens to always be the new mage."
    He is drawn, not assembled, so the poster is the drawing at full size and the
    copy gets out of its way. */
-const MAGE_SEEN_KEY = 'mageIntroSeen';
-async function maybeShowMageIntro() {
-  try {
-    if ((CALM_BOOT() && !window.__mageForce) || !S.settings) return;
-    if (await kvGet(MAGE_SEEN_KEY, false)) return;
-    let tries = 0;
-    const tick = async () => {
-      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
-        if (tries++ < 60) setTimeout(tick, 500);
-        return;
-      }
-      if (!claimBootSheet(window.__mageForce)) return;   // another sheet already had this open
-      await kvSet(MAGE_SEEN_KEY, true);
-      openMageIntro();
-    };
-    setTimeout(tick, 3400);
-  } catch { /* never block boot */ }
-}
+/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowMageIntro fired the Live Wire card once. openMageIntro is unchanged and still opens from the News tab */
 
 function openMageIntro() {
   const veil = document.createElement('div');
@@ -1768,7 +1680,6 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__bossIntro = o
  * reflects the new date and prizes we cant have mixed messaging". Hard-coding
  * them here is how the poster and the board drift apart.
  */
-const RACE_SEEN_KEY = 'raceIntroSeen';
 const RACE_PURSE = [
   { place: '1st', coins: 5000, crate: 'golden', dust: 200 },
   { place: '2nd', coins: 2500, crate: 'golden', dust: 100 },
@@ -1822,18 +1733,11 @@ function openRaceIntro() {
  * paid on. A poster built on it announces the wrong winners, silently, and only
  * in some weeks, which is the worst version of wrong.
  */
-const RACE_RESULT_SEEN = 'raceResultSeen';   // v376's flag, kept only to migrate off
 const raceResultKey = wk => 'raceResult:' + wk;
-const raceOpensKey = wk => 'raceResultShown:' + wk;
-/* TWO OPENS, not one. Tom, 2026-08-14: "i didnt see the pop up? maybe make it
-   happen on first two opens because i didnt see it at all."
-   He saw the banner, which proves the podium had been fetched and cached, so
-   the poster did not fail on data. It failed in the boot gate: the gate waits
-   for a clear screen and gives up after 30s, and v376 also shipped a What's New
-   card, so anything that held the screen through that window swallowed the only
-   showing there was. A single chance at a moment you do not control is the bug;
-   two chances is the fix, and the second one reads from a warm cache. */
-const RACE_RESULT_OPENS = 2;
+/* RACE_RESULT_SEEN, raceOpensKey and RACE_RESULT_OPENS went with the poster on
+   2026-08-25. All three counted SHOWINGS of a full-screen veil, and nothing
+   shows itself any more. The cache key above stays: it is what stops the
+   settled podium being refetched, and the Today banner reads it. */
 
 /* The week that has just finished, or null before the first one ever has. */
 function lastSettledWeek() {
@@ -1876,87 +1780,15 @@ const racePrizeHtml = p => `<span class="rr-prize">
   ${p.dust ? `<span class="pz">${ICONS.dust(12)}${p.dust}</span>` : ''}
 </span>`;
 
-/* THE POSTER. It fires once, the first open after the race settles, and then it
-   is gone; the Today banner is where the result lives on. The order of the card
-   is the argument: who won, by how much, what they took, then how close it was.
-   NO PURSE COLUMN on the lanes: measured at 375x667, five lanes each carrying a
-   prize row ran past the card and pushed 4th and 5th below the fold. The poster
-   spends its height on the winner and the gaps; the banner carries every purse
-   (Tom, 2026-08-14: "that's fine 4th and 5th can find out from the banner"). */
-function openRaceResults(podium) {
-  const w = podium[0];
-  const margin = podium.length > 1 ? w.steps - podium[1].steps : 0;
-  const veil = document.createElement('div');
-  veil.className = 'drop-veil rr-veil';
-  veil.innerHTML = `
-    <div class="drop-card">
-      <div class="rr-scroll">
-        <p class="drop-eyebrow">THAT IS A WRAP</p>
-        <h1 class="drop-title">Step Race <em>Results</em></h1>
-        <div class="rr-hero">
-          <span class="rr-fig">${avatarLayersHtml(w.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
-          <div class="rr-who">
-            <span class="rr-crown">${badgePixHtml('badge-trophy', 13)} 1ST</span>
-            <b>${esc(w.name)}</b>
-            <span class="rr-steps">${w.steps.toLocaleString()} <i>STEPS</i></span>
-          </div>
-        </div>
-        ${margin ? `<p class="rr-shout">Nobody got within <b>${margin.toLocaleString()} steps</b>. Take a bow.</p>` : ''}
-        <div class="rr-haul">${racePrizeHtml(w)}</div>
-        <span class="rr-sect">How close it was</span>
-        ${raceLanesHtml(podium)}
-        <p class="note" style="margin-top:3px">Every prize is already paid, and the
-        next race is already running. You are in it.</p>
-      </div>
-      <div class="rr-foot">
-        <button class="drop-cta" id="rrGo">SEE THE BOARD</button>
-        <button class="drop-later" id="rrLater">Nice one</button>
-      </div>
-    </div>`;
-  document.body.appendChild(veil);
-  composeAvatars(veil);
-  const close = () => veil.remove();
-  $('#rrLater', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
-  $('#rrGo', veil).addEventListener('click', () => { close(); location.hash = '#/friends'; });
-}
+/* openRaceResults went with its boot gate on 2026-08-25. It was a full-screen
+   veil and the ONLY thing that opened it was the launch takeover, so with that
+   gone it had no route: no News row, no banner, no button anywhere. Everything
+   it drew is still drawn by hydrateRaceResult below, on the pinned Today card,
+   which carries every place's full purse instead of only the winner's haul.
+   REVIVAL: it is one function in git history at this line, and it needs a
+   caller with a control attached to it before it comes back. */
 
-/* ONE SHOWING, and the flag burns before the poster is drawn rather than after,
-   so a crash inside the render cannot leave a player being shown last week's
-   results every time they open the app. Same boot etiquette as the race intro:
-   after the other first-run cards, never on top of a sheet or another veil. */
-async function maybeShowRaceResults() {
-  try {
-    if (!RACE_LIVE || !S.settings) return;
-    if (navigator.webdriver && !window.__raceResultForce) return;
-    const wk = lastSettledWeek();
-    if (!wk) return;
-    // migrate v376's boolean-ish flag: somebody who already saw it once has
-    // spent one of their two showings, not none and not both.
-    let opens = (await kvGet(raceOpensKey(wk), null));
-    if (opens === null) {
-      opens = (await kvGet(RACE_RESULT_SEEN, '')) === wk ? 1 : 0;
-      await kvSet(raceOpensKey(wk), opens);
-    }
-    if (opens >= RACE_RESULT_OPENS) return;
-    const podium = await settledPodium(wk);
-    if (!podium || !podium.length) return;   // nothing settled: say nothing
-    let tries = 0;
-    const tick = async () => {
-      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
-        if (tries++ < 60) setTimeout(tick, 500);
-        return;
-      }
-      if (!claimBootSheet(window.__raceResultForce)) return;   // another sheet already had this open
-      /* SPENT BEFORE IT IS DRAWN, so a crash inside the render cannot put a
-         player in a loop. A showing is spent by being shown, not by being
-         read: closing it with "Nice one" costs this one open and no more. */
-      await kvSet(raceOpensKey(wk), opens + 1);
-      openRaceResults(podium);
-    };
-    setTimeout(tick, 3200);
-  } catch { /* never block boot */ }
-}
+/* REMOVED 2026-08-25: maybeShowRaceResults put the settled-race poster over the app on up to two launches a week, measured firing on a two-minute-old account. See boot(). */
 
 /* THE TODAY BANNER. The permanent home for the result, for everyone who tapped
    past the poster, and the surface that carries every place's full purse. */
@@ -1993,46 +1825,15 @@ async function hydrateRaceResult(el) {
    the announcement renders is to watch a real phone on release day. */
 if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__raceIntro = async () => { raceIntroFit = await equipped(); openRaceIntro(); };
-  window.__raceResultShow = async () => {
-    const podium = await settledPodium(lastSettledWeek());
-    if (podium && podium.length) openRaceResults(podium);
-    return !!(podium && podium.length);
-  };
-  /* Drives the REAL boot gate, flag-burning and all, rather than the shortcut
-     above. The once-only promise lives in maybeShowRaceResults, so a test that
-     asserts it against __raceResultShow would be checking nothing. */
-  window.__raceResultBoot = async () => {
-    window.__raceResultForce = true;
-    await maybeShowRaceResults();
-  };
-  window.__raceResultForget = async () => {
-    await kvSet(RACE_RESULT_SEEN, '');
-    await kvSet(raceOpensKey(lastSettledWeek()), null);
-    await kvSet(raceResultKey(lastSettledWeek()), null);
-  };
-  window.__raceResultOpens = async () => await kvGet(raceOpensKey(lastSettledWeek()), null);
+  /* __raceResultShow / __raceResultBoot / __raceResultForget / __raceResultOpens
+     went with the poster and its showing budget on 2026-08-25. What replaced
+     them is __raceResultForgetCache, which is all the banner needs: drop the
+     cached podium so the next render refetches. */
+  window.__raceResultForgetCache = async () => kvSet(raceResultKey(lastSettledWeek()), null);
 }
 
 let raceIntroFit = { B: 'B0-1', SK: 'SK0-1' };
-async function maybeShowRaceIntro() {
-  try {
-    if (!RACE_LIVE) return;
-    if ((CALM_BOOT() && !window.__raceForce) || !S.settings) return;
-    if (await kvGet(RACE_SEEN_KEY, false)) return;
-    raceIntroFit = await equipped();       // it is YOUR bonehead on the start line
-    let tries = 0;
-    const tick = async () => {
-      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
-        if (tries++ < 60) setTimeout(tick, 500);
-        return;
-      }
-      if (!claimBootSheet(window.__raceForce)) return;   // another sheet already had this open
-      await kvSet(RACE_SEEN_KEY, true);
-      openRaceIntro();
-    };
-    setTimeout(tick, 3200);
-  } catch { /* never block boot */ }
-}
+/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowRaceIntro fired the step-race announcement once. openRaceIntro is unchanged and still opens from the News tab */
 
 /* THE COMMUNITY. Tom, 2026-08-11: the Discord is where beta feedback
  * consolidates and "where all future feature discussions etc will take place",
@@ -2050,16 +1851,12 @@ const DISCORD_URL = 'https://discord.gg/HrMReZe9D';
    get the remaining two rather than a fresh three. Migrating them to zero would
    show the card to people who have already dismissed it once, which is the
    opposite of what a counter is for. */
-const COMMUNITY_SEEN_KEY = 'discordIntroSeen';     // legacy boolean, still honoured
-const COMMUNITY_SHOWN_KEY = 'discordIntroShown';   // how many times it has opened
-const COMMUNITY_JOINED_KEY = 'discordJoined';      // tapped JOIN: never show again
 /* THREE, and it stays three. Tom said so on 2026-08-13 ("make the popup happen
    on the first three opens") and tests/community-audit.mjs quotes him. I cut it
    to 2 in the one-per-open pass and that was scope creep on a decision he had
    already made: his complaint was the QUEUE, which claimBootSheet fixes, not
    this number. The drop popup and the cosmetic teaser had no such instruction on
    them, so those did come down. */
-const COMMUNITY_MAX_SHOWS = 3;
 /* The mark, not the brand. Reg, 2026-08-12: "a lot of people recognise that
    shape before they read the word", which is the whole point for the players
    this card is written for. Drawn in currentColor so it takes the eyebrow's
@@ -2132,11 +1929,12 @@ async function openCommunityCard() {
   // the join is an <a> so the OS handles it (app or browser); the card closes
   // behind it so returning players are not stuck under a stale veil
   $('#communityGo', veil).addEventListener('click', () => {
-    /* Burn it here and now. This fires on the same tap that follows the link,
-       so it lands before the OS hands the player to Discord and before any
-       chance of the app being backgrounded mid-write. */
-    kvSet(COMMUNITY_JOINED_KEY, true).catch(() => {});
-    kvSet(COMMUNITY_SHOWN_KEY, COMMUNITY_MAX_SHOWS).catch(() => {});
+    /* The two kv writes that used to live here (discordJoined, discordIntroShown)
+       went with the boot showing on 2026-08-25. Their only reader was the gate
+       that decided whether to open this card unprompted, and nothing opens it
+       unprompted any more, so keeping them would be writing a counter nobody
+       reads. The card is opened from the Crew strip, the News row and Settings,
+       and none of those has anything to burn. */
     setTimeout(close, 400);
   });
 }
@@ -2146,34 +1944,7 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__community = () => openCommunityCard();
 }
 
-async function maybeShowCommunityIntro() {
-  try {
-    if ((CALM_BOOT() && !window.__communityForce) || !S.settings) return;
-    /* Three strikes, and JOIN ends it early and permanently. Somebody who has
-       joined must never see this again; that is the one behaviour here worth
-       being careful about, so it is checked first and written the moment the
-       link is tapped rather than on the way back from wherever Discord opened. */
-    if (await kvGet(COMMUNITY_JOINED_KEY, false)) return;
-    const shown = (await kvGet(COMMUNITY_SHOWN_KEY, null)) ??
-      ((await kvGet(COMMUNITY_SEEN_KEY, false)) ? 1 : 0);   // legacy: one already spent
-    if (shown >= COMMUNITY_MAX_SHOWS) return;
-    let tries = 0;
-    const tick = async () => {
-      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
-        if (tries++ < 60) setTimeout(tick, 500);
-        return;
-      }
-      /* Spend the showing BEFORE opening, not after: the card is dismissed by
-         several routes (the button, the veil, history) and a counter written on
-         the way out can be skipped by any of them. */
-      if (!claimBootSheet(window.__communityForce)) return;   // another sheet already had this open
-      await kvSet(COMMUNITY_SHOWN_KEY, shown + 1);
-      await kvSet(COMMUNITY_SEEN_KEY, true);
-      openCommunityCard();
-    };
-    setTimeout(tick, 4000);
-  } catch { /* never block boot */ }
-}
+/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowCommunityIntro put the Discord card over the app on up to three launches. THE DISCORD ROUTES ARE THE ONES TOM ASKED TO KEEP and all three are untouched: the Crew tab's strip, the News row, and the Settings row. Only the unasked-for showing is gone */
 
 /* THE BETA THANK-YOU. Tom, 2026-08-15: thank the people playing so far, ask
  * them to pass the link on, and tell Android players to say hello in the
@@ -2192,7 +1963,6 @@ async function maybeShowCommunityIntro() {
  * The invite URL lives in ONE constant for the same reason DISCORD_URL does,
  * and the Discord link here IS DISCORD_URL: a second copy would rot. */
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/rtZ6Uyxc';
-const THANKS_SEEN_KEY = 'betaThanksSeen';
 /* Inline for the same reason as DISCORD_MARK: sw.js precaches an explicit
    list, so an asset file would need an entry there and this needs none.
    currentColor so it takes the eyebrow's accent and the strip's own tint. */
@@ -2258,30 +2028,7 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__betaThanks = () => openThanksCard();
 }
 
-async function maybeShowThanksCard() {
-  try {
-    if ((CALM_BOOT() && !window.__thanksForce) || !S.settings) return;
-    if (await kvGet(THANKS_SEEN_KEY, false)) return;
-    let tries = 0;
-    const tick = async () => {
-      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash') || document.querySelector('.drop-veil')) {
-        if (tries++ < 60) setTimeout(tick, 500);
-        return;
-      }
-      /* Spend it BEFORE opening, not after: the card is dismissed by several
-         routes (the button, the veil, history) and a flag written on the way
-         out can be skipped by any of them. It is only spent once the overlay
-         check above has passed, so it is never burned on a card that did not
-         get to render. */
-      if (!claimBootSheet(window.__thanksForce)) return;   // another sheet already had this open
-      await kvSet(THANKS_SEEN_KEY, true);
-      openThanksCard();
-    };
-    // behind the community card's 4000ms: if that one is up, the veil check
-    // above holds this one back rather than stacking two popups on a boot.
-    setTimeout(tick, 4600);
-  } catch { /* never block boot */ }
-}
+/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowThanksCard put the TestFlight invite card over the app once per install. openThanksCard is unchanged and still opens from the Crew strip and the News row */
 
 // Pinned Today card: what you hold, what it owes you, and how close it is to
 // going quiet. Doubles as the explainer for anyone who dismissed the popup.
@@ -2453,24 +2200,7 @@ function dropFitHtml(topId, hatId) {
   return `<span class="drop-fit">${layers.map(s => `<img src="${s}" alt="">`).join('')}</span>`;
 }
 
-async function maybeShowDropPopup() {
-  try {
-    if ((CALM_BOOT() && !window.__dropForce) || !S.settings) return;
-    const seen = await kvGet(DROP_SEEN_KEY, 0);
-    if (seen >= 2) return;
-    let tries = 0;
-    const tick = async () => {
-      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash')) {
-        if (tries++ < 60) setTimeout(tick, 500);
-        return;      // busy boot: does NOT consume one of the 5 showings
-      }
-      if (!claimBootSheet(window.__dropForce)) return;   // another sheet already had this open
-      await kvSet(DROP_SEEN_KEY, seen + 1);
-      openDropPopup();
-    };
-    setTimeout(tick, 2200);
-  } catch { /* never block boot */ }
-}
+/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowDropPopup fired the Puffer Pack release card twice per install. openDropPopup is unchanged and still opens from the News tab */
 
 function openDropPopup() {
   const veil = document.createElement('div');
@@ -2511,7 +2241,6 @@ function openDropPopup() {
    teaser.
    Counts are DERIVED, never typed. "63" hard-coded here would be a lie the moment
    anyone adds or drops one. */
-const TEASER_SEEN_KEY = 'cosmeticTeaserSeen';
 /* THE DROP, identified by id rather than by the unreleased flag.
    The teaser first keyed off `unreleased`, which was right while the items were
    dark and wrong the moment they launched: the flags came off, the set went
@@ -2667,29 +2396,7 @@ function cosmeticTeaserBannerHtml() {
   </details>`;
 }
 
-// First run online: actively invite the player to pick their own Crew name
-// instead of silently living with the random bone-name handle the server hands
-// out as a fallback. Fires once ever (kv flag), only when online with no chosen
-// name, and never over the splash / daily wheel / an open sheet.
-async function maybePromptName() {
-  try {
-    if (navigator.webdriver) return;
-    if (await kvGet('namePrompted', false)) return;
-    const me = await social.socialMe();
-    if (!me || me.name) return;
-    let tries = 0;
-    const tick = async () => {
-      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash')) {
-        if (tries++ < 60) setTimeout(tick, 500);
-        return;
-      }
-      await kvSet('namePrompted', true);
-      toast('Welcome to the Crew! Pick a name so friends know who you are.', 3600);
-      openNameBuilder();
-    };
-    setTimeout(tick, 2000);
-  } catch { /* noop */ }
-}
+/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybePromptName toasted and then opened the name builder at launch. The Crew tab and Settings both still offer it the moment you land on them with no name, which is where a name is actually wanted */
 
 // Poll for NEW incoming friend requests and surface them: an OS notification
 // (if enabled, so it lands when the app is backgrounded) plus an in-app toast.
@@ -2857,35 +2564,7 @@ async function checkFriendRequests() {
   } catch { /* noop */ }
 }
 
-// New users default to notifications ON, so ask for OS permission once (guarded
-// by a kv flag) so the default actually delivers. Never over the splash / wheel
-// / an open sheet, so it doesn't interrupt onboarding or name-picking.
-async function maybeRequestNotifPermission() {
-  try {
-    if (navigator.webdriver) return;
-    if (await kvGet('notifAsked', false)) return;
-    if (notifPlatform() === 'none') { await kvSet('notifAsked', true); return; }
-    const prefs = await notifPrefs();
-    if (!prefs.enabled) { await kvSet('notifAsked', true); return; }
-    const state = await notifPermissionState();
-    if (state === 'granted' || state === 'denied' || state === 'unsupported') { await kvSet('notifAsked', true); return; }
-    let tries = 0;
-    const tick = async () => {
-      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash')) {
-        if (tries++ < 60) setTimeout(tick, 500);
-        return;
-      }
-      await kvSet('notifAsked', true);
-      const ok = await requestNotifPermission();
-      if (ok) {
-        await syncNotifications();
-        const loc = await kvGet('lastLoc', null);
-        await scheduleRares();   // retired: clears any rare pushes still queued
-      }
-    };
-    setTimeout(tick, 3500);
-  } catch { /* noop */ }
-}
+/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeRequestNotifPermission raised the iOS notification dialog on the boot path, before the player had asked for a single notification. The ask now happens where it earns its keep: renderSettings calls requestNotifPermission() on the three toggles that turn notifications on, so the OS is asked at the moment somebody says yes */
 
 async function backupNudge() {
   try {
@@ -9863,7 +9542,7 @@ async function renderFriends(el) {
       await social.pushBackup(APP_SOCIAL_V).catch(() => {});
       toast("You're online! Here's your friend code.", 3600);
       renderFriends(el);
-      if (!(await social.socialMe())?.name) { await kvSet('namePrompted', true); setTimeout(() => openNameBuilder(() => renderFriends(el)), 500); }
+      if (!(await social.socialMe())?.name) setTimeout(() => openNameBuilder(() => renderFriends(el)), 500);
     });
     return;
   }
@@ -11316,8 +10995,10 @@ function openSurveySheet(source = 'auto') {
 
   $('#svLater')?.addEventListener('click', async () => {
     trackEvent('survey_later', { src: source });
-    // snooze, don't kill: a "later" comes back in a few days (never after submit)
-    await kvSet('surveySnoozeAt', Date.now());
+    /* The `surveySnoozeAt` write went with the boot showing on 2026-08-25: the
+       only reader was maybeShowSurvey's four-day snooze, and nothing re-opens
+       this sheet on its own any more. The player closes it, and it is in
+       Settings when they want it. */
     history.back();
   });
 
@@ -11364,38 +11045,7 @@ function showDayOneReveal(granted) {
   $('#svDone', wrap)?.addEventListener('click', () => { history.back(); setTimeout(openStable, 260); });
 }
 
-// Boot trigger: invite engaged players to the survey once. Gated so it never nags
-// — the few-days wait is ONLY for brand-new accounts (they need time to form an
-// opinion); established players (older account OR already levelled up) see it right
-// away. Never over onboarding / the splash / the daily wheel / any open sheet
-// (retries next boot), snoozes on "Maybe later", and NEVER returns once submitted.
-// Skips webdriver/demo.
-async function maybeShowSurvey() {
-  try {
-    if (CALM_BOOT() || !S.settings) return;
-    if (await kvGet('surveyDone', false)) return;
-    // Established-player check: an account created 3+ days ago (or with a missing
-    // createdAt = pre-dates the field = old account) OR already past level 2 is
-    // "established" and eligible now. Only a genuinely new account has to wait.
-    const created = S.settings.createdAt || 0;
-    const ageDays = created ? (Date.now() - created) / 86400e3 : 999;
-    let established = ageDays >= 3;
-    if (!established) { try { established = levelFor(await totalXp()) >= 3; } catch { /* noop */ } }
-    if (!established) return;
-    // "Maybe later" snooze: wait ~4 days before asking again
-    const snooze = await kvGet('surveySnoozeAt', 0);
-    if (snooze && Date.now() - snooze < 4 * 86400e3) return;
-    let tries = 0;
-    const tick = async () => {
-      if (sheetStack.length || document.querySelector('.dw') || document.getElementById('splash')) {
-        if (tries++ < 60) setTimeout(tick, 500);
-        return;
-      }
-      openSurveySheet('auto');
-    };
-    setTimeout(tick, 2600); // after What's New / wheel have had their chance
-  } catch { /* never block boot */ }
-}
+/* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowSurvey opened the Day One Lizard survey over the app. openSurveySheet is unchanged and the Settings row ('Day One survey') still opens it, so the lizard is still claimable; nothing already collected is affected */
 
 // What's New: the player-facing changelog. Opening it marks everything seen so
 // the "new" dot clears. Reachable from Settings and the Crew tab.
@@ -11884,9 +11534,10 @@ async function renderSettings(el) {
     const pulled = await social.pullGrants().catch(() => null);
     toast(`You're in the Crew! Your progress is now backed up.${pulled && pulled.applied ? ' A welcome gift is in your Backpack.' : ''}`, 4200);
     renderSettings(el);
-    // straight into picking a name (they just joined; don't leave them as the
-    // random fallback handle). namePrompted stops the boot nudge double-firing.
-    if (!(await social.socialMe())?.name) { await kvSet('namePrompted', true); setTimeout(() => openNameBuilder(() => renderSettings(el)), 500); }
+    /* straight into picking a name (they just joined; don't leave them as the
+       random fallback handle). The `namePrompted` write went with the boot
+       nudge on 2026-08-25: nothing reads it now that nothing prompts at boot. */
+    if (!(await social.socialMe())?.name) setTimeout(() => openNameBuilder(() => renderSettings(el)), 500);
   });
   $('#cbOn', el)?.addEventListener('click', async () => {
     await social.setCloudBackup(true);
@@ -16335,7 +15986,10 @@ function sleepDiagHtml(dg) {
    backup survived but the key lived only in the device keychain, and deleting
    the app took it. A phrase the player chooses can rebuild the account on any
    device. The phrase never leaves the phone. */
-async function openRecoverySheet({ firstRun = false } = {}) {
+/* `firstRun` went with the boot prompt on 2026-08-25: it only ever changed the
+   close button from "Done" to "Later", and the only caller that passed it was
+   the launch interstitial that no longer exists. */
+async function openRecoverySheet() {
   const existingId = await social.myRecoveryId();
   // Someone who set a phrase before v231 has no ID, so restoring still demands
   // their friend code. Say why they are being asked again rather than repeating
@@ -16345,7 +15999,7 @@ async function openRecoverySheet({ firstRun = false } = {}) {
     ? 'You already have a recovery phrase, but restoring with it still needs your friend code, and that is on the phone you would have lost. Pick a Recovery ID and re-enter a phrase, and the ID is all you need from now on.'
     : 'Two things you pick and remember. Together they bring your Bonehead back on any phone, even if this one is lost or wiped. We never see your phrase, so we can never reset it for you.';
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>${upgrading ? 'Finish your recovery code' : 'Recovery code'}</h2><button class="sheet-close">${firstRun ? 'Later' : 'Done'}</button></div>
+    <div class="sheet-head"><h2>${upgrading ? 'Finish your recovery code' : 'Recovery code'}</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
       <p class="note" style="margin:2px 2px 14px">${intro}</p>
       <div class="field">
@@ -16436,29 +16090,39 @@ async function openRestoreSheet() {
   });
 }
 
-// Nag until a phrase exists. Tom: "make sure that people that skip the recovery
-// phrase popup see it each time they open until they pick one, for their own
-// good." So this is NOT once-per-session: every open, until it is set.
-async function maybePromptRecovery(tries = 0) {
+/* THE RECOVERY CODE IS DATA SAFETY, NOT AN ANNOUNCEMENT, so it is the one item
+   in the 2026-08-25 sweep that is not simply deleted.
+   It used to open openRecoverySheet({ firstRun: true }) on EVERY launch until a
+   phrase existed, which was Tom's own instruction in v231 ("make sure that
+   people that skip the recovery phrase popup see it each time they open until
+   they pick one, for their own good"). That instruction is superseded by this
+   one: a sheet with a Later button, in front of the game, every single open, is
+   exactly the nightmare he is asking me to end, and it was the FIRST thing he
+   hit on the simulator launch that produced this change.
+   What it must not become is silence. Losing the code means a player cannot
+   restore, so the route stays and the reminder stays, both without blocking:
+     - Settings already carries a "Recovery code" row that says NOT SET and what
+       that costs (renderSettings), and it is the only route now.
+     - this toast points at that row, at most once a week.
+   A toast rather than a banner because there is already a toast for exactly
+   this shape of standing reminder (backupNudge, five lines below its own kv
+   clock) and a second mechanism for the same job is a second thing to keep
+   working. */
+async function maybeNudgeRecovery() {
   try {
     if (CALM_BOOT() || !S.settings) return;
     // Offline players used to be skipped here. They are the MOST exposed group,
-    // with no cloud backup at all, so they get the prompt too: setRecoveryPhrase
-    // now takes them online as part of saving it.
+    // with no cloud backup at all, so they get the nudge too: setRecoveryPhrase
+    // takes them online as part of saving it.
     if (!(await social.apiBase())) return;           // no server configured at all
     // A v230 phrase with no recovery ID still needs the friend code to restore,
     // which is the gap v231 exists to close. Checking only for a phrase left every
     // early player silently uninvited to the fix, so both count as "not covered".
     if (await social.hasRecoveryPhrase() && await social.myRecoveryId()) return;
-    // Never stack over another sheet, but do NOT give up: What's New pops on the
-    // very release that introduces recovery, and simply bailing here would swallow
-    // the prompt on the one open where it matters most. Wait for the stack to
-    // clear instead, for up to a minute.
-    if (document.querySelector('#sheets .sheet')) {
-      if (tries < 30) setTimeout(() => maybePromptRecovery(tries + 1), 2000);
-      return;
-    }
-    openRecoverySheet({ firstRun: true });
+    const last = await kvGet('recoveryNudgeAt', 0);
+    if (Date.now() - last < 7 * 86400e3) return;
+    await kvSet('recoveryNudgeAt', Date.now());
+    setTimeout(() => toast('No recovery code yet. Delete the app and this account is gone: set one in Settings.', 5200), 6000);
   } catch { /* never block boot */ }
 }
 
@@ -18345,7 +18009,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v447'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v448'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

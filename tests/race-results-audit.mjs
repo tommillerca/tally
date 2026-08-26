@@ -1,4 +1,4 @@
-/* THE STEP RACE RESULTS POSTER + TODAY BANNER.
+/* THE STEP RACE RESULT ON TODAY.
  *
  * WHAT THIS EXISTS TO CATCH, stated before the checks so a future reader can
  * tell whether they still discriminate:
@@ -11,12 +11,12 @@
  *     players who never placed and promoted 5th to 2nd. A poster built on that
  *     board announces the wrong winners, silently, and only in some weeks.
  *     PAID is therefore the first and most important row here.
- *  2. The poster is in the DOM but invisible. This app shipped three separate
+ *  2. The result is in the DOM but invisible. This app shipped three separate
  *     "present but at opacity 0" bugs in eight days (v370 onboarding, the fight
  *     result, the crate reveal), so presence is not evidence. VISIBLE measures
  *     the effective opacity PRODUCT up the ancestor chain, the way
  *     freeze-reveal-audit does.
- *  3. It shows twice. A result is not a recurring card.
+ *  3. (RETIRED 2026-08-25 with the poster: it used to show twice on launch.)
  *  4. It renders with nothing in it. An empty podium must produce NO poster at
  *     all, never a frame with an empty board inside it: an empty sample is a
  *     failure, never a pass.
@@ -55,50 +55,71 @@ page.on('pageerror', e => errs.push(String(e)));
 await page.evaluate(podium => { window.__raceResults = () => podium; }, PAID);
 await dismissOverlays(page);
 
-const shown = await page.evaluate(() => window.__raceResultShow());
-ok('the poster opens at all (an unrenderable poster is not a passing test)', shown === true, `__raceResultShow -> ${shown}`);
+/* THE POSTER IS GONE (2026-08-25) and with it every row that graded it: the
+   veil, its FITS/scroll geometry, "Nice one" closing it, and the TWICE / THEN
+   STOP / count rows that graded its showing budget. It was a full-screen
+   takeover on the launch path, and Tom asked for that whole class to leave the
+   game. Measured on a booted simulator on a level-1 account two minutes old
+   that had never walked: the poster was the first thing on the screen after the
+   daily wheel, because the podium comes off the SERVER and not off your own
+   history. So it was not, as the old header implied, a receipt only a racer
+   could see.
+   WHAT SURVIVES IS EVERY ROW THAT MATTERED. The five failure modes at the top
+   of this file are properties of the DATA and of the surface that shows it, and
+   the Today banner shows the same podium from the same settledPodium() read:
+   PAID, the stray-name discrimination, VISIBLE and the art are all graded on it
+   below. The banner also carries strictly MORE than the poster did (every
+   place's purse, not just the winner's haul), which is why it was always
+   described in js/app.js as the result's permanent home.
+   EMPTY moved with them: it is asserted on the banner, which is where an empty
+   podium can now render an empty frame. */
 
 /* Give the art a bounded moment to decode. Bounded, not unconditional: if it
    never decodes the REAL row below still goes red, which is the point. */
+await page.evaluate(() => { location.hash = '#/'; });
+await new Promise(r => setTimeout(r, 1500));
+/* OPENED BY A REAL TAP on the card's own summary, not by setting .open. The
+   banner is a <details> and expanding it is the only interaction a player has
+   with this surface, so driving it any other way would grade a card nobody can
+   necessarily reach: exactly the failure guard-hygiene-lint's SEAM row was
+   written for after fifteen green rows on an unreachable Paddock viewer. */
+await page.waitForSelector('#raceResultCard:not([hidden]) summary', { timeout: 8000 }).catch(() => {});
+await page.click('#raceResultCard summary').catch(() => {});
 await page.waitForFunction(() => {
-  const im = [...document.querySelectorAll('.rr-veil img')];
+  const c = document.querySelector('#raceResultCard');
+  if (!c || !c.open) return false;
+  const im = [...c.querySelectorAll('img')];
   return im.length > 0 && im.every(i => i.naturalWidth > 0);
-}, { timeout: 5000 }).catch(() => {});
+}, { timeout: 6000 }).catch(() => {});
 
 const card = await page.evaluate(() => {
-  const veil = document.querySelector('.rr-veil');
-  if (!veil) return { none: true };
+  const c = document.querySelector('#raceResultCard');
+  if (!c || c.hidden) return { none: true };
   // EFFECTIVE opacity, up the whole ancestor chain. A container at 0 anywhere
   // above the card makes every child invisible while querySelector still finds
   // them, which is exactly how three of these shipped.
   let eff = 1;
-  for (let n = veil.querySelector('.drop-card'); n && n.nodeType === 1; n = n.parentElement) {
+  for (let n = c; n && n.nodeType === 1; n = n.parentElement) {
     eff *= parseFloat(getComputedStyle(n).opacity || '1');
     if (getComputedStyle(n).visibility === 'hidden') eff = 0;
   }
-  const lanes = [...veil.querySelectorAll('.race-lane')].map(l => ({
+  const lanes = [...c.querySelectorAll('.race-lane')].map(l => ({
     place: (l.querySelector('.rk') || {}).textContent,
     name: (l.querySelector('.nm b') || {}).textContent,
     steps: (l.querySelector('.nm .st') || {}).textContent,
   }));
-  const imgs = [...veil.querySelectorAll('.race-lane .run img, .rr-fig img')];
-  const box = veil.querySelector('.drop-card').getBoundingClientRect();
+  const imgs = [...c.querySelectorAll('.race-lane .run img')];
   return {
-    none: false, eff, lanes,
-    winner: (veil.querySelector('.rr-who b') || {}).textContent,
-    winnerSteps: (veil.querySelector('.rr-steps') || {}).textContent,
+    none: false, eff, lanes, opened: c.open,
+    winner: (c.querySelector('.race-h b') || {}).textContent,
     imgs: imgs.length,
     decoded: imgs.filter(i => i.naturalWidth > 0).length,
-    overflow: Math.round(box.bottom - innerHeight),
-    /* The card's own box fitting the viewport proves NOTHING, because the body
-       scrolls inside it: the first version of this row passed while 5th place
-       sat 57px below the fold. What matters is whether a player sees the whole
-       podium without being asked to scroll a popup. */
-    scrollOverflow: Math.round(veil.querySelector('.rr-scroll').scrollHeight - veil.querySelector('.rr-scroll').clientHeight),
   };
 });
 
-ok('VISIBLE the poster is actually on screen, not merely in the DOM',
+ok('REACH a real tap on the card opens it, so a player can get to the podium at all',
+  !card.none && card.opened === true, card.none ? 'no card on Today' : `open=${card.opened}`);
+ok('VISIBLE the result is actually on screen, not merely in the DOM',
   !card.none && card.eff > 0.9, `effective opacity ${card.none ? 'no card' : card.eff}`);
 
 /* THE ROW THAT MATTERS. Every place, every name, every step count, against the
@@ -114,12 +135,11 @@ ok('PAID the podium is exactly the one the server paid, in order',
    somebody ever repoints this at /steps/week, three of these five arrive. */
 const strays = card.none ? [] : card.lanes.map(l => l.name)
   .filter(n => LIVE_BOARD_TODAY.includes(n) && !PAID.some(p => p.name === n));
-ok('PAID nobody from the live board who was never paid is on the poster',
+ok('PAID nobody from the live board who was never paid is on the result',
   strays.length === 0, strays.length ? `stray: ${strays.join(', ')}` : 'none');
 
-ok('the winner leads the card by name and by total',
-  !card.none && card.winner === 'BONY WRECKER'.slice(0, 99) || (!card.none && /BONY WRECKER/i.test(card.winner || '')),
-  `${card.winner} / ${card.winnerSteps}`);
+ok('the winner leads the card by name',
+  !card.none && /BONY WRECKER/i.test(card.winner || ''), card.winner);
 
 /* COUNT FIRST, then decode. `decoded === imgs` alone passes vacuously the
    moment the art source goes empty, because avatarLayersHtml emits NO <img> for
@@ -130,54 +150,38 @@ ok('REAL every racer is drawn, and the art actually decoded',
   !card.none && card.imgs >= card.lanes.length * 2 && card.decoded === card.imgs,
   `${card.decoded}/${card.imgs} decoded across ${card.none ? 0 : card.lanes.length} lanes`);
 
-ok('FITS the whole podium is on a 375x667 phone WITHOUT scrolling the popup',
-  !card.none && card.overflow <= 0 && card.scrollOverflow <= 0,
-  `card ${card.overflow}px past the viewport, body ${card.none ? '?' : card.scrollOverflow}px past the card`);
-
-await page.evaluate(() => { document.querySelector('#rrLater')?.click(); });
-ok('"Nice one" closes it', await page.evaluate(() => !document.querySelector('.rr-veil')));
-
-/* TWICE THEN STOP, driven through the REAL boot gate rather than the shortcut
-   hook, because the counter lives in maybeShowRaceResults and nowhere else.
-   Tom missed the single v376 showing entirely, so "it appears at all" is now a
-   two-boot promise and the third boot is what proves it is not a nag. */
-await page.evaluate(() => window.__raceResultForget());
-const bootOnce = async () => {
-  await page.evaluate(() => window.__raceResultBoot());
-  await new Promise(r => setTimeout(r, 4200));         // the gate waits 3.2s for a clear screen
-  const up = await page.evaluate(() => !!document.querySelector('.rr-veil'));
-  await page.evaluate(() => { document.querySelector('#rrLater')?.click(); });
-  return up;
-};
-ok('TWICE the real boot gate shows it on the first open', await bootOnce());
-ok('TWICE it shows again on the second open, which is the whole point',
-  await bootOnce(), 'Tom saw zero of one showing on v376');
-ok('THEN STOP the third open does not show it: a result is not a nag',
-  (await bootOnce()) === false);
-
-const opens = await page.evaluate(() => window.__raceResultOpens());
-ok('the count is kept against the WEEK, so next race gets its own two showings',
-  opens === 2, `raceResultShown = ${JSON.stringify(opens)}`);
-
-/* EMPTY. No settled result must produce NO poster, not an empty frame. The
-   cache is cleared first, or this would read back the podium above and prove
-   nothing: an empty sample is a failure, and so is a test fed a full one. */
-await page.evaluate(() => window.__raceResultForget());
+/* EMPTY. No settled result must render NOTHING, not an empty frame. The cache is
+   cleared first, or this would read back the podium above and prove nothing: an
+   empty sample is a failure, and so is a test fed a full one. */
+await page.evaluate(() => window.__raceResultForgetCache());
 await page.evaluate(() => { window.__raceResults = () => []; });
-const emptyShown = await page.evaluate(() => window.__raceResultShow());
-const emptyVeil = await page.evaluate(() => !!document.querySelector('.rr-veil'));
-ok('EMPTY an empty podium renders no poster at all, rather than an empty one',
-  emptyShown === false && emptyVeil === false, `shown=${emptyShown} veil=${emptyVeil}`);
-await page.evaluate(() => window.__raceResultForget());
+await page.evaluate(() => { location.hash = '#/boneyard'; });
+await new Promise(r => setTimeout(r, 900));
+await page.evaluate(() => { location.hash = '#/'; });
+await new Promise(r => setTimeout(r, 1800));
+const emptyCard = await page.evaluate(() => {
+  const c = document.querySelector('#raceResultCard');
+  return { present: !!c, hidden: c ? c.hidden : null, lanes: c ? c.querySelectorAll('.race-lane').length : 0 };
+});
+ok('EMPTY an empty podium renders no result card at all, rather than an empty one',
+  emptyCard.hidden !== false || emptyCard.lanes === 0, JSON.stringify(emptyCard));
+await page.evaluate(() => window.__raceResultForgetCache());
 
 /* THE BANNER, which is the surface that carries every place's purse. */
 await page.evaluate(podium => { window.__raceResults = () => podium; }, PAID);
-await page.evaluate(() => { location.hash = '#/'; });
+/* Bounce off Today and back. The EMPTY rows above left the app sitting on a
+   rendered Today with the card hidden, and assigning location.hash its CURRENT
+   value fires no hashchange, so route() never runs and the re-seeded podium is
+   never read: 0 lanes, and four BANNER rows red on a healthy tree. Same trap
+   tray-destination-audit's header describes one layer down. */
+await page.evaluate(() => { location.hash = '#/boneyard'; });
 await new Promise(r => setTimeout(r, 1200));
+await page.evaluate(() => { location.hash = '#/'; });
+await new Promise(r => setTimeout(r, 2000));
+await page.click('#raceResultCard summary').catch(() => {});
 const banner = await page.evaluate(() => {
   const b = document.querySelector('#raceResultCard');
   if (!b) return { none: true };
-  b.open = true;
   let eff = 1;
   for (let n = b; n && n.nodeType === 1; n = n.parentElement) eff *= parseFloat(getComputedStyle(n).opacity || '1');
   return {

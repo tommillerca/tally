@@ -3353,7 +3353,6 @@ body::before {
 .race-champ b { color: var(--gold); font-weight: 800; }
 
 .race-lanes { display: grid; gap: 7px; }
-.rr-veil .race-lanes { gap: 4px; padding-bottom: 9px; }
 .race-lane { display: grid; grid-template-columns: 26px 1fr; gap: 9px; align-items: center; }
 .race-lane .rk {
   width: 26px; height: 26px; display: grid; place-items: center;
@@ -3411,63 +3410,24 @@ body::before {
 .race-lane.you .run { border-color: var(--accent); }
 .race-lane.you .nm b { color: var(--accent); }
 
-/* ==================== THE SETTLED RESULT: poster + banner ====================
-   Built to market-quality-mockups/race-results-poster.html and
-   race-results-banner.html, which Tom approved on 2026-08-14. Gold-led rather
-   than coral: the app's coral is the "do this now" colour and a settled result
-   is a podium, not an alarm. Lanes, rank chips and markers are the SAME
-   .race-lane component the Crew board uses, so the two surfaces cannot drift. */
-.rr-veil { padding: 10px; padding-top: max(10px, var(--sat)); }
-.rr-veil .drop-card { display: flex; flex-direction: column; max-height: calc(100vh - 20px);
-  text-align: left; padding: 16px 16px 14px; }
-.rr-scroll { overflow-y: auto; min-height: 0; margin: 0 -18px; padding: 0 18px;
-  -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-.rr-scroll::-webkit-scrollbar { display: none; }
-.rr-veil .drop-eyebrow { color: var(--coral); margin-bottom: 4px; }
-.rr-veil .drop-title { font-size: 28px; line-height: 0.92; }
-.rr-veil .drop-title em { color: var(--coral); }
-
-/* the winner, at poster scale, on the loudest colour in the brand. The sunburst
-   is flat ink wedges at 17%, so it reads as screenprint rather than as a glow. */
-.rr-hero { position: relative; display: flex; align-items: flex-end; gap: 10px;
-  margin: 9px 0 0; padding: 7px 11px 5px; overflow: hidden;
-  background: var(--coral); border: 2px solid var(--ink); border-radius: var(--radius-sm);
-  box-shadow: var(--sh); }
-.rr-hero::before { content: ''; position: absolute; inset: -40% -10%;
-  background: repeating-conic-gradient(from 0deg at 22% 78%,
-    rgba(42, 45, 40, .17) 0deg 9deg, rgba(42, 45, 40, 0) 9deg 22deg); pointer-events: none; }
-.rr-fig { position: relative; flex: none; width: 70px; height: 78px; z-index: 1; }
-.rr-fig img, .rr-fig .bh-anim { position: absolute; left: -14%; top: -6%; width: 128%; height: 128%; }
-.rr-who { position: relative; z-index: 1; flex: 1; min-width: 0; padding-bottom: 2px; }
-.rr-crown { display: inline-flex; align-items: center; gap: 4px; padding: 1px 9px 2px 7px;
-  background: var(--gold); color: var(--ink); border: 2px solid var(--ink);
-  border-radius: 999px; box-shadow: var(--sh-sm);
-  font-family: var(--display); font-size: var(--fs-2); letter-spacing: .06em; }
-.rr-who b { display: block; margin-top: 3px; font-family: var(--display); font-weight: 400;
-  font-size: 26px; line-height: 1; letter-spacing: .02em; color: var(--text);
-  text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rr-who .rr-steps { display: block; font-family: var(--display); font-size: 24px;
-  letter-spacing: .02em; color: var(--ink); }
-.rr-who .rr-steps i { font-style: normal; font-family: inherit; font-size: var(--fs-2);
-  letter-spacing: .14em; }
-.rr-shout { margin: 6px 2px 0; font-size: var(--fs-2); color: var(--text); }
-.rr-shout b { color: var(--coral); font-weight: 800; }
-.rr-haul { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 0; }
-.rr-sect { display: block; margin: 6px 2px 3px; font-size: var(--fs-0); font-weight: 800;
-  letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); }
-.rr-veil .note { font-size: var(--fs-1); line-height: 1.4; color: var(--text-3); }
-/* the footer never scrolls away: the way out is always on screen */
-.rr-foot { flex: none; padding-top: 9px; }
-.rr-veil .drop-cta { padding: 12px; }
-.rr-veil .drop-later { padding: 8px 0 0; }
+/* ==================== THE SETTLED RESULT ====================
+   Built to market-quality-mockups/race-results-banner.html, which Tom approved
+   on 2026-08-14. Gold-led rather than coral: the app's coral is the "do this
+   now" colour and a settled result is a podium, not an alarm. Lanes, rank chips
+   and markers are the SAME .race-lane component the Crew board uses, so the two
+   surfaces cannot drift.
+   THE POSTER'S RULES LEFT WITH THE POSTER on 2026-08-25 (.rr-veil, .rr-scroll,
+   .rr-hero, .rr-fig, .rr-who, .rr-crown, .rr-shout, .rr-haul, .rr-sect,
+   .rr-foot). It was a full-screen veil opened only by a launch takeover, so it
+   went with the takeover, and a rule scoped to a class nothing renders is a rule
+   nobody can tell is dead. The banner below is untouched. */
 
 /* the purse, as the thing a person won rather than a column in a table */
 .rr-prize { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
-.rr-prize .pz, .rr-haul .pz { display: inline-flex; align-items: center; gap: 4px;
+.rr-prize .pz { display: inline-flex; align-items: center; gap: 4px;
   background: var(--surface-3); border: 2px solid var(--ink); border-radius: 999px;
   padding: 2px 9px 2px 7px; font-size: var(--fs-0); font-weight: 800; color: var(--text);
   white-space: nowrap; }
-.rr-haul .pz { background: rgba(42, 45, 40, .82); font-size: var(--fs-2); padding: 3px 11px 3px 8px; }
 .pz svg { flex: none; }
 
 /* THE HYPE BANNER, directly above the step-race result. It has to out-shout the

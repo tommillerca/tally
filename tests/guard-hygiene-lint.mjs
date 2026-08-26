@@ -157,7 +157,6 @@ const SEAM_ONLY_KNOWN = [
   'error-telemetry-audit.mjs',
   'fav-skull-audit.mjs',
   'fight-tray-audit.mjs',
-  'first-session-audit.mjs',
   'freeze-reveal-audit.mjs',
   'lb-profile.mjs',
   'motion-truth-audit.mjs',
@@ -169,7 +168,6 @@ const SEAM_ONLY_KNOWN = [
   'spire-phase3-audit.mjs',
   'spire-poster.mjs',
   'sw-upgrade-audit.mjs',
-  'teaser-fire-audit.mjs',
 ];
 const usesSeam = t => /window\.__[a-zA-Z]/.test(t);
 const drivesReal = t => /\.click\(\)|dispatchEvent|page\.(click|tap)/.test(t);
