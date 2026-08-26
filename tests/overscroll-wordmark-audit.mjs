@@ -1308,16 +1308,79 @@ ok('REDUCED   under prefers-reduced-motion the fade is dropped (opacity pinned t
   const half = rel.find(r => -r.faked === 60);          // half of the 120px peak
   const at100 = rel.find(r => -r.faked === 100);
   const landed = rel[rel.length - 1];                    // pull 0
-  ok('RELEASE   after a real release the alpha is PROPORTIONAL to the return, so the mark is carried up and faded out as one motion and lands with the screen. Tom: "isn\'t bouncing back up and fading at the same time as you release"',
-    !!half && Math.abs(half.op - 0.5) <= 0.1 && !!at100 && at100.op < 1 && !!landed && landed.op === 0,
-    `half way back (60px of a 120px peak) -> ${half ? half.op.toFixed(2) : 'n/a'} (want 0.50 +/- 0.10; pinned reads 1.00, which is the pre-v452 defect), `
-    + `100px -> ${at100 ? at100.op.toFixed(2) : 'n/a'} (must be under 1: pinned is the bug), landed -> ${landed ? landed.op.toFixed(2) : 'n/a'}. `
+  /* THREE WRONG ANSWERS, ALL PINNED HERE, because this row has now been re-premised
+     twice and each rewrite was a different mistake shipping:
+       1.00 half way back  PINNED. The original defect: the mark sat at full alpha
+                           from a deep bounce down to 36px while the cards slid up
+                           under it.
+       0.00 well before landing  EARLY. v452. Gone at 30px of pull with 122px of the
+                           128px travel still to run; Tom read it as blinking out.
+       0.50 half way back  LINEAR. v453. Lands together but is dragged: "it still
+                           needs to scroll up fast and fade out faster."
+     The bound is the band BETWEEN them: leading the screen home, still on screen,
+     still landing exactly at zero. */
+  ok('RELEASE   after a real release the mark LEADS the screen home and lands with it: eased, so it is well ahead of a straight proportion half way back, still visible, and exactly zero as the pull reaches zero',
+    !!half && half.op >= 0.20 && half.op <= 0.45 && !!at100 && at100.op < 1 && !!landed && landed.op === 0,
+    `half way back (60px of a 120px peak) -> ${half ? half.op.toFixed(2) : 'n/a'} (want 0.20-0.45. 1.00 = pinned, the original defect. 0.50 = linear, which Tom called dragged. 0.00 = v452, which blinked out), `
+    + `100px -> ${at100 ? at100.op.toFixed(2) : 'n/a'} (under 1, or it is pinned), landed -> ${landed ? landed.op.toFixed(2) : 'n/a'}. `
     + `Full sweep ${rel.map(r => `${-r.faked}px:${r.op.toFixed(2)}`).join(' ')}`);
 
   await pullTo(page, 0);          // hand the page back with released + peak cleared
   await releasePull(page);
   await clearPull(page);
   await page.evaluate(() => document.documentElement.style.removeProperty('--wm-fade'));
+}
+
+/* ---------- NOBG: a player with no backdrop does not get a black band ---------- */
+/* Tom, 2026-08-26: "it's jsut black behind the boneheadz page now."
+   The BG slot has NO default in BH_SLOTS, so "nothing equipped" is a state real
+   players are in, and the hero markup renders no <img class="hero-backdrop"> at
+   all for them. paintHeroEdge took that for a missing image and returned, so
+   --hero-edge stayed unset and #screen fell back to var(--bg).
+   MEASURED on a save with BG removed, before the fix: the pulled strip rendered
+   rgb(13,12,18) for 110px sitting directly on the scene's coral rgb(253,104,87).
+   Not a subtle seam, a hard black band, and invisible to every other row here
+   because they all run on the seeded default, which HAS a backdrop.
+   The row grades the strip the bounce actually reveals, in both states, and the
+   equipped half is the control: without it a build that set --hero-edge to some
+   constant for everybody would pass. */
+{
+  const readEdge = () => page.evaluate(() => {
+    const el = document.getElementById('screen');
+    return {
+      edge: getComputedStyle(document.documentElement).getPropertyValue('--hero-edge').trim() || null,
+      bg: getComputedStyle(el).backgroundColor,
+      hasImg: !!document.querySelector('#bhStage .hero-backdrop'),
+    };
+  });
+  const pageBg = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());
+  const withBg = await readEdge();
+  ok('NOBG      CONTROL: with a backdrop equipped the strip is the sampled art colour, so the row below is not passing on a constant',
+    withBg.hasImg && !!withBg.edge && withBg.bg !== pageBg, `equipped -> --hero-edge ${withBg.edge}, strip ${withBg.bg} (page --bg is ${pageBg})`);
+
+  const noBg = await page.evaluate(async () => {
+    const db = await import('./js/db.js');
+    const saved = (await db.kvGet('equipped', {})) || {};
+    delete saved.BG;
+    await db.kvSet('equipped', saved);
+    document.documentElement.style.removeProperty('--hero-edge');
+    location.hash = '#/foods'; await new Promise(r => setTimeout(r, 500));
+    location.hash = '#/today'; await new Promise(r => setTimeout(r, 1600));
+    const el = document.getElementById('screen');
+    const toRgb = c => c.replace(/\s+/g, '');
+    return {
+      hasImg: !!document.querySelector('#bhStage .hero-backdrop'),
+      edge: getComputedStyle(document.documentElement).getPropertyValue('--hero-edge').trim() || null,
+      bg: toRgb(getComputedStyle(el).backgroundColor),
+      stage: toRgb(getComputedStyle(document.getElementById('bhStage')).backgroundColor),
+    };
+  });
+  const bgHex = pageBg.replace('#', '');
+  const asRgb = `rgb(${parseInt(bgHex.slice(0,2),16)},${parseInt(bgHex.slice(2,4),16)},${parseInt(bgHex.slice(4,6),16)})`;
+  ok('NOBG      with NO backdrop equipped the overscroll strip is the scene\'s own colour, not the page background: a player who never equipped one must not get a black band above their hero',
+    noBg.hasImg === false && !!noBg.edge && noBg.bg !== asRgb && noBg.bg === noBg.stage,
+    `no backdrop -> --hero-edge ${noBg.edge || '(UNSET)'}, strip ${noBg.bg}, scene ${noBg.stage}. `
+    + `Page --bg is ${pageBg} = ${asRgb}, which is what this shipped as: 110px of rgb(13,12,18) on top of coral.`);
 }
 
 /* COST. A scroll listener on this element is the one thing that could make the
