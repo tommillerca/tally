@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 453, date: '2026-08-26', title: 'The wordmark rides the screen back up', items: [
+    'Pull down past the top of Today and let go. The BONEHEADZ mark now travels back up with the screen and fades as it goes, so the two land together. The last build had it clearing out early, which left it disappearing while the screen was still visibly moving.',
+  ] },
+
   { n: 452, date: '2026-08-26', title: 'The wordmark gets out of the way', items: [
     'Pull down past the top of Today and the BONEHEADZ mark still slides in over the art. What changed is the way out. It now starts clearing the moment you lift your thumb, rather than staying solid until the screen has almost finished springing back, so it is gone before your cards arrive underneath it.',
   ] },
