@@ -2628,6 +2628,7 @@ function bindWordmarkPull() {
   const el = $('#screen');
   const FULL = 36;         // px of pull at which the mark is fully revealed
   const LEAD = 0;          // the fade spans the WHOLE return, landing with it
+  const EXIT_EASE = 1.7;   // >1 front-loads the exit so the mark leads the screen home
   let last = -1, lastF = -1, released = false, peak = 0;
 
   /* THE RELEASE IS THE FINGER LIFTING. It is deliberately NOT "the pull got
@@ -2694,11 +2695,27 @@ function bindWordmarkPull() {
        property exactly as it always has and the fail-open default is untouched:
        opacity is var(--wm-fade, var(--wm-pull, 1)). */
     let f = null;
-    if (released && peak > LEAD) f = Math.round(Math.min(q, Math.max(0, (pull - LEAD) / (peak - LEAD))) * 20) / 20;
+    if (released && peak > LEAD) {
+      /* EASED, so it LEADS the screen without leaving early. Tom on the linear
+         version: "it still needs to scroll up fast and fade out faster." A raw
+         proportion has the mark at half alpha half way back, which lands together
+         but feels like it is being dragged. r^EXIT_EASE front-loads both without
+         moving either endpoint: still exactly the on-screen value at the instant
+         of release, still exactly 0 as the pull reaches 0. Half way back is 0.31
+         rather than 0.50, so the mark is 69% of the way home while the screen is
+         only half way. Not the v452 answer, which was gone at 30px with 122px of
+         travel left and read as blinking out. */
+      const r = Math.max(0, (pull - LEAD) / (peak - LEAD));
+      f = Math.round(Math.min(q, Math.pow(r, EXIT_EASE)) * 20) / 20;
+    }
     if (f !== lastF) {
       lastF = f;
       if (f === null) root.style.removeProperty('--wm-fade');
       else root.style.setProperty('--wm-fade', f);
+      /* THE TRAVEL LEADS TOO, which is the "scroll up fast" half. On the way in
+         --wm-pull is untouched, so every reveal row still grades the same curve;
+         only a real release, which no synthetic scroll can produce, moves it. */
+      if (f !== null && f !== last) { last = f; root.style.setProperty('--wm-pull', f); }
     }
   }, { passive: true });
 }
@@ -10691,9 +10708,29 @@ const HERO_ART_FILTER = 'saturate(0.92)';
    rather than left dangling. */
 const _edgeCache = new Map();
 function paintHeroEdge(img) {
-  if (!img || !img.currentSrc && !img.src) return;
-  const key = img.currentSrc || img.src;
   const put = v => v && document.documentElement.style.setProperty('--hero-edge', v);
+  /* NO BACKDROP EQUIPPED IS A NORMAL STATE, NOT A MISSING IMAGE, and treating it
+     as one shipped a black band. The BG slot has NO default (BH_SLOTS), so a
+     player who has never equipped a backdrop, or who unequipped theirs, renders
+     no <img class="hero-backdrop"> at all (see the hero markup). This function
+     used to return here, --hero-edge stayed unset, and #screen fell back to
+     var(--bg). Measured on a save with BG removed: the pulled strip renders
+     rgb(13,12,18) for 110px directly on top of the scene's coral rgb(253,104,87).
+     Tom, 2026-08-26: "it's jsut black behind the boneheadz page now."
+     The scene's OWN background is the honest answer, and reading it back rather
+     than naming a colour here means the two can never drift: when a backdrop is
+     equipped the markup sets #bhStage to --surface-2 and this branch is not
+     taken, and when it is not, #bhStage is the coral the player actually sees. */
+  if (!img || !img.currentSrc && !img.src) {
+    const stage = document.getElementById('bhStage');
+    const bg = stage && getComputedStyle(stage).backgroundColor;
+    /* transparent resolves to rgba(0,0,0,0), which would paint the same black
+       this whole branch exists to stop. Leave it unset in that case: the CSS
+       fallback is then a deliberate choice rather than an accident. */
+    if (bg && !/^rgba\(0, 0, 0, 0\)$/.test(bg) && bg !== 'transparent') put(bg);
+    return;
+  }
+  const key = img.currentSrc || img.src;
   if (_edgeCache.has(key)) return put(_edgeCache.get(key));
   const read = () => {
     try {
