@@ -275,3 +275,26 @@ at **300px or more per item** before naming it. Both halves matter:
 `#N` names and any two rows in the same slot sharing identical art. Duplicate art
 is a defect in itself: a player owns both and sees no difference, and it cannot be
 named honestly. Recolour one using brand palette colours, do not ship twins.
+
+## Simulator: never read a result off a build you did not confirm
+
+Two scripts, and they are a pair. Neither replaces the other.
+
+- `native/sim-verify.sh` asks the INSTALLED BUNDLE which origin it loads, asks that
+  origin whether it answers and what version it serves, and refuses when that is
+  not what you meant. Exit 2 means "could not check", which is NOT a pass.
+  Enforced by `.claude/hooks/simulator-freshness.py` (PreToolUse), which BLOCKS
+  simulator screenshots, taps, swipes and recordings when the check fails. It never
+  blocks install/launch/terminate/boot, or it would trap you in the bad state.
+- `native/sim-refresh.sh` is the LAST STEP OF A RELEASE: it confirms the live site
+  is serving the build, restores the bundle to the live URL, rebuilds, installs and
+  then re-verifies.
+
+Why both: a ship-time refresh cannot cover staleness that begins after the ship, and
+a test-time check cannot make the device current. 2026-08-26: the installed bundle
+pointed at a local dev server that had been killed hours earlier. A WKWebView serves
+a dead origin from its own NetworkCache, so the app opened and looked normal, and an
+http:// non-localhost origin is not a secure context so there was no service worker
+at all. An hour went into two "missing" icons that were files the cache had never
+fetched. A memory already said to verify on live; it was read and ignored twice,
+which is why this is a hook and not a note.
