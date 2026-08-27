@@ -91,6 +91,7 @@ async function measure() {
       // each caption inside its OWN half, and no full-width sentence spanning both
       capsOwned: caps.length === 2
         && !!document.querySelector('#hypeYard .hype-cap') && !!document.querySelector('#hypeShop .hype-cap'),
+      // rot-audit: negative the two halves were split in v422; this holds them apart
       spanningLine: !!card.querySelector('.hype-line'),
       // one frame: both halves are children of the SAME card, never two cards
       oneFrame: document.querySelectorAll('.card.hype').length === 1
@@ -199,7 +200,7 @@ await sleep(1500);
 const shop = await page.evaluate(async () => {
   document.getElementById('hypeShop').click();
   await new Promise(r => setTimeout(r, 1400));
-  return { hash: location.hash, shop: !!document.querySelector('[data-hubtab="shop"].on, .hub-tab.on') ,
+  return { hash: location.hash, shop: !!document.querySelector('[data-hubtab="shop"].on, .ch-tab.on') ,
     text: (document.getElementById('screen')?.textContent || '').slice(0, 0) };
 });
 ok('ROUTE the shop half opens the Bonehead hub', shop.hash === '#/bonehead', JSON.stringify(shop));

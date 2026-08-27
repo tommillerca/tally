@@ -303,7 +303,7 @@ const SCREENS = [
   ['stable', p => viaToday(p, 'stableBtn')],
   ['kitchen', async p => {
     await viaToday(p, 'kitchenActBtn');
-    await p.evaluate(() => document.getElementById('doorCook')?.click());
+    await p.evaluate(() => document.getElementById('kitchenActBtn')?.click());
     await sleep(1400);
   }],
   ['pit', p => viaToday(p, 'pitBtn')],

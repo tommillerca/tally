@@ -400,7 +400,6 @@ const DECLARED = {
      against. */
   'newsrow-return-audit.mjs': ['skip', "a news story puts you back where you were, not on a sheet you never opened. Needs an announcement whose CTA opens a sheet; the Bone Garden's row was the only one and it left NEWS on 2026-08-18. Restore to FAST when another one lands."],
   'garden-sim.mjs': ['skip', 'a balance MODEL, not a guard: 30 days x 60 seeded runs of the garden against the kitchen. It reports numbers for a decision and asserts nothing about the app. tests/garden-appetite-guard.mjs is the guard that pins the outcome.'],
-  'hollow-audit.mjs': ['full', 'drives the Hollow at two viewports with and without reduced motion, including a real harvest tap and the modal contract. About 90s, too slow for the fast tier.'],
   'hollow-backdrop-audit.mjs': ['full', 'renders all three time bands and hit-tests an 800-point grid to prove the backdrop takes no taps. Slow by construction.'],
   'hollow-beds-audit.mjs': ['full', 'renders every plot state and measures them apart by pixels. Slow by construction.'],
   'arena-static-probe.mjs': ['skip', 'a PROBE by its own first line: it measures whether .arena shifts when the action tray changes button count, and prints the numbers. The guard for that behaviour is fight-layout-audit.mjs.'],
@@ -638,7 +637,26 @@ const DECLARED = {
      asserts the OPPOSITE: that no door is open. suite-rot-audit.mjs is expected to
      start naming these files; that is the signal working, not a failure. */
   'garden-audit.mjs': ['skip', 'drives #doorGrow, which was removed with the garden on 2026-08-18. Kept for the revival, replaced by garden-closed-audit.mjs.'],
-  'garden-intro-audit.mjs': ['skip', 'the garden intro popup no longer fires from boot (2026-08-18) and the Kitchen no longer lands on two doors. garden-closed-audit.mjs pins both absences instead.'],
+  /* 'hollow-audit.mjs' and 'garden-intro-audit.mjs' were DELETED on 2026-08-27,
+     with the feature they guarded rather than left to drive a path that no longer
+     exists. Same treatment spire-intro-audit and teaser-fire-audit got.
+
+     v404 ("the Bone Garden closes, and the Boneyard feeds the Kitchen instead",
+     #53) took the Hollow and the Bone Garden out of the player's path on purpose.
+     Verified in the tree, not assumed: openHollow() is called from exactly ONE
+     place, the CTA inside the garden intro popup, and the only thing that ever
+     showed that popup, maybeShowGardenPopup(), is called from nowhere at all. No
+     route, no hash, no other door. Both audits were therefore grading a feature
+     no player can reach, which is why they read `beds: 0` and `#doorGrow` was
+     dead in seven places across the suite.
+
+     THE CLOSURE ITSELF IS STILL GUARDED, which is the part that matters:
+     garden-closed-audit.mjs pins both absences and is green. t3-audit's GARDEN
+     section went in the same pass.
+
+     The garden CODE is still in the tree (openHollow, maybeShowGardenPopup,
+     js/hollow-art.js, js/hollow-beds.js, js/hollow-scene.js), flagged to Tom as
+     dead weight rather than deleted here. */
   'garden-reach-audit.mjs': ['skip', 'its whole subject is REACH into the garden: the Today banner, the GROW door and the seed pouch, all removed 2026-08-18. Its one surviving row (the food-log boundary line) is not worth a boot on its own; if it ever matters again it moves to a diary suite.'],
   'glyph-audit.mjs': ['full', 'no dingbats standing in for icons.'],
   'kitchen-queue-audit.mjs': ['full', 'the cook queue fired from the real Cook button (a SECOND cook really starts with one pot in one visit, and the queued one takes the pot on its own with the dish time untouched), plus the starter-pouch backfill including its second-run no-op (rewarded-actions SOP). Its compost-ordering section came out on 2026-08-18 with the compost button; the pouch half now reads the larder rather than the seed pouch, because the pouch pays ingredients. Self-serves this checkout when given no URL.'],

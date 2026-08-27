@@ -124,44 +124,26 @@ ok('a rung button starts a real fight', (await count('.arena')) === 1, `${await 
 await page.evaluate(() => { [...document.querySelectorAll('.sheet-close')].pop()?.click(); });
 await sleep(900);
 
-/* ---------------- GARDEN ---------------- */
-await page.evaluate(() => { location.hash = '#/today'; });
-await sleep(1000);
-const planted = await page.evaluate(async () => {
-  const g = await import('./js/garden.js');
-  await g.grantSeed('graveroot', 2);
-  const r = await g.plantSeed('graveroot');
-  return r.ok === true;
-});
-/* THE ROUTE HAS MOVED TWICE IN ONE DAY, so it is worth writing down. The Garden
-   used to be a #gardenRow buried in the Kitchen's recipe list; v304 gave it a
-   tile on Today; v306 took that tile straight back out again (Tom: "we dont need
-   the garden icon on Today because if you click kitchen it's gonna basically take
-   you there"). The only route now is Kitchen -> GROW, and this test kept walking
-   the tile that no longer exists, so both Garden checks have been failing since.
-   tests/garden-doors.mjs owns the routing itself; this one just needs to arrive. */
-await page.evaluate(() => document.getElementById('kitchenActBtn')?.click());
-await sleep(1800);
-await page.evaluate(() => document.getElementById('doorGrow')?.click());
-await sleep(1800);
-const garden = {
-  planted, beds: await count('.t3-bed'), soil: await count('.t3-bed.thirsty, .t3-bed.growing, .t3-bed.ready'),
-  buy: await count('.t3-bed.buy'), pouch: await count('.t3-seed'),
-};
-// an empty sample set is a failure: a garden with no planted bed proves nothing
-// about the soil treatment, which is the whole point of the redraw
-ok('Garden renders real soil beds (not just empty voids)',
-  garden.planted && garden.beds >= 3 && garden.soil >= 1, JSON.stringify(garden));
-const watered = await page.evaluate(async () => {
-  const b = document.querySelector('.t3-bed.thirsty');
-  if (!b) return { err: 'no thirsty bed to water' };
-  b.click();
-  await new Promise(r => setTimeout(r, 1200));
-  return { stillThirsty: !!document.querySelector('.t3-bed.thirsty') };
-});
-ok('tapping a thirsty bed waters it', !watered.err && watered.stillThirsty === false, JSON.stringify(watered));
-await page.evaluate(() => { [...document.querySelectorAll('.sheet-close')].pop()?.click(); });
-await sleep(700);
+/* THE GARDEN SECTION WAS RETIRED HERE ON 2026-08-27, on Tom's instruction, and
+   it is a retirement rather than a repair.
+
+   v404 ("the Bone Garden closes, and the Boneyard feeds the Kitchen instead",
+   #53) took the Hollow and the Bone Garden OUT of the player's path
+   deliberately. Verified in the tree rather than assumed: openHollow() is called
+   from exactly one place, the CTA inside the garden intro popup, and the only
+   thing that ever showed that popup, maybeShowGardenPopup(), is called from
+   nowhere at all. There is no route, no hash and no other door.
+
+   So these rows were grading a feature no player can reach, which is why they
+   read `beds: 0` and `no thirsty bed to water`. They were not finding a bug,
+   they were describing a closure. tests/hollow-audit.mjs and
+   tests/garden-intro-audit.mjs went in the same pass for the same reason, the
+   way spire-intro-audit and teaser-fire-audit went with the announcements they
+   guarded.
+
+   The garden CODE is still in the tree (openHollow, maybeShowGardenPopup,
+   js/hollow-art.js, js/hollow-beds.js, js/hollow-scene.js). It is dead weight
+   from a product decision, flagged to Tom rather than deleted here. */
 
 /* ---------------- STABLE ---------------- */
 await hubTab('backpack');

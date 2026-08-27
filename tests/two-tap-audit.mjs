@@ -106,6 +106,7 @@ await page.evaluate(() => document.querySelector('#shopRest')?.click());
 await sleep(900);
 const merch = await page.evaluate(() => ({
   buys: document.querySelectorAll('[data-buyweapon]').length,
+  // rot-audit: negative S0 removed the weapon shop outright; this holds it removed
   equips: document.querySelectorAll('[data-weapon]').length,
   heading: /Bone Merchant/.test(document.body.textContent),
   // CONTROL: the shop really did render, so "no merchant" is not "no screen"
