@@ -22,7 +22,7 @@ import {
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   stripAll, stripAllPlan,
   DROP, buyDropItem, refundStreakFreezes,
-  RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_REROLL_LADDER,
+  RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_REROLL_LADDER, RACK_RARITY_PRICE,
   setWornAura, ownsAura,
   rack, rerollRack, buyRackItem, wornAura,
   buyPetItem,
@@ -8151,13 +8151,21 @@ async function renderShop(el) {
      the waist tile still asks for 952 device pixels from a master that carries
      229 across that crop (1.49x). That needs bigger source art, not a code
      change, and it is written down rather than tuned away. */
-  const rackTile = (id, i) => {
+  /* THE SECOND SHELF DRAWS AT A THUMBNAIL TIER, THE THEMED RUNGS KEEP THEIR
+     MASTERS. The nine above are the hero of the screen and the comment on
+     BH_THUMB_TIERS records that their masters were measured and deliberately
+     paid for. Twelve more mannequins at master resolution is a different
+     question, and it was answered by measuring rather than by taste: the Shop
+     went 64.1 MB -> 115.6 MB against a 90 MB ceiling, images 59 -> 92, so
+     memory-census went red. At 384 the tile is still drawn above its own CSS
+     box on this grid, and the shelf is a browse strip rather than the thing you
+     lean in to inspect: the try-on sheet is where a piece gets looked at
+     closely, and that still opens the full-size stack. */
+  const rackTile = (id, coin, dust, thumb) => {
     const it = BH_BY_ID[id];
-    const coin = RACK_POOLS[i][0];
-    const dust = RACK_DUST[i];
     return `<div class="rk r-${it.rarity}${rackOwns(id) ? ' owned' : ''}">
       <button class="rk-stage ${RACK_FIT[it.slot] || ''}" data-tryon="${id}" data-coin="${coin}" data-dust="${dust}" aria-label="Try on ${esc(it.name)}"
-        >${avatarLayersHtml({ ...RACK_BASE, [it.slot]: id }, { wpnAura: null, skip: ['C'] })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
+        >${avatarLayersHtml({ ...RACK_BASE, [it.slot]: id }, { wpnAura: null, skip: ['C'], ...(thumb ? { thumb } : {}) })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
       ${rackTag(it.rarity)}<b>${esc(it.name)}</b>
       ${rackBuyRow(id, coin, dust)}
     </div>`;
@@ -8285,8 +8293,16 @@ async function renderShop(el) {
   const rerollCost = RACK_REROLL_LADDER[rk.rr] ?? null;
   const rerollsLeft = RACK_REROLL_LADDER.length - rk.rr;
   // what this wallet actually reaches, counted rather than implied
-  const allRackCoins = [...RACK_POOLS.map(p => p[0]), RACK_AURA.coin];
-  const allRackDust = [...RACK_DUST, RACK_AURA.dust];
+  /* THE ROTATING SHELF, and the wallet line has to count it. Tom, 2026-08-27:
+     "players are pissed and have no where to spend their gold so make the rack
+     more interesting", then the shape: themed above, "just random rotating
+     items below". The themed rungs are untouched; this is a second shelf drawn
+     from the rest of the catalogue, priced by rarity. */
+  const rotIds = (rk.rot || []).filter(id => BH_BY_ID[id] && RACK_RARITY_PRICE[BH_BY_ID[id].rarity]);
+  const rotPrice = id => RACK_RARITY_PRICE[BH_BY_ID[id].rarity];
+  const allRackCoins = [...RACK_POOLS.map(p => p[0]), RACK_AURA.coin, ...rotIds.map(id => rotPrice(id)[0])];
+  const allRackDust = [...RACK_DUST, RACK_AURA.dust, ...rotIds.map(id => rotPrice(id)[1])];
+  const rackCount = allRackCoins.length;
   const cheapestRack = Math.min(...allRackCoins);
   const afford = { coins: allRackCoins.filter(c => c <= coinBal).length, dust: allRackDust.filter(d => d <= dustBal).length };
 
@@ -8301,17 +8317,28 @@ async function renderShop(el) {
        decoration at 0 dust with no route to any, so the route is attached to the
        number that is zero. -->
   <div class="rk-wallet">
-    <span class="rk-w">${ICONS.coin(13)}<b>${coinBal.toLocaleString()}</b><i>${afford.coins ? `buys ${afford.coins} of 9` : `${(cheapestRack - coinBal).toLocaleString()} short of the cheapest`}</i></span>
-    <button class="rk-w link" id="rackDust">${ICONS.dust(13)}<b>${dustBal.toLocaleString()}</b><i>${afford.dust ? `buys ${afford.dust} of 9` : 'melt gear to earn it'} ›</i></button>
+    <span class="rk-w">${ICONS.coin(13)}<b>${coinBal.toLocaleString()}</b><i>${afford.coins ? `buys ${afford.coins} of ${rackCount}` : `${(cheapestRack - coinBal).toLocaleString()} short of the cheapest`}</i></span>
+    <button class="rk-w link" id="rackDust">${ICONS.dust(13)}<b>${dustBal.toLocaleString()}</b><i>${afford.dust ? `buys ${afford.dust} of ${rackCount}` : 'melt gear to earn it'} ›</i></button>
   </div>
   <div class="rk-grid">
-    ${rackIds.slice(0, RACK_AURA_CELL).map((id, i) => rackTile(id, i)).join('')}
+    ${rackIds.slice(0, RACK_AURA_CELL).map((id, i) => rackTile(id, RACK_POOLS[i][0], RACK_DUST[i])).join('')}
     ${rackAuraTile()}
-    ${rackIds.slice(RACK_AURA_CELL).map((id, i) => rackTile(id, i + RACK_AURA_CELL)).join('')}
+    ${rackIds.slice(RACK_AURA_CELL).map((id, i) => rackTile(id, RACK_POOLS[i + RACK_AURA_CELL][0], RACK_DUST[i + RACK_AURA_CELL])).join('')}
   </div>
-  <button class="rk-reroll" id="rackReroll"><span class="rk-rr"><b>Reroll the rack</b><small>Another nine from ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())}</small></span>
+  <button class="rk-reroll" id="rackReroll"><span class="rk-rr"><b>Reroll the rack</b><small>A new ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())} nine, and a new shelf below</small></span>
     <span class="rk-left">${rerollsLeft > 0 ? `${rerollsLeft} left this week` : 'none left this week'}</span>
     ${rerollCost == null ? '' : rerollCost ? `<span class="t3-price">${ICONS.coin(13)} ${rerollCost}</span>` : '<span class="t3-price free">FREE</span>'}</button>
+  ${rotIds.length ? `
+  <!-- THE OTHER 355. The themed rungs above sell nine a week out of a catalogue
+       of 370, which is why there was nowhere to spend coins: 361 finished pieces
+       were unreachable. This shelf draws from all of them except the ones that
+       must never be sold (pets, Bumbleseal's own pieces, exclusive art awarded
+       by name, and the body and skull every player starts with). Same tile, same
+       try-on, same buy row: a player should not have to learn a second shop. -->
+  <div class="rk-theme"><b>ALSO ON THE RACK</b><i></i><span>${rotIds.length} pieces</span></div>
+  <div class="rk-grid">
+    ${rotIds.map(id => rackTile(id, rotPrice(id)[0], rotPrice(id)[1], 384)).join('')}
+  </div>` : ''}
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Potions and charms</b><small>Supplies ›</small></button>
   <div id="shopRestBody" hidden>
 
