@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 460, date: '2026-08-27', title: 'Breeding works again', items: [
+    'Breeding looked like it did nothing. You picked two pets, confirmed, and the screen sat there \u2014 no reveal, no baby, the pair still selected as though you had not tapped. It had been that way since the release two days ago that made breeding free: removing the Bone Dust price left behind a mention of the price that no longer existed, and it fell over at the very last step.',
+    'It was not doing nothing, which is the part worth knowing. The breed had already happened by the time it fell over: the fed pet really was gone, your keeper really did gain its lineage rank, and the cooldown really did start. Only the announcement was missing. If you bred pets in the last two days and thought it failed, it did not, and reopening the Stable would have shown you a pet missing. Nothing was taken twice and nothing needs putting right.',
+  ] },
+
   { n: 459, date: '2026-08-27', title: 'The app works with no signal again, and stops reloading itself', items: [
     'If you opened the app with no signal, you got a blank screen. Not a slow one, not a partial one: nothing. That has been true since the backdrop-colour release two days ago, because one small file the app cannot start without was left out of the list of things kept on your phone. On a plane, on the subway, anywhere with no bars, the app was dead. Open it once with signal after this update and it will work offline from then on.',
     'The app could reload itself out from under you while you were using it. There is a safety net that reloads a screen that failed to draw; it was checking once, at one instant, and a normal tap between screens looks identical to a broken one for about a hundredth of a second. It now watches for a full second before deciding anything is wrong.',
