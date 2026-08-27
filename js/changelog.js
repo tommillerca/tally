@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 461, date: '2026-08-27', title: 'The chest finishes opening before it leaves', items: [
+    'The very first chest you opened in a session clipped the end of its own animation: the last drawn frame of the lid coming off was cut short because the chest had already started leaving. Later chests looked right, which is what made it odd. The reason is that the first one pays to load its artwork, and when that took long enough there was no room left in the window for the ending. The chest now waits for its own animation to finish instead of talking over it. Chests that were already loading quickly look exactly as they did.',
+  ] },
+
   { n: 460, date: '2026-08-27', title: 'Breeding works again', items: [
     'Breeding looked like it did nothing. You picked two pets, confirmed, and the screen just sat there: no reveal, no baby, the pair still selected as though you had not tapped. It had been that way since the release two days ago that made breeding free: removing the Bone Dust price left behind a mention of the price that no longer existed, and it fell over at the very last step.',
     'It was not doing nothing, which is the part worth knowing. The breed had already happened by the time it fell over: the fed pet really was gone, your keeper really did gain its lineage rank, and the cooldown really did start. Only the announcement was missing. If you bred pets in the last two days and thought it failed, it did not, and reopening the Stable would have shown you a pet missing. Nothing was taken twice and nothing needs putting right.',
