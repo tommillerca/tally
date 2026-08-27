@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 463, date: '2026-08-27', title: 'Sharper shop tiles, and the golden chest is pixel art everywhere', items: [
+    'The new shelf added yesterday was stretching its artwork slightly to fill each tile, which softened it. The tiles are smaller and there are four across now instead of three, so the art is drawn at less than its real size rather than more. You also see more of the shelf at once, which is the point of it.',
+    'The golden chest was still drawing as the old flat icon anywhere it appeared small: the Kitchen, the Stable, Today, and both the prize wheel and its result. It is the pixel chest with a gold glow in all of those places now, the same one the Backpack has always used.',
+  ] },
+
   { n: 462, date: '2026-08-27', title: 'A lot more to buy, and it changes every day', items: [
     'The Shop sold nine pieces a week. The game has 370 cosmetics, so 361 of them could not be bought at all, which is the real reason there was nowhere for your coins to go. There is a second shelf under the themed nine now, and it is drawn from the whole collection: twelve more pieces, priced by how rare they are, twenty one on the screen instead of nine.',
     'That shelf is new every single day. The themed nine above it still last the week, and your rerolls are still weekly, so nothing you were saving up for moves. Worth a look each morning: with twelve out of hundreds, what is on it today will not be there tomorrow.',
