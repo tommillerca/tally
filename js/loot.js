@@ -128,8 +128,73 @@ export const RACK_REROLL_LADDER = [0, 100, 200, 300, 400, 500, 500];
 // Same FNV-1a the dens turn over on, so the rack changes every Monday with no
 // server. The salt is the reroll counter: rerolling is a new deterministic draw
 // from the SAME theme pools, never a random pull out of the whole game.
+/* ============ THE SECOND HALF OF THE RACK: VARIETY ============
+ * Tom, 2026-08-27: "we need to be offering for more for sale there now that we
+ * have removed chests for sale from the game players are pissed and have no
+ * where to spend their gold so make the rack more interesting", and then the
+ * shape: "why dont we make it so part of the rack has themed stuff and then
+ * there is just random rotating items below? best of both worlds".
+ *
+ * THE NUMBER THAT MAKES THE CASE: the catalogue holds 370 cosmetics and the
+ * themed rack sells NINE a week. So 361 pieces of finished art were unreachable
+ * with coins, which is the whole reason there is nowhere to spend them. The
+ * themed rungs above are untouched: this is a second shelf, not a replacement.
+ *
+ * WHAT IS DELIBERATELY NOT IN THE POOL, each for its own reason rather than by
+ * taste, because a silent allow-list is how the wrong thing ends up for sale:
+ *   slot C            pets are hatched, not bought. C6 (Bumbleseal) is the one
+ *                     Tom named as shop-only and she has her own 1% hatch, so
+ *                     putting her on a coin shelf would undercut both.
+ *   CE / CB / CG / CM Bumbleseal's own pieces, sold on her own shelf.
+ *   exclusive         SK15 and the Day One Lizard. js/loot.js already records
+ *                     the rule for this flag: "never appears at all (awarded by
+ *                     name only)". Selling one would break a promise made to
+ *                     the players who earned it.
+ *   default           B0-1 and SK0-1, the body and skull every player already
+ *                     starts with. Charging for those reads as a bug.
+ *
+ * PRICED BY RARITY, and the ladder is checked rather than asserted: dust is the
+ * CERTAINTY premium, so coins-per-dust must never REVERSE as pieces get dearer
+ * (the same invariant RACK_DUST carries above). Implied here, cheapest to
+ * dearest: 8.6, 9.3, 10.5, 10.8, 12.5. Strictly single-directional, and every
+ * value is one already on the themed ladder so the two shelves cannot disagree
+ * about what a piece of a given rarity is worth. */
+export const RACK_ROTATE_N = 12;
+export const RACK_RARITY_PRICE = {
+  common:    [300, 35],
+  uncommon:  [700, 75],
+  rare:      [1000, 95],
+  epic:      [1400, 130],
+  legendary: [2000, 160],
+};
+const RACK_PET_SLOTS = new Set(['C', 'CE', 'CB', 'CG', 'CM']);
+export const RACK_ROTATE_POOL = BH_ITEMS
+  .filter(i => !RACK_PET_SLOTS.has(i.slot) && !i.exclusive && !i.default && RACK_RARITY_PRICE[i.rarity])
+  .map(i => i.id)
+  .sort();
+
 const rackHash = t => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
-const rackPick = (week, salt) => RACK_POOLS.map(([, ids], i) => ids[rackHash(`${week}:${salt}:rack:${i}`) % ids.length]);
+export const rackPick = (week, salt) => RACK_POOLS.map(([, ids], i) => ids[rackHash(`${week}:${salt}:rack:${i}`) % ids.length]);
+
+/* Same hash, a different namespace in the seed string, so the two shelves cannot
+   move together: a reroll changes both because the salt changes, but the themed
+   rung and the rotating slot at the same index never track each other.
+   `taken` keeps the shelves disjoint. That is not cosmetic: buyRackItem prices a
+   themed piece by `st.ids.indexOf(artId)`, so the SAME id appearing on both
+   shelves would be charged the themed rung's price wherever the player tapped
+   it, which is the exact collision rack-theme-lint exists to prevent one level
+   up. The loop is bounded and de-duplicated; with a pool of ~350 against 12
+   draws it is nowhere near the cap, and returning short is safe (the shelf just
+   renders fewer tiles) where looping forever is not. */
+export const rackRotatePick = (week, salt, taken) => {
+  const pool = RACK_ROTATE_POOL.filter(id => !taken.includes(id));
+  const out = [];
+  for (let i = 0; out.length < RACK_ROTATE_N && i < RACK_ROTATE_N * 40; i++) {
+    const id = pool[rackHash(`${week}:${salt}:rot:${i}`) % pool.length];
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
+};
 
 /* WHICH NINE, WHICH WEEK, HOW MANY REROLLS: all of it persisted, because a
    rack recomputed on every render is a rack that changes under the player's
@@ -140,6 +205,17 @@ export async function rack() {
   const { isoWeekKey } = await import('./poi.js');
   const week = isoWeekKey(new Date());
   const cur = await kvGet('rack', null);
+  /* MIGRATION, IN PLACE, NO NEW WEEK. A save written before the rotating shelf
+     existed has ids but no rot. Rebuilding the whole record would move the
+     themed rung under a player mid-week and quietly hand back their spent
+     rerolls, so the record is kept and only the missing half is filled, on the
+     salt it already carries. */
+  if (cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length
+      && !Array.isArray(cur.rot)) {
+    const rot = rackRotatePick(week, cur.salt || 0, cur.ids);
+    await kvSet('rack', { ...cur, rot });
+    cur.rot = rot;
+  }
   if (cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length) {
     /* THE ALLOWANCE IS WEEKLY, and the week check three lines up is the whole
        mechanism: a record that survives to here belongs to THIS week, so its
@@ -152,7 +228,8 @@ export async function rack() {
        Tom approved weekly on 2026-08-20. `day` is no longer read here. */
     return { ...cur, rr: cur.rr || 0 };
   }
-  const st = { week, salt: 0, ids: rackPick(week, 0), rr: 0 };
+  const ids = rackPick(week, 0);
+  const st = { week, salt: 0, ids, rot: rackRotatePick(week, 0, ids), rr: 0 };
   await kvSet('rack', st);
   return st;
 }
@@ -176,7 +253,8 @@ export async function rerollRack() {
     const used = (cur && cur.rr) || 0;
     if (!cur || cur.week !== st.week || used !== st.rr) return undefined;   // somebody else moved it
     const salt = (cur.salt || 0) + 1;
-    return { week: cur.week, salt, ids: rackPick(cur.week, salt), rr: used + 1 };
+    const ids = rackPick(cur.week, salt);
+    return { week: cur.week, salt, ids, rot: rackRotatePick(cur.week, salt, ids), rr: used + 1 };
   });
   if (!next) return { ok: false, reason: 'race' };
   if (cost) await coinsAdd(-cost);
@@ -238,12 +316,23 @@ export async function buyRackItem(artId, currency = 'coins') {
   const st = await rack();
   const aura = artId === RACK_AURA.key;
   const i = st.ids.indexOf(artId);
-  if (!aura && i < 0) return { ok: false, reason: 'not-stocked' };
+  /* THE ROTATING SHELF IS PRICED BY RARITY, THE THEMED RUNGS BY POSITION, and
+     the two lookups must not be able to cross. The themed shelf is checked
+     FIRST and the shelves are built disjoint (rackRotatePick is handed the
+     themed ids), so `indexOf` keeps meaning what buyRackItem has always meant by
+     it. A piece stocked on neither shelf is still refused: this widens what the
+     rack sells, never what it will take money for. */
+  const r = i < 0 && Array.isArray(st.rot) ? st.rot.indexOf(artId) : -1;
+  if (!aura && i < 0 && r < 0) return { ok: false, reason: 'not-stocked' };
   const art = aura ? null : BH_BY_ID[artId];
   if (!aura && !art) return { ok: false, reason: 'not-stocked' };
+  const rar = !aura && i < 0 ? RACK_RARITY_PRICE[art.rarity] : null;
+  if (!aura && i < 0 && !rar) return { ok: false, reason: 'not-stocked' };
   const price = aura
     ? (currency === 'dust' ? RACK_AURA.dust : RACK_AURA.coin)
-    : (currency === 'dust' ? RACK_DUST[i] : RACK_POOLS[i][0]);
+    : i >= 0
+      ? (currency === 'dust' ? RACK_DUST[i] : RACK_POOLS[i][0])
+      : (currency === 'dust' ? rar[1] : rar[0]);
   const already = aura ? (await wornAura()) === artId : (await ownedCosmeticIds()).has(artId);
   if (already) return { ok: false, reason: 'owned' };
   const bal = currency === 'dust' ? await boneDust() : await coins();
