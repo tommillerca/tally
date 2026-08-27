@@ -4,6 +4,13 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 459, date: '2026-08-27', title: 'The app works with no signal again, and stops reloading itself', items: [
+    'If you opened the app with no signal, you got a blank screen. Not a slow one, not a partial one: nothing. That has been true since the backdrop-colour release two days ago, because one small file the app cannot start without was left out of the list of things kept on your phone. On a plane, on the subway, anywhere with no bars, the app was dead. Open it once with signal after this update and it will work offline from then on.',
+    'The app could reload itself out from under you while you were using it. There is a safety net that reloads a screen that failed to draw; it was checking once, at one instant, and a normal tap between screens looks identical to a broken one for about a hundredth of a second. It now watches for a full second before deciding anything is wrong.',
+    'The one news row that takes you to the Boneyard says so on the row. The other eight open a card and leave you where you were, so the odd one out read as the app throwing you somewhere with no explanation.',
+    'Tapping the word TODAY no longer opens the phone\u2019s date picker. It was an invisible control laid over the title with nothing to say it was there, and hunting down an exact day is not something anyone was doing. The arrows still walk you back a day at a time.',
+  ] },
+
   { n: 458, date: '2026-08-27', title: 'Today stops working when you are not looking at it', items: [
     'Today was quietly doing about a hundred and twenty pieces of layout work every second while you just sat there reading it. The news shelf added yesterday keeps a few animated things behind it, and a closed drawer gets no help from the graphics chip, so the whole page was being recalculated over and over for animations nobody could see. It does nothing now until you touch it. If Today felt warm or your battery went faster since yesterday, that was this.',
     'Breeding two pets no longer costs Bone Dust. Walking is the only thing it asks for, the same 6,000 steps between breeds as before. Dust is for how things LOOK now, and nothing you buy with it can make you stronger.',
