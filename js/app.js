@@ -3643,7 +3643,7 @@ async function renderToday(el) {
        <details>, so it is a real disclosure widget: keyboard operable, announced
        to a screen reader, and every section stays IN THE DOM, which is what keeps
        today-container's PASTDAY markers and the NESTED rows honest. */''}
-  <details class="dayrest" id="dayRest">
+  <details class="dayrest" id="dayRest"${S.dayOpen ? ' open' : ''}>
     <summary>
       <div class="tsec-h">Today's health</div>
       ${calorieRingCard({ tot, t, over, remaining, protHit, startPct: prev.ringPct, startBig: prev.eatenShown ?? tot.kcal, macroPcts: prev.macroPcts })}
@@ -3780,6 +3780,14 @@ async function renderToday(el) {
      you tap every row", so one open clears it. Written on toggle rather than on
      each row so a player who opens, reads the summaries and closes is not shown
      the dot again tomorrow. */
+  /* THE DISCLOSURE SURVIVES A RE-RENDER, and that is a correctness fix rather
+     than a nicety. Today re-renders on a day change, on refresh() and after a
+     log; if the day snapped shut each time, the page would shorten under the
+     player and the scroll position would clamp. Measured: 900 -> 608 on a day
+     change, which is today-container's SCROLL contract ("a day change keeps the
+     reading position") failing for a real reason. */
+  $('#dayRest', el)?.addEventListener('toggle', e => { S.dayOpen = e.target.open; });
+
   $('#newsBanner', el)?.addEventListener('toggle', async e => {
     if (!e.target.open) return;
     await kvSet('newsSeen', NEWS.map(n => n.id));

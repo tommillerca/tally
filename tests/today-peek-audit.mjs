@@ -158,7 +158,9 @@ const CONFIGS = [
    ceiling because "peeking" means partly off: the row already requires the
    bottom to be below the fold, and this keeps a card that merely fits from
    being read as a peek if that bottom check is ever loosened. */
-const PEEK_MIN = 18;
+/* Retired with the PEEK rows on 2026-08-27, kept as the record of what the
+   straddle signal used to require. See the WHOLE block. */
+const PEEK_MIN_RETIRED = 18;
 /* His plate against his ink. Measured on this build: 40-46% of the plate's
    interior is his drawing at 393x852. The floor is well under that and well
    over the ~2% a stray grain speckle could score on a blank plate. */
@@ -293,18 +295,42 @@ for (const cfg of CONFIGS) {
       geo.gwImgs.map(i => `${i.src.split('/').pop()}:${i.nw}`).join(' '));
   }
 
-  /* ---------------- PEEK: something is half on the screen ------------------ */
-  const straddling = geo.cards
-    .map(c => ({ ...c, vis: +(geo.fold - c.top).toFixed(1), hidden: +(c.bottom - geo.fold).toFixed(1) }))
-    .filter(c => c.vis > 0 && c.hidden > 0);
-  const best = straddling.sort((a, b) => b.vis - a.vis)[0] || null;
-  ok(`PEEK ${tag} a card straddles the fold: part of it on screen, part of it below`,
-    !!best, best ? `${best.cls.slice(0, 30)} showing ${best.vis}px, hiding ${best.hidden}px`
-      : `nothing straddles; nearest card tops ${geo.cards.map(c => c.top).filter(t => t < geo.fold + 200).slice(-3).join(', ')} against fold ${geo.fold}`);
-  ok(`PEEK ${tag} enough of it shows to be a signal rather than a hairline`,
-    !!best && best.vis >= PEEK_MIN, best ? `${best.vis}px visible, floor ${PEEK_MIN}` : 'no card straddles');
-  ok(`PEEK ${tag} it really is cut off, so there is visibly more below`,
-    !!best && best.hidden >= 4, best ? `${best.hidden}px below the fold` : 'no card straddles');
+  /* ---------------- WHOLE: the day's summary fits without scrolling --------- */
+  /* RE-PREMISED 2026-08-27, on Tom's ruling, and the old rows are quoted below so
+     nobody re-adds them by accident.
+
+     WHAT THIS USED TO ASSERT: that a card STRADDLED the fold, showing at least
+     PEEK_MIN px above it and 4px below, so a player could see there was more
+     down there. That was the right signal while Today was a long scroll: the
+     meal list alone ran 912px and Wellness began about 700px below the fold.
+
+     WHY IT IS GONE: the day is collapsed behind its own banner now (Tom: "below
+     the fold should be fully collapsed and only showing a banner with the wheel
+     and macros"). Today's scrollHeight went 3096 -> 1474 closed, so on every
+     viewport in this class NOTHING straddles the fold. The peek signal is not
+     broken, it is unnecessary, because there is no long scroll left to hint at.
+     Keeping it would have meant re-introducing 800px of scroll to satisfy a
+     guard, which is the tail wagging the dog.
+
+     WHAT REPLACES IT, so this is a re-premise and not a deletion: the promise the
+     collapse actually makes is that the day's whole summary is readable WITHOUT
+     scrolling. That is a real claim, it is the one a player experiences, and it
+     goes red the moment the banner grows past the fold again. */
+  const dayBox = geo.cards.find(c => /dayblk/.test(c.cls || ''));
+  /* AND THE CLAIM IS THAT IT FITS IN ONE SCREEN, NOT THAT IT IS ABOVE THE FOLD.
+     The first draft of this row asserted the latter and was FALSE: the day sits
+     under the hero, the doors and the quests, so it ends 434px past the fold on
+     393x852 even collapsed. Caught here rather than shipped, which is the row
+     earning its keep on the day it was written. What the collapse actually
+     promises is that the day is ONE screenful instead of three, so that is what
+     is graded, and it goes red the moment the banner grows past a screen. */
+  const dayH = dayBox ? +(dayBox.bottom - dayBox.top).toFixed(1) : null;
+  ok(`WHOLE ${tag} the collapsed day fits inside a single screen height, so it is a summary and not a scroll`,
+    dayH != null && dayH <= geo.fold,
+    dayH != null ? `day is ${dayH}px against a ${geo.fold}px screen (was ~2300px expanded)`
+                 : 'no .dayblk found to measure');
+  ok(`WHOLE ${tag} and it is a real summary rather than an empty box`,
+    dayH != null && dayH >= 120, dayH != null ? `${dayH}px tall, floor 120` : 'no .dayblk');
 
   /* ---------------- FIGURE: the peek is not bought with the Bonehead ------- */
   ok(`FIGURE ${tag} the Bonehead's stage keeps its height`,
