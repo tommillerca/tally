@@ -10597,6 +10597,35 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    this row's own `pointer-events: none` already handles. */
 .gw-row .gw-box.tb-done { pointer-events: auto; cursor: pointer; }
 
+/* A SHUT DRAWER STILL TICKS, AND THE WHOLE DOCUMENT PAYS FOR IT.
+   Chrome keeps running the animations inside a closed <details>, but that
+   content is skipped for paint, so nothing in it can get a compositor layer and
+   every one of those animations falls onto the main thread. Per
+   idle-perf-audit's own note, ONE un-compositable animation in the document
+   drops the entire document onto the slow path, however cheap it is and whether
+   or not you can see it.
+
+   MEASURED. v457 put four headshots into the shut news banner on Today, each
+   with the bh-idle sway and one with a weapon sheen. Settled Today went 0.0
+   style recalcs/s at 482b6fff to 119.9/s at 2bee5858, the commit that added the
+   banner, and stayed there. In the live page, cancelling ONLY the five
+   animations inside #newsBanner took Today from 119.0/s back to 0.0/s while
+   every other animation on the screen kept running, so the eighteen elements
+   that were being restyled every frame were victims, not the cause.
+
+   AND IT IS NOT ONE ANIMATION, WHICH IS WHY THIS RULE IS NOT A NAME LIST. The
+   first fix killed bh-idle inside a shut disclosure and measured 119.6/s: the
+   single remaining wpnCharge in there held the document on the slow path by
+   itself. `will-change: transform` on `.wpn-sheen::after` does not rescue it,
+   because skipped content gets no layer to be promoted to. So the rule is the
+   thing that is actually true: content behind a shut disclosure is invisible,
+   and invisible content does not move. The summary is excluded because it is
+   the half that IS on screen. */
+details:not([open]) > :not(summary),
+details:not([open]) > :not(summary) *,
+details:not([open]) > :not(summary) *::before,
+details:not([open]) > :not(summary) *::after { animation: none !important; }
+
 /* THE NEWS BANNER, collapsed by default. One line at rest so it can never become
    wallpaper the way a permanently open banner does, and a lime count when there
    is something unread. Tom, 2026-08-27: "when there is new news there can be an
