@@ -303,9 +303,36 @@ async function waitFor(fn, capMs, pollMs = 120) {
   }
 }
 
+/* THE DAY IS COLLAPSED NOW, AND A PLAYER OPENS IT BEFORE ADDING A MEAL.
+   v457 put the whole day behind one banner (calorie wheel + macros), so every
+   meal row, and with it every [data-addmeal] button, lives inside a closed
+   <details id="dayRest">. The buttons still MEASURE 30x30 in there, which is why
+   this was not obvious, but nothing is painted at those coordinates, so $click's
+   hit-test (anti-regression rule 6) rightly refused to click them and
+   barcodeLookup/logAMeal returned "(no add sheet)" on every run. That took four
+   rows down with it, including both CONTROL rows, which is the shape that makes
+   a suite look like the app is broken when it is the provocation that is stale.
+   Opened by TAPPING THE SUMMARY, not by setting .open, so this stays the route a
+   player actually takes and would still fail if the banner stopped opening. */
+async function openDay() {
+  const already = await page.evaluate(() => {
+    const d = document.getElementById('dayRest');
+    if (!d) return 'absent';
+    return d.hasAttribute('open') ? 'open' : 'closed';
+  });
+  if (already !== 'closed') return already;
+  await $click('#dayRest > summary');
+  await sleep(900);
+  return await page.evaluate(() => {
+    const d = document.getElementById('dayRest');
+    return d && d.hasAttribute('open') ? 'open' : 'still-closed';
+  });
+}
+
 /* ---- one full pass of the real Add-food flow, ending on the Add button ---- */
 async function logAMeal() {
   await goTab('today');
+  await openDay();
   if (!await $click('[data-addmeal]')) return { opened: false };
   await sleep(1700);
   await page.evaluate(() => {
@@ -323,6 +350,7 @@ async function logAMeal() {
 /* ======================================================= 1. LOOKUP, CONTROL */
 async function barcodeLookup() {
   await goTab('today');
+  await openDay();
   if (!await $click('[data-addmeal]')) return '(no add sheet)';
   await sleep(1700);
   if (!await $click('#actScan')) return '(no scan control)';
