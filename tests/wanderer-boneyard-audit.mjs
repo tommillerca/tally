@@ -50,19 +50,46 @@
  * FIELD, never a class name or a copy string, so reformatting cannot drift them
  * red.
  *
- * A KNOWN RED THAT IS NOT ABOUT THE LIGHT. VISIBLE fails on clean main and has
- * done since before this file was last touched: it wants a Wanderer handed to
- * the map from beyond his own 300 m cone, and at the sampled minute only one is
- * near enough to be handed over at all, so the sample it grades is empty. It is
- * left alone here on purpose rather than quietly widened, but it must not be
- * allowed to hide anything: every run below states its own PASS count.
- * Measured on this tree: clean main 40 PASS / 1 FAIL (VISIBLE), this branch
- * 61 PASS / 1 FAIL (the same VISIBLE, same detail line).
+ * THE KNOWN RED IS GONE, AND IT WAS THE ROW, NOT THE APP. 2026-08-27. VISIBLE
+ * had been red on clean main for weeks: it wanted a Wanderer handed to the map
+ * from beyond his own 300 m cone and witnessed that with ONE wanderersNear call
+ * at one point at one minute. A cell is WANDER_CELL_DEG = 0.02 deg, so the eight
+ * neighbours of your cell sit 1.4 to 2.2 km off and every one of them is outside
+ * WANDER_SHOW_M; one call therefore hands over exactly ONE man, your own cell's,
+ * and whether he happens to be inside 300 m at that minute is a coin flip. The
+ * row read "0 of 1", which is a sample of one, not a fairness bug.
+ * The app was measured before the row was touched, over 1728 player positions
+ * (81 cells, two stances in each, six minutes across the day): 1836 handovers,
+ * 1638 of them (89.2%) beyond the 300 m cone, furthest handover 1199.80 m
+ * against WANDER_SHOW_M = 1200, none past it, no cell handed over twice. He is
+ * drawn far outside his light exactly as the rule requires. So VISIBLE now
+ * grades that measurement instead of that coin flip, DENSITY grades the same
+ * sample instead of the same single call, and SHOW-CAP was added because the
+ * sample makes the other side of the contract free to assert.
+ * Measured on this tree after the change: 63 PASS / 0 FAIL. Before it, on the
+ * same tree: 61 PASS / 1 FAIL (VISIBLE).
+ *
+ * PROVE-RED, 2026-08-27, for the handover rows. Same method as below: throwaway
+ * `cp -R` with .git removed, one mutation at a time, exit read from a FILE.
+ * Every mutation exited 1 and moved exactly the row named, 62 PASS / 1 FAIL.
+ *   SHOW-SHRINK  WANDER_SHOW_M 1200 -> 300, so he is only drawn once he is
+ *     already able to catch you -> VISIBLE "0 of 198 handed over ... beyond the
+ *     300 m cone; furthest handover 299 m; drawn out to 300 m (1.0x his reach)".
+ *     Note the denominator went 1836 -> 198: the sample control catches the
+ *     starvation on its own, which is the half the old one-call row could not do.
+ *   CONE-ONLY    wanderersNear's filter changed to CONE_RANGE_M, so the constant
+ *     still reads 1200 and the handover no longer honours it -> VISIBLE red on
+ *     "furthest handover 299 m" while "drawn out to 1200 m (4.0x)" still prints.
+ *     That is the whole point of grading the measurement instead of the constant.
+ *   NO-CAP       the WANDER_SHOW_M filter deleted -> SHOW-CAP "13716 of 15552
+ *     handovers past 1200 m".
+ *   DUP-CELL     every handover pushed twice -> DENSITY "1566 of 1728 handovers
+ *     repeated a cell; busiest handover 6 men".
  *
  * PROVE-RED, 2026-08-22, for the rows added with the beam rework. Throwaway
  * `cp -R` of the tree with its .git removed, one mutation at a time, exit code
  * read from a FILE and never through a pipe. Every mutation exited 1; only the
- * rows named went red, VISIBLE excepted.
+ * rows named went red.
  *   NARROW-WEDGE   the beam stops laid out over CONE_HALF_DEG - 6 instead of
  *     CONE_HALF_DEG, so the light is drawn 48 degrees wide over a 60-degree
  *     trap -> DRAWN "48deg of light ... against a catch wedge of +/-30" and
@@ -193,17 +220,39 @@ try {
       }
     }
 
-    // one per cell, and he is DRAWN well outside his own cone
-    const near = W.wanderersNear(DATE, 49.28, -123.12, 400);
-    const cellIds = new Set(near.map(w => `${w.cx}_${w.cy}`));
+    /* WHAT THE MAP IS ACTUALLY HANDED: one per cell, and DRAWN well outside his
+       own cone. Sampled the way the rest of this file samples, over the same 81
+       cells, from two stances inside each (dead centre and off-centre, because a
+       player is not standing on a cell centre) and across the day's instances.
+       A ONE-CALL SAMPLE IS THE BUG THIS BLOCK REPLACES: a cell is 0.02 deg, so
+       its eight neighbours sit 1.4 to 2.2 km away and all but your own fall
+       outside WANDER_SHOW_M. One call therefore hands over ONE man, and whether
+       that one happens to be inside 300 m at that one minute is a coin flip that
+       has nothing to do with what the row is grading. */
+    let nCalls = 0, nHanded = 0, nFar = 0, nOver = 0, nDup = 0, nMaxDist = 0, nMaxN = 0;
+    for (const [cx, cy] of cells) {
+      for (const [ox, oy] of [[0, 0], [0.3, -0.25]]) {
+        for (const m of [3, 20, 61, 200, 700, 1300]) {
+          const near = W.wanderersNear(DATE, (cx + ox) * W.WANDER_CELL_DEG, (cy + oy) * W.WANDER_CELL_DEG, m);
+          nCalls++;
+          nHanded += near.length;
+          nMaxN = Math.max(nMaxN, near.length);
+          if (new Set(near.map(w => `${w.cx}_${w.cy}`)).size !== near.length) nDup++;
+          for (const w of near) {
+            if (w.dist > W.CONE_RANGE_M) nFar++;
+            if (w.dist > W.WANDER_SHOW_M) nOver++;
+            nMaxDist = Math.max(nMaxDist, w.dist);
+          }
+        }
+      }
+    }
     return {
       cells: cells.length, samples: steps.length, distinct: seen.size, checked, flips, fp,
       spdMin: Math.min(...steps), spdMax: Math.max(...steps),
       spdMean: steps.reduce((a, b) => a + b, 0) / steps.length,
       headingErrWorst, headingChecked,
       beatMin: Math.min(...beatMoves),
-      nearN: near.length, nearCells: cellIds.size,
-      nearFar: near.filter(w => w.dist > W.CONE_RANGE_M).length,
+      nCalls, nHanded, nFar, nOver, nDup, nMaxDist, nMaxN,
       coneRange: W.CONE_RANGE_M, coneHalf: W.CONE_HALF_DEG, showM: W.WANDER_SHOW_M,
     };
   }, DATE);
@@ -240,14 +289,31 @@ try {
      multiple came down with it; what the row is for is unchanged, which is that
      you must be able to SEE him from well outside the light or routing around it
      is not a move you can make. 1200 m against a 300 m beam still means four
-     minutes of walking between spotting him and being lit. */
+     minutes of walking between spotting him and being lit.
+     GRADED ON THE HANDOVER, NOT ON THE CONSTANT. The old row read the constant
+     and then tried to witness it with a single wanderersNear call, which hands
+     over exactly one man; the witness was a coin flip and it had been red on
+     clean main for weeks over a sample of one. What is asserted now is the
+     distance the map is ACTUALLY handed: the furthest handover in a real sample
+     has to reach three cone-lengths, and most handovers have to be outside the
+     light, so a wanderersNear rewritten to hand over only men who are already
+     about to catch you goes red on the measurement rather than on the constant.
+     The denominator is printed: an empty sample is a failure, not a pass. */
   ok('VISIBLE he is handed to the map far outside his own cone, so he can be avoided',
-    walk.nearFar > 0 && walk.showM >= walk.coneRange * 3,
-    `${walk.nearFar} of ${walk.nearN} nearby are beyond the ${walk.coneRange} m cone; drawn out to ${walk.showM} m ` +
+    walk.nHanded >= 500 && walk.nFar >= walk.nHanded * 0.5
+    && walk.nMaxDist >= walk.coneRange * 3 && walk.showM >= walk.coneRange * 3,
+    `${walk.nFar} of ${walk.nHanded} handed over across ${walk.nCalls} player positions are beyond the ` +
+    `${walk.coneRange} m cone; furthest handover ${walk.nMaxDist.toFixed(0)} m; drawn out to ${walk.showM} m ` +
     `(${(walk.showM / walk.coneRange).toFixed(1)}x his reach)`);
 
+  /* And never further than he is drawn: a man handed over past WANDER_SHOW_M is
+     a marker the map has no business painting. */
+  ok('SHOW-CAP nobody is handed over from beyond the draw radius',
+    walk.nOver === 0, `${walk.nOver} of ${walk.nHanded} handovers past ${walk.showM} m`);
+
   ok('DENSITY one per cell, no more',
-    walk.nearN > 0 && walk.nearN === walk.nearCells, `${walk.nearN} nearby across ${walk.nearCells} cells`);
+    walk.nHanded > 0 && walk.nDup === 0,
+    `${walk.nDup} of ${walk.nCalls} handovers repeated a cell; busiest handover ${walk.nMaxN} men`);
 
   /* PURITY ACROSS REALMS. The rows above all ran in one page, where a module
      that cached a position at import time would still look pure. A second page
