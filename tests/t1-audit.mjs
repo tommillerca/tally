@@ -314,8 +314,23 @@ ok('BONEYARD old floating pill is gone', await count('.map-readout:not(.ma-body)
 
 const spawns = await count('.map-spawn');
 ok('BONEYARD draws spawn markers', spawns > 0, `${spawns} markers`);   // empty = failure
+/* ART IS A DRAWN NODE THAT DECODED, NOT AN <svg>. This row asked
+   `querySelector('svg')` from the day it was written, and v416 moved every
+   spawn type off vectors: spawnIcon() now routes through pixCur/crateIcon and
+   emits <img src="assets/icons-pix/*.png">. Measured on origin/main at
+   14fb37a3, with the map drawing normally: 61 of 61 .map-spawn nodes carried a
+   decoded <img> and 0 carried an <svg>, so this row read 0/61 while
+   boneyard-icon-audit.mjs graded the same markers green in the same tree
+   (66 pixel imgs, 66 decoded). Drifted assertion, not an app defect.
+   NOT MERELY WIDENED. An <img> only counts once naturalWidth > 0 says the PNG
+   actually decoded, so the row now also fails on the blank tile the old <svg>
+   test could never see: an icon can hold a perfect 24x24 box over a file that
+   never loaded. */
 const iconed = await page.evaluate(() =>
-  [...document.querySelectorAll('.map-spawn')].filter(m => m.querySelector('svg')).length);
+  [...document.querySelectorAll('.map-spawn')].filter(m => {
+    const img = m.querySelector('img');
+    return !!m.querySelector('svg') || !!(img && img.naturalWidth > 0);
+  }).length);
 ok('BONEYARD every marker carries its art', spawns > 0 && iconed === spawns, `${iconed}/${spawns}`);
 
 /* The deck bans soft glow on chrome, and the old markers had 14px-blur halos.

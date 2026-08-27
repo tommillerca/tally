@@ -56,11 +56,26 @@ const hubTab = async re => {
 
 /* ---------------- SHOP ---------------- */
 await hubTab('shop');
+/* ONE CELL PER CATALOGUE ENTRY, not a headcount. This row asked
+   `cells >= 6` because the coin shop sold six things when it was written. S0
+   emptied it on purpose: a5b1f4fe closed the Bone Merchant and the
+   CRATES-ARE-NOT-FOR-SALE note in js/loot.js (2026-08-25) took the crates out,
+   leaving `SHOP` at two entries. Measured on origin/main at 14fb37a3:
+   {"drop":1,"prices":23,"cells":2,"forage":3}, so the row was red on a shop
+   that renders every item it has. A bound pinned to a product decision, and it
+   would go red again on the next catalogue change.
+   NOT WIDENED TO `>= 2`, which would drift the same way. The DOM is graded
+   against the app's OWN list: every SHOP entry must have drawn a cell and
+   nothing else may claim one, with the denominator printed. `SHOP.length > 0`
+   keeps an emptied catalogue from satisfying `0 === 0`. */
+const shopSize = await page.evaluate(async () => (await import('./js/loot.js')).SHOP.length);
 const shop = {
   drop: await count('.t3-drop'), prices: await count('.t3-price'),
-  cells: await count('.t3-cell'), forage: await count('.t3-forage'),
+  cells: await count('.t3-cell'), forage: await count('.t3-forage'), catalogue: shopSize,
 };
-ok('Shop renders the Tier 3 language', shop.drop === 1 && shop.prices >= 4 && shop.cells >= 6 && shop.forage >= 1, JSON.stringify(shop));
+ok('Shop renders the Tier 3 language',
+   shop.drop === 1 && shop.prices >= 4 && shopSize > 0 && shop.cells === shopSize && shop.forage >= 1,
+   JSON.stringify(shop));
 // the drop poster IS the disclosure: opening it must reveal the real per-item grid
 await page.evaluate(() => document.querySelector('.t3-drop')?.click());
 await sleep(700);

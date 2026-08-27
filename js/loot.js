@@ -866,7 +866,10 @@ export async function breedPets(keepIid, feedIid) {
     if (eqp.C === fed.sp && keep.sp !== fed.sp) await equip('C', keep.sp);
     const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[fed.sp]; await kvSet('pets', petsRec);
   }
-  return { ok: true, offspring: { ...keep, parents: consumed, fedName: fed.sp }, cost };
+  // No `cost` key: #203 made breeding free and deleted the variable, but left
+  // it in this return, so every breed threw "cost is not defined" and the
+  // result reveal never opened. No caller ever read it.
+  return { ok: true, offspring: { ...keep, parents: consumed, fedName: fed.sp } };
 }
 
 let _iidSeq = 0;
