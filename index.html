@@ -111,16 +111,40 @@
   // a module error is the specific symptom, but do not depend on catching it:
   // the check below is about the OUTCOME (nothing rendered), which is true no
   // matter which module died or why.
+  /* EMPTY HAS TO BE SUSTAINED, NOT SAMPLED. This read `children.length > 0` at
+     ONE instant, and #screen has a legitimate transient zero: route() clears it
+     and rebuilds, measured at ~11ms wide. Land the 12,000ms timer inside that
+     window and a perfectly healthy app is declared dead and RELOADED under the
+     player mid-session. Tom hit it on 2026-08-27 tapping a news row shortly
+     after opening ("i clicked on one, it reset the app"), and it is also what
+     made newcomers-audit fail about one run in six on every build, including
+     v456, which is how it was traced.
+
+     A dead shell is empty FOREVER; a route gap is empty for one sample. So the
+     check now needs the screen to be empty on every sample across a second
+     before it acts. That is 10 chances to see content, against an 11ms gap.
+
+     Deliberately NOT a flag set by js/app.js: this whole watchdog exists for the
+     case where app.js died, and a flag it never got to set would be no evidence
+     of anything. The DOM is the only witness that does not depend on the thing
+     being tested. */
   setTimeout(function () {
-    try {
-      var screenEl = document.getElementById('screen');
-      var alive = screenEl && screenEl.children.length > 0;
-      if (alive) { sessionStorage.removeItem(KEY); return; }
-      if (sessionStorage.getItem(KEY)) return;      // already tried once this session
-      sessionStorage.setItem(KEY, '1');
-      var u = location.href.split('#')[0];
-      location.replace(u + (u.indexOf('?') < 0 ? '?' : '&') + 'bhgr=' + Date.now() + location.hash);
-    } catch (e) { /* private mode, storage denied: better to do nothing than to loop */ }
+    var CHECKS = 10, GAP = 100, seen = 0;
+    var tick = function () {
+      try {
+        var screenEl = document.getElementById('screen');
+        if (screenEl && screenEl.children.length > 0) {   // any sign of life, ever
+          sessionStorage.removeItem(KEY);
+          return;
+        }
+        if (++seen < CHECKS) { setTimeout(tick, GAP); return; }
+        if (sessionStorage.getItem(KEY)) return;    // already tried once this session
+        sessionStorage.setItem(KEY, '1');
+        var u = location.href.split('#')[0];
+        location.replace(u + (u.indexOf('?') < 0 ? '?' : '&') + 'bhgr=' + Date.now() + location.hash);
+      } catch (e) { /* private mode, storage denied: better to do nothing than to loop */ }
+    };
+    tick();
   }, 12000);
 })();
 </script>
