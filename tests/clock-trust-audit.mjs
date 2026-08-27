@@ -226,15 +226,42 @@ try {
   const GRACE = await guard.grace();
   check('DAY_GRACE is a real, small number', Number.isInteger(GRACE) && GRACE >= 1 && GRACE <= 5, `DAY_GRACE=${GRACE}`);
 
-  /* One simulated day of the cheapest possible play: log three meals (three
-     taps), settle yesterday, take the free Pit fights, claim whatever daily
-     quests are genuinely satisfied, and read whether the wheel has re-armed.
-     Nothing here fakes progress: every claim goes through the app's real
-     award()/claimQuest() and would refuse a second time on the same date. */
-  const runCycle = () => page.evaluate(async () => {
-    const [nut, game, quests, loot, energy, db] = await Promise.all([
+  /* One simulated day of play: log meals, settle yesterday, take the free Pit
+     fights, claim whatever daily quests are genuinely satisfied, and read
+     whether the wheel has re-armed. Nothing here fakes progress: every claim
+     goes through the app's real award()/claimQuest() and would refuse a second
+     time on the same date.
+
+     TWO SHAPES OF DAY, AND WHY `full` EXISTS. The cheap day (three taps) is the
+     right provocation for the forward walk, where the question is what a clock
+     farmer collects per reset and a bigger day would only inflate the number.
+     It is the WRONG provocation for section 3's "an honest day still pays", and
+     those rows were RED on a clean tree because of it. dailyQuests() draws 3 of
+     the 10 ungated pool entries, seeded by the DATE (js/quests.js pick()), and
+     the cheap day satisfies exactly three of those ten (q-first, q-3meals,
+     q-protein), so on any date whose draw misses all three the day genuinely
+     completes nothing, claimedQ is 0, and the quest coins that are the day's only
+     coin source are 0 with the guard wide open. MEASURED over 401 consecutive
+     dates from 2026-08-27: 123 of them (30.7%) roll a set the cheap day cannot
+     touch. 2026-12-11 (the +106 honest day when today is 2026-08-27) is one:
+     it rolled [q-sleep, q-bed, q-water], each at cur 0 / target 1, while
+     claimDay() answered { fresh: true, reason: 'same-day' }. The audit was
+     asking a day that had done nothing why it had not been paid.
+
+     `full` does the other seven things a player can do in a day, through the
+     same real APIs the UI calls (js/wellness.js addWater/markBed/markSleep, a
+     weights row read back the way js/app.js:3307 reads it, a `via: 'scan'` log,
+     a foodId the day has never seen, and five entries instead of three). All ten
+     ungated dailies are then genuinely done, so whichever three the date draws
+     are all claimable and claimedQ is QUEST_N.day on EVERY date. Used for the
+     +102..+106 block only: those wellness/scan award() keys are per-DATE and
+     ungated by claimDay, so folding them into the forward walk would add ungated
+     XP to the refused days and move a bound this file is not entitled to move. */
+  const runCycle = (full = false) => page.evaluate(async (full) => {
+    const [nut, game, quests, loot, energy, db, well] = await Promise.all([
       import('./js/nutrition.js'), import('./js/game.js'), import('./js/quests.js'),
       import('./js/loot.js'), import('./js/energy.js'), import('./js/db.js'),
+      import('./js/wellness.js'),
     ]);
     const targets = { kcal: 2200, p: 150, c: 220, f: 70 };
     const day = nut.dateKey();
@@ -242,13 +269,31 @@ try {
     const inv0 = (await db.db.all('inv')).length;
     const guardBefore = await db.dayGuardState();
 
-    // three meals, ordinary food, well inside budget -> an on-budget day
-    const meals = [0, 1, 2];
-    for (const m of meals) {
-      const e = { id: `ct-${day}-${m}`, date: day, meal: m, name: 'Chicken and rice',
-                  kcal: 600, p: 50, c: 60, f: 15, qty: 1, ts: Date.now() };
+    /* Three meals, ordinary food, inside budget -> a GOLDEN day close. `full`
+       adds two snacks that keep the day ON budget (1800 + 400 = 2200, the target
+       itself, and js/game.js onBudget is `<=`) and take q-log5 to its target of
+       five. They carry a foodId, which q-new-food reads against the empty
+       priorFoodIds below, and are logged `via: 'scan'`, which is the only thing
+       that writes the type-'scan' row q-scan reads. */
+    const meals = full ? [0, 1, 2, 3, 3] : [0, 1, 2];
+    for (let i = 0; i < meals.length; i++) {
+      const snack = i >= 3;
+      const e = snack
+        ? { id: `ct-${day}-s${i}`, date: day, meal: meals[i], name: 'Yoghurt and berries',
+            foodId: `ctfood-${day}-${i}`, kcal: 200, p: 12, c: 20, f: 5, qty: 1, ts: Date.now() }
+        : { id: `ct-${day}-${meals[i]}`, date: day, meal: meals[i], name: 'Chicken and rice',
+            kcal: 600, p: 50, c: 60, f: 15, qty: 1, ts: Date.now() };
       await db.db.put('log', e);
-      await game.onFoodLogged(e, { targets, entriesForDate: await db.db.byIndex('log', 'date', day) });
+      await game.onFoodLogged(e, { targets, via: snack ? 'scan' : null,
+        entriesForDate: await db.db.byIndex('log', 'date', day) });
+    }
+    /* The other four ungated dailies, each through the API the UI calls:
+       q-water, q-bed and q-sleep (js/wellness.js), and q-weigh (a weights row). */
+    if (full) {
+      await well.addWater(well.WATER_GOAL, day);
+      await well.markBed(day);
+      await well.markSleep(8, day);
+      await db.db.put('weights', { date: day, kg: 80 });
     }
 
     // settle yesterday: this is the day-close crate + XP (js/game.js:479)
@@ -271,7 +316,8 @@ try {
     const ctx = quests.questCtx('day', {
       date: day, entries: await db.db.byIndex('log', 'date', day), allXp,
       allLog: await db.db.all('log'), healthRows: await db.db.all('health'),
-      targets, weighedToday: false, priorFoodIds: new Set(),
+      // js/app.js:3307 reads it exactly this way; false stays false on a cheap day.
+      targets, weighedToday: !!(await db.db.get('weights', day)), priorFoodIds: new Set(),
     });
     let claimedQ = 0, questCoins = 0, questXp = 0;
     for (const q of qs) {
@@ -297,8 +343,10 @@ try {
       wall: Date.now(),
       guardBefore, guardAfter: await db.dayGuardState(),
       questNames: qs.map(q => q.id),
+      questStates: qs.map(q => ({ id: q.id, ...quests.questState(q, ctx) })),
+      questCap: quests.QUEST_N.day,
     };
-  });
+  }, full);
 
   /* EXACTLY the daily gates claimDay stands in front of, and nothing else. Two
      things are deliberately excluded, because folding them in would make this
@@ -422,9 +470,9 @@ try {
      crate and no quests and "the backwards day is cheaper" compares two thin
      days and means nothing. */
   await shiftDays(104);
-  await runCycle();
+  await runCycle(true);
   await shiftDays(105);
-  const fwd = await runCycle();
+  const fwd = await runCycle(true);
   check('CONTROL: the +105 day pays, so the guard is not simply refusing everything',
     guardCoveredTotal(fwd) > 0 && fwd.xp > 0,
     `xp+${fwd.xp} coins+${fwd.coins} inv+${fwd.inv} free ${fwd.free} quests ${fwd.claimedQ} guard=${fwd.guardAfter.highWater}`);
@@ -439,7 +487,10 @@ try {
     backProbe.state.highWater === fwd.guardAfter.highWater,
     `${backProbe.state.highWater} still == ${fwd.guardAfter.highWater}`);
 
-  const back = await runCycle();
+  /* FULL, like the +105 control above it. A backwards day that is offered every
+     daily the game has and still pays zero is a strictly stronger statement than
+     one that was only ever offered three. */
+  const back = await runCycle(true);
   const bc = guardCovered(back);
   check('backwards day pays ZERO quest coins', bc.questCoins === 0, `quest coins+${bc.questCoins}`);
   check('backwards day hands back ZERO free Pit fights', bc.freeFights === 0, `free ${bc.freeFights} (FREE_FIGHTS=3)`);
@@ -485,23 +536,70 @@ try {
   console.log('\n--- honest forward day: +106, a real day after +105 ---');
   await shiftDays(106);
   const honestKey = await keyFor(106);
-  const honestProbe = await guard.claim(honestKey);
-  check('claimDay opens a genuine new day, BY NAME',
-    honestProbe.fresh === true && honestProbe.reason === 'advanced',
-    `fresh=${honestProbe.fresh} reason=${honestProbe.reason}`);
-  const honest = await runCycle();
+  const honest = await runCycle(true);
+  /* THE ROLLOVER IS READ OFF THE MARK, NOT OFF A PROBE, and the probe is gone.
+     This block used to fire `guard.claim(honestKey)` before the cycle and assert
+     reason === 'advanced' on the answer. That probe IS the rollover: claimDay's
+     'advanced' branch writes dayHighWater, so it fires exactly once per day, and
+     every one of the six reward-path callers that followed it (js/energy.js:55,
+     js/game.js:695, js/poi.js:648, js/quests.js:356 and :396, js/wheel.js:302)
+     then got 'same-day'. The rows below were grading a day that was already open,
+     which is not the thing they are named after. Nothing probes it now: the
+     cycle's own first caller takes the transition, exactly as the first screen a
+     player opens after midnight does, and the evidence it happened is the mark
+     itself moving from the +105 day to this one. A refusal writes nothing and
+     leaves the mark where it was (section 2 asserts that), so this row cannot
+     pass on a refused day. HONEST LIMIT: which caller takes 'advanced' is an
+     ordering detail of this cycle, so a regression punishing only ONE caller's
+     rollover would cost that caller's reward and show up in the totals below,
+     not in this row. */
+  check('claimDay opened a genuine new day: the mark moved, on the path that pays',
+    honest.guardBefore.highWater === fwd.day && honest.guardAfter.highWater === honestKey,
+    `mark ${honest.guardBefore.highWater} -> ${honest.guardAfter.highWater} (expected ${fwd.day} -> ${honestKey})`);
   const hoursSinceHonest = (honest.wall - fwd.wall) / HOUR;
   check('the honest day really is more than 20 hours after the last one',
     hoursSinceHonest > 20, `${hoursSinceHonest.toFixed(1)}h of wall clock`);
   check('honest forward day still pays a day-close crate', honest.closed || honest.consoled,
     `closed=${honest.closed} consoled=${honest.consoled}`);
   check('honest forward day hands back the full free-fight floor', honest.free === 3, `free ${honest.free}`);
-  check('honest forward day still claims daily quests', honest.claimedQ > 0, `${honest.claimedQ} claims`);
-  check('honest forward day still pays coins', honest.coins > 0, `coins+${honest.coins}`);
+  /* NOT `claimedQ > 0`. That was this file's own red row on a clean tree, and it
+     was red because the cheap day satisfied nothing on a date whose draw missed
+     it, never because a claim was refused: see the `full` note on runCycle. The
+     full day genuinely completes all ten ungated dailies, so the date rolls
+     three quests, all three are DONE, and all three must PAY. Asserting the whole
+     cap rather than "at least one" is strictly stronger than the row it replaces
+     and it no longer moves with the calendar: one refusal, on any date, is red.
+     The set is asserted non-empty and fully done FIRST, so the claim row can
+     never pass on 0 === 0, and a shortfall is attributed to the right side of
+     the line: an incomplete provocation reds the control row, a refused payout
+     reds the claim row. */
+  check('the honest day really rolled a full quest set, so the claim row is not vacuous',
+    honest.questNames.length === honest.questCap && honest.questStates.every(q => q.done),
+    `${honest.questNames.length} of cap ${honest.questCap}, all done: ` +
+    honest.questStates.map(q => `${q.id} ${q.cur}/${q.target}`).join(', '));
+  check('honest forward day still claims daily quests, EVERY one it rolled',
+    honest.claimedQ === honest.questCap,
+    `${honest.claimedQ} of ${honest.questCap} claims`);
+  /* NOT `coins > 0` either. The raw delta is the one number guardCovered above
+     deliberately refuses to trust, because a level-up pays coins through
+     grantLevelRewards and would hold this row up on its own while every daily
+     gate stayed shut. Measured: with the coinsAdd in claimQuest removed, this day
+     still banks +85 coins of level-up spillover, so `coins > 0` was green while
+     all 140 quest coins vanished. So: the QUEST coins have to be positive, and
+     they have to have reached the wallet. */
+  check('honest forward day still pays coins, and they are the QUEST coins',
+    honest.questCoins > 0 && honest.coins >= honest.questCoins,
+    `coins+${honest.coins}, of which quest coins ${honest.questCoins}`);
   check('honest forward day still pays XP', honest.xp > 0, `xp+${honest.xp}`);
-  check('honest forward day is worth as much as the pre-guard forward walk',
-    honest.xp >= Number(perDay('xp')) * 0.8,
-    `${honest.xp} vs measured mean ${perDay('xp')} per reset`);
+  /* Compared against the +105 control, not against the forward walk's mean. The
+     walk is a CHEAP day and this is a full one, so that comparison would be two
+     different shapes of day and would pass with 2.5x of room whatever happened
+     here. `fwd` is the same shape of day one day earlier, which makes the bound
+     tight (measured 333 vs 333). The pre-guard 176.4 and the measured mean are
+     still reported in the FINDING above, so the historical anchor is not lost. */
+  check('the honest day is worth as much as the honest day before it',
+    honest.xp >= fwd.xp * 0.8,
+    `${honest.xp} vs ${fwd.xp} on the +105 control (pre-guard walk measured ${perDay('xp')}/reset)`);
 
   /* ================= 4. THE GRACE CEILING (ASSERTED, BOTH SIDES) ==========
      Rule 2: the local date may not outrun UTC elapsed by more than DAY_GRACE.
