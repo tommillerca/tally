@@ -20,14 +20,38 @@
  *
  * Usage: node tests/mockup-parity.mjs
  */
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MOCKS = process.env.MOCKUP_PARITY_DIR
-  ? path.resolve(process.env.MOCKUP_PARITY_DIR)
-  : path.resolve(ROOT, '../market-quality-mockups');
+
+/* FOUND FROM A WORKTREE TOO, WHICH IS WHERE THE WORK ACTUALLY HAPPENS. The
+   mockups are a sibling of the CHECKOUT, and every scratch worktree in this
+   repo lives under /private/tmp, so beside it there is nothing. This audit
+   therefore exited 3 (SKIPPED, "checked NOTHING") on every run any agent or
+   release worktree ever made of it, and it was only reachable from the one
+   main checkout, which is usually parked on an old branch. Verified: pointed at
+   the real directory it passes 30 approved designs, 30 marked built.
+   A worktree's `.git` is a FILE reading `gitdir: <main>/.git/worktrees/<name>`,
+   so the main checkout is three levels up from that, and the mockups sit beside
+   it. Still just a candidate: nothing is assumed to exist, and if none of them
+   do the loud skip below is unchanged. */
+/* AN EXPLICIT OVERRIDE IS OBEYED, NOT TREATED AS A HINT. If MOCKUP_PARITY_DIR is
+   set and wrong, the skip below has to say so; falling through to a directory
+   the caller did not ask for would grade a different library than the one they
+   named and report it as theirs. */
+const mockCandidates = [];
+if (process.env.MOCKUP_PARITY_DIR) mockCandidates.push(path.resolve(process.env.MOCKUP_PARITY_DIR));
+else mockCandidates.push(path.resolve(ROOT, '../market-quality-mockups'));
+try {
+  const dotgit = path.join(ROOT, '.git');
+  if (existsSync(dotgit) && statSync(dotgit).isFile()) {
+    const m = readFileSync(dotgit, 'utf8').match(/gitdir:\s*(.+)/);
+    if (m && !process.env.MOCKUP_PARITY_DIR) mockCandidates.push(path.resolve(m[1].trim(), '../../..', '../market-quality-mockups'));
+  }
+} catch { /* not a worktree, or an unreadable .git: fall through to the skip */ }
+const MOCKS = mockCandidates.find(d => existsSync(d)) || mockCandidates[mockCandidates.length - 1];
 
 /* The mockups live in a sibling directory OUTSIDE the repo, so most checkouts
    do not have them. Without this guard readdirSync threw before the first
