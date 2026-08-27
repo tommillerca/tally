@@ -16,7 +16,15 @@ await page.evaluate(async () => {
 });
 // does every rendered E4 layer carry the class AND an animation?
 const audit = async label => page.evaluate(l => {
-  const imgs=[...document.querySelectorAll('.bh-anim img')].filter(i=>/\/E\/E4\.png/.test(i.getAttribute('src')||''));
+  /* Only layers a player can SEE. A shut <details> still lays its content out, so
+     a src filter alone picks up the headshots inside the closed news banner that
+     v457 added to Today, and app.css deliberately cancels animations behind a
+     shut disclosure (one un-compositable animation drops the whole document onto
+     the slow path). That decoy is what made this read "2/2 classed, 1/2
+     animated": the visible ember was lit the whole time. */
+  const imgs=[...document.querySelectorAll('.bh-anim img')]
+    .filter(i=>/\/E\/E4\.png/.test(i.getAttribute('src')||''))
+    .filter(i=>!i.closest('details:not([open])'));
   return {
     surface: l,
     e4Layers: imgs.length,
