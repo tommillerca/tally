@@ -215,6 +215,14 @@ const PRECACHE = [
   './assets/shortcut/Sync-Boneheadz.shortcut',
   './icons/maskable-512.png',
   './data/generic-foods.js',
+  /* app.js:90 imports HERO_EDGE from here, STATICALLY, so this is the same class
+     of fatal as haptics.js above: miss it and the whole module graph dies and
+     index.html's shell paints alone. It shipped in v455 and was not added here,
+     and precache-audit.mjs did not catch it because its walker only followed
+     same-directory specifiers, which threw away every ../data one app.js has. That
+     walker now resolves relative to the importing file, so a cold offline boot
+     went from 0 chars on #screen to 507. */
+  './data/hero-edge.js',
   './vendor/zbar/zbar.mjs',
   './vendor/maplibre/maplibre.mjs',
   './vendor/maplibre/maplibre-gl.js',

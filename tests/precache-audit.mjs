@@ -31,10 +31,21 @@ const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
    comment must not count as protected. That is the same "a mention is not
    evidence" rule the selector sweep learned the hard way. */
 const arr = sw.slice(sw.indexOf('PRECACHE'), sw.indexOf('];', sw.indexOf('PRECACHE')));
-const precached = new Set([...arr.matchAll(/['"]\.\/(js\/[\w.-]+\.js)['"]/g)].map(m => m[1]));
+const precached = new Set([...arr.matchAll(/['"]\.\/([\w./-]+\.js)['"]/g)].map(m => m[1]));
 
 /* The real graph, followed transitively from the entry point, because a module
-   is just as fatal whether app.js imports it directly or two hops down. */
+   is just as fatal whether app.js imports it directly or two hops down.
+   AND THE SPECIFIER IS RESOLVED AGAINST THE FILE THAT WROTE IT, not assumed to
+   be a sibling in js/. It used to match only './x.js' and prepend 'js/', which
+   silently discarded every '../data/*.js' app.js imports. app.js:90 imports
+   HERO_EDGE from '../data/hero-edge.js' statically; it shipped in v455, was
+   never precached, and this file stayed green through all of it while
+   tests/offline-boot-audit.mjs went red on a cold offline boot with 0 chars on
+   #screen (the SW answers a js miss with index.html, and a module served
+   text/html is a hard load error). Two of the three data modules were in
+   PRECACHE by hand, which is exactly how a hand-kept list rots.
+   PROVE-RED: delete './data/hero-edge.js' from sw.js PRECACHE and this names
+   it; it did not before this change. */
 const reached = new Set();
 const walk = rel => {
   if (reached.has(rel)) return;
@@ -42,7 +53,8 @@ const walk = rel => {
   const full = path.join(ROOT, rel);
   if (!fs.existsSync(full)) return;
   const src = fs.readFileSync(full, 'utf8');
-  for (const m of src.matchAll(/(?:^|\n)\s*(?:import|export)[^'"]*['"]\.\/([\w.-]+\.js)['"]/g)) walk('js/' + m[1]);
+  for (const m of src.matchAll(/(?:^|\n)\s*(?:import|export)[^'"]*['"](\.\.?\/[\w./-]+\.js)['"]/g))
+    walk(path.posix.normalize(path.posix.join(path.posix.dirname(rel), m[1])));
 };
 walk('js/app.js');
 
