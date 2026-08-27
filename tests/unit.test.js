@@ -1865,6 +1865,32 @@ test('S0: no coin-priced sink grants a crate, gear or a weapon row', () => {
   assert.ok(/grantCrate|grantGear|db\.put\('inv'/.test(fbody), 'the crate pattern cannot detect a violation');
 });
 
+test('no audit can grade PRODUCTION by accident: boot() defaults to this checkout', () => {
+  /* boot()'s default used to be the literal live URL. In the release gate it
+     never showed, because release-gate passes `base` as argv[2] to every browser
+     suite. The damage was to BARE runs, which is how every debugging session and
+     every prove-red happens: MEASURED 2026-08-27, 26 audits called boot() with an
+     unset argv/env and silently graded https://tommillerca.github.io/tally/.
+
+     It cost a full investigation the same day. melt-ui-audit had one red row that
+     read the SAME red against a pristine origin/main worktree, so it was reported
+     as pre-existing and structural. It was neither: two cp -R mutations of the
+     exact copy that row asserts on changed the output by NOTHING, because the
+     mutated files were never served.
+
+     This is a source lint rather than a behavioural one on purpose. The failure
+     it guards is an audit AGREEING with you, so there is no red state to observe;
+     the only observable is the default itself. */
+  const gm = readFileSync(join(here, 'godmode.js'), 'utf8');
+  const sig = gm.match(/export async function boot\(([^)]*)\)/);
+  assert.ok(sig, 'boot() was not found; this lint is reading the wrong thing');
+  assert.ok(!/https?:\/\//.test(sig[1]),
+    `boot() takes a URL as its default again: ${sig[1]}. An unset base must serve THIS checkout.`);
+  const body = gm.slice(gm.indexOf('export async function boot('));
+  assert.ok(/if \(!base\)[\s\S]{0,200}serveTree/.test(body),
+    'boot() no longer falls back to serving the tree when given no base');
+});
+
 test('S0: dust buys looks, and every dust spend in the tree is declared', () => {
   /* THE SECOND HALF OF S0, 2026-08-25. Coins stopped buying power; this is the
      same property one currency along. Tom: "i dont think we want to be able to
