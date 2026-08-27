@@ -74,12 +74,32 @@
  * js/fx.js reads it ONCE at module import (`export const reducedMotion = ...`),
  * so a page that flips it later measures the wrong app.
  *
- * PROVE-RED, all four run on this tree:
+ * PROVE-RED, all five run on this tree:
  *   MOVES     `.tz-head-in .bh-anim { animation: none !important; }` in app.css
  *   BEATS     drop `!reducedMotion` from the reel gate's inverse, or pause the
  *             stepper; simplest is to make TZ_BEATS a single beat
  *   STILL     give `.hype` any looping animation
  *   COVERAGE  give `.hype` a looping animation and leave it unregistered
+ *   REDUCE    a plain looping animation is NOT enough here: app.css's global
+ *             reduce block kills it, which is the behaviour this row asserts. It
+ *             needs one that SURVIVES reduce, so add both of these to app.css:
+ *               @keyframes hypeWob { 50% { transform: translateX(7px); } }
+ *               .hype { animation: hypeWob 1s linear infinite; }
+ *               @media (prefers-reduced-motion: reduce) { .hype {
+ *                 animation-duration: 1s !important;
+ *                 animation-iteration-count: infinite !important; } }
+ *             Ran on a throwaway tree 2026-08-27, on this exact file: REDUCE
+ *             hype-banner peak 28.838% against a bound of 0, red, and STILL went
+ *             red the same run at 30.481%. That run ALSO discarded a sample to
+ *             the toast and still came back red, which is the thing worth
+ *             knowing: the two preconditions below reject a corrupt sample
+ *             without swallowing a real one.
+ * THE PRECONDITIONS HAVE CONTROLS OF THEIR OWN, both printed on a normal run:
+ *   overlay   `NOTE sample of .hype discarded: [toast] was over the clip`. Seen
+ *             on 4 of 8 runs on 2026-08-27, each reading 0.000% on the retake.
+ *   blank     `MEAN_DEBUG=1` prints every capture's std. 251 captures over 3
+ *             runs: 63 rejected, all at 1.21 or 2.67; 188 accepted, 27.19 up.
+ *   A run that prints neither never exercised either.
  *
  * Usage: node tests/motion-truth-audit.mjs [baseUrl]   (serves this repo if omitted)
  */
@@ -183,17 +203,19 @@ const diffPage = async browser => {
        threshold boot-flash-audit's edge detector uses; a compositor that
        re-encodes an unchanged frame scores 0.000 through it, which is what the
        STILL rows prove on every run. */
-    /* Mean brightness of one frame, used only to tell a REAL capture from an
-       UNPAINTED one. Same canvas, no image library. */
-    mean: a => p.evaluate(async A => {
+    /* How much STRUCTURE one frame has: the standard deviation of per-pixel
+       brightness. Used only to tell a REAL capture from an UNPAINTED one, and
+       it replaces mean brightness, which could not. Same canvas, no image
+       library. See BLANK_STD. */
+    spread: a => p.evaluate(async A => {
       const i = new Image(); i.src = 'data:image/png;base64,' + A; await i.decode();
       const c = document.createElement('canvas'); c.width = i.width; c.height = i.height;
       const g = c.getContext('2d', { willReadFrequently: true });
       g.drawImage(i, 0, 0);
       const d = g.getImageData(0, 0, c.width, c.height).data;
-      let sum = 0;
-      for (let k = 0; k < d.length; k += 4) sum += d[k] + d[k + 1] + d[k + 2];
-      return sum / (d.length / 4) / 3;
+      let s = 0, s2 = 0; const n = d.length / 4;
+      for (let k = 0; k < d.length; k += 4) { const v = (d[k] + d[k + 1] + d[k + 2]) / 3; s += v; s2 += v * v; }
+      return Math.sqrt(Math.max(0, s2 / n - (s / n) ** 2));
     }, a),
     diff: (a, b) => p.evaluate(async (A, B) => {
       const load = async s => { const i = new Image(); i.src = 'data:image/png;base64,' + s; await i.decode(); return i; };
@@ -238,6 +260,42 @@ const clipOf = async (page, sel, W, H) => {
   }, sel, W, H);
 };
 
+/* AND THE HIT TEST HAS TO HOLD FOR THE WHOLE WINDOW, not just at reach. The
+   centre test in clipOf runs ONCE, BEFORE the sample, and it only tests ONE
+   point, so it is blind to an overlay that arrives DURING the window or covers
+   an edge. Measured 2026-08-27 on b45a8b0d: the REDUCE hype-banner row read
+   peak 9.320% on a banner with no animation in it and getAnimations() === 0.
+   The changed pixels were the bottom 27 rows of the clip, full width, and they
+   changed once and stayed changed. It was `#toast`. The boot toast queue in
+   ?demo runs for 22 seconds (measured: 6 messages, 0.0s to 22.0s), `.toast` is
+   `position: fixed; bottom: calc(var(--sab) + 96px)`, and a TWO-LINE toast
+   occupies y 772-836 at this 932px viewport while .hype sits at y 626-794. So a
+   two-line toast overlaps the banner's last 22px. The banner's centre is y 710
+   and is never covered, which is exactly why clipOf's one point saw nothing.
+   WHY IT WENT RED ON 2026-08-27 AND NOT BEFORE, and it is not the app: measured
+   on both trees, the banner's rect (626-794) and the toast timeline (0.0-22.0s)
+   are IDENTICAL at v456 (d748ff69) and at b45a8b0d. What moved is when THIS FILE
+   takes the sample. Under MEAN_DEBUG, the REDUCE pass at v456 took 39 captures
+   of which 12 were blank (31%), and every blank costs a retry plus a backing-off
+   sleep; at b45a8b0d it took 27 captures with 0 blanks. Those retries were
+   spending 13 seconds, so v456 sampled .hype at +35.5s, safely past the toasts,
+   and b45a8b0d samples it at +22.1s, on top of the last one. v456 was green
+   because the CAMERA WAS BLINKING. A guard whose pass depends on how many frames
+   the compositor dropped is not a guard, so the fix is the missing precondition
+   and not the bound: nothing foreign may be painted over the clip AT ANY POINT
+   of the sample, and a sample taken while something was is thrown away and
+   retaken, the same way sampleQuiet throws away a sample taken across a beat.
+   Nine points, not one: an overlay is a rectangle and can take an edge. */
+const foreignOver = (page, sel, clip) => page.evaluate((s, c) => {
+  const e = document.querySelector(s);
+  if (!e) return 'gone';
+  for (const fx of [0.04, 0.5, 0.96]) for (const fy of [0.04, 0.5, 0.96]) {
+    const hit = document.elementFromPoint(c.x + c.width * fx, c.y + c.height * fy);
+    if (hit && !(e.contains(hit) || hit.contains(e))) return hit.id || hit.className || hit.tagName;
+  }
+  return null;
+}, sel, clip);
+
 /* Sample a surface across its window and return the LARGEST change seen against
    the first frame. Peak, not mean: a loop spends part of every cycle back where
    it started, so a mean would punish a slow animation for being slow. */
@@ -253,21 +311,39 @@ const clipOf = async (page, sel, W, H) => {
    So reject a blank and take another. If every attempt is blank the sample is
    unmeasurable and the caller is told, rather than being handed a number that
    describes the capture pipeline instead of the art. */
-/* CALIBRATED, not picked. Measured 2026-08-23 across 63 captures on this Mac
-   under headless 'shell': the unpainted frame lands on exactly ONE value, mean
-   9.17, and every real frame is 35.8 or brighter (max 67.1). Nothing lands
-   between. 20 sits in the middle of that gap with a factor of two either side.
-   If a future row grades a genuinely dark surface this will need to become
-   relative to the brightest frame in the run rather than absolute; the REACH row
-   above already proves the element is on screen, so a dark reading would be the
-   art rather than the camera. */
-const BLANK_MEAN = 20;
+/* AND THE DISCRIMINATOR IS STRUCTURE, NOT BRIGHTNESS. It used to be mean
+   brightness with a bound of 20, calibrated 2026-08-23 on 63 captures where the
+   unpainted frame landed on exactly one value, 9.17, against 35.8+ for a real
+   one. That calibration was of the DROP ROWS, whose clip is a 398x429 sheet, and
+   it does not describe the hype banner: measured 2026-08-27 over five runs, an
+   unpainted .hype capture reads mean 23.98, which is the page's own background
+   colour showing through a 398x168 hole, and a real one reads 59.96. 23.98 is
+   ABOVE 20, so the blank guard waved it through and the REDUCE row read peak
+   87.202% on a banner with getAnimations() === 0 and an unmoved rect. The header
+   above predicted exactly this ("if a future row grades a genuinely dark surface
+   this will need to stop being absolute"); it arrived as a SMALLER surface
+   rather than a darker one, and the answer is the same.
+   So grade what an unpainted frame really lacks, which is structure, not light.
+   Standard deviation of per-pixel brightness, measured 2026-08-27 across all
+   three surfaces in both passes:
+       unpainted .hype                     std  2.67   (mean 23.98)
+       real .hype                          std 40.66
+       #tzReel, dimmest real beat          std 40.32   (mean 39.99)
+       #tzWall / #tzReel, other real       std 43-62
+   Then measured again over the whole file, 251 captures across 3 runs: 63 came
+   back unpainted and every one of them read 1.21 or 2.67, the accepted 188 run
+   from 27.19 to 62.62, and NOTHING lands between. 12 sits in that gap, 4.5x
+   above the blank and 2.3x below the dimmest frame this file has ever
+   legitimately graded, against a factor of 1.7 either side on brightness. A flat
+   frame is the camera; art of any brightness has edges in it.
+   The 2.67 readings are the .hype blanks, and the old bound accepted them. */
+const BLANK_STD = 12;
 const shot = async (page, dp, clip, tries = 12) => {
   for (let i = 0; i < tries; i++) {
     const b = await page.screenshot({ clip, encoding: 'base64' });
-    const mv = await dp.mean(b);
-    if (process.env.MEAN_DEBUG) console.log(`      [mean] ${mv.toFixed(2)}`);
-    if (mv > BLANK_MEAN) return b;
+    const mv = await dp.spread(b);
+    if (process.env.MEAN_DEBUG) console.log(`      [std] ${mv.toFixed(2)}`);
+    if (mv > BLANK_STD) return b;
     /* BLANKS COME IN RUNS, they are not independent draws: 7 of 63 captures were
        blank but six in a row still happened, which random 11% would not produce.
        The compositor stops painting for a stretch, so waiting the same 220ms
@@ -279,18 +355,38 @@ const shot = async (page, dp, clip, tries = 12) => {
   return null;
 };
 
-const sampleMotion = async (page, dp, clip, windowMs) => {
+const sampleOnce = async (page, sel, dp, clip, windowMs) => {
   const n = 8, gap = Math.max(120, Math.round(windowMs / n));
+  let over = await foreignOver(page, sel, clip);
   const first = await shot(page, dp, clip);
-  if (!first) return { peak: 0, blank: true };
+  if (!first) return { peak: 0, blank: true, over };
   let peak = 0, blanks = 0;
   for (let i = 0; i < n; i++) {
     await sleep(gap);
     const next = await shot(page, dp, clip);
+    over = over || await foreignOver(page, sel, clip);
     if (!next) { blanks++; continue; }
     peak = Math.max(peak, await dp.diff(first, next));
   }
-  return { peak, blank: blanks === n };
+  return { peak, blank: blanks === n, over };
+};
+
+/* Throw the sample away and retake it if anything foreign was over the clip
+   while it was taken. The overlays that do this are transient by construction
+   (a toast, a sheet mid-close), so waiting is the whole fix; a permanent one
+   still runs out of tries and the row reports COVERED rather than a number. */
+const sampleMotion = async (page, sel, dp, clip, windowMs, tries = 4) => {
+  let r;
+  for (let t = 0; t < tries; t++) {
+    r = await sampleOnce(page, sel, dp, clip, windowMs);
+    if (!r.over) return r;
+    /* Printed, not silent: a retake is the only visible sign this precondition is
+       load-bearing, and a run with no retakes at all would be a green that never
+       exercised it. */
+    console.log(`NOTE  sample of ${sel} discarded: [${r.over}] was over the clip (attempt ${t + 1}/${tries})`);
+    await sleep(1400);
+  }
+  return r;
 };
 
 /* Take the sample only while a driver elsewhere is holding still, so the number
@@ -298,15 +394,15 @@ const sampleMotion = async (page, dp, clip, windowMs) => {
    crossfade settle, samples, and throws the sample away if the class moved
    underneath it. Returns null after `tries` if the quiet window never came,
    which fails the row rather than reporting a number taken during a transition. */
-const sampleQuiet = async (page, dp, clip, windowMs, quiet, tries = 4) => {
+const sampleQuiet = async (page, sel, dp, clip, windowMs, quiet, tries = 4) => {
   const held = async () => (await page.evaluate(s => document.querySelector(s)?.className || '', quiet.sel)).includes(quiet.cls);
   for (let t = 0; t < tries; t++) {
     for (let i = 0; i < 60 && !await held(); i++) await sleep(250);
     if (!await held()) continue;
     await sleep(1100);                       // the .9s wall crossfade, settled
     if (!await held()) continue;
-    const r = await sampleMotion(page, dp, clip, windowMs);
-    if (r.blank) continue;                   // every capture was unpainted: not a sample, try again
+    const r = await sampleMotion(page, sel, dp, clip, windowMs);
+    if (r.blank || r.over) continue;         // unpainted, or something drawn over it: not a sample, try again
     if (await held()) return r.peak;         // the beat never moved: the sample is about the art
   }
   return null;
@@ -392,20 +488,28 @@ async function pass({ reduce }) {
       /* quietOn only applies with motion ALLOWED: under reduce the driver it
          waits on never runs, so the quiet class never arrives and the row would
          time out instead of measuring the stillness it is there to measure. */
-      let blankSample = false;
+      let blankSample = false, coveredBy = null;
       let peak;
       if (row.quietOn && !reduce) {
-        peak = await sampleQuiet(page, dp, clip, row.windowMs, row.quietOn);
+        peak = await sampleQuiet(page, row.sel, dp, clip, row.windowMs, row.quietOn);
       } else {
-        const r = await sampleMotion(page, dp, clip, row.windowMs);
-        peak = r.peak; blankSample = r.blank;
+        const r = await sampleMotion(page, row.sel, dp, clip, row.windowMs);
+        peak = r.peak; blankSample = r.blank; coveredBy = r.over;
+      }
+      /* Something else was painted over the clip for all four attempts, so every
+         number available is about that and not about this surface. Say so rather
+         than grading the overlay. */
+      if (coveredBy) {
+        ok(`${tag}: SAMPLE ${row.key} was clear of overlays for a whole window (a clip is a rectangle: whatever is drawn over it is what gets graded)`,
+          false, `[${coveredBy}] was over ${row.sel} on all 4 attempts`);
+        continue;
       }
       /* Every capture came back unpainted, so there is no frame to grade. Say so
          instead of reporting 0% motion, which would look like a still surface
          passing and would be a green that graded nothing. */
       if (blankSample) {
         ok(`${tag}: SAMPLE ${row.key} produced a paintable frame (every capture was blank, so nothing was graded)`,
-          false, `all captures below mean brightness ${BLANK_MEAN}: the capture pipeline, not the art`);
+          false, `all captures flatter than std ${BLANK_STD}: the capture pipeline, not the art`);
         continue;
       }
       if (row.beats && !reduce) stopPoll();
@@ -413,7 +517,7 @@ async function pass({ reduce }) {
 
       if (row.quietOn && !reduce && peak === null) {
         ok(`${tag}: MOVES ${row.key} was sampled while ${row.quietOn.sel} held on "${row.quietOn.cls}" (a sample taken across a beat change measures the driver, not this surface)`,
-          false, `the quiet window never came in 4 tries`);
+          false, `no clear sample in 4 tries: the quiet window never came, every capture was blank, or something was drawn over the clip`);
         continue;
       }
 
