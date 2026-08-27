@@ -322,9 +322,26 @@ const runs = {};
 let attempts = 0;
 for (const want of TYPES) {
   if (runs[want]) continue;
-  const cands = field().filter(s => s.type === want && !Object.values(runs).some(r => r.id === s.id)).slice(0, 5);
+  /* THE RARE TYPES USED TO STARVE, AND IT WAS THE ORDER, NOT THE FIELD. FIXTURE
+     proves all five types are on the map, and this loop still reported
+     "crate:NO in 9 attempts": standOn puts the player exactly on the spawn, but
+     the map snaps them onto walkable ground, and the bar offers the NEAREST
+     spawn from wherever they land. Snap next to a bones pile that has already
+     been collected and the candidate is spent on a `continue`. Five candidates
+     of a type that has only a handful on the field is not many chances.
+     So candidates are ranked by ISOLATION, furthest-from-any-other-spawn first:
+     a snap near one of those has nothing else to offer instead. Ordering, not a
+     wider net, so this stays a real drive rather than a retry until lucky. */
+  const all = field();
+  const isolation = s => Math.min(...all.filter(o => o.id !== s.id).map(o => distanceM(s.lat, s.lng, o.lat, o.lng)), Infinity);
+  const cands = all
+    .filter(s => s.type === want && !Object.values(runs).some(r => r.id === s.id))
+    .map(s => ({ s, iso: isolation(s) }))
+    .sort((a, b) => b.iso - a.iso)
+    .slice(0, 8)
+    .map(x => x.s);
   for (const c of cands) {
-    if (runs[want] || attempts >= 22) break;
+    if (runs[want] || attempts >= 30) break;
     attempts++;
     const btn = await standOn(c);
     if (!btn) continue;
