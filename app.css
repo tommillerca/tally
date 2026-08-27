@@ -9594,6 +9594,20 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    Everything below is what that width forced, and each of it was measured, not
    guessed. */
 .rk-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+/* THE BROWSE SHELF IS DENSER THAN THE HERO SHELF, AND THAT IS A RESOLUTION FIX
+   AS MUCH AS A VISUAL ONE. The themed nine draw from 640 masters; the rotating
+   twelve draw from the 384 tier so twelve more mannequins fit under the 90 MB
+   ceiling (measured: masters put the Shop at 115.6 MB, and even six of them did
+   not fit). But .rk-stage crops to the body part with a scale, so at three
+   across on a 440 phone a tile's layer is 292 CSS px, which is 583 device px
+   against a 384 source: 1.52x, the exact upscale art-resolution-audit's own
+   header records as the reason the rack moved to masters in the first place. I
+   reintroduced it for this shelf and shipped it in v462.
+   Four across brings the same layer to about 216 CSS px (432 device, 1.13x)
+   with the crop and the memory tier both intact. minmax(0, 1fr), never
+   repeat(N, 1fr), which grid-min-width-audit bans outright. */
+.rk-grid.rot { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.rk-grid.rot .rk { padding: 5px 4px 6px; border-radius: 11px; }
 /* One tile language, four times. Rarity is the border and nothing else, so the
    tile carries a name, two prices and no third line of text. */
 .rk { background: var(--surface-2); border: 1.5px solid var(--line-strong); border-radius: 13px;

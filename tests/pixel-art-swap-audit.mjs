@@ -242,14 +242,6 @@ const SWAP_OK = {
   'progress|tombstone': 'the badge wall: 7 of 23 badges have art, see the block above.',
   'progress|marrow': 'the badge wall: 7 of 23 badges have art, see the block above.',
 
-  /* ---- THE ONE SITE THAT IS TWO PIXELS SHORT, and it is already on the other
-     guard's list. renderPit draws the Gauntlet card's golden crate at 22, and
-     crateIcon's floor is 24, so it falls to the vector. icon-inventory-audit
-     declares it as 'js/app.js:renderPit|crate/golden', calls it "the strongest
-     CANDIDATE on this list", and that is where the decision belongs: it is a
-     card-layout change (the row is 22px of art today) and it wants Tom's eye on
-     the rendered card, not a blind +2 from here. */
-  'pit|crates/golden/f0': '22px on the Gauntlet card, 2 under crateIcon\'s floor. Declared and reasoned in icon-inventory-audit SUBFLOOR as js/app.js:renderPit|crate/golden.',
 
   /* ---- THE WHEEL HUB. .dw-hub is a 💀 at font-size min(7vw,26px), and
      badge-skull.png would fit it. It is deliberately NOT swapped: the hub is
