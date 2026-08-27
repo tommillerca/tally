@@ -4513,15 +4513,54 @@ const GUIDE_ENTRIES = [
    writing again. `topic` opens ONE entry and scrolls it up, which is what the
    inline "What is this?" buttons need: a player at the Transmute row lands on the
    Transmute answer rather than on a wall of nine headings. */
+/* THE GUIDE IS GROUPED, and the groups are here rather than on the entries so the
+   reading order is one list somebody can look at. Tom, 2026-08-26: "it is super
+   bland with no real hierarchy or anything to it ... make sure that players know
+   they should click on gwart if they get confused."
+
+   TEN FLAT ROWS WITH ONE GREY LINE ABOVE THEM was the whole screen. Nothing said
+   which of them answered the question you actually had, and the two he had just
+   told me were unclear (Transmute, and changing how gear looks) sat at positions
+   2 and 7 of a list with no order to it. They are both in the first group now.
+
+   EVERY ENTRY MUST APPEAR IN EXACTLY ONE GROUP. A new GUIDE_ENTRIES row that
+   nobody adds here would render nowhere at all: present in the source, reachable
+   by its "What is this?" deep link, and invisible in the guide itself. That is
+   the v395 LOOKS bug one surface over, so it is a graded row in
+   tests/gwart-guide-audit.mjs rather than a comment asking people to remember. */
+const GUIDE_GROUPS = [
+  ['Your Bonehead', 'what he wears, and what it costs', ['transmog', 'fits', 'dust', 'transmute']],
+  ['Out there',     'the Boneyard, and what it drops',  ['crates', 'pets', 'wanderer', 'ectoplasm']],
+  ['Every day',     'the things that come to you',      ['wheel', 'streaks']],
+];
+
 function openGwartGuide(topic = null) {
+  const byId = Object.fromEntries(GUIDE_ENTRIES.map(e => [e.id, e]));
+  const entry = e => `<details class="gd-e" data-gd="${e.id}"${e.id === topic ? ' open' : ''}>
+        <summary>${esc(e.title)}</summary>
+        ${e.body.map(p => `<p>${esc(p)}</p>`).join('')}
+      </details>`;
+  /* Anything not named in a group still renders, at the end, under its own
+     heading. The audit fails on it, but a player never loses an answer to a
+     bookkeeping slip. */
+  const grouped = new Set(GUIDE_GROUPS.flatMap(g => g[2]));
+  const orphans = GUIDE_ENTRIES.filter(e => !grouped.has(e.id));
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Gwart&rsquo;s Guide</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
-      <p class="note" style="margin:6px 2px 10px">Ask. I have been here longer than the furniture.</p>
-      ${GUIDE_ENTRIES.map(e => `<details class="gd-e" data-gd="${e.id}"${e.id === topic ? ' open' : ''}>
-        <summary>${esc(e.title)}</summary>
-        ${e.body.map(p => `<p>${esc(p)}</p>`).join('')}
-      </details>`).join('')}
+      <div class="gd-hero">
+        <img src="assets/gwart/gwart.png" alt="" width="58" height="58" decoding="async">
+        <div>
+          <div class="t">Stuck? Ask me.</div>
+          <div class="s">I have been here longer than the furniture. Tap me on Today any time.</div>
+        </div>
+      </div>
+      ${GUIDE_GROUPS.map(([title, sub, ids]) => `<div class="gd-grp">
+        <h4>${esc(title)}</h4><p class="gs">${esc(sub)}</p>
+        ${ids.map(id => byId[id] ? entry(byId[id]) : '').join('')}
+      </div>`).join('')}
+      ${orphans.length ? `<div class="gd-grp"><h4>More</h4><p class="gs">everything else</p>
+        ${orphans.map(entry).join('')}</div>` : ''}
     </div>`, { name: "Gwart's Guide" });
   if (topic) requestAnimationFrame(() =>
     $(`.gd-e[data-gd="${topic}"]`, wrap)?.scrollIntoView({ block: 'start' }));
