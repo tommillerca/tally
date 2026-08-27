@@ -79,8 +79,40 @@ const SPOTS = [
    player. This needs a floor measured on a phone-representative machine, which
    is a decision with Tom, not a threshold nudge. Until then the red is honest:
    it means "this machine cannot reproduce the calibration", not "the app broke".
-   See docs/FLAKE-CLASSIFICATION-2026-08-22.md. */
-const VISIBLE_FLOOR = 10;   // measured 13.75 when written; this machine gives 9.0-9.5 at EVERY commit
+   See docs/FLAKE-CLASSIFICATION-2026-08-22.md.
+
+   2026-08-27, AND IT IS THE DATE SEED, NOT THE MACHINE. The 2026-08-22 note
+   above says this container gives 9.0 to 9.5 at every commit and that 49.2827
+   "draws 3 to 4 every single run". Both are now false on the same container,
+   and what changed was the calendar.
+     - EIGHT runs today on origin/main, five alone and three under deliberate
+       contention (five other browser suites, then five other MAP suites, all
+       still running when the density run ended): 15.50, 15.50, 15.25, 15.50,
+       15.50, 15.50, 15.25, 15.25. Every one green, exit 0, floor 10.
+       49.2827 drew 13 or 14 in all eight, not 3 to 4.
+     - Contention was ruled out by that comparison, which is the SERIAL-list
+       test in release-gate.mjs. Green alone AND green in company is not a
+       contention flake.
+     - THE SPAWN FIELD IS DATE-SEEDED and these four SPOTS are n=4. Counting
+       spawnsNear within a fixed 300 m band, from the pure generator, so the
+       renderer and the tiles are out of the picture, the four-spot mean over 21
+       consecutive dates runs 5.50 to 8.50, a 1.55x swing with nothing but the
+       date changing (low 5.50 on 2026-08-29, high 8.50 on 2026-08-20; today is
+       8.00, the second highest of the 21). Instance-of-day does nothing: the
+       faucet reads a flat 20 at all 32 instances.
+     - That swing is the whole history of this row. 13.75 when written, 9.25 on
+       2026-08-22, 7.75 in a release-gate run this week, 15.4 today, all on code
+       that has not regressed. A pass/fail verdict on a fixed four-location
+       sample is decided by which day it runs.
+   NOTHING WAS CHANGED HERE, and lowering the floor would still be wrong for the
+   reason above. What this row actually needs is a bigger location sample, which
+   invalidates the floor that was calibrated against these four and is therefore
+   the same decision with Tom the 2026-08-22 note reserved. It is also NOT an
+   exit-97 case: godmode's rule is that UNPROVEN is claimed against a missing
+   machine capability measured in the same run, and this machine has every one
+   of them. It draws the map, reaches the tiles and grades the row for real. A
+   red here is a dice roll, not a machine that cannot look. */
+const VISIBLE_FLOOR = 10;   // measured 13.75 when written; 9.25 on 2026-08-22, 15.4 on 2026-08-27, same code
 const MARKER_BUDGET = 100;  // measured: 60fps to ~84 markers, first drops near 107
 
 const out = [];
