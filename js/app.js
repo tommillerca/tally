@@ -6834,8 +6834,22 @@ async function openKitchen() {
               pay/get grammar the look panel uses.
               It does NOT say "nothing is destroyed", which is what the look panel
               says and would be a lie here: the six commons really are gone. */''}
-        <div style="flex:1"><b>Transmute Ectoplasm</b><small>Pay ${TRANSMUTE.commons} common ingredients, get 1 ${esc(INGREDIENTS[TRANSMUTE.yields].name)}. Always exactly that: no roll, nothing else taken. It uses whichever commons you hold most of. You have ${tmute.commonsHave}.</small><small class="recipe-need">Ectoplasm is what the Necromancer's Feast needs.</small></div>
-        <button class="btn small ${tmute.ready && tmute.canAfford ? '' : 'ghost'}" id="transmuteBtn" ${tmute.ready && tmute.canAfford ? '' : 'disabled'}>${!tmute.ready ? `${fmtCookTime(tmute.msLeft)}` : !tmute.canAfford ? `Need ${TRANSMUTE.commons}` : 'Transmute'}</button>
+        <div style="flex:1"><b>Transmute Ectoplasm</b><small>Pay ${TRANSMUTE.commons} common ingredients, get 1 ${esc(INGREDIENTS[TRANSMUTE.yields].name)}. Always exactly that: no roll, nothing else taken. It uses whichever commons you hold most of.</small><small class="recipe-need">Ectoplasm is what the Necromancer's Feast needs.</small>
+          ${/* PROGRESS AS A METER, NOT AS THE LAST CLAUSE OF A PARAGRAPH. Tom,
+                2026-08-25: "Transmute is not clear how to use". The count was the
+                final sentence of a four-line explanation ("You have 3."), which is
+                the one place a player skims past, so the answer to "can I do this
+                yet" was buried in the middle of the answer to "what is this". */''}
+          <span class="tm-meter${tmute.canAfford ? ' full' : ''}" role="img" aria-label="${tmute.commonsHave} of ${TRANSMUTE.commons} common ingredients">
+            <i style="width:${Math.min(100, Math.round(tmute.commonsHave / TRANSMUTE.commons * 100))}%"></i>
+            <b>${tmute.commonsHave} / ${TRANSMUTE.commons}</b> commons
+          </span></div>
+        ${/* THE SHORTFALL, NOT THE PRICE. "Need 6" was printed whatever you were
+              holding, so at 3 commons it read as six MORE when three would do. The
+              price is already stated twice on this row; the button is the only
+              place that can answer "how far off am I". !canAfford guarantees
+              commonsHave < TRANSMUTE.commons, so this is always 1 or more. */''}
+        <button class="btn small ${tmute.ready && tmute.canAfford ? '' : 'ghost'}" id="transmuteBtn" ${tmute.ready && tmute.canAfford ? '' : 'disabled'}>${!tmute.ready ? `${fmtCookTime(tmute.msLeft)}` : !tmute.canAfford ? `${TRANSMUTE.commons - tmute.commonsHave} more` : 'Transmute'}</button>
       </div>
       <div class="sect-h" style="display:flex;justify-content:space-between;align-items:center">Ingredients <button class="btn small ghost" id="forageBtn">Forage · 45${ICONS.coin(13)}</button></div>
       <div class="ingredient-grid">
