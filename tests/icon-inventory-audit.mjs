@@ -209,6 +209,7 @@ const EMITTERS = {
   'js/app.js:openMageIntro':        ['scene', 'the Live Wire introduction art.'],
   'js/app.js:openSpireIntro':       ['scene', 'the spire announcement art.'],
   'js/app.js:openSpireSheet':       ['scene', 'the spire sheet art.'],
+  'js/app.js:openGwartGuide':      ['scene', "the guide's hero card draws Gwart himself at 58px, so a player reading the guide sees the character they are meant to tap on Today."],
   'js/app.js:gwartHeroHtml':        ['scene', "Gwart's Emporium header: the shopkeeper's two art layers, the wordmark and the gear, at panel size. Five lines because the spell-cast animation stacks the body and three star strips."],
   'js/app.js:hypePlateHtml':        ['scene', 'the Today hype banner plate: the creature art behind its caption.'],
   'js/app.js:petShotHtml':          ['scene', "a pet cosmetic's product shot, cropped to the PART being sold rather than to the whole plate."],

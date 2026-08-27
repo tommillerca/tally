@@ -10528,8 +10528,38 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 
 /* NATIVE DISCLOSURE, so open/close, the keyboard and the screen-reader role all
    come for free. Only the marker and the spacing are ours. */
+/* GWART'S GUIDE. The hero card is the discoverability half: the only thing that
+   told a player the wizard on Today was a button was an aria-label, which a
+   sighted player never reads. Tom, 2026-08-26: "make sure that players know they
+   should click on gwart if they get confused." */
+.gd-hero {
+  display: flex; gap: 12px; align-items: center;
+  background: var(--surface-2); border: 2px solid var(--ink); border-radius: 16px;
+  padding: 12px 14px; margin: 2px 2px 16px; box-shadow: 0 3px 0 rgba(0, 0, 0, .32);
+}
+.gd-hero img { width: 58px; height: 58px; object-fit: contain; flex: none; }
+.gd-hero .t {
+  font-family: var(--display); font-weight: 400; font-size: 20px;
+  letter-spacing: .02em; line-height: 1.05; color: var(--text-1);
+}
+.gd-hero .s { font-size: 12.5px; color: var(--text-3); margin-top: 3px; line-height: 1.35; }
+.gd-grp { margin: 0 2px 14px; }
+.gd-grp > h4 {
+  font-family: var(--display); font-weight: 400; font-size: 15px;
+  letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin: 0 0 1px;
+}
+.gd-grp > .gs { font-size: 11.5px; color: var(--text-3); margin: 0 0 6px; }
 .gd-e { border-top: 1px solid var(--line); padding: 2px 2px 6px; }
 .gd-e:last-child { border-bottom: 1px solid var(--line); }
+/* inside a group the rules are between rows, not around the block */
+.gd-grp .gd-e { border-top: none; border-bottom: 1px solid var(--line); }
+.gd-grp .gd-e:last-child { border-bottom: none; }
+/* the open one is marked, so a deep link from "What is this?" lands somewhere
+   the eye finds without scrolling for it */
+.gd-grp .gd-e[open] {
+  background: rgba(165, 232, 71, .05); border-radius: 10px;
+  box-shadow: inset 3px 0 0 var(--accent); padding-left: 9px;
+}
 .gd-e > summary {
   list-style: none; cursor: pointer; padding: 12px 2px;
   font-size: 15.5px; font-weight: 800; color: var(--text);
