@@ -1,14 +1,31 @@
 /* The melt confirm bar overlapping list rows. A screenshot alone would not prove
  * it: the test is whether the bar is OPAQUE and whether a tap at a row's label
  * still reaches that row. */
-import { boot, sleep } from './godmode.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { boot, serveTree, sleep } from './godmode.js';
 const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
    year-readout-audit already use. Reading env.URL ONLY meant that any run passing
    the URL as an argument (which is how the release gate invokes every suite) fell
    through to godmode's boot() default, https://tommillerca.github.io/tally/, and
    graded PRODUCTION while reading as coverage of the tree under test. */
-const { browser, page } = await boot(process.argv[2] || process.env.URL);
+/* AND IT SERVES THIS CHECKOUT WHEN NOTHING IS PASSED, which is the other half of
+   the note above and was missing for as long as that note has been here. Fixing
+   argv-vs-env stopped the GATE grading production; a BARE `node
+   tests/melt-ui-audit.mjs`, which is how every debugging run and every prove-red
+   is done, still fell through to boot()'s default and graded the live site.
+
+   MEASURED 2026-08-27: this audit had one row red, and it read the same red
+   against a pristine origin/main worktree, so it looked pre-existing and
+   structural. It was neither. Both runs were grading https://tommillerca.github.io/tally/.
+   Two cp -R mutations of the copy that row asserts on changed its output by
+   NOTHING, because the mutated files were never served. That is the tell.
+   (lessons_audit_default_url_grades_production.) */
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const argUrl = process.argv[2] || process.env.URL;
+const own = argUrl ? null : await serveTree(ROOT);
+const { browser, page } = await boot(argUrl || own.url);
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 
@@ -264,15 +281,31 @@ else {
     return { hasPanel: !!grid, cells: document.querySelectorAll('.look-grid .ward-cell').length,
       ownPreselected: !!own?.classList.contains('equipped'),
       tag: (own?.querySelector('.look-tag')?.textContent || '').trim(),
-      /* the panel's OWN note is the sibling right after the look bar. Reaching for
-         `parentElement.querySelector('p.note')` grabbed the wardrobe's generic
-         "tap a piece to inspect its stats" line instead and failed on correct copy. */
+      /* TWO LINES, TWO CLAIMS, AND THIS ROW HAS NOW BEEN POINTED AT THE WRONG
+         ELEMENT TWICE. First it reached for `parentElement.querySelector('p.note')`
+         and grabbed the wardrobe's generic "tap a piece to inspect its stats".
+         The fix for that landed on `bar.nextElementSibling`, which is `.mog-safe`
+         ("Nothing is destroyed. The piece stays on..."), a real claim but a
+         DIFFERENT one. The word "free" was never going to be in it, so the row
+         has been red on correct copy ever since.
+
+         MEASURED in the running app, both present and both right:
+           .mog-lead  "Nothing with stats is in this hat, so changing the picture
+                       here is free."          <- the PRICE claim
+           .mog-safe  "Nothing is destroyed. The piece stays on, keeps its stats
+                       and stays in your Backpack."   <- the SAFETY claim
+         So each is read into its own field and graded by its own row. A single
+         row over "whichever note is nearest" is what produced two years of this.
+         (lessons_audit_drift_false_red: fix it at the assertion.) */
+      lead: (document.querySelector('.mog-lead')?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160),
       note: (bar?.nextElementSibling?.matches('p.note') ? bar.nextElementSibling.textContent : '').replace(/\s+/g, ' ').trim().slice(0, 160) };
   });
   console.log('panel:', JSON.stringify(panel));
   check('the transmog panel is offered on a slot holding a plain cosmetic', panel.hasPanel && panel.cells >= 2, JSON.stringify(panel));
   check('with what you are wearing preselected', panel.ownPreselected && /as equipped/i.test(panel.tag), JSON.stringify(panel));
-  check('and it says switching is free rather than quoting a price', /free/i.test(panel.note), panel.note);
+  check('and it says switching is free rather than quoting a price', /free/i.test(panel.lead), panel.lead);
+  check('and it still promises the piece itself is safe, which is the other half a player needs before tapping',
+    /nothing is destroyed/i.test(panel.note), panel.note);
 
   /* THE END OF THE CHAIN, and it runs LAST on purpose: applying a transmog moves
      what is preselected, so doing this before the panel checks above made them
@@ -319,5 +352,6 @@ const el = await page.$('.melt-fold');
 if (el) await el.screenshot({ path: `${DIR}/melt-bar.png` });
 console.log('shot melt-bar');
 await browser.close();
+if (own) own.close();
 console.log(bad ? `\n${bad} FAILED` : '\nMELT BAR OK');
 process.exit(bad ? 1 : 0);
