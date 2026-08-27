@@ -901,3 +901,87 @@ export async function withBoot(base, fn, opts = {}) {
   try { return await fn(b); }
   finally { await b.browser.close().catch(() => {}); }
 }
+
+/* THE WANDERER THE APP WILL ACTUALLY DRAW, and a point at a bearing off him.
+ *
+ * The two live Wanderer suites both used to ask js/wanderer.js where he is with
+ * `wanderersNear(date, lat, lng)` and no fourth argument. js/app.js asks with
+ * one: js/water.js's land oracle. That is not a detail. wandererAt runs a SEEDED
+ * FALLBACK over beat centres until the whole 45-minute lap is off the water
+ * (Tom, 2026-08-22: "The wanderer is out in the lake where I am right now"), and
+ * the candidate index k is not part of his id. So the oracle-free call returns
+ * the RIGHT ID at the WRONG PLACE whenever candidate 0 is wet, and every suite
+ * that then stands the player "45 m into his light" is standing in a cone that
+ * does not exist.
+ *
+ * MEASURED, 2026-08-27, 224 (date, instance) samples at HOME over 7 days:
+ *   CONE-OK    190   the oracle-free point really is inside the real cone
+ *   CONE-MISS   25   he moved (331 m, 556 m, 599 m measured) and it is not
+ *   ID-ABSENT    2   the oracle-free id is not in the real set at all
+ *   WET-EMPTY    2   nobody in range once the land constraint applies
+ *   NO-BARE      5   nobody in range at all: a real data state
+ * 12% of instances put the player outside the light while the suite reported
+ * "no arena and no __bhFight after taking the encounter", which reads as a dead
+ * fight engine and is nothing of the kind.
+ *
+ * SO THE ORACLE IS WARMED AND PASSED, HERE, at the one place both suites ask.
+ * isWater answers undefined until its z14 tile lands, and an undefined anywhere
+ * on the lap makes wandererAt return null, so the tiles for the 3x3 cell block
+ * around `home` are pulled first and the caller is told whether they all landed.
+ *
+ * RETURNS { w: null } WHEN NOBODY IS IN RANGE, which is a real data state: he
+ * walks a 140-220 m loop and can leave WANDER_SHOW_M inside an instance. The
+ * caller must DECLARE that, never index [0] into it. The patrol suite did index
+ * into it and died with `Cannot read properties of undefined (reading 'lat')`,
+ * exit 1, ZERO rows graded, four runs out of five on 2026-08-27.
+ */
+export async function realWanderer(page, home, { offsetDeg = 0, metres = 45, anyone = false, deadlineMs = 30000 } = {}) {
+  return page.evaluate(async ({ home, offsetDeg, metres, anyone, deadlineMs }) => {
+    const W = await import('./js/wanderer.js');
+    const water = await import('./js/water.js');
+    const { dateKey } = await import('./js/nutrition.js');
+    /* One z14 tile is 0.022 deg of longitude and ~0.015 deg of latitude here, so
+       a 0.008 deg lattice cannot step over one, and +-0.032 deg covers the 3x3
+       cell block (WANDER_CELL_DEG 0.02) the derivation reads. */
+    const pts = [];
+    for (let a = -4; a <= 4; a++) for (let b = -4; b <= 4; b++) pts.push([home.latitude + a * 0.008, home.longitude + b * 0.008]);
+    const cell = W.wandererCell(home.latitude, home.longitude);
+    /* RETRIED, THE WAY THE APP RETRIES. Warming the lattice once is not enough:
+       water.js caps its tile cache at MAX_TILES 64 and evicts to make room, and
+       one wanderersNear pass walks nine cells whose candidate laps reach ~0.039
+       deg out, past the warmed block. The far cells queue new tiles, the
+       eviction takes the warm ones with it, and the HOME cell's own lap comes
+       back undefined -- which wandererAt reports as "no wanderer", identical to
+       an all-water cell. Measured 2026-08-27: realWanderer returned w:null while
+       a probe one second later said wandererAt(2464,-6156) was true.
+       js/app.js has the same race and answers it the same way, by asking again
+       on the next 5 s world pass. So does this. */
+    const t0 = Date.now();
+    let near = [], w = null;
+    for (;;) {
+      await water.ensureWater(pts, Math.max(1000, deadlineMs - (Date.now() - t0)));
+      near = W.wanderersNear(dateKey(), home.latitude, home.longitude, undefined, water.isWater);
+      w = near[0] || (anyone ? W.wandererAt(cell.cx, cell.cy, dateKey(), undefined, water.isWater) : null);
+      if (w || Date.now() - t0 > deadlineMs) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
+    const date = dateKey();
+    if (!w) {
+      /* WHICH EMPTY. "He is out there but past WANDER_SHOW_M" and "this cell is
+         effectively all water this lap" are different facts and the caller has
+         to be able to print the right one. */
+      const bare = W.wandererAt(cell.cx, cell.cy, date, undefined);
+      const bareDist = bare ? Math.round(W.wanderersNear(date, home.latitude, home.longitude).length) : null;
+      return { date, tiles: pts.length, w: null, near: [], cell, waitedMs: Date.now() - t0,
+        why: bare ? `nobody within WANDER_SHOW_M (${bareDist} in range without the land constraint)` : 'no wanderer derives here at all' };
+    }
+    const R = 6371000, r = Math.PI / 180, dr = metres / R, brg = (w.heading + offsetDeg) * r;
+    const f1 = w.lat * r, l1 = w.lng * r;
+    const f2 = Math.asin(Math.sin(f1) * Math.cos(dr) + Math.cos(f1) * Math.sin(dr) * Math.cos(brg));
+    const l2 = l1 + Math.atan2(Math.sin(brg) * Math.sin(dr) * Math.cos(f1), Math.cos(dr) - Math.sin(f1) * Math.sin(f2));
+    const p = { lat: f2 / r, lng: l2 / r };
+    return { date, tiles: pts.length, p, cell, waitedMs: Date.now() - t0,
+      w: { id: w.id, lat: w.lat, lng: w.lng, heading: w.heading, inst: w.inst, dist: Math.round(w.dist ?? 0) },
+      near: near.map(x => x.id), predicted: W.inWandererCone(w, p.lat, p.lng) };
+  }, { home, offsetDeg, metres, anyone, deadlineMs });
+}

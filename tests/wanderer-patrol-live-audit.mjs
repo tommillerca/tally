@@ -58,11 +58,41 @@
  * it measures the capability first and reports UNPROVEN with exit 97 rather than
  * green, the same contract tests/boneyard-audit.mjs runs under.
  *
+ * THREE DICE THIS SUITE WAS ROLLING, ALL FIXED 2026-08-27, NONE OF THEM THE
+ * APP. It failed a DIFFERENT row every run on clean main, which is the tell.
+ *
+ *   1. IT DIED ON AN EMPTY SET. `wanderersNear(date, HOME...)[0]` with no guard.
+ *      He walks a 140-220 m loop and can leave WANDER_SHOW_M inside an instance,
+ *      and when he had, the suite threw `Cannot read properties of undefined
+ *      (reading 'lat')`, exit 1, SEVENTEEN rows graded to nothing and a stack
+ *      trace that reads like a broken app. Measured on clean main 2026-08-27:
+ *      four runs out of five, minutes apart. Declared now, never indexed into.
+ *   2. IT ASKED WITHOUT THE LAND ORACLE, so on ~12% of instances it stood the
+ *      player 45 m into a cone that does not exist and CHARGE-LIVE went red on a
+ *      healthy trigger. See the note on realWanderer in tests/godmode.js for the
+ *      224-sample measurement. Now derived the way js/app.js derives.
+ *   3. IT GRADED WHICHEVER MARKER CAME FIRST. `querySelector('.map-wanderer-
+ *      mark')` on a map that draws every man inside 1200 m. Measured on clean
+ *      main: the graded marker sat at x 706..906, y 979..1179 on a 393x852
+ *      screen -- entirely off it -- so document.elementFromPoint returned null
+ *      and TAPTHRU-LIVE printed "elementFromPoint over his body returned the
+ *      Wanderer" about a marker nobody could have tapped. It now selects
+ *      [data-w="<his id>"], the id js/app.js stamps on the element, and both
+ *      hit-test rows say out loud whether their probe was on screen at all.
+ *
+ * PROVE-RED, 2026-08-27, after the above. Throwaway `cp -R`, exit read from a
+ * FILE, one mutation at a time:
+ *   js/wanderer.js MARK_PX 200 -> 260 -> exit 1, LOOMS-LIVE alone red.
+ *   js/wanderer.js .map-wanderer-mark `pointer-events: none` -> `auto` ->
+ *     exit 1, TAPTHRU-LIVE alone red, now naming the pixel it probed.
+ *   js/wanderer.js the `.map-you, .map-spawn, ... { z-index: 1 }` rule deleted
+ *     -> exit 1, PINS-SURVIVE alone red.
+ *
  *   node tests/wanderer-patrol-live-audit.mjs
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boot, seed, sleep, serveTree, boneyardCapability, unproven, unprovenReport, exitFor } from './godmode.js';
+import { boot, seed, sleep, serveTree, boneyardCapability, unproven, unprovenReport, exitFor, realWanderer } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const srv = process.env.URL ? null : await serveTree(ROOT);
@@ -84,23 +114,18 @@ async function run(offsetDeg, label) {
   if (!cap.ok) { await browser.close(); return { cap }; }
   await seed(page, { level: 18, coins: 500 });
 
-  // where is he, and where would a player have to stand
-  const target = await page.evaluate(async ({ HOME, offsetDeg }) => {
-    const W = await import('./js/wanderer.js');
-    const { dateKey } = await import('./js/nutrition.js');
-    const date = dateKey();
-    const w = W.wanderersNear(date, HOME.latitude, HOME.longitude)[0];
-    const dest = (lat, lng, brg, d) => {
-      const R = 6371000, r = Math.PI / 180;
-      const f1 = lat * r, l1 = lng * r, b = brg * r, dr = d / R;
-      const f2 = Math.asin(Math.sin(f1) * Math.cos(dr) + Math.cos(f1) * Math.sin(dr) * Math.cos(b));
-      const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(dr) * Math.cos(f1), Math.cos(dr) - Math.sin(f1) * Math.sin(f2));
-      return { lat: f2 / r, lng: l2 / r };
-    };
-    const p = dest(w.lat, w.lng, w.heading + offsetDeg, 45);
-    return { w: { lat: w.lat, lng: w.lng, heading: w.heading, id: w.id }, p, date,
-      predicted: W.inWandererCone(w, p.lat, p.lng) };
-  }, { HOME, offsetDeg });
+  /* WHERE IS HE, AND WHERE WOULD A PLAYER HAVE TO STAND. Through godmode's
+     realWanderer, which asks the question js/app.js asks: with js/water.js's
+     land oracle. Asking without it returned the right ID at the wrong place on
+     12% of instances (see the note on realWanderer), which is what took
+     CHARGE-LIVE red on a healthy app.
+     AND AN EMPTY SET IS DECLARED, NOT INDEXED INTO. This used to be
+     `wanderersNear(...)[0]` with no guard, so on a minute when his loop had
+     carried him past WANDER_SHOW_M the whole suite died at `w.lat` with
+     `Cannot read properties of undefined`, exit 1, seventeen rows graded to
+     nothing. Measured on clean main 2026-08-27: four runs out of five. */
+  const target = await realWanderer(page, HOME, { offsetDeg });
+  if (!target.w) { await browser.close(); return { empty: target }; }
 
   await page.setGeolocation({ latitude: target.p.lat, longitude: target.p.lng });
   await page.evaluate(() => { location.hash = '#/boneyard'; });
@@ -111,9 +136,18 @@ async function run(offsetDeg, label) {
   });
   await sleep(11000);
 
-  const seenState = await page.evaluate(async () => {
+  const seenState = await page.evaluate(async (wid) => {
     const W = await import('./js/wanderer.js');
-    const mark = document.querySelector('.map-wanderer-mark');
+    /* HIS MARKER, BY ID. `querySelector('.map-wanderer-mark')` returns whichever
+       Wanderer MapLibre happens to hold first, and on a map that draws every man
+       inside WANDER_SHOW_M (1200 m) that is regularly one who is nowhere near
+       the viewport: measured on clean main 2026-08-27, the graded marker sat at
+       x 706..906 y 979..1179 on a 393x852 screen, entirely off-screen, which
+       made document.elementFromPoint return null and took TAPTHRU-LIVE red with
+       the message "elementFromPoint over his body returned the Wanderer" on a
+       perfectly good marker. The despawn suite already learned this and stamps
+       the id on the element (js/app.js, el.dataset.w); this reads it. */
+    const mark = document.querySelector(`.map-wanderer-mark[data-w="${wid}"]`);
     const cone = mark && mark.querySelector('.wanderer-cone');
     const bodyEl = mark && mark.querySelector('.wanderer-body');
     const img = mark && mark.querySelector('img');
@@ -174,13 +208,22 @@ async function run(offsetDeg, label) {
       for (const n of document.querySelectorAll('.map-spawn')) {
         const b = n.getBoundingClientRect();
         if (!(b.left < rb.right && b.right > rb.left && b.top < rb.bottom && b.bottom > rb.top)) continue;
+        const px = Math.round(b.left + b.width / 2), py = Math.round(b.top + b.height / 2);
+        if (px < 0 || py < 0 || px >= innerWidth || py >= innerHeight) continue;   // no pixel, no verdict
         pinsOnHim++;
-        const hit = document.elementFromPoint(Math.round(b.left + b.width / 2), Math.round(b.top + b.height / 2));
+        const hit = document.elementFromPoint(px, py);
         if (hit && hit.closest('.map-spawn')) pinsHittable++;
       }
     }
+    /* AND HE HAS TO BE ON THE SCREEN. elementFromPoint answers null for any
+       point outside the viewport, so TAPTHRU-LIVE and PINS-SURVIVE both grade
+       NOTHING on an off-screen marker while reporting a cause that is not true.
+       Measured, not asserted, and printed by the rows that depend on it. */
+    const probe = bb ? { x: Math.round(bb.left + bb.width * 0.5), y: Math.round(bb.top + bb.height * 0.42) } : null;
+    const probeInView = !!probe && probe.x >= 0 && probe.y >= 0 && probe.x < innerWidth && probe.y < innerHeight;
     return {
-      hasMark: !!mark,
+      hasMark: !!mark, probe, probeInView,
+      markRect: rb ? { l: Math.round(rb.left), t: Math.round(rb.top), w: Math.round(rb.width), h: Math.round(rb.height) } : null,
       markVisible: !!mark && +getComputedStyle(mark).opacity > 0.5 && rb.width > 10,
       imgSrc: img && img.getAttribute('src'),
       conePx: cb ? Math.round(cb.width) : null,
@@ -206,7 +249,7 @@ async function run(offsetDeg, label) {
       encounter: !!document.querySelector('.wnd-enc'),
       encButtons: [...document.querySelectorAll('.wnd-enc-acts .btn')].map(b => b.textContent.trim()),
     };
-  });
+  }, target.w.id);
   /* DOES THE BEAM HOLD STILL WHILE THE MAP MOVES. Tom, 2026-08-22: "the
      wanderer's light cone is flickering in size ... the cone shouldn't flicker
      or change size."
@@ -292,7 +335,12 @@ const ROWS = [
 // ---- 1. BEHIND him: drawn, lit, and NOT fought
 const behind = await run(180, 'behind');
 let cap = behind && behind.cap;
-if (behind && !cap) {
+/* AHEAD_ROW is the index in ROWS where the second boot's rows start, so an
+   empty sample in one boot declares that boot's rows and leaves the other
+   boot's real verdicts alone. */
+const AHEAD_ROW = 14;
+let empty = behind && behind.empty, emptyFrom = empty ? 0 : null;
+if (behind && !cap && !empty) {
   const { target: t, seenState: s, drive: s0drive } = behind;
   ok('CONTROL the behind-him fix was really outside his cone', t.predicted === false,
     `45 m at heading+180 from ${t.w.heading.toFixed(0)} deg`);
@@ -338,12 +386,22 @@ if (behind && !cap) {
     s.inkW > s.ringPx * 1.25 && s.inkW > s.pinPx * 4 && s.inkW < s.screenW * 0.5,
     `his ink is ${s.inkW}x${s.inkH} against a ${s.ringPx}px collect ring and a ${s.pinPx}px spawn pin, `
     + `so ${(s.inkW / s.ringPx).toFixed(2)}x the ring and ${(100 * s.inkW / s.screenW).toFixed(0)}% of a ${s.screenW}px screen`);
+  /* The hit-test half only means anything for pins whose centre is on screen,
+     for the same reason as TAPTHRU above; the z-index half always grades. */
   ok('PINS-SURVIVE he sits at the BACK of the marker layer, so the pins and the player clear him',
     s.behindAll === true && s.pinsHittable === s.pinsOnHim,
     `wanderer z-index ${s.zWanderer} against [${s.zOthers}]; ` +
-    `${s.pinsHittable}/${s.pinsOnHim} pin(s) overlapping him are still tappable`);
+    `${s.pinsHittable}/${s.pinsOnHim} pin(s) overlapping his ${JSON.stringify(s.markRect)} box are still tappable ` +
+    `(on a ${s.screenW}x${s.screenH} screen)`);
+  /* GATED ON THE PROBE BEING ON SCREEN, and it says so either way: a null from
+     elementFromPoint is "the browser was asked about a pixel that does not
+     exist", not "the Wanderer swallowed the tap", and the two used to print the
+     same sentence. */
   ok('TAPTHRU-LIVE a tap on his coat reaches the map underneath, not him',
-    s.through === true, `elementFromPoint over his body returned ${s.through ? 'something else' : 'the Wanderer'}`);
+    s.probeInView === true && s.through === true,
+    s.probeInView
+      ? `elementFromPoint at ${s.probe.x},${s.probe.y} returned ${s.through ? 'something else' : 'the Wanderer'}`
+      : `his marker ${JSON.stringify(s.markRect)} is off a ${s.screenW}x${s.screenH} screen, so the probe measured nothing`);
   /* REACH. Tom's mockup runs the beam off the edge of the screen. The ring is
      75 m and is measured by the map's own projection, so the beam's radius in px
      over the ring's radius in px IS the range ratio, measured rather than
@@ -394,8 +452,9 @@ if (behind && !cap) {
 }
 
 // ---- 2. AHEAD of him, in the light: the encounter fires from the fix alone
-const ahead = cap ? null : await run(0, 'ahead');
-if (ahead && !ahead.cap) {
+const ahead = (cap || empty) ? null : await run(0, 'ahead');
+if (ahead && ahead.empty) { empty = ahead.empty; emptyFrom = AHEAD_ROW; }
+if (ahead && !ahead.cap && !ahead.empty) {
   const { target: t, seenState: s } = ahead;
   ok('CONTROL the ahead fix was really inside his cone', t.predicted === true,
     `45 m dead ahead of heading ${t.w.heading.toFixed(0)} deg`);
@@ -416,15 +475,23 @@ if (ahead && !ahead.cap) {
       : (s.arena ? `arena straight away, foe ${s.foeName}` : 'nothing opened'));
   ok('CHARGE-LIVE and what it opens is the CHOICE, not the arena behind it',
     s.encounter === true && s.arena === false && s.encButtons.length === 2,
-    `encounter=${s.encounter} arena=${s.arena} buttons=[${s.encButtons.join(', ')}]`);
+    `encounter=${s.encounter} arena=${s.arena} buttons=[${s.encButtons.join(', ')}], `
+    + `standing 45 m off ${t.w.id} on heading ${t.w.heading.toFixed(0)}`);
 }
 
 if (cap || (ahead && ahead.cap)) {
   const why = 'the Boneyard could not draw on this machine';
   for (const n of ROWS) unproven(n, why);
+} else if (empty) {
+  /* A REAL DATA STATE, DECLARED. He walks a 140-220 m loop once every 45
+     minutes, so there are minutes when the nearest man is past WANDER_SHOW_M of
+     HOME and this suite has nobody to grade. It used to crash here. */
+  const why = 'no Wanderer is within WANDER_SHOW_M of HOME right now '
+    + `(${empty.tiles} water tiles warmed over ${empty.waitedMs}ms: ${empty.why}); nothing to stand in front of`;
+  for (const n of ROWS.slice(emptyFrom)) unproven(n, why);
 }
 if (srv) await srv.close();
 unprovenReport('wanderer-patrol-live-audit.mjs', cap || (ahead && ahead.cap));
 console.log(fails ? '\nWANDERER PATROL LIVE AUDIT FAILED'
-  : (cap ? '\nWANDERER PATROL LIVE AUDIT UNPROVEN' : '\nWANDERER PATROL LIVE AUDIT VERIFIED'));
+  : ((cap || empty) ? '\nWANDERER PATROL LIVE AUDIT UNPROVEN' : '\nWANDERER PATROL LIVE AUDIT VERIFIED'));
 process.exit(exitFor(fails));
