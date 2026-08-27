@@ -142,6 +142,29 @@ const COLLECT = (sels) => {
     }
     return null;
   };
+  /* A FULL-BLEED CONTROL IS NOT AN UNREACHABLE ONE, and the difference is a
+     property, not a name. .gw-art is Gwart on the Shop: absolutely positioned,
+     centred, 480px wide at every viewport, so it hangs off BOTH edges (-80..400
+     at 320) and .gw-panel clips it with overflow-x: hidden. Measured: document
+     scrollWidth === clientWidth at 320, 360 and 375, and scrolling to x=500
+     moves 0px. It cannot be untappable, because it spans the entire viewport
+     width: every horizontal position on the screen is inside it.
+
+     THE EXEMPTION IS DELIBERATELY NARROW so it cannot excuse the case this row
+     exists for. BOTH must hold: the control overflows on BOTH sides (so it
+     covers the whole viewport, rather than having been pushed out of the layout
+     on one side, which is what .badge-grid did at 27px past the right edge),
+     AND an ancestor clips it. A bleed that is NOT clipped scrolls the page
+     sideways and is caught by the SIDESCROLL row below instead. */
+  const clipped = el => {
+    for (let n = el.parentElement; n; n = n.parentElement) {
+      const ox = getComputedStyle(n).overflowX;
+      if (ox === 'hidden' || ox === 'clip') return true;
+      if (n === document.body) return false;
+    }
+    return false;
+  };
+  const bleed = (el, r) => r.left < -0.5 && r.right > vw + 0.5 && clipped(el);
   const visible = el => {
     const r = el.getBoundingClientRect();
     if (!r.width || !r.height) return false;
@@ -159,6 +182,7 @@ const COLLECT = (sels) => {
        exclusion is the scroller itself, never a name on a list. */
     if (scroller(el)) continue;
     const r = el.getBoundingClientRect();
+    if (bleed(el, r)) continue;
     if (r.right > vw + 0.5 || r.left < -0.5) {
       out.push({ label: label(el), cls: (el.className || '').toString().slice(0, 40), left: Math.round(r.left), right: Math.round(r.right) });
     }
@@ -186,7 +210,19 @@ const COLLECT = (sels) => {
       });
     });
   }
-  return { controls: out, grids, vw };
+  /* MEASURED ON THE CONTAINER THE PLAYER ACTUALLY SWIPES, which is #screen, not
+     the document. Every screen in this app renders inside #screen and CSS forces
+     its overflow-x to auto (the same fact scroller() refuses to treat as a
+     rail), so the document itself never gains scroll room however wide the
+     content gets. The first version of this row read documentElement and body
+     alone and COULD NOT FAIL: measured at 320, a deliberately planted 900px
+     element took #screen to scrollWidth 932 against clientWidth 320 while
+     documentElement and body both stayed at 320/320. */
+  const de = document.documentElement;
+  const boxes = [de, document.body, document.getElementById('screen'), document.getElementById('app')].filter(Boolean);
+  const sideScroll = Math.max(...boxes.map(b => b.scrollWidth - b.clientWidth));
+  const sideWhere = (boxes.find(b => b.scrollWidth - b.clientWidth === sideScroll) || {}).id || 'document';
+  return { controls: out, grids, vw, sideScroll, sideWhere };
 };
 
 async function walk(w, h) {
@@ -288,6 +324,17 @@ for (const vp of VIEWPORTS) {
   ok(`CELLS ${tag}  every equal-track grid keeps its cells inside its own box and inside the viewport`,
     spills.length === 0,
     spills.length ? `\n        ${[...new Set(spills)].slice(0, 20).join('\n        ')}` : `${stops.reduce((n, s) => n + s.grids.length, 0)} grid instances, none spilling`);
+
+  /* THE HARM THE OVERFLOW ROW WAS ONLY A PROXY FOR. A control off the edge
+     matters because it is untappable or because the page slides sideways under
+     the thumb. The bound above grades the first; nothing graded the second, so
+     an unclipped bleed could satisfy the letter of this file and still hand a
+     player a page that scrolls left-right. Graded at every width, from the same
+     walk, with the offending stop named. */
+  const slides = stops.filter(s => s.sideScroll > 1).map(s => `${s.where}: ${s.sideScroll}px of horizontal scroll room on #${s.sideWhere}`);
+  ok(`SIDESCROLL ${tag}  no screen scrolls sideways (#screen, #app, body and documentElement: scrollWidth <= clientWidth)`,
+    slides.length === 0,
+    slides.length ? `\n        ${[...new Set(slides)].join('\n        ')}` : `${stops.length} stops, none scrollable sideways`);
 
   const offenders = stops.flatMap(s => s.controls.map(c => `${s.where}: "${c.label}" ${c.cls} left=${c.left} right=${c.right} (viewport ${vp.w})`));
   /* THE PROPERTY, and it is only asserted at the narrowest supported phone.
