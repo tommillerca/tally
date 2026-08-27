@@ -233,6 +233,18 @@ const probe = label => page.evaluate(l => {
     const fit = getComputedStyle(art).objectFit;
     const r = stack.getBoundingClientRect();
     if (r.width < 4 || r.height < 4) continue;             // not laid out / hidden
+    /* A SHUT DISCLOSURE STILL LAYS ITS CONTENT OUT, so the size filter above does
+       not catch it. v457 put four headshots into the closed news banner on Today
+       and one of them carries a weapon sheen; app.css deliberately cancels
+       animations behind a shut <details> (one un-compositable animation drops the
+       WHOLE document onto the slow path, which cost Today 120 style recalcs a
+       second). So this loop was reading a decoy nobody can see and reporting "the
+       charge is running: none" while the visible hero was measured, in the same
+       run, as animationName "wpnCharge".
+       Grading what a player can see is this row's intent, not a widening of it: a
+       stopped charge on a VISIBLE stack still fails, which is what the prove-red
+       below asserts. */
+    if (stack.closest('details:not([open])')) continue;
     const cs = sheen ? getComputedStyle(sheen) : null;
     out.push({
       sheen: !!sheen,
