@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 464, date: '2026-08-27', title: 'The Paddock is a fifth lighter', items: [
+    'Standing in the Paddock had your phone holding about 110 MB of pictures, which is the kind of number that gets a browser tab thrown away in the background and makes you lose your place. It is under 90 MB now. Two things were behind it: the little pet lurking at the edge of the Paddock was being drawn from an image twenty times bigger than the space it appears in, and the small pictures on the news rows were full-size art painted at the size of a fingernail.',
+    'Nothing looks any different. The same art, at sizes that make sense for where it is shown.',
+  ] },
+
   { n: 463, date: '2026-08-27', title: 'Sharper shop tiles, and the golden chest is pixel art everywhere', items: [
     'The new shelf added yesterday was stretching its artwork slightly to fill each tile, which softened it. The tiles are smaller and there are four across now instead of three, so the art is drawn at less than its real size rather than more. You also see more of the shelf at once, which is the point of it.',
     'The golden chest was still drawing as the old flat icon anywhere it appeared small: the Kitchen, the Stable, Today, and both the prize wheel and its result. It is the pixel chest with a gold glow in all of those places now, the same one the Backpack has always used.',
