@@ -439,7 +439,36 @@ export async function boneyardCapability(page) {
   return { ok: checks.every(c => c.ok), checks };
 }
 
-export async function boot(base = 'https://tommillerca.github.io/tally/', opts = {}) {
+/* NO BASE MEANS THIS CHECKOUT, NEVER PRODUCTION. This default used to be the
+   literal live URL, and that is a footgun that fired repeatedly.
+
+   In the release gate it never showed: release-gate passes `base` as argv[2] to
+   every browser suite, so gate runs always graded the tree. The damage was to
+   BARE runs, which is how every debugging session and every prove-red happens.
+   MEASURED 2026-08-27: 26 audits called boot() with an unset argv/env and
+   silently graded https://tommillerca.github.io/tally/.
+
+   It cost a full investigation the same day. melt-ui-audit had one red row; it
+   read the SAME red against a pristine origin/main worktree, so it was reported
+   as pre-existing and structural. It was neither. Two cp -R mutations of the
+   exact copy that row asserts on changed the output by NOTHING, because the
+   mutated files were never served. An audit that cannot see your edit will agree
+   with you about anything.
+
+   Nothing wanted the old behaviour: checked, zero audits reference the live URL
+   as a value rather than in a comment warning about this. Anything that ever
+   does need production can still pass it explicitly, which is also the only way
+   it should ever be a deliberate act.
+
+   The server is closed on process exit rather than handed back, because these
+   are short-lived test processes and every existing caller already owns its own
+   teardown; giving boot() a second return value would mean editing all 26. */
+export async function boot(base, opts = {}) {
+  if (!base) {
+    const own = await serveTree(ROOT_DIR);
+    base = own.url;
+    process.once('exit', () => { try { own.close(); } catch { /* already down */ } });
+  }
   const puppeteer = await loadPuppeteer();
   /* Chrome refuses to start its sandbox as uid 0, so on a root container every
      check here dies at launch and reads as "the browser is broken". No-op on a
