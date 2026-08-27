@@ -73,6 +73,16 @@ ok('BACK the previous-day arrow moves the strip back exactly one day', await sho
 await tap('nextDay');
 ok('FORWARD the next-day arrow returns to today', await shownDate() === await iso(0), `${await shownDate()} expected ${await iso(0)}`);
 
+/* Open the day's <details>, which every read of the ledger below needs. See the
+   note at the first call site for what was measured and why. */
+const expandDay = async () => {
+  await page.evaluate(() => {
+    const d = document.getElementById('dayRest');
+    if (d && !d.open) d.open = true;
+  });
+  await sleep(400);
+};
+
 /* THE ROUND TRIP, which is the whole point: log food on a chosen day and read
    the stored row back. A strip that displays correctly but writes the wrong
    date is the bug that costs a player their history, and only the store can
@@ -116,6 +126,17 @@ await page.evaluate(d => {
 }, target);
 await sleep(1400);
 ok('SETUP re-selecting the same date leaves the strip where it was', await shownDate() === target, `${await shownDate()} expected ${target}`);
+/* AND EXPAND THE DAY BEFORE READING IT (2026-08-27). The day now collapses behind
+   its ring-and-macros banner, so the ledger this check is about sits inside a shut
+   <details id="dayRest">, and innerText does not report text that is not laid out.
+   Measured on the failing run: shut, #screen.innerText was 445 chars with no "Day
+   strip probe" in it, while #screen.textContent was 5,318 chars and had it;
+   opening it took innerText to 1,158 chars and the row read back. The row is drawn
+   either way. It is behind a tap, not missing, and what this check means is
+   "the day shown reads its own store rows", not "the ledger is on screen unaided".
+   Expanded HERE rather than once at the top because the app repaints the day on
+   every date change and a fresh <details> comes back shut. */
+await expandDay();
 const readsBack = await page.evaluate(() => (document.getElementById('screen') || {}).innerText || '');
 ok('ROUND TRIP the shown day reads its own row back', /Day strip probe/.test(readsBack), readsBack.slice(0, 90).replace(/\s+/g, ' '));
 
@@ -129,6 +150,11 @@ await page.evaluate(d => {
 }, jump);
 await sleep(1300);
 ok('PICKER a chosen date moves the strip to exactly that date', await shownDate() === jump, `${await shownDate()} expected ${jump}`);
+/* THE SAME EXPANSION, AND THIS ONE MATTERS MORE, because it is a NEGATIVE check.
+   A shut day reads as "no probe row here" for every date at once, so leaving this
+   one alone would have left a row that passes and can no longer fail: it would
+   have gone green on a build that leaked every row across every day. */
+await expandDay();
 const probeGone = await page.evaluate(() => !/Day strip probe/.test((document.getElementById('screen') || {}).innerText || ''));
 ok('PICKER and the other day does NOT show the row from the first one', probeGone, 'the probe row leaked across days');
 
