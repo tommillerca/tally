@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 462, date: '2026-08-27', title: 'A lot more to buy, and it changes every day', items: [
+    'The Shop sold nine pieces a week. The game has 370 cosmetics, so 361 of them could not be bought at all, which is the real reason there was nowhere for your coins to go. There is a second shelf under the themed nine now, and it is drawn from the whole collection: twelve more pieces, priced by how rare they are, twenty one on the screen instead of nine.',
+    'That shelf is new every single day. The themed nine above it still last the week, and your rerolls are still weekly, so nothing you were saving up for moves. Worth a look each morning: with twelve out of hundreds, what is on it today will not be there tomorrow.',
+    'What will never turn up on it: pets, Bumbleseal and her pieces, the Day One Lizard and anything else handed out by name, and the body and skull you already start with.',
+  ] },
+
   { n: 461, date: '2026-08-27', title: 'The chest finishes opening before it leaves', items: [
     'The very first chest you opened in a session clipped the end of its own animation: the last drawn frame of the lid coming off was cut short because the chest had already started leaving. Later chests looked right, which is what made it odd. The reason is that the first one pays to load its artwork, and when that took long enough there was no room left in the window for the ending. The chest now waits for its own animation to finish instead of talking over it. Chests that were already loading quickly look exactly as they did.',
   ] },
