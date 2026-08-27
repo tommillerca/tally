@@ -8335,7 +8335,7 @@ async function renderShop(el) {
        must never be sold (pets, Bumbleseal's own pieces, exclusive art awarded
        by name, and the body and skull every player starts with). Same tile, same
        try-on, same buy row: a player should not have to learn a second shop. -->
-  <div class="rk-theme"><b>ALSO ON THE RACK</b><i></i><span>${rotIds.length} pieces</span></div>
+  <div class="rk-theme"><b>ALSO ON THE RACK</b><i></i><span>${rotIds.length} pieces &middot; new every day</span></div>
   <div class="rk-grid">
     ${rotIds.map(id => rackTile(id, rotPrice(id)[0], rotPrice(id)[1], 384)).join('')}
   </div>` : ''}

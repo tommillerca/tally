@@ -113,6 +113,21 @@ ok('SIZE   every shelf is full, so the picker never returns short',
 ok('MOVES  a reroll actually changes the rotating shelf',
   movePairs > 0 && moved === movePairs, `${moved} of ${movePairs} rerolls moved it`);
 
+/* DAILY, which is the reason the shelf is seeded on the day rather than the
+   week. Tom, 2026-08-27: "i think the rack should change up everyday to keep
+   things fresh and have people checking in". A shelf that repeated across days
+   would look identical to the weekly one it replaced and nothing else in the app
+   would say otherwise. */
+{
+  const themedW = themedFor('2026-W35', 0);
+  const shelves = [];
+  for (let d = 1; d <= 30; d++) shelves.push(pick(`2026-09-${String(d).padStart(2, '0')}`, 0, themedW).join());
+  const distinct = new Set(shelves).size;
+  ok('DAILY  a new day gives a different shelf, which is the point of seeding on the day',
+    distinct === shelves.length && shelves.length === 30,
+    `${distinct} distinct shelves across ${shelves.length} consecutive days`);
+}
+
 const a = pick('2026-W07', 2, themedFor('2026-W07', 2));
 const b = pick('2026-W07', 2, themedFor('2026-W07', 2));
 ok('STABLE the same week and salt give the same shelf, so it cannot change under a re-render',
