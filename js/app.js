@@ -3613,10 +3613,19 @@ async function renderToday(el) {
        which is the whole argument of the variant.
        PROMO BANNERS ARE NOT PART OF THE DAY and are emitted below it. ===== */''}
   <section class="dayblk">
-  <div class="dayhdr">
+  ${/* NO DATE PICKER. Tom, 2026-08-27: "clicking on today on the today page
+       brings up an ugly ios calendar. i dont think it's a feature that people are
+       going to use to go hunt down an exact day. for now let's lose that option".
+       It was a transparent <input type="date"> stretched over the whole title, so
+       tapping the word "TODAY" opened the native calendar with no affordance
+       saying it would. The arrows still move the day, which is how anyone
+       actually walks back through it.
+       The date moved to data-date on the header rather than being dropped: it was
+       the only place the SHOWN day was readable, and day-strip-audit and
+       today-container-audit both read it to know which day is on screen. */''}
+  <div class="dayhdr" data-date="${S.date}">
     <div class="day-title">
       <h1>${title}</h1><div class="sub">${sub}</div>
-      <input type="date" id="datePick" value="${S.date}" aria-label="Pick date">
     </div>
     <button class="icon-btn" id="prevDay" aria-label="Previous day"><svg viewBox="0 0 24 24"><path d="M14.5 5l-7 7 7 7"/></svg></button>
     <button class="icon-btn" id="nextDay" aria-label="Next day"><svg viewBox="0 0 24 24"><path d="M9.5 5l7 7-7 7"/></svg></button>
@@ -3698,7 +3707,6 @@ async function renderToday(el) {
   $('#todaySettings', el)?.addEventListener('click', () => { location.hash = '#/settings'; });
   $('#prevDay').addEventListener('click', () => { S.date = addDays(S.date, -1); refresh(); });
   $('#nextDay').addEventListener('click', () => { S.date = addDays(S.date, 1); refresh(); });
-  $('#datePick').addEventListener('change', e => { if (e.target.value) { S.date = e.target.value; refresh(); } });
   $('#lvlChip').addEventListener('click', () => { location.hash = '#/progress'; });
   $('#trendsBtn').addEventListener('click', () => { location.hash = '#/progress'; });
   /* GWART SPEAKS. Both halves of what Tom asked for, and they are the same one
@@ -11229,10 +11237,18 @@ function newsBannerHtml(unseen, eq) {
       <span class="nb-chev">${ICONS.chev(16)}</span>
     </summary>
     <div class="nb-list">
+      ${/* A ROW THAT NAVIGATES SAYS WHERE IT GOES. Tom, 2026-08-27: "i clicked
+           another and it took me to the boneyard with no explanation in between
+           on what i just clicked."
+           Eight of the nine rows open a card and leave you on Today. The Wanderer
+           opens the BONEYARD instead, deliberately (he is a thing you find on the
+           map, not a card), and from a list where every other row behaves the
+           other way that reads as the app throwing you somewhere. So the row
+           carries its destination and the others carry nothing. */''}
       ${NEWS.map(n => `<button class="nb-row" data-news="${n.id}">
         <span class="nb-thumb">${newsThumb(n, eq)}</span>
         <span class="nb-txt"><b>${esc(n.title)}</b><i>${esc(n.blurb)}</i></span>
-        <span class="nb-date">${esc(n.date)}</span>
+        ${n.goes ? `<span class="nb-goes">${esc(n.goes)} ${ICONS.chev(11)}</span>` : `<span class="nb-date">${esc(n.date)}</span>`}
       </button>`).join('')}
     </div>
   </details>`;
@@ -11254,6 +11270,7 @@ const NEWS = [
   { id: 'wanderer', date: 'Aug 25', title: 'You hear him first',
     blurb: 'Heavy footsteps, and a light sweeping the ground ahead of him. Do not stand in it.',
     thumb: () => `<img class="nw-img" src="assets/bh/wanderer/wanderer.png" alt="">`,
+    goes: 'Boneyard',
     open: () => { location.hash = '#/boneyard'; } },
   { id: 'thanks', date: 'Aug 15', title: 'Thanks for being early',
     blurb: 'The invite link to pass on, and how Android players get added.',
