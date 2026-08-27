@@ -9593,6 +9593,24 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    a tile is 115px at 393x852 and 129px at 440x956, against 176/198 two-wide.
    Everything below is what that width forced, and each of it was measured, not
    guessed. */
+/* THE TRANSMUTE PROGRESS METER. A count buried at the end of a paragraph is not
+   an answer to "can I do this yet", so the row carries a bar. Deliberately the
+   same ink as the rest of the crate row rather than a new accent: this is a
+   readout, not a call to action, and the button beside it is the action. */
+.tm-meter { display: flex; align-items: center; gap: 6px; position: relative;
+  width: 140px; max-width: 100%; margin-top: 9px; font-size: 11px; font-weight: 700;
+  letter-spacing: .04em; color: var(--text-3); text-transform: uppercase; }
+/* THE EMPTY REMAINDER IS THE POINT. A fill with no track behind it is just a
+   line: 3 of 6 and 5 of 6 look the same at a glance, which is the confusion this
+   row is being fixed for. The track is the full width, the fill sits on it. */
+.tm-meter::before { content: ''; position: absolute; left: 0; right: 0; top: -4px;
+  height: 3px; border-radius: 2px; background: var(--line-strong); opacity: .7; }
+.tm-meter i { display: block; position: absolute; left: 0; top: -4px; height: 3px;
+  border-radius: 2px; background: var(--text-3); opacity: .55; max-width: 100%; }
+.tm-meter b { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.tm-meter.full i { background: var(--lime, #a5e847); opacity: .9; }
+.tm-meter.full b { color: var(--lime, #a5e847); }
+
 .rk-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 /* THE BROWSE SHELF IS DENSER THAN THE HERO SHELF, AND THAT IS A RESOLUTION FIX
    AS MUCH AS A VISUAL ONE. The themed nine draw from 640 masters; the rotating
