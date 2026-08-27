@@ -5738,6 +5738,14 @@ body::before {
   letter-spacing: .04em; text-transform: uppercase; color: var(--text-3);
 }
 .mog-lines b { color: var(--text-1, #efe9f5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* THE PRICE NEVER TRUNCATES. Measured in the running app: "You pay: 12 Bone ..."
+   clipped at 66px against the 79px it needed, because <b> was the flexible item
+   on a row that also carries the wallet in an <em>. The other two lines SHOULD
+   truncate, since gear names are long and a clipped name still reads; the price
+   is the one row on this panel a player must be able to finish reading before
+   they spend. So the number holds its width and the wallet gives way instead. */
+.mog-lines .pay b { flex: none; overflow: visible; text-overflow: clip; }
+.mog-lines .pay em { min-width: 0; overflow: hidden; }
 .mog-lines em {
   flex: none; font-style: normal; font-size: 10.5px; color: var(--text-3);
   display: inline-flex; align-items: center; gap: 3px;

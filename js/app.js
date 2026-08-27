@@ -58,7 +58,7 @@ import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribut
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
-import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, breedCost, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear } from './loot.js';
+import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear } from './loot.js';
 import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
@@ -2510,7 +2510,7 @@ function revealGift(g) {
     const gear = GEAR_BY_ID[p.gearId];
     cards.push({ iconHtml: `<img src="${bhAsset(BH_BY_ID[gear.artId])}" alt="" style="width:130px;height:130px;object-fit:contain">`, name: gear.name, rarity: gear.rarity, kind: 'GEAR', stats: 'Equip it in the Wardrobe' });
   }
-  if (p.dust) cards.push({ iconHtml: ICONS.dust(120), name: `${p.dust} Bone Dust`, rarity: 'uncommon', kind: 'DUST', stats: 'Spend it on transmog and eggs' });
+  if (p.dust) cards.push({ iconHtml: ICONS.dust(120), name: `${p.dust} Bone Dust`, rarity: 'uncommon', kind: 'DUST', stats: 'Spend it on how your gear looks' });
   if (!cards.length && p.coins) cards.push({ iconHtml: ICONS.coin(120), name: `${p.coins.toLocaleString()} coins`, rarity: 'common', kind: 'COINS', stats: 'Spend it in the Shop' });
   confettiRain(60); chimeSound(S.sounds); haptic.success();
   openPackReveal(cards, { coins: p.coins || 0, footerNote: `From ${giftSender(g)}` });
@@ -4549,7 +4549,7 @@ const GUIDE_ENTRIES = [
   { id: 'dust', title: 'Bone Dust', body: [
     'The other currency, and the one everybody ignores. Coins buy things. Dust is for changing your mind about them.',
     'Melting gear you are never going to wear is where most of it comes from. A piece he has outgrown is not waste, it is dust.',
-    'It pays for transmog, which is wearing one thing and showing another, and it pays to breed two pets into one. It used to buy eggs, crates and charms; that shop is closed, so dust is for looks now.',
+    'It pays for one thing: how your gear LOOKS. Wearing one piece and showing another, and the weekly Rack. It used to buy eggs, crates and charms, and it used to pay to breed pets; none of that is true any more. Dust is for looks, and nothing you buy with it can make you stronger.',
     'You pay for a look once. Putting it back on in that same slot is free forever after that.',
   ] },
   /* ADDED 2026-08-23 at integration, and it is a real defect neither branch could
@@ -4559,8 +4559,8 @@ const GUIDE_ENTRIES = [
      transmogPrice returns 0 when paidLooks() already holds paidKey(slot, artId),
      and applyTransmog writes the override without touching the gear or the
      inventory row. */
-  { id: 'transmog', title: 'Changing how gear looks', body: [
-    'Wearing one thing and showing another. The numbers are whatever the piece really is; only the picture changes.',
+  { id: 'transmog', title: 'The Dressing Room', body: [
+    'The Dressing Room is where you change how a piece LOOKS without changing what it is. Wearing one thing and showing another. The numbers are whatever the piece really is; only the picture changes.',
     'Nothing is destroyed and nothing comes off. The piece stays on him, keeps its stats, and stays in the Backpack where you left it.',
     'It costs dust, and only the first time. That look in that slot is free forever after, so try things.',
     'A look you have not paid for is priced on the tile before you commit. Nothing is taken until you say so twice.',
@@ -12919,7 +12919,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
            a rule. Under v2 the section keeps its place and says the rule in one
            line. No control, so nothing new can be tapped or spent. */
         if (!baseArtId) return S.mogv2
-          ? `<div class="sect-h mog-h" style="margin-top:14px"><span>${esc(GEAR_SLOT_LABELS[slot])} · change how it looks</span></div>
+          ? `<div class="sect-h mog-h" style="margin-top:14px"><span>The Dressing Room · ${esc(GEAR_SLOT_LABELS[slot])}</span></div>
              <p class="note mog-empty">This slot is empty, so there is nothing to disguise yet. Put something on above and the look picker appears here.</p>`
           : '';
         const cur = tm[slot] ?? '';                        // '' = the gear's own look
@@ -12976,7 +12976,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           const figure = eqMap => `<div class="bh-stage mog-fig">${avatarLayersHtml(eqMap, { noYard: true, skip: ['C', 'BG'] })}</div>`;
           return `
         <div class="mog-panel">
-          <div class="sect-h mog-h"><span>${esc(GEAR_SLOT_LABELS[slot])} · change how it looks</span>
+          <div class="sect-h mog-h"><span>The Dressing Room · ${esc(GEAR_SLOT_LABELS[slot])}</span>
             ${/* THE HOOK FOR GWART'S GUIDE, and it is a hook, not an explainer: the
                   words for "transmog" as a concept belong to that workstream, not to
                   this one. It calls THEIR helper rather than hand-rolling the markup,
@@ -13006,7 +13006,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             <div class="mog-lines">
               <span><i>You keep</i><b>${wornGear ? gearLabel(wornGear) : 'every piece you own'}</b></span>
               <span><i>You get</i><b>${esc(nameOf(sel))}</b></span>
-              <span><i>You pay</i><b>${cost ? `${cost} Bone Dust` : 'nothing'}</b>${cost ? `<em>${dustIco} you have ${dustBal}</em>` : ''}</span>
+              <span class="pay"><i>You pay</i><b>${cost ? `${cost} Bone Dust` : 'nothing'}</b>${cost ? `<em>${dustIco} you have ${dustBal}</em>` : ''}</span>
             </div>
             ${changed
               ? (afford
@@ -13361,7 +13361,17 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <button class="btn ghost small" id="bpKitchen" style="margin-top:8px">Open the Kitchen to cook</button>
       <div class="t3-sect"><b>Salvage Bench · nothing wasted</b><i></i></div>
       <div class="wallet-line"><span class="note">Bone Dust</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${dust.toLocaleString()}</b></div>
-      <p class="note" style="margin:0 2px 8px">Melt gear you don't wear straight from the list below. Manage, breed, and destroy pets in the <b>Stable</b>. Bad drops and dupe eggs still pay off.</p>
+      ${/* THE BENCH STOPS PROMISING A LIST THAT IS NOT THERE. On a new account the
+           gear list below is EMPTY, and this paragraph said "melt gear straight
+           from the list below" over nothing, leaving "Open the Stable" as the
+           only control a player could resolve. A screen that names something the
+           player cannot see reads as broken rather than empty.
+           So the copy branches on whether there IS anything to melt, and the
+           empty state says what will fill the bench and when instead of pointing
+           at a list. Guarded by the EMPTY row in tests/melt-ui-audit.mjs. */''}
+      ${(invAll.filter(r => r.kind === 'gear' && GEAR_BY_ID[r.gearId]).length)
+        ? `<p class="note" style="margin:0 2px 8px">Melt gear you don't wear straight from the list below. Manage, breed, and destroy pets in the <b>Stable</b>. Bad drops and dupes still pay off.</p>`
+        : `<p class="note" style="margin:0 2px 8px">Nothing to melt yet. Gear you don't want ends up here: crates, the Boneyard and the Pit all drop it.<br>Every piece pays Bone Dust, and dust is what changes how your Bonehead looks.</p>`}
       ${pCountTotal ? `<button class="btn small" id="openStableFromBp">Open the Stable (${pCountTotal} ${pCountTotal === 1 ? 'pet' : 'pets'})</button>` : ''}
       ${(() => {
         const rows = invAll.filter(r => r.kind === 'gear' && GEAR_BY_ID[r.gearId]).map(r => GEAR_BY_ID[r.gearId])
@@ -14684,7 +14694,10 @@ function openPetLevelUp(petId, level, prevLevel, newTalent, inst = null) {
   });
 }
 
-const BREED_ERR = { 'pick-two': 'Pick two different pets.', gone: 'One of those pets is no longer here.', 'bad-species': 'Choose the offspring species.', cooldown: 'Walk a bit more before breeding again.', dust: 'Not enough Bone Dust.' };
+/* No `dust` key: breedPets stopped returning that reason on 2026-08-27 when the
+   cost was removed. A message for an outcome that cannot happen is a message
+   somebody later mistakes for a live rule. */
+const BREED_ERR = { 'pick-two': 'Pick two different pets.', gone: 'One of those pets is no longer here.', 'bad-species': 'Choose the offspring species.', cooldown: 'Walk a bit more before breeding again.' };
 
 // THE STABLE: the pet hub. Every pet you own, grouped by species, each individual
 // copy showing its own level/lineage/shiny/stats with Equip / Breed / Destroy.
@@ -14701,7 +14714,6 @@ function openPetsHelp() {
   const maxSteps = PET_LEVEL_STEPS[PET_LEVEL_STEPS.length - 1];
   const tiers = (PET_TREES[Object.keys(PET_TREES)[0]] || []).map(t => t.tier);
   const shinyOdds = Math.round(1 / SHINY_CHANCE);
-  const costs = [1, 2, 3].map(n => breedCost(n));
   openSheet(`
     <div class="sheet-head"><h2>How pets work</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body pets-help">
@@ -14716,11 +14728,11 @@ function openPetsHelp() {
       <section>
         <h3>Breeding</h3>
         <p>Breeding feeds a <b>spare</b> pet into one you <b>keep</b>. The keeper gains a <b>lineage rank</b>, worth <b>+5% to every stat</b>, and keeps its own name, level and look. The spare is destroyed and does not come back.</p>
-        <p class="note">It costs Bone Dust and needs ${BREED_COOLDOWN_STEPS.toLocaleString()} steps of walking between breeds.</p>
+        <p class="note">It costs nothing but walking: ${BREED_COOLDOWN_STEPS.toLocaleString()} steps between breeds.</p>
       </section>
       <section>
         <h3>When to stop</h3>
-        <p>Each rank is worth the same <b>+5%</b>, but each one costs more than the last: ${costs.map(c => `<b>${c}</b>`).join(', then ')} dust and climbing. So the first few ranks are cheap power and the later ones are a grind for the same step up.</p>
+        <p>Each rank is worth the same <b>+5%</b>. What they cost is your legs: every rank is another ${BREED_COOLDOWN_STEPS.toLocaleString()} steps, so a long bloodline is a walking record and nothing else.</p>
         <p>Two things never transfer: a fed-in pet's <b>levels</b> and its <b>bloodline</b>. Feed in plain spares, not the pet you have been walking.</p>
       </section>
       <section>
@@ -15073,9 +15085,9 @@ async function openStable(opts = {}) {
     // "maybe you shouldn't": a shiny, a bred bloodline or a levelled pet is a
     // real loss, and the player has to be told BEFORE they commit.
     const spareIsPrecious = !!spare && (spare.shiny || (spare.lineage || 0) > 0 || spareLvl >= 5);
-    const cost = breedCost(offLineage);
-    const afford = st.dust >= cost;
-    const canBreedNow = pair && st.ready && afford;
+    /* No dust check: breeding is gated by the 6,000-step cooldown alone since
+       2026-08-27, so the pair and the cooldown are the whole of it. */
+    const canBreedNow = pair && st.ready;
 
     /* THE COVERFLOW ROSTER (v317). Tom sent the shadcn coverflow component and
        asked how it would look in the app, then "build the stable cover flow".
@@ -15351,7 +15363,6 @@ async function openStable(opts = {}) {
             Feed a plain spare in instead unless you are sure.</div>
           </div>` : ''}
           <div class="breed-pick"><span class="note">Which one are you keeping?</span><div class="breed-sp">${spChips}</div></div>
-          <div class="wallet-line"><span class="note">Cost</span><b><span class="dust-ico">${ICONS.dust(13)}</span> ${cost}${afford ? '' : ' · not enough'}</b></div>
           ${st.ready ? '' : `<p class="note">Walk ${st.cooldownLeft.toLocaleString()} more steps before breeding again.</p>`}
           <button class="btn" id="doBreed" ${canBreedNow ? '' : 'disabled'}>Feed ${esc((BH_BY_ID[spare.sp] || {}).name || spare.sp)} in</button>
         </div>` : ''}`;
@@ -20058,7 +20069,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
         if (r) {
           xp += r.xp || 0; coins = r.coins || 0;
           if (r.crate) extraCards.push(crateCard(r.crate));
-          if (r.dust) extraCards.push({ iconHtml: `<span class="dust-ico">${ICONS.dust(112)}</span>`, name: `${r.dust} Bone Dust`, rarity: 'common', kind: 'MATERIAL', stats: 'Spend it at the Salvage Bench' });
+          if (r.dust) extraCards.push({ iconHtml: `<span class="dust-ico">${ICONS.dust(112)}</span>`, name: `${r.dust} Bone Dust`, rarity: 'common', kind: 'MATERIAL', stats: 'Spend it in the Dressing Room' });
         } else coins = 8; // already beaten today
       }
       else if (foeCfg.mode === 'secret') {

@@ -785,7 +785,26 @@ export function removeInstance(instances, iid) {
  * it stays tied to walking. The KEEPER keeps its own look: a shiny fed in is lost
  * with it, which is what makes a shiny worth keeping. */
 export const BREED_COOLDOWN_STEPS = 6000;
-export function breedCost(newLineage) { return 30 + Math.max(1, newLineage) * 30; }
+/* BREEDING NO LONGER COSTS DUST, and this is a DELETION rather than a rule.
+   Tom, 2026-08-27, choosing option (a) of the dust plan's Q1.
+
+   WHY IT HAD TO GO. Dust is meant to become a mainly paywalled resource, and
+   dust bought breeding. Lineage is +5% per tier, permanently, so the moment dust
+   is sold, breeding sells POWER and the cosmetic-only decision of 2026-08-07
+   breaks. js/loot.js predicted this in writing before it was a problem.
+
+   The alternatives were to make lineage cosmetic (guts a progression system and
+   re-measures every Pit number downstream of petBattleStats) or to split earned
+   dust from bought dust (two currencies that look identical and behave
+   differently, which docs/IAP-SCOPING.md already warns reads as monetised in a
+   way one does not). This one makes the rule true by removing code instead of
+   adding a concept.
+
+   BREED_COOLDOWN_STEPS was always the real constraint and it carries this alone
+   now. If 6,000 steps turns out to be too generous, that is ONE constant, and
+   tests/fight-sim.mjs can measure whether it needs raising rather than anyone
+   guessing. The sink this removes was 60 to 180 dust, which the plan's 2.4
+   showed was never load-bearing against a 7,593 lifetime cosmetic sink. */
 
 /* The pet a breed consumed, for the reveal to show. Display-only: kept off the
    stored instance so nothing in the save grows a field it does not need. */
@@ -816,8 +835,6 @@ export async function breedPets(keepIid, feedIid) {
     return { ok: false, reason: 'cooldown', stepsLeft: BREED_COOLDOWN_STEPS - (lifetime - credit) };
   }
   const newLineage = (keep.lineage || 0) + 1;
-  const cost = breedCost(newLineage);
-  if ((await boneDust()) < cost) return { ok: false, reason: 'dust', cost };
 
   const consumed = breedParents(fed);
   // lineage is EARNED per feeding, not transferred: feeding a high-lineage pet in
@@ -826,7 +843,6 @@ export async function breedPets(keepIid, feedIid) {
   keep.lineage = newLineage;
   list = removeInstance(list, feedIid).instances;
   await savePetInstances(list);
-  await boneDustAdd(-cost);
   await kvSet('petBreedCredit', lifetime);
 
   // the keeper is the SAME pet, so its level bank is untouched. Only drop the
