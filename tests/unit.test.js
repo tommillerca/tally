@@ -34,7 +34,7 @@ import {
 } from '../js/quests.js';
 import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, gearDustValue, gearStatPoints, petDustValue,
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
-  removeInstance, breedParents, breedCost, transmogCost, TRANSMOG_HIDE,
+  removeInstance, breedParents, transmogCost, TRANSMOG_HIDE,
   nickProblem, cleanNick, NICK_MAX } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, PET_SLOTS } from '../data/boneheadz.js';
 import {
@@ -1261,17 +1261,30 @@ test('breeding: the fed pet is reported so the reveal can show what it cost', ()
 test('breeding: lineage is earned per feeding, never transferred from the spare', () => {
   /* Feeding a lineage-4 pet into a lineage-0 keeper must NOT vault the keeper to
      5: otherwise sacrificing your best pet is a strategy instead of a mistake.
-     The rule is keeper.lineage + 1, which is what breedCost is quoted against. */
+     The rule is keeper.lineage + 1. */
   const keeperLineage = 0, spareLineage = 4;
   const next = keeperLineage + 1;
   assert.equal(next, 1, 'keeper goes 0 -> 1 regardless of the spare');
   assert.notEqual(next, spareLineage + 1, 'the spare lineage does not carry');
-  assert.equal(breedCost(next), 60, 'and the price is quoted for the rank actually gained');
 });
 
-test('breeding: cost escalates with the lineage rank being bought', () => {
-  assert.ok(breedCost(2) > breedCost(1), 'higher lineage costs more');
-  assert.equal(breedCost(1), 60);
+test('breeding: costs no dust at all, and the step cooldown is the whole gate', async () => {
+  /* REPLACES 'cost escalates with the lineage rank being bought', which asserted
+     breedCost(1) === 60 and breedCost(2) > breedCost(1). Tom retired the cost on
+     2026-08-27 (dust plan Q1, option a): dust is becoming a paid resource and
+     lineage is +5% per tier permanently, so a dust price on breeding would have
+     been selling power the moment dust went on sale.
+
+     This asserts the ABSENCE, because the old test would simply have been
+     deleted otherwise and nothing would notice a price coming back. If somebody
+     re-exports breedCost or re-adds a spend to the breed path, this goes red. */
+  const loot = await import('../js/loot.js');
+  assert.equal(loot.breedCost, undefined, 'breedCost must not come back: dust cannot buy power');
+  const src = readFileSync(new URL('../js/loot.js', import.meta.url), 'utf8');
+  const breed = src.slice(src.indexOf('export async function breedPets'));
+  const body = breed.slice(0, breed.indexOf('\nexport '));
+  assert.ok(!/boneDustAdd\(\s*-/.test(body), 'the breed path must not spend dust');
+  assert.ok(/BREED_COOLDOWN_STEPS/.test(body), 'and the step cooldown is still the gate');
 });
 
 test('breeding: removeInstance drops exactly the targeted iid', () => {
@@ -1867,9 +1880,10 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
        2. EVERY dust spend in the module is enumerated and must be DECLARED
           here, so a new one cannot appear silently;
        3. no declared dust spend reaches a grant of an item.
-     Row 2 is the load-bearing one. It is also why breedPets is written down as
-     the one dust spend that is NOT cosmetic rather than quietly excluded: this
-     test is the register, and a register that hides its exception is a lie. */
+     Row 2 is the load-bearing one. It used to carry ONE declared exception,
+     breedPets, written down rather than quietly excluded because a register that
+     hides its exception is a lie. That exception was retired on 2026-08-27, so
+     the claim is now unqualified: every dust spend in the tree is cosmetic. */
   const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
 
@@ -1883,12 +1897,18 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
   const DECLARED = {
     buyRackItem: 'COSMETIC. Buys a piece off the rack: grantCosmetic, or the aura kv. tests/purchase-firewall.mjs asserts statically that this path cannot reach grantGear or grantCrate.',
     applyTransmog: 'COSMETIC. Pays for a look on a slot. One changes your stats, one costs dust and changes only the picture.',
-    breedPets: 'NOT COSMETIC, and written down rather than excused. Fusing two owned pets costs 30 + 30 x lineage dust and the offspring carries a permanent stat bump. It survived the 2026-08-25 closure because it is a SINK on pets you already own, not a shop that sells one, but it is the one place dust still touches power and it is the first thing to look at if dust is ever sold for money.',
+    /* breedPets WAS the third entry, declared NOT COSMETIC and written down
+       rather than excused: "it is the one place dust still touches power and it
+       is the first thing to look at if dust is ever sold for money". That is
+       exactly what happened. Tom ruled on 2026-08-27 (dust plan Q1, option a)
+       that breeding stops costing dust, so the exception this register existed
+       to flag is gone and EVERY remaining dust spend is cosmetic. The floor
+       below moved 3 -> 2 with it. */
   };
   const owners = [...src.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/gm)].map(m => [m.index, m[1]]);
   const ownerAt = i => { let n = '(top level)'; for (const [ix, name] of owners) { if (ix <= i) n = name; else break; } return n; };
   const spends = [...src.matchAll(/boneDustAdd\(\s*-/g)].map(m => ownerAt(m.index));
-  assert.ok(spends.length >= 3, `found ${spends.length} dust spends; the lint is reading the wrong thing`);
+  assert.ok(spends.length >= 2, `found ${spends.length} dust spends; the lint is reading the wrong thing`);
   assert.deepEqual([...new Set(spends)].sort(), Object.keys(DECLARED).sort(),
     `an undeclared dust spend: ${spends.join(', ')}`);
 
