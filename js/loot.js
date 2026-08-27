@@ -203,18 +203,38 @@ export const rackRotatePick = (week, salt, taken) => {
 export async function rack() {
   // lazy import: poi.js imports this module, so a top-level import is a cycle
   const { isoWeekKey } = await import('./poi.js');
+  /* lazy for the same reason as isoWeekKey: nutrition.js is not on loot.js's
+     static graph and a top-level import would put it there. */
+  const { dateKey } = await import('./nutrition.js');
   const week = isoWeekKey(new Date());
+  const day = dateKey();
   const cur = await kvGet('rack', null);
   /* MIGRATION, IN PLACE, NO NEW WEEK. A save written before the rotating shelf
      existed has ids but no rot. Rebuilding the whole record would move the
      themed rung under a player mid-week and quietly hand back their spent
      rerolls, so the record is kept and only the missing half is filled, on the
      salt it already carries. */
-  if (cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length
-      && !Array.isArray(cur.rot)) {
-    const rot = rackRotatePick(week, cur.salt || 0, cur.ids);
-    await kvSet('rack', { ...cur, rot });
-    cur.rot = rot;
+  /* THE ROTATING SHELF IS DAILY, THE THEMED NINE AND THE REROLLS STAY WEEKLY.
+     Tom, 2026-08-27: "i think the rack should change up everyday to keep things
+     fresh and have people checking in".
+
+     ONLY `rot` MOVES, AND THAT SEPARATION IS THE WHOLE CARE HERE. The comment
+     below records that `rr` used to reset on the day and that this handed out a
+     free full-rack draw EVERY DAY, surfacing any specific themed piece 94% of
+     weeks for nothing, which is precisely what a reroll must not do. Tom
+     approved weekly rerolls on 2026-08-20 and that is untouched: the day is
+     read for the shelf's seed and for nothing else. The themed rungs keep their
+     week too, so the theme still reads as a week-long thing to save up for.
+
+     Also covers the migration from the shelf's first shape: a save with no
+     `rot`, or one written on an earlier day, is filled in place rather than
+     rebuilt, so a player's spent rerolls and their themed nine survive. */
+  const staleRot = cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length
+    && (!Array.isArray(cur.rot) || cur.rotDay !== day);
+  if (staleRot) {
+    const rot = rackRotatePick(day, cur.salt || 0, cur.ids);
+    await kvSet('rack', { ...cur, rot, rotDay: day });
+    cur.rot = rot; cur.rotDay = day;
   }
   if (cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length) {
     /* THE ALLOWANCE IS WEEKLY, and the week check three lines up is the whole
@@ -229,7 +249,7 @@ export async function rack() {
     return { ...cur, rr: cur.rr || 0 };
   }
   const ids = rackPick(week, 0);
-  const st = { week, salt: 0, ids, rot: rackRotatePick(week, 0, ids), rr: 0 };
+  const st = { week, salt: 0, ids, rot: rackRotatePick(day, 0, ids), rotDay: day, rr: 0 };
   await kvSet('rack', st);
   return st;
 }
@@ -242,6 +262,12 @@ export function rackRerollCost(rr) { return RACK_REROLL_LADDER[rr] ?? null; }
    and nothing is deducted. Coins are only spent AFTER the rung is won. */
 export async function rerollRack() {
   const st = await rack();
+  /* `day` is read HERE and not borrowed from rack(): it is a different function
+     and the binding does not reach across. That exact mistake shipped in v458,
+     where breedPets returned a `cost` variable a previous change had deleted and
+     every breed threw ReferenceError at the last line. */
+  const { dateKey } = await import('./nutrition.js');
+  const day = dateKey();
   if (st.rr >= RACK_REROLL_LADDER.length) return { ok: false, reason: 'limit' };
   const cost = RACK_REROLL_LADDER[st.rr];
   const bal = await coins();
@@ -254,7 +280,7 @@ export async function rerollRack() {
     if (!cur || cur.week !== st.week || used !== st.rr) return undefined;   // somebody else moved it
     const salt = (cur.salt || 0) + 1;
     const ids = rackPick(cur.week, salt);
-    return { week: cur.week, salt, ids, rot: rackRotatePick(cur.week, salt, ids), rr: used + 1 };
+    return { week: cur.week, salt, ids, rot: rackRotatePick(day, salt, ids), rotDay: day, rr: used + 1 };
   });
   if (!next) return { ok: false, reason: 'race' };
   if (cost) await coinsAdd(-cost);
