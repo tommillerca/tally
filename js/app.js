@@ -889,6 +889,23 @@ function crateIcon(kind, s = 22) {
     return `<span class="bhi-wrap"><img src="assets/${file}.png" alt="" class="crate-ico-pix"`
       + ` width="${px}" height="${px}" style="width:${px}px;height:${px}px" decoding="sync"></span>`;
   }
+  /* BELOW 24 THE RARITY ART HAS NO WHOLE STEP, AND THE ANSWER IS NOT A VECTOR.
+     The golden chest is drawn at 48 and 24 only, and there is no 'golden' entry
+     in CRATE_ICON_BASIC, so every caller asking for 16 fell through to the old
+     vector: measured on five screens at once (kitchen, stable, today, wheel and
+     wheel-reveal), all of them drawing a vector golden crate at 16px next to
+     pixel art. That is the same complaint Tom has made repeatedly ("level up
+     screen still doesnt have the pixel art correct for coins and golden chest",
+     "legend doesnt have updated pixel art icons").
+     crateChip already IS the sanctioned answer to this exact case and it is his
+     own call: the plain 48px chest at its 16px step, carrying the rarity as a
+     glow instead of as its own artwork ("just use the backpack chest icon that
+     is simpler for the crate in that screen if it doesnt work shrunken", then
+     "ok make it glow then to seem rarer"). It was reachable only by calling
+     crateChip directly, so five call sites asking crateIcon for 16 never got it.
+     Fixed here, where every caller routes through, rather than at five sites
+     that would each have to remember. */
+  if (pix && s >= 16) return crateChip(kind, s);
   const id = kind === 'golden' ? 'crate-golden' : kind === 'egg' ? 'egg' : 'crate-daily';
   return `<span class="bhi-wrap">${bhIcon(id, s)}</span>`;
 }
@@ -8336,7 +8353,7 @@ async function renderShop(el) {
        by name, and the body and skull every player starts with). Same tile, same
        try-on, same buy row: a player should not have to learn a second shop. -->
   <div class="rk-theme"><b>ALSO ON THE RACK</b><i></i><span>${rotIds.length} pieces &middot; new every day</span></div>
-  <div class="rk-grid">
+  <div class="rk-grid rot">
     ${rotIds.map(id => rackTile(id, rotPrice(id)[0], rotPrice(id)[1], 384)).join('')}
   </div>` : ''}
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Potions and charms</b><small>Supplies ›</small></button>
