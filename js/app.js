@@ -3272,6 +3272,8 @@ async function renderToday(el) {
   const foodbuffs = await activeFoodBuffs();
   const ingCount = ingredientCount(await ingredients());
   const eq = await equipped();
+  const newsSeen = new Set(await kvGet('newsSeen', []));
+  const newsUnseen = NEWS.filter(n => !newsSeen.has(n.id)).length;
   const [coinBal, dustBal, pitEnergy] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
   const crates = await unopenedCrates();
   const allXp = await db.all('xp');
@@ -3554,6 +3556,8 @@ async function renderToday(el) {
     <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(24)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
 
+  ${newsBannerHtml(newsUnseen, eq)}
+
   ${/* QUESTS SIT DIRECTLY UNDER THE FOUR DOORS, ALWAYS. Tom, 2026-08-22: "have
        quests be always under the initial 4 buttons (backpack stable kitchen
        etc)". They used to render below a stack of nudges and banners, so their
@@ -3626,8 +3630,25 @@ async function renderToday(el) {
     <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
   </button>` : ''}
 
-  <section class="tsec"><div class="tsec-h">Calories</div>
-  ${calorieRingCard({ tot, t, over, remaining, protHit, startPct: prev.ringPct, startBig: prev.eatenShown ?? tot.kcal, macroPcts: prev.macroPcts })}</section>
+  ${/* THE DAY IS ONE COLLAPSED BANNER UNTIL YOU ASK FOR IT. Tom, 2026-08-27:
+       "below the fold should be fully collapsed and only showing a banner with
+       the wheel and macros when you tap it then you see the rest of health info".
+
+       The wheel and the macros ARE the summary, so the resting state answers the
+       only question most opens are asking (how much have I eaten) in one screen,
+       and meals, wellness, the Kitchen and activity are one tap away instead of
+       eight hundred pixels of scrolling. Measured before this: the meal list
+       alone was 912px and Wellness began ~700px below the fold.
+
+       <details>, so it is a real disclosure widget: keyboard operable, announced
+       to a screen reader, and every section stays IN THE DOM, which is what keeps
+       today-container's PASTDAY markers and the NESTED rows honest. */''}
+  <details class="dayrest" id="dayRest"${S.dayOpen ? ' open' : ''}>
+    <summary>
+      <div class="tsec-h">Today's health</div>
+      ${calorieRingCard({ tot, t, over, remaining, protHit, startPct: prev.ringPct, startBig: prev.eatenShown ?? tot.kcal, macroPcts: prev.macroPcts })}
+      <div class="dr-more"><span>Meals, wellness and activity</span>${ICONS.chev(13)}</div>
+    </summary>
 
   ${/* WELLNESS IS THE ONE SECTION THAT STAYS TODAY-ONLY, and the reason is its
        store, not its layout: js/wellness.js keeps water/bed/sleep in a SINGLE kv
@@ -3646,6 +3667,7 @@ async function renderToday(el) {
 
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
   <p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>
+  </details>
   </div>
   </section>
 
@@ -3754,6 +3776,61 @@ async function renderToday(el) {
      handlers that used to sit here belonged to the "Out there today" rows and
      came off with them (the spire CTA, the bestiary row's delegate and its
      compose, the teaser strip's deferred wall, and the garden row's two). */
+  /* OPENING IT IS READING IT. The dot is about "is there something", not "did
+     you tap every row", so one open clears it. Written on toggle rather than on
+     each row so a player who opens, reads the summaries and closes is not shown
+     the dot again tomorrow. */
+  /* THE DISCLOSURE SURVIVES A RE-RENDER, and that is a correctness fix rather
+     than a nicety. Today re-renders on a day change, on refresh() and after a
+     log; if the day snapped shut each time, the page would shorten under the
+     player and the scroll position would clamp. Measured: 900 -> 608 on a day
+     change, which is today-container's SCROLL contract ("a day change keeps the
+     reading position") failing for a real reason. */
+  $('#dayRest', el)?.addEventListener('toggle', e => { S.dayOpen = e.target.open; });
+
+  $('#newsBanner', el)?.addEventListener('toggle', async e => {
+    if (!e.target.open) return;
+    await kvSet('newsSeen', NEWS.map(n => n.id));
+    $('.nb-dot', el)?.remove();
+  });
+  /* EVERY NEWS TILE READS AT THE SAME SIZE, measured rather than hand-tuned.
+     Tom, 2026-08-27: "your icons are aligned right now theyre different themes
+     with different centreing and scaling it looks sloppy". He was right and the
+     numbers were ugly: across the nine rows the art filled between 0.36 and 3.80
+     of its 40px tile, a TEN-FOLD spread, and the Discord tile sat 19px off centre
+     on a 40px box because its art is a fixed 78px square.
+
+     The News tab solves this with per-class scales (.nw-fit .42, .nw-wall .52),
+     which covers two of the shapes and leaves tz-head and dc-app overflowing. A
+     tenth row would need an eleventh rule. So this measures what each tile
+     actually rendered and scales it to one target, which is correct for art
+     nobody has drawn yet.
+
+     ONE READ, ONE WRITE, on render only. Nothing here runs per frame, so the
+     settled-screen budget idle-perf-audit holds is untouched. */
+  requestAnimationFrame(() => {
+    for (const t of $$('.nb-thumb', el)) {
+      const kid = t.firstElementChild;
+      if (!kid) continue;
+      const tb = t.getBoundingClientRect(), kb = kid.getBoundingClientRect();
+      if (!kb.width || !kb.height) continue;
+      const scale = (Math.min(tb.width, tb.height) * 0.78) / Math.max(kb.width, kb.height);
+      kid.style.transformOrigin = 'center';
+      /* SCALE FIRST, THEN MEASURE THE OFFSET THAT IS LEFT. Doing both in one pass
+         off the pre-scale box put the Discord tile 29px out on a 40px square: in
+         `translate() scale()` the translate is in the PARENT's units, so dividing
+         it by the scale over-corrects by exactly that factor. Two passes is the
+         honest way to do it and costs one extra read of nine elements, once. */
+      kid.style.transform = `scale(${scale})`;
+      const sb = kid.getBoundingClientRect();
+      const dx = (tb.left + tb.width / 2) - (sb.left + sb.width / 2);
+      const dy = (tb.top + tb.height / 2) - (sb.top + sb.height / 2);
+      kid.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+    }
+  });
+  $$('.nb-row', el).forEach(b => b.addEventListener('click', () => {
+    NEWS.find(n => n.id === b.dataset.news)?.open();
+  }));
   $('#hypeYard', el)?.addEventListener('click', () => { location.hash = '#/boneyard'; });
   $('#hypeShop', el)?.addEventListener('click', () => openCharacter('shop'));
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
@@ -11086,6 +11163,70 @@ function richLine(str) {
    function, so the announcement a player sees here is byte-for-byte the one they
    missed, and there is no second copy to drift. The thumbnail is a small piece of
    that same popup's art for the same reason. */
+/* THE NEWS BANNER: COLLAPSED BY DEFAULT, AND IT TELLS YOU WHEN THERE IS SOMETHING.
+   Tom, 2026-08-27: "we have news in a collapsed banner that players can open and
+   it drops down to see all the past banners. when there is new news there can be
+   an icon letting them know otherwise it stays collapsed and avoids being
+   annoying?"
+
+   IT READS THE SAME `NEWS` ARRAY THE News TAB DOES. A second hand-written list is
+   how the Boneyard's "Out there today" drifted four markers behind the map key it
+   was duplicating, so there is one registry and two surfaces onto it.
+
+   WHY COLLAPSED RATHER THAN PINNED OPEN. v448 deleted every launch popup because
+   they interrupted, which left news entirely passive in a tab nobody opens. A
+   permanently open banner is the other failure: first in the scroll for three
+   days, then wallpaper. Collapsed with a dot is unmissable when there IS
+   something and one line when there is not.
+
+   IT NEVER OPENS ITSELF. first-session-audit's QUEUE row fails by name on any
+   maybeShow* added to boot(), and this adds none: it is markup in the page.
+
+   POSITION, AND A CONFLICT WORTH RECORDING. Tom, 2026-08-22: "have quests be
+   always under the initial 4 buttons", which today-container-audit holds with a
+   PASTDAY row. Tom, 2026-08-27: the news banner "should be at the top above
+   quests". Those cannot both be literally true. The newer instruction wins and
+   the guard is re-premised to allow exactly this one collapsed row between the
+   doors and the quests, rather than being deleted. */
+/* A NEWS ROW'S ART TAKES THE PLAYER'S OUTFIT, and exactly one row uses it: the
+   step race draws YOUR Bonehead on the track (`thumb: eq => headshotHtml(eq, 52)`)
+   while every other row ignores the argument. Calling thumb() with nothing there
+   gives headshotHtml undefined and it throws on `.B`.
+
+   THAT BLANKED THE ENTIRE HOME SCREEN and reported nothing: renderToday threw
+   mid-template, route() had already stamped screen--today, and #screen was left
+   with zero bytes of HTML, no page error and no console error. It was found by
+   bisecting the call out, not by reading.
+
+   So the outfit is passed, AND one row's art can never again take Today down
+   with it: a thumb that throws costs its own 40px tile and nothing else. This is
+   the app's default screen, which is the whole reason the fallback is here rather
+   than a comment asking people to be careful. */
+function newsThumb(n, eq) {
+  try { return n.thumb(eq) || ''; } catch { return ''; }
+}
+
+function newsBannerHtml(unseen, eq) {
+  const newest = NEWS[0];
+  if (!newest) return '';
+  return `<details class="nb" id="newsBanner">
+    <summary>
+      <span class="nb-ico">${pixCur('scroll', 16) || ICONS.quest(15)}</span>
+      <span class="nb-t">News</span>
+      ${unseen > 0 ? `<span class="nb-dot">${unseen}</span>` : ''}
+      <span class="nb-sub">${unseen > 0 ? esc(newest.title) : 'Nothing new'}</span>
+      <span class="nb-chev">${ICONS.chev(16)}</span>
+    </summary>
+    <div class="nb-list">
+      ${NEWS.map(n => `<button class="nb-row" data-news="${n.id}">
+        <span class="nb-thumb">${newsThumb(n, eq)}</span>
+        <span class="nb-txt"><b>${esc(n.title)}</b><i>${esc(n.blurb)}</i></span>
+        <span class="nb-date">${esc(n.date)}</span>
+      </button>`).join('')}
+    </div>
+  </details>`;
+}
+
 const NEWS = [
   /* THE WANDERER. Tom kept this row when every other launch interstitial went in
      v448: "the only news things staying are the new one with the wanderer on it

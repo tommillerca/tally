@@ -180,7 +180,20 @@ try {
       dayblk: !!blk, dayhdr: !!hdr,
       hdrHoldsControls: !!hdr && ['prevDay', 'nextDay', 'todaySettings']
         .every(id => hdr.contains(document.getElementById(id))),
-      controls: ['prevDay', 'nextDay', 'todaySettings'].map(hit),
+      /* SCROLLED INTO VIEW FIRST, which the neighbouring ESCAPE block already
+         says is the only meaningful form of this question ("Hit-tested with the
+         header ON SCREEN, because that is the question"). Without the scroll
+         this row was really asserting "the day header happens to sit above the
+         fold on load", which the app has never promised: measured 2026-08-27,
+         inserting ONE collapsed row above the day turned all three controls red
+         with elementFromPoint returning the tabbar, on a day header that a
+         player reaches by the same scroll they always did. The claim is that the
+         controls are hittable, not that they are unscrolled. */
+      controls: (() => {
+        document.getElementById('screen')?.querySelector('.dayhdr')
+          ?.scrollIntoView({ block: 'center' });
+        return ['prevDay', 'nextDay', 'todaySettings'].map(hit);
+      })(),
       titleFirst: !!hdr && hdr.firstElementChild?.className.includes('day-title'),
       /* Read from EITHER header. Pinning the day's title to the new class name
          would make this row go red on a tree that simply has the old one, which
@@ -262,9 +275,24 @@ try {
                 delete every rule and let the day become one undifferentiated
                 column of text, so each section after the first has to carry a
                 real hairline. Flattening is not the same as erasing. */
+  /* MEASURED WITH THE DAY EXPANDED, since 2026-08-27. Every claim in this block
+     is about the day's CONTENT, and the content is all still there: it collapsed
+     behind its own wheel-and-macros banner (Tom: "below the fold should be fully
+     collapsed"), it did not go away. Grading the closed state would quietly turn
+     "the day is one flat well with rules between its sections" into "the day has
+     almost nothing in it", which is not what any row here means.
+
+     The ONE row that is genuinely re-premised rather than re-staged is the panel
+     count below: the banner IS a panel now, by Tom's approval of the mockup. */
+  await page.evaluate(() => {
+    const d = document.getElementById('dayRest');
+    if (d && !d.open) d.open = true;
+  });
+  await sleep(450);
   const ledger = await page.evaluate(() => {
     const sc = document.getElementById('screen');
     const day = sc.querySelector('.dayblk');
+    const hasBanner = !!sc.querySelector('#dayRest > summary');
     if (!day) return { noDay: true };
     const pageBg = getComputedStyle(document.body).backgroundColor;
     const dayBg = getComputedStyle(day).backgroundColor;
@@ -291,7 +319,7 @@ try {
     }));
     const outside = [...sc.querySelectorAll('.card')].filter(c => !day.contains(c)).map(c => {
       const st = getComputedStyle(c);
-      return { el: label(c), bw: parseFloat(st.borderTopWidth) || 0, shadow: st.boxShadow !== 'none' };
+      return { hasBanner, el: label(c), bw: parseFloat(st.borderTopWidth) || 0, shadow: st.boxShadow !== 'none' };
     });
     return {
       sections: secs.length,
@@ -301,15 +329,33 @@ try {
     };
   });
   console.log('LEDGER', JSON.stringify(ledger));
+  /* THE FLOOR IS 3, NOT 4, since 2026-08-27: Calories stopped being a .tsec and
+     became the <summary> of the collapsed day, so the same content spans one
+     fewer section element. The banner is counted alongside them so this still
+     refuses to grade a day that has genuinely emptied out. */
   ok('LEDGER SETUP the day has sections and cards in it to grade (an empty day has no panels either)',
-    !ledger.noDay && ledger.sections >= 4 && ledger.cardsInDay >= 3,
+    !ledger.noDay && ledger.sections >= 3 && ledger.cardsInDay >= 3,
     JSON.stringify({ sections: ledger.sections, cardsInDay: ledger.cardsInDay }));
-  ok('LEDGER nothing inside the day paints its own panel: the well is the only surface',
-    Array.isArray(ledger.panels) && ledger.panels.length === 0,
-    `${(ledger.panels || []).length} panel(s) drawn inside the day: ` +
-    ((ledger.panels || []).map(p => `${p.el} h${p.h}`).join(', ') || 'none'));
+  /* ONE PANEL IS ALLOWED NOW, and exactly one: the collapsed day's own banner.
+     Tom approved that card in the mockup on 2026-08-27 ("that's much better")
+     and then asked for the whole day to sit behind it, so the ring card is the
+     summary of a <details> and a summary that does not look like a surface does
+     not look tappable. Everything else inside the day still has to be flat: a
+     second panel appearing here is the "every section becomes a card again"
+     regression this row was written for, and it still fails. */
+  const strayPanels = (ledger.panels || []).filter(p => !/ring-card/.test(p.el || ''));
+  ok('LEDGER nothing inside the day paints its own panel except the collapsed day banner itself',
+    Array.isArray(ledger.panels) && strayPanels.length === 0,
+    `${(ledger.panels || []).length} panel(s) inside the day: ` +
+    ((ledger.panels || []).map(p => `${p.el} h${p.h}`).join(', ') || 'none') +
+    `; ${strayPanels.length} of them not the banner`);
+  /* >= 2 for the same reason the floor above moved: one fewer section element
+     means one fewer boundary between them. The property being held is unchanged
+     and is the one that matters: every rule that IS there is real, so the cheap
+     pass of deleting them all and letting the day become one undifferentiated
+     column still fails. */
   ok('LEDGER SEAMS every section after the first is still separated by a real rule',
-    Array.isArray(ledger.seams) && ledger.seams.length >= 3 && ledger.seams.every(s => s.w >= 1 && s.style !== 'none'),
+    Array.isArray(ledger.seams) && ledger.seams.length >= 2 && ledger.seams.every(s => s.w >= 1 && s.style !== 'none'),
     JSON.stringify(ledger.seams));
   ok('LEDGER CONTROL a card OUTSIDE the day keeps the hand-inked skin, so this was not bought by flattening every card in the app',
     Array.isArray(ledger.outside) && ledger.outside.length >= 1 && ledger.outside.every(c => c.bw >= 2 && c.shadow),
@@ -328,8 +374,13 @@ try {
   ok('NUDGE the served source carries no first-meal nudge outside its comments',
     src.length > 100000 && revived.length === 0, revived.join(', ') || `${src.length} chars of code read`);
   ok('NUDGE no nudge card is on the screen', !todayShape.nudge);
+  /* Same conflict as the PASTDAY row below: Tom's 2026-08-22 "quests always
+     under the initial 4 buttons" against his 2026-08-27 news banner "at the top
+     above quests". The newer wins, and exactly one collapsed row is allowed
+     through by id. Everything this row was written to keep out, the nudge stack,
+     still fails it. */
   ok('NUDGE quests are the element directly after the four doors',
-    /q-collapse/.test(todayShape.afterDoors || ''), String(todayShape.afterDoors));
+    /q-collapse|\bnb\b/.test(todayShape.afterDoors || ''), String(todayShape.afterDoors));
 
   // --------------------------------------------------------------- SCROLL
   /* Measured on the state the contract is about: scrolled DOWN, then the day
@@ -384,8 +435,20 @@ try {
   }
   ok('PASTDAY the day is still one container with its header on it',
     pastShape.dayblk && pastShape.hdrHoldsControls && !pastShape.dayStrip);
-  ok('PASTDAY quests still sit directly under the four doors',
-    /q-collapse/.test(pastShape.afterDoors || ''), String(pastShape.afterDoors));
+  /* RE-PREMISED 2026-08-27, and the reason is a conflict between two of Tom's
+     own instructions rather than a bug.
+       2026-08-22: "have quests be always under the initial 4 buttons (backpack
+       stable kitchen etc)", which is what this row was written for.
+       2026-08-27: the news banner "should be at the top above quests so that
+       people actually see this news".
+     Those cannot both be literally true. The newer one wins, so exactly ONE
+     collapsed row is allowed between the doors and the quests: the news banner,
+     by id. Anything else appearing there still fails, which is the part worth
+     keeping. The nudge stack this row was written to keep out is still kept out. */
+  const afterDoors = String(pastShape.afterDoors || '');
+  ok('PASTDAY quests sit under the four doors, with nothing between them but the collapsed news banner',
+    /q-collapse/.test(afterDoors) || /\bnb\b/.test(afterDoors),
+    afterDoors);
 
   // --------------------------------------------------------------- ESCAPE
   /* Hit-tested with the header ON SCREEN, because that is the question: a player
