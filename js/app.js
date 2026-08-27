@@ -3814,7 +3814,18 @@ async function renderToday(el) {
       if (!kid) continue;
       const tb = t.getBoundingClientRect(), kb = kid.getBoundingClientRect();
       if (!kb.width || !kb.height) continue;
-      const scale = (Math.min(tb.width, tb.height) * 0.78) / Math.max(kb.width, kb.height);
+      /* THE TARGET IS A WHOLE PIXEL-ART STEP, 24, not a fraction of the tile.
+         It was Math.min(tile) * 0.78 = 31.2px, and that put badge-crown.png on
+         screen at 31.2 against a declared 24. pixel-art-swap-audit holds every
+         pixel <img> to a whole step at its own width, because a fractional step
+         resamples the sprite and blurs it, and it caught this.
+         Exempting pixel art from the pass instead was tried and is worse: it
+         leaves one tile at 24 among eight at 31.2, which is the ragged row this
+         normalisation exists to fix (measured spread 7.2px against a 1.5 bound).
+         24 satisfies both rules at once: pixCur already snaps to it, so pixel art
+         scales by exactly 1.0 and everything else meets it. */
+      const TARGET = 24;
+      const scale = TARGET / Math.max(kb.width, kb.height);
       kid.style.transformOrigin = 'center';
       /* SCALE FIRST, THEN MEASURE THE OFFSET THAT IS LEFT. Doing both in one pass
          off the pre-scale box put the Discord tile 29px out on a 40px square: in

@@ -211,7 +211,7 @@ const openCook = async () => {
   await page.evaluate(() => document.getElementById('kitchenActBtn')?.click());
   await sleep(1700);
   // the Kitchen lost its two-door landing on 2026-08-18 and IS the cook view now
-  const door = await page.evaluate(() => { const d = document.getElementById('doorCook'); if (!d) return 'no-door'; d.click(); return true; });
+  const door = await page.evaluate(() => { const d = document.getElementById('kitchenActBtn'); if (!d) return 'no-door'; d.click(); return true; });
   await sleep(1400);
   await settle(page);
   return door === 'no-door' ? true : door;
