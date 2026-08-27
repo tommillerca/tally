@@ -10588,3 +10588,49 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    over, and on Today the thing underneath the box is the Bonehead stage, which
    this row's own `pointer-events: none` already handles. */
 .gw-row .gw-box.tb-done { pointer-events: auto; cursor: pointer; }
+
+/* THE NEWS BANNER, collapsed by default. One line at rest so it can never become
+   wallpaper the way a permanently open banner does, and a lime count when there
+   is something unread. Tom, 2026-08-27: "when there is new news there can be an
+   icon letting them know otherwise it stays collapsed and avoids being
+   annoying?" */
+.nb { margin: 0 0 10px; border: 2px solid var(--ink); border-radius: var(--radius-sm);
+  background: var(--surface); box-shadow: 0 3px 0 rgba(0, 0, 0, .32); overflow: hidden; }
+.nb > summary { list-style: none; cursor: pointer; display: flex; align-items: center;
+  gap: 8px; padding: 10px 12px; font-size: 13px; font-weight: 800; }
+.nb > summary::-webkit-details-marker { display: none; }
+.nb-ico { display: flex; flex: none; }
+.nb-t { letter-spacing: .07em; text-transform: uppercase; font-size: 11.5px; color: var(--text-2); }
+.nb-dot { background: var(--accent); color: #14210a; font-size: 10.5px; font-weight: 900;
+  min-width: 17px; height: 17px; border-radius: 9px; display: grid; place-items: center; padding: 0 5px; }
+.nb-sub { margin-left: 2px; flex: 1; min-width: 0; font-weight: 600; font-size: 12.5px;
+  color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-chev { display: flex; flex: none; color: var(--text-3); transform: rotate(90deg); transition: transform .18s linear; }
+.nb[open] .nb-chev { transform: rotate(-90deg); }
+.nb-list { border-top: 1px solid var(--line); }
+.nb-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px;
+  background: none; border: none; border-bottom: 1px solid var(--line); text-align: left; cursor: pointer; }
+.nb-row:last-child { border-bottom: none; }
+.nb-row:active { background: var(--surface-2); }
+.nb-thumb { width: 40px; height: 40px; border-radius: 10px; overflow: hidden; flex: none;
+  display: grid; place-items: center; background: var(--surface-2); }
+.nb-thumb img, .nb-thumb svg { max-width: 100%; max-height: 100%; }
+.nb-txt { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.nb-txt b { font-size: 13.5px; }
+.nb-txt i { font-style: normal; font-size: 11.5px; color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-date { font-size: 10.5px; color: var(--text-3); flex: none; }
+
+/* THE DAY, COLLAPSED. The wheel and the macros are the summary; meals, wellness,
+   the Kitchen and activity live behind the tap. Tom, 2026-08-27: "below the fold
+   should be fully collapsed and only showing a banner with the wheel and macros". */
+.dayrest > summary { list-style: none; cursor: pointer; display: block; }
+.dayrest > summary::-webkit-details-marker { display: none; }
+.dr-more {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  margin: 9px 2px 2px; font-size: 11.5px; font-weight: 800;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--accent);
+}
+.dr-more svg { transform: rotate(90deg); transition: transform .18s linear; }
+.dayrest[open] .dr-more svg { transform: rotate(-90deg); }
+.dayrest[open] .dr-more { margin-bottom: 10px; }

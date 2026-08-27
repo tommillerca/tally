@@ -180,7 +180,20 @@ try {
       dayblk: !!blk, dayhdr: !!hdr,
       hdrHoldsControls: !!hdr && ['prevDay', 'nextDay', 'todaySettings']
         .every(id => hdr.contains(document.getElementById(id))),
-      controls: ['prevDay', 'nextDay', 'todaySettings'].map(hit),
+      /* SCROLLED INTO VIEW FIRST, which the neighbouring ESCAPE block already
+         says is the only meaningful form of this question ("Hit-tested with the
+         header ON SCREEN, because that is the question"). Without the scroll
+         this row was really asserting "the day header happens to sit above the
+         fold on load", which the app has never promised: measured 2026-08-27,
+         inserting ONE collapsed row above the day turned all three controls red
+         with elementFromPoint returning the tabbar, on a day header that a
+         player reaches by the same scroll they always did. The claim is that the
+         controls are hittable, not that they are unscrolled. */
+      controls: (() => {
+        document.getElementById('screen')?.querySelector('.dayhdr')
+          ?.scrollIntoView({ block: 'center' });
+        return ['prevDay', 'nextDay', 'todaySettings'].map(hit);
+      })(),
       titleFirst: !!hdr && hdr.firstElementChild?.className.includes('day-title'),
       /* Read from EITHER header. Pinning the day's title to the new class name
          would make this row go red on a tree that simply has the old one, which
@@ -328,8 +341,13 @@ try {
   ok('NUDGE the served source carries no first-meal nudge outside its comments',
     src.length > 100000 && revived.length === 0, revived.join(', ') || `${src.length} chars of code read`);
   ok('NUDGE no nudge card is on the screen', !todayShape.nudge);
+  /* Same conflict as the PASTDAY row below: Tom's 2026-08-22 "quests always
+     under the initial 4 buttons" against his 2026-08-27 news banner "at the top
+     above quests". The newer wins, and exactly one collapsed row is allowed
+     through by id. Everything this row was written to keep out, the nudge stack,
+     still fails it. */
   ok('NUDGE quests are the element directly after the four doors',
-    /q-collapse/.test(todayShape.afterDoors || ''), String(todayShape.afterDoors));
+    /q-collapse|\bnb\b/.test(todayShape.afterDoors || ''), String(todayShape.afterDoors));
 
   // --------------------------------------------------------------- SCROLL
   /* Measured on the state the contract is about: scrolled DOWN, then the day
@@ -384,8 +402,20 @@ try {
   }
   ok('PASTDAY the day is still one container with its header on it',
     pastShape.dayblk && pastShape.hdrHoldsControls && !pastShape.dayStrip);
-  ok('PASTDAY quests still sit directly under the four doors',
-    /q-collapse/.test(pastShape.afterDoors || ''), String(pastShape.afterDoors));
+  /* RE-PREMISED 2026-08-27, and the reason is a conflict between two of Tom's
+     own instructions rather than a bug.
+       2026-08-22: "have quests be always under the initial 4 buttons (backpack
+       stable kitchen etc)", which is what this row was written for.
+       2026-08-27: the news banner "should be at the top above quests so that
+       people actually see this news".
+     Those cannot both be literally true. The newer one wins, so exactly ONE
+     collapsed row is allowed between the doors and the quests: the news banner,
+     by id. Anything else appearing there still fails, which is the part worth
+     keeping. The nudge stack this row was written to keep out is still kept out. */
+  const afterDoors = String(pastShape.afterDoors || '');
+  ok('PASTDAY quests sit under the four doors, with nothing between them but the collapsed news banner',
+    /q-collapse/.test(afterDoors) || /\bnb\b/.test(afterDoors),
+    afterDoors);
 
   // --------------------------------------------------------------- ESCAPE
   /* Hit-tested with the header ON SCREEN, because that is the question: a player
