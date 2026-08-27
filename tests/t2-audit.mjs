@@ -10,6 +10,14 @@
  *                 sheets over a busy screen (the hatch opened over the words
  *                 "BOSS LOOT · TAP TO COMPARE, KEEP ONE PER DROP").
  *                 RED: drop `cls: 'takeover'` from openPackReveal.
+ *   EGGS-READY    the control for the hatch TAKEOVER row: the egg this audit
+ *                 grants has genuinely walked to term, so a red TAKEOVER means
+ *                 the reveal lost its takeover, not that the button was never
+ *                 drawn. Added 2026-08-27 after the provocation banked its 30
+ *                 days on the wrong side of grantEgg's stepsAtStart anchor, so
+ *                 TAKEOVER reported "no .sheet.takeover" on an app that was
+ *                 fine. RED: put the step-seeding loop back above the
+ *                 grantCrate('egg') call.
  *   CARD-PLATE    the card's name/rarity sit on a plate, and the rarity CHIP is
  *                 tinted by the card's own .r-<rarity> class, so frame and label
  *                 can never disagree. RED: put the old inline style back.
@@ -207,18 +215,37 @@ else {
 await closeAll();
 
 /* ---- 4. pet hatch ---- */
+/* GRANT THE EGG FIRST, THEN WALK IT. The order here was the other way round
+   until 2026-08-27 and the egg could never be ready, so [data-hatch] never
+   rendered, the click below hit nothing and the row reported "no
+   .sheet.takeover" as if openHatchReveal had lost its takeover class. It has
+   not: app.js openHatchReveal still passes `{ cls: 'takeover' }`.
+   grantEgg() snapshots `stepsAtStart = lifetimeStepsSum()` at the moment of the
+   grant, and eggProgress compares `lifetime - stepsAtStart` against the goal.
+   Banking 30 days BEFORE the grant therefore banks them on the wrong side of
+   the anchor. Measured on origin/main at 14fb37a3 under this audit's exact
+   sequence: stepsAtStart 424,500 against a lifetime of 424,500, walked 0 of
+   8,000, ready false, 0 [data-hatch] buttons, the card reading "STEP EGG 0 /
+   8,000 steps". A broken provocation, not an app defect. Reordered rather than
+   granted with `goal: 0`, because the ready-on-arrival egg is the Crew
+   channel's path and this row is supposed to walk one to term. EGGS-READY
+   below is the control: it fails loudly here rather than letting TAKEOVER fail
+   for a reason that reads like a missing CSS class. */
 const eggs = await page.evaluate(async () => {
   const l = await import('./js/loot.js');
   const db = (await import('./js/db.js')).db;
+  await l.grantCrate('egg', 'audit-egg-' + Date.now());
   const now = new Date();
   for (let i = 0; i < 30; i++) {
     const d = new Date(now.getTime() - i * 86400000).toISOString().slice(0, 10);
     const prev = (await db.get('health', d)) || { date: d };
     await db.put('health', { ...prev, date: d, steps: Math.max(prev.steps || 0, 13000) });
   }
-  await l.grantCrate('egg', 'audit-egg-' + Date.now());
-  return (await l.inventory()).filter(r => r.kind === 'egg').length;
+  const life = await l.lifetimeStepsSum();
+  const rows = (await l.inventory()).filter(r => r.kind === 'egg');
+  return { n: rows.length, ready: rows.filter(r => l.eggProgress(r, life).ready).length };
 });
+ok('EGGS-READY the provoked egg is actually hatchable', eggs.n > 0 && eggs.ready > 0, JSON.stringify(eggs));
 await page.evaluate(() => { location.hash = '#/bonehead'; });
 await sleep(2300);
 await page.evaluate(() => { const t = [...document.querySelectorAll('.chip.ch-tab')].find(x => /backpack/i.test(x.textContent || '')); if (t) t.click(); });
@@ -226,7 +253,7 @@ await sleep(1700);
 await page.evaluate(() => document.querySelector('[data-hatch]')?.click());
 await sleep(4000);
 const hTk = await takeover();
-ok('TAKEOVER pet hatch owns the screen', hTk.ok, `${eggs} egg(s); ` + JSON.stringify(hTk));
+ok('TAKEOVER pet hatch owns the screen', hTk.ok, `${eggs.n} egg(s), ${eggs.ready} ready; ` + JSON.stringify(hTk));
 await shot('hatch');
 await closeAll();
 
