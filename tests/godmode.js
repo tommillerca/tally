@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { spawn, execSync } from 'node:child_process';
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -469,6 +470,11 @@ export async function boot(base, opts = {}) {
     base = own.url;
     process.once('exit', () => { try { own.close(); } catch { /* already down */ } });
   }
+  /* Sweep anything an earlier killed run stranded BEFORE launching ours, so a
+     leak is bounded by "until the next audit runs" even on a machine where the
+     nanny somehow never started. Only touches ppid-1 orphans, never a live
+     suite's browser. */
+  reapStrandedBrowsers();
   const puppeteer = await loadPuppeteer();
   /* Chrome refuses to start its sandbox as uid 0, so on a root container every
      check here dies at launch and reads as "the browser is broken". No-op on a
@@ -774,7 +780,6 @@ export async function serveTree(root, { timeoutMs = 15000, forcePort = null } = 
      port and python cannot bind, which is the stranded-server case without needing a
      stranded server (macOS happily lets two processes share a port with SO_REUSEADDR,
      so squatting does not reproduce it). */
-  const { spawn } = await import('node:child_process');
   const net = await import('node:net');
   const port = forcePort || await new Promise((res, rej) => {
     const s = net.createServer();
@@ -832,8 +837,63 @@ export async function serveTree(root, { timeoutMs = 15000, forcePort = null } = 
 const _browsers = new Set();
 const _servers = new Set();
 
+/* THE ONE HOLE NOTHING INSIDE NODE CAN PLUG, PLUGGED FROM OUTSIDE IT.
+ * Everything above is a handler that runs INSIDE this process, so SIGKILL beats
+ * all of it: the note above says so and delegated the case to the census, which
+ * only helps on runs the census performs. A single audit killed by a harness
+ * timeout left nothing to reap it.
+ *
+ * WHAT THAT COSTS, MEASURED ON TOM'S MACHINE 2026-08-27: an orphaned
+ * chrome-headless-shell whose GPU child sat at 1200% CPU, eleven cores of
+ * SwiftShader software rendering, for 1h37m with no parent (ppid 1) and no page
+ * doing anything. It was started at 14:07:35 by an audit that a 2-minute
+ * timeout SIGKILLed.
+ *
+ * So the reaper is a SEPARATE, DETACHED process that cannot be killed with us.
+ * It watches OUR pid, and when we are gone it kills the browser. `sh` rather
+ * than a second node: about 1MB, no module graph, and it is asleep the whole
+ * time. It exits on its own the moment either side is gone, so it never
+ * accumulates.
+ *
+ * kill -0 tests existence without signalling. The browser pid is Chrome's own
+ * parent process (Browser.process()), which is what puppeteer reaps helpers
+ * through, so killing it takes the renderers and the GPU child with it. */
+function _nanny(browser) {
+  const proc = browser.process();
+  const pid = proc && proc.pid;
+  if (!pid) return;
+  const script = `while kill -0 ${process.pid} 2>/dev/null; do kill -0 ${pid} 2>/dev/null || exit 0; sleep 2; done; kill -9 -${pid} 2>/dev/null || kill -9 ${pid} 2>/dev/null; exit 0`;
+  try {
+    const n = spawn('/bin/sh', ['-c', script], { detached: true, stdio: 'ignore' });
+    n.unref();
+    browser.once('disconnected', () => { try { process.kill(n.pid, 'SIGKILL'); } catch { /* already gone */ } });
+  } catch { /* a machine that cannot spawn sh has bigger problems than this */ }
+}
+
+/* AND CLEAN UP WHAT EARLIER RUNS ALREADY STRANDED. Orphans are identifiable
+ * without guessing: ppid 1 (reparented to launchd because their launcher died)
+ * AND a binary under the puppeteer cache. A browser belonging to a LIVE audit
+ * has a live parent, so it is never matched, which is what makes this safe to
+ * run while other suites are going. Best-effort and silent: this is hygiene,
+ * not a check, and it must never be the reason a suite fails. */
+export function reapStrandedBrowsers() {
+  if (process.platform === 'win32') return 0;
+  try {
+    const out = execSync("ps -Ao pid,ppid,args", { encoding: 'utf8' });
+    const dead = out.split('\n')
+      .filter(l => /cache\/puppeteer/.test(l) && !/--type=/.test(l))
+      .map(l => l.trim().split(/\s+/))
+      .filter(f => f[1] === '1')
+      .map(f => +f[0])
+      .filter(Boolean);
+    for (const pid of dead) { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
+    return dead.length;
+  } catch { return 0; }
+}
+
 function _trackBrowser(browser) {
   _installExitHandlers();
+  _nanny(browser);
   _browsers.add(browser);
   browser.once('disconnected', () => _browsers.delete(browser));
 }
