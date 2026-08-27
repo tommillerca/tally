@@ -11313,7 +11313,7 @@ const NEWS = [
      card, deliberately, and news-tab-audit was re-premised to allow that. */
   { id: 'wanderer', date: 'Aug 25', title: 'You hear him first',
     blurb: 'Heavy footsteps, and a light sweeping the ground ahead of him. Do not stand in it.',
-    thumb: () => `<img class="nw-img" src="assets/bh/wanderer/wanderer.png" alt="">`,
+    thumb: () => `<img class="nw-img" src="assets/bh/wanderer/wanderer-192.png" alt="">`,
     goes: 'Boneyard',
     open: () => { location.hash = '#/boneyard'; } },
   { id: 'thanks', date: 'Aug 15', title: 'Thanks for being early',
@@ -11337,7 +11337,7 @@ const NEWS = [
     open: () => openCommunityCard() },
   { id: 'mage', date: 'Aug 9', title: 'The Live Wire',
     blurb: 'Some of the dens out there are his, and nothing marks them.',
-    thumb: () => `<img class="nw-img" src="assets/bh/mage/mage.png" alt="">`,
+    thumb: () => `<img class="nw-img" src="assets/bh/mage/mage-192.png" alt="">`,
     open: () => openMageIntro() },
   /* The Bestiary is a TEASER and this is the only place it lives on after the
      one-time showing. It shows a sample of the cast and names nothing: meeting a
@@ -11345,7 +11345,7 @@ const NEWS = [
   { id: 'bestiary', date: 'Aug 9', title: 'The Bestiary',
     blurb: 'Fifty-six of them out there. The ground decides which one you meet.',
     thumb: () => { const d = remoteDen(dateKey());
-      return d.theme && d.theme.art === 'mage' ? `<img class="nw-img" src="assets/bh/mage/mage.png" alt="">`
+      return d.theme && d.theme.art === 'mage' ? `<img class="nw-img" src="assets/bh/mage/mage-192.png" alt="">`
         : headshotHtml(themedLook(d.theme && d.theme.key, d.id) || {}, 52); },
     open: () => openBossIntro() },
   { id: 'drop', date: 'Aug 8', title: 'The Puffer Pack',
@@ -11369,7 +11369,7 @@ const NEWS = [
     open: () => openRaceIntro() },
   { id: 'spire', date: 'Aug 6', title: 'Dark Spires',
     blurb: 'Take a tower and it pays you tribute for visiting.',
-    thumb: () => `<img class="nw-img" src="assets/brand/tomb.png" alt="">`,
+    thumb: () => `<img class="nw-img" src="assets/brand/tomb-192.png" alt="">`,
     open: () => openSpireIntro() },
   /* The Bone Garden row came out on 2026-08-18 with the rest of the garden's
      player-facing routes: its CTA reopened openGardenPopup, whose own CTA opened
@@ -15002,7 +15002,12 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
         </div>` : ''}
         ${roster.map(petHtml).join('')}
         ${lurkSp ? `<div class="pdk-lurker${lurkSp !== 'CX' ? ' pdk-lure-shiny' : ''}" data-pdk="${lurkSp}" style="left:296px;top:158px;width:96px;height:64px">
-          <img src="${bhAsset(BH_BY_ID[lurkSp])}" alt=""><span class="pdk-eyes"><i></i><i></i></span>
+          <!-- THE LURKER IS 96x64, SO IT DOES NOT NEED A 2048px MASTER. Measured on
+               the Paddock census: this one <img> decoded 16.0 MB, more than a third
+               of the Paddock's own 41.6 MB, to draw a pet 96 CSS px wide. 192 is the
+               tier bhTierFor picks for that box at dpr 2, and the thumbnail exists
+               for every pet. -->
+          <img src="${bhThumb(bhAsset(BH_BY_ID[lurkSp]), 192)}" alt=""><span class="pdk-eyes"><i></i><i></i></span>
           ${lurkSp !== 'CX' ? '<span class="pdk-lure-spark">✦</span><span class="pdk-lure-spark s2">✦</span>' : ''}
         </div>` : ''}
         <i class="pdk-fog" style="left:20px;top:172px;--pdk-dur:26s"></i>

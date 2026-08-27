@@ -182,6 +182,16 @@ const PRECACHE = [
   './assets/bh/fx/heckle/bone1.png',
   './assets/bh/fx/heckle/bone2.png',
   './assets/bh/mage/mage.png',
+  /* THE NEWS ROW THUMBNAILS, at the size the news row actually draws them.
+     The three masters above are 1024, 640 and 340 wide and the row paints them
+     at 24 to 40 CSS px: measured on the Paddock census, mage.png alone decoded
+     3.5 MB for a 24px slot. These are precached alongside their masters rather
+     than instead of them, because the masters are still used elsewhere, and an
+     asset the app asks for that PRECACHE does not carry is the v455 offline
+     blank-screen bug. */
+  './assets/bh/mage/mage-192.png',
+  './assets/bh/wanderer/wanderer-192.png',
+  './assets/brand/tomb-192.png',
   // Cam's lightning layers, cut from mage-fx.png: his casts are drawn with these,
   // so a cold cache must not fire a spell with no spell in it
   './assets/bh/mage/fx/bolt-tall.png',
