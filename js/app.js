@@ -14107,7 +14107,48 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily', tOpen = performa
        the end of it, which is the very thing being fixed. */
     const late = Math.max(0, performance.now() - tOpen);
     const delay = Math.max(0, start - late);
-    const room = Math.max(200, secs('--b-sink') - (late + delay) - HOLD);
+    /* IF THE TAIL NO LONGER FITS, THE CRATE WAITS. The line below used to floor
+       the window at 200ms, which cannot compress into a window that has already
+       closed: measured under a cold-cache provocation, decode finished at
+       late=1633ms against a sink at 1640, so room floored at 200 and the last
+       frame landed 279ms AFTER the crate had started leaving. That is Tom's
+       original report exactly ("the first chest you open for both kind clips the
+       end of the animation a little bit but the second chest doesn't"), still
+       alive in the one case the first fix did not cover: it moved decode cost
+       onto the pre-roll, but when decode outruns the pre-roll AND the sink there
+       is no pre-roll left to spend it on.
+       Every beat from the sink onwards is a CSS animation-delay, and the
+       stylesheet's own rule is that everything after the card keeps its spacing,
+       so they move together by the shortfall. When decode is fast this computes
+       push = 0 and the shipped timing is byte-for-byte what it was. */
+    const BEATS = ['--b-sink', '--b-card', '--b-count', '--b-title', '--b-foot', '--b-sway', '--b-spark'];
+    const beat0 = Object.fromEntries(BEATS.map(b => [b, secs(b)]));
+    const shove = ms => { for (const b of BEATS) reveal.style.setProperty(b, `${((beat0[b] + ms) / 1000).toFixed(3)}s`); };
+    /* The allowance is rAF granularity per step. The table is a PREDICTION and
+       the loop below is the truth: eight step boundaries can each land up to one
+       frame late, and without the allowance the predicted end undershot the real
+       one by 113ms, which came straight back out of HOLD (measured: hold -13ms
+       on daily, 35ms on golden, when the push used `want` alone). The observed
+       correction under the loop cannot be the only mechanism, because by the
+       time the last frame lands the sink may already have begun. */
+    /* THE PREDICTION IS NOT TRUSTED, THE OBSERVED END IS. A fixed per-frame
+       allowance cannot cover a phone that is dropping frames: measured under
+       contention, golden's two-step table took 486ms of wall clock against a
+       320ms schedule, six times the 17ms-per-step allowance, and the last frame
+       landed 26ms after a sink that had already begun (so the correction below
+       was rightly refused: shoving a crate that is halfway gone back on screen
+       is a worse artefact than the clip).
+
+       So when decode has already outrun the window, the beats are parked well
+       out of reach FIRST, which guarantees the sink cannot start while frames
+       are still playing, and the real value is written when the last frame
+       actually lands. `bare` deliberately excludes any allowance: when the
+       authored table still fits, push is 0, nothing is written inline, and the
+       shipped choreography is exactly what it was. */
+    const bare = late + delay + want + HOLD;
+    let push = bare > beat0['--b-sink'] ? (bare + want + 300) - beat0['--b-sink'] : 0;
+    if (push > 0) shove(push);
+    const room = Math.max(200, (beat0['--b-sink'] + push) - (late + delay) - HOLD);
     const holds = table.map(v => v * (want > room ? room / want : 1));
     /* ON THE DROP'S OWN animationend, not on the `at(start)` beat.
        The beat is 1.12s and the drop lands at 1.02s, so on a player's phone the
@@ -14144,7 +14185,20 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily', tOpen = performa
         for (const f of frames) f.classList.remove('on');
         frames[Math.min(shown, frames.length - 1)].classList.add('on');
       }
-      if (shown < frames.length - 1) requestAnimationFrame(tick);
+      if (shown < frames.length - 1) { requestAnimationFrame(tick); return; }
+      /* THE OBSERVED END, which is the only one that is true. Whatever the
+         prediction above got wrong, the last authored frame is on screen NOW, so
+         the crate may not begin leaving for another HOLD ms. Only ever later:
+         pulling the sink earlier would clip the very thing this protects. */
+      const nowRel = performance.now() - tOpen, sinkAt = beat0['--b-sink'] + push;
+      /* The last authored frame is on screen NOW, so the crate leaves exactly
+         HOLD after it, never before the authored beat, and never earlier than
+         wherever the sink has already got to. */
+      if (nowRel < sinkAt) {
+        const target = Math.max(beat0['--b-sink'], nowRel + HOLD);
+        push = target - beat0['--b-sink'];
+        shove(push);
+      }
     };
     at(delay, () => requestAnimationFrame(tick));
   });
