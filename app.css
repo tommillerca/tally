@@ -254,7 +254,6 @@ svg { display: block; }
 .day-title { text-align: center; flex: 1; position: relative; }
 .day-title h1 { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
 .day-title .sub { font-size: 12.5px; color: var(--text-3); margin-top: 1px; font-weight: 500; }
-.day-title input[type="date"] { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; }
 .icon-btn {
   width: 40px; height: 40px; border-radius: 13px; background: var(--surface);
   display: grid; place-items: center; color: var(--text-2); flex: none;
@@ -10671,3 +10670,8 @@ details:not([open]) > :not(summary) *::after { animation: none !important; }
 .dr-more svg { transform: rotate(90deg); transition: transform .18s linear; }
 .dayrest[open] .dr-more svg { transform: rotate(-90deg); }
 .dayrest[open] .dr-more { margin-bottom: 10px; }
+
+/* a news row that LEAVES Today says where it is going */
+.nb-goes { display: flex; align-items: center; gap: 3px; flex: none;
+  font-size: 10.5px; font-weight: 800; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--accent); }

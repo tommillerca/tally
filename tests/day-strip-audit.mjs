@@ -38,7 +38,7 @@ const { browser, page } = await boot(base);
 await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(1800);
 
-const shownDate = () => page.evaluate(() => (document.getElementById('datePick') || {}).value);
+const shownDate = () => page.evaluate(() => (document.querySelector('.dayhdr') || {}).dataset?.date);
 const iso = (offset) => page.evaluate(o => { const d = new Date(); d.setDate(d.getDate() + o); return d.toISOString().slice(0, 10); }, offset);
 
 /* Every control must EXIST before anything is asserted about it: a missing
@@ -46,8 +46,8 @@ const iso = (offset) => page.evaluate(o => { const d = new Date(); d.setDate(d.g
 const controls = await page.evaluate(() => ({
   prev: !!document.getElementById('prevDay'),
   next: !!document.getElementById('nextDay'),
-  pick: !!document.getElementById('datePick'),
-  pickValue: (document.getElementById('datePick') || {}).value || null,
+  pick: !!document.querySelector('.dayhdr[data-date]'),
+  pickValue: (document.querySelector('.dayhdr') || {}).dataset?.date || null,
 }));
 ok('SETUP all three day controls are on the screen', controls.prev && controls.next && controls.pick, JSON.stringify(controls));
 ok('SETUP the picker starts on today', controls.pickValue === await iso(0), `${controls.pickValue} vs ${await iso(0)}`);
@@ -100,7 +100,7 @@ const wrote = await page.evaluate(async () => {
      drawn, because the ledger groups by meal: my first version left it out and
      the read-back check failed for its own reason rather than the app's. Shape
      copied from a live row in the demo save. */
-  const row = { id: 'daystrip-probe', date: document.getElementById('datePick').value,
+  const row = { id: 'daystrip-probe', date: document.querySelector('.dayhdr').dataset.date,
     meal: 0, ts: Date.now(), foodId: null, name: 'Day strip probe', brand: null,
     portionLabel: '1 probe', sel: { mode: 'serving', idx: 0, qty: 1 },
     kcal: 123, p: 1, c: 1, f: 1 };
@@ -117,13 +117,15 @@ ok('ROUND TRIP the row is stored under the day the strip is showing', wrote.stor
    RE-RENDER FIRST, THROUGH A REAL CONTROL. The row went straight into the
    store, so the screen is still showing the paint from before it existed:
    my first version asserted against that stale paint and failed for its own
-   reason, not the app's. Re-select the SAME date on the picker, which is a
-   real user action and drives the app's own refresh on the same day. */
-await page.evaluate(d => {
-  const el = document.getElementById('datePick');
-  el.value = d;
-  el.dispatchEvent(new Event('change', { bubbles: true }));
-}, target);
+   reason, not the app's.
+   THROUGH THE ARROWS SINCE 2026-08-27. This used to re-select the same date on
+   the picker. Tom had the picker removed ("clicking on today on the today page
+   brings up an ugly ios calendar ... let's lose that option"), so the same-day
+   re-render now goes back one day and forward again, which is two real controls
+   and lands on the day it started. */
+await page.evaluate(() => document.getElementById('prevDay').click());
+await sleep(900);
+await page.evaluate(() => document.getElementById('nextDay').click());
 await sleep(1400);
 ok('SETUP re-selecting the same date leaves the strip where it was', await shownDate() === target, `${await shownDate()} expected ${target}`);
 /* AND EXPAND THE DAY BEFORE READING IT (2026-08-27). The day now collapses behind
@@ -140,16 +142,32 @@ await expandDay();
 const readsBack = await page.evaluate(() => (document.getElementById('screen') || {}).innerText || '');
 ok('ROUND TRIP the shown day reads its own row back', /Day strip probe/.test(readsBack), readsBack.slice(0, 90).replace(/\s+/g, ' '));
 
-/* THE PICKER, driven by a real change event, and jumped somewhere far enough
-   that an off-by-one cannot pass by luck. */
-const jump = await iso(-9);
-await page.evaluate(d => {
-  const el = document.getElementById('datePick');
-  el.value = d;
-  el.dispatchEvent(new Event('change', { bubbles: true }));
-}, jump);
-await sleep(1300);
-ok('PICKER a chosen date moves the strip to exactly that date', await shownDate() === jump, `${await shownDate()} expected ${jump}`);
+/* THE PICKER ROW WAS RETIRED ON 2026-08-27 WITH THE PICKER ITSELF. Tom: "clicking
+   on today on the today page brings up an ugly ios calendar. i dont think it's a
+   feature that people are going to use to go hunt down an exact day. for now
+   let's lose that option from the game." It was a transparent <input type="date">
+   stretched over the whole title, so tapping the word TODAY opened the native
+   calendar with nothing saying it would.
+   WHAT REPLACES IT rather than simply going: walking back nine days through the
+   real arrow and landing exactly nine days back. That was the point of jumping
+   far enough that an off-by-one could not pass by luck, and the arrows are how
+   anyone actually walks back through the day now. */
+/* MEASURED FROM WHERE THE STRIP ACTUALLY IS, not from today: the checks above
+   have already moved the day, so an absolute iso(-9) was two days out and the row
+   failed for its own arithmetic rather than the app's. */
+const from = await shownDate();
+const jump = await page.evaluate(d => {
+  const x = new Date(d + 'T12:00:00');
+  x.setDate(x.getDate() - 9);
+  return x.toISOString().slice(0, 10);
+}, from);
+for (let i = 0; i < 9; i++) {
+  await page.evaluate(() => document.getElementById('prevDay').click());
+  await sleep(260);
+}
+await sleep(1100);
+ok('WALKBACK nine taps of the back arrow land exactly nine days back',
+  await shownDate() === jump, `${from} -> ${await shownDate()}, expected ${jump}`);
 /* THE SAME EXPANSION, AND THIS ONE MATTERS MORE, because it is a NEGATIVE check.
    A shut day reads as "no probe row here" for every date at once, so leaving this
    one alone would have left a row that passes and can no longer fail: it would

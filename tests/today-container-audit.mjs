@@ -123,7 +123,7 @@ async function tapDay(page, id, want) {
   /* A timeout is a graded FAILURE, not a thrown audit: an exception here would
      stop every row below from running at all, which reads as "fewer failures". */
   const landed = await page.waitForFunction(
-    w => document.getElementById('datePick')?.value === w, { timeout: 15000, polling: 120 }, want)
+    w => document.querySelector('.dayhdr')?.dataset.date === w, { timeout: 15000, polling: 120 }, want)
     .then(() => true).catch(() => false);
   await sleep(400);   // let the ring tween and the images settle before measuring
   return landed;
@@ -201,7 +201,7 @@ try {
          (lessons_audit_drift_false_red). ORPHAN owns the class-name claim. */
       h1: sc.querySelector('.dayhdr h1, .day-strip h1')?.textContent.trim() || null,
       sub: sc.querySelector('.dayhdr .sub, .day-strip .sub')?.textContent.trim() || null,
-      pickDate: document.getElementById('datePick')?.value || null,
+      pickDate: document.querySelector('.dayhdr')?.dataset.date || null,
       // day-scoped things: inside the day block, never a sibling of it
       nested: ['.ring-card', '.tsec-meals', '.day-signoff', '.tsec']
         .map(s => [s, sc.querySelectorAll(s).length, blk ? blk.querySelectorAll(s).length : 0]),
@@ -407,7 +407,7 @@ try {
   });
   await sleep(200);
   const yesterday = await page.evaluate(() => {
-    const d = new Date(document.getElementById('datePick').value + 'T12:00:00');
+    const d = new Date(document.querySelector('.dayhdr').dataset.date + 'T12:00:00');
     d.setDate(d.getDate() - 1);
     return d.toISOString().slice(0, 10);
   });
@@ -465,7 +465,7 @@ try {
   ok('ESCAPE the next-day arrow moved the day at all', cameHome, `wanted ${todayShape.pickDate}`);
   const home = await page.evaluate(() => ({
     h1: document.querySelector('.dayhdr h1, .day-strip h1')?.textContent.trim(),
-    pick: document.getElementById('datePick')?.value,
+    pick: document.querySelector('.dayhdr')?.dataset.date,
   }));
   /* Compared against the date the app itself showed on the first render, not
      against a date computed here: toISOString() is UTC and this app keys days
