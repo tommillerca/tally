@@ -4,6 +4,13 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 457, date: '2026-08-27', title: 'Today fits on one screen, and news stops hiding', items: [
+    'Today used to be a long scroll: the meal list alone ran nine hundred pixels and your wellness rows started well below the fold. The whole day now sits behind one banner showing your calorie wheel and your macros, and everything else \u2014 meals, wellness, the Kitchen, activity \u2014 is one tap underneath it. Nothing was removed. The page is less than half as tall.',
+    'It remembers whether you left it open, so flicking between days no longer moves the page out from under you.',
+    'News has a collapsed banner at the top of Today. It is one line when there is nothing, it shows a count when there is, and tapping it drops down every announcement the game has ever made with its own art. It never opens itself.',
+    'Gwart\u2019s Guide is grouped now, into what your Bonehead wears, what is out there, and what comes to you each day. It also opens with Gwart telling you that you can tap him on Today whenever you are stuck, which is the one thing the app never actually said.',
+  ] },
+
   { n: 456, date: '2026-08-26', title: 'The seam is gone, and the calorie ring makes sense', items: [
     'The faint line where the top of the page met your Bonehead\u2019s backdrop is gone. It was never the colour, which is what four attempts at it kept adjusting: a grain texture sat over the whole hero, and a flat fill can never match a textured surface however well the colour is computed. The texture is off the hero now and the two meet with no step at all.',
     'The calorie ring and the number in it used to disagree. The ring filled up as you ate while the number counted down, two opposite readings in one dial. The number is now what you have eaten, so it climbs with the ring, and how much you have left sits underneath it.',
