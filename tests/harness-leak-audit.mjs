@@ -42,6 +42,13 @@ import { reapStrandedBrowsers } from './godmode.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.dirname(here);
+/* POINTABLE AT THIS TREE, which the gate REQUIRES of every suite it runs: a file
+   that cannot be handed a base URL is a file that would grade PRODUCTION, and
+   the gate refuses to start rather than let one through. It caught this file the
+   first time it ran, which is the guard doing exactly its job on my own audit.
+   The victim below inherits it, so the browser it strands belongs to the tree
+   under test and not to the live site. */
+const BASE = process.argv[2] || process.env.URL || '';
 let fails = 0;
 const ok = (label, pass, detail = '') => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${label}${detail ? `  | ${detail}` : ''}`);
@@ -60,7 +67,7 @@ const gone = async (pid, ms) => {
 const victimPath = path.join(here, `.leak-victim-${process.pid}.mjs`);
 fs.writeFileSync(victimPath, `
 import { boot } from ${JSON.stringify(path.join(here, 'godmode.js'))};
-const { browser } = await boot();
+const { browser } = await boot(${JSON.stringify(BASE)} || undefined);
 console.log('CHROME_PID=' + browser.process().pid);
 await new Promise(() => {});
 `);
@@ -109,7 +116,7 @@ try {
   const p2 = path.join(here, `.leak-stray-${process.pid}.mjs`);
   fs.writeFileSync(p2, `
 import { boot } from ${JSON.stringify(path.join(here, 'godmode.js'))};
-const { browser } = await boot();
+const { browser } = await boot(${JSON.stringify(BASE)} || undefined);
 console.log('CHROME_PID=' + browser.process().pid);
 await new Promise(() => {});
 `);
