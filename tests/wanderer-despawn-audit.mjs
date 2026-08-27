@@ -40,11 +40,60 @@
  * NEIGHBOURS and NEXT stayed green through the mutation, so the red is about the
  * marker and nothing else. That two-marker line IS Tom's report.
  *
+ * FOUR WAYS THIS SUITE GRADED NOTHING, ALL FIXED 2026-08-27, NONE OF THEM THE
+ * APP. It came back UNPROVEN on one run and FAILED on the next two, on clean
+ * main, with `CONTROL the encounter really started a fight | no arena and no
+ * __bhFight after taking the encounter` -- a sentence that reads as a dead fight
+ * engine on the single most important thing the Wanderer does.
+ *
+ *   1. THE LAND ORACLE WAS NOT PASSED. It asked wanderersNear(date, lat, lng);
+ *      js/app.js asks wanderersNear(date, lat, lng, undefined, isWater). The
+ *      land fallback (js/wanderer.js landCandidate) reseeds his beat CENTRE when
+ *      candidate 0's lap crosses water, and the candidate index is NOT part of
+ *      his id, so the oracle-free call returns the right id at the wrong place.
+ *      Measured over 224 (date, instance) samples at HOME across 7 days:
+ *        190 the 45 m point really was inside the real cone
+ *         25 he had moved (331 m, 556 m, 599 m measured) and it was not
+ *          2 the oracle-free id was not in the real set at all
+ *          2 nobody in range once the constraint applies
+ *          5 nobody in range at all, a real data state
+ *      12% of instances stood the player outside a cone that does not exist,
+ *      no encounter fired, and CONTROL blamed openFight. Now derived through
+ *      godmode's realWanderer, which asks the app's question.
+ *   2. `|| before.near[0]` MADE THE POSITIVE CONTROL LIE. On the run whose
+ *      45-minute instance rolled over between the fix and the map it printed
+ *      "2 wanderer marker(s) drawn [..._i18, ..._i18], his own id ..._i19", a
+ *      man nobody had walked up to; and on a run where near[0] happened to be
+ *      drawn it would have passed BEFORE and graded every row below against the
+ *      WRONG Wanderer. Gone. A rolled instance measured nothing and is declared.
+ *   3. THE CLICK WAS A SILENT NO-OP. `const b = ...; if (b) b.click()` after a
+ *      flat sleep(1500). The sheet is opened by refreshWanderer on a 5 s world
+ *      tick that cannot fire before js/water.js's tiles land, so on a slow fetch
+ *      the suite clicked nothing and reported the fight engine broken. It now
+ *      WAITS for the button and reports `opened` and `clicked` separately, so a
+ *      trigger fault and an engine fault do not print the same sentence.
+ *   4. `look()` DERIVED AT HOME while the markers were built at the player's
+ *      real fix. Now derived where the player is standing.
+ *   AND NEXT'S EMPTY SAMPLE IS GONE. The beat re-rolls at the turnover and can
+ *   land past WANDER_SHOW_M of wherever the player was left standing (measured:
+ *   the man in his own cell was 1666 m away one lap on), so 1 run in 3 declared
+ *   NEXT unproven and exited 97. The fix now stands 400 m BEHIND the new
+ *   instance: inside the 1200 m the map draws at, outside the 300 m cone, so
+ *   the row grades every run. The claim is unchanged.
+ *
+ * PROVE-RED, 2026-08-27, after all of the above. Throwaway `cp -R` of the tree
+ * with its .git removed, one mutation at a time, exit read from a FILE:
+ *   js/app.js refreshWanderer's `.filter(w => !wandererDone.has(...))` deleted
+ *     -> exit 1, DESPAWN alone red. (See the log at the foot of this header.)
+ *   js/app.js `startWandererEncounter(w, rec.el)` deleted -> exit 1, CONTROL
+ *     alone red, and it now names the right half: "cone entry never opened the
+ *     encounter sheet in 20000ms".
+ *
  *   node tests/wanderer-despawn-audit.mjs
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boot, seed, sleep, serveTree, boneyardCapability, unproven, unprovenReport, exitFor, dismissOverlays } from './godmode.js';
+import { boot, seed, sleep, serveTree, boneyardCapability, unproven, unprovenReport, exitFor, dismissOverlays, realWanderer } from './godmode.js';
 
 /* Thrown when the date's own Wanderer set puts nobody near HOME, so the run has
    nothing to grade. Caught below, after the four rows have been DECLARED, which
@@ -70,8 +119,16 @@ const HOME = { latitude: 49.2827, longitude: -123.1207 };
    The first cut of this suite did project, could not reach the map object, got
    null back for every distance and passed "no marker near him" on nothing at
    all, which is this repo's oldest wound (tally/CLAUDE.md rule 3). */
-const look = page => page.evaluate(async (HOME) => {
+/* AT THE PLAYER'S OWN FIX, AND THROUGH THE LAND ORACLE. Both were wrong and
+   both are the same mistake: asking a different question from the one js/app.js
+   asks and then grading the app's answer against it. The set was derived at
+   HOME while the markers were built at the player's real fix (which is why NEXT
+   grew a comment about a Wanderer "on the WANDER_SHOW_M boundary" being drawn
+   and absent from the sample), and it was derived with no isWater, which moves
+   him hundreds of metres under the same id. See realWanderer in godmode.js. */
+const look = (page, at) => page.evaluate(async (at) => {
   const W = await import('./js/wanderer.js');
+  const water = await import('./js/water.js');
   const { dateKey } = await import('./js/nutrition.js');
   const db = await import('./js/db.js');
   const date = dateKey();
@@ -79,12 +136,12 @@ const look = page => page.evaluate(async (HOME) => {
     id: n.dataset.w || null,
     visible: +getComputedStyle(n).opacity > 0.5 && n.getBoundingClientRect().width > 10,
   }));
-  const near = W.wanderersNear(date, HOME.latitude, HOME.longitude)
+  const near = W.wanderersNear(date, at.lat, at.lng, undefined, water.isWater)
     .map(w => ({ id: w.id, key: W.wandererKey(date, w), cell: `${w.cx}_${w.cy}`, inst: w.inst, dist: Math.round(w.dist) }));
   return { date, drawn, near,
     ledger: (await db.db.all('xp')).filter(r => r.type === 'wanderer').map(r => r.key),
     arena: !!document.getElementById('arena'), enc: !!document.querySelector('.wnd-enc') };
-}, HOME);
+}, at);
 
 async function openBoneyard(page) {
   await page.evaluate(() => { location.hash = '#/boneyard'; });
@@ -112,58 +169,89 @@ try {
     unproven('NEXT the next instance walks again', 'this machine cannot draw the Boneyard');
   } else {
     await seed(page, { level: 18, coins: 500 });
-    // stand 45 m into his light, computed off his REAL heading, so the encounter
-    // fires from the player's position exactly as it does for a walker.
-    const target = await page.evaluate(async (HOME) => {
-      const W = await import('./js/wanderer.js');
-      const { dateKey } = await import('./js/nutrition.js');
-      const w = W.wanderersNear(dateKey(), HOME.latitude, HOME.longitude)[0];
-      /* The derived set is seeded on the DATE, so on some days nobody walks
-         within range of HOME. That is a legitimate data state, not a defect,
-         and indexing [0] on it threw a TypeError that graded ZERO rows while
-         the gate counted the suite as failing. An empty sample must be
-         DECLARED, never crashed on and never quietly passed. */
-      if (!w) return null;
-      const R = 6371000, r = Math.PI / 180, dr = 45 / R;
-      const f1 = w.lat * r, l1 = w.lng * r, b = w.heading * r;
-      const f2 = Math.asin(Math.sin(f1) * Math.cos(dr) + Math.cos(f1) * Math.sin(dr) * Math.cos(b));
-      const l2 = l1 + Math.atan2(Math.sin(b) * Math.sin(dr) * Math.cos(f1), Math.cos(dr) - Math.sin(f1) * Math.sin(f2));
-      return { lat: f2 / r, lng: l2 / r, w: { id: w.id, heading: w.heading } };
-    }, HOME);
-    if (!target) {
-      const why = 'no Wanderer walks within range of HOME on this date (the set is date-seeded)';
+    /* Stand 45 m into his light, computed off the position and heading the APP
+       derives (land oracle and all), so the encounter fires from the player's
+       position exactly as it does for a walker. */
+    const target = await realWanderer(page, HOME);
+    if (!target.w) {
+      const why = `no Wanderer walks within range of HOME right now (his loop can leave WANDER_SHOW_M inside an instance; ${target.tiles} water tiles warmed over ${target.waitedMs}ms: ${target.why})`;
       unproven('BEFORE his own marker is on the map before the fight', why);
       unproven('DESPAWN he is gone from the map after the win', why);
       unproven('LEDGER the win is recorded on his instance key', why);
       unproven('NEXT the next instance walks again', why);
       throw new NoWanderer(why);
     }
-    await page.setGeolocation({ latitude: target.lat, longitude: target.lng });
+    await page.setGeolocation({ latitude: target.p.lat, longitude: target.p.lng });
     await openBoneyard(page);
 
-    const before = await look(page);
-    const him = before.near.find(w => w.id === target.w.id) || before.near[0];
+    const before = await look(page, target.p);
+    /* HIS ID, OR NOTHING. This used to fall back to `before.near[0]`, and the
+       fallback is why a rolled instance produced the unreadable
+       "2 wanderer marker(s) drawn [..._i18, ..._i18], his own id ..._i19": the
+       target was taken at i18, the 45-minute clock turned over, and the row
+       reported a man nobody had walked up to. Worse in the other direction, on
+       a run where near[0] happened to be drawn the whole suite would go on to
+       grade a DIFFERENT Wanderer from the one the player is standing in front
+       of. A rolled instance measured nothing, so it is declared, not failed. */
+    const him = before.near.find(w => w.id === target.w.id);
+    if (!him) {
+      const why = `his 45-minute instance rolled over between the fix and the map: took ${target.w.id}, the live set is now [${before.near.map(w => w.id).join(', ') || 'empty'}]`;
+      unproven('BEFORE his own marker is on the map before the fight', why);
+      unproven('DESPAWN he is gone from the map after the win', why);
+      unproven('LEDGER the win is recorded on his instance key', why);
+      unproven('NEXT the next instance walks again', why);
+      throw new NoWanderer(why);
+    }
     ok('BEFORE his own marker is on the map before the fight (the positive control: every row below is gated on this)',
-      !!him && before.drawn.some(m => m.id === him.id && m.visible),
-      `${before.drawn.length} wanderer marker(s) drawn [${before.drawn.map(m => m.id).join(', ')}], his own id ${him && him.id}`);
+      before.drawn.some(m => m.id === him.id && m.visible),
+      `${before.drawn.length} wanderer marker(s) drawn [${before.drawn.map(m => m.id).join(', ')}], his own id ${him.id}`);
 
-    // take the encounter and win it through the real engine
-    await sleep(1500);
-    await page.evaluate(() => {
+    /* TAKE THE ENCOUNTER AND WIN IT THROUGH THE REAL ENGINE.
+       WAITED FOR, NOT SLEPT ON, AND THE CLICK IS ASSERTED TO HAVE LANDED. The
+       old shape was `await sleep(1500)` and then `const b = ...; if (b) b.click()`,
+       which is a no-op on a miss: when the sheet had not arrived yet the suite
+       clicked nothing, found no arena, and printed "no arena and no __bhFight
+       after taking the encounter" -- a sentence that blames the fight engine for
+       a sheet that was never opened. The encounter is opened by refreshWanderer,
+       which runs on a 5 s world tick and cannot fire before js/water.js's tiles
+       land, so how long it takes is the network's business, not the app's.
+       Two separate facts now, so a triager can tell them apart:
+         opened  did cone entry produce the sheet at all
+         clicked did the Fight button exist when we pressed it */
+    const enc = await page.evaluate(async () => {
+      const t0 = Date.now();
+      while (Date.now() - t0 < 20000) {
+        if (document.querySelector('.wnd-enc .wnd-fight')) return { opened: true, ms: Date.now() - t0 };
+        await new Promise(r => setTimeout(r, 200));
+      }
+      return { opened: false, ms: Date.now() - t0 };
+    });
+    const clicked = enc.opened && await page.evaluate(() => {
       const b = document.querySelector('.wnd-enc .wnd-fight');
-      if (b) b.click();
+      if (!b) return false;
+      b.click();
+      return true;
     });
     await sleep(3500);
     const inArena = await page.evaluate(() => !!document.getElementById('arena') && !!window.__bhFight);
     if (!inArena) {
-      ok('CONTROL the encounter really started a fight', false, 'no arena and no __bhFight after taking the encounter');
+      /* WHICH HALF BROKE. A sheet that never opened is a trigger/derivation
+         story; a Fight button that was pressed and opened no arena is the fight
+         engine, and only the second one is this suite's business to shout
+         about. */
+      ok('CONTROL the encounter really started a fight',
+        false,
+        enc.opened
+          ? `the encounter sheet opened after ${enc.ms}ms and Fight was ${clicked ? 'clicked' : 'NOT clickable'}, but there is no arena and no __bhFight`
+          : `cone entry never opened the encounter sheet in ${enc.ms}ms: standing at ${target.p.lat.toFixed(6)},${target.p.lng.toFixed(6)}, `
+            + `45 m dead ahead of ${target.w.id} (heading ${target.w.heading.toFixed(0)}, ${target.w.dist} m from HOME), predicted-in-cone ${target.predicted}`);
     } else {
       await page.evaluate(() => window.__bhFight.finish('p'));
       await sleep(2500);
       await dismissOverlays(page, 8);
       await sleep(6000);   // let refreshWorld's own tick run at least once
 
-      const after = await look(page);
+      const after = await look(page, target.p);
       /* STILL DERIVED, AND NO LONGER DRAWN. Both halves: if his instance had
          simply rolled over mid-run he would be undrawn for a reason that has
          nothing to do with the win, so the row refuses to grade unless the
@@ -195,8 +283,19 @@ try {
       await page.reload({ waitUntil: 'networkidle2' });
       await sleep(2600);
       await dismissOverlays(page);
+      /* STAND WHERE THE NEXT MAN IS, instead of hoping. Every beat re-rolls at
+         the turnover, so the lap that follows can legitimately leave nobody
+         within WANDER_SHOW_M of where you happened to be standing -- measured
+         on clean main, 1 run in 3 reported NEXT as an empty sample and exited
+         97 UNPROVEN while the other 2 graded it. An UNPROVEN that comes and
+         goes is not a check. So the fix is moved to 400 m BEHIND the new
+         instance: inside the 1200 m the map draws at, outside the 300 m cone so
+         nothing charges, and the row grades every run. Nothing is weakened --
+         the claim was never about which patch of ground the player stands on. */
+      const nextMan = await realWanderer(page, { latitude: target.p.lat, longitude: target.p.lng }, { offsetDeg: 180, metres: 400, anyone: true });
+      if (nextMan.w) await page.setGeolocation({ latitude: nextMan.p.lat, longitude: nextMan.p.lng });
       await openBoneyard(page);
-      const next = await look(page);
+      const next = await look(page, nextMan.w ? nextMan.p : target.p);
       /* NOT "his cell, one instance on": every Wanderer's beat re-rolls at the
          turnover, so the man in his cell can easily be past WANDER_SHOW_M and
          out of the picture for reasons that have nothing to do with the ledger
@@ -209,7 +308,10 @@ try {
          records that a legitimate lap can leave nobody in range. Failing on it
          reds the gate for a healthy app, and passing on it would be a row that
          cannot fail. Declare it instead, which is what unproven is for. */
-      if (!fresh.length) unproven('NEXT the next instance walks again', 'no new instance was in range this lap (an empty sample, not a defect)');
+      if (!fresh.length) unproven('NEXT the next instance walks again',
+        `no new instance was in range this lap even standing 400 m off ${nextMan.w ? nextMan.w.id : 'nobody'} `
+        + `(${next.drawn.length} marker(s) drawn, ${next.near.length} derived; ${nextMan.tiles} water tiles warmed over ${nextMan.waitedMs}ms: ${nextMan.why}: `
+        + 'an empty sample, not a defect)');
       else ok('NEXT the next instance walks again, on a key nobody has claimed, with the win still on the ledger',
         next.ledger.includes(him.key) && fresh.every(m => m.visible)
         /* The key is rebuilt from the marker's own id rather than looked up in
