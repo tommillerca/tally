@@ -4,6 +4,13 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 458, date: '2026-08-27', title: 'Today stops working when you are not looking at it', items: [
+    'Today was quietly doing about a hundred and twenty pieces of layout work every second while you just sat there reading it. The news shelf added yesterday keeps a few animated things behind it, and a closed drawer gets no help from the graphics chip, so the whole page was being recalculated over and over for animations nobody could see. It does nothing now until you touch it. If Today felt warm or your battery went faster since yesterday, that was this.',
+    'Breeding two pets no longer costs Bone Dust. Walking is the only thing it asks for, the same 6,000 steps between breeds as before. Dust is for how things LOOK now, and nothing you buy with it can make you stronger.',
+    'The place where you change how a piece of gear looks has a name at last: the Dressing Room. It is the only room in the game that never had one, which is why it was hard to talk about.',
+    'The Salvage Bench stops telling new players to melt gear from a list that is not there yet, and a few lines that still promised to sell you eggs and crates have been corrected.',
+  ] },
+
   { n: 457, date: '2026-08-27', title: 'Today fits on one screen, and news stops hiding', items: [
     'Today used to be a long scroll: the meal list alone ran nine hundred pixels and your wellness rows started well below the fold. The whole day now sits behind one banner showing your calorie wheel and your macros, and everything else \u2014 meals, wellness, the Kitchen, activity \u2014 is one tap underneath it. Nothing was removed. The page is less than half as tall.',
     'It remembers whether you left it open, so flicking between days no longer moves the page out from under you.',
