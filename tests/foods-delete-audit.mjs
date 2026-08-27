@@ -151,6 +151,21 @@ ok('HISTORY and those rows are byte identical, name and macros included',
    rendering is the same loss from where the player sits. */
 await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(2000);
+/* EXPAND THE DAY BEFORE READING IT (2026-08-27). Since the day collapsed behind
+   its own ring-and-macros banner, everything below that banner is inside a shut
+   <details id="dayRest">, and innerText does not report text the browser is not
+   laying out. Measured on the failing run: with it shut, #screen.innerText was
+   509 chars and did NOT contain "Nan bread", while #screen.textContent was 5,633
+   chars and DID; opening it took innerText to 1,408 chars and the name came back.
+   So the row is still drawn. It went behind a tap, it did not go away, and this
+   check is about whether the day still DRAWS the orphaned entry, not about how
+   many taps it takes to see it. Grading the shut state would have quietly turned
+   "the deleted food's entry survives" into "nothing is on the day at all". */
+await page.evaluate(() => {
+  const d = document.getElementById('dayRest');
+  if (d && !d.open) d.open = true;
+});
+await sleep(400);
 const drawn = await page.evaluate(() => (document.getElementById('screen')?.innerText || '').includes('Nan bread'));
 ok('RENDER today still draws the entry whose food was deleted', drawn, drawn ? '' : 'the entry vanished from the day');
 
