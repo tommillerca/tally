@@ -190,7 +190,8 @@ ok('PROBE the analytics recorder is live (a dead probe would score every collect
 const silenced = await page.evaluate(async () => {
   const { db } = await import('/js/db.js');
   const { BADGES } = await import('/js/game.js');
-  const today = new Date().toISOString().slice(0, 10);
+  /* LOCAL, not UTC: godmode.js's localDay explains the class. */
+  const today = (d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date());
   for (const b of BADGES) await db.put('xp', { key: 'badge-' + b.id, type: 'badge', xp: 0, label: 'audit: pre-claimed', date: today, ts: Date.now() });
   return BADGES.length;
 });

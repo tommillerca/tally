@@ -186,7 +186,10 @@ try {
      MAP decide when a sample has been found. */
   const eggSpots = await page.evaluate(async (home) => {
     const hunt = await import('./js/hunt.js');
-    const date = new Date().toISOString().slice(0, 10);
+    /* LOCAL, not UTC (godmode.js's localDay says why). The spawn field is
+       DATE-SEEDED, so a UTC date asks the generator for a different day than the
+       map is drawing, and the key then advertises pieces no marker carries. */
+    const date = (d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date());
     /* stand ON an egg's own cell so it lands inside NEAR_M and draws as a
        full-density marker rather than a dimmed far beacon */
     return hunt.spawnsForRoute(date, home.latitude, home.longitude)

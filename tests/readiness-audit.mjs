@@ -44,7 +44,12 @@ const { browser, page } = await boot(base);
 const seedHealth = (rhr, hrv, extra = {}) => page.evaluate(async ({ rhr, hrv, extra }) => {
   const db = await new Promise((res, rej) => { const r = indexedDB.open('tally-demo'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
   await new Promise((res, rej) => { const tx = db.transaction('health', 'readwrite'); tx.objectStore('health').clear(); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
-  const dk = n => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+  /* LOCAL, not UTC (godmode.js's localDay says why at length). This runs in page
+     context so it cannot import it. At 21:5x EDT toISOString dated the seeded
+     "today" as tomorrow, so the one differing reading never became `latest`,
+     every delta cancelled, and better/flat/worse all scored the base 72. */
+  const dk = n => { const d = new Date(); d.setDate(d.getDate() - n);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const rows = rhr.map((v, i) => ({ date: dk(rhr.length - 1 - i), restingHr: v, hrv: hrv[i], ...(i === rhr.length - 1 ? extra : {}) }));
   await new Promise((res, rej) => { const tx = db.transaction('health', 'readwrite'); rows.forEach(r => tx.objectStore('health').put(r)); tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
   db.close();
