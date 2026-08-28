@@ -486,7 +486,6 @@ async function streakAwards(streak) {
 
 // Called after a log entry is written. Returns {xp, levelUp, newBadges, streakMilestone, boosted}.
 export async function onFoodLogged(entry, { via = null, targets = null, entriesForDate = [] } = {}) {
-  const before = await totalXp();
   let gained = 0;
   const logXp = await award(`log-${entry.id}`, 'log', 10, 'Logged a food', entry.date);
   gained += logXp;
@@ -517,8 +516,20 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
   const newBadges = await evaluateBadges();
   gained += newBadges.length * 25;
 
-  const after = before + gained;
-  const lvBefore = levelFor(before), lvAfter = levelFor(after);
+  /* READ THE TOTAL AT THE MOMENT OF THE COMPARISON, not thirty lines earlier.
+     This used to be `before + gained`, where `before` was a totalXp() read taken
+     at the top of the function, roughly 35 awaits before it was used. Anything
+     else that awarded XP in that gap (the init backfill is the reachable one:
+     log a food while it is still replaying) left `after` describing a total the
+     player never had, so the level crossing was computed against a number that
+     had already moved.
+     The fresh read is the player's real total, and `after - gained` is the total
+     immediately before THIS log, so the crossing attributed here is still only
+     the one this food caused. In the uncontended case the two agree exactly.
+     It could never double-pay: grantLevelRewards claims each level through
+     addIfAbsent('levelpaid-<L>'). The failure was a MISSED or mistimed level. */
+  const after = await totalXp();
+  const lvBefore = levelFor(after - gained), lvAfter = levelFor(after);
   const levelUp = lvAfter.level > lvBefore.level ? lvAfter : null;
   let levelRewards = null;
   if (levelUp) levelRewards = await grantLevelRewards(lvBefore.level, lvAfter.level);
