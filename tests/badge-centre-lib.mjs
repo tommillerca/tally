@@ -133,6 +133,7 @@ export const collectBadges = page => page.evaluate((ROUND_MIN_PCT, MIN_BADGE_PX)
 const rects = page => page.evaluate(() => (window.__bcEls || []).map(([el, g]) => {
   const r = el.getBoundingClientRect(), gr = g.getBoundingClientRect();
   const cx = r.x + r.width / 2, cy = r.y + r.height / 2, rad = r.width / 2 * 0.9;
+  const coveredBy = [];
   let covered = 0, samples = 0;
   for (let i = 0; i < 5; i++) {
     for (let j = 0; j < 5; j++) {
@@ -148,11 +149,26 @@ const rects = page => page.evaluate(() => (window.__bcEls || []).map(([el, g]) =
          or an unrelated element on top is neither ancestor nor descendant, and
          that is the real cover. Measured: without this arm the bolt itself came
          back COVERED and the audit failed its own COVERAGE row. */
-      if (!hit || !(el.contains(hit) || hit.contains(el))) covered++;
+      if (!hit || !(el.contains(hit) || hit.contains(el))) {
+        covered++;
+        /* NAME THE THING ON TOP. "NOT graded: COVERED" with no culprit is a dead
+           end for whoever reads it: the Boneyard readout disc failed this way
+           three separate times on 2026-08-27/28 and each time the only route to
+           an answer was to re-instrument this line by hand. The occluder is
+           right here, so keep it. Deduped, capped, and only ever read on the
+           failure path. */
+        if (!coveredBy.includes(hit ? hit.tagName : 'null') && coveredBy.length < 4) {
+          coveredBy.push(hit
+            ? hit.tagName.toLowerCase()
+              + (hit.id ? '#' + hit.id : '')
+              + (hit.className && hit.className.toString ? '.' + hit.className.toString().trim().split(/\s+/).slice(0, 2).join('.') : '')
+            : '(nothing at that point)');
+        }
+      }
     }
   }
   return { disc: { x: r.x, y: r.y, w: r.width, h: r.height },
-    glyph: { x: gr.x, y: gr.y, w: gr.width, h: gr.height }, covered, samples };
+    glyph: { x: gr.x, y: gr.y, w: gr.width, h: gr.height }, covered, coveredBy, samples };
 }));
 const setGlyphVisibility = (page, v) => page.evaluate(vv => { for (const [, g] of window.__bcEls || []) g.style.visibility = vv; }, v);
 const shot = async page => 'data:image/png;base64,' + (await page.screenshot({ encoding: 'base64' }));
@@ -229,7 +245,10 @@ export async function measureScreen(page, screenName) {
     const box = { dx: (g0.glyph.x + g0.glyph.w / 2) - (g0.disc.x + g0.disc.w / 2),
                   dy: (g0.glyph.y + g0.glyph.h / 2) - (g0.disc.y + g0.disc.h / 2) };
     const inkOff = r.ink ? Math.hypot(r.ink.dx, r.ink.dy) : null;
-    const why = (g0.covered || g1.covered) ? 'COVERED'
+    /* The occluder travels WITH the verdict, so the failure line can name it
+       instead of sending the next reader back here to re-instrument. */
+    const cov = [...new Set([...(g0.coveredBy || []), ...(g1.coveredBy || [])])].slice(0, 4);
+    const why = (g0.covered || g1.covered) ? `COVERED by ${cov.join(', ') || 'something'}`
       : overlaps(r.idx) ? 'OVERLAP'
       : (r.driftPx > 0 || moved >= 0.5) ? 'MOVING'
       : r.ink ? null : 'NO-INK';
