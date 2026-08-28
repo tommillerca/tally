@@ -129,6 +129,29 @@ try {
     return new Date().toISOString();
   }, d);
 
+  /* N LOCAL DAYS AHEAD, NOT N*24 HOURS, and the difference is a real one that
+     only shows on some real-world dates. shiftDays() adds a flat 86400000ms per
+     day, but the app's day is dateKey(), which is LOCAL. Across a DST fall-back
+     a 24 hour REAL step does not advance the local date at all: measured, base
+     2026-08-28 00:55 EDT + 800 days lands on 2028-11-05 00:55 EDT, and +801 days
+     (exactly 24h more of real time) lands on 2028-11-05 23:55 EST. Same local
+     day, because the clocks went back an hour in between.
+     The ten-day walk below then made two claims on ONE day and the app correctly
+     answered `same-day` for the second, which the row read as a missing
+     `advanced`. The app was right; the shim was not. And because the landing
+     date is computed from TODAY, this row was green for most of the year and
+     went red the moment the real date moved base+800 onto a DST boundary: it
+     passed at 23:00 and failed at 00:55 on the next date.
+     Same construction as gotoLocal below, which already had to solve this for
+     the evening-then-morning case. */
+  const shiftLocalDays = (d, hour = 12) => page.evaluate((n, h) => {
+    const real = window.__realNow();
+    const b = new Date(real);
+    const target = new Date(b.getFullYear(), b.getMonth(), b.getDate() + n, h, 0, 0, 0).getTime();
+    localStorage.setItem('__clockOffsetMs', String(target - real));
+    return new Date().toISOString();
+  }, d, hour);
+
   /* Put the page's local clock at a specific LOCAL day-offset and hour. Needed
      for the evening-then-morning case, where the whole point is that only nine
      hours pass across a real day boundary. */
@@ -859,18 +882,27 @@ try {
      all, the ceiling is always ahead and never binds. Ten days, no refusals.
      DIRECTION: a single refusal here is a FAILURE. */
   await guard.reset();
-  await shiftDays(800);
+  await shiftLocalDays(800);
   await guard.witnessAt(800);
   await guard.claim(await keyFor(800));
   const online = [];
   for (let d = 801; d <= 810; d++) {
-    await shiftDays(d);
+    await shiftLocalDays(d);
     await guard.witnessAt(d);                      // the server got there too
     online.push(await guard.claim(await keyFor(d)));
   }
   check('ten days with the server advancing too: not one refusal',
     online.length === 10 && online.every(r => r.fresh === true && r.reason === 'advanced'),
-    online.every(r => r.fresh) ? '10/10 advanced' : `refused: ${online.filter(r => !r.fresh).map(r => r.reason).join(', ')}`);
+    /* THE DETAIL HAS TO EXPLAIN THE CONDITION IT SITS UNDER. This printed
+       "10/10 advanced" while the row was RED, because it only consulted
+       `fresh` while the condition also requires reason === 'advanced'. The
+       actual failure was one day answering `same-day`, and the message hid it
+       completely: it took a trace to find out which day and why. Report both
+       halves. */
+    online.every(r => r.fresh && r.reason === 'advanced')
+      ? `${online.length}/${online.length} advanced`
+      : `refused: [${online.filter(r => !r.fresh).map(r => r.reason).join(', ') || 'none'}]`
+        + `  not-advanced: [${online.map((r, i) => [801 + i, r]).filter(([, r]) => r.fresh && r.reason !== 'advanced').map(([d, r]) => `d${d}:${r.reason}`).join(', ') || 'none'}]`);
 
   /* 7e. A RESTORE CANNOT WIND THE CEILING BACK. Named in the previous version
      of this file as the hole that undoes any device-side mark: export, farm,
