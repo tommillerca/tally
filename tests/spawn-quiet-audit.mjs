@@ -224,8 +224,17 @@ async function standOn(s) {
     const b = [...document.querySelectorAll('#screen button')].find(x => /start|allow|enable|walk|open|let/i.test(x.textContent || ''));
     if (b) b.click();
   });
-  // the map has to boot, place, and snap onto walkable ground before the bar can offer anything
-  for (let i = 0; i < 30; i++) {
+  /* THE MAP HAS TO BOOT, PLACE, AND SNAP ONTO WALKABLE GROUND before the bar can
+     offer anything, and that last step is a network race: placeWalkable snaps a
+     spawn from the RENDERED scene via queryRenderedFeatures, so until the vector
+     tiles for this spot arrive it returns null and the spawn stays hidden.
+     21s (30 x 700ms) was not enough under load. Measured on three concurrent
+     runs of this suite: EVERY miss logged below was "nothing in reach", none was
+     "offered the wrong type", and one run missed a BONES pile it was standing on
+     top of, on a field where bones are a third of every spawn. Waiting longer is
+     also the cheaper trade: a miss costs the full wait anyway AND then pays for
+     another map boot on the next candidate. */
+  for (let i = 0; i < 50; i++) {
     await sleep(700);
     const btn = await page.evaluate(() => {
       const b = document.getElementById('mapCollect');
@@ -320,7 +329,25 @@ async function collect(shotName) {
    bar offers the NEAREST spawn, and placeWalkable can snap a different one into
    reach, so whatever it offers is taken if that type is still wanted. */
 const runs = {};
+const tried = new Set();   // candidate ids already stood on, so a later pass gets FRESH ground
 let attempts = 0;
+const BUDGET = 30;
+/* ONE PASS PER TYPE LEFT THE BUDGET ON THE TABLE, and that is the whole of the
+   2026-08-27 gate failure: "herbs:NO in 16 attempts" against a budget of 30.
+   Herbs are 3/14 of the weight table and 186 of the 860 spawns on the fixture
+   field, so scarcity is not it. What happens is that standOn's 21s wait is a
+   race with the vector tiles: placeWalkable can only snap a spawn onto walkable
+   ground from the RENDERED scene, so while tiles are still arriving it returns
+   null, the spawn stays hidden and the candidate is spent on "nothing in reach".
+   Measured here, not reasoned: two parallel runs of this suite disagreed about
+   the SAME spawn id (9852_-24627_s0_i12) in the same 45-minute instance, one
+   driving it and one missing it. A per-type slice of 8 therefore hands a type
+   eight coin flips and then gives up with 14 attempts unspent.
+   So the pass is repeated over whatever is still missing until the budget is
+   actually gone. This is NOT a wider net: the same global 30 attempts bound the
+   run, each pass takes candidates it has not already stood on, and a type that
+   genuinely cannot spawn still exhausts the budget and reports NO. */
+for (let pass = 0; pass < 4 && attempts < BUDGET && !TYPES.every(t => runs[t]); pass++)
 for (const want of TYPES) {
   if (runs[want]) continue;
   /* THE RARE TYPES USED TO STARVE, AND IT WAS THE ORDER, NOT THE FIELD. FIXTURE
@@ -336,20 +363,20 @@ for (const want of TYPES) {
   const all = field();
   const isolation = s => Math.min(...all.filter(o => o.id !== s.id).map(o => distanceM(s.lat, s.lng, o.lat, o.lng)), Infinity);
   const cands = all
-    .filter(s => s.type === want && !Object.values(runs).some(r => r.id === s.id))
+    .filter(s => s.type === want && !tried.has(s.id) && !Object.values(runs).some(r => r.id === s.id))
     .map(s => ({ s, iso: isolation(s) }))
     .sort((a, b) => b.iso - a.iso)
     .slice(0, 8)
     .map(x => x.s);
   for (const c of cands) {
-    if (runs[want] || attempts >= 30) break;
-    attempts++;
+    if (runs[want] || attempts >= BUDGET) break;
+    attempts++; tried.add(c.id);
     const btn = await standOn(c);
-    if (!btn) continue;
+    if (!btn) { console.log(`      miss ${want} @ ${c.id}: the map never offered anything in reach`); continue; }
     const got = typeOfId(btn.id);
-    if (!got || runs[got]) continue;                 // already have this type, or a slot rolled under us
+    if (!got || runs[got]) { console.log(`      miss ${want} @ ${c.id}: offered ${btn.id} (${got || 'off-field'})${got ? ', already driven' : ''}`); continue; }
     const r = await collect(`collect-${got}`);
-    if (r.after.xp === r.before.xp && !r.saw.packReveal && !r.saw.toasts.length) continue;   // nothing happened: stale ledger row
+    if (r.after.xp === r.before.xp && !r.saw.packReveal && !r.saw.toasts.length) { console.log(`      miss ${want} @ ${c.id}: offered ${got} but nothing happened (stale ledger row)`); continue; }
     runs[got] = { id: btn.id, type: got, ...r };
     console.log(`      drove ${got} @ ${btn.id}: packReveal=${r.saw.packReveal} takeover=${r.saw.takeover} sheets=${r.saw.sheets} clean=${r.clean} toasts=${JSON.stringify(r.saw.toasts)} feat=${r.feat.length} [${r.evs.join(',')}]`);
   }
@@ -363,7 +390,7 @@ const mapRow = (name, fn) => {
 };
 
 ok('DROVE every spawn type was actually collected in a real map (an empty sample is a FAILURE)',
-  TYPES.every(t => runs[t]), TYPES.map(t => `${t}:${runs[t] ? 'yes' : 'NO'}`).join(' ') + ` in ${attempts} attempts`);
+  TYPES.every(t => runs[t]), TYPES.map(t => `${t}:${runs[t] ? 'yes' : 'NO'}`).join(' ') + ` in ${attempts}/${BUDGET} attempts`);
 
 for (const t of QUIET) {
   mapRow(`QUIET ${t} collects with no full-screen reveal`, () => {
