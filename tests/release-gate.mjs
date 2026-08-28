@@ -309,11 +309,28 @@ function run(file, args) {
 const UNPROVEN = 97;
 /* The suites print their own banner; this pulls it back out for the summary so
    the reason is on screen next to the verdict rather than 200 lines above it. */
+/* THE SUITE ALREADY SAID WHY; READ THAT, DO NOT GUESS AT IT. godmode's
+   unproven() prints `UNPRV <name>  DID NOT RUN: <why>`, so the reason is on the
+   line this function is already counting. It was instead sniffed out of OTHER
+   lines with a fixed list of machine-capability phrases, which meant any suite
+   whose reason was NOT about hardware reported no reason at all.
+   Measured on the 2026-08-27 gate: wanderer-water printed "3 check(s) not
+   graded" and nothing else, under a banner asserting "this machine cannot host
+   them", while its actual reason was "today's seeds put no relocatable Wanderer
+   in the Toronto waterfront band" -- a DATE SEED. No machine on earth fixes
+   that, so the advice sent whoever read it hunting for different hardware.
+   The capability sniff is kept as a supplement, because some suites print that
+   detail on a separate line, but the authoritative reason now comes first. */
 function unprovenLines(out) {
   const lines = out.split('\n');
-  const rows = lines.filter(l => l.startsWith('UNPRV ')).length;
+  const unprv = lines.filter(l => l.startsWith('UNPRV '));
+  const stated = unprv.map(l => (l.split('DID NOT RUN:')[1] || '').trim()).filter(Boolean);
   const missing = lines.filter(l => /is UNREACHABLE|no webgl|will not link|read back as|measured NOTHING/.test(l));
-  return { rows, why: [...new Set(missing.map(l => l.trim()))].slice(0, 3) };
+  const why = [...new Set([...stated, ...missing.map(l => l.trim())])].slice(0, 3);
+  /* A reason is a MACHINE reason only when it says so. Anything else (a date
+     seed, an empty data state) is not fixed by running somewhere else. */
+  const machine = why.some(w => /machine|webgl|tile host|unreachable|cannot draw|cannot host|hardware/i.test(w));
+  return { rows: unprv.length, why, machine };
 }
 
 /* A SUITE THAT CRASHES MUST NOT LOOK LIKE A QUIET FAILURE. This printed only
@@ -1143,8 +1160,14 @@ if (unprv.length) {
     console.log(`        ${r.file.padEnd(26)} ${u.rows} check(s) not graded`);
     for (const w of u.why) console.log(`          ${w}`);
   }
-  console.log('        These guard shipped surfaces and this machine cannot host them.');
-  console.log('        Run the gate somewhere that can before calling a release checked.');
+  /* Advise on what the suites actually SAID, not on an assumption. Telling
+     somebody to find another machine when the reason is a date seed costs them
+     an evening and fixes nothing. */
+  const anyMachine = unprv.some(r => unprovenLines(r.out).machine);
+  console.log('        These guard shipped surfaces and they did NOT run here.');
+  if (anyMachine) console.log('        Where the reason is a missing machine capability, run the gate somewhere that has it.');
+  console.log('        Where it is a data state (the date seed, an empty set), it grades on a day that offers the case.');
+  console.log('        Either way this is not green: do not call a release checked on it.');
 }
 /* Release on the way out, pass or fail: a lock only ever left behind on a RED run
    trains everyone to ignore the line, which is how it stopped meaning anything. */
