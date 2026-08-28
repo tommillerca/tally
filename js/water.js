@@ -45,6 +45,20 @@ let tpl = null;          // resolved tile URL template, or null until TileJSON l
 let tplLoading = null;
 const tiles = new Map(); // "x/y" -> { feats } | 'pending' | { retryAt }
 const MAX_TILES = 64;    // ~9 cells around the player need <= ~16; cap the cache
+/* EVICT THE LEAST RECENTLY USED, NOT THE FIRST FETCHED, and that difference is a
+   bug a player can see. A Map iterates in INSERTION order, so the old sweep threw
+   away the OLDEST-FETCHED tiles: the ones under the player's own feet, fetched
+   first when the map opened and read on every single pass since. One
+   wanderersNear call walks nine cells whose candidate laps reach past the warmed
+   block, queues new tiles, trips the cap, and the sweep takes the home tiles with
+   it. isWater then answers `undefined` for the cell the player is standing in,
+   which wandererAt cannot distinguish from "all water", so the Wanderer VANISHES
+   and reappears on the next 5s world pass.
+   Observed while fixing the Wanderer audits on 2026-08-27: realWanderer returned
+   w:null while a probe one second later said wandererAt(2464,-6156) was true.
+   A counter rather than Date.now(): it is monotonic, needs no clock, and ties
+   break in insertion order, which is the old behaviour for tiles never read. */
+let useTick = 0;
 
 function fetchTemplate() {
   if (tpl || tplLoading) return;
@@ -69,7 +83,10 @@ function fetchTile(tx, ty) {
   if (cur && cur.retryAt > Date.now()) return;
   if (!tpl) { fetchTemplate(); return; }
   if (tiles.size > MAX_TILES) {
-    for (const [k, v] of tiles) { if (v !== 'pending') tiles.delete(k); if (tiles.size <= MAX_TILES / 2) break; }
+    const victims = [...tiles.entries()]
+      .filter(([, v]) => v !== 'pending')
+      .sort((a, b) => (a[1].used || 0) - (b[1].used || 0));
+    for (const [k] of victims) { tiles.delete(k); if (tiles.size <= MAX_TILES / 2) break; }
   }
   tiles.set(key, 'pending');
   const url = tpl.replace('{z}', WATER_Z).replace('{x}', tx).replace('{y}', ty);
@@ -184,6 +201,7 @@ export function isWater(lat, lng) {
   const tx = Math.floor(xf), ty = Math.floor(yf);
   const t = tiles.get(`${tx}/${ty}`);
   if (!t || !t.feats) { fetchTile(tx, ty); return undefined; }
+  t.used = ++useTick;   // read = recently used, which is what the sweep above spares
   const px = (xf - tx) * 4096, py = (yf - ty) * 4096;
   for (const f of t.feats) {
     const sx = f.extent === 4096 ? px : (px * f.extent) / 4096;
