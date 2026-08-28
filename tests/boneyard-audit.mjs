@@ -862,10 +862,53 @@ await slowPage.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMo
    backstop stays what it says: a screaming pathological guard, not the
    contract; it does not fire on this scenario. */
 await slowPage.setRequestInterception(true);
+/* HELD UNTIL THE REVEAL, NOT DELAYED BY A TIMER, and that is a robustness fix
+   rather than a retune. The 2000ms sleep was chosen as "the smallest value
+   strictly greater than the 1800ms cap" and measured 5/5 on an idle machine. It
+   is 3/3 standalone today and it produced ZERO STRAGGLERS inside the full gate,
+   where every other suite is competing for the same CPU: once the timings shift,
+   all placement can finish in one pass and the scenario stops exercising the
+   mechanism it exists for. This file's own note says a scenario that only
+   sometimes bites "is a coin-flip guard and gets ignored inside a week", so the
+   answer is to stop racing a timer.
+   Tiles are now HELD until the reveal has actually happened, then released. That
+   makes "markers added after the reveal" true BY CONSTRUCTION instead of by
+   luck, and it cannot deadlock: the reveal has an 1800ms hard cap that fires
+   whether or not tiles ever arrive, which is precisely why that cap exists. The
+   ceiling keeps total pop off the 3000ms backstop, and a held request is
+   released anyway if the reveal is never observed, so a broken build still gets
+   graded rather than hanging. */
+const HELD_CEILING_MS = 2600;
+const HOLD_FIRST = 2;      // enough to guarantee a straggler, few enough to leave total pop alone
+let revealSeen = false, heldCount = 0;
+const heldTiles = [];
+const releaseHeld = () => { while (heldTiles.length) { const r = heldTiles.shift(); r.continue().catch(() => {}); } };
 slowPage.on('request', req => {
-  if (/openfreemap|openmaptiles|\.pbf|tiles\./.test(req.url())) setTimeout(() => req.continue(), 2000);
-  else req.continue();
+  if (!/openfreemap|openmaptiles|\.pbf|tiles\./.test(req.url())) { req.continue().catch(() => {}); return; }
+  /* Holding EVERY tile until the reveal made stragglers certain and pushed total
+     pop to 4035ms, past the 4000ms backstop this file says to investigate rather
+     than widen. Only a COUNT of at least one is needed, so exactly the first two
+     are held and everything else keeps the original 2000ms delay: total pop stays
+     on the path that was calibrated, and the two held requests guarantee the
+     post-reveal arrival that load was stealing. */
+  if (!revealSeen && heldCount < HOLD_FIRST) {
+    heldCount++;
+    heldTiles.push(req);
+    setTimeout(() => { const i = heldTiles.indexOf(req); if (i >= 0) { heldTiles.splice(i, 1); req.continue().catch(() => {}); } }, HELD_CEILING_MS);
+    return;
+  }
+  setTimeout(() => req.continue().catch(() => {}), 2000);
 });
+const watchReveal = (async () => {
+  const t0 = Date.now();
+  while (Date.now() - t0 < HELD_CEILING_MS + 1200) {
+    const on = await slowPage.evaluate(() => !!document.querySelector('.markers-in')).catch(() => false);
+    if (on) { revealSeen = true; releaseHeld(); return Math.round(Date.now() - t0); }
+    await sleep(60);
+  }
+  revealSeen = true; releaseHeld();
+  return null;
+})();
 await slowPage.evaluateOnNewDocument(BEAT_RECORDER);
 await slowPage.evaluateOnNewDocument(() => {
   /* Recorder for the slow-tile scenario. Tracks:
