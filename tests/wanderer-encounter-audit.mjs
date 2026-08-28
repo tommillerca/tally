@@ -29,7 +29,8 @@
  * shown to fail on the real defect and to come back green when it was reverted:
  *   WIRED     revert cone entry to the straight-to-arena path -> FAIL
  *   NOTOAST   restore the old toast() call                    -> FAIL (found)
- *   LINES     blank ENCOUNTER_LINES[1]     -> FAIL, box shows ""
+ *   LINES     blank ENCOUNTER_LINES[0]     -> FAIL, box shows ""
+ *   NAME      blank TITLE_TEXT             -> FAIL, the card shows ""
  *   CHOICE    delete the Flee button       -> FAIL, "Fight" alone
  *   SCENE     make it a 40vh bottom sheet  -> FAIL
  *   FLEE      wire Flee to end('fight')    -> FAIL, choice=null overlay still up
@@ -104,7 +105,7 @@ const open = () => page.evaluate(async () => {
      player chooses, and choosing is what the rows below are here to do. */
   window.__wndPick = null;
   m.showWandererEncounter({ reduced: false }).then(r => { window.__wndPick = r; });
-  return { lines: m.ENCOUNTER_LINES, zoomMs: m.ZOOM_MS };
+  return { lines: m.ENCOUNTER_LINES, zoomMs: m.ZOOM_MS, title: m.TITLE_TEXT };
 });
 
 const meta = await open();
@@ -134,14 +135,33 @@ const shown = await page.evaluate(() => {
     btns: btns.map(b => ({ tag: b.tagName, txt: b.textContent.trim(), cls: b.className })),
     /* the art is a real <img> with the shipped plate, not a CSS shape */
     art: el.querySelector('.wnd-enc-art')?.getAttribute('src') || '',
+    /* THE SECOND BEAT IS A NAME CARD NOW, not a second typed line, so the row
+       below reads the card. Visibility is read COMPUTED rather than from the
+       class, because .wnd-title starts `visibility:hidden` to hold its space and
+       a card that never became visible would otherwise pass on markup alone. */
+    title: el.querySelector('.wnd-title b')?.textContent || '',
+    titleVis: (() => { const t = el.querySelector('.wnd-title');
+      return !!t && getComputedStyle(t).visibility === 'visible'; })(),
+    titleRuleW: (() => { const i = el.querySelector('.wnd-title i');
+      return i ? Math.round(i.getBoundingClientRect().width) : -1; })(),
     covers: (() => { const b = el.getBoundingClientRect();
       return b.width >= innerWidth - 1 && b.height >= innerHeight - 1; })(),
   };
 });
 
-ok('LINES the box types Tom\'s two lines through the app\'s one talk box',
-  !!shown && shown.text === meta.lines[1] && meta.lines.every(l => l.trim().length > 3),
+ok('LINES the box types Tom\'s line through the app\'s one talk box',
+  !!shown && shown.text === meta.lines[0] && meta.lines.every(l => l.trim().length > 3),
   shown ? `showing "${shown.text}"` : 'no .wnd-enc on screen');
+
+/* Tom, 2026-08-28: "just have no second line and make it a title appearing kinda
+   borderlands boss style that says THE WANDERER". Graded on three things, because
+   any one alone passes on a card nobody can read: the SHIPPED string (not the
+   audit's copy of it), that the card actually became visible, and that the rule
+   under it drew a real width. A rule stuck at 0 means the sweep never ran. */
+ok('NAME the boss card shows his name, visible, with its rule drawn',
+  !!shown && shown.title === meta.title && (meta.title || '').trim().length > 3
+    && shown.titleVis === true && shown.titleRuleW > 40,
+  shown ? `"${shown.title}" vis=${shown.titleVis} rule=${shown.titleRuleW}px` : 'no .wnd-enc on screen');
 
 ok('CHOICE two real buttons, Fight and Flee, and they are <button>',
   !!shown && shown.btns.length === 2 && shown.btns.every(b => b.tag === 'BUTTON')
