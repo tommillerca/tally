@@ -197,10 +197,25 @@ const PROBE = async () => {
   return { kids: document.getElementById('screen')?.children.length ?? 0, flag, rows, gets: window.__xpGets ?? null };
 };
 
+/* COINS AND CRATES TOO, NOT ONLY XP AND ROW COUNT. The ledger comparison caught
+   a real asymmetry on 2026-08-28 purely by luck of the row count: a
+   twice-interrupted resume came back "1983 rows vs 1982 cold ... unexpected:
+   levelpaid-2", with XP IDENTICAL at 51350. levelpaid-<L> is the row that gates
+   a level payout (js/game.js:325), and minting it is followed immediately by
+   coinsAdd(levelCoins(L)) and a golden crate. So the interrupted run PAID a
+   level the cold run did not, and XP could never have shown it, because a level
+   payout is coins and crates and carries xp: 0.
+   A payout that depends on when the boot was interrupted is the rewarded-actions
+   class this repo guards hardest, so the invariant is measured in the currency
+   it is actually paid in. */
 const LEDGER = async () => {
   const { db, kvGet } = await import('/js/db.js');
+  const loot = await import('/js/loot.js');
   const rows = await db.all('xp');
+  const inv = await db.all('inv');
   return { keys: rows.map(r => r.key), sum: rows.reduce((a, r) => a + (r.xp || 0), 0),
+           coins: await loot.coins(), dust: await loot.boneDust(),
+           crates: inv.filter(r => r.kind === 'crate').length,
            flag: !!(await kvGet('game-init')), cursor: await kvGet('game-init-at', null), gets: window.__xpGets ?? null };
 };
 
@@ -365,11 +380,15 @@ try {
     const extra = resumed.keys.filter(k => !coldSet.has(k));
     ok('RESUME twice-interrupted, the save reaches the exact ledger and XP total of an uninterrupted run',
        seeded.want.length > 0 && missing.length === 0 && resumed.sum === cold.sum &&
-       resumed.keys.length === cold.keys.length && extra.length === 0 && resumed.flag === true,
+       resumed.keys.length === cold.keys.length && extra.length === 0 && resumed.flag === true &&
+       resumed.coins === cold.coins && resumed.dust === cold.dust && resumed.crates === cold.crates,
        `${resumed.keys.length} rows vs ${cold.keys.length} cold, ${resumed.sum} xp vs ${cold.sum} cold, ` +
        `${seeded.want.length - missing.length}/${seeded.want.length} reference keys` +
        (missing.length ? `; first missing: ${missing.slice(0, 4).join(', ')}` : '') +
-       (extra.length ? `; unexpected: ${extra.slice(0, 4).join(', ')}` : ''));
+       (extra.length ? `; unexpected: ${extra.slice(0, 4).join(', ')}` : '') +
+       ((resumed.coins !== cold.coins || resumed.dust !== cold.dust || resumed.crates !== cold.crates)
+         ? `; PAID DIFFERENTLY: coins ${resumed.coins} vs ${cold.coins}, dust ${resumed.dust} vs ${cold.dust}, crates ${resumed.crates} vs ${cold.crates}`
+         : `; paid the same (coins ${resumed.coins}, dust ${resumed.dust}, crates ${resumed.crates})`));
   }
 
   ok('RESUME the checkpoint is cleared once the replay is genuinely finished',
