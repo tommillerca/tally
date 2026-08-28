@@ -203,6 +203,7 @@ const HOME = { latitude: 49.2827, longitude: -123.1207 };
    which shifts an absolutely positioned box on top of left/top: 0. */
 const measure = (page, at) => page.evaluate(async (at) => {
   const W = await import('./js/wanderer.js');
+  const water = await import('./js/water.js');
   const { dateKey } = await import('./js/nutrition.js');
   const map = window.__map;
   if (!map) return { error: 'no window.__map on the page' };
@@ -213,7 +214,22 @@ const measure = (page, at) => page.evaluate(async (at) => {
     const h = Math.sin(dLat / 2) ** 2 + Math.cos(a * rad) * Math.cos(c * rad) * Math.sin(dLng / 2) ** 2;
     return 2 * R * Math.asin(Math.sqrt(h));
   };
-  const near = new Map(W.wanderersNear(dateKey(), at.lat, at.lng).map(w => [w.id, w]));
+  /* DERIVED THE WAY js/app.js DERIVES, WITH THE LAND ORACLE, or this row measures
+     the oracle instead of the marker. wandererAt runs landCandidate, a seeded
+     fallback that reseeds a Wanderer's beat CENTRE when his lap crosses water,
+     and the candidate index is NOT part of his id. So an oracle-free
+     wanderersNear returns the RIGHT ID AT THE WRONG PLACE, and GROUND then
+     compares a marker MapLibre placed correctly against a position the app never
+     used. That is the whole of this row's history: 1.9 m on one run, 549.6 m on
+     another, 1331.1 m on a third, on markers that never moved.
+     ensureWater first because the oracle is only as good as its tiles: water.js
+     caps its cache at MAX_TILES 64 and evicts mid-pass, so a cold read falls back
+     exactly as if the cell were dry. Same lattice and same reason as
+     godmode.js's realWanderer. */
+  const pts = [];
+  for (let a = -4; a <= 4; a++) for (let b = -4; b <= 4; b++) pts.push([at.lat + a * 0.008, at.lng + b * 0.008]);
+  await water.ensureWater(pts, 20000);
+  const near = new Map(W.wanderersNear(dateKey(), at.lat, at.lng, undefined, water.isWater).map(w => [w.id, w]));
   const rows = [];
   for (const el of document.querySelectorAll('.maplibregl-marker')) {
     const t = el.style.transform || '';
