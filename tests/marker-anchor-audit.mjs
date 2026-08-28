@@ -274,19 +274,40 @@ try {
        either way, which is why this shipped. The set is a pure function of
        (date, cell, clock), so the spot is SEARCHED for rather than hardcoded,
        and a date that offers nobody a crowd is declared, never passed. */
+    /* THE SEARCH AND THE GRADING MUST AGREE ABOUT WHO IS OUT THERE, and until
+       tonight they did not. GROUND grades with the land oracle (that fix is what
+       stopped it measuring the oracle instead of the marker), while this search
+       ran WITHOUT it for cost: warming water tiles at every point of a 41x41
+       lattice would take far longer than the whole suite. The result was a spot
+       where three Wanderers derive dry and NONE derive once the water constraint
+       applies, and the run failed with "0 Wanderer marker(s) matched to a derived
+       instance" on an app that was fine.
+       So the sweep stays cheap and oracle-free to find CANDIDATES, and then the
+       few best candidates are CONFIRMED with the oracle, warming tiles only for
+       those. A candidate that does not survive the constraint is not a failure,
+       it is not a spot. */
     const spot = await page.evaluate(async (HOME) => {
       const W = await import('./js/wanderer.js');
+      const water = await import('./js/water.js');
       const { dateKey } = await import('./js/nutrition.js');
       const date = dateKey();
+      const cands = [];
       for (let dy = -20; dy <= 20; dy++) for (let dx = -20; dx <= 20; dx++) {
         const lat = HOME.latitude + dy * 0.004, lng = HOME.longitude + dx * 0.006;
         const n = W.wanderersNear(date, lat, lng);
-        if (n.length >= 3) return { lat, lng, n: n.length };
+        if (n.length >= 3) { cands.push({ lat, lng, bare: n.length }); if (cands.length >= 12) break; }
+      }
+      for (const c of cands) {
+        const pts = [];
+        for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) pts.push([c.lat + a * 0.008, c.lng + b * 0.008]);
+        await water.ensureWater(pts, 8000).catch(() => {});
+        const wet = W.wanderersNear(date, c.lat, c.lng, undefined, water.isWater);
+        if (wet.length >= 2) return { lat: c.lat, lng: c.lng, n: wet.length, bare: c.bare, tried: cands.length };
       }
       return null;
     }, HOME);
     if (!spot) {
-      const why = 'no point near HOME has three Wanderers within range on this date (the set is date-seeded)';
+      const why = 'no point near HOME has two Wanderers in range on this date ONCE THE LAND CONSTRAINT APPLIES (the set is date-seeded, and candidates that derive dry can be all-water)';
       for (const n of MAP_ROWS) unproven(n, why);
     } else {
       console.log(`STANDING AT  ${spot.lat.toFixed(4)}, ${spot.lng.toFixed(4)}  (${spot.n} Wanderers derived)`);
