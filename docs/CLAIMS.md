@@ -21,19 +21,9 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 ## v466
 
-1. PROOF: a rendered before/after at 2x with a POSITIVE CONTROL, not an eyeball.
-   Same markup, both stylesheets, counting the cream fill-tail pixels in the band
-   above the box: BEFORE (tail present) box top y=295, cream tail px=47; AFTER
-   (tail removed) box top y=295, cream tail px=0. Box top identical, so nothing
-   reflowed. My first probe counted the dark stage background as tail pixels and
-   could not have failed; it was thrown out and replaced with the one above.
-   SCOPE: `.cele-bubble`'s two pseudo-elements only. Copy, sticker, rotation and
-   the 14px gap are untouched. `.hero-bubble` (the typed talk box, whose tail
-   correctly drops to a speaking character's jaw) and `.hlw-say` (the Hollow,
-   closed in v404) are deliberately not touched.
-   NOT PROVEN: that no other surface in the app draws a speech tail. What IS
-   proven is that no other CSS rule does: every `solid transparent` triangle in
-   app.css was enumerated and there are three, named above.
+1. PROOF: MANUAL, a 2x render with a positive control rather than an eyeball. Same markup, both stylesheets, counting cream fill-tail pixels in the band above the box: BEFORE (tail present) box top y=295, cream tail px=47; AFTER (tail removed) box top y=295, cream tail px=0. Box top identical, so nothing reflowed. No audit grades .cele-bubble and I did not write one: a static check that the two deleted rules are still deleted would only restate the diff. My first probe counted the dark stage background as tail pixels and could not have failed; it was thrown out. | REACH: Level up any pet, or finish a breed in the Stable. The note under the pet portrait now has no tail pointing at it. Both sheets reach it, and neither is behind a flag or a server change.
+
+2. PROOF: MANUAL, the same render pair. The copy strings in the app source are untouched by this change (the diff is app.css only, two pseudo-element rules), and the measurement above shows the box top unmoved at y=295, so the sticker and its 14px gap are where they were. | REACH: The same two sheets. The words, the cream sticker and its tilt are identical to v465; the only difference a player can see is the missing tail.
 
 ## v465
 
