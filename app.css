@@ -3909,14 +3909,24 @@ body::before {
   transform: rotate(-1.6deg); box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.45);
   position: relative; max-width: 82%;
 }
-.cele-bubble::before {
-  content: ""; position: absolute; left: 46%; top: -13px;
-  border: 9px solid transparent; border-bottom-color: #17151d; border-top-width: 0;
-}
-.cele-bubble::after {
-  content: ""; position: absolute; left: 47.5%; top: -7px;
-  border: 6px solid transparent; border-bottom-color: #f2e9d7; border-top-width: 0;
-}
+/* NO TAIL, BECAUSE NOTHING HERE IS SPEAKING. Tom, 2026-08-20: "typed dialogue
+   instead of chat bubbles APP-WIDE". This was the last chat bubble left in the
+   app, at two sites: the pet level-up sheet and the breeding reveal. Both sit
+   directly under a pet portrait, and the tail pointed UP at it, so a system
+   message ("New talent unlocked. Choose it in the Stable.") read as the PET
+   saying it. Pets have no voice anywhere in this app: grep finds no pet line,
+   no petSay, nothing. The tail was claiming a speaker that does not exist.
+
+   NOT converted to a typed talk box, which is what the instruction says
+   literally, because that is the same mistake with better typography: it would
+   give the pet the voice it does not have, and spend ~1.5s typing a UI label
+   into the middle of a reward moment. The talk box stays for the characters who
+   DO speak (Gwart, the Wanderer, the Mimic), where .hero-bubble's tail correctly
+   drops to a jaw per the figure contract.
+
+   Only the two pseudo-elements are gone. The copy, the sticker, its rotation and
+   the 14px gap above it are untouched, so it now reads as the caption it always
+   was. Verified on a 2x render of both sites, not estimated. */
 .lvl-rewards { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
 .lvl-rewards .bh-pill { font-size: 13.5px; padding: 6px 13px; }
 
