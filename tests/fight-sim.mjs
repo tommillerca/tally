@@ -143,7 +143,17 @@ export const BUILDS = [
     talents: ['totem', 'totemic', 'pacing', 'pacing', 'pacing', 'conduits', 'conduits', 'conduits', 'conduits', 'conduits', 'deeplungs'] },
   // #7 the caster chain, for comparison against the melee one
   { name: 'Shaman: elemental', stats: BASE,
-    talents: ['frostbolt', 'firebolt', 'attunement', 'attunement', 'attunement', 'attunement', 'attunement', 'wildfire', 'frostbite', 'tempest', 'kindling', 'kindling'] },
+    talents: ['frostbolt', 'firebolt', 'attunement', 'attunement', 'attunement', 'attunement', 'attunement', 'wildfire', 'frostbite', 'tempest', 'kindling', 'kindling'] }
+
+];
+
+/* SEPARATE FROM BUILDS ON PURPOSE. tests/balance.mjs iterates BUILDS and holds
+   every row to a 1.85x DESIGN BAND, a number chosen so the uncapped Alchemist at
+   1.96x could not slip through. A STACK is a different question and is held to
+   the game's HARD ceiling, BUILD_MULT_CAP, because that is the thing that
+   actually stops it. Putting these in BUILDS graded a stack against the
+   single-build band and turned balance.mjs red on my own change. */
+export const STACKS = [
   /* ---- STACKS, added 2026-08-27. THE BOARD ABOVE TESTS BUILDS IN ISOLATION,
      WHICH IS NOT WHERE THE BUG WAS. The 3.39x finding that produced
      BUILD_MULT_CAP was a COMBINATION (Alchemist catalyst + the stamina engine +
@@ -169,14 +179,15 @@ export const BUILDS = [
     talents: [...BUILDS_ALCH, ...BUILDS_STAM, ...BUILDS_SLAB] }
 ];
 
+
 // pathToFileURL, not string concatenation: this project lives under
 // "Hyperframes Editor" and the space arrives percent-encoded in import.meta.url,
 // so the naive compare silently never matched and the script printed nothing.
 const isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
-  console.log(`fight-sim: ${BUILDS.length} builds x ${SEEDS} seeds`);
+  console.log(`fight-sim: ${BUILDS.length} builds + ${STACKS.length} stacks x ${SEEDS} seeds`);
   console.log('damage/turn vs a dummy (offense, no AI noise) + win% vs a foe at 80% of your stats\n');
-  const rows = BUILDS.map(b => measure(b));
+  const rows = [...BUILDS, ...STACKS].map(b => measure(b));
   const base = rows[0];
   const pad = (s, n) => String(s).padEnd(n);
   console.log(pad('build', 30) + pad('dmg/turn', 11) + pad('x base', 9) + pad('win%', 7) + 'median turns');
