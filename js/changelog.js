@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 466, date: '2026-08-28', title: 'Notes about your pet stop looking like your pet is talking', items: [
+    'When a pet levelled up, and when a breeding finished, the note underneath it was drawn as a speech bubble with a tail pointing up at the pet. So a message from the game read as something your pet had said, and pets do not speak anywhere else in Boneheadz.',
+    'The note is still there, in the same place, with the same words. It just no longer claims a speaker.',
+  ] },
+
   { n: 465, date: '2026-08-27', title: 'The Wanderer stops flickering on the map', items: [
     'On a map that was still loading, the Wanderer could vanish for a few seconds and then come back. The app keeps a small store of map data and throws the oldest away when it fills up, and the oldest was always the ground directly under you: loaded first when you opened the map, and checked constantly ever since. Once it was thrown away the game could not tell "I do not know what is here yet" apart from "this is water", and the Wanderer is never drawn on water. It now throws away whatever you have gone longest without needing, so the ground under your feet stays loaded.',
     'Also fixed by the same change: the Transmute button in the Kitchen now tells you how many more common ingredients you need rather than the total. It said "Need 6" whether you had none or five. It shows the shortfall and a 3 of 6 meter.',

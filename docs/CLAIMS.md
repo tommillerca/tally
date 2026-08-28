@@ -19,6 +19,22 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v466
+
+1. PROOF: a rendered before/after at 2x with a POSITIVE CONTROL, not an eyeball.
+   Same markup, both stylesheets, counting the cream fill-tail pixels in the band
+   above the box: BEFORE (tail present) box top y=295, cream tail px=47; AFTER
+   (tail removed) box top y=295, cream tail px=0. Box top identical, so nothing
+   reflowed. My first probe counted the dark stage background as tail pixels and
+   could not have failed; it was thrown out and replaced with the one above.
+   SCOPE: `.cele-bubble`'s two pseudo-elements only. Copy, sticker, rotation and
+   the 14px gap are untouched. `.hero-bubble` (the typed talk box, whose tail
+   correctly drops to a speaking character's jaw) and `.hlw-say` (the Hollow,
+   closed in v404) are deliberately not touched.
+   NOT PROVEN: that no other surface in the app draws a speech tail. What IS
+   proven is that no other CSS rule does: every `solid transparent` triangle in
+   app.css was enumerated and there are three, named above.
+
 ## v465
 
 1. PROOF: water-cache-audit.mjs (a new suite that grades the PROPERTY rather than the policy: a point that HAS answered keeps answering while the player walks and the cache churns past its cap, which stays true if the eviction is ever rewritten. The cause: the water module swept its tile cache by iterating the Map, and a Map iterates in INSERTION order, so it discarded the OLDEST-FETCHED tiles, which are the ones under the player, fetched first when the map opened and read every pass since. isWater then answers undefined for the cell the player stands in, and wandererAt cannot tell that apart from "all water", so the Wanderer is not drawn. MY FIRST VERSION OF THIS AUDIT COULD NOT FAIL and its prove-red is what caught it: checking HOME once at the END passed on the broken tree, because a read of an evicted tile also RE-FETCHES it and re-inserts it at the tail, immunising it against the very sweep under test. The symptom is transient, so HOLD records EVERY pass and one blank fails. Proven red on the restored sweep: "1 of 11 passes read undefined, first after 77 points", with WARM and CHURN still green so the red is the eviction and not the setup) | REACH: Open the Boneyard on a cold map and watch the Wanderer. He no longer disappears for a few seconds and come back while the map is still loading.
