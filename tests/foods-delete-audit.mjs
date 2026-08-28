@@ -50,7 +50,8 @@ const setup = await page.evaluate(async id => {
   const db = await import('./js/db.js');
   const { dateKey } = await import('./js/nutrition.js');
   const today = dateKey();
-  const older = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().slice(0, 10); })();
+  /* LOCAL, not UTC: godmode.js's localDay explains the class. */
+  const older = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return (d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(d); })();
   /* source 'custom' is what makes the editor (and therefore the delete)
      reachable at all: js/app.js:4191 only offers it for custom foods. */
   await db.db.put('foods', { id, name: 'Nan bread (from the packet)', brand: null, source: 'custom',

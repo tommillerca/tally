@@ -153,7 +153,7 @@ const lv = await page.evaluate(async () => {
   const db = (await import('./js/db.js')).db;
   const total = await g.totalXp();
   const gap = g.levelFor(total).nextAt - total;
-  if (gap > 1) await db.put('xp', { key: 'audit-top-' + Date.now(), type: 'audit', xp: gap - 1, label: 'audit', date: new Date().toISOString().slice(0, 10), ts: Date.now() });
+  if (gap > 1) await db.put('xp', { key: 'audit-top-' + Date.now(), type: 'audit', xp: gap - 1, label: 'audit', date: (d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date()), ts: Date.now() });
   return gap;
 });
 await page.evaluate(() => { location.hash = '#/today'; });
@@ -237,7 +237,7 @@ const eggs = await page.evaluate(async () => {
   await l.grantCrate('egg', 'audit-egg-' + Date.now());
   const now = new Date();
   for (let i = 0; i < 30; i++) {
-    const d = new Date(now.getTime() - i * 86400000).toISOString().slice(0, 10);
+    const d = (d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date(now.getTime() - i * 86400000));
     const prev = (await db.get('health', d)) || { date: d };
     await db.put('health', { ...prev, date: d, steps: Math.max(prev.steps || 0, 13000) });
   }

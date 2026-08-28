@@ -88,7 +88,8 @@ await page.evaluate(async () => {
   const settings = (await kvGet('settings', {})) || {};
   await kvSet('settings', { ...settings, hkNative: true, hkConnected: true });
   const q = await import('./js/quests.js');
-  const date = new Date().toISOString().slice(0, 10);
+  /* LOCAL, not UTC: godmode.js's localDay explains the class. */
+  const date = (d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date());
   const tiers = [
     ['day', q.dailyQuests(date)],
     ['week', q.weeklyQuests(date)],

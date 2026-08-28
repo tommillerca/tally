@@ -80,7 +80,8 @@ async function logWeightViaSheet({ value, date }) {
 
 /* -------------- 1. LOG WEIGHT: KG PATH -------------- */
 await resetForUnit('kg');
-const today = new Date().toISOString().slice(0, 10);
+/* LOCAL, not UTC: godmode.js's localDay explains the class. */
+const today = (d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date());
 const kgResult = await logWeightViaSheet({ value: 74.5, date: today });
 check('KG  the weight sheet wrote exactly one row to `weights`',
   kgResult.weights.length === 1, `got ${kgResult.weights.length} rows`);

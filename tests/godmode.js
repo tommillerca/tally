@@ -608,6 +608,29 @@ export async function click(page, re) {
      champ      -> the Champion marked beaten
      xp         -> arbitrary extra award rows, if you need a specific shape
    Reloads by default; pass { reload: false } to batch several seeds. */
+/* THE PLAYER'S DAY IS A LOCAL DAY, AND toISOString() IS NOT IT.
+ * js/nutrition.js's dateKey formats the LOCAL date, because a food diary day is
+ * the day the player is actually having. Every audit that reached for
+ * `new Date().toISOString().slice(0, 10)` was therefore seeding UTC, and from
+ * the moment UTC rolls over until local midnight the two disagree by a day.
+ * That window is four hours in EDT and longer further west.
+ *
+ * MEASURED 2026-08-27 at 21:5x EDT, which is 01:5x UTC on the 28th:
+ *   day-strip-audit   three rows red, demanding tomorrow's date from an app
+ *                     that was correct (fixed in its own commit)
+ *   readiness-audit   every scenario scored the base 72, better AND worse,
+ *                     because the one differing reading was dated a day ahead
+ *                     and never became "latest", so every delta cancelled
+ * Both PASSED earlier the same day, before UTC rolled over. That is what makes
+ * this class so durable: it looks like flake, and it is right two thirds of the
+ * time.
+ *
+ * Exported so audits share one answer instead of each rolling their own. Page
+ * context cannot import this, so the few that build dates inside
+ * page.evaluate() format them the same way inline, with a comment pointing here. */
+export const localDay = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 export async function seed(page, opts = {}) {
   const res = await page.evaluate(async (o) => {
     // THE guard, and it has to be about THIS PAGE, not about what databases exist.
@@ -625,7 +648,10 @@ export async function seed(page, opts = {}) {
     const db = await new Promise((res2, rej) => {
       const r = indexedDB.open(name); r.onsuccess = () => res2(r.result); r.onerror = () => rej(r.error);
     });
-    const today = new Date().toISOString().slice(0, 10);
+    /* LOCAL, not UTC: see localDay above. seed() dates its XP rows, and a row
+       dated a day ahead is not "today" to anything in the app that groups by
+       dateKey, which is how a level seeded at 9pm EDT landed on tomorrow. */
+    const today = (d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date());
     const xpRows = [];
     if (o.level) xpRows.push({ key: 'godmode-level', type: 'quest', xp: o.level * o.level * 40, label: 'test seed', date: today, ts: Date.now() });
     for (const r of o.beatRungs || []) xpRows.push({ key: `pitrung-${r}`, type: 'pitrung', xp: 40, label: `Ladder: beat rung ${r}`, date: today, ts: Date.now() });

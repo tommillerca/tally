@@ -220,7 +220,13 @@ export function rotHash(s) {
  * flyers/hoverers/floppers onto their fixed lanes and spots, extras wrapping
  * with a small offset so a fourth catfish still lands somewhere sane.
  * `day` only seeds the rotation; any stable per-day string works. */
-export function placePaddock(roster, scene = PDK_SCENE, day = new Date().toISOString().slice(0, 10)) {
+/* THE DEFAULT DAY IS LOCAL, because every real caller passes dateKey() and a
+   default that disagrees with all of them is a trap for the next one. UTC rolls
+   over at 8pm for an EDT player, so a caller that took this default would shuffle
+   the paddock four hours before their day actually turned, out of step with
+   quests, spawns and readiness. Not a live bug: js/app.js:15053 and :15134 both
+   pass dateKey() today. Fixed so it cannot become one. */
+export function placePaddock(roster, scene = PDK_SCENE, day = (d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date())) {
   const by = m => roster.filter(r => r.motion === m);
   const out = {};
   by('fly').forEach((r, i) => {
