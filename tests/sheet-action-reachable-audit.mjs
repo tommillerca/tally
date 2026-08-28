@@ -72,7 +72,23 @@ const { browser, page } = await boot(srv.url, { headless: process.env.HEADLESS_M
 
 /* THE MEASURE. No scrolling, no scrollIntoView: a tap lands where the thumb is. */
 const reach = sel => page.evaluate(s => {
-  const b = document.querySelector(s);
+  /* THE CONTROL IN THE TOPMOST SHEET, WHICH IS THE ONE A THUMB CAN REACH.
+     The kitchen scenarios leave the previous sheet mounted underneath, so two
+     elements answer this selector and document.querySelector returns the FIRST,
+     which is the stale one in the sheet below. The hit-test then reads the pixels
+     of the LIVE control and `b.contains(hit)` is false because they are two
+     different buttons: measured [dupes=2 sheets=2 hitBelongsToIndex=1], i.e. the
+     element under the cursor belonged to sheet 1 while `b` was sheet 0's.
+     That reported #buyPot as unreachable while it was perfectly tappable, and a
+     direct probe at the very same coordinates returned inside=true. All four
+     kitchen rows were this.
+     Resolving inside the topmost sheet is what a player experiences; the fallback
+     keeps single-sheet and non-sheet callers behaving exactly as before. */
+  const all = [...document.querySelectorAll(s)];
+  if (!all.length) return { missing: true };
+  const sheets = [...document.querySelectorAll('.sheet')].filter(x => x.getBoundingClientRect().height > 0);
+  const top = sheets[sheets.length - 1];
+  const b = (top && all.find(e => top.contains(e))) || all[all.length - 1];
   if (!b) return { missing: true };
   const r = b.getBoundingClientRect();
   const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
@@ -102,6 +118,9 @@ const reach = sel => page.evaluate(s => {
     cx: Math.round(cx), cy: Math.round(cy), vh: innerHeight, vw: innerWidth,
     onScreen: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth,
     hit: name(hit), reachable: !!hit && (hit === b || b.contains(hit)),
+    /* printed so a future stack is visible in the failure line rather than
+       needing to be rediscovered from scratch */
+    dupes: all.length,
     disabled: !!b.disabled, clipper, scroller,
   };
 }, sel);
@@ -128,7 +147,16 @@ const reach = sel => page.evaluate(s => {
  */
 const reachAfterBodyScroll = async sel => {
   await page.evaluate(s => {
-    const b = document.querySelector(s);
+    /* THE SAME TOPMOST-SHEET RESOLUTION AS reach(), and it has to be, or this
+       scrolls to bring the STALE control into view and then reach() measures the
+       live one somewhere else entirely. That is why #forageBtn still read
+       "hit=nothing" after the topmost fix landed in reach() alone: the scroll was
+       still aiming at sheet 0's button. */
+    const all = [...document.querySelectorAll(s)];
+    if (!all.length) return;
+    const sheets = [...document.querySelectorAll('.sheet')].filter(x => x.getBoundingClientRect().height > 0);
+    const top = sheets[sheets.length - 1];
+    const b = (top && all.find(e => top.contains(e))) || all[all.length - 1];
     if (!b) return;
     /* the OUTERMOST scroller inside the sheet, i.e. the sheet body: the innermost
        one is the nested panel this check exists to refuse to use */
@@ -469,7 +497,7 @@ for (const s of SHEETS) {
          reading rides along in the detail so the "you had to scroll to your own
          confirm button" cases stay visible without failing the run. */
       ok(`REACH ${tag}: a tap at the centre of ${s.action} lands ON it after scrolling the SHEET (not a nested panel)${mode === 'default' ? ' (CONTROL: red here means the measurement is wrong, not the app)' : ''}`,
-        r.reachable, `hit=${r.hit} at ${r.cx},${r.cy} of ${r.vw}x${r.vh}  onScreen=${r.onScreen}${r.clipper ? `  CLIPPED BY ${r.clipper}` : ''}`
+        r.reachable, `hit=${r.hit} at ${r.cx},${r.cy} of ${r.vw}x${r.vh}  onScreen=${r.onScreen}${r.dupes > 1 ? `  (${r.dupes} matched, graded the topmost)` : ''}${r.clipper ? `  CLIPPED BY ${r.clipper}` : ''}`
           + `  |  before any scroll: hit=${asShipped.hit} at ${asShipped.cx},${asShipped.cy} reachable=${asShipped.reachable}`);
     }
 
