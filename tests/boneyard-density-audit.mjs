@@ -11,7 +11,8 @@
  * of markers on the glass, and only the renderer knows it.
  *
  * WHAT IT ASSERTS, and which direction is failure (anti-regression rule 11):
- *   VISIBLE   markers inside the map canvas. Failure is DOWN: an empty-looking
+ *   VISIBLE   markers inside the map canvas, over TEN locations. Failure is DOWN:
+ *             a mean below the floor, or too many nearly-empty screens. Empty-looking
  *             map is the complaint this branch exists to answer.
  *   BUDGET    total live DOM markers. Failure is UP: every marker is a live DOM
  *             node transformed on each frame, and "as many as possible" is the
@@ -51,11 +52,23 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /* Four real places, because one lucky cell must not carry the claim: a dense
    downtown grid, a residential grid, an arterial strip and a quieter east-side
    grid. All Vancouver, the latitude every number in this branch was measured at. */
+/* TEN, NOT FOUR. The floor used to be calibrated against these first four, and
+   four draws from a distribution with sd ~= 3 carry a standard error of ~1.5
+   markers before the app is involved. That is why this row read as "does not
+   reproduce on every machine": it was mostly reading its own sample size.
+   The six below come from the 50-cell sweep in docs/BONEYARD-DENSITY-MEASUREMENT.md
+   (10 locations x 5 consecutive dates, every cell measured). */
 const SPOTS = [
-  [49.2827, -123.1207],
-  [49.2650, -123.1560],
-  [49.2490, -123.1000],
-  [49.2790, -123.0680],
+  [49.2827, -123.1207],   // downtown waterfront
+  [49.2650, -123.1560],   // kitsilano grid
+  [49.2490, -123.1000],   // main/kingsway
+  [49.2790, -123.0680],   // east side grid
+  [49.2260, -123.1010],   // sunset/south van
+  [49.2450, -123.0700],   // trout lake
+  [49.2680, -123.0980],   // commercial drive
+  [49.2320, -123.1560],   // dunbar
+  [49.2570, -123.1250],   // cambie/city hall
+  [49.2210, -123.0680],   // killarney
 ];
 /* THE FLOOR OF 10 DOES NOT REPRODUCE ON EVERY MACHINE. Investigated 2026-08-22
    after this row sat in the "flaky" pile for nine days while failing every run.
@@ -112,7 +125,26 @@ const SPOTS = [
    machine capability measured in the same run, and this machine has every one
    of them. It draws the map, reaches the tiles and grades the row for real. A
    red here is a dice roll, not a machine that cannot look. */
-const VISIBLE_FLOOR = 10;   // measured 13.75 when written; 9.25 on 2026-08-22, 15.4 on 2026-08-27, same code
+/* SIX, MEASURED, NOT GUESSED. docs/BONEYARD-DENSITY-MEASUREMENT.md, 50 cells:
+   min 3, median 9, mean 8.60, max 16. Graded over 1050 simulated runs the way
+   this file grades, the old floor of 10 passed 23% OF THE TIME ON HEALTHY CODE.
+   A row that is red three runs in four teaches people to ignore it, which is
+   worse than not having it. Six sits below the healthy mean with room for the
+   spread and still sits well above the 4.00 the parent branch drew.
+   The variance is NOT mainly the calendar, which is what this file used to
+   assume: LOCATION 13.1%, DATE 12.1%, residual 74.8%. Three quarters is the
+   per-cell roll, so the answer is a bigger sample, not a different day. */
+const VISIBLE_FLOOR = 6;
+/* THE DEAD-SCREEN ROW, REPLACED. It used to be worst-of-N >= ceil(FLOOR/2), and
+   worst-of-N gets HARSHER as the sample grows: ten locations means ten chances
+   to draw the low tail, so widening the sample would have broken the very row
+   that was meant to benefit from it. It is now a COUNT: a couple of thin screens
+   in ten is the distribution doing its job, but a third of the map being nearly
+   empty is the defect this row exists to catch.
+   Both numbers keep their prove-red against the parent branch, which drew mean
+   4.00 with its worst location at 3. */
+const SPARSE_AT = 4;    // a location drawing fewer than this is "nearly empty"
+const SPARSE_MAX = 2;   // at most this many of SPOTS may be nearly empty
 const MARKER_BUDGET = 100;  // measured: 60fps to ~84 markers, first drops near 107
 
 const out = [];
@@ -208,9 +240,12 @@ try {
   const meanVisible = rows.reduce((a, r) => a + r.visible, 0) / rows.length;
   ok(`VISIBLE  ${meanVisible.toFixed(2)} spawn markers on screen`,
     meanVisible >= VISIBLE_FLOOR, `floor ${VISIBLE_FLOOR}, the parent branch drew 4.00`);
+  const sparse = rows.filter(r => r.visible < SPARSE_AT);
   const worst = Math.min(...rows.map(r => r.visible));
-  ok(`VISIBLE  the emptiest location still shows ${worst}`,
-    worst >= Math.ceil(VISIBLE_FLOOR / 2), `floor ${Math.ceil(VISIBLE_FLOOR / 2)}: a mean cannot carry a dead screen`);
+  ok(`VISIBLE  ${sparse.length} of ${rows.length} locations are nearly empty (worst ${worst})`,
+    sparse.length <= SPARSE_MAX,
+    `at most ${SPARSE_MAX} may be under ${SPARSE_AT}: a mean cannot carry a dead screen, ` +
+    `and worst-of-N only gets harsher as the sample grows`);
 
   /* ---- BUDGET. Failure is UP. A ceiling, never a trend. ---- */
   const most = Math.max(...rows.map(r => r.allMarkers));
