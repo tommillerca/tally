@@ -17873,7 +17873,17 @@ async function renderBoneyard(el) {
          called it unplayable. Hence showBar, and no nearest access without it. */
       const showBar = (inRange && !!nearest) || tooFast;
       const ro = $('#mapReadout', body);
-      if (ro && showBar) {
+      /* ONLY REWRITE IT WHEN IT ACTUALLY SAYS SOMETHING ELSE. refreshSpawns runs
+         on every camera idle and on every world refresh, and an unconditional
+         innerHTML write DESTROYS the disc and its <img> several times a second
+         while you stand still: the same bolt is re-created, re-decoded and any
+         CSS animation on it restarts. Measured 2026-08-28 with the readout held
+         by reference across ~800ms: rect 28.0,799.8 40x40 before, 0,0 0x0 after,
+         because the node it named had been thrown away and rebuilt. The whole
+         string is a pure function of these two inputs, so they are the key. */
+      const barKey = tooFast ? 'fast' : nearest ? 'near:' + nearest.type : '';
+      if (ro && showBar && ro.dataset.bar !== barKey) {
+        ro.dataset.bar = barKey;
         ro.innerHTML = tooFast
           /* `fast`, NOT `warn`. app.css:637 has a global `.warn` BANNER utility
              (padding 10px 12px, its own border and radius, margin-bottom 12px),
