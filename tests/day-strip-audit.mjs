@@ -39,7 +39,20 @@ await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(1800);
 
 const shownDate = () => page.evaluate(() => (document.querySelector('.dayhdr') || {}).dataset?.date);
-const iso = (offset) => page.evaluate(o => { const d = new Date(); d.setDate(d.getDate() + o); return d.toISOString().slice(0, 10); }, offset);
+/* LOCAL, NEVER toISOString(). A food diary day is the day the PLAYER is having,
+   so js/nutrition.js's dateKey formats the local date, and this file has to
+   expect the same thing or it is comparing two different calendars.
+   toISOString() renders UTC, so from the moment UTC rolls over until local
+   midnight this row demanded TOMORROW: measured 2026-08-27 at 21:54 EDT, which
+   is 01:54 UTC on the 28th, SETUP read "2026-08-27 vs 2026-08-28" and BACK and
+   FORWARD went with it. That is roughly four hours of every day in EDT, longer
+   the further west you are, and it reads as a flaky suite rather than a broken
+   expectation. The APP was right in every one of those runs. */
+const iso = (offset) => page.evaluate(o => {
+  const d = new Date();
+  d.setDate(d.getDate() + o);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}, offset);
 
 /* Every control must EXIST before anything is asserted about it: a missing
    arrow would otherwise make the "did not move" checks pass for free. */
@@ -157,9 +170,13 @@ ok('ROUND TRIP the shown day reads its own row back', /Day strip probe/.test(rea
    failed for its own arithmetic rather than the app's. */
 const from = await shownDate();
 const jump = await page.evaluate(d => {
+  /* Local for the same reason as iso() above. Anchoring at local noon happens to
+     survive EDT, because a 4 hour shift cannot cross a date boundary from midday,
+     but it breaks at UTC+13 where local noon is the previous day in UTC. Same
+     calendar on both sides, everywhere. */
   const x = new Date(d + 'T12:00:00');
   x.setDate(x.getDate() - 9);
-  return x.toISOString().slice(0, 10);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
 }, from);
 for (let i = 0; i < 9; i++) {
   await page.evaluate(() => document.getElementById('prevDay').click());
