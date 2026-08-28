@@ -116,6 +116,12 @@ export function measure(build, { foeMult = 0.8, seeds = SEEDS } = {}) {
 /* The builds. Stats are held IDENTICAL across every row on purpose: the only
    variable is the talent set, so any difference in the table is the talents. */
 const BASE = { power: 55, marrow: 55, wind: 55, reflex: 55, hype: 55 };
+/* Pulled out so the STACK rows below reuse the EXACT same talent lists as the
+   isolated rows, rather than a second copy that can drift from them. */
+const BUILDS_SLAB = ['heavyhands', 'followthrough', 'rage', 'rage', 'rage', 'sunder', 'sunder'];
+const BUILDS_ALCH = ['fireflask', 'potency', 'potency', 'potency', 'potency', 'potency', 'acidvial', 'catalyst', 'catalyst', 'catalyst', 'catalyst', 'catalyst', 'overdose', 'corrode', 'deathbomb'];
+const BUILDS_STAM = ['totem', 'totemic', 'pacing', 'pacing', 'pacing', 'conduits', 'conduits', 'conduits', 'conduits', 'conduits', 'deeplungs'];
+
 export const BUILDS = [
   { name: 'baseline (no talents)', stats: BASE, talents: [] },
   // #1 the multiplicative melee chain: heavy hands x follow-through x rage x sunder
@@ -138,6 +144,29 @@ export const BUILDS = [
   // #7 the caster chain, for comparison against the melee one
   { name: 'Shaman: elemental', stats: BASE,
     talents: ['frostbolt', 'firebolt', 'attunement', 'attunement', 'attunement', 'attunement', 'attunement', 'wildfire', 'frostbite', 'tempest', 'kindling', 'kindling'] },
+  /* ---- STACKS, added 2026-08-27. THE BOARD ABOVE TESTS BUILDS IN ISOLATION,
+     WHICH IS NOT WHERE THE BUG WAS. The 3.39x finding that produced
+     BUILD_MULT_CAP was a COMBINATION (Alchemist catalyst + the stamina engine +
+     a free AP), and nothing here ever measured a combination again, so the cap
+     that was added in response was never re-checked against the thing it was
+     written for.
+     Measured on this tree the day these rows were added:
+       alchemist + stamina           2.17x   99% win   5 turns
+       alchemist + stamina + slab    1.93x   98% win   5 turns
+       everything measured           1.93x  100% win   4 turns
+     The cap HOLDS, at 2.17x against a ceiling of 2.2, which is 98.6% of it. That
+     is the useful number: there is almost no headroom, so the next damage talent
+     or gear set breaches it, and now the board says so instead of a future
+     session rediscovering stacking from scratch.
+     WIN RATE IS THE OTHER HALF AND IT HAS NO CEILING. The full stack wins 100%
+     of fights in 4 turns against a baseline of 78% in 6, and 'two free lives'
+     reaches 98% with NO damage increase at all, so BUILD_MULT_CAP cannot touch
+     it. Survivability stacking is unbounded by design; whether that is wrong is
+     Tom's call, not the sim's. */
+  { name: 'STACK: alchemist + stamina', stats: BASE,
+    talents: [...BUILDS_ALCH, ...BUILDS_STAM] },
+  { name: 'STACK: alch + stamina + slab', stats: BASE,
+    talents: [...BUILDS_ALCH, ...BUILDS_STAM, ...BUILDS_SLAB] }
 ];
 
 // pathToFileURL, not string concatenation: this project lives under
@@ -150,11 +179,11 @@ if (isMain) {
   const rows = BUILDS.map(b => measure(b));
   const base = rows[0];
   const pad = (s, n) => String(s).padEnd(n);
-  console.log(pad('build', 26) + pad('dmg/turn', 11) + pad('x base', 9) + pad('win%', 7) + 'median turns');
-  console.log('-'.repeat(72));
+  console.log(pad('build', 30) + pad('dmg/turn', 11) + pad('x base', 9) + pad('win%', 7) + 'median turns');
+  console.log('-'.repeat(76));
   for (const r of rows) {
     console.log(
-      pad(r.name, 26) +
+      pad(r.name, 30) +
       pad(r.dpt.toFixed(1), 11) +
       pad((r.dpt / base.dpt).toFixed(2) + 'x', 9) +
       pad((r.winRate * 100).toFixed(0) + '%', 7) +
