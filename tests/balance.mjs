@@ -16,7 +16,7 @@
  *
  * Usage: node tests/balance.mjs
  */
-import { measure, BUILDS } from './fight-sim.mjs';
+import { measure, BUILDS, STACKS } from './fight-sim.mjs';
 import { BUILD_MULT_CAP, CATALYST_CAP } from '../js/pit.js';
 
 const SEEDS = 120;
@@ -36,6 +36,22 @@ console.log(`balance: ${BUILDS.length} builds x ${SEEDS} seeds (caps: chain ${BU
 const rows = BUILDS.map(b => measure(b, { seeds: SEEDS }));
 const base = rows[0];
 ok('the sim produced a baseline to measure against', base && base.dpt > 0, `baseline dpt=${base?.dpt?.toFixed(1)}`);
+
+/* STACKS ARE HELD TO THE HARD CAP, NOT THE DESIGN BAND, and they are graded
+   here because until 2026-08-27 NOTHING did. MAX_RATIO is 1.85 for a single
+   build, chosen so the uncapped Alchemist at 1.96x could not slip through. A
+   COMBINATION is a different question: BUILD_MULT_CAP is what actually stops it,
+   so that is what it is measured against.
+   Measured the day this was added: alchemist + stamina reaches 2.17x against a
+   cap of 2.2, which is 98.6% of it. That is a real finding, not a comfortable
+   pass: there is almost no headroom, and the row exists so the next talent or
+   gear set that eats the rest fails here rather than in someone's hands. */
+for (const st of STACKS) {
+  const m = measure(st, { seeds: SEEDS });
+  const ratio = m.dpt / base.dpt;
+  ok(`STACK-CEILING ${st.name} stays within the hard cap ${BUILD_MULT_CAP}x`,
+    ratio <= BUILD_MULT_CAP, `${ratio.toFixed(2)}x of ${BUILD_MULT_CAP}x (${((ratio / BUILD_MULT_CAP) * 100).toFixed(0)}% of the ceiling)`);
+}
 
 for (const r of rows.slice(1)) {
   const ratio = r.dpt / base.dpt;
