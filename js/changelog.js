@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 465, date: '2026-08-27', title: 'The Wanderer stops flickering on the map', items: [
+    'On a map that was still loading, the Wanderer could vanish for a few seconds and then come back. The app keeps a small store of map data and throws the oldest away when it fills up, and the oldest was always the ground directly under you: loaded first when you opened the map, and checked constantly ever since. Once it was thrown away the game could not tell "I do not know what is here yet" apart from "this is water", and the Wanderer is never drawn on water. It now throws away whatever you have gone longest without needing, so the ground under your feet stays loaded.',
+    'Also fixed by the same change: the Transmute button in the Kitchen now tells you how many more common ingredients you need rather than the total. It said "Need 6" whether you had none or five. It shows the shortfall and a 3 of 6 meter.',
+  ] },
+
   { n: 464, date: '2026-08-27', title: 'The Paddock is a fifth lighter', items: [
     'Standing in the Paddock had your phone holding about 110 MB of pictures, which is the kind of number that gets a browser tab thrown away in the background and makes you lose your place. It is under 90 MB now. Two things were behind it: the little pet lurking at the edge of the Paddock was being drawn from an image twenty times bigger than the space it appears in, and the small pictures on the news rows were full-size art painted at the size of a fingernail.',
     'Nothing looks any different. The same art, at sizes that make sense for where it is shown.',
