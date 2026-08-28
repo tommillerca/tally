@@ -407,7 +407,12 @@ function showWheel(idx, prize, result, commit, { sounds }) {
 
     spinBtn.addEventListener('click', spin, { once: true });
     // test hook (headless only): deterministic drive
-    if (navigator.webdriver) window.__dw = { spin, idx, prize: prize.key, reveal, finish, el: dw };
+    /* `coin` is exposed because the KEY cannot be used to infer it. Coin prizes
+       are c30/c75/c150 and a test that reads "starts with c" also catches
+       'charm', which pays no coins by design and was therefore graded as a coin
+       prize that failed to pay. The table already carries the flag; hand it over
+       rather than making the caller guess from a naming convention. */
+    if (navigator.webdriver) window.__dw = { spin, idx, prize: prize.key, coin: !!prize.coin, reveal, finish, el: dw };
   });
 }
 

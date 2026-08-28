@@ -136,16 +136,22 @@ const spin1 = await page.evaluate(async () => {
   const afterDate  = await db.kvGet('wheelLastDate', null);
   const today = nut.dateKey();
   const prize = window.__dw?.prize;
+    const isCoinPrize = !!window.__dw?.coin;
   return {
-    prize, beforeCoins, afterCoins, coinDelta: afterCoins - beforeCoins,
+    prize, isCoinPrize, beforeCoins, afterCoins, coinDelta: afterCoins - beforeCoins,
     beforeDate, afterDate, dateStampedToday: afterDate === today, today,
   };
 });
 check('PAYOUT-1  the first spin completes without error', !spin1.error, spin1.error || '');
 check('PAYOUT-1  commit stamped wheelLastDate to today (the double-dip guard)', spin1.dateStampedToday, `date now ${spin1.afterDate}`);
 check("PAYOUT-1  it paid SOMETHING (prize was granted; coin prizes show delta, non-coin prizes stamp the date)",
-  spin1.prize && (spin1.coinDelta > 0 || (spin1.prize && !spin1.prize.startsWith('c'))),
-  `prize=${spin1.prize} coinDelta=${spin1.coinDelta}`);
+  /* READ THE TABLE'S OWN FLAG, do not infer it from the key. This said
+     `!prize.startsWith('c')`, and the wheel's prizes are c30, c75, c150 AND
+     'charm'. A charm pays no coins BY DESIGN, so it was graded as a coin prize
+     that had failed to pay. js/wheel.js hands the `coin` flag to the test hook
+     now, because the table already knows and the caller was guessing. */
+  spin1.prize && (spin1.isCoinPrize ? spin1.coinDelta > 0 : spin1.dateStampedToday),
+  `prize=${spin1.prize} coin=${spin1.isCoinPrize} coinDelta=${spin1.coinDelta} stamped=${spin1.dateStampedToday}`);
 
 /* Now the second-attempt guard. Two paths to the double-dip:
      A) the outer date gate stops the wheel from re-showing at all (measured
