@@ -669,12 +669,29 @@ import { talkBoxHtml, runTalkBox, TALK_MS } from './talkbox.js';
 
 const ENC_STYLE_ID = 'wanderer-enc-style';
 
-/* The two lines, in Tom's words from the screenshots. Exported so the guard
-   asserts the SHIPPED strings rather than its own copy of them. */
+/* ONE LINE NOW, AND THEN HIS NAME. Tom, 2026-08-28: "just have no second line
+   and make it a title appearing kinda borderlands boss style that says THE
+   WANDERER".
+
+   The first line is still Tom's own words from the screenshots, and it is the
+   one that has to exist: it plays over the glow ALONE, before any figure, and
+   it is what makes the dark read as something coming rather than as a loading
+   screen. The second line was doing a job a name card does better. It landed on
+   the beat where he steps out of the black and said "Something approaches...",
+   which is a caption for a thing the player is already looking at.
+
+   Exported so the guard asserts the SHIPPED string rather than its own copy. */
 export const ENCOUNTER_LINES = [
   'You hear heavy footsteps, and see a warm glowing light.',
-  'Something approaches...',
 ];
+
+/* THE NAME CARD. TITLE_AT is measured from the moment `.arrive` lands, so the
+   name hits while he is still walking rather than after he has parked: the slam
+   should feel like it is announcing the movement, not captioning a still frame.
+   The walk is 1650ms, so 620ms puts it around a third of the way in. */
+export const TITLE_TEXT = 'THE WANDERER';
+export const TITLE_AT = 620;
+export const TITLE_MS = 540;
 
 export const ZOOM_MS = 900;
 
@@ -761,6 +778,51 @@ function ensureEncounterStyle() {
 }
 .wnd-enc-acts.on { opacity: 1; pointer-events: auto; }
 .wnd-enc-acts .btn { width: 100%; }
+
+/* ---- THE NAME CARD ----
+   Cream on ink in the display face, which is the app's own poster voice, rather
+   than a new one invented for this screen. The stroke is drawn UNDER the fill
+   (paint-order) so the letterforms keep their weight instead of being eaten
+   from the inside, and the hard offset shadow is the same 0-blur language the
+   celebration stickers already use.
+   It reserves its space from the start (visibility, not display) so the buttons
+   below it do not jump when the name lands. */
+.wnd-title {
+  position: relative; z-index: 2; margin: 0 0 14px; text-align: center;
+  visibility: hidden;
+}
+.wnd-enc.named .wnd-title { visibility: visible; }
+.wnd-title b {
+  display: inline-block; font-family: var(--display); font-weight: 400;
+  font-size: clamp(34px, 11.5vw, 56px); line-height: 0.98; letter-spacing: 0.045em;
+  color: #f2e9d7; -webkit-text-stroke: 3px #17151d; paint-order: stroke fill;
+  text-shadow: 4px 5px 0 rgba(0, 0, 0, 0.55); transform: rotate(-2deg);
+}
+.wnd-title i { display: block; height: 5px; width: 0; margin: 9px auto 0;
+  background: #f2e9d7; border: 2px solid #17151d; }
+.wnd-enc.named .wnd-title b { animation: wndTitleIn ${TITLE_MS}ms cubic-bezier(.16, 1.42, .3, 1) both; }
+.wnd-enc.named .wnd-title i { animation: wndTitleRule 360ms 200ms ease-out both; }
+/* the box hands the moment over rather than sitting under his name */
+.wnd-enc.named .wnd-enc-box { opacity: 0; transition: opacity 240ms ease; }
+@keyframes wndTitleIn {
+  0%   { opacity: 0; transform: rotate(-2deg) scale(1.85) translateY(12px); }
+  55%  { opacity: 1; }
+  100% { opacity: 1; transform: rotate(-2deg) scale(1) translateY(0); }
+}
+@keyframes wndTitleRule { from { width: 0; } to { width: min(76%, 296px); } }
+/* REDUCED MOTION: no slam, no sweep, and the rule is simply THERE at full width.
+   Both the class (set from the caller's own reduced flag) and the media query,
+   because the two do not always agree: the flag follows the app's setting and
+   the query follows the OS. Durations stay in the hundreds of ms rather than
+   being crushed to 0.001s, which is how a reduced-motion rule turns into a
+   thousand-iterations-a-second loop. */
+.wnd-enc.rm .wnd-title b, .wnd-enc.rm .wnd-title i { animation: none; }
+.wnd-enc.rm.named .wnd-title b { opacity: 1; }
+.wnd-enc.rm.named .wnd-title i { width: min(76%, 296px); }
+@media (prefers-reduced-motion: reduce) {
+  .wnd-enc.named .wnd-title b { animation: wndEncIn 200ms linear both; }
+  .wnd-enc.named .wnd-title i { animation: none; width: min(76%, 296px); }
+}
 
 @keyframes wndEncIn { from { opacity: 0 } to { opacity: 1 } }
 @keyframes wndEncFlicker { 0%, 100% { opacity: .82 } 42% { opacity: 1 } 71% { opacity: .74 } }
@@ -853,6 +915,10 @@ export function showWandererEncounter({ reduced = false } = {}) {
     `<div class="wnd-enc-scene"><div class="wnd-enc-glow"></div>` +
       `<img class="wnd-enc-art" src="${WANDERER_ART}" alt="" aria-hidden="true"></div>` +
     talkBoxHtml(ENCOUNTER_LINES[0], { hold: true, cls: 'wnd-enc-box' }) +
+    /* role=status, NOT aria-hidden. This card replaced a spoken line, so a
+       screen reader still has to receive his name at the same beat; the art
+       beside it stays aria-hidden because it says nothing the name does not. */
+    `<div class="wnd-title" role="status"><b>${TITLE_TEXT}</b><i></i></div>` +
     `<div class="wnd-enc-acts">` +
       `<button type="button" class="btn wnd-fight">Fight</button>` +
       `<button type="button" class="btn ghost wnd-flee">Flee</button>` +
@@ -895,10 +961,17 @@ export function showWandererEncounter({ reduced = false } = {}) {
     };
     timer = setTimeout(tick, 60);
   };
+  /* THE SECOND BEAT IS THE NAME, NOT A LINE. `.named` drives both halves: the
+     talk box clears out and the card slams in, so the two never fight for the
+     same corner. The buttons wait for the slam to finish, because a boss name
+     that is still moving while you are being asked to choose reads as a bug. */
+  if (reduced) el.classList.add('rm');
   afterLine(0, () => {
     el.classList.add('arrive');
-    runTalkBox(box, ENCOUNTER_LINES[1], { hold: true });
-    afterLine(1, () => acts.classList.add('on'));
+    timer = setTimeout(() => {
+      el.classList.add('named');
+      timer = setTimeout(() => acts.classList.add('on'), reduced ? 160 : TITLE_MS + 240);
+    }, reduced ? 0 : TITLE_AT);
   });
 
   return new Promise(resolve => {

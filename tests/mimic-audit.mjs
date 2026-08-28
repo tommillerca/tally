@@ -444,8 +444,13 @@ try {
   const wnd = await page.evaluate(async () => {
     const w = await import('./js/wanderer.js');
     const { TALK_MS } = await import('./js/talkbox.js');
+    /* the second beat is a NAME CARD now, not a typed line, so its cost is
+       TITLE_AT + TITLE_MS plus the settle the buttons wait out. Reading the
+       shipped constants rather than restating them keeps this honest when they
+       move. */
     return w.ENCOUNTER_LINES.reduce((a, l) => a + l.length * TALK_MS, 0)
-      + w.LINE_HOLD_MS * w.ENCOUNTER_LINES.length + w.ZOOM_MS;
+      + w.LINE_HOLD_MS * w.ENCOUNTER_LINES.length
+      + w.TITLE_AT + w.TITLE_MS + 240 + w.ZOOM_MS;
   });
   ok('SMALLER noticeably shorter than the Wanderer, and never shorter than one cycle of Cam\'s loop',
     atResolve.ms >= rev.floor && atResolve.ms < wnd * 0.6,
