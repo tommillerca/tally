@@ -562,6 +562,63 @@ try {
       questRows: rows.filter(r => r.type === 'quest').length };
   }, yesterday);
 
+  /* SATISFY TODAY'S DAILIES BEFORE LOOKING FOR A CLAIM CONTROL. The three rows
+     below press the app's own [data-claim][data-period="day"] button, and there
+     IS no such button unless a daily quest is actually finished. Nothing here
+     finished one: the suite relied on whatever the demo seed happened to satisfy
+     lining up with whatever the date happened to draw.
+     Measured at the failure: 2026-08-28 drew q-protein, q-sleep and q-scan, all
+     three not done, zero claim controls, so READONLY SETUP reported {"ok":false}
+     and took two more rows with it. It passed the night before on a draw the
+     seed happened to cover. Same class as clock-trust #221, where the suite was
+     "asking a day that had done nothing why it had not been paid".
+     So the ungated set is satisfied through the REAL APIs the UI calls, not by
+     writing quest rows directly: five logged meals (one via 'scan', all with a
+     foodId, protein-heavy and on budget) plus water, bed, sleep and a weight.
+     Whatever the date draws, it is done. */
+  await page.evaluate(async () => {
+    const [nut, game, db, well] = await Promise.all([
+      import('./js/nutrition.js'), import('./js/game.js'),
+      import('./js/db.js'), import('./js/wellness.js'),
+    ]);
+    const targets = { kcal: 2200, p: 150, c: 220, f: 70 };
+    const day = nut.dateKey();
+    const meals = [0, 1, 2, 3, 3];
+    for (let i = 0; i < meals.length; i++) {
+      const snack = i >= 3;
+      const e = snack
+        ? { id: `tc-${day}-s${i}`, date: day, meal: meals[i], name: 'Yoghurt and berries',
+            foodId: `tcfood-${day}-${i}`, kcal: 200, p: 12, c: 20, f: 5, qty: 1, ts: Date.now() }
+        : { id: `tc-${day}-${meals[i]}`, date: day, meal: meals[i], name: 'Chicken and rice',
+            kcal: 600, p: 50, c: 60, f: 15, qty: 1, ts: Date.now() };
+      await db.db.put('log', e);
+      await game.onFoodLogged(e, { targets, via: snack ? 'scan' : null,
+        entriesForDate: await db.db.byIndex('log', 'date', day) });
+    }
+    await well.addWater(well.WATER_GOAL, day);
+    await well.markBed(day);
+    await well.markSleep(8, day);
+    await db.db.put('weights', { date: day, kg: 80 });
+    const xp = await db.db.all('xp');
+    /* Reported, never swallowed: a `.catch(() => {})` here hid a half-finished
+       seed once already, and a silent partial seed looks exactly like an app
+       that did not award anything. */
+    return { ok: true, sleepRow: xp.some(r => r.key === `sleep-${day}`), day };
+  }).then(r => console.log('DAILIES ' + JSON.stringify(r)))
+    .catch(e => { throw new Error('seeding today\'s dailies threw: ' + e); });
+  /* A REAL NAVIGATION. Setting location.hash to the value it ALREADY holds fires
+     no hashchange, so route() never runs and the screen keeps the markup it was
+     built with: the quests above were genuinely finished in the store (the seed
+     block returns sleepRow true) and the panel still showed 0/1 because it had
+     never been rebuilt. tests/emporium-audit.mjs records the same trap and cost
+     four false failures to it. */
+  await page.evaluate(() => { location.hash = '#/bonehead'; });
+  await sleep(700);
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(1600);
+  await openQuests();
+  await sleep(800);
+
   const beforeRetro = await wallet();
   const fired = await page.evaluate(k => {
     const b = document.querySelector('.q-collapse [data-claim][data-period="day"]');
