@@ -1061,6 +1061,25 @@ function report(r) {
    GATE_JOBS=1 restores the old behaviour exactly, for bisecting a suite that
    only fails with company. */
 const SERIAL = {
+  /* ---- ADDED 2026-08-28, each on the same evidence: green standalone, red in a
+     six-way parallel gate, on the identical tree. That is the signature this
+     list exists for, and the note above says adding to it is cheap while
+     assuming everything is safe "is how a parallel gate starts lying". */
+  'spawn-quiet-audit.mjs': 'walks a real map until it has collected one of EVERY '
+    + 'spawn type, and the field is wildly uneven: measured today bones 311, coins 292, '
+    + 'herbs 180, crate 62, rare ELEVEN. The collect bar offers the NEAREST spawn, so '
+    + 'standing on one of eleven rare spawns usually offers something commoner and burns '
+    + 'an attempt. Idle it finishes in 6 attempts; in the gate it spent 22 and never '
+    + 'reached rare, taking 480s against a usual 90. It is measuring how much CPU it got.',
+  'badge-centre-audit.mjs': 'grades a disc by hiding glyphs and diffing PIXELS across '
+    + 'bracketing captures, then hit-tests the Boneyard readout disc. Under contention the '
+    + 'map top bar has not finished arriving over that disc when the capture lands, so the '
+    + 'disc reports COVERED or OVERLAP and COVERAGE goes red for a reason that has nothing '
+    + 'to do with centring. 5/5 standalone, repeatedly; red in roughly half the parallel gates.',
+  'marker-anchor-audit.mjs': 'stands the player in a searched-for crowd of Wanderers and '
+    + 'measures marker geometry in METRES against a live MapLibre camera. It needs the map '
+    + 'settled and the water tiles warm; six browsers competing move both. Green standalone '
+    + 'three runs, red in the gate on the same tree.',
   'offline-boot-audit.mjs': 'binds a FIXED port (serveTree forcePort) because it '
     + 'must survive the service worker across a restart on the same origin. Two of '
     + 'anything on that port is a bind error, not a finding.',
