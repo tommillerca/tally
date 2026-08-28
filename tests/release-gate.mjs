@@ -1061,6 +1061,16 @@ function report(r) {
    GATE_JOBS=1 restores the old behaviour exactly, for bisecting a suite that
    only fails with company. */
 const SERIAL = {
+  /* ITS OWN TIER ENTRY ALREADY SAID SO and nobody acted on it: "it installs and
+     upgrades a real service worker across two builds, which is slow and MUST NOT
+     RACE A PARALLEL SUITE." It was still running six-up. Red on the 2026-08-28
+     gate at 564s with SECOND OPEN reporting worker=tally-v465 when it wanted
+     v466, and ALL GREEN standalone on the identical tree minutes later. A worker
+     takeover is a race by nature; five siblings competing for the CPU decide it. */
+  'sw-upgrade-audit.mjs': 'installs and upgrades a REAL service worker across two '
+    + 'builds and then asks which one is in charge. Its own tier note says it must not '
+    + 'race a parallel suite. Red in the gate (worker=tally-v465, want tally-v466), ALL '
+    + 'GREEN standalone on the same tree.',
   /* ---- ADDED 2026-08-28, each on the same evidence: green standalone, red in a
      six-way parallel gate, on the identical tree. That is the signature this
      list exists for, and the note above says adding to it is cheap while
