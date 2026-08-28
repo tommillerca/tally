@@ -158,34 +158,6 @@ for (const t of ['crates', 'shop', 'talents', 'wardrobe']) {
    prove the markup and nothing about whether the game ever produces this state.
    The settle afterwards is deliberate and safe: youSpeed decays only when a NEW
    fix arrives, so waiting lets the camera stop without letting the state go. */
-/* WAIT OUT THE APP'S OWN TOAST BEFORE SAMPLING. The Boneyard leg drives the app
-   into the "moving too fast" state on purpose, and the app answers that with a
-   TOAST. The toast lands over the readout, so elementFromPoint returns
-   div#toast.toast and the readout disc is recorded COVERED and never graded,
-   which fails COVERAGE on an app that is drawing the badge correctly. That is a
-   guard reporting the instant it sampled, not the thing it is meant to measure.
-
-   Waiting is safe for exactly the reason the note above already gives: youSpeed
-   decays only when a NEW fix arrives, so the state the leg set up survives the
-   wait while the toast fades on its own.
-
-   BOUNDED, and it does not swallow the failure. If a toast is still up after the
-   budget the sample proceeds and COVERAGE fails as before, so a toast that never
-   clears is still a red row rather than a silent skip. */
-const toastGone = async (ms = 7000) => {
-  const t0 = Date.now();
-  for (;;) {
-    const up = await page.evaluate(() => {
-      const t = document.querySelector('#toast');
-      if (!t) return false;
-      const cs = getComputedStyle(t);
-      return cs.display !== 'none' && cs.visibility !== 'hidden' && +cs.opacity > 0.01;
-    });
-    if (!up || Date.now() - t0 > ms) return !up;
-    await sleep(250);
-  }
-};
-
 await page.evaluate(() => { location.hash = '#/boneyard'; });
 await sleep(2500);
 await page.evaluate(() => {
@@ -195,14 +167,12 @@ await page.evaluate(() => {
 await sleep(9000);
 const mapUp = await page.evaluate(() => !!document.querySelector('#mapStage'));
 if (mapUp) {
-  await toastGone();
   rows.push(...await measureScreen(page, 'boneyard'));
   let lat = 49.2827;
   for (let i = 0; i < 6; i++) { lat += 0.0006; await page.setGeolocation({ latitude: lat, longitude: -123.1207 }); await sleep(1500); }
   await sleep(3000);
   const card = await page.evaluate(() => document.querySelector('#mapAct')?.innerText.replace(/\s+/g, ' ').trim() || '');
   console.log(`      readout: "${card}"`);
-  await toastGone();
   rows.push(...await measureScreen(page, 'boneyard:toofast'));
 }
 
