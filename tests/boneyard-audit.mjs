@@ -1146,16 +1146,32 @@ const canvasBox = await slowPage.evaluate(() => {
   const r = c.getBoundingClientRect();
   return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
 });
+let dragSettleMs = null;
 if (canvasBox) {
   await slowPage.mouse.move(canvasBox.x, canvasBox.y);
   await slowPage.mouse.down();
-  await slowPage.mouse.move(canvasBox.x + 120, canvasBox.y + 80, { steps: 8 });
+  await sleep(60);                    // let the pointerdown register before the move begins
+  await slowPage.mouse.move(canvasBox.x + 120, canvasBox.y + 80, { steps: 12 });
+  await sleep(60);
   await slowPage.mouse.up();
-  await sleep(400);
+  /* POLLED, NOT SLEPT. This row went red about one run in six, always under load,
+     never on the app: maplibre fires its drag/move events and js/map.js sets the
+     flag on its own schedule, and a flat 400ms is a bet that the whole chain
+     finishes inside it while every other suite in the gate competes for the CPU.
+     A guard that is right five times in six is the coin-flip guard this file
+     already warns about, so it waits for the CONDITION with a ceiling instead.
+     Still fails honestly: if the flag never flips, the loop runs out and the
+     assertion below reads false exactly as it did before. */
+  const t0 = Date.now();
+  while (Date.now() - t0 < 5000) {
+    if (await isInteracted() === true) break;
+    await sleep(100);
+  }
+  dragSettleMs = Date.now() - t0;
 }
 const afterDrag = await isInteracted();
 ok('INTERACTED real user drag DOES flip interacted (so holdArrival re-engages its pan-trickle guard once the player has started moving around)',
-  afterDrag === true, `isMapInteracted()=${afterDrag}, canvasBox=${JSON.stringify(canvasBox)}`);
+  afterDrag === true, `isMapInteracted()=${afterDrag} after ${dragSettleMs}ms, canvasBox=${JSON.stringify(canvasBox)}`);
 
 await slowBrowser.close();
 if (srv) srv.kill();
