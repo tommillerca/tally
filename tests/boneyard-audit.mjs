@@ -769,9 +769,35 @@ ok('PAN the map actually had markers to work with (an empty sample is a FAILURE)
    trickle. Before the fix this was three separate arrivals over 1281ms and the
    count rose by one each time. */
 const perBeat = arrivals.map((a, i) => a.n - (i ? arrivals[i - 1].n : panBaseline));
+/* ARRIVALS ONLY. The tracker logs every count CHANGE, and the Wanderer moves on
+   his own, so a marker can leave the viewport and come back mid-measurement:
+   observed 2026-08-29 as beats of [15,-1] and [15,-1,1], red 2 of 3 standalone
+   on an idle machine. A departure is not an arrival, and a moving marker
+   re-crossing the edge is not a placement beat, so only POSITIVE deltas are
+   graded. The row keeps its power against the bug it exists for: the pre-fix
+   trickle was one marker at a time, all positive, and still exceeds the
+   ceiling. The full timeline (departures included) stays in the detail so a
+   red row still shows everything that happened. */
+/* NET arrivals: a departure leaves a debt and a later positive delta pays it
+   before counting as a beat, so one marker pacing across the viewport edge is
+   zero beats however many times it crosses ([15,-1,1] -> [15], [15,-2,2] ->
+   [15], and my first cut, a plain positive filter, left [15,-2,2] at the
+   ceiling where a second crossing would flake). A trickle has no departures,
+   so it pays nothing down and stays red: [+1,+1,+1,+1] is four beats in both
+   versions. */
+const beats = [];
+{
+  let debt = 0;
+  for (const d of perBeat) {
+    if (d < 0) { debt += -d; continue; }
+    const pay = Math.min(d, debt);
+    debt -= pay;
+    if (d - pay > 0) beats.push(d - pay);
+  }
+}
 ok('PAN new POIs arrive in coordinated beats, not one marker at a time',
-  arrivals.length <= 2,
-  `${arrivals.length} beat(s), ${JSON.stringify(perBeat)} markers each: ${JSON.stringify(pan)}`);
+  beats.length <= 2,
+  `${beats.length} arrival beat(s) of [${beats.join(', ')}], full timeline ${JSON.stringify(perBeat)}: ${JSON.stringify(pan)}`);
 
 await browser.close();
 
