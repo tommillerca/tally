@@ -249,8 +249,20 @@ try {
      is what DRESSED reads. */
   const REACH_YARD = {
     n: 37,
+    /* THE FILLERS ARE DRESSABLE ON PURPOSE. placePaddock seeds its walk-cap
+       lottery with dateKey(), so WHICH pets stand in the field rotates daily.
+       With C4 fillers this fixture held exactly one dressable pet, and on dates
+       whose draw culled it the field legitimately contained zero dressed pets:
+       DRESSED read "0 dressed pet(s) wearing [nothing]" on a healthy app, red
+       3/3 on 2026-08-29 and green in the 213/213 gate the day before, same
+       code. Proven date-triggered by running the previous day's exact tree on
+       the new date: it failed too. C6 fillers mean at most three walkers
+       (C1,C2,C3) can be undressable, the cap is far above three, so every
+       possible draw contains dressed pets and the row measures the WARDROBE,
+       not the calendar. TALLY still has its three numbers and FIELD still
+       measures the capped path: the counts are unchanged. */
     pets: [{ sp: PET, shiny: false }, { sp: 'C1', shiny: true }, { sp: 'C2', shiny: false },
-      { sp: 'C3', shiny: false }, ...Array.from({ length: 11 }, () => ({ sp: 'C4', shiny: false }))],
+      { sp: 'C3', shiny: false }, ...Array.from({ length: 11 }, () => ({ sp: 'C6', shiny: false }))],
     wear: THEIR_WEAR,
   };
   const reachByTap = async () => {

@@ -144,6 +144,14 @@ ok('PARSES every audit is something Node will actually execute',
    FIXED ONE? Delete its line. The row fails on a stale entry too, so the
    inventory cannot quietly rot into a list nobody maintains. */
 const SEAM_ONLY_KNOWN = [
+  /* The two levelpaid tools (#265) are skip-tiered INVESTIGATION instruments,
+     not guards: the tracer asserts nothing and the repro deliberately exits 1
+     on machines too fast to mint the race it reproduces. Neither is evidence
+     that a player can reach anything, and neither claims to be. They live here
+     rather than in a filename carve-out so that a future rename cannot slip a
+     real seam-only audit past this row. */
+  'levelpaid-repro.mjs',
+  'levelpaid-trace.mjs',
   'admin-grant-audit.mjs',
   'backup-roundtrip-audit.mjs',
   'badge-centre-lib.mjs',
