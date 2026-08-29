@@ -371,13 +371,25 @@ export async function discardPantryDish(index) {
  * RARE spawns / world bosses, so this gives a reliable, walk-fed path to it. Costs
  * COMMONS commons (pulled greedily from your most-abundant), on a ~daily cooldown. */
 export const TRANSMUTE = { commons: 6, yields: RARE_INGREDIENT, cooldownMs: 20 * 3600e3 };
-// pure: greedily remove `n` commons from the most-abundant first (for the consume + tests)
+// pure: WHICH commons a transmute takes, in take order, greedily from the
+// most-abundant first. The Kitchen's slot strip draws exactly this list, and
+// transmuteConsume spends exactly this list, so the sockets a player sees and
+// the ingredients that vanish cannot disagree (Tom picked option B on
+// 2026-08-29: "These six go in. One Ectoplasm comes out.").
+export function transmutePicks(inv, n) {
+  const have = { ...(inv || {}) };
+  const picks = [];
+  const order = COMMON_INGREDIENT_IDS.slice().sort((a, b) => (have[b] || 0) - (have[a] || 0));
+  for (const id of order) { while (picks.length < n && (have[id] || 0) > 0) { have[id]--; picks.push(id); } }
+  return picks;
+}
+// pure: greedily remove `n` commons from the most-abundant first (for the consume + tests).
+// Derived from transmutePicks so the preview and the spend share one order.
 export function transmuteConsume(inv, n) {
   const out = { ...(inv || {}) };
-  let left = n;
-  const order = COMMON_INGREDIENT_IDS.slice().sort((a, b) => (out[b] || 0) - (out[a] || 0));
-  for (const id of order) { while (left > 0 && (out[id] || 0) > 0) { out[id]--; left--; } if (!out[id]) delete out[id]; }
-  return { inv: out, taken: n - left };
+  const picks = transmutePicks(out, n);
+  for (const id of picks) { out[id]--; if (!out[id]) delete out[id]; }
+  return { inv: out, taken: picks.length };
 }
 export async function transmuteStatus(now = Date.now()) {
   const last = (await kvGet('transmuteAt', 0)) || 0;
