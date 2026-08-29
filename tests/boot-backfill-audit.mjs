@@ -241,7 +241,37 @@ try {
       if (s && s.flag) break;
       await sleep(120);
     }
-    return { samples, ms: Date.now() - t0 };
+    /* THE FLAG IS NOT THE END OF THE BOOT, and treating it as one minted a
+       ghost. kv 'game-init' appears, and boot() keeps AWARDING after it:
+       awardDayCloseIfDue's non-quiet evaluateBadges sweep runs in the tail.
+       This function used to return here, the caller's next SEED cleared the
+       xp store under that live sweep, and the sweep re-claimed its badges
+       fresh against a near-empty ledger: the running total crossed
+       xpForLevel(2)=200 inside the sweep's own 225-285 xp span and
+       grantLevelRewards paid 30 coins and a golden crate. That is the
+       one-in-thirty "unexpected: levelpaid-2" of 2026-08-28, reproduced
+       verbatim on a slow worker by tests/levelpaid-repro.mjs (on a fast Mac
+       the mint rarely lands, but the tail itself measures 12 post-flag
+       xp-store writes per boot on both machines).
+       So: after the flag, wait for the LEDGER to go quiet. Three consecutive
+       unchanged row-count samples 400ms apart means no write for >=800ms,
+       which is an order of magnitude past the tail's own cadence. Bounded by
+       the same maxMs; a tail that never settles falls out at the timeout and
+       the run fails on its own assertions rather than hanging here. */
+    let tailWrites = 0;
+    {
+      let last = -1, stable = 0;
+      while (Date.now() - t0 < maxMs && stable < 3) {
+        const n = await page.evaluate(async () => {
+          const { db } = await import('/js/db.js');
+          return (await db.all('xp')).length;
+        }).catch(() => -2);
+        if (n === last) stable++;
+        else { if (last !== -1) tailWrites += Math.max(0, n - last); stable = 0; last = n; }
+        await sleep(400);
+      }
+    }
+    return { samples, ms: Date.now() - t0, tailWrites };
   };
 
   const seeded = await page.evaluate(SEED, DAYS, PER_DAY);
