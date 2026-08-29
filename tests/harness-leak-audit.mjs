@@ -36,6 +36,7 @@
  */
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { reapStrandedBrowsers } from './godmode.js';
@@ -64,7 +65,10 @@ const gone = async (pid, ms) => {
 
 /* A victim that boots a browser exactly as any audit does, reports the pid, then
    sits there. It never closes anything: being killed IS the scenario. */
-const victimPath = path.join(here, `.leak-victim-${process.pid}.mjs`);
+/* Lives in tmpdir, not tests/, so a killed run's orphaned file does not poison the
+   gate's coverage scan on the next run. 2026-08-29: a SIGKILL left .leak-victim-30822.mjs
+   in tests/, and the gate refused to start until it was manually removed. */
+const victimPath = path.join(os.tmpdir(), `bh-leak-victim-${process.pid}.mjs`);
 fs.writeFileSync(victimPath, `
 import { boot } from ${JSON.stringify(path.join(here, 'godmode.js'))};
 const { browser } = await boot(${JSON.stringify(BASE)} || undefined);
@@ -113,7 +117,7 @@ try {
    way the real one was: launch, then kill the launcher so the browser reparents
    to init. Then the sweep has to find it by shape, without being told its pid. */
 {
-  const p2 = path.join(here, `.leak-stray-${process.pid}.mjs`);
+  const p2 = path.join(os.tmpdir(), `bh-leak-stray-${process.pid}.mjs`);
   fs.writeFileSync(p2, `
 import { boot } from ${JSON.stringify(path.join(here, 'godmode.js'))};
 const { browser } = await boot(${JSON.stringify(BASE)} || undefined);
