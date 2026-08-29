@@ -1,6 +1,6 @@
 // What's New: a player-facing changelog so friends can follow the game as it
 // changes. Newest first. Written in plain language (no build numbers in the copy
-// itself) — the version is metadata for the "new since you last looked" dot.
+// itself) - the version is metadata for the "new since you last looked" dot.
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 

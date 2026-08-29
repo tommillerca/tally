@@ -570,7 +570,7 @@ export const STEP_OVER = [ // diminishing bonuses beyond the cap
 ];
 
 // ACTIVE ENERGY (Apple Watch / Health): active kcal is the universal "you moved"
-// signal — a bike ride, a gym session, a run all burn it, so rewarding it means
+// signal - a bike ride, a gym session, a run all burn it, so rewarding it means
 // every workout counts, not just steps. Wellbeing-safe: rewards effort/movement,
 // never eating less. (Active energy also nudges the eating TARGET up elsewhere.)
 export const ACTIVE_MILESTONES = [
@@ -715,7 +715,7 @@ export async function awardDayCloseIfDue(targets) {
     const g = await award(`dayclose-${y}`, 'dayclose', 50, 'Closed the day on budget', y);
     if (g) { await grantCrate('golden', 'dayclose-' + y); closed = true; }
   } else {
-    // shame-free: you still logged the day, so you still earn — just a lighter
+    // shame-free: you still logged the day, so you still earn - just a lighter
     // reward, never a penalty ("you'll get 'em next time"). This rewards the ACT
     // of tracking, not the calorie number, so it never favours eating less: an
     // on-budget day always pays strictly more, and over/under both land here.

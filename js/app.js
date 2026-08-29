@@ -4091,7 +4091,7 @@ async function measureBubbleSide(stage, eq) {
  * calls this today. PET_LINES underneath is in the same position.
  *
  * The pools used to be indexed by the DAY OF THE MONTH, which meant he said one
- * line all day no matter how many times you opened the app — nine lines read like
+ * line all day no matter how many times you opened the app - nine lines read like
  * one. The index is now a per-open salt, so every launch gets a fresh line and the
  * bubble still holds still within a session instead of flickering on each render.
  *
@@ -4749,7 +4749,7 @@ function gwIdleStart(scope, nextLine) {
   gwIdleTimer = setInterval(gwIdleTick, gwIdleEvery);
 }
 
-// NOTE: the `noYard` option some callers still pass is a legacy no-op — the
+// NOTE: the `noYard` option some callers still pass is a legacy no-op - the
 // yard-decor slot was retired, so there is no anchored decor layer any more.
 /* Eye items whose ARTWORK depicts something lit, so a glow is telling the truth
  * about the drawing rather than adding an effect to it. E4 is two coals with hot
@@ -5234,7 +5234,7 @@ function sleepRowHtml(w) {
 }
 
 // The Glutton (v215): a one-time world-boss spectacle. Lightweight interim
-// version — no map marker, no blight/spawn-suppression mechanic yet (those are
+// version - no map marker, no blight/spawn-suppression mechanic yet (those are
 // still ROADMAP items). Reachable from a card on Today; the win is idempotent
 // via the same award() ledger every other one-time encounter uses.
 // He surfaces twice a day. Tell the player which it is, in plain language.
@@ -5247,7 +5247,7 @@ function gluttonWhenHtml() {
 }
 // The exact lore lockup + copy Tom already approved (scratchpad/glutton.src.html,
 // direction locked). Reused verbatim for both the compact card and the full
-// sheet reveal — do not paraphrase this, it's Brock's, use it as written.
+// sheet reveal - do not paraphrase this, it's Brock's, use it as written.
 function gluttonLoreHtml() {
   return `<div class="glutton-lore">
     <p class="lead">With a comparable appetite to a chocolate lab and the expansion rate of spray foam insulation, the Glutton is no mere dungeon monster.</p>
@@ -5458,7 +5458,7 @@ async function gluttonBeaten(slot) {
 async function openGluttonSheet() {
   const slot = gluttonSlotNow();
   // "beaten" is per APPEARANCE, not forever: he's back next window. Note this no
-  // longer requires w.active — a win recorded for this slot reads as beaten even
+  // longer requires w.active - a win recorded for this slot reads as beaten even
   // if the window closed while you were fighting, which is exactly the state that
   // used to re-offer the fight.
   const beaten = await gluttonBeaten(slot);
@@ -8990,7 +8990,7 @@ const WORKOUT_LABEL = {
 
 // Metric registry shared by the Progress modules and the drill-in sheet.
 // goodLow: true = lower is better (resting HR), false = higher is better,
-// null = neither (weight — we show the trend, no "best day").
+// null = neither (weight - we show the trend, no "best day").
 const TREND_METRICS = {
   restingHr:   { label: 'Resting heart rate', short: 'Resting HR',    unit: 'bpm',   color: 'var(--fat)',     pick: h => h.restingHr,   goodLow: true },
   hrv:         { label: 'Heart rate variability', short: 'HRV',       unit: 'ms',    color: 'var(--protein)', pick: h => h.hrv,         goodLow: false },
@@ -9166,10 +9166,10 @@ async function openMetricDetail(metricKey) {
     const stat = (l, v) => `<div class="st"><div class="l">${l}</div><div class="v">${v}</div></div>`;
     let stats;
     if (metric.goodLow == null) { // weight: Average / Range / Latest
-      stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}–${metricNum(metricKey, mx)}`) + stat('Latest', `${metricNum(metricKey, vals[vals.length - 1])}<small> ${u}</small>`);
+      stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}-${metricNum(metricKey, mx)}`) + stat('Latest', `${metricNum(metricKey, vals[vals.length - 1])}<small> ${u}</small>`);
     } else {
       const exLbl = metric.goodLow ? 'Lowest' : 'Highest', exVal = metric.goodLow ? mn : mx;
-      stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}–${metricNum(metricKey, mx)}`) + stat(exLbl, `${metricNum(metricKey, exVal)}<small> ${u}</small>`);
+      stats = stat('Average', `${metricNum(metricKey, avg)}<small> ${u}</small>`) + stat('Range', `${metricNum(metricKey, mn)}-${metricNum(metricKey, mx)}`) + stat(exLbl, `${metricNum(metricKey, exVal)}<small> ${u}</small>`);
     }
     return `<div class="trend-panel">${metricDetailChart(pts, metricKey)}
       <p class="bc-readout note">Tap any bar for that day.</p></div><div class="trend-stats">${stats}</div>${metricInsight(metricKey, pts)}`;
@@ -9423,7 +9423,7 @@ function activityRecoveryHtml(days) {
       <p class="note" style="margin:2px 0 13px;line-height:1.55">${line}</p>${btn}</div>`;
   }
 
-  // Your real workout mix (weekly, not daily tiles) — kept as its own card.
+  // Your real workout mix (weekly, not daily tiles) - kept as its own card.
   const mix = (() => {
     const counts = {};
     for (const d of days) for (const t of (d.wtypes || [])) counts[t] = (counts[t] || 0) + 1;
@@ -9641,7 +9641,7 @@ async function openNameBuilder(after) {
   `, { cls: 'sheet-namebuild', onClose: after });
 
   const paint = () => {
-    $('#nbPreview', wrap).textContent = buildDisplayName(sel.adj, sel.noun, sel.num) || '—';
+    $('#nbPreview', wrap).textContent = buildDisplayName(sel.adj, sel.noun, sel.num) || '-';
     $$('#nbAdj .nb-chip', wrap).forEach((c, i) => c.classList.toggle('on', i === sel.adj));
     $$('#nbNoun .nb-chip', wrap).forEach((c, i) => c.classList.toggle('on', i === sel.noun));
     const numOn = sel.num != null;
@@ -9667,7 +9667,7 @@ async function openNameBuilder(after) {
     e.target.value = digits;
     sel.num = digits === '' ? null : parseInt(digits, 10);
     // live-update the preview without repainting the field (keeps the caret)
-    $('#nbPreview', wrap).textContent = buildDisplayName(sel.adj, sel.noun, sel.num) || '—';
+    $('#nbPreview', wrap).textContent = buildDisplayName(sel.adj, sel.noun, sel.num) || '-';
   });
   $('#nbNumVal', wrap).addEventListener('blur', e => { if (!e.target.value) { sel.num = null; paint(); } });
   $('#nbSave', wrap).addEventListener('click', async () => {
@@ -9680,7 +9680,7 @@ async function openNameBuilder(after) {
       if (r.suggestNum != null) {
         sel.num = r.suggestNum;
         const f = $('#nbNumVal', wrap); if (f) f.value = String(r.suggestNum);
-        $('#nbPreview', wrap).textContent = buildDisplayName(sel.adj, sel.noun, sel.num) || '—';
+        $('#nbPreview', wrap).textContent = buildDisplayName(sel.adj, sel.noun, sel.num) || '-';
         toast(`${r.name} is taken. Try ${buildDisplayName(sel.adj, sel.noun, sel.num)}.`, 3400);
       } else toast(`${r.name} is taken. Pick another.`, 3000);
       return;
@@ -10504,7 +10504,7 @@ async function renderFriends(el) {
   // The all-players leaderboard: ranked by level, one-tap add-friend on every
   // row (friend codes are share-keys; while the community is small, everyone
   // can find everyone). Adding someone who already requested you auto-accepts.
-  // Every row shows the player's actual Bonehead — the customization IS the flex.
+  // Every row shows the player's actual Bonehead - the customization IS the flex.
   let lbData = null; // one fetch shared by the podium tile + the full sheet
   /* __testLb: webdriver-gated fixture, same idea as __testFriends. The board
      renders entirely from a server payload, so its LAYOUT was only ever checkable
@@ -11631,7 +11631,7 @@ async function renderSettings(el) {
   const vault = await social.vaultStatus();             // null on the web: no vault to describe
   const myRid = await social.myRecoveryId();
   const exportAgo = lastExport ? Math.round((Date.now() - lastExport) / 86400e3) : null;
-  // native shell build (TestFlight/APK build number) — the WEB build updates by
+  // native shell build (TestFlight/APK build number) - the WEB build updates by
   // itself, so without this there's no way to tell which SHELL a device runs
   // (needed to diagnose shell-level bugs like the portrait-lock regression).
   let shellV = '';
@@ -11961,7 +11961,7 @@ async function renderSettings(el) {
   $('#hkSyncNow')?.addEventListener('click', syncFromClipboard);
   $('#exportBtn').addEventListener('click', async () => {
     // On the native shells the WebView can't save a blob download, so don't fake
-    // success — your progress is already safe via the auto cloud backup. The file
+    // success - your progress is already safe via the auto cloud backup. The file
     // export is a web-only convenience.
     if (isNative()) { toast('Your progress is auto-saved to the cloud (end-to-end encrypted). A downloadable file export is available in the web version.', 4600); return; }
     const data = await exportAll();
@@ -12027,7 +12027,7 @@ async function renderSettings(el) {
   $('#feedbackBtn')?.addEventListener('click', openFeedbackSheet);
   $('#surveyBtn')?.addEventListener('click', () => openSurveySheet('settings'));
   // reload from the network. This is the escape hatch when a stale cached build
-  // is stuck on the device (data is untouched — it lives in IndexedDB).
+  // is stuck on the device (data is untouched - it lives in IndexedDB).
   $('#updateBtn')?.addEventListener('click', hardRefresh);
   /* Copy, not just screenshot: a screenshot means somebody retypes these values to
      search for them. Clipboard can be refused, so the fallback is selecting the text
@@ -12523,7 +12523,7 @@ function startLevelGlow(el) {
       `radial-gradient(90% 60% at 50% 0%, rgba(96,74,150,${(0.22 * (1 - h * 0.7)).toFixed(3)}), rgba(96,74,150,0) 60%)`,
     ].join(', ');
   };
-  /* Automation gets the resting simmer so screenshots stay deterministic — but a
+  /* Automation gets the resting simmer so screenshots stay deterministic - but a
      motion effect that can ONLY run outside automation is one no test can ever
      see, which makes every future change to it a guess. Window.__motionForce
      turns it back on, same idiom as __spireForce / __raceForce / __gardenForce. */
@@ -12535,7 +12535,7 @@ function startLevelGlow(el) {
 }
 
 function badgesGridHtml(earned, newIds = new Set()) {
-  // secret (easter-egg) badges stay masked as ??? until earned — the mystery
+  // secret (easter-egg) badges stay masked as ??? until earned - the mystery
   // tile IS the hint that there's something out there to find.
   return `<div class="badge-grid">${BADGES.map(b => {
     const hidden = b.secret && !earned.has(b.id);
@@ -12707,7 +12707,7 @@ function openHatchReveal(res, charWrap) {
    clipped copies of the stars layer inside .wz-sway inside the one-shot .wz-enter,
    and the two palm glows sit on top. His integration note is that the container
    must be square and position:relative, which .wz-scene is, and that the entrance
-   replays by re-adding .wz-enter — which costs nothing here, because this markup
+   replays by re-adding .wz-enter - which costs nothing here, because this markup
    is built fresh every time the tab is opened, so walking into the shop always
    spawns him. Nothing re-renders it mid-visit: a purchase re-renders #chContent
    (renderShop's own `rerender`), not this.
@@ -13683,7 +13683,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       if (!res.ok) { toast('Could not melt that piece.'); return; }
       popSound(S.sounds);
       toast(`${res.name} melted into ${res.dust} Bone Dust.`, 2200);
-      // melt in place (no full re-render) so the list doesn't jump to the top —
+      // melt in place (no full re-render) so the list doesn't jump to the top -
       // you can melt a whole stack of spare gear in one pass.
       btn.closest('.crate-row')?.remove();
       const fold = content.querySelector('.melt-fold');
@@ -16092,7 +16092,7 @@ async function openStable(opts = {}) {
     }));
     $$('[data-offsp]', body).forEach(c => c.addEventListener('click', () => { offSp = c.dataset.offsp; render(); }));
     $('#doBreed', body)?.addEventListener('click', async e => {
-      // breeding CONSUMES both parents. If one is shiny, warn once — the shiny
+      // breeding CONSUMES both parents. If one is shiny, warn once - the shiny
       // colour carries to (and overtakes any common colour in) the offspring,
       // but the parent itself is gone. Arm-then-confirm.
       const spareInst = insts.find(x => x.iid === sel.find(y => y !== offSp)) || {};
@@ -16872,7 +16872,7 @@ async function renderBoneyard(el) {
     // panning/zooming to plan a route: re-snap + reveal spawns in the new view
     const rerunPlacement = () => {
       // 'idle' fires after the camera settles AND tiles finish loading, so
-      // queryRenderedFeatures actually has the water/road features — the moment
+      // queryRenderedFeatures actually has the water/road features - the moment
       // to resolve which POIs snap to a path vs stay hidden (water/backyard).
       // It can also fire BEFORE this setup finishes: the `typeof fn === 'function'`
       // guards pass (declarations hoist) while the consts those functions close
@@ -17032,7 +17032,7 @@ async function renderBoneyard(el) {
     // it snaps to a walkable feature (road / path / park) within ~80m; otherwise
     // it stays hidden (returns null → caller skips it). This is the robust rule:
     // water and backyards never snap, so they never show. Crucially we cache ONLY
-    // successes — an undecided point (off-screen, or tiles still loading so
+    // successes - an undecided point (off-screen, or tiles still loading so
     // queryRenderedFeatures is empty) returns null WITHOUT caching, so it keeps
     // retrying on the next refresh/idle until its tiles load and it either snaps
     // (appears on the nearest path) or stays hidden (water). The seeded ledger key
@@ -17356,7 +17356,7 @@ async function renderBoneyard(el) {
       let placed = placeWalkable({ lat: c.lat, lng: c.lng }, glutSnap, 'glutton' + w.slot);
       // ALWAYS place him, even unsnapped. placeWalkable returns null while
       // `map.loaded()` is false, and on a live map that streams tiles it is
-      // false almost always — gating on it made the world boss permanently
+      // false almost always - gating on it made the world boss permanently
       // invisible. Spawns already behave this way (raw coords until the snap
       // resolves); the marker just refines its spot on a later pass.
       if (!placed) placed = { lat: c.lat, lng: c.lng };
@@ -17605,7 +17605,7 @@ async function renderBoneyard(el) {
     // Dark Spires: permanent territory. Unclaimed ones are held by an NPC warden;
     // yours light up, accrue tribute you must walk to, and fade to dormant if you
     // stop visiting. Marker root carries position ONLY (MapLibre owns its
-    // transform) — every filter and animation lives on the inner .spire-fx.
+    // transform) - every filter and animation lives on the inner .spire-fx.
     const spireMarkers = new Map();
     let spireState_ = {};
     let spireInRange = null;
@@ -17737,7 +17737,7 @@ async function renderBoneyard(el) {
     }
 
     // Easter-egg secret dens: whisper within earshot, materialize on approach.
-    // No marker, readout or button exists beyond SECRET_REVEAL_M — the whole
+    // No marker, readout or button exists beyond SECRET_REVEAL_M - the whole
     // point is that these spread by rumor, not by map-reading.
     function refreshSecrets() {
       const secrets = secretsNear(scoutLat, scoutLng);
@@ -18201,7 +18201,7 @@ async function renderBoneyard(el) {
       await syncGluttonCleared();   // self-heal: a boss cleared anywhere leaves the map here
       refreshWorld();
     }, 5000);
-    // occasionally a den STIRS (boss eyes glow + a shake) to give the map life —
+    // occasionally a den STIRS (boss eyes glow + a shake) to give the map life -
     // not a loop, just a random flicker; the full gate cinematic plays on entry.
     const denAwaken = setInterval(() => {
       if (!body.isConnected) { clearInterval(denAwaken); return; }
@@ -18309,7 +18309,7 @@ async function buildFighter() {
   for (const k of Object.keys(baseStats)) gearedBase[k] = baseStats[k] + (gBonus[k] || 0);
   const stats = allocatedStats(gearedBase, alloc);
   // training points: one per wellbeing-safe positive day (protein hit / day closed on
-  // budget) PLUS one per 25,000 lifetime steps — walking earns build power too.
+  // budget) PLUS one per 25,000 lifetime steps - walking earns build power too.
   // Derived from history, so it's retroactive and idempotent by construction.
   const tpTotal = (behavior.proteinDays || 0) + (behavior.closes || 0) + Math.floor((behavior.lifetimeSteps || 0) / 25000);
   const tpSpent = STAT_META.reduce((a, m) => a + (alloc[m.key] || 0), 0);
@@ -18369,7 +18369,7 @@ function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, 
     nudge: 'Ready for your first fight?',
     toast: 'The Pit is open. Sparring is free, and your first win pays coins + XP.',
   });
-  // first gear owned but nothing worn — the biggest "free power you're missing"
+  // first gear owned but nothing worn - the biggest "free power you're missing"
   if (gearOwnedCount > 0 && gearEquippedCount === 0) sig.push({
     key: 'gear:first', hero: 'ward', action: 'wardrobe', priority: 5,
     nudge: 'You have gear to equip',
