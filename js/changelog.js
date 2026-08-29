@@ -4,6 +4,13 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 467, date: '2026-08-29', title: 'THE WANDERER announces himself', items: [
+    'When he walks out of the dark, his name now slams onto the screen the way a boss deserves, instead of a second line of small talk. The footsteps line you hear first is unchanged.',
+    'On the Boneyard, messages no longer land on top of the card that tells you what you can do right now. The card that says Grab it, or Slow down, stays readable while a message is up.',
+    'Standing still on the map no longer quietly redraws the bottom card several times a second. Nothing looks different; your battery just stops paying for it.',
+    'A level-up decided while lots was happening at once could show up a beat late. It now reads your total at the moment it matters.',
+  ] },
+
   { n: 466, date: '2026-08-28', title: 'Notes about your pet stop looking like your pet is talking', items: [
     'When a pet levelled up, and when a breeding finished, the note underneath it was drawn as a speech bubble with a tail pointing up at the pet. So a message from the game read as something your pet had said, and pets do not speak anywhere else in Boneheadz.',
     'The note is still there, in the same place, with the same words. It just no longer claims a speaker.',
