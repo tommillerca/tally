@@ -99,6 +99,7 @@
  * Usage: node tests/suite-rot-audit.mjs
  */
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -434,6 +435,33 @@ for (const s of negative) console.log(`      tests/${s.file}:${s.line}  ${s.toks
 
 ok('IMPORT every audit binds the helpers it calls', dead.length === 0, `${dead.length} file(s) die at first call`);
 ok('STALE every query has at least one arm the app can answer', stale.length === 0, `${stale.length} dead selector(s) across ${new Set(stale.map(s => s.file)).size} file(s)`);
+
+/* ----------------------------------------------------------- SCRATCH ------ */
+/* SCRATCH PROBES KEEP LEAKING INTO COMMITS: twice in the week of 2026-08-24 a
+   throwaway tests/_*.mjs / tests/*probe*.mjs file rode along in a commit. Those
+   names are the scratch convention here, so being TRACKED IN GIT is the defect,
+   not being on disk: an untracked probe on a dev machine is normal work.
+   arena-static-probe.mjs is exempt by name: it is a deliberate, kept probe,
+   SKIP-listed with a reason in release-gate.mjs. A new deliberate probe earns
+   its exemption the same way: a SKIP entry there AND a name here. */
+{
+  let tracked = null;
+  try {
+    tracked = execSync('git ls-files -- tests', { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString().trim().split('\n').filter(Boolean);
+  } catch { /* not a git checkout */ }
+  if (tracked === null) {
+    console.log('      SCRATCH not graded: this tree is not a git checkout, so "tracked" has no answer here');
+  } else {
+    const DELIBERATE = new Set(['tests/arena-static-probe.mjs']);
+    const leaked = tracked.filter(f =>
+      /^tests\/(?:_[^/]*\.mjs|[^/]*probe[^/]*\.mjs)$/.test(f) && !DELIBERATE.has(f));
+    ok('SCRATCH no scratch probe (tests/_*.mjs, tests/*probe*.mjs) is tracked in git',
+      leaked.length === 0,
+      leaked.length ? leaked.join(' ')
+        : `${tracked.length} tracked files under tests/, 1 deliberate probe exempt (arena-static-probe.mjs)`);
+  }
+}
 
 const failed = results.filter(r => !r.pass).length;
 console.log(`\n${results.length - failed}/${results.length} passed  (${files.length} audit files scanned)`);
