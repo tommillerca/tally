@@ -9619,6 +9619,31 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    an answer to "can I do this yet", so the row carries a bar. Deliberately the
    same ink as the rest of the crate row rather than a new accent: this is a
    readout, not a call to action, and the button beside it is the action. */
+/* ---- transmute slot strip (option B with option C's glow, Tom 2026-08-29).
+   The sockets reuse the shop/socket border language; the out-socket's violet is
+   the ritual glow from the C mockup, lit only when the six are on the table.
+   The old .tm-meter rules stay for one release below in case a cached shell
+   paints before its module updates. */
+.tmx { display: flex; align-items: center; gap: 5px; margin-top: 9px; }
+.tmx-sock { width: 30px; height: 30px; border-radius: 8px; flex: none;
+  border: 2px solid var(--line-strong); background: var(--surface-2);
+  display: grid; place-items: center; }
+.tmx-sock.emp { opacity: .32; }
+.tmx-arrow { color: var(--text-3); font-weight: 800; margin: 0 1px; }
+.tmx-out { border-radius: 50%; }
+.tmx-out:not(.on) { opacity: .45; }
+.tmx-out.on { border-color: #b48aff; box-shadow: 0 0 9px rgba(180, 138, 255, .5); }
+@keyframes tmxBloom {
+  0% { box-shadow: 0 0 9px rgba(180, 138, 255, .5); transform: scale(1); }
+  45% { box-shadow: 0 0 26px rgba(180, 138, 255, .95); transform: scale(1.22); }
+  100% { box-shadow: 0 0 9px rgba(180, 138, 255, .5); transform: scale(1); }
+}
+.tmx-out.bloom { animation: tmxBloom 620ms ease-out 1; }
+/* the fly-in: clones only, one transform animation per clone, per the
+   two-animations-one-property lesson. Reduced motion never mints a clone. */
+.tmx-fly { position: fixed; z-index: 300; pointer-events: none; margin: 0;
+  transition: transform 360ms cubic-bezier(.5, .05, .75, .4), opacity 360ms linear; }
+
 .tm-meter { display: flex; align-items: center; gap: 6px; position: relative;
   width: 140px; max-width: 100%; margin-top: 9px; font-size: 11px; font-weight: 700;
   letter-spacing: .04em; color: var(--text-3); text-transform: uppercase; }

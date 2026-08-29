@@ -72,7 +72,7 @@ import {
   POTIONS, POTION_BY_ID, RECIPE_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
   pantryDishes, activatePantryDish, discardPantryDish,
-  transmuteStatus, doTransmute, TRANSMUTE,
+  transmuteStatus, doTransmute, transmutePicks, TRANSMUTE,
 } from './cooking.js';
 import {
   gardenState, cropsReady, seeds, grantSeed, plantSeed, waterPlot, harvestPlot,
@@ -6845,9 +6845,22 @@ async function openKitchen() {
                 final sentence of a four-line explanation ("You have 3."), which is
                 the one place a player skims past, so the answer to "can I do this
                 yet" was buried in the middle of the answer to "what is this". */''}
-          <span class="tm-meter${tmute.canAfford ? ' full' : ''}" role="img" aria-label="${tmute.commonsHave} of ${TRANSMUTE.commons} common ingredients">
-            <i style="width:${Math.min(100, Math.round(tmute.commonsHave / TRANSMUTE.commons * 100))}%"></i>
-            <b>${tmute.commonsHave} / ${TRANSMUTE.commons}</b> commons
+          ${/* THE SIX THAT GO IN, SHOWN AS THEMSELVES. Tom picked option B with
+                option C's glow (2026-08-29): the strip shows the ACTUAL commons
+                doTransmute would take, in its own greedy order (transmutePicks is
+                the single source of that order, and transmuteConsume derives from
+                it, so the sockets shown and the ingredients spent cannot
+                disagree). Empty sockets are the shortfall, made countable the way
+                v465's meter made it countable, but now each filled socket also
+                says WHICH ingredient is on the table. The Ectoplasm socket takes
+                the ritual violet only when the pay side is complete, so the glow
+                is the "can I do this yet" answer readable from across the room.
+                The aria-label carries the same sentence the meter carried. */''}
+          <span class="tmx${tmute.canAfford ? ' full' : ''}" role="img" aria-label="${tmute.commonsHave} of ${TRANSMUTE.commons} common ingredients">
+            ${(() => { const picks = transmutePicks(inv, TRANSMUTE.commons); return Array.from({ length: TRANSMUTE.commons }, (_, i) =>
+              picks[i] ? `<span class="tmx-sock">${ingIconHtml(picks[i], 22)}</span>` : '<span class="tmx-sock emp"></span>').join(''); })()}
+            <span class="tmx-arrow">&#8594;</span>
+            <span class="tmx-sock tmx-out${tmute.canAfford ? ' on' : ''}">${ingIconHtml(TRANSMUTE.yields, 22)}</span>
           </span></div>
         ${/* THE SHORTFALL, NOT THE PRICE. "Need 6" was printed whatever you were
               holding, so at 3 commons it read as six MORE when three would do. The
@@ -6902,9 +6915,52 @@ async function openKitchen() {
     }
     $('#transmuteBtn', body)?.addEventListener('click', async () => {
       const res = await doTransmute();
-      if (!res.ok) { toast(res.reason === 'cooldown' ? `Transmute recharges in ${fmtCookTime(res.msLeft)}.` : `Need ${res.need} common ingredients (you have ${res.have}).`, 3000); return; }
+      if (!res.ok) { toast(res.reason === 'cooldown' ? `Transmute recharges in ${fmtCookTime(res.msLeft)}.` : `Need ${res.need} common ingredients. You have ${res.have}.`, 3000); return; }
       trackEvent('transmute');
-      confettiBurst(innerWidth / 2, innerHeight * 0.4, 18); levelSound(S.sounds);
+      /* THE POT TAKES THEM. Option B's moment: each filled socket's icon flies
+         into the Ectoplasm socket, staggered, then the socket blooms in option
+         C's violet. CLONES ONLY, one transform transition per clone (the
+         two-animations-one-property lesson), and the real strip is left
+         untouched underneath so an interrupted animation costs nothing.
+         Reduced motion mints no clones and goes straight to the render, which
+         is also why the whole moment is fire-and-forget: the ledger was paid
+         by doTransmute above, and the animation is theatre, never state. */
+      const strip = $('.tmx', body);
+      if (strip && !reducedMotion) {
+        const out = $('.tmx-out', strip);
+        const o = out.getBoundingClientRect();
+        $$('.tmx-sock:not(.emp):not(.tmx-out)', strip).forEach((sock, k) => {
+          const img = sock.querySelector('img'); if (!img) return;
+          const r = img.getBoundingClientRect();
+          const fly = img.cloneNode(true);
+          fly.className = 'tmx-fly';
+          fly.style.left = r.left + 'px'; fly.style.top = r.top + 'px';
+          fly.style.width = r.width + 'px'; fly.style.height = r.height + 'px';
+          document.body.appendChild(fly);
+          setTimeout(() => {
+            fly.style.transform = `translate(${o.left + o.width / 2 - r.left - r.width / 2}px, ${o.top + o.height / 2 - r.top - r.height / 2}px) scale(.4)`;
+            fly.style.opacity = '0';
+          }, 40 + k * 70);
+          setTimeout(() => fly.remove(), 900);
+        });
+        /* THE BLOOM IS A CLONE TOO. The Kitchen re-renders on its own cook-timer
+           tick, and the first capture showed it wiping the live socket (and the
+           bloom with it) ~380ms into the moment. The fly clones survived because
+           they live on document.body, so the bloom does the same: a fixed-position
+           copy of the out socket that no re-render can touch. */
+        const bloom = out.cloneNode(true);
+        bloom.className = 'tmx-sock tmx-out on bloom tmx-fly';
+        bloom.style.transition = 'none';
+        bloom.style.left = o.left + 'px'; bloom.style.top = o.top + 'px';
+        bloom.style.width = o.width + 'px'; bloom.style.height = o.height + 'px';
+        bloom.style.boxSizing = 'border-box';
+        document.body.appendChild(bloom);
+        setTimeout(() => bloom.remove(), 1000);
+        setTimeout(() => { levelSound(S.sounds); }, 560);
+        await new Promise(r => setTimeout(r, 980));
+      } else {
+        confettiBurst(innerWidth / 2, innerHeight * 0.4, 18); levelSound(S.sounds);
+      }
       toast(`${INGREDIENTS[res.yields].icon} Transmuted a rare ${INGREDIENTS[res.yields].name}!`, 3000);
       render();
     });
