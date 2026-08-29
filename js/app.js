@@ -1100,6 +1100,10 @@ async function showSplash(userEq) {
 
 async function boot() {
   if (S.demo) { useDbName('tally-demo'); document.body.insertAdjacentHTML('beforeend', '<div class="demo-badge">DEMO</div>'); }
+  /* MOCKUP (cloud/hud-ring, DO NOT SHIP): ?hudmock=a|b|c previews the calorie
+     HUD treatments under review. Pure CSS switch; delete with the losers. */
+  const hudmock = new URLSearchParams(location.search).get('hudmock');
+  if (hudmock) document.documentElement.dataset.hudmock = hudmock;
   S.settings = await kvGet('settings');
   if (S.demo && !S.settings) { await seedDemo(); S.settings = await kvGet('settings'); }
   snapSettings();
@@ -4019,8 +4023,15 @@ function calorieRingCard({ tot, t, over, remaining, protHit, startPct = 0, start
   const sub = over
     ? `${Math.abs(Math.round(remaining)).toLocaleString()} over`
     : `${Math.round(remaining).toLocaleString()} left`;
+  /* MOCKUP (cloud/hud-ring, DO NOT SHIP): fill-state class for the HUD
+     treatments under review. Inert without the data-hudmock attribute on
+     <html>; every visual lives in app.css under the same marker. Thresholds
+     are mockup parameters, not tuned values: near = 85% of target, hit =
+     100-107% (a hair over your target is still hitting it), over past that. */
+  const hudPct = t.kcal ? tot.kcal / t.kcal : 0;
+  const hudState = hudPct >= 1 ? (hudPct <= 1.07 ? 'hud-hit' : 'hud-over') : hudPct >= 0.85 ? 'hud-near' : 'hud-low';
   return `<div class="card ring-card">
-    <div class="ring-wrap">
+    <div class="ring-wrap ${hudState}">
       <svg viewBox="0 0 158 158">
         <circle class="ring-track" cx="79" cy="79" r="66" fill="none" stroke-width="13"/>
         <circle class="ring-fill ${over ? 'over' : ''}"${live ? ' id="ringFill"' : ''} cx="79" cy="79" r="66" fill="none" stroke-width="13" stroke-linecap="round"

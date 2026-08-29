@@ -10717,3 +10717,72 @@ details:not([open]) > :not(summary) *::after { animation: none !important; }
 .nb-goes { display: flex; align-items: center; gap: 3px; flex: none;
   font-size: 10.5px; font-weight: 800; letter-spacing: .05em;
   text-transform: uppercase; color: var(--accent); }
+
+/* =====================================================================
+   MOCKUPS: cloud/hud-ring. DO NOT SHIP.
+   Three treatments for the calorie HUD, selected with ?hudmock=a|b|c
+   (or document.documentElement.dataset.hudmock = 'a' in a console).
+   Tom picks one; the other two AND this whole block get deleted.
+   Nothing below matches without [data-hudmock], so plain builds render
+   the shipped card untouched. In all three the ring keeps what it has:
+   the Bangers number, the single-lime arc, the macro colour bars.
+   State classes (.hud-low/.hud-near/.hud-hit/.hud-over) come from
+   calorieRingCard(), same marker.
+   ===================================================================== */
+
+/* the glow needs room: the arc sits 6.5px from the svg edge */
+:root[data-hudmock] .ring-wrap svg { overflow: visible; }
+
+/* ---- Option A: the lineage glow, lifted onto the ring. This is the
+   .lin-3/.lin-4 language (layered drop-shadows riding the art itself),
+   in lime, constant at every fill. Over keeps the shipped amber, with
+   the amber wearing the same glow. Zero animation. ---- */
+:root[data-hudmock="a"] .ring-fill {
+  filter: drop-shadow(0 0 5px rgba(165, 232, 71, .55)) drop-shadow(0 0 12px rgba(165, 232, 71, .3));
+}
+:root[data-hudmock="a"] .ring-fill.over {
+  filter: drop-shadow(0 0 5px rgba(255, 180, 84, .5)) drop-shadow(0 0 12px rgba(255, 180, 84, .28));
+}
+
+/* ---- Option B: state-reactive, one lime hue throughout. Calm and flat
+   below 85%, breathing as the target comes into reach, steady-charged
+   when you land it (100-107% reads as a win, not a warning, so the hit
+   band stays lime). Past the band the shipped amber takes over with a
+   quiet version of the same glow. ---- */
+:root[data-hudmock="b"] .hud-near .ring-fill {
+  animation: hudBreathe 3.2s ease-in-out infinite alternate;
+}
+:root[data-hudmock="b"] .hud-hit .ring-fill,
+:root[data-hudmock="b"] .hud-hit .ring-fill.over {
+  stroke: #c2f07d; /* the lu-take flash lime: brighter, same family */
+  filter: drop-shadow(0 0 6px rgba(190, 245, 120, .7)) drop-shadow(0 0 14px rgba(165, 232, 71, .35));
+}
+:root[data-hudmock="b"] .hud-over .ring-fill.over {
+  filter: drop-shadow(0 0 5px rgba(255, 180, 84, .45));
+}
+@keyframes hudBreathe {
+  from { filter: drop-shadow(0 0 3px rgba(165, 232, 71, .3)); }
+  to   { filter: drop-shadow(0 0 8px rgba(165, 232, 71, .6)); }
+}
+
+/* ---- Option C: multi-colour as a REWARD. Below target nothing changes,
+   the flat lime arc IS the resting state. Land the target (100-107%) and
+   the completed circle becomes the wheel: a slow conic sweep through the
+   app's own macro palette on the lvl-rays clock. Blow past the band and
+   the wheel is gone; over is the shipped amber. ---- */
+:root[data-hudmock="c"] .hud-hit .ring-fill { opacity: 0; }
+:root[data-hudmock="c"] .hud-hit::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 0deg, #a5e847, #7cc4ff, #ff9dc7, #ffb454, #a5e847);
+  /* annulus over the stroke: r 59.5-72.5px of the 79px half-width */
+  -webkit-mask: radial-gradient(closest-side, transparent 74%, #000 76.5%, #000 90.5%, transparent 93%);
+  mask: radial-gradient(closest-side, transparent 74%, #000 76.5%, #000 90.5%, transparent 93%);
+  animation: raysSpin 14s linear infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* settled, not frozen: near holds the mid glow, the wheel holds still */
+  :root[data-hudmock="b"] .hud-near .ring-fill { animation: none; filter: drop-shadow(0 0 5px rgba(165, 232, 71, .45)); }
+  :root[data-hudmock="c"] .hud-hit::after { animation: none; }
+}
