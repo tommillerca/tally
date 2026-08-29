@@ -19,6 +19,16 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v467
+
+1. PROOF: wanderer-encounter-audit.mjs (gate-registered, 11 rows green; the NAME row grades the SHIPPED string, computed visibility and the rule width, proven red by blanking TITLE_TEXT: exit 1 while LINES stayed green). | REACH: Walk into the Wanderer's lantern cone on the Boneyard map. The line types over the glow, he walks in, THE WANDERER slams on. No flag, no server change.
+
+2. PROOF: toast-map-audit.mjs (gate-registered; drives a REAL toast through the shipped toast() seam; CLEAR proven red by disabling the one CSS rule, SEAT green both ways). | REACH: On the Boneyard with something in reach, trigger any message (walk fast and get the Slow down nag). The message sits above the action card instead of on it. Everywhere else it keeps its old seat.
+
+3. PROOF: MANUAL, measured 2026-08-28: #mapReadout held by reference across 800ms read rect 28,799 40x40 before and 0,0 0x0 after, because refreshSpawns rewrote innerHTML on every camera idle; after keying on data-bar the map-topbar misread disappeared 3/3 and badge-centre's detach artifact with it. No dedicated audit: the defect was invisible except through a held reference, and badge-centre exercises the path. | REACH: Stand still on the Boneyard. Nothing visibly changes; the readout card simply stops being torn down and rebuilt every second.
+
+4. PROOF: levelup-audit.mjs green on the tree (exit 0, zero FAIL rows; the suite exists because of three earlier bugs on this exact path). NOT PROVEN: no automated test fails on the pre-fix code, because the bug needs a second XP award landing inside a 35-await gap and that interleaving resisted deterministic triggering; stated in PR #260 rather than implied. | REACH: Log a food while other XP lands (the init backfill replaying is the reachable case). The level crossing is computed from the total at the comparison instant.
+
 ## v466
 
 1. PROOF: MANUAL, a 2x render with a positive control rather than an eyeball. Same markup, both stylesheets, counting cream fill-tail pixels in the band above the box: BEFORE (tail present) box top y=295, cream tail px=47; AFTER (tail removed) box top y=295, cream tail px=0. Box top identical, so nothing reflowed. No audit grades .cele-bubble and I did not write one: a static check that the two deleted rules are still deleted would only restate the diff. My first probe counted the dark stage background as tail pixels and could not have failed; it was thrown out. | REACH: Level up any pet, or finish a breed in the Stable. The note under the pet portrait now has no tail pointing at it. Both sheets reach it, and neither is behind a flag or a server change.
