@@ -3001,6 +3001,11 @@ function nextToast() {
     if (reducedMotion) done(); else setTimeout(done, 180);
   }, job.ms);
 }
+/* Test hook (webdriver only), same pattern as __cosmeticTeaser and friends:
+   tests/toast-map-audit.mjs grades where a REAL toast sits over the Boneyard's
+   action card, and toast() is module-scoped, so without this seam an audit can
+   only poke #toast by hand and never proves the shipped path. */
+if (typeof window !== 'undefined' && navigator.webdriver) window.__toast = toast;
 
 const sheetStack = [];
 /* set when a new service worker took over while a sheet was open, so the
