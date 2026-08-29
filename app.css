@@ -580,6 +580,18 @@ svg { display: block; }
   width: max-content; max-width: 86%; text-align: center;
 }
 @keyframes toastin { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+/* THE TOAST MUST NOT LAND ON THE MAP ACTION CARD. On the Boneyard the one
+   surface that says what you can do right now is #mapAct ("Grab it" / "Slow
+   down" / "Too fast to loot"), and the shipped bottom above put every toast
+   directly on top of it: measured 2026-08-28 at 430x932, toast 30.1,771.5
+   369.8x64.5 over card 14.0,787.8 402.0x64.0, so the "Slow down" nag hid the
+   very card it was nagging about. Keyed on the card being VISIBLE rather than
+   on the route, because the card is hidden unless something is in reach (or
+   you are too fast), and when it is hidden the toast's normal seat is fine.
+   158px clears the card's measured top (144.2px from the viewport bottom, and
+   the card rides --sab the same way this rule does) with a 14px gap.
+   Guard: tests/toast-map-audit.mjs. */
+body:has(.map-act:not([hidden])) .toast { bottom: calc(var(--sab) + 158px); }
 
 /* progress bar (ocr) */
 .progress { height: 6px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin: 10px 0; }
