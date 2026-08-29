@@ -183,7 +183,7 @@ export function ingredientCount(inv) {
 
 /* ---------- the cooking pots (v143: multiple slots, real-time timers) ----------
  * `cooking` kv is now an ARRAY of pot slots (null = empty). `potsOwned` (default 1)
- * caps how many you can run at once — buy the 2nd/3rd pot for coins. Reads migrate
+ * caps how many you can run at once - buy the 2nd/3rd pot for coins. Reads migrate
  * the legacy single {recipeId,...} object into a one-element array automatically. */
 export const MAX_POTS = 3;
 export const POT_PRICES = [1000, 3000]; // coins for the 2nd pot, then the 3rd

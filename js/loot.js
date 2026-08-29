@@ -1344,7 +1344,7 @@ export function creditSteps(bank, key, delta) {
 
 // The per-INSTANCE banked-step map (keyed by iid). Migrates losslessly from the
 // v127 per-species map (each instance inherits its species' level) or, failing
-// that, from hatch anchors — so no pet loses its current level. Sets the credit
+// that, from hatch anchors - so no pet loses its current level. Sets the credit
 // checkpoint so past steps aren't retroactively dumped onto the equipped pet.
 export async function petLevelBank() {
   const ver = await kvGet('petLvlV', 0);
