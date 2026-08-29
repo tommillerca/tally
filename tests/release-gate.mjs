@@ -1070,6 +1070,18 @@ const SERIAL = {
      gate at 564s with SECOND OPEN reporting worker=tally-v465 when it wanted
      v466, and ALL GREEN standalone on the identical tree minutes later. A worker
      takeover is a race by nature; five siblings competing for the CPU decide it. */
+  /* ---- ADDED 2026-08-29, the #250 signature again: green standalone on the
+     same tree the same day, red only in a six-way gate. ---- */
+  'boneyard-audit.mjs': 'drag gestures, arrival timing and beat grouping are all '
+    + 'races against the machine. PAN needed net-arrival counting for the moving '
+    + 'Wanderer (#268, 9 standalone greens that day), and INTERACTED, a synthetic '
+    + 'drag from the #242 dice family, then lost its race only in the gate.',
+  'boneyard-density-audit.mjs': 'ten locations, each with a 12s settle window '
+    + '(#262 tripled the surface from four). Under five siblings one canvas can '
+    + 'miss its window entirely: gate 2026-08-29 drew 0 markers at location 8 and '
+    + 'the CONTROL row correctly refused the vacuous sample, while the identical '
+    + 'tree was 100 percent green standalone. It measures rendering capacity, and '
+    + 'contention measures the machine instead.',
   'sw-upgrade-audit.mjs': 'installs and upgrades a REAL service worker across two '
     + 'builds and then asks which one is in charge. Its own tier note says it must not '
     + 'race a parallel suite. Red in the gate (worker=tally-v465, want tally-v466), ALL '
