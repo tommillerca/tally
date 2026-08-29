@@ -6810,7 +6810,7 @@ async function openKitchen() {
       ${pantry.length
         ? pantry.map((p, i) => { const r = RECIPE_BY_ID[p.recipeId]; return `<div class="crate-row"><span class="crate-ico">${r ? recipeIconHtml(r, 26) : (p.icon || '🍲')}</span>
             <div style="flex:1"><b>${esc(p.name)}</b><small>${r && r.buff ? esc(foodBuffLabel({ ...r.buff, ...(r.buff.kind === 'combat' ? { fightsLeft: r.buff.fights } : {}) })) : 'Ready to eat'}</small></div>
-            <button class="btn small" data-eat="${i}">Eat</button><button class="btn small ghost" data-toss="${i}" title="Discard" style="margin-left:6px">${ICONS.close(13)}</button></div>`; }).join('')
+            <button class="btn small" data-eat="${i}">Eat</button><button class="btn small ghost" data-toss="${i}" title="Discard" aria-label="Discard" style="margin-left:6px">${ICONS.close(13)}</button></div>`; }).join('')
         : '<p class="note" style="margin:2px 2px 6px">Empty. Cook a dish and it waits here until you choose to eat it, so you can save buffs for the fight or day you want them.</p>'}
       ${potionCount(potInv) ? `<div class="sect-h">Potion satchel · drink these mid-fight</div>
         <div class="ingredient-grid">${POTIONS.filter(p => potInv[p.id] > 0).map(p => `<div class="ing-cell"><span class="ing-ico">${recipeIconHtml(p, 26)}</span><span class="ing-n">${potInv[p.id]}</span><span class="ing-name">${esc(p.name)}</span></div>`).join('')}</div>` : ''}
