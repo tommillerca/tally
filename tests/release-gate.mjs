@@ -1078,6 +1078,12 @@ const SERIAL = {
      answer (a capped concurrency CLASS for map suites instead of one-by-one
      discovery) is written up for daylight; these two join the tail tonight on
      the same evidence as their eight siblings. ---- */
+  /* ---- ADDED 2026-08-30, late: the #250 signature with the full evidence
+     this tier demands, learned the hard way the same night a fake version of
+     the signature (two audits poisoning their own IndexedDB) was evicted. ---- */
+  'spire-gate.mjs': 'the SPIRE day-gate row races the Crew render for the machine: red in two '
+    + 'consecutive six-up gates (offered-button row reading hidden:true on an unspent day), '
+    + 'green three of three solo on the identical bytes the same evening.',
   'boneyard-icon-audit.mjs': 'grades map marker art against the drawn field; failed twice in the '
     + 'same six-way gate as its siblings and is green 2/2 standalone on the identical tree.',
   'mini-theme-audit.mjs': 'walks the map to real minis and grades their reach; red in the '
