@@ -28,7 +28,7 @@ import {
   buyPetItem,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
-import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
+import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP, manualWalksToday, logManualWalk, MANUAL_WALKS_PER_DAY } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
 import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, showWandererEncounter, WANDERER_FIGHT, CONE_RANGE_M } from './wanderer.js';
@@ -3306,6 +3306,10 @@ async function renderToday(el) {
   const wellness = S.date === dateKey() ? await getWellness(S.date) : null;
   const routines = wellness ? await getRoutines() : [];
   const routinesDoneToday = wellness ? await routinesDone(S.date) : new Set();
+  // Manual "Add a walk" is only for players whose phone is NOT counting for
+  // them; with Health connected the walk row would double-ask for data the
+  // sync already has. null = hide the row entirely.
+  const manualWalks = wellness && !S.settings.hkConnected ? await manualWalksToday(S.date) : null;
   const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled, socialOn: await social.isOnline().catch(() => false),
     /* A quest list should describe a day this player can actually have. The Pit
        appears once they have been there (win or lose: trying is the gate, not
@@ -3691,7 +3695,7 @@ async function renderToday(el) {
        would save that zeroed record over today's. A card that lies about the
        past and destroys the present on a tap is worse than a card that is not
        there. Un-gate it the day wellness gets a per-date store. */''}
-  ${tsec('Wellness', isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday) : '')}
+  ${tsec('Wellness', isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday, manualWalks) : '')}
   ${tsec('Kitchen', kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe))}
   ${tsec('Activity', healthCardHtml(hk, isToday))}
 
@@ -3909,6 +3913,13 @@ async function renderToday(el) {
       popSound(S.sounds); refresh();
     });
   });
+  $$('[data-walkmin]').forEach(b => b.addEventListener('click', async () => {
+    const r = await logManualWalk(Number(b.dataset.walkmin));
+    if (!r.ok) { toast(`${MANUAL_WALKS_PER_DAY} walks a day is the cap. See you tomorrow.`, 2600); refresh(); return; }
+    chimeSound(S.sounds); haptic.success();
+    toast(`Walk logged. +${r.xp} XP and +1 Vigor for the Pit.`, 2800);
+    refresh();
+  }));
   $$('[data-sleep]').forEach(b => b.addEventListener('click', async () => {
     const hours = Number(b.dataset.sleep);
     const { xp } = await markSleep(hours); chimeSound(S.sounds);
@@ -5189,7 +5200,7 @@ function potionShort(p) {
 
 // a Today alert card, ONLY when a dish is ready to collect (access lives in the
 // shortcut row now). Cooking-in-progress just shows a badge on the Kitchen button.
-function wellnessCardHtml(w, routines = [], done = new Set()) {
+function wellnessCardHtml(w, routines = [], done = new Set(), walks = null) {
   if (!w) return '';
   const waterDone = w.water >= WATER_GOAL;
   const row = (cls, ico, title, doneLbl, todoLbl, done, btnId, btnLabel, extra = '') => `
@@ -5204,6 +5215,7 @@ function wellnessCardHtml(w, routines = [], done = new Set()) {
     ${row('', pixCur('water', 24) || ICONS.water(22), 'Water', `${WATER_GOAL} cups down. Hydrated.`, `${w.water} / ${WATER_GOAL} cups`, waterDone, 'wWater', '+1 cup', waterBar)}
     ${row('ghost', pixCur('bed', 24) || ICONS.bed(22), 'Make your bed', 'Done. A small win banked.', 'Start the day with a small win', w.bed, 'wBed', 'Mark done')}
     ${sleepRowHtml(w)}
+    ${walkRowHtml(walks)}
     ${/* YOUR OWN routines, under the three the game has opinions about. Same row
          language, same ledger, so they count toward the wellness quest too. */''}
     <div class="sect-h" style="margin:14px 0 4px">Your routines</div>
@@ -5243,6 +5255,29 @@ function sleepRowHtml(w) {
         ${auto ? '' : `<div class="sleep-picks">${chips}</div>`}
       </div>
       ${logged ? `<span class="well-check">${ICONS.check(14)}</span>` : ''}
+    </div>`;
+}
+
+// "Add a walk" for players without HealthKit/watch (walks === null hides the
+// row when Health is connected). Pays LOCAL rewards only: XP, the wellness
+// quests and Vigor, through logManualWalk in js/wellness.js. It never writes a
+// `steps` field, so the step race (weekStepsNow) cannot see it; the rule and
+// the 2/day cap are documented and enforced there, not here.
+function walkRowHtml(walks) {
+  if (!walks) return '';
+  const capped = walks.length >= MANUAL_WALKS_PER_DAY;
+  const chips = [15, 30, 45, 60].map(m => `<button class="hchip" data-walkmin="${m}">${m}m</button>`).join('');
+  return `
+    <div class="well-row ${capped ? 'done' : ''}">
+      <span class="well-ico">${badgePixHtml('badge-footprint', 24)}</span>
+      <div class="well-body">
+        <b>Add a walk</b>
+        <small>${capped
+          ? `${MANUAL_WALKS_PER_DAY} walks logged today. Good legs.`
+          : 'Counts for quests and energy. Step races only count steps your phone saw.'}</small>
+        ${capped ? '' : `<div class="sleep-picks">${chips}</div>`}
+      </div>
+      ${capped ? `<span class="well-check">${ICONS.check(14)}</span>` : ''}
     </div>`;
 }
 
