@@ -262,7 +262,24 @@ class HealthPlugin : Plugin() {
                     }
                     val coreS = unionSeconds(core); val deepS = unionSeconds(deep); val remS = unionSeconds(rem)
                     val staged = coreS + deepS + remS
-                    val asleep = if (staged > 0) staged else unionSeconds(unspecified)
+                    val unspecS = unionSeconds(unspecified)
+                    val awakeS = unionSeconds(awake)
+                    // Prefer staged data; fall back to unspecified "asleep" when the source
+                    // didn't record stages (older watches / third-party trackers).
+                    // As a last resort, use in-bed (awake) time discounted at 0.9 (people are
+                    // not asleep the whole time they are in bed), marked as estimated.
+                    val asleep: Long
+                    val sleepEstimated: Boolean
+                    if (staged > 0) {
+                        asleep = staged
+                        sleepEstimated = false
+                    } else if (unspecS > 0) {
+                        asleep = unspecS
+                        sleepEstimated = false
+                    } else {
+                        asleep = (awakeS * 0.9).toLong()
+                        sleepEstimated = awakeS > 0
+                    }
                     // Report WHAT the query saw, even when it finds nothing usable, so a
                     // failed sleep read is inspectable in Settings instead of invisible.
                     // Same keys as the iOS sleepDiag so one renderer serves both;
@@ -284,6 +301,7 @@ class HealthPlugin : Plugin() {
                         res.put("sleepCoreMin", mins(coreS))
                         res.put("sleepAwakeMin", mins(unionSeconds(awake)))
                         res.put("sleepStaged", if (staged > 0) 1 else 0)
+                        res.put("sleepEstimated", if (sleepEstimated) 1 else 0)
                     }
                 }
             } catch (e: Exception) {

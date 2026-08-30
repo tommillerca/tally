@@ -8724,7 +8724,8 @@ async function renderTrends(el) {
       steps: h.steps || 0, sleepHours: h.sleepHours ?? null,
       sleepMin: h.sleepMin ?? null, sleepDeepMin: h.sleepDeepMin ?? null,
       sleepRemMin: h.sleepRemMin ?? null, sleepCoreMin: h.sleepCoreMin ?? null,
-      sleepAwakeMin: h.sleepAwakeMin ?? null, sleepStaged: !!h.sleepStaged, sleepAuto: !!h.sleepAuto,
+      sleepAwakeMin: h.sleepAwakeMin ?? null, sleepStaged: !!h.sleepStaged,
+      sleepEstimated: !!h.sleepEstimated, sleepAuto: !!h.sleepAuto,
       activeKcal: h.activeKcal ?? null, exerciseMin: h.exerciseMin ?? null,
       workouts: h.workouts || 0, wtypes: Array.isArray(h.wtypes) ? h.wtypes : [],
       restingHr: h.restingHr ?? null, hrv: h.hrv ?? null,
@@ -9301,6 +9302,7 @@ function readinessScore(days) {
     // and the tile used to render it undated. So a stale entry looked exactly
     // like a fresh watch read, which hid a broken auto-read for days.
     slL: slHours, slScore, slDate: sl ? sl.date : null, slStaged: sl ? !!sl.sleepStaged : false,
+    slEstimated: sl ? !!sl.sleepEstimated : false,
     slDeep: sl ? sl.sleepDeepMin : null, slRem: sl ? sl.sleepRemMin : null,
     slCore: sl ? sl.sleepCoreMin : null, slAwake: sl ? sl.sleepAwakeMin : null,
     slAuto: sl ? !!sl.sleepAuto : false,
@@ -9397,7 +9399,9 @@ async function openSleepDetail() {
   const bar = staged
     ? `<div class="sleep-bar">${stages.filter(s => s.m > 0).map(s => `<i style="flex:${s.m};background:${s.col}"></i>`).join('')}</div>
        <div class="sleep-legend">${stages.filter(s => s.m > 0).map(s => `<div class="sl-row"><span class="sl-dot" style="background:${s.col}"></span><span class="sl-k">${s.k}</span><span class="sl-m">${hm(s.m)}</span><span class="sl-p">${Math.round(s.m / tot * 100)}%</span></div>`).join('')}</div>`
-    : `<p class="note" style="margin:10px 0 0">Stage breakdown (deep / REM / core) needs an Apple Watch worn to bed. ${r.sleepAuto ? 'Your watch logged the hours but not the stages last night.' : 'This night was logged by hand.'}</p>`;
+    : r.sleepEstimated
+      ? `<p class="note" style="margin:10px 0 0">Sleep is estimated from time in bed, so the actual asleep time may be less.</p>`
+      : `<p class="note" style="margin:10px 0 0">Stage breakdown (deep / REM / core) needs an Apple Watch worn to bed. ${r.sleepAuto ? 'Your watch logged the hours but not the stages last night.' : 'This night was logged by hand.'}</p>`;
   const bandCol = sc >= 80 ? 'var(--accent)' : sc >= 60 ? '#5fe6d0' : 'var(--gold)';
   const when = r.date === dateKey() ? 'Last night' : `Night of ${r.date}`;
   const html = `<button class="sheet-close" style="position:absolute;top:12px;right:14px;z-index:2">Close</button>
@@ -14828,6 +14832,7 @@ async function ingestHealth(payload, { celebrate = true } = {}) {
     row.sleepCoreMin = payload.sleepCoreMin ?? null;
     row.sleepAwakeMin = payload.sleepAwakeMin ?? null;
     row.sleepStaged = !!payload.sleepStaged;
+    row.sleepEstimated = !!payload.sleepEstimated;
     row.sleepHours = Math.round(payload.sleepMin / 6) / 10; // 0.1h precision, keeps the sleep chart fed
     row.sleepAuto = true;
   }
@@ -16254,7 +16259,7 @@ async function nativeSyncNow({ silent = false } = {}) {
       sleepMin: r.sleepMin ?? null, sleepDeepMin: r.sleepDeepMin ?? null,
       sleepRemMin: r.sleepRemMin ?? null, sleepCoreMin: r.sleepCoreMin ?? null,
       sleepAwakeMin: r.sleepAwakeMin ?? null, sleepStaged: r.sleepStaged ?? null,
-      sleepDiag: r.sleepDiag ?? null,
+      sleepEstimated: r.sleepEstimated ?? null, sleepDiag: r.sleepDiag ?? null,
     };
     await ingestHealth(payload, { celebrate: !silent });
     if (!S.settings.hkConnected || S.settings.hkNative !== true) {
@@ -16403,7 +16408,7 @@ function sleepDiagHtml(dg) {
     dg.err ? `Health returned an error: ${esc(dg.err)}`
     : dg.manual ? 'You hand-logged sleep for today, so the automatic read is deliberately skipped to keep your entry.'
     : n === 0 ? 'No sleep samples came back at all for that window. Either Sleep is not shared with Boneheadz (iOS Settings > Health > Data Access & Devices > Boneheadz Gym) or nothing is recorded in it.'
-    : asleep === 0 && inBed > 0 ? 'Your sleep is recorded as time IN BED with no asleep stages. Boneheadz currently throws in-bed time away, which is exactly why nothing shows. This is a bug on our side, not your watch.'
+    : asleep === 0 && inBed > 0 ? 'Your sleep is recorded as time in bed only. We are estimating sleep from that, so the number may be less than the time you spent in bed.'
     : asleep === 0 ? 'Samples came back but none of them were asleep, in-bed, or staged time.'
     : asleep < 30 ? 'Under the 30-minute minimum, so it was discarded as a stray reading.'
     : 'Sleep read correctly on the last sync.';

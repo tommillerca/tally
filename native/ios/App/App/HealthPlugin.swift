@@ -127,7 +127,24 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
             let staged = coreS + deepS + remS
             // Prefer staged data; fall back to unspecified "asleep" when the source
             // didn't record stages (older watches / third-party trackers).
-            let asleep = staged > 0 ? staged : self.unionSeconds(unspecified)
+            // As a last resort, use in-bed time discounted at 0.9 (people are not asleep
+            // the whole time they are in bed), marked as estimated.
+            let unspecS = self.unionSeconds(unspecified)
+            let inBedS = self.unionSeconds(cats.filter { $0.value == 0 }
+                .map { (max($0.startDate, start), min($0.endDate, end)) }
+                .filter { $0.1 > $0.0 })
+            let asleep: Double
+            let sleepEstimated: Bool
+            if staged > 0 {
+                asleep = staged
+                sleepEstimated = false
+            } else if unspecS > 0 {
+                asleep = unspecS
+                sleepEstimated = false
+            } else {
+                asleep = inBedS * 0.9
+                sleepEstimated = inBedS > 0
+            }
             diag["stagedMin"] = Int((staged / 60).rounded())
             diag["rawAsleepMin"] = Int((asleep / 60).rounded())
             guard asleep >= 30 * 60 else { done(nil, diag); return } // ignore stray < 30 min blips
@@ -139,6 +156,7 @@ public class HealthPlugin: CAPPlugin, CAPBridgedPlugin {
                 "sleepCoreMin": m(coreS),
                 "sleepAwakeMin": m(self.unionSeconds(awake)),
                 "sleepStaged": staged > 0 ? 1 : 0,
+                "sleepEstimated": sleepEstimated ? 1 : 0,
             ], diag)
         }
         store.execute(q)
