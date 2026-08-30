@@ -419,3 +419,19 @@ sufficient alone.
 The audit reaches the arena by playing the game, not by calling `mimicPlateHtml()`,
 because the hop that has broken before is `endlessFightCfg` dropping a field on the way
 past, and a harness that calls the drawer itself can never see that.
+
+## players.app_v reads "v68" for everyone, and that is by construction (2026-08-30)
+
+Anyone eyeballing the production players table will conclude every player runs
+build 68. They do not. The profile push sends APP_SOCIAL_V, the frozen social
+PROTOCOL version, not APP_BUILD: the server stores it in players.app_v and
+echoes it back in friend rows, and no client code reads it back at all. The 32
+NULL rows are players who have never pushed a profile since the column landed.
+
+Not a bug and not worth a write path change mid-sprint: the field is inert,
+and if compat gating ever wants a protocol version, this is exactly the value
+it would want. The real running build is tagged on every analytics event
+instead (the analytics init comment in the app source calls out the same
+distinction). If we ever want ops-grade "who is on which build", add a second
+column rather than repurposing this one; friend rows already ship app_v to
+clients, so changing its meaning is a silent protocol change.
