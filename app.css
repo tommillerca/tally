@@ -1652,7 +1652,8 @@ body::before {
 .hero-actions.six .hero-act { font-size: 9px; padding: 9px 1px 7px; }
 .hero-actions.six .hero-act .ico { width: 21px; height: 21px; }
 .hero-emoji { font-size: 22px; line-height: 23px; }
-.hero-badge { color: var(--accent); font-style: normal; font-weight: 900; }
+.hero-act > span { position: relative; }
+.hero-badge { position: absolute; right: 2px; top: 0; color: var(--accent); font-style: normal; font-weight: 900; /* anchored inside button's right edge since button has overflow:hidden; avoids clipping at narrow viewports */ }
 .hero-act.attn { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
 /* The v146 unlock-nudge card (`.unlock-nudge`, `.ul-ico/.ul-txt/.ul-chev`) stood
    here until 2026-08-22, when Tom removed the last nudge it carried: "remove the

@@ -168,3 +168,21 @@ Web only (native early-returns with the cloud-backup toast and must NOT change).
 - ~16688: rsGo captures wasOnb; cloud restore mid-onboarding latches the shell
   or re-renders onboarding when no save came back  (extra 1,2)
 # from: 3c2c98dc (Restore journey: file import from onboarding, honest summary copy, wrong-file error, gear hidden during onboarding, export label refresh)
+
+
+---
+
+# Verification Checklist
+
+## 1. Hero badge at 375px viewport
+- [ ] Badge visible at 375px: elementFromPoint on badge center (approximately x:152, y:~590 for Backpack button) hits the badge element
+- [ ] Badge rect fully within button bounds: badge right edge <= button right edge + 6px
+- [ ] Badge still visible at 430px: elementFromPoint hit confirms render
+- [ ] No visual regression at 430px: badge position within a few pixels of original
+
+## 2. Den victory button label
+- [ ] Remote Den fight: button shows "Back to The Pit" on victory
+- [ ] Walked-to den fight (from Boneyard): button shows "Back to the Boneyard" on victory
+- [ ] Sparring fight: button shows "Back to The Pit" on victory
+- [ ] Each fight closes to the correct destination (verified by checking which sheet renders after close)
+# from: fcb69d59 (Fix hero badge clipping at 375px and den victory button label.)
