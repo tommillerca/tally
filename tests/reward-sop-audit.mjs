@@ -158,6 +158,13 @@ const ACTIONS = [
   { id: 'js/wellness.js:addWater', sites: 1, undriven: 'ledger key water-<date>, and the goal edge is guarded by wasGoal so topping up cannot re-award' },
   { id: 'js/wellness.js:markBed', sites: 1, undriven: 'ledger key bed-<date>' },
   { id: 'js/wellness.js:markSleep', sites: 1, undriven: 'ledger key sleep-<date>' },
+  /* REGISTERED BY THE REVIEWER, deliberately: the agent that built the manual
+     walk (feat/manual-walk, 2026-08-30) correctly refused to register its own
+     payout, which is the entire point of this registry. Pays 10 XP + 1 Vigor,
+     capped 2/day and 60min in the write path, ledger key mwalk-<date>-<n>, and
+     by construction it never writes h.steps, so the step race and step quests
+     cannot see it (the race pays real prizes). */
+  { id: 'js/wellness.js:logManualWalk', sites: 1, undriven: 'ledger key mwalk-<date>-<n>, capped 2/day in the write path' },
   { id: 'js/wellness.js:markRoutine', sites: 1, undriven: 'ledger key routine-<id>-<date>, and past ROUTINE_XP_CAP the row is minted with 0 XP on purpose' },
   { id: 'js/cooking.js:doTransmute', sites: 1, undriven: 'a once-a-day cooldown plus an ingredient spend; nothing is granted without both' },
   { id: 'js/cooking.js:advanceQueue', sites: 1, undriven: 'moves an already-paid-for queued dish into a pot; the dish was bought with ingredients at startCook' },
@@ -188,7 +195,7 @@ const ACTIONS = [
      seven awards (log, firstlog, weigh, protein, dayclose, meals3, levelup),
      byte for byte the same keys and amounts, so nothing was added or lost. */
   { id: 'js/game.js:runInitBackfill', sites: 7, undriven: "one-time retroactive backfill behind kv 'game-init', reached only through initGameIfNeeded, and every award inside is ledger-keyed anyway" },
-  { id: 'js/game.js:initLootIfNeeded', sites: 5, undriven: "the welcome kit, behind kv 'loot-init'" },
+  { id: 'js/game.js:initLootIfNeeded', sites: 6, undriven: "the welcome kit, behind kv 'loot-init'; site 6 is the starter egg (goal 0, hatch on arrival), added 2026-08-30 from the playtest" },
   { id: 'js/game.js:backfillStarterSeedsIfNeeded', sites: 2, undriven: 'one-time backfill behind its own kv flag. Pays ingredients rather than seeds since 2026-08-18; the ledger key and the write-before-pay order are unchanged' },
   /* THE GARDEN'S CLOSING PAYOUT. Transition: "this save still holds a live Bone
      Garden" becomes "it has been settled", once per save, and nothing about play

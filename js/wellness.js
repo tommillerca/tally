@@ -4,6 +4,7 @@
 // read it and the XP is one-time per day. State for the day lives in kv 'wellness'.
 import { kvGet, kvSet, db } from './db.js';
 import { award } from './game.js';
+import { addVigor } from './energy.js';
 import { dateKey } from './nutrition.js';
 
 export const WATER_GOAL = 8; // cups
@@ -52,6 +53,54 @@ export async function markSleep(hours, date = dateKey()) {
   let xp = 0;
   if (first) xp = await award(`sleep-${date}`, 'wellness', 10, `Slept ${hours}h`, date);
   return { w, xp, hours, first };
+}
+
+/* MANUAL WALKS: "Add a walk" for players with no HealthKit / no watch.
+ *
+ * LOCAL REWARDS ONLY, and that boundary is the whole design. The weekly step
+ * race pays real prizes: weekStepsNow() (js/app.js) builds profile.weekSteps by
+ * summing `r.steps` across db 'health' rows, and the server's anti-cheat bound
+ * (MAX_STEPS_PER_DAY in server/src/index.js) assumes every step in that sum was
+ * counted by a phone. A self-reported walk in that sum is a prize-fraud button.
+ * So a manual walk NEVER writes a `steps` field anywhere: it lives in its own
+ * `manualWalks` list on the per-date health row, which weekStepsNow, the
+ * Vigor-from-steps watermark (todaySignals in js/energy.js) and questCtx.steps
+ * all ignore because each of them reads only `r.steps`.
+ *
+ * What it DOES pay, through the same local ledgers everything else uses:
+ *   XP     award() row of type 'wellness', so it also counts toward the
+ *          wellness quests (wellnessDays / w-wellness) like water/bed/sleep
+ *   Vigor  addVigor(1), banked exactly like a Vigor Draught
+ */
+export const MANUAL_WALK_MAX_MIN = 60;
+/* Two a day, enforced HERE in the write path rather than in the UI: a manual
+   walk is self-reported and free to tap, so without a hard bound it is an
+   XP-and-Vigor faucet. Two covers a real day (a morning and an evening walk)
+   without paying anyone to sit and tap. */
+export const MANUAL_WALKS_PER_DAY = 2;
+export const MANUAL_WALK_XP = 10;
+
+export async function manualWalksToday(date = dateKey()) {
+  const h = await db.get('health', date);
+  return (h && Array.isArray(h.manualWalks)) ? h.manualWalks : [];
+}
+
+// Log one walk of up to MANUAL_WALK_MAX_MIN minutes. Returns
+// { ok, xp, energy, count } or { ok: false, reason: 'capped' }.
+export async function logManualWalk(minutes, date = dateKey()) {
+  const min = Math.max(1, Math.min(MANUAL_WALK_MAX_MIN, Math.round(Number(minutes) || 0)));
+  const h = (await db.get('health', date)) || { date };
+  const walks = Array.isArray(h.manualWalks) ? h.manualWalks : [];
+  if (walks.length >= MANUAL_WALKS_PER_DAY) return { ok: false, reason: 'capped' };
+  walks.push({ min, at: Date.now(), source: 'manual' });
+  h.manualWalks = walks; // never h.steps: see the block comment above
+  await db.put('health', h);
+  const xp = await award(`mwalk-${date}-${walks.length}`, 'wellness', MANUAL_WALK_XP, `Walked ${min} min`, date);
+  // Vigor rides the award's idempotency: two overlapping taps race the cap
+  // read above, but they mint the same ledger key, so only the one whose
+  // award() actually paid banks the Vigor (one extra Pit fight per walk).
+  if (xp > 0) await addVigor(1);
+  return { ok: true, xp, vigor: xp > 0 ? 1 : 0, count: walks.length };
 }
 
 /* USER ROUTINES.

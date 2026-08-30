@@ -1479,6 +1479,30 @@ function rollRarity(floor = 0) {
   return pool[pool.length - 1];
 }
 
+/* THE ODDS THE BACKPACK PRINTS, read off the SAME weight table rollRarity
+   spends (RARITIES[*].w over the crate's floor), so the screen can never
+   advertise a chance this file does not honour and there is no hand-typed
+   percentage anywhere to drift when a weight moves. This doubles as the App
+   Store loot-box odds disclosure (Review Guideline 3.1.1 expects the odds of
+   randomised items to be published in-app), which is why it must stay computed
+   and stay on the screen where crates are opened.
+   Rounding is the denGearOdds trick from poi.js: the largest slice absorbs the
+   drift, so the printed percentages always sum to exactly 100 rather than the
+   99 or 103 a straight per-line Math.round can produce.
+   `rareUpOneIn` is the plain-voice summary ("Rare or better: about 1 in 5"),
+   computed from the raw weights rather than the rounded percentages, so the
+   two can never disagree with each other by more than the rounding they each
+   declare. */
+export function crateOdds(kind) {
+  const floor = (CRATES[kind] || CRATES.daily).floor;
+  const pool = RARITY_ORDER.slice(floor);
+  const total = pool.reduce((a, r) => a + RARITIES[r].w, 0);
+  const pcts = pool.map(r => Math.round((RARITIES[r].w / total) * 100));
+  pcts[pcts.indexOf(Math.max(...pcts))] += 100 - pcts.reduce((a, b) => a + b, 0);
+  const rareUp = pool.reduce((a, r) => a + (RARITY_ORDER.indexOf(r) >= RARITY_ORDER.indexOf('rare') ? RARITIES[r].w : 0), 0);
+  return { rows: pool.map((r, i) => ({ rarity: r, pct: pcts[i] })), rareUpOneIn: Math.round(total / rareUp) };
+}
+
 /* WHAT A CRATE IS ALLOWED TO CONTAIN, in ONE predicate, because there are two
    pools in this file and they have already drifted apart once.
    Pets (slot C) hatch from step eggs only, never from crates. PET ACCESSORY

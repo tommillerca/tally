@@ -11,7 +11,7 @@ import {
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
-  unopenedCrates, openCrate, buyShopItem, equipped, equip, activateBattleCharm,
+  unopenedCrates, openCrate, crateOdds, buyShopItem, equipped, equip, activateBattleCharm,
   ownedGearIds, grantGear, gearLoadout, equipGear,
   migrateLegacyEggs, eggProgress, repairEggAnchors, hatchEgg, lifetimeStepsSum,
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, consumeConsumable, VIGOR_DRAUGHT_AMOUNT, redeemCode,
@@ -28,7 +28,7 @@ import {
   buyPetItem,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
-import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP } from './wellness.js';
+import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP, manualWalksToday, logManualWalk, MANUAL_WALKS_PER_DAY } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
 import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, showWandererEncounter, WANDERER_FIGHT, CONE_RANGE_M } from './wanderer.js';
@@ -1283,7 +1283,7 @@ async function boot() {
     route({ keepScroll: true }); // the screen painted at their old level; show the real one
   }
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), init && init.xp > 0 ? 4200 : 900);
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), init && init.xp > 0 ? 4200 : 900);
   // the pouch reaches installs that predate it; see backfillStarterSeedsIfNeeded
   const pouch = kit ? null : await backfillStarterSeedsIfNeeded();
   if (pouch) setTimeout(() => toast(`${pouch.ingredients} starter ingredients in your Kitchen: exactly one Bone Broth. Cook it.`, 4200), init && init.xp > 0 ? 4200 : 1400);
@@ -2696,10 +2696,10 @@ function bindTabs() {
     dblTimer = setTimeout(() => { dblTimer = 0; route(); }, DBL_MS);
   }));
   $('#gearBtn')?.addEventListener('click', () => { location.hash = '#/settings'; });
-  $('#fab').addEventListener('click', () => {
+  $('#fab').addEventListener('click', async () => {
     if (currentTab() !== 'today') location.hash = '#/today';
-    const now = new Date();
-    openAdd(mealForHour(now.getHours() + now.getMinutes() / 60));
+    const defaultMeal = await mealDefault();
+    openAdd(defaultMeal);
   });
 }
 
@@ -3306,6 +3306,10 @@ async function renderToday(el) {
   const wellness = S.date === dateKey() ? await getWellness(S.date) : null;
   const routines = wellness ? await getRoutines() : [];
   const routinesDoneToday = wellness ? await routinesDone(S.date) : new Set();
+  // Manual "Add a walk" is only for players whose phone is NOT counting for
+  // them; with Health connected the walk row would double-ask for data the
+  // sync already has. null = hide the row entirely.
+  const manualWalks = wellness && !S.settings.hkConnected ? await manualWalksToday(S.date) : null;
   const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled, socialOn: await social.isOnline().catch(() => false),
     /* A quest list should describe a day this player can actually have. The Pit
        appears once they have been there (win or lose: trying is the gate, not
@@ -3551,7 +3555,7 @@ async function renderToday(el) {
        player either understands the loop or is not going to learn it from a
        caption. `hero-why` is a caption, not a card, because Today already asks
        for too much attention above the food. */''}
-  ${lvl.level < 3 ? `<p class="hero-why">${ICONS.boltIco(13)} <b>${pitEnergy.ready} fights ready.</b> Walking earns more.</p>` : ''}
+  ${lvl.level < 3 ? `<p class="hero-why">${ICONS.boltIco(13)} <b>${pitEnergy.ready} fight${pitEnergy.ready === 1 ? '' : 's'} ready.</b> Walking earns more.</p>` : ''}
 
   <!-- FIVE DOORS since 2026-08-26, and the fifth is a MOVE, not an addition:
        Trends came down off the hero art (see .trend-dot's removal above). The
@@ -3691,7 +3695,7 @@ async function renderToday(el) {
        would save that zeroed record over today's. A card that lies about the
        past and destroys the present on a tap is worse than a card that is not
        there. Un-gate it the day wellness gets a per-date store. */''}
-  ${tsec('Wellness', isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday) : '')}
+  ${tsec('Wellness', isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday, manualWalks) : '')}
   ${tsec('Kitchen', kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe))}
   ${tsec('Activity', healthCardHtml(hk, isToday))}
 
@@ -3909,6 +3913,13 @@ async function renderToday(el) {
       popSound(S.sounds); refresh();
     });
   });
+  $$('[data-walkmin]').forEach(b => b.addEventListener('click', async () => {
+    const r = await logManualWalk(Number(b.dataset.walkmin));
+    if (!r.ok) { toast(`${MANUAL_WALKS_PER_DAY} walks a day is the cap. See you tomorrow.`, 2600); refresh(); return; }
+    chimeSound(S.sounds); haptic.success();
+    toast(`Walk logged. +${r.xp} XP and +1 Vigor for the Pit.`, 2800);
+    refresh();
+  }));
   $$('[data-sleep]').forEach(b => b.addEventListener('click', async () => {
     const hours = Number(b.dataset.sleep);
     const { xp } = await markSleep(hours); chimeSound(S.sounds);
@@ -3983,6 +3994,7 @@ async function renderToday(el) {
     for (const e of src) {
       const copy = { ...e, id: newId(), date: S.date, ts: Date.now() };
       await db.put('log', copy);
+      await recordMealUsed(copy.meal);
       last = await onFoodLogged(copy, { targets: S.settings.targets, entriesForDate: await entriesFor(S.date) });
       gained += last.xp;
     }
@@ -5188,7 +5200,7 @@ function potionShort(p) {
 
 // a Today alert card, ONLY when a dish is ready to collect (access lives in the
 // shortcut row now). Cooking-in-progress just shows a badge on the Kitchen button.
-function wellnessCardHtml(w, routines = [], done = new Set()) {
+function wellnessCardHtml(w, routines = [], done = new Set(), walks = null) {
   if (!w) return '';
   const waterDone = w.water >= WATER_GOAL;
   const row = (cls, ico, title, doneLbl, todoLbl, done, btnId, btnLabel, extra = '') => `
@@ -5203,6 +5215,7 @@ function wellnessCardHtml(w, routines = [], done = new Set()) {
     ${row('', pixCur('water', 24) || ICONS.water(22), 'Water', `${WATER_GOAL} cups down. Hydrated.`, `${w.water} / ${WATER_GOAL} cups`, waterDone, 'wWater', '+1 cup', waterBar)}
     ${row('ghost', pixCur('bed', 24) || ICONS.bed(22), 'Make your bed', 'Done. A small win banked.', 'Start the day with a small win', w.bed, 'wBed', 'Mark done')}
     ${sleepRowHtml(w)}
+    ${walkRowHtml(walks)}
     ${/* YOUR OWN routines, under the three the game has opinions about. Same row
          language, same ledger, so they count toward the wellness quest too. */''}
     <div class="sect-h" style="margin:14px 0 4px">Your routines</div>
@@ -5242,6 +5255,29 @@ function sleepRowHtml(w) {
         ${auto ? '' : `<div class="sleep-picks">${chips}</div>`}
       </div>
       ${logged ? `<span class="well-check">${ICONS.check(14)}</span>` : ''}
+    </div>`;
+}
+
+// "Add a walk" for players without HealthKit/watch (walks === null hides the
+// row when Health is connected). Pays LOCAL rewards only: XP, the wellness
+// quests and Vigor, through logManualWalk in js/wellness.js. It never writes a
+// `steps` field, so the step race (weekStepsNow) cannot see it; the rule and
+// the 2/day cap are documented and enforced there, not here.
+function walkRowHtml(walks) {
+  if (!walks) return '';
+  const capped = walks.length >= MANUAL_WALKS_PER_DAY;
+  const chips = [15, 30, 45, 60].map(m => `<button class="hchip" data-walkmin="${m}">${m}m</button>`).join('');
+  return `
+    <div class="well-row ${capped ? 'done' : ''}">
+      <span class="well-ico">${badgePixHtml('badge-footprint', 24)}</span>
+      <div class="well-body">
+        <b>Add a walk</b>
+        <small>${capped
+          ? `${MANUAL_WALKS_PER_DAY} walks logged today. Good legs.`
+          : 'Counts for quests and energy. Step races only count steps your phone saw.'}</small>
+        ${capped ? '' : `<div class="sleep-picks">${chips}</div>`}
+      </div>
+      ${capped ? `<span class="well-check">${ICONS.check(14)}</span>` : ''}
     </div>`;
 }
 
@@ -7078,7 +7114,7 @@ function signOffLine(count, tot, targets) {
     `${count} entries, protein target met. Structurally, an excellent day.`,
   ]);
   return pick([
-    `${count} things written down today. That is the whole job.`,
+    `${count} thing${count === 1 ? '' : 's'} written down today. That is the whole job.`,
     `${count} logged. The ledger is honest, which is all I ask.`,
     `${count} entries. Nothing else required of you.`,
     `That is ${count} in the book. See you tomorrow.`,
@@ -7104,6 +7140,29 @@ function mealBlock(name, i, entries, yEntries, budget = 0) {
     ${!entries.length ? `<p class="meal-empty">${esc(emptyMealLine(name))}</p>` : ''}
     ${!entries.length && yEntries.length ? `<button class="chip-btn" data-copymeal="${i}">↺ Copy yesterday's ${name} (${Math.round(dayTotals(yEntries).kcal)} kcal)</button>` : ''}
   </section>`;
+}
+
+
+/* ================= meal defaults ================= */
+
+// Last-used meal tracker: when logging multiple items within the same day,
+// default to the meal the player used previously, not the hour-of-day. This
+// prevents the "logged lunch at 12pm, then logged lunch again at 5:10pm" case
+// where mealForHour() would flip to dinner and force a re-selection.
+// Reads lastMealToday kv; on day boundary, falls back to mealForHour().
+// P0 ORIGIN: playtest found players flipped away from their meal by the clock.
+async function mealDefault() {
+  const last = await kvGet('lastMealToday', null);
+  if (last !== null && typeof last === 'object' && last.date === S.date) {
+    return last.meal;
+  }
+  const now = new Date();
+  return mealForHour(now.getHours() + now.getMinutes() / 60);
+}
+
+// Record the meal a player just used, so the next log defaults to it.
+async function recordMealUsed(meal) {
+  await kvSet('lastMealToday', { date: S.date, meal });
 }
 
 /* ================= add flow ================= */
@@ -7186,6 +7245,7 @@ function openAdd(meal = 0) {
       if (!src) return;
       const copy = { ...src, id: newId(), date: S.date, meal: curMeal, ts: Date.now() };
       await db.put('log', copy);
+      await recordMealUsed(curMeal);
       const game = await onFoodLogged(copy, { targets: S.settings.targets, entriesForDate: await entriesFor(S.date) });
       confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 300, 12);
       popSound(S.sounds);
@@ -7520,6 +7580,7 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       trackEvent('log_write_failed', { quota: !!full });
       return;                       // the sheet stays open, the entry stays put
     }
+    await recordMealUsed(e.meal);
     food.lastPortion = { ...sel };
     await persistFoodUse(food);
     const game = await onFoodLogged(e, { via, targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
@@ -12367,7 +12428,7 @@ async function saveInitialSettings(np) {
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), 1200);
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.
@@ -13523,6 +13584,27 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </div>`;
         }).join('');
       })()}</div>` : '<p class="note" style="text-align:center;padding:12px 0 16px">No unopened crates. Finish quests, close days on budget, and walk 10k steps to earn more.</p>'}
+      ${(() => {
+        /* CRATE ODDS, ALWAYS ON THIS SCREEN (playtest P2, 2026-08-30). Every
+           number below is COMPUTED at render time by crateOdds() in loot.js off
+           the same RARITIES weights rollRarity spends, so a weight change ships
+           its own disclosure and nothing here can drift. This is also the App
+           Store loot-box odds disclosure (Review Guideline 3.1.1), which is why
+           the block renders whether or not a crate is currently held: the odds
+           must be readable BEFORE you earn one, not only while holding one.
+           Two lines on purpose, coarse and honest, rather than a per-crate
+           table per pull: openCrate applies the floor to the FIRST pull only,
+           so the Bone Crate's later pulls use the ordinary table, and printing
+           one blended table per crate would be a lie in both directions. A pull
+           can also pay a consumable or an ingredient instead of a cosmetic, so
+           the copy scopes the table to "when a cosmetic drops" instead of
+           pretending every pull is one. */
+        const line = kind => crateOdds(kind).rows.map(o => `${RARITIES[o.rarity].label} ${o.pct}%`).join(' · ');
+        return `<div class="t3-sect"><b>Crate odds</b><i></i></div>
+        <p class="note" style="margin:2px 2px 10px">A pull can pay a cosmetic, a consumable or an ingredient. When a cosmetic drops:<br>
+        Any ordinary pull: ${line('daily')}. Rare or better: about 1 in ${crateOdds('daily').rareUpOneIn}.<br>
+        Bone Crate: 3 pulls, and the first is always Rare or better: ${line('golden')}.</p>`;
+      })()}
       ${eggs.length ? `<div class="t3-sect"><b>Incubating</b><i></i></div>
       ${eggs.map(e => {
         const p = eggProgress(e, lifeSteps);
@@ -18426,7 +18508,15 @@ function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, 
      `mealSkipped` inputs, its "Not right now" skip, the `firstMealSkipped` kv it
      wrote and the whole `.unlock-nudge` card on Today went with it: renderToday
      reads these signals only for the Pit "!" badge and the unlock toasts now.
-     The fight/gear/talent signals below are unchanged. */
+     The fight/gear/talent signals below are unchanged.
+     
+     P0 REGRESSION PREVENTION (if nudge is ever re-added): The nudge MUST open
+     the add sheet with the hour-aware meal (mealForHour()), NOT a hardcoded 0.
+     The copy should also match the meal selected: instead of always saying
+     "Start with breakfast", it should say "Start with [meal]" based on the hour,
+     so the nudge text and the sheet default stay honest. Both are fixed via
+     mealDefault() which reads lastMealToday for same-day consistency,
+     falling back to mealForHour() on day boundaries. Pass the result to openAdd(). */
   // activation: brand-new players open the app, browse, and stall without ever
   // fighting (seen in tester telemetry). One clear invitation to the core loop.
   if (fightWins === 0) sig.push({
@@ -18803,6 +18893,12 @@ async function renderPit(wrap) {
   const energy = await refreshPitEnergy();     // hybrid: free floor + Vigor from logging/steps
   const tapped = energy.ready <= 0;
   const gate = tapped ? 'disabled' : '';
+  /* THE UNRESOLVED FIGHT, read from disk, not from render flow. Non-null means
+     a staked fight ended in a loss (or was abandoned, which is the same thing)
+     and the player has not acknowledged it yet: the panel below renders from
+     this record wherever the player re-enters, and startPit refuses to spend
+     until it is cleared. See the lifecycle comment above openFight. */
+  const downed = await kvGet('pitFight', null);
 
   // Sections. The "current fight to spot" floats to the top and opens; anything
   // you've finished collapses out of the way. Pre-Champion the Ladder leads;
@@ -18899,6 +18995,20 @@ async function renderPit(wrap) {
     ? [remoteSect, endlessSect, ladderSect, champSect, sparringSect]
     : [remoteSect, ladderSect, champSect, sparringSect, endlessSect]).join('');
 
+  /* The DOWN, NOT OUT panel, derived from the persisted record so it survives
+     an app kill, a re-open, and any number of re-renders. A record still in
+     phase 'open' can only mean the app died mid-fight, which is an abandon, so
+     it reads as a forfeit. Reuses the .pit-gate styling; no new CSS. */
+  const defeatSect = downed ? `
+    <div class="pit-gate" id="pitDefeat">
+      <div class="pg-head"><span class="pg-ico">${badgePixHtml('tombstone', 22)}</span><b>DOWN, NOT OUT</b></div>
+      <p class="pg-why">${downed.phase === 'lost' && !downed.forfeit
+        ? `<b>${esc(downed.foe || 'The Pit')}</b> put you down.`
+        : `You left your fight with <b>${esc(downed.foe || 'The Pit')}</b> before it was decided, so it goes down as a loss.`}
+        Your bones keep every stat: eat well, walk far, run it back.</p>
+      <button class="btn" id="pitDefeatAck" style="width:100%">Back on your feet</button>
+    </div>` : '';
+
   // The mockup's hero sat on a raster capture of the arena. The app already
   // draws that arena in CSS, live and lighter than shipping a screenshot as
   // art, so the poster keeps the drawn scene and takes the mockup's typography.
@@ -18914,7 +19024,12 @@ async function renderPit(wrap) {
       <h2>MANY ENTER.<br>FEW LEAVE.</h2>
       <p>${champBeaten ? `THE GAUNTLET · RANK ${fightRank}` : `THE LADDER · RUNG ${Math.min(rungsBeaten + 1, LADDER.length)} OF ${LADDER.length}`}</p>
       <div class="stats">
-        <span class="chip">${d.maxHp} HP</span>
+        <!-- "FULL" is a fact, not decoration: HP is never persisted between
+             fights (makeFighter starts every fight at d.maxHp), so there is no
+             "hurt" state and no HP regen timer to show. The playtest read this
+             bare number as a stale current-HP readout; saying FULL makes the
+             true rule (you enter every fight at full HP) legible. -->
+        <span class="chip">${d.maxHp} HP · FULL</span>
         <span class="chip">${d.maxWind} STAMINA</span>
         <span class="chip">${ICONS.boltIco(13)} ${energy.ready} READY</span>
       </div>
@@ -18924,11 +19039,18 @@ async function renderPit(wrap) {
       <div class="tx">
         <b>${energy.ready} fight${energy.ready === 1 ? '' : 's'} in the tank</b>
         <div class="bar"><i style="width:${Math.min(100, Math.round(energy.ready / (energy.freeMax + 6) * 100))}%"></i></div>
-        <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · take a walk to earn Vigor' : ' · walk to earn more'}</small>
+        <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · walk to earn Vigor · free fights refill at midnight' : ' · walk to earn more'}</small>
       </div>
     </div>
+    ${defeatSect}
     <button class="t3-forage" id="buildBtn" style="margin:0 0 4px">${pixCur('build', 24) || ICONS.pit(20)}<b>Shape your build</b><small>stats &amp; talents ›</small>${unspent > 0 ? `<i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
     ${pitSections}`;
+
+  // acknowledging the loss is the only way past it; the record dies here
+  $('#pitDefeatAck', body)?.addEventListener('click', async () => {
+    await kvSet('pitFight', null);
+    renderPit(wrap);
+  });
 
   $('#buildBtn', body)?.addEventListener('click', () => openCharacter('talents'));
   // the remote den spends NO energy: being unable to walk is the whole reason
@@ -18946,6 +19068,22 @@ async function renderPit(wrap) {
   const start = (foeCfg) => openFight(wrap, fighter, foeCfg);
   // sparring is always free (practice); real fights spend the hybrid energy
   const startPit = async (foeCfg) => {
+    /* An unacknowledged loss BLOCKS the next staked fight. Before this gate,
+       FIGHT after an unresolved defeat spent a fresh charge with the old loss
+       still standing (the play-riz auto-loss P0). Re-read the record at the
+       tap, never trust the rendered screen: the defeat can have landed after
+       this Pit body was drawn. Routing means showing the panel, not a toast:
+       re-render if it is missing, then take the player to it. */
+    const downedNow = await kvGet('pitFight', null);
+    if (downedNow) {
+      if (!$('#pitDefeat', body)) await renderPit(wrap);
+      const p = $('#pitDefeat', wrap);
+      if (p) {
+        p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        p.style.animation = 'none'; void p.offsetWidth; p.style.animation = 'quake 0.4s ease';
+      }
+      return;   // no charge spent, no fight opened
+    }
     const spent = await spendPitFight();
     if (!spent.ok) { toast('Rest up! Log a meal or take a walk to earn Vigor. Free fights refill tomorrow.', 3400); renderPit(wrap); return; }
     openFight(wrap, fighter, foeCfg);
@@ -19050,6 +19188,54 @@ function fighterStatuses(f) {
   return s;
 }
 
+/* ==== THE PIT FIGHT LIFECYCLE, WRITTEN DOWN (2026-08-30, play-riz P0s) ====
+ *
+ * What the code did BEFORE this change, traced from every hop:
+ *
+ *   startPit()  -> spendPitFight()   the free/Vigor charge is debited HERE,
+ *                                    before the fight exists
+ *   openFight -> createFight          the whole fight lives in a closure;
+ *                                    NOTHING about it is ever persisted
+ *   settle()                         win: rewards; loss: 5 coins + a
+ *                                    "DOWN, NOT OUT" panel APPENDED to the
+ *                                    sheet body on a 750ms timeout
+ *   sheet close (flee)               "No harm done" toast; the charge stays
+ *                                    spent and no record of the fight remains
+ *   app killed mid-fight             nothing anywhere; charge spent, fight gone
+ *
+ * So a defeat existed only as transient DOM: kill the app on (or before) the
+ * defeat panel and the Pit re-renders as if the fight never happened, with the
+ * FIGHT buttons live and a fresh charge one tap away. That is the play-riz
+ * screenshot (16-rattles2-end.png): a finished fight with no persisted outcome.
+ *
+ * What the code does NOW. One kv key, 'pitFight', holds the state for fights
+ * that SPEND a charge (PIT_STAKED_MODES: rung / champ / endless; sparring is
+ * free and explicitly "no stakes", the remote den is free by design, and map
+ * fights keep their own documented flee-is-harmless rule):
+ *
+ *   null                                 no staked fight open, none unresolved
+ *   { phase:'open', foe, mode, at }      written when the fight starts, the
+ *                                        same moment the charge is genuinely
+ *                                        spent. Found on re-entry it means the
+ *                                        app died mid-fight: an abandon.
+ *   { phase:'lost', foe, mode, at,       written by settle() on any non-win,
+ *     forfeit? }                         and by the sheet's onClose when the
+ *                                        player flees a live staked fight
+ *                                        (forfeit:true). An abandon IS a loss.
+ *
+ * A fight has exactly three exits, and each one resolves the key:
+ *   1. WIN            settle() clears it (a kill on the victory screen must
+ *                     never read as a forfeit)
+ *   2. DEFEAT SEEN    the defeat panel was on screen and the sheet closed
+ *                     (the Done tap or any other close): onClose clears it
+ *   3. ABANDON        flee or app-kill mid-fight: the key survives as an
+ *                     unacknowledged loss
+ *
+ * While 'pitFight' is non-null, renderPit() derives a DOWN, NOT OUT panel from
+ * it (#pitDefeat, persisted state, not render flow) and startPit() refuses to
+ * spend: FIGHT routes the player to that panel until they acknowledge it. */
+const PIT_STAKED_MODES = ['rung', 'champ', 'endless'];
+
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
   const food = await foodCombatBuff(); // active dish buffs (damage / hype / regen / pet-free)
@@ -19077,6 +19263,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
     outfit: foeOutfitFor(foeCfg.add.name),
   }) : null;
   trackEvent('fight_start', { mode: foeCfg.mode || 'pit', pet: !!fighter.petMeta });
+  /* The staked-fight record, written at the one moment a charge is genuinely
+     spent (startPit debited it just before calling us). From here the fight is
+     OPEN until settle() or onClose resolves it; see the lifecycle comment
+     above openFight. Awaited so the record exists before the player can act. */
+  const staked = PIT_STAKED_MODES.includes(foeCfg.mode);
+  if (staked) await kvSet('pitFight', { phase: 'open', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() });
   /* THE FIRST FIGHT IS UNLOSABLE, and it is derived HERE because openFight is the
      one door every fight in the app walks through: the Pit ladder, the Champion,
      the Gauntlet, spars, spires, world-boss dens and minis are twelve call sites
@@ -19165,7 +19357,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
     <div class="sheet-body fight-body" id="fightBody"></div>`,
-    { cls: 'full', onClose: () => {
+    { cls: 'full', onClose: async () => {
       stopGluttonFoeAnim();
       /* Stale-seam teardown. __bhFight/__fightPoke close over THIS fight and
          die with the sheet, but they stayed on window, so an audit poking
@@ -19175,7 +19367,23 @@ async function openFight(pitWrap, fighter, foeCfg) {
          already own the names. */
       if (window.__bhFight && window.__bhFight._owner === seamOwner) window.__bhFight = null;
       if (window.__fightPoke && window.__fightPoke._owner === seamOwner) window.__fightPoke = null;
-      if (!fight.over && !settled) toast(fromMap ? 'You slipped away. No harm done.' : 'You slipped out of The Pit. No harm done.');
+      /* ONE ABANDON RULE for staked fights (exit 3 of the lifecycle above
+         openFight). The old copy said "No harm done", which was a lie here:
+         the charge was already spent at startPit. Leaving a live staked fight
+         is a forfeit, recorded as an unacknowledged loss so the Pit shows the
+         same DOWN, NOT OUT panel a played-out defeat gets. Closing a SETTLED
+         staked fight is the acknowledgement (the result panel was on screen),
+         so that clears the record; on a win settle() already cleared it and
+         the null write is a no-op. Awaited so the renderPit below re-reads
+         the resolved state, never the stale one. */
+      if (staked) {
+        if (!fight.over && !settled) {
+          await kvSet('pitFight', { phase: 'lost', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now(), forfeit: true });
+          toast('You left the fight, so it goes down as a loss. Your bones keep every stat.');
+        } else {
+          await kvSet('pitFight', null);
+        }
+      } else if (!fight.over && !settled) toast(fromMap ? 'You slipped away. No harm done.' : 'You slipped out of The Pit. No harm done.');
       /* CLOSE THE DOOR BEHIND A WIN. Tom, 2026-08-07: "i think you can spam beat
          the one a day raid boss right now?? ... it should just be gone after the
          one beat or greyed out till the next day."
@@ -19957,7 +20165,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (ev.t === 'drain') return `${esc(ev.name)} drains ${ev.amount} stamina${ev.healed ? ` and heals ${ev.healed}` : ''}`;
     if (ev.t === 'summon') return `${esc(ev.name)} claws its way up`;
     if (ev.t === 'amulet') return `The amulet SHATTERS. ${esc(ev.name)} cannot wail or raise the dead again.`;
-    if (ev.t === 'ko') return `${who} wins by KO`;
+    if (ev.t === 'ko') return `${who === 'You' ? 'You win' : who + ' wins'} by KO`;
     return '';
   }
 
@@ -20303,6 +20511,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (settled) return; settled = true;
     await consumeFightFoodBuffs(); // combat dish buffs are spent one fight at a time
     const won = fight.over.winner === 'p';
+    /* Resolve the staked-fight record the moment the outcome is known (see the
+       lifecycle above openFight). A win clears it HERE, not on the Done tap,
+       so killing the app on the victory screen can never read as a forfeit. A
+       non-win (loss or double KO) becomes phase:'lost' and stays until the
+       player sees the panel: acknowledged by closing this sheet (onClose), or
+       by the #pitDefeatAck button in the Pit if the app dies first. */
+    if (staked) await kvSet('pitFight', won ? null : { phase: 'lost', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() });
     // KO choreography
     const loserStage = fight.over.winner === 'p' ? el('foeStage') : fight.over.winner === 'f' ? el('youStage') : null;
     if (loserStage) loserStage.classList.add('ko');
