@@ -2301,7 +2301,8 @@ export default {
 
         const board = async weekKey => (await env.DB.prepare(
           `SELECT id, handle, name, json_extract(profile,'$.outfit') outfit,
-                  CAST(COALESCE(json_extract(profile,'$.weekSteps'),0) AS INTEGER) steps
+                  CAST(COALESCE(json_extract(profile,'$.weekSteps'),0) AS INTEGER) steps,
+                  last_seen seenAt
              FROM players
             WHERE profile IS NOT NULL
               AND COALESCE(is_test, 0) = 0 -- a test account must never place (or be paid) in the race

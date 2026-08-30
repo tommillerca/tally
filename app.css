@@ -3198,6 +3198,10 @@ body::before {
 }
 .race-champ b { color: var(--gold); font-weight: 800; }
 
+/* a racer who has not opened the app wears their age (Tom, 2026-08-30) */
+.race-fresh { font-family: var(--mono, monospace); font-size: 10.5px; color: var(--text-3);
+  margin-left: 7px; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+
 .race-lanes { display: grid; gap: 7px; }
 .race-lane { display: grid; grid-template-columns: 26px 1fr; gap: 9px; align-items: center; }
 .race-lane .rk {
