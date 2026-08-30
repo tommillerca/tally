@@ -26,7 +26,7 @@ android {
         applicationId "com.boneheadz.gym"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 10
+        versionCode 10 // WRAPPED_WEB_BUILD=v413
         versionName "1.0.9"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
