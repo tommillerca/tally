@@ -334,8 +334,26 @@ try {
   });
 
   /* The lit screen, captured through the SAME encoder as the trace so the two
-     sides of every ratio below are comparable. */
+     sides of every ratio below are comparable.
+     THE SCREENCAST ONLY EMITS ON DAMAGE: a perfectly still screen produces
+     zero frames, frames[-1] is undefined, and this file died on a TypeError
+     mid-gate three times in one evening before anyone read the stack. So the
+     ground shot is EARNED: nudge one invisible pixel to force a compositor
+     frame, and if the encoder still hands us nothing, say UNPROVEN by name
+     (exit 97) instead of crashing into a red that reads like a Mimic bug. */
+  await page.evaluate(() => {
+    const d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;background:rgba(255,255,255,0.02);z-index:99999';
+    document.body.appendChild(d);
+    requestAnimationFrame(() => d.remove());
+  });
   await sleep(700);
+  if (!frames.length) {
+    console.log('UNPROVEN: the screencast delivered zero frames for the ground shot (still screen, no damage events); the reveal pacing rows cannot be graded on this run');
+    await cdp.send('Page.stopScreencast').catch(() => {});
+    await browser.close(); srv?.stop?.();
+    process.exit(97);
+  }
   const groundFrame = frames[frames.length - 1];
 
   const rev = await startReveal();
