@@ -228,8 +228,8 @@ async function standOn(s) {
      offer anything, and that last step is a network race: placeWalkable snaps a
      spawn from the RENDERED scene via queryRenderedFeatures, so until the vector
      tiles for this spot arrive it returns null and the spawn stays hidden.
-     21s (30 x 700ms) was not enough under load. Measured on three concurrent
-     runs of this suite: EVERY miss logged below was "nothing in reach", none was
+     35s (50 x 700ms) is the current bound under load. Measurement from three
+     concurrent runs found EVERY miss logged below was "nothing in reach", none was
      "offered the wrong type", and one run missed a BONES pile it was standing on
      top of, on a field where bones are a third of every spawn. Waiting longer is
      also the cheaper trade: a miss costs the full wait anyway AND then pays for
@@ -354,12 +354,12 @@ for (const want of TYPES) {
      proves all five types are on the map, and this loop still reported
      "crate:NO in 9 attempts": standOn puts the player exactly on the spawn, but
      the map snaps them onto walkable ground, and the bar offers the NEAREST
-     spawn from wherever they land. Snap next to a bones pile that has already
-     been collected and the candidate is spent on a `continue`. Five candidates
-     of a type that has only a handful on the field is not many chances.
-     So candidates are ranked by ISOLATION, furthest-from-any-other-spawn first:
-     a snap near one of those has nothing else to offer instead. Ordering, not a
-     wider net, so this stays a real drive rather than a retry until lucky. */
+     spawn from wherever they land. The isolation ranking gives rare spawns
+     fresh ground to snap onto, maximizing the chance placeWalkable finds
+     walkable candidates in reach. A spawn standing far from others is more
+     likely to snap to terrain where the collect bar has options, rather than
+     into empty ocean or a backyard where nothing is reachable. Ordering, not a
+     wider net, so this stays a real drive rather than retrying lucky map tiles. */
   const all = field();
   const isolation = s => Math.min(...all.filter(o => o.id !== s.id).map(o => distanceM(s.lat, s.lng, o.lat, o.lng)), Infinity);
   const cands = all
