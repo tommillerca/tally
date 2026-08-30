@@ -4,6 +4,28 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 470, date: '2026-08-31', title: 'The Pit remembers your fight, and your account is truly yours', items: [
+    'Leaving the app mid-fight no longer makes the fight vanish. Come back and the Pit knows exactly where you stood: a loss shows you the defeat screen you earned, and walking back in never charges you a second time for a fight you already started.',
+    'You can now delete your account and every trace of it, from inside the app: Settings, Delete account & cloud data. It removes your cloud account, friends, race entry and encrypted backup in one stroke, then wipes this phone. The old Erase stays for wiping just the phone.',
+    'Reinstalling with a backup file finally has a real front door: the welcome screen\'s restore now takes your exported .json directly, drops you straight into your day, and says exactly what came back in plain words. A wrong file gets a plain answer too, not a wall of code.',
+    'Come back after a few days away and the day greets you like the gardener would: everything is where you left it, and here is what is waiting. No day counts, no guilt, one tap and it is gone.',
+    'Remote den victories were quietly paying DOUBLE their banner. Now a win pays exactly what it says, and the coin count on your day updates the moment a fight pays instead of after a restart.',
+    'Earned loot stopped hiding: your tab bar shows how many crates are waiting, the quest header says when a finished weekly is ready to claim, crates print their odds before you spend, and brand-new players start with an egg in the incubator.',
+    'The Boneyard with location off now shows you what is out there today under the banner instead of a mostly empty screen, and its Retry button fits on the smallest phones.',
+    'Logging a meal remembers which meal you last used today. If your phone is not counting steps, you can log a walk by hand, twice a day, and it feeds your wellness, never the step race.',
+    'Monthly quests now warn you in the last days of the month that the board resets on the 1st.',
+    'Talent trees stop eating taps: a node that cannot spend now says exactly why, and the sections you open or close stay the way you left them.',
+    'The Boneyard map can no longer die silently: a load that fails lands on a labeled screen with a Retry that genuinely works, and what is out there today stays listed while you fix your signal.',
+    'Boss fights on the map got honest: the Fight prompt withdraws if you walk away, fighting from six hundred meters out is refused, and losing no longer leaves ghost sheets stuck on your screen.',
+    'The Boss Slayer quests and den badges now actually count your den victories. They were counting a record the game stopped writing, which means they have paid nobody; your past wins count the moment you open the app.',
+    'Travel and clock changes get a voice: a day that already passed on your clock says so instead of silently withholding rewards, your streak shows its real number with a nudge to log, and a diary day dated ahead of the clock is marked.',
+    'The Marrow King row now names his real prize, the Gauntlet tells the truth about how its ladder grows, and every ladder row shows the full XP a win really pays.',
+    'Buying Bumbleseal finally feels like fifty thousand coins: a proper reveal. Destroying your only copy of a premium pet now demands you type it out, and the breeding pen labels which pet stays and which is fed.',
+    'A pet you have not met yet says so honestly. Only the founders\' Day One Lizard is truly closed; everything else points you at eggs or the Emporium.',
+    'The rack learned two new tricks: reroll the rotating shelf (first one free each week, then an increasing price for the restless), and the Mystery Egg returns to the Shop for 60 Bone Dust, once a week, so every player has a path to a hatch.',
+    'Going online without signal no longer leaves the button stuck saying Connecting forever, small words got fixed (no more "1 dishes" or "1 Pit fights"), the back arrow stays off the title on small phones, a crate whose art has not loaded yet shows a quiet note instead of a broken picture, and quitting mid-setup no longer restarts you from the first screen: the app resumes exactly where you stopped, skeleton and all.',
+  ] },
+
   { n: 469, date: '2026-08-30', title: 'Gwart greets new players, and the ring knows when you are close', items: [
     'Gwart now meets brand-new players at the door. He introduces himself on the first screen and coaches you through the plan questions, the same wizard who runs the shop and the guide.',
     'The calorie ring starts breathing softly when you are within reach of your daily target, and settles into a brighter charged look when you land it. A hair over your target still counts as hitting it. One lime, like you are used to; the ring just knows how your day is going now.',
