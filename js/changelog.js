@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 469, date: '2026-08-30', title: 'Gwart greets new players, and the ring knows when you are close', items: [
+    'Gwart now meets brand-new players at the door. He introduces himself on the first screen and coaches you through the plan questions, the same wizard who runs the shop and the guide.',
+    'The calorie ring starts breathing softly when you are within reach of your daily target, and settles into a brighter charged look when you land it. A hair over your target still counts as hitting it. One lime, like you are used to; the ring just knows how your day is going now.',
+    'For brand-new players installing with no signal: the little cloud pet on the welcome screen no longer needs the network to show up.',
+  ] },
+
   { n: 468, date: '2026-08-29', title: 'The pot shows you the six that go in', items: [
     'Transmute used to describe its price in a sentence. Now the row shows the actual six ingredients the next transmute will take, as themselves, with empty sockets for what you are still missing. The Ectoplasm lights up violet the moment the six are on the table.',
     'When you press Transmute, the six fly into the pot one by one and the Ectoplasm blooms. What you see in the sockets is exactly what gets spent: the two can no longer disagree, because the game reads them from the same list.',
