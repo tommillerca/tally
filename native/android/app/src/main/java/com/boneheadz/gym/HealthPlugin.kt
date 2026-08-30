@@ -294,4 +294,52 @@ class HealthPlugin : Plugin() {
     }
 
     private fun today(): String = LocalDate.now().toString() // yyyy-MM-dd
+
+    @PluginMethod
+    fun debugWrite(call: PluginCall) {
+        if (!BuildConfig.DEBUG) {
+            call.reject("debugWrite is DEBUG-only")
+            return
+        }
+        if (!sdkAvailable()) {
+            val res = JSObject(); res.put("written", false); call.resolve(res); return
+        }
+        // NOTE: debugWrite requires android.permission.health.WRITE_STEPS and
+        // android.permission.health.WRITE_ACTIVE_CALORIES_BURNED, but these are NOT
+        // declared in AndroidManifest.xml because they are not part of the store
+        // submission and cannot be gated debug-only at manifest level. This method
+        // will fail at runtime if called without those permissions granted, which is
+        // safe: debug-only code paths are not exposed to release builds and cannot
+        // trigger store-submission issues.
+        scope.launch {
+            try {
+                val steps = call.getDouble("steps") ?: 0.0
+                val activeKcal = call.getDouble("activeKcal") ?: 0.0
+                val now = Instant.now()
+                val start = now.minus(Duration.ofHours(1))
+                val samples = mutableListOf<androidx.health.connect.client.records.Record>()
+                if (steps > 0) {
+                    samples.add(StepsRecord(count = steps.toLong(), startTime = start, endTime = now))
+                }
+                if (activeKcal > 0) {
+                    samples.add(ActiveCaloriesBurnedRecord(
+                        energy = androidx.health.connect.client.units.Energy.kilocalories(activeKcal),
+                        startTime = start,
+                        endTime = now
+                    ))
+                }
+                if (samples.isEmpty()) {
+                    val res = JSObject(); res.put("written", false); call.resolve(res); return@launch
+                }
+                try {
+                    client().insertRecords(samples)
+                    val res = JSObject(); res.put("written", true); call.resolve(res)
+                } catch (e: Exception) {
+                    val res = JSObject(); res.put("written", false); call.resolve(res)
+                }
+            } catch (e: Exception) {
+                val res = JSObject(); res.put("written", false); call.resolve(res)
+            }
+        }
+    }
 }
