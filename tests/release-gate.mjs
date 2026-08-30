@@ -550,17 +550,6 @@ const DECLARED = {
     + 'a square-ish box of at least 20px, exactly one visible img/svg child and no text. `.gbn-ico` on the Crew banners is the same '
     + 'top-left glyph at a 26% radius and is feedback item v424-7 in its own workstream; widening this file to cover it is the '
     + 'ROUND_MIN_PCT constant in tests/badge-centre-lib.mjs and nothing else.'],
-  /* ---- ADDED 2026-08-30, late: the #250 signature with a twist worth writing
-     down: the load was not five sibling suites, it was ME. Every red observation
-     (two gates and a standalone) shared a machine that was also running wrangler
-     dev, repeated api-test loops and a deploy; the one idle-machine run rendered
-     the seamed Crew route perfectly, banner present, zero page events. The suite
-     leans on a 6s waitForFunction for the Crew render, and a starved CPU spends
-     that budget before first paint. ---- */
-  'beta-thanks-audit.mjs': 'waits 6s for the seamed Crew render before grading the strip; '
-    + 'red in two loaded gates and one loaded standalone on two different trees, green '
-    + 'on the idle machine with the identical bytes. The render it waits for is the '
-    + 'heaviest single screen in the app.',
   'boneyard-icon-audit.mjs': ['full', "the Boneyard and its map key draw the same pixel art at whole steps, and it decodes. "
     + 'Run it on any change to pixCur, crateIcon, the map key or the marker sizes. It is full rather than fast because it '
     + 'boots the Boneyard map, so it wants the same reachable vector tile host as boneyard-audit. '
@@ -1089,6 +1078,16 @@ const SERIAL = {
      answer (a capped concurrency CLASS for map suites instead of one-by-one
      discovery) is written up for daylight; these two join the tail tonight on
      the same evidence as their eight siblings. ---- */
+  /* ---- ADDED 2026-08-30, late, at the second attempt: the first landed this
+     entry in the TIER MAP as a dead duplicate key (the #269 ambiguous-anchor
+     class), so the suite kept running six-up and kept failing. Evidence now:
+     red in THREE six-up gates on two trees, one of them a clean idle machine,
+     green solo on the identical bytes. It waits 6s for the seamed Crew render,
+     the heaviest single screen in the app, and five siblings spend that budget
+     before its first paint. ---- */
+  'beta-thanks-audit.mjs': 'waits 6s for the seamed Crew render before grading the strip; '
+    + 'red in three six-up gates across two trees (one on an idle machine), green solo '
+    + 'on identical bytes. The render it waits for is the heaviest screen in the app.',
   'boneyard-icon-audit.mjs': 'grades map marker art against the drawn field; failed twice in the '
     + 'same six-way gate as its siblings and is green 2/2 standalone on the identical tree.',
   'mini-theme-audit.mjs': 'walks the map to real minis and grades their reach; red in the '
