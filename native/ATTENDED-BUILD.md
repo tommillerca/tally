@@ -33,7 +33,6 @@ cd native && ./build-store.sh
 It refuses a checkout behind origin/main or a dirty native/, builds `www/`
 (plus `sw.js` and `version.json`), verifies every sw.js PRECACHE entry landed,
 swaps in the store config, runs `npx cap sync ios` (or prints the exact
-commands if `node_modules` is missing), restores the committed config, and
 prints the Xcode steps. It never runs xcodebuild.
 
 ## 4. Xcode (manual, attended)
