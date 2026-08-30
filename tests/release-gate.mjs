@@ -1073,6 +1073,17 @@ const SERIAL = {
      takeover is a race by nature; five siblings competing for the CPU decide it. */
   /* ---- ADDED 2026-08-29, the #250 signature again: green standalone on the
      same tree the same day, red only in a six-way gate. ---- */
+  /* ---- ADDED 2026-08-30, same #250 signature, third round. The structural
+     answer (a capped concurrency CLASS for map suites instead of one-by-one
+     discovery) is written up for daylight; these two join the tail tonight on
+     the same evidence as their eight siblings. ---- */
+  'boneyard-icon-audit.mjs': 'grades map marker art against the drawn field; failed twice in the '
+    + 'same six-way gate as its siblings and is green 2/2 standalone on the identical tree.',
+  'mini-theme-audit.mjs': 'walks the map to real minis and grades their reach; red in the '
+    + 'six-way gate with every miss reading "snapped away" (the placeWalkable tile race '
+    + 'under load), green 3/3 standalone on the identical tree minutes later.',
+  'tab-doubletap-audit.mjs': 'needs the Boneyard map up to grade the double-tap; UNPROVEN in '
+    + 'the gate ("the Boneyard map never came up on this machine"), green 3/3 standalone.',
   'boneyard-audit.mjs': 'drag gestures, arrival timing and beat grouping are all '
     + 'races against the machine. PAN needed net-arrival counting for the moving '
     + 'Wanderer (#268, 9 standalone greens that day), and INTERACTED, a synthetic '

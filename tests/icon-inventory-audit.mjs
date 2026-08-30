@@ -191,6 +191,7 @@ const EMITTERS = {
   /* ---- scene, stage and character art: sized by layout, not by an icon size ---- */
   'js/app.js:avatarLayersHtml':     ['scene', 'the Bonehead figure: cosmetic layers stacked at stage size.'],
   'js/app.js:croppedPetImg':        ['scene', 'a pet sprite cropped to its own art box.'],
+  'js/app.js:onbGwartHtml':         ['scene', 'Gwart at the onboarding door (#279): the Today row scene at 74px, portrait plus stars beside his talk box. Composed from the shipped gwart art, draws no icon.'],
   'js/app.js:buildDenPin':          ['scene', 'a boss den marker on the map, built from the tombstone art.'],
   'js/app.js:crewCardArtHtml':      ['scene', 'a crew member card portrait.'],
   'js/app.js:crateSeqHtml':         ['scene', 'the nine-frame crate opening sequence at reveal size.'],
