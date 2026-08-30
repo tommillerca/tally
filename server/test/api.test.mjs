@@ -907,5 +907,84 @@ await test('a flagged account cannot put a friend request in a real player\'s Cr
     'an UNflagged request must still arrive, or the guard is refusing everybody');
 });
 
+/* ---- account deletion (App Store 5.1.1(v)) ----
+   One doomed player and one friend who watches them vanish, staged once so
+   each requirement is its own test and a failure names itself. Order matters:
+   the wrong-key attempt runs BEFORE the real delete, because "the account
+   survives" is only a claim while the account exists. */
+const doomed = {}, witness = {};
+let delWk = null;
+await test('account delete: setup: a friended, backed-up racer exists', async () => {
+  doomed.k = await makeKeys();
+  doomed.p = await (await regFetch(doomed.k.pubJwk)).json();
+  witness.k = await makeKeys();
+  witness.p = await (await regFetch(witness.k.pubJwk)).json();
+  // on this week's step board (same week arithmetic as the race test above)
+  const epoch = Date.parse('2026-08-07T00:00:00Z');
+  const weekStart = epoch + Math.floor((Date.now() - epoch) / (7 * 86400000)) * 7 * 86400000;
+  delWk = new Date(weekStart).toISOString().slice(0, 10);
+  const body = JSON.stringify({ snapshot: { level: 4, outfit: { SK: 'SK0-1' }, gear: [], weekKey: delWk, weekSteps: 20000, raceV: 2 }, appV: 'test' });
+  assert.equal((await signedFetch(doomed.k.kp, doomed.p.playerId, 'PUT', '/profile', body)).status, 200);
+  // a backup to lose
+  assert.equal((await signedFetch(doomed.k.kp, doomed.p.playerId, 'PUT', '/backup', JSON.stringify({ blob: bl('doomed') }))).status, 200);
+  // a friendship to sever (reciprocal request auto-accepts, as above)
+  await signedFetch(doomed.k.kp, doomed.p.playerId, 'POST', '/friends/request', JSON.stringify({ code: witness.p.friendCode }));
+  await signedFetch(witness.k.kp, witness.p.playerId, 'POST', '/friends/request', JSON.stringify({ code: doomed.p.friendCode }));
+  // PRECONDITIONS, positively: without these the deletion tests prove nothing
+  const seen = await (await signedFetch(witness.k.kp, witness.p.playerId, 'GET', '/friends')).json();
+  assert.ok(seen.friends.some(x => x.playerId === doomed.p.playerId), 'PRECONDITION: the witness must actually hold the friendship');
+  assert.equal((await signedFetch(doomed.k.kp, doomed.p.playerId, 'GET', '/backup')).status, 200, 'PRECONDITION: the backup must exist');
+  const board = await (await signedFetch(witness.k.kp, witness.p.playerId, 'GET', `/steps/week?week=${delWk}`)).json();
+  assert.ok(board.players.some(x => x.playerId === doomed.p.playerId), 'PRECONDITION: the racer must be on the board');
+});
+
+await test('account delete: a wrong key gets 401 and the account survives', async () => {
+  const other = await makeKeys();
+  const r = await signedFetch(other.kp, doomed.p.playerId, 'POST', '/account/delete');
+  assert.equal(r.status, 401, 'a signature by the wrong key must be refused');
+  assert.equal((await signedFetch(doomed.k.kp, doomed.p.playerId, 'GET', '/me')).status, 200, 'the refused delete must leave the account standing');
+});
+
+await test('account delete: the owner\'s signed delete answers ok', async () => {
+  const r = await signedFetch(doomed.k.kp, doomed.p.playerId, 'POST', '/account/delete');
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).ok, true);
+});
+
+await test('account delete: the player disappears from a friend\'s Crew', async () => {
+  const seen = await (await signedFetch(witness.k.kp, witness.p.playerId, 'GET', '/friends')).json();
+  const all = [...(seen.friends || []), ...(seen.incoming || []), ...(seen.outgoing || [])];
+  assert.ok(!all.some(x => x.playerId === doomed.p.playerId), 'the deleted player is still in the witness\'s Crew');
+});
+
+await test('account delete: the backup is gone (404 on the restore path)', async () => {
+  // the row itself is gone, not merely unreadable behind the dead identity
+  const warp = await fetch(BASE + '/dev/backup-warp', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ playerId: doomed.p.playerId, backMs: 0 }),
+  });
+  assert.equal(warp.status, 200, `/dev/backup-warp needs DEV=1 (got ${warp.status})`);
+  assert.equal((await warp.json()).row, null, 'a backups row survived the deletion');
+  // and the user-visible restore path: the same device re-registers (same
+  // pubkey), gets a FRESH account, and finds no backup waiting for it
+  const re = await (await regFetch(doomed.k.pubJwk)).json();
+  assert.notEqual(re.playerId, doomed.p.playerId, 'PRECONDITION: re-registering must mint a fresh account, or the players row survived');
+  const r = await signedFetch(doomed.k.kp, re.playerId, 'GET', '/backup');
+  assert.equal(r.status, 404, 'a re-registered account was handed the deleted account\'s backup');
+});
+
+await test('account delete: the deleted player is off the step board', async () => {
+  const board = await (await signedFetch(witness.k.kp, witness.p.playerId, 'GET', `/steps/week?week=${delWk}`)).json();
+  assert.ok(!board.players.some(x => x.playerId === doomed.p.playerId), 'the deleted player still ranks');
+  // CONTROL: the board is not simply empty (an absence needs a denominator)
+  assert.ok(board.players.length > 0, 'CONTROL: the board answered empty, so the absence above proves nothing');
+});
+
+await test('account delete: deleting an already-deleted account is ok, not a 500', async () => {
+  const r = await signedFetch(doomed.k.kp, doomed.p.playerId, 'POST', '/account/delete');
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).ok, true);
+});
+
 console.log(`\n${passed} passed, ${failed} failed${unproven ? `, ${unproven} UNPROVEN here (see the note on UNPROVEN above)` : ''}`);
 process.exit(failed ? 1 : 0);

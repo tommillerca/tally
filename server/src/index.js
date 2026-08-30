@@ -2519,6 +2519,64 @@ export default {
           renameOf: row.rename_of || null });
       }
 
+      /* Signed: delete this account and everything the server holds about it
+         (App Store guideline 5.1.1(v): in-app account deletion).
+
+         One batch, so a half-deleted account cannot exist. Every table keyed to
+         the player goes: players, backups (live + daily archive columns ride in
+         the row), recovery, grants, friendships (either side), trades and
+         pvp_fights (either side), leads (the survey row carries the player id
+         and an email). NOT deleted, with reasons: devices/events/reports are
+         keyed to the anonymous per-device id, never the player, and rate_limits
+         holds only keyed-HMAC buckets that expire on their own.
+
+         Spires: an unclaimed spire has NO row, by construction (see the schema
+         and the /spires comment above), so deleting the rows IS returning the
+         towers to unowned. The map stays whole for everyone else because tower
+         placement and naming are deterministic from the map cell and the server
+         never invents a tower. Keeping the rows was considered and rejected:
+         owner_name and the defender snapshot are this player's data, and a row
+         pointing at a deleted owner renders as a ghost hold nobody can contest.
+
+         STEP RACE, delete-and-recreate inside one race week: SAFE. The board
+         (/steps/week) selects FROM players, so a deleted player is simply off
+         the board, and settlement pays only board rows: deletion pays nothing.
+         A re-registered account is a fresh player whose previous-week claim is
+         frozen at 0 (sanitizeSnapshot rule 2: the server recorded nothing for
+         it) and whose current week is rate-bounded from 0, so the cycle can
+         only LOSE steps, never gain a place. The welcome grant is re-minted per
+         registration, but its client ledger key ('social-welcome') is constant,
+         so a save that already claimed it ignores the duplicate; harvesting it
+         means erasing the whole local save each cycle, which costs far more
+         than the 50 coins it pays. One bounded residual: if the deleted player
+         held a settled week's ONLY podium row, that week reads as unsettled and
+         may settle again, but UNIQUE(player_id, key) + INSERT OR IGNORE means
+         no remaining player can ever be paid twice for it.
+
+         Idempotent: the second call finds no players row, verifySigned answers
+         'unknown player', and that IS the requested end state, so it returns ok
+         rather than 401. Harmless to a probe: there is nothing left to protect
+         and every other route already distinguishes known from unknown ids. */
+      if (path === '/account/delete' && request.method === 'POST') {
+        const bodyText = await request.text();
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err === 'unknown player') return json({ ok: true, already: true });
+        if (auth.err) return json({ error: auth.err }, 401);
+        const id = auth.playerId;
+        await env.DB.batch([
+          env.DB.prepare('DELETE FROM spires WHERE owner = ?').bind(id),
+          env.DB.prepare('DELETE FROM friendships WHERE a = ? OR b = ?').bind(id, id),
+          env.DB.prepare('DELETE FROM trades WHERE from_p = ? OR to_p = ?').bind(id, id),
+          env.DB.prepare('DELETE FROM pvp_fights WHERE challenger = ? OR defender = ?').bind(id, id),
+          env.DB.prepare('DELETE FROM grants WHERE player_id = ?').bind(id),
+          env.DB.prepare('DELETE FROM backups WHERE player_id = ?').bind(id),
+          env.DB.prepare('DELETE FROM recovery WHERE player_id = ?').bind(id),
+          env.DB.prepare('DELETE FROM leads WHERE player = ?').bind(id),
+          env.DB.prepare('DELETE FROM players WHERE id = ?').bind(id),
+        ]);
+        return json({ ok: true });
+      }
+
       // Anonymous analytics ingest. Unsigned (events carry only a random device
       // id + coarse event names, no identity/PII), but capped to resist spam.
       if (path === '/events' && request.method === 'POST') {
