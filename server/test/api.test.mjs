@@ -292,7 +292,7 @@ await test('backup: a blob D1 cannot hold answers 413, not an unhandled 500', as
   assert.equal(got.status, 404, 'a backup D1 refused left a row behind');
 });
 
-await test('backup: a blob over the cap is refused with 413, and SILENTLY on the client', async () => {
+await test('backup: a blob over the cap is refused with 413, and nothing is stored', async () => {
   const fresh = await makeKeys();
   const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ test: IS_TEST, pubkey: fresh.pubJwk }) })).json();
   const blob = 'A'.repeat(4 * 1024 * 1024 + 1024);
@@ -302,15 +302,13 @@ await test('backup: a blob over the cap is refused with 413, and SILENTLY on the
   // refusal, because the restore would decrypt to garbage rather than 404.
   const got = await signedFetch(fresh.kp, reg.playerId, 'GET', '/backup');
   assert.equal(got.status, 404, 'a refused backup left a row behind');
-  /* And the half that no server test can see: js/social.js must still be
-     throwing this away. The day somebody makes pushBackup's failure visible,
-     this assertion is what tells them to come back and delete it. */
-  const { readFileSync } = await import('node:fs');
-  const social = readFileSync(new URL('../../js/social.js', import.meta.url), 'utf8');
-  assert.ok(/if \(now - lastBackup > BACKUP_THROTTLE_MS\) await pushBackup\(appV\);/.test(social),
-    'autoSync no longer ignores pushBackup\'s result. If the failure is now surfaced to the player, ' +
-    'delete this assertion and the "silently" in this test name; if it is surfaced somewhere else, ' +
-    're-read src/index.js MAX_BACKUP_BYTES and update the finding.');
+  /* The tripwire that used to live here fired on 2026-08-30, exactly as
+     designed: the launch-telemetry work made autoSync consume pushBackup's
+     result (a backup that stops landing now emits a funnel event, with
+     cloud-off opt-outs deliberately never counted as failures). The failure is
+     surfaced, so per this test's own instruction the assertion is deleted and
+     the name loses its "silently". The server half above still holds: refuse
+     with 413 and store nothing. */
 });
 
 /* ---- the daily backup slot ----
@@ -627,6 +625,21 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   try {
     execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command',
       `DELETE FROM grants WHERE key = 'stepweek-${prev}'`], { cwd: SERVER_DIR, stdio: 'ignore' });
+    /* And clear this week's ACCUMULATED racers. The local D1 keeps every racer
+       every past run of this suite ever minted, the board is LIMIT 25, and on
+       2026-08-30 the leftovers finally outnumbered the slots: the 9,000-step
+       fixture fell below the cut and the suite went red on a healthy server.
+       A fixture that ranks against residue from old runs is a lottery that
+       pays out until the table fills. The PREVIOUS week gets the same reset:
+       every past run week-warped a stale racer there, so the settle-and-pay
+       half of this test was ranking against ghosts too (its first symptom was
+       the payout note naming the wrong place). Both storage forms are named
+       because week-warp writes the columns while a live PUT writes the
+       profile json. Same guard shape as the receipt above: reset first, or
+       the re-run is not a test. */
+    execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command',
+      `DELETE FROM players WHERE json_extract(profile,'$.weekKey') IN ('${wk}','${prev}') ` +
+      `OR week_key IN ('${wk}','${prev}')`], { cwd: SERVER_DIR, stdio: 'ignore' });
   } catch { /* a remote BASE cannot be reset; the pay-once assert will say so */ }
   /* raceV IS REQUIRED, and this test never sent it. The v300 stale-client fix added
      `raceV >= RACE_RULES` to the board query so a client still counting steps under
