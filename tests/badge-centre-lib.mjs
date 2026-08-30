@@ -233,7 +233,20 @@ export async function measureScreen(page, screenName) {
      the loot markers routinely sit on top of one another, which is exactly how a
      Bone cache that is centred to 2.3% came back reading 35.3% twice in a row --
      reproducible, and wrong both times. Reproducible is not the same as correct. */
-    const overlaps = i => r0.some((o, j) => j !== i
+    /* AN OVERLAPPER NOBODY CAN SEE CANNOT CONTAMINATE INK. The rationale above
+       is about badge B's DRAWING vanishing inside badge A's rect when the
+       glyphs are hidden. A badge that is fully covered (covered === samples,
+       in both hit-test brackets) has no drawing on the glass at all: hiding it
+       changes zero pixels anywhere, so it cannot pull A's centroid. The
+       Boneyard readout sits on an OPAQUE card, and loot markers routinely park
+       BEHIND that card: rect math alone excluded the readout disc from grading
+       ("NOT graded: OVERLAP") twice in the 2026-08-29 ship gate, on markers
+       that lost elementFromPoint at all 25 of their own sample points. A
+       PARTIALLY covered overlapper still excludes, because its visible part
+       still bleeds ink. */
+    const fullyHidden = j => r0[j].covered === r0[j].samples
+      && r1[j] && r1[j].covered === r1[j].samples;
+    const overlaps = i => r0.some((o, j) => j !== i && !fullyHidden(j)
       && o.disc.x < r0[i].disc.x + r0[i].disc.w && o.disc.x + o.disc.w > r0[i].disc.x
       && o.disc.y < r0[i].disc.y + r0[i].disc.h && o.disc.y + o.disc.h > r0[i].disc.y);
 
