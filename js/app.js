@@ -18803,6 +18803,12 @@ async function renderPit(wrap) {
   const energy = await refreshPitEnergy();     // hybrid: free floor + Vigor from logging/steps
   const tapped = energy.ready <= 0;
   const gate = tapped ? 'disabled' : '';
+  /* THE UNRESOLVED FIGHT, read from disk, not from render flow. Non-null means
+     a staked fight ended in a loss (or was abandoned, which is the same thing)
+     and the player has not acknowledged it yet: the panel below renders from
+     this record wherever the player re-enters, and startPit refuses to spend
+     until it is cleared. See the lifecycle comment above openFight. */
+  const downed = await kvGet('pitFight', null);
 
   // Sections. The "current fight to spot" floats to the top and opens; anything
   // you've finished collapses out of the way. Pre-Champion the Ladder leads;
@@ -18899,6 +18905,20 @@ async function renderPit(wrap) {
     ? [remoteSect, endlessSect, ladderSect, champSect, sparringSect]
     : [remoteSect, ladderSect, champSect, sparringSect, endlessSect]).join('');
 
+  /* The DOWN, NOT OUT panel, derived from the persisted record so it survives
+     an app kill, a re-open, and any number of re-renders. A record still in
+     phase 'open' can only mean the app died mid-fight, which is an abandon, so
+     it reads as a forfeit. Reuses the .pit-gate styling; no new CSS. */
+  const defeatSect = downed ? `
+    <div class="pit-gate" id="pitDefeat">
+      <div class="pg-head"><span class="pg-ico">${badgePixHtml('tombstone', 22)}</span><b>DOWN, NOT OUT</b></div>
+      <p class="pg-why">${downed.phase === 'lost' && !downed.forfeit
+        ? `<b>${esc(downed.foe || 'The Pit')}</b> put you down.`
+        : `You left your fight with <b>${esc(downed.foe || 'The Pit')}</b> before it was decided, so it goes down as a loss.`}
+        Your bones keep every stat: eat well, walk far, run it back.</p>
+      <button class="btn" id="pitDefeatAck" style="width:100%">Back on your feet</button>
+    </div>` : '';
+
   // The mockup's hero sat on a raster capture of the arena. The app already
   // draws that arena in CSS, live and lighter than shipping a screenshot as
   // art, so the poster keeps the drawn scene and takes the mockup's typography.
@@ -18914,7 +18934,12 @@ async function renderPit(wrap) {
       <h2>MANY ENTER.<br>FEW LEAVE.</h2>
       <p>${champBeaten ? `THE GAUNTLET · RANK ${fightRank}` : `THE LADDER · RUNG ${Math.min(rungsBeaten + 1, LADDER.length)} OF ${LADDER.length}`}</p>
       <div class="stats">
-        <span class="chip">${d.maxHp} HP</span>
+        <!-- "FULL" is a fact, not decoration: HP is never persisted between
+             fights (makeFighter starts every fight at d.maxHp), so there is no
+             "hurt" state and no HP regen timer to show. The playtest read this
+             bare number as a stale current-HP readout; saying FULL makes the
+             true rule (you enter every fight at full HP) legible. -->
+        <span class="chip">${d.maxHp} HP · FULL</span>
         <span class="chip">${d.maxWind} STAMINA</span>
         <span class="chip">${ICONS.boltIco(13)} ${energy.ready} READY</span>
       </div>
@@ -18924,11 +18949,18 @@ async function renderPit(wrap) {
       <div class="tx">
         <b>${energy.ready} fight${energy.ready === 1 ? '' : 's'} in the tank</b>
         <div class="bar"><i style="width:${Math.min(100, Math.round(energy.ready / (energy.freeMax + 6) * 100))}%"></i></div>
-        <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · take a walk to earn Vigor' : ' · walk to earn more'}</small>
+        <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · walk to earn Vigor · free fights refill at midnight' : ' · walk to earn more'}</small>
       </div>
     </div>
+    ${defeatSect}
     <button class="t3-forage" id="buildBtn" style="margin:0 0 4px">${pixCur('build', 24) || ICONS.pit(20)}<b>Shape your build</b><small>stats &amp; talents ›</small>${unspent > 0 ? `<i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
     ${pitSections}`;
+
+  // acknowledging the loss is the only way past it; the record dies here
+  $('#pitDefeatAck', body)?.addEventListener('click', async () => {
+    await kvSet('pitFight', null);
+    renderPit(wrap);
+  });
 
   $('#buildBtn', body)?.addEventListener('click', () => openCharacter('talents'));
   // the remote den spends NO energy: being unable to walk is the whole reason
@@ -18946,6 +18978,22 @@ async function renderPit(wrap) {
   const start = (foeCfg) => openFight(wrap, fighter, foeCfg);
   // sparring is always free (practice); real fights spend the hybrid energy
   const startPit = async (foeCfg) => {
+    /* An unacknowledged loss BLOCKS the next staked fight. Before this gate,
+       FIGHT after an unresolved defeat spent a fresh charge with the old loss
+       still standing (the play-riz auto-loss P0). Re-read the record at the
+       tap, never trust the rendered screen: the defeat can have landed after
+       this Pit body was drawn. Routing means showing the panel, not a toast:
+       re-render if it is missing, then take the player to it. */
+    const downedNow = await kvGet('pitFight', null);
+    if (downedNow) {
+      if (!$('#pitDefeat', body)) await renderPit(wrap);
+      const p = $('#pitDefeat', wrap);
+      if (p) {
+        p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        p.style.animation = 'none'; void p.offsetWidth; p.style.animation = 'quake 0.4s ease';
+      }
+      return;   // no charge spent, no fight opened
+    }
     const spent = await spendPitFight();
     if (!spent.ok) { toast('Rest up! Log a meal or take a walk to earn Vigor. Free fights refill tomorrow.', 3400); renderPit(wrap); return; }
     openFight(wrap, fighter, foeCfg);
@@ -19050,6 +19098,54 @@ function fighterStatuses(f) {
   return s;
 }
 
+/* ==== THE PIT FIGHT LIFECYCLE, WRITTEN DOWN (2026-08-30, play-riz P0s) ====
+ *
+ * What the code did BEFORE this change, traced from every hop:
+ *
+ *   startPit()  -> spendPitFight()   the free/Vigor charge is debited HERE,
+ *                                    before the fight exists
+ *   openFight -> createFight          the whole fight lives in a closure;
+ *                                    NOTHING about it is ever persisted
+ *   settle()                         win: rewards; loss: 5 coins + a
+ *                                    "DOWN, NOT OUT" panel APPENDED to the
+ *                                    sheet body on a 750ms timeout
+ *   sheet close (flee)               "No harm done" toast; the charge stays
+ *                                    spent and no record of the fight remains
+ *   app killed mid-fight             nothing anywhere; charge spent, fight gone
+ *
+ * So a defeat existed only as transient DOM: kill the app on (or before) the
+ * defeat panel and the Pit re-renders as if the fight never happened, with the
+ * FIGHT buttons live and a fresh charge one tap away. That is the play-riz
+ * screenshot (16-rattles2-end.png): a finished fight with no persisted outcome.
+ *
+ * What the code does NOW. One kv key, 'pitFight', holds the state for fights
+ * that SPEND a charge (PIT_STAKED_MODES: rung / champ / endless; sparring is
+ * free and explicitly "no stakes", the remote den is free by design, and map
+ * fights keep their own documented flee-is-harmless rule):
+ *
+ *   null                                 no staked fight open, none unresolved
+ *   { phase:'open', foe, mode, at }      written when the fight starts, the
+ *                                        same moment the charge is genuinely
+ *                                        spent. Found on re-entry it means the
+ *                                        app died mid-fight: an abandon.
+ *   { phase:'lost', foe, mode, at,       written by settle() on any non-win,
+ *     forfeit? }                         and by the sheet's onClose when the
+ *                                        player flees a live staked fight
+ *                                        (forfeit:true). An abandon IS a loss.
+ *
+ * A fight has exactly three exits, and each one resolves the key:
+ *   1. WIN            settle() clears it (a kill on the victory screen must
+ *                     never read as a forfeit)
+ *   2. DEFEAT SEEN    the defeat panel was on screen and the sheet closed
+ *                     (the Done tap or any other close): onClose clears it
+ *   3. ABANDON        flee or app-kill mid-fight: the key survives as an
+ *                     unacknowledged loss
+ *
+ * While 'pitFight' is non-null, renderPit() derives a DOWN, NOT OUT panel from
+ * it (#pitDefeat, persisted state, not render flow) and startPit() refuses to
+ * spend: FIGHT routes the player to that panel until they acknowledge it. */
+const PIT_STAKED_MODES = ['rung', 'champ', 'endless'];
+
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
   const food = await foodCombatBuff(); // active dish buffs (damage / hype / regen / pet-free)
@@ -19077,6 +19173,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
     outfit: foeOutfitFor(foeCfg.add.name),
   }) : null;
   trackEvent('fight_start', { mode: foeCfg.mode || 'pit', pet: !!fighter.petMeta });
+  /* The staked-fight record, written at the one moment a charge is genuinely
+     spent (startPit debited it just before calling us). From here the fight is
+     OPEN until settle() or onClose resolves it; see the lifecycle comment
+     above openFight. Awaited so the record exists before the player can act. */
+  const staked = PIT_STAKED_MODES.includes(foeCfg.mode);
+  if (staked) await kvSet('pitFight', { phase: 'open', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() });
   /* THE FIRST FIGHT IS UNLOSABLE, and it is derived HERE because openFight is the
      one door every fight in the app walks through: the Pit ladder, the Champion,
      the Gauntlet, spars, spires, world-boss dens and minis are twelve call sites
@@ -19165,7 +19267,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
     <div class="sheet-body fight-body" id="fightBody"></div>`,
-    { cls: 'full', onClose: () => {
+    { cls: 'full', onClose: async () => {
       stopGluttonFoeAnim();
       /* Stale-seam teardown. __bhFight/__fightPoke close over THIS fight and
          die with the sheet, but they stayed on window, so an audit poking
@@ -19175,7 +19277,23 @@ async function openFight(pitWrap, fighter, foeCfg) {
          already own the names. */
       if (window.__bhFight && window.__bhFight._owner === seamOwner) window.__bhFight = null;
       if (window.__fightPoke && window.__fightPoke._owner === seamOwner) window.__fightPoke = null;
-      if (!fight.over && !settled) toast(fromMap ? 'You slipped away. No harm done.' : 'You slipped out of The Pit. No harm done.');
+      /* ONE ABANDON RULE for staked fights (exit 3 of the lifecycle above
+         openFight). The old copy said "No harm done", which was a lie here:
+         the charge was already spent at startPit. Leaving a live staked fight
+         is a forfeit, recorded as an unacknowledged loss so the Pit shows the
+         same DOWN, NOT OUT panel a played-out defeat gets. Closing a SETTLED
+         staked fight is the acknowledgement (the result panel was on screen),
+         so that clears the record; on a win settle() already cleared it and
+         the null write is a no-op. Awaited so the renderPit below re-reads
+         the resolved state, never the stale one. */
+      if (staked) {
+        if (!fight.over && !settled) {
+          await kvSet('pitFight', { phase: 'lost', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now(), forfeit: true });
+          toast('You left the fight, so it goes down as a loss. Your bones keep every stat.');
+        } else {
+          await kvSet('pitFight', null);
+        }
+      } else if (!fight.over && !settled) toast(fromMap ? 'You slipped away. No harm done.' : 'You slipped out of The Pit. No harm done.');
       /* CLOSE THE DOOR BEHIND A WIN. Tom, 2026-08-07: "i think you can spam beat
          the one a day raid boss right now?? ... it should just be gone after the
          one beat or greyed out till the next day."
@@ -20303,6 +20421,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (settled) return; settled = true;
     await consumeFightFoodBuffs(); // combat dish buffs are spent one fight at a time
     const won = fight.over.winner === 'p';
+    /* Resolve the staked-fight record the moment the outcome is known (see the
+       lifecycle above openFight). A win clears it HERE, not on the Done tap,
+       so killing the app on the victory screen can never read as a forfeit. A
+       non-win (loss or double KO) becomes phase:'lost' and stays until the
+       player sees the panel: acknowledged by closing this sheet (onClose), or
+       by the #pitDefeatAck button in the Pit if the app dies first. */
+    if (staked) await kvSet('pitFight', won ? null : { phase: 'lost', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() });
     // KO choreography
     const loserStage = fight.over.winner === 'p' ? el('foeStage') : fight.over.winner === 'f' ? el('youStage') : null;
     if (loserStage) loserStage.classList.add('ko');
