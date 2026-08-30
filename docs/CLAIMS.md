@@ -19,6 +19,14 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v468
+
+1. PROOF: MANUAL, by firing the real button per the FX rules: seeded {marrow:4, graveroot:3}, the strip showed marrow x4 + graveroot x2 (the greedy picks), and after converting the inventory read {graveroot:1, ectoplasm:1} with exactly one filled socket left, so shown = spent, to the item. The seam is structural: transmutePicks is the single source of the take order and transmuteConsume derives from it (unit tests 189/189 including the pre-existing consume assertions). Ready-state glow measured on pixels (645 violet px at the out socket). | REACH: Open the Kitchen. The Transmute row shows the sockets whenever you own any commons; the violet lights when you hold six. No flag, no server change.
+
+2. PROOF: MANUAL, probed mid-animation through the real click at +420ms: computed box-shadow rgba(180,138,255,.706) 16.7px with tmxBloom running on the body-level clone. The clones are body-level BECAUSE the first capture caught the Kitchen's cook-timer tick re-rendering the sheet mid-moment and wiping the bloom off the live socket; the moment is theatre, never state, and doTransmute settles the ledger before the first clone exists. Reduced motion mints no clones. | REACH: Hold six commons off cooldown and press Transmute. The six fly into the pot and it blooms.
+
+3. PROOF: MANUAL, one-line change reviewed against an independent control: 49 icon-bearing buttons in the app source, a lone-icon-without-aria sweep returned zero further hits. | REACH: A screen reader on the Pantry now announces "Discard" on the toss button. Nothing visual changed.
+
 ## v467
 
 1. PROOF: wanderer-encounter-audit.mjs (gate-registered, 11 rows green; the NAME row grades the SHIPPED string, computed visibility and the rule width, proven red by blanking TITLE_TEXT: exit 1 while LINES stayed green). | REACH: Walk into the Wanderer's lantern cone on the Boneyard map. The line types over the glow, he walks in, THE WANDERER slams on. No flag, no server change.

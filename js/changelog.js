@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 468, date: '2026-08-29', title: 'The pot shows you the six that go in', items: [
+    'Transmute used to describe its price in a sentence. Now the row shows the actual six ingredients the next transmute will take, as themselves, with empty sockets for what you are still missing. The Ectoplasm lights up violet the moment the six are on the table.',
+    'When you press Transmute, the six fly into the pot one by one and the Ectoplasm blooms. What you see in the sockets is exactly what gets spent: the two can no longer disagree, because the game reads them from the same list.',
+    'One tiny thing for screen reader players: the button that tosses a dish out of the Pantry now says what it does.',
+  ] },
+
   { n: 467, date: '2026-08-29', title: 'THE WANDERER announces himself', items: [
     'When he walks out of the dark, his name now slams onto the screen the way a boss deserves, instead of a second line of small talk. The footsteps line you hear first is unchanged.',
     'On the Boneyard, messages no longer land on top of the card that tells you what you can do right now. The card that says Grab it, or Slow down, stays readable while a message is up.',
