@@ -146,13 +146,21 @@ await page.evaluate(async () => {
   const db = await import('./js/db.js');
   await db.kvSet('betaThanksSeen', false);   // the state that USED to make it fire
 });
-/* IN ITS OWN PAGE. The mask must be installed before any app script, so it is
-   evaluateOnNewDocument, so it survives every later reload on that page, and it
-   takes every window.__test* hook with it (they are all webdriver-gated). Doing
-   that to the shared page emptied the Crew tab and reddened three BANNER rows
-   below that have nothing to do with this. Same origin, same IndexedDB, thrown
-   away after. */
-const coldPage = await browser.newPage();
+/* IN ITS OWN PAGE, IN ITS OWN CONTEXT. The mask must be installed before any
+   app script, so it is evaluateOnNewDocument on a page of its own (doing it to
+   the shared page emptied the Crew tab). The first version shared the main
+   page's IndexedDB and called that harmless; it was the opposite: this page's
+   demo boots hit the same db the main page holds open, the main page's wipe
+   watcher / db freeze machinery reacts, and every LATER kv await on the main
+   page wedges, so renderFriends dies at its first read and the three BANNER
+   rows below go red with hash '#/friends' over a Today screen and not one page
+   error (route() swallows the rejection by design). Which rows lost the race
+   varied by machine load, which is how this masqueraded as the #250 contention
+   signature for a whole evening. An isolated browser context is also the more
+   faithful fixture: a real first launch is a fresh profile, not a tab sharing
+   a veteran's database. */
+const coldCtx = await browser.createBrowserContext();
+const coldPage = await coldCtx.newPage();
 await coldPage.evaluateOnNewDocument(() => {
   Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
 });
@@ -170,6 +178,7 @@ ok('MASKED navigator.webdriver reads false, so a quiet boot means something',
 ok('NEVER-FROM-BOOT the card does not open itself on a launch, with the seen flag cleared',
   !opens[0] && !opens[1], JSON.stringify(opens));
 await coldPage.close();
+await coldCtx.close();
 
 /* ---- the permanent strip on Crew, for everyone who tapped past it ---- */
 await page.evaluate(() => {

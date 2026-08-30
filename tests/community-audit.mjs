@@ -75,7 +75,12 @@ ok('and the tab bar is tappable again (hit-tested)', after.tabReachable, JSON.st
    so masking the shared page silently emptied the Crew tab and reddened four
    BANNER rows that have nothing to do with this. A second page shares the same
    origin and the same IndexedDB and is thrown away after. */
-const coldPage = await browser.newPage();
+/* ISOLATED CONTEXT, same reason as beta-thanks-audit: a cold page sharing the
+   main page's IndexedDB wedges the main page's later kv awaits via the wipe
+   watcher, and the Crew render this suite grades dies silently. A fresh
+   context is also the honest fixture for a first-launch check. */
+const coldCtx = await browser.createBrowserContext();
+const coldPage = await coldCtx.newPage();
 await coldPage.evaluateOnNewDocument(() => {
   Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
 });
@@ -92,6 +97,7 @@ ok('MASKED navigator.webdriver reads false, so a quiet boot means something', ma
   `navigator.webdriver = ${await coldPage.evaluate(() => navigator.webdriver)}`);
 ok('NEVER-FROM-BOOT the Discord card does not open itself on a launch', !opens[0] && !opens[1], JSON.stringify(opens));
 await coldPage.close();
+await coldCtx.close();
 
 /* ---- the thin strip on Crew, for everyone who tapped past the popup ---- */
 await page.evaluate(() => {
