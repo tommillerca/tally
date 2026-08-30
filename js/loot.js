@@ -359,6 +359,13 @@ export async function buyRackItem(artId, currency = 'coins') {
     : i >= 0
       ? (currency === 'dust' ? RACK_DUST[i] : RACK_POOLS[i][0])
       : (currency === 'dust' ? rar[1] : rar[0]);
+  /* A rung added to RACK_POOLS without its RACK_DUST twin makes price
+     undefined here; `bal < undefined` is false, so the sale would PASS and
+     write NaN into the wallet itself. Refuse before the receipt claim, so a
+     mispriced shelf is a dead button and never a corrupted balance. The
+     PARALLEL row in rack-rotate-audit pins the arrays; this line is for the
+     day that audit is wrong. */
+  if (!Number.isFinite(price)) return { ok: false, reason: 'not-stocked' };
   const already = aura ? (await wornAura()) === artId : (await ownedCosmeticIds()).has(artId);
   if (already) return { ok: false, reason: 'owned' };
   const bal = currency === 'dust' ? await boneDust() : await coins();
@@ -790,6 +797,17 @@ export async function repairEggAnchors() {
 // obtainable even after you own every pet: a shiny roll on a dupe upgrades an
 // owned pet to shiny instead of paying coins.
 export const SHINY_CHANCE = 0.03;
+/* WHICH SPECIES HAVE SHINY ART. The shiny render path builds
+   assets/bh/C/shiny/<id>.png, and minting a shiny instance for a species with
+   no file there hands the player a broken image on what may be the most
+   premium item in the game (Bumbleseal is 50,000 coins and 1% of eggs; her
+   shiny would be 1 in 3,333). A browser cannot read the folder, so this list
+   is the folder's contents by hand, and pet-pool-audit pins the two to each
+   other in both directions: an id here without art fails, and NEW SHINY ART
+   SHIPPED WITHOUT EXTENDING THIS LIST FAILS TOO, which is what lets a future
+   shiny C6 turn on by adding one file and one id. CX is absent on purpose:
+   the amethyst art IS its look (the render guards say the same). */
+export const SHINY_ART = ['C1', 'C2', 'C3', 'C4', 'C5'];
 
 /* ONE PET POOL, TWO CALLERS, AND THAT IS THE POINT.
  *
@@ -826,7 +844,9 @@ export function pickRandomPet(owned) {
 }
 
 // Crack a ready egg: rolls a PET (slot C). A NEW species if you're missing any
-// (rarity-weighted, uncommon floor), otherwise a DUPLICATE that stacks in your
+// (commons drop out of the pool and the pick is UNIFORM over what survives;
+// pickRandomPet's own doc is the authority, this line once claimed a rarity
+// weighting that never existed), otherwise a DUPLICATE that stacks in your
 // crew as breeding stock (v126: no more coins dead-end when you own them all).
 export async function hatchEgg(invId) {
   const inv = await inventory();
@@ -840,8 +860,13 @@ export async function hatchEgg(invId) {
      hands the row to exactly one caller; anybody else sees it already gone. */
   if (!(await db.take('inv', row.id))) return { ready: false };
   const owned = await ownedCosmeticIds();
-  const isShiny = rng() < SHINY_CHANCE;
+  /* The roll stays UNCONDITIONAL so the rng stream is identical to before; only
+     the RESULT is gated. A species outside SHINY_ART must never mint shiny:
+     the instance is persistent state, and state with no art is a broken image
+     on every screen that honours it (see SHINY_ART above). */
+  const shinyRoll = rng() < SHINY_CHANCE;
   const pick = pickRandomPet(owned);
+  const isShiny = shinyRoll && SHINY_ART.includes(pick.id);
   await addPetInstance(pick.id, { shiny: isShiny });
   /* DUPE IS ASKED OF THE PICK, not of whether a fresh species existed. It drives
      one line of copy ("ANOTHER ONE!" against "IT HATCHED!") and the two agreed

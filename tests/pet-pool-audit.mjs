@@ -280,6 +280,31 @@ ok('SHARED the crate pool is ONE predicate too: one `slot !== \'C\'`, and both c
   slotC === 1 && /const crateEligible = /.test(src) && eligible === 2,
   `${slotC} inline \`slot !== 'C'\` filter(s), ${eligible} crateEligible call site(s) (candidates + the terminal fallback)`);
 
+/* SHINY ART EXISTS FOR EVERY SPECIES THAT CAN MINT SHINY, both directions.
+   The round-2 review memo found the gap: hatchEgg rolled shiny independent of
+   the pick, assets/bh/C/shiny/ holds C1-C5, and the render guards special-case
+   only CX. A shiny C6 (3% of her 1%, oftener via shiny-dupe upgrades) was a
+   broken image on a 50,000-coin pet. The mint now consults SHINY_ART; these
+   rows pin SHINY_ART to the folder (an id without art fails; ART WITHOUT AN ID
+   FAILS TOO, so shipping shiny C6 art forces the one-line enable) and pin the
+   mint to the list the way SHARED pins the pool. */
+import { SHINY_ART } from '../js/loot.js';
+import { readdirSync } from 'node:fs';
+{
+  const files = readdirSync(new URL('../assets/bh/C/shiny/', import.meta.url))
+    .filter(f => f.endsWith('.png')).map(f => f.replace(/\.png$/, ''));
+  const noArt = SHINY_ART.filter(id => !files.includes(id));
+  const noId = files.filter(f => !SHINY_ART.includes(f));
+  ok('SHINY-ART every SHINY_ART id has its png, and every shiny png is in SHINY_ART',
+    SHINY_ART.length > 0 && noArt.length === 0 && noId.length === 0,
+    `${SHINY_ART.length} ids vs ${files.length} pngs` + (noArt.length ? `; missing art: ${noArt}` : '') + (noId.length ? `; art without id: ${noId}` : ''));
+  ok('SHINY-MINT hatchEgg gates the shiny mint on SHINY_ART membership',
+    !!hatch && hatch.includes('SHINY_ART.includes(pick.id)'),
+    'the isShiny assignment consults SHINY_ART inside hatchEgg');
+  ok(`SHINY-MINT the ${SHOP_PET} cannot mint shiny while she has no shiny art (today's truth, flips by design when the art ships)`,
+    !SHINY_ART.includes(SHOP_PET), `SHINY_ART = ${SHINY_ART}`);
+}
+
 console.log(fails
   ? '\nPET POOL AUDIT: FAILED'
   : `\nPET POOL AUDIT: ${SHOP_PET} hatches at 1%, exclusives never do, no pet or pet accessory can come out of a crate, and both pools have exactly one home`);
