@@ -186,3 +186,79 @@ Web only (native early-returns with the cloud-backup toast and must NOT change).
 - [ ] Sparring fight: button shows "Back to The Pit" on victory
 - [ ] Each fight closes to the correct destination (verified by checking which sheet renders after close)
 # from: fcb69d59 (Fix hero badge clipping at 375px and den victory button label.)
+
+---
+# VERIFY: welcome-back return card (feat/welcome-back)
+
+Built under a release-gate constraint: syntax-checked only (`node --check`
+passes on js/app.js and js/db.js). NOTHING below has been driven in a browser.
+A later verifier must run all of it before this ships.
+
+## What was built
+
+A player who returns after 2+ days away gets one gentle card at the top of the
+Today day block, above the ring (first child of `.dayflow`, above the hk-stale
+banner). Copy obeys the HLW_SAY.back voice rule (js/app.js ~line 5990): no day
+count, no streak talk, no guilt, no exclamation marks.
+
+- Gate: `maybeWelcomeBack()` in js/app.js (after `rollDayIfNeeded`), called
+  awaited in `boot()` before the first `route()`, and on every `onAppResume`.
+- kv keys: `lastOpenDay` (dateKey, written on boot + resume when it changes),
+  `wbReturnDay` (the return date while the card is pending; cleared on dismiss,
+  expires by itself when the day moves on). Both registered in db.js QUIET_KV.
+- Render + dismiss: `renderToday` (`wbShow` block, `#wbCard` markup, `#wbOk`
+  handler). CSS `.wb-back` in app.css beside `.hk-stale`.
+
+## Drive these (real browser, ui-audit rules apply)
+
+1. Cold path, card appears: seed a save with logging history, set kv
+   `lastOpenDay` to a date 3+ days back, clear `wbReturnDay`, reload.
+   Card must render inside `.dayflow` above the ring, greeting
+   "Everything is where you left it." plus 1-2 fact sentences. A FAILING
+   result is no card, or a card below the ring.
+2. Facts are true right now, not invented:
+   - With a completed unclaimed weekly quest: the weekly line shows and the
+     quest really is claimable in the QUESTS panel.
+   - With N unopened crates: the crate line shows N and matches the Backpack
+     badge.
+   - With neither: exactly one fact line, "Today's quests are new."
+   - Never more than two fact sentences.
+3. Dismiss: tap "Good to be back". Card leaves the DOM without a re-render,
+   `wbReturnDay` kv is null, and it does NOT return on reload, tab switches,
+   or refresh() the same day.
+4. Once per return: after dismissal, set `lastOpenDay` to yesterday and reload
+   (1-day gap). No card. Then 3 days back again: card returns.
+5. Natural expiry: stamp `wbReturnDay` with yesterday's date, do not dismiss,
+   reload today. No card (it belongs to the return day only).
+6. Never for the ineligible:
+   - Fresh install straight through onboarding: no card on first Today, and
+     `lastOpenDay` seeds without stamping `wbReturnDay`.
+   - A save with settings but ZERO rows in the `log` store and a 3-day gap:
+     no card.
+   - Paged back to a past day (isToday false): no card.
+7. Resume path (the one boot never covers): background/foreground the app
+   (or fire the `onAppResume` seam) with `lastOpenDay` 3+ days back and no
+   sheet open. The screen must repaint with the card, without a reboot.
+8. Two tabs / double open: open the app twice the same day after a gap. Both
+   may show the card; dismissing in one and navigating in the other must not
+   resurrect it after reload. No reward is attached anywhere, so
+   reward-sop-audit has nothing new to register, but confirm `node
+   tests/reward-sop-audit.mjs` still passes its derivation sweep over js/*.js.
+9. Voice check on the rendered card, verbatim: no digits counting days away,
+   no "streak", no "missed", no "!" anywhere in the card.
+10. Regression gates the constraint blocked: tests/ui-audit.js (add a
+    CONTROL_EXPECTATIONS row for `#wbOk`: tap it, assert `#wbCard` leaves the
+    DOM), tests/screen-sweep.mjs, tests/unit.test.js, and hit-test `#wbOk` via
+    elementFromPoint since the card sits above tappable content.
+
+## Exact copy shipped (for Tom's review)
+
+- Greeting (always): `Everything is where you left it.`
+- Weekly fact: `A weekly quest is finished and waiting to claim.` /
+  `{n} weekly quests are finished and waiting to claim.`
+- Crates fact: `A crate is waiting in your backpack.` /
+  `{n} crates are waiting in your backpack.`
+- Fallback fact (only when neither above is live): `Today's quests are new.`
+- Dismiss button: `Good to be back`
+# from: b744a88a (Welcome-back return card on Today after a 2+ day gap)
+# from: 75d0e771 (Welcome-back return card on Today after a 2+ day gap)

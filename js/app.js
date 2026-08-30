@@ -92,7 +92,7 @@ import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CR
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
-  computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
+  computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, ACTIVITY_LEVELS, GOALS, kcalConsistent,
   activeCalorieBonus, assumedActiveBurn,
@@ -1252,6 +1252,9 @@ async function boot() {
   await refreshShinyPets();
   await refreshSlimedSlots();
   await refreshPetWear();
+  // AWAITED, before the first route(): renderToday reads 'wbReturnDay' at paint
+  // time, so the pending mark must be down before the first paint reads for it.
+  await maybeWelcomeBack();
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
   route();
@@ -1327,6 +1330,10 @@ async function boot() {
      soft; skipped under NOSOCIAL so audits and ?demo never phone production. */
   onAppResume(() => {
     if (!NOSOCIAL) social.touchServerDay();
+    /* A RESUME IS AN OPEN. iOS suspends the WebView for days without a boot, so
+       the return gap has to be checked here too. The refresh below may already
+       have painted by the time the kv lands, so a fresh detection repaints. */
+    maybeWelcomeBack().then(back => { if (back && !sheetStack.length) refresh(); }).catch(() => {});
     rollDayIfNeeded(); nativeAutoSync();
     if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
     flushAnalytics(); refreshNotifSchedules();
@@ -1428,6 +1435,27 @@ async function rollDayIfNeeded() {
     refreshNotifSchedules();
     return true;
   } finally { _rolling = false; }
+}
+
+/* THE RETURN CARD's gate. A player who has been away 2+ days gets one gentle
+   card on Today (see renderToday). Same rule as the Hollow keeper's HLW_SAY.back
+   lines: no day count, no question, no welcome-back fanfare. A number is an
+   accusation, and somebody away for a fortnight was probably unwell.
+   kv 'lastOpenDay' is the last day this ran (boot + every resume, because the
+   native shell resumes for days without ever booting; see rollDayIfNeeded).
+   kv 'wbReturnDay' is the pending card, stamped with the return date so it
+   expires with the day on its own; dismissing clears it. Resolves true only
+   when a new return was just detected, so the resume path knows to repaint. */
+async function maybeWelcomeBack() {
+  if (!S.settings) return false;               // never during onboarding
+  const today = dateKey();
+  const prev = await kvGet('lastOpenDay', null);
+  if (prev === today) return false;
+  await kvSet('lastOpenDay', today);
+  if (!prev) return false;                     // first run: seed, no card
+  if (!(dayOrdinal(today) - dayOrdinal(prev) >= 2)) return false;
+  await kvSet('wbReturnDay', today);
+  return true;
 }
 
 /* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowWhatsNew opened the What's New sheet over the app on the first launch after every update. What's New is still reachable from Settings and from the Crew tab, and the unseen-entry dot still points at it */
@@ -3352,6 +3380,24 @@ async function renderToday(el) {
      2026-08-23: "make past day quests read-only"), so nothing there is ready for
      anything and the badge and its accent would both be lying. */
   const questClaimable = isToday ? questTiers.reduce((n, tier) => n + tier.quests.filter(q => { const st = questState(q, tier.ctx); return st.done && !st.claimed; }).length, 0) : 0;
+  /* THE RETURN CARD. Pending only while 'wbReturnDay' IS today (it expires with
+     the day on its own), only on the live day, and never for a player with no
+     logging history (allLog is already in hand). The voice rule is the one on
+     HLW_SAY.back: no day count, no streak talk, no guilt, nothing invented.
+     One greeting, then at most two things that are TRUE RIGHT NOW, read off
+     state this render already computed: a finished weekly quest waiting to
+     claim, unopened crates. "Today's quests are new" only stands in when
+     neither is live, so the card never pads itself. */
+  const wbShow = isToday && allLog.length > 0 && (await kvGet('wbReturnDay', null)) === S.date;
+  let wbFacts = [];
+  if (wbShow) {
+    const wk = questTiers.find(tier => tier.period === 'week');
+    const wkReady = wk.quests.filter(q => { const st = questState(q, wk.ctx); return st.done && !st.claimed; }).length;
+    if (wkReady) wbFacts.push(wkReady === 1 ? 'A weekly quest is finished and waiting to claim.' : `${wkReady} weekly quests are finished and waiting to claim.`);
+    if (crates.length) wbFacts.push(crates.length === 1 ? 'A crate is waiting in your backpack.' : `${crates.length} crates are waiting in your backpack.`);
+    if (!wbFacts.length) wbFacts.push("Today's quests are new.");
+    wbFacts = wbFacts.slice(0, 2);
+  }
   // v146 unlock guidance: surface Build/gear/weapon moments the player would miss
   /* READ ON EVERY DAY, NOT ONLY TODAY (v425). Tom, 2026-08-22: "accidentally
      changing the day on your macros makes all the news above disappear and makes
@@ -3674,6 +3720,12 @@ async function renderToday(el) {
   </div>
 
   <div class="dayflow">
+  ${wbShow ? `
+  <div class="card wb-back" id="wbCard">
+    <b>Everything is where you left it.</b>
+    <span>${wbFacts.join(' ')}</span>
+    <button class="btn small ghost" id="wbOk">Good to be back</button>
+  </div>` : ''}
   ${hkStale ? `
   <button class="card hk-stale" id="hkStaleFix">
     <b>⚠️ Steps aren't syncing</b>
@@ -3963,6 +4015,14 @@ async function renderToday(el) {
     setTimeout(() => { location.hash = '#/boneyard'; setTimeout(() => $('#mapStart')?.click(), 900); }, 1200);
   }
   $('#hkSync', el)?.addEventListener('click', syncFromClipboard);
+  /* Dismissing the return card clears its pending mark, so it is gone until the
+     next 2+ day gap stamps a new one. Removed in place, no re-render: nothing
+     else on the screen depends on it. */
+  $('#wbOk', el)?.addEventListener('click', async e => {
+    e.currentTarget.disabled = true;           // one tap, one write
+    await kvSet('wbReturnDay', null);
+    $('#wbCard', el)?.remove();
+  });
   $('#hkStaleFix', el)?.addEventListener('click', async () => {
     // best case: a manual native sync brings steps right back
     if (isNative() && S.settings.hkNative) {

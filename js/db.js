@@ -224,6 +224,7 @@ const QUIET_KV = new Set([
   'betaThanksSeen', 'cosmeticTeaserSeen', 'changelogSeen', 'grantsSeen', 'seenUnlocks',
   'hlwSeen', 'siegeSeen', 'map-seen', 'mapLpHint', 'namePrompted', 'notifAsked',
   'surveyDone', 'surveySnoozeAt', 'renameRequired', 'petSeenLevel',
+  'lastOpenDay', 'wbReturnDay',
   // "when did I last do X" throttles: a lost timestamp costs one extra attempt
   'lastNudgeAt', 'racePushAt', 'socialSyncAt', 'crewSeenTs', 'hkLastSync',
   'hkStaleNotified', 'hkSleepDiag', 'lastExportAt', 'backupAt', 'transmuteAt',
