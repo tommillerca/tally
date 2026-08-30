@@ -86,7 +86,11 @@ const ACTIONS = [
   { id: 'js/poi.js:claimGluttonWin', sites: 5, drive: 'glutton',
     transition: "today's Glutton goes from alive to beaten, for THIS appearance window",
     authority: 'the ledger key glutton-<date>-<slot>' },
-  { id: 'js/poi.js:claimDenWin', sites: 11, drive: 'denWin',
+  /* sites went 11 to 10 on 2026-08-31: the remote branch's own coinsAdd was
+     the double-pay half of a confirmed live money bug (banner +48, bank +96;
+     the settle already pays r.coins with the multipliers). Removing a paying
+     site on purpose is exactly what this count exists to make loud. */
+  { id: 'js/poi.js:claimDenWin', sites: 10, drive: 'denWin',
     transition: 'a boss den goes from uncleared to cleared for today (and its week, for the Pit ceiling)',
     authority: 'the ledger keys boss-<date>-<cell> / roam-… / remote-… and bossfirst-<week>-<cell>' },
   { id: 'js/poi.js:claimMiniWin', sites: 3, drive: 'miniWin',
