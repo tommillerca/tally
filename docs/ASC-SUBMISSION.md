@@ -63,17 +63,17 @@
 
 **ASC Question**: Does your app contain simulated gambling?
 
-**Answer**: YES, but with mandatory odds disclosure and no real-money purchase in v1.
+**Answer**: NO (frequency: None).
 
 **Reasoning**:
 - Boneheadz Gym includes loot crates earned through gameplay (no real-money purchase). Crates contain random gear, cosmetics, consumables, and eggs.
 - These crates are **not purchased with real money** in this submission version, so they do not meet the definition of gambling that triggers payment-related scrutiny.
-- However, they are simulated loot boxes with random outcomes and disclosed odds, so they qualify as simulated gambling for rating purposes.
+- Apple's simulated gambling question targets casino-style wagering presented as gambling (slots, poker, roulette, betting). Random loot rewards earned through play are not that: they are handled by the separate loot box rules (Guideline 3.1.1 odds disclosure, which the app already satisfies in-app), not by the gambling rating flag. Answering YES here would misrepresent the game and inflate the age rating for a mechanic Apple regulates through disclosure instead.
 - **Odds are disclosed in-app**: The app includes a "Crate odds" section visible in the Shop menu. Players see the probability of each rarity tier before opening any crate. (Source: `js/app.js` - "Store loot-box odds disclosure (Review Guideline 3.1.1)...the block renders whether or not a crate is currently held: the odds are computed at render time by crateOdds()"; see `crateOdds('daily')` output: "Any ordinary pull: ${line('daily')}. Rare or better: about 1 in ${crateOdds('daily').rareUpOneIn}.")
 - **No real-money purchase**: In v1, crates are earned only through in-game play (daily login gift, boss defeats, quest rewards). There is no option to purchase crates with real money. All cosmetics and gameplay items earned from crates are cosmetic or power-neutral; no crate reward is pay-to-win or pay-to-progress.
 - **No pressure to purchase**: The game loop does not gate progress on crate openings. Players advance solely through logged meals, workouts, and step activity.
 
-**Conclusion**: Rate as contains simulated gambling / loot boxes with disclosed odds.
+**Conclusion**: Answer None for simulated gambling. Keep the in-app odds disclosure (already shipped) as the loot box compliance; mention it in the review notes so the reviewer sees it without hunting.
 
 ### 2.2 Violence
 
@@ -166,7 +166,7 @@ Boneheadz Gym is a calorie and habit tracker that gamifies daily activity and wo
 - **No login required**: Account is anonymous and auto-created. Players can tap "Go Online" in Settings to optionally enable friend codes and leaderboards, but the game is fully playable offline.
 - **HealthKit is optional**: If the player declines HealthKit access, the app still works. Calorie burn can be entered manually or estimated from logged meals. There is a non-Health path for every game feature.
 - **Loot crate odds are disclosed**: Open the Shop tab and scroll down to see "Crate odds" showing the probability of each rarity tier. Odds are recomputed and displayed every time the screen opens so the player always sees current rates. Crates are earned through play only (daily login gift, boss rewards, quest completion); there is no real-money purchase option in v1.
-- **Account deletion**: In Settings tab (gear icon), tap "Erase all data" to delete all local progress. This removes the device's game save. The app will create a fresh account on next launch.
+- **Account deletion**: In Settings, "Delete account & cloud data" (typed DELETE confirm) deletes the server account and every cloud row (friends, race entry, encrypted backup), then wipes the local save. This is the Guideline 5.1.1(v) control. The separate "Erase all data" wipes only the local save.
 - **Cloud backup is end-to-end encrypted**: If enabled (on by default), a copy of the save is backed up to the developer's server, encrypted on the device before upload. The server cannot read the backup. Backup can be disabled in Settings.
 - **No third-party analytics or ads**: The app collects only anonymous usage events (e.g., "opened app", "won a fight") tied to a random device ID. No third-party trackers, no ad networks, no behavioral profiling. Coarse location (country/region) is derived from the request IP and aggregated for analytics only; precise GPS is never transmitted to the server.
 - **Privacy policy**: Full details at the app's privacy URL (shown on the App Store listing).
@@ -290,7 +290,7 @@ Player taps "Go Online" -> App generates ECDSA keypair on device and sends pubke
 | ITSAppUsesNonExemptEncryption = false | `native/ios/App/App/Info.plist` | Key: ITSAppUsesNonExemptEncryption, Value: false |
 | Device supports iPhone and iPad | `native/ios/App/App.xcodeproj/project.pbxproj` | TARGETED_DEVICE_FAMILY = "1,2" |
 | Server URL points to live site | `native/capacitor.config.json` | server.url: "https://tommillerca.github.io/tally/" |
-| Account deletion is in Settings | `js/app.js` | "Erase all data" button in settings-row |
+| Account deletion is in Settings | `js/app.js` + `js/social.js` + `server/src/index.js` | "Delete account & cloud data" row, deleteAccount(), POST /account/delete (feat/account-deletion) |
 | Coarse location added server-side from IP | `js/analytics.js` | flush() function, "label" parameter; comment: "Location is added server-side from the request's coarse edge geo" |
 | Map grid cells are 2.2 km, not GPS coords | `privacy.html` | "Location and the map" section, "grid cell roughly 2.2 km across" |
 
