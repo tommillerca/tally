@@ -938,7 +938,9 @@ const MINI_SKULL_PX = 24;
 // The Boneyard map key: every marker type that can appear out there, rendered with
 // the EXACT same marker markup the map draws (so the legend and the map never drift).
 // Covers spawns + all three den looks incl. the pink secret dens.
-function mapLegendHtml() {
+// `head` lets the location-denied screen reuse the key inside a .card with its
+// own title; the map overlay keeps the default MAP KEY header.
+function mapLegendHtml(head = '<div class="leg-h">MAP KEY</div>') {
   const den = (cls = '') => `<div class="map-den-mark${cls}"><div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${bhIcon('badge-skull', 13, 'currentColor').repeat(2)}</span></div></div>`;
   /* 24 EXPLICITLY, because that is what the map draws (the `s.far ? 16 : 24` in
      the spawn pass below). The default was 20, which pixCur snaps DOWN to 16, so
@@ -970,7 +972,7 @@ function mapLegendHtml() {
     [den(' roaming'), 'Roaming den', 'A daily den: here today, gone tomorrow'],
     [den(' secret'), 'Secret den', 'A hidden boss, only where one is buried'],
   ];
-  return `<div class="leg-h">MAP KEY</div>${rows.map(([m, n, d]) =>
+  return `${head}${rows.map(([m, n, d]) =>
     `<div class="leg-row"><span class="leg-ico">${m}</span><span class="leg-txt"><b>${n}</b><small>${d}</small></span></div>`).join('')}`;
 }
 function consumableIcon(type, s = 20) {
@@ -14638,6 +14640,23 @@ function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
     .map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined)));
 }
 
+/* Canvas art (imgSrc) already paints a plain plate when its load fails (see
+   drawTrimmedArt). iconHtml cards are raw <img> tags, and an uncached one
+   rendered the browser's broken-image glyph in the middle of the reveal. Swap
+   the whole art panel for a quiet note instead; the name and rarity on the
+   plate are untouched, so the pull still reads. Replacing the panel removes
+   the <img>, and { once: true } clears the handler, so this can never loop. */
+function wirePackArtFallback(scope) {
+  for (const img of $$('.pc-icon img', scope)) {
+    const fail = () => {
+      const icon = img.closest('.pc-icon');
+      if (icon) icon.innerHTML = '<span class="note" style="text-align:center">Art on its way</span>';
+    };
+    if (img.complete && img.naturalWidth === 0) fail();
+    else img.addEventListener('error', fail, { once: true });
+  }
+}
+
 /* Crate crack: the crate LANDS, strains, the lid blows off on an arc, light
    climbs out of the mouth, and the card rises out of the box as it sinks away.
    Beats live in app.css as --b-* on .pack-reveal, so the timing table is in one
@@ -14843,6 +14862,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       deck.classList.remove('go');
       deck.innerHTML = ghosts
         + `<div class="pack-tilt"><div class="pc-rise"><div class="pc-sway">${packCardHtml(c)}</div></div></div>`;
+      wirePackArtFallback(deck);
       const tilt = $('.pack-tilt', deck), sway = $('.pc-sway', deck), glare = $('.pc-glare', deck);
 
       if (!burstTried) {
@@ -17040,7 +17060,11 @@ async function renderBoneyard(el) {
       body.innerHTML = `<p class="warn" style="margin:16px">${geoErr && err.code === 1
         ? locDenied
         : geoErr ? 'No location fix yet. Step outside or near a window and retry.'
-        : 'The map could not load. The Boneyard needs a network signal; your spawns are safe and will be here when you are back online.'}</p><button class="btn ghost" id="mapRetry" style="margin:0 16px;width:calc(100% - 32px)">Retry</button>`;
+        : 'The map could not load. The Boneyard needs a network signal; your spawns are safe and will be here when you are back online.'}</p><button class="btn ghost" id="mapRetry" style="margin:0 16px;width:calc(100% - 32px)">Retry</button>
+        <div class="card" style="margin:16px">${mapLegendHtml('<div class="card-title">OUT THERE TODAY</div>')}</div>`;
+      /* The banner used to sit over ~90% dead space. The map key is pure seeded
+         markup with no position input, so the player still sees what is out
+         there today while location (or the network) is off. */
       $('#mapRetry', body)?.addEventListener('click', startMap);
       return;
     }

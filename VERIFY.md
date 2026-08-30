@@ -325,3 +325,86 @@ serve.mjs), not by reading code.
   and already reads `unopenedCrates()`; left alone.
 # from: c564bffd (loot visibility: crate count on the Bonehead tab, claim tag says claim)
 # from: 5c76e4b2 (loot visibility: crate count on the Bonehead tab, claim tag says claim)
+
+---
+# VERIFY.md — browser pass for fix/honest-state (P2-4 batch)
+
+Written under a code-only constraint (no browsers, no test suites). Every item
+below needs a real browser/device pass before this branch is called done.
+
+## 1. Progress dots — NO CODE CHANGE (finding)
+
+Traced every "·" on the Progress screen (renderTrends, js/app.js ~8840-8900).
+All five render sites are honest no-data markers; no partial-data window can
+produce one:
+
+- Walked (7d) pill (js/app.js:8851): "·" iff `stepsWk === 0`, i.e. zero steps
+  summed across the last 7 health rows (`h.steps || 0`). Any step reading > 0
+  in the week prints km.
+- Avg sleep pill (8852) and SLEEP card (8875): "·" iff no `sleepHours != null`
+  row in the last 7 days. A single sleep reading prints the average.
+- 7d/30d step avgs (8865/8866): `stepAvgWithToday` (8748) returns avg 0 only
+  when NO COMPLETE day in the window has steps > 0. With any complete day of
+  steps, avg >= 1 and prints. NaN is impossible: `h.steps || 0` folds
+  null/undefined/NaN to 0 when the `days` array is built (~8786).
+- INTAKE card (8896): "·" iff zero logged days in 14. Honest.
+
+One deliberate edge, documented in the code (js/app.js:8754-8759): on the
+FIRST day of health data, when only today has steps, the 7d/30d averages stay
+"·" on purpose. Computing an average from today alone would render
+todaySteps / dayElapsedShare(), which at 00:15 with 100 steps claims a
+25,000-step average (the guard comment's own example). "Today" prints the
+real count right beside the dots, so data is never hidden.
+
+The playtest saw dots on the step averages AND the walked pill AND the sleep
+lines simultaneously. That combination requires zero steps and zero sleep
+readings across the whole window: a profile with Apple Health not connected
+(or a web build with no native bridge). Reproduce both states:
+
+- Dots: fresh profile, no Health connection (or web build), open Progress.
+  Expect "·" on walked, avg sleep, 7d avg, 30d avg; Today shows 0.
+- Numbers: `?demo` seed (seedDemo writes 14 days of steps + sleep) or a device
+  with Health connected for >= 1 complete day. Expect every dot replaced.
+- First-day edge: connect Health mid-day on day one, sync. Expect Today with a
+  real count, 7d/30d still "·", and the caption under the chart explaining it.
+
+## 2. Boneyard location-denied legend (js/app.js ~16826-16835, 941)
+
+Change: the geolocation catch block (denied / no fix / maplibre load failure)
+now renders the map key card ("OUT THERE TODAY", full mapLegendHtml) under the
+banner and Retry button. mapLegendHtml gained a `head` param (default
+unchanged: MAP KEY) so the card supplies a .card-title instead.
+
+Browser pass:
+- Deny location, open Boneyard, tap "Open the map". Expect the denial banner,
+  Retry, and the full key card (bone cache, coin pile, crate, herb patch,
+  mystery egg, mini-boss, 3 den looks) with pixel icons at marker size.
+- Confirm den rows in the card do NOT animate (leg-ico rules kill den-fx) and
+  the card scrolls normally (it must not inherit .map-legend's absolute
+  overlay positioning; it is deliberately NOT wrapped in .map-legend).
+- Allow location, open the map, tap the key button. Expect the overlay legend
+  identical to before (header still "MAP KEY").
+- Airplane-mode / no-network branch shows the same card.
+
+## 3. Crate reveal broken-image fallback (js/app.js wirePackArtFallback,
+   defined after hydratePackArt ~14489, called in openPackReveal's renderCard)
+
+Change: after each reveal card mounts, every <img> inside .pc-icon gets a
+once-only error handler (plus an already-failed check via
+`complete && naturalWidth === 0`) that replaces the art panel's content with
+a quiet "Art on its way" note. Name and rarity plate untouched. Canvas-art
+cards (imgSrc) already had their own fallback in drawTrimmedArt.
+
+Browser pass (per tally/CLAUDE.md: cold cache, real control):
+- DevTools: block a request pattern for one item's art
+  (e.g. assets/icons-pix/*.png), then open a crate from the Backpack (the real
+  button, not __packReveal). Expect: no broken-image glyph; the art area shows
+  "Art on its way"; the card's name and rarity chip render normally; the
+  reveal advances and closes normally.
+- Prove the guard can fail (anti-regression rule 2): with the block removed,
+  confirm art renders and NO "Art on its way" note appears anywhere.
+- Confirm no loop: the note appears once and the network panel shows no
+  repeated re-requests of the failed asset from the reveal.
+- Sweep the other openPackReveal producers (quest claim, gift claim, wheel)
+  since renderCard is shared: one spot check each with art blocked.
+# from: 020601fa (Honest-state P2-4: denial-screen legend, reveal art fallback, Progress-dot finding)
