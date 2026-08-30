@@ -1213,6 +1213,9 @@ async function boot() {
        wording promises a retry because bootSync now genuinely retries: it no
        longer marks the restore done unless it succeeded or there was nothing to
        fetch. */
+    /* the same definite-failure branch the toast speaks from, so the event and
+       the player see the identical condition (launch visibility, 2026-08-30) */
+    try { trackEvent('cloud_restore_failed', { reason: String(cloudRestore.reason).slice(0, 24) }); } catch { /* analytics never breaks the app */ }
     setTimeout(() => toast('Could not reach your cloud backup just now. Nothing has been lost; we will try again next time you open the app.', 5200), 900);
   }
 
@@ -16712,6 +16715,12 @@ async function renderBoneyard(el) {
       ]);
     } catch (err) {
       const geoErr = err && typeof err.code === 'number';
+      /* LAUNCH VISIBILITY. A player who denies location simply never reaches
+         the Boneyard, and until 2026-08-30 nothing recorded that it happened:
+         the crash-funnel sweep found 8 of the 10 likeliest launch failures
+         were silent, and this was the loudest of them. Coarse code only, no
+         coordinates, per the analytics contract. */
+      if (geoErr) { try { trackEvent('geo_err', { code: err.code }); } catch { /* analytics never breaks the app */ } }
       const isAndroid = /android/i.test(navigator.userAgent || '');
       const locDenied = isAndroid
         ? 'Location is off. Allow it in Settings → Apps → Boneheadz Gym → Permissions → Location, then retry.'
