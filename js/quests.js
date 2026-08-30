@@ -171,7 +171,7 @@ export const DAILY_POOL = [
 export const WEEKLY_POOL = [
   { id: 'w-steps', name: 'Trailblazer', desc: 'Walk 50,000 steps this week', coins: 150, crate: 'golden', need: 'hk',
     progress: c => clamp(c.steps, 50000) },
-  { id: 'w-pit', name: 'Pit regular', desc: 'Win 12 Pit fights this week', coins: 150, crate: 'golden', item: 'vigor',
+  { id: 'w-pit', name: 'Pit regular', desc: 'Win 12 Pit fights this week', coins: 150, crate: 'golden', item: 'vigor', need: 'pit',
     progress: c => clamp(c.pitWins, 12) },
   { id: 'w-workouts', name: 'Training week', desc: 'Work out (500+ active kcal) on 4 days', coins: 160, crate: 'golden', item: 'vigor', need: 'hk',
     progress: c => clamp(c.workoutDays, 4) },
@@ -183,7 +183,7 @@ export const WEEKLY_POOL = [
     progress: c => clamp(c.spawns, 15) },
   { id: 'w-log', name: 'Steady logger', desc: 'Log on 5 days this week', coins: 120, crate: 'golden',
     progress: c => clamp(c.logDays, 5) },
-  { id: 'w-cook', name: 'Cauldron keeper', desc: 'Cook or brew 5 times this week', coins: 130, crate: 'golden',
+  { id: 'w-cook', name: 'Cauldron keeper', desc: 'Cook or brew 5 times this week', coins: 130, crate: 'golden', need: 'kitchen',
     progress: c => clamp(c.cooksDone, 5) },
   /* w-garden ("Harvest 8 crops this week", 140 coins + a golden crate) came out
      with q-harvest, 2026-08-18.
@@ -213,7 +213,7 @@ export const WEEKLY_POOL = [
 export const MONTHLY_POOL = [
   { id: 'm-steps', name: 'Marathoner', desc: 'Walk 200,000 steps this month', coins: 400, crate: 'egg', need: 'hk',
     progress: c => clamp(c.steps, 200000) },
-  { id: 'm-pit', name: 'Pit veteran', desc: 'Win 50 Pit fights this month', coins: 400, crate: 'egg',
+  { id: 'm-pit', name: 'Pit veteran', desc: 'Win 50 Pit fights this month', coins: 400, crate: 'egg', need: 'pit',
     progress: c => clamp(c.pitWins, 50) },
   { id: 'm-boss', name: 'Boss slayer', desc: 'Beat 8 world bosses this month', coins: 500, crate: 'egg', dust: 150,
     progress: c => clamp(c.bossWins, 8) },
