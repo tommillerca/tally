@@ -168,11 +168,21 @@ export const STACKS = [
      is the useful number: there is almost no headroom, so the next damage talent
      or gear set breaches it, and now the board says so instead of a future
      session rediscovering stacking from scratch.
-     WIN RATE IS THE OTHER HALF AND IT HAS NO CEILING. The full stack wins 100%
-     of fights in 4 turns against a baseline of 78% in 6, and 'two free lives'
-     reaches 98% with NO damage increase at all, so BUILD_MULT_CAP cannot touch
-     it. Survivability stacking is unbounded by design; whether that is wrong is
-     Tom's call, not the sim's. */
+     WIN RATE LOOKED UNBOUNDED AND WAS NOT: THE DUMMY WAS. This comment used to
+     say the full stack "wins 100% of fights" and that win rate "has no ceiling",
+     and both claims were true only against this file's default foe at 0.8x of
+     the player's stats, an opponent the shipped game stops serving almost
+     immediately. Measured 2026-08-30 across the game's own escalation
+     (160 seeds per cell):
+        full stack:   79% vs an equal foe, 12% at the Glutton's 1.3,
+                      3% at the Wanderer's 1.45
+        Crow Lord:    94% / 41% / 18% at the same rungs
+     and the endless Pit ladder opens at mult ~1.64 (js/pit.js: (1.32 +
+     rank*0.07) * 1.18, proportional by design), so the first endless rung
+     already beats every measured build over 94% of the time. Tom's ruling that
+     a full stack "cannot be 100%" is satisfied by the shipped content; the
+     alarm was this harness's dummy. The LADDER columns below exist so nobody
+     reads the 0.8x column as the game again. */
   { name: 'STACK: alchemist + stamina', stats: BASE,
     talents: [...BUILDS_ALCH, ...BUILDS_STAM] },
   { name: 'STACK: alch + stamina + slab', stats: BASE,
@@ -202,4 +212,14 @@ if (isMain) {
     );
   }
   console.log('\nSame stats in every row, so the multiplier IS the talents.');
+  /* THE LADDER COLUMNS: the same builds against the rungs players actually
+     fight. Without these, the 0.8x dummy column reads as the game (it did, for
+     two days: a "100%, no ceiling" alarm that survived into a plan and five
+     candidate nerfs before anyone asked what the foe was). */
+  console.log('\nwin% vs the game\'s own rungs   Glutton 1.3   Wanderer 1.45');
+  for (const b of [...BUILDS, ...STACKS].filter(x => /STACK|Crow|two free|stamina engine|baseline/.test(x.name))) {
+    const a = Math.round(measure(b, { foeMult: 1.3 }).winRate * 100);
+    const c = Math.round(measure(b, { foeMult: 1.45 }).winRate * 100);
+    console.log(b.name.padEnd(30) + String(a + '%').padStart(12) + String(c + '%').padStart(15));
+  }
 }
