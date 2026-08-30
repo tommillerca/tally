@@ -13759,7 +13759,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       renderCharacter(wrap, 'crates');
     });
     $('#useVigor', content)?.addEventListener('click', async () => {
-      if (await consumeConsumable('vigor')) { const e = await addVigor(VIGOR_DRAUGHT_AMOUNT); popSound(S.sounds); toast(`Vigor Draught drunk: +${VIGOR_DRAUGHT_AMOUNT} Vigor. You have ${e.ready} Pit fights ready.`, 3000); }
+      if (await consumeConsumable('vigor')) { const e = await addVigor(VIGOR_DRAUGHT_AMOUNT); popSound(S.sounds); toast(`Vigor Draught drunk: +${VIGOR_DRAUGHT_AMOUNT} Vigor. You have ${e.ready} Pit ${e.ready === 1 ? 'fight' : 'fights'} ready.`, 3000); }
       renderCharacter(wrap, 'crates');
     });
     $('#openStableFromBp', content)?.addEventListener('click', () => openStable());
