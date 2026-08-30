@@ -12089,19 +12089,14 @@ async function renderSettings(el) {
     a.click();
     await kvSet('lastExportAt', Date.now());
     toast('Backup exported');
+    refresh(); // the "Never backed up yet" / "Last backup" row reads lastExportAt
   });
   $('#importBtn').addEventListener('click', () => $('#importFile').click());
   $('#importFile').addEventListener('change', async e => {
     const file = e.target.files[0];
+    e.target.value = ''; // so re-picking the same file fires change again
     if (!file) return;
-    try {
-      const counts = await importAll(JSON.parse(await file.text()));
-      S.settings = await kvGet('settings') || S.settings;
-      snapSettings();
-      S.userFoods = await db.all('foods');
-      toast(`Imported ${counts.log} log entries, ${counts.foods} foods`);
-      refresh();
-    } catch (err) { toast('Import failed: ' + err.message, 3200); }
+    await importBackupFromFile(file);
   });
   $('#eraseBtn').addEventListener('click', () => {
     const wrap = openSheet(`
@@ -12371,6 +12366,11 @@ function renderOnboarding(step = 0, ctx = {}) {
      shell itself or the gear stays behind app.css's failsafe for 8 seconds. */
   markBooted();
   $('#tabbar').style.display = 'none';
+  /* The floating gear lives outside #screen and its click handler is bound in
+     bindTabs(), which never ran on this path (boot returns before it when there
+     are no settings). Left alone it paints as a live control and does nothing.
+     Hide it; route() owns gear visibility from the first navigation on. */
+  const gearBtn = $('#gearBtn'); if (gearBtn) gearBtn.hidden = true;
   trackEvent('onb_step', { n: step });
   const dots = `<div class="onb-dots">${[0, 1, 2].map(i => `<i class="${i === step ? 'on' : i < step ? 'done' : ''}"></i>`).join('')}</div>`;
   const back = step > 0 ? `<button class="onb-back" id="onbBack" aria-label="Back">${ICONS.chev(18)}</button>` : '';
@@ -12495,6 +12495,15 @@ async function saveInitialSettings(np) {
   if (!(S.demo || navigator.webdriver === true)) {
     social.goOnline().then(r => { if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
   }
+  enterAppFromOnboarding();
+}
+
+/* Leaving onboarding for the app proper: finishing it (saveInitialSettings above)
+   and a successful restore mid-onboarding (cloud phrase or backup file) all land
+   here. boot() returned before binding any of this when it found no settings, so
+   whoever ends onboarding owns the shell latch: without it a restored player gets
+   Today with a hidden tab bar, unbound tabs and a dead hashchange. */
+function enterAppFromOnboarding() {
   $('#tabbar').style.display = '';
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
@@ -16657,6 +16666,56 @@ async function openRecoverySheet() {
   });
 }
 
+/* One toast for everything a file restore brought back. Only nonzero categories
+   speak: "0 foods" reads as data loss to a player whose custom-foods store was
+   simply empty (confirmed playtest ticket, 2026-08). */
+function importSummary(counts) {
+  const parts = [];
+  if (counts.log) parts.push(`${counts.log} log entr${counts.log === 1 ? 'y' : 'ies'}`);
+  if (counts.foods) parts.push(`${counts.foods} custom food${counts.foods === 1 ? '' : 's'}`);
+  if (counts.weights) parts.push(`${counts.weights} weigh-in${counts.weights === 1 ? '' : 's'}`);
+  if (!parts.length) return 'Backup restored';
+  return 'Restored ' + (parts.length > 1
+    ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1]
+    : parts[0]);
+}
+
+/* THE one file-import path, shared by Settings > Import and the restore sheet
+   (which onboarding opens). Routing and copy only: importAll owns the actual
+   restore and is untouched. Lands the player on Today afterwards; a restore
+   mid-onboarding also ends onboarding, exactly like a successful cloud restore. */
+async function importBackupFromFile(file) {
+  const wasOnb = !S.settings;   // onboarding is exactly "no settings yet"
+  let counts;
+  try {
+    counts = await importAll(JSON.parse(await file.text()));
+  } catch (err) {
+    /* A wrong pick is a SyntaxError out of JSON.parse or importAll's own
+       'Not a Tally backup file' shape check; both mean "not our file", and the
+       raw parser message ("Unexpected token...") is useless to a player.
+       Every other importAll failure carries player-facing copy: pass it on. */
+    const wrongFile = err instanceof SyntaxError || /Not a Tally backup/i.test(err.message || '');
+    toast(wrongFile
+      ? "That doesn't look like a Boneheadz Gym backup. Pick the .json file you exported."
+      : 'Import failed: ' + err.message, 4200);
+    return;
+  }
+  S.settings = await kvGet('settings') || S.settings;
+  snapSettings();
+  S.userFoods = await db.all('foods');
+  closeAllSheetsViaHistory();   // no-op when no sheet is open (Settings > Import)
+  toast(importSummary(counts), 4200);
+  if (wasOnb) {
+    /* A real export always carries settings; if this one somehow did not,
+       onboarding stays on screen and finishes normally over the imported data.
+       Routing into the app without settings would just re-hit the boot gate. */
+    if (S.settings) { levelSound(S.sounds); enterAppFromOnboarding(); }
+    return;
+  }
+  location.hash = '#/today';
+  route();
+}
+
 async function openRestoreSheet() {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Restore an account</h2><button class="sheet-close">Done</button></div>
@@ -16672,9 +16731,20 @@ async function openRestoreSheet() {
       </div>
       <p class="rc-err" id="rsErr" hidden></p>
       <button class="btn" id="rsGo" style="margin-top:14px">Restore my Bonehead</button>
+      <p class="note" style="margin:16px 2px 0;text-align:center">Got a backup file instead? Use the .json you exported from Settings.</p>
+      <button class="btn ghost" id="rsFileBtn" style="margin-top:8px">Restore from a backup file</button>
+      <input type="file" id="rsFile" accept="application/json,.json" hidden>
     </div>`, { cls: '', name: 'Restore' });
   const err = m => { const e = $('#rsErr', wrap); e.hidden = !m; e.textContent = m || ''; };
+  $('#rsFileBtn', wrap).addEventListener('click', () => $('#rsFile', wrap).click());
+  $('#rsFile', wrap).addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = ''; // so re-picking the same file fires change again
+    if (!file) return;
+    await importBackupFromFile(file);
+  });
   $('#rsGo', wrap).addEventListener('click', async () => {
+    const wasOnb = !S.settings;   // this sheet is also onboarding's restore path
     const btn = $('#rsGo', wrap); btn.disabled = true; btn.textContent = 'Restoring...';
     const r = await social.restoreWithPhrase($('#rsCode', wrap).value, $('#rsPhrase', wrap).value);
     btn.disabled = false; btn.textContent = 'Restore my Bonehead';
@@ -16684,6 +16754,12 @@ async function openRestoreSheet() {
     levelSound(S.sounds);
     closeAllSheetsViaHistory();
     toast(r.restored ? 'Welcome back. Your Bonehead is restored.' : 'Account restored, but there was no save to pull.', 4600);
+    /* Restoring FROM ONBOARDING must also end onboarding: boot() returned before
+       binding the shell, so a bare route() here left Today with a hidden tab bar
+       and no bound tabs. enterAppFromOnboarding is the same latch finishing
+       onboarding uses, and it routes. An account with no save to pull has no
+       settings either: onboarding continues instead of routing into the gate. */
+    if (wasOnb) { if (S.settings) enterAppFromOnboarding(); else renderOnboarding(); return; }
     route();
   });
 }
