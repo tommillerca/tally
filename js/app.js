@@ -2696,10 +2696,10 @@ function bindTabs() {
     dblTimer = setTimeout(() => { dblTimer = 0; route(); }, DBL_MS);
   }));
   $('#gearBtn')?.addEventListener('click', () => { location.hash = '#/settings'; });
-  $('#fab').addEventListener('click', () => {
+  $('#fab').addEventListener('click', async () => {
     if (currentTab() !== 'today') location.hash = '#/today';
-    const now = new Date();
-    openAdd(mealForHour(now.getHours() + now.getMinutes() / 60));
+    const defaultMeal = await mealDefault();
+    openAdd(defaultMeal);
   });
 }
 
@@ -3983,6 +3983,7 @@ async function renderToday(el) {
     for (const e of src) {
       const copy = { ...e, id: newId(), date: S.date, ts: Date.now() };
       await db.put('log', copy);
+      await recordMealUsed(copy.meal);
       last = await onFoodLogged(copy, { targets: S.settings.targets, entriesForDate: await entriesFor(S.date) });
       gained += last.xp;
     }
@@ -7106,6 +7107,29 @@ function mealBlock(name, i, entries, yEntries, budget = 0) {
   </section>`;
 }
 
+
+/* ================= meal defaults ================= */
+
+// Last-used meal tracker: when logging multiple items within the same day,
+// default to the meal the player used previously, not the hour-of-day. This
+// prevents the "logged lunch at 12pm, then logged lunch again at 5:10pm" case
+// where mealForHour() would flip to dinner and force a re-selection.
+// Reads lastMealToday kv; on day boundary, falls back to mealForHour().
+// P0 ORIGIN: playtest found players flipped away from their meal by the clock.
+async function mealDefault() {
+  const last = await kvGet('lastMealToday', null);
+  if (last !== null && typeof last === 'object' && last.date === S.date) {
+    return last.meal;
+  }
+  const now = new Date();
+  return mealForHour(now.getHours() + now.getMinutes() / 60);
+}
+
+// Record the meal a player just used, so the next log defaults to it.
+async function recordMealUsed(meal) {
+  await kvSet('lastMealToday', { date: S.date, meal });
+}
+
 /* ================= add flow ================= */
 
 function openAdd(meal = 0) {
@@ -7186,6 +7210,7 @@ function openAdd(meal = 0) {
       if (!src) return;
       const copy = { ...src, id: newId(), date: S.date, meal: curMeal, ts: Date.now() };
       await db.put('log', copy);
+      await recordMealUsed(curMeal);
       const game = await onFoodLogged(copy, { targets: S.settings.targets, entriesForDate: await entriesFor(S.date) });
       confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 300, 12);
       popSound(S.sounds);
@@ -7520,6 +7545,7 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       trackEvent('log_write_failed', { quota: !!full });
       return;                       // the sheet stays open, the entry stays put
     }
+    await recordMealUsed(e.meal);
     food.lastPortion = { ...sel };
     await persistFoodUse(food);
     const game = await onFoodLogged(e, { via, targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
@@ -18426,7 +18452,15 @@ function computeHomeUnlocks({ fighter, level, coinBal, dustBal, gearOwnedCount, 
      `mealSkipped` inputs, its "Not right now" skip, the `firstMealSkipped` kv it
      wrote and the whole `.unlock-nudge` card on Today went with it: renderToday
      reads these signals only for the Pit "!" badge and the unlock toasts now.
-     The fight/gear/talent signals below are unchanged. */
+     The fight/gear/talent signals below are unchanged.
+     
+     P0 REGRESSION PREVENTION (if nudge is ever re-added): The nudge MUST open
+     the add sheet with the hour-aware meal (mealForHour()), NOT a hardcoded 0.
+     The copy should also match the meal selected: instead of always saying
+     "Start with breakfast", it should say "Start with [meal]" based on the hour,
+     so the nudge text and the sheet default stay honest. Both are fixed via
+     mealDefault() which reads lastMealToday for same-day consistency,
+     falling back to mealForHour() on day boundaries. Pass the result to openAdd(). */
   // activation: brand-new players open the app, browse, and stall without ever
   // fighting (seen in tester telemetry). One clear invitation to the core loop.
   if (fightWins === 0) sig.push({
