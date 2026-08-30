@@ -1121,7 +1121,21 @@ export async function autoSync(buildSnapshot, appV = '') {
     if (!(await isOnline())) return null;
     const now = Date.now();
     const lastBackup = (await kvGet('backupAt', 0)) || 0;
-    if (now - lastBackup > BACKUP_THROTTLE_MS) await pushBackup(appV);
+    if (now - lastBackup > BACKUP_THROTTLE_MS) {
+      const pushed = await pushBackup(appV);
+      /* LAUNCH VISIBILITY (2026-08-30): a backup that silently stops pushing is
+         invisible progress loss waiting for a dead phone. Fire-and-forget, and
+         the import is dynamic because analytics.js already imports THIS module:
+         a static import here would be a cycle. */
+      /* pushBackup returns false for the cloud OPT-OUT as well as for real
+         failures (the cloudOff write guard above). An opted-out player is not
+         a failure and must not be counted as one: firing here for them would
+         pollute the signal and quietly track the people who asked to be left
+         alone. Caught reading this diff against pushBackup's own returns. */
+      if (pushed === false && !(await kvGet('cloudOff', false))) {
+        try { (await import('./analytics.js')).track('backup_push_failed'); } catch { /* analytics never breaks the app */ }
+      }
+    }
     const last = (await kvGet('socialSyncAt', 0)) || 0;
     if (now - last < SYNC_THROTTLE_MS) return null;
     await kvSet('socialSyncAt', now);
