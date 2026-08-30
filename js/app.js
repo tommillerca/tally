@@ -3551,7 +3551,7 @@ async function renderToday(el) {
        player either understands the loop or is not going to learn it from a
        caption. `hero-why` is a caption, not a card, because Today already asks
        for too much attention above the food. */''}
-  ${lvl.level < 3 ? `<p class="hero-why">${ICONS.boltIco(13)} <b>${pitEnergy.ready} fights ready.</b> Walking earns more.</p>` : ''}
+  ${lvl.level < 3 ? `<p class="hero-why">${ICONS.boltIco(13)} <b>${pitEnergy.ready} fight${pitEnergy.ready === 1 ? '' : 's'} ready.</b> Walking earns more.</p>` : ''}
 
   <!-- FIVE DOORS since 2026-08-26, and the fifth is a MOVE, not an addition:
        Trends came down off the hero art (see .trend-dot's removal above). The
@@ -7079,7 +7079,7 @@ function signOffLine(count, tot, targets) {
     `${count} entries, protein target met. Structurally, an excellent day.`,
   ]);
   return pick([
-    `${count} things written down today. That is the whole job.`,
+    `${count} thing${count === 1 ? '' : 's'} written down today. That is the whole job.`,
     `${count} logged. The ledger is honest, which is all I ask.`,
     `${count} entries. Nothing else required of you.`,
     `That is ${count} in the book. See you tomorrow.`,
@@ -20109,7 +20109,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     if (ev.t === 'drain') return `${esc(ev.name)} drains ${ev.amount} stamina${ev.healed ? ` and heals ${ev.healed}` : ''}`;
     if (ev.t === 'summon') return `${esc(ev.name)} claws its way up`;
     if (ev.t === 'amulet') return `The amulet SHATTERS. ${esc(ev.name)} cannot wail or raise the dead again.`;
-    if (ev.t === 'ko') return `${who} wins by KO`;
+    if (ev.t === 'ko') return `${who === 'You' ? 'You win' : who + ' wins'} by KO`;
     return '';
   }
 
