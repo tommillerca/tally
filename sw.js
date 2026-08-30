@@ -67,6 +67,14 @@ const PRECACHE = [
      edits Cam's art — max delta 30/255 on 0.94% of pixels, alpha included — so
      it is Tom's call, not a build step. */
   './assets/gwart/gwart.png',
+  /* the onboarding cloud pet: referenced on the FIRST screen a brand-new
+     player sees (renderOnboarding step 0), and it was never precached, so a
+     cold offline install drew the welcome poster with a hole where the pet
+     sits. Found by a static precache cross-reference on 2026-08-30, verified
+     by hand (0 hits for anim/cloud in this file, referenced in js/app.js).
+     Same class as the #213 hero-edge blank. */
+  './assets/bh/anim/cloud/body-noeyes.png',
+  './assets/bh/anim/cloud/eyes.png',
   './assets/gwart/gwart-stars.png',
   /* The common crate's 9 authored frames. The whole sequence runs inside a
      260ms window, so a cold fetch mid-open paints a blank frame. Precached
