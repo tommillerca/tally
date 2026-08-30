@@ -2458,6 +2458,20 @@ function setCrewBadge(n) {
   if (n > 0) { el.textContent = n > 9 ? '9+' : String(n); el.hidden = false; }
   else el.hidden = true;
 }
+// Badge on the Bonehead tab: unopened crates, so earned loot cannot pile up
+// invisibly (a playtest week ended with 6 unopened crates nobody knew about).
+// The count is unopenedCrates(), the SAME inv read the Backpack's crates tab
+// renders from (both are inv rows with kind === 'crate'), so the badge and the
+// screen it points at can never disagree.
+function setCrateBadge(n) {
+  const el = $('#crateBadge');
+  if (!el) return;
+  if (n > 0) { el.textContent = n > 9 ? '9+' : String(n); el.hidden = false; }
+  else el.hidden = true;
+}
+async function refreshCrateBadge() {
+  try { setCrateBadge((await unopenedCrates()).length); } catch { /* keep the last count rather than lie with a blank */ }
+}
 /* THE DELIVERIES INBOX.
  *
  * Tom, 2026-08-06: "if you miss the pop up from a gift then you don't know your
@@ -2885,6 +2899,7 @@ function route({ keepScroll = false } = {}) {
   // than leaving the bar with nothing selected.
   const navTab = tab === 'shop' ? 'bonehead' : tab;
   $$('#tabbar .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === navTab));
+  refreshCrateBadge(); // fire-and-forget: every nav/refresh re-reads the crate count
   // Redundant on Settings itself, and the Boneyard is full-bleed map.
   const gear = $('#gearBtn');
   // Today carries its own gear in the day strip, so the floating one stays out
@@ -3640,7 +3655,7 @@ async function renderToday(el) {
        nudge card is gone entirely and the banners are evicted below the day, so
        this is now the only thing between the doors and the day itself. */''}
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
-    <summary><span class="q-sum-ico">${pixCur('scroll', 24) || ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
+    <summary><span class="q-sum-ico">${pixCur('scroll', 24) || ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready to claim</span>` : ''}</summary>
     <div class="q-card-body">
     ${isToday ? '' : `<p class="note">A record of ${esc(title)}. Quests are claimed on the day.</p>`}
     ${questTiers.map(tier => {
@@ -13010,6 +13025,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const lvl = levelFor(xp);
   const chShiny = await ownShinyPetId(eq);   // your own stack, so your own collection answers
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
+  // Opening a crate re-renders this screen in place (no route()), so the tab
+  // badge is synced here too, off the same rows the tab is about to render.
+  setCrateBadge(crates.length);
   const boosts = inv.filter(r => r.kind === 'xp2').length;
   const vigors = inv.filter(r => r.kind === 'vigor').length;
   const ownedCount = inv.filter(r => r.kind === 'cos').length;
