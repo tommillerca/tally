@@ -4024,8 +4024,17 @@ function calorieRingCard({ tot, t, over, remaining, protHit, startPct = 0, start
   const sub = over
     ? `${Math.abs(Math.round(remaining)).toLocaleString()} over`
     : `${Math.round(remaining).toLocaleString()} left`;
+  /* THE RING CHARGES AS THE DAY LANDS. Tom picked option B from the rendered
+     states (2026-08-29): one lime hue throughout, calm below 85% of target,
+     breathing as the target comes into reach, steady-charged through the
+     100-107% band (a hair over your target is still hitting it, so the hit
+     band reads as a win, not a warning), and past the band the shipped amber
+     takes over with a quieter version of the same glow. The class is computed
+     here in the one shared card, so Today and Trends can never disagree. */
+  const hudPct = t.kcal ? tot.kcal / t.kcal : 0;
+  const hudState = hudPct >= 1 ? (hudPct <= 1.07 ? 'hud-hit' : 'hud-over') : hudPct >= 0.85 ? 'hud-near' : 'hud-low';
   return `<div class="card ring-card">
-    <div class="ring-wrap">
+    <div class="ring-wrap ${hudState}">
       <svg viewBox="0 0 158 158">
         <circle class="ring-track" cx="79" cy="79" r="66" fill="none" stroke-width="13"/>
         <circle class="ring-fill ${over ? 'over' : ''}"${live ? ' id="ringFill"' : ''} cx="79" cy="79" r="66" fill="none" stroke-width="13" stroke-linecap="round"
