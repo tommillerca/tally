@@ -43,14 +43,33 @@ for (let i = 0; i < 365; i++) {
 ok(`DAY-ONE none of ${IMPOSSIBLE_ON_DAY_ONE.join('/')} is ever handed to a brand-new player, across a whole year`,
   bad.length === 0, bad.length ? `${bad.length} bad days, e.g. ${bad.slice(0, 3).join(', ')}` : '365 days clean');
 
-/* And it must still hand out THREE, or the fix has quietly emptied the list. */
-const counts = new Set();
+/* SPEC CHANGE, 2026-08-30 (#283): this row used to demand a full list of 3,
+   which the old picker satisfied by SUBSTITUTION: skip a gated quest, hand the
+   next one. Substitution is the exploit #283 closed (a flag flip minted fresh
+   ledger keys; measured 1445 XP/day against an intended 605), so gates now only
+   REMOVE from a seed-fixed draw and a day-one list can legitimately be short.
+   What must still hold instead:
+     1. never EMPTY (zero quests is a dead screen; pick() keeps a floor of one),
+     2. fewer, never different: the day-one list is a SUBSET of the same date's
+        ungated list, so unlocking reveals quests, never swaps them. The ONE
+        allowed exception is pick()'s floor: a draw that is gated wall to wall
+        collapses to a single fallback quest from outside the draw, because an
+        empty list is a dead screen. A floor day is exactly a length-1 list;
+        any other non-subset shape is substitution creeping back in. */
+let empties = 0, swapped = 0, floorDays = 0;
 for (let i = 0; i < 365; i++) {
   const d = new Date(2026, 0, 1 + i).toISOString().slice(0, 10);
-  counts.add(dailyQuests(d, NEW).length);
+  const newIds = dailyQuests(d, NEW).map(q => q.id);
+  const allIds = new Set(dailyQuests(d, {}).map(q => q.id));
+  if (newIds.length === 0) empties++;
+  else if (!newIds.every(id => allIds.has(id))) {
+    if (newIds.length === 1) floorDays++; else swapped++;
+  }
 }
-ok('DAY-ONE they still get a full list of 3 (a gate that empties the list is a worse bug)',
-  counts.size === 1 && counts.has(3), `list sizes seen: ${[...counts].join(', ')}`);
+ok('DAY-ONE the list is never empty, across a whole year',
+  empties === 0, `${empties} empty days`);
+ok('DAY-ONE fewer never different: gating only removes from the draw (floor days excepted, and a floor day is length 1)',
+  swapped === 0, `${swapped} days where gating SWAPPED a quest; ${floorDays} legitimate floor days`);
 
 /* The gates must OPEN, or we have just deleted content. */
 const vetIds = new Set();
