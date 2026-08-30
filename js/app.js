@@ -1313,7 +1313,7 @@ async function boot() {
   await refreshSlimedSlots();
   const closed = await awardDayCloseIfDue(S.settings.targets);
   if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Bone Crate earned', 3400), 2400);
-  else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 2400);
+  else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. That counts: Common Crate earned", 3600), 2400);
   await ingestHkPayload(hkTaken);
   backupNudge();
   nativeAutoSync();
@@ -1423,7 +1423,7 @@ async function rollDayIfNeeded() {
     const closed = await awardDayCloseIfDue(S.settings.targets);
     if (wasOnToday) route(); // a new day starts at the top, like a fresh open
     if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Bone Crate earned', 3400), 1400);
-    else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 1400);
+    else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. That counts: Common Crate earned", 3600), 1400);
     maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
     refreshNotifSchedules();
     return true;
@@ -9878,8 +9878,8 @@ async function renderFriends(el) {
     $('#crewWhatsNew', el)?.addEventListener('click', openWhatsNew);
     $('#crewGoOnline', el)?.addEventListener('click', async () => {
       const btn = $('#crewGoOnline', el); btn.disabled = true; btn.textContent = 'Connecting...';
-      const r = await social.goOnline();
-      if (!r.ok) { btn.disabled = false; btn.textContent = 'Go Online'; toast('Could not connect. Try again in a bit.'); return; }
+      const r = await social.goOnline().catch(() => ({ ok: false, reason: 'network' }));
+      if (!r.ok) { btn.disabled = false; btn.textContent = 'Go Online'; toast(navigator.onLine === false ? "You're offline. Try again when you have signal." : 'Could not connect. Try again in a bit.'); return; }
       trackEvent('go_online');
       confettiRain(60); levelSound(S.sounds);
       await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V).catch(() => {});
@@ -16453,7 +16453,7 @@ async function syncFromClipboard() {
     await kvSet('hkClipLast', { ...clipId, date: payload.date });
     refresh();
   } catch {
-    toast('Clipboard not available. Run the shortcut, then tap Sync again.', 3200);
+    toast('Nothing to paste yet. Run the Sync Boneheadz shortcut (it copies your steps), then come back and tap Sync.', 3200);
   }
 }
 
@@ -16826,7 +16826,7 @@ async function renderBoneyard(el) {
       body.innerHTML = `<p class="warn" style="margin:16px">${geoErr && err.code === 1
         ? locDenied
         : geoErr ? 'No location fix yet. Step outside or near a window and retry.'
-        : 'The map could not load. The Boneyard needs a network signal; your spawns are safe and will be here when you are back online.'}</p><button class="btn ghost" id="mapRetry" style="margin:0 16px">Retry</button>`;
+        : 'The map could not load. The Boneyard needs a network signal; your spawns are safe and will be here when you are back online.'}</p><button class="btn ghost" id="mapRetry" style="margin:0 16px;width:calc(100% - 32px)">Retry</button>`;
       $('#mapRetry', body)?.addEventListener('click', startMap);
       return;
     }
@@ -16943,7 +16943,7 @@ async function renderBoneyard(el) {
     cleanupExtras = () => { prevCleanupRO(); try { ro.disconnect(); } catch { /* noop */ } };
     map.once('error', e => {
       if (!loaded) {
-        body.innerHTML = `<p class="warn" style="margin:16px">The Boneyard needs a network signal to draw the map. Your spawns are safe; try again when you are back online.</p><button class="btn ghost" id="mapRetry" style="margin:0 16px">Retry</button>`;
+        body.innerHTML = `<p class="warn" style="margin:16px">The Boneyard needs a network signal to draw the map. Your spawns are safe; try again when you are back online.</p><button class="btn ghost" id="mapRetry" style="margin:0 16px;width:calc(100% - 32px)">Retry</button>`;
         $('#mapRetry', body)?.addEventListener('click', startMap);
       }
     });
