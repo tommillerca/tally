@@ -10700,6 +10700,22 @@ async function renderFriends(el) {
      The board is a TRACK, not a table: the fill is each racer's distance
      relative to the leader and their own Bonehead is the marker, so the GAP is
      what you read and you can see whose head is in front of yours. */
+  /* THE FROZEN ROWS EXPLAIN THEMSELVES. Tom, 2026-08-30, after playtesters
+     reported "peoples steps arent updating in the step race": production said
+     the pipeline was healthy and the stuck racers were simply players who had
+     not opened the app since the week rolled (9 of 22, none seen in 36 hours).
+     Steps are summed on the phone and pushed when the app runs, so a friend
+     who walks but does not open Boneheadz shows a frozen number. That is the
+     design; what was missing was the row SAYING so. The server now sends each
+     racer's last_seen, and a row older than three hours wears its age, so a
+     frozen number reads as "has not checked in", never as a broken race. */
+  const raceFreshHtml = p => {
+    if (p.you || !p.seenAt) return '';
+    const h = (Date.now() - p.seenAt) / 3600000;
+    if (h < 3) return '';
+    const label = h < 24 ? `synced ${Math.round(h)}h ago` : `last seen ${Math.round(h / 24)}d ago`;
+    return `<span class="race-fresh">${label}</span>`;
+  };
   const hydrateRace = async () => {
     if (!RACE_LIVE) return;
     const myFit = await equipped();
@@ -10794,7 +10810,7 @@ async function renderFriends(el) {
             return `<div class="race-lane r${p.rank}${p.you ? ' you' : ''}">
               <span class="rk">${p.rank}</span>
               <div class="bd">
-                <div class="nm"><b>${esc(p.name)}</b><span class="st">${p.steps.toLocaleString()}</span></div>
+                <div class="nm"><b>${esc(p.name)}</b>${raceFreshHtml(p)}<span class="st">${p.steps.toLocaleString()}</span></div>
                 <div class="track"><i style="width:${pct}%"></i>
                   <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
                 </div>
