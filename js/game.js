@@ -950,8 +950,27 @@ export async function initLootIfNeeded() {
      shorter. Strictly less generous than before (a seed harvested for 2). */
   await grantIngredient('marrow', 2);
   await grantIngredient('salt', 1);
+  /* STARTER EGG (playtest P2, 2026-08-30): one pet egg in the kit, so day one
+     ends with a pet instead of a locked mechanic the player has only read
+     about. It lives INSIDE the 'loot-init' guard with the rest of the kit, so
+     it is granted exactly once per save through the same state transition, and
+     it sits HERE rather than in the onboarding screens because BOTH onboarding
+     paths (the full form and "skip, use defaults") land on saveInitialSettings
+     -> initLootIfNeeded: a skipped onboarding still gets it, and the render
+     layer stays untouched.
+     goal 0 is not an invented number, it is the smaller of the only two egg
+     goal tiers that exist (0 and EGG_GOAL_STEPS 8000), and it is the tier v307
+     created for exactly this moment: loot.js's own words are that a goal-0 egg
+     "is how the Crew channel can hand a new player one they can crack straight
+     away". It renders as READY TO HATCH with a live HATCH button, so the first
+     visit to the Backpack teaches the whole egg loop instead of opening on a
+     progress bar at zero. If day one should instead teach incubation by
+     walking, the only honest alternative is dropping this argument to take the
+     8,000-step default; anything in between would be a number no other egg in
+     the game has ever carried. */
+  await grantEgg('welcome', 0);
   await kvSet('loot-init', true);
-  return { crates: 2, draught: true, ingredients: 3 };
+  return { crates: 2, draught: true, ingredients: 3, egg: true };
 }
 
 /* THE STARTER POUCH, BACKFILLED TO INSTALLS THAT ALREADY EXIST.

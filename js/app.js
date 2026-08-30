@@ -11,7 +11,7 @@ import {
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
-  unopenedCrates, openCrate, buyShopItem, equipped, equip, activateBattleCharm,
+  unopenedCrates, openCrate, crateOdds, buyShopItem, equipped, equip, activateBattleCharm,
   ownedGearIds, grantGear, gearLoadout, equipGear,
   migrateLegacyEggs, eggProgress, repairEggAnchors, hatchEgg, lifetimeStepsSum,
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, consumeConsumable, VIGOR_DRAUGHT_AMOUNT, redeemCode,
@@ -1283,7 +1283,7 @@ async function boot() {
     route({ keepScroll: true }); // the screen painted at their old level; show the real one
   }
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), init && init.xp > 0 ? 4200 : 900);
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), init && init.xp > 0 ? 4200 : 900);
   // the pouch reaches installs that predate it; see backfillStarterSeedsIfNeeded
   const pouch = kit ? null : await backfillStarterSeedsIfNeeded();
   if (pouch) setTimeout(() => toast(`${pouch.ingredients} starter ingredients in your Kitchen: exactly one Bone Broth. Cook it.`, 4200), init && init.xp > 0 ? 4200 : 1400);
@@ -12393,7 +12393,7 @@ async function saveInitialSettings(np) {
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), 1200);
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.
@@ -13549,6 +13549,27 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </div>`;
         }).join('');
       })()}</div>` : '<p class="note" style="text-align:center;padding:12px 0 16px">No unopened crates. Finish quests, close days on budget, and walk 10k steps to earn more.</p>'}
+      ${(() => {
+        /* CRATE ODDS, ALWAYS ON THIS SCREEN (playtest P2, 2026-08-30). Every
+           number below is COMPUTED at render time by crateOdds() in loot.js off
+           the same RARITIES weights rollRarity spends, so a weight change ships
+           its own disclosure and nothing here can drift. This is also the App
+           Store loot-box odds disclosure (Review Guideline 3.1.1), which is why
+           the block renders whether or not a crate is currently held: the odds
+           must be readable BEFORE you earn one, not only while holding one.
+           Two lines on purpose, coarse and honest, rather than a per-crate
+           table per pull: openCrate applies the floor to the FIRST pull only,
+           so the Bone Crate's later pulls use the ordinary table, and printing
+           one blended table per crate would be a lie in both directions. A pull
+           can also pay a consumable or an ingredient instead of a cosmetic, so
+           the copy scopes the table to "when a cosmetic drops" instead of
+           pretending every pull is one. */
+        const line = kind => crateOdds(kind).rows.map(o => `${RARITIES[o.rarity].label} ${o.pct}%`).join(' · ');
+        return `<div class="t3-sect"><b>Crate odds</b><i></i></div>
+        <p class="note" style="margin:2px 2px 10px">A pull can pay a cosmetic, a consumable or an ingredient. When a cosmetic drops:<br>
+        Any ordinary pull: ${line('daily')}. Rare or better: about 1 in ${crateOdds('daily').rareUpOneIn}.<br>
+        Bone Crate: 3 pulls, and the first is always Rare or better: ${line('golden')}.</p>`;
+      })()}
       ${eggs.length ? `<div class="t3-sect"><b>Incubating</b><i></i></div>
       ${eggs.map(e => {
         const p = eggProgress(e, lifeSteps);
