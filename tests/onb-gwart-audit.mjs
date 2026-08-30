@@ -19,7 +19,10 @@ import { boot, sleep } from './godmode.js';
 let fails = 0;
 const ok = (n, pass, d = '') => { console.log(`${pass ? 'PASS ' : 'FAIL '} ${n}${d ? '  | ' + d : ''}`); if (!pass) fails++; };
 
-const { browser, page } = await boot();
+/* the gate's URL contract: grade THE GATE'S served tree, never a default
+   (a bare boot is how melt-ui graded production once). The plain origin is
+   still derived from it, because ?demo seeds settings and skips onboarding. */
+const { browser, page } = await boot(process.argv[2] || process.env.URL);
 try {
   const origin = await page.evaluate(() => location.origin);
   await page.goto(origin + '/', { waitUntil: 'domcontentloaded' });   // PLAIN url: the real empty db
