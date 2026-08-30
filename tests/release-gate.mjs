@@ -550,6 +550,17 @@ const DECLARED = {
     + 'a square-ish box of at least 20px, exactly one visible img/svg child and no text. `.gbn-ico` on the Crew banners is the same '
     + 'top-left glyph at a 26% radius and is feedback item v424-7 in its own workstream; widening this file to cover it is the '
     + 'ROUND_MIN_PCT constant in tests/badge-centre-lib.mjs and nothing else.'],
+  /* ---- ADDED 2026-08-30, late: the #250 signature with a twist worth writing
+     down: the load was not five sibling suites, it was ME. Every red observation
+     (two gates and a standalone) shared a machine that was also running wrangler
+     dev, repeated api-test loops and a deploy; the one idle-machine run rendered
+     the seamed Crew route perfectly, banner present, zero page events. The suite
+     leans on a 6s waitForFunction for the Crew render, and a starved CPU spends
+     that budget before first paint. ---- */
+  'beta-thanks-audit.mjs': 'waits 6s for the seamed Crew render before grading the strip; '
+    + 'red in two loaded gates and one loaded standalone on two different trees, green '
+    + 'on the idle machine with the identical bytes. The render it waits for is the '
+    + 'heaviest single screen in the app.',
   'boneyard-icon-audit.mjs': ['full', "the Boneyard and its map key draw the same pixel art at whole steps, and it decodes. "
     + 'Run it on any change to pixCur, crateIcon, the map key or the marker sizes. It is full rather than fast because it '
     + 'boots the Boneyard map, so it wants the same reachable vector tile host as boneyard-audit. '
