@@ -45,8 +45,14 @@ const ok = (name, cond, detail) => {
    Measured on THIS tree's pools, independently of the numbers that came with the
    fix (and they agreed to the digit): day 9, week 7, month 3, XP/day 1145.
    These may only ever be RATCHETED DOWN. */
-const CEILING = { day: 9, week: 7, month: 3 };
-const CEILING_XP = 1145;
+/* Tightened 2026-08-30 to the draw-then-filter measurement (365 dates x 32
+   flag states, deterministic): the gates Tom ordered ("no one should get a
+   quest they cannot complete") plus draw-then-filter DROPPED every bound below
+   its pre-gate value. The intermediate state, gates with the old substituting
+   picker, measured day 9 / week 9 / month 4 / 1445 XP, which is why these are
+   assertions and not history. */
+const CEILING = { day: 5, week: 6, month: 3 };
+const CEILING_XP = 975;
 /* The pre-fix figures, kept so the direction is legible: the old picker reached
    11/8/3 and 1315 XP on its own base. The ordering fix does not get to n by
    itself and was never going to (a gated quest ahead of the n-th ungated one

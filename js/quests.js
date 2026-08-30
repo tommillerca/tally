@@ -248,10 +248,25 @@ function pick(pool, seedStr, n, { hkConnected, huntEnabled, socialOn, pitTried, 
     const j = Math.floor(rand() * (i + 1));
     [order[i], order[j]] = [order[j], order[i]];
   }
-  const out = [];
-  for (const q of order) {
-    if (out.length >= n) break;
-    if (ok(q)) out.push(q);
+  /* DRAW FIRST, THEN FILTER, NEVER SUBSTITUTE. The loop this replaces walked
+     the shuffled order SKIPPING gated quests until it had n, so a flag flip
+     changed which quests filled the back of the set: substitution, new ledger
+     keys, freshly claimable rewards. Measured on 2026-08-30 when Tom's ruling
+     ("no one should get a quest they cannot complete") added gates to the
+     weekly and monthly tiers: worst reachable XP/day rose to 1445, past the
+     1315 this comment's own history calls an exploit.
+     Now the period's set is the first n of the shuffled order, fixed by the
+     seed alone, and gates only REMOVE from it. A locked player sees fewer
+     quests, never different ones, so unlocking mid-period reveals at most the
+     quests that were always theirs and mints nothing fresh.
+     THE FLOOR: a player whose whole draw is gated gets the first quest they
+     CAN do, because zero quests is a dead screen (the first-week rule). That
+     floor is the one surviving substitution and it is bounded at one. */
+  const drawn = order.slice(0, n);
+  const out = drawn.filter(ok);
+  if (!out.length) {
+    const fallback = order.find(ok);
+    if (fallback) out.push(fallback);
   }
   return out;
 }
