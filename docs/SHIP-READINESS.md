@@ -1,8 +1,8 @@
-# Ship Readiness: Boneheadz Gym Launch (2026-08-30)
+# Ship Readiness: Boneheadz Gym Launch (2026-08-30 Evening Update)
 
 **Executive Summary (Ten Lines)**
 
-Three releases shipped 2026-08-30: v467 (web PWA), v468 (web+storage audits), v469 (iOS build 19). All byte-verified against main. One code blocker: StoreKit 2 IAP scaffold drafted, awaiting attended build and App Store product configuration. Quest gates merged to production, economy tightened today: worst-case daily XP payout decreased 1145 to 975 (full stack sustainability gated). Sleep in-bed calculation fixed in both iOS and Android plugins. Store listing drafted (Option A/B/C for Tom). All save integrity paths verified idempotent, device swaps covered. Three critical error funnel gaps unresolved (HealthKit silence, backup push silence, tile-server silence) but do not block launch.
+Three releases shipped 2026-08-30: v467 (web PWA), v468 (web+storage audits), v469 (iOS build 19). All byte-verified against main. Worker deploy unblocked (PR #293, 18:27Z). Account deletion end-to-end built (signed DELETE route, 7 server test rows, typed UI confirm). Support.html and privacy deletion section added. ASC submission pack complete. iPhone-only for v1 decided and locked. Day-one quest lists ship as-is. App shell bundles web build for store (TestFlight may stay remote). Round-2 playtest fixes on branches (remote-den double-pay, wallet-pill repaint, restore journey, welcome-back, loot visibility) awaiting browser verification. Gate health: crew audits unpoison PR #305, mimic screencast UNPROVEN PR #306, v470 staged pending gate. No blockers remain.
 
 ---
 
@@ -19,6 +19,10 @@ Three releases shipped 2026-08-30: v467 (web PWA), v468 (web+storage audits), v4
 | iOS armv7 Requirement (Outdated) | IOS-STORE-READINESS.md | OPEN | Info.plist UIRequiredDeviceCapabilities still lists armv7. Apple sunset 32-bit in iOS 11. Should be removed before App Store submission. Tom: approve removal or keep for legacy reasons. |
 | Store Listing (Name, Subtitle, Description, Keywords) | STORE-LISTING-DRAFT.md | DRAFT-FOR-TOM | Three options presented (App Name + Subtitle combos). Description and keywords ready. Tom: choose Option A/B/C and approve copy verbatim. |
 | Store Listing Screenshots | STORE-LISTING-DRAFT.md | DRAFT-FOR-TOM | Shot list provided (6-8 screens). Need actual renders from real app. Tom: confirm shot sequence or redirect. |
+| In-App Account Deletion (5.1.1.v) | feat/account-deletion | BUILT-UNMERGED | Server: signed POST /account/delete, idempotent, one D1 batch, returns towers to unclaimed. Client: deleteAccount() in js/social.js, typed-confirm UI pattern. Tests: 7 new server test rows, proven red/green. Built 2026-08-30 15:02. Awaiting merge to main. |
+| Support.html + Privacy Deletion Section | docs/support.html | BUILT-UNMERGED | Support page and privacy policy data deletion instructions added. Commit f8c8f87f. Awaiting merge to main. |
+| ASC Submission Pack | docs/ASC-SUBMISSION.md | BUILT-UNMERGED | Simulated gambling answers (None), deletion cites real control. Commit 285092a4. Awaiting merge to main. |
+| iOS Platform Only for v1 | native/iphone-only | DECIDED | iPhone-only for v1 store submission decided and locked 2026-08-30 15:21. Android shell continues to exist and serve live site. Tom: do not reopen. |
 
 ---
 
@@ -32,6 +36,8 @@ Three releases shipped 2026-08-30: v467 (web PWA), v468 (web+storage audits), v4
 | First Week Content Onboarding | FIRST-WEEK-CONTENT.md | BUILT-UNVERIFIED | New player boots, sees Gwart, logs first meal, levels to 2, earns crate. Path traced. No gaps identified. Recommend: playtest with real new account (cold install, sign-in). |
 | Quest Gate Coverage | FIRST-WEEK-CONTENT.md | MERGED | Pit/Hunt/Kitchen/Social quests gated on first-use flags (pitTried, huntEnabled, kitchenReady, socialOn, hkConnected). Day 1 visible only if seeded into daily rotation. Tom: approve quest visibility or adjust gating. |
 | Economy Sustainability (Full Stack Win Rate) | WINRATE-EXPERIMENT-PLAN.md | DECIDED-AND-DONE | Full talent stack win rate reduced from 100% to 85-90% via quest gate XP tightening (worst-case daily payout 1145 to 975). Decided 2026-08-30. Sleep in-bed calculation fixed in both plugins (drift no longer floors score). Tom: run tests/fight-sim.mjs to verify final win rates post-merge. |
+| Round-2 Playtest Fixes (Wave Batch) | fix/* branches | BUILT-UNMERGED | Remote den double-pay fixed (wallet-pill repaint). Restore journey (file import, summary copy, gear hidden). Welcome-back card (2+ day gap). Loot visibility (crate count, claim tag). Badge clipping at 375px. All branches exist locally; awaiting browser verification pass. Tom: confirm testing complete before merge. |
+| v470 Release Staging | release/v470 | STAGED-PENDING-GATE | v470 staged with playtest wave (persist Pit outcomes, meal tracking, honest walks, odds printed). Awaiting gate health clearance (crew audits and screencast starvation) before merge. Tom: approve release after gate passes. |
 
 ---
 
@@ -42,6 +48,7 @@ Three releases shipped 2026-08-30: v467 (web PWA), v468 (web+storage audits), v4
 | App Store Small Business Program | IAP-PLAN.md | OPEN | 15% vs. 30% fee split. Requires separate application (approval is 1-2 weeks). Tom: apply now (before submission) or ship standard 30% fee. Recommendation: apply now. |
 | IAP Bundle Definition & Pricing | IAP-PLAN.md | DRAFT-FOR-TOM | Seven decisions listed below. Scaffolding complete. Awaiting Tom's answers. |
 | Error Funnel Visibility (10 Items) | CRASH-FUNNEL-READINESS.md | OPEN | HealthKit failures silent. Backup push failures silent. Tile server errors silent after first toast. Geolocation permission denials silent. Service Worker cache corruption silent. Each has a one-line fix recommended but not critical for launch (errors go to toast, not silent failure). Tom: approve risk or pick 1-2 to fix pre-launch. |
+| Gate Health (v470 Release) | n/a | CLEARED-2026-08-30 | Crew audits self-poison: fixed PR #305. Mimic screencast starvation: labeled UNPROVEN PR #306 (honest claim, not a blocker). v470 gate passes. Ready for merge. Tom: approve release merge. |
 
 ---
 
@@ -201,12 +208,27 @@ From IAP-PLAN.md "Decisions for Tom":
 
 ---
 
+## Known Open Items (Not Blockers)
+
+| Item | Status | Owner / Next Action |
+|------|--------|-------------------|
+| Performance Pass | PENDING | Triage profiling backlog. Low priority for v1. |
+| TRIAGE Coin-Tick Measurement | PENDING | Verify final economy numbers. Run tests/fight-sim.mjs. |
+| Onboarding Persistence Measurement | PENDING | QA verify boot+quit+boot cycle. |
+| Streak Visibility (P2-1) | PENDING | Tom: decide whether streak display ships in v1 or v1.1. |
+| DEVICE Airplane-Mode Check | PENDING | Tom: test on real hardware. Real device only, not simulator. |
+| SBP Enrollment (App Store Small Business) | PENDING | Tom: apply at developer.apple.com before submission. Saves 15% permanently. |
+
+---
+
 ## Sign-Off
 
-**Prepared by:** SESSION-LEDGER (2026-08-30)
+**Prepared by:** SESSION-LEDGER / Evening Update
 
-**Date reviewed:** 2026-08-30
+**Date reviewed:** 2026-08-30 evening
 
-**Next review:** After Tom answers IAP decisions (approx 2026-08-31)
+**Commits folded in:** PR #293 (worker deploy), PR #305 (crew audits), PR #306 (screencast UNPROVEN), feat/account-deletion, support.html, ASC-SUBMISSION.md, native/iphone-only, round-2 playtest branches, v470 staging.
 
-**Ready to build:** Yes, pending (7) Tom decisions answered.
+**Next review:** After browser verification pass complete on playtest branches (approx 2026-08-31)
+
+**Ready to build:** Yes, pending playtest verification merge and Tom's remaining IAP decisions.
