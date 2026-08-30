@@ -1341,6 +1341,12 @@ body::before {
    plaque keeps its measured width, so the box takes whatever is left rather
    than being declared: at 393 that is 185 and 176, which is the mockup's split.
    The row is where the FLOW is; .gw-today keeps its own float animation. */
+/* Gwart inside onboarding: the Today row's scene at a size that shares the
+   step with a headline instead of owning a hero. The span is aria-hidden and
+   non-interactive: the Guide he opens elsewhere references screens a brand-new
+   player has not seen. */
+
+
 .gw-row {
   /* pinned against the island bleed, same as .hero-top and .hero-char. This was
      the one I missed: the first pass pinned two absolute children, measured those
@@ -10693,6 +10699,20 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    over, and on Today the thing underneath the box is the Bonehead stage, which
    this row's own `pointer-events: none` already handles. */
 .gw-row .gw-box.tb-done { pointer-events: auto; cursor: pointer; }
+
+/* .gw-row on Today is position:absolute against the hero island; onboarding
+   has no island, so the inherited pin parked the box over the headline and
+   left the wizard collapsed off-flow (seen on the rendered step, not guessed;
+   and the first fix landed EARLIER in this file than .gw-row, so the pin won
+   the cascade at equal specificity, measured again: box y=50 over h1 y=60).
+   Doubled class beats it wherever it sits; in flow, portrait left, words right. */
+.gw-row.onb-gwrow { position: static; margin: 14px 0 4px; pointer-events: none; }
+.gw-row.onb-gwrow .gw-today { pointer-events: none; background: none; border: 0; padding: 0; width: auto; height: auto; position: static; float: none; }
+.gw-row.onb-gwrow .wz-scene { position: relative; display: block; width: 74px; height: 74px; flex: none; }
+.gw-row.onb-gwrow .wz-body { position: absolute; inset: 0; }
+.gw-row.onb-gwrow .wz-body img { width: 100%; height: 100%; object-fit: contain; object-position: top; }
+.gw-row.onb-gwrow .gw-box { position: static; flex: 1; }
+
 
 /* A SHUT DRAWER STILL TICKS, AND THE WHOLE DOCUMENT PAYS FOR IT.
    Chrome keeps running the animations inside a closed <details>, but that

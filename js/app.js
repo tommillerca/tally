@@ -12185,6 +12185,34 @@ function openProfileSheet() {
    hand the player their character, capture the plan HONESTLY. The old version was
    a feature list any tracker ships, a hard cut to a form, and a Skip that faked a
    body silently. Every step is a funnel event: launch lives or dies here. */
+/* GWART MEETS THE NEW PLAYER AT THE DOOR. Tom, 2026-08-20: "Gwart's animation
+   in the onboarding" and "Gwart as coach". He appears on step 0 (the welcome)
+   and step 2 (the plan), NOT on step 1: the Bonehead reveal is its own moment,
+   and a fuller Gwart-led reveal belongs to the parked Raising redesign, which
+   must not be half-built here. The figure reuses the shipped .gw-today scene
+   (same art, same entrance, same stars) as a non-interactive span: the Guide
+   it would open references screens a brand-new player has not seen yet. */
+const ONB_GWART = [
+  'New bones. I\'m Gwart. You eat, the skeleton earns.',
+  null,
+  'Four questions. The plan bends to your bones, not the other way round.',
+];
+function onbGwartHtml(step) {
+  if (!ONB_GWART[step]) return '';
+  return `<div class="gw-row onb-gwrow">
+    <span class="gw-today onb-gw" aria-hidden="true">
+      <span class="wz-scene">
+        <span class="wz-body"><img src="assets/gwart/gwart.png" alt=""></span>
+        <span class="wz-enter"><span class="wz-sway">
+          <img class="wz-stars-l" src="assets/gwart/gwart-stars.png" alt="">
+          <img class="wz-stars-m" src="assets/gwart/gwart-stars.png" alt="">
+          <img class="wz-stars-r" src="assets/gwart/gwart-stars.png" alt="">
+        </span></span>
+      </span>
+    </span>
+    ${talkBoxHtml(ONB_GWART[step], { name: 'GWART', cls: 'gw-box' })}
+  </div>`;
+}
 function renderOnboarding(step = 0, ctx = {}) {
   const el = $('#screen');
   /* THE CONTAINER HIDE IS OPT-OUT, AND THIS PATH NEVER OPTED OUT.
@@ -12214,6 +12242,7 @@ function renderOnboarding(step = 0, ctx = {}) {
       ${dots}
       <h1>FEED THE<br>BONES</h1>
       <p class="onb-sub">The food tracker with a <b>skeleton in it</b>. Log your meals, and your Bonehead earns the loot.</p>
+      ${onbGwartHtml(0)}
       <div class="onb-poster">
         ${['B0-1', 'FW1', 'P1', 'SK0-1', 'H11-1', 'IL1-1', 'IR1'].map(ly).join('')}
         <div class="onb-pet"><img src="assets/bh/anim/cloud/body-noeyes.png" alt=""><img src="assets/bh/anim/cloud/eyes.png" alt=""></div>
@@ -12223,6 +12252,7 @@ function renderOnboarding(step = 0, ctx = {}) {
         <button class="onb-quiet" id="onbRestore">Played before? <b>Restore a backup</b></button>
       </div>
     </div>`;
+    { const b = $('.onb-gwrow .talkbox', el); if (b) runTalkBox(b, ONB_GWART[0], { name: 'GWART' }); }
     $('#onbGo').addEventListener('click', () => renderOnboarding(1, ctx));
     // switching phones is a launch-day path, not a Settings scavenger hunt
     $('#onbRestore').addEventListener('click', () => { trackEvent('onb_restore'); openRestoreSheet(); });
@@ -12274,12 +12304,13 @@ function renderOnboarding(step = 0, ctx = {}) {
   <div class="onb onb-in onb-plan">
     ${back}${dots}
     <h1>THE PLAN</h1>
-    <p class="onb-sub left">Four questions. Your Bonehead does the maths.</p>
+    ${onbGwartHtml(2)}
     <div id="pfHost">${profileFormHtml({}, 'lb')}</div>
     <button class="btn" id="onbSave">Start tracking</button>
     <button class="onb-quiet" id="onbSkip">Skip for now: uses a rough default plan <b>(30 yr &middot; 5'10" &middot; 180 lb)</b> you can fix any time in Settings.</button>
     <div style="height:26px"></div>
   </div>`;
+  { const b = $('.onb-gwrow .talkbox', el); if (b) runTalkBox(b, ONB_GWART[2], { name: 'GWART' }); }
   $('#onbBack')?.addEventListener('click', () => renderOnboarding(1, ctx));
   const get = bindProfileForm(el, { units: 'lb' });
   $('#onbSave').addEventListener('click', async () => {
