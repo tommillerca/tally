@@ -19,6 +19,14 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v469
+
+1. PROOF: onb-gwart-audit.mjs (gate-registered, 7 rows on a PLAIN-url fresh boot: portrait rect at size, box clear of the headline, both lines typed verbatim, funnel completes, shell latch intact; proven red by reintroducing the hero pin, which fails exactly the GWART and CLEAR rows). | REACH: Install fresh, or clear the app's data, and open it. Gwart is on the first screen and on the plan step. Existing players never see onboarding again, so this reaches new players only, which is the point.
+
+2. PROOF: MANUAL, driven through the shipped thresholds by moving the target around the demo intake so the app's own hudPct computation picked each class: hud-low (no animation, no filter), hud-near (hudBreathe running, caught mid-breath at 0.553 alpha), hud-hit (the brighter stroke rgb(194,240,125) with the double glow), hud-over (the shipped amber with a quiet glow). Screenshots of all four states on file. The class is computed in the one shared calorieRingCard, so Today and Trends cannot disagree. | REACH: Open Today or Trends with any day in flight. Below 85 percent of target the ring is the calm lime it always was; from 85 percent it breathes; landing 100 to 107 percent charges it.
+
+3. PROOF: MANUAL, the gap found by a static precache cross-reference and verified by hand: zero hits for anim/cloud in the service worker against a first-paint reference in the onboarding poster. Two entries added to the precache list. NOT separately audited: the offline-boot suite covers the cold-offline boot path and precache-audit covers list integrity; a dedicated row for one image would restate the diff. | REACH: Install the app, go offline before first open, and the welcome screen's cloud pet still draws. Requires this release's service worker to have installed once online first, which is how every precache entry reaches a device.
+
 ## v468
 
 1. PROOF: MANUAL, by firing the real button per the FX rules: seeded {marrow:4, graveroot:3}, the strip showed marrow x4 + graveroot x2 (the greedy picks), and after converting the inventory read {graveroot:1, ectoplasm:1} with exactly one filled socket left, so shown = spent, to the item. The seam is structural: transmutePicks is the single source of the take order and transmuteConsume derives from it (unit tests 189/189 including the pre-existing consume assertions). Ready-state glow measured on pixels (645 violet px at the out socket). | REACH: Open the Kitchen. The Transmute row shows the sockets whenever you own any commons; the violet lights when you hold six. No flag, no server change.
