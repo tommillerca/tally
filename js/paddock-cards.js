@@ -253,8 +253,20 @@ export function lockedCardHtml(sp) {
     <button class="pdk-x-btn" data-act="close" aria-label="Close">×</button>
     <div class="pdk-head"><span class="pdk-thumb pdk-sil"><img src="${esc(bhAsset(s.id ? s : { slot: 'C', id: sp }))}" style="${inkFitStyle(sp)}" alt=""></span>
       <div class="pdk-id"><b class="pdk-name">${esc(s.name)}</b></div></div>
-    <p class="pdk-flavor">Day-one Boneheadz only. Check your inbox, bony buddy.</p>
+    <p class="pdk-flavor">${esc(lockedFlavor(sp))}</p>
   </article>`;
+}
+
+/* Tom, 2026-08-31: "make the mystery just pets they dont have yet outside of
+   the founders lizard because that wont be available to nonbeta testers."
+   Every locked card used to carry the founder line, so a pet the player simply
+   had not hatched yet read as forever unobtainable, which is exactly backwards:
+   a completionist filed it as an uncompletable collection. Three honest cases,
+   and only the Lizard's is a closed door. */
+function lockedFlavor(sp) {
+  if (sp === 'CX') return "A founder's companion, from the very first days of Boneheadz. Wears it proudly on someone else's shoulder.";
+  if (sp === 'C6') return 'Not yours yet. Gwart sells her in the Emporium, for those with deep pockets.';
+  return 'Not yours yet. Eggs know the way.';
 }
 
 export function eggCardHtml(eggs) {
