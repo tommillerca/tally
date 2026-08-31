@@ -523,6 +523,89 @@ export async function buyPetItem(id) {
   return { ok: true, label: art.name, cost: price, isPet, coins: await coins() };
 }
 
+/* THE MYSTERY EGG, BACK ON DUST, ONCE A WEEK.
+ *
+ * The Bone Dust shop sold this egg for 60 dust, unbounded, until S0 closed the
+ * whole shop on 2026-08-25 (commit 23de102b). Tom ruled on 2026-08-31 that the
+ * egg's removal was unintentional: dust needs a deterministic egg source so a
+ * player who cannot walk enough for step milestones can still hatch. The
+ * historical price (60) is kept; the historical bound (none) is NOT, it is one
+ * per ISO week, because the old shop predates the exploit sweeps and an
+ * unbounded dust-to-pet pump is exactly the class they closed.
+ *
+ *   TRANSITION  this week's Mystery Egg goes from unbought to bought. Once per
+ *               ISO week, and the week key is the whole mechanism.
+ *   AUTHORITY   db.addIfAbsent on the kv row `dustegg:<isoWeek>`, claimed
+ *               BEFORE the dust moves, same ordering as buyRackItem/buyPetItem.
+ *   NO-OP       a second attempt in the same week loses the claim and returns
+ *               reason 'limit', having deducted nothing.
+ *
+ * THE GRANTED FLAG replaces what ownedCosmeticIds() is to the rack's recovery
+ * branch. A cosmetic is owned forever, so "receipt exists but not owned" proves
+ * a stuck write; an egg HATCHES and its inv row is deleted, so inventory absence
+ * proves nothing. The receipt itself carries `granted`, flipped by a CONDITIONAL
+ * kvUpdate (one transaction, one winner) so a retry after a failed write grants
+ * exactly one egg and a double-tap racing the recovery cannot grant two. */
+export const DUST_EGG = { label: 'Mystery Egg', cost: 60, desc: 'Incubate, then hatch a pet' };
+
+const dustEggKey = async () => {
+  // lazy import: poi.js imports this module, so a top-level import is a cycle
+  const { isoWeekKey } = await import('./poi.js');
+  return `dustegg:${isoWeekKey(new Date())}`;
+};
+
+/* Bought AND granted this week. `granted` and not mere receipt existence, so a
+   paid-but-stuck purchase keeps its shop cell pressable and the next tap runs
+   the recovery branch below instead of reading "yours" over a missing egg. */
+export async function dustEggBought() {
+  const r = await kvGet(await dustEggKey(), null);
+  return !!(r && r.granted);
+}
+
+export async function buyDustEgg() {
+  const key = await dustEggKey();
+  const price = DUST_EGG.cost;
+  if (!Number.isFinite(price)) return { ok: false, reason: 'not-stocked' };
+  const bal = await boneDust();
+  if (bal < price) return { ok: false, reason: 'dust', need: price, have: bal };
+  if (!(await db.addIfAbsent('kv', { k: key, v: { ts: Date.now(), price } }))) {
+    /* The receipt is down: this week's egg was already bought, OR a write failed
+       after payment and the egg never landed. The conditional kvUpdate is both
+       the test and the claim in one transaction: exactly one caller ever flips
+       granted, so a losing caller cannot re-grant. */
+    let won;
+    try { won = !!(await kvUpdate(key, v => v && !v.granted ? { ...v, granted: true } : undefined)); }
+    catch { won = false; }
+    if (!won) return { ok: false, reason: 'limit' };
+    try { await grantEgg('dust'); }
+    catch {
+      /* Reopen the recovery for the next tap; best-effort, because the world
+         where this write also fails is the world the receipt exists for. */
+      try { await kvUpdate(key, v => v ? { ...v, granted: false } : undefined); } catch { /* say so below */ }
+      return { ok: false, reason: 'write', label: DUST_EGG.label };
+    }
+    /* 'limit', not ok:true: this branch cannot tell a stuck receipt from a
+       losing caller in a race (same reasoning as buyRackItem), and by the time
+       it returns the egg really has been granted for this week. */
+    return { ok: false, reason: 'limit', recovered: true };
+  }
+  await boneDustAdd(-price);
+  /* Flip granted BEFORE the grant, conditionally. If a concurrent recovery call
+     already flipped it (receipt from a prior failed run), it also granted, so
+     this caller must not grant a second egg for one week's payment. */
+  let mine;
+  try { mine = !!(await kvUpdate(key, v => v && !v.granted ? { ...v, granted: true } : undefined)); }
+  catch { return { ok: false, reason: 'write', label: DUST_EGG.label }; }
+  if (mine) {
+    try { await grantEgg('dust'); }
+    catch {
+      try { await kvUpdate(key, v => v ? { ...v, granted: false } : undefined); } catch { /* recovery stays open best-effort */ }
+      return { ok: false, reason: 'write', label: DUST_EGG.label };
+    }
+  }
+  return { ok: true, label: DUST_EGG.label, cost: price, dust: await boneDust() };
+}
+
 /* WHAT THE PET IS WEARING. One kv row, `petWear`, shaped { slotCode: itemId }:
  *   { CG: 'CG1', CB: 'CB2', CM: 'CM1', CE: 'CE1' }
  *

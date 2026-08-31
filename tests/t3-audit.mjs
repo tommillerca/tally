@@ -69,12 +69,18 @@ await hubTab('shop');
    nothing else may claim one, with the denominator printed. `SHOP.length > 0`
    keeps an emptied catalogue from satisfying `0 === 0`. */
 const shopSize = await page.evaluate(async () => (await import('./js/loot.js')).SHOP.length);
+/* + the ONE dust-priced cell outside SHOP: the Mystery Egg, restored 2026-08-31
+   (Tom's ruling; see the S0 register in tests/unit.test.js). It renders as a
+   [data-dustegg] t3-cell, and tests/dust-egg-audit.mjs owns its behaviour; this
+   row only keeps the census exact, so a second uncatalogued cell still fails. */
 const shop = {
   drop: await count('.t3-drop'), prices: await count('.t3-price'),
-  cells: await count('.t3-cell'), forage: await count('.t3-forage'), catalogue: shopSize,
+  cells: await count('.t3-cell'), dustEgg: await count('[data-dustegg]'),
+  forage: await count('.t3-forage'), catalogue: shopSize,
 };
 ok('Shop renders the Tier 3 language',
-   shop.drop === 1 && shop.prices >= 4 && shopSize > 0 && shop.cells === shopSize && shop.forage >= 1,
+   shop.drop === 1 && shop.prices >= 4 && shopSize > 0 && shop.dustEgg === 1
+   && shop.cells === shopSize + shop.dustEgg && shop.forage >= 1,
    JSON.stringify(shop));
 // the drop poster IS the disclosure: opening it must reveal the real per-item grid
 await page.evaluate(() => document.querySelector('.t3-drop')?.click());

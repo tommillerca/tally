@@ -26,6 +26,7 @@ import {
   setWornAura, ownsAura,
   rack, rerollRack, rackRerollCost, buyRackItem, wornAura,
   buyPetItem,
+  DUST_EGG, buyDustEgg, dustEggBought,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP, manualWalksToday, logManualWalk, MANUAL_WALKS_PER_DAY } from './wellness.js';
@@ -4739,7 +4740,7 @@ const GUIDE_ENTRIES = [
   { id: 'dust', title: 'Bone Dust', body: [
     'The other currency, and the one everybody ignores. Coins buy things. Dust is for changing your mind about them.',
     'Melting gear you are never going to wear is where most of it comes from. A piece he has outgrown is not waste, it is dust.',
-    'It pays for one thing: how your gear LOOKS. Wearing one piece and showing another, and the weekly Rack. It used to buy eggs, crates and charms, and it used to pay to breed pets; none of that is true any more. Dust is for looks, and nothing you buy with it can make you stronger.',
+    'It pays for how your gear LOOKS: wearing one piece and showing another, and the weekly Rack. One exception, on purpose: once a week it buys a Mystery Egg in the Shop, so a pet is never out of reach. Crates and charms are still gone, and breeding is free.',
     'You pay for a look once. Putting it back on in that same slot is free forever after that.',
   ] },
   /* ADDED 2026-08-23 at integration, and it is a real defect neither branch could
@@ -8321,8 +8322,8 @@ function petShelfHtml(ownedCos, coinBal) {
   </div>`;
 }
 async function renderShop(el) {
-  const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn] =
-    await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura()]);
+  const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn, eggBought] =
+    await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura(), dustEggBought()]);
   const rerender = () => renderShop(el);
 
   // No page heading or back button: the Shop is a tab inside Your Bonehead now,
@@ -8677,10 +8678,21 @@ async function renderShop(el) {
     </button>`).join('')}
   </div>
 
-  <!-- The Bone Dust shop stood here until 2026-08-25. It sold an egg, a crate
-       and a charm, all three of them power, so it closed with the coin shop's
-       crates (S0). Dust now buys looks and nothing else, which is why the only
-       dust control left on this screen is the route to EARN it. -->
+  <!-- The Bone Dust shop stood here until 2026-08-25 (S0: an egg, a crate and a
+       charm, all three power). The EGG came back on 2026-08-31, alone: Tom ruled
+       its removal unintentional, because dust is the one deterministic route to
+       a hatch for a player who cannot walk the step milestones. Historical price
+       (60), new bound (one per ISO week; the old cell was unbounded). The crate
+       and the charm stay gone. -->
+  <div class="t3-sect"><b>Bone Dust</b><i></i></div>
+  <div class="t3-cells">
+    <button class="t3-cell" data-dustegg="1" ${eggBought || dustBal < DUST_EGG.cost ? 'disabled' : ''}>
+      <span class="art">${crateIcon('egg', 54)}</span>
+      <b>${esc(DUST_EGG.label).toUpperCase()}</b>
+      <span class="t3-price${eggBought ? '' : ' dust'}">${eggBought ? `${ICONS.check(13)} Yours this week` : `${ICONS.dust(13)} ${DUST_EGG.cost}`}</span>
+      <small>${eggBought ? 'A new one lands Monday' : `${DUST_EGG.desc} · 1 a week`}</small>
+    </button>
+  </div>
   <button class="t3-forage" id="shopSalvage" style="margin-top:10px">${ICONS.dust(20)}<b>Melt gear for Bone Dust</b><small>Salvage Bench ›</small></button>
 
   <button class="t3-forage" id="shopForage">${ingIconHtml('graveroot', 24)}<b>Forage for ingredients</b><small>in the Kitchen ›</small></button>
@@ -8695,6 +8707,24 @@ async function renderShop(el) {
     if (!r.ok) { toast(`Not enough coins. That costs ${r.need}, you have ${r.have}.`, 2600); return; }
     popSound(S.sounds);
     toast(`${r.label} bought. −${r.cost} coins, ${r.coins} left. You now have ${r.owned}.`, 3000);
+    rerender();
+  }));
+  /* THE DUST EGG. armToConfirm like every spend. buyDustEgg claims the weekly
+     receipt before the dust moves and recovers a paid-but-ungranted week on the
+     next tap, the same shape as buyRackItem, so nothing here needs to know. */
+  el.querySelectorAll('[data-dustegg]').forEach(b => armToConfirm(b, `Spend ${DUST_EGG.cost}?`, async () => {
+    const r = await buyDustEgg();
+    if (!r.ok) {
+      toast(r.reason === 'limit' ? (r.recovered ? 'The egg you already paid for is in the nest now. Walk it warm.' : 'One a week. A fresh egg lands Monday.')
+        : r.reason === 'write' ? `${DUST_EGG.label} did not save. Your dust is safe, tap again.`
+        : r.reason === 'dust' ? `Need ${DUST_EGG.cost} Bone Dust (you have ${(r.have ?? dustBal).toLocaleString()}). Melt gear at the Salvage Bench.`
+        : 'That is not for sale right now.', 2800);
+      if (r.recovered) rerender();
+      return;
+    }
+    popSound(S.sounds);
+    trackEvent('buy_dustegg', { cost: r.cost });
+    toast(`${r.label} is incubating. −${r.cost} dust, ${r.dust.toLocaleString()} left. Walk to hatch it.`, 3200);
     rerender();
   }));
   // Drop pieces: same two-tap arm-then-buy ritual as the coin shop, because these
