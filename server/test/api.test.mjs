@@ -548,6 +548,33 @@ await test('cheer: preset cheer delivers a reward-less grant; self + bad index r
   assert.equal(bad.status, 400);
 });
 
+/* A RETRY IS NOT A SECOND CHEER. The client's send has a 12s deadline, so an
+   answer lost in flight re-arms the chips and the player taps again; without an
+   idempotency key the server counted a second row and the friend got two. */
+const cheerRows = async (to, keys) => {
+  const g = await (await signedFetch(keys.kp, to, 'GET', '/grants?since=0')).json();
+  return (g.grants || []).filter(x => x.type === 'cheer');
+};
+await test('cheer: the same ck twice delivers ONE cheer; a different ck delivers a second', async () => {
+  const rk = await makeKeys();
+  const r = await (await regFetch(rk.pubJwk)).json();
+  await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: r.friendCode }));
+  await signedFetch(rk.kp, r.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
+  const ck = 'tap-' + RUNSUF;
+  const send = c => signedFetch(kp, player.playerId, 'POST', '/cheer', JSON.stringify({ to: r.playerId, cheer: 1, ck: c }));
+  const a = await send(ck);
+  assert.equal(a.status, 200);
+  const before = await cheerRows(r.playerId, rk);
+  assert.equal(before.length, 1, 'the first send delivers exactly one');
+  const b = await send(ck);
+  assert.equal(b.status, 200, 'a retry is answered ok, not 429');
+  assert.equal((await b.json()).duplicate, true, 'and is named as the duplicate it is');
+  assert.equal((await cheerRows(r.playerId, rk)).length, 1, 'the same ck twice delivers ONE cheer');
+  const c = await send(ck + '-2');
+  assert.equal(c.status, 200);
+  assert.equal((await cheerRows(r.playerId, rk)).length, 2, 'a different ck IS a second cheer');
+});
+
 await test('friends: accept endpoint seals a one-way request', async () => {
   const p3keys = await makeKeys();
   const p3 = await (await regFetch(p3keys.pubJwk)).json();

@@ -11422,12 +11422,19 @@ function openCheerSheet(f) {
       <div class="cheer-grid">${CHEERS.map((c, i) => `<button class="cheer-chip" data-cheer="${i}"><span class="cheer-emo">${c.emo}</span><span class="cheer-txt">${esc(c.txt)}</span></button>`).join('')}</div>
     </div>
   `, { cls: 'sheet-cheer' });
+  /* ONE KEY PER TAP, REUSED BY ITS RETRIES. A send whose answer is lost (the
+     12s API deadline, a dead socket) re-enables the chips and the player taps
+     the same cheer again, which used to deliver a second one. The key is kept
+     until that cheer actually succeeds, so the server can tell a retry from a
+     new cheer; a different chip is a different cheer and gets its own. */
+  const keys = new Map();
   $('.cheer-grid', wrap).addEventListener('click', async e => {
     const b = e.target.closest('[data-cheer]'); if (!b) return;
     const i = +b.dataset.cheer;
     $$('.cheer-chip', wrap).forEach(x => x.disabled = true);
-    const r = await social.sendCheer(f.playerId, i);
-    if (r.ok) { popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${esc(f.alias || f.name)}!`, 3000); history.back(); }
+    if (!keys.has(i)) keys.set(i, social.newCheerKey());
+    const r = await social.sendCheer(f.playerId, i, keys.get(i));
+    if (r.ok) { keys.delete(i); popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${esc(f.alias || f.name)}!`, 3000); history.back(); }
     else { $$('.cheer-chip', wrap).forEach(x => x.disabled = false); toast(r.status === 429 ? "You've cheered them plenty today. Give 'em a rest!" : 'Could not send. Try again.', 3200); }
   });
 }
@@ -12125,12 +12132,17 @@ async function renderSettings(el) {
     if (!r.ok) return toast(r.reason || 'Could not switch to it.', 3600);
     S.settings = await kvGet('settings', S.settings);
     snapSettings();
-    /* same honesty as the phrase-restore toast: 'decrypt' means the save
-       exists but this key cannot read it, which is not "no save". */
+    /* FOUR outcomes, not two. 'decrypt' means the save exists but this key
+       cannot read it; 'none'/'empty' means there is genuinely nothing to pull;
+       anything else is "could not fetch it", which is NOT "no save" and which
+       adoptIdentity leaves unsettled so the next boot pulls again. */
+    const noSave = r.pullReason === 'none' || r.pullReason === 'empty';
     toast(r.restored ? 'Switched. Welcome back.'
       : r.pullReason === 'decrypt'
         ? 'Switched, but the cloud save was written by a different key and could not be unlocked. Nothing was deleted.'
-        : 'Switched, but there was no save to pull.', r.pullReason === 'decrypt' ? 6000 : 4200);
+        : noSave ? 'Switched, but there was no save to pull.'
+          : 'Switched, but the save could not be downloaded. It will retry next time you open the app.',
+    r.pullReason === 'decrypt' ? 6000 : 4200);
     route();
   });
   $('#goOnlineBtn', el)?.addEventListener('click', async () => {
@@ -17035,13 +17047,18 @@ async function openRestoreSheet() {
     snapSettings();
     levelSound(S.sounds);
     closeAllSheetsViaHistory();
-    /* 'decrypt' is NOT "no save": the save is there, sealed under a different
-       key (js/social.js pullBackup). Saying "no save" here is the exact lie
-       the backup-key bug hid behind. */
+    /* Same four-way as the vault-adopt toast. 'decrypt' is NOT "no save": the
+       save is there, sealed under a different key (js/social.js pullBackup),
+       and saying "no save" here is the exact lie the backup-key bug hid behind.
+       Nor is a dropped download "no save": that one retries at the next boot,
+       because adoptIdentity no longer burns the one-shot on a failure. */
+    const noSave = r.pullReason === 'none' || r.pullReason === 'empty';
     toast(r.restored ? 'Welcome back. Your Bonehead is restored.'
       : r.pullReason === 'decrypt'
         ? 'Account restored, but the cloud save was written by a different key and could not be unlocked. Nothing was deleted. If your old device still has the app, opening it there will repair the cloud copy.'
-        : 'Account restored, but there was no save to pull.', r.pullReason === 'decrypt' ? 6500 : 4600);
+        : noSave ? 'Account restored, but there was no save to pull.'
+          : 'Account restored, but the save could not be downloaded. It will retry next time you open the app.',
+    r.pullReason === 'decrypt' ? 6500 : 4600);
     /* Restoring FROM ONBOARDING must also end onboarding: boot() returned before
        binding the shell, so a bare route() here left Today with a hidden tab bar
        and no bound tabs. enterAppFromOnboarding is the same latch finishing

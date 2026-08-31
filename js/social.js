@@ -316,19 +316,32 @@ export async function renameOwed() {
   } catch { return null; }
 }
 
+// Register a pubkey with the server WITHOUT touching local state. Split out of
+// goOnline so adoptIdentity can validate a restored bundle against the server
+// BEFORE swapping the device identity (a register that fails after the swap
+// left a half-adopted device: signed as the new account, none of its data).
+// Never throws: a dropped connection is { ok:false }, same as every sibling.
+async function registerKey(id) {
+  const base = await apiBase();
+  if (!base) return { ok: false, reason: 'no-api' };
+  try {
+    const r = await apiFetch(base + '/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ pubkey: id.pubJwk }),
+    });
+    if (!r.ok) return { ok: false, reason: 'register-failed', status: r.status };
+    return { ok: true, me: await r.json() };
+  } catch { return { ok: false, reason: 'network' }; }
+}
+
 // Opt in: register this device's pubkey. Re-running (or restoring a backup)
 // returns the same account.
 export async function goOnline() {
-  const base = await apiBase();
-  if (!base) return { ok: false, reason: 'no-api' };
   const id = await ensureIdentity();
-  const r = await apiFetch(base + '/register', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ pubkey: id.pubJwk }),
-  });
-  if (!r.ok) return { ok: false, reason: 'register-failed', status: r.status };
-  const me = await r.json();
+  const r = await registerKey(id);
+  if (!r.ok) return r;
+  const me = r.me;
   await kvSet('social', { playerId: me.playerId, handle: me.handle, friendCode: me.friendCode, name: me.name || null, onlineAt: Date.now() });
   return { ok: true, me };
 }
@@ -416,14 +429,24 @@ export async function sendGift(toId, mode, coins) {
     return { ok: r.ok, status: r.status, ...d };
   } catch { return { ok: false }; }
 }
-// Send a preset cheer (index into the client-side CHEERS list; no free text).
-export async function sendCheer(toId, cheer) {
+/* Send a preset cheer (index into the client-side CHEERS list; no free text).
+   `ck` IS THE TAP, NOT THE REQUEST. A cheer send that loses its answer (the
+   12s deadline above fires, or the socket goes quiet) re-arms the chips and the
+   player taps again for the same cheer they already sent; without a key the
+   server counts a second row and the friend gets two. The caller mints one key
+   per TAP and passes the same one to every retry of it, so the server's
+   INSERT OR IGNORE collapses them and answers ok. Minted here when the caller
+   does not pass one, so a fresh tap is never accidentally deduped against the
+   previous one. */
+export async function sendCheer(toId, cheer, ck = null) {
   try {
-    const r = await signedFetch('POST', '/cheer', { to: toId, cheer });
+    const r = await signedFetch('POST', '/cheer', { to: toId, cheer, ck: ck || newCheerKey() });
     const d = await r.json().catch(() => ({}));
     return { ok: r.ok, status: r.status, ...d };
   } catch { return { ok: false }; }
 }
+// [a-zA-Z0-9_-]{1,32}, which is exactly what the server keeps of it.
+export const newCheerKey = () => crypto.randomUUID().replace(/-/g, '').slice(0, 24);
 
 // Private, local-only nicknames: what YOU call a friend so a generic bone-name
 // is memorable ("Bone Guy" -> "Coach Mike"). Stored on-device in kv, so it's
@@ -1056,21 +1079,46 @@ export async function restoreWithPhrase(handle, phrase) {
 // Become this identity and pull its save. Shared by phrase restore and by
 // adopting the bundle the vault is already holding (vaultConflict), which needs
 // no phrase because the key itself is right there.
+/* ORDERED SO A FAILURE CANNOT HALF-ADOPT. This used to swap the device identity
+   (kv plus a FORCED keychain overwrite) before its first network call, so a
+   dead connection at register left the device signed as the new account with
+   none of its data and the old identity already destroyed. Now the one network
+   call that can refuse (register) runs FIRST, against the bundle directly, and
+   nothing local is written until it answers ok: any failure up to that line
+   leaves the device exactly as it was. After the swap the only network step
+   left is the backup pull, and a failed pull is RETRIED at the next boot
+   instead of being reported as "no save":
+
+   DO NOT BURN THE ONE-SHOT ON A FAILURE (same rule as bootSync below). This
+   used to set bootRestored true whatever pullBackup answered, so a dropped
+   connection during the save download told the player "there was no save to
+   pull" (false) and permanently forfeited the boot retry: adopted identity,
+   fresh save, good backup on the server, silence. Only a success or a
+   definitive "no backup exists" (404 / empty) settles the flag; every other
+   answer leaves it false so bootSync pulls again next open, and `pullReason`
+   tells the caller which of them actually happened. */
 export async function adoptIdentity(bundle) {
   if (!bundle || !bundle.privJwk || !bundle.pubJwk) return { ok: false, reason: 'That recovery data is damaged.' };
+  const reg = await registerKey(bundle);
+  if (!reg.ok) return { ok: false, reason: 'Could not reach the server. Nothing was changed; try again.' };
+  const me = reg.me;
+  // The swap. Local writes only from here on, so it lands whole.
   await kvSet('identity', bundle);
   await mirrorIdentity(bundle, { force: true });   // deliberate account swap
-  await kvSet('social', null);                   // re-register under the restored key
-  await kvSet('bootRestored', false);            // let the backup pull run again
+  await kvSet('social', { playerId: me.playerId, handle: me.handle, friendCode: me.friendCode, name: me.name || null, onlineAt: Date.now() });
+  await kvSet('bootRestored', false);            // let the backup pull run (and re-run at boot if it fails below)
   await kvSet('vaultConflict', null);
-  const on = await goOnline();
-  if (!on.ok) return { ok: false, reason: 'Restored the key but could not go online.' };
-  const pulled = await pullBackup();
-  await kvSet('bootRestored', true);
   await kvSet('recoverySetAt', Date.now());
-  /* pullReason rides along so the UI can tell "no save exists" from
-     "a save exists but was written by a different key" ('decrypt'). */
-  return { ok: true, restored: !!(pulled && pulled.restored), counts: pulled && pulled.counts, pullReason: (pulled && pulled.reason) || null };
+  const pulled = await pullBackup();
+  // exactly bootSync's rule below: only a success or a definitive "there is no
+  // backup" settles the one-shot. 'decrypt' is deliberately NOT settled either:
+  // the device holding the right key re-pushes daily and self-heals the cloud
+  // copy, so a later boot CAN succeed.
+  if (pulled.restored || pulled.reason === 'none' || pulled.reason === 'empty') await kvSet('bootRestored', true);
+  /* pullReason rides along so the UI can tell "no save exists" from "a save
+     exists but was written by a different key" ('decrypt') and from "could not
+     fetch the save", which is the one that retries at the next boot. */
+  return { ok: true, restored: !!pulled.restored, counts: pulled.counts, pullReason: pulled.reason || null };
 }
 
 /* THE ONE CLOCK THE PLAYER CANNOT MOVE (js/db.js, RULE 3 of the day guard).

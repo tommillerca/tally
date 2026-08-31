@@ -1270,14 +1270,22 @@ async function requestFriendship(env, meId, otherId) {
    is unchanged and still deterministic (no timestamp, no random id -- the client
    ledger's idempotence depends on that).
 
-   Returns true when a row landed, false when the cap refused it. */
-async function insertCappedGrant(env, { to, prefix, cap, type, payload, now }) {
+   An explicit `key` (a client idempotency key, still inside `prefix` so it is
+   counted by the same cap) replaces the counted suffix: the row then dedupes on
+   UNIQUE (player_id, key), so a retry of a request whose answer was lost lands
+   nothing and changes nobody's total. The caller distinguishes that `false`
+   from a cap refusal by asking whether the row is there.
+
+   Returns true when a row landed, false when the cap refused it (or, with an
+   explicit key, when this exact request already landed). */
+async function insertCappedGrant(env, { to, prefix, cap, type, payload, now, key = null }) {
   const hi = prefix + '￿'; // prefix-range count: no LIKE, playerIds contain '_'
+  const count = 'SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ?';
   const r = await env.DB.prepare(
     `INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts)
-     SELECT ?, ? || (SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ?), ?, ?, ?
-      WHERE (SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ?) < ?`)
-    .bind(to, prefix, to, prefix, hi, type, payload, now, to, prefix, hi, cap).run();
+     SELECT ?, ${key ? '?' : `? || (${count})`}, ?, ?, ?
+      WHERE (${count}) < ?`)
+    .bind(to, ...(key ? [key] : [prefix, to, prefix, hi]), type, payload, now, to, prefix, hi, cap).run();
   return !!(r.meta && r.meta.changes);
 }
 
@@ -2492,13 +2500,36 @@ export default {
         const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
         const fromName = (me && (me.name || me.handle)) || 'A Bonehead';
         const day = new Date(Date.now()).toISOString().slice(0, 10);
+        /* A RETRY IS NOT A SECOND CHEER. The cap key counts rows, so a client
+           that re-sends after a lost answer (the app's own network deadline
+           fires at 12s and the tap is re-armed) mints the NEXT n and delivers a
+           duplicate. The client mints one `ck` per tap and reuses it on retry;
+           the same UNIQUE (player_id, key) + INSERT OR IGNORE that enforces the
+           gift's once-a-day does the deduping here, and a duplicate answers ok
+           without a second cheer, because the sender did what they meant to do
+           exactly once. No ck (older clients) keeps the counted key. */
+        const ck = String(bd.ck || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+        const prefix = `cheer-${auth.playerId}-${day}-`;
         // same COUNT-then-key shape as the spend gift, and the same fix: the
         // count is evaluated inside the insert, so no two concurrent cheers can
-        // mint the same key and silently collapse into one.
+        // mint the same key and silently collapse into one. With a ck the key
+        // is the client's instead of the count, so the UNIQUE constraint does
+        // the deduping; the cap is counted over both shapes either way.
         const landed = await insertCappedGrant(env, {
-          to, prefix: `cheer-${auth.playerId}-${day}-`, cap: 10, type: 'cheer', now: Date.now(),
+          to, prefix, cap: 10, type: 'cheer', now: Date.now(),
+          key: ck ? `${prefix}ck-${ck}` : null,
           payload: JSON.stringify({ from: fromName, cheer, cheerFrom: auth.playerId, note: `${fromName} cheered you` }),
         });
+        /* A REFUSAL HAS TWO CAUSES AND ONLY ONE OF THEM IS AN ERROR. With a ck,
+           `false` means either the cap refused it or this exact tap already
+           landed. A retry of a delivered cheer must answer ok, or the app tells
+           the player it failed and they send a third. One SELECT, only on the
+           rare path, and it is the row's own existence that decides. */
+        if (!landed && ck) {
+          const dupe = await env.DB.prepare('SELECT 1 FROM grants WHERE player_id = ? AND key = ?')
+            .bind(to, `${prefix}ck-${ck}`).first();
+          if (dupe) return json({ ok: true, duplicate: true });
+        }
         if (!landed) return json({ error: 'daily cheer limit', code: 'limit' }, 429);
         return json({ ok: true });
       }
