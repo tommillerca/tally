@@ -1652,8 +1652,26 @@ body::before {
 .hero-actions.six .hero-act { font-size: 9px; padding: 9px 1px 7px; }
 .hero-actions.six .hero-act .ico { width: 21px; height: 21px; }
 .hero-emoji { font-size: 22px; line-height: 23px; }
-.hero-act > span { position: relative; }
-.hero-badge { position: absolute; right: 2px; top: 0; color: var(--accent); font-style: normal; font-weight: 900; /* anchored inside button's right edge since button has overflow:hidden; avoids clipping at narrow viewports */ }
+/* INLINE, as it was for 280 builds: this class is SHARED by every hero-door
+   attention mark ("The Pit !"), and #314's absolute positioning, written for
+   the Backpack crate COUNT, ripped every door's bang out of its label flow and
+   planted it on the text (Tom saw it live within hours: "the exclamation point
+   is on top of text"). The clip fix the count needed is scoped to the one
+   badge that needed it, below. */
+.hero-badge { color: var(--accent); font-style: normal; font-weight: 900; }
+/* The crate COUNT on the Backpack door is the badge that overflowed at 375px
+   (a two-digit count widens the label past the button's overflow:hidden edge).
+   Only it gets the absolute anchor, and to the BUTTON's top-right corner, not
+   the label span: #314 anchored it right:2px of the span, and since the span
+   IS the shrink-wrapped label, the count landed on top of "Backpack"'s last
+   glyphs (measured: "14" overlapped the "ck" at 375 AND 390). Padding the span
+   instead would widen it right back to the width that clipped in the first
+   place. The corner is empty at every viewport, fits two digits, and stays
+   inside overflow:hidden. #314's `.hero-act > span { position: relative }` is
+   gone with it: the span is the badge's parent, so while positioned it stays
+   the containing block and the count can only ever land on the label. */
+#charBtn { position: relative; }
+#charBtn .hero-badge { position: absolute; right: 4px; top: 3px; }
 .hero-act.attn { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
 /* The v146 unlock-nudge card (`.unlock-nudge`, `.ul-ico/.ul-txt/.ul-chev`) stood
    here until 2026-08-22, when Tom removed the last nudge it carried: "remove the
