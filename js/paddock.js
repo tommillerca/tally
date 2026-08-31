@@ -124,7 +124,10 @@ export async function paddockEggs() {
   for (const row of rows) {
     const p = eggProgress(row, lifetime);
     const togo = Math.max(0, (p.goal | 0) - (p.walked | 0));
-    if (!nearest || togo < nearest.togo) nearest = { togo, pct: p.goal ? Math.min(1, p.walked / p.goal) : 0, ready: !!p.ready };
+    /* A READY EGG IS 100%, WHATEVER ITS GOAL. `goal: 0` is how a ready egg is handed
+       out (loot.js grantEgg), so `goal ? walked/goal : 0` printed an empty bar over the
+       one egg the player can crack right now. Ready is the answer, not the divisor. */
+    if (!nearest || togo < nearest.togo) nearest = { togo, pct: p.ready ? 1 : (p.goal ? Math.min(1, p.walked / p.goal) : 0), ready: !!p.ready };
   }
   return { count: rows.length, nearest };
 }
@@ -143,8 +146,16 @@ export const PDK_SCENE = {
      hat and inside the duck lanes; they drift LOW over the fence line now */
   HOVER_SPOTS: [{ x: 64, y: 244 }, { x: 306, y: 252 }, { x: 196, y: 232 }],
   /* third flop spot moved off the bottom-left corner: the keeper (your own
-     bonehead) stands there now (Tom, 2026-08-11) */
-  FLOP_SPOTS: [{ x: 304, y: 420, w: 88 }, { x: 232, y: 434, w: 82 }, { x: 140, y: 458, w: 58 }],
+     bonehead) stands there now (Tom, 2026-08-11).
+     FIRST SPOT MOVED OFF THE NEST, measured 2026-08-31: at { x: 304, y: 420 } the 88px
+     flop box spanned x 304-392, y 332-420 and the nest is drawn at 296-386 x, 334-384 y,
+     so elementFromPoint at the nest's own centre returned the catfish. The nest is the
+     egg card's only door, and it was shut for everyone who owns a C3. The sprite layer
+     sits above the backdrop SVG the nest is drawn in, so the fix is the spot, not the
+     z-order. Anything with x+w past 296 covers it (the backdrop scales with the scene
+     width and the sprites do not, so the nest only moves RIGHT on a wider screen);
+     bottom-centre is the nearest clear grass that keeps the foot above PANEL_Y. */
+  FLOP_SPOTS: [{ x: 196, y: 492, w: 88 }, { x: 232, y: 434, w: 82 }, { x: 140, y: 458, w: 58 }],
   WALK_ROWS: [322, 318, 356, 350, 396, 398, 428, 460],
   /* the props own the right flank above y~370 (hay 306,316; nest 300,352):
      walker bands on those rows stop short of them. Measured, not assumed: the

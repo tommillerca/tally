@@ -268,10 +268,22 @@ const hearts = await page.evaluate(() => {
   return { pips: pips.length, withIcon: pips.filter(p => p.querySelector('svg.bhi')).length,
            /* a CSS circle would have a border-radius and no svg: that is the "red dots"
               Tom reported, so assert the ICON is there rather than trusting the class */
-           stillCircles: pips.filter(p => !p.querySelector('svg') && getComputedStyle(p).borderRadius !== '0px').length };
+           stillCircles: pips.filter(p => !p.querySelector('svg') && getComputedStyle(p).borderRadius !== '0px').length,
+           /* AND THE STATE HAS TO BE READABLE IN PIXELS. bhIcon inlines the manifest tint
+              (`style="color:#fd6857"`), which beats `.pdk-heart`'s own colour on the
+              wrapper, so every pip painted coral and a bond of 1 looked like a bond of 5:
+              a meter that cannot be wrong is not a meter. Read the PAINTED colour off the
+              svg, not the class, because the class was always right. */
+           onPaint: [...new Set(pips.filter(p => p.classList.contains('on')).map(p => getComputedStyle(p.querySelector('svg') || p).color))],
+           offPaint: [...new Set(pips.filter(p => !p.classList.contains('on')).map(p => getComputedStyle(p.querySelector('svg') || p).color))] };
 });
 ok('the bond meter draws real heart icons, not CSS dots', hearts.pips === 5 && hearts.withIcon === 5 && hearts.stillCircles === 0,
   JSON.stringify(hearts));
+/* both sets must be non-empty or the comparison proves nothing: w1 is mid-bond here
+   (one press above, five below the cap), so there are filled pips AND empty ones */
+ok('a filled pip and an empty pip are painted DIFFERENT colours',
+  hearts.onPaint.length === 1 && hearts.offPaint.length === 1 && hearts.onPaint[0] !== hearts.offPaint[0],
+  `on ${hearts.onPaint.join('/') || 'NONE'}, off ${hearts.offPaint.join('/') || 'NONE'}`);
 
 /* ---- W-PADDOCK-1: every way out of the card ------------------------------ */
 await ensureOpen('C5');

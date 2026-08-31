@@ -9288,7 +9288,12 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pdk-back { position: absolute; top: 12px; left: 14px; z-index: 10; width: 44px; height: 44px;
   border-radius: 50%; background: rgba(13, 12, 18, .42); backdrop-filter: blur(10px);
   border: 0; color: var(--text); display: grid; place-items: center; }
-.pdk-coach { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 9;
+/* pointer-events: none because the pill is a SIGN, not a control, and it sits at
+   z-index 9 over the card host's 6: on a tall card (BEST FRIEND) the Pet/Feed row lands
+   exactly under it, so every press hit the pill, and being outside the card the
+   dismisser then closed the card. The pill is also removed the moment any card opens
+   (paddock-cards.js openPaddockCards); this is the half that cannot be forgotten. */
+.pdk-coach { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 9; pointer-events: none;
   font-family: var(--display); font-size: 15px; color: #17151d; background: #f2e9d7;
   border-radius: 999px; padding: 7px 18px 6px; box-shadow: 0 3px 0 rgba(0, 0, 0, .38); }
 /* panel shell: Lane W mounts inside */
@@ -9302,11 +9307,19 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 /* ===== THE PADDOCK: cards + collection panel (Lane W) =====================
    `.pdk-`, NOT `.pd-`: `.pd-*` is the wardrobe paperdoll above. Same reason the
    reveal rule is scoped to `#sheets .sheet-body`. */
-.pdk-host { position: absolute; left: 50%; transform: translateX(-50%); top: 284px; width: 274px; z-index: 6; }
+/* z-index 10, ABOVE the panel's 9 and the coach mark's 9. Measured 2026-08-31 at
+   430x932: the dots row lands at y605 and the panel's top edge is at y601, so at 6 the
+   one control that says "there are more of these" was painted UNDER the panel, and
+   elementFromPoint at each dot returned .pdk-panel. An open card is the front-most
+   thing on this screen, so it says so. */
+.pdk-host { position: absolute; left: 50%; transform: translateX(-50%); top: 284px; width: 274px; z-index: 10; }
 .pdk-rail { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
 .pdk-rail::-webkit-scrollbar { display: none; }
 .pdk-card {
-  flex: 0 0 100%; scroll-snap-align: center; box-sizing: border-box;
+  /* 92%, so the copy NEXT to this one peeks in at the edge. At 100% a four-deep stack
+     looked like a single card and the second playtester never found the slider at all;
+     the dots are the other half of the same message. */
+  flex: 0 0 92%; scroll-snap-align: center; box-sizing: border-box;
   background: #1d1b22; border: 2.5px solid #17151d; border-radius: 16px;
   box-shadow: 4px 5px 0 rgba(0,0,0,.45); padding: 12px 14px; position: relative;
   animation: pdkPop 320ms cubic-bezier(.34,1.56,.64,1) both;
@@ -9347,9 +9360,15 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   display: grid; place-items: center; box-shadow: 0 3px 0 #17151d;
 }
 .pdk-x-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #17151d; }
-.pdk-dots { display: flex; gap: 6px; justify-content: center; margin-top: 8px; }
-.pdk-dot { width: 8px; height: 8px; border-radius: 50%; background: #14131a; border: 1.5px solid #17151d; }
-.pdk-dot.on { background: #a5e847; }
+/* THE DOT IS A CONTROL WITH A 24px TAP AREA and an 8px face. It was an 8px box with no
+   handler: too small to hit even once it was visible, and nothing happened if you did.
+   The face is drawn by ::after so the box can grow without the dot growing with it, and
+   the empty face is #3a3542 rather than the panel's own #14131a: these land ON the
+   panel's top edge, where a dot the colour of the panel is a dot nobody can see. */
+.pdk-dots { display: flex; gap: 2px; justify-content: center; margin-top: 2px; }
+.pdk-dot { width: 24px; height: 24px; display: grid; place-items: center; }
+.pdk-dot::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #3a3542; border: 1.5px solid #17151d; }
+.pdk-dot.on::after { background: #a5e847; }
 /* the burst floats out of the header; pointer-events none so it never eats a tap */
 .pdk-burst { position: absolute; right: 4px; top: 0; pointer-events: none; }
 .pdk-glyph { position: absolute; right: 0; top: 0; width: 13px; height: 13px; opacity: 0; animation: pdkFloat 850ms ease-out both; }
@@ -9376,11 +9395,18 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pdk-x { position: absolute; top: 3px; right: 3px; background: #f2e9d7; color: #17151d; border: 1.5px solid #17151d; border-radius: 999px; font-size: 9px; font-weight: 800; padding: 0 4px; }
 .pdk-star { position: absolute; top: 3px; left: 3px; width: 11px; height: 11px; background: #ffc961; clip-path: polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%); }
 .pdk-eggico { width: 26px; height: 32px; background: #f2e9d7; border: 2px solid #17151d; border-radius: 50% 50% 46% 46% / 60% 60% 40% 40%; }
+/* an empty nest still shows the door, but not a full egg it does not have */
+.pdk-eggico.pdk-empty { opacity: .3; }
 .pdk-eggbar { display: block; width: 76%; height: 6px; background: #14131a; border: 1.5px solid #17151d; border-radius: 999px; margin-top: 5px; overflow: hidden; }
 .pdk-eggbar i { display: block; height: 100%; background: #a5e847; }
 .pdk-foot { display: flex; gap: 8px; margin-top: 14px; }
 .pdk-seg { flex: 1; font-family: Bangers, system-ui; font-size: 15px; border: 2px solid #17151d; border-radius: 13px; padding: 7px 0; background: #1d1b22; color: #8f8578; }
 .pdk-seg.on { background: #a5e847; color: #17151d; }
+/* a door that does not open yet must LOOK shut: `disabled` alone left it at full
+   opacity with a pointer cursor beside a lit segment, which reads as a working tab */
+.pdk-seg[disabled] { opacity: .45; cursor: default; }
+/* and the count beside it is a LABEL, not the selected half of a toggle */
+.pdk-count { text-align: center; color: #f2e9d7; }
 
 /* ---------- Discord card hero (Tom, 2026-08-12) ----------
    "the discord icon with a bonehead chillin next to it or something to really
