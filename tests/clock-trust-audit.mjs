@@ -335,7 +335,14 @@ try {
 
     // daily quests: claim only the ones actually satisfied by the above
     const allXp = await db.db.all('xp');
-    const qs = quests.dailyQuests(day, { hkConnected: false, huntEnabled: false, socialOn: false, pitTried: false, kitchenReady: false });
+    /* ALL GATES OPEN, deliberately: this file grades whether an honest forward
+       day can CLAIM what it rolled, not what gating serves a locked player
+       (quest-daymore-audit owns that). With gates closed the seed-fixed draw
+       shrinks on dates whose draw hits gated quests (post-#283 fewer-never-
+       different semantics), and on 2026-08-31 the date lottery finally dealt a
+       one-quest day: the full-set premise row went red on a healthy tree, the
+       same class the daymore audit hit the day before. */
+    const qs = quests.dailyQuests(day, { hkConnected: true, huntEnabled: true, socialOn: true, pitTried: true, kitchenReady: true });
     const ctx = quests.questCtx('day', {
       date: day, entries: await db.db.byIndex('log', 'date', day), allXp,
       allLog: await db.db.all('log'), healthRows: await db.db.all('health'),
