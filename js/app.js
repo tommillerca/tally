@@ -15459,7 +15459,13 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
       : p.kind === 'fly'
         ? `left:0;top:${p.y - Math.round(p.w * .5)}px;width:${p.w}px;height:${Math.round(p.w * .8)}px;--pdk-dur:${p.dur}s;--pdk-phase:${p.phase || 0}s`
         : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px`;
-    return `<div class="pdk-pet pdk-${p.kind}${glow}" data-pdk="${r.sp}" style="${pos}">
+    /* THE SPRITE NAMES THE COPY, not just the species. `data-pdk` alone meant the field
+       was a species picker: tapping the fourth Bulldog opened the slider on the first
+       one, so the animal you pressed and the card you got were different animals. The
+       iid is what the bond is banked against, so it is what the tap has to carry. A
+       friend's field passes positional ids (`y0`, `y1`) and opens nothing, which is
+       unchanged: it has no card to open. */
+    return `<div class="pdk-pet pdk-${p.kind}${glow}" data-pdk="${r.sp}" data-iid="${r.iid}" style="${pos}">
       <span class="pdk-flip"><span class="pdk-bob">${art}</span></span>
       ${p.kind === 'walk' || p.kind === 'flop' ? '<span class="pdk-shadow"></span>' : ''}
     </div>`;
@@ -15584,7 +15590,7 @@ async function openPaddock() {
     /* Lane W's module; a tap before it lands degrades to nothing, never to an
        error (anti-regression rule 8's spirit: absent halves degrade visibly
        calm, not broken). */
-    import('./paddock-cards.js').then(m => m.openPaddockCards(sp)).catch(() => {});
+    import('./paddock-cards.js').then(m => m.openPaddockCards(sp, hit.dataset.iid)).catch(() => {});
   });
   $('#pdkNest', wrap)?.addEventListener('click', () => {
     import('./paddock-cards.js').then(m => m.openPaddockCards('egg')).catch(() => {});

@@ -153,9 +153,16 @@ export function eggCardModel(eggs) {
   let line;
   if (!count) line = 'Nothing in the nest yet.';
   else if (!near) line = `${count} in the nest.`;
-  else if (near.ready) line = `${count} in the nest. One is ready to hatch.`;
+  /* THE NEST IS NOT WHERE EGGS OPEN, so a ready egg says where it does. The Paddock
+     has no hatch control (hatchEgg is wired to the Backpack's Incubating rows, app.js
+     [data-hatch]), and a card that only announces "ready" with nothing to press reads
+     as a broken button. One line of pointing beats a second door. */
+  else if (near.ready) line = `${count} in the nest. One is ready to hatch: open it in your Backpack.`;
   else line = `${count} in the nest. Nearest hatch: ${num(near.togo)} steps to go.`;
-  return { count, line, pct: near ? Math.max(0, Math.min(1, near.pct || 0)) : 0, ready: !!(near && near.ready) };
+  const ready = !!(near && near.ready);
+  /* READY IS 100%, whatever the goal. A ready egg carries goal 0 (loot.js grantEgg) and
+     the divisor said 0%, on the tile as well as the card: both bars read this number. */
+  return { count, line, pct: ready ? 1 : (near ? Math.max(0, Math.min(1, near.pct || 0)) : 0), ready };
 }
 
 /* ---- markup ------------------------------------------------------------- */
@@ -204,9 +211,16 @@ export function inkFitStyle(sp, fill = INK_FILL) {
    gen_icons.mjs rather than pasted into the generated file, so a future regen keeps it.
    Icon-system rules: flat fill, no rim, tint from the manifest (#fd6857 coral), and
    the soft drop-shadow lives in CSS. An empty pip is the SAME shape dimmed, so five
-   hearts read as five hearts whether or not they are filled. */
+   hearts read as five hearts whether or not they are filled.
+   THE TINT MUST BE `currentColor`, NOT THE MANIFEST'S. bhIcon inlines
+   `style="color:#fd6857"` on the svg when no tint is passed, and an inline style beats
+   the `.pdk-heart { color:#26232e }` / `.on { color:#fd6857 }` pair on the wrapper: every
+   pip painted coral, so a bond of 2 read as a bond of 5 and the meter said nothing.
+   Passing currentColor hands the decision back to the wrapper's CSS, which is the only
+   thing that knows which pips are filled. bhIcon itself is unchanged: its other call
+   sites want the manifest tint. */
 const heartsHtml = n => Array.from({ length: 5 }, (_, i) =>
-  `<i class="pdk-heart${i < n ? ' on' : ''}" aria-hidden="true">${bhIcon('heart', 17)}</i>`).join('');
+  `<i class="pdk-heart${i < n ? ' on' : ''}" aria-hidden="true">${bhIcon('heart', 17, 'currentColor')}</i>`).join('');
 
 /* THE TWO BOXES A PET LAYER LANDS IN, and both are needed before the markup
    exists, so neither can be measured off the element it describes.
@@ -300,8 +314,12 @@ export function panelHtml(roster, eggs, { tileBox = 0 } = {}) {
         <b>Riding since day one? Check your inbox, bony buddy.</b></span>
     </button>
     <div class="pdk-grid">
+      ${/* AN EMPTY NEST DOES NOT DRAW A FULL EGG. The glyph was unconditional, so the
+           tile showed an egg at full strength while the card behind it said "SOUL EGGS
+           ×0 / Nothing in the nest yet". Dimmed rather than removed: the tile is still
+           the door to the nest, and an empty square would not read as one. */''}
       <button class="pdk-tile pdk-eggtile" data-egg="1">
-        <span class="pdk-eggico" aria-hidden="true"></span>
+        <span class="pdk-eggico${egg.count ? '' : ' pdk-empty'}" aria-hidden="true"></span>
         <span class="pdk-eggbar"><i style="width:${Math.round(egg.pct * 100)}%"></i></span>
       </button>
       ${tiles.map(t => `<button class="pdk-tile${t.owned ? '' : ' pdk-lockt'}${t.glow ? ' r-' + t.rarity : ''}" data-sp="${esc(t.sp)}">
@@ -311,9 +329,13 @@ export function panelHtml(roster, eggs, { tileBox = 0 } = {}) {
         ${t.owned ? '' : '<span class="pdk-q">?</span>'}
       </button>`).join('')}
     </div>
+    ${/* NOT A TAB BAR. Two segments, one disabled and one lit lime, read as a toggle
+         whose other half was broken: the lit one is a COUNT, not a selected tab, and
+         BONEPEDIA is not built. So the count is a label (it was never a control), and
+         the door that does not open yet says so. */''}
     <div class="pdk-foot">
-      <button class="pdk-seg" data-seg="pedia" disabled>BONEPEDIA</button>
-      <button class="pdk-seg on" data-seg="count">${esc(footerLabel(roster))}</button>
+      <button class="pdk-seg" data-seg="pedia" disabled>BONEPEDIA · SOON</button>
+      <span class="pdk-seg pdk-count">${esc(footerLabel(roster))}</span>
     </div>
   </div>`;
 }
@@ -381,15 +403,42 @@ function armOutsideTap() {
   outsideTap = e => {
     if (!sel) return;
     if (host && host.contains(e.target)) return;          // inside the card: not a dismissal
+    /* A TAP ON A PET OR THE NEST IS THE SCENE'S OWN, and exit 1 and exit 3 were
+       cancelling each other on it. This listener captures, so on a re-tap of the OPEN
+       species it closed the card first; the scene's bubbling handler then saw sel ===
+       null, and openPaddockCards REOPENED instead of dismissing. The card was destroyed
+       and silently rebuilt, so the exit the player was told about did nothing (proven by
+       stamping the card node and reading a different node back). Let the scene answer
+       for its own targets: a different pet opens that pet, the same one closes. */
+    if (e.target.closest && e.target.closest('[data-pdk], #pdkNest')) return;
     closePaddockCards();
   };
   tapScene = scene;
   scene.addEventListener('click', outsideTap, true);
 }
 
+/* SCROLL THE RAIL TO ONE COPY, by index into the open species' copies. Two callers,
+   one rule: the field opens the animal you actually tapped, and a dot moves to the copy
+   it stands for. offsetLeft is measured against the same offsetParent for the rail and
+   for its cards, so the difference is the card's position INSIDE the scroller and no
+   caller has to know where the host sits. Setting scrollLeft fires the rail's own
+   scroll listener, which is what repaints the dots: there is no second source of truth
+   for which copy is current. */
+function scrollToCopy(i) {
+  const rail = host && host.querySelector('.pdk-rail');
+  const card = rail && rail.querySelectorAll('.pdk-card')[i];
+  if (!card) return;
+  /* CENTRED, because the cards are `scroll-snap-align: center` and narrower than the
+     rail: parking the card's left edge at the rail's would leave the snap to argue with
+     us afterwards. This is the same centre the scroll handler picks the lit dot by. */
+  rail.scrollLeft = card.offsetLeft - rail.offsetLeft - (rail.clientWidth - card.offsetWidth) / 2;
+}
+
 /* Re-tap dismiss lives HERE rather than in the scene, so the rule is one line and
-   cannot disagree with itself: opening the species already open closes it. */
-export async function openPaddockCards(sp) {
+   cannot disagree with itself: opening the species already open closes it.
+   `iid` is the COPY that was tapped out in the field. Optional: the panel's species
+   tiles have no copy to name and open at the first one, as before. */
+export async function openPaddockCards(sp, iid) {
   /* THE SCENE CALLS THIS WITH ONE ARGUMENT (js/app.js: the #pdkScene tap handler and
      the nest), so the module fetches its own data and owns its own host rather than
      making the scene carry state for it. Re-tap dismiss lives here too, so the rule
@@ -411,7 +460,18 @@ export async function openPaddockCards(sp) {
   rosterRef = roster;
   host.innerHTML = sp === 'egg' ? eggCardHtml(eggs) : sliderHtml(rosterRef, sp);
   host.classList.add('pdk-open');
+  /* THE COACH MARK IS NOT SCENERY WHILE A CARD IS OPEN. It sits at z-index 9 over the
+     host's 6 and covers exactly where a tall card's Pet/Feed row lands, and because it
+     is OUTSIDE the card the outside-tap dismisser read the press as "close". The scene's
+     own pet handler already dropped it; the panel and the nest never did, so every card
+     opened from the grid kept it. Dropped HERE, where every door passes. */
+  document.getElementById('pdkCoach')?.remove();
   wire();
+  /* open on the copy the player tapped, not on copy 1 */
+  if (iid) {
+    const i = rosterRef.filter(r => r.sp === sp).findIndex(r => r.iid === iid);
+    if (i > 0) scrollToCopy(i);
+  }
   armOutsideTap();
   return true;
 }
@@ -442,6 +502,13 @@ function wire() {
     cards.forEach((c, i) => { const d = Math.abs(c.offsetLeft + c.offsetWidth / 2 - mid); if (d < bestD) { bestD = d; best = i; } });
     host.querySelectorAll('.pdk-dot').forEach((d, i) => d.classList.toggle('on', i === best));
   }, { passive: true });
+
+  /* AND THE DOTS ARE A CONTROL, not a readout. They shipped with no handler at all, so
+     the one affordance that says "there are more of these" did nothing when pressed. */
+  host.querySelectorAll('.pdk-dot').forEach((d, i) => d.addEventListener('click', e => {
+    e.stopPropagation();
+    scrollToCopy(i);
+  }));
 
   host.querySelectorAll('.pdk-x-btn').forEach(b => b.addEventListener('click', e => {
     e.stopPropagation();
