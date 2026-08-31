@@ -1221,7 +1221,12 @@ async function boot() {
     setTimeout(() => toast('Could not reach your cloud backup just now. Nothing has been lost; we will try again next time you open the app.', 5200), 900);
   }
 
-  if (!S.settings) { renderOnboarding(); return; }
+  if (!S.settings) {
+    const saved = await kvGet('onbProgress', null);
+    renderOnboarding(saved && Number.isInteger(saved.step) ? Math.min(2, Math.max(0, saved.step)) : 0,
+      saved && saved.pick ? { pick: saved.pick } : {});
+    return;
+  }
 
   /* FIRST PAINT COMES BEFORE THE AWARDING WORK, NOT AFTER IT.
    *
@@ -12448,6 +12453,13 @@ function renderOnboarding(step = 0, ctx = {}) {
      are no settings). Left alone it paints as a live control and does nothing.
      Hide it; route() owns gear visibility from the first navigation on. */
   const gearBtn = $('#gearBtn'); if (gearBtn) gearBtn.hidden = true;
+  /* AN INTERRUPTED INSTALL RESUMES WHERE IT STOPPED. Reproduced on the round-1
+     playtest report: reach THE PLAN, quit, reopen, and you are back at the
+     first screen with a freshly rolled skeleton, the one you liked gone. Every
+     render stamps its step and the current pick; boot resumes from the stamp,
+     and finishing onboarding clears it. Fire-and-forget: a lost write costs a
+     replayed step, never a stuck one. */
+  kvSet('onbProgress', { step, pick: ctx.pick || null }).catch(() => {});
   trackEvent('onb_step', { n: step });
   const dots = `<div class="onb-dots">${[0, 1, 2].map(i => `<i class="${i === step ? 'on' : i < step ? 'done' : ''}"></i>`).join('')}</div>`;
   const back = step > 0 ? `<button class="onb-back" id="onbBack" aria-label="Back">${ICONS.chev(18)}</button>` : '';
@@ -12581,6 +12593,7 @@ async function saveInitialSettings(np) {
    whoever ends onboarding owns the shell latch: without it a restored player gets
    Today with a hidden tab bar, unbound tabs and a dead hashchange. */
 function enterAppFromOnboarding() {
+  kvSet('onbProgress', null).catch(() => {});   // onboarding is over; nothing to resume
   $('#tabbar').style.display = '';
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
@@ -16857,7 +16870,13 @@ async function openRestoreSheet() {
        and no bound tabs. enterAppFromOnboarding is the same latch finishing
        onboarding uses, and it routes. An account with no save to pull has no
        settings either: onboarding continues instead of routing into the gate. */
-    if (wasOnb) { if (S.settings) enterAppFromOnboarding(); else renderOnboarding(); return; }
+    if (wasOnb) {
+      if (S.settings) { enterAppFromOnboarding(); return; }
+      const saved = await kvGet('onbProgress', null);
+      renderOnboarding(saved && Number.isInteger(saved.step) ? Math.min(2, Math.max(0, saved.step)) : 0,
+        saved && saved.pick ? { pick: saved.pick } : {});
+      return;
+    }
     route();
   });
 }

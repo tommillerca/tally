@@ -222,6 +222,7 @@ const QUIET_KV = new Set([
   'spiresIntroSeen', 'bossesIntroSeen', 'mageIntroSeen', 'raceIntroSeen', 'raceResultSeen',
   'gardenIntroSeen', 'discordIntroSeen', 'discordIntroShown', 'discordJoined',
   'betaThanksSeen', 'cosmeticTeaserSeen', 'changelogSeen', 'grantsSeen', 'seenUnlocks',
+  'onbProgress',
   'hlwSeen', 'siegeSeen', 'map-seen', 'mapLpHint', 'namePrompted', 'notifAsked',
   'surveyDone', 'surveySnoozeAt', 'renameRequired', 'petSeenLevel',
   'lastOpenDay', 'wbReturnDay',
