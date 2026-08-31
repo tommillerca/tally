@@ -22,9 +22,9 @@ import {
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   stripAll, stripAllPlan,
   DROP, buyDropItem, refundStreakFreezes,
-  RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_REROLL_LADDER, RACK_RARITY_PRICE,
+  RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_RARITY_PRICE,
   setWornAura, ownsAura,
-  rack, rerollRack, buyRackItem, wornAura,
+  rack, rerollRack, rackRerollCost, buyRackItem, wornAura,
   buyPetItem,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
@@ -8575,16 +8575,14 @@ async function renderShop(el) {
       tonBurst = mountCrateBurst($('#tonBurst', wrap), { color: b.light, amp: Math.max(b.amp, .12), haze: b.haze });
     }
   };
-  /* REROLL HAS A CEILING AND THE SCREEN HAS TO CARRY IT. A control reading
-     "Reroll the rack / FREE" with nothing beside it says unlimited, and an
-     unlimited reroll destroys the rack: you spam it until your piece appears and
-     the countdown beside the theme becomes noise. Two words carry the limit,
-     "N left this week", and the small line under the label says what a reroll draws
-     from, which is the thing a curated theme and a random reroll otherwise fight
-     about: another nine FROM THE SAME THEME, never a random pull out of the
-     whole game. */
-  const rerollCost = RACK_REROLL_LADDER[rk.rr] ?? null;
-  const rerollsLeft = RACK_REROLL_LADDER.length - rk.rr;
+  /* THE REROLL IS A PRICE CURVE, NOT A COUNT (Tom, 2026-08-31: "players should
+     be able to pay an increasing amount to reroll the rack thats fine"). It
+     moves ONLY the rotating shelf: the themed nine keep their week identity,
+     which is why the button lives on that shelf and its copy names which shelf
+     stays put. The price rises per reroll to a hard cap and resets Monday; the
+     button always carries the price and disables when the wallet cannot cover
+     it, so its only states are "afford it" and "visibly can't". */
+  const rerollCost = rackRerollCost(rk.rr);
   // what this wallet actually reaches, counted rather than implied
   /* THE ROTATING SHELF, and the wallet line has to count it. Tom, 2026-08-27:
      "players are pissed and have no where to spend their gold so make the rack
@@ -8618,9 +8616,6 @@ async function renderShop(el) {
     ${rackAuraTile()}
     ${rackIds.slice(RACK_AURA_CELL).map((id, i) => rackTile(id, RACK_POOLS[i + RACK_AURA_CELL][0], RACK_DUST[i + RACK_AURA_CELL])).join('')}
   </div>
-  <button class="rk-reroll" id="rackReroll"><span class="rk-rr"><b>Reroll the rack</b><small>A new ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())} nine, and a new shelf below</small></span>
-    <span class="rk-left">${rerollsLeft > 0 ? `${rerollsLeft} left this week` : 'none left this week'}</span>
-    ${rerollCost == null ? '' : rerollCost ? `<span class="t3-price">${ICONS.coin(13)} ${rerollCost}</span>` : '<span class="t3-price free">FREE</span>'}</button>
   ${rotIds.length ? `
   <!-- THE OTHER 355. The themed rungs above sell nine a week out of a catalogue
        of 370, which is why there was nowhere to spend coins: 361 finished pieces
@@ -8631,7 +8626,13 @@ async function renderShop(el) {
   <div class="rk-theme"><b>ALSO ON THE RACK</b><i></i><span>${rotIds.length} pieces &middot; new every day</span></div>
   <div class="rk-grid rot">
     ${rotIds.map(id => rackTile(id, rotPrice(id)[0], rotPrice(id)[1], 384)).join('')}
-  </div>` : ''}
+  </div>
+  <!-- The reroll sits ON the shelf it moves. Its copy names the boundary out
+       loud (the themed nine above never reroll), the price is on the button
+       before the tap, and a wallet that cannot cover it sees a disabled button
+       rather than a taunt. -->
+  <button class="rk-reroll" id="rackReroll"${coinBal < rerollCost ? ' disabled' : ''}><span class="rk-rr"><b>Reroll this shelf</b><small>A fresh ${rotIds.length}, drawn from the whole catalogue. The ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())} nine above stay put.</small></span>
+    <span class="t3-price">${rerollCost === 0 ? 'FREE' : `${ICONS.coin(13)} ${rerollCost.toLocaleString()}`}</span></button>` : ''}
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Potions and charms</b><small>Supplies ›</small></button>
   <div id="shopRestBody" hidden>
 
@@ -8801,15 +8802,16 @@ async function renderShop(el) {
     rerender();
   }));
   el.querySelectorAll('[data-tryon]').forEach(b => b.addEventListener('click', () => rackTryOn(b.dataset.tryon, +b.dataset.coin, +b.dataset.dust)));
-  /* THE REROLL SPENDS, so it arms first like every other spend in the game. The
-     free one does not, because there is nothing to protect the player from. */
+  /* THE REROLL SPENDS, so it arms first like every other spend in the game.
+     There is no free rung on the curve anymore, so it always arms. The coins
+     toast stays as the backstop for a balance that fell between render and tap
+     (the disabled state covers the common case). */
   const rrBtn = $('#rackReroll', el);
   if (rrBtn) {
     const doReroll = async () => {
       const r = await rerollRack();
       if (!r.ok) {
-        toast(r.reason === 'limit' ? 'No rerolls left this week. A fresh rack lands Monday.'
-          : r.reason === 'coins' ? `Not enough coins. That reroll costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`
+        toast(r.reason === 'coins' ? `Not enough coins. That reroll costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`
           : 'Try that again.', 2800);
         return;
       }
@@ -8817,8 +8819,7 @@ async function renderShop(el) {
       trackEvent('rack_reroll', { n: r.rr, cost: r.cost });
       rerender();
     };
-    if (rerollCost) armToConfirm(rrBtn, `Spend ${rerollCost}?`, doReroll);
-    else rrBtn.addEventListener('click', doReroll);
+    armToConfirm(rrBtn, rerollCost === 0 ? 'Reroll free?' : `Spend ${rerollCost.toLocaleString()}?`, doReroll);
   }
   /* The other departments are one tap away rather than gone. The control that
      hides them owns un-hiding them (anti-regression rule 8), and there is no

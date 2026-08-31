@@ -50,7 +50,8 @@
    COPY: deleting the `taken` filter from js/loot.js left this file completely
    green, so the one row that protects the money could not see the defect it
    exists for. Caught by proving it red, not by reading it. */
-import { RACK_ROTATE_POOL, RACK_ROTATE_N, RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, rackRotatePick, rackPick } from '../js/loot.js';
+import { RACK_ROTATE_POOL, RACK_ROTATE_N, RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, RACK_REROLL_LADDER, rackRerollCost, rackRotatePick, rackPick } from '../js/loot.js';
+import { readFileSync } from 'node:fs';
 import { BH_ITEMS, BH_BY_ID } from '../data/boneheadz.js';
 
 let fails = 0;
@@ -132,6 +133,88 @@ const a = pick('2026-W07', 2, themedFor('2026-W07', 2));
 const b = pick('2026-W07', 2, themedFor('2026-W07', 2));
 ok('STABLE the same week and salt give the same shelf, so it cannot change under a re-render',
   a.length > 0 && a.join() === b.join(), `${a.length} ids, identical on a second call`);
+
+/* ============ THE REROLL CURVE (Tom, 2026-08-31) ============
+ * "players should be able to pay an increasing amount to reroll the rack thats
+ * fine": the count is unlimited within the week, so the PRICE is the only
+ * ceiling. Three things must hold or the sink becomes a trap or a faucet:
+ * the curve rises, it CAPS past the ladder rather than indexing off the end
+ * (an undefined cost is `bal < undefined` = false, then a NaN wallet), and
+ * the FIRST rung is free (the shipped freebie survives the 2026-08-31 ruling)
+ * and every rung after it is finite, paid and strictly rising, so the free
+ * roll cannot be spammed: rung two always costs. */
+{
+  const L = RACK_REROLL_LADDER;
+  const rising = L.every((v, i) => i === 0 || v > L[i - 1]);
+  ok('CURVE  one free roll, then the price rises strictly, all finite and paid',
+    L.length >= 3 && L[0] === 0 && rising && L.slice(1).every(v => Number.isFinite(v) && v > 0),
+    L.join(' < '));
+  const cap = L[L.length - 1];
+  const past = [L.length, L.length + 5, 50].map(rackRerollCost);
+  ok('CURVE  past the ladder the price holds at the cap, never null or undefined',
+    past.every(v => v === cap) && rackRerollCost(0) === L[0],
+    `rackRerollCost(${L.length}/${L.length + 5}/50) = ${past.join('/')}, cap ${cap}, first rung ${L[0]}`);
+}
+
+/* DISTINCT: each paid reroll buys a shelf the player has not already seen this
+   week. The themed nine are FIXED per week (rerollRack keeps cur.ids), so
+   `taken` is pinned to the week's salt-0 themed draw, exactly as the app now
+   calls the picker. Pairwise across salts, not just adjacent: MOVES above only
+   proves n differs from n-1, which a two-state flip-flop would pass. */
+{
+  let weeks = 0, allDistinct = 0;
+  for (let w = 10; w < 20; w++) {
+    const themed = themedFor(`2026-W${w}`, 0);
+    const shelves = [];
+    for (let n = 0; n <= 5; n++) shelves.push(pick(`2026-W${w}`, n, themed).join());
+    weeks++;
+    if (new Set(shelves).size === shelves.length) allDistinct++;
+  }
+  ok('DISTINCT six salts give six pairwise-different shelves, week after week',
+    weeks === 10 && allDistinct === weeks,
+    `${allDistinct} of ${weeks} weeks fully distinct across salts 0..5`);
+}
+
+/* N0: the un-rerolled shelf is untouched by the reroll machinery. A counter
+   threaded wrongly into the seed (off by one, or salting n=0) would silently
+   move EVERY player's default shelf on update day. The salt-0 seed string is
+   pinned by a local FNV-1a reimplementation, so this goes red if it moves. */
+{
+  const fnv = t => { let h = 2166136261; for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+  const themed = themedFor('2026-W21', 0);
+  const pool = RACK_ROTATE_POOL.filter(id => !themed.includes(id));
+  const expect = [];
+  for (let i = 0; expect.length < RACK_ROTATE_N && i < RACK_ROTATE_N * 40; i++) {
+    const id = pool[fnv(`2026-W21:0:rot:${i}`) % pool.length];
+    if (!expect.includes(id)) expect.push(id);
+  }
+  const got = pick('2026-W21', 0, themed);
+  ok('N0     salt 0 is exactly the un-rerolled draw (seed string pinned)',
+    got.length === RACK_ROTATE_N && got.join() === expect.join(),
+    `${got.length} ids against the pinned \${week}:0:rot:\${i} seed`);
+}
+
+/* WEEK-IDENTITY, statically, the same way the GUARD row reads buyRackItem:
+   rerollRack must keep the themed nine (`ids: cur.ids`) and must debit only
+   AFTER the kvUpdate claim is won, or a losing racer pays for a shelf it never
+   moved. Source order is the contract here because this audit is pure node and
+   cannot drive IndexedDB. */
+{
+  const src = readFileSync(new URL('../js/loot.js', import.meta.url), 'utf8');
+  const at = src.indexOf('async function rerollRack');
+  /* Comments are STRIPPED before matching. Proving this row red caught the
+     first draft matching the words `ids: cur.ids` inside rerollRack's own
+     comment while the code beside it redrew the nine: a guard that reads prose
+     grades the documentation, not the behaviour. */
+  const body = (at === -1 ? '' : src.slice(at, src.indexOf('\nexport', at + 1)))
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const keeps = body.includes('ids: cur.ids');
+  const debitAfterClaim = body.includes('kvUpdate') && body.includes('coinsAdd')
+    && body.indexOf('kvUpdate') < body.indexOf('coinsAdd');
+  ok('WEEK-IDENTITY rerollRack keeps the themed nine and debits only after the claim',
+    keeps && debitAfterClaim,
+    body ? `ids: cur.ids ${keeps ? 'present' : 'MISSING'}, debit-after-claim ${debitAfterClaim}` : 'rerollRack body NOT FOUND, so this row read nothing');
+}
 
 /* THE TWO RUNG ARRAYS ARE PARALLEL, AND NOTHING ELSE HOLDS THEM TOGETHER.
    buyRackItem prices a dust buy as RACK_DUST[i] where i indexes RACK_POOLS; a

@@ -9923,6 +9923,7 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm); padding: 9px 12px; color: var(--text); }
 .rk-reroll b { text-align: left; font-size: var(--fs-3); }
+.rk-reroll:disabled { opacity: 0.45; }
 
 /* ============ the try-on sheet ============
    One piece, on the player's own bonehead, over their real outfit. The grid is
@@ -10152,15 +10153,13 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .rk-w i { font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rk-w svg { flex: none; }
 
-/* The reroll's LIMIT, which the simplification pass cut along with the printed
-   price ladder. The ladder was clutter; the limit is the mechanic, and without
-   it the control reads as unlimited, which would let anyone spam the rack until
-   their piece appears and turn the countdown beside the theme into noise. */
+/* The reroll's mechanic since 2026-08-31 is a rising PRICE, not a count, so
+   the button carries the price pill and nothing else: the price IS the limit,
+   and a wallet that cannot cover it gets the disabled state below rather than
+   a countdown ("N left this week" left with the count cap). */
 .rk-rr { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
 .rk-rr b { font-size: var(--fs-3); }
 .rk-rr small { font-size: 10.5px; color: var(--text-3); }
-.rk-left { flex: none; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; color: var(--text-2);
-  background: var(--surface-3); border-radius: 7px; padding: 3px 7px; }
 
 /* GWART'S MENAGERIE. The pet shelf sits above the rack: Tom, 2026-08-21, wanted
    "a hero banner above the normal shop stuff for bumbleseal ... below on one
