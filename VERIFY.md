@@ -503,3 +503,79 @@ touching the OS clock, set the mark directly in the console:
      m-boss/w-boss (he re-rolls every 45 min; deliberately out of progression).
    - node tests/unit.test.js and tests/reward-sop-audit.mjs must pass: quest
      claims stay idempotent per `quest-<periodKey>-<id>`.
+
+---
+# VERIFY: encounter range + fight-exit cleanup (branch fix/encounter-range)
+
+Scope: js/app.js only. Three changes: (1) the #mapDen tap re-measures distance
+from the live fix and refuses beyond 1.5x DEN_RADIUS_M with a toast; (2) the
+den Fight/Flee prompt is withdrawn when a position update puts the player
+beyond 1.5x; (3) fight exits: settle() removes any still-standing gate intro
+overlay, and #fightDone for every map-launched mode (boss/mini/secret/mimic/
+wanderer, plus glutton/spire wins) closes the WHOLE sheet stack instead of one
+level. Glutton/spire LOSSES still back out one level to the retry sheet, on
+purpose. No payout code touched; reward-sop-audit untouched.
+
+`node --check js/app.js` passes on this tree. Everything below needs the
+browser pass (drive position via CDP Emulation.setGeolocationOverride, or the
+webdriver fake at js/app.js:4034; DEN_RADIUS_M is 80, so the refuse line is
+120 m).
+
+## 1. Fight tap revalidates distance (the ~600 m exploit)
+
+1. Stand a fix inside 80 m of a den, tap its pin: the sheet opens with the
+   Fight button live.
+2. WITHOUT closing the sheet, move the fix ~600 m away. Do NOT wait for a
+   refresh; tap Fight immediately after the move lands.
+3. MUST BE TRUE: no fight sheet opens, no gate intro plays, a toast reads
+   "Too far away now. Walk back to the den.", and the den sheet is closed
+   (its own tap already dismissed it). No coins/XP/ledger rows move (fights
+   only pay on settle, so assert no fight sheet is the guard here).
+4. Prove-red (throwaway tree only): revert the revalidation block in the
+   #mapDen handler (restore `rec.den.dist > DEN_RADIUS_M` against the stale
+   value) and repeat; the fight MUST start from 600 m. Red proves the guard.
+5. Jitter grace: from ~100 m (between 80 and 120), tap Fight: it must START.
+   From 130 m it must refuse. The boundary is 1.5x, not 1x, by design.
+
+## 2. The prompt withdraws itself mid-walk
+
+1. Open a den sheet in range (Fight button live). Walk the fix out past 120 m
+   in steps, one watchPosition tick at a time (ticks are throttled to 1.2 s;
+   send fixes slower than that).
+2. MUST BE TRUE: the sheet closes ON ITS OWN within one tick of crossing
+   120 m, with the toast "You walked out of range of the den." The map is
+   what remains, no sheet.
+3. Control (an absence needs one): open the SAME den's sheet from OUT of
+   range (walk-up copy showing, Fight disabled) and move the fix around
+   beyond 120 m: the sheet must NOT close on its own. Informational sheets
+   stay put.
+4. Stack safety: open a den sheet in range, then open the report sheet on top
+   of it (or any second sheet). Walk out past 120 m: NOTHING auto-closes
+   (withdraw is top-of-stack only), and tapping Fight afterwards still
+   refuses by rule 1.
+
+## 3. Fight exits clear every fight surface
+
+For each of WIN, LOSS, FLEE on a walked-to den (mode boss, from the map):
+1. Start the fight legitimately in range. For win/loss use the webdriver
+   seam `window.__bhFight.finish('p'|'f')`; for flee tap the Flee button.
+2. After tapping the outcome's exit (#fightDone, or Flee itself):
+   MUST BE TRUE: `document.querySelectorAll('#sheets .sheet').length === 0`,
+   no `.gi` (gate intro) node anywhere in the DOM, no element containing
+   "Turn 1"/"Round one" text, and the Boneyard map is interactive (tap a pin,
+   get a sheet).
+3. Same sweep for a MINI fight and one of mimic/wanderer if reachable.
+4. Glutton and spire (deliberate exception): a WIN must land on the map with
+   zero sheets (unchanged behavior); a LOSS must land back on the glutton/
+   spire sheet, ONE sheet deep, still offering the retry.
+5. Pit fights (rung/champ/endless/spar) are untouched: win one from The Pit
+   and confirm Done returns to the Pit screen and renderPit re-rendered
+   (energy/rung state fresh). Flee a staked fight and confirm the DOWN, NOT
+   OUT panel still renders (kv pitFight 'lost' + forfeit); reopen the app on
+   a QUIT fight and confirm it still restores. A den WIN/LOSS must still
+   write exactly what it wrote before (claimDenWin path untouched): run
+   node tests/reward-sop-audit.mjs and tests/fight-exit-audit.mjs.
+6. Gate intro teardown: start a boss fight, and while the intro is still
+   playing finish the fight via the seam; assert the .gi node is gone the
+   moment the outcome renders.
+# from: 137468cc (Encounter range honesty + fight-exit sheet cleanup)
