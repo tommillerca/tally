@@ -429,14 +429,24 @@ export async function sendGift(toId, mode, coins) {
     return { ok: r.ok, status: r.status, ...d };
   } catch { return { ok: false }; }
 }
-// Send a preset cheer (index into the client-side CHEERS list; no free text).
-export async function sendCheer(toId, cheer) {
+/* Send a preset cheer (index into the client-side CHEERS list; no free text).
+   `ck` IS THE TAP, NOT THE REQUEST. A cheer send that loses its answer (the
+   12s deadline above fires, or the socket goes quiet) re-arms the chips and the
+   player taps again for the same cheer they already sent; without a key the
+   server counts a second row and the friend gets two. The caller mints one key
+   per TAP and passes the same one to every retry of it, so the server's
+   INSERT OR IGNORE collapses them and answers ok. Minted here when the caller
+   does not pass one, so a fresh tap is never accidentally deduped against the
+   previous one. */
+export async function sendCheer(toId, cheer, ck = null) {
   try {
-    const r = await signedFetch('POST', '/cheer', { to: toId, cheer });
+    const r = await signedFetch('POST', '/cheer', { to: toId, cheer, ck: ck || newCheerKey() });
     const d = await r.json().catch(() => ({}));
     return { ok: r.ok, status: r.status, ...d };
   } catch { return { ok: false }; }
 }
+// [a-zA-Z0-9_-]{1,32}, which is exactly what the server keeps of it.
+export const newCheerKey = () => crypto.randomUUID().replace(/-/g, '').slice(0, 24);
 
 // Private, local-only nicknames: what YOU call a friend so a generic bone-name
 // is memorable ("Bone Guy" -> "Coach Mike"). Stored on-device in kv, so it's

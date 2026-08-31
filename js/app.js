@@ -11422,12 +11422,19 @@ function openCheerSheet(f) {
       <div class="cheer-grid">${CHEERS.map((c, i) => `<button class="cheer-chip" data-cheer="${i}"><span class="cheer-emo">${c.emo}</span><span class="cheer-txt">${esc(c.txt)}</span></button>`).join('')}</div>
     </div>
   `, { cls: 'sheet-cheer' });
+  /* ONE KEY PER TAP, REUSED BY ITS RETRIES. A send whose answer is lost (the
+     12s API deadline, a dead socket) re-enables the chips and the player taps
+     the same cheer again, which used to deliver a second one. The key is kept
+     until that cheer actually succeeds, so the server can tell a retry from a
+     new cheer; a different chip is a different cheer and gets its own. */
+  const keys = new Map();
   $('.cheer-grid', wrap).addEventListener('click', async e => {
     const b = e.target.closest('[data-cheer]'); if (!b) return;
     const i = +b.dataset.cheer;
     $$('.cheer-chip', wrap).forEach(x => x.disabled = true);
-    const r = await social.sendCheer(f.playerId, i);
-    if (r.ok) { popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${esc(f.alias || f.name)}!`, 3000); history.back(); }
+    if (!keys.has(i)) keys.set(i, social.newCheerKey());
+    const r = await social.sendCheer(f.playerId, i, keys.get(i));
+    if (r.ok) { keys.delete(i); popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${esc(f.alias || f.name)}!`, 3000); history.back(); }
     else { $$('.cheer-chip', wrap).forEach(x => x.disabled = false); toast(r.status === 429 ? "You've cheered them plenty today. Give 'em a rest!" : 'Could not send. Try again.', 3200); }
   });
 }
