@@ -3411,6 +3411,15 @@ async function renderToday(el) {
      claim, unopened crates. "Today's quests are new" only stands in when
      neither is live, so the card never pads itself. */
   const wbShow = isToday && allLog.length > 0 && (await kvGet('wbReturnDay', null)) === S.date;
+  /* THE DAY GUARD'S ONE LINE OF VOICE. After a clock set-back or a westbound
+     date-line hop, the high-water mark (js/db.js claimDay, rule 1) sits AHEAD
+     of the device's today, so every daily gate quietly refuses: no wheel, no
+     day-close crate, quests pre-checked. The guard is right and is not touched
+     here; this line only tells the player why the day looks spent. STRICTLY
+     behind, never equal: today EQUALLING the mark is the normal state of every
+     ordinary day once it has been opened. Display only, read off the read-only
+     mark; it decides no award. Expires on its own when the calendar catches up. */
+  const preSpent = isToday && dayOrdinal(await kvGet('dayHighWater', null)) > dayOrdinal(S.date);
   let wbFacts = [];
   if (wbShow) {
     const wk = questTiers.find(tier => tier.period === 'week');
@@ -3443,7 +3452,12 @@ async function renderToday(el) {
   const [y, m, d] = S.date.split('-').map(Number);
   const dObj = new Date(y, m - 1, d);
   const title = isToday ? 'Today' : dObj.toLocaleDateString(undefined, { weekday: 'long' });
-  const sub = dObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' });
+  /* A day AHEAD of the device clock exists after a clock set-back or a westbound
+     hop (its entries are real, logged before the clock moved). Mark it quietly in
+     the header so it does not read as corruption; the data itself is untouched. */
+  const aheadOfClock = dayOrdinal(S.date) > dayOrdinal(dateKey());
+  const sub = dObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' })
+    + (aheadOfClock ? ' · dated ahead of this clock' : '');
 
   const heroPet = petFrom(null, eq.C);   // yours, so S.shinyPets answers (the figure contract)
   /* HOW BIG SHE STANDS, AS A SHARE OF THE BONEHEAD. PET_HERO_REL is a ratio, so
@@ -3742,6 +3756,8 @@ async function renderToday(el) {
   </div>
 
   <div class="dayflow">
+  ${preSpent ? `
+  <p class="note">This day already passed on this clock. Fresh rewards return tomorrow.</p>` : ''}
   ${wbShow ? `
   <div class="card wb-back" id="wbCard">
     <b>Everything is where you left it.</b>
@@ -8912,7 +8928,16 @@ async function renderTrends(el) {
   const sleepWk = days7.filter(d => d.sleepHours != null);
   const avgSleep = sleepWk.length ? sleepWk.reduce((a, d) => a + d.sleepHours, 0) / sleepWk.length : null;
   let streak = 0;
-  for (let i = days.length - 1; i >= 0; i--) { if (days[i].logged || days[i].steps >= 3000) streak++; else break; }
+  /* The same one-day grace streakFrom (js/nutrition.js) has always given: a day
+     with no log YET is a streak waiting on today, not a broken one. Without it
+     this pill read 0 every morning before the first log, and after a westbound
+     timezone hop it read 0 all day over an unbroken run ending yesterday.
+     Display only: streak milestone payouts still come off streakFrom in
+     js/game.js and are untouched. If yesterday is also empty, the 0 is real
+     and shows with no hint. */
+  const dayActive = d => d.logged || d.steps >= 3000;
+  const streakGraced = days.length > 0 && !dayActive(days[days.length - 1]);
+  for (let i = days.length - 1 - (streakGraced ? 1 : 0); i >= 0; i--) { if (dayActive(days[i])) streak++; else break; }
 
   const xp = await totalXp();
   const lvl = levelFor(xp);
@@ -8959,7 +8984,7 @@ async function renderTrends(el) {
       ${pill(`${loggedWk}<small>/7</small>`, 'days logged')}
       ${pill(stepsWk ? `${kmWk.toFixed(1)}<small>km</small>` : '·', 'walked (7d)')}
       ${pill(avgSleep != null ? `${avgSleep.toFixed(1)}<small>h</small>` : '·', 'avg sleep')}
-      ${pill(`${streak}<small>${ICONS.flame(13)}</small>`, 'day streak')}
+      ${pill(`${streak}<small>${ICONS.flame(13)}</small>`, streakGraced && streak > 0 ? 'day streak · log today to keep it' : 'day streak')}
     </div>
     <div class="recap-lvl">
       <div class="rl-top"><b>Lv ${lvl.level} · ${esc(lvl.name)}</b><span class="note">${(lvl.need - lvl.into).toLocaleString()} XP to Lv ${lvl.level + 1}</span></div>
