@@ -1203,6 +1203,16 @@ async function boot() {
     snapSettings();
     S.userFoods = await db.all('foods');
     setTimeout(() => toast('Welcome back. Your progress was restored from your cloud backup.', 4600), 900);
+  } else if (cloudRestore && cloudRestore.reason === 'decrypt') {
+    /* HONEST DECRYPT FAILURE. A backup EXISTS but this device's key cannot
+       read it (written under a different key: see pushBackup's
+       mint-before-snapshot note in js/social.js). Telling this player "could
+       not reach your cloud backup, we will retry" is a lie on both halves:
+       the server answered fine, and no retry with this key can ever succeed.
+       The device holding the right key re-pushes daily and self-heals the
+       cloud copy, so nothing is deleted and honesty costs nothing. */
+    try { trackEvent('cloud_restore_failed', { reason: 'decrypt' }); } catch { /* analytics never breaks the app */ }
+    setTimeout(() => toast('A cloud backup exists, but it was written by a different key and this device cannot unlock it. Nothing has been deleted. If another device still has your progress, opening the app there will repair the cloud copy.', 6500), 900);
   } else if (cloudRestore && cloudRestore.reason && !['none', 'empty', 'already'].includes(cloudRestore.reason)) {
     /* A FAILED CLOUD RESTORE MUST SAY SO. The file-import path already gets this
        right ("Import failed: your old data is unchanged"); the cloud path said
@@ -12106,7 +12116,12 @@ async function renderSettings(el) {
     if (!r.ok) return toast(r.reason || 'Could not switch to it.', 3600);
     S.settings = await kvGet('settings', S.settings);
     snapSettings();
-    toast(r.restored ? 'Switched. Welcome back.' : 'Switched, but there was no save to pull.', 4200);
+    /* same honesty as the phrase-restore toast: 'decrypt' means the save
+       exists but this key cannot read it, which is not "no save". */
+    toast(r.restored ? 'Switched. Welcome back.'
+      : r.pullReason === 'decrypt'
+        ? 'Switched, but the cloud save was written by a different key and could not be unlocked. Nothing was deleted.'
+        : 'Switched, but there was no save to pull.', r.pullReason === 'decrypt' ? 6000 : 4200);
     route();
   });
   $('#goOnlineBtn', el)?.addEventListener('click', async () => {
@@ -17005,7 +17020,13 @@ async function openRestoreSheet() {
     snapSettings();
     levelSound(S.sounds);
     closeAllSheetsViaHistory();
-    toast(r.restored ? 'Welcome back. Your Bonehead is restored.' : 'Account restored, but there was no save to pull.', 4600);
+    /* 'decrypt' is NOT "no save": the save is there, sealed under a different
+       key (js/social.js pullBackup). Saying "no save" here is the exact lie
+       the backup-key bug hid behind. */
+    toast(r.restored ? 'Welcome back. Your Bonehead is restored.'
+      : r.pullReason === 'decrypt'
+        ? 'Account restored, but the cloud save was written by a different key and could not be unlocked. Nothing was deleted. If your old device still has the app, opening it there will repair the cloud copy.'
+        : 'Account restored, but there was no save to pull.', r.pullReason === 'decrypt' ? 6500 : 4600);
     /* Restoring FROM ONBOARDING must also end onboarding: boot() returned before
        binding the shell, so a bare route() here left Today with a hidden tab bar
        and no bound tabs. enterAppFromOnboarding is the same latch finishing

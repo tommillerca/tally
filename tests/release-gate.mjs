@@ -162,7 +162,25 @@ if (own) console.log(`serving this repo at ${base}\n`);
    cannot report clean, and PARITY pins the generator's slot list against
    js/app.js's BH_THUMB_RE, which is the enumeration both of them share and the
    one mutation the first draft could not see. */
-const PURE = ['unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs'];
+/* backup-key-audit is PURE and belongs in EVERY gate run, not the --all tier:
+   it guards the E2E cloud backup's key discipline, which is total-loss class
+   (the 2026-08-31 chain: a device's first-ever blob embedded a keyless
+   identity, the boot/cloud MERGE let that blob overwrite a second device's
+   good key, the second device re-minted, and the two devices then encrypted
+   under different keys with the cloud copy's decryptability flipping on
+   whoever pushed last, reported to the player as "no save to pull"). No
+   browser: an in-memory IndexedDB + fetch shim under the REAL js/social.js
+   and js/db.js, two devices as two dbNames, ~2s. Rows: the first blob carries
+   the key, the merge never overwrites a device key the device holds (with
+   payload-wins and fresh-install controls), the full two-device round trip
+   ends with A still able to decrypt, a wrong-key blob is named
+   reason:'decrypt' at both surfaces instead of "no save", plus pet-pool-style
+   source rows so the next rewrite of pushBackup / importAll / the two toasts
+   fails by name. Proven red on a pre-fix snapshot of 61249c4b: 12 of 24 rows
+   red, controls green; the exact measured output is in the file header. Run
+   it on any change to pushBackup, pullBackup, adoptIdentity, importAll,
+   DEVICE_KV or the restore toasts. */
+const PURE = ['backup-key-audit.mjs','unit.test.js', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs'];
 const BROWSER = [
   'write-failure-seam-audit.mjs', // a rejected write is announced and re-thrown, and the ATOMIC primitives are in the seam: the reward SOP routes every payout through addIfAbsent/take/kvUpdate, which bypass db.put entirely
   'write-failure-toast-audit.mjs', // the OTHER half of that seam: it ends in `if (!writeFailureSink) return;` and until now nothing in the app called onWriteFailure, so every rejection returned early and a lost meal, weight, crate or coin row stayed as silent as before the seam existed. The seam audit cannot catch that and should not: it registers its OWN sink to observe the seam, which is exactly why it stays green while the app has none. This file registers nothing, breaks a real write in the real page and reads the real #toast. REJECTS is the positive control (a write that quietly succeeded would make every other row vacuous); LOUD fails on SILENCE; QUIET, THROTTLE, QUOTA and NORECURSE cover the four ways announcing it can go wrong. Proven red against main's js/app.js: LOUD, THROTTLE and QUOTA go red together. Self-serving, ~50s, 6 checks
