@@ -15479,7 +15479,16 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
       ? `left:${p.x0}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-range:${Math.max(0, (p.x1 - p.x0) - p.w)}px;--pdk-dur:${9 + ([...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 5)}s`
       : p.kind === 'fly'
         ? `left:0;top:${p.y - Math.round(p.w * .5)}px;width:${p.w}px;height:${Math.round(p.w * .8)}px;--pdk-dur:${p.dur}s;--pdk-phase:${p.phase || 0}s`
-        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px`;
+        /* HOVERERS AND FLOPPERS GET A PHASE, or a row of them breathes as one
+           animal. The one-packer rework puts hoverers on a single sky row and
+           floppers on shared ground rows, which is what makes this visible: four
+           clouds at the same y, drifting and bobbing on the same clock, read as a
+           chorus line rather than as four animals. Same `--pdk-phase` the fly
+           lanes already use, derived from the iid the way the walkers derive
+           their duration, so it is deterministic (a pet drifts the same way every
+           visit) and needs no randomness. Negative, so the animation starts
+           mid-stride instead of pausing first. */
+        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-phase:-${[...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 9}s`;
     /* THE SPRITE NAMES THE COPY, not just the species. `data-pdk` alone meant the field
        was a species picker: tapping the fourth Bulldog opened the slider on the first
        one, so the animal you pressed and the card you got were different animals. The

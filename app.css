@@ -9212,13 +9212,16 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 @keyframes pdkWing { from { transform: translateY(-9px) rotate(-2deg); } to { transform: translateY(9px) rotate(2deg); } }
 .pdk-fly.pdk-gold { filter: drop-shadow(0 0 8px rgba(255, 201, 97, .95)); }
 /* hoverers: drift + bob, epic glow */
-.pdk-hover { animation: pdkDrift 10s ease-in-out infinite alternate; z-index: 4; }
+/* the delay is the per-pet phase js/app.js derives from the iid: without it a
+   row of clouds drifts and bobs as one animal. Drift and bob run on different
+   clocks (10s and 3s), so one offset desynchronises both. */
+.pdk-hover { animation: pdkDrift 10s ease-in-out infinite alternate; animation-delay: var(--pdk-phase, 0s); z-index: 4; }
 @keyframes pdkDrift { from { transform: translateX(-30px); } to { transform: translateX(30px); } }
-.pdk-hover .pdk-bob { display: block; animation: pdkHoverBob 3s ease-in-out infinite alternate; }
+.pdk-hover .pdk-bob { display: block; animation: pdkHoverBob 3s ease-in-out infinite alternate; animation-delay: var(--pdk-phase, 0s); }
 @keyframes pdkHoverBob { from { transform: translateY(-6px); } to { transform: translateY(6px); } }
 .pdk-hover.pdk-epic { filter: drop-shadow(0 0 7px rgba(155, 146, 232, .9)); }
 /* floppers: one flop per cycle, origin low so it pivots off the ground */
-.pdk-flop .pdk-bob { display: block; transform-origin: 50% 90%; animation: pdkFlop 4.8s ease-in-out infinite; }
+.pdk-flop .pdk-bob { display: block; transform-origin: 50% 90%; animation: pdkFlop 4.8s ease-in-out infinite; animation-delay: var(--pdk-phase, 0s); }
 @keyframes pdkFlop { 0%, 64%, 84%, 100% { transform: none; } 72% { transform: translateY(-15px) rotate(-9deg); } }
 /* keeper: idle bob + moonlit rim (charcoal bones vanish on the dark scene without it) */
 /* THE KEEPER SWALLOWS ITS OWN TAPS. It was pointer-events: none because it is
