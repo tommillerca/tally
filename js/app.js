@@ -19486,9 +19486,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
      The Wanderer is the identical fight one boss later, so both are named
      rather than fixing only the path this change added. Neither launcher goes
      stale: the marker they came from is gone on the next refreshWorld. */
-  const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret'
+  const fromMap = foeCfg.mode === 'mini' || (foeCfg.mode === 'boss' && foeCfg.week) || foeCfg.mode === 'secret'
     || foeCfg.mode === 'glutton' || foeCfg.mode === 'spire'
-    || foeCfg.mode === 'mimic' || foeCfg.mode === 'wanderer';
+    || foeCfg.mode === 'mimic' || foeCfg.mode === 'wanderer';  // boss with week = walked-to den (map); boss without week = remote den (pit)
   const seamOwner = {};   // identity token: which fight installed the test seams
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
