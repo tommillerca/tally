@@ -11,3 +11,7 @@
    pill's coin number must change without navigating. Same on a loss (+5).
 4. Playtest P1-5 second half: the outcome screen's TOTAL (if one renders)
    must match the post-payout balance; measure, and fix separately if stale.
+
+## Status 2026-08-30 late
+- Item 1 (REMOTE-PAYS-NOTHING prove-red): DONE, red with delta 48 on restored bug, green delta 0 on fix.
+- Items 2-4 (end-to-end banner==bank, pill repaint, outcome total): STILL OPEN. Hand-driving a full fight to settle needs the fight harness, not button mashing; run with fight-tray-audit machinery on the next pass.
