@@ -48,6 +48,20 @@ const probe = await page.evaluate(async () => {
     reward: { xp: 60 }, theme: null };
   const l1 = await poi.claimDenWin(land, '2026-08-13');
   out.steps.push({ what: 'landmark win', paid: !!l1, ceiling: await ceil() });
+
+  /* A REMOTE den claim must not move the wallet. The remote branch used to pay
+     coinsAdd(r.coins) itself while the fight settle paid the same r.coins out
+     of the return: every remote win banked double its banner (+48 announced,
+     +96 banked, measured live in the round-2 playtest). The settle is the one
+     payer, so this function's own wallet delta is exactly zero, while the
+     return still CARRIES the coins for the settle to pay. */
+  const loot = await import('./js/loot.js');
+  const remote = { id: 'remote-test-1', remote: true, name: 'Test Remote',
+    reward: { xp: 40, coins: 48 } };
+  const before = await loot.coins();
+  const rw = await poi.claimDenWin(remote, '2026-08-13');
+  out.remote = { paid: !!rw, carried: rw ? rw.coins || 0 : 0,
+    delta: (await loot.coins()) - before, ceiling: await ceil() };
   return out;
 });
 
@@ -61,6 +75,12 @@ ok('ROAMING re-clearing the same boss does NOT raise it again (no farm)',
   roamAgain.ceiling === roamWin.ceiling, `${roamWin.ceiling} -> ${roamAgain.ceiling}`);
 ok('LANDMARK a walk-to den still raises it (the control that already worked)',
   landWin.paid && landWin.ceiling > roamWin.ceiling, `${roamWin.ceiling} -> ${landWin.ceiling}`);
+ok('REMOTE-PAYS-NOTHING a remote den claim carries its coins in the return and leaves the wallet alone (the settle is the one payer)',
+  probe.remote && probe.remote.paid && probe.remote.carried > 0 && probe.remote.delta === 0,
+  probe.remote ? `carried ${probe.remote.carried}, wallet delta ${probe.remote.delta}` : 'remote claim never ran');
+ok('REMOTE a remote den still raises the ceiling (the reason the branch exists)',
+  probe.remote && probe.remote.ceiling > landWin.ceiling - 1 && probe.remote.ceiling > probe.base,
+  probe.remote ? `ceiling ${probe.remote.ceiling}` : '');
 ok('STEP each distinct boss moves it by the same amount, whatever kind it is',
   (roamWin.ceiling - probe.base) === (landWin.ceiling - roamWin.ceiling),
   `roaming +${roamWin.ceiling - probe.base}, landmark +${landWin.ceiling - roamWin.ceiling}`);

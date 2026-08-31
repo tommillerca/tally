@@ -425,7 +425,15 @@ export async function claimDenWin(den, day = dateKey(), week = isoWeekKey()) {
     if (xp === 0) return null;
     await award(`bossfirst-${den.id}`, 'bossfirst', 0, `Remote clear: ${den.name}`);
     if (r.crate) await grantCrate(r.crate, 'remote-den');
-    if (r.coins) await coinsAdd(r.coins);
+    /* COINS ARE PAID BY THE FIGHT SETTLE, NOT HERE. This branch used to pay
+       coinsAdd(r.coins) itself, and the settle read r.coins out of the return
+       and paid it AGAIN: every remote den win banked double its banner (the
+       playtest measured +48 announced, +96 banked, on every win). The landmark
+       branch below never paid internally, which is why only remote dens
+       doubled. The settle is the right single payer because the Battle Charm
+       and Feast multipliers live there and apply to what the banner shows.
+       den-ceiling-audit's REMOTE-PAYS-NOTHING row pins this function to a zero
+       wallet delta. */
     return { xp, ...r, gearChoices: null };
   }
   // landmark: once per day for loot/coins/xp, logged non-gating

@@ -3803,6 +3803,21 @@ async function renderToday(el) {
   $('#pitBtn')?.addEventListener('click', openPit);
   $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
+  /* refreshWalletPill: repaint the four numbers in place, nothing else. The
+     Pit is a sheet OVER this screen, and a fight settle pays coins while this
+     DOM stands behind it; only #pitBody was re-rendered on close, so the pill
+     showed the pre-fight balance until the next full render. That staleness is
+     what let a remote den pay DOUBLE its banner for weeks without one player
+     noticing (round-2 playtest, the +48/+96 pair). A full re-render here would
+     reset scroll and animation state the anti-regression rules protect, so
+     this touches exactly the numbers. */
+  window.__refreshWalletPill = async () => {
+    const btn = $('#coinBtn'); if (!btn || !btn.isConnected) return;
+    const [c, d, pe] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
+    const put = (sel, v) => { const b = $(sel + ' b'); if (b) b.textContent = v; };
+    put('#coinBtn', c.toLocaleString()); put('#dustBtn', d.toLocaleString());
+    put('#vigorBtn', String(pe.ready));
+  };
   $('#dustBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#vigorBtn')?.addEventListener('click', openPit);
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
@@ -20850,12 +20865,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
         extras.push(`Feast +${bonus} coins`);
       }
       if (coins) await coinsAdd(coins);
+      window.__refreshWalletPill?.();   // the hub behind this sheet shows the balance this just changed
       const badges = await evaluateBadges();
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
     } else if (fight.over.winner === 'f') {
       coins = 5;
       await coinsAdd(coins);
+      window.__refreshWalletPill?.();
     }
     /* Spend the day's attempt on this tower, whatever the outcome. Outside the
        win/lose branches on purpose: a loss and a draw have to consume it too, or
