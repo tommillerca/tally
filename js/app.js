@@ -17031,12 +17031,24 @@ async function renderBoneyard(el) {
   const eq = await equipped();
   let map = null, maplibregl = null;
   let cleanupExtras = () => {};
-  const cleanup = () => {
+  let mapAttempt = 0;   // bumped per startMap call; stale timers/handlers no-op against it
+  /* Everything a map ATTEMPT owns: the instance (and its WebGL context), the
+     world intervals, the listeners, the GPS watch. Runs on teardown AND at the
+     top of every startMap, so Retry is genuinely fresh: before this, a failed
+     attempt left a zombie map plus its 5s world timer running against removed
+     markers (the repeated maplibre TypeErrors), and each Retry leaked another
+     WebGL context until the new map could not render at all. */
+  const teardownMap = () => {
     stopHuntWatch();
-    if (huntStopOrient) huntStopOrient();
     cleanupExtras();
+    cleanupExtras = () => {};
     try { map?.remove(); } catch { /* already gone */ }
     map = null;
+  };
+  const cleanup = () => {
+    mapAttempt++;   // orphan any pending boot timer
+    if (huntStopOrient) huntStopOrient();
+    teardownMap();
   };
   const wrap = el;
   screenCleanup = cleanup;            // route() tears the map down when you leave
@@ -17071,8 +17083,28 @@ async function renderBoneyard(el) {
   huntStopOrient = stopOrient;
 
   async function startMap() {
-    stopHuntWatch();
-    if (!('geolocation' in navigator)) { body.innerHTML = '<p class="warn" style="margin:16px">This device has no location support.</p>'; return; }
+    teardownMap();   // Retry lands here too: kill any half-made attempt first
+    const attempt = ++mapAttempt;
+    let bootT = 0;
+    const NET_MSG = 'The Boneyard needs a network signal to draw the map. Your spawns are safe; try again when you are back online.';
+    /* The floor. Every dead end on this screen lands here: a labeled error, a
+       Retry that re-enters startMap on a clean slate, and the seeded map key so
+       the space is not 90% dead. */
+    const floorMap = msg => {
+      if (attempt !== mapAttempt) return;   // a newer attempt owns the screen
+      clearTimeout(bootT);
+      teardownMap();
+      body.innerHTML = `<p class="warn" style="margin:16px">${msg}</p><button class="btn ghost" id="mapRetry" style="margin:0 16px;width:calc(100% - 32px)">Retry</button>
+        <div class="card" style="margin:16px">${mapLegendHtml('<div class="card-title">OUT THERE TODAY</div>')}</div>`;
+      $('#mapRetry', body)?.addEventListener('click', startMap);
+    };
+    /* BOUND THE LOAD. Nothing on this path may hang forever (a stuck vendor
+       import, a tile server that never answers): if the map has not reached a
+       usable state (maplibre 'load', or any tile arriving) in 25s, floor to the
+       error card. Cleared on 'load' and by floorMap. */
+    let tilesSeen = false, tileErrs = 0;
+    bootT = setTimeout(() => { if (!tilesSeen) floorMap(NET_MSG); }, 25000);
+    if (!('geolocation' in navigator)) { clearTimeout(bootT); body.innerHTML = '<p class="warn" style="margin:16px">This device has no location support.</p>'; return; }
     // compass permission must be requested inside this tap
     try {
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -17101,17 +17133,13 @@ async function renderBoneyard(el) {
       const locDenied = isAndroid
         ? 'Location is off. Allow it in Settings → Apps → Boneheadz Gym → Permissions → Location, then retry.'
         : 'Location is off. Allow it in Settings → Boneheadz Gym → Location, then retry.';
-      body.innerHTML = `<p class="warn" style="margin:16px">${geoErr && err.code === 1
+      floorMap(geoErr && err.code === 1
         ? locDenied
         : geoErr ? 'No location fix yet. Step outside or near a window and retry.'
-        : 'The map could not load. The Boneyard needs a network signal; your spawns are safe and will be here when you are back online.'}</p><button class="btn ghost" id="mapRetry" style="margin:0 16px;width:calc(100% - 32px)">Retry</button>
-        <div class="card" style="margin:16px">${mapLegendHtml('<div class="card-title">OUT THERE TODAY</div>')}</div>`;
-      /* The banner used to sit over ~90% dead space. The map key is pure seeded
-         markup with no position input, so the player still sees what is out
-         there today while location (or the network) is off. */
-      $('#mapRetry', body)?.addEventListener('click', startMap);
+        : NET_MSG);
       return;
     }
+    if (attempt !== mapAttempt) return;   // player left (or retried) during the await
 
     let lat = boot.coords.latitude, lng = boot.coords.longitude;
 
@@ -17181,7 +17209,7 @@ async function renderBoneyard(el) {
     $('#mapKeyBtn', body)?.addEventListener('click', e => { e.stopPropagation(); legendEl.hidden = !legendEl.hidden; });
     $('#mapCanvas', body)?.addEventListener('pointerdown', () => { if (!legendEl.hidden) legendEl.hidden = true; });
 
-    let loaded = false, follow = true;
+    let follow = true;
 
     /* Move the scouting anchor (see SCOUT_STEP_M above). Declared here, below
        `follow`, deliberately: this file has already shipped a bug where a hoisted
@@ -17204,11 +17232,11 @@ async function renderBoneyard(el) {
     try {
       map = createBoneyardMap(maplibregl, $('#mapCanvas', body), { lat, lng });
     } catch (e) {
-      body.innerHTML = `<p class="warn" style="margin:16px">The map renderer could not start on this device.</p>`;
+      floorMap('The map renderer could not start on this device. Give it a moment and retry.');
       return;
     }
     if (navigator.webdriver) window.__map = map;
-    map.on('load', () => { loaded = true; map.resize(); });
+    map.on('load', () => { clearTimeout(bootT); map.resize(); });
     // one-time discovery hint: the press-and-hold report/nominate feature is
     // invisible otherwise (zero den nominations since launch = nobody found it)
     kvGet('mapLpHint', false).then(seen => {
@@ -17223,11 +17251,18 @@ async function renderBoneyard(el) {
     ro.observe(stageEl);
     const prevCleanupRO = cleanupExtras;
     cleanupExtras = () => { prevCleanupRO(); try { ro.disconnect(); } catch { /* noop */ } };
-    map.once('error', e => {
-      if (!loaded) {
-        body.innerHTML = `<p class="warn" style="margin:16px">The Boneyard needs a network signal to draw the map. Your spawns are safe; try again when you are back online.</p><button class="btn ghost" id="mapRetry" style="margin:0 16px;width:calc(100% - 32px)">Retry</button>`;
-        $('#mapRetry', body)?.addEventListener('click', startMap);
-      }
+    /* THE TILE-ERROR FLOOR. maplibre emits 'error' per failed tile/glyph
+       fetch, and a dead network produces a stream of them (the console full of
+       vendor TypeErrors). One errored tile on a working map is routine: it
+       retries and the map lives. The dead shape is repeated errors with ZERO
+       tiles ever loaded, so floor only on that, never on a transient. 'data'
+       events carry a `tile` property exactly when a tile actually arrived.
+       Deferred a tick because floorMap removes the map from inside its own
+       event dispatch. `tilesSeen`/`tileErrs` are declared with bootT above. */
+    map.on('data', e => { if (e && e.tile) tilesSeen = true; });
+    map.on('error', () => {
+      tileErrs++;
+      if (!tilesSeen && tileErrs >= 6) setTimeout(() => { if (!tilesSeen) floorMap(NET_MSG); }, 0);
     });
     map.on('dragstart', () => { follow = false; const r = $('#mapRecenter', body); if (r) r.hidden = false; });
     /* Post-interaction, holdArrival goes back to its trickle-guard regime

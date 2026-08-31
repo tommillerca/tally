@@ -1,3 +1,45 @@
+# VERIFY: fix/map-floor branch (browser pass, post-gate)
+
+Scope: js/app.js only, inside renderBoneyard/startMap. `node --check js/app.js`
+passes. Everything below is the deferred browser pass (edit-only session).
+
+Setup: serve this tree, open the Boneyard tab, grant location (or use DevTools
+sensor override). To simulate tile failure, block the tile host
+`tiles.openfreemap.org`: DevTools > Network > right-click a tile request >
+"Block request domain" (or a request-pattern block on `tiles.openfreemap.org`),
+BEFORE opening the map. Simulate a full network loss with the Network tab's
+Offline preset (the style JSON is local, so Offline still boots maplibre and
+every tile then errors, which is Tom's round-3 shape).
+
+1. TILE-ERROR FLOOR: block the tile host, open the map. Within a few seconds
+   (>= 6 tile errors, zero tiles loaded) the body must show the labeled
+   "needs a network signal" card with Retry + the OUT THERE TODAY key. It must
+   NEVER sit on "Raising the map from the dirt..." past 25s. Console: no
+   repeated maplibre TypeErrors AFTER the floor renders (the old zombie world
+   timer is gone; a burst before flooring is the failing tiles themselves).
+2. RETRY IS REAL: with the host still blocked, tap Retry 3-4 times (each lands
+   back on the floor card), then unblock and tap Retry once more: the map must
+   fully render with markers. This is the WebGL-context-leak regression: before
+   the fix, stacked zombie maps made later attempts render nothing.
+   Check `document.querySelectorAll('.maplibregl-map').length` is 1 after every
+   retry, never climbing.
+3. TRANSIENT ERRORS DO NOT FLOOR: open the map on a working network, let it
+   load, then block the tile host and pan to new areas. Tiles go missing, but
+   the map must STAY (tilesSeen=true forever suppresses the floor). Unblock and
+   keep panning: tiles resume.
+4. BOOT TIMEOUT: throttle to a dead-slow custom profile (or block the host at
+   the request level so 'load' never fires and errors are slow to accumulate):
+   the "Raising the map..." state must be replaced by the floor card at ~25s,
+   never hang.
+5. LEAVE DURING BOOT: open the map, and while "Raising the map..." shows,
+   switch tabs. No error card may ever paint into the Boneyard later (attempt
+   token orphaned the boot timer), and no console errors on the next visit.
+6. PROVE THE GUARD FAILS (rule 2): in a throwaway copy, comment out the
+   `teardownMap()` at the top of startMap and repeat step 2: retries should
+   again stack `.maplibregl-map` nodes / leak contexts. Restore.
+
+---
+
 # VERIFY: fix/den-double-pay branch (browser pass, post-gate)
 
 1. REMOTE-PAYS-NOTHING prove-red: in a throwaway copy, re-add
