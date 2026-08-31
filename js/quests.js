@@ -78,6 +78,13 @@ export function questCtx(period, base) {
     // today-scoped (daily quests)
     entries: base.entries || [],
     weighedToday: base.weighedToday,
+    /* q-first says "Log anything at all", and the app's own UI calls a manual
+       walk, a weigh-in, water, sleep and a routine "logging". Every one of
+       those writes a type-'wellness' xp row (js/wellness.js) or the weights
+       store, never the food 'log' store this quest used to read exclusively,
+       so a player whose first act of the day was a manual walk sat on 0/1. */
+    loggedAnyToday: (base.entries || []).length > 0 || !!base.weighedToday
+      || base.allXp.some(r => r.type === 'wellness' && r.date === base.date),
     priorFoodIds: base.priorFoodIds || new Set(),
     scanToday: base.allXp.some(r => r.type === 'scan' && r.date === base.date),
     targets: base.targets,
@@ -87,7 +94,16 @@ export function questCtx(period, base) {
     workoutToday,
     workoutDays: base.allXp.filter(r => r.type === 'actcrate' && inP(r)).length, // ≥500 active-kcal days
     pitWins: countType('fight'),
-    bossWins: countType('boss'),
+    /* 'boss' is a LEGACY row type: nothing has written it since den wins moved
+       to 'bossday' (landmark + remote) and 'roamboss' (roaming) in js/poi.js
+       claimDenWin. Counting only the dead type left w-boss and m-boss at 0
+       forever, on every kill. 'bossfirst' rows are excluded on purpose: they
+       are 0-XP gate markers minted ALONGSIDE the day row, so counting them
+       would double-count a first clear. The Boneyard Wanderer ('wanderer'
+       rows) is also excluded: he re-rolls every 45 minutes and is deliberately
+       kept out of boss progression (see the CEILING note in js/app.js and
+       tests/wanderer-boneyard-audit.mjs). */
+    bossWins: base.allXp.filter(r => (r.type === 'bossday' || r.type === 'roamboss' || r.type === 'boss') && inP(r)).length,
     spawns: countType('spawn'),
     proteinDays: countType('protein'),
     cookedToday: base.allXp.some(r => r.type === 'cook' && r.date === base.date),
@@ -111,7 +127,7 @@ const clamp = (v, t) => ({ cur: Math.min(t, Math.max(0, Math.round(v))), target:
 
 export const DAILY_POOL = [
   { id: 'q-first', name: 'Show up', desc: 'Log anything at all', coins: 30,
-    progress: c => clamp(c.entries.length, 1) },
+    progress: c => clamp(c.loggedAnyToday ? 1 : 0, 1) },
   { id: 'q-log5', name: 'Deep log', desc: 'Log 5 items today', coins: 50,
     progress: c => clamp(c.entries.length, 5) },
   { id: 'q-3meals', name: 'Square meals', desc: 'Log breakfast, lunch, and dinner', coins: 60,

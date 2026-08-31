@@ -408,3 +408,57 @@ Browser pass (per tally/CLAUDE.md: cold cache, real control):
 - Sweep the other openPackReveal producers (quest claim, gift claim, wheel)
   since renderCard is shared: one spot check each with art blocked.
 # from: 020601fa (Honest-state P2-4: denial-screen legend, reveal art fallback, Progress-dot finding)
+
+---
+
+# VERIFY: day guard voice + two quest counters (branch fix/dayguard-voice)
+
+Written under a release gate: READ/EDIT/`node --check` only on this pass. Both
+`node --check js/app.js` and `node --check js/quests.js` pass on this tree.
+Nothing below changes what the day guard blocks or pays; items 1-3 are display
+only, items 5-6 change quest COUNTERS and need the prove-red treatment.
+
+Setup: serve this tree, `?demo` profile. To fake a clock set-back without
+touching the OS clock, set the mark directly in the console:
+`const db = await import('./js/db.js'); await db.kvSet('dayHighWater', db => {})`
+- i.e. `kvSet('dayHighWater', '<tomorrow's key>')` with tomorrow computed via
+`(await import('./js/nutrition.js')).addDays((await import('./js/nutrition.js')).dateKey(), 1)`.
+
+1. PRE-SPENT LINE on Today (js/app.js renderToday, `preSpent`):
+   - With dayHighWater set to tomorrow, open Today. MUST show the note
+     "This day already passed on this clock. Fresh rewards return tomorrow."
+     inside .dayflow, above the return card slot.
+   - FAIL direction A (false positive): with dayHighWater equal to TODAY (the
+     normal state of every ordinary day), the note MUST NOT render. This is the
+     check that cannot be skipped: the condition is strictly-behind, and a
+     regression to `>=` would show the line to every player every day.
+   - The note must not render on a paged-back past day (it is gated on isToday).
+2. FUTURE-DATED HEADER (js/app.js, `aheadOfClock`): page FORWARD with the next-day
+   arrow past the real today. The day header .sub MUST read
+   "<date> · dated ahead of this clock". On today and past days the suffix MUST
+   be absent. No data reconciliation happens: entries on that day are untouched.
+3. STREAK GRACE (js/app.js renderTrends): with an unbroken run of logged days
+   ending YESTERDAY and nothing logged today (and <3000 steps today), Progress
+   MUST show the real streak number with sub "day streak · log today to keep it".
+   - FAIL direction: if yesterday is ALSO empty, the pill MUST show 0 with the
+     plain "day streak" sub (the 0 is genuinely earned; no hint).
+   - Milestone payouts are off streakFrom in js/game.js and MUST be unaffected:
+     assert no new xp row of type 'streakms' appears from rendering Progress.
+4. GUARD UNCHANGED prove-green: node tests/clock-trust-audit.mjs must pass
+   unchanged (no assertion in it was touched; a red here means this branch
+   altered an award decision and must not ship).
+5. q-first COUNTER (js/quests.js `loggedAnyToday`): on a day whose daily slate
+   contains q-first ("Show up: log anything"), with an EMPTY food diary, log a
+   manual walk (Today > Wellness > Add a walk; requires hkConnected false).
+   q-first MUST read 1/1 and be claimable. Same for a weigh-in, water goal, bed,
+   sleep, or a routine tick. Prove-red: on a throwaway tree revert progress to
+   `clamp(c.entries.length, 1)` and the walk case MUST read 0/1.
+6. m-boss / w-boss COUNTER (js/quests.js `bossWins`): beat any den (landmark,
+   remote, or roaming) and m-boss/w-boss MUST advance by exactly 1 per den win.
+   - Double-count FAIL direction: a FIRST-EVER clear mints a 'bossfirst' row
+     alongside the 'bossday'/'roamboss' row; the counter MUST still advance by
+     1, not 2 (bossfirst is excluded by name).
+   - Boneyard Wanderer: beating him (xp type 'wanderer') MUST NOT advance
+     m-boss/w-boss (he re-rolls every 45 min; deliberately out of progression).
+   - node tests/unit.test.js and tests/reward-sop-audit.mjs must pass: quest
+     claims stay idempotent per `quest-<periodKey>-<id>`.
