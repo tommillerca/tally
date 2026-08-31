@@ -8282,7 +8282,10 @@ function petShelfHtml(ownedCos, coinBal) {
   const pet = BH_BY_ID[PET_SHOP.pet.id];
   if (!pet) return '';
   const hasPet = ownedCos.has(PET_SHOP.pet.id);
-  const hero = hasPet ? '' : `
+  /* After the buy the NEW ARRIVAL hero vanishes on the next render with no
+     acknowledgment, which reads like the shop forgot the 50,000 coins. One line
+     in its place says where she went. */
+  const hero = hasPet ? `<p class="note" style="margin:0 2px 10px">${esc(pet.name)} is yours. She lives in your Stable, and everything below is drawn for her.</p>` : `
   <div class="pet-hero">
     <span class="pet-new">NEW ARRIVAL</span>
     <div class="pet-hero-art">${petSpriteHtml(PET_SHOP.pet.id, 176, true, { thumb: true })}</div>
@@ -8779,7 +8782,14 @@ async function renderShop(el) {
     toast(r.isPet
       ? `${esc(r.label)} is yours, and she is out with you now. −${r.cost.toLocaleString()} coins.`
       : `${esc(r.label)} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left.`, 3400);
-    if (r.isPet) S.shinyPets = new Set(await shinyPetIds());
+    if (r.isPet) {
+      S.shinyPets = new Set(await shinyPetIds());
+      /* The pet herself goes through the celebration funnel, same as a level-up:
+         the toast above lands first (maybeCelebrate waits 380ms for exactly that)
+         and then the takeover shows her own art. Accessories keep the toast. */
+      queueCelebration({ newPet: { sp: id } });
+      maybeCelebrate();
+    }
     rerender();
   }));
   /* WEAR / TAKE OFF, and deliberately NOT behind armToConfirm. The two-tap arm
@@ -12639,10 +12649,12 @@ function enterAppFromOnboarding() {
 
 function queueCelebration(game) {
   if (!game) return;
-  if (game.levelUp || (game.newBadges && game.newBadges.length) || game.streakMilestone) {
+  if (game.levelUp || (game.newBadges && game.newBadges.length) || game.streakMilestone || game.newPet) {
     const prev = S.celebration || {};
     S.celebration = {
       levelUp: game.levelUp || prev.levelUp,
+      /* a premium pet purchase gets the same takeover a level-up does; { sp } */
+      newPet: game.newPet || prev.newPet,
       /* fromLevel has to travel WITH its own levelUp. This funnel merges queued
          celebrations, so taking it independently could pair a new level with a
          stale "from" and misreport the size of the jump. */
@@ -12684,7 +12696,35 @@ function maybeCelebrate() {
   setTimeout(() => openCelebration(c), 380);
 }
 
-async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null, note = null }) {
+async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null, note = null, newPet = null }) {
+  /* A PREMIUM PET PURCHASE gets a takeover, not just a toast. 50,000 coins is
+     the biggest spend in the game and the shelf it was bought from disappears on
+     the very next render, so the moment needs the same weight a level-up gets.
+     All existing machinery: openSheet takeover, the breed reveal's rays and
+     stage, the pet's own art. Anything else queued alongside is re-queued so a
+     coinciding level-up or badge is shown after, never dropped. */
+  if (newPet) {
+    const rest = { levelUp, fromLevel, levelRewards, streakMilestone, newBadges, note };
+    const it = BH_BY_ID[newPet.sp] || {};
+    levelSound(S.sounds);
+    haptic.reward();
+    const wrap = openSheet(`
+      <div class="reveal-take cool">
+        <div class="grainy"></div>
+        <div class="reveal-eyebrow">New arrival</div>
+        <div class="reveal-sub">${esc(it.name || newPet.sp)} is yours</div>
+        <div class="reveal-body">
+          <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar newpet-avatar r-${it.rarity || 'common'}">${petPortraitHtml(newPet.sp, 104, false, { thumb: true })}</div></div>
+          <div class="cele-bubble">Out with you now, and home in your Stable whenever you visit.</div>
+        </div>
+        <div class="reveal-foot">
+          <button class="btn" id="celeOk">Welcome home</button>
+        </div>
+      </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
+    setFxLayer(305);
+    $('#celeOk', wrap).addEventListener('click', () => { history.back(); queueCelebration(rest); maybeCelebrate(); });
+    return;
+  }
   const bits = [];
   if (streakMilestone) bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP</div>`);
   for (const b of newBadges) bits.push(`<div class="cele-badge"><span>${badgeIconHtml(b.icon,26)}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)} · +25 XP</small></div></div>`);
@@ -15766,8 +15806,17 @@ async function openStable(opts = {}) {
 
 
 
+    /* The chips carry what tells the two copies apart, because with two of the
+       same species the names are identical and this feed is irreversible: level
+       and lineage off the instance row (nickname first when the player gave one),
+       plus which side of the trade each chip currently sits on. */
     const spChips = pair ? [a, b]
-      .map(x => `<button class="chip ${offSp === x.iid ? 'on' : ''}" data-offsp="${x.iid}">${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}${x.shiny ? ' ✦' : ''}</button>`).join('') : '';
+      .map(x => {
+        const lbl = nicks[x.iid] || (BH_BY_ID[x.sp] || {}).name || x.sp;
+        const bits = [`Lv ${petLevel(bank[x.iid] || 0)}`];
+        if (x.lineage) bits.push(`lineage ${x.lineage}`);
+        return `<button class="chip ${offSp === x.iid ? 'on' : ''}" data-offsp="${x.iid}">${esc(lbl)}${x.shiny ? ' ✦' : ''} &middot; ${bits.join(' &middot; ')} &middot; <b>${offSp === x.iid ? 'KEPT' : 'FED'}</b></button>`;
+      }).join('') : '';
 
     /* THE WAY IN. Tom, 2026-08-11: the Paddock's entry was the FOURTH CHIP in the row
        below, `chip chip-btn`, measured 134x38 and therefore the same class and the same
@@ -16423,6 +16472,46 @@ async function openStable(opts = {}) {
       const inst = insts.find(x => x.iid === btn.dataset.destroy);
       const isShiny = !!(inst && inst.shiny);
       const dustVal = btn.dataset.dust || '?';
+      const doSalvage = async () => {
+        const res = await salvageInstance(btn.dataset.destroy);
+        if (!res.ok) { toast('Could not destroy that pet.'); return false; }
+        popSound(S.sounds);
+        toast(`${res.name} salvaged into ${res.dust} Bone Dust.`, 2600);
+        return true;
+      };
+      /* THE LAST COPY OF A PREMIUM PET is not a dupe melt. The two-tap arm below
+         is sized for a spare that hatches again next week; a 50,000-coin shop pet
+         or a legendary the player owns exactly ONE of does not come back for 120
+         dust, so it gets the same typed-confirm the app already uses for Erase
+         and Delete account. A dupe of the same species keeps the light arm:
+         salvaging spares is routine and the heavier gate would just teach players
+         to type through it. */
+      const petIt = inst ? (BH_BY_ID[inst.sp] || {}) : {};
+      const lastCopy = !!inst && insts.filter(x => x.sp === inst.sp).length === 1;
+      if (lastCopy && (inst.sp === PET_SHOP.pet.id || petIt.rarity === 'legendary')) {
+        const nm = petIt.name || inst.sp;
+        const wrap = openSheet(`
+          <div class="sheet-head">
+            <div class="hd"><h2>Destroy ${esc(nm)}?</h2><div class="sub">This cannot be undone</div></div>
+            <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
+          </div>
+          <div class="sheet-body">
+            <p class="note" style="margin-bottom:12px">This is your <b>only ${esc(nm)}</b>${isShiny ? ', and it is SHINY' : ''}. Destroying it pays <span class="dust-ico">${ICONS.dust(13)}</span><b>${dustVal} Bone Dust</b> and it does not come back.</p>
+            <div class="t1-field"><label>Type ${esc(nm.toUpperCase())} or DESTROY to confirm</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="DESTROY"></div>
+          </div>
+          <div class="t1-foot"><button class="btn danger-ish" id="pdGo" disabled>Destroy it</button></div>`, { cls: 't1', name: 'DestroyPet' });
+        const input = $('#pdIn', wrap), go = $('#pdGo', wrap);
+        const typedOk = () => { const t = input.value.trim().toUpperCase(); return t === 'DESTROY' || t === nm.toUpperCase(); };
+        input.addEventListener('input', () => { go.disabled = !typedOk(); });
+        go.addEventListener('click', async () => {
+          if (!typedOk()) return;   // belt and braces
+          go.disabled = true;
+          const done = await doSalvage();
+          history.back();   // close the confirm; the Stable is the sheet underneath
+          if (done) render();
+        });
+        return;
+      }
       if (btn.dataset.armed !== '1') {
         btn.dataset.armed = '1'; const t = btn.innerHTML;
         btn.innerHTML = isShiny ? `SHINY! Melt for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?` : `Melt for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?`;
@@ -16430,11 +16519,7 @@ async function openStable(opts = {}) {
         setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.innerHTML = t; } }, isShiny ? 4600 : 2800);
         return;
       }
-      const res = await salvageInstance(btn.dataset.destroy);
-      if (!res.ok) { toast('Could not destroy that pet.'); return; }
-      popSound(S.sounds);
-      toast(`${res.name} salvaged into ${res.dust} Bone Dust.`, 2600);
-      render();
+      if (await doSalvage()) render();
     }));
     $$('[data-offsp]', body).forEach(c => c.addEventListener('click', () => { offSp = c.dataset.offsp; render(); }));
     $('#doBreed', body)?.addEventListener('click', async e => {
