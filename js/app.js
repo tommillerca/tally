@@ -17218,7 +17218,7 @@ async function renderBoneyard(el) {
        import, a tile server that never answers): if the map has not reached a
        usable state (maplibre 'load', or any tile arriving) in 25s, floor to the
        error card. Cleared on 'load' and by floorMap. */
-    let tilesSeen = false, tileErrs = 0;
+    let tilesSeen = false, tileErrs = 0, errGrace = null;
     bootT = setTimeout(() => { if (!tilesSeen) floorMap(NET_MSG); }, 25000);
     if (!('geolocation' in navigator)) { clearTimeout(bootT); body.innerHTML = '<p class="warn" style="margin:16px">This device has no location support.</p>'; return; }
     // compass permission must be requested inside this tap
@@ -17375,10 +17375,24 @@ async function renderBoneyard(el) {
        events carry a `tile` property exactly when a tile actually arrived.
        Deferred a tick because floorMap removes the map from inside its own
        event dispatch. `tilesSeen`/`tileErrs` are declared with bootT above. */
-    map.on('data', e => { if (e && e.tile) tilesSeen = true; });
+    map.on('data', e => { if (e && e.tile) { tilesSeen = true; if (errGrace) { clearTimeout(errGrace); errGrace = null; } } });
     map.on('error', () => {
       tileErrs++;
-      if (!tilesSeen && tileErrs >= 6) setTimeout(() => { if (!tilesSeen) floorMap(NET_MSG); }, 0);
+      /* AN ERROR BEFORE ANY TILE ARMS A GRACE WINDOW, IT DOES NOT FLOOR.
+         Three shapes had to separate, and each earlier version broke one:
+         BLOCKED (style local, host dead: maplibre errors once per SOURCE, so
+         a six-error count never fires and the player stares at "Raising the
+         map" for the whole boot bound; measured red in map-offline-audit at
+         its 8s window), THROTTLED (slow but alive: an instant first-error
+         floor tears the map down at ~1.8s and marker population stops dead;
+         measured in boneyard-audit as final spawn count 5 against the
+         pre-rework 49), and WORKING (tilesSeen: never floors from here at
+         all). The grace window answers all three: the first pre-tile error
+         starts a 6s clock, any tile cancels it, and a host that produces
+         errors but no tile inside 6s is dead by every measure this app has. */
+      if (!tilesSeen && !errGrace) {
+        errGrace = setTimeout(() => { if (!tilesSeen && attempt === mapAttempt) floorMap(NET_MSG); }, 6000);
+      }
     });
     map.on('dragstart', () => { follow = false; const r = $('#mapRecenter', body); if (r) r.hidden = false; });
     /* Post-interaction, holdArrival goes back to its trickle-guard regime
