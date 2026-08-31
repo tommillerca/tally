@@ -21548,7 +21548,12 @@ const STAT_BAR_COLOR = {
 async function renderTalents(wrap) {
   const body = $('#talBody', wrap) || (wrap && wrap.id === 'talBody' ? wrap : null);
   if (!body) return;
-  const [xpRows, takenArr, fighter, coinBal, dustBal] = await Promise.all([db.all('xp'), kvGet('talents', []), buildFighter(), coins(), boneDust()]);
+  const [xpRows, takenArr, fighter, coinBal, dustBal, treesOpenKv] = await Promise.all([db.all('xp'), kvGet('talents', []), buildFighter(), coins(), boneDust(), kvGet('taltrees', {})]);
+  // Which tree folds the player left open, kv-backed. Open used to be re-derived
+  // from points-in-tree on EVERY render, and renderTalents re-renders after every
+  // spend, so a tree the player collapsed snapped back open mid-pass (layout
+  // jumping under the finger) and everything reset on leaving the screen.
+  const treesOpen = treesOpenKv || {};
   const taken = new Set(takenArr);
   const tranks = talentRanks(takenArr);
   const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
@@ -21617,8 +21622,9 @@ async function renderTalents(wrap) {
     ${TALENT_TREES.map(tree => {
       const treeMax = tree.nodes.reduce((a, n) => a + nodeRanks(n), 0);
       const treeIn = tree.nodes.reduce((a, n) => a + Math.min(tranks[n.id] || 0, nodeRanks(n)), 0);
+      const treeOpen = (tree.id in treesOpen) ? treesOpen[tree.id] : treeIn > 0;
       return `
-      <details class="tal-tree" ${treeIn > 0 ? 'open' : ''}>
+      <details class="tal-tree" data-tree="${tree.id}" ${treeOpen ? 'open' : ''}>
         <summary class="tal-tree-head">
           <b style="color:${tree.color}">${tree.name}</b>
           <span class="tal-tag">${tree.tag}</span>
@@ -21640,7 +21646,11 @@ async function renderTalents(wrap) {
               ? `<span class="tal-ranks">${Array.from({ length: max }, (_, r) => `<i class="${r < cur ? 'on' : ''}" style="${r < cur ? `background:${tree.color}` : ''}"></i>`).join('')}</span>`
               : '';
             const pipTxt = max > 1 ? `${cur}/${max}` : (full ? ICONS.check(11) : tier === 4 ? ICONS.star(11) : 'T' + tier);
-            return `<button class="tal-node ${cls}" data-talent="${n.id}" data-tree="${tree.id}" data-idx="${i}" ${can ? '' : 'disabled'}>
+            // NOT disabled: a disabled button eats the tap with zero feedback,
+            // which round-3 playtests read as a dead screen. Every node stays
+            // live and the click handler either spends or SAYS why it cannot;
+            // aria-disabled keeps the semantics the attribute carried.
+            return `<button class="tal-node ${cls}" data-talent="${n.id}" data-tree="${tree.id}" data-idx="${i}" ${can ? '' : 'aria-disabled="true"'}>
               <span class="tal-pip" style="${cur > 0 ? `background:${tree.color};border-color:${tree.color}` : ''}">${pipTxt}</span>
               <span class="tal-body"><b>${n.name}${n.move ? ' <span class="tal-move">NEW MOVE</span>' : ''}</b><small>${n.desc}</small>${pips}</span>
             </button>`;
@@ -21703,9 +21713,31 @@ async function renderTalents(wrap) {
     } else if (badge) badge.remove();
   }
 
+  // A toggled fold is remembered where it stands (quiet: no sound, no re-render).
+  $$('.tal-tree', body).forEach(dt => dt.addEventListener('toggle', () => {
+    treesOpen[dt.dataset.tree] = dt.open;
+    kvSet('taltrees', treesOpen);
+  }));
+
   $$('[data-talent]', body).forEach(b => b.addEventListener('click', async () => {
     const arr = await kvGet('talents', []); // rank = one entry each, so push (never dedupe)
-    if (!canTakeTalent(arr, b.dataset.tree, Number(b.dataset.idx))) return;
+    // The old handler checked the tier gate and nothing else, silently: a refused
+    // tap looked identical to a dead one, and it never checked the point balance
+    // at all (the disabled attribute did, off a render that could be stale).
+    // Check both here, and SAY which rule refused the tap.
+    const left = Math.max(0, talentPoints(levelFor(await totalXp()).level) - arr.length);
+    if (left <= 0 || !canTakeTalent(arr, b.dataset.tree, Number(b.dataset.idx))) {
+      const tree = TALENT_TREES.find(t => t.id === b.dataset.tree);
+      const node = tree && tree.nodes[Number(b.dataset.idx)];
+      const gate = node ? { 1: 0, 2: 2, 3: 6, 4: 10 }[node.tier] : 0;
+      toast(!node ? 'That talent is locked.'
+        : (talentRanks(arr)[node.id] || 0) >= nodeRanks(node) ? `${node.name} is already maxed.`
+        : left <= 0 ? 'No talent points to spend. You earn one every level.'
+        : `Locked: needs ${gate} point${gate === 1 ? '' : 's'} spent in ${tree.name} first.`);
+      // a node drawn spendable that refused means the screen is stale: redraw it
+      if (b.classList.contains('can')) renderTalents(wrap);
+      return;
+    }
     arr.push(b.dataset.talent);
     await kvSet('talents', arr);
     popSound(S.sounds);

@@ -39,6 +39,54 @@ every tile then errors, which is Tom's round-3 shape).
    again stack `.maplibregl-map` nodes / leak contexts. Restore.
 
 ---
+# VERIFY: fix/talent-taps branch (browser pass, post-gate)
+
+Scope: js/app.js renderTalents only, plus tests/talent-badge.mjs selectors.
+`node --check` passes on both. New kv key: `taltrees` (object, treeId -> bool).
+kv exports wholesale (STORES in js/db.js), so backup needs no allow-list change.
+
+Setup: serve this tree, boot `?demo`, go to the character hub Build tab
+(#/bonehead, tap Build). The demo save must have unspent talent points; if not,
+that is an empty sample and every check below is a FAIL, not a skip.
+
+1. REFUSED TAPS SPEAK (the round-3 bug). Tap a dimmed LOCKED node in a tier the
+   gate refuses. PASS: a toast appears reading "Locked: needs N points spent in
+   <tree> first." FAIL direction: no toast (the old silent `return`).
+   Also tap a maxed node (toast "... is already maxed.") and, after spending down
+   to 0 points, any non-maxed node (toast "No talent points to spend...").
+   Prove-red: reintroduce `${can ? '' : 'disabled'}` on the tal-node template in
+   a throwaway copy; the locked-node tap must produce NO toast (disabled eats
+   it), which is the shipped bug.
+2. NO SNAP-BACK MID-PASS (the swallowed-spend mechanism). With points already in
+   tree A (spend one there first), collapse tree A via its summary, then spend a
+   point in tree B. PASS: after the re-render tree A STAYS collapsed and tree B
+   stays open; the page must not grow taller from sections reopening themselves.
+   Measure: record each `.tal-tree[data-tree]`.open before and after the spend;
+   any tree whose open state changed without the player toggling it is a FAIL.
+   Prove-red: revert the open attr to the old `treeIn > 0 ? 'open' : ''`
+   expression in a throwaway copy and watch tree A reopen on the spend.
+3. EXPANSION PERSISTS ACROSS VISITS. Toggle two trees away from their defaults,
+   leave to Today, come back to Build, then hard-reload the page and come back
+   again. PASS: both trees render exactly as left, both times. Check kv:
+   `await (await import('./js/db.js')).kvGet('taltrees')` shows the map.
+4. COLLAPSED SECTIONS ARE HONESTLY INERT. With a tree collapsed,
+   `document.elementFromPoint` at the coords where its first node used to sit
+   must NOT be a `.tal-node` of that tree (rule 6 hit-test); tapping the summary
+   must expand it and must NOT spend a point (points count unchanged).
+5. SPEND STILL WORKS END TO END. A full spend pass: N unspent points, tap N
+   `.can` nodes (expanding trees as needed). PASS: kv 'talents' length grew by
+   exactly N, badge hit 0, confetti/pop fired per spend. This is the playtest
+   scenario that registered 0 and 11/46; the bound is EXACTLY N, not "more than
+   before".
+6. NO OVERSPEND ON STALE DOM (the handler now checks the balance; it never did).
+   With exactly 1 point left, dispatch click twice in the same frame on two
+   different `.can` nodes. PASS: exactly one spend lands, the second tap toasts
+   "No talent points to spend...". kv 'talents' length grew by exactly 1.
+7. Run tests/talent-badge.mjs (selectors updated to `.can` in this branch): must
+   PASS. Run tests/ui-audit.js on the Build tab per anti-regression rule 9.
+# from: f2086c8a (Fix talent tree: refused taps speak, expansion state persists (kv taltrees))
+
+---
 
 # VERIFY: fix/den-double-pay branch (browser pass, post-gate)
 
