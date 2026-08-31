@@ -335,14 +335,16 @@ try {
 
     // daily quests: claim only the ones actually satisfied by the above
     const allXp = await db.db.all('xp');
-    /* ALL GATES OPEN, deliberately: this file grades whether an honest forward
-       day can CLAIM what it rolled, not what gating serves a locked player
-       (quest-daymore-audit owns that). With gates closed the seed-fixed draw
-       shrinks on dates whose draw hits gated quests (post-#283 fewer-never-
-       different semantics), and on 2026-08-31 the date lottery finally dealt a
-       one-quest day: the full-set premise row went red on a healthy tree, the
-       same class the daymore audit hit the day before. */
-    const qs = quests.dailyQuests(day, { hkConnected: true, huntEnabled: true, socialOn: true, pitTried: true, kitchenReady: true });
+    /* GATES CLOSED ON PURPOSE, second attempt documented: opening every gate
+       (the first attempt at the 2026-08-31 red) rolled quests this harness can
+       never satisfy (steps targets, cooking), which reds the claim sweep for
+       the wrong reason. Closed gates restrict the draw to the ungated dailies
+       the full-day fixture genuinely completes; what aged out was only the
+       premise that a closed-gate draw is always THREE. Post-#283 the seed-fixed
+       draw shrinks on dates whose draw hits gated quests, so the premise and
+       claim rows below assert on the rolled SET (non-empty, fully done, every
+       one paid), which no date lottery can shrink to vacuity. */
+    const qs = quests.dailyQuests(day, { hkConnected: false, huntEnabled: false, socialOn: false, pitTried: false, kitchenReady: false });
     const ctx = quests.questCtx('day', {
       date: day, entries: await db.db.byIndex('log', 'date', day), allXp,
       allLog: await db.db.all('log'), healthRows: await db.db.all('health'),
@@ -603,13 +605,13 @@ try {
      never pass on 0 === 0, and a shortfall is attributed to the right side of
      the line: an incomplete provocation reds the control row, a refused payout
      reds the claim row. */
-  check('the honest day really rolled a full quest set, so the claim row is not vacuous',
-    honest.questNames.length === honest.questCap && honest.questStates.every(q => q.done),
-    `${honest.questNames.length} of cap ${honest.questCap}, all done: ` +
+  check('the honest day rolled a non-empty, fully completed quest set, so the claim row is not vacuous',
+    honest.questNames.length >= 1 && honest.questStates.every(q => q.done),
+    `${honest.questNames.length} rolled (cap ${honest.questCap}; the draw may shrink on gated dates post-#283), all done: ` +
     honest.questStates.map(q => `${q.id} ${q.cur}/${q.target}`).join(', '));
   check('honest forward day still claims daily quests, EVERY one it rolled',
-    honest.claimedQ === honest.questCap,
-    `${honest.claimedQ} of ${honest.questCap} claims`);
+    honest.claimedQ === honest.questNames.length,
+    `${honest.claimedQ} of ${honest.questNames.length} rolled claims`);
   /* NOT `coins > 0` either. The raw delta is the one number guardCovered above
      deliberately refuses to trust, because a level-up pays coins through
      grantLevelRewards and would hold this row up on its own while every daily
@@ -627,9 +629,16 @@ try {
      here. `fwd` is the same shape of day one day earlier, which makes the bound
      tight (measured 333 vs 333). The pre-guard 176.4 and the measured mean are
      still reported in the FINDING above, so the historical anchor is not lost. */
-  check('the honest day is worth as much as the honest day before it',
-    honest.xp >= fwd.xp * 0.8,
-    `${honest.xp} vs ${fwd.xp} on the +105 control (pre-guard walk measured ${perDay('xp')}/reset)`);
+  /* Post-#283 two consecutive dates can legitimately roll different-SIZED quest
+     sets, and quest XP dominates the day total, so raw-total parity reds on a
+     healthy tree whenever the lottery deals unequal days. Compare like with
+     like: parity holds on the raw totals when the sets are the same size, and
+     on the per-rolled-quest normalized totals when they are not. */
+  const sameSize = honest.questNames.length === fwd.questNames.length;
+  const norm = d => d.xp / Math.max(1, d.questNames.length);
+  check('the honest day is worth as much as the honest day before it (normalized when the date lottery dealt unequal sets)',
+    sameSize ? honest.xp >= fwd.xp * 0.8 : norm(honest) >= norm(fwd) * 0.8,
+    `${honest.xp} (${honest.questNames.length}q) vs ${fwd.xp} (${fwd.questNames.length}q) on the +105 control`);
 
   /* ================= 4. THE GRACE CEILING (ASSERTED, BOTH SIDES) ==========
      Rule 2: the local date may not outrun UTC elapsed by more than DAY_GRACE.
