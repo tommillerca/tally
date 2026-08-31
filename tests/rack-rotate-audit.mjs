@@ -50,7 +50,7 @@
    COPY: deleting the `taken` filter from js/loot.js left this file completely
    green, so the one row that protects the money could not see the defect it
    exists for. Caught by proving it red, not by reading it. */
-import { RACK_ROTATE_POOL, RACK_ROTATE_N, RACK_RARITY_PRICE, rackRotatePick, rackPick } from '../js/loot.js';
+import { RACK_ROTATE_POOL, RACK_ROTATE_N, RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, rackRotatePick, rackPick } from '../js/loot.js';
 import { BH_ITEMS, BH_BY_ID } from '../data/boneheadz.js';
 
 let fails = 0;
@@ -132,6 +132,33 @@ const a = pick('2026-W07', 2, themedFor('2026-W07', 2));
 const b = pick('2026-W07', 2, themedFor('2026-W07', 2));
 ok('STABLE the same week and salt give the same shelf, so it cannot change under a re-render',
   a.length > 0 && a.join() === b.join(), `${a.length} ids, identical on a second call`);
+
+/* THE TWO RUNG ARRAYS ARE PARALLEL, AND NOTHING ELSE HOLDS THEM TOGETHER.
+   buyRackItem prices a dust buy as RACK_DUST[i] where i indexes RACK_POOLS; a
+   rung added to one array without the other prices as undefined, `bal <
+   undefined` is false, and the wallet write is NaN (the loot.js guard now
+   refuses that sale at runtime; this row is what keeps the guard theoretical).
+   The rung ladder gets the same certainty-premium rule the rarity shelf has:
+   coins-per-dust must never reverse as rungs get dearer. */
+{
+  const src = (await import('node:fs')).readFileSync(new URL('../js/loot.js', import.meta.url), 'utf8');
+  const at = src.indexOf('function buyRackItem');
+  const body = at === -1 ? '' : src.slice(at, src.indexOf('\nexport', at + 1));
+  ok('GUARD buyRackItem refuses a non-finite price before the receipt claim',
+    body.includes('Number.isFinite(price)')
+      && body.indexOf('Number.isFinite(price)') < body.indexOf('rackbuy:'),
+    'the NaN-wallet guard sits between pricing and the claim');
+}
+ok('PARALLEL every RACK_POOLS rung has its RACK_DUST price',
+  RACK_DUST.length === RACK_POOLS.length && RACK_DUST.every(Number.isFinite),
+  `${RACK_POOLS.length} rungs, ${RACK_DUST.length} dust prices`);
+{
+  const rungs = RACK_POOLS.map(([coin], i) => ({ coin, cpd: coin / RACK_DUST[i] }))
+    .sort((x, y) => x.coin - y.coin);
+  const rising = rungs.every((x, i) => i === 0 || x.cpd >= rungs[i - 1].cpd);
+  ok('RUNG-LADDER coins-per-dust never reverses across the themed rungs',
+    rising, rungs.map(x => x.cpd.toFixed(2)).join(' <= '));
+}
 
 const order = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 const cpd = order.map(r => ({ r, v: RACK_RARITY_PRICE[r][0] / RACK_RARITY_PRICE[r][1] }));
