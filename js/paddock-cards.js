@@ -304,15 +304,33 @@ export function sliderHtml(roster, sp) {
   </div>`;
 }
 
-export function panelHtml(roster, eggs, { tileBox = 0 } = {}) {
+/* TWO THINGS ONLY THE CALLER CAN ANSWER, so neither is guessed here.
+ *
+ * `showTeaser` false = this player already owns the Day One Lizard. The banner
+ * rendered unconditionally, so the veteran who has carried the Lizard since the
+ * beta was advertised his own pet and, on tapping it, handed the locked card
+ * telling him someone ELSE owns one. Ownership comes off the cosmetic inventory
+ * (a legacy grant never made an instance row), which is openPaddock's to read.
+ * This is the one place Tom's 2026-08-31 mystery ruling keeps its exception:
+ * the bushes tease something huntable, the banner teases the founder pet, and
+ * neither is shown to somebody who already has it.
+ *
+ * `inField` = how many roster rows actually got a place in the scene. The walk
+ * cap is 8, so a 16-pet roster puts 14 animals on the grass while the footer
+ * says 16 and nothing explains the other two. This is the sentence that does.
+ * Absent (openFriendPaddock, the unit tests) means "claim no number", which is
+ * why it is a null check and not a falsy one. */
+export function panelHtml(roster, eggs, { tileBox = 0, showTeaser = true, inField = null } = {}) {
   const tiles = gridModel(roster);
   const egg = eggCardModel(eggs);
+  const total = (roster || []).length;
+  const out = inField == null ? null : Math.max(0, Math.min(inField | 0, total));
   return `<div class="pdk-inner">
-    <button class="pdk-teaser" data-sp="CX">
+    ${showTeaser ? `<button class="pdk-teaser" data-sp="CX">
       <span class="pdk-thumb pdk-sil"><img src="${esc(bhAsset(SPECIES_BY_ID.CX || { slot: 'C', id: 'CX' }))}" style="${inkFitStyle('CX')}" alt=""></span>
       <span class="pdk-teaser-tx"><small>SOMETHING'S IN THE BUSHES</small>
         <b>Riding since day one? Check your inbox, bony buddy.</b></span>
-    </button>
+    </button>` : ''}
     <div class="pdk-grid">
       ${/* AN EMPTY NEST DOES NOT DRAW A FULL EGG. The glyph was unconditional, so the
            tile showed an egg at full strength while the card behind it said "SOUL EGGS
@@ -337,6 +355,7 @@ export function panelHtml(roster, eggs, { tileBox = 0 } = {}) {
       <button class="pdk-seg" data-seg="pedia" disabled>BONEPEDIA · SOON</button>
       <span class="pdk-seg pdk-count">${esc(footerLabel(roster))}</span>
     </div>
+    ${out !== null && out < total ? `<p class="pdk-bench">${out} of ${total} out today, the rest are resting.</p>` : ''}
   </div>`;
 }
 
@@ -359,6 +378,8 @@ export function closePaddockCards() {
   sel = null;
   if (host) host.innerHTML = '';
   host?.classList.remove('pdk-open');
+  host?.classList.remove('pdk-hi');
+  markPanelSelection(null);
   /* detach from the element we ATTACHED to, not from whatever #pdkScene resolves to
      now: on a second visit that is a different element and this removed nothing */
   if (outsideTap && tapScene) tapScene.removeEventListener('click', outsideTap, true);
@@ -438,7 +459,19 @@ function scrollToCopy(i) {
    cannot disagree with itself: opening the species already open closes it.
    `iid` is the COPY that was tapped out in the field. Optional: the panel's species
    tiles have no copy to name and open at the first one, as before. */
-export async function openPaddockCards(sp, iid) {
+/* WHICH TILE IS OPEN, SAID ON THE TILE. A grid tap gave no pressed and no
+   selected state at all, so the only feedback that anything happened was a card
+   appearing 278px away (measured 2026-08-31 at 430x932: tile centre y754, card
+   centre y476). The lit tile is the other half of leading the eye. */
+function markPanelSelection(sp) {
+  document.querySelectorAll('#pdkPanel .pdk-tile.on, #pdkPanel .pdk-teaser.on')
+    .forEach(b => b.classList.remove('on'));
+  if (!sp) return;
+  const sel = sp === 'egg' ? '#pdkPanel [data-egg]' : `#pdkPanel [data-sp="${CSS.escape(sp)}"]`;
+  document.querySelectorAll(sel).forEach(b => b.classList.add('on'));
+}
+
+export async function openPaddockCards(sp, iid, { from = null } = {}) {
   /* THE SCENE CALLS THIS WITH ONE ARGUMENT (js/app.js: the #pdkScene tap handler and
      the nest), so the module fetches its own data and owns its own host rather than
      making the scene carry state for it. Re-tap dismiss lives here too, so the rule
@@ -460,6 +493,26 @@ export async function openPaddockCards(sp, iid) {
   rosterRef = roster;
   host.innerHTML = sp === 'egg' ? eggCardHtml(eggs) : sliderHtml(rosterRef, sp);
   host.classList.add('pdk-open');
+  /* THE CARD SITS LOW BY DEFAULT, which is the half of the screen every door
+     into it is on: the collection grid is BELOW the scene, and a card pinned at
+     y284 landed 278px above the tile the finger just pressed. Low means it ends
+     at the panel's own top edge, about a tile's height from the tap.
+     A FIELD TAP THEN MEASURES, rather than being told: mount low, and if the
+     card actually covers the figure the player pressed, try high and keep
+     whichever of the two covers less. Measuring beats a rule of thumb here
+     because the answer depends on the row the animal happens to be standing on,
+     which is placePaddock's business and not this module's. */
+  host.classList.remove('pdk-hi');
+  if (from) {
+    const fr = from.getBoundingClientRect();
+    const cover = () => { const r = host.getBoundingClientRect(); return Math.max(0, Math.min(r.bottom, fr.bottom) - Math.max(r.top, fr.top)); };
+    const low = cover();
+    if (low > 0) {
+      host.classList.add('pdk-hi');
+      if (cover() >= low) host.classList.remove('pdk-hi');
+    }
+  }
+  markPanelSelection(sp);
   /* THE COACH MARK IS NOT SCENERY WHILE A CARD IS OPEN. It sits at z-index 9 over the
      host's 6 and covers exactly where a tall card's Pet/Feed row lands, and because it
      is OUTSIDE the card the outside-tap dismisser read the press as "close". The scene's
@@ -478,12 +531,12 @@ export async function openPaddockCards(sp, iid) {
 
 /* The collection panel is not tap-driven: it is the screen's lower half and must be
    there the moment the Paddock opens. The scene leaves `#pdkPanel` empty for me. */
-export async function mountPaddockPanel() {
+export async function mountPaddockPanel({ showTeaser = true, inField = null } = {}) {
   const el = document.getElementById('pdkPanel');
   if (!el) return false;
   const { paddockRoster, paddockEggs } = await import('./paddock.js');
   const [roster, eggs] = await Promise.all([paddockRoster(), paddockEggs()]);
-  el.innerHTML = panelHtml(roster, eggs, { tileBox: pdkTileBox(el) });
+  el.innerHTML = panelHtml(roster, eggs, { tileBox: pdkTileBox(el), showTeaser, inField });
   el.querySelectorAll('[data-sp]').forEach(b => b.addEventListener('click', () => openPaddockCards(b.dataset.sp)));
   el.querySelector('[data-egg]')?.addEventListener('click', () => openPaddockCards('egg'));
   return true;

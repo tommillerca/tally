@@ -273,7 +273,7 @@ const SITES = [
     key: 'paddock-herd', claim: 'petSpriteHtml(r.sp', paired: false, undriven:
       'the scene is driven end-to-end by tests/paddock-scene-audit.mjs '
       + '(gate FULL tier): real Stable chip tap, decoded herd from a real '
-      + 'roster, band-overlap assertion in the live DOM, and motion asserted '
+      + 'roster, a whole-cast packing assertion in the live DOM, and motion asserted '
       + 'as rendered pixels (headless freezes the main-thread animation clock, '
       + 'so gBCR lies; screenshots are the layer the player sees).',
   },
