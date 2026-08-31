@@ -87,6 +87,47 @@ that is an empty sample and every check below is a FAIL, not a skip.
 # from: f2086c8a (Fix talent tree: refused taps speak, expansion state persists (kv taltrees))
 
 ---
+# VERIFY: feat/rack-reroll (browser pass, post-gate)
+
+Scope: the rack reroll became a rising, capped, UNLIMITED-count price curve
+(Tom, 2026-08-31: "players should be able to pay an increasing amount to reroll
+the rack thats fine") and now moves ONLY the rotating shelf: the themed nine
+keep their week identity. Curve: 500, 1000, 2000, 4000, then 8000 forever,
+resetting Monday. REVIEWER-CHECK: the curve values are proposed, not Tom-given.
+
+Already run on this tree (pure node, green): `node tests/rack-rotate-audit.mjs`
+with new rows CURVE x2, DISTINCT, N0, WEEK-IDENTITY; CURVE and WEEK-IDENTITY
+each proven red in a throwaway copy (non-monotone ladder; themed-nine redraw).
+
+Still to run in a real browser (this machine was gated):
+
+1. `node tests/purchase-firewall.mjs` — its REROLL rows were REWRITTEN for the
+   new contract (REROLL-LADDER rising-then-capped, REROLL-SCOPE themed nine
+   frozen, REROLL-FLOOR broke wallet refused at the capped price and unmoved,
+   REROLL-WEEKLY quotes the cap after a stale day). These rows have NOT run
+   yet; they must be green, and prove REROLL-SCOPE red per the header's
+   prove-red item 5.
+2. Operate the button (ui-audit rules): it sits UNDER the rotating shelf
+   ("ALSO ON THE RACK" grid), reads "Reroll this shelf" with the coin price on
+   it, arms to "Spend 500?" before spending, and after the spend the rotating
+   tiles change while the themed nine and the aura tile DO NOT.
+3. Price walk: reroll repeatedly with a rich wallet (`kvSet('coins', 40000)` in
+   the console) and confirm the button re-renders 500 -> 1,000 -> 2,000 ->
+   4,000 -> 8,000 -> 8,000, balance falling by exactly the shown price each
+   time (read coins from the wallet line, not from memory).
+4. Broke state: set coins below the shown price; the button must render
+   DISABLED (attribute present, opacity dimmed) and not respond to taps.
+   The failing look: an enabled button that toasts, or one that spends.
+5. Re-render without paying (navigate away and back): both shelves identical.
+6. `node tests/reward-sop-audit.mjs`, `node tests/unit.test.js`, and
+   `node tests/screen-sweep.mjs` for regressions around the shop screen.
+
+## Status 2026-08-30
+- Pure-node audit: GREEN on this tree, two rows proven red in a throwaway copy.
+- Browser items 1-6: OPEN, blocked by the release gate on this machine.
+# from: 0ebdffe0 (Rack reroll: rising capped price curve, rotating shelf only)
+
+---
 
 # VERIFY: fix/den-double-pay branch (browser pass, post-gate)
 

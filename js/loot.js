@@ -118,16 +118,24 @@ export const RACK_DUST = [200, 175, 160, 130, 95, 90, 75, 35];
    three-wide grid. */
 export const RACK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 1200, dust: 110 };
 export const RACK_AURA_CELL = 4;
-/* REROLL HAS A CEILING AND THE SCREEN HAS TO CARRY IT. A reroll reading FREE
-   with nothing beside it says unlimited, and an unlimited reroll destroys the
-   rack: you spam it until your piece appears and the weekly countdown becomes
-   noise. One free, then six paid ones totalling exactly 2,000 coins, and the
-   allowance resets daily. */
-export const RACK_REROLL_LADDER = [0, 100, 200, 300, 400, 500, 500];
+/* THE REROLL IS A PRICE CURVE, NOT A COUNT CAP. Tom, 2026-08-31: "players
+   should be able to pay an increasing amount to reroll the rack thats fine".
+   This is deliberately a coin sink: post-Bumbleseal players sit on ~30,000
+   inert coins with the crate shop closed. So the count is unlimited within the
+   week and the PRICE is the ceiling: it starts at a quarter of a legendary
+   (RACK_RARITY_PRICE tops at 2,000), doubles per reroll, and holds at the cap.
+   Five rerolls cost 15,500; a 30,000 hoard funds about seven. The counter (and
+   with it the curve) resets weekly with the rack record (rr: 0 in rack()).
+   The old count-capped weekly ladder (one free + six paid, 2,000 total,
+   approved 2026-08-20) is superseded by the 2026-08-31 ruling.
+   REVIEWER-CHECK: the 500 -> 8,000 doubling curve is proposed from the shelf
+   economy in evidence, not a Tom-given number. */
+export const RACK_REROLL_LADDER = [500, 1000, 2000, 4000, 8000];
 
 // Same FNV-1a the dens turn over on, so the rack changes every Monday with no
-// server. The salt is the reroll counter: rerolling is a new deterministic draw
-// from the SAME theme pools, never a random pull out of the whole game.
+// server. The salt is the reroll counter, and since 2026-08-31 it moves ONLY
+// the rotating shelf below: the themed nine keep their week identity, so a
+// reroll can never fish a specific themed piece out of its 3-deep rungs.
 /* ============ THE SECOND HALF OF THE RACK: VARIETY ============
  * Tom, 2026-08-27: "we need to be offering for more for sale there now that we
  * have removed chests for sale from the game players are pissed and have no
@@ -237,15 +245,16 @@ export async function rack() {
     cur.rot = rot; cur.rotDay = day;
   }
   if (cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length) {
-    /* THE ALLOWANCE IS WEEKLY, and the week check three lines up is the whole
+    /* THE COUNTER IS WEEKLY, and the week check three lines up is the whole
        mechanism: a record that survives to here belongs to THIS week, so its
-       reroll count stands, and a new week rebuilds the record from scratch with
-       rr: 0. It used to reset on rrDay, which made the first reroll free EVERY
-       DAY. Seven free full-rack draws a week against 3-deep rungs surfaces any
-       specific piece 94% of weeks (1 - (2/3)^7) for nothing, which is exactly
-       what the comment beside RACK_REROLL_LADDER says a reroll must not do:
-       "you spam it until your piece appears and the countdown becomes noise".
-       Tom approved weekly on 2026-08-20. `day` is no longer read here. */
+       reroll count (and with it the price curve) stands, and a new week
+       rebuilds the record from scratch with rr: 0. It used to reset on rrDay,
+       which handed back the cheap end of the ladder EVERY DAY; seven cheap
+       full-rack draws a week against 3-deep rungs surfaced any specific themed
+       piece 94% of weeks (1 - (2/3)^7). Since 2026-08-31 a reroll cannot touch
+       the themed nine at all (rerollRack keeps cur.ids), but the weekly reset
+       still matters: it is what makes the rising curve a curve rather than a
+       daily 500-coin flat rate. `day` is no longer read here. */
     return { ...cur, rr: cur.rr || 0 };
   }
   const ids = rackPick(week, 0);
@@ -254,7 +263,9 @@ export async function rack() {
   return st;
 }
 
-export function rackRerollCost(rr) { return RACK_REROLL_LADDER[rr] ?? null; }
+/* Clamped, never null: past the last rung the price holds at the cap, because
+   the count is unlimited and a null cost would brick the button mid-week. */
+export function rackRerollCost(rr) { return RACK_REROLL_LADDER[Math.min(rr, RACK_REROLL_LADDER.length - 1)]; }
 
 /* A SPEND, GUARDED THE SAME WAY A PAYOUT IS. kvUpdate does the read and the
    write in ONE IndexedDB transaction, so two taps racing cannot both take the
@@ -268,8 +279,11 @@ export async function rerollRack() {
      every breed threw ReferenceError at the last line. */
   const { dateKey } = await import('./nutrition.js');
   const day = dateKey();
-  if (st.rr >= RACK_REROLL_LADDER.length) return { ok: false, reason: 'limit' };
-  const cost = RACK_REROLL_LADDER[st.rr];
+  const cost = rackRerollCost(st.rr);
+  /* Mirror buyRackItem's NaN-wallet guard: a curve edit that makes cost
+     undefined must be a dead button, never `bal < undefined` (false) followed
+     by a NaN wallet write. */
+  if (!Number.isFinite(cost)) return { ok: false, reason: 'price' };
   const bal = await coins();
   if (bal < cost) return { ok: false, reason: 'coins', need: cost, have: bal };
   const next = await kvUpdate('rack', cur => {
@@ -279,12 +293,16 @@ export async function rerollRack() {
     const used = (cur && cur.rr) || 0;
     if (!cur || cur.week !== st.week || used !== st.rr) return undefined;   // somebody else moved it
     const salt = (cur.salt || 0) + 1;
-    const ids = rackPick(cur.week, salt);
-    return { week: cur.week, salt, ids, rot: rackRotatePick(day, salt, ids), rotDay: day, rr: used + 1 };
+    /* ONLY THE ROTATING SHELF MOVES. `ids: cur.ids` is the 2026-08-31 ruling's
+       boundary: the themed nine keep their week identity, so a reroll can
+       never fish a specific themed piece out of its rung. The new salt seeds
+       the rotating draw alone, against the SAME themed ids, so the two shelves
+       stay disjoint and buyRackItem's indexOf pricing cannot cross. */
+    return { week: cur.week, salt, ids: cur.ids, rot: rackRotatePick(day, salt, cur.ids), rotDay: day, rr: used + 1 };
   });
   if (!next) return { ok: false, reason: 'race' };
-  if (cost) await coinsAdd(-cost);
-  return { ok: true, cost, rr: next.rr, left: RACK_REROLL_LADDER.length - next.rr, coins: await coins() };
+  await coinsAdd(-cost);
+  return { ok: true, cost, rr: next.rr, coins: await coins() };
 }
 
 /* THE AURA YOU BOUGHT IS THE AURA YOU WEAR. There is exactly one aura in the

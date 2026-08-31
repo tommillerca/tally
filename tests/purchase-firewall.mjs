@@ -38,11 +38,12 @@
  *            graded against a NEGATIVE CONTROL in the same slot on the same
  *            save: a collected-but-unbought look must still cost dust, so a
  *            transmogPrice that returns 0 for everything cannot pass.
- *   REROLL   the ladder runs out. A spend with no ceiling is the other way this
- *            screen could take an unbounded amount of money, so the ladder is
- *            drained to exhaustion and two attempts past it: each reroll charges
- *            exactly its rung, the total is 2,000 coins, and a refused reroll
- *            spends nothing.
+ *   REROLL   the price curve holds. Tom, 2026-08-31: rerolls are UNLIMITED in
+ *            count and the rising price is the only ceiling (a deliberate coin
+ *            sink), so what must hold instead of a count cap is: each reroll
+ *            charges exactly its rung (rising, then capped), it moves the
+ *            ROTATING shelf and never the themed nine, and a reroll the wallet
+ *            cannot cover is refused, spends nothing and moves nothing.
  *
  * CONTROL ROWS. Every measurement here is preceded by a row that fails if the
  * check is looking in the wrong place: the static scanner must have found real
@@ -59,11 +60,11 @@
  *      -> ONCE-RACE goes red (three concurrent callers all pay)
  *   4. move the spend above the claim
  *      -> ONCE-SEQ goes red
- *   5. drop the `st.rr >= RACK_REROLL_LADDER.length` limit in rerollRack
- *      -> REROLL-CAP goes red (the ladder never runs out and keeps charging)
- *   6. key the reroll allowance back on the day (`cur.rrDay === day`) in both
- *      rack() and rerollRack()
- *      -> REROLL-WEEKLY goes red (a stale day hands back a whole free ladder)
+ *   5. redraw the themed nine in rerollRack (ids: rackPick(cur.week, salt)
+ *      instead of ids: cur.ids)
+ *      -> REROLL-SCOPE goes red (the reroll fishes themed pieces out of rungs)
+ *   6. key the reroll counter back on the day in rack() (reset rr with rotDay)
+ *      -> REROLL-WEEKLY goes red (a stale day hands back the cheap rungs)
  *
  * Usage: node tests/purchase-firewall.mjs            (serves this tree)
  *        node tests/purchase-firewall.mjs <base-url>
@@ -247,21 +248,32 @@ const res = await page.evaluate(async () => {
     break;
   }
 
-  /* THE REROLL LADDER, drained. A spend with no ceiling is the other way this
-     screen could take an unbounded amount of money: the ladder is FREE then
-     100/200/300/400/500/500, six paid a day, and it must stop. Driven to
-     exhaustion and one attempt past it. */
+  /* THE REROLL CURVE, driven past its ladder. Tom, 2026-08-31: the count is
+     unlimited and the rising price is the ceiling, so the invariants are the
+     CHARGE (each reroll costs exactly its rung, rising then capped), the SCOPE
+     (the rotating shelf moves, the themed nine never do), and the FLOOR (a
+     wallet below the price is refused, spends nothing, moves nothing). */
   await db.kvSet('coins', 100000);
   const rrStart = await loot.coins();
   const rrSteps = [];
   for (let n = 0; n < loot.RACK_REROLL_LADDER.length + 2; n++) {
     const c0 = await loot.coins();
-    const ids0 = (await loot.rack()).ids.join(',');
+    const st0 = await loot.rack();
+    const ids0 = st0.ids.join(','), rot0 = (st0.rot || []).join(',');
     const r = await loot.rerollRack();
+    const st1 = await loot.rack();
     rrSteps.push({ n, ok: r.ok, reason: r.reason || null, spent: c0 - (await loot.coins()),
-      changed: (await loot.rack()).ids.join(',') !== ids0 });
+      rotChanged: (st1.rot || []).join(',') !== rot0, idsChanged: st1.ids.join(',') !== ids0 });
   }
   const rrSpent = rrStart - (await loot.coins());
+  /* the floor: a wallet below the (now capped) price must be refused unmoved */
+  await db.kvSet('coins', 10);
+  const rb0 = await loot.rack();
+  const brokeTry = await loot.rerollRack();
+  const rb1 = await loot.rack();
+  const rrBroke = { ok: !!brokeTry.ok, reason: brokeTry.reason || null, need: brokeTry.need ?? null,
+    coinsAfter: await loot.coins(), rotChanged: (rb1.rot || []).join(',') !== (rb0.rot || []).join(','),
+    rrMoved: rb1.rr !== rb0.rr };
 
   /* ---- THE PET SHOP, driven the same way and for the same reason ----
      buyPetItem is buyRackItem's twin (its own header says so: "If this ever
@@ -313,7 +325,7 @@ const res = await page.evaluate(async () => {
 
   return { target: { ...target, gear: target.gear.id }, coinPrice, dustPrice, before, after, afterTwice,
     buy1, buy2, wearBefore, wearAfter, wearOther, otherArt: other ? other.artId : null, race, dustLeg,
-    ladder: loot.RACK_REROLL_LADDER, rrSteps, rrSpent,
+    ladder: loot.RACK_REROLL_LADDER, rrSteps, rrSpent, rrBroke,
     pet: { petId, accId, petPrice, accPrice, gate, gateSpent, petBuy1, petBuy2, petSpent, petSpent2,
       petRace, ownsPet: petOwned.includes(petId), ownsAcc: petOwned.includes(accId),
       petBefore, petAfter } };
@@ -413,36 +425,41 @@ else {
     !!res.dustLeg && res.dustLeg.dustSpent === res.dustLeg.price && res.dustLeg.coinDelta === 0,
     res.dustLeg ? `dust fell ${res.dustLeg.dustSpent} (price ${res.dustLeg.price}), coins moved ${res.dustLeg.coinDelta}` : 'not run');
 
-  /* ---- REROLL: a spend that must run out ---- */
+  /* ---- REROLL: the curve, the scope, the floor (Tom, 2026-08-31) ---- */
   const granted = res.rrSteps.filter(r => r.ok);
-  const refused = res.rrSteps.filter(r => !r.ok);
-  ok('CONTROL the reroll ladder actually granted rerolls, and they changed the rack',
-    granted.length === res.ladder.length && granted.every(r => r.changed),
-    `${granted.length} of ${res.ladder.length} granted, ${granted.filter(r => r.changed).length} changed the nine`);
-  ok('REROLL-LADDER each reroll charges exactly its rung, first one free',
-    granted.every((r, i) => r.spent === res.ladder[i]),
-    `spent ${granted.map(r => r.spent).join(', ')} against ladder ${res.ladder.join(', ')}`);
-  ok('REROLL-CAP the day\'s rerolls run out, and the ceiling is 2,000 coins',
-    refused.length === 2 && refused.every(r => r.reason === 'limit') && res.rrSpent === 2000,
-    `${refused.length} refused (${[...new Set(refused.map(r => r.reason))].join('/')}) after ${res.rrSpent} coins spent in total`);
-  /* ---- THE ALLOWANCE IS WEEKLY, NOT DAILY ----
-     Tom approved weekly on 2026-08-20. The old code reset the ladder on rrDay,
-     so the first reroll was free EVERY DAY: seven free full-rack draws a week
-     against 3-deep rungs surfaces any specific piece 94% of weeks (1-(2/3)^7)
-     for nothing, which is the exact outcome the ladder exists to prevent.
-     Driven by ageing the PERSISTED record rather than by faking a clock: the
-     ladder is already exhausted above, so a stale day must change nothing while
-     a stale week must hand the allowance back. The first half is what goes red
-     if the reset is ever keyed on the day again. */
+  const expSpend = res.rrSteps.map((_, i) => res.ladder[Math.min(i, res.ladder.length - 1)]);
+  ok('CONTROL the reroll curve actually granted rerolls, and each moved the rotating shelf',
+    granted.length === res.rrSteps.length && res.rrSteps.length > res.ladder.length && granted.every(r => r.rotChanged),
+    `${granted.length} of ${res.rrSteps.length} granted, ${granted.filter(r => r.rotChanged).length} moved the shelf`);
+  ok('REROLL-LADDER each reroll charges exactly its rung, rising then held at the cap',
+    granted.length === expSpend.length && granted.every((r, i) => r.spent === expSpend[i]),
+    `spent ${granted.map(r => r.spent).join(', ')} against curve ${expSpend.join(', ')}`);
+  ok('REROLL-SCOPE the themed nine never move on a reroll (they keep their week identity)',
+    granted.length > 0 && granted.every(r => !r.idsChanged),
+    `${granted.filter(r => r.idsChanged).length} of ${granted.length} rerolls moved the themed nine`);
+  ok('REROLL-FLOOR a reroll the wallet cannot cover is refused at the capped price, spends nothing, moves nothing',
+    res.rrBroke.ok === false && res.rrBroke.reason === 'coins'
+      && res.rrBroke.need === res.ladder[res.ladder.length - 1]
+      && res.rrBroke.coinsAfter === 10 && !res.rrBroke.rotChanged && !res.rrBroke.rrMoved,
+    `ok=${res.rrBroke.ok} reason=${res.rrBroke.reason} need=${res.rrBroke.need} coins=${res.rrBroke.coinsAfter} rotChanged=${res.rrBroke.rotChanged}`);
+  /* ---- THE COUNTER IS WEEKLY, NOT DAILY ----
+     Since 2026-08-31 the count is unlimited, so what a day change must not
+     hand back is the CHEAP END OF THE CURVE: a counter re-keyed on the day
+     would sell a 500-coin reroll every morning where the week's curve says
+     8,000. Driven by ageing the PERSISTED record rather than faking a clock,
+     with the wallet at 0 so the probe itself cannot spend: the refusal's
+     `need` field exposes which rung the code believes it is on. A stale DAY
+     must still quote the cap; a stale WEEK must rebuild the record at rr 0. */
   const weekly = await page.evaluate(async () => {
     const loot = await import('./js/loot.js');
     const { kvGet, kvSet } = await import('./js/db.js');
     const before = await kvGet('rack', null);
     const out = { rrAtStart: before ? before.rr : null };
 
-    await kvSet('rack', { ...before, rrDay: '2000-01-01' });      // yesterday, same week
+    await kvSet('coins', 0);
+    await kvSet('rack', { ...before, rotDay: '2000-01-01' });      // yesterday, same week
     const staleDay = await loot.rerollRack();
-    out.staleDay = { ok: !!staleDay.ok, reason: staleDay.reason || null };
+    out.staleDay = { ok: !!staleDay.ok, reason: staleDay.reason || null, need: staleDay.need ?? null };
 
     await kvSet('rack', { ...before, week: 'stale-week' });        // a week that is not this one
     const staleWeek = await loot.rack();
@@ -450,21 +467,16 @@ else {
     out.staleWeekRegenerated = staleWeek.week !== 'stale-week';
     return out;
   });
-  ok('CONTROL the ladder really was exhausted before the weekly probe ran',
-    weekly.rrAtStart === res.ladder.length, `rr was ${weekly.rrAtStart} of ${res.ladder.length}`);
-  ok('REROLL-WEEKLY a new DAY inside the same week hands back no rerolls',
-    weekly.staleDay.ok === false && weekly.staleDay.reason === 'limit',
-    `ok=${weekly.staleDay.ok} reason=${weekly.staleDay.reason}`);
-  ok('REROLL-WEEKLY and a new WEEK does hand the allowance back',
+  ok('CONTROL the drive really pushed the counter past the ladder before the weekly probe ran',
+    weekly.rrAtStart === res.rrSteps.length && res.rrSteps.length > res.ladder.length,
+    `rr was ${weekly.rrAtStart} after ${res.rrSteps.length} rerolls over a ${res.ladder.length}-rung curve`);
+  ok('REROLL-WEEKLY a new DAY inside the same week hands back no cheap rungs (still quotes the cap)',
+    weekly.staleDay.ok === false && weekly.staleDay.reason === 'coins'
+      && weekly.staleDay.need === res.ladder[res.ladder.length - 1],
+    `ok=${weekly.staleDay.ok} reason=${weekly.staleDay.reason} need=${weekly.staleDay.need} (a day-keyed reset would quote ${res.ladder[0]})`);
+  ok('REROLL-WEEKLY and a new WEEK does reset the curve',
     weekly.staleWeekRegenerated === true && weekly.staleWeekRr === 0,
     `regenerated=${weekly.staleWeekRegenerated} rr=${weekly.staleWeekRr}`);
-
-  /* `refused.every(...)` on an EMPTY set is true, and this row passed vacuously
-     on the prove-red where the ladder never ran out. An empty sample is a
-     failure, never a pass. */
-  ok('REROLL-CAP a refused reroll spends nothing',
-    refused.length > 0 && refused.every(r => r.spent === 0),
-    refused.length ? `${refused.length} refused attempts spent ${refused.map(r => r.spent).join(', ')}` : 'NO reroll was ever refused, so this row graded nothing');
 }
 
 ok('CONTROL the page threw nothing while the purchases ran', errors.length === 0, errors.join(' | ') || 'no page errors');
