@@ -262,3 +262,66 @@ count, no streak talk, no guilt, no exclamation marks.
 - Dismiss button: `Good to be back`
 # from: b744a88a (Welcome-back return card on Today after a 2+ day gap)
 # from: 75d0e771 (Welcome-back return card on Today after a 2+ day gap)
+
+---
+# VERIFY.md: loot visibility (branch fix/loot-visibility)
+
+Written under a no-browser release gate. Nothing below has been run; this is the
+checklist for the verification pass. Verify on a real served app (live or local
+serve.mjs), not by reading code.
+
+## What changed
+
+1. `index.html`: the Bonehead tab in `#tabbar` gains `<i class="tab-badge" id="crateBadge" hidden>`,
+   the same badge element/class the Crew tab already uses (`#crewBadge`).
+2. `js/app.js`:
+   - `setCrateBadge(n)` + `refreshCrateBadge()` next to `setCrewBadge()` (~line 2433).
+     Count source: `unopenedCrates()` from js/loot.js, which is
+     `inventory().filter(r => r.kind === 'crate')`, the SAME `inv` store and filter the
+     Backpack crates tab renders (`renderCharacter`, `inv.filter(r => r.kind === 'crate')`).
+   - `route()` calls `refreshCrateBadge()` on every navigation/refresh (~line 2861).
+   - `renderCharacter()` calls `setCrateBadge(crates.length)` from its own crates rows
+     (~line 12902), because opening a crate re-renders that screen in place without route().
+   - QUESTS summary badge copy: "N ready" is now "N ready to claim" (~line 3612).
+     The badge itself (questClaimable across day/week/month tiers, today only) already
+     existed since v179; only the copy changed per the ticket.
+
+## Checks (each must be able to fail; the failing look is stated)
+
+1. **Nav badge appears and matches the Backpack.** Seed a crate
+   (`(await import('./js/loot.js')).grantCrate('daily', 'verify')` in the console), then
+   navigate to any tab (route runs the refresh). PASS: `#crateBadge` visible with "1".
+   Open the Bonehead tab, Backpack/crates tab: exactly 1 crate row listed.
+   FAIL looks like: badge hidden, or badge count differs from the crate rows on screen.
+2. **Badge and crates tab cannot disagree.** With N crates seeded (include one
+   `grantCrate('golden', 'verify')`), compare `#crateBadge` text to the number of
+   crate rows in the Backpack crates tab. Must be equal, goldens included.
+3. **Opening a crate decrements live, without navigation.** On the crates tab, tap OPEN,
+   finish the reveal. PASS: `#crateBadge` drops by 1 (hides at 0) while still on that
+   screen. FAIL: badge unchanged until you switch tabs (that was the stale-path risk;
+   renderCharacter's setCrateBadge call is the guard, prove it by removing that one call
+   and watching this step go red).
+4. **Zero state.** Open all crates. PASS: `#crateBadge` has `hidden` set. An empty
+   `inv` must not leave a "0" badge.
+5. **9+ cap.** Seed 12 crates: badge reads "9+" (same idiom as crewBadge).
+6. **Hit-test (anti-regression rule 6).** With the badge visible,
+   `document.elementFromPoint` at the center of the Bonehead tab still returns the tab
+   button (the badge is a child, so this passes unless CSS moved it).
+7. **Quest tag reads from outside when collapsed.** On today, complete but do not claim
+   one weekly quest (or seed its progress), leave `.q-collapse` collapsed. PASS: summary
+   shows a `.q-badge` reading "1 ready to claim" without opening the section, and the
+   section did NOT auto-expand. FAIL: no badge, or copy still "1 ready".
+8. **Past days stay silent.** `tests/today-container-audit.mjs` must stay green: it
+   asserts the q-badge is ABSENT on a read-only past day (the copy change does not touch
+   that logic, but run it since the summary line was edited).
+9. **Run `tests/ui-audit.js`** per tally CLAUDE.md rule 9 (badge overlays a tabbar
+   control).
+
+## Not changed on purpose
+
+- No auto-expand of QUESTS, no reward/claim logic touched (claimQuest, periodClosed,
+  reward-sop-audit surface untouched: js/quests.js and js/loot.js have zero diff).
+- The Today hero Backpack door badge (`hero-badge` on `#charBtn`) already existed (v188)
+  and already reads `unopenedCrates()`; left alone.
+# from: c564bffd (loot visibility: crate count on the Bonehead tab, claim tag says claim)
+# from: 5c76e4b2 (loot visibility: crate count on the Bonehead tab, claim tag says claim)
