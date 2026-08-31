@@ -432,7 +432,14 @@ async function buildStats() {
     spawns: xp.filter(r => r.type === 'spawn').length,
     roadStops: xp.filter(r => r.type === 'road').length,
     roadCycles: xp.filter(r => r.type === 'road' && r.key.endsWith('-6')).length,
-    bossWins: xp.filter(r => r.type === 'boss').length,
+    /* 'boss' is a dead type: den wins have written 'bossday' (landmark and
+       remote) or 'roamboss' (roaming) since the den rework, so the den-1 and
+       den-5 badges were unearnable for every player. Same fix as the m-boss
+       and w-boss quest counters one commit down; the legacy type stays counted
+       for saves that carry it. Players who already earned these retroactively
+       will see the badge pop on their next evaluate, which is them being paid
+       what they were owed. */
+    bossWins: xp.filter(r => r.type === 'bossday' || r.type === 'roamboss' || r.type === 'boss').length,
     pitWins: xp.filter(r => r.type === 'fight').length,
     pitChamp: xp.some(r => r.type === 'pitchamp'),
     secretTumtum: xp.some(r => r.key === 'secret-tumtum'),
