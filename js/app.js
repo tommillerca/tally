@@ -3597,12 +3597,23 @@ async function renderToday(el) {
     <summary><span class="q-sum-ico">${pixCur('scroll', 24) || ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
     <div class="q-card-body">
     ${isToday ? '' : `<p class="note">A record of ${esc(title)}. Quests are claimed on the day.</p>`}
-    ${questTiers.map(tier => `
+    ${questTiers.map(tier => {
+      let monthEndNote = '';
+      if (tier.period === 'month') {
+        const [y, m, d] = S.date.split('-').map(Number);
+        const daysInMonth = new Date(y, m, 0).getDate();
+        const daysRemaining = daysInMonth - d;
+        if (daysRemaining <= 3 && tier.quests.some(q => questState(q, tier.ctx).cur > 0)) {
+          monthEndNote = '<p class="note" style="margin-top: 4px; margin-bottom: 8px;">Monthly quests reset on the 1st</p>';
+        }
+      }
+      return `
     <div class="q-tier ${tier.period}">
       ${/* the daily tier is labelled "TODAY'S QUESTS", which is a lie on a day
              that is not today. The tier list is built before isToday exists, so
              the label is corrected here rather than reordering that block. */''}
       <div class="q-tier-h">${tier.period === 'day' && !isToday ? 'DAILY QUESTS' : tier.label}</div>
+      ${monthEndNote}
       <div class="q-list">
       ${tier.quests.map(q => {
         const st = questState(q, tier.ctx);
@@ -3626,7 +3637,8 @@ async function renderToday(el) {
         </div>`;
       }).join('')}
       </div>
-    </div>`).join('')}
+    </div>`;
+    }).join('')}
     <button class="link" id="qProg" style="margin-top:4px">Quest progress</button>
     </div>
   </details>
