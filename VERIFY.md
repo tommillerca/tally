@@ -627,3 +627,78 @@ For each of WIN, LOSS, FLEE on a walked-to den (mode boss, from the map):
    playing finish the fight via the seam; assert the .gi node is gone the
    moment the outcome renders.
 # from: 137468cc (Encounter range honesty + fight-exit sheet cleanup)
+
+---
+# VERIFY: premium-pet weight (branch fix/premium-weight)
+
+Scope: js/app.js only (plus a SITES registration in tests/figure-audit.mjs).
+`node --check js/app.js` passes on this tree. Round-3 completionist findings:
+destroy safety on the last copy of a premium pet, keeper-picker chip labels,
+and a purchase reveal for the 50,000-coin Bumbleseal.
+
+Setup: serve this tree, stage a save with 60,000+ coins and no C6 owned
+(tests/godmode.js pattern). Buy Bumbleseal from the Shop's pet shelf for the
+reveal scenarios; the Stable scenarios need at least two copies of one common
+species plus a single-copy legendary (grantPet in js/loot.js can stage both).
+
+## (a) Destroy safety: last-copy premium gets the typed confirm
+
+1. Stable, spin the ring to Bumbleseal (owned exactly once). Tap DESTROY 120.
+2. MUST BE TRUE: NO light arm ("Melt for ... ?" never appears on the button).
+   A t1 sheet opens: title "Destroy Bumbleseal?", sub "This cannot be undone",
+   input #pdIn, button #pdGo DISABLED.
+3. Type "nope" into #pdIn: #pdGo stays disabled. Clear it, type "destroy"
+   (lowercase): #pdGo enables. Clear, type "bumbleseal": #pdGo enables too
+   (name or DESTROY, case-insensitive).
+4. Tap the sheet close (Cancel): the pet survives, roster unchanged, dust
+   balance unchanged. Reopen, type DESTROY, tap #pdGo: sheet closes, toast
+   "... salvaged into N Bone Dust", pet gone from the ring, dust up by exactly
+   the button's number.
+5. Same check on a single-copy legendary that is NOT the shop pet (e.g. C2):
+   typed confirm too (rarity branch, not just the PET_SHOP id).
+6. CONTROL, dupe keeps the light arm: with 2+ copies of one species focused,
+   tap DESTROY. MUST BE TRUE: the button arms in place ("Melt for ... ?"),
+   NO sheet opens, second tap salvages. A shiny dupe still gets the shiny
+   arm toast, unchanged.
+7. Prove the gate can fail (anti-regression rule 2): in a throwaway copy,
+   revert the `lastCopy &&` condition to `false &&` and confirm the last-copy
+   Bumbleseal falls back to the light arm; restore and confirm the sheet.
+
+## (b) Keeper-picker chips name what they are
+
+1. Own two copies of ONE species with different levels (and give one a
+   nickname or lineage). Select both for breeding.
+2. MUST BE TRUE in the sticky breed bar's "Which one are you keeping?" row:
+   each chip reads name (nickname if set), "Lv N", "lineage N" when nonzero,
+   a shiny star when shiny, and ends in KEPT on the selected chip and FED on
+   the other. No two chips render identical text when the instances differ
+   in any of level, lineage, shiny, or nickname.
+3. Tap the FED chip: the labels SWAP (tapped one now KEPT), and the trade
+   diagram + facts list above flips keeper/spare to match. The chip marked
+   KEPT is always the one `#doBreed` keeps: breed and confirm the survivor
+   is the KEPT chip's instance (check its iid via nickname or level).
+
+## (c) Purchase reveal + shelf note
+
+1. With 50,000+ coins and no C6: Shop pet shelf, tap the 50,000 price, tap
+   again to confirm.
+2. MUST BE TRUE, in order: the buy toast lands first; ~380ms later a takeover
+   sheet opens (reveal-take): eyebrow "New arrival", "Bumbleseal is yours",
+   her own art on the rays stage, DECODED (naturalWidth > 0 while visible,
+   per the FX rules; cold cache run included), button "Welcome home".
+3. Tap Welcome home: sheet closes; the shop shelf now shows the one-line note
+   "Bumbleseal is yours. She lives in your Stable..." where the NEW ARRIVAL
+   hero was; accessory tiles are unlocked.
+4. Accessory CONTROL: buy one accessory (e.g. Bug-Eye Shades). MUST BE TRUE:
+   toast only, NO takeover opens.
+5. Coincidence path: queue a level-up so it lands in the same 380ms window as
+   the purchase (or stage S.celebration by hand), then buy. MUST BE TRUE: the
+   pet reveal shows first, and closing it opens the level-up moment, dropped
+   celebrations are the bug this guards.
+6. node tests/figure-audit.mjs: COVERAGE passes with the new shop-pet-reveal
+   row (an unregistered petPortraitHtml call site is a FAIL, so this also
+   proves the row matches).
+7. node tests/reward-sop-audit.mjs still passes: the reveal pays nothing
+   (buyPetItem is untouched), so no new ACTIONS row is expected; a red here
+   means the celebration path grew a payout it must not have.
+# from: 91a8af7a (Premium-pet weight: last-copy destroy confirm, keeper chip labels, purchase reveal)

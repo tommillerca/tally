@@ -310,6 +310,14 @@ const SITES = [
       'only rendered while exactly one pet is flagged for breeding; the state is '
       + 'driven by the Stable checks rather than from here',
   },
+  {
+    /* The shop-pet purchase reveal (fix/premium-weight). Pet-only takeover,
+       no Bonehead beside it. shiny is a hardcoded false because the shop never
+       sells a shiny: deliverPet grants the base variant, shinies are hatch-only. */
+    key: 'shop-pet-reveal', claim: 'newpet-avatar', paired: false, undriven:
+      'the celebration only opens after a real 50,000-coin purchase, which needs '
+      + 'the coin balance and the unowned-pet state to be staged inside the run',
+  },
 ];
 
 /* ------------------------------------------------------ COVERAGE + STATIC ---- */
