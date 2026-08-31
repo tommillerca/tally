@@ -24,9 +24,10 @@ export async function scheduleRares() {
 // pushed as they surface) or NONE. Nothing fires until the player turns it on
 // and grants permission.
 
-import { kvGet, kvSet } from './db.js';
+import { db, kvGet, kvSet } from './db.js';
 import { isNative } from './native.js';
-import { dateKey } from './nutrition.js';
+import { dateKey, streakFrom } from './nutrition.js';
+import { streakDateSet } from './game.js';
 
 // New users have notifications ON by default (Tom's call). enabled=true only
 // takes effect once the OS grants permission (requested once at boot); until
@@ -160,7 +161,31 @@ export async function syncNotifications() {
   if (!p.enabled) return;
   const notis = [];
   if (p.reminder) notis.push({ id: ID.reminder, title: 'Boneheadz Gym', body: "Log today's food. Your skeleton earns XP from every meal.", schedule: { on: { hour: 19, minute: 0 }, allowWhileIdle: true } });
-  if (p.streak) notis.push({ id: ID.streak, title: 'Keep your streak', body: 'Log something before midnight to keep the streak alive.', schedule: { on: { hour: 20, minute: 30 }, allowWhileIdle: true } });
+  if (p.streak) {
+    /* NO STREAK, NO NAG. This was a repeating nightly schedule with no gate, so
+       a dead streak got guilt-poked at 20:30 forever, the one guilt-toned
+       surface left for a lapsed player. Two changes, both needed:
+       1. Only schedule while the streak is actually alive (same streakDateSet +
+          streakFrom the game scores with, freeze days included).
+       2. ONE-SHOT, not repeating. A repeating schedule outlives a dead streak
+          on a phone that never opens the app again; a one-shot fires at most
+          once after the last open, when the streak was genuinely alive, and
+          every open re-arms it. The cancel above clears any legacy repeating
+          schedule the moment this build first runs. */
+    try {
+      const [log, xp] = await Promise.all([db.all('log'), db.all('xp')]);
+      const today = dateKey();
+      const set = streakDateSet(log, xp);
+      if (streakFrom([...set], today) > 0) {
+        const at = new Date(); at.setHours(20, 30, 0, 0);
+        // Today already logged: today's streak is safe, so the next useful nag
+        // is tomorrow evening. Today unlogged and 20:30 already past: schedule
+        // nothing, because by tomorrow evening the streak is dead.
+        if (set.has(today)) at.setDate(at.getDate() + 1);
+        if (at.getTime() > Date.now()) notis.push({ id: ID.streak, title: 'Keep your streak', body: 'Log something before midnight to keep the streak alive.', schedule: { at, allowWhileIdle: true } });
+      }
+    } catch { /* fails silent, like everything here */ }
+  }
   if (notis.length) { try { await L.schedule({ notifications: notis }); } catch { /* ignore */ } }
 }
 

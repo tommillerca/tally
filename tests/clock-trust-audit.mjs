@@ -360,8 +360,11 @@ try {
          truthy and carries no coins or xp: it would have counted a refused claim
          and added undefined, turning both totals into NaN. Not reachable today
          (each replayed day gets its own periodKey, so no period is ever spent)
-         but the same unguarded truthiness as reward-sop's `!!r`. */
-      if (r && !r.capped) { claimedQ++; questCoins += r.coins; questXp += r.xp; }
+         but the same unguarded truthiness as reward-sop's `!!r`.
+         { dayGuard } is the FOURTH shape (the day-guard refusal, voiced instead
+         of null since the lapsed-player fix) and it is a REFUSAL: counting it
+         would score the guard's own no as a payout. */
+      if (r && !r.capped && !r.dayGuard) { claimedQ++; questCoins += r.coins; questXp += r.xp; }
     }
     const bonus = await quests.claimAllBonusIfDue(day, qs, await db.db.all('xp'));
 

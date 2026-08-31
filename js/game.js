@@ -711,9 +711,24 @@ export async function awardDayCloseIfDue(targets) {
      the award() ledger already dedupes on. */
   const today = dateKey();
   if (!(await claimDay(today)).fresh) return null;
-  const y = addDays(today, -1);
-  const es = await db.byIndex('log', 'date', y);
-  if (!es.length) return null;
+  let y = addDays(today, -1);
+  let es = await db.byIndex('log', 'date', y);
+  if (!es.length) {
+    /* THE GAP CASE. Yesterday empty used to mean "nothing to settle", which
+       silently discarded the day-close a lapsed player EARNED on the last day
+       they logged: come back after a 2+ day gap and the crate was just gone.
+       Settle the LAST LOGGED day before today instead. EXACTLY ONE day settles
+       here however long the gap is: the most recent logged day, nothing further
+       back, so a long absence never pays a backlog. The award() ledger keys on
+       that date, so a day already settled before the gap pays nothing again,
+       and the claimDay guard above still rules the whole path. */
+    const rows = await db.all('log');
+    let last = null;
+    for (const r of rows) if (r.date < today && (!last || r.date > last)) last = r.date;
+    if (!last) return null;
+    y = last;
+    es = rows.filter(r => r.date === y);
+  }
   const tot = dayTotals(es);
   const onBudget = tot.kcal <= targets.kcal && tot.kcal >= targets.kcal * 0.6;
   let closed = false, consoled = false;
@@ -733,7 +748,9 @@ export async function awardDayCloseIfDue(targets) {
   const meals = new Set(es.map(e => e.meal));
   if ([0, 1, 2].every(m => meals.has(m))) await award(`meals3-${y}`, 'meals', 20, 'All meals logged', y);
   await evaluateBadges();
-  return closed ? { date: y, closed: true } : consoled ? { date: y, consoled: true } : null;
+  // gap: the settled day was not yesterday, so the caller's toast can say so.
+  const gap = y !== addDays(today, -1);
+  return closed ? { date: y, closed: true, gap } : consoled ? { date: y, consoled: true, gap } : null;
 }
 
 /* THE RETROACTIVE BACKFILL, AND THE BOOT LOOP IT USED TO CAUSE.

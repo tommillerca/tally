@@ -431,8 +431,10 @@ const results = await page.evaluate(async () => {
          a refusal as a win and reported pay:{coins:0}. It is green today only
          because this driver claims exactly QUEST_N.day distinct ids and so lands
          ON the cap rather than past it; a fourth quest here would have made it
-         lie. Sitting on a boundary is not passing. */
-      return { act: () => quests.claimQuest('2099-01-02', q, 'day'), won: r => !!r && !r.capped };
+         lie. Sitting on a boundary is not passing.
+         { dayGuard } is now the FOURTH shape (the day-guard refusal, voiced
+         instead of null) and is likewise a refusal, never a win. */
+      return { act: () => quests.claimQuest('2099-01-02', q, 'day'), won: r => !!r && !r.capped && !r.dayGuard };
     },
     questAll: () => {
       const d = `2099-02-${String(1 + (n++ % 27)).padStart(2, '0')}`;

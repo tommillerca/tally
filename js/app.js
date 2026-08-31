@@ -1333,8 +1333,8 @@ async function boot() {
   await refreshShinyPets();
   await refreshSlimedSlots();
   const closed = await awardDayCloseIfDue(S.settings.targets);
-  if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Bone Crate earned', 3400), 2400);
-  else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. That counts: Common Crate earned", 3600), 2400);
+  if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 2400);
+  else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 2400);
   await ingestHkPayload(hkTaken);
   backupNudge();
   nativeAutoSync();
@@ -1447,8 +1447,8 @@ async function rollDayIfNeeded() {
     if (wasOnToday) S.date = today;
     const closed = await awardDayCloseIfDue(S.settings.targets);
     if (wasOnToday) route(); // a new day starts at the top, like a fresh open
-    if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Bone Crate earned', 3400), 1400);
-    else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. That counts: Common Crate earned", 3600), 1400);
+    if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 1400);
+    else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 1400);
     maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
     refreshNotifSchedules();
     return true;
@@ -4098,6 +4098,15 @@ async function renderToday(el) {
       const when = period === 'day' ? 'today' : period === 'week' ? 'this week' : 'this month';
       toast(`All ${res.cap} quests for ${when} are already claimed. Fresh ones ${period === 'day' ? 'tomorrow' : 'next ' + period}.`, 3600);
       refresh();
+      return;
+    }
+    /* The day guard refused (js/db.js claimDay). Its decision stands; this is
+       only the voice, so the button is never silently dead. 'unwitnessed' is the
+       lapsed-player case: 7+ days without the server confirming the date. */
+    if (res?.dayGuard) {
+      toast(res.dayGuard === 'unwitnessed'
+        ? 'Rewards are paused until the app can check the clock with the server. Any connection, even a moment, fixes it.'
+        : 'Daily rewards are paused while the date settles. They return with the next fresh day.', 4200);
       return;
     }
     if (!res) return;
