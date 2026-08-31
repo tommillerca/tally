@@ -619,6 +619,16 @@ export async function pushBackup(appV = '') {
        turning backup back on still pushes immediately.
        tests/cloud-optout-audit.mjs, proven red against the missing guard. */
     if (await kvGet('cloudOff', false)) return false;
+    /* MINT THE KEY BEFORE THE SNAPSHOT. encryptBackup() below lazily mints
+       aesJwk into kv 'identity' AFTER exportAll has already read kv, so a
+       device's FIRST-EVER blob embedded an identity row WITHOUT the backup
+       key. A second device restoring that blob by phrase then merged the
+       keyless identity over its own good one (see importAll's DEVICE_KV
+       guard), minted a fresh key on its next push, and the two devices
+       encrypted under DIFFERENT keys forever after: the cloud copy's
+       decryptability flipped with whoever pushed last. One extra call to the
+       same lazy function; everything after it is unchanged. */
+    await backupKey();
     const snapshot = await exportAll();
     const blob = await encryptBackup(snapshot);
     const r = await signedFetch('PUT', '/backup', { blob, appV });
@@ -643,7 +653,21 @@ export async function pullBackup({ slot = null, replace = false } = {}) {
     if (!r.ok) return { restored: false, reason: 'http-' + r.status };
     const data = await r.json();
     if (!data.blob) return { restored: false, reason: 'empty' };
-    const snapshot = await decryptBackup(data.blob);
+    /* A DECRYPT FAILURE IS NOT "NO SAVE" AND NOT A NETWORK BLIP. AES-GCM
+       rejects here when the blob was written under a DIFFERENT key (the
+       poisoned-identity chain pushBackup's mint-before-snapshot note
+       describes). The catch-all below would launder that into a generic
+       reason string and the player would be told nothing was found or that
+       we will retry, both lies. Named 'decrypt' so both surfaces (the boot
+       toast and the phrase-restore flow in js/app.js) can say honestly that
+       the backup exists but this device's key cannot read it. Nothing is
+       written: the server copy is left untouched, because the device that
+       DOES hold the right key re-pushes daily and self-heals the cloud copy.
+       The unrecoverable case is a phrase-only restore against a poisoned
+       blob, which is exactly why the copy must be honest. */
+    let snapshot;
+    try { snapshot = await decryptBackup(data.blob); }
+    catch { return { restored: false, reason: 'decrypt' }; }
     /* `replace: false` PINS TODAY'S BEHAVIOUR HERE ON PURPOSE. importAll now
        defaults to a true restore (it clears each declared store first) so the
        Settings Import button cannot be farmed for coins. This path is not that
@@ -1044,7 +1068,9 @@ export async function adoptIdentity(bundle) {
   const pulled = await pullBackup();
   await kvSet('bootRestored', true);
   await kvSet('recoverySetAt', Date.now());
-  return { ok: true, restored: !!(pulled && pulled.restored), counts: pulled && pulled.counts };
+  /* pullReason rides along so the UI can tell "no save exists" from
+     "a save exists but was written by a different key" ('decrypt'). */
+  return { ok: true, restored: !!(pulled && pulled.restored), counts: pulled && pulled.counts, pullReason: (pulled && pulled.reason) || null };
 }
 
 /* THE ONE CLOCK THE PLAYER CANNOT MOVE (js/db.js, RULE 3 of the day guard).
