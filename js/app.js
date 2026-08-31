@@ -19205,7 +19205,7 @@ async function renderPit(wrap) {
       const locked = r.rung > rungsBeaten + 1;
       return `<div class="t3-row${done ? ' done' : ''}">
         <span class="t3-rung">${r.rung}</span>
-        <div class="t3-tx"><b>${r.name}</b><small>${Math.round(r.mult * 100)}% stats · ${done ? `rematch · ${ICONS.coin(12)}${r.repeatCoins}` : `first win ${ICONS.coin(12)}${r.coins} + ${r.xp} XP`}</small></div>
+        <div class="t3-tx"><b>${r.name}</b><small>${Math.round(r.mult * 100)}% stats · ${done ? `rematch · ${ICONS.coin(12)}${r.repeatCoins}` : `first win ${ICONS.coin(12)}${r.coins} + ${r.xp}+10 XP`}</small></div>
         ${locked ? `<span class="t3-lock">BEAT RUNG ${rungsBeaten + 1}</span>` : `<button class="btn ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate}>${done ? 'REMATCH' : 'FIGHT'}</button>`}
       </div>`;
     }).join('')}`;
@@ -19246,14 +19246,14 @@ async function renderPit(wrap) {
     <div class="t3-sect"><b>After the ladder</b><i></i></div>
     <div class="t3-row${champBeaten ? ' done' : ''}">
       <span class="t3-med">${crateIcon('golden', 22)}</span>
-      <div class="t3-tx"><b>${CHAMPION.name}</b><small>${champBeaten ? `rematch · ${ICONS.coin(12)}${CHAMPION.repeatCoins}` : 'Wields the Bonecrusher · first win drops it + a Bone Crate'}</small></div>
+      <div class="t3-tx"><b>${CHAMPION.name}</b><small>${champBeaten ? `rematch · ${ICONS.coin(12)}${CHAMPION.repeatCoins}` : 'Wields the Moonlit Skull · first win drops it + the Marrow King title'}</small></div>
       ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate}>${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
     </div>`;
   const endlessSect = `
     <div class="t3-sect"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class="r chip" style="font-size:11px">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>
     ${champBeaten ? `
     ${canNewRank
-      ? `<p class="note" style="margin:2px 2px 8px">Foes scale <b>forever</b>, the Pit never runs dry. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
+      ? `<p class="note" style="margin:2px 2px 8px">Foes scale as you climb ranks. World bosses raise the ceiling by 3 each. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
       : `<div class="pit-gate">
           <div class="pg-head"><span class="pg-ico">${badgePixHtml('tombstone', 22)}</span><b>You have hit the ceiling at rank ${ceiling}</b></div>
           <p class="pg-why">The Gauntlet does not go higher until you beat a <b>world boss den</b>. Each one raises the ceiling by <b>3 ranks</b>. <b>The remote den above counts</b>, so this moves whether or not you can get out today.</p>
@@ -19269,7 +19269,7 @@ async function renderPit(wrap) {
     : `
     <div class="t3-row">
       <span class="t3-med">${ICONS.lock(20)}</span>
-      <div class="t3-tx"><b>The Gauntlet</b><small>Foes scale <b>forever</b>. The climb never ends.</small></div>
+      <div class="t3-tx"><b>The Gauntlet</b><small>Foes scale with world bosses you beat. The climb keeps growing.</small></div>
       <span class="t3-lock">BEAT THE CHAMPION</span>
     </div>`}`;
   // beaten the Champion → your live endless fight leads, spent content tucks below.
