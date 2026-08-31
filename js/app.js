@@ -8632,7 +8632,7 @@ async function renderShop(el) {
        before the tap, and a wallet that cannot cover it sees a disabled button
        rather than a taunt. -->
   <button class="rk-reroll" id="rackReroll"${coinBal < rerollCost ? ' disabled' : ''}><span class="rk-rr"><b>Reroll this shelf</b><small>A fresh ${rotIds.length}, drawn from the whole catalogue. The ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())} nine above stay put.</small></span>
-    <span class="t3-price">${ICONS.coin(13)} ${rerollCost.toLocaleString()}</span></button>` : ''}
+    <span class="t3-price">${rerollCost === 0 ? 'FREE' : `${ICONS.coin(13)} ${rerollCost.toLocaleString()}`}</span></button>` : ''}
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Potions and charms</b><small>Supplies ›</small></button>
   <div id="shopRestBody" hidden>
 
@@ -8819,7 +8819,7 @@ async function renderShop(el) {
       trackEvent('rack_reroll', { n: r.rr, cost: r.cost });
       rerender();
     };
-    armToConfirm(rrBtn, `Spend ${rerollCost.toLocaleString()}?`, doReroll);
+    armToConfirm(rrBtn, rerollCost === 0 ? 'Reroll free?' : `Spend ${rerollCost.toLocaleString()}?`, doReroll);
   }
   /* The other departments are one tap away rather than gone. The control that
      hides them owns un-hiding them (anti-regression rule 8), and there is no

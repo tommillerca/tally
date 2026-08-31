@@ -140,12 +140,14 @@ ok('STABLE the same week and salt give the same shelf, so it cannot change under
  * ceiling. Three things must hold or the sink becomes a trap or a faucet:
  * the curve rises, it CAPS past the ladder rather than indexing off the end
  * (an undefined cost is `bal < undefined` = false, then a NaN wallet), and
- * every value is finite and positive (there is no free rung to spam). */
+ * the FIRST rung is free (the shipped freebie survives the 2026-08-31 ruling)
+ * and every rung after it is finite, paid and strictly rising, so the free
+ * roll cannot be spammed: rung two always costs. */
 {
   const L = RACK_REROLL_LADDER;
   const rising = L.every((v, i) => i === 0 || v > L[i - 1]);
-  ok('CURVE  the reroll price rises strictly with every rung, all finite and paid',
-    L.length >= 2 && rising && L.every(v => Number.isFinite(v) && v > 0),
+  ok('CURVE  one free roll, then the price rises strictly, all finite and paid',
+    L.length >= 3 && L[0] === 0 && rising && L.slice(1).every(v => Number.isFinite(v) && v > 0),
     L.join(' < '));
   const cap = L[L.length - 1];
   const past = [L.length, L.length + 5, 50].map(rackRerollCost);

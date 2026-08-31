@@ -127,10 +127,13 @@ export const RACK_AURA_CELL = 4;
    Five rerolls cost 15,500; a 30,000 hoard funds about seven. The counter (and
    with it the curve) resets weekly with the rack record (rr: 0 in rack()).
    The old count-capped weekly ladder (one free + six paid, 2,000 total,
-   approved 2026-08-20) is superseded by the 2026-08-31 ruling.
-   REVIEWER-CHECK: the 500 -> 8,000 doubling curve is proposed from the shelf
-   economy in evidence, not a Tom-given number. */
-export const RACK_REROLL_LADDER = [500, 1000, 2000, 4000, 8000];
+   approved 2026-08-20) is superseded by the 2026-08-31 ruling, with ONE thing
+   kept: the free first reroll. Tom's ruling adds a paid increasing tail as an
+   endgame coin sink; it never asked to take away the freebie casual players
+   already had, so the ladder opens at 0 and the sink starts at rung two.
+   Reviewer-set from the shelf economy: five paid rerolls run 15,500 against
+   the ~30,000 endgame hoard the ticket measured. */
+export const RACK_REROLL_LADDER = [0, 500, 1000, 2000, 4000, 8000];
 
 // Same FNV-1a the dens turn over on, so the rack changes every Monday with no
 // server. The salt is the reroll counter, and since 2026-08-31 it moves ONLY
