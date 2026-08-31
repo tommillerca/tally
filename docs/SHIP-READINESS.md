@@ -1,8 +1,35 @@
-# Ship Readiness: Boneheadz Gym Launch (2026-08-30 Evening Update)
+# Ship Readiness: Boneheadz Gym Launch (2026-08-31 Afternoon Update)
 
-**Executive Summary (Ten Lines)**
+**Executive Summary**
 
-Three releases shipped 2026-08-30: v467 (web PWA), v468 (web+storage audits), v469 (iOS build 19). All byte-verified against main. Worker deploy unblocked (PR #293, 18:27Z). Account deletion end-to-end built (signed DELETE route, 7 server test rows, typed UI confirm). Support.html and privacy deletion section added. ASC submission pack complete. iPhone-only for v1 decided and locked. Day-one quest lists ship as-is. App shell bundles web build for store (TestFlight may stay remote). Round-2 playtest fixes on branches (remote-den double-pay, wallet-pill repaint, restore journey, welcome-back, loot visibility) awaiting browser verification. Gate health: crew audits unpoison PR #305, mimic screencast UNPROVEN PR #306, v470 staged pending gate. No blockers remain.
+Every engineering item on the critical path is done. What remains before a store
+submission is Tom's to do, and it is one attended Xcode session plus the two
+account chores that need his credentials.
+
+Five fix waves merged and verified on the live served bytes 2026-08-31: the hero
+door badge overlap Tom reported, the two-device backup Critical (a total-loss
+class bug in the marquee feature, closed at all three links), the lapsed-player
+trapdoors (dead Claim button, the day-close crate a gap used to eat, the streak
+nag), all nine Paddock mechanical bugs found by two independent playtest personas
+(including a bond meter that had been showing every pet as fully bonded), and the
+half-applied restore. Round 3 and the round-4 interim findings are fully absorbed.
+
+v470 is cut and staged on `release/v470`: rebased through every merge above,
+version stamps consistent across `js/app.js`, `sw.js` and `version.json`, 23
+changelog items with 23 matching CLAIMS rows, claim-evidence lint clean. It needs
+one solitary gate run and the version stamp. Note that GitHub Pages serves `main`
+directly, so every fix above is ALREADY reaching players; the v470 stamp drives
+the update banner, not delivery.
+
+**The only blocker is machine time, not code.** The release gate needs the Mac to
+itself (six gates died this week to contention), and the machine is in use.
+
+Outstanding, all Tom-owned: the attended Xcode build (`native/attended-stack`,
+runbook in `native/ATTENDED-BUILD.md`), Small Business Program enrollment (steps
+in `docs/IAP-PLAN.md`), and store screenshots, which need the build to exist
+first. One deferred engineering item: a worker deploy switches on the server half
+of the cheer idempotency fix; the client half is live and degrades to today's
+behaviour until then.
 
 ---
 
@@ -13,15 +40,15 @@ Three releases shipped 2026-08-30: v467 (web PWA), v468 (web+storage audits), v4
 | iOS Bundle ID & Version Sync | IOS-STORE-READINESS.md | SHIPPED | v468: bundle `com.boneheadz.gym`, version 1.0, build 19. No further action. |
 | iOS Entitlements (HealthKit only) | IOS-STORE-READINESS.md | SHIPPED | HealthKit capability enabled, single entitlement. Matches NSHealthShareUsageDescription. Verified. |
 | iOS Privacy Strings (Camera, Health, Location) | IOS-STORE-READINESS.md | SHIPPED | All six strings quoted and traced to code. Camera string accurate (barcode + on-device). Health strings conservative (describe current UI, omit future HRV/sleep). Location string complete (when-in-use, no storage). Tom: review strings, approve verbatim or request rewording. |
-| Android Version Alignment | ANDROID-PARITY.md | BUILT-UNVERIFIED | Android v1.0.9 build 10 vs. iOS 1.0 build 19. No player impact (shells load live site). Tom: accept as-is or mandate unified versioning scheme. |
+| Android Version Alignment | ANDROID-PARITY.md | BUILT-PENDING-BUILD | Addressed on `native/attended-stack`: all three platforms now carry a marker naming the web build they wrap, with a sub-second gate lint proven red. No player impact either way, because the shells point at the live site, so the old 55-build drift never touched anyone. Rides the attended session. |
 | Android HealthPlugin Parity (debugWrite gap) | ANDROID-PARITY.md | MERGED | Kotlin HealthPlugin.debugWrite() missing (iOS-only debug method). Low severity (simulator-only). Merged to main 2026-08-30. No further action. |
 | Android Health Connect Permissions | ANDROID-PARITY.md | SHIPPED | Asymmetry: Android requires per-type permissions (READ_HEART_RATE, READ_SLEEP); iOS buckets under one HealthKit prompt. Functionally equivalent. Both apps read same data. Verified. |
-| iOS armv7 Requirement (Outdated) | IOS-STORE-READINESS.md | OPEN | Info.plist UIRequiredDeviceCapabilities still lists armv7. Apple sunset 32-bit in iOS 11. Should be removed before App Store submission. Tom: approve removal or keep for legacy reasons. |
+| iOS armv7 Requirement (Outdated) | IOS-STORE-READINESS.md | BUILT-PENDING-BUILD | Removed on `native/attended-stack`, along with a HealthKit permission string that now names everything the app actually reads. The whole plist re-parses. Rides the attended Xcode session. |
 | Store Listing (Name, Subtitle, Description, Keywords) | STORE-LISTING-DRAFT.md | DRAFT-FOR-TOM | Three options presented (App Name + Subtitle combos). Description and keywords ready. Tom: choose Option A/B/C and approve copy verbatim. |
 | Store Listing Screenshots | STORE-LISTING-DRAFT.md | DRAFT-FOR-TOM | Shot list provided (6-8 screens). Need actual renders from real app. Tom: confirm shot sequence or redirect. |
-| In-App Account Deletion (5.1.1.v) | feat/account-deletion | BUILT-UNMERGED | Server: signed POST /account/delete, idempotent, one D1 batch, returns towers to unclaimed. Client: deleteAccount() in js/social.js, typed-confirm UI pattern. Tests: 7 new server test rows, proven red/green. Built 2026-08-30 15:02. Awaiting merge to main. |
-| Support.html + Privacy Deletion Section | docs/support.html | BUILT-UNMERGED | Support page and privacy policy data deletion instructions added. Commit f8c8f87f. Awaiting merge to main. |
-| ASC Submission Pack | docs/ASC-SUBMISSION.md | BUILT-UNMERGED | Simulated gambling answers (None), deletion cites real control. Commit 285092a4. Awaiting merge to main. |
+| In-App Account Deletion (5.1.1.v) | feat/account-deletion | MERGED-LIVE | Server: signed POST /account/delete, idempotent, one D1 batch, returns towers to unclaimed. Client: deleteAccount() in js/social.js, typed-confirm UI pattern. Tests: 7 new server test rows, proven red/green. Merged, and the route is LIVE on the worker (deployed 2026-08-30 18:27Z and interrogated afterwards). The Settings flow ships with v470. |
+| Support.html + Privacy Deletion Section | docs/support.html | MERGED | Support page and privacy policy deletion section written in the house voice, every claim traced to code, and corrected in review to name the control that actually deletes (the draft pointed at the local-only Erase). Merged. |
+| ASC Submission Pack | docs/ASC-SUBMISSION.md | MERGED | Privacy questionnaire answers, age rating (crates answer NO to simulated gambling: earned loot with disclosed odds is regulated by disclosure, not the gambling flag), export compliance and paste-ready reviewer notes. Merged. |
 | iOS Platform Only for v1 | native/iphone-only | DECIDED | iPhone-only for v1 store submission decided and locked 2026-08-30 15:21. Android shell continues to exist and serve live site. Tom: do not reopen. |
 
 ---
@@ -36,8 +63,8 @@ Three releases shipped 2026-08-30: v467 (web PWA), v468 (web+storage audits), v4
 | First Week Content Onboarding | FIRST-WEEK-CONTENT.md | BUILT-UNVERIFIED | New player boots, sees Gwart, logs first meal, levels to 2, earns crate. Path traced. No gaps identified. Recommend: playtest with real new account (cold install, sign-in). |
 | Quest Gate Coverage | FIRST-WEEK-CONTENT.md | MERGED | Pit/Hunt/Kitchen/Social quests gated on first-use flags (pitTried, huntEnabled, kitchenReady, socialOn, hkConnected). Day 1 visible only if seeded into daily rotation. Tom: approve quest visibility or adjust gating. |
 | Economy Sustainability (Full Stack Win Rate) | WINRATE-EXPERIMENT-PLAN.md | DECIDED-AND-DONE | Full talent stack win rate reduced from 100% to 85-90% via quest gate XP tightening (worst-case daily payout 1145 to 975). Decided 2026-08-30. Sleep in-bed calculation fixed in both plugins (drift no longer floors score). Tom: run tests/fight-sim.mjs to verify final win rates post-merge. |
-| Round-2 Playtest Fixes (Wave Batch) | fix/* branches | BUILT-UNMERGED | Remote den double-pay fixed (wallet-pill repaint). Restore journey (file import, summary copy, gear hidden). Welcome-back card (2+ day gap). Loot visibility (crate count, claim tag). Badge clipping at 375px. All branches exist locally; awaiting browser verification pass. Tom: confirm testing complete before merge. |
-| v470 Release Staging | release/v470 | STAGED-PENDING-GATE | v470 staged with playtest wave (persist Pit outcomes, meal tracking, honest walks, odds printed). Awaiting gate health clearance (crew audits and screencast starvation) before merge. Tom: approve release after gate passes. |
+| Round-2 Playtest Fixes (Wave Batch) | fix/* branches | MERGED-LIVE | All merged and verified on the live served bytes. The badge fix needed a second pass: PR #314's shared-class positioning put the hero doors' "!" on top of their labels, which Tom saw live; PR #329 scoped the corner anchor to the one badge that needed it. |
+| v470 Release Staging | release/v470 | STAGED-PENDING-GATE | Rebased through PRs #326 to #333. 23 changelog items, 23 CLAIMS rows, evidence lint clean, version stamps consistent. Blocked ONLY on a quiet machine for one solitary gate run. Everything in it is already live via Pages; the stamp drives the update banner. |
 
 ---
 
@@ -48,7 +75,7 @@ Three releases shipped 2026-08-30: v467 (web PWA), v468 (web+storage audits), v4
 | App Store Small Business Program | IAP-PLAN.md | OPEN | 15% vs. 30% fee split. Requires separate application (approval is 1-2 weeks). Tom: apply now (before submission) or ship standard 30% fee. Recommendation: apply now. |
 | IAP Bundle Definition & Pricing | IAP-PLAN.md | DRAFT-FOR-TOM | Seven decisions listed below. Scaffolding complete. Awaiting Tom's answers. |
 | Error Funnel Visibility (10 Items) | CRASH-FUNNEL-READINESS.md | OPEN | HealthKit failures silent. Backup push failures silent. Tile server errors silent after first toast. Geolocation permission denials silent. Service Worker cache corruption silent. Each has a one-line fix recommended but not critical for launch (errors go to toast, not silent failure). Tom: approve risk or pick 1-2 to fix pre-launch. |
-| Gate Health (v470 Release) | n/a | CLEARED-2026-08-30 | Crew audits self-poison: fixed PR #305. Mimic screencast starvation: labeled UNPROVEN PR #306 (honest claim, not a blocker). v470 gate passes. Ready for merge. Tom: approve release merge. |
+| Gate Health (v470 Release) | n/a | ROOT-CAUSED-2026-08-31 | Six consecutive gates died to a MACHINE cause, not code: macOS media indexers feeding on 30GB of test screenshots, plus 54 days of uptime. A reboot was the cure. Two real regressions the noisy gates had masked were then caught and fixed on the healthy machine (a dead tile host now floors to Retry in seconds, and the clock-trust audit learned the post-gating quest math). Standing rule reaffirmed: NOTHING runs beside a gate. |
 
 ---
 
