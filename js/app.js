@@ -15479,7 +15479,16 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
       ? `left:${p.x0}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-range:${Math.max(0, (p.x1 - p.x0) - p.w)}px;--pdk-dur:${9 + ([...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 5)}s`
       : p.kind === 'fly'
         ? `left:0;top:${p.y - Math.round(p.w * .5)}px;width:${p.w}px;height:${Math.round(p.w * .8)}px;--pdk-dur:${p.dur}s;--pdk-phase:${p.phase || 0}s`
-        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px`;
+        /* HOVERERS AND FLOPPERS GET A PHASE, or a row of them breathes as one
+           animal. The one-packer rework puts hoverers on a single sky row and
+           floppers on shared ground rows, which is what makes this visible: four
+           clouds at the same y, drifting and bobbing on the same clock, read as a
+           chorus line rather than as four animals. Same `--pdk-phase` the fly
+           lanes already use, derived from the iid the way the walkers derive
+           their duration, so it is deterministic (a pet drifts the same way every
+           visit) and needs no randomness. Negative, so the animation starts
+           mid-stride instead of pausing first. */
+        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-phase:-${[...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 9}s`;
     /* THE SPRITE NAMES THE COPY, not just the species. `data-pdk` alone meant the field
        was a species picker: tapping the fourth Bulldog opened the slider on the first
        one, so the animal you pressed and the card you got were different animals. The
@@ -15563,7 +15572,8 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
  * fork per screen. The hanging sign stays. */
 async function openPaddock() {
   const { paddockRoster, paddockEggs, placePaddock, PDK_SCENE, rotHash } = await import('./paddock.js');
-  const [roster, eggs, eqOwn, ownedIds] = await Promise.all([paddockRoster(), paddockEggs(), equipped(), ownedCosmeticIds()]);
+  const [roster, eggs, eqOwn, ownedIds, petTapped] = await Promise.all([
+    paddockRoster(), paddockEggs(), equipped(), ownedCosmeticIds(), kvGet('pdkPetTapped', false)]);
   /* THE HERD TURNS OVER WHEN THE PLAYER'S DAY DOES. placePaddock's rotation seed
      defaults to toISOString(), which is UTC, and calling it with no day meant a
      collection past the walk cap swapped its herd at 17:00 local here while
@@ -15578,40 +15588,62 @@ async function openPaddock() {
      source the wardrobe trusts) instead of the instance roster, which missed
      legacy grants like the Founder's Lizard and showed veterans their own pet;
      and the tease is now a shiny you have NOT collected, of a species you DO
-     own (never spoils an unseen pet), rotating daily. The CX secret keeps
-     priority for players who genuinely lack it. CX has no shiny variant, so it
-     is never a shiny candidate. Nothing missing = no lurker: an empty tease
-     would be a lie. */
+     own (never spoils an unseen pet), rotating daily. CX has no shiny variant,
+     so it is never a shiny candidate. Nothing missing = no lurker: an empty
+     tease would be a lie.
+     AND THE BUSHES ARE NEVER THE LIZARD ANY MORE. Both playtesters hit the same
+     wall from opposite sides: the bushes and the panel's founder banner opened a
+     BYTE-IDENTICAL locked card, so the screen carried two prominent mysteries
+     that both dead-ended on the one pet a non-beta player can never obtain.
+     Tom's ruling (2026-08-31) is that a mystery pet is a pet you do not have YET
+     and the founders' lizard is the sole exception to that; so the exception
+     lives in exactly one place, the banner, which is now shown only to players
+     who do not already own it (paddock-cards.js panelHtml). The bushes go back
+     to teasing something huntable. */
   /* shiny ownership comes off the INSTANCES already in hand, not S.shinyPets:
      that cache refreshes at boot + hatch, so a mid-session grant or restore
      would leave the bushes teasing a shiny the player just collected */
   const shinyOwned = new Set(roster.filter(r => r.shiny).map(r => r.sp));
   const shinyGaps = [...ownedIds].filter(id => (BH_BY_ID[id] || {}).slot === 'C' && id !== 'CX' && !shinyOwned.has(id)).sort();
-  const lurkSp = !ownedIds.has('CX') ? 'CX'
-    : shinyGaps.length ? shinyGaps[rotHash('lurk:' + dateKey()) % shinyGaps.length] : null;
+  const lurkSp = shinyGaps.length ? shinyGaps[rotHash('lurk:' + dateKey()) % shinyGaps.length] : null;
 
   const K = PDK_SCENE.KEEPER;
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Paddock</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" style="padding:0">
-      ${paddockSceneHtml({ roster, places, eggCount: eggs.count, eq: eqOwn, keeper: K, lurkSp, coach: 'Tap a pet to say hi' })}
+      ${/* THE COACH MARK IS ONBOARDING, SO IT LEAVES WHEN ONBOARDING IS OVER.
+           It re-rendered on EVERY entry and only cleared on a scene-pet tap
+           inside that one visit, so the veteran tester with 16 pets was told
+           how to greet a pet every single time he walked in. Gated on the one
+           honest fact: has this player ever tapped a pet. Same quiet-kv shape
+           as 'mapLpHint' and 'map-seen'. */''}
+      ${paddockSceneHtml({ roster, places, eggCount: eggs.count, eq: eqOwn, keeper: K, lurkSp, coach: petTapped ? null : 'Tap a pet to say hi' })}
       <div class="pdk-panel" id="pdkPanel"><!-- Lane W mounts here (walt/paddock-ui) --></div>
     </div>`, { cls: 'sheet-paddock' });
 
   /* Lane W's collection panel is the screen's lower half, not a tap target, so it is
      mounted as the sheet opens rather than on first interaction. Failure degrades to
-     an empty panel, never to a thrown render. */
-  import('./paddock-cards.js').then(m => m.mountPaddockPanel()).catch(() => {});
+     an empty panel, never to a thrown render.
+     IT IS HANDED THE TWO THINGS ONLY THIS FUNCTION KNOWS: how many of the roster
+     actually got a place in the field (so the panel can say what the field cannot),
+     and whether this player already owns the pet the founder banner teases. */
+  import('./paddock-cards.js').then(m => m.mountPaddockPanel({
+    inField: Object.keys(places).length,
+    showTeaser: !ownedIds.has('CX'),
+  })).catch(() => {});
 
   $('#pdkScene', wrap)?.addEventListener('click', e => {
     const hit = e.target.closest('[data-pdk]');
     if (!hit) return;
     $('#pdkCoach', wrap)?.remove();
+    if (!petTapped) kvSet('pdkPetTapped', true);
     const sp = hit.dataset.pdk;
     /* Lane W's module; a tap before it lands degrades to nothing, never to an
        error (anti-regression rule 8's spirit: absent halves degrade visibly
-       calm, not broken). */
-    import('./paddock-cards.js').then(m => m.openPaddockCards(sp, hit.dataset.iid)).catch(() => {});
+       calm, not broken). `from` is the FIGURE that was tapped: the card measures
+       itself against it rather than being told where to go, because a fixed y284
+       card lands on top of the animal it describes. */
+    import('./paddock-cards.js').then(m => m.openPaddockCards(sp, hit.dataset.iid, { from: hit })).catch(() => {});
   });
   $('#pdkNest', wrap)?.addEventListener('click', () => {
     import('./paddock-cards.js').then(m => m.openPaddockCards('egg')).catch(() => {});

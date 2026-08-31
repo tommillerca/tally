@@ -9212,16 +9212,28 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 @keyframes pdkWing { from { transform: translateY(-9px) rotate(-2deg); } to { transform: translateY(9px) rotate(2deg); } }
 .pdk-fly.pdk-gold { filter: drop-shadow(0 0 8px rgba(255, 201, 97, .95)); }
 /* hoverers: drift + bob, epic glow */
-.pdk-hover { animation: pdkDrift 10s ease-in-out infinite alternate; z-index: 4; }
+/* the delay is the per-pet phase js/app.js derives from the iid: without it a
+   row of clouds drifts and bobs as one animal. Drift and bob run on different
+   clocks (10s and 3s), so one offset desynchronises both. */
+.pdk-hover { animation: pdkDrift 10s ease-in-out infinite alternate; animation-delay: var(--pdk-phase, 0s); z-index: 4; }
 @keyframes pdkDrift { from { transform: translateX(-30px); } to { transform: translateX(30px); } }
-.pdk-hover .pdk-bob { display: block; animation: pdkHoverBob 3s ease-in-out infinite alternate; }
+.pdk-hover .pdk-bob { display: block; animation: pdkHoverBob 3s ease-in-out infinite alternate; animation-delay: var(--pdk-phase, 0s); }
 @keyframes pdkHoverBob { from { transform: translateY(-6px); } to { transform: translateY(6px); } }
 .pdk-hover.pdk-epic { filter: drop-shadow(0 0 7px rgba(155, 146, 232, .9)); }
 /* floppers: one flop per cycle, origin low so it pivots off the ground */
-.pdk-flop .pdk-bob { display: block; transform-origin: 50% 90%; animation: pdkFlop 4.8s ease-in-out infinite; }
+.pdk-flop .pdk-bob { display: block; transform-origin: 50% 90%; animation: pdkFlop 4.8s ease-in-out infinite; animation-delay: var(--pdk-phase, 0s); }
 @keyframes pdkFlop { 0%, 64%, 84%, 100% { transform: none; } 72% { transform: translateY(-15px) rotate(-9deg); } }
 /* keeper: idle bob + moonlit rim (charcoal bones vanish on the dark scene without it) */
-.pdk-keeper { position: absolute; z-index: 6; pointer-events: none;
+/* THE KEEPER SWALLOWS ITS OWN TAPS. It was pointer-events: none because it is
+   not a control, and the consequence was worse than a dead control: it is drawn
+   at z-index 6 OVER the herd, so every tap that landed on your own bonehead fell
+   straight through to whichever pet was hidden behind him and opened that pet's
+   card. The new player reported it as "tapping my character opens a pet I cannot
+   see". You cannot tap what you cannot see, so the figure absorbs the press and
+   nothing opens. It is not given a handler: it has nothing to say, and inventing
+   a response is not what the report asked for. The rule covers .pdk-visitor too,
+   which carries this class and had the identical hole in a friend's field. */
+.pdk-keeper { position: absolute; z-index: 6; pointer-events: auto;
   filter: drop-shadow(0 0 10px rgba(232, 228, 210, .35)) drop-shadow(0 6px 8px rgba(0, 0, 0, .45));
   animation: pdkKeeper 4s ease-in-out infinite alternate; }
 @keyframes pdkKeeper { from { transform: translateY(0); } to { transform: translateY(-7px); } }
@@ -9312,7 +9324,16 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    one control that says "there are more of these" was painted UNDER the panel, and
    elementFromPoint at each dot returned .pdk-panel. An open card is the front-most
    thing on this screen, so it says so. */
-.pdk-host { position: absolute; left: 50%; transform: translateX(-50%); top: 284px; width: 274px; z-index: 10; }
+/* AND IT SITS WHERE THE HAND IS. Measured 2026-08-31 at 430x932: every door
+   into this card except a field tap is BELOW the scene (the collection grid
+   starts at y601), and top:284px put the card at y387-565, 278px above the tile
+   the finger had just pressed and on top of the keeper. Anchored to the scene's
+   bottom edge instead, it ends where the panel begins, roughly a tile's height
+   from the tap. `.pdk-hi` is the one exception and the field asks for it: a pet
+   standing in the LOWER half of the scene would otherwise be covered by its own
+   card (paddock-cards.js openPaddockCards). */
+.pdk-host { position: absolute; left: 50%; transform: translateX(-50%); bottom: 26px; width: 274px; z-index: 10; }
+.pdk-host.pdk-hi { bottom: auto; top: 96px; }
 .pdk-rail { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
 .pdk-rail::-webkit-scrollbar { display: none; }
 .pdk-card {
@@ -9407,6 +9428,13 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pdk-seg[disabled] { opacity: .45; cursor: default; }
 /* and the count beside it is a LABEL, not the selected half of a toggle */
 .pdk-count { text-align: center; color: #f2e9d7; }
+/* the field cannot hold everybody, so the panel says so out loud rather than
+   letting a 16-pet footer sit over 14 animals with no explanation */
+.pdk-bench { margin: 8px 0 0; text-align: center; font-size: 11.5px; font-weight: 600; color: #8f8578; }
+/* THE TAPPED TILE LOOKS TAPPED. A grid press had neither a pressed nor a
+   selected state, so nothing on the tile said the card belonged to it. */
+.pdk-tile:active, .pdk-teaser:active { transform: translateY(2px); box-shadow: 0 1px 0 #17151d; }
+.pdk-tile.on, .pdk-teaser.on { border-color: #a5e847; box-shadow: 0 3px 0 #17151d, 0 0 0 2px rgba(165, 232, 71, .35); }
 
 /* ---------- Discord card hero (Tom, 2026-08-12) ----------
    "the discord icon with a bonehead chillin next to it or something to really

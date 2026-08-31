@@ -2747,34 +2747,80 @@ test('paddock names are deterministic, collision-free, order-independent', async
 });
 
 
-test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule)', async () => {
-  const { assignBands, placePaddock, PDK_SCENE } = await import('../js/paddock.js');
-  for (const n of [1, 2, 3, 5, 7, 9, 14]) {
-    const bands = assignBands(Array.from({ length: n }, (_, i) => ({ iid: 'w' + i, motion: 'walk' })));
-    assert.equal(bands.length, n, `lost a walker at n=${n}`);
-    let checked = 0;
-    for (const a of bands) for (const b of bands) {
-      if (a.iid >= b.iid) continue;
-      if (Math.abs(a.y - b.y) < 40) {
-        checked++;
-        const ov = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
-        assert.ok(ov <= 20, `n=${n}: ${a.iid}@${a.y} and ${b.iid}@${b.y} share ${ov}px of x-range (rule: <=20)`);
-      }
-    }
-    if (n >= 2) assert.ok(checked > 0, `n=${n}: no same-cluster pairs were checked, the rule never ran`);
-    for (const b of bands) {
-      assert.ok(b.y < PDK_SCENE.PANEL_Y, `feet below the panel edge at n=${n}`);
-      /* the graveyard corner (tombstone x16-42 base y330, cross x62-78): a
-         walker whose feet sit above that base must never enter its x-range,
-         because the herd layer would draw it over props it stands behind */
-      assert.ok(b.x0 >= PDK_SCENE.ROW_XMIN(b.y), `n=${n}: ${b.iid}@${b.y} band starts at ${b.x0}, inside the row's left exclusion (${PDK_SCENE.ROW_XMIN(b.y)})`);
-    }
-    /* and the exclusion itself is pinned to the measured graveyard edge (the
-       cross ends at x78), so weakening the spec cannot pass the loop above */
-    assert.ok(PDK_SCENE.ROW_XMIN(322) >= 86, 'top-row left exclusion regressed below the graveyard edge');
-    /* and the bottom-left corner is the player's own bonehead now */
-    assert.ok(PDK_SCENE.ROW_XMIN(460) >= 152, 'bottom-row left exclusion regressed into the keeper corner');
+/* THE WHOLE CAST, NOT ONE OF ITS THREE PACKERS.
+ *
+ * The old pin measured walkers against walkers, which is exactly why it stayed
+ * green while a catfish sat 59x46px inside a bulldog: floppers and hoverers were
+ * placed by two other systems and nothing compared the three. This one measures
+ * every placed figure's SPRITE BOX against every other's, which is what the two
+ * playtesters measured on the live screen (2026-08-31: eight offending pairs,
+ * worst 66x96px).
+ *
+ * FLYERS ARE EXCLUDED, and it is a stated exemption rather than an oversight:
+ * they cross the entire width on a CSS animation at their own depth (z-index 4,
+ * behind everything on the ground), so they have no static x to compare and
+ * passing over a cloud is what the design asks them to do. */
+const pdkBox = p => (p.kind === 'walk'
+  ? { x0: p.x0, x1: Math.max(p.x1, p.x0 + p.w), y0: p.y - p.w, y1: p.y }
+  : { x0: p.x, x1: p.x + p.w, y0: p.y - p.w, y1: p.y });
+function pdkClashes(placed, tol = 20) {
+  const boxes = Object.entries(placed).filter(([, p]) => p.kind !== 'fly').map(([iid, p]) => ({ iid, ...pdkBox(p) }));
+  const bad = [];
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+    const a = boxes[i], b = boxes[j];
+    const ox = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+    const oy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+    if (ox > tol && oy > tol) bad.push(`${a.iid}/${b.iid} ${Math.round(ox)}x${Math.round(oy)}px`);
   }
+  return { bad, pairs: (boxes.length * (boxes.length - 1)) / 2, boxes };
+}
+
+test('paddock figures never stack: no pair shares more than 20px in BOTH axes', async () => {
+  const { assignRows, placePaddock, PDK_SCENE, OVERLAP } = await import('../js/paddock.js');
+  /* every mix that has ever been on this screen, walkers alone through a herd
+     past the cap with catfish and clouds in it */
+  const mixes = [
+    [['walk', 1]], [['walk', 3]], [['walk', 8]], [['walk', 14]],
+    [['walk', 8], ['flop', 3]], [['walk', 11], ['flop', 3], ['hover', 5], ['fly', 2]],
+    [['flop', 6], ['hover', 6], ['walk', 6], ['fly', 4]],
+  ];
+  let comparisons = 0;
+  for (const mix of mixes) {
+    const roster = mix.flatMap(([motion, n]) => Array.from({ length: n }, (_, i) => ({ iid: `${motion}${i}`, motion })));
+    const placed = placePaddock(roster, undefined, '2026-08-31');
+    const { bad, pairs, boxes } = pdkClashes(placed);
+    assert.ok(boxes.length > 0, `${JSON.stringify(mix)}: nothing was placed, so the rule never ran (an empty sample is a failure)`);
+    comparisons += pairs;
+    assert.equal(bad.length, 0, `${JSON.stringify(mix)}: ${bad.join(', ')}`);
+    for (const [iid, p] of Object.entries(placed)) {
+      if (p.kind === 'fly') continue;
+      assert.ok(pdkBox(p).y1 <= PDK_SCENE.PANEL_Y, `${iid} stands below the panel edge at ${pdkBox(p).y1}`);
+    }
+  }
+  assert.ok(comparisons > 50, `only ${comparisons} pairs were compared across every mix: the rule barely ran`);
+  /* and the geometry the guarantee rests on, pinned where weakening it shows:
+     rows further apart than the sprite minus the tolerance is what makes two
+     rows independent, so the loop above cannot be satisfied by luck */
+  const ys = PDK_SCENE.GROUND_ROWS.map(r => r.y);
+  for (let i = 1; i < ys.length; i++) {
+    assert.ok(ys[i] - ys[i - 1] >= 76 - 20, `ground rows ${ys[i - 1]} and ${ys[i]} are ${ys[i] - ys[i - 1]}px apart, closer than the 76px sprite minus the 20px tolerance`);
+  }
+  assert.ok(OVERLAP <= 20, 'the allocator hands out more overlap than the layout rule tolerates');
+  /* the graveyard corner (tombstone x16-42 base y330, cross x62-78): a figure
+     whose feet sit above that base must never enter its x-range, because the
+     herd layer draws over the backdrop and would hide the props */
+  assert.ok(PDK_SCENE.GROUND_ROWS[0].xmin >= 86, 'top-row left exclusion regressed below the graveyard edge');
+  /* and the bottom-left corner is the player's own bonehead */
+  for (const r of PDK_SCENE.GROUND_ROWS.filter(r => r.y >= 376)) {
+    assert.ok(r.xmin >= 152, `row ${r.y} reaches into the keeper corner at x${r.xmin}`);
+  }
+  /* the allocator DROPS what will not fit rather than stacking it, and says so
+     by returning fewer rows than it was handed: the panel's "N of M out today"
+     line is built on that difference being real */
+  const crowd = Array.from({ length: 40 }, (_, i) => ({ iid: 'c' + i, w: 76 }));
+  const rows = assignRows(crowd, PDK_SCENE.GROUND_ROWS);
+  assert.ok(rows.length > 0 && rows.length < crowd.length, `assignRows placed ${rows.length} of ${crowd.length}: it must fill the rows and drop the rest`);
+
   // every motion kind gets placed, none invents a position off-scene
   const cast = [...Array(4)].flatMap((_, i) => [
     { iid: `a${i}`, motion: 'walk' }, { iid: `b${i}`, motion: 'fly' },
@@ -2782,15 +2828,13 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
   const placed = placePaddock(cast);
   assert.equal(Object.keys(placed).length, cast.length, 'a pet vanished in placement');
 
-  /* THE WALK CAP (Aggie's measured ceiling, 2026-08-11): the rule is measured
-     on 76px sprites, so same-cluster spacing (bandW + GUTTER) must stay >= 56,
-     which the top cluster's 202px span can only give 4 walkers. A big herd
-     rotates by day instead of crushing the clusters. */
+  /* THE WALK CAP (Aggie's measured ceiling, 2026-08-11), unchanged at 8: a big
+     herd rotates by day instead of crushing the rows. */
   const herd = Array.from({ length: 20 }, (_, i) => ({ iid: 'h' + i, motion: 'walk' }));
   const capped = placePaddock(herd, undefined, '2026-08-11');
   const walks = Object.entries(capped).filter(([, p]) => p.kind === 'walk');
   assert.equal(walks.length, 8, `walk cap must render exactly 8 of 20, got ${walks.length}`);
-  for (const [iid, p] of walks) assert.ok(p.x1 - p.x0 >= 32, `${iid}: capped band ${p.x1 - p.x0}px, below the 32px floor the 56px spacing rule implies`);
+  for (const [iid, p] of walks) assert.ok(p.x1 - p.x0 >= p.w, `${iid}: band ${p.x1 - p.x0}px is narrower than its own ${p.w}px sprite`);
   const again = placePaddock(herd, undefined, '2026-08-11');
   assert.deepEqual(Object.keys(again).sort(), Object.keys(capped).sort(), 'same day must pick the same herd');
   const other = placePaddock(herd, undefined, '2026-08-12');
