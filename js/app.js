@@ -11793,6 +11793,7 @@ async function renderSettings(el) {
     <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Boneheadz Gym export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights, gear</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
+    ${me ? `<div class="settings-row"><div class="lab"><b>Delete account &amp; cloud data</b><span>Removes your cloud account, friends + backup</span></div><button class="btn small danger" id="delAcctBtn">Delete</button></div>` : ''}
   </div>
 
   ${notifPlat !== 'none' ? `
@@ -12108,6 +12109,38 @@ async function renderSettings(el) {
          second tab writing continuously: zero rows in every store.
          See js/db.js STORES and eraseAll. */
       await eraseAll();
+      location.reload();
+    });
+  });
+  /* Account deletion (App Store 5.1.1(v)). Same typed-confirm pattern as Erase.
+     ORDER MATTERS: the server delete goes FIRST, and the local wipe only runs
+     after it answers ok. Offline or a failed call aborts with the save intact,
+     because a local wipe with the account still on the server is the one
+     outcome that satisfies nobody. */
+  $('#delAcctBtn')?.addEventListener('click', () => {
+    const wrap = openSheet(`
+      <div class="sheet-head">
+        <div class="hd"><h2>Delete account?</h2><div class="sub">This cannot be undone</div></div>
+        <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
+      </div>
+      <div class="sheet-body">
+        <p class="note" style="margin-bottom:12px">Your cloud account is deleted for good: friends, step race entry, cloud backup and recovery phrase. The local save on <b>this phone</b> is wiped too, and there is no vault copy to restore.</p>
+        <div class="t1-field"><label>Type DELETE to confirm</label><input id="daIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="DELETE"></div>
+      </div>
+      <div class="t1-foot"><button class="btn danger-ish" id="daGo" disabled>Delete account</button></div>`, { cls: 't1', name: 'DeleteAccount' });
+    const input = $('#daIn', wrap), go = $('#daGo', wrap);
+    input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'DELETE'; });
+    go.addEventListener('click', async () => {
+      if (input.value.trim().toUpperCase() !== 'DELETE') return;   // belt and braces
+      go.disabled = true; go.textContent = 'Deleting...';
+      const res = await social.deleteAccount();
+      if (!res.ok) {
+        go.disabled = false; go.textContent = 'Delete account';
+        toast('Could not reach the server. Nothing was deleted. Try again when you are online.', 3600);
+        return;
+      }
+      await social.forgetIdentity();   // else the vault re-adopts the dead identity on the next boot
+      await eraseAll();                // the same everything-in-one-transaction wipe Erase uses
       location.reload();
     });
   });

@@ -333,6 +333,18 @@ export async function goOnline() {
   return { ok: true, me };
 }
 
+/* Delete the server account (App Store 5.1.1(v)). Server-first, on purpose:
+   the caller must only wipe local data AFTER this answers ok, so an offline
+   tap aborts with everything intact. { ok:false } covers no-network, timeout
+   and any non-2xx alike; the caller shows the normal error toast. */
+export async function deleteAccount() {
+  try {
+    const r = await signedFetch('POST', '/account/delete', null);
+    const d = await r.json().catch(() => ({}));
+    return { ok: r.ok && d.ok === true };
+  } catch { return { ok: false }; }
+}
+
 // Your display name for the UI: the curated name if set, else the bone-name.
 export async function displayName() {
   const me = await kvGet('social', null);
