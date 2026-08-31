@@ -50,7 +50,10 @@ const read = () => p.evaluate(async () => {
   return {
     unspent: Math.max(0, talentPoints(levelFor(await totalXp()).level) - (await kvGet('talents', [])).length),
     badge: t?.querySelector('.ch-badge')?.textContent ?? null,
-    nodes: document.querySelectorAll('[data-talent]:not([disabled])').length,
+    // spendable = .can: nodes are never [disabled] any more (fix/talent-taps,
+    // 2026-08-30: a disabled node ate taps silently), so :not([disabled])
+    // would count locked nodes and click one that refuses.
+    nodes: document.querySelectorAll('[data-talent].can').length,
   };
 });
 const die = async m => { console.log(m); await b.close(); srv.kill(); process.exit(1); };
@@ -60,7 +63,7 @@ if (!before.unspent) await die('FAIL: demo save has no unspent talent points, so
 if (Number(before.badge) !== before.unspent) await die(`FAIL  ${before.unspent} unspent point(s) but the badge reads ${JSON.stringify(before.badge)}`);
 if (!before.nodes) await die('FAIL: badge shows points but no takeable talent node');
 // spend one WITHOUT leaving the tab
-await p.evaluate(()=>{ document.querySelector('[data-talent]:not([disabled])')?.click(); });
+await p.evaluate(()=>{ document.querySelector('[data-talent].can')?.click(); });
 await sleep(1800);
 const after = await read();
 console.log('after spending:  ', JSON.stringify(after));
