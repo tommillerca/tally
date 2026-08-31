@@ -420,9 +420,8 @@ only, items 5-6 change quest COUNTERS and need the prove-red treatment.
 
 Setup: serve this tree, `?demo` profile. To fake a clock set-back without
 touching the OS clock, set the mark directly in the console:
-`const db = await import('./js/db.js'); await db.kvSet('dayHighWater', db => {})`
-- i.e. `kvSet('dayHighWater', '<tomorrow's key>')` with tomorrow computed via
-`(await import('./js/nutrition.js')).addDays((await import('./js/nutrition.js')).dateKey(), 1)`.
+`const db = await import('./js/db.js'), nut = await import('./js/nutrition.js');`
+`await db.kvSet('dayHighWater', nut.addDays(nut.dateKey(), 1));` then reload.
 
 1. PRE-SPENT LINE on Today (js/app.js renderToday, `preSpent`):
    - With dayHighWater set to tomorrow, open Today. MUST show the note
