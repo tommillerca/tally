@@ -128,6 +128,71 @@ Still to run in a real browser (this machine was gated):
 # from: 0ebdffe0 (Rack reroll: rising capped price curve, rotating shelf only)
 
 ---
+# VERIFY: feat/dust-egg (browser pass, post-gate)
+
+Scope: js/loot.js (buyDustEgg, DUST_EGG, dustEggBought), js/app.js (shop cell,
+handler, Guide dust entry), tests/dust-egg-audit.mjs (NEW, NEVER RUN),
+tests/unit.test.js (S0 register: buyDustEgg declared as the one grantEgg
+exception; one-tap CONTROLS row for [data-dustegg]), tests/reward-sop-audit.mjs
+(ACTIONS row, sites: 2), tests/t3-audit.mjs (shop cell census = SHOP.length + 1),
+tests/release-gate.mjs (dust-egg-audit declared 'full'), docs/GWARTS-GUIDE-COPY.md,
+docs/CLAIMS.md. Written under a no-run gate: `node --check` only. EVERYTHING
+BELOW IS UNPROVEN UNTIL RUN.
+
+1. `node tests/unit.test.js`: the S0 dust register must be green with three
+   declared spends (buyRackItem, applyTransmog, buyDustEgg), and buyDustEgg may
+   reach grantEgg only.
+2. `node tests/reward-sop-audit.mjs`: COVERAGE green; js/loot.js:buyDustEgg must
+   scan at exactly 2 sites (both grantEgg calls; the negative boneDustAdd is a
+   spend, not a payout). If the count reads differently, the registry row is
+   wrong, not the scanner.
+3. `node tests/dust-egg-audit.mjs` (FIRST RUN EVER): all rows green. Then its
+   five prove-reds, each in a throwaway tree, per the file header: price
+   mutation reds PRICE, a Date.now() receipt key reds BOUND, kvGet/kvSet claim
+   reds the race row, dropping the recovery branch reds RECOVER, paying before
+   the claim reds the race charge. Prove-red rule: mutated copy red with the
+   mutation asserted applied, unmutated copy green FIRST. After the pass, remove
+   the HONESTY NOTE from this suite's header and from its release-gate entry.
+4. `node tests/t3-audit.mjs`: the Shop census row green with dustEgg: 1 and
+   cells === SHOP.length + 1.
+5. Operate the real control (anti-regression rule 5), in the app served from
+   this tree: Shop tab > "Potions and charms" > Bone Dust section. With >= 60
+   dust: first tap ARMS ("Spend 60?") and the dust balance does not move;
+   second tap buys, toast names the price and remaining dust, the cell rerenders
+   as "Yours this week", and the Backpack's Incubating section gains one Step
+   Egg bar. With < 60 dust the cell is disabled. After buying, the cell is
+   disabled until next ISO week.
+6. Gwart's Guide (tap Gwart in the Emporium): the Bone Dust entry now names the
+   weekly egg exception and no longer claims nothing dust buys can make you
+   stronger.
+7. Paddock nest: deliberately unchanged. The nest names no source for ANY egg
+   (eggCardModel in js/paddock-cards.js prints count + nearest hatch only), so
+   the dust egg needs none; if the round-3 nest-source ticket meant the nest
+   SHOULD name sources, that is a separate design change for every egg, not
+   this branch.
+8. INTEGRATOR, at release: this branch does NOT stamp a version (v470 is staged
+   on release/v470; a feature branch claiming the next number collides). Stamp
+   all four (sw.js VERSION, APP_BUILD, js/changelog.js, version.json), write the
+   patch note (the egg is back at its old 60 dust, once a week, crates and
+   charms stay gone, and why), and answer it in docs/CLAIMS.md, or
+   claim-evidence-lint will say the same thing.
+
+Flagged for the reviewer rather than guessed at (see also the report):
+- The bound is one per ISO week, a NEW bound: the historical cell was unbounded.
+  Tom's ticket pre-approved "bound it per week and say so"; the toast copy says
+  "One a week. A fresh egg lands Monday."
+- Like buyRackItem, the balance check runs BEFORE the receipt claim, so a
+  paid-but-stuck player whose balance then falls under 60 cannot reach the
+  recovery branch from the cell until they have 60 dust again. Same shape as the
+  rack on purpose ("if the two ever diverge, the divergence is the bug"); noted
+  because for the rack the receipt blocks a SECOND charge, here it also carries
+  the weekly bound.
+- docs/CLAIMS.md v446 claim 2 already listed breedPets as a surviving dust spend
+  before this branch (stale since 2026-08-27). Not corrected here: pre-existing,
+  and not this branch's claim.
+# from: bee2c040 (feat/dust-egg: the Mystery Egg returns to the Shop, one a week for 60 Bone Dust)
+
+---
 
 # VERIFY: fix/den-double-pay branch (browser pass, post-gate)
 

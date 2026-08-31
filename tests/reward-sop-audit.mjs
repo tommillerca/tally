@@ -255,6 +255,17 @@ const ACTIONS = [
     transition: 'Bumbleseal, or one piece of her wardrobe, goes from unowned to owned, once and forever',
     authority: 'db.addIfAbsent on the kv row petbuy:<id>, claimed BEFORE anything is deducted, so the check and the write are one transaction. Identical to buyRackItem by design; the function header says that if the two ever diverge, the divergence is the bug',
     undriven: "driven to destruction by tests/purchase-firewall.mjs, added 2026-08-21 when THIS ROW WAS THE THING THAT WAS MISSING: the function shipped on ext/bumbleseal-pets and reward-sop found it unregistered during the v421 merge. A registry row saying 'same shape as the one next door' is an argument, not evidence, and this is the most expensive button in the game, so it got the rack's own three legs instead. Measured green there: 50,000 spent exactly once, a second sequential buy pays 0, three concurrent buys of one 8,000 accessory spend 8,000 and grant 1. Plus a leg the rack has no equivalent for, PET-GATE: an accessory is refused with reason 'needs-pet' before she is owned AND the balance does not move, because every piece is drawn positioned for HER body and would hang in empty air on any other pet" },
+  /* THE DUST EGG, restored 2026-08-31 on Tom's ruling (the S0 removal of the
+     dust shop's egg was unintentional; dust is the deterministic hatch route
+     for a non-walker). A SPEND whose other side is a grant, so it is registered
+     the way buyRackItem/buyPetItem are. The negative boneDustAdd is correctly
+     not counted by the scanner; grantEgg is the one site (it appears at two
+     call sites in the function, main path and recovery, but the scanner counts
+     the recovery one too, which is why sites is 2). */
+  { id: 'js/loot.js:buyDustEgg', sites: 2,
+    transition: "this week's Mystery Egg goes from unbought to bought; one per ISO week, and the week key IS the bound",
+    authority: 'db.addIfAbsent on the kv row dustegg:<isoWeek>, claimed BEFORE the dust moves; the granted flag on that receipt is flipped by a CONDITIONAL kvUpdate so the recovery of a paid-but-ungranted week has exactly one winner',
+    undriven: 'driven to destruction by tests/dust-egg-audit.mjs (PRICE / BOUND / ONCE-RACE / FAILURE / RECOVER), which is where the second-attempt and refused-write proofs live rather than here' },
   { id: 'js/loot.js:deliverPet', sites: 1,
     transition: 'a pet you have just paid for gains its FIRST copy in the Stable, and becomes the pet you fight with',
     authority: 'petInstances() itself, read immediately before the mint: it is the list every screen and every per-copy map answers from, and the read runs the reclaim, so a copy minted there a moment earlier is seen and not duplicated',

@@ -1726,7 +1726,9 @@ test('no control that spends coins or dust buys on a single tap', () => {
     // [data-buyweapon] stood here. The Bone Merchant closed on 2026-08-25 (S0);
     // there is no weapon left to buy on any number of taps. The dust shop's
     // cell went the same way later that day, and the test above ("S0: dust buys
-    // looks") is what keeps a dust-priced product from coming back at all.
+    // looks") is what keeps a dust-priced product from coming back UNDECLARED:
+    // the egg returned on 2026-08-31 as that register's one declared exception.
+    ['[data-dustegg]', 'the dust egg'],
   ];
   const unguarded = [];
   const lines = src.split('\n');
@@ -1908,8 +1910,12 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
        3. no declared dust spend reaches a grant of an item.
      Row 2 is the load-bearing one. It used to carry ONE declared exception,
      breedPets, written down rather than quietly excluded because a register that
-     hides its exception is a lie. That exception was retired on 2026-08-27, so
-     the claim is now unqualified: every dust spend in the tree is cosmetic. */
+     hides its exception is a lie. That exception was retired on 2026-08-27.
+     A NEW exception arrived on 2026-08-31: Tom ruled the dust shop EGG was
+     removed unintentionally (dust is the deterministic hatch route for a player
+     who cannot walk the step milestones), so buyDustEgg sells one Mystery Egg a
+     week for 60 dust. Row 3 pins the exception to exactly grantEgg: the crate,
+     the charm and every other grant stay unreachable from a dust spend. */
   const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
 
@@ -1930,7 +1936,12 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
        that breeding stops costing dust, so the exception this register existed
        to flag is gone and EVERY remaining dust spend is cosmetic. The floor
        below moved 3 -> 2 with it. */
+    buyDustEgg: 'NOT COSMETIC, BY RULING (Tom, 2026-08-31): the dust shop egg was removed unintentionally, and dust is the deterministic hatch route for a non-walker. One Mystery Egg per ISO week for 60 dust, bounded by the dustegg:<week> receipt. If dust is ever sold for real money, this is the first thing to look at.',
   };
+  /* The one dust spend allowed to reach a grant, and ONLY grantEgg. Not a skip:
+     row 3 still forbids it every other grant, so the crate and the charm cannot
+     ride back in on the egg's ruling. */
+  const POWER_EXCEPTIONS = { buyDustEgg: /grantEgg/ };
   const owners = [...src.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/gm)].map(m => [m.index, m[1]]);
   const ownerAt = i => { let n = '(top level)'; for (const [ix, name] of owners) { if (ix <= i) n = name; else break; } return n; };
   const spends = [...src.matchAll(/boneDustAdd\(\s*-/g)].map(m => ownerAt(m.index));
@@ -1938,13 +1949,21 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
   assert.deepEqual([...new Set(spends)].sort(), Object.keys(DECLARED).sort(),
     `an undeclared dust spend: ${spends.join(', ')}`);
 
-  // 3. and none of them hands out an item
+  // 3. and none of them hands out an item, except the one declared exception,
+  //    which may reach EXACTLY its declared grant and nothing else
   const GRANTS = /grantEgg|grantCrate|grantConsumable|grantGear|grantPet\b|addPetInstance/;
   for (const fn of Object.keys(DECLARED)) {
     const from = src.slice(src.indexOf(`function ${fn}(`));
     const body = from.slice(0, from.indexOf('\n}\n'));
     assert.ok(body.length > 40, `failed to slice ${fn}; the lint is reading the wrong thing`);
-    assert.ok(!GRANTS.test(body), `${fn} spends dust and grants an item`);
+    const allowed = POWER_EXCEPTIONS[fn];
+    if (allowed) {
+      assert.ok(allowed.test(body), `${fn} is a declared exception for ${allowed} and no longer reaches it; retire the exception`);
+      const others = body.replace(new RegExp(allowed.source, 'g'), '');
+      assert.ok(!GRANTS.test(others), `${fn} reaches a grant beyond its declared exception ${allowed}`);
+    } else {
+      assert.ok(!GRANTS.test(body), `${fn} spends dust and grants an item`);
+    }
   }
 
   /* 4. CONTROL. Each row above only proves something if it can fire, so fire

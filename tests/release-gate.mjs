@@ -558,6 +558,13 @@ const DECLARED = {
     + 'the suite exits 97 instead of exiting 1 with an art-regression message about a placement outcome. '
     + 'STILL WORTH FIXING SEPARATELY: unlike boneyard-audit it carries no capability probe, so on a host with no route to '
     + 'the tile server its CONTROL rows are the only thing standing between a tile-less run and a vacuous pass.'],
+  'dust-egg-audit.mjs': ['full', "the dust Mystery Egg (restored 2026-08-31, Tom's ruling: the S0 removal was unintentional) charges exactly its "
+    + 'historical 60 dust, is bounded to one per ISO week by the dustegg:<isoWeek> receipt, pays exactly once under three concurrent '
+    + 'callers, and a rejected egg write cannot take the dust without the retry granting for free (the same shape as '
+    + 'purchase-write-failure-audit, with the receipt\'s granted flag standing in for cosmetic ownership, because a hatched egg row is '
+    + 'deleted and inventory absence proves nothing). Run it on any change to buyDustEgg, grantEgg or the db write paths. '
+    + 'HONESTY NOTE: written 2026-08-31 under a no-run release gate; neither it nor its five listed prove-reds have been executed yet. '
+    + 'VERIFY.md carries both as the browser pass, and this note comes out when that pass lands.'],
   'purchase-write-failure-audit.mjs': ['full', "a rejected write during a rack purchase must not cost the player the coins AND the piece. "
     + 'Run it on any change to buyRackItem, grantCosmetic, markPaid or the db write paths. It makes the real db.addIfAbsent reject '
     + 'for the one row grantCosmetic writes, which is what quota, abort and the wipe-protocol freeze do to that same call, so no app '
