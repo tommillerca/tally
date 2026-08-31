@@ -17491,6 +17491,9 @@ async function renderBoneyard(el) {
     // = ~29 km/h: comfortably above running/cycling, clearly a vehicle.
     const MAX_LOOT_SPEED = 8;
     let youSpeed = 0, lastFix = null;
+    // the open den Fight/Flee prompt, if any, so a live GPS fix can withdraw it
+    // once the player has walked out of range (see the watchPosition handler)
+    let denPrompt = null;
 
     // Place a POI onto reachable ground. A POI is only SHOWN once we've confirmed
     // it snaps to a walkable feature (road / path / park) within ~80m; otherwise
@@ -17670,9 +17673,11 @@ async function renderBoneyard(el) {
         if (denRec) {
           hidePoiTip();
           const d = denRec.den;
-          openDenSheet(d, {
-            cleared: claimedBoss.has(denKey(dateKey(), d)),
-            inRange: d.dist != null && d.dist <= DEN_RADIUS_M,
+          const cleared = claimedBoss.has(denKey(dateKey(), d));
+          const inRange = d.dist != null && d.dist <= DEN_RADIUS_M;
+          const sheet = openDenSheet(d, {
+            cleared,
+            inRange,
             // reuse the existing #mapDen path rather than rebuilding the fight:
             // it owns escalation, the paired add and the too-fast gate. Point it
             // at the den that was actually TAPPED, since two dens can be in
@@ -17684,6 +17689,9 @@ async function renderBoneyard(el) {
               btn.click();
             },
           });
+          // only a sheet holding a LIVE Fight button gets withdrawn by distance;
+          // an out-of-range or cleared den sheet is informational, let them read it
+          if (inRange && !cleared) denPrompt = { den: d, wrap: sheet };
         } else showPoiTip(el);
         ev.stopPropagation();
       } else hidePoiTip();
@@ -18447,7 +18455,15 @@ async function renderBoneyard(el) {
       if (tooFastToAct()) return;
       const id = $('#mapDen', body).dataset.denId;
       const rec = denMarkers.get(id);
-      if (!rec || rec.den.dist > DEN_RADIUS_M) return;
+      if (!rec) return;
+      /* REVALIDATE AT THE TAP. rec.den.dist is only as fresh as the last
+         refreshDens pass, and the den sheet's Fight button can fire minutes
+         after the prompt opened (round-3 GPS walk: a fight started from ~600 m
+         because this read a stale distance). Measure from the freshest cached
+         fix now; 1.5x the trigger radius is GPS-jitter grace for a player who
+         was genuinely in range when the prompt opened. */
+      rec.den.dist = distanceM(lat, lng, rec.den.lat, rec.den.lng);
+      if (rec.den.dist > DEN_RADIUS_M * 1.5) { toast('Too far away now. Walk back to the den.', 3200); return; }
       const den = rec.den;
       const fighter = await buildFighter();
       // landmark dens escalate with your progression; roaming dens use their raw
@@ -18738,6 +18754,19 @@ async function renderBoneyard(el) {
       youWalk.move(lat, lng);
       if (follow && map) map.easeTo({ center: [lng, lat], duration: 900 });
       refreshWorld();
+      /* WITHDRAW A STALE FIGHT PROMPT. The den sheet never expired: round-3 GPS
+         walk held a live Fight button 600 m from the den. Close it the moment a
+         fix puts the player beyond the same 1.5x grace the tap check uses.
+         Top-of-stack only, because history.back() pops the TOP sheet: mid-walk
+         the prompt is the only sheet open, and if something is stacked on it
+         the tap-time revalidation still guards the fight itself. */
+      if (denPrompt && !denPrompt.wrap.isConnected) denPrompt = null;
+      if (denPrompt && sheetStack.length && sheetStack[sheetStack.length - 1].wrap === denPrompt.wrap
+          && distanceM(lat, lng, denPrompt.den.lat, denPrompt.den.lng) > DEN_RADIUS_M * 1.5) {
+        denPrompt = null;
+        history.back();
+        toast('You walked out of range of the den.', 3200);
+      }
     }, () => { /* transient errors after boot: keep last position */ }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
   }
   $('#mapStart', wrap).addEventListener('click', () => { mapWanted = true; kvSet('map-seen', true); startMap(); });
@@ -20826,6 +20855,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
   async function settle() {
     if (settled) return; settled = true;
+    /* A gate intro still standing when the outcome is known is stale by
+       definition. It normally removes itself, but its animationend sentinel and
+       7s failsafe are timers, and a backgrounded tab throttles timers: round-3
+       GPS walk had the intro overlay outlive a whole lost fight. Removing the
+       node is safe: showGateIntro's finish() is idempotent and nobody awaits
+       its promise on this path. */
+    document.querySelectorAll('body > .gi').forEach(n => n.remove());
     await consumeFightFoodBuffs(); // combat dish buffs are spent one fight at a time
     const won = fight.over.winner === 'p';
     /* Resolve the staked-fight record the moment the outcome is known (see the
@@ -21244,7 +21280,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
            openFight call sites, so a NEW mode that never states where a win
            drops you FAILS instead of silently inheriting the Pit's behaviour. */
         const STALE_LAUNCHER = ['glutton', 'spire'];
-        if (STALE_LAUNCHER.includes(foeCfg.mode) && won) { closeAllSheetsViaHistory(); closeAllSheets(); maybeCelebrate(); return; }
+        /* A glutton/spire LOSS deliberately backs out ONE level (the shared
+           history.back() below): the launcher sheet beneath is still valid and
+           offers the retry. Every OTHER map-launched fight closes the whole
+           stack on win AND loss, not only the STALE_LAUNCHER wins: its launcher
+           is a map button or a den prompt that already dismissed itself, so
+           anything still stacked under this sheet is stale (round-3 GPS walk: a
+           lost den fight left the den prompt plus a Turn-1 battle sheet standing
+           for minutes). The map is a route, not a sheet, so this always lands on
+           the map. */
+        const retryLoss = STALE_LAUNCHER.includes(foeCfg.mode) && !won;
+        if (fromMap && !retryLoss) { closeAllSheetsViaHistory(); closeAllSheets(); maybeCelebrate(); return; }
         history.back(); if (!fromMap && foeCfg.mode !== 'friend') setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate();
       });
     }, fast ? 80 : 750);
