@@ -383,8 +383,16 @@ export async function claimQuest(periodKey, q, period = 'day') {
      periodKey, because periodKey is a week or month key for the other two
      tiers and only dayOrdinal-comparable for 'day'. Gating all three on the
      current day is also the stronger rule: a week and a month roll over off
-     the same clock, so a distrusted today must not pay a weekly either. */
-  if (!(await claimDay(dateKey())).fresh) return null;
+     the same clock, so a distrusted today must not pay a weekly either.
+     A REFUSAL HERE GETS A VOICE. This used to return null, which reaches the
+     click handler as a glowing Claim button whose tap does nothing: exactly how
+     a lapsed player (7+ days with no /health, reason 'unwitnessed') experienced
+     the app. The DECISION is untouched and stays the guard's; this only names
+     it, shaped like { capped } below: truthy, carries no xp/coins, and every
+     counter that scores wins must exclude it (clock-trust and reward-sop's
+     predicates were updated alongside). */
+  const day = await claimDay(dateKey());
+  if (!day.fresh) return { dayGuard: day.reason || true };
   /* THE BOUND, not a trend. Ordering the pool stops the set from churning, but
      it is a property of one function that a later edit could quietly undo. This
      is the ceiling that holds regardless: a period pays at most QUEST_N claims,

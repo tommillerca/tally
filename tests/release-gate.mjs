@@ -583,6 +583,12 @@ const DECLARED = {
     + 'deleted and inventory absence proves nothing). Run it on any change to buyDustEgg, grantEgg or the db write paths. '
     + 'HONESTY NOTE: written 2026-08-31 under a no-run release gate; neither it nor its five listed prove-reds have been executed yet. '
     + 'VERIFY.md carries both as the browser pass, and this note comes out when that pass lands.'],
+  'gap-settle-audit.mjs': ['full', 'the lapsed-player cluster (round 4, 2026-08-31): a 2+ day gap settles the LAST LOGGED day\'s day-close '
+    + '(bounded at exactly one day, the ledger still dedupes, and the day guard still pays nothing when it refuses); a day-guard '
+    + 'refusal in claimQuest returns { dayGuard: reason } so the Claim button toasts why instead of doing nothing (the guard\'s '
+    + 'DECISION is asserted unchanged); and the 20:30 streak reminder only schedules while the streak is alive, as a one-shot, so '
+    + 'it cannot nag a dead streak forever from a repeating schedule. Run it on any change to awardDayCloseIfDue, claimQuest, '
+    + 'claimDay or syncNotifications. Proven red on pre-fix origin/main in a throwaway tree.'],
   'purchase-write-failure-audit.mjs': ['full', "a rejected write during a rack purchase must not cost the player the coins AND the piece. "
     + 'Run it on any change to buyRackItem, grantCosmetic, markPaid or the db write paths. It makes the real db.addIfAbsent reject '
     + 'for the one row grantCosmetic writes, which is what quota, abort and the wipe-protocol freeze do to that same call, so no app '
