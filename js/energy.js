@@ -2,7 +2,7 @@
 // VIGOR that you earn ONLY from healthy behaviour — logging food and getting
 // steps. It never hard-locks (the free floor is always there) and never rewards
 // eating less: Vigor comes from logging + walking, not from a calorie deficit.
-import { db, kvGet, kvSet, claimDay } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, claimDay } from './db.js';
 import { dateKey } from './nutrition.js';
 
 export const FREE_FIGHTS = 3;          // free Pit fights every day, no strings attached
@@ -85,12 +85,25 @@ export async function addVigor(n) {
   return view(s2);
 }
 
-// Consume one Pit fight: spend the free floor first, then banked Vigor.
-// Returns { ok, used: 'free' | 'vigor' } or { ok: false } when tapped out.
+/* Consume one Pit fight: spend the free floor first, then banked Vigor.
+ * Returns { ok, used: 'free' | 'vigor' } or { ok: false } when tapped out.
+ *
+ * THE CHARGE IS READ AND SPENT IN ONE TRANSACTION. It used to be a kvGet, an
+ * await and a kvSet, so two overlapping calls both saw the same last free fight
+ * and both took it: measured 2026-09-01 on origin/main 3d4b208c, with one free
+ * fight left a double tap on a rung's FIGHT button opened TWO staked arenas
+ * against ONE charge, and the two-tab race did the same. The rollover refresh
+ * stays outside, because it is a day boundary rather than a charge, and the
+ * updater below has to be synchronous. */
 export async function spendPitFight() {
-  let st = (await kvGet('pitEnergy', null)) || {};
-  if (st.date !== dateKey()) { await refreshPitEnergy(); st = (await kvGet('pitEnergy', {})) || {}; }
-  if ((st.freeUsed || 0) < FREE_FIGHTS) { st.freeUsed = (st.freeUsed || 0) + 1; await kvSet('pitEnergy', st); return { ok: true, used: 'free' }; }
-  if ((st.vigor || 0) > 0) { st.vigor = clampVigor(st.vigor - 1); await kvSet('pitEnergy', st); return { ok: true, used: 'vigor' }; }
-  return { ok: false };
+  const st = (await kvGet('pitEnergy', null)) || {};
+  if (st.date !== dateKey()) await refreshPitEnergy();
+  let used = null;
+  await kvUpdate('pitEnergy', cur => {
+    const s = cur || {};
+    if ((s.freeUsed || 0) < FREE_FIGHTS) { used = 'free'; return { ...s, freeUsed: (s.freeUsed || 0) + 1 }; }
+    if ((s.vigor || 0) > 0) { used = 'vigor'; return { ...s, vigor: clampVigor(s.vigor - 1) }; }
+    return undefined;   // tapped out: nothing owed, so nothing is written
+  }, {});
+  return used ? { ok: true, used } : { ok: false };
 }

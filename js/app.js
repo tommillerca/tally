@@ -19765,6 +19765,20 @@ async function renderPit(wrap) {
   const start = (foeCfg) => openFight(wrap, fighter, foeCfg);
   // sparring is always free (practice); real fights spend the hybrid energy
   const startPit = async (foeCfg) => {
+    /* ONE TAP, ONE ARENA. This function is async and the FIGHT buttons are never
+       disabled, so a double tap ran the whole body twice before either arena
+       appeared. The atomic spend in js/energy.js is the money half and refuses
+       the second charge; this is the other half, because a player holding two
+       charges would still stack two arenas on one tap-tap. Set SYNCHRONOUSLY,
+       before the first await, which is the only thing a second tap already
+       sitting in the same task queue cannot get past, and released once
+       openFight has drawn the arena (it resolves at "Round one", not at the end
+       of the fight), by which time the Pit's buttons are covered anyway. */
+    if (pitOpening) return;
+    pitOpening = true;
+    try { await startPitInner(foeCfg); } finally { pitOpening = false; }
+  };
+  const startPitInner = async (foeCfg) => {
     /* An unacknowledged loss BLOCKS the next staked fight. Before this gate,
        FIGHT after an unresolved defeat spent a fresh charge with the old loss
        still standing (the play-riz auto-loss P0). Re-read the record at the
@@ -19783,7 +19797,7 @@ async function renderPit(wrap) {
     }
     const spent = await spendPitFight();
     if (!spent.ok) { toast('Rest up! Log a meal or take a walk to earn Vigor. Free fights refill tomorrow.', 3400); renderPit(wrap); return; }
-    openFight(wrap, fighter, foeCfg);
+    await openFight(wrap, fighter, foeCfg);   // awaited so the guard above holds until the arena is up
   };
   $$('[data-spar]', body).forEach(b => b.addEventListener('click', () =>
     start({ mode: 'spar', name: b.dataset.name, mult: Number(b.dataset.spar) })));
@@ -19932,6 +19946,11 @@ function fighterStatuses(f) {
  * it (#pitDefeat, persisted state, not render flow) and startPit() refuses to
  * spend: FIGHT routes the player to that panel until they acknowledge it. */
 const PIT_STAKED_MODES = ['rung', 'champ', 'endless'];
+
+/* Module scope on purpose, not a renderPit closure: startPit's early-return path
+   re-renders the Pit, and a flag living in the closure would be a fresh false on
+   every re-render, which is a guard that is not there. See startPit. */
+let pitOpening = false;
 
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
