@@ -1018,6 +1018,7 @@ function armToConfirm(btn, confirmLabel, onConfirm, { cooloff = ARM_COOLOFF_MS }
   if (!btn || btn.dataset.armWired === '1') return;
   btn.dataset.armWired = '1';
   let t = null;
+  let busy = false;
   const restore = () => {
     if (!btn.isConnected) return;
     btn.dataset.armed = '0';
@@ -1027,6 +1028,7 @@ function armToConfirm(btn, confirmLabel, onConfirm, { cooloff = ARM_COOLOFF_MS }
   btn.addEventListener('click', async e => {
     e.preventDefault();
     e.stopPropagation();
+    if (busy) return;   // a spend is in flight: a queued tap is not a new decision
     if (btn.dataset.armed !== '1') {
       if (btn.dataset.armLabel == null) btn.dataset.armLabel = btn.innerHTML;
       btn.dataset.armed = '1';
@@ -1038,8 +1040,21 @@ function armToConfirm(btn, confirmLabel, onConfirm, { cooloff = ARM_COOLOFF_MS }
     }
     clearTimeout(t);
     haptic.heavy();   // the second tap commits: every spend/destroy thumps once
-    restore();
-    await onConfirm();
+    /* DISARM AFTER THE SPEND, NEVER BEFORE IT. restore() used to run here, above
+       the await, so the button was back in its unarmed state inside the same
+       frame and a synchronous tap burst simply re-armed and committed again:
+       N taps bought floor(N/2) items. `busy` is set before the first await, so
+       every tap queued behind this one lands on a button already out of the
+       running, the same job the crate OPEN button does with `disabled`.
+       IT IS A CLOSURE FLAG AND NOT `btn.disabled` ON PURPOSE. `disabled` is the
+       CALLER's state on these buttons: the gift chips open with
+       `if (b.disabled) return` and re-disable themselves by affordability after
+       a send, so setting it here made every gift a silent no-op and clearing it
+       afterwards would have re-offered amounts the player can no longer afford.
+       A flag also works on the chips and rows here that are not <button>. */
+    busy = true;
+    try { await onConfirm(); }
+    finally { busy = false; restore(); }
   });
 }
 
@@ -8750,16 +8765,20 @@ async function renderShop(el) {
   // are the most expensive single taps in the game.
   el.querySelectorAll('[data-buydrop]').forEach((b => {
     let t = null;
+    let busy = false;
     const reset = () => { b.dataset.armed = '0'; b.innerHTML = b.dataset.label || b.innerHTML; };
     b.addEventListener('click', async () => {
+      if (busy) return;   // same latch as armToConfirm: a queued tap is not a new decision
       if (b.dataset.armed !== '1') {
         b.dataset.label = b.dataset.label || b.innerHTML;
         b.dataset.armed = '1'; b.textContent = 'Tap again to buy';
         clearTimeout(t); t = setTimeout(() => { if (b.isConnected) reset(); }, 2600);
         return;
       }
-      clearTimeout(t); reset();
-      const r = await buyDropItem(b.dataset.buydrop);
+      // reset() moved below the await for the armToConfirm reason: disarming
+      // first re-armed the button in the same frame and let a burst buy twice.
+      clearTimeout(t); busy = true;
+      const r = await buyDropItem(b.dataset.buydrop).finally(() => { busy = false; reset(); });
       if (!r.ok) {
         toast(r.reason === 'owned' ? 'Already in your Wardrobe.' : `Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600);
         return;
@@ -14146,16 +14165,20 @@ async function renderCharacter(wrap, tab, opts = {}) {
     $('#bpKitchen', content)?.addEventListener('click', () => openKitchen());
     $$('[data-buy]', content).forEach((b => {
       let t = null;
+      let busy = false;
       const reset = () => { b.dataset.armed = '0'; b.textContent = b.dataset.label || b.textContent; };
       b.addEventListener('click', async () => {
+        if (busy) return;   // same latch as armToConfirm: a queued tap is not a new decision
         if (b.dataset.armed !== '1') {
           b.dataset.label = b.dataset.label || b.textContent;
           b.dataset.armed = '1'; b.textContent = 'Tap again to buy';
           clearTimeout(t); t = setTimeout(() => { if (b.isConnected) reset(); }, 2600);
           return;
         }
-        clearTimeout(t); reset();
-        const r = await buyShopItem(b.dataset.buy);
+        // reset() moved below the await for the armToConfirm reason: disarming
+        // first re-armed the button in the same frame and let a burst buy twice.
+        clearTimeout(t); busy = true;
+        const r = await buyShopItem(b.dataset.buy).finally(() => { busy = false; reset(); });
         if (!r.ok) { toast(`Not enough coins. That costs ${r.need}, you have ${r.have}.`, 2600); return; }
         popSound(S.sounds);
         toast(`${r.label} bought. −${r.cost} coins, ${r.coins} left. You now have ${r.owned}.`, 3000);

@@ -32,6 +32,15 @@
  *            naive kvGet/kvSet form passes the sequential half and was MEASURED
  *            printing 16,500 coins to three concurrent callers on the garden
  *            refund.
+ *   SPEND    the money decides, not a read of the money. The two shops with no
+ *            per-item receipt (the coin shop's consumables, which are meant to
+ *            be bought over and over, and the drop) are driven with MORE
+ *            concurrent callers than the wallet can fund: a repeatable item
+ *            grants exactly what was paid for and no more, an idempotent grant
+ *            is charged exactly once, and a wallet a coin short moves not at
+ *            all. Both directions matter because they are one bug wearing two
+ *            faces: read-then-debit over kvBump's min:0 clamp mints free goods
+ *            for a repeatable item and double-charges a once-only one.
  *   WEAR     a bought look is FREE TO WEAR. Transmog is priced in Bone Dust, so
  *            without the `paidlooks` row a player who just paid 3,000 coins for
  *            a look is asked for dust the first time they put it on. The row is
@@ -66,6 +75,15 @@
  *   6. key the reroll counter back on the day in rack() (reset rr with rotDay)
  *      -> REROLL-WEEKLY goes red (a stale day hands back the cheap rungs)
  *
+ * PROVE-RED for the SPEND rows, 2026-08-31, on a cp -R throwaway copy of
+ * origin/main 13583e42 (the PRE-FIX tree) with this file copied in:
+ *   FAIL SPEND-MINT   4 callers, 4 granted (wallet funded 2), 4 reported ok
+ *   FAIL SPEND-EXACT  spent 180 for 4 x 90, 0 left
+ *   FAIL SPEND-ONCE   4 callers, 4 ok, 1 owned, spent 9000 against price 3000
+ *   ok   SPEND-FLOOR  and the CONTROL row, both green pre-fix, so a green run
+ *                     of this leg is grading something rather than not running
+ *
+
  * Usage: node tests/purchase-firewall.mjs            (serves this tree)
  *        node tests/purchase-firewall.mjs <base-url>
  */
@@ -323,7 +341,71 @@ const res = await page.evaluate(async () => {
 
   const petOwned = [...(await loot.ownedCosmeticIds())];
 
-  return { target: { ...target, gear: target.gear.id }, coinPrice, dustPrice, before, after, afterTwice,
+  /* ================= THE ATOMIC SPEND (R5-P1-a / R5-P1-b) =================
+     Every leg above it claims a per-item receipt, so its debit runs at most
+     once whatever the wallet says. The two shops that DO NOT have that shape
+     are graded here, because the receipt was never the whole guard: the
+     affordability check and the debit were two separate kv transactions, so
+     concurrent callers all passed the same stale read and kvBump's min:0 clamp
+     made every overdrawn debit FREE.
+     BOTH DIRECTIONS OF THAT ARE MEASURED, because they present as opposite
+     symptoms of one bug: a repeatable item MINTS goods (more granted than paid
+     for), a once-only item DOUBLE CHARGES (more paid than granted). */
+
+  /* A. THE REPEATABLE SHOP. A wallet funding exactly k of them, driven with
+        2k concurrent callers. It must grant exactly k and take exactly k*price.
+        Measured on origin/main 13583e42: 3 concurrent calls on a 90-coin wallet
+        granted 3 Vigor Draughts for 90 coins. Vigor is Pit energy, so past the
+        first Draught this was coins buying power for nothing. */
+  const shopItem = loot.SHOP[0];
+  const K = 2;                       // items the wallet can honestly afford
+  const shopFund = shopItem.cost * K;
+  await db.kvSet('coins', shopFund);
+  const shopHeld0 = await loot.consumableCount(shopItem.id);
+  const shopRs = await Promise.all(
+    Array.from({ length: K * 2 }, () => loot.buyShopItem(shopItem.id)));
+  const shopSpend = {
+    id: shopItem.id, price: shopItem.cost, k: K, drove: K * 2, funded: shopFund,
+    ok: shopRs.filter(r => r.ok).length,
+    granted: (await loot.consumableCount(shopItem.id)) - shopHeld0,
+    left: await loot.coins(),
+    spent: shopFund - (await loot.coins()),
+  };
+
+  /* B. THE ONCE-ONLY SHOP, the same drive against an idempotent grant. The drop
+        pieces are ordinary cosmetics, so grantCosmetic's `cos:<id>` row already
+        made the GRANT once-only; only the money was unguarded. Measured on
+        origin/main 13583e42: 4 concurrent taps on a 3,000-coin jacket with
+        7,000 coins took all 7,000 and delivered one jacket. */
+  const ownedNow = await loot.ownedCosmeticIds();
+  const dropDef = loot.DROP.items.find(x => !ownedNow.has(x.id)) || null;
+  const dropFund = dropDef ? dropDef.cost * 3 : 0;
+  if (dropDef) await db.kvSet('coins', dropFund);
+  const dropRs = dropDef ? await Promise.all(
+    Array.from({ length: 4 }, () => loot.buyDropItem(dropDef.id))) : [];
+  const dropSpend = !dropDef ? null : {
+    id: dropDef.id, price: dropDef.cost, drove: 4, funded: dropFund,
+    ok: dropRs.filter(r => r.ok).length,
+    owned: (await loot.ownedCosmeticIds()).has(dropDef.id) ? 1 : 0,
+    left: await loot.coins(),
+    spent: dropFund - (await loot.coins()),
+  };
+
+  /* C. THE FLOOR. A wallet one coin short of a single item, driven eight ways.
+        Nothing may be granted and the balance must not move, because "the debit
+        clamped at zero" is exactly how the free goods were minted. */
+  await db.kvSet('coins', shopItem.cost - 1);
+  const brokeHeld0 = await loot.consumableCount(shopItem.id);
+  const brokeRs = await Promise.all(
+    Array.from({ length: 8 }, () => loot.buyShopItem(shopItem.id)));
+  const shopFloor = {
+    funded: shopItem.cost - 1, ok: brokeRs.filter(r => r.ok).length,
+    granted: (await loot.consumableCount(shopItem.id)) - brokeHeld0,
+    left: await loot.coins(),
+  };
+
+  return { shopSpend, dropSpend, shopFloor,
+    target: { ...target, gear: target.gear.id }, coinPrice, dustPrice, before, after, afterTwice,
     buy1, buy2, wearBefore, wearAfter, wearOther, otherArt: other ? other.artId : null, race, dustLeg,
     ladder: loot.RACK_REROLL_LADDER, rrSteps, rrSpent, rrBroke,
     pet: { petId, accId, petPrice, accPrice, gate, gateSpent, petBuy1, petBuy2, petSpent, petSpent2,
@@ -416,6 +498,25 @@ else {
   ok('PET-FIREWALL the pet purchase moved no gear loadout and no other equipment',
     !!P && P.petBefore.gearloadout === P.petAfter.gearloadout,
     P ? `${P.petBefore.gearloadout} -> ${P.petAfter.gearloadout}` : 'not run');
+
+  /* ---- THE ATOMIC SPEND: a buy cannot mint free goods or charge twice ---- */
+  const SS = res.shopSpend, DS = res.dropSpend, SF = res.shopFloor;
+  ok('CONTROL the atomic-spend leg drove a real, non-zero price with a real wallet',
+    !!SS && SS.price > 0 && SS.k > 0 && SS.drove > SS.k && SS.funded === SS.price * SS.k
+      && !!DS && DS.price > 0 && DS.drove > 1,
+    SS ? `${SS.drove} concurrent x ${SS.id} at ${SS.price} on a ${SS.funded} wallet; ${DS.drove} x ${DS.id} at ${DS.price} on ${DS.funded}` : 'not run');
+  ok('SPEND-MINT concurrent buys grant exactly what the wallet paid for, never more',
+    !!SS && SS.granted === SS.k && SS.ok === SS.k,
+    SS ? `${SS.drove} callers, ${SS.granted} granted (wallet funded ${SS.k}), ${SS.ok} reported ok` : 'not run');
+  ok('SPEND-EXACT the debit is exactly k x price, and the wallet never goes below zero',
+    !!SS && SS.spent === SS.price * SS.k && SS.left === 0 && SS.spent === SS.granted * SS.price,
+    SS ? `spent ${SS.spent} for ${SS.granted} x ${SS.price}, ${SS.left} left` : 'not run');
+  ok('SPEND-ONCE an idempotent grant is charged exactly once, however many taps land',
+    !!DS && DS.owned === 1 && DS.spent === DS.price && DS.ok === 1,
+    DS ? `${DS.drove} callers, ${DS.ok} ok, ${DS.owned} owned, spent ${DS.spent} against price ${DS.price} (${DS.left} left of ${DS.funded})` : 'not run');
+  ok('SPEND-FLOOR a wallet a coin short grants nothing and is left byte-identical',
+    !!SF && SF.ok === 0 && SF.granted === 0 && SF.left === SF.funded,
+    SF ? `8 callers on ${SF.funded} coins: ${SF.ok} ok, ${SF.granted} granted, ${SF.left} left` : 'not run');
 
   /* ---- DUST ---- */
   ok('CONTROL the dust leg ran with a real, non-zero dust price',
