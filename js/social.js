@@ -237,11 +237,48 @@ const u8ToB64 = u8 => {
 };
 const b64ToU8 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
+/* GZIP THE SNAPSHOT, BECAUSE A MATURE SAVE RUNS OUT OF ROOM IN THE ROW.
+   The blob the encoder above has to carry is one D1 column, and the server
+   archives the REPLACED blob into daily_blob on the SAME row when it promotes a
+   daily (server/src/index.js UPSERT_BACKUP). So an established account stores
+   live + daily together and the binding constraint is the per-ROW limit, not the
+   per-value one: measured on the local emulator 2026-09-01, a 2,174,864-byte
+   blob stores fine as a first push and the SAME save 413s on the re-push once
+   the daily slot is populated. Effective ceiling on a real account is therefore
+   about exportAll 0.8MB, which a long-term player reaches. It fails honestly
+   ('too-large' -> "outgrown its slot"), but honest is not the same as fixed.
+
+   ORDER MATTERS AND IT IS NOT NEGOTIABLE: JSON -> gzip -> encrypt -> base64.
+   AES-GCM output is indistinguishable from random, so compressing AFTER
+   encrypting spends the CPU and saves nothing. The snapshot is JSON with seven
+   stores of repeated keys, which is the best case gzip has.
+
+   HOW A READER TELLS THE TWO APART: the gzip magic 1f 8b on the decrypted
+   plaintext. Every backup ever written before this line was JSON.stringify of an
+   OBJECT, so byte 0 is always '{' (0x7b) and the two can never be confused. That
+   is why there is no version field: adding one would need the old clients to
+   already understand it, and they do not. Every uncompressed blob sitting in the
+   cloud right now still restores, which matters more than the ceiling does.
+
+   CompressionStream IS NOT EVERYWHERE. It arrived in Safari 16.4 and this app's
+   iOS deployment target is 15.0 (native/ios/App/App.xcodeproj), so a real device
+   in the fleet can be running this code without it. Such a device pushes
+   uncompressed, which every reader still accepts. It also cannot READ a
+   compressed blob: that throws and pullBackup reports 'decrypt'.
+   ponytail: known ceiling, an iOS 15 restore of a compressed blob gets the
+   wrong failure copy. Give it its own reason only if anyone actually hits it. */
+const through = async (u8, stream) =>
+  new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(stream)).arrayBuffer());
+
 // Encrypt an object -> base64(iv(12) || ciphertext). Server can never read this.
 async function encryptBackup(obj) {
   const key = await backupKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const pt = new TextEncoder().encode(JSON.stringify(obj));
+  let pt = new TextEncoder().encode(JSON.stringify(obj));
+  // The one line that makes new blobs compressed. Delete it and this release
+  // becomes read-only support for a format nothing writes yet, which is the
+  // staged rollout if the mixed fleet needs one.
+  if (typeof CompressionStream === 'function') pt = await through(pt, new CompressionStream('gzip'));
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt));
   const out = new Uint8Array(iv.length + ct.length);
   out.set(iv, 0); out.set(ct, iv.length);
@@ -251,7 +288,8 @@ async function decryptBackup(b64s) {
   const key = await backupKey();
   const buf = b64ToU8(b64s);
   const iv = buf.slice(0, 12), ct = buf.slice(12);
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  let pt = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct));
+  if (pt[0] === 0x1f && pt[1] === 0x8b) pt = await through(pt, new DecompressionStream('gzip'));
   return JSON.parse(new TextDecoder().decode(pt));
 }
 
