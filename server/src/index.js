@@ -807,7 +807,45 @@ async function recordPruneRun(env, row) {
   }
 }
 
-/* ---------------- signature auth ---------------- */
+/* ---------------- signature auth ----------------
+
+   ONE SIGNATURE, ONE EFFECT. Everything below used to check exactly two things:
+   the signature, and that the timestamp was inside MAX_SKEW_MS. Neither of them
+   says a request is NEW. A captured signed POST re-sent byte for byte verified
+   again and landed a fresh effect every time, for as long as that five-minute
+   window stayed open, and this was PROVEN against /cheer: one original plus two
+   replays delivered three cheers to the recipient.
+
+   The `ck` idempotency key closes it for a cheer sent by a client that mints
+   one -- the replay carries the same ck, so the grant's UNIQUE (player_id, key)
+   absorbs it -- but that is a per-route patch: it does nothing for an older
+   client that sends no ck, nothing for a spire claim, and nothing for the next
+   signed route somebody adds. So the guard lives HERE, once, in front of every
+   signed write there will ever be.
+
+   ECDSA signing is randomised, so two honest requests never share a signature,
+   and a real retry re-signs with a fresh ts (js/social.js signedFetch mints
+   both per call): nothing legitimate is ever refused by this. That is also why
+   it is not a substitute for `ck` -- a retry is a DIFFERENT signature, which
+   this cannot dedupe and the client's key can.
+
+   `rate_limits` rather than a new table, because a nonce IS a limiter: a budget
+   of one per subject, in a table nothing but the limiter writes, with an
+   `expires_at` sweeper that already runs. The digest is UNKEYED, unlike
+   rlBucket, on purpose: a signature is 512 bits with nothing to reverse it to,
+   so there is no rainbow table to build, and the per-isolate fallback secret
+   would give the same replay a different bucket on a different isolate, which
+   is exactly how this guard would quietly stop catching anything. */
+async function claimSignature(env, sig, tsNum) {
+  const digest = hexOf(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sig)), 16);
+  const r = await env.DB.prepare(
+    "INSERT OR IGNORE INTO rate_limits (bucket, name, window_start, hits, expires_at) VALUES (?,'sig',?,1,?)")
+    // Swept at twice the skew window, so the row always outlives the signature
+    // it is remembering; the sweep itself is rateLimit()'s, on any rl_* route.
+    .bind(digest, Math.floor(tsNum), Math.floor(tsNum) + MAX_SKEW_MS * 2).run();
+  return !!(r.meta && r.meta.changes);
+}
+
 async function verifySigned(request, env, bodyText) {
   const playerId = request.headers.get('x-bh-player');
   const ts = request.headers.get('x-bh-ts');
@@ -830,14 +868,23 @@ async function verifySigned(request, env, bodyText) {
   if (!row) return { err: 'unknown player' };
   const url = new URL(request.url);
   const msg = `${request.method}\n${url.pathname}${url.search}\n${ts}\n${bodyText || ''}`;
+  let ok = false;
   try {
     const key = await crypto.subtle.importKey('jwk', JSON.parse(row.pubkey), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
     const sigBytes = Uint8Array.from(atob(sig), c => c.charCodeAt(0));
-    const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sigBytes, new TextEncoder().encode(msg));
-    return ok ? { playerId } : { err: 'bad signature' };
+    ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sigBytes, new TextEncoder().encode(msg));
   } catch {
     return { err: 'bad signature' };
   }
+  if (!ok) return { err: 'bad signature' };
+  /* Writes only. A replayed READ changes nothing, and making every /grants and
+     /friends poll pay for a row would turn the guard into the write
+     amplification it is here to prevent. The claim is OUTSIDE the try above so
+     a database failure can never be laundered into 'bad signature'. */
+  if (request.method !== 'GET' && !(await claimSignature(env, sig, tsNum))) {
+    return { err: 'replayed request' };
+  }
+  return { playerId };
 }
 
 /* ---------------- routes ---------------- */
@@ -2176,12 +2223,27 @@ export default {
            cap subquery counts it, and its shield subquery sees the fresh
            claimed_at. RETURNING gives the level the write actually produced,
            which is the number the client has to mirror -- computing it from the
-           stale `prev` read published a level the database did not have. */
+           stale `prev` read published a level the database did not have.
+
+           AND SO IS "IT IS ALREADY MINE". The early return above is the only
+           thing that stopped a same-owner claim bumping the level, and it reads
+           `prev` an await before the write. Once a concurrent claim by this
+           same player flips ownership, a second request that read a pre-flip
+           prev sails past it, and the shield below could not stop it either:
+           `owner <> ?` is FALSE for a tower that is now mine, so NOT EXISTS was
+           true and `level = spires.level+1` fired a second time. Two levels for
+           one takeover, and js/app.js pays the full 80-coin branch for each.
+           The clause is now "refuse if the row is mine OR was claimed inside the
+           shield", which is the same test as before plus the same-owner case,
+           on the same three bindings: the owner read is re-checked AT WRITE TIME
+           instead of being trusted across the await. A refusal from the new arm
+           lands on the `already` path below, which is exactly what the early
+           return would have answered had it read the post-flip state. */
         const won = await env.DB.prepare(
           `INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at)
              SELECT ?,?,?,?,?,?,?,?,?,?,?
               WHERE (SELECT COUNT(*) FROM spires WHERE owner = ? AND tended_at > ?) < 3
-                AND NOT EXISTS (SELECT 1 FROM spires WHERE id = ? AND owner <> ? AND claimed_at > ?)
+                AND NOT EXISTS (SELECT 1 FROM spires WHERE id = ? AND (owner = ? OR claimed_at > ?))
              ON CONFLICT(id) DO UPDATE SET name=excluded.name, owner=excluded.owner, owner_name=excluded.owner_name,
                defender=excluded.defender, claimed_at=excluded.claimed_at, tended_at=excluded.tended_at,
                level=spires.level+1, updated_at=excluded.updated_at
@@ -2193,8 +2255,15 @@ export default {
         if (!won) {
           // Nothing landed, so say WHICH rule refused it. Read after the write,
           // never before: this only picks the message, it decides nothing.
-          const nowRow = await env.DB.prepare('SELECT owner, claimed_at FROM spires WHERE id = ?').bind(id).first();
-          if (nowRow && nowRow.owner !== auth.playerId && (nowRow.claimed_at || 0) > now - SPIRE_SHIELD_MS) {
+          const nowRow = await env.DB.prepare('SELECT owner, claimed_at, level FROM spires WHERE id = ?').bind(id).first();
+          // The tower is mine, so a claim by me is a tend, not a takeover: the
+          // same answer the early return gives, at the level the write that beat
+          // me actually produced. Answering 'cap' here would be a lie AND would
+          // tell the client its own concurrent claim failed.
+          if (nowRow && nowRow.owner === auth.playerId) {
+            return json({ ok: true, already: true, level: nowRow.level || 1 });
+          }
+          if (nowRow && (nowRow.claimed_at || 0) > now - SPIRE_SHIELD_MS) {
             return json({ error: 'shielded', until: (nowRow.claimed_at || 0) + SPIRE_SHIELD_MS }, 409);
           }
           return json({ error: 'cap', cap: 3 }, 409);
@@ -2474,10 +2543,32 @@ export default {
         }
         const coins = Math.max(1, Math.min(1000, Math.floor(bd.coins || 0)));
         const reward = { coins };
+        /* A RETRY IS NOT A SECOND GIFT, and here that is not merely untidy, it
+           MINTS COINS. js/app.js deducts the sender locally BEFORE the send and
+           refunds only when the answer says it failed, so a gift that was
+           delivered but whose answer was lost refunds the sender while the
+           recipient keeps the coins. Two of them, both succeeding, debits the
+           sender twice and credits the friend twice. The counted cap key made
+           that unavoidable: it is the opposite of dedup, minting the NEXT n for
+           every retry. Same `ck` treatment as /cheer, for the same reason, with
+           the same shape: the client mints one key per amount chip and reuses
+           it for every retry of that chip, the grant's UNIQUE (player_id, key)
+           collapses them, and no ck (older clients) keeps the counted key. */
+        const ck = String(bd.ck || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+        const prefix = `gift-spend-${auth.playerId}-${day}-`;
         const landed = await insertCappedGrant(env, {
-          to, prefix: `gift-spend-${auth.playerId}-${day}-`, cap: 5, type: 'gift', now,
+          to, prefix, cap: 5, type: 'gift', now,
+          key: ck ? `${prefix}ck-${ck}` : null,
           payload: JSON.stringify({ ...reward, from: fromName, note: `${fromName} sent you ${coins} coins!`, gift: true, mode }),
         });
+        /* `false` has two causes with a ck: the cap refused it, or this exact
+           tap already landed. The retry MUST be answered ok, because the client
+           refunds itself on anything else and the friend keeps the coins. */
+        if (!landed && ck) {
+          const dupe = await env.DB.prepare('SELECT 1 FROM grants WHERE player_id = ? AND key = ?')
+            .bind(to, `${prefix}ck-${ck}`).first();
+          if (dupe) return json({ ok: true, duplicate: true, reward, mode });
+        }
         if (!landed) return json({ error: 'daily spend-gift limit', code: 'limit' }, 429);
         return json({ ok: true, reward, mode });
       }

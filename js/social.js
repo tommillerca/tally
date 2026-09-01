@@ -442,13 +442,19 @@ export async function friendAdd(token) { return friendship('/friends/add', { tok
 export async function acceptFriend(id) { try { return (await signedFetch('POST', '/friends/accept', { id })).ok; } catch { return false; } }
 export async function removeFriend(id) { try { return (await signedFetch('POST', '/friends/remove', { id })).ok; } catch { return false; } }
 
-// Send a gift to a friend. mode 'free' = the once-a-day server-rolled gift;
-// mode 'spend' = your own coins (the CALLER deducts locally first). The gift is
-// delivered as a grant the friend reveals on their next open. Returns
-// { ok, status, reward?, code? }.
-export async function sendGift(toId, mode, coins) {
+/* Send a gift to a friend. mode 'free' = the once-a-day server-rolled gift;
+   mode 'spend' = your own coins (the CALLER deducts locally first). The gift is
+   delivered as a grant the friend reveals on their next open. Returns
+   { ok, status, reward?, duplicate?, code? }.
+   `ck` IS THE TAP, NOT THE REQUEST, exactly as it is for a cheer, and here it
+   is coins rather than confetti: the caller has already spent locally, and it
+   refunds itself on anything but ok. A spend gift that was DELIVERED and lost
+   its answer therefore refunds the sender while the friend keeps the coins, and
+   a retry that also succeeds charges twice for one gift. One key per amount
+   chip, reused by every retry of it, and the server answers a retry ok. */
+export async function sendGift(toId, mode, coins, ck = null) {
   try {
-    const r = await signedFetch('POST', '/gift', { to: toId, mode, coins });
+    const r = await signedFetch('POST', '/gift', { to: toId, mode, coins, ck: ck || newSendKey() });
     const d = await r.json().catch(() => ({}));
     return { ok: r.ok, status: r.status, ...d };
   } catch { return { ok: false }; }
@@ -464,13 +470,16 @@ export async function sendGift(toId, mode, coins) {
    previous one. */
 export async function sendCheer(toId, cheer, ck = null) {
   try {
-    const r = await signedFetch('POST', '/cheer', { to: toId, cheer, ck: ck || newCheerKey() });
+    const r = await signedFetch('POST', '/cheer', { to: toId, cheer, ck: ck || newSendKey() });
     const d = await r.json().catch(() => ({}));
     return { ok: r.ok, status: r.status, ...d };
   } catch { return { ok: false }; }
 }
+// One idempotency key for one player action, shared by cheers and gifts (it was
+// newCheerKey until gifts needed the same thing, and one minter called
+// `newCheerKey` from the gift sheet is the sort of thing nobody reads twice).
 // [a-zA-Z0-9_-]{1,32}, which is exactly what the server keeps of it.
-export const newCheerKey = () => crypto.randomUUID().replace(/-/g, '').slice(0, 24);
+export const newSendKey = () => crypto.randomUUID().replace(/-/g, '').slice(0, 24);
 
 // Private, local-only nicknames: what YOU call a friend so a generic bone-name
 // is memorable ("Bone Guy" -> "Coach Mike"). Stored on-device in kv, so it's
