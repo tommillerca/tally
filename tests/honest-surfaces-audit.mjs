@@ -531,8 +531,22 @@ const shippedQuiet = await cloud.evaluate(async u => {
   const m = src.match(/const CLOUD_QUIET_REASONS = \[([^\]]*)\]/);
   return m ? m[1].split(',').map(x => x.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean) : null;
 }, srv.url.replace(/\/$/, '') + '/js/app.js');
+/* THE QUIET REASONS, SPLIT BY WHO GRADES THEM. Both halves are read back
+   against the shipped CLOUD_QUIET_REASONS list below rather than restated, so
+   this pin cannot drift from the app: it names only WHICH of the shipped
+   reasons this file is responsible for driving.
+   Provenance: PR #342, 2026-08-31, closing round 7's R7-P3. bootSync returns
+   'new-player' before it will mint an identity, 'opted-out' when the player
+   turned cloud backup off, and 'no-api' when no backend is configured; none of
+   the three is a failure, and all three used to render "could not reach your
+   cloud backup" to somebody who has no cloud backup. */
 const DRIVEN_QUIET = ['new-player', 'opted-out'];
-const PULL_QUIET = ['none', 'empty', 'already'];   // graded in cloud-restore-silent-audit
+/* Provenance: PR #339, 2026-08-31. These three are the ORIGINAL quiet reasons,
+   shipped long before the trio above and graded in cloud-restore-silent-audit,
+   which owns the pull path. They are listed here only so the completeness check
+   against the shipped list can account for every reason it finds; this file
+   drives DRIVEN_QUIET and defers these. */
+const PULL_QUIET = ['none', 'empty', 'already'];
 ok('QUIET COVERAGE every reason js/app.js keeps quiet is driven by a row somewhere (a new one fails this until it is)',
   !!shippedQuiet && shippedQuiet.length > 0
     && shippedQuiet.every(r => DRIVEN_QUIET.includes(r) || PULL_QUIET.includes(r) || r === 'no-api'),

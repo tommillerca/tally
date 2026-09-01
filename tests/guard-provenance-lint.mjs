@@ -139,7 +139,6 @@ const KNOWN_UNDATED = [
   'ember-cohesion-audit.mjs:CLASSES',
   'facegate-audit.mjs:HELD_SLOTS',
   'fight-exit-audit.mjs:NO_MAP_ROWS',
-  'fight-tray-audit.mjs:KNOWN',
   'figure-audit.mjs:SITES',
   'flaky-network-audit.mjs:DEADLINE_FILES',
   'flaky-network-audit.mjs:FRIENDS',
