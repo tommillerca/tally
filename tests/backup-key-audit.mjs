@@ -230,7 +230,17 @@ const b64ToU8 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 async function decryptWith(aesJwk, b64blob) {
   const key = await crypto.subtle.importKey('jwk', aesJwk, { name: 'AES-GCM' }, false, ['decrypt']);
   const buf = b64ToU8(b64blob);
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: buf.slice(0, 12) }, key, buf.slice(12));
+  let pt = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: buf.slice(0, 12) }, key, buf.slice(12)));
+  /* SECOND READER OF THE SAME BLOB, so it needs the same sniff (2026-09-01).
+     encryptBackup now gzips the snapshot before encrypting it, and this file is
+     the only other place in the repo that opens a backup blob by hand. Without
+     these two bytes the plaintext is gzip and JSON.parse throws, which took out
+     SETUP and FIRSTBLOB below. Same magic-byte rule as js/social.js: a legacy
+     plaintext always began '{', so the two can never be confused. */
+  if (pt[0] === 0x1f && pt[1] === 0x8b) {
+    pt = new Uint8Array(await new Response(
+      new Blob([pt]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
+  }
   return JSON.parse(new TextDecoder().decode(pt));
 }
 async function encryptForeign(obj) {   // a blob written by "somebody else's key"
