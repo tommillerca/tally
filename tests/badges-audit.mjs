@@ -2,8 +2,19 @@
  * player would rather than greyed out. */
 import { boot, sleep, serveTree } from './godmode.js';
 import path from 'node:path';
+import os from 'node:os';
+import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
+/* WHERE THE SHOT LANDS, AND WHY IT IS NOT A PASTED PATH ANY MORE. This was an
+   absolute path into a DIFFERENT Claude session's scratchpad. That directory is
+   temporary and gets collected, and when it goes the screenshot throws AFTER
+   every row has already printed ok: the suite exits non-zero for a reason that
+   has nothing to do with the app, and reads as app breakage to whoever is
+   holding the release. A machine-local temp directory belongs to no session and
+   is created on demand, so the shot is always writable and the exit code always
+   means what it says. 2026-09-01. */
+const DIR = path.join(os.tmpdir(), 'tally-badge-shots');
+mkdirSync(DIR, { recursive: true });
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
    year-readout-audit already use. Reading env.URL ONLY meant that any run passing
    the URL as an argument (which is how the release gate invokes every suite) fell
