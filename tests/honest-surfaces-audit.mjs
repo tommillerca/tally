@@ -70,7 +70,20 @@ const toastLook = p => p.evaluate(() => {
   let o = 1, n = t;
   while (n && n.nodeType === 1) { o *= parseFloat(getComputedStyle(n).opacity); n = n.parentElement; }
   const cs = getComputedStyle(t);
+  /* ASK WHETHER ANYTHING IS PAINTED OVER THE TOAST, NOT WHETHER THE TOAST TAKES
+     TAPS. This read `document.elementFromPoint(centre) === t` until 2026-09-01,
+     and the accessibility pass then gave .toast `pointer-events: none` on
+     purpose, because for the 2.2 to 3.6s a message is up it was eating the taps
+     meant for the Bonehead, Stable and Kitchen doors underneath it. A
+     tap-transparent element is never the answer elementFromPoint gives, so this
+     read false on every toast the app has ever shown and graded four correct
+     surfaces as silent. It asks the same question by making the toast
+     hit-testable for the length of one synchronous probe and putting the
+     property straight back: a splash painted over it still answers the splash. */
+  const pe = t.style.pointerEvents;
+  t.style.pointerEvents = 'auto';
   const hit = r.width && r.height ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+  t.style.pointerEvents = pe;
   return {
     exists: true, hidden: t.hidden, text: (t.textContent || '').trim(), eff: +o.toFixed(3),
     w: Math.round(r.width), h: Math.round(r.height), vis: cs.visibility, disp: cs.display,
@@ -269,6 +282,11 @@ await cloud.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'redu
 let push = { status: 200, body: '{"ok":true,"updatedAt":1}' };
 let healthTs = () => Date.now();          // a server whose clock agrees with ours
 let pushHits = 0;
+/* The GET is bootSync's RESTORE pull, and phase 5 grades what the boot toast
+   says about it, so it needs a scenario of its own. 404 is the quiet default
+   every push scenario above relies on. */
+let pull = { status: 404, body: '{}' };
+let pullHits = 0;
 await cloud.setRequestInterception(true);
 cloud.on('request', req => {
   const u = req.url();
@@ -280,7 +298,7 @@ cloud.on('request', req => {
     /* Only the PUT carries the scenario. The GET is bootSync's restore pull and
        a 413 there would fire the cloud-restore toast instead, which would land
        in the very sample this phase is measuring. 404 is the quiet answer. */
-    if (req.method() !== 'PUT') { req.respond({ status: 404, contentType: 'application/json', body: '{}' }).catch(() => {}); return; }
+    if (req.method() !== 'PUT') { pullHits++; req.respond({ status: pull.status, contentType: 'application/json', body: pull.body }).catch(() => {}); return; }
     pushHits++;
     req.respond({ status: push.status, contentType: 'application/json', body: push.body }).catch(() => {});
     return;
@@ -437,6 +455,90 @@ ok('CLOUD HONEST no message claims the player has lost data',
     .some(s => /lost your|data (was )?lost|deleted|gone/i.test(s || '')),
   'checked both toasts and both rows');
 
+/* ========== 5. THE BOOT TOAST STAYS QUIET WHEN NOTHING FAILED ==========
+ *
+ * bootSync returns a REASON, and three of them are not failures at all:
+ * 'new-player' (a first launch, before an identity is ever minted),
+ * 'opted-out' (the player turned cloud backup off) and 'no-api' (no backend
+ * configured). Each of those greeted somebody with "could not reach your cloud
+ * backup" for a backup that could not exist or that they had declined. They are
+ * collected in js/app.js as CLOUD_QUIET_REASONS.
+ *
+ * WHY THE THIRD ROW IS NOT OPTIONAL. "No toast appeared" is satisfied just as
+ * well by a toast that is broken, by a boot that never happened and by an app
+ * that says nothing ever, so two silent rows on their own prove only that the
+ * app CAN be quiet. The http- row is the control: the same page, the same
+ * watcher, one boot where the restore really did fail, and it must speak.
+ *
+ * REACHED, NOT ASSUMED. Both quiet reasons return BEFORE pullBackup, so a
+ * scenario that hit its branch makes ZERO /backup GETs and the failing one makes
+ * at least one. That number is asserted, so a seed that stops reaching its rule
+ * shows up as a mis-seeded row rather than as a silently weaker check, the same
+ * shape as the day guard above. */
+async function bootReason({ pullAnswer = { status: 404, body: '{}' }, put = [], del = [] }) {
+  /* PUT THE PUSH SIDE BACK TO HEALTHY FIRST. Phase 4 leaves the fake server's
+     clock three days behind and its PUT answering 401, and pushBackup's own
+     "this device's clock is 3 days ahead" toast then fires on these boots and
+     wins the watcher, which reads the longest sighting. Measured: the control
+     row came back holding the CLOCK message instead of the restore one, so it
+     would have graded the wrong toast on every row in this phase. The only
+     thing allowed to speak here is the restore. */
+  push = { status: 200, body: '{"ok":true,"updatedAt":1}' };
+  healthTs = () => Date.now();
+  pull = pullAnswer;
+  pullHits = 0;
+  /* bootRestored would short-circuit to 'already' and grade nothing; the rest
+     are the same marks every scenario above clears. */
+  await cloudKvPut(put, ['bootRestored', 'backupFail', 'cloudNudgeAt', 'backupAt', 'clockSkewMs', 'socialSyncAt', ...del]);
+  await goCloud();
+  const t = await watchToast(cloud);
+  const booted = await cloud.evaluate(() => (document.getElementById('screen') || {}).childElementCount || 0);
+  return { toast: t.best ? t.best.text : '', pulls: pullHits, booted };
+}
+
+/* ORDER MATTERS, so it is deliberate rather than incidental: the control runs
+   FIRST, while the account seeded further up is still intact, and the new-player
+   scenario runs LAST because reaching that branch means destroying that account.
+   Seeding it back would mean re-minting a key here and grading a state this file
+   built rather than one the app produced. */
+// a restore that genuinely failed: a real account and a server that 500s
+const httpFail = await bootReason({ pullAnswer: { status: 500, body: '{"error":"boom"}' }, del: ['cloudOff'] });
+// the player turned cloud backup off: bootSync returns before it asks the server
+const optedOut = await bootReason({ put: [['cloudOff', true]] });
+// a first launch: no identity anywhere, the state bootSync refuses to mint one in
+const newPlayer = await bootReason({ del: ['cloudOff', 'identity', 'social'] });
+
+ok('QUIET SAMPLE all three boots ran and each reached its own branch (a boot that never happened is silent too)',
+  [optedOut, newPlayer, httpFail].every(s => s.booted > 0)
+    && optedOut.pulls === 0 && newPlayer.pulls === 0 && httpFail.pulls > 0,
+  JSON.stringify({ optedOut, newPlayer, httpFail }));
+ok('QUIET a brand-new install is not told its nonexistent backup could not be reached',
+  !/backup|could not reach/i.test(newPlayer.toast || ''),
+  newPlayer.toast ? `said "${newPlayer.toast}"` : 'silent');
+ok('QUIET a player who turned cloud backup OFF is not told we could not reach it',
+  !/backup|could not reach/i.test(optedOut.toast || ''),
+  optedOut.toast ? `said "${optedOut.toast}"` : 'silent');
+ok('QUIET CONTROL a restore that really failed still SPEAKS (two silent rows alone would pass on a broken toast)',
+  /could not reach your cloud backup/i.test(httpFail.toast || ''),
+  httpFail.toast ? `"${httpFail.toast}"` : 'no visible toast in 11s');
+
+/* COVERAGE, off the SHIPPED list rather than a copy of it. The rows above drive
+   two of the six quiet reasons by hand, so a seventh added to js/app.js with no
+   row here would be guarded by nothing and nobody would know. Reading the array
+   the app actually ships means this goes red when the list grows instead. */
+const shippedQuiet = await cloud.evaluate(async u => {
+  const src = await (await fetch(u)).text();
+  const m = src.match(/const CLOUD_QUIET_REASONS = \[([^\]]*)\]/);
+  return m ? m[1].split(',').map(x => x.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean) : null;
+}, srv.url.replace(/\/$/, '') + '/js/app.js');
+const DRIVEN_QUIET = ['new-player', 'opted-out'];
+const PULL_QUIET = ['none', 'empty', 'already'];   // graded in cloud-restore-silent-audit
+ok('QUIET COVERAGE every reason js/app.js keeps quiet is driven by a row somewhere (a new one fails this until it is)',
+  !!shippedQuiet && shippedQuiet.length > 0
+    && shippedQuiet.every(r => DRIVEN_QUIET.includes(r) || PULL_QUIET.includes(r) || r === 'no-api'),
+  `shipped ${JSON.stringify(shippedQuiet)}; driven here ${JSON.stringify(DRIVEN_QUIET)}, ` +
+  `in cloud-restore-silent ${JSON.stringify(PULL_QUIET)}, no-api is un-drivable here (this page HAS an api)`);
+
 await browser.close(); srv.close?.();
-console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nfour surfaces measured off the render: streak, wallet, day guard, cloud backup');
+console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\nfive surfaces measured off the render: streak, wallet, day guard, cloud backup, boot quiet');
 process.exit(fails.length ? 1 : 0);

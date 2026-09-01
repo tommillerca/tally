@@ -148,7 +148,20 @@ const toastLook = () => page.evaluate(() => {
   let o = 1, n = t;
   while (n && n.nodeType === 1) { o *= parseFloat(getComputedStyle(n).opacity); n = n.parentElement; }
   const cs = getComputedStyle(t);
+  /* ASK WHETHER ANYTHING IS PAINTED OVER THE TOAST, NOT WHETHER THE TOAST TAKES
+     TAPS. This read `document.elementFromPoint(centre) === t` until 2026-09-01,
+     and the accessibility pass then gave .toast `pointer-events: none` on
+     purpose, because for the 2.2 to 3.6s a message is up it was eating the taps
+     meant for the Bonehead, Stable and Kitchen doors underneath it. A
+     tap-transparent element is never the answer elementFromPoint gives, so this
+     read false on every toast the app has ever shown and graded four correct
+     surfaces as silent. It asks the same question by making the toast
+     hit-testable for the length of one synchronous probe and putting the
+     property straight back: a splash painted over it still answers the splash. */
+  const pe = t.style.pointerEvents;
+  t.style.pointerEvents = 'auto';
   const hit = r.width && r.height ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+  t.style.pointerEvents = pe;
   return {
     exists: true, hidden: t.hidden, text: (t.textContent || '').trim(), eff: +o.toFixed(3),
     w: Math.round(r.width), h: Math.round(r.height), vis: cs.visibility, disp: cs.display,

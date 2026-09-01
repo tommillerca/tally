@@ -128,7 +128,11 @@ const overlap = (a, b) => (!a || !b) ? 0 : +Math.max(0, Math.min(a.bottom, b.bot
 const argv = process.argv[2] || process.env.URL;
 const srvHandle = argv ? null : await serveTree(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
 const base = argv || srvHandle.url;
-const { browser, page } = await boot(base);
+/* HEADLESS 'shell': inkOf() below screenshots, and page.screenshot never
+   returns under headless 'new' on this Mac (godmode.js:484, and the gate's own
+   note on hero-flash.mjs says the same). Measured here 2026-09-01: a bare run
+   died in inkOf on a CDP timeout before grading a single row. */
+const { browser, page } = await boot(base, { headless: process.env.HEADLESS_MODE || 'shell' });
 
 /* ---- 1. tall phone: nothing falls off the bottom ---- */
 await page.setViewport({ width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -493,7 +497,14 @@ for (const [W, H, sat, sab, name] of SLACK_SIZES) {
   }, { timeout: 15000, polling: 50 }).catch(() => {});
   await sleep(900);
   await settle(page);
-  await page.evaluate(() => document.querySelectorAll('.toast, #floats > *, .drop-veil').forEach(n => n.remove()));
+  /* Blank #toast rather than deleting it: `.toast` matches the app's one live
+     region, and nextToast() re-reads it by id, so removing it throws on the next
+     message. Same line, same fix, in fight-tray-audit, which has the measurement. */
+  await page.evaluate(() => {
+    document.querySelectorAll('#floats > *, .drop-veil').forEach(n => n.remove());
+    const t = document.getElementById('toast');
+    if (t) { t.textContent = ''; t.hidden = true; }
+  });
   await sleep(200);
 
   const s = await page.evaluate(sab => {
