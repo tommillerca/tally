@@ -246,33 +246,67 @@ export async function queueCook(recipeId) {
  * rather than whenever the player happened to look, so a queue lined up on Monday
  * has really drained by Tuesday instead of waiting for a tap it never got.
  * Returns the dishes it collected on the player's behalf so the caller can pay
- * the same XP a manual Serve pays. It has exactly ONE caller for that reason. */
+ * the same XP a manual Serve pays. It has exactly ONE caller for that reason.
+ *
+ * EMPTYING THE POT IS THE CLAIM HERE TOO, same as collectDish below. Reading the
+ * slots, awaiting the grant and writing the slots back used to be three separate
+ * transactions, so two overlapping ticks both found the same finished cook and
+ * both banked it: measured 2026-09-01 on origin/main 3d4b208c, one cook paid TWO
+ * Pantry dishes from one ingredient set in a single context, and a true two-tab
+ * race double-banked 10 of 12 attempts. Overlapping ticks are the ordinary case
+ * rather than a contrivance: the Kitchen re-renders on a 1000ms setInterval that
+ * calls an async render() without awaiting it, and render() opens with this.
+ *
+ * The queue is a SECOND kv row, so it cannot ride in the pot transaction. It is
+ * TAKEN first instead (kvUpdate on 'cookq': the read and the shift are one
+ * transaction, so no entry can be carried into two pots), and whatever the pots
+ * turn out not to have room for goes back at the front. Both halves are needed:
+ * claiming the pot alone still let two ticks start one paid-for queue entry in
+ * two different pots, which is the same free dish by another door. */
 export async function advanceQueue(now = Date.now()) {
-  const q = await readQueue();
-  if (!q.length) return [];
-  const arr = await readSlots();
+  const arr0 = await readSlots();
+  /* Cheap pre-check, and it is what keeps the take below off the common path:
+     with every pot busy and none finished there is nothing to advance, which is
+     what almost every one of those per-second ticks looks like. */
+  const room = arr0.filter(c => !c || c.readyAt <= now).length;
+  if (!room) return [];
+  const pots = arr0.length;
+  let mine = [];
+  await kvUpdate('cookq', cur => {
+    const a = Array.isArray(cur) ? cur : [];
+    if (!a.length) return undefined;
+    mine = a.slice(0, room);
+    return a.slice(mine.length);
+  }, []);
+  if (!mine.length) return [];
   const banked = [];
-  while (q.length) {
-    let idx = arr.findIndex(c => !c);
-    let at = now;
-    if (idx < 0) {
-      // the pot that came free EARLIEST, so the line runs in the order it was laid
-      const done = arr.map((c, i) => ({ i, t: c.readyAt })).filter(x => x.t <= now).sort((a, b) => a.t - b.t)[0];
-      if (!done) break;
-      idx = done.i; at = done.t;
-      const prev = RECIPE_BY_ID[arr[idx].recipeId];
-      arr[idx] = null;
-      if (prev) {
-        if (prev.potion) await grantPotion(prev.id); else await addToPantry(prev, at);
-        banked.push(prev);
+  await kvUpdate('cooking', raw => {
+    const arr = slotsFrom(raw, pots);
+    while (mine.length) {
+      let idx = arr.findIndex(c => !c);
+      let at = now;
+      if (idx < 0) {
+        // the pot that came free EARLIEST, so the line runs in the order it was laid
+        const done = arr.map((c, i) => ({ i, t: c.readyAt })).filter(x => x.t <= now).sort((a, b) => a.t - b.t)[0];
+        if (!done) break;
+        idx = done.i; at = done.t;
+        const prev = RECIPE_BY_ID[arr[idx].recipeId];
+        arr[idx] = null;
+        // granted AFTER the transaction, so only a pot THIS call emptied pays
+        if (prev) banked.push({ recipe: prev, at });
       }
+      const r = RECIPE_BY_ID[mine.shift().recipeId];
+      arr[idx] = r ? { recipeId: r.id, startedAt: at, readyAt: at + r.cookMin * 60e3 } : null;
     }
-    const r = RECIPE_BY_ID[q.shift().recipeId];
-    arr[idx] = r ? { recipeId: r.id, startedAt: at, readyAt: at + r.cookMin * 60e3 } : null;
+    return arr;
+  }, null);
+  /* Anything the pots could not take after all goes back at the FRONT. It was
+     paid for in ingredients at queueCook and must never be dropped. */
+  if (mine.length) await kvUpdate('cookq', cur => [...mine, ...(Array.isArray(cur) ? cur : [])], []);
+  for (const { recipe, at } of banked) {
+    if (recipe.potion) await grantPotion(recipe.id); else await addToPantry(recipe, at);
   }
-  await writeSlots(arr);
-  await kvSet('cookq', q);
-  return banked;
+  return banked.map(b => b.recipe);
 }
 
 export async function cookState(now = Date.now()) {
