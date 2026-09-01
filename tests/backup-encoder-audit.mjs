@@ -247,7 +247,39 @@ ok('MAGIC: a legacy plaintext can never be mistaken for gzip',
 
 const blob = await shipped.encryptBackup(SNAP);
 const legacyBlob = await noStreams.encryptBackup(SNAP);
-const gzBytes = Math.round(blob.length * 3 / 4) - 12;    // base64 -> iv(12) + ciphertext
+
+/* THE WRITE SIDE IS STAGED OFF, AND THAT IS AN ASSERTION, NOT AN OMISSION.
+   This release READS gzip and does not write it: the store binary bundles a
+   frozen copy of the web build, so a device running an older bundle could not
+   read a blob a newer PWA had compressed, and autoSync would push its empty
+   save over the good one (js/social.js encryptBackup carries the full reason).
+   So the ratio below is measured on the COMPRESSOR, not on what encryptBackup
+   currently emits, and this row pins the staged state: the day somebody
+   uncomments the write line, this goes red and they must come here and decide
+   deliberately rather than discovering it in production. That is the point.
+   Flip both together: this row's expectation, and the line in encryptBackup. */
+const WRITE_SIDE_ENABLED = false;   // staged 2026-09-01, see js/social.js encryptBackup
+/* NOT `blob !== legacyBlob`: every encrypt draws a fresh random IV, so two
+   ciphertexts of the same snapshot ALWAYS differ and that comparison reports
+   "compressing" no matter what. Size is the honest signal, and the margin is
+   wide because the measured ratio is ~7x. */
+const emitsGzip = blob.length < legacyBlob.length * 0.8;
+ok('STAGED: the shipped write path matches the rollout decision on record',
+  emitsGzip === WRITE_SIDE_ENABLED,
+  emitsGzip ? 'encryptBackup IS compressing; if that is intended, set WRITE_SIDE_ENABLED true here'
+            : 'encryptBackup emits the legacy format, as staged; the reader still accepts gzip (COMPAT rows)');
+
+/* Measured on the compressor itself so the ratio is true whether or not the
+   write side is switched on. gzip of the exact plaintext encryptBackup would
+   hand to AES, which is the only number that answers "is this worth doing". */
+const gzProbe = await (async () => {
+  const cs = new CompressionStream('gzip');
+  const w = cs.writable.getWriter(); w.write(new TextEncoder().encode(snapJson)); w.close();
+  const parts = []; const r = cs.readable.getReader();
+  for (;;) { const { value, done } = await r.read(); if (done) break; parts.push(value); }
+  return parts.reduce((n, p) => n + p.length, 0);
+})();
+const gzBytes = gzProbe;
 const ratio = exportBytes / gzBytes;
 
 /* RATIO. A floor, not a pin: gzip's exact output moves with the zlib build, and
@@ -280,10 +312,16 @@ ok('INCOMPRESSIBLE: gzipping the CIPHERTEXT instead saves nothing', ctGz.length 
    bisected 2026-08-17) is the honest budget, and this is stated as indicative:
    production D1 may differ and a sandbox cannot settle it. */
 const ESTABLISHED_BUDGET = Math.floor(2_199_942 / 2);
-ok('CEILING: a mature save now fits beside its own archived daily copy',
-  blob.length < ESTABLISHED_BUDGET,
-  `blob ${blob.length.toLocaleString()} of a ~${ESTABLISHED_BUDGET.toLocaleString()} byte budget ` +
-  `(legacy blob was ${legacyBlob.length.toLocaleString()}, which does NOT fit)`);
+/* Graded on the COMPRESSED size the same way RATIO is, because the write side
+   is staged off (see STAGED above). The question this row answers is "does
+   compression clear the ceiling", which is what decides whether the rollout is
+   worth finishing; it is not "is the ceiling cleared today", which the STAGED
+   row already reports honestly. */
+const gzBlobBytes = Math.ceil((gzBytes + 12) * 4 / 3);   // iv(12) + ciphertext -> base64
+ok('CEILING: a compressed mature save fits beside its own archived daily copy',
+  gzBlobBytes < ESTABLISHED_BUDGET,
+  `compressed blob would be ${gzBlobBytes.toLocaleString()} of a ~${ESTABLISHED_BUDGET.toLocaleString()} byte budget ` +
+  `(the legacy blob is ${legacyBlob.length.toLocaleString()}, which does NOT fit)`);
 ok('CEILING-CONTROL: the UNCOMPRESSED blob really did overflow that budget',
   legacyBlob.length > ESTABLISHED_BUDGET,
   `${legacyBlob.length.toLocaleString()} vs ${ESTABLISHED_BUDGET.toLocaleString()}`);

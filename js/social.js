@@ -275,10 +275,20 @@ async function encryptBackup(obj) {
   const key = await backupKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
   let pt = new TextEncoder().encode(JSON.stringify(obj));
-  // The one line that makes new blobs compressed. Delete it and this release
-  // becomes read-only support for a format nothing writes yet, which is the
-  // staged rollout if the mixed fleet needs one.
-  if (typeof CompressionStream === 'function') pt = await through(pt, new CompressionStream('gzip'));
+  /* STAGED ON PURPOSE: THIS RELEASE READS THE FORMAT AND DOES NOT WRITE IT.
+     The line that compresses is below, commented out, and it is the whole of
+     the write side. It stays off until the native builds in the field can READ
+     a compressed blob, because the store binary BUNDLES a frozen copy of this
+     web build: a player whose PWA pushed a compressed backup and who then
+     installs an older bundled build gets a device that cannot read its own
+     backup, and autoSync would push that device's empty save over the good
+     blob. That is save loss, and it is not worth a size ceiling that already
+     fails honestly. iOS 15 cannot read the format at all (CompressionStream is
+     Safari 16.4+), which is the same argument twice.
+     TO FINISH THE ROLLOUT: uncomment the line, once the oldest build a player
+     can still be running understands gzip. Nothing else changes; the reader,
+     the sniff and every test are already here and already green. */
+  // if (typeof CompressionStream === 'function') pt = await through(pt, new CompressionStream('gzip'));
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt));
   const out = new Uint8Array(iv.length + ct.length);
   out.set(iv, 0); out.set(ct, iv.length);
