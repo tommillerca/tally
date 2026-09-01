@@ -229,6 +229,9 @@ const QUIET_KV = new Set([
   // "when did I last do X" throttles: a lost timestamp costs one extra attempt
   'lastNudgeAt', 'racePushAt', 'socialSyncAt', 'crewSeenTs', 'hkLastSync',
   'hkStaleNotified', 'hkSleepDiag', 'lastExportAt', 'backupAt', 'transmuteAt',
+  // cloud-health diagnostics + their once-a-day nudge throttle: all three are
+  // re-derived by the next push / the next /health, same class as backupAt
+  'backupFail', 'clockSkewMs', 'cloudNudgeAt',
   // idempotent one-shot migrations and backfills: they re-run next launch
   'game-init', 'loot-init', 'bootRestored', 'dayOneEquipFix', 'denceil-backfill',
   'seedpouch-backfill', 'freeze-refunded', 'wheelResetOnce_v61', 'petLvlV', 'hkScopesV',

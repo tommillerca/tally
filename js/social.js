@@ -688,9 +688,30 @@ export async function pushBackup(appV = '') {
     const snapshot = await exportAll();
     const blob = await encryptBackup(snapshot);
     const r = await signedFetch('PUT', '/backup', { blob, appV });
-    if (r.ok) await kvSet('backupAt', Date.now());
-    return r.ok;
-  } catch { return false; }
+    if (r.ok) { await kvSet('backupAt', Date.now()); await kvSet('backupFail', null); return true; }
+    /* NAME THE FAILURE. Everything below used to be `return r.ok` into a caller
+       that reads nothing, so `backupAt` simply stopped moving and a dead backup
+       was indistinguishable from a healthy one. Two of these the player can and
+       must be told about by name, because neither heals by waiting:
+         413  the save has outgrown D1's row (server/src/index.js, code
+              'too-large'), and it gets BIGGER with every session, so "try again
+              later" would be a lie.
+         401 'stale timestamp'  the device clock is more than MAX_SKEW_MS out, so
+              EVERY signed call is refused and the whole cloud goes dark. Read
+              from the body rather than assumed, because a 401 is also how a
+              deleted account and a bad signature come back and those need the
+              generic line. Nothing else consumes this body. */
+    let reason = 'http-' + r.status;
+    if (r.status === 413) reason = 'too-large';
+    else if (r.status === 401) {
+      const b = await r.json().catch(() => ({}));
+      if (/stale timestamp/i.test(String(b && b.error))) reason = 'clock';
+    }
+    await kvSet('backupFail', { at: Date.now(), reason });
+    return false;
+    // .catch: the header promises this never throws to the caller, and during an
+    // "Erase all data" every write in a frozen tab rejects on purpose
+  } catch { await kvSet('backupFail', { at: Date.now(), reason: 'network' }).catch(() => {}); return false; }
 }
 
 // Pull + decrypt the cloud backup and merge it in (additive importAll). Returns
@@ -1176,6 +1197,15 @@ export async function touchServerDay() {
     const r = await apiFetch(base + '/health', { cache: 'no-store' });
     if (!r.ok) return null;
     const j = await r.json();
+    /* MEASURE THE SKEW WHILE WE ARE HERE. This is the only call that still
+       ANSWERS when the clock is wrong, so it is the only place a number can be
+       had: `j.ts` is the server's own instant, and the difference is what
+       verifySigned is refusing every signed call over. Round-trip latency is a
+       second at worst and the threshold this feeds is five minutes, so no
+       correction is worth the complexity. Overwritten on every boot and resume,
+       so a clock the player has since fixed reads 0 on the next answer. */
+    const sv = Number(j && j.ts);
+    if (Number.isFinite(sv) && sv > 0) await kvSet('clockSkewMs', Date.now() - sv);
     return await witnessServerDay(j && j.ts);
   } catch { return null; }
 }

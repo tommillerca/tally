@@ -1356,7 +1356,7 @@ async function boot() {
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
-  if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
+  if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(cloudTroubleNotice).then(() => checkFriendRequests()).then(checkSieges);
   /* touchServerDay BEFORE rollDayIfNeeded: coming back to the app is exactly
      when a new day gets opened, and the day guard's ceiling (js/db.js rule 3)
      is only as fresh as the last /health we saw. Unsigned, anonymous, fails
@@ -1368,7 +1368,7 @@ async function boot() {
        have painted by the time the kv lands, so a fresh detection repaints. */
     maybeWelcomeBack().then(back => { if (back && !sheetStack.length) refresh(); }).catch(() => {});
     rollDayIfNeeded(); nativeAutoSync();
-    if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
+    if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(cloudTroubleNotice).then(() => checkFriendRequests()).then(checkSieges);
     flushAnalytics(); refreshNotifSchedules();
     /* COMING BACK MEANS READING THE STORE AGAIN. With the app open twice, the
        other tab has been spending and earning while this one sat there, and
@@ -2661,6 +2661,46 @@ async function checkFriendRequests() {
 
 /* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeRequestNotifPermission raised the iOS notification dialog on the boot path, before the player had asked for a single notification. The ask now happens where it earns its keep: renderSettings calls requestNotifPermission() on the three toggles that turn notifications on, so the OS is asked at the moment somebody says yes */
 
+/* WHAT A FAILED CLOUD BACKUP SAYS. One function, because Settings and the boot
+   notice below both need it and must never disagree about what is wrong.
+   js/social.js pushBackup writes the reason; this is the only place it is read
+   into words. */
+function cloudFailLine(reason, skewMs = 0) {
+  if (reason === 'clock') {
+    const days = Math.round(Math.abs(skewMs) / 86400e3);
+    const how = days >= 1 ? `${days} day${days === 1 ? '' : 's'} ${skewMs > 0 ? 'ahead' : 'behind'}` : 'wrong';
+    return `Backup is blocked: this device's clock is ${how}. Check your date and time. Everything catches up on its own once it is right.`;
+  }
+  if (reason === 'too-large') {
+    return 'Backup is blocked: this save has outgrown its slot on the server, and playing makes it bigger. Your progress is safe on this phone. Export a copy below until this is fixed.';
+  }
+  return 'The last backup did not go through. Your progress is safe on this phone and it keeps retrying.';
+}
+
+/* THE VOICE FOR A CLOUD BACKUP THAT IS FAILING. Chained onto autoSync at boot
+   and on resume, so the reason it reads is the one that sync's own push just
+   wrote rather than a stale mark from a previous session.
+   Why it exists: pushBackup's blanket catch used to turn every failure into a
+   bare `return false`, so `backupAt` stopped moving and NOTHING said a word. A
+   wrong device clock 401s every signed call (server MAX_SKEW_MS is five
+   minutes) and autoSync then returns {applied:0}, which is exactly what a
+   healthy empty sync returns. Neither of the two named states heals by waiting
+   and the too-large one gets worse with play, so the player is told rather than
+   left to notice a number that never moves in a screen they never open.
+   Once a day: it is a standing condition, not an event. */
+async function cloudTroubleNotice() {
+  try {
+    const fail = await kvGet('backupFail', null);
+    if (!fail || !(await social.cloudBackupOn())) return;
+    if (Date.now() - ((await kvGet('cloudNudgeAt', 0)) || 0) < 86400e3) return;
+    await kvSet('cloudNudgeAt', Date.now());
+    // staggered like every other boot notice here: there is ONE toast element,
+    // and a grant delivery firing 3.6s of its own would otherwise be stomped
+    const line = cloudFailLine(fail.reason, Number(await kvGet('clockSkewMs', 0)) || 0);
+    setTimeout(() => toast(line, 5600), 4200);
+  } catch { /* a notice must never break the boot chain behind it */ }
+}
+
 async function backupNudge() {
   try {
     const log = await db.all('log');
@@ -3346,6 +3386,17 @@ async function dayBudget() {
    gets asked, and it is permanent and unconditional: a trust line that only shows
    up sometimes is worse than none at all. */
 const LOG_ONLY_LINE = '<p class="log-only">Nothing you grow or cook in the Kitchen counts as food you ate. This diary only records what you log yourself.</p>';
+
+/* ONE LINE PER DAY-GUARD RULE (js/db.js claimDay). Keyed by the reason claimDay
+   itself returns, so a rule added there without copy here degrades to `other`
+   rather than to silence. Each names its own cause: "paused" with no reason is
+   what a player reads as "broken". */
+const DAY_GUARD_COPY = {
+  backwards: 'This device says it is an earlier day than the app has already seen, so today is not a new day yet. Rewards return when the date catches up.',
+  'too-fast': 'The date on this device has jumped further ahead than time actually passed. Rewards are paused until the calendar catches up.',
+  unwitnessed: 'Rewards are paused until the app can check the clock with the server. Any connection, even a moment, fixes it.',
+  other: 'Daily rewards are paused while the date settles. They return with the next fresh day.',
+};
 
 /* Set the first time Today renders Gwart; see the note at its read site below. */
 let gwEntranceSeen = false;
@@ -4116,12 +4167,13 @@ async function renderToday(el) {
       return;
     }
     /* The day guard refused (js/db.js claimDay). Its decision stands; this is
-       only the voice, so the button is never silently dead. 'unwitnessed' is the
-       lapsed-player case: 7+ days without the server confirming the date. */
+       only the voice, so the button is never silently dead. Each of the three
+       rules gets its OWN line, because they are three different situations and
+       only one of them (unwitnessed, the lapsed player: 7+ days without the
+       server confirming the date) used to name its cause. The fallback covers a
+       bare `true` from an older caller and any rule added later. */
     if (res?.dayGuard) {
-      toast(res.dayGuard === 'unwitnessed'
-        ? 'Rewards are paused until the app can check the clock with the server. Any connection, even a moment, fixes it.'
-        : 'Daily rewards are paused while the date settles. They return with the next fresh day.', 4200);
+      toast(DAY_GUARD_COPY[res.dayGuard] || DAY_GUARD_COPY.other, 4200);
       return;
     }
     if (!res) return;
@@ -8738,9 +8790,9 @@ async function renderShop(el) {
   // which would wipe a Tier 3 cell's art and price chip on the first tap.
   el.querySelectorAll('[data-buy]').forEach(b => armToConfirm(b, `Spend ${SHOP.find(s => s.id === b.dataset.buy)?.cost ?? ''}?`, async () => {
     const r = await buyShopItem(b.dataset.buy);
-    if (!r.ok) { toast(`Not enough coins. That costs ${r.need}, you have ${r.have}.`, 2600); return; }
+    if (!r.ok) { toast(`Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600); return; }
     popSound(S.sounds);
-    toast(`${r.label} bought. −${r.cost} coins, ${r.coins} left. You now have ${r.owned}.`, 3000);
+    toast(`${r.label} bought. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. You now have ${r.owned}.`, 3000);
     rerender();
   }));
   /* THE DUST EGG. armToConfirm like every spend. buyDustEgg claims the weekly
@@ -9006,17 +9058,22 @@ async function renderTrends(el) {
   const kmWk = stepsWk * 0.000762;
   const sleepWk = days7.filter(d => d.sleepHours != null);
   const avgSleep = sleepWk.length ? sleepWk.reduce((a, d) => a + d.sleepHours, 0) / sleepWk.length : null;
-  let streak = 0;
-  /* The same one-day grace streakFrom (js/nutrition.js) has always given: a day
-     with no log YET is a streak waiting on today, not a broken one. Without it
-     this pill read 0 every morning before the first log, and after a westbound
-     timezone hop it read 0 all day over an unbroken run ending yesterday.
+  /* THE WHOLE HISTORY, NOT THE HEATMAP'S WINDOW. This counted backwards through
+     `days`, which is the 56-day heatmap slice, so every streak of 56 or more
+     rendered as exactly 56 forever: a verified 400-day run displayed 56. It is
+     the one number a long-term player is proudest of, and it was capped by an
+     array length that has nothing to do with streaks.
+     `log` and `health` are already the FULL stores here, so the set costs
+     nothing extra. streakFrom (js/nutrition.js) brings the same one-day grace
+     the loop hand-rolled: a day with no log YET is a streak waiting on today,
+     not a broken one, which is why this pill no longer reads 0 every morning
+     or all day after a westbound timezone hop.
      Display only: streak milestone payouts still come off streakFrom in
-     js/game.js and are untouched. If yesterday is also empty, the 0 is real
-     and shows with no hint. */
-  const dayActive = d => d.logged || d.steps >= 3000;
-  const streakGraced = days.length > 0 && !dayActive(days[days.length - 1]);
-  for (let i = days.length - 1 - (streakGraced ? 1 : 0); i >= 0; i--) { if (dayActive(days[i])) streak++; else break; }
+     js/game.js and are untouched. */
+  const activeDates = new Set(log.map(e => e.date));
+  for (const h of health) if ((h.steps || 0) >= 3000) activeDates.add(h.date);   // a walked day counts, as it always has here
+  const streak = streakFrom([...activeDates], dateKey());
+  const streakGraced = streak > 0 && !activeDates.has(dateKey());
 
   const xp = await totalXp();
   const lvl = levelFor(xp);
@@ -11969,8 +12026,16 @@ async function renderSettings(el) {
   const friendCount = crewReached ? crewData.friends.length : 0;
   const backupOn = apiConfigured ? await social.cloudBackupOn() : false;
   const backupAt = apiConfigured ? await kvGet('backupAt', 0) : 0;
+  const backupFail = apiConfigured ? await kvGet('backupFail', null) : null;
+  const backupAge = backupAt ? (Date.now() - backupAt < 36e5 ? 'just now' : Math.round((Date.now() - backupAt) / 36e5) + 'h ago') : 'never';
+  /* A FAILED PUSH USED TO READ EXACTLY LIKE A HEALTHY ONE. pushBackup returned a
+     bare false, so `backupAt` just stopped moving and this row went on quoting an
+     age that got older and older with nothing to say why. The reason comes from
+     js/social.js and the age rides along, because "it failed" and "the last good
+     copy is 40h old" are different facts and the player needs both. */
   const backupLabel = !backupOn ? 'Off: your progress lives only on this phone'
-    : backupAt ? `On · last backup ${Date.now() - backupAt < 36e5 ? 'just now' : Math.round((Date.now() - backupAt) / 36e5) + 'h ago'}`
+    : backupFail ? `${cloudFailLine(backupFail.reason, Number(await kvGet('clockSkewMs', 0)) || 0)} Last good backup: ${backupAge}.`
+    : backupAt ? `On · last backup ${backupAge}`
     : 'On · backing up automatically';
   const np = await notifPrefs();
   const notifPlat = notifPlatform();
@@ -13653,7 +13718,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         }
         const res = await applyFit(chip.dataset.fit);
         if (!res.ok) {
-          toast(res.reason === 'dust' ? `That fit needs ${res.need} dust, you have ${res.have}.` : 'Could not wear that fit.', 2800);
+          toast(res.reason === 'dust' ? `That fit needs ${res.need.toLocaleString()} dust, you have ${res.have.toLocaleString()}.` : 'Could not wear that fit.', 2800);
           return;
         }
         S.lookPreview = null;
@@ -13734,7 +13799,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const val = btn.dataset.lookApply;
       const res = val === '' ? await clearTransmog(slot) : await applyTransmog(slot, val);
       if (!res.ok) {
-        toast(res.reason === 'dust' ? `Need ${res.need} dust, you have ${res.have}.` : 'Could not change that look.', 2600);
+        toast(res.reason === 'dust' ? `Need ${res.need.toLocaleString()} dust, you have ${res.have.toLocaleString()}.` : 'Could not change that look.', 2600);
         return;
       }
       S.lookPreview = null;
@@ -14191,9 +14256,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
         // first re-armed the button in the same frame and let a burst buy twice.
         clearTimeout(t); busy = true;
         const r = await buyShopItem(b.dataset.buy).finally(() => { busy = false; reset(); });
-        if (!r.ok) { toast(`Not enough coins. That costs ${r.need}, you have ${r.have}.`, 2600); return; }
+        if (!r.ok) { toast(`Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600); return; }
         popSound(S.sounds);
-        toast(`${r.label} bought. −${r.cost} coins, ${r.coins} left. You now have ${r.owned}.`, 3000);
+        toast(`${r.label} bought. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. You now have ${r.owned}.`, 3000);
         renderCharacter(wrap, 'crates');
       });
     }));
