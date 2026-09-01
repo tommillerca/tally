@@ -1213,6 +1213,26 @@ async function boot() {
   const NOSOCIAL = S.demo || navigator.webdriver === true;
   await social.initFromQuery();
   const cloudRestore = NOSOCIAL ? null : await social.bootSync().catch(() => null);
+  /* THE REASONS THAT ARE NOT A FAILURE, so the boot toast stays silent for them.
+     'none'/'empty' (no backup on the server) and 'already' (restored on an
+     earlier boot) were always here. The other three were NOT, and each one made
+     the app lie to somebody who has no cloud backup to fail:
+       'new-player'  a brand-new install, which bootSync returns BEFORE it will
+                     mint an identity (js/social.js: registering at boot once
+                     filled the leaderboard with abandoned level-1 players). A
+                     first launch was greeted with "could not reach your cloud
+                     backup", over onboarding, for a backup that cannot exist.
+       'opted-out'   the player turned cloud backup OFF. Telling them we could
+                     not reach it is the one thing they explicitly declined.
+       'no-api'      no backend is configured at all, so there is nothing to
+                     reach and nothing the player could do about it.
+     A KNOWN-OFFLINE DEVICE is silent too, on the same principle: the player put
+     the phone in airplane mode, they do not need the app to report the weather.
+     bootSync genuinely retries on the next open either way, so nothing is lost
+     by saying nothing. Round 7 caught this walking the launch path an App Store
+     reviewer walks, which is offline and brand new: both conditions at once. */
+  const CLOUD_QUIET_REASONS = ['none', 'empty', 'already', 'new-player', 'opted-out', 'no-api'];
+
   if (cloudRestore && cloudRestore.restored) {
     S.settings = await kvGet('settings');
     snapSettings();
@@ -1228,7 +1248,8 @@ async function boot() {
        cloud copy, so nothing is deleted and honesty costs nothing. */
     try { trackEvent('cloud_restore_failed', { reason: 'decrypt' }); } catch { /* analytics never breaks the app */ }
     setTimeout(() => toast('A cloud backup exists, but it was written by a different key and this device cannot unlock it. Nothing has been deleted. If another device still has your progress, opening the app there will repair the cloud copy.', 6500), 900);
-  } else if (cloudRestore && cloudRestore.reason && !['none', 'empty', 'already'].includes(cloudRestore.reason)) {
+  } else if (cloudRestore && cloudRestore.reason && !CLOUD_QUIET_REASONS.includes(cloudRestore.reason)
+             && !(typeof navigator !== 'undefined' && navigator.onLine === false)) {
     /* A FAILED CLOUD RESTORE MUST SAY SO. The file-import path already gets this
        right ("Import failed: your old data is unchanged"); the cloud path said
        nothing at all, so a player whose backup failed to come down saw an empty
