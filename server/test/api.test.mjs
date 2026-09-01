@@ -82,6 +82,23 @@ async function signedFetch(kp, playerId, method, path, body = '', tsOverride = n
   });
 }
 
+/* SIGN ONCE, SEND AS MANY TIMES AS YOU LIKE. signedFetch above re-signs on every
+   call, which is what an honest client does and is therefore exactly what CANNOT
+   test a replay. This returns a thunk over one frozen set of headers and one
+   frozen body, so calling it twice puts the SAME bytes on the wire twice, which
+   is what a captured request is. */
+async function signedReq(kp, playerId, method, path, body = '') {
+  const ts = Date.now();
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, kp.privateKey,
+    new TextEncoder().encode(`${method}\n${path}\n${ts}\n${body}`));
+  const init = {
+    method,
+    headers: { 'content-type': 'application/json', 'x-bh-player': playerId, 'x-bh-ts': String(ts), 'x-bh-sig': b64(sig) },
+    body: method === 'GET' ? undefined : body,
+  };
+  return () => fetch(BASE + path, init);
+}
+
 const { kp, pubJwk } = await makeKeys();
 let player = null;
 
@@ -573,6 +590,91 @@ await test('cheer: the same ck twice delivers ONE cheer; a different ck delivers
   const c = await send(ck + '-2');
   assert.equal(c.status, 200);
   assert.equal((await cheerRows(r.playerId, rk)).length, 2, 'a different ck IS a second cheer');
+});
+
+/* A RETRY IS NOT A SECOND GIFT, and unlike a cheer this one moves coins. The
+   client deducts locally BEFORE the send and refunds on anything that is not
+   ok, so a delivered gift whose answer was lost refunds the sender while the
+   friend keeps the coins: two of them mint coins out of nothing. */
+const befriend = async (bk, b) => {
+  await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: b.friendCode }));
+  await signedFetch(bk.kp, b.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
+};
+const spendGiftRows = async (to, keys) => {
+  const g = await (await signedFetch(keys.kp, to, 'GET', '/grants?since=0')).json();
+  return (g.grants || []).filter(x => x.type === 'gift' && x.payload.mode === 'spend');
+};
+const sendGift = (to, ck, coins = 50) => signedFetch(kp, player.playerId, 'POST', '/gift',
+  JSON.stringify(ck === null ? { to, mode: 'spend', coins } : { to, mode: 'spend', coins, ck }));
+
+await test('gift: the same ck twice delivers ONE spend gift; a different ck delivers a second', async () => {
+  const rk = await makeKeys();
+  const r = await (await regFetch(rk.pubJwk)).json();
+  await befriend(rk, r);
+  const ck = 'gtap-' + RUNSUF;
+  assert.equal((await sendGift(r.playerId, ck)).status, 200);
+  assert.equal((await spendGiftRows(r.playerId, rk)).length, 1, 'the first send delivers exactly one');
+  const b = await sendGift(r.playerId, ck);
+  assert.equal(b.status, 200, 'a retry must be answered ok: the client refunds itself on anything else');
+  const bj = await b.json();
+  assert.equal(bj.duplicate, true, 'and is named as the duplicate it is');
+  assert.equal(bj.reward.coins, 50, 'the retry still reports the reward, so the sheet can settle');
+  assert.equal((await spendGiftRows(r.playerId, rk)).length, 1, 'the same ck twice delivers ONE gift');
+  assert.equal((await sendGift(r.playerId, ck + '-2')).status, 200);
+  assert.equal((await spendGiftRows(r.playerId, rk)).length, 2, 'a different ck IS a second gift');
+});
+
+await test('gift: the 5/friend/day cap still refuses at its bound, counting ck and no-ck alike', async () => {
+  const rk = await makeKeys();
+  const r = await (await regFetch(rk.pubJwk)).json();
+  await befriend(rk, r);
+  // Three keyed and two unkeyed, because the cap counts the whole key RANGE and
+  // an older client sending no ck must not buy itself extra gifts.
+  for (const c of ['cap1-' + RUNSUF, 'cap2-' + RUNSUF, 'cap3-' + RUNSUF, null, null]) {
+    assert.equal((await sendGift(r.playerId, c)).status, 200, 'the first five are under the cap');
+  }
+  assert.equal((await spendGiftRows(r.playerId, rk)).length, 5, 'five delivered, and no more');
+  const over = await sendGift(r.playerId, 'cap6-' + RUNSUF);
+  assert.equal(over.status, 429, 'the sixth is refused by the cap, not deduped');
+  assert.equal((await over.json()).code, 'limit');
+  assert.equal((await spendGiftRows(r.playerId, rk)).length, 5, 'and nothing landed for it');
+});
+
+/* THE REPLAY, which is the sharpest form of all of this and the reason a client
+   token alone is not the answer. verifySigned checked a signature and a
+   five-minute skew window and nothing else, so a captured signed POST re-sent
+   BYTE FOR BYTE verified again and landed again: one original plus two replays
+   was measured as three cheers. The no-ck body below is deliberate. It is what
+   an older client sends, so the grant key falls back to the counted shape and
+   the client token cannot absorb anything: only the server-side nonce can. */
+await test('replay: one signed POST sent three times lands ONE effect', async () => {
+  const rk = await makeKeys();
+  const r = await (await regFetch(rk.pubJwk)).json();
+  await befriend(rk, r);
+  const fire = await signedReq(kp, player.playerId, 'POST', '/cheer',
+    JSON.stringify({ to: r.playerId, cheer: 2 }));
+  assert.equal((await fire()).status, 200, 'PRECONDITION: the original must be accepted');
+  assert.equal((await cheerRows(r.playerId, rk)).length, 1, 'PRECONDITION: it delivered one cheer');
+
+  const again = await fire();
+  assert.equal(again.status, 401, 'the same bytes a second time must be refused');
+  assert.equal((await again.json()).error, 'replayed request', 'and told why, not "bad signature"');
+  assert.equal((await fire()).status, 401, 'and a third time');
+  assert.equal((await cheerRows(r.playerId, rk)).length, 1,
+    'one original plus two replays is ONE cheer');
+
+  /* THE CONTROL. A guard that refuses everything would pass every line above.
+     The same player, same friend, same body, RE-SIGNED, is an ordinary second
+     cheer and must land: that is what separates a replay guard from an outage. */
+  const fresh = await signedFetch(kp, player.playerId, 'POST', '/cheer', JSON.stringify({ to: r.playerId, cheer: 2 }));
+  assert.equal(fresh.status, 200, 'a re-signed send is not a replay');
+  assert.equal((await cheerRows(r.playerId, rk)).length, 2, 'and it delivers a second cheer');
+
+  // Reads are exempt on purpose: a replayed GET changes nothing, and nonce-ing
+  // the polling routes would be the write amplification the guard exists to avoid.
+  const read = await signedReq(rk.kp, r.playerId, 'GET', '/grants?since=0');
+  assert.equal((await read()).status, 200);
+  assert.equal((await read()).status, 200, 'a signed READ may be repeated');
 });
 
 await test('friends: accept endpoint seals a one-way request', async () => {

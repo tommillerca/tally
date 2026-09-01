@@ -11392,6 +11392,16 @@ async function openGiftSheet(f) {
      different cooloff windows, and that drift is what the helper was written to
      stop. The label stays short: the sheet header already names who this is
      going to, and a long label reflows the chip row on a small phone. */
+  /* ONE KEY PER AMOUNT, REUSED BY ITS RETRIES, and this one is about coins
+     rather than confetti. The refund below runs on any answer that is not ok,
+     including a send that was DELIVERED and lost its reply on the 12s deadline:
+     the friend keeps the coins, the sender gets them back, and coins are minted
+     out of nothing. Tapping the same chip again then charged twice for one
+     gift. The server collapses two sends carrying the same key into one grant
+     and answers the second ok, so the retry keeps its deduction and the friend
+     is credited exactly once. Dropped on success, so a deliberate second gift
+     of the same amount is a real one. */
+  const giftKeys = new Map();
   $$('.gift-amt', wrap).forEach(b => armToConfirm(b, `Send ${b.dataset.amt}?`, async () => {
     if (b.disabled) return;
     const amt = +b.dataset.amt;
@@ -11399,8 +11409,10 @@ async function openGiftSheet(f) {
     if (amt > have) { toast("You don't have that many coins."); return; }
     b.disabled = true;
     await coinsAdd(-amt); // deduct locally first; refund if the send fails
-    const r = await social.sendGift(f.playerId, 'spend', amt);
+    if (!giftKeys.has(amt)) giftKeys.set(amt, social.newSendKey());
+    const r = await social.sendGift(f.playerId, 'spend', amt, giftKeys.get(amt));
     if (r.ok) {
+      giftKeys.delete(amt);
       coinSound(S.sounds);
       toast(`You sent ${esc(f.alias || f.name)} ${amt} coins!`, 3400);
       const nb = await coins(); const bl = $('#giftBal', wrap); if (bl) bl.textContent = `you have ${nb}`;
@@ -11432,7 +11444,7 @@ function openCheerSheet(f) {
     const b = e.target.closest('[data-cheer]'); if (!b) return;
     const i = +b.dataset.cheer;
     $$('.cheer-chip', wrap).forEach(x => x.disabled = true);
-    if (!keys.has(i)) keys.set(i, social.newCheerKey());
+    if (!keys.has(i)) keys.set(i, social.newSendKey());
     const r = await social.sendCheer(f.playerId, i, keys.get(i));
     if (r.ok) { keys.delete(i); popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${esc(f.alias || f.name)}!`, 3000); history.back(); }
     else { $$('.cheer-chip', wrap).forEach(x => x.disabled = false); toast(r.status === 429 ? "You've cheered them plenty today. Give 'em a rest!" : 'Could not send. Try again.', 3200); }
