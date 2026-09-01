@@ -170,6 +170,52 @@ const rects = page => page.evaluate(() => (window.__bcEls || []).map(([el, g]) =
   return { disc: { x: r.x, y: r.y, w: r.width, h: r.height },
     glyph: { x: gr.x, y: gr.y, w: gr.width, h: gr.height }, covered, coveredBy, samples };
 }));
+/* WHICH OVERLAPPER CAN ACTUALLY REACH THE INK. Rect intersection alone says two
+   badges MIGHT contaminate each other; it does not say they do. The contamination
+   is badge B's glyph vanishing from inside badge A's rect when every glyph is
+   hidden at once, so the only region where B can move A's centroid is the region
+   the two rects SHARE. B being visible somewhere else is irrelevant, and asking
+   the broader question is what has now excluded the Boneyard readout disc from
+   its own COVERAGE row twice.
+   The first repair (2026-08-29) exempted an overlapper that is hidden at all 25
+   of its OWN sample points. That is the right idea aimed one step too far out:
+   measured 2026-09-01, a `.map-spawn` loot marker parked so it overlaps the
+   readout disc AND pokes past the card's left edge keeps some of its own points
+   visible, so it still excluded, while being invisible at all 25 points of the
+   INTERSECTION. app.css:7039 is why: `.map-act` is z-index 6 with an opaque
+   `var(--surface)` fill and a 2px border, and `.map-spawn` is z-index 1
+   (js/wanderer.js:408), so a marker over that card is behind it by construction
+   and no marker is ever drawn on a readout. Proof it cannot reach the ink: with
+   the marker parked and without it, the disc measures the same ink(-0.21,-1.53)px
+   = 7.7%, to the pixel.
+   So sample the intersection instead, and the older rule falls out of this one:
+   an overlapper hidden everywhere is hidden here too. Same hit-test idiom as
+   `rects` above, ancestor-on-top included, so a pointer-transparent overlapper
+   still counts as visible and still excludes. Same 5x5 grid, so a sliver thinner
+   than a quarter of the shared rect can still be missed; that is the sampling
+   this file already accepts, not a new hole. */
+const overlapReach = page => page.evaluate(() => {
+  const els = (window.__bcEls || []).map(([el]) => el);
+  const r = els.map(e => e.getBoundingClientRect());
+  const name = e => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '')
+    + (e.className && e.className.toString ? '.' + e.className.toString().trim().split(/\s+/).slice(0, 2).join('.') : '');
+  return els.map((_, i) => {
+    const hits = [];
+    for (let j = 0; j < els.length; j++) {
+      if (j === i) continue;
+      const x0 = Math.max(r[i].x, r[j].x), y0 = Math.max(r[i].y, r[j].y);
+      const x1 = Math.min(r[i].right, r[j].right), y1 = Math.min(r[i].bottom, r[j].bottom);
+      if (x1 <= x0 || y1 <= y0) continue;                  // the rects do not share anything
+      for (let p = 0; p <= 4 && !hits.includes(name(els[j])); p++) {
+        for (let q = 0; q <= 4; q++) {
+          const hit = document.elementFromPoint(x0 + (x1 - x0) * (p / 4), y0 + (y1 - y0) * (q / 4));
+          if (hit && (els[j].contains(hit) || hit.contains(els[j]))) { hits.push(name(els[j])); break; }
+        }
+      }
+    }
+    return hits;
+  });
+});
 const setGlyphVisibility = (page, v) => page.evaluate(vv => { for (const [, g] of window.__bcEls || []) g.style.visibility = vv; }, v);
 const shot = async page => 'data:image/png;base64,' + (await page.screenshot({ encoding: 'base64' }));
 
@@ -193,6 +239,8 @@ export async function measureScreen(page, screenName) {
   await sleep(160);
   const C = await shot(page);
   const r1 = await rects(page);
+  /* After the glyphs are back, so this reads the same glass the brackets did. */
+  const reach = await overlapReach(page);
 
   const rows = await page.evaluate(async (a, b, c, list, geo) => {
     const load = u => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = u; });
@@ -233,22 +281,13 @@ export async function measureScreen(page, screenName) {
      the loot markers routinely sit on top of one another, which is exactly how a
      Bone cache that is centred to 2.3% came back reading 35.3% twice in a row --
      reproducible, and wrong both times. Reproducible is not the same as correct. */
-    /* AN OVERLAPPER NOBODY CAN SEE CANNOT CONTAMINATE INK. The rationale above
-       is about badge B's DRAWING vanishing inside badge A's rect when the
-       glyphs are hidden. A badge that is fully covered (covered === samples,
-       in both hit-test brackets) has no drawing on the glass at all: hiding it
-       changes zero pixels anywhere, so it cannot pull A's centroid. The
-       Boneyard readout sits on an OPAQUE card, and loot markers routinely park
-       BEHIND that card: rect math alone excluded the readout disc from grading
-       ("NOT graded: OVERLAP") twice in the 2026-08-29 ship gate, on markers
-       that lost elementFromPoint at all 25 of their own sample points. A
-       PARTIALLY covered overlapper still excludes, because its visible part
-       still bleeds ink. */
-    const fullyHidden = j => r0[j].covered === r0[j].samples
-      && r1[j] && r1[j].covered === r1[j].samples;
-    const overlaps = i => r0.some((o, j) => j !== i && !fullyHidden(j)
-      && o.disc.x < r0[i].disc.x + r0[i].disc.w && o.disc.x + o.disc.w > r0[i].disc.x
-      && o.disc.y < r0[i].disc.y + r0[i].disc.h && o.disc.y + o.disc.h > r0[i].disc.y);
+    /* AN OVERLAPPER NOBODY CAN SEE CANNOT CONTAMINATE INK, and "cannot see" is
+       measured where it would have to bleed: inside the rect the two badges
+       share. That is overlapReach above, which also subsumes the 2026-08-29
+       rule it replaces (an overlapper hidden at all 25 of its own points is
+       hidden in the shared rect too) and fixes the case that rule still missed.
+       A visible overlapper, partially covered or not, still excludes. */
+    const overlaps = i => reach[i].length > 0;
 
   return rows.map(r => {
     const g0 = r0[r.idx], g1 = r1[r.idx];
@@ -262,7 +301,9 @@ export async function measureScreen(page, screenName) {
        instead of sending the next reader back here to re-instrument. */
     const cov = [...new Set([...(g0.coveredBy || []), ...(g1.coveredBy || [])])].slice(0, 4);
     const why = (g0.covered || g1.covered) ? `COVERED by ${cov.join(', ') || 'something'}`
-      : overlaps(r.idx) ? 'OVERLAP'
+      /* Named for the same reason COVERED is: "NOT graded: OVERLAP" with no
+         culprit sent the last two readers back here to re-instrument by hand. */
+      : overlaps(r.idx) ? `OVERLAP with ${reach[r.idx].slice(0, 3).join(', ')}`
       : (r.driftPx > 0 || moved >= 0.5) ? 'MOVING'
       : r.ink ? null : 'NO-INK';
     return { screen: screenName, ...r, ...g0, R, box, movedPx: moved, why, graded: !why,
