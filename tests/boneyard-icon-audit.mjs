@@ -95,6 +95,18 @@
  * instead of exiting 1 with an art-regression message about a placement
  * outcome. It is never reported as a pass.
  *
+ * AND SO IS THE MINI-BOSS SAMPLE, as of 2026-09-01. Where this suite stands is
+ * chosen for the EGG, and that choice moves the mini field with it: standing on
+ * the nearest rare put every mini-boss either outside placeWalkable's halo or on
+ * ground the snap query could not answer for, so the map drew none and
+ * "CONTROL the map drew mini-boss markers" killed the run on `sample did not
+ * hold` with nothing printed. The walk now asks the rendered map for BOTH
+ * samples before it settles, and an instance that can offer neither reports the
+ * mini rows UNPROVEN by name rather than as an art regression. The measurement
+ * is at the walk.
+ *
+ * AND THE BUFFERED EVIDENCE IS PRINTED EVEN WHEN THE RUN DIES. See the finally.
+ *
  * Serves the tree by default and NEVER defaults to production. Pass a URL as
  * argv[2] only to point it somewhere deliberately.
  * Usage: node tests/boneyard-icon-audit.mjs      (exits non-zero on failure)
@@ -220,19 +232,45 @@ try {
      placeWalkable has the last word and only the map knows what it decided.
      Retargeting is a setGeolocation and a wait, because refreshSpawns runs off
      the position watch on a 5s tick, so this costs one boot, not eight. */
-  const eggOnMap = () => page.evaluate(() =>
-    [...document.querySelectorAll('#mapStage .map-spawn.maplibregl-marker')]
+  /* AND THE MINI-BOSS IS THE SECOND SAMPLE, hunted the same way, because the
+     spot chosen for the egg decides the mini field too. Measured 2026-09-01:
+     the nearest rare was 1631 m from the fixed pin, and standing on it left
+     minisNear returning FOUR minis whose nearest was 960 m away, where the pin
+     itself has one at 417 m. Three of the four projected past placeWalkable's
+     300px halo (to 1569px below the canvas) and the fourth answered
+     queryRenderedFeatures with zero features, so the app vetoed every one of
+     them and drew no mini disc at all. The model was healthy the whole time.
+     "CONTROL the map drew mini-boss markers" then killed the run on `sample did
+     not hold`, which is a broken-app message for a standing point this suite
+     chose itself. Seven of the eight rare candidates that day had a mini inside
+     500 m, so the premise holds as soon as the walk asks for it. */
+  const onMap = () => page.evaluate(() => ({
+    egg: [...document.querySelectorAll('#mapStage .map-spawn.maplibregl-marker')]
       .some(el => !el.classList.contains('far')
-        && [...el.querySelectorAll('img')].some(i => /egg-basic\.png$/.test(i.getAttribute('src') || ''))));
-  let eggUsed = eggSpots[0] || null;
-  let eggDrawn = eggSpots.length ? await eggOnMap() : false;
-  let eggTried = eggSpots.length ? 1 : 0;
-  for (let i = 1; i < eggSpots.length && !eggDrawn; i++) {
-    await page.setGeolocation({ latitude: eggSpots[i].latitude, longitude: eggSpots[i].longitude });
+        && [...el.querySelectorAll('img')].some(i => /egg-basic\.png$/.test(i.getAttribute('src') || ''))),
+    /* .maplibregl-marker deliberately: #mapLegend lives inside #mapStage and its
+       key row wears .map-mini-mark too, and only a real marker carries this. */
+    mini: document.querySelectorAll('#mapStage .map-mini-mark.maplibregl-marker').length > 0,
+  }));
+  const score = g => (g.egg ? 1 : 0) + (g.mini ? 1 : 0);
+  let at = eggSpots[0] || null;              // where the player is standing right now
+  let eggUsed = at, eggTried = eggSpots.length ? 1 : 0, drawn = { egg: false, mini: false };
+  const stand = async (spot) => {
+    at = spot;
+    await page.setGeolocation({ latitude: spot.latitude, longitude: spot.longitude });
     await sleep(6500);
-    eggUsed = eggSpots[i]; eggTried = i + 1;
-    eggDrawn = await eggOnMap();
+  };
+  for (let i = 0; i < eggSpots.length; i++) {
+    if (i) await stand(eggSpots[i]);
+    const here = await onMap();
+    if (score(here) > score(drawn)) { drawn = here; eggUsed = eggSpots[i]; eggTried = i + 1; }
+    if (here.egg && here.mini) break;
   }
+  /* The walk can end PAST the best spot it found, and every row below reads the
+     map as it stands now, so go back and re-measure there rather than grading a
+     spot the walk already rejected. */
+  if (eggUsed && at !== eggUsed) { await stand(eggUsed); drawn = await onMap(); }
+  const eggDrawn = drawn.egg;
   /* AN UNPLACEABLE INSTANCE IS UNPROVEN, NOT A PASS AND NOT AN ART FAILURE.
      Dropping the row from EXPECT is what stops MATCH reporting a placement
      outcome as a regression; naming it here is what stops the drop being a
@@ -243,6 +281,17 @@ try {
     unproven('MATCH    the Mystery Egg key row against its marker',
       `none of the ${eggSpots.length} rare spawn(s) in this 45-minute instance survived the app's own `
       + 'placeWalkable veto, so the map drew no egg to compare the key against');
+  }
+  /* SAME RULE FOR THE MINI, and for the same reason: which minis are drawable
+     is a property of where this suite chose to stand, not of the art. Naming
+     all three rows is what stops the drop being a silent skip. */
+  if (!drawn.mini) {
+    delete EXPECT['Mini-boss'];
+    const why = `no standing point among the ${eggSpots.length} candidate(s) walked had a mini-boss the app `
+      + "would draw: minisNear generates them, and placeWalkable's halo and walkability snap vetoed every one";
+    unproven('MATCH    the Mini-boss key row against its marker', why);
+    unproven('MINI     the mini-boss disc is not smaller than a loot disc', 'same');
+    unproven('MINI     the mini-boss skull renders at 24', 'same');
   }
 
   // the key starts hidden; it is the same markup either way, so unhide it rather
@@ -290,7 +339,12 @@ try {
   }
 
   ok('CONTROL  the map drew spawn markers', s.spawns.length > 0, `${s.spawns.length} spawn discs`);
-  ok('CONTROL  the map drew mini-boss markers', s.minis.length > 0, `${s.minis.length} mini discs`);
+  if (drawn.mini) {
+    ok('CONTROL  the map drew mini-boss markers', s.minis.length > 0, `${s.minis.length} mini discs`);
+  } else {
+    out.push('UNPRV CONTROL  the map drew no mini-boss marker anywhere the walk stood, so the three '
+      + 'mini rows are UNGRADED this run, not passed.');
+  }
   ok('CONTROL  the map key rendered all nine rows', s.legend.length === 9, `${s.legend.length} rows`);
   /* POSITIVE CONTROL. Rows below pass for free if the probe is reading nodes
      that hold no pixel art at all, which is failure mode 2 and 4 of
@@ -367,21 +421,31 @@ try {
     drift.length === 0,
     drift.length ? drift.join(' | ') : `${Object.keys(EXPECT).length} rows agree with the map`);
 
-  /* ---- MINI. Failure is DOWN. ---- */
-  const spawnW = Math.max(...s.spawns.filter(d => !d.far).map(d => d.w));
-  const miniW = Math.min(...s.minis.map(d => d.w));
-  ok('MINI     the mini-boss disc is not smaller than a loot disc',
-    miniW >= spawnW, `mini ${miniW}px, loot ${spawnW}px`);
-  const skulls = s.minis.flatMap(d => d.icons).filter(i => i.src);
-  ok('MINI     the mini-boss skull renders at 24',
-    skulls.length > 0 && skulls.every(i => i.rw === 24),
-    skulls.length ? `${[...new Set(skulls.map(i => i.rw))].join(', ')}px` : 'no skull icons found');
+  /* ---- MINI. Failure is DOWN. Declared UNPROVEN above when the map drew no
+     mini, because Math.min of an empty set is Infinity and Math.max of one is
+     -Infinity, so this block does not merely go red on an empty sample, it goes
+     GREEN on it. ---- */
+  if (drawn.mini) {
+    const spawnW = Math.max(...s.spawns.filter(d => !d.far).map(d => d.w));
+    const miniW = Math.min(...s.minis.map(d => d.w));
+    ok('MINI     the mini-boss disc is not smaller than a loot disc',
+      miniW >= spawnW, `mini ${miniW}px, loot ${spawnW}px`);
+    const skulls = s.minis.flatMap(d => d.icons).filter(i => i.src);
+    ok('MINI     the mini-boss skull renders at 24',
+      skulls.length > 0 && skulls.every(i => i.rw === 24),
+      skulls.length ? `${[...new Set(skulls.map(i => i.rw))].join(', ')}px` : 'no skull icons found');
+  }
 } finally {
   await browser.close().catch(() => {});
   if (srv) srv.close();
+  /* PRINT THE EVIDENCE EVEN WHEN THE RUN DIES. Every row is buffered into `out`
+     and printed at the end, and the CONTROL block throws BEFORE that print, so
+     the one failure mode that stops the suite was also the one that showed
+     nobody which row failed: triaging the 2026-09-01 red meant patching a copy
+     of this file just to see the line it had already written. Printing here
+     covers any throw, not only that one. */
+  console.log(out.join('\n'));
 }
-
-console.log(out.join('\n'));
 unprovenReport('boneyard-icon-audit.mjs', null);
 console.log(fails ? `\n${fails} FAILED` : '\nall good');
 process.exit(exitFor(fails));
