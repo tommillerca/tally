@@ -182,6 +182,12 @@ const TARGETS = [
   { surface: 'today', sel: '#todaySettings', why: 'day nav: Settings' },
   { surface: 'today', sel: '.q-claim',       why: 'quest payout', inject: 'q-claim' },
   { surface: 'settings', sel: '.seg button', why: 'every On/Off in Settings', all: true },
+  /* Round-9 pass, 2026-09-01. The segmented toggles above already passed at 44
+     effective; the secondary buttons beneath them never got the treatment and
+     measured 42x43 (.btn.small) and 74x17.5 (#recalc). Taken by CLASS, not by
+     the eight ids, so the next button added to Settings is graded too. */
+  { surface: 'settings', sel: '.btn.small', why: 'every secondary Settings action: export, import, erase, redeem, save targets, notification test, copy diagnostics, what is new', all: true },
+  { surface: 'settings', sel: '#recalc', why: 'the Recalculate link in the DAILY TARGETS card title' },
   { surface: 'build', sel: '.t3-pm',         why: 'stat +/-', all: true },
   { surface: 'build', sel: '#gearBtn',      why: 'the floating Settings gear (route() hides it on Today/Settings/Boneyard)' },
   { surface: 'shop',  sel: '#gwGear',       why: "the Emporium's own Settings gear" },
@@ -306,8 +312,17 @@ async function tapTargets(page, w, h) {
       const got = await page.evaluate((sel, all) => {
         const els = [...document.querySelectorAll(sel)].filter(e => e.offsetParent !== null || getComputedStyle(e).position === 'fixed');
         const pick = all ? els : els.slice(0, 1);
-        return pick.map(e => ({ id: e.id || null, probe: e.dataset.claim === '__probe',
-          hit: window.__hitBox(e), top: window.__topAt(e) }));
+        /* SCROLLED TO, then hit-tested. elementFromPoint answers about the
+           VIEWPORT, so a control below the fold reads as "nothing tappable at
+           its centre" no matter how big its hit area is, and Settings is far
+           longer than a phone. Scroll and measure one at a time: instant
+           scrolling settles synchronously, so each read is of that control's
+           own layout, and a neighbour that steals the overlap still shows up. */
+        return pick.map(e => {
+          e.scrollIntoView({ block: 'center', behavior: 'instant' });
+          return { id: e.id || null, probe: e.dataset.claim === '__probe',
+            hit: window.__hitBox(e), top: window.__topAt(e) };
+        });
       }, t.sel, !!t.all || !!t.inject);
       if (!got.length) {
         if (t.optional) { info(`${w}x${h} ${surface} ${t.sel}: not present on this profile (optional)`); continue; }
@@ -353,7 +368,7 @@ async function tapTargets(page, w, h) {
         if (owner && owner !== b) thieves.push({ victim: b.id || String(b.className).split(' ')[0], thief: owner.id || String(owner.className).split(' ')[0] });
       }
       return { seen: out.length, thieves };
-    }, '.wallet-pill .wp, .dayhdr .icon-btn, .gear-btn, .seg button, .q-claim, button.t3-price');
+    }, '.wallet-pill .wp, .dayhdr .icon-btn, .gear-btn, .seg button, .q-claim, .btn.small, #recalc, button.t3-price');
     swept += stolen.seen;
     for (const t of stolen.thieves)
       fail(`${w}x${h} ${surface}: the enlarged hit area on "${t.thief}" now eats the tap on "${t.victim}"`);

@@ -3494,7 +3494,13 @@ async function renderToday(el) {
   ];
   const tot = dayTotals(entries);
   const remaining = Math.round(t.kcal - tot.kcal);
-  const pct = Math.min(1, tot.kcal / t.kcal);
+  /* The zero guard its sibling at hudPct already has. NOT reachable today:
+     computeTargets floors kcal at 1200 and the manual editor's own minimum is
+     800, so t.kcal cannot be 0 or missing on any path that reaches here. It is
+     here because the two expressions are the same reading of the same number,
+     and a divergence between them is the kind of thing that survives a refactor
+     of the floor and shows up as NaN in the ring. */
+  const pct = t.kcal ? Math.min(1, tot.kcal / t.kcal) : 0;
   const over = tot.kcal > t.kcal;
   const isToday = S.date === dateKey();
   // quest header status: how many are claimable right now (drives the accent cue)
@@ -12875,11 +12881,23 @@ const LEVELUP_LINES = [
   'That XP went straight to my spine.',
 ];
 
+/* ONE PENDING CEREMONY AT A TIME. The payload is read when the timer FIRES, not
+   when it is scheduled, so anything queued during the 380ms wait joins the sheet
+   that is already on its way instead of opening a second one behind it. A food
+   log that crosses a level queues twice in that window: the `bh-levelup` event
+   fires mid-log, and the caller then queues the badges and the "what you just
+   did" note. Both belong on one screen, and openLevelUpMoment already takes the
+   badges as `extras`. Nothing is dropped: a queue that lands after the timer has
+   fired schedules a fresh one, exactly as before. */
+let celebrateTimer = null;
 function maybeCelebrate() {
-  if (!S.celebration) return;
-  const c = S.celebration;
-  S.celebration = null;
-  setTimeout(() => openCelebration(c), 380);
+  if (!S.celebration || celebrateTimer) return;
+  celebrateTimer = setTimeout(() => {
+    celebrateTimer = null;
+    const c = S.celebration;
+    S.celebration = null;
+    if (c) openCelebration(c);
+  }, 380);
 }
 
 async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null, note = null, newPet = null }) {

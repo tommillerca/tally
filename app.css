@@ -336,6 +336,25 @@ svg { display: block; }
 .macro { display: grid; gap: 5px; }
 .macro .row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
 .macro .row .val { color: var(--text-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* THE VALUE IS ONE READING, NOT A SENTENCE.
+   The macros sit in .ring-side, which is whatever the 158px ring leaves: 124px
+   at 390, 109px at 375, 82.7px at 320. Measured 2026-09-01 at 375x667 in
+   headless Chrome, which resolves this stack to the device's own .SF NS (checked with
+   CSS.getPlatformFontsForNode, so these widths are not a fallback-font
+   artefact): "Protein" (45.5px) beside "94 / 185 g" (64.8px) wants 110.3px of a
+   109px row, so Protein and Carbs each broke the trailing "g" onto a second line
+   and the label ran into the value. Carbs was 111px of the same 109.
+   nowrap is enough on its own: a flex item will not shrink below min-content,
+   and min-content for an unbreakable string is the whole string.
+   HELD ABOVE 360px, and 320 is deliberately left exactly as it was. Below that
+   the row is over budget for any font (label plus value is 110.3px of 82.7px),
+   so nowrap there only trades a legible two-line value for a label squeezed to
+   nothing: measured 2026-09-01, .ring-side ran 38.8px past its card and
+   tests/grid-min-width-audit.mjs went red on SIDESCROLL 320x568. 360 is the
+   next viewport that audit measures, and it has room to spare. */
+@media (min-width: 360px) {
+  .macro .row .val { white-space: nowrap; }
+}
 .bar { height: 7px; border-radius: 4px; background: var(--surface-3); overflow: hidden; }
 .bar i { display: block; height: 100%; border-radius: 4px; transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
 .bar.protein i { background: var(--protein); }
@@ -10942,11 +10961,21 @@ details:not([open]) > :not(summary) *::after { animation: none !important; }
        the audit measures what a neighbour actually leaves behind.
    .t3-pm is not in this list: both of its pseudo-elements already draw the +/-
    bars, so it grows for real (see its own rule).
+
+   Round-9 pass, 2026-09-01, same instrument, same two viewports. The PRIMARY
+   segmented toggles already passed at 44 effective; the SECONDARY buttons under
+   them never got the treatment and measured, before:
+     .btn.small  42x43   (#exportBtn #importBtn #eraseBtn #redeemBtn
+                          #saveTargets #notifTest #copyDiag #whatsNewBtn)
+     #recalc     74x17.5 (a .link inside the DAILY TARGETS card title)
+   Same fix for the same reason: the boxes stay exactly where they are.
    ========================================================================== */
 .wallet-pill .wp,
 .dayhdr .icon-btn,
 .seg button,
 .q-claim,
+.btn.small,
+#recalc,
 button.t3-price { position: relative; }
 /* .gear-btn is ALREADY position:absolute and is deliberately NOT in the list
    above: a `position: relative` for it here, at the end of the file, would beat
@@ -10958,6 +10987,8 @@ button.t3-price { position: relative; }
 .gear-btn::before,
 .seg button::before,
 .q-claim::before,
+.btn.small::before,
+#recalc::before,
 button.t3-price::before {
   content: ''; position: absolute; left: 50%; top: 50%;
   width: 100%; height: 100%; min-width: 44px; min-height: 44px;

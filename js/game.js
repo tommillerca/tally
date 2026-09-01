@@ -491,7 +491,8 @@ async function streakAwards(streak) {
   return { gained, milestone };
 }
 
-// Called after a log entry is written. Returns {xp, levelUp, newBadges, streakMilestone, boosted}.
+// Called after a log entry is written. Returns {xp, newBadges, streakMilestone, boosted}.
+// A level crossed by this log is announced by awardOnce's `bh-levelup` event, not here.
 export async function onFoodLogged(entry, { via = null, targets = null, entriesForDate = [] } = {}) {
   let gained = 0;
   const logXp = await award(`log-${entry.id}`, 'log', 10, 'Logged a food', entry.date);
@@ -523,36 +524,31 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
   const newBadges = await evaluateBadges();
   gained += newBadges.length * 25;
 
-  /* READ THE TOTAL AT THE MOMENT OF THE COMPARISON, not thirty lines earlier.
-     This used to be `before + gained`, where `before` was a totalXp() read taken
-     at the top of the function, roughly 35 awaits before it was used. Anything
-     else that awarded XP in that gap (the init backfill is the reachable one:
-     log a food while it is still replaying) left `after` describing a total the
-     player never had, so the level crossing was computed against a number that
-     had already moved.
-     The fresh read is the player's real total, and `after - gained` is the total
-     immediately before THIS log, so the crossing attributed here is still only
-     the one this food caused. In the uncontended case the two agree exactly.
-     It could never double-pay: grantLevelRewards claims each level through
-     addIfAbsent('levelpaid-<L>'). The failure was a MISSED or mistimed level. */
-  const after = await totalXp();
-  const lvBefore = levelFor(after - gained), lvAfter = levelFor(after);
-  const levelUp = lvAfter.level > lvBefore.level ? lvAfter : null;
-  let levelRewards = null;
-  if (levelUp) levelRewards = await grantLevelRewards(lvBefore.level, lvAfter.level);
+  /* ONE OWNER OF THE LEVEL CROSSING, AND IT IS NOT THIS FUNCTION.
+     This used to re-read the total here, recompute the crossing over `gained`
+     and call grantLevelRewards again, so a food log that crossed a level
+     reported it TWICE: once from awardOnce, which dispatches `bh-levelup` the
+     moment a sub-award crosses, and once from here, through the caller's
+     queueCelebration. grantLevelRewards is idempotent (`levelpaid-<L>` is
+     claimed with addIfAbsent), so the payout was always correct, but the second
+     ceremony was handed a zeroed reward object and opened ON TOP of the real
+     one reading "+0" (measured 2026-09-01: two .lu-take sheets, +427ms "+65"
+     and +514ms "+0"). Every other XP source already relies on the dispatch
+     alone, so food logging now does too.
+     Nothing is missed by dropping the recompute: every sub-award above goes
+     through awardOnce, which reads a fresh total per award and compares the
+     level either side of it. XP only ever grows, so a crossing over the sum is
+     a crossing over one of the parts, and that part is the one that dispatches. */
   return {
     xp: gained,
-    total: after,
-    levelUp,
-    // the level you came FROM: a multi-level jump must not be assumed to be one
-    // step, and this is the path food logging takes
-    fromLevel: lvBefore.level,
-    levelRewards,
+    total: await totalXp(),
     newBadges,
     streakMilestone: sa.milestone,
     streak,
     boosted,
-    crates: (levelUp ? levelRewards.crates : 0) + (sa.milestone ? 1 : 0),
+    // streak crates only. Level crates are granted and counted by the level
+    // crossing's own owner (awardOnce -> grantLevelRewards).
+    crates: sa.milestone ? 1 : 0,
   };
 }
 
