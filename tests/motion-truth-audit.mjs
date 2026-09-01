@@ -99,7 +99,14 @@
  *             on 4 of 8 runs on 2026-08-27, each reading 0.000% on the retake.
  *   blank     `MEAN_DEBUG=1` prints every capture's std. 251 captures over 3
  *             runs: 63 rejected, all at 1.21 or 2.67; 188 accepted, 27.19 up.
- *   A run that prints neither never exercised either.
+ *             THOSE NUMBERS ARE HISTORY NOW, and are kept because they are what
+ *             calibrated BLANK_STD. The blanks had a cause and it was this
+ *             file's own camera, not the compositor: see captureBeyondViewport
+ *             at `shot` below. Measured after that fix, 0 of 30. So the blank
+ *             guard is now a net that should never be hit rather than a rate
+ *             this file lives with, and a run that starts rejecting captures
+ *             again is reporting a real change, not weather.
+ *   A run that prints no overlay NOTE never exercised that one.
  *
  * Usage: node tests/motion-truth-audit.mjs [baseUrl]   (serves this repo if omitted)
  */
@@ -286,14 +293,54 @@ const clipOf = async (page, sel, W, H) => {
    of the sample, and a sample taken while something was is thrown away and
    retaken, the same way sampleQuiet throws away a sample taken across a beat.
    Nine points, not one: an overlay is a rectangle and can take an edge. */
+/* AND elementFromPoint COULD NEVER SEE THE TOAST, which is the one overlay this
+   precondition was written for. It honours pointer-events, and `.toast` is
+   `pointer-events: none` (app.css), so the nine points below were reporting
+   `card`, `hypeYard`, `IMG` at every instant the toast sat on the banner's
+   bottom 22 rows. Measured 2026-09-01, ten probes across one toast queue: the
+   toast overlapped .hype's clip for the first 19.8 seconds and the hit test
+   named it not once.
+   The row passed anyway, for the reason the note above already calls
+   unacceptable: the blank-frame retries were burning ~13s and pushing the sample
+   past the queue. Fixing the camera (see `shot`) removed that accidental delay,
+   and the banner immediately read 9.320% on three runs out of three, which is
+   the toast's own number from 2026-08-27 to the third decimal. The guard was
+   blind the whole time; the camera's stutter was standing in for it. */
 const foreignOver = (page, sel, clip) => page.evaluate((s, c) => {
   const e = document.querySelector(s);
   if (!e) return 'gone';
-  for (const fx of [0.04, 0.5, 0.96]) for (const fy of [0.04, 0.5, 0.96]) {
-    const hit = document.elementFromPoint(c.x + c.width * fx, c.y + c.height * fy);
-    if (hit && !(e.contains(hit) || hit.contains(e))) return hit.id || hit.className || hit.tagName;
-  }
-  return null;
+  /* THE HIT TEST HAD TO STOP HONOURING pointer-events FIRST. Painting and
+     hit-testing are different questions and elementFromPoint only answers the
+     second one, so anything `pointer-events: none` is invisible to it however
+     solidly it is drawn. Lifting the property for the length of the test asks
+     the browser the question this row actually means, in the browser's own
+     stacking order, and pointer-events changes nothing about what is painted,
+     so the capture that follows is untouched.
+     A rect scan over fixed elements was tried first and is the wrong tool: it
+     cannot tell BEHIND from IN FRONT, and it threw away 28 samples a run by
+     naming `sheet-backdrop`, which is under the sheet the drop rows live in. */
+  /* AND ONCE EVERYTHING IS HIT-TESTABLE, "topmost" has to mean "topmost thing
+     that is actually drawn". elementFromPoint skips display:none and
+     visibility:hidden for us but NOT opacity:0, and #tzSpot is exactly that: a
+     full-size, empty, opacity-0 layer resting over the drop wall between beats
+     (measured 2026-09-01, both passes). Taking it as an overlay threw away 16
+     samples a run and redded the wall for a layer with nothing in it. So walk
+     the stack and take the first element no ancestor has faded out. */
+  const paints = el => {
+    for (let n = el; n && n !== document.body; n = n.parentElement)
+      if (parseFloat(getComputedStyle(n).opacity) === 0) return false;
+    return true;
+  };
+  const lift = document.createElement('style');
+  lift.textContent = '*{pointer-events:auto!important}';
+  document.head.appendChild(lift);
+  try {
+    for (const fx of [0.04, 0.5, 0.96]) for (const fy of [0.04, 0.5, 0.96]) {
+      const hit = document.elementsFromPoint(c.x + c.width * fx, c.y + c.height * fy).find(paints);
+      if (hit && !(e.contains(hit) || hit.contains(e))) return hit.id || hit.className || hit.tagName;
+    }
+    return null;
+  } finally { lift.remove(); }
 }, sel, clip);
 
 /* Sample a surface across its window and return the LARGEST change seen against
@@ -338,9 +385,29 @@ const foreignOver = (page, sel, clip) => page.evaluate((s, c) => {
    frame is the camera; art of any brightness has edges in it.
    The 2.67 readings are the .hype blanks, and the old bound accepted them. */
 const BLANK_STD = 12;
+/* AND THE BLANK FRAME HAD A CAUSE, which is this file's own camera. Everything
+   above treats the unpainted capture as weather to be retried around; it is not.
+   puppeteer 24 defaults `captureBeyondViewport: true` (Page.js:116), which wraps
+   every CLIPPED screenshot in a device-metrics override so the clip may extend
+   past the viewport. Under headless 'shell' that override re-rasterizes, and the
+   frame that comes back is the one that has not been painted yet. Every clip
+   this file takes is wholly INSIDE the viewport, so the option buys nothing here
+   and costs the sample.
+   Measured 2026-09-01 on #tzReel under reduce, the surface this went red on, the
+   two calls interleaved round-robin in one page so ordering cannot explain it
+   (an earlier sequential probe was confounded by exactly that: the blank rate
+   drifted down through the run and made whichever method ran last look best):
+       page.screenshot({ clip })                        27 of 30 blank
+       page.screenshot({ clip, captureBeyondViewport })   0 of 30 blank
+   Identical 398x429 output either way, so `diff` and `spread` are unaffected.
+   Nothing about what this file ASSERTS changes: a flat capture is still rejected
+   by BLANK_STD, the retries still run, and a surface that really cannot be
+   photographed still returns null and still fails its row. Only the camera is
+   fixed. The other ~18 clipped page.screenshot callers in tests/ have the same
+   defect and are out of this file's scope. */
 const shot = async (page, dp, clip, tries = 12) => {
   for (let i = 0; i < tries; i++) {
-    const b = await page.screenshot({ clip, encoding: 'base64' });
+    const b = await page.screenshot({ clip, captureBeyondViewport: false, encoding: 'base64' });
     const mv = await dp.spread(b);
     if (process.env.MEAN_DEBUG) console.log(`      [std] ${mv.toFixed(2)}`);
     if (mv > BLANK_STD) return b;
@@ -397,7 +464,18 @@ const sampleMotion = async (page, sel, dp, clip, windowMs, tries = 4) => {
 const sampleQuiet = async (page, sel, dp, clip, windowMs, quiet, tries = 4) => {
   const held = async () => (await page.evaluate(s => document.querySelector(s)?.className || '', quiet.sel)).includes(quiet.cls);
   for (let t = 0; t < tries; t++) {
-    for (let i = 0; i < 60 && !await held(); i++) await sleep(250);
+    /* WAIT FOR THE BEAT TO ARRIVE, not merely to BE HERE. Asking whether the
+       class is present takes whatever is left of a beat already running, and
+       grid is 5.2s against a 1.1s settle plus a 2.4s window: enter it late and
+       the sample runs off the end into the next beat every time. That was
+       invisible while #tzSpot was pointer-transparent (the straddle was simply
+       graded); with foreignOver able to see it, the row correctly refused, four
+       tries running, on 3 of 4 runs. So let the current beat finish first and
+       take the next one from its start, which leaves the whole 5.2s ahead.
+       The waits cover a full 18s cycle (TZ_BEATS 5.2 + 3.6 + 3.6 + 5.6) so
+       arriving just after a grid beat ended still catches the following one. */
+    for (let i = 0; i < 80 && await held(); i++) await sleep(250);
+    for (let i = 0; i < 80 && !await held(); i++) await sleep(250);
     if (!await held()) continue;
     await sleep(1100);                       // the .9s wall crossfade, settled
     if (!await held()) continue;

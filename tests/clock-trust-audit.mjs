@@ -109,18 +109,29 @@ const { browser, page } = await boot(base);
 
 try {
   /* The shim. Declared before the reload so it is installed for the boot path
-     too, not bolted on after the app has already read the date once. */
-  await page.evaluateOnNewDocument(() => {
+     too, not bolted on after the app has already read the date once.
+     CT_BASE_SHIFT MOVES THE WHOLE SIMULATED CALENDAR, and it is here because
+     three reds in this file in one day were the date lottery: the quest draw is
+     seeded on the date string (js/quests.js:326), so every row downstream of it
+     is graded on exactly ONE calendar date, the one the run happened on, and a
+     row that only holds today is the bug rather than the proof. With this, the
+     same suite runs on any date without touching the machine clock, so a fix can
+     be shown to hold across the draw instead of on the day it was written.
+     It is folded into the shim's own offset AND into __realNow, not into
+     shiftDays, so the flat-millisecond walk and the LOCAL-calendar helpers
+     (shiftLocalDays, gotoLocal) move together and the file keeps one "today".
+     Defaults to 0, so the gate grades the real date exactly as before. */
+  await page.evaluateOnNewDocument(baseMs => {
     const Real = Date;
-    const off = () => Number(localStorage.getItem('__clockOffsetMs') || 0);
+    const off = () => baseMs + Number(localStorage.getItem('__clockOffsetMs') || 0);
     function Shim(...a) { return a.length ? new Real(...a) : new Real(Real.now() + off()); }
     Shim.prototype = Real.prototype;
     Shim.now = () => Real.now() + off();
     Shim.parse = Real.parse; Shim.UTC = Real.UTC;
     Object.setPrototypeOf(Shim, Real);
     window.Date = Shim;
-    window.__realNow = () => Real.now();
-  });
+    window.__realNow = () => Real.now() + baseMs;
+  }, Number(process.env.CT_BASE_SHIFT || 0) * 86400000);
   await page.reload({ waitUntil: 'networkidle2' });
   await sleep(2200);
 
@@ -633,15 +644,28 @@ try {
      tight (measured 333 vs 333). The pre-guard 176.4 and the measured mean are
      still reported in the FINDING above, so the historical anchor is not lost. */
   /* Post-#283 two consecutive dates can legitimately roll different-SIZED quest
-     sets, and quest XP dominates the day total, so raw-total parity reds on a
-     healthy tree whenever the lottery deals unequal days. Compare like with
-     like: parity holds on the raw totals when the sets are the same size, and
-     on the per-rolled-quest normalized totals when they are not. */
-  const sameSize = honest.questNames.length === fwd.questNames.length;
-  const norm = d => d.xp / Math.max(1, d.questNames.length);
-  check('the honest day is worth as much as the honest day before it (normalized when the date lottery dealt unequal sets)',
-    sameSize ? honest.xp >= fwd.xp * 0.8 : norm(honest) >= norm(fwd) * 0.8,
-    `${honest.xp} (${honest.questNames.length}q) vs ${fwd.xp} (${fwd.questNames.length}q) on the +105 control`);
+     sets, so the raw day total is not comparable across them. #328 normalized by
+     dividing the WHOLE total by the rolled count, on the stated premise that
+     "quest XP dominates the day total". It does not, and never did. Measured
+     2026-09-01, the date that dealt +105 one quest and +106 three:
+         +105  283 XP total = 258 base + 1 x 25 quest   (quest share 9%)
+         +106  333 XP total = 258 base + 3 x 25 quest   (quest share 23%)
+     The base is identical because the fixture does the identical day either way;
+     it is the term that does NOT scale with the draw. Dividing it by the set
+     size is what redded a healthy tree, and it reds a DIFFERENT date every time
+     the lottery deals unequal sets, which is the third sighting of this class.
+     A day total is base + REWARD_XP.day per claimed quest (js/quests.js:411, a
+     flat 25 for EVERY daily quest, so the per-quest rate is set-independent by
+     construction). So grade the two terms separately and each comparison is
+     between like and like on every date in the calendar, not just this one.
+     Strictly stronger than the raw-total row it replaces: a day that paid its
+     base and refused every quest satisfied that row and cannot satisfy this one. */
+  const baseXp = d => d.xp - d.questXp;
+  const perQuest = d => d.questXp / Math.max(1, d.questNames.length);
+  check('the honest day is worth as much as the honest day before it (base XP and per-quest rate, neither of which an unequal draw can move)',
+    baseXp(honest) >= baseXp(fwd) * 0.8 && perQuest(honest) >= perQuest(fwd) * 0.8,
+    `base ${baseXp(honest)} vs ${baseXp(fwd)}, per quest ${perQuest(honest)} vs ${perQuest(fwd)}` +
+    ` (totals ${honest.xp} on ${honest.questNames.length}q vs ${fwd.xp} on ${fwd.questNames.length}q, +105 control)`);
 
   /* ================= 4. THE GRACE CEILING (ASSERTED, BOTH SIDES) ==========
      Rule 2: the local date may not outrun UTC elapsed by more than DAY_GRACE.
