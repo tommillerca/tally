@@ -210,7 +210,31 @@ async function backupKey() {
   return crypto.subtle.importKey('jwk', id.aesJwk, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
 
-const u8ToB64 = u8 => btoa(String.fromCharCode(...u8));
+/* CHUNKED, BECAUSE THE SPREAD WAS A SILENT CEILING ON EVERY MATURE SAVE.
+   This was `btoa(String.fromCharCode(...u8))`, which passes the WHOLE ciphertext
+   as individual arguments to one call. That blows the engine's call stack, and
+   the throw is a RangeError that pushBackup's blanket catch turns into a plain
+   `return false`: no toast, no log, no retry, `backupAt` never moves. So every
+   push path (autoSync at boot and resume, both Go Online buttons, the cloud
+   toggle) failed with ZERO WORDS forever once a save got big enough, which is a
+   few weeks of heavy play. The backup-key discipline above was protecting a
+   backup that a mature save never got to write.
+
+   It is a STACK limit, not a fixed argument cap, so it is not even a stable
+   cliff: measured at 109,841 bytes here and ~124,385 in the reporter's Chromium,
+   and it moves with stack depth, so the same save can push on one device and
+   fail on another, or fail only sometimes.
+
+   0x8000 per chunk keeps each apply() call three orders of magnitude clear of
+   any engine's limit and is the conventional size for exactly this. The decode
+   side (b64ToU8 below) never had the problem: it maps, it does not spread.
+   tests/backup-encoder-audit.mjs, proven red against the spread. */
+const B64_CHUNK = 0x8000;
+const u8ToB64 = u8 => {
+  let s = '';
+  for (let i = 0; i < u8.length; i += B64_CHUNK) s += String.fromCharCode.apply(null, u8.subarray(i, i + B64_CHUNK));
+  return btoa(s);
+};
 const b64ToU8 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
 // Encrypt an object -> base64(iv(12) || ciphertext). Server can never read this.
