@@ -177,7 +177,15 @@ const ACTIONS = [
   /* js/loot.js:buyWithDust stood here with 3 sites (grantEgg / grantCrate /
      grantConsumable). The Bone Dust shop closed on 2026-08-25 and dust is a
      cosmetic-only currency, so all three sites went with it. */
-  { id: 'js/loot.js:buyDropItem', sites: 1, undriven: 'a purchase, and it refuses when already owned' },
+  /* sites went 1 to 2 on 2026-08-31 with the atomic spend. The second site is a
+     REFUND of the coins this very call just took, on the one path where the
+     grant is lost to a concurrent tap (grantCosmetic addIfAbsent's `cos:<id>`
+     and returns null to whoever loses). It is bounded by the debit above it and
+     conserves the balance rather than adding to it, so it is not a payout and
+     needs no ledger key of its own. It is graded by the SPEND-ONCE row in
+     tests/purchase-firewall.mjs: four concurrent taps on a 3,000-coin piece
+     leave the wallet exactly 3,000 lighter, not 9,000. */
+  { id: 'js/loot.js:buyDropItem', sites: 2, undriven: 'a purchase, and it refuses when already owned; the second site is its own refund on a lost grant race, not a payout' },
   { id: 'js/loot.js:disenchantGear', sites: 1, undriven: 'melts a piece the player owns: the gear row is the input, so a second run finds nothing' },
   { id: 'js/loot.js:salvagePet', sites: 1, undriven: 'as disenchantGear, on a pet instance' },
   { id: 'js/loot.js:salvageInstance', sites: 1, undriven: 'as salvagePet, by instance id' },

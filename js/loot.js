@@ -69,11 +69,24 @@ export async function buyDropItem(itemId) {
   if (!d) throw new Error('not a drop item');
   const item = BH_BY_ID[itemId];
   if ((await ownedCosmeticIds()).has(itemId)) return { ok: false, reason: 'owned' };
-  const c = await coins();
-  if (c < d.cost) return { ok: false, reason: 'coins', need: d.cost, have: c };
-  await coinsAdd(-d.cost);
-  await grantCosmetic(itemId, 'drop');
-  return { ok: true, label: item.name, cost: d.cost, coins: await coins() };
+  /* CHARGED ONCE, GRANTED ONCE, and this used to be neither. Reading the balance
+     and then calling coinsAdd let overlapping taps all pass one stale check:
+     measured on origin/main 13583e42, four taps on a 3,000-coin jacket with
+     7,000 coins took the WHOLE 7,000 (the clamp ate the overdraft) and
+     delivered one jacket.
+     grantCosmetic is already the receipt here, so no second ledger row is
+     needed: it addIfAbsent's `cos:<id>` and returns null to whoever loses. The
+     money moves first, atomically, and the loser of the grant race gets it
+     straight back, so exactly one caller is out of pocket. Same receipt-decides
+     principle as buyRackItem, without a `dropbuy:` key that would then need its
+     own recovery branch. */
+  const left = await spendCoins(d.cost);
+  if (left === null) return { ok: false, reason: 'coins', need: d.cost, have: await coins() };
+  if (!await grantCosmetic(itemId, 'drop')) {
+    await coinsAdd(d.cost);   // somebody else's tap landed the piece: give it back
+    return { ok: false, reason: 'owned' };
+  }
+  return { ok: true, label: item.name, cost: d.cost, coins: left };
 }
 
 /* ---------- the rack: the weekly cosmetic shop (v409) ----------
@@ -667,6 +680,30 @@ function rng() {
    unchanged, it just happens inside the transaction now. */
 export async function coins() { return (await kvGet('coins', 0)) || 0; }
 export async function coinsAdd(n) { return kvBump('coins', n); }
+
+/* THE ATOMIC SPEND, and it is the only honest way to take money in this file.
+   Every buy used to read the balance, compare it to the price, and THEN call
+   coinsAdd(-price) in a second transaction. That is check-then-act: concurrent
+   callers all pass the same stale read, and because kvBump clamps at min 0 the
+   surplus debits cost NOTHING. Measured on origin/main 13583e42: three
+   overlapping buyShopItem('vigor') calls on a 90-coin wallet returned ok three
+   times, granted three 90-coin Draughts and charged 90. Past the first item the
+   goods were free, and Vigor is Pit energy, so thumb speed bought power.
+   Deciding affordability and taking the money inside ONE kv transaction is the
+   shape that cannot do that: kvUpdate writes nothing when fn returns undefined,
+   so a wallet that cannot cover the price is left byte-identical.
+   Returns the REAL post-spend balance, or null for "could not afford it". The
+   balance is returned rather than re-read because a re-read can already carry
+   somebody else's concurrent spend, and a receipt should say what this purchase
+   left behind. */
+export async function spendCoins(cost) {
+  if (!Number.isFinite(cost) || cost < 0) return null;
+  const left = await kvUpdate('coins', cur => {
+    const bal = Number(cur) || 0;
+    return bal < cost ? undefined : bal - cost;
+  }, 0);
+  return left === undefined ? null : left;
+}
 
 /* ---------- inventory ---------- */
 export async function inventory() { return db.all('inv'); }
@@ -1759,16 +1796,22 @@ export async function openCrate(invId) {
 export async function buyShopItem(shopId) {
   const s = SHOP.find(x => x.id === shopId);
   if (!s) throw new Error('unknown item');
-  const c = await coins();
-  if (c < s.cost) return { ok: false, reason: 'coins', need: s.cost, have: c };
-  await coinsAdd(-s.cost);
+  /* THE MONEY DECIDES, not a read of the money. A consumable is bought over and
+     over, so there is no per-item receipt to claim the way buyRackItem does; the
+     debit itself has to be the gate. spendCoins refuses inside the transaction,
+     which is why the grant below can only ever follow a real payment. An earlier
+     pass met this same double-tap and fixed only the TOAST (the `owned` count
+     the comment below explains); the race underneath it was never touched, so
+     the wallet went on minting free Draughts. */
+  const left = await spendCoins(s.cost);
+  if (left === null) return { ok: false, reason: 'coins', need: s.cost, have: await coins() };
   await grantConsumable(shopId, 'shop');
   // Report WHAT was bought, what it cost, the new balance and how many you now
   // hold. The old bare {ok:true} left the UI with nothing to say beyond
   // "Purchased", which reads as a no-op when you tap twice, so people kept
   // tapping and drained their coins without ever seeing a purchase land.
   const owned = await consumableCount(shopId);
-  return { ok: true, label: s.label, cost: s.cost, coins: await coins(), owned };
+  return { ok: true, label: s.label, cost: s.cost, coins: left, owned };
 }
 
 /* ---------- the Bone Merchant's closing payout ----------
