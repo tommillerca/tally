@@ -88,9 +88,23 @@ for (const [W, H] of SIZES) {
   /* A transient toast or the floats layer sits over the tray for a beat after a
      turn renders. Hit-testing through it measures the toast, not the button, so
      clear them first and say so, rather than reporting a reachability failure
-     that is really a timing artefact. */
+     that is really a timing artefact.
+
+     HIDE THE TOAST, NEVER REMOVE IT. This cleared `.toast` until 2026-09-01, and
+     that selector also matches #toast itself, the app's ONE live region: it is
+     declared once in index.html and nextToast() re-reads it by id on every
+     message, so deleting it made the app throw on the next thing it said. This
+     file was failing the app for a null it had made. That throw is also the
+     error pinned at the bottom of this file as pre-existing: it read
+     "reading 'getAttribute'" while nextToast() began by asking #toast for its
+     aria-live, and when the accessibility pass moved aria-live into the markup
+     the same deref started reporting "reading 'classList'" and slipped the pin.
+     Measured both arms, same fight and same close: with the removal the error
+     fires, without it the run is clean. Blanking it is all the hit test needed. */
   await page.evaluate(() => {
-    document.querySelectorAll('.toast, #floats > *, .drop-veil').forEach(n => n.remove());
+    document.querySelectorAll('#floats > *, .drop-veil').forEach(n => n.remove());
+    const t = document.getElementById('toast');
+    if (t) { t.textContent = ''; t.hidden = true; }
   });
   await sleep(250);
 
@@ -273,15 +287,13 @@ for (const [W, H] of SIZES) {
   await sleep(400);
 }
 
-/* ONE KNOWN ERROR IS PINNED BY MESSAGE, everything else fails. Confirmed on
-   unmodified origin/main (b5dd3af) with this identical file, so it predates the
-   tray fix and belongs to the crash-risk lane, which has the reproduction. It is
-   pinned rather than ignored: a NEW page error still fails this audit, and when
-   that lane lands its fix this pin should be deleted rather than left to rot. */
-const KNOWN = [/Cannot read properties of null \(reading 'getAttribute'\)/];
-const novel = errors.filter(e => !KNOWN.some(k => k.test(e)));
-ok('no NEW page errors during the run', novel.length === 0, novel.slice(0, 2).join(' | '));
-if (errors.length) console.log(`  (${errors.length} known pre-existing page error(s) seen, pinned, owned by the crash-risk lane)`);
+/* THE PIN IS GONE, because the error it pinned was this file's own doing.
+   It was recorded as pre-existing and handed to the crash-risk lane on the
+   strength of reproducing against unmodified origin/main, which it did: this
+   file reproduced it on any tree, because the cleanup above deleted #toast and
+   the app then threw on its next message. Nothing else in the run ever produced
+   one. So EVERY page error fails now, with no escape hatch to rot. */
+ok('no page errors during the run', errors.length === 0, errors.slice(0, 2).join(' | '));
 
 await browser.close();
 srv?.close?.();
