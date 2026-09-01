@@ -32,7 +32,13 @@
     radial-gradient(80% 48% at 90% 26%, rgba(52,80,120,.15), transparent 56%),
     radial-gradient(120% 58% at 50% 112%, rgba(110,80,168,.20), transparent 60%),
     linear-gradient(#08070e 0%, #0b0a15 46%, #0f0d1c 76%, #131120 100%);
-  --text-3: #8f8578;   /* 5.00:1 on --surface. #7d7365 was 3.89:1 and carried 16 of the 21 failing pairs on Today */
+  /* --text-3 is graded on the WORST surface it lands on, not the best. #8f8578
+     was 5.00:1 on --surface and the comment stopped there, but it is 4.64:1 on
+     --surface-2 and 4.03:1 on --surface-3, and the soft-light grain lightens
+     all three. #9d9284 is 5.93 / 5.51 / 4.78 on the same three, so every one of
+     them clears 4.5 with the grain still on top, and the hierarchy below
+     --text-2 (6.54:1 on --surface-3) is untouched. */
+  --text-3: #9d9284;
   --accent: #a5e847;
   --accent-ink: #16210b;
   --accent-soft: rgba(165, 232, 71, 0.16);
@@ -513,6 +519,11 @@ svg { display: block; }
 .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 
 .seg { display: flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 3px; }
+/* A SEGMENT THAT SHRANK BELOW ITS OWN WIDTH. Every Settings seg asks for 130px
+   inline and every one of them is a flex item, so a long label squeezed it: the
+   Gear glow row's two buttons measured 30.9 and 33.4 wide. The author's width is
+   the width; the label wraps instead. */
+.settings-row .seg { flex: none; }
 .seg button { flex: 1; padding: 9px 6px; border-radius: 9px; font-size: 13.5px; font-weight: 700; color: var(--text-2); }
 .seg button.on { background: var(--surface-3); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
 
@@ -591,6 +602,13 @@ svg { display: block; }
   background: var(--surface-3); border: 1px solid var(--line-strong); color: var(--text);
   font-size: 15px; font-weight: 600; padding: 11px 18px; border-radius: 22px;
   z-index: 80; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  /* IT STOPS EATING TAPS. Fixed, z-index 80, and until 2026-08-31 it was
+     hit-testable, so for the 2.2 to 3.6 seconds a message is up
+     document.elementFromPoint over the Bonehead, Stable and Kitchen doors on
+     Today returned #toast and the tap went nowhere. Anti-regression rule 6,
+     broken by the toast itself. It is never interactive, so it never needed
+     to be in the hit test at all. Guard: tests/a11y-audit.mjs. */
+  pointer-events: none;
   animation: toastin 0.25s cubic-bezier(0.22, 1, 0.36, 1);
   /* `width: max-content` so the pill uses the room it is allowed instead of
      shrink-wrapping: a fixed element with auto width was sizing to ~50% of the
@@ -2062,7 +2080,10 @@ body::before {
 .range-pill {
   justify-self: center; font-family: var(--display); font-weight: 400;
   font-size: var(--fs-4); letter-spacing: .05em; text-transform: uppercase;
-  color: var(--text); background: var(--coral);
+  /* INKED, NOT CREAM. #f2e9d7 on this coral is 2.39:1 against the 4.5 small
+     text needs; #2a0d08 is 6.29:1 and is the hex the app's other coral chips
+     (.spp .ribbon.t3, .den-hero .who .tier.warden.t3) already use. */
+  color: #2a0d08; background: var(--coral);
   border: 2px solid var(--ink); border-radius: 10px; box-shadow: var(--sh-sm);
   padding: 2px 12px;
 }
@@ -3201,7 +3222,7 @@ body::before {
 }
 .race-clock {
   flex: none; display: inline-flex; align-items: center;
-  background: var(--coral); color: var(--text); border: 2px solid var(--ink);
+  background: var(--coral); color: #2a0d08; border: 2px solid var(--ink);
   border-radius: 999px; box-shadow: var(--sh-sm);
   padding: 1px 9px; font-size: var(--fs-0); font-weight: 800; letter-spacing: .06em;
   white-space: nowrap;
@@ -3337,7 +3358,11 @@ body::before {
 /* The heading, not a chip. It spans both columns, which is a large part of what
    keeps the two halves reading as one banner. */
 .hype-eye { grid-column: 1 / -1; justify-self: start; font-family: var(--display); font-weight: 400;
-  font-size: var(--fs-4); line-height: 1; letter-spacing: .04em; color: var(--coral);
+  /* CREAM, NOT CORAL. The wash's radial starts at 18% 0%, which is exactly
+     where this heading sits, so coral-on-coral measured 2.59:1. Cream on the
+     same pixels is 8.55:1 and the banner still reads as the coral surface it
+     is: the accent is the wash, not the word. */
+  font-size: var(--fs-4); line-height: 1; letter-spacing: .04em; color: var(--text);
   margin-bottom: 6px; }
 .hype-half { grid-row: 2; display: flex; flex-direction: column; align-items: center; gap: 5px;
   background: none; border: 0; padding: 0; cursor: pointer; min-width: 0; }
@@ -3379,7 +3404,7 @@ body::before {
   letter-spacing: .03em; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rr-banner .race-h .pill { flex: none; display: inline-flex; align-items: center;
-  background: var(--coral); color: var(--text); border: 2px solid var(--ink);
+  background: var(--coral); color: #2a0d08; border: 2px solid var(--ink);
   border-radius: 999px; padding: 1px 8px; font-size: var(--fs-0); font-weight: 800;
   letter-spacing: .06em; white-space: nowrap; }
 .rr-banner .gbn-txt small { display: block; font-size: var(--fs-2); color: var(--text-2); }
@@ -3672,7 +3697,7 @@ body::before {
 .cfan-chip.lvl { background: var(--gold); color: var(--ink); }
 .cfan-chip.pet { background: var(--violet); color: var(--ink); }
 .cfan-acts { display: flex; flex-direction: column; gap: 7px; }
-.cfan-acts .btn.gift { background: var(--coral); color: var(--text); }
+.cfan-acts .btn.gift { background: var(--coral); color: #2a0d08; }
 @media (prefers-reduced-motion: reduce) {
   .cfan-card, .cfan-deck { transition: none; }
 }
@@ -7881,8 +7906,12 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .t3-stat .foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .t3-stat .foot small { flex: 1; font-size: var(--fs-1); color: var(--text-2); line-height: 1.35; }
 /* drawn +/- steppers: two bars, the plus rotates one of them */
+/* 44, NOT 38. This is the one control in the tap-target pass that grows for
+   real rather than under a transparent ::before: both of its pseudo-elements
+   are already spent drawing the +/- bars. The bars are absolutely centred, so
+   they do not move. */
 .t3-pm {
-  flex: none; width: 38px; height: 38px; border-radius: 10px; position: relative;
+  flex: none; width: 44px; height: 44px; border-radius: 10px; position: relative;
   background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
 }
 .t3-pm::before, .t3-pm.plus::after {
@@ -7955,8 +7984,8 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   flex: none; text-align: center; background: var(--coral); border: 2px solid var(--ink); border-radius: 11px;
   box-shadow: var(--sh-sm); padding: 4px 12px;
 }
-.t3-fighter .tp b { display: block; font-family: var(--display); font-weight: 400; font-size: 22px; color: var(--text); line-height: 1; }
-.t3-fighter .tp small { font-size: 8.5px; font-weight: 800; letter-spacing: .08em; color: var(--text); }
+.t3-fighter .tp b { display: block; font-family: var(--display); font-weight: 400; font-size: 22px; color: #2a0d08; line-height: 1; }
+.t3-fighter .tp small { font-size: 8.5px; font-weight: 800; letter-spacing: .08em; color: #2a0d08; }
 .t3-armor { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 .t3-armor .t3-cell b { color: var(--protein); font-size: 24px; margin-bottom: 2px; }
 .t3-armor .t3-cell .lab { font-family: var(--display); font-size: 13px; letter-spacing: .05em; color: var(--text); }
@@ -8389,7 +8418,12 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    dot that used to lead this row is gone (2026-08-26): it is a labelled door in
    .hero-actions now. */
 .wallet-pill {
-  display: inline-flex; align-items: center; gap: 12px;
+  /* GAP 20, NOT 12. The four chips' 44px hit areas meet in the middle of the
+     gap, and at 12 they overlapped: measured, #dustBtn and #vigorBtn answered
+     over 38px of width because their neighbours took the rest. 20 puts every
+     pair of centres at least 46px apart, which is the only reason the numbers
+     in tests/a11y-audit.mjs come out at 44 and not 38. */
+  display: inline-flex; align-items: center; gap: 20px;
   padding: 6px 12px; border-radius: 999px;
   background: rgba(13, 12, 18, .42);
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
@@ -10883,3 +10917,83 @@ details:not([open]) > :not(summary) *::after { animation: none !important; }
 .nb-goes { display: flex; align-items: center; gap: 3px; flex: none;
   font-size: 10.5px; font-weight: 800; letter-spacing: .05em;
   text-transform: uppercase; color: var(--accent); }
+
+/* ============================================================================
+   TAP TARGETS: Apple's 44x44 floor, without moving a pixel
+   Round-5 accessibility pass, 2026-08-31, and it is App Store review surface.
+
+   Measured with document.elementFromPoint at 375x667 and 390x844, before:
+     #vigorBtn  26x16      #dustBtn 29x16   #cratesBtn 28x16   #coinBtn 44x16
+     #prevDay / #nextDay / #todaySettings   38x39
+     .seg button  43x37 (and 32x38 on the Gear glow row)
+     .q-claim     56x28   button.t3-price (pet shop)  59x26
+   Every one is under the floor a reviewer taps against, and the wallet chips
+   are the smallest interactive elements in the app while opening real sheets.
+
+   THE BOXES DO NOT CHANGE. Cam's art and the chip sizes are the fixed input, so
+   the hit area is carried by a transparent ::before, centred on the control and
+   never smaller than 44x44. Two consequences worth knowing:
+     - getBoundingClientRect still reads the OLD number. Only a hit test grades
+       this, which is exactly what tests/a11y-audit.mjs does, and why a box-size
+       assertion would have failed a correct fix.
+     - Two of these controls sit close enough that their hit areas would fight
+       over the same pixels. That is why .wallet-pill's gap went 12 -> 20 and
+       .settings-row .seg stopped shrinking: the spacing is part of the fix, and
+       the audit measures what a neighbour actually leaves behind.
+   .t3-pm is not in this list: both of its pseudo-elements already draw the +/-
+   bars, so it grows for real (see its own rule).
+   ========================================================================== */
+.wallet-pill .wp,
+.dayhdr .icon-btn,
+.seg button,
+.q-claim,
+button.t3-price { position: relative; }
+/* .gear-btn is ALREADY position:absolute and is deliberately NOT in the list
+   above: a `position: relative` for it here, at the end of the file, would beat
+   its own rule on source order and unpin the Settings gear from the corner it
+   was moved to. Its ::before anchors to it either way. */
+
+.wallet-pill .wp::before,
+.dayhdr .icon-btn::before,
+.gear-btn::before,
+.seg button::before,
+.q-claim::before,
+button.t3-price::before {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 100%; height: 100%; min-width: 44px; min-height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+/* ----------------------------------------------------------------------------
+   RARITY IS NOT A COLOUR
+   .ward-cell.r-* carried the tier in border-colour alone, so a colourblind
+   player could not read their own collection at all. The crate reveal and the
+   shop's pet cards already print the word; the grid has room for the initial,
+   in the corner the equipped tick and the SLIMED tag both leave free. The full
+   word goes in the accessible name (see wardrobe rendering in js/app.js).
+   -------------------------------------------------------------------------- */
+.ward-rar {
+  position: absolute; left: 3px; bottom: 3px; z-index: 2; pointer-events: none;
+  font-size: 8.5px; font-weight: 900; letter-spacing: .04em; line-height: 1;
+  padding: 2.5px 4px; border-radius: 5px;
+  /* .88 AND NOT .78, MEASURED. The tile behind this is Cam's art, so the worst
+     case is a white pixel under the plate: at .78 the epic violet came out at
+     3.69:1 against the 4.5 it needs, and at .88 it is 5.3. Every other tier is
+     7:1 or better either way; the violet is what set the number. */
+  background: rgba(13, 12, 18, .88); color: var(--text);
+}
+/* A GEAR TILE SPENDS ITS WHOLE BOTTOM STRIP on the +PWR line, and at this tile
+   width that line WRAPS to two: measured 23px tall, so the first attempt at
+   this (bottom: 21px, "just above it") overlapped it on 3 of 3 tiles and the
+   audit said so. The tier goes to the top-left corner instead, which is a
+   corner and not an offset, and the only thing that ever uses it is the SLIMED
+   tag. Cosmetic tiles have no stat line and keep the bottom-left.
+   .ward-cell.look never gets here: transmog tiles carry no r-* class. */
+.ward-cell.gear .ward-rar { bottom: auto; top: 3px; }
+/* and under the SLIMED tag on the pieces that carry both */
+.ward-cell.gear.slimed .ward-rar { top: 18px; }
+.ward-cell.r-uncommon .ward-rar { color: var(--mint); }
+.ward-cell.r-rare .ward-rar { color: var(--protein); }
+.ward-cell.r-epic .ward-rar { color: var(--violet); }
+.ward-cell.r-legendary .ward-rar { color: var(--gold); }
+

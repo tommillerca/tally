@@ -3108,7 +3108,9 @@ function nextToast() {
   const job = toastQ.shift();
   if (!job) { toastBusy = false; return; }
   toastBusy = true;
-  if (!t.getAttribute('aria-live')) { t.setAttribute('aria-live', 'polite'); t.setAttribute('role', 'status'); }
+  /* aria-live and role are in index.html now. Attaching them here meant the
+     region came into existence in the same tick as the message it carried, so
+     the first toast of a session announced to nobody. */
   t.classList.remove('out');
   t.textContent = job.msg;
   t.hidden = false;
@@ -13524,15 +13526,17 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="ward-grid" data-wslot="${slot}">
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
         ${items.map(i => `
-          <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)}">
-            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" role="img" aria-label="${esc(i.name)}"></canvas>
+          <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)} · ${esc(i.rarity)}">
+            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>
+            ${rarityTagHtml(i.rarity)}
           </button>`).join('')}
         ${gearItems.map(g => {
           const art = BH_BY_ID[g.artId];
           const locked = wLevel < g.minLevel;
           return `
-          <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
-            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}" data-pad="0.14" role="img" aria-label="${esc(g.name)}"></canvas>
+          <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)} · ${esc(g.rarity)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
+            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}" data-pad="0.14" role="img" aria-label="${esc(g.name)}, ${esc(g.rarity)}"></canvas>
+            ${rarityTagHtml(g.rarity)}
             <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
           </button>`;
@@ -14404,6 +14408,17 @@ function petPanelHtml(petId, fighter) {
 }
 
 const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+
+/* THE TIER, IN SOMETHING OTHER THAN COLOUR. Wardrobe tiles carried rarity in
+   the border colour alone, which a colourblind player cannot read at all. The
+   initial fits a 78px tile; the word itself goes in the tile's accessible name
+   and its title, and it is the same vocabulary the crate odds sheet already
+   prints. Bottom-left, because the equipped tick owns the top-right corner and
+   the SLIMED tag owns the top-left. */
+function rarityTagHtml(rarity) {
+  const r = String(rarity || '');
+  return RAR_ORDER.includes(r) ? `<span class="ward-rar" aria-hidden="true">${r[0].toUpperCase()}</span>` : '';
+}
 
 // Trim an image to its non-transparent content and draw it CENTERED + as large as
 // fits into the canvas. Fixes art (pets, gear, cosmetics) that sits parked in a
@@ -19575,7 +19590,7 @@ async function renderPit(wrap) {
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
       <div class="t3-row"><span class="t3-med">${ICONS.pit(24)}</span>
         <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · +15 coins on a win</small></div>
-        <button class="btn ghost" data-spar="${m}" data-name="${name}">FIGHT</button>
+        <button class="btn ghost" data-spar="${m}" data-name="${name}" aria-label="Fight ${esc(name)}">FIGHT</button>
       </div>`).join('')}`;
   const ladderSect = `
     <div class="t3-sect"><b>The ladder</b><i></i><span class="r chip" style="font-size:11px">${champOpen ? 'Cleared' : `Rung ${Math.min(rungsBeaten + 1, LADDER.length)} of ${LADDER.length}`}</span></div>
@@ -19585,7 +19600,7 @@ async function renderPit(wrap) {
       return `<div class="t3-row${done ? ' done' : ''}">
         <span class="t3-rung">${r.rung}</span>
         <div class="t3-tx"><b>${r.name}</b><small>${Math.round(r.mult * 100)}% stats · ${done ? `rematch · ${ICONS.coin(12)}${r.repeatCoins}` : `first win ${ICONS.coin(12)}${r.coins} + ${r.xp}+10 XP`}</small></div>
-        ${locked ? `<span class="t3-lock">BEAT RUNG ${rungsBeaten + 1}</span>` : `<button class="btn ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate}>${done ? 'REMATCH' : 'FIGHT'}</button>`}
+        ${locked ? `<span class="t3-lock">BEAT RUNG ${rungsBeaten + 1}</span>` : `<button class="btn ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate} aria-label="${done ? 'Rematch' : 'Fight'} ${esc(r.name)}, rung ${r.rung}">${done ? 'REMATCH' : 'FIGHT'}</button>`}
       </div>`;
     }).join('')}`;
   /* THE REMOTE DEN. Tom, 2026-08-06: "People that can't get out for walks feel
@@ -19618,7 +19633,7 @@ async function renderPit(wrap) {
         /* denRewardLabel takes the REWARD, not the den: passing rDen read every
            field as undefined and rendered a bare "· · free". */
         : `${denRewardLabel(rDen.reward)} · free`}</small></div>
-      ${rDone ? '<span class="t3-lock">TOMORROW</span>' : '<button class="btn" id="remoteDenBtn">FIGHT</button>'}
+      ${rDone ? '<span class="t3-lock">TOMORROW</span>' : `<button class="btn" id="remoteDenBtn" aria-label="Fight ${esc(rDen.boss)}, the remote den">FIGHT</button>`}
     </div>`;
 
   const champSect = `
@@ -19626,7 +19641,7 @@ async function renderPit(wrap) {
     <div class="t3-row${champBeaten ? ' done' : ''}">
       <span class="t3-med">${crateIcon('golden', 22)}</span>
       <div class="t3-tx"><b>${CHAMPION.name}</b><small>${champBeaten ? `rematch · ${ICONS.coin(12)}${CHAMPION.repeatCoins}` : 'Wields the Moonlit Skull · first win drops it + the Marrow King title'}</small></div>
-      ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate}>${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
+      ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate} aria-label="${champBeaten ? 'Rematch' : 'Fight'} ${esc(CHAMPION.name)}, the Champion">${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
     </div>`;
   const endlessSect = `
     <div class="t3-sect"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class="r chip" style="font-size:11px">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>
