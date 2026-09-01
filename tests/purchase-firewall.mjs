@@ -41,6 +41,16 @@
  *            all. Both directions matter because they are one bug wearing two
  *            faces: read-then-debit over kvBump's min:0 clamp mints free goods
  *            for a repeatable item and double-charges a once-only one.
+ *   CROSS    two DIFFERENT things bought in the SAME INSTANT. Every ONCE row
+ *            above drives the same item repeatedly, which a per-item receipt
+ *            passes trivially, and that is exactly what hid this: each of two
+ *            different purchases passed its own stale balance read, claimed its
+ *            own receipt, and both debits clamped to zero. Graded on one
+ *            currency-agnostic invariant, THE VALUE DELIVERED NEVER EXCEEDS WHAT
+ *            WAS TAKEN, on a wallet funded for the dearer item only. Five legs:
+ *            the rack in coins, the rack in dust, Gwart's accessories, a reroll
+ *            beside a buy, and the same transmog applied twice (the mirror
+ *            image, where the player is charged twice for one change).
  *   WEAR     a bought look is FREE TO WEAR. Transmog is priced in Bone Dust, so
  *            without the `paidlooks` row a player who just paid 3,000 coins for
  *            a look is asked for dust the first time they put it on. The row is
@@ -74,6 +84,16 @@
  *      -> REROLL-SCOPE goes red (the reroll fishes themed pieces out of rungs)
  *   6. key the reroll counter back on the day in rack() (reset rr with rotDay)
  *      -> REROLL-WEEKLY goes red (a stale day hands back the cheap rungs)
+ *
+ * PROVE-RED for the CROSS rows, 2026-08-31, on a cp -R throwaway copy of
+ * origin/main 2faa73b6 (the tree with the #338 atomic spend but NOT the reorder)
+ * with this file copied in:
+ *   FAIL CROSS-RACK      delivered 2500 against 1500 spent (both cost 2500)
+ *   FAIL CROSS-DUST      delivered 165 against 90 spent (both cost 165)
+ *   FAIL CROSS-PET       delivered 15000 against 9000 spent (both cost 15000)
+ *   FAIL CROSS-TRANSMOG  2 ok, spent 24 against price 12
+ *   FAIL CROSS-REROLL    delivered 800 against 500 spent (both cost 800)
+ *   ok   both CONTROL rows green there, so every leg really ran
  *
  * PROVE-RED for the SPEND rows, 2026-08-31, on a cp -R throwaway copy of
  * origin/main 13583e42 (the PRE-FIX tree) with this file copied in:
@@ -404,8 +424,91 @@ const res = await page.evaluate(async () => {
     left: await loot.coins(),
   };
 
+  /* ============== TWO DIFFERENT THINGS AT ONCE (the cross overdraft) ========
+     Every ONCE-RACE row above drives the SAME item several times, and a
+     per-item receipt passes that trivially. What it cannot see is two DIFFERENT
+     items bought in the same instant: each passes its own stale balance read,
+     each claims its own receipt, and both debits clamp at zero. The wallet is
+     funded for the DEARER item only, so an honest shop can deliver exactly one.
+     The invariant graded is currency-agnostic and is the whole point: THE VALUE
+     DELIVERED NEVER EXCEEDS WHAT WAS TAKEN. */
+  const priceOf = (ids, prices, owned) => ids.reduce((sum, id, i) => sum + (owned.has(id) ? prices[i] : 0), 0);
+  const freshRungs = async () => {
+    const rk2 = await loot.rack();
+    const own = await loot.ownedCosmeticIds();
+    const out = [];
+    for (let i = 0; i < rk2.ids.length; i++) {
+      if (!own.has(rk2.ids[i])) out.push({ id: rk2.ids[i], coin: loot.RACK_POOLS[i][0], dust: loot.RACK_DUST[i] });
+    }
+    return out;
+  };
+
+  /* A. THE RACK, IN COINS. Measured on origin/main 2faa73b6: 3,000 coins bought
+        a 3,000 and a 2,400 piece together and kept both. */
+  const rcPool = await freshRungs();
+  const crossRack = rcPool.length < 2 ? null : await (async () => {
+    const [a, b] = rcPool;
+    const fund = Math.max(a.coin, b.coin);
+    await db.kvSet('coins', fund);
+    await Promise.all([loot.buyRackItem(a.id, 'coins'), loot.buyRackItem(b.id, 'coins')]);
+    const own = await loot.ownedCosmeticIds();
+    return { ids: [a.id, b.id], prices: [a.coin, b.coin], funded: fund,
+      delivered: priceOf([a.id, b.id], [a.coin, b.coin], own),
+      spent: fund - (await loot.coins()), bothCost: a.coin + b.coin };
+  })();
+
+  /* B. THE RACK, IN BONE DUST. The same function, the other currency: a shop
+        exact in one and sloppy in the other is the same bug on a slower clock.
+        Measured pre-fix: 160 dust bought 160 + 130 and kept both. */
+  const rdPool = await freshRungs();
+  const crossDust = rdPool.length < 2 ? null : await (async () => {
+    const [a, b] = rdPool;
+    const fund = Math.max(a.dust, b.dust);
+    await db.kvSet('bonedust', fund);
+    await Promise.all([loot.buyRackItem(a.id, 'dust'), loot.buyRackItem(b.id, 'dust')]);
+    const own = await loot.ownedCosmeticIds();
+    return { ids: [a.id, b.id], prices: [a.dust, b.dust], funded: fund,
+      delivered: priceOf([a.id, b.id], [a.dust, b.dust], own),
+      spent: fund - (await loot.boneDust()), bothCost: a.dust + b.dust };
+  })();
+
+  /* C. GWART'S MENAGERIE. The worst case in the game for the old shape: the only
+        shelf where several affordable things all cost thousands. Measured
+        pre-fix: 8,000 coins bought an 8,000 and a 6,000 accessory, kept both. */
+  const accPool = PET_SHOP.items.filter(x => !(new Set(petOwned)).has(x.id));
+  const crossPet = accPool.length < 2 ? null : await (async () => {
+    const [a, b] = accPool;
+    const fund = Math.max(a.coin, b.coin);
+    await db.kvSet('coins', fund);
+    await Promise.all([loot.buyPetItem(a.id), loot.buyPetItem(b.id)]);
+    const own = await loot.ownedCosmeticIds();
+    return { ids: [a.id, b.id], prices: [a.coin, b.coin], funded: fund,
+      delivered: priceOf([a.id, b.id], [a.coin, b.coin], own),
+      spent: fund - (await loot.coins()), bothCost: a.coin + b.coin };
+  })();
+
+  /* D. THE SAME TRANSMOG TWICE. Not an overdraft but its mirror image, the
+        player-negative half: markPaid is the only receipt a look has, it was
+        written after the debit, so two taps in the same instant paid twice for
+        one change. Measured pre-fix: 24 dust for one 12-dust look. The negative
+        control's art is used because it is COLLECTED but never bought, which is
+        the only state where transmogPrice is non-zero. */
+  const crossTm = !other ? null : await (async () => {
+    await db.kvSet('bonedust', 5000);
+    const price = await loot.transmogPrice(target.slot, other.artId);
+    const d0 = await loot.boneDust();
+    const rs = await Promise.all([
+      loot.applyTransmog(target.slot, other.artId),
+      loot.applyTransmog(target.slot, other.artId),
+    ]);
+    return { art: other.artId, price, spent: d0 - (await loot.boneDust()),
+      ok: rs.filter(r => r.ok).length,
+      applied: (await loot.transmogMap())[target.slot] === other.artId };
+  })();
+
   return { shopSpend, dropSpend, shopFloor,
     target: { ...target, gear: target.gear.id }, coinPrice, dustPrice, before, after, afterTwice,
+    crossRack, crossDust, crossPet, crossTm,
     buy1, buy2, wearBefore, wearAfter, wearOther, otherArt: other ? other.artId : null, race, dustLeg,
     ladder: loot.RACK_REROLL_LADDER, rrSteps, rrSpent, rrBroke,
     pet: { petId, accId, petPrice, accPrice, gate, gateSpent, petBuy1, petBuy2, petSpent, petSpent2,
@@ -518,6 +621,27 @@ else {
     !!SF && SF.ok === 0 && SF.granted === 0 && SF.left === SF.funded,
     SF ? `8 callers on ${SF.funded} coins: ${SF.ok} ok, ${SF.granted} granted, ${SF.left} left` : 'not run');
 
+  /* ---- CROSS: two DIFFERENT things bought in the same instant ---- */
+  const XR = res.crossRack, XD = res.crossDust, XP = res.crossPet, XT = res.crossTm;
+  const crossOk = (X) => !!X && X.delivered === X.spent && X.delivered > 0
+    && X.funded < X.bothCost;   // the wallet genuinely could not cover both
+  ok('CONTROL the cross legs each drove two DIFFERENT priced items on a wallet that funds one',
+    crossOk(XR) !== null && !!XR && !!XD && !!XP
+      && XR.funded < XR.bothCost && XD.funded < XD.bothCost && XP.funded < XP.bothCost
+      && XR.prices[0] > 0 && XD.prices[0] > 0 && XP.prices[0] > 0,
+    XR ? `rack ${XR.ids} @${XR.prices} on ${XR.funded}; dust ${XD.ids} @${XD.prices} on ${XD.funded}; pet ${XP.ids} @${XP.prices} on ${XP.funded}` : 'a leg found fewer than two unowned items: nothing to grade');
+  ok('CROSS-RACK two different rack pieces at once deliver only what was paid for',
+    crossOk(XR), XR ? `delivered ${XR.delivered} against ${XR.spent} spent (both would cost ${XR.bothCost}, wallet had ${XR.funded})` : 'not run');
+  ok('CROSS-DUST and the same holds in Bone Dust, not just in coins',
+    crossOk(XD), XD ? `delivered ${XD.delivered} against ${XD.spent} spent (both would cost ${XD.bothCost}, dust had ${XD.funded})` : 'not run');
+  ok('CROSS-PET two different accessories at once deliver only what was paid for',
+    crossOk(XP), XP ? `delivered ${XP.delivered} against ${XP.spent} spent (both would cost ${XP.bothCost}, wallet had ${XP.funded})` : 'not run');
+  ok('CONTROL the transmog leg ran on a look with a real, non-zero dust price',
+    !!XT && XT.price > 0, XT ? `${XT.art} at ${XT.price} dust` : 'no negative-control art to price');
+  ok('CROSS-TRANSMOG the same look applied twice at once is charged exactly once',
+    !!XT && XT.spent === XT.price && XT.applied === true,
+    XT ? `${XT.ok} ok, spent ${XT.spent} against price ${XT.price}, applied=${XT.applied}` : 'not run');
+
   /* ---- DUST ---- */
   ok('CONTROL the dust leg ran with a real, non-zero dust price',
     !!res.dustLeg && res.dustLeg.price > 0 && res.dustLeg.ok === true,
@@ -566,6 +690,31 @@ else {
     const staleWeek = await loot.rack();
     out.staleWeekRr = staleWeek.rr;
     out.staleWeekRegenerated = staleWeek.week !== 'stale-week';
+
+    /* A REROLL AND A BUY IN THE SAME INSTANT. Last, because it needs the fresh
+       week above: rr is 0 here, so the free rung is burned first to give the
+       reroll a real price. The rack kvUpdate already stopped two rerolls
+       double-charging each other; what it never saw was a reroll landing beside
+       an ordinary purchase, each on its own stale read. Measured on origin/main
+       2faa73b6: a 3,000-coin wallet paid a 500 reroll AND a 3,000 piece. */
+    await kvSet('coins', 999999);
+    await loot.rerollRack();                                       // burn the free rung
+    const st = await loot.rack();
+    const cost = loot.rackRerollCost(st.rr);
+    const owned = await loot.ownedCosmeticIds();
+    let pick = null;
+    for (let i = 0; i < st.ids.length; i++) {
+      if (!owned.has(st.ids[i])) { pick = { id: st.ids[i], coin: loot.RACK_POOLS[i][0] }; break; }
+    }
+    if (pick) {
+      const fund = Math.max(cost, pick.coin);
+      await kvSet('coins', fund);
+      const rs = await Promise.all([loot.rerollRack(), loot.buyRackItem(pick.id, 'coins')]);
+      const own2 = await loot.ownedCosmeticIds();
+      out.crossReroll = { rerollCost: cost, buyCost: pick.coin, funded: fund,
+        delivered: (rs[0].ok ? cost : 0) + (own2.has(pick.id) ? pick.coin : 0),
+        spent: fund - (await loot.coins()), bothCost: cost + pick.coin };
+    }
     return out;
   });
   ok('CONTROL the drive really pushed the counter past the ladder before the weekly probe ran',
@@ -578,6 +727,13 @@ else {
   ok('REROLL-WEEKLY and a new WEEK does reset the curve',
     weekly.staleWeekRegenerated === true && weekly.staleWeekRr === 0,
     `regenerated=${weekly.staleWeekRegenerated} rr=${weekly.staleWeekRr}`);
+  const XX = weekly.crossReroll;
+  ok('CONTROL the cross-reroll leg drove a real, non-zero reroll price beside a real piece',
+    !!XX && XX.rerollCost > 0 && XX.buyCost > 0 && XX.funded < XX.bothCost,
+    XX ? `reroll ${XX.rerollCost} + piece ${XX.buyCost} on a ${XX.funded} wallet` : 'no unowned rung on the fresh week');
+  ok('CROSS-REROLL a reroll and a buy at once deliver only what was paid for',
+    !!XX && XX.delivered === XX.spent && XX.delivered > 0,
+    XX ? `delivered ${XX.delivered} against ${XX.spent} spent (both would cost ${XX.bothCost}, wallet had ${XX.funded})` : 'not run');
 }
 
 ok('CONTROL the page threw nothing while the purchases ran', errors.length === 0, errors.join(' | ') || 'no page errors');

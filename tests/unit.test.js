@@ -1924,8 +1924,20 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
     assert.ok(!src.includes(gone) && !app.includes(gone), `${gone} is back in the tree`);
 
   /* 2. every dust SPEND, by the function that makes it, against a declaration.
-        A spend is boneDustAdd with a negative argument; the positive ones are
-        income (melting, quests, the wheel) and are not this test's business. */
+        A spend is `await spendDust(...)` OR boneDustAdd with a negative
+        argument; the positive ones are income (melting, quests, the wheel) and
+        are not this test's business.
+        BOTH SHAPES, and the pattern widened rather than moved on 2026-08-31.
+        The spends became atomic that day (spendDust decides affordability and
+        debits in ONE kv transaction, because the old read-then-boneDustAdd let
+        two concurrent dust buys pass the same stale read and clamp their
+        overdrafts to free), and this register went momentarily blind: it found
+        0 spends and said so, which is the floor row below doing its job. Keeping
+        `boneDustAdd(-` in the pattern matters as much as adding the new one, so
+        a future hand-rolled negative debit still lands in this register instead
+        of slipping past a check that now only knows about spendDust. The
+        `await` is what keeps spendDust's own one-line definition out of the
+        census. */
   const DECLARED = {
     buyRackItem: 'COSMETIC. Buys a piece off the rack: grantCosmetic, or the aura kv. tests/purchase-firewall.mjs asserts statically that this path cannot reach grantGear or grantCrate.',
     applyTransmog: 'COSMETIC. Pays for a look on a slot. One changes your stats, one costs dust and changes only the picture.',
@@ -1944,7 +1956,8 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
   const POWER_EXCEPTIONS = { buyDustEgg: /grantEgg/ };
   const owners = [...src.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/gm)].map(m => [m.index, m[1]]);
   const ownerAt = i => { let n = '(top level)'; for (const [ix, name] of owners) { if (ix <= i) n = name; else break; } return n; };
-  const spends = [...src.matchAll(/boneDustAdd\(\s*-/g)].map(m => ownerAt(m.index));
+  const DUST_SPEND = /boneDustAdd\(\s*-|await spendDust\(/g;
+  const spends = [...src.matchAll(DUST_SPEND)].map(m => ownerAt(m.index));
   assert.ok(spends.length >= 2, `found ${spends.length} dust spends; the lint is reading the wrong thing`);
   assert.deepEqual([...new Set(spends)].sort(), Object.keys(DECLARED).sort(),
     `an undeclared dust spend: ${spends.join(', ')}`);
@@ -1970,7 +1983,11 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
         every pattern against a forgery of the thing it hunts for. */
   const forgery = "function buyWithDust(id) {\n  await boneDustAdd(-60);\n  await grantEgg('dust');\n}\n";
   assert.ok(forgery.includes('buyWithDust'), 'the name pattern cannot detect a violation');
-  assert.equal([...forgery.matchAll(/boneDustAdd\(\s*-/g)].length, 1, 'the spend pattern cannot find a spend');
+  assert.equal([...forgery.matchAll(new RegExp(DUST_SPEND.source, 'g'))].length, 1, 'the spend pattern cannot find a legacy boneDustAdd spend');
+  /* and the same for the shape every real spend uses now, so the widened half
+     of the pattern is proven to fire rather than merely present */
+  const forgery2 = "function buyWithDust2(id) {\n  await spendDust(60);\n}\n";
+  assert.equal([...forgery2.matchAll(new RegExp(DUST_SPEND.source, 'g'))].length, 1, 'the spend pattern cannot find a spendDust spend');
   assert.ok(GRANTS.test(forgery), 'the grant pattern cannot detect a violation');
 });
 

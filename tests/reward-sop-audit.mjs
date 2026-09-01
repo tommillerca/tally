@@ -186,6 +186,12 @@ const ACTIONS = [
      tests/purchase-firewall.mjs: four concurrent taps on a 3,000-coin piece
      leave the wallet exactly 3,000 lighter, not 9,000. */
   { id: 'js/loot.js:buyDropItem', sites: 2, undriven: 'a purchase, and it refuses when already owned; the second site is its own refund on a lost grant race, not a payout' },
+  /* Registered 2026-08-31: both gained their single "paying" site from the spend
+     reorder, and in both cases it is a REFUND of the balance the same call took
+     a line or two earlier, not a payout. Neither grants anything, so neither has
+     a state transition to earn; what they have is a bounded give-back. */
+  { id: 'js/loot.js:rerollRack', sites: 1, undriven: "the one site is a coinsAdd refunding a caller that paid for a reroll and then lost the rack kvUpdate on `used !== st.rr`. That claim was always atomic, so two rerolls could never double-charge each other; the reorder closes a reroll landing beside an ordinary BUY, each on its own stale read (measured on origin/main 2faa73b6: a 3,000-coin wallet paid a 500 reroll AND a 3,000 piece). It also covers the stale-PRICE case for free, since a caller quoting a cheap rung's price after somebody else advanced the counter is refused and refunded rather than underpaying. Graded by CROSS-REROLL in tests/purchase-firewall.mjs, alongside the REROLL-LADDER / REROLL-FLOOR / REROLL-WEEKLY rows that own the curve" },
+  { id: 'js/loot.js:applyTransmog', sites: 1, undriven: "the one site is a boneDustAdd refunding a caller whose look was banked by a concurrent tap. markPaid IS this function's receipt (a banked look is free to wear forever after) and it now reports whether IT added the key, so applyTransmog is the buyDropItem shape with the paid-look ledger playing grantCosmetic's part. Not a payout: bounded by the spendDust directly above it. Before the reorder both halves were broken, measured on 2faa73b6: two concurrent applies of one 12-dust look took 24 and applied one, and the read-then-debit overdrew against any other dust spend. Graded by CROSS-TRANSMOG in tests/purchase-firewall.mjs, with the WEAR-FREE rows owning the free-to-wear half" },
   { id: 'js/loot.js:disenchantGear', sites: 1, undriven: 'melts a piece the player owns: the gear row is the input, so a second run finds nothing' },
   { id: 'js/loot.js:salvagePet', sites: 1, undriven: 'as disenchantGear, on a pet instance' },
   { id: 'js/loot.js:salvageInstance', sites: 1, undriven: 'as salvagePet, by instance id' },
@@ -255,13 +261,22 @@ const ACTIONS = [
      grants once. Proven both ways by tests/purchase-write-failure-audit.mjs:
      red on unfixed main where the retry leaves the player owning nothing, and
      green here with zero coins taken on the retry. */
-  { id: 'js/loot.js:buyRackItem', sites: 2,
+  /* sites went 2 to 4 on 2026-08-31 with the spend reorder. The two new ones are
+     the REFUND on a lost claim, `currency === 'dust' ? boneDustAdd(price) :
+     coinsAdd(price)`, which the scanner counts twice because the ternary puts
+     both calls on one line. Bounded by the debit directly above it and
+     conserving the balance rather than adding to it, so it is not a payout;
+     graded by CROSS-RACK and CROSS-DUST in tests/purchase-firewall.mjs. */
+  { id: 'js/loot.js:buyRackItem', sites: 4,
     transition: 'a rack piece goes from unowned to owned, once and forever',
-    authority: 'db.addIfAbsent on the kv row rackbuy:<artId>, claimed BEFORE anything is deducted, so the check and the write are one transaction',
+    authority: 'db.addIfAbsent on the kv row rackbuy:<artId>. The money is spent FIRST and atomically (spendCoins/spendDust refuse inside the kv transaction and leave the balance byte-identical), and the claim then decides WHO GETS THE THING, with the loser of the claim refunded on the line under the debit. Reordered 2026-08-31: claiming first made a second tap on the SAME item free, which is the case that was tested, and hid the case that was not, two DIFFERENT items bought in the same instant each passing their own stale balance read with both clamped debits free. Measured pre-reorder on origin/main 2faa73b6: a 3,000-coin wallet took a 3,000 and a 2,400 piece together and kept both, and 160 dust took 160 + 130',
     undriven: "driven to destruction by tests/purchase-firewall.mjs, which is where the second-attempt proof lives rather than here: it buys through the real function against a real IndexedDB, measures every store either side, and performs the same purchase twice sequentially AND three times concurrently. Proven red there on a kvGet/kvSet claim (3 callers charged 7,200 for a 2,400 item) and on paying before the claim" },
-  { id: 'js/loot.js:buyPetItem', sites: 2,
+  /* sites went 2 to 3 on 2026-08-31 with the spend reorder: the new one is the
+     coinsAdd REFUND on a lost claim, bounded by the debit above it. Graded by
+     CROSS-PET in tests/purchase-firewall.mjs. */
+  { id: 'js/loot.js:buyPetItem', sites: 3,
     transition: 'Bumbleseal, or one piece of her wardrobe, goes from unowned to owned, once and forever',
-    authority: 'db.addIfAbsent on the kv row petbuy:<id>, claimed BEFORE anything is deducted, so the check and the write are one transaction. Identical to buyRackItem by design; the function header says that if the two ever diverge, the divergence is the bug',
+    authority: 'db.addIfAbsent on the kv row petbuy:<id>. The money is spent FIRST and atomically (spendCoins/spendDust refuse inside the kv transaction and leave the balance byte-identical), and the claim then decides WHO GETS THE THING, with the loser of the claim refunded on the line under the debit. Reordered 2026-08-31: claiming first made a second tap on the SAME item free, which is the case that was tested, and hid the case that was not, two DIFFERENT items bought in the same instant each passing their own stale balance read with both clamped debits free. Identical to buyRackItem by design; the function header says that if the two ever diverge, the divergence is the bug. Her shelf was the worst case for the old ordering because it is the only one where several affordable things each cost thousands: measured pre-reorder on 2faa73b6, an 8,000-coin wallet took an 8,000 and a 6,000 accessory together and kept both',
     undriven: "driven to destruction by tests/purchase-firewall.mjs, added 2026-08-21 when THIS ROW WAS THE THING THAT WAS MISSING: the function shipped on ext/bumbleseal-pets and reward-sop found it unregistered during the v421 merge. A registry row saying 'same shape as the one next door' is an argument, not evidence, and this is the most expensive button in the game, so it got the rack's own three legs instead. Measured green there: 50,000 spent exactly once, a second sequential buy pays 0, three concurrent buys of one 8,000 accessory spend 8,000 and grant 1. Plus a leg the rack has no equivalent for, PET-GATE: an accessory is refused with reason 'needs-pet' before she is owned AND the balance does not move, because every piece is drawn positioned for HER body and would hang in empty air on any other pet" },
   /* THE DUST EGG, restored 2026-08-31 on Tom's ruling (the S0 removal of the
      dust shop's egg was unintentional; dust is the deterministic hatch route
@@ -269,10 +284,14 @@ const ACTIONS = [
      the way buyRackItem/buyPetItem are. The negative boneDustAdd is correctly
      not counted by the scanner; grantEgg is the one site (it appears at two
      call sites in the function, main path and recovery, but the scanner counts
-     the recovery one too, which is why sites is 2). */
-  { id: 'js/loot.js:buyDustEgg', sites: 2,
+     the recovery one too, which is why sites was 2). It went to 3 on 2026-08-31
+     with the spend reorder: the new site is the POSITIVE boneDustAdd refunding a
+     caller that paid and then lost the receipt claim, bounded by the debit above
+     it. The weekly receipt already made a second EGG impossible; what the
+     reorder closes is the egg landing beside another dust spend. */
+  { id: 'js/loot.js:buyDustEgg', sites: 3,
     transition: "this week's Mystery Egg goes from unbought to bought; one per ISO week, and the week key IS the bound",
-    authority: 'db.addIfAbsent on the kv row dustegg:<isoWeek>, claimed BEFORE the dust moves; the granted flag on that receipt is flipped by a CONDITIONAL kvUpdate so the recovery of a paid-but-ungranted week has exactly one winner',
+    authority: 'db.addIfAbsent on the kv row dustegg:<isoWeek>. The money is spent FIRST and atomically (spendCoins/spendDust refuse inside the kv transaction and leave the balance byte-identical), and the claim then decides WHO GETS THE THING, with the loser of the claim refunded on the line under the debit. Reordered 2026-08-31: claiming first made a second tap on the SAME item free, which is the case that was tested, and hid the case that was not, two DIFFERENT items bought in the same instant each passing their own stale balance read with both clamped debits free. The granted flag on that receipt is flipped by a CONDITIONAL kvUpdate so the recovery of a paid-but-ungranted week has exactly one winner',
     undriven: 'driven to destruction by tests/dust-egg-audit.mjs (PRICE / BOUND / ONCE-RACE / FAILURE / RECOVER), which is where the second-attempt and refused-write proofs live rather than here' },
   { id: 'js/loot.js:deliverPet', sites: 1,
     transition: 'a pet you have just paid for gains its FIRST copy in the Stable, and becomes the pet you fight with',
