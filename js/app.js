@@ -1230,8 +1230,18 @@ async function boot() {
      the phone in airplane mode, they do not need the app to report the weather.
      bootSync genuinely retries on the next open either way, so nothing is lost
      by saying nothing. Round 7 caught this walking the launch path an App Store
-     reviewer walks, which is offline and brand new: both conditions at once. */
-  const CLOUD_QUIET_REASONS = ['none', 'empty', 'already', 'new-player', 'opted-out', 'no-api'];
+     reviewer walks, which is offline and brand new: both conditions at once.
+       'never-registered'  the fourth way into the same wrong message, and it
+                     arrives ONLINE, which is how it got past the guard below.
+                     goOnline mints the identity before /register, so an install
+                     whose registration failed opens the second time holding a
+                     key with no account, bootSync reads that as a reinstall,
+                     fails again and used to call it 'offline'. The key was
+                     minted on this device (js/social.js: kv 'idMinted'), so
+                     nothing has ever been registered under it and there is no
+                     backup to have failed. A key recovered from the keychain is
+                     still 'offline' and still speaks. */
+  const CLOUD_QUIET_REASONS = ['none', 'empty', 'already', 'new-player', 'opted-out', 'no-api', 'never-registered'];
 
   if (cloudRestore && cloudRestore.restored) {
     S.settings = await kvGet('settings');
@@ -1372,6 +1382,22 @@ async function boot() {
   if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 2400);
   else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 2400);
   await ingestHkPayload(hkTaken);
+  /* THE SCREEN PAINTED BEFORE ANY OF THAT PAID. route() ran sixty lines up, and
+     everything since writes coins, XP and crates behind a standing DOM: the
+     welcome kit, the starter pouch, the garden and merchant closures, the den
+     ceiling, the day close, the health backfill. Nothing repainted, so the
+     header carried the pre-payout numbers until the player happened to change
+     tabs. Measured on a masked first open of a new day: the header sat on
+     74 coins and 105 XP while storage already held 224 and 180.
+     A REPAINT, NOT A PILL REFRESH. __refreshWalletPill fixes this class for the
+     Pit, but it only touches the four wallet numbers, and the day close moves
+     the LEVEL plate and adds a crate chip that has to appear at all. Same
+     `route({ keepScroll: true })` the import branch above already does for the
+     same reason ("the screen painted at their old level"), and only when
+     something actually paid, so a boot that owed nothing still paints once.
+     Guarded on the sheet stack for the reason the resume refresh below is:
+     route() closes every open sheet, and yanking one shut is a worse bug. */
+  if ((kit || pouch || settled || merch || ceil || closed || hkTaken) && !sheetStack.length) route({ keepScroll: true });
   backupNudge();
   nativeAutoSync();
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
@@ -1411,7 +1437,17 @@ async function boot() {
 
   // daily haunted prize wheel: once per day, after the splash intro. Self-gates
   // (once/day kv, waits for splash, skips webdriver). Fire-and-forget.
-  maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
+  /* AND IT REPAINTS WHEN IT PAYS. The wheel grants on SPIN and resolves true on
+     COLLECT; nothing behind it re-read anything. Measured on a masked first
+     open: "You won 30 coins", then the header held 224 for the whole eight
+     seconds it was watched while storage already held 254, and it only caught
+     up when the player moved between tabs. A new player's very first spin looks
+     unpaid. Same class as the Pit's stale wallet pill (__refreshWalletPill),
+     repainted the same way as the boot payouts above rather than through the
+     pill, because a spin can pay a CRATE and that chip has to appear at all.
+     resolve(false) means the wheel never opened, so a skipped day paints
+     nothing. Sheet-stack guarded like every other unprompted refresh here. */
+  maybeShowDailyWheel({ sounds: S.sounds }).then(spun => { if (spun && !sheetStack.length) refresh(); }).catch(() => {});
   refundStreakFreezes().then(r => {
     if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
   }).catch(() => {});
@@ -1485,7 +1521,8 @@ async function rollDayIfNeeded() {
     if (wasOnToday) route(); // a new day starts at the top, like a fresh open
     if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 1400);
     else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 1400);
-    maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
+    // pays on COLLECT, so it repaints on COLLECT: see the boot call site
+    maybeShowDailyWheel({ sounds: S.sounds }).then(spun => { if (spun && !sheetStack.length) refresh(); }).catch(() => {});
     refreshNotifSchedules();
     return true;
   } finally { _rolling = false; }
@@ -7948,6 +7985,10 @@ function openQuickAdd(getMeal, entry = null) {
       kcal, p: p.value, c: c.value, f: f.value,
     };
     await db.put('log', e);
+    // the fourth commit path, and the one that was skipping this: a Quick add to
+    // Dinner reopened the add sheet on Lunch. Quick add is how most people log
+    // their first meal, so it is where "meals remember" most needs to work.
+    await recordMealUsed(e.meal);
     const game = await onFoodLogged(e, { targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
     if (!entry && btn && btn.isConnected) {
       const r = btn.getBoundingClientRect();

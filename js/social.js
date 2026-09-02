@@ -187,6 +187,16 @@ async function ensureIdentity() {
     createdAt: Date.now(),
   };
   await kvSet('identity', id);
+  /* WHOSE KEY THIS IS, recorded where the answer is still known. A key MINTED
+     here has never been registered anywhere, so no server account and no cloud
+     backup can exist for it; a key recovered from the vault above may own both.
+     Both look identical afterwards (the recovery branch writes kv 'identity'
+     too), so by the next boot nothing could tell them apart, and bootSync was
+     calling a failed first registration a REINSTALL and warning a brand-new
+     install about a backup it has never had. Reads in bootSync. Never cleared:
+     a reinstall wipes the container, so a mark that survives is this device's
+     own, and adoptIdentity only lands after a register that succeeded. */
+  await kvSet('idMinted', Date.now());
   await mirrorIdentity(id);   // no-ops if the vault is unreadable or holds someone else
   return id;
 }
@@ -1283,7 +1293,18 @@ export async function bootSync() {
         if (!(kc.id && kc.id.privJwk)) return { restored: false, reason: 'new-player' };
       }
       const r = await goOnline();
-      if (!r.ok) return { restored: false, reason: 'offline' };
+      /* A FAILED FIRST REGISTRATION IS NOT A REINSTALL. goOnline mints the
+         identity before it calls /register, so an install whose register failed
+         (captive wifi, the server down, a sandbox) comes back on its next open
+         holding a privJwk with no `social` row: exactly the shape the reinstall
+         branch above is looking for. It then failed again and returned
+         'offline', which is not quiet, which told somebody two minutes into a
+         brand-new install that their cloud backup could not be reached.
+         'idMinted' says this device made the key itself, so nothing was ever
+         registered under it and no backup can exist to fail. A key that came off
+         the keychain keeps saying 'offline' and keeps warning, because for that
+         player a backup plausibly does exist and the warning is true. */
+      if (!r.ok) return { restored: false, reason: (await kvGet('idMinted', null)) ? 'never-registered' : 'offline' };
     }
     if (await kvGet('bootRestored', false)) return { restored: false, reason: 'already' };
     const res = await pullBackup();
