@@ -14,6 +14,9 @@ const json = (obj, status = 200, extraHeaders = null) =>
 
 const MAX_SKEW_MS = 5 * 60 * 1000;
 const MAX_PROFILE_BYTES = 24 * 1024;
+// A spire claim body is {name, lat, lng}. Three words and two floats; see the
+// cap's own note on the /spires/{id}/claim route for what it stops.
+const MAX_SPIRE_BYTES = 2 * 1024;
 /* THE BACKUP CAP, AND WHAT IT ACTUALLY COSTS (measured 2026-08-17).
  *
  * A backup blob is base64(iv || AES-GCM(JSON.stringify(exportAll()))), so its
@@ -1085,9 +1088,78 @@ function classifyWeekKey(key, nowMs) {
  * What it can no longer do is assert an impossible one, walk up without the
  * elapsed time to justify it, or take a paying podium it did not walk for.
  */
+/* EVERY KEY buildSnapshot() IN js/app.js ACTUALLY SENDS, and nothing else.
+   `{ ...rawSnap }` kept whatever the caller wrote, and the clamps below only
+   ever spoke about a handful of NUMBERS, so an unknown key was copied into
+   players.profile verbatim, served to every accepted friend by GET /friends,
+   and copied again into spires.defender for every rival who opens a tower this
+   account holds. Measured on 2026-09-01 against 996f28b9: an `evilHtml` field,
+   C0 control characters, a bidi override, a 20KB note, a nested object and
+   `name` as an object all survived the round trip unchanged.
+   Keys are dropped rather than 400'd, for the same reason the numbers are
+   clamped rather than rejected (see WHY CLAMP AND NOT REJECT above): the
+   likeliest cause of a strange key is our own next feature, and taking a
+   player's whole yard offline over it is the worse failure. */
+const SNAP_KEYS = new Set([
+  'weekKey', 'weekSteps', 'raceV', 'plat',
+  'level', 'levelName', 'stats', 'talents', 'title', 'outfit', 'gearLo', 'gear', 'badges',
+  'pet', 'yard',
+]);
+/* MEASURED, not chosen. The longest string this snapshot can legitimately carry
+   is a level name: js/game.js LEVEL_NAMES tops out at "Calorie Cartographer"
+   (20), and past the twentieth level it gains a number, so "Calorie
+   Cartographer 999" at 24 is the true worst case (read off js/game.js on
+   2026-09-01). CHAMP_TITLE is 11, cosmetic ids top out at 7 ("IL10-1", of 370
+   in data/boneheadz.js), a weekKey is 10. 64 is that worst case with 2.5x of
+   room, which is what a bound wants: generous enough that a new level name
+   never truncates, small enough that no string in here can be a payload. */
+const MAX_SNAP_STR = 64;
+/* Above MAX_GEAR_IDS on purpose, so the gear clamp below stays the thing that
+   reports 'gear' in `bounded` and this pass never silently takes its job. */
+const MAX_SNAP_ARR = 512;
+/* yard -> pets -> a pet -> its `sp` string is the deepest real value, so a
+   value nested below that is not a field we ship and does not get to travel. */
+const MAX_SNAP_DEPTH = 4;
+
+/* Depth-limited copy that bounds every string and drops what cannot be JSON.
+   Structured ids are already graded against a fixed catalog on the client, so
+   this deliberately does not try to know what a valid `sp` or outfit slot is:
+   it bounds SIZE and nesting, which is the part the client cannot defend. */
+function boundSnapValue(v, depth) {
+  if (typeof v === 'string') {
+    /* C0 CONTROLS AND THE BIDI OVERRIDES COME OUT, they are not escaped. No
+       level name, title, platform tag or cosmetic id contains one, and both
+       families exist to make a string lie about itself to whoever reads it
+       next: a NUL or an ESC in a crew row, and U+202E to reverse a name in a
+       leaderboard the reader has no reason to distrust. Escaping is the
+       renderer's job and it does it; this is about what is worth STORING. */
+    const clean = v.replace(/[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
+    return clean.length > MAX_SNAP_STR ? clean.slice(0, MAX_SNAP_STR) : clean;
+  }
+  if (v === null || typeof v === 'boolean') return v;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (depth >= MAX_SNAP_DEPTH) return null;
+  if (Array.isArray(v)) return v.slice(0, MAX_SNAP_ARR).map(x => boundSnapValue(x, depth + 1));
+  if (typeof v === 'object') {
+    const out = {};
+    for (const [k, val] of Object.entries(v)) out[k.slice(0, MAX_SNAP_STR)] = boundSnapValue(val, depth + 1);
+    return out;
+  }
+  return null;   // a function or an undefined would not have survived JSON anyway
+}
+
 function sanitizeSnapshot(rawSnap, row, nowMs) {
-  const snap = { ...rawSnap };
+  const snap = {};
+  for (const [k, v] of Object.entries(rawSnap)) {
+    if (SNAP_KEYS.has(k)) snap[k] = boundSnapValue(v, 1);
+  }
   const bounded = [];
+  /* Named in `bounded` like every other clamp here, so a client or a test can
+     see it happened instead of diffing what came back. One stringify of a body
+     already capped at MAX_PROFILE_BYTES covers a dropped key, a truncated
+     string and an over-nested value alike, which is cheaper than three
+     counters that each only see their own third of the problem. */
+  if (JSON.stringify(snap) !== JSON.stringify(rawSnap)) bounded.push('shape');
 
   /* ---- level ----
      Two independent ceilings, and the lower of the two wins.
@@ -2183,12 +2255,25 @@ export default {
       // as every other award in this game, friends-scale, stated plainly).
       if (path.startsWith('/spires/') && path.endsWith('/claim') && request.method === 'PUT') {
         const bodyText = await request.text();
+        /* A CAP, LIKE /profile AND /backup ALREADY HAVE. This route had none, and
+           it is the one route in the file whose body is copied into a row that is
+           then handed to ANOTHER player: the spire-lost grant below. Measured on
+           2026-09-01 against 996f28b9, toppling a tower with a 100KB name gave the
+           victim a grant note of length 102,450. A tower name is three words, so
+           2KB is generous by two orders of magnitude and still refuses the abuse
+           before it is ever parsed. */
+        if (bodyText.length > MAX_SPIRE_BYTES) return json({ error: 'too large' }, 413);
         const auth = await verifySigned(request, env, bodyText);
         if (auth.err) return json({ error: auth.err }, 401);
         const id = path.slice('/spires/'.length, -'/claim'.length);
         if (!/^sp-[-0-9]+-[-0-9]+$/.test(id)) return json({ error: 'bad spire id' }, 400);
         const b = JSON.parse(bodyText || '{}');
         if (!b.name || typeof b.lat !== 'number' || typeof b.lng !== 'number') return json({ error: 'missing spire' }, 400);
+        /* ONE sliced name, and both the row and the grant note read it. The
+           note used to interpolate the RAW b.name while the row two lines below
+           took slice(0, 40) off the same value, so the bound the tower name had
+           was simply absent from the sentence a rival gets sent. */
+        const spireName = String(b.name).slice(0, 40);
         const now = Date.now();
         const me = await env.DB.prepare('SELECT id, name, handle, profile, is_test FROM players WHERE id = ?').bind(auth.playerId).first();
         /* A FLAGGED TEST ACCOUNT HOLDS NO TOWERS. Refused rather than hidden,
@@ -2244,7 +2329,7 @@ export default {
                defender=excluded.defender, claimed_at=excluded.claimed_at, tended_at=excluded.tended_at,
                level=spires.level+1, updated_at=excluded.updated_at
            RETURNING level`)
-          .bind(id, String(b.name).slice(0, 40), b.lat, b.lng, auth.playerId, me?.name || me?.handle || null,
+          .bind(id, spireName, b.lat, b.lng, auth.playerId, me?.name || me?.handle || null,
                 me?.profile || null, now, now, 1, now,
                 auth.playerId, now - SPIRE_DORMANT_MS,
                 id, auth.playerId, now - SPIRE_SHIELD_MS).first();
@@ -2297,7 +2382,7 @@ export default {
         if (prev && prev.owner !== auth.playerId) {
           await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
             .bind(prev.owner, `spire-lost-${id}-${now}`, 'spire', JSON.stringify({
-              note: `${me?.name || me?.handle || 'Someone'} toppled ${b.name}. Walk back and take it.`,
+              note: `${me?.name || me?.handle || 'Someone'} toppled ${spireName}. Walk back and take it.`,
             }), now).run();
         }
         return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null, level: won.level });

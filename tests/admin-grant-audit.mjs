@@ -254,7 +254,13 @@ const r = await page.evaluate(async () => {
   const branch = {
     found: i > -1,
     pushesCard: iPush > -1 && /cards\.push\(\{ imgSrc: bhAsset\(it\)/.test(body),
-    usesTheNote: iPush > -1 && /stats: esc\(note\)/.test(body.slice(iPush, iPush + 200)),
+    /* `stats: note`, not `stats: esc(note)`. This row asserts the card CARRIES
+       the note, and it was spelled with the esc() because escaping used to be
+       the caller's job: packCardHtml interpolated `stats` raw. The sink escapes
+       it now (2026-09-01), so esc() here would double-escape and a player would
+       read &amp; in their own inbox. Fixed at the assertion rather than by
+       putting the esc() back, which is the drift rule in guard-provenance-lint. */
+    usesTheNote: iPush > -1 && /stats: note/.test(body.slice(iPush, iPush + 200)),
     beforeReveal: iPush > -1 && iRev > -1 && iPush < iRev,
   };
 
