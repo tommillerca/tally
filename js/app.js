@@ -11552,7 +11552,16 @@ function openCheerSheet(f) {
     if (!keys.has(i)) keys.set(i, social.newSendKey());
     const r = await social.sendCheer(f.playerId, i, keys.get(i));
     if (r.ok) { keys.delete(i); popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${esc(f.alias || f.name)}!`, 3000); history.back(); }
-    else { $$('.cheer-chip', wrap).forEach(x => x.disabled = false); toast(r.status === 429 ? "You've cheered them plenty today. Give 'em a rest!" : 'Could not send. Try again.', 3200); }
+    /* 403 IS NOT "TRY AGAIN", AND IT IS REACHABLE FROM THE ONE BUTTON THAT DOES
+       NOT COME OFF THE FRIENDS LIST. Cheer back is built from the inbox ROW on
+       purpose (so it works offline), so it is still offered after the sender
+       has left the Crew or deleted their account, and /cheer answers 'not
+       friends'. "Could not send. Try again." sends the player round that loop
+       forever. Say what actually happened instead. */
+    else { $$('.cheer-chip', wrap).forEach(x => x.disabled = false); toast(
+      r.status === 429 ? "You've cheered them plenty today. Give 'em a rest!"
+      : r.status === 403 ? "They're not in your Crew any more."
+      : 'Could not send. Try again.', 3200); }
   });
 }
 
