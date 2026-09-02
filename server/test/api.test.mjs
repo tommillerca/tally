@@ -726,6 +726,39 @@ await test('leaderboard: hides never-synced players, carries pet.shiny', async (
   assert.ok(!board.players.some(x => x.playerId === gp.playerId), 'never-synced registration is hidden');
 });
 
+/* THE BOARD RANKS ON THE CURRENT LEVEL, NOT ON THE RATCHET.
+   2026-09-01 moved the rank key out of json_extract(profile,'$.level') and into
+   a real column, because no index can serve an expression and the board was
+   reading every player in the table to publish a hundred. players.max_level was
+   already sitting there and looks like the same number, but it is MONOTONE by
+   design: it is the server's memory of the highest level it has ever accepted,
+   and the no-teleporting bound measures against it. Rank on that instead and
+   every player who has ever been higher than they are now quietly moves up.
+   A level can go down: sanitizeSnapshot clamps a claim from above and never
+   from below, and a restore from an older backup is exactly that. So this walks
+   one account down and asks the BOARD, which is the consumer that would be
+   wrong, rather than asking the row.
+   PROVE-RED: bind checked.maxLevel where PUT /profile binds checked.boardLevel,
+   and this fails with the ratchet's number. */
+await test('leaderboard: a level that goes DOWN goes down on the board too', async () => {
+  const k = await makeKeys();
+  const p = await (await regFetch(k.pubJwk)).json();
+  const put = lvl => signedFetch(k.kp, p.playerId, 'PUT', '/profile',
+    JSON.stringify({ snapshot: { level: lvl, outfit: { SK: 'SK0-1' }, gear: [] }, appV: 'test' }));
+  /* Climb to this account's own ceiling first, so "one below the top" is a real
+     rank on a dev DB that has accumulated a synced player per past run, rather
+     than a modest level that legitimately misses a LIMIT 100 page. */
+  assert.equal((await put(999999)).status, 200);
+  const peak = JSON.parse((await (await fetch(BASE + `/dev/player?id=${p.playerId}`)).json()).profile).level;
+  assert.ok(peak > 1, `PRECONDITION: the first sync landed a real level, got ${peak}`);
+  assert.equal((await put(peak - 1)).status, 200);
+  const board = await (await signedFetch(k.kp, p.playerId, 'GET', '/leaderboard')).json();
+  const me = board.players.find(x => x.playerId === p.playerId);
+  assert.ok(me, 'PRECONDITION: the player is on the board at all');
+  assert.equal(me.level, peak - 1,
+    `the board must show where the player is NOW (${peak - 1}), not the highest they have ever been (${peak})`);
+});
+
 /* THE WEEKLY STEP RACE. Tom, 2026-08-08: a weekly most-steps event with a prize
    and a visible 1st/2nd/3rd. Ranks come from the profile snapshot the client
    already syncs, stamped with the week they belong to, and the previous week is

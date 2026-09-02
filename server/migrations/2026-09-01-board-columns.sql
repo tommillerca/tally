@@ -1,0 +1,132 @@
+-- The boards stop reading every player to rank a hundred, 2026-09-01.
+--
+-- Apply local:  npx wrangler d1 execute bonez --local  --file=migrations/2026-09-01-board-columns.sql
+-- Apply remote: npx wrangler d1 execute bonez --remote --file=migrations/2026-09-01-board-columns.sql
+--
+-- ADDITIVE ONLY: two columns and two indexes. Nothing renamed, nothing dropped,
+-- no existing column touched, no row rewritten.
+--
+-- RUN THIS BEFORE ./deploy.sh, like every migration here. THEN RUN ITS OTHER
+-- HALF, 2026-09-01-board-backfill.sql, which fills the new columns for every
+-- row that already exists. See DEPLOY ORDER at the bottom for why the backfill
+-- is a separate file and why it gets run twice.
+--
+-- ============================================================================
+-- WHY
+-- ============================================================================
+-- /leaderboard ranked on CAST(json_extract(profile,'$.level')) and
+-- json_extract(profile,'$.badges'), and /steps/week filtered and ordered on
+-- three more json_extracts. A computed expression is not a column, so no index
+-- can serve it: both routes walked the WHOLE players table, parsed the whole
+-- profile JSON of every row, and then sorted the lot in a temp b-tree to hand
+-- back 100 rows (25 for the race). /leaderboard is fetched on every crew-tab
+-- open by every player, and settlement calls the race board TWICE.
+--
+-- MEASURED on this schema in local SQLite, seeded by a recursive CTE, median of
+-- 15 runs after a warm-up. No ANALYZE, which is the state a D1 database nobody
+-- has ANALYZEd is in:
+--
+--   players     /leaderboard         /steps/week
+--    25,000      12.70 ->  0.19 ms    13.56 -> 0.03 ms
+--   100,000      48.74 ->  0.20 ms    55.00 -> 0.03 ms
+--   200,000     111.40 ->  0.24 ms   108.48 -> 0.02 ms
+--
+-- The BEFORE column is linear in the table (roughly a microsecond a row) and the
+-- AFTER column is flat across an 8x growth, which is the actual point: this is a
+-- slope change, not a constant-factor win. The plans say the same thing:
+--
+--   /leaderboard  before  SCAN players | ... | USE TEMP B-TREE FOR ORDER BY
+--                 after   SCAN players USING INDEX idx_players_board | ...
+--   /steps/week   before  SCAN players | USE TEMP B-TREE FOR ORDER BY
+--                 after   SEARCH players USING INDEX idx_players_week
+--                           (week_key=? AND week_steps>?)
+--
+-- "SCAN players USING INDEX" is SQLite's phrase for an ORDERED WALK of that
+-- index, not a table scan: it reads index entries in board order and stops at
+-- the LIMIT, which is why the number does not move with the table.
+--
+-- AND AT THE ROUTE, which is the number a player actually waits on. Two
+-- `wrangler dev --local` workers, origin/main against this branch, the same
+-- seed in each, one signed GET, p50 of 30:
+--
+--   players     GET /leaderboard      GET /steps/week
+--    25,000      16.2 ->  3.2 ms       21.4 -> 1.6 ms
+--   100,000      53.4 ->  3.1 ms       78.1 -> 1.7 ms
+--
+-- The 3 ms that is left is signature verification and worker overhead, and it
+-- does not move with the table either. Both boards' payloads were dumped from
+-- both workers at both sizes and are byte-identical, ids, levels, badges and
+-- ranks alike: this changes what the query COSTS and not what it SAYS.
+--
+-- ============================================================================
+-- 1. The race board needed NO new writes at all
+-- ============================================================================
+-- week_key and week_steps have been real columns since
+-- 2026-08-16-hardening.sql, and PUT /profile has written them on every sync
+-- ever since, holding exactly the values it also stamps into the snapshot
+-- (sanitizeSnapshot returns one acceptedKey/acceptedSteps pair and both
+-- destinations are bound from it). The route was re-parsing JSON to read back
+-- numbers the row already carried. It reads the columns now.
+CREATE INDEX IF NOT EXISTS idx_players_week ON players (week_key, week_steps DESC);
+
+-- ============================================================================
+-- 2. The leaderboard needed a current (level, badges) pair
+-- ============================================================================
+-- max_level was NOT a substitute. It is a monotone ratchet, the server's memory
+-- of the highest level it has ever accepted, and it exists so a snapshot can be
+-- checked against a prior value. The board has always shown a player's CURRENT
+-- level, so ranking on the ratchet would have silently reordered the board for
+-- anyone who has ever been higher than they are now. badges had no column at
+-- all. So: two new columns holding the current claim, post-clamp.
+--
+-- They carry the board's own COALESCE defaults with them (an absent level is 1,
+-- absent badges is 0), so ORDER BY needs no expression wrapped around the
+-- column and the index can serve it end to end.
+--
+-- Re-running these two ALTERs errors with "duplicate column name", which is
+-- harmless and means they are already applied.
+ALTER TABLE players ADD COLUMN level INTEGER;
+ALTER TABLE players ADD COLUMN badges INTEGER;
+
+-- ============================================================================
+-- 3. The leaderboard's index
+-- ============================================================================
+-- Exactly the columns of its ORDER BY, in its order and its directions, so the
+-- walk IS the sort.
+--
+-- WHAT THE TWO INDEXES COST. Storage, measured by page_count delta on a
+-- 200,000 row fixture: idx_players_board 18.9 bytes a players row (3.61 MB),
+-- idx_players_week 22.9 (4.37 MB), together 41.8 bytes a row, which is 4.0 MB
+-- at 100,000 players against D1's 10 GB per-database limit.
+-- Writes: D1 bills one row written per index entry touched, so a PUT /profile
+-- goes from touching the players row alone to touching it plus these two, on a
+-- call that already writes that row and every tower the player defends.
+CREATE INDEX IF NOT EXISTS idx_players_board ON players (level DESC, badges DESC, last_seen DESC);
+
+-- ============================================================================
+-- DEPLOY ORDER, and why the backfill is a separate file
+-- ============================================================================
+-- The columns are new, so the worker that WRITES them is the one being
+-- deployed, and no ordering of one migration and one deploy has no gap at all.
+-- There are two gaps to choose between and they are not equally bad:
+--
+--   migrate then deploy (THIS ONE): in between, the old worker is still
+--     serving. It does not write the new columns and it does not read them, so
+--     nothing on the board is wrong; the only residue is that a player who
+--     syncs inside the window carries a level column one sync behind their JSON
+--     until the new worker's first PUT from them. A stale rank on a row that
+--     heals itself.
+--
+--   deploy then migrate: in between, the new worker reads columns that are NULL
+--     for everyone who has not synced yet, which is the whole board missing
+--     until a manual step somebody could forget.
+--
+-- So: this file, then ./deploy.sh, then the backfill file, and the backfill
+-- file AGAIN is harmless and sweeps the window shut. That is what it is a
+-- separate file FOR. `wrangler d1 execute --file` STOPS AT THE FIRST ERROR
+-- (measured 2026-09-01 on the local database: a re-run of this file died on
+-- `duplicate column name: level` and never reached anything below it), so a
+-- single file carrying both the ALTERs and the backfill would be re-runnable in
+-- the comments and not in fact. 2026-09-01-board-backfill.sql contains no
+-- ALTER, which is what makes running it as many times as you like actually
+-- work; schema-plan.test.mjs holds it to that.
