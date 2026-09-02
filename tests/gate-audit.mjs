@@ -65,7 +65,19 @@ for (const fn of OK_HELPERS) {
      match graded the wrong binding and still called this helper stale. */
   const rets = [...body.matchAll(/\breturn\s+([A-Za-z_$][\w$]*)\s*;/g)].map(m => m[1]);
   const viaVar = rets.some(n => new RegExp(`\\b${n}\\s*=\\s*\\{\\s*ok\\s*:`).test(body));
-  if (!direct && !viaVar) {
+  /* AND A TERNARY IS A THIRD LEGITIMATE SHAPE. spendPitFight became
+     `return used ? { ok: true, used } : { ok: false };` on 2026-09-01, when the
+     energy gate moved inside a single kvUpdate so a double tap could not open two
+     staked fights on one charge. That is the same {ok} contract as ever, but the
+     brace does not follow `return` and no name is returned, so both arms above
+     missed it and this check called a correct function stale. A guard that reads
+     the SHAPE of the source rather than the shape of the RESULT goes red every
+     time somebody writes the same contract a different way, which is how a
+     healthy tree ends up with a red it learns to ignore.
+     Scoped to the same statement (no `;` in between) so it cannot wander into
+     the next return. 2026-09-02. */
+  const viaTernary = /\breturn\b[^;]*\?[^;]*\{\s*ok\s*:/.test(body);
+  if (!direct && !viaVar && !viaTernary) {
     problems.push(`${fn}: no \`{ ok: ... }\` result near its definition; it may no longer be an {ok} helper`);
   }
 }
