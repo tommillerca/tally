@@ -27,7 +27,6 @@
  *
  * Needs DEV=1 and ADMIN_TOKEN, exactly like the other suites.
  */
-import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { flagFor } from './test-flag.mjs';
 
@@ -36,17 +35,6 @@ const BASE = process.env.BASE || process.env.API || 'http://127.0.0.1:8788';
    the live API mints accounts nobody can see. See server/test-flag.mjs. */
 const IS_TEST = flagFor(BASE);
 
-/* The limiter outlives the process, and this suite registers players, so a
-   second run starts throttled and every case fails as "too many requests"
-   rather than on its own merits. security.test.mjs and recovery.test.mjs
-   already do this; this file predates the rate_limits table, which is why it
-   was the only one still bleeding. */
-if (/127\.0\.0\.1|localhost/.test(BASE)) {
-  try {
-    execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command', 'DELETE FROM rate_limits'],
-      { cwd: import.meta.dirname, stdio: 'ignore' });
-  } catch { console.log('(could not reset the rate limiter; some limits may already be spent)'); }
-}
 const DAY = 86400000;
 const RETENTION_DAYS = 90;      // must match GRANT_RETENTION_DAYS in src/index.js
 const DORMANT_DAYS = 180;       // must match GRANT_DORMANT_DAYS in src/index.js
@@ -87,30 +75,37 @@ async function postJson(path, body) {
 
 /** A brand new account with its own keypair, so one test can never move another
  *  test's acknowledgement cursor. */
-/* THIS SUITE NEEDS 16 REGISTRATIONS AND rl_register_ip ALLOWS 10 AN HOUR.
-   Resetting once at import is not enough: the suite outruns the limit halfway
-   through its own run, and every case after that failed as "too many requests"
-   rather than on its own merits, which reads as nine broken features instead of
-   one exhausted counter. Clearing the counter on a 429 and retrying ONCE keeps
-   the limit itself honest (it is a real guard on a real route, and lowering it
-   for tests would be testing a different server) while letting the suite finish.
-   A second 429 is a genuine failure and still asserts. */
+/* THIS SUITE MAKES 22 REGISTRATIONS AND rl_register_ip ALLOWS 10 AN HOUR, so
+   sending them all from one address cannot work and never did: it used to clear
+   the whole rate_limits table on every 429 and retry once, which meant the suite
+   only finished when a several-second `wrangler d1 execute` subprocess won a race
+   against the dev worker holding the same SQLite file. When it lost, nine
+   unrelated cases failed as "too many requests" and the gate read as a broken
+   pruner. That is the coin flip this file used to be, and the counter it kept
+   resetting was not even its own budget.
+   Each account now arrives from its own synthetic edge IP instead, which is the
+   pattern test/api.test.mjs already documents at rndIp(): cf-connecting-ip is set
+   by Cloudflare at the edge in production and a client-supplied value is replaced
+   there, so this is only settable locally, and a dozen phones on a dozen
+   addresses is what this suite honestly is. The limit itself is untouched, and
+   security.test.mjs still proves it bites by pinning ONE address and exhausting
+   it. Random per run rather than a fixed sequence, on purpose: fixed addresses
+   would make the second run against one local database start throttled, which is
+   the history dependence this replaces. */
+const rndIp = () => `198.18.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
 async function register(pubJwk) {
   return (await fetch(BASE + '/register', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ test: IS_TEST, pubkey: pubJwk }),
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
+    body: JSON.stringify({ test: IS_TEST, pubkey: pubJwk }),
   })).json();
 }
 async function newPlayer() {
   const { kp, pubJwk } = await makeKeys();
-  let r = await register(pubJwk);
-  if (!r.playerId && /127\.0\.0\.1|localhost/.test(BASE)) {
-    try {
-      execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command', 'DELETE FROM rate_limits'],
-        { cwd: import.meta.dirname, stdio: 'ignore' });
-      r = await register(pubJwk);
-    } catch { /* fall through to the assert with the original answer */ }
-  }
-  assert.ok(r.playerId, 'register failed: ' + JSON.stringify(r));
+  const r = await register(pubJwk);
+  assert.ok(r.playerId,
+    'register failed, and a 429 here means a registration went out without its own cf-connecting-ip: '
+    + JSON.stringify(r));
   return { kp, id: r.playerId };
 }
 
