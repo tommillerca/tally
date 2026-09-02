@@ -14378,7 +14378,7 @@ function gearToCard(g) {
     kind: `GEAR · ${GEAR_SLOT_LABELS[g.slot] || g.slot}`,
     lvl: g.minLevel > 1 ? `Lv ${g.minLevel}` : '',
     statList: st, talent: g.talent ? g.talentName : '', plain: !st.length,
-    stats: g.talent ? `<div class="pc-perk-desc">${esc(TALENT_DESC[g.talent] || 'special ability')}</div>` : '',
+    statsHtml: g.talent ? `<div class="pc-perk-desc">${esc(TALENT_DESC[g.talent] || 'special ability')}</div>` : '',
   };
 }
 function lootCardHtml(g) { return packCardHtml(gearToCard(g), { selectable: true }); }
@@ -14619,7 +14619,7 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
 }
 
 // Shared pack-card markup.
-// card: {imgSrc?|iconHtml?, name, rarity, kind, lvl?, statList?, talent?, plain?, stats?, id?}
+// card: {imgSrc?|iconHtml?, name, rarity, kind, lvl?, statList?, talent?, plain?, stats?, statsHtml?, id?}
 // Image art uses a canvas that hydratePackArt() fills (trimmed + centered).
 function packCardHtml(c, { selectable = false } = {}) {
   const rar = RARITIES[c.rarity] || RARITIES.common;
@@ -14631,13 +14631,24 @@ function packCardHtml(c, { selectable = false } = {}) {
   /* The BAND under the plate is where a drop says what it does: real stat chips
      when it rolled some, the talent affix on top of them, and an explicit
      "no stats" line for pure cosmetics. An empty shelf under a legendary's
-     nameplate reads as a bug, not as "this one is looks-only". `stats` stays the
-     free-form HTML slot every older call site already fills. */
+     nameplate reads as a bug, not as "this one is looks-only".
+
+     `stats` IS TEXT NOW, AND THE SINK IS WHAT ESCAPES IT. It used to be the
+     free-form HTML slot every older call site filled, and two of those call
+     sites hand it a sentence the SERVER wrote around another player's typed
+     name: the spire-lost inbox card and the "Taken from ..." claim card. That
+     was safe only because those callers remembered esc(), which is caller
+     discipline holding up a raw sink, and the first refactor that forgets it
+     turns a rival's display name into script in your reveal.
+     Two callers genuinely need markup (a talent's perk block, a dupe's coin
+     glyph) and they now say so by name in `statsHtml`, which only ever carries
+     literals this app wrote. tests/render-sink-lint.mjs pins that split. */
   const chips = (c.statList || []).map(([k, v]) =>
     `<span class="pcs" data-k="${esc(k)}"><b>+${esc(v)}</b><small>${esc(k)}</small></span>`).join('');
+  const statsBit = c.statsHtml || (c.stats ? esc(c.stats) : '');
   const bandBits = (chips ? `<div class="pc-chips">${chips}</div>` : '')
     + (c.talent ? `<div class="pc-talent"><i></i>${esc(c.talent)}</div>` : '')
-    + (c.stats ? `<div class="pc-stats">${c.stats}</div>` : '')
+    + (statsBit ? `<div class="pc-stats">${statsBit}</div>` : '')
     + (!chips && !c.talent && c.plain ? '<div class="pc-plain">Plain cosmetic · no stats</div>' : '');
   /* name + rarity sit on a bottom PLATE. The rarity is a chip tinted by the
      card's own .r-<rarity> class, not inline-coloured text, so the frame and
@@ -15109,7 +15120,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
             </div>
           </div>
           <div class="pack-foot" id="packFoot">
-            ${footerNote ? `<span class="pack-coins">${footerNote}</span>` : ''}
+            ${/* ESCAPED AT THE SINK, same reason packCardHtml's `stats` is. The
+                  gift reveal builds this from giftSender(), which reads a name
+                  out of a note the SERVER wrote from another player's payload,
+                  and nothing on the way here escapes it. Every other caller
+                  passes "+N XP", which esc() leaves untouched. */''}
+            ${footerNote ? `<span class="pack-coins">${esc(footerNote)}</span>` : ''}
             ${coins ? `<span class="pack-coins">+${coins} ${ICONS.coin(14)} coins</span>` : ''}
             ${cards.length ? '<span class="pack-hint" id="packHint"></span>' : ''}
             <div class="pack-dots" id="packDots"></div>
@@ -15327,17 +15343,17 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
 
 // Normalize a crate result row into a pack card.
 function crateResultToCard(r) {
-  if (r.type === 'consumable') { const c = CONSUMABLES[r.consumable]; return { iconHtml: consumableIcon(r.consumable, 130), name: c.label, rarity: 'uncommon', kind: 'ITEM', stats: esc(c.desc) }; }
+  if (r.type === 'consumable') { const c = CONSUMABLES[r.consumable]; return { iconHtml: consumableIcon(r.consumable, 130), name: c.label, rarity: 'uncommon', kind: 'ITEM', stats: c.desc }; }
   if (r.type === 'ingredient') { const ing = INGREDIENTS[r.ingredient]; return { iconHtml: ingIconHtml(ing.id, 130), name: ing.name, rarity: 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }; }
   if (r.type === 'gear' || r.type === 'geardupe') {
     const g = r.gear, dup = r.type === 'geardupe';
-    if (dup) return { imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity, kind: 'GEAR · DUPE', stats: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
+    if (dup) return { imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity, kind: 'GEAR · DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
     // the slot, the level gate, the stat line and the talent affix as separate
     // fields: the card lays them out itself instead of reading one packed string
     return gearToCard(g);
   }
   const isPet = r.item && r.item.slot === 'C';
-  if (r.type === 'dupe') return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', stats: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
+  if (r.type === 'dupe') return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
   return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: '' };
 }
 
@@ -19310,24 +19326,24 @@ function presentGrantDelivery(r) {
     if (p.gift) giftInfos.push({ from: p.from, label: giftRewardLabel(p) });
     const note = p.note || (p.gift ? `A gift${p.from ? ' from ' + p.from : ''}` : 'From the Crew');
     let hadCard = false;
-    if (p.crate && CRATES[p.crate]) { cards.push({ iconHtml: crateIcon(p.crate, 120), name: CRATES[p.crate].label, rarity: p.crate === 'daily' ? 'uncommon' : 'rare', kind, stats: esc(note) }); hadCard = true; }
+    if (p.crate && CRATES[p.crate]) { cards.push({ iconHtml: crateIcon(p.crate, 120), name: CRATES[p.crate].label, rarity: p.crate === 'daily' ? 'uncommon' : 'rare', kind, stats: note }); hadCard = true; }
     /* A PET, AND AN EGG, BOTH LANDED SILENTLY BEFORE THIS. Added 2026-08-21 with
        the admin make-good arm: a payload carrying only a pet paid no coins and
        no XP and built no card, so every branch below fell through and the player
        got a Day One Lizard back with no reveal, no toast and nothing to look at.
        That is the end of the chain and it is the only part she experiences.
        Same shape as the crate line above; a pet is drawn from its own art. */
-    if (p.pet && BH_BY_ID[p.pet]) { const it = BH_BY_ID[p.pet]; cards.push({ imgSrc: bhAsset(it), name: it.name, rarity: it.rarity, kind, stats: esc(note) }); hadCard = true; }
-    if (p.egg) { cards.push({ iconHtml: crateIcon('egg', 120), name: CRATES.egg.label, rarity: 'rare', kind, stats: esc(note) }); hadCard = true; }
+    if (p.pet && BH_BY_ID[p.pet]) { const it = BH_BY_ID[p.pet]; cards.push({ imgSrc: bhAsset(it), name: it.name, rarity: it.rarity, kind, stats: note }); hadCard = true; }
+    if (p.egg) { cards.push({ iconHtml: crateIcon('egg', 120), name: CRATES.egg.label, rarity: 'rare', kind, stats: note }); hadCard = true; }
     if (p.gearId && GEAR_BY_ID[p.gearId]) { cards.push({ ...gearToCard(GEAR_BY_ID[p.gearId]), kind }); hadCard = true; }
-    if (p.consumable && CONSUMABLES[p.consumable]) { cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind, stats: esc(note) }); hadCard = true; }
+    if (p.consumable && CONSUMABLES[p.consumable]) { cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind, stats: note }); hadCard = true; }
     if (p.gift && !hadCard && p.coins) coinGifts.push(`${p.from || 'A friend'} sent you ${p.coins} coins!`);
   }
   for (const p of spireNews) {
     cards.push({
       iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain;filter:grayscale(1) brightness(.75)">`,
       name: 'Spire Lost', rarity: 'rare', kind: 'DARK SPIRE',
-      stats: esc(p.note || 'One of your towers no longer flies your name.'),
+      stats: p.note || 'One of your towers no longer flies your name.',
     });
   }
   // OS notification for friend gifts + cheers (so it feels like an event, not
@@ -21379,7 +21395,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           const lv = (res && res.level) || (foeCfg.spire.level || 1) + 1;
           extraCards.push({ iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain">`,
             name: foeCfg.spire.name, rarity: 'epic', kind: `SIEGE BROKEN · LV ${lv}`,
-            stats: `${esc(foeCfg.name)} is scattered. The tower is level ${lv} now and pays more tribute for it.` });
+            stats: `${foeCfg.name} is scattered. The tower is level ${lv} now and pays more tribute for it.` });
           dispatchEvent(new CustomEvent('bh-spire-claimed', { detail: { id: foeCfg.spire.id } }));
         }
       }

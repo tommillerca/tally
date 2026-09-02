@@ -1115,5 +1115,107 @@ await test('account delete: deleting an already-deleted account is ok, not a 500
   assert.equal((await r.json()).ok, true);
 });
 
+/* WHAT A PEER IS SERVED OUT OF YOUR SNAPSHOT, added 2026-09-01.
+   sanitizeSnapshot did `{ ...rawSnap }` and clamped four NUMBERS. It stripped no
+   unknown key, bounded no string and refused no nesting, and players.profile is
+   not a private field: GET /friends hands the whole blob to every accepted
+   friend, and the same blob is copied into spires.defender for every rival who
+   opens a tower this account holds. Measured against 996f28b9, all six of the
+   values below came back to the peer VERBATIM, bounded only by the 24KB body cap.
+   Graded at the PEER's readback rather than on the PUT response, because that is
+   the end of the chain and the response is not what anybody renders. */
+await test('snapshot: a peer is never served unknown keys, long strings or deep nesting', async () => {
+  const owner = await makeKeys();
+  const op = await (await regFetch(owner.pubJwk)).json();
+  const peer = await makeKeys();
+  const pp = await (await regFetch(peer.pubJwk)).json();
+  // reciprocate so the friendship is ACCEPTED and /friends returns the blob
+  await signedFetch(owner.kp, op.playerId, 'POST', '/friends/request', JSON.stringify({ code: pp.friendCode }));
+  await signedFetch(peer.kp, pp.playerId, 'POST', '/friends/request', JSON.stringify({ code: op.friendCode }));
+
+  const put = await signedFetch(owner.kp, op.playerId, 'PUT', '/profile', JSON.stringify({
+    snapshot: {
+      // the legitimate half, and the CONTROL: every one of these must survive
+      level: 12, levelName: 'Bruiser', badges: 4, title: 'Marrow King',
+      stats: { power: 20, guard: 11 }, outfit: { SK: 'SK0-1' }, gear: ['g-1', 'g-2'],
+      pet: { id: 'C3', level: 6, shiny: true },
+      yard: { n: 2, pets: [{ sp: 'C3', shiny: true }], wear: { G: 'PA1' } },
+      // the six the reviewers proved came back to a peer untouched
+      evilHtml: '<img src=x onerror=alert(1)>',
+      ctrl: 'a\u0000bc',
+      note: 'N'.repeat(20000),
+      nested: { a: { b: { c: { d: 'too deep' } } } },
+      name: { toString: 'not a string' },
+      levelNameLong: 'L'.repeat(500),
+    },
+    appV: 'test',
+  }));
+  assert.equal(put.status, 200, 'a strange snapshot is bounded, not rejected');
+  const putBody = await put.json();
+
+  const list = await (await signedFetch(peer.kp, pp.playerId, 'GET', '/friends')).json();
+  const seen = (list.friends || []).find(x => x.playerId === op.playerId);
+  assert.ok(seen && seen.profile, 'PRECONDITION: the peer must actually be served a profile, or every absence below is vacuous');
+  const prof = seen.profile;
+
+  /* CONTROL FIRST. An allowlist that dropped a key the client renders would
+     break the crew sheet and the tower sheet, and every absence asserted below
+     would pass on an empty object. */
+  assert.equal(prof.level, 12, 'CONTROL level');
+  assert.equal(prof.levelName, 'Bruiser', 'CONTROL levelName');
+  assert.equal(prof.title, 'Marrow King', 'CONTROL title');
+  assert.equal(prof.stats.power, 20, 'CONTROL stats');
+  assert.equal(prof.outfit.SK, 'SK0-1', 'CONTROL outfit');
+  assert.equal(prof.pet.id, 'C3', 'CONTROL pet');
+  assert.equal(prof.yard.pets[0].sp, 'C3', 'CONTROL yard is still three levels deep');
+  assert.equal(prof.yard.wear.G, 'PA1', 'CONTROL the paddock wardrobe');
+  assert.equal(prof.gear.length, 2, 'CONTROL gear');
+
+  for (const k of ['evilHtml', 'ctrl', 'note', 'nested', 'name', 'levelNameLong']) {
+    assert.ok(!(k in prof), `unknown key '${k}' reached the peer`);
+  }
+  const blob = JSON.stringify(prof);
+  assert.ok(blob.length < 1024, `the peer was served ${blob.length} bytes of snapshot`);
+  assert.ok(!/onerror/.test(blob), 'the payload reached the peer somewhere in the blob');
+
+  /* Asserted LAST on purpose. `bounded` is a convenience for a client and a
+     test, and it is only present when it is non-empty, so reading it first made
+     the pre-fix run die on `undefined.includes` before it had said a word about
+     the actual leak. The rows above are the finding; this one is the receipt. */
+  assert.ok((putBody.bounded || []).includes('shape'),
+    `\`bounded\` must name that the shape was cut, got ${JSON.stringify(putBody.bounded)}`);
+});
+
+/* THE OTHER HALF, and the one an allowlist on its own does not answer: an
+   ALLOWED key can still carry an unbounded string or a control character, and
+   levelName is rendered straight into a crew row. */
+await test('snapshot: an allowed key is still bounded, stripped and depth-limited', async () => {
+  const owner = await makeKeys();
+  const op = await (await regFetch(owner.pubJwk)).json();
+  const peer = await makeKeys();
+  const pp = await (await regFetch(peer.pubJwk)).json();
+  await signedFetch(owner.kp, op.playerId, 'POST', '/friends/request', JSON.stringify({ code: pp.friendCode }));
+  await signedFetch(peer.kp, pp.playerId, 'POST', '/friends/request', JSON.stringify({ code: op.friendCode }));
+
+  await signedFetch(owner.kp, op.playerId, 'PUT', '/profile', JSON.stringify({
+    snapshot: {
+      level: 9,
+      levelName: 'L'.repeat(5000),
+      title: 'Mar\u0000row\u202eKing',
+      plat: 'ios',                                   // CONTROL: a short honest string is untouched
+      yard: { n: 1, pets: [{ sp: 'C3', deeper: { a: 1 } }] },
+    },
+    appV: 'test',
+  }));
+  const list = await (await signedFetch(peer.kp, pp.playerId, 'GET', '/friends')).json();
+  const prof = ((list.friends || []).find(x => x.playerId === op.playerId) || {}).profile;
+  assert.ok(prof, 'PRECONDITION: the peer must be served a profile');
+  assert.equal(prof.plat, 'ios', 'CONTROL: a legitimate short string passes through untouched');
+  assert.equal(prof.levelName.length, 64, `levelName came back ${prof.levelName.length} chars`);
+  assert.equal(prof.title, 'MarrowKing', 'a NUL and a bidi override survived into a rendered name');
+  assert.equal(prof.yard.pets[0].sp, 'C3', 'CONTROL: the real field at that depth still travels');
+  assert.equal(prof.yard.pets[0].deeper, null, 'a value nested below the deepest real field still travelled');
+});
+
 console.log(`\n${passed} passed, ${failed} failed${unproven ? `, ${unproven} UNPROVEN here (see the note on UNPROVEN above)` : ''}`);
 process.exit(failed ? 1 : 0);
