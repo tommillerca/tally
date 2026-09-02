@@ -40,6 +40,19 @@ CREATE TABLE IF NOT EXISTS players (
   -- "players". Existing DBs: migrations/2026-08-22-test-accounts.sql, applied
   -- BEFORE deploying the worker that filters on it.
   is_test INTEGER DEFAULT 0,
+  -- WHICH RUN MADE THIS ROW (2026-09-02). is_test above is a SUPPRESSION switch,
+  -- not a provenance mark, and it cannot be both: hard-coding flagFor to true so
+  -- local runs flagged too turned 49 of 174 server assertions red, because the
+  -- suites that grade the leaderboard, friends, the race and the spires need an
+  -- account the server will actually show. So a test-made row carries a second
+  -- mark that NO route filters on: the suite that made it and when, written at
+  -- the moment of creation. NULL means a real client made it. Answers "is this a
+  -- bot" and "which run" in one column, which is what the 2026-08-22 census had
+  -- to reconstruct from registration timing and grant counts.
+  -- Existing DBs: migrations/2026-09-02-test-run-provenance.sql, applied BEFORE
+  -- deploying the worker whose INSERT names it. Same landmine as is_test: the
+  -- register route 500s with "no such column" if the deploy lands first.
+  test_run TEXT,
   /* THE RANKING KEY, MATERIALISED (2026-09-01). Both boards ranked on
      json_extract(profile, ...), which is a computed expression no index can
      serve, so every crew-tab open read and parsed EVERY player row: linear at

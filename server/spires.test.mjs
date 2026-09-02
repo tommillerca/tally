@@ -10,7 +10,7 @@
  * suggestion), and the player who lost a tower has to be told.
  */
 import assert from 'node:assert/strict';
-import { flagFor } from './test-flag.mjs';
+import { flagFor, RUN } from './test-flag.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8788';
 /* Registrations are flagged when this run is NOT local, so a suite pointed at
@@ -35,7 +35,7 @@ async function newPlayer(name, flagged = false) {
   const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
   const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
   const res = await fetch(`${BASE}/register`, {
-    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() }, body: JSON.stringify({ test: IS_TEST || flagged, pubkey: pubJwk }),
+    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() }, body: JSON.stringify({ test: IS_TEST || flagged, run: RUN, pubkey: pubJwk }),
   });
   if (!res.ok) throw new Error(`register failed: ${res.status}`);
   const me = await res.json();

@@ -28,7 +28,7 @@
  * Needs DEV=1 and ADMIN_TOKEN, exactly like the other suites.
  */
 import assert from 'node:assert/strict';
-import { flagFor } from './test-flag.mjs';
+import { flagFor, RUN } from './test-flag.mjs';
 
 const BASE = process.env.BASE || process.env.API || 'http://127.0.0.1:8788';
 /* Registrations are flagged when this run is NOT local, so a suite pointed at
@@ -46,7 +46,8 @@ async function test(name, fn) {
   catch (e) { console.log(`FAIL  ${name}\n      ${e.message}`); failed++; }
 }
 
-const RUN = Math.random().toString(36).slice(2, 8);
+// renamed off RUN 2026-09-02: RUN is now the shared run label imported above
+const KEYTAG = Math.random().toString(36).slice(2, 8);
 const b64 = buf => Buffer.from(buf).toString('base64');
 
 async function makeKeys() {
@@ -97,7 +98,7 @@ async function register(pubJwk) {
   return (await fetch(BASE + '/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
-    body: JSON.stringify({ test: IS_TEST, pubkey: pubJwk }),
+    body: JSON.stringify({ test: IS_TEST, run: RUN, pubkey: pubJwk }),
   })).json();
 }
 async function newPlayer() {
@@ -177,7 +178,7 @@ await test('the pruner reports the window it actually enforces', async () => {
 
 await test('GET /grants records how far the client has read (grants_ack)', async () => {
   const p = await newPlayer();
-  const id = await plant(p.id, `ack-${RUN}-a`, 'social', NEW);
+  const id = await plant(p.id, `ack-${KEYTAG}-a`, 'social', NEW);
   // DIRECTION: null -> the cursor the client sent. BOUND: it must be null first,
   // or this proves nothing about what the route did.
   assert.equal(await ackOf(p.id), null, 'a fresh account should have acknowledged nothing');
@@ -189,7 +190,7 @@ await test('GET /grants records how far the client has read (grants_ack)', async
 
 await test('the ack is CLAMPED: a wild cursor cannot acknowledge grants nobody was shown', async () => {
   const p = await newPlayer();
-  const id = await plant(p.id, `ack-${RUN}-b`, 'social', NEW);
+  const id = await plant(p.id, `ack-${KEYTAG}-b`, 'social', NEW);
   // A client asking for everything above a far-future id. Left unclamped this
   // would mark every grant the account ever receives below that id as delivered,
   // and the pruner would eat real gifts 90 days later.
@@ -203,7 +204,7 @@ await test('the ack is CLAMPED: a wild cursor cannot acknowledge grants nobody w
 
 await test('the ack only ever RISES, so a restored client cannot un-acknowledge', async () => {
   const p = await newPlayer();
-  const id = await plant(p.id, `ack-${RUN}-c`, 'social', NEW);
+  const id = await plant(p.id, `ack-${KEYTAG}-c`, 'social', NEW);
   await (await signedFetch(p.kp, p.id, 'GET', `/grants?since=${id}`)).json();
   assert.equal(await ackOf(p.id), id, 'fixture did not land');
   // A reinstall restores an OLD backup, so grantCursor comes back stale and the
@@ -216,14 +217,14 @@ await test('the ack only ever RISES, so a restored client cannot un-acknowledge'
 
 await test('KEEPS a 120-day-old GIFT for a player who has never acknowledged anything', async () => {
   const p = await newPlayer();
-  await plant(p.id, `keep-${RUN}-unread`, 'gift', OLD, { coins: 200, from: 'A Friend', gift: true });
+  await plant(p.id, `keep-${KEYTAG}-unread`, 'gift', OLD, { coins: 200, from: 'A Friend', gift: true });
   // BOUND: the fixture must exist, or the assertion after the drain is vacuous.
-  assert.ok(keysOf(await grantsOf(p.id)).includes(`keep-${RUN}-unread`), 'fixture did not land');
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`keep-${KEYTAG}-unread`), 'fixture did not land');
   await drain();
   // DIRECTION: unchanged. This is THE test. Age alone must never be enough to
   // delete something carrying value: the only safe signal is the client saying
   // it has the row, and this player's client has never said anything.
-  assert.ok(keysOf(await grantsOf(p.id)).includes(`keep-${RUN}-unread`),
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`keep-${KEYTAG}-unread`),
     'an unread 120-day-old gift was deleted: a player just lost a present');
 });
 
@@ -239,10 +240,10 @@ await test('KEEPS a 120-day-old GIFT for a player who has never acknowledged any
 
 await test('KEEPS a 200-day-old unread GIFT for a player who is still ACTIVE', async () => {
   const p = await newPlayer();
-  await plant(p.id, `dorm-${RUN}-active`, 'gift', (DORMANT_DAYS + 20) * DAY, { coins: 500, from: 'A Friend', gift: true });
+  await plant(p.id, `dorm-${KEYTAG}-active`, 'gift', (DORMANT_DAYS + 20) * DAY, { coins: 500, from: 'A Friend', gift: true });
   // BOUND, both halves: the gift must be past the age line and the player must
   // be inside the silence line, or this passes for the wrong reason.
-  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${RUN}-active`), 'fixture did not land');
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${KEYTAG}-active`), 'fixture did not land');
   const seen = await lastSeenOf(p.id);
   assert.ok(seen > Date.now() - DORMANT_DAYS * DAY,
     `fixture did not land: the player is already dormant (last_seen ${new Date(seen).toISOString()})`);
@@ -251,35 +252,35 @@ await test('KEEPS a 200-day-old unread GIFT for a player who is still ACTIVE', a
      delete something carrying value, at ANY age, while the recipient is still
      opening the app. If this goes red the rule has become delete-on-age and a
      live player has just lost 500 coins their friend sent them. */
-  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${RUN}-active`),
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${KEYTAG}-active`),
     'a 200-day-old unread gift was deleted from an ACTIVE account: the dormancy rule is ignoring the recipient');
 });
 
 await test('KEEPS a fresh unread gift for a player who HAS gone dormant', async () => {
   const p = await newPlayer();
-  await plant(p.id, `dorm-${RUN}-young`, 'gift', 30 * DAY, { coins: 500, from: 'A Friend', gift: true });
+  await plant(p.id, `dorm-${KEYTAG}-young`, 'gift', 30 * DAY, { coins: 500, from: 'A Friend', gift: true });
   await warpPlayer(p.id, (DORMANT_DAYS + 20) * DAY);
-  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${RUN}-young`), 'fixture did not land');
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${KEYTAG}-young`), 'fixture did not land');
   assert.ok(await lastSeenOf(p.id) < Date.now() - DORMANT_DAYS * DAY, 'fixture did not land: the player is not dormant');
   await drain();
   // DIRECTION: unchanged. The other half of the AND. A player who stops playing
   // does not forfeit the gift that arrived last month; they forfeit the one that
   // has been sitting unopened for longer than they have been gone.
-  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${RUN}-young`),
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${KEYTAG}-young`),
     'a 30-day-old gift was deleted because its recipient is dormant: the age bound is not being applied');
 });
 
 await test('DELETES a 200-day-old unread gift once its recipient has ALSO been gone 200 days', async () => {
   const p = await newPlayer();
-  await plant(p.id, `dorm-${RUN}-gone`, 'gift', (DORMANT_DAYS + 20) * DAY, { coins: 500, from: 'A Friend', gift: true });
+  await plant(p.id, `dorm-${KEYTAG}-gone`, 'gift', (DORMANT_DAYS + 20) * DAY, { coins: 500, from: 'A Friend', gift: true });
   await warpPlayer(p.id, (DORMANT_DAYS + 20) * DAY);
-  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${RUN}-gone`), 'fixture did not land');
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`dorm-${KEYTAG}-gone`), 'fixture did not land');
   assert.ok(await lastSeenOf(p.id) < Date.now() - DORMANT_DAYS * DAY, 'fixture did not land: the player is not dormant');
   await drain();
   // DIRECTION: gone, and this is the only rule in the file that deletes a
   // value-bearing row the client never read. It is sound because BOTH clocks ran
   // out: nothing has come for this gift, and nobody has come for the account.
-  assert.ok(!keysOf(await grantsOf(p.id)).includes(`dorm-${RUN}-gone`),
+  assert.ok(!keysOf(await grantsOf(p.id)).includes(`dorm-${KEYTAG}-gone`),
     'a 200-day-old unread gift for a 200-day-dormant account survived: the tail still has no ceiling');
 });
 
@@ -298,14 +299,14 @@ await test('a stepweek- RECEIPT survives dormancy too, on both clocks', async ()
 
 await test('KEEPS an ACKNOWLEDGED grant that is still inside the window', async () => {
   const p = await newPlayer();
-  const id = await plant(p.id, `keep-${RUN}-fresh`, 'social', NEW);
+  const id = await plant(p.id, `keep-${KEYTAG}-fresh`, 'social', NEW);
   await (await signedFetch(p.kp, p.id, 'GET', `/grants?since=${id}`)).json();
   assert.equal(await ackOf(p.id), id, 'fixture did not land');
   await drain();
   // DIRECTION: unchanged. The age bound is the margin that survives a restore
   // rolling the client's cursor backwards, so acknowledgement alone is not a
   // licence to delete immediately.
-  assert.ok(keysOf(await grantsOf(p.id)).includes(`keep-${RUN}-fresh`),
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`keep-${KEYTAG}-fresh`),
     'a 5-day-old grant was pruned the moment it was acknowledged');
 });
 
@@ -338,45 +339,45 @@ await test('KEEPS a stepweek- RECEIPT forever, acknowledged and ancient', async 
 
 await test('KEEPS a cheer that is inside the window', async () => {
   const p = await newPlayer();
-  await plant(p.id, `cheer-${RUN}-fresh`, 'cheer', NEW, { from: 'A Friend', cheer: 3, note: 'A Friend cheered you' });
-  assert.ok(keysOf(await grantsOf(p.id)).includes(`cheer-${RUN}-fresh`), 'fixture did not land');
+  await plant(p.id, `cheer-${KEYTAG}-fresh`, 'cheer', NEW, { from: 'A Friend', cheer: 3, note: 'A Friend cheered you' });
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`cheer-${KEYTAG}-fresh`), 'fixture did not land');
   await drain();
   // DIRECTION: unchanged. Cheers lose their age protection, not their delivery.
-  assert.ok(keysOf(await grantsOf(p.id)).includes(`cheer-${RUN}-fresh`),
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`cheer-${KEYTAG}-fresh`),
     'a 5-day-old cheer was pruned: the window is being ignored for cheers');
 });
 
 await test('the 90-day boundary: day 89 lives, day 91 dies', async () => {
   const p = await newPlayer();
-  const a = await plant(p.id, `edge-${RUN}-89`, 'social', 89 * DAY);
-  const b = await plant(p.id, `edge-${RUN}-91`, 'social', 91 * DAY);
+  const a = await plant(p.id, `edge-${KEYTAG}-89`, 'social', 89 * DAY);
+  const b = await plant(p.id, `edge-${KEYTAG}-91`, 'social', 91 * DAY);
   await (await signedFetch(p.kp, p.id, 'GET', `/grants?since=${Math.max(a, b)}`)).json();
   assert.equal(await ackOf(p.id), Math.max(a, b), 'fixture did not land');
-  assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`edge-${RUN}`)).length, 2, 'fixture did not land');
+  assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`edge-${KEYTAG}`)).length, 2, 'fixture did not land');
   await drain();
   const left = keysOf(await grantsOf(p.id));
-  assert.ok(left.includes(`edge-${RUN}-89`), 'day 89 was pruned: the window is too tight');
-  assert.ok(!left.includes(`edge-${RUN}-91`), 'day 91 survived: the window is too loose');
+  assert.ok(left.includes(`edge-${KEYTAG}-89`), 'day 89 was pruned: the window is too tight');
+  assert.ok(!left.includes(`edge-${KEYTAG}-91`), 'day 91 survived: the window is too loose');
 });
 
 /* ---------------- DELETE --------------------------------------------------- */
 
 await test('DELETES an acknowledged grant that is past the window', async () => {
   const p = await newPlayer();
-  const id = await plant(p.id, `gone-${RUN}-acked`, 'social', OLD);
+  const id = await plant(p.id, `gone-${KEYTAG}-acked`, 'social', OLD);
   await (await signedFetch(p.kp, p.id, 'GET', `/grants?since=${id}`)).json();
   assert.equal(await ackOf(p.id), id, 'fixture did not land');
-  assert.ok(keysOf(await grantsOf(p.id)).includes(`gone-${RUN}-acked`), 'fixture did not land');
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`gone-${KEYTAG}-acked`), 'fixture did not land');
   await drain();
   // DIRECTION: gone. This is the only reason the table has a ceiling at all.
-  assert.ok(!keysOf(await grantsOf(p.id)).includes(`gone-${RUN}-acked`),
+  assert.ok(!keysOf(await grantsOf(p.id)).includes(`gone-${KEYTAG}-acked`),
     'a delivered, acknowledged, 120-day-old grant survived: nothing is being reclaimed');
 });
 
 await test('DELETES a stale CHEER even though it was never acknowledged', async () => {
   const p = await newPlayer();
-  await plant(p.id, `cheer-${RUN}-stale`, 'cheer', OLD, { from: 'A Friend', cheer: 7, note: 'A Friend cheered you' });
-  assert.ok(keysOf(await grantsOf(p.id)).includes(`cheer-${RUN}-stale`), 'fixture did not land');
+  await plant(p.id, `cheer-${KEYTAG}-stale`, 'cheer', OLD, { from: 'A Friend', cheer: 7, note: 'A Friend cheered you' });
+  assert.ok(keysOf(await grantsOf(p.id)).includes(`cheer-${KEYTAG}-stale`), 'fixture did not land');
   await drain();
   /* DIRECTION: gone, and this is the ONE rule that deletes something a client
      has not read, so it is the one that has to be justified rather than
@@ -385,7 +386,7 @@ await test('DELETES a stale CHEER even though it was never acknowledged', async 
      consumable field, so applyPayload has nothing to award. Losing one costs a
      toast, not a reward. If this test goes red because /cheer started paying
      something, the RULE is what has to change, not the test. */
-  assert.ok(!keysOf(await grantsOf(p.id)).includes(`cheer-${RUN}-stale`),
+  assert.ok(!keysOf(await grantsOf(p.id)).includes(`cheer-${KEYTAG}-stale`),
     'a 120-day-old cheer survived: the valueless-grant rule is not running');
 });
 
@@ -416,9 +417,9 @@ await test('a run is BOUNDED by maxRows and resumes on the next tick', async () 
   await drain();                       // start from a clean backlog
   const p = await newPlayer();
   for (let i = 0; i < 25; i++) {
-    await plant(p.id, `batch-${RUN}-${i}`, 'cheer', OLD + i * 1000, { from: 'F', cheer: 1, note: 'F cheered you' });
+    await plant(p.id, `batch-${KEYTAG}-${i}`, 'cheer', OLD + i * 1000, { from: 'F', cheer: 1, note: 'F cheered you' });
   }
-  assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`batch-${RUN}`)).length, 25, 'fixture did not land');
+  assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`batch-${KEYTAG}`)).length, 25, 'fixture did not land');
 
   // DIRECTION: strictly downward, in steps no larger than maxRows. BOUND: never
   // more than 10 in one tick, because a tick that runs away holds D1's single
@@ -427,26 +428,26 @@ await test('a run is BOUNDED by maxRows and resumes on the next tick', async () 
   assert.equal(a.total, 10, `a bounded tick deleted ${a.total}, expected exactly 10`);
   assert.equal(a.stopped, 'maxRows');
   assert.equal(a.more, true, 'a tick that hit its bound must say there is more to do');
-  assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`batch-${RUN}`)).length, 15);
+  assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`batch-${KEYTAG}`)).length, 15);
 
   const b = await prune({ maxRows: 10, batch: 5 });
   assert.equal(b.total, 10, 'the next tick did not resume where the last one stopped');
   const c = await prune();
   assert.equal(c.more, false, 'a finished tick must not claim there is a backlog');
-  assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`batch-${RUN}`)).length, 0);
+  assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`batch-${KEYTAG}`)).length, 0);
 });
 
 await test('a wall-clock bound also stops a run, and stops it cleanly', async () => {
   const p = await newPlayer();
   for (let i = 0; i < 12; i++) {
-    await plant(p.id, `clock-${RUN}-${i}`, 'cheer', OLD + i * 1000, { from: 'F', cheer: 1, note: 'F cheered you' });
+    await plant(p.id, `clock-${KEYTAG}-${i}`, 'cheer', OLD + i * 1000, { from: 'F', cheer: 1, note: 'F cheered you' });
   }
-  assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`clock-${RUN}`)).length, 12, 'fixture did not land');
+  assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`clock-${KEYTAG}`)).length, 12, 'fixture did not land');
   const r = await prune({ budgetMs: 1, batch: 1 });
   assert.ok(r.stopped === 'budgetMs' || r.more === false,
     `a 100ms budget neither finished nor reported stopping: ${JSON.stringify(r)}`);
   await drain();
-  assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`clock-${RUN}`)).length, 0,
+  assert.equal((await grantsOf(p.id)).filter(r => r.key.startsWith(`clock-${KEYTAG}`)).length, 0,
     'the interrupted run did not resume to completion');
 });
 
@@ -526,13 +527,13 @@ await test('nothing prunes the backups table, at any age', async () => {
 await test('pruning grants does not disturb the EVENTS pruner or the front door', async () => {
   // The two run back to back on the same cron tick and share a wall clock.
   const p = await newPlayer();
-  const id = await plant(p.id, `live-${RUN}`, 'social', NEW, { coins: 10, note: 'still here' });
+  const id = await plant(p.id, `live-${KEYTAG}`, 'social', NEW, { coins: 10, note: 'still here' });
   await drain();
   // DIRECTION: a brand new grant is still deliverable through the real route.
   const r = await signedFetch(p.kp, p.id, 'GET', `/grants?since=${id - 1}`);
   assert.equal(r.status, 200);
   const got = (await r.json()).grants.map(g => g.key);
-  assert.ok(got.includes(`live-${RUN}`), 'a fresh grant stopped being deliverable after a prune');
+  assert.ok(got.includes(`live-${KEYTAG}`), 'a fresh grant stopped being deliverable after a prune');
 });
 
 // The real scheduled() path, which is where BOTH pruners actually run. wrangler
@@ -549,12 +550,12 @@ await (async () => {
   await probe.text();
   await test(name, async () => {
     const p = await newPlayer();
-    await plant(p.id, `cron-${RUN}`, 'cheer', OLD, { from: 'F', cheer: 1, note: 'F cheered you' });
-    assert.ok(keysOf(await grantsOf(p.id)).includes(`cron-${RUN}`), 'fixture did not land');
+    await plant(p.id, `cron-${KEYTAG}`, 'cheer', OLD, { from: 'F', cheer: 1, note: 'F cheered you' });
+    assert.ok(keysOf(await grantsOf(p.id)).includes(`cron-${KEYTAG}`), 'fixture did not land');
     const r = await fetch(BASE + '/__scheduled?cron=*%2F15+*+*+*+*');
     await r.text();
     assert.equal(r.status, 200);
-    assert.ok(!keysOf(await grantsOf(p.id)).includes(`cron-${RUN}`), 'the cron entry point pruned no grants');
+    assert.ok(!keysOf(await grantsOf(p.id)).includes(`cron-${KEYTAG}`), 'the cron entry point pruned no grants');
   });
 })();
 
