@@ -60,7 +60,11 @@ const b64 = buf => Buffer.from(buf).toString('base64');
    cf-connecting-ip is set by Cloudflare at the edge in production and a
    client-supplied value is replaced there, so this is only settable locally,
    which is what makes the IP-keyed limiter testable at all.
-   Passing a FIXED ip is how a test drives the limiter deliberately. */
+   Passing a FIXED ip is how a test drives the limiter deliberately.
+   SO EVERY REGISTRATION IN THIS FILE GOES THROUGH regFetch. Three of the backup
+   cases used to POST /register by hand with no cf-connecting-ip, which puts them
+   in the one bucket every header-less caller shares, and that bucket is spent by
+   the fourth consecutive run of this suite against one local database. */
 const rndIp = () => `198.18.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
 function regFetch(pubkey, ip = rndIp()) {
   return fetch(BASE + '/register', {
@@ -267,7 +271,7 @@ await test('backup: PUT requires a valid signature (wrong key rejected)', async 
    cap rejects nothing" are both failures and only one of them looks like one. */
 await test('backup: a 2 MB blob STORES, and comes back byte-for-byte', async () => {
   const fresh = await makeKeys();
-  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ test: IS_TEST, pubkey: fresh.pubJwk }) })).json();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
   // 2,000,000 bytes: comfortably over the p50 one-year save (2.23 MB is p50 at
   // 365 days, so this is roughly the median player at eleven months), and
   // comfortably under D1's own value limit measured at 2,199,942 bytes.
@@ -280,7 +284,7 @@ await test('backup: a 2 MB blob STORES, and comes back byte-for-byte', async () 
 
 await test('backup: a blob D1 cannot hold answers 413, not an unhandled 500', async () => {
   const fresh = await makeKeys();
-  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ test: IS_TEST, pubkey: fresh.pubJwk }) })).json();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
   /* 3 MB sits in the gap nobody knew was there: under MAX_BACKUP_BYTES, so the
      route's own check passes it, and over D1's value limit, so the INSERT throws
      SQLITE_TOOBIG. Before 2026-08-17 that fell through to the generic handler
@@ -316,7 +320,7 @@ await test('backup: a blob D1 cannot hold answers 413, not an unhandled 500', as
 
 await test('backup: a blob over the cap is refused with 413, and nothing is stored', async () => {
   const fresh = await makeKeys();
-  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ test: IS_TEST, pubkey: fresh.pubJwk }) })).json();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
   const blob = 'A'.repeat(4 * 1024 * 1024 + 1024);
   const put = await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob }));
   assert.equal(put.status, 413, 'the cap is not being enforced at all');
