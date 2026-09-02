@@ -1293,6 +1293,16 @@ function sanitizeSnapshot(rawSnap, row, nowMs) {
     maxLevelAt: raisesMax ? nowMs : (row.max_level_at || null),
     weekKey: acceptedKey,
     weekSteps: acceptedSteps,
+    /* THE BOARD'S RANK KEY, so it can be a column instead of a json_extract the
+       ORDER BY has to compute for every player in the table. Current, not the
+       max_level ratchet above: the leaderboard has always shown where a player
+       IS, and ranking on the ratchet would reorder the board for anyone who has
+       ever been higher than they are now.
+       `level` is 0 here only when snap.level is absent (clamp holds a present
+       one at 1 or more), so `|| 1` is the board's own COALESCE default carried
+       into the column rather than left for the read to compute. */
+    boardLevel: level || 1,
+    boardBadges: intOrNull(snap.badges) || 0,
   };
 }
 /* =============== end snapshot bounds =============== */
@@ -1709,9 +1719,11 @@ export default {
         await env.DB.batch([
           env.DB.prepare(
             `UPDATE players SET profile = ?, app_v = ?, last_seen = ?,
-               max_level = ?, max_level_at = ?, week_key = ?, week_steps = ? WHERE id = ?`)
+               max_level = ?, max_level_at = ?, week_key = ?, week_steps = ?,
+               level = ?, badges = ? WHERE id = ?`)
             .bind(snap, String(body.appV || ''), nowP,
                   checked.maxLevel || null, checked.maxLevelAt, checked.weekKey, checked.weekSteps,
+                  checked.boardLevel, checked.boardBadges,
                   auth.playerId),
           env.DB.prepare('UPDATE spires SET defender = ?, updated_at = ? WHERE owner = ?')
             .bind(snap, nowP, auth.playerId),
@@ -2421,9 +2433,25 @@ export default {
         if (auth.err) return json({ error: auth.err }, 401);
         const rows = await env.DB.prepare(
           `SELECT id, handle, name,
-                  CAST(COALESCE(json_extract(profile,'$.level'), 1) AS INTEGER) lvl,
+                  /* THE RANK KEY IS A COLUMN NOW, not an expression. It used to
+                     be CAST(COALESCE(json_extract(profile,'$.level'),1) AS INTEGER),
+                     and the same for badges, in the ORDER BY below. No index can
+                     serve a computed expression, so ranking a hundred players
+                     meant reading and JSON-parsing every player in the table and
+                     then sorting the lot in a temp b-tree: measured linear at
+                     about a microsecond a row, 111 ms at 200,000 players, on the
+                     one route every crew-tab open fetches.
+                     PUT /profile writes these two beside max_level and
+                     week_steps, carrying the COALESCE defaults above with them,
+                     so this reads back exactly what the expression computed and
+                     idx_players_board turns the sort into a walk of 100 index
+                     entries. 0.24 ms at the same 200,000, and flat: see
+                     migrations/2026-09-01-board-columns.sql for both plans.
+                     The remaining json_extracts are per OUTPUT row, not per
+                     table row, so they run 100 times rather than N. */
+                  level lvl,
                   json_extract(profile,'$.levelName') lvlName,
-                  CAST(COALESCE(json_extract(profile,'$.badges'), 0) AS INTEGER) badges,
+                  badges,
                   json_extract(profile,'$.outfit') outfit,
                   json_extract(profile,'$.pet') pet,
                   json_extract(profile,'$.stats') stats,
@@ -2440,7 +2468,7 @@ export default {
            FROM players
            WHERE profile IS NOT NULL -- a registration that never synced a snapshot COALESCEs to a level-1 "bot"; hide it
              AND COALESCE(is_test, 0) = 0 -- flagged test accounts never surface; also gates the "New Boneheadz" card and add-tokens, both derived from these rows
-           ORDER BY lvl DESC, badges DESC, last_seen DESC LIMIT 100`)
+           ORDER BY level DESC, badges DESC, last_seen DESC LIMIT 100`)
           .bind(Date.now() - SPIRE_DORMANT_MS, Date.now(), Date.now() - SPIRE_DORMANT_MS).all();
         const nowLb = Date.now();
         const players = await Promise.all((rows.results || []).map(async r => ({
@@ -2487,16 +2515,28 @@ export default {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(wk)) return json({ error: 'bad week' }, 400);
 
         const board = async weekKey => (await env.DB.prepare(
+          /* week_key and week_steps are COLUMNS, and always have been: PUT
+             /profile writes them from the same accepted pair it stamps into the
+             snapshot, so they cannot disagree with it. This route was
+             json_extracting the numbers back out of the JSON anyway, which made
+             the week filter and the ORDER BY computed expressions no index could
+             serve: a full walk of the table and a temp b-tree to hand back 25
+             rows, 108 ms at 200,000 players, and settlement calls this board
+             TWICE. On the columns, idx_players_week seeks straight to the week
+             and reads it already in step order: 0.02 ms at the same size.
+             raceV stays a json_extract because there is no column for it, but it
+             is a RESIDUAL now, applied to the handful of rows the index hands
+             over rather than to every player who exists. */
           `SELECT id, handle, name, json_extract(profile,'$.outfit') outfit,
-                  CAST(COALESCE(json_extract(profile,'$.weekSteps'),0) AS INTEGER) steps,
+                  week_steps steps,
                   last_seen seenAt
              FROM players
             WHERE profile IS NOT NULL
               AND COALESCE(is_test, 0) = 0 -- a test account must never place (or be paid) in the race
-              AND json_extract(profile,'$.weekKey') = ?
+              AND week_key = ?
               AND CAST(COALESCE(json_extract(profile,'$.raceV'),0) AS INTEGER) >= ${RACE_RULES}
-              AND CAST(COALESCE(json_extract(profile,'$.weekSteps'),0) AS INTEGER) > 0
-            ORDER BY steps DESC LIMIT 25`).bind(weekKey).all()).results || [];
+              AND week_steps > 0
+            ORDER BY week_steps DESC LIMIT 25`).bind(weekKey).all()).results || [];
 
         /* Settle the week just gone, once, before answering for this one.
            ONLY WHEN `wk` REALLY IS THIS WEEK. `wk` arrives in the query string,
