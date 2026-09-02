@@ -332,11 +332,38 @@ const RATE_LIMITS = {
      is a queue drain: QCAP is 300 events and each POST carries 50, so a client
      that was offline sends ceil(300/50) = 6 back-to-back POSTs on reconnect.
      120/hour per device is 100x the steady rate and 20x the worst burst.
-     The IP bucket has to survive carrier CGNAT, where thousands of real players
-     share one address, so it is deliberately loose and is a backstop against
-     device-id rotation, not the primary control. */
+
+     THE IP BUCKET WAS 600/HOUR AND THAT WAS A LOCKOUT, not a backstop. It was
+     described here as "deliberately loose"; it was not, and round 12 measured
+     what it actually did. Twelve users behind ONE address, each posting 60
+     events an hour, which is half of what the DEVICE budget above allows a
+     single honest client: users 1 to 10 succeeded and spent the 600 exactly,
+     and users 11 and 12 got 429 on EVERY post for the rest of the window. A
+     brand-new install's very FIRST POST came back 429 with a retry-after of 59
+     minutes. So a NAT'd office, school, gym or stadium went analytics-dark, and
+     the device upsert with it, once about ten people were active on it. Those
+     crowds are exactly the ones worth measuring, and nothing anywhere reported
+     that they had stopped being measured: the client discards the result.
+
+     SO THE DEVICE BUCKET IS THE CONTROL AND THE IP BUCKET IS A CEILING ON ONE
+     SOURCE, which is what the paragraph above always claimed and the number
+     never delivered. 20,000/hour is set so a crowd cannot reach it before the
+     per-device limit stops the individual: it is 166 devices at the per-device
+     ceiling of 120, 333 at the 60/hour round 12 stressed with, and roughly
+     16,000 at the 28-a-day rate a real client posts. It still bounds one
+     abusive address at 20,000 requests an hour, or 5.5 a second, which no crowd
+     of honest clients produces and which caps that address's D1 cost at 51
+     writes a request whatever it does.
+     SIGNED TRAFFIC WAS NEVER THE PROBLEM and is deliberately untouched: the
+     same round ramped 400 users through one IP and counted ZERO rate-limit 429s
+     on every signed route at every level. The only 429s were the daily cheer
+     cap, which is a game rule doing its job.
+     THIS IS STILL NOT A FLOOD DEFENCE, and raising it does not pretend to be
+     one. See the note on the route itself: every check here is a D1 write, so
+     volumetric protection belongs in a Cloudflare rate-limiting rule in front
+     of the Worker, which is a deploy-side change and not a code one. */
   rl_events_dev:  { limit: 120, windowMs: 3600000 },
-  rl_events_ip:   { limit: 600, windowMs: 3600000 },
+  rl_events_ip:   { limit: 20000, windowMs: 3600000 },
 
   /* --- account creation ---
      A device registers ONCE, ever, and again on a reinstall. 10/hour per IP
@@ -366,6 +393,12 @@ const RATE_LIMITS = {
      session is a few dozen an hour. 120/hour leaves that alone. */
   rl_profile:     { limit: 120, windowMs: 3600000 },
 };
+
+/* Expired rows cleared by one first-hit sweep inside rateLimit(). Deliberately
+   the same 1,000 as PRUNE_BATCH: it is the size the batching note down there
+   was measured at, and there is no reason for a sweep on a request path to be
+   more expensive than one on the cron. */
+const RL_SWEEP_BATCH = 1000;
 
 function hexOf(buf, bytes) {
   return [...new Uint8Array(buf)].slice(0, bytes).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -399,11 +432,28 @@ async function rateLimit(env, name, kind, value) {
      RETURNING hits`)
     .bind(bucket, name, windowStart, windowStart + cfg.windowMs * 2).first();
   const hits = Number(row?.hits || 1);
-  // Sweep on the FIRST hit of a fresh window only: self-throttling (one delete
-  // per bucket per window) and it keeps the table proportional to live traffic
-  // rather than to all traffic ever.
+  /* Sweep on the FIRST hit of a fresh window only: self-throttling (one delete
+     per bucket per window) and it keeps the table proportional to live traffic
+     rather than to all traffic ever.
+     AND BOUNDED, because it runs on a REQUEST PATH and the rows it clears are
+     never the caller's own. This table is not only counters: every signed write
+     claims a nonce row here (claimSignature below) with a 10 minute TTL, so the
+     expired set is the whole signed write volume of the last window rather than
+     a handful of buckets. Round 12 caught the consequence: 202,733 expired rows
+     went in ONE 700 ms call, and the five backups in flight behind D1's single
+     writer each paid about 675 ms against a 134 to 361 ms baseline. Re-measured
+     against the real schema in local SQLite with that same backlog: 117.5 ms
+     unbounded, 1.0 ms at LIMIT 1000, and the LIMITed form is a COVERING seek of
+     idx_rate_limits_expiry rather than a walk of the whole expired set.
+     What a batch leaves behind is not lost: the next first-hit through here
+     takes another batch, and pruneStale() sweeps the same rows on the 15 minute
+     tick, which is what closes the gap for PUT /backup and POST /cheer. Neither
+     of those calls a limiter, so before the tick learned to sweep, the routes
+     writing the MOST nonce rows were the two that never cleared any. */
   if (hits === 1) {
-    await env.DB.prepare('DELETE FROM rate_limits WHERE expires_at < ?').bind(now).run().catch(() => {});
+    await env.DB.prepare(
+      'DELETE FROM rate_limits WHERE rowid IN (SELECT rowid FROM rate_limits WHERE expires_at < ? LIMIT ?)')
+      .bind(now, RL_SWEEP_BATCH).run().catch(() => {});
   }
   if (hits <= cfg.limit) return null;
   const resetMs = windowStart + cfg.windowMs - now;
@@ -743,6 +793,118 @@ async function pruneGrants(env, now = Date.now(), opts = {}) {
     dormantTs,
     stopped,
     more: stopped !== null,
+    ms: Date.now() - started,
+  };
+}
+
+/* ---------------- the tables nobody had looked at ----------------
+   `grep -n "DELETE FROM" src/index.js` lists every deleter on this worker, and
+   until now it named rate_limits, events, grants, prune_runs, friendships and
+   the /account/delete cascade. NOTHING deleted from `devices` or `reports`, and
+   `leads` only ever lost the rows belonging to a player who deleted their
+   account. Three tables that only grew, on a database whose 10 GB per-database
+   limit cannot be bought past, which is the same wall the events note above is
+   written against.
+
+   WHAT WRITES THEM, AND HOW FAST IT COULD. All three are reached from UNSIGNED
+   routes keyed on a device id the caller chooses, so the only thing standing
+   between them and an infinite table is a per-IP budget:
+     devices  upserted by POST /events, 20,000/hour per IP. Round 12 grew it by
+              111 rows with nothing anywhere to stop it.
+     reports  inserted by POST /report, 60/hour per IP = 1,440 rows a day.
+              Round 12 grew it by 402 rows, same finding.
+     leads    inserted by POST /survey, 10/day per IP.
+   The rows are small (97 bytes/row measured over a 1,000,000 row devices
+   fixture), so this is a slow leak rather than an urgent one. It is still a
+   leak, and "slow" has no ceiling in it.
+
+   THE WINDOW IS 365 DAYS FOR ALL THREE, and it is one number on purpose.
+     1. It is the shortest window in which the figures these tables feed still
+        mean what the dashboard calls them. /stats reads `devices` for four
+        ALL-TIME figures (total devices, the returned rate, and the country and
+        city breakdowns); /admin reads the 100 newest reports and the 200 newest
+        leads. A year of installs is a yearly business's view of itself. Ninety
+        days is a quarter's, and nobody asked for that.
+     2. Nothing may outlive the table it joins to. Both /stats reads of reports
+        and leads LEFT JOIN devices for a label, and every surviving events row
+        does too. One window across all three means no join ever degrades, and
+        365 is 12x EVENT_RETENTION_DAYS, so no events row can lose its device.
+     3. It buys a CEILING, which is the entire point. At the budgets above one
+        address can mint 14,400 devices rows and 1,440 reports rows a day.
+        Unbounded those are infinite; at 365 days they are 5.26M rows (about
+        510 MB) and 526k rows. Both fit inside 10 GB. "Forever" does not.
+     4. `leads` holds the only contact PII in this database, an email and an
+        explicit opt-in to be mailed. A shorter window there would be a decision
+        about somebody's mailing list rather than about storage, and it is also
+        the least leaky of the three by 144x. 365 bounds it without taking that
+        decision on Tom's behalf.
+
+   DEVICES KEYS OFF last_seen, NOT first_seen, because the question a retention
+   rule asks is "is this row still about anybody", and the /events upsert moves
+   last_seen on every post. A device installed two years ago and used this
+   morning stays; one that has not been seen for a year goes, along with the
+   coarse geo it is carrying, which is the over-collection half of the same
+   argument the events note makes. last_seen is nullable and `NULL < cutoff` is
+   NULL rather than true, so a row with no last_seen is never deleted: the same
+   fail-safe direction as the grants pruner's NULL arm, and unreachable through
+   the route anyway, which stamps last_seen on insert and on update. */
+const STALE_RULES = [
+  /* ORDER MATTERS, because maxRows is shared across the whole run. The three
+     retention tables go first: they are the ones with the leak, they drain in a
+     few hundred rows a tick, and putting the high-volume sweep in front of them
+     would let a busy hour of signed writes starve them indefinitely. */
+  { table: 'devices',     col: 'last_seen',  days: 365 },
+  { table: 'reports',     col: 'ts',         days: 365 },
+  { table: 'leads',       col: 'ts',         days: 365 },
+  /* NOT RETENTION: expires_at already IS the cutoff ("when this row may be
+     swept"), so days = 0 means now, which is exactly the sweep rateLimit() runs
+     inline. It is here so that PUT /backup and POST /cheer, which claim a nonce
+     row on every write and call no limiter, are no longer relying on some OTHER
+     route hitting a fresh window to clear up after them. It is last because it
+     is the only one whose backlog can arrive in a burst. */
+  { table: 'rate_limits', col: 'expires_at', days: 0 },
+];
+
+/** Delete rows past their window, table by table, in bounded batches. Same
+ *  contract as pruneEvents and pruneGrants: no cursor, every statement
+ *  independently correct, so a tick killed halfway leaves the rest for the next
+ *  one and nothing has to be remembered in between. */
+async function pruneStale(env, now = Date.now(), opts = {}) {
+  const batch = Math.max(1, Math.min(5000, Number(opts.batch) || PRUNE_BATCH));
+  const maxRows = Math.max(0, opts.maxRows === undefined ? PRUNE_MAX_ROWS : Number(opts.maxRows));
+  const budgetMs = Math.max(100, opts.budgetMs === undefined ? PRUNE_BUDGET_MS : Number(opts.budgetMs));
+  const started = Date.now();
+  const deleted = {}, cutoffs = {};
+  let total = 0, stopped = null;
+
+  for (const rule of STALE_RULES) {
+    const cutoff = now - rule.days * 86400000;
+    cutoffs[rule.table] = cutoff;
+    for (;;) {
+      if (total >= maxRows) { stopped = 'maxRows'; break; }
+      if (Date.now() - started >= budgetMs) { stopped = 'budgetMs'; break; }
+      const n = Math.min(batch, maxRows - total);
+      /* The table and column are interpolated from STALE_RULES and can never
+         come from a request; both bounds are parameters. Every column named
+         there is indexed (schema.sql), which is what makes the inner SELECT a
+         COVERING seek instead of a table walk: measured on 1,000,000 devices
+         rows, 2.3 ms a batch with idx_devices_last_seen against 22.3 ms and a
+         SCAN without it, and the scan is the one that grows with the table. */
+      const r = await env.DB.prepare(
+        `DELETE FROM ${rule.table} WHERE rowid IN (
+           SELECT rowid FROM ${rule.table} WHERE ${rule.col} < ? LIMIT ?)`)
+        .bind(cutoff, n).run();
+      const c = Number(r?.meta?.changes || 0);
+      if (c) { deleted[rule.table] = (deleted[rule.table] || 0) + c; total += c; }
+      if (c < n) break;   // that table is drained for this cutoff
+    }
+    if (stopped) break;
+  }
+
+  return {
+    total, deleted, cutoffs,
+    stopped,                       // null = it finished; otherwise the bound that hit
+    more: stopped !== null,        // true = there is still a backlog for the next tick
     ms: Date.now() - started,
   };
 }
@@ -1537,8 +1699,13 @@ function adminGrantPayload(b) {
 
 export default {
   /* THE CRON. Declared in wrangler.toml under [triggers], every 15 minutes.
-     This is the only thing on this worker that deletes anything, and the only
-     reason the events table has a ceiling at all.
+     It is the reason events, grants, devices, reports and leads have a ceiling
+     at all, and it is the only SCHEDULED deleter here. It is not the only
+     deleter, and the line that used to say so sent the next person looking in
+     the wrong place: `grep -n "DELETE FROM" src/index.js` is the real list, and
+     the other entries on it are rateLimit()'s expired-row sweep, /friends
+     removing a friendship, /account/delete's cascade, and recordPruneRun below
+     trimming its own trace.
 
      Awaited rather than handed to ctx.waitUntil, and the error is rethrown, so
      a broken prune shows up as a FAILED cron invocation in the Cloudflare
@@ -1547,7 +1714,7 @@ export default {
   async scheduled(event, env) {
     const now = Date.now();
     const cron = (event && event.cron) || null;
-    let r = null, g = null, thrown = null;
+    let r = null, g = null, s = null, thrown = null;
     try {
       r = await pruneEvents(env, now);
       /* Grants second, and with whatever wall clock the events pass left. Events
@@ -1558,7 +1725,13 @@ export default {
          pruner that silently stops is indistinguishable from one with nothing
          to do, right up until the cap arrives. */
       g = await pruneGrants(env, now, { budgetMs: Math.max(1000, PRUNE_BUDGET_MS - r.ms) });
-      console.log('prune', JSON.stringify({ cron, ...r, grants: g }));
+      /* Third, on what the first two left. Same reasoning as the paragraph
+         above and for the same reason it is safe: cursorless, so being cut
+         short costs it nothing. It goes last because its tables are the small
+         ones (a few hundred rows a tick at any plausible scale) while events is
+         the one with the deadline. */
+      s = await pruneStale(env, now, { budgetMs: Math.max(1000, PRUNE_BUDGET_MS - r.ms - g.ms) });
+      console.log('prune', JSON.stringify({ cron, ...r, grants: g, stale: s }));
     } catch (e) {
       thrown = e;
       console.error('prune failed', (e && e.stack) || e);
@@ -1566,7 +1739,16 @@ export default {
     /* THE TRACE IS WRITTEN ON BOTH PATHS, and the failing path is the one it
        exists for. A tick that threw is exactly the tick nobody will be watching,
        and `r` surviving while `g` is null is how "the events pass finished and
-       the grants pass died" stays legible afterwards. */
+       the grants pass died" stays legible afterwards.
+       THE STALE PASS GETS NO COLUMN HERE, deliberately. A column costs an ALTER
+       plus the schema/migration column-equality check in schema-plan.test.mjs,
+       and it would buy less than it looks: the tick's ok/err already covers "did
+       the stale pass throw", the console line above carries its full result, and
+       GET /admin/prune reports live row counts and the oldest surviving row for
+       every table in STALE_RULES, which answers "is it keeping pace" from the
+       tables themselves rather than from a log of what it claims to have done.
+       Give it a column the day the tables get big enough that per-tick history
+       matters, which is not today. */
     await recordPruneRun(env, {
       ts: now,
       ms: Date.now() - now,
@@ -3279,7 +3461,7 @@ export default {
            break the aggregates below. Losing the counts is acceptable; losing
            "status: failing" and the recorded stack because of them is not. */
         let oldestDay = null, eventsRows = null, grantsRows = null, grantsDormant = null,
-            backups = null, tableErr = null;
+            backups = null, stale = null, tableErr = null;
         const dormantTs = now - GRANT_DORMANT_DAYS * 86400000;
         try {
           oldestDay = await env.DB.prepare('SELECT MIN(day) d FROM events').first('d');
@@ -3346,6 +3528,23 @@ export default {
                     COALESCE(SUM(size + COALESCE(daily_size, 0)), 0) bytes,
                     COALESCE(MAX(size + COALESCE(daily_size, 0)), 0) maxBytes,
                     COUNT(daily_at) withDaily FROM backups`).first();
+          /* THE STALE TABLES, AND WHY THIS IS THEIR ONLY AUDIT SURFACE. The
+             stale pass writes no prune_runs column (see scheduled()), so these
+             four rows are how anybody answers "is it keeping pace". `oldest`
+             next to `cutoff` is the whole check: oldest < cutoff means rows past
+             the window are still in the table, which is the same reading the
+             `behind` status makes of eventsOldestDay. Both figures are cheap
+             because every column named in STALE_RULES is indexed, so MIN() is a
+             seek to one end of the index rather than a scan. */
+          stale = {};
+          for (const rule of STALE_RULES) {
+            stale[rule.table] = {
+              days: rule.days,
+              cutoff: now - rule.days * 86400000,
+              rows: await env.DB.prepare(`SELECT COUNT(*) n FROM ${rule.table}`).first('n'),
+              oldest: await env.DB.prepare(`SELECT MIN(${rule.col}) t FROM ${rule.table}`).first('t'),
+            };
+          }
         } catch (e) { tableErr = (e && e.message) || String(e); }
         const avgBackup = backups && backups.n ? Math.round(backups.bytes / backups.n) : null;
 
@@ -3403,6 +3602,8 @@ export default {
                oversight, and the figures under tables.backups are what that
                decision was traded for. */
             backupDays: null,
+            // devices / reports / leads, plus the rate_limits sweep at 0 days.
+            staleDays: Object.fromEntries(STALE_RULES.map(s2 => [s2.table, s2.days])),
           },
           caps: { batch: PRUNE_BATCH, maxRowsPerTick: PRUNE_MAX_ROWS, budgetMs: PRUNE_BUDGET_MS },
           tables: {
@@ -3419,6 +3620,7 @@ export default {
               budgetFraction: BACKUPS_BUDGET_FRACTION, budgetBytes: Math.round(D1_LIMIT_BYTES * BACKUPS_BUDGET_FRACTION),
               playersAtBudget: avgBackup ? Math.round(D1_LIMIT_BYTES * BACKUPS_BUDGET_FRACTION / avgBackup) : null,
             } : null,
+            stale,
             error: tableErr,
           },
           runs, generatedAt: now,
@@ -3605,6 +3807,72 @@ export default {
           batch: b.batch, maxRows: b.maxRows, budgetMs: b.budgetMs, retentionDays: b.retentionDays,
         });
         return json({ ok: true, ...r });
+      }
+      /* Run the STALE prune on demand, DEV only. Its own route for the same
+         reason /dev/prune-grants is: the events suite asserts the shape
+         /dev/prune returns, and a third pruner must not be able to break those
+         assertions or hide behind them. The injected clock is what proves a 365
+         day window from both sides without waiting a year, and it proves it TO
+         THE ROW: the predicate is `col < now - days`, so a fixture planted at T
+         survives a run at exactly T + 365 days and dies one millisecond later. */
+      if (env.DEV === '1' && path === '/dev/prune-stale' && request.method === 'POST') {
+        const b = await request.json().catch(() => ({}));
+        const r = await pruneStale(env, Number(b.nowMs) || Date.now(), {
+          batch: b.batch, maxRows: b.maxRows, budgetMs: b.budgetMs,
+        });
+        return json({ ok: true, ...r });
+      }
+      /* Age a devices, reports or leads row, so a test can cross a 365 day
+         window without waiting a year. Same shape and same reasoning as
+         /dev/player-warp, /dev/backup-warp and /dev/spire-warp above: move
+         EVERY clock on the row together, which is why devices moves first_seen
+         with last_seen (a device somehow first seen this morning and last seen
+         a year ago is a state the real world cannot produce).
+         WHY A WARP RATHER THAN AN INJECTED CLOCK, which is what the events and
+         grants suites use. /dev/prune-stale takes a `nowMs` too, but a clock a
+         YEAR out puts EVERY row in these tables past its cutoff, not just the
+         fixture: it emptied `devices` while the 30-day events rows referencing
+         them survived, and api.test.mjs's tester-board case went red on the
+         second run against the same local database. That is an artefact of the
+         test clock and nothing production can do (the devices window is 365 days
+         and EVENT_RETENTION_DAYS is 30), but a suite that breaks its neighbours
+         on a re-run is not a suite anybody will keep running. Ageing one row
+         instead leaves the prune on the real clock, where only the fixture is a
+         candidate. DEV only; it moves timestamps and creates nothing. */
+      if (env.DEV === '1' && path === '/dev/stale-warp' && request.method === 'POST') {
+        const WARP = {
+          devices: { sql: 'UPDATE devices SET first_seen = first_seen - ?, last_seen = last_seen - ? WHERE device = ?', bind: (ms, d) => [ms, ms, d] },
+          reports: { sql: 'UPDATE reports SET ts = ts - ? WHERE device = ?', bind: (ms, d) => [ms, d] },
+          leads: { sql: 'UPDATE leads SET ts = ts - ? WHERE device = ?', bind: (ms, d) => [ms, d] },
+        };
+        const b = await request.json().catch(() => ({}));
+        const w = WARP[b.table];
+        if (!w) return json({ error: `table must be one of: ${Object.keys(WARP).join(', ')}` }, 400);
+        const r = await env.DB.prepare(w.sql).bind(...w.bind(Number(b.backMs) || 0, String(b.device || ''))).run();
+        return json({ ok: true, moved: Number((r.meta && r.meta.changes) || 0) });
+      }
+      /* Count the stale tables by device, DEV only, read only. A retention test
+         has to assert what SURVIVED as precisely as what went, and /stats only
+         exposes aggregates over whole tables. Three literal statements behind a
+         fixed map rather than a `table` parameter: a caller-supplied table name
+         in a DEV endpoint is a footgun for no gain, which is the same call
+         /dev/ratelimit-count made. All three tables carry `device`, so one
+         fixture id addresses a row in each. */
+      if (env.DEV === '1' && path === '/dev/stale-count' && request.method === 'GET') {
+        const BY_DEVICE = {
+          devices: 'SELECT COUNT(*) n, MIN(last_seen) at FROM devices WHERE device = ?',
+          reports: 'SELECT COUNT(*) n, MIN(ts) at FROM reports WHERE device = ?',
+          leads: 'SELECT COUNT(*) n, MIN(ts) at FROM leads WHERE device = ?',
+        };
+        const sql = BY_DEVICE[url.searchParams.get('table')];
+        if (!sql) return json({ error: `table must be one of: ${Object.keys(BY_DEVICE).join(', ')}` }, 400);
+        const row = await env.DB.prepare(sql).bind(url.searchParams.get('device') || '').first();
+        /* `at` is the STORED value of the column the rule prunes on, and it is
+           the reason the boundary can be asserted to the row rather than to the
+           minute. The test's own Date.now() is not the one the row carries, so
+           a cutoff computed from it would be a couple of milliseconds off and
+           the two sides of the boundary would be a guess. */
+        return json({ n: Number((row && row.n) || 0), at: row && row.at !== null ? Number(row.at) : null });
       }
       /* Read grants back exactly, DEV only. A retention test has to assert what
          SURVIVED as precisely as what went, and GET /grants cannot do it: it
