@@ -9,7 +9,7 @@
    for a literal fails LINK-DC; the Android bullet removed fails ANDROID; the
    hero replaced with an empty span fails PIXELS; kvSet dropped from the boot
    path fails ONCE; the crewThanks listener removed fails BANNER-OPENS. */
-import { boot, sleep, serveTree, setWidth } from './godmode.js';
+import { boot, sleep, serveTree, setWidth, maskWebdriver } from './godmode.js';
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/rtZ6Uyxc';
@@ -161,9 +161,7 @@ await page.evaluate(async () => {
    a veteran's database. */
 const coldCtx = await browser.createBrowserContext();
 const coldPage = await coldCtx.newPage();
-await coldPage.evaluateOnNewDocument(() => {
-  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
-});
+await maskWebdriver(coldPage);
 const bootShow = async () => {
   await coldPage.goto(base + '?demo', { waitUntil: 'networkidle2' });
   await sleep(9500);   // past the 4.6s the old gate used, plus its retries

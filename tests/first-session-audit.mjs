@@ -53,7 +53,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boot, sleep, serveTree } from './godmode.js';
+import { boot, sleep, serveTree, maskWebdriver } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argUrl = process.argv.slice(2).find(a => !a.startsWith('--'));
@@ -96,9 +96,7 @@ ok('QUEUE the allowlist has no stale entries (took one off the launch path? drop
 const { browser, page } = await boot(base);
 /* Before any app script on the next load. Setting it after boot() would be too
    late: every gate has already read the flag and returned. */
-await page.evaluateOnNewDocument(() => {
-  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
-});
+await maskWebdriver(page);
 await page.reload({ waitUntil: 'networkidle2' });
 
 const masked = await page.evaluate(() => navigator.webdriver);

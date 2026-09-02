@@ -37,6 +37,11 @@
  * run a player gets. The mask is installed before app.js parses and asserted in
  * page; MASK below is a hard row, not a comment.
  *
+ * It arrives through godmode's maskWebdriver, which brings the egress wall with
+ * it, and that is not cosmetic here: NOSOCIAL off plus no ?api= override means
+ * PROD_API, and the seven virgin installs below each used to boot, finish
+ * onboarding and register a real account against the production Worker.
+ *
  * PROVE-RED (run 2026-09-02, on a cp -R copy of origin/main 6bf08cc): DOUBLE-TAP,
  * DOUBLE-TAP-SAVED, HEIGHT-FOLLOWS, CHIPS-TRUTH, REROLL-RESUMES and STEP-TOP all
  * fail; MASK and CONTROL stay green, which is what says the harness was looking
@@ -46,7 +51,7 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { serveTree, loadPuppeteer, chromePath, sandboxArgs, sleep } from './godmode.js';
+import { serveTree, loadPuppeteer, chromePath, sandboxArgs, sleep, maskWebdriver } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const puppeteer = await loadPuppeteer();
@@ -73,9 +78,7 @@ const masks = [];
 async function freshPage(w = 390, h = 844) {
   const ctx = await browser.createBrowserContext();
   const p = await ctx.newPage();
-  await p.evaluateOnNewDocument(() => {
-    Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
-  });
+  await maskWebdriver(p);
   await p.setViewport({ width: w, height: h, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   p.on('pageerror', e => { errors.push(e.message); console.log('  PAGEERROR:', e.message.slice(0, 140)); });
   await p.goto(base, { waitUntil: 'networkidle2' });   // NO ?demo: onboarding only exists on a virgin install
