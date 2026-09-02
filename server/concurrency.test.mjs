@@ -496,6 +496,75 @@ await test('an uncontested re-claim of my own aged tower is still a tend that re
   assert.equal(after.claimedAt, before.claimedAt, 'a tend is not a takeover: claimed_at must not move');
 });
 
+/* ---------------------------------------------------------------------------
+   N. THE WRITE THAT LANDS AFTER THE ACCOUNT IS GONE.
+
+   Same shape as every race above, with /account/delete on the other side of it.
+   verifySigned reads the players row; UPSERT_BACKUP and the spire claim used to
+   write an await later with nothing in the statement re-asking whether that row
+   is still there. A push that verified while the delete batch was committing
+   landed afterwards, and the row it wrote had no owner: /account/delete is the
+   App Store 5.1.1(v) flow, so this is data the player was told was destroyed.
+   Measured on 2026-09-02 against 1681e58c, 30 rounds: 25 orphaned backups and
+   22 towers owned by a dead id. Neither has anything that would clean it up
+   later. backups has no pruning rule at all, and a ghost tower is worse than
+   bytes: the map still serves it, a rival can take it, and the takeover mints a
+   spire-lost grant addressed to the deleted owner.
+
+   DIRECTION: rows SURVIVE the delete. BOUND: exactly zero, over every round.
+   Read back through /dev/*-warp with backMs 0, which returns the ROW, so the
+   assertion is about the database and not about what a route answered. Per
+   player id rather than a table-wide count: the local D1 persists between runs
+   and a total would grade this suite on another suite's leftovers.
+--------------------------------------------------------------------------- */
+await test('a save pushed as the account is deleted must not outlive the account', async () => {
+  const ROUNDS = 10;
+  const survivors = [];
+  for (let i = 0; i < ROUNDS; i++) {
+    const doomed = await newPlayer();
+    // pre-signed so the burst is two bare fetches: signing inside it would
+    // stagger the arrivals by exactly the width the race needs.
+    const push = await doomed.sign('PUT', '/backup', { blob: 'x'.repeat(2000), appV: 'race' });
+    const kill = await doomed.sign('POST', '/account/delete', {});
+    await burst([kill, push]);
+    const warp = await fetch(`${BASE}/dev/backup-warp`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ playerId: doomed.id, backMs: 0 }),
+    });
+    assert.equal(warp.status, 200, `/dev/backup-warp needs DEV=1 (got ${warp.status})`);
+    if ((await warp.json()).row) survivors.push(doomed.id);
+    // CONTROL: the account really is gone, so a clean round is a won race and
+    // not a delete that quietly failed and left the guard nothing to refuse.
+    assert.equal((await doomed.signed('GET', '/me')).status, 401,
+      'the delete did not take, so this round tested nothing');
+  }
+  assert.equal(survivors.length, 0,
+    `${survivors.length}/${ROUNDS} deleted accounts still have a backup row: ${survivors.join(', ')}`);
+});
+
+await test('a spire claimed as the account is deleted must not leave a tower behind', async () => {
+  const ROUNDS = 10;
+  const ghosts = [];
+  for (let i = 0; i < ROUNDS; i++) {
+    const doomed = await newPlayer();
+    const id = nextSpireId();
+    const take = await doomed.sign('PUT', `/spires/${id}/claim`, { name: 'Ghost Tower', lat: 4.5, lng: 5.5 });
+    const kill = await doomed.sign('POST', '/account/delete', {});
+    await burst([kill, take]);
+    const warp = await fetch(`${BASE}/dev/spire-warp`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, backMs: 0 }),
+    });
+    assert.equal(warp.status, 200, `/dev/spire-warp needs DEV=1 (got ${warp.status})`);
+    const row = (await warp.json()).row;
+    if (row && row.owner === doomed.id) ghosts.push(id);
+    assert.equal((await doomed.signed('GET', '/me')).status, 401,
+      'the delete did not take, so this round tested nothing');
+  }
+  assert.equal(ghosts.length, 0,
+    `${ghosts.length}/${ROUNDS} towers are held by a deleted account: ${ghosts.join(', ')}`);
+});
+
 async function befriend(x, y) {
   const cx = (await (await x.signed('GET', '/me')).json()).friendCode;
   const cy = (await (await y.signed('GET', '/me')).json()).friendCode;

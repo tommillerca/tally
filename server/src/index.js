@@ -143,17 +143,31 @@ const MAX_BACKUP_BYTES = 4 * 1024 * 1024; // encrypted full save (food log grows
    question a restore screen has to answer. */
 const BACKUP_DAILY_MS = 24 * 60 * 60 * 1000;
 const PROMOTE_DAILY = `backups.daily_at IS NULL OR excluded.updated_at - backups.daily_at >= ${BACKUP_DAILY_MS}`;
+/* THE PLAYER MUST STILL EXIST AT WRITE TIME, and that is a rule in the
+   statement rather than an `if` in front of it, for the same reason the spire
+   claim's cap and shield are (see the long note there). verifySigned reads the
+   players row and the upsert lands an await later, so a save pushed while
+   /account/delete is committing verified against a player that no longer exists
+   by the time it writes. Measured on 2026-09-02 against 1681e58c, racing one
+   backup push against the delete: 25 of 30 rounds left an orphaned row, and
+   backups is the one table in this database with no pruning rule at all, so
+   nothing would ever have taken them back. `EXISTS` costs a primary-key probe
+   and it is the difference between "delete your account" meaning it and not. */
 const UPSERT_BACKUP =
-  `INSERT INTO backups (player_id, blob, app_v, size, updated_at) VALUES (?,?,?,?,?)
+  `INSERT INTO backups (player_id, blob, app_v, size, updated_at)
+   SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM players WHERE id = ?)
    ON CONFLICT(player_id) DO UPDATE SET
      daily_blob = CASE WHEN ${PROMOTE_DAILY} THEN backups.blob       ELSE backups.daily_blob END,
      daily_size = CASE WHEN ${PROMOTE_DAILY} THEN backups.size       ELSE backups.daily_size END,
      daily_at   = CASE WHEN ${PROMOTE_DAILY} THEN excluded.updated_at ELSE backups.daily_at  END,
      blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at`;
-/* The pre-migration statement, kept verbatim. Only reachable from the "no such
-   column" fallback in PUT /backup; see the note there. */
+/* The pre-migration statement: the same one, minus the daily slot. Only
+   reachable from the "no such column" fallback in PUT /backup; see the note
+   there. It carries the EXISTS clause too, because production is the tree most
+   likely to be running unmigrated and an orphan is no less an orphan there. */
 const UPSERT_BACKUP_NO_DAILY =
-  'INSERT INTO backups (player_id, blob, app_v, size, updated_at) VALUES (?,?,?,?,?) ' +
+  'INSERT INTO backups (player_id, blob, app_v, size, updated_at) ' +
+  'SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM players WHERE id = ?) ' +
   'ON CONFLICT(player_id) DO UPDATE SET blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at';
 
 /* ---------------- names + friend codes ----------------
@@ -865,6 +879,38 @@ const STALE_RULES = [
   { table: 'rate_limits', col: 'expires_at', days: 0 },
 ];
 
+/* ---------------- rows whose player is gone ----------------
+   NOT RETENTION AT ALL, which is why these are a second list rather than a
+   `days: 0` entry: the question is not "how old is this row" but "is there
+   still an account this belongs to". Both writes are now guarded at write time
+   (the EXISTS clauses on UPSERT_BACKUP and the spire claim), so this list
+   cannot grow any more; it exists for the rows the unguarded code already left,
+   and as the backstop for anything a future signed write forgets.
+
+   ONLY TWO TABLES, and both earn it. A backup is the largest row in this
+   database and the only table with no pruning rule of any kind, so an orphan
+   there is permanent bytes; measured on 2026-09-02, thirty racing deletes left
+   25 of them. A spire is worse than bytes: the map still serves a ghost tower,
+   a rival can take it, and the takeover mints another orphan. `grants` is
+   deliberately NOT here. Its own pruner already walks it, orphans arrive only
+   from the same race on a route that pays nothing, and the candidate scan would
+   be the whole 1.9M row table every fifteen minutes.
+
+   `pick` IS THE PERFORMANCE OF THIS WHOLE SWEEP. The candidate SELECT runs on
+   every tick and finds nothing on almost all of them, so it must never touch
+   the row bodies: backups rows carry a whole encrypted save, and scanning them
+   by rowid would read gigabytes of blob pages to answer "no orphans". Selecting
+   player_id keeps the scan inside the PRIMARY KEY's own index, which covers it:
+   EXPLAIN QUERY PLAN, 2026-09-02, reads SCAN x USING COVERING INDEX
+   sqlite_autoindex_backups_1, and the NOT EXISTS is a covering seek on the
+   players PK per candidate. spires is small and has no such problem, so it uses
+   the same rowid shape as the retention rules above (its candidate scan covers
+   through idx_spires_owner anyway). */
+const ORPHAN_RULES = [
+  { table: 'backups', col: 'player_id', pick: 'player_id' },
+  { table: 'spires',  col: 'owner',     pick: 'rowid' },
+];
+
 /** Delete rows past their window, table by table, in bounded batches. Same
  *  contract as pruneEvents and pruneGrants: no cursor, every statement
  *  independently correct, so a tick killed halfway leaves the rest for the next
@@ -899,6 +945,29 @@ async function pruneStale(env, now = Date.now(), opts = {}) {
       if (c < n) break;   // that table is drained for this cutoff
     }
     if (stopped) break;
+  }
+
+  /* The orphan pass rides the SAME total, maxRows and budgetMs as the loop
+     above, so the tick keeps one ceiling rather than gaining a second one. It
+     goes last for the reason the retention rules go first: those are the ones
+     with a leak, and a backlog of orphans must not be able to starve them. */
+  for (const rule of ORPHAN_RULES) {
+    if (stopped) break;
+    for (;;) {
+      if (total >= maxRows) { stopped = 'maxRows'; break; }
+      if (Date.now() - started >= budgetMs) { stopped = 'budgetMs'; break; }
+      const n = Math.min(batch, maxRows - total);
+      // Table and columns are interpolated from ORPHAN_RULES and can never come
+      // from a request; the only bound value is the limit.
+      const r = await env.DB.prepare(
+        `DELETE FROM ${rule.table} WHERE ${rule.pick} IN (
+           SELECT x.${rule.pick} FROM ${rule.table} x
+            WHERE NOT EXISTS (SELECT 1 FROM players p WHERE p.id = x.${rule.col}) LIMIT ?)`)
+        .bind(n).run();
+      const c = Number(r?.meta?.changes || 0);
+      if (c) { deleted[rule.table] = (deleted[rule.table] || 0) + c; total += c; }
+      if (c < n) break;   // no orphans left in that table
+    }
   }
 
   return {
@@ -1927,8 +1996,13 @@ export default {
         if (typeof body.blob !== 'string' || !body.blob) return json({ error: 'missing blob' }, 400);
         const now = Date.now();
         try {
-          await env.DB.prepare(UPSERT_BACKUP)
-            .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now).run();
+          const r = await env.DB.prepare(UPSERT_BACKUP)
+            .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now, auth.playerId).run();
+          /* Nothing landed means the EXISTS refused it, which has exactly one
+             cause: the account was deleted between verifySigned and here. Say
+             the same thing every other route says about an id that is not
+             there, rather than answering ok about a save nobody stored. */
+          if (!(r.meta && r.meta.changes)) return json({ error: 'unknown player' }, 401);
         } catch (e) {
           /* THE MIGRATION IS NOT APPLIED YET, AND THIS IS THE ONE ROUTE WHERE
              THAT MUST NOT MATTER. Two migrations in server/migrations/ are
@@ -1941,8 +2015,9 @@ export default {
           if (/no such column/i.test(String(e))) {
             console.error('backups.daily_* missing; storing without the archive. ' +
               'Apply migrations/2026-08-25-backup-daily-slot.sql', (e && e.message) || e);
-            await env.DB.prepare(UPSERT_BACKUP_NO_DAILY)
-              .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now).run();
+            const nd = await env.DB.prepare(UPSERT_BACKUP_NO_DAILY)
+              .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now, auth.playerId).run();
+            if (!(nd.meta && nd.meta.changes)) return json({ error: 'unknown player' }, 401);
             return json({ ok: true, updatedAt: now });
           }
           /* D1 HAS ITS OWN VALUE LIMIT, AND IT IS LOWER THAN MAX_BACKUP_BYTES.
@@ -2513,12 +2588,22 @@ export default {
            on the same three bindings: the owner read is re-checked AT WRITE TIME
            instead of being trusted across the await. A refusal from the new arm
            lands on the tend below, which is where "it is already mine" is
-           answered now, by a write rather than by a read. */
+           answered now, by a write rather than by a read.
+
+           AND SO IS "I STILL EXIST". Same shape, third read across the same
+           await: verifySigned and the `me` SELECT both saw a live player, and
+           /account/delete can commit before this statement runs. Measured on
+           2026-09-02 against 1681e58c, racing a claim against the delete: 22 of
+           30 rounds left a tower owned by an id with no players row. That is
+           not merely a stale row. The map still serves it, a rival can take it,
+           and the takeover then mints a spire-lost grant addressed to a deleted
+           account, which is a second orphan minted by the first. */
         const won = await env.DB.prepare(
           `INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at)
              SELECT ?,?,?,?,?,?,?,?,?,?,?
               WHERE (SELECT COUNT(*) FROM spires WHERE owner = ? AND tended_at > ?) < 3
                 AND NOT EXISTS (SELECT 1 FROM spires WHERE id = ? AND (owner = ? OR claimed_at > ?))
+                AND EXISTS (SELECT 1 FROM players WHERE id = ?)
              ON CONFLICT(id) DO UPDATE SET name=excluded.name, owner=excluded.owner, owner_name=excluded.owner_name,
                defender=excluded.defender, claimed_at=excluded.claimed_at, tended_at=excluded.tended_at,
                level=spires.level+1, updated_at=excluded.updated_at
@@ -2526,7 +2611,8 @@ export default {
           .bind(id, spireName, b.lat, b.lng, auth.playerId, me?.name || me?.handle || null,
                 me?.profile || null, now, now, 1, now,
                 auth.playerId, now - SPIRE_DORMANT_MS,
-                id, auth.playerId, now - SPIRE_SHIELD_MS).first();
+                id, auth.playerId, now - SPIRE_SHIELD_MS,
+                auth.playerId).first();
         if (!won) {
           /* A CLAIM ON A TOWER THAT IS MINE IS A TEND, and the tend is now the
              thing that answers it. This lived in an early return in front of the
@@ -2572,12 +2658,21 @@ export default {
           }
           return json({ error: 'cap', cap: 3 }, 409);
         }
-        // Tell the loser, through the grants channel the client already ingests.
+        /* Tell the loser, through the grants channel the client already ingests.
+           ONLY IF THERE IS STILL A LOSER: `prev` is a read from before the
+           write, and the tower it names can have belonged to an account that
+           deleted itself in between. A grant addressed to a missing player is
+           unreachable by definition and nothing prunes it (the grants pruner's
+           dormancy arm needs p.last_seen, and a NULL comparison is never true),
+           so the condition goes inside the statement like every other one on
+           this route. */
         if (prev && prev.owner !== auth.playerId) {
-          await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+          await env.DB.prepare(
+            `INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts)
+             SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM players WHERE id = ?)`)
             .bind(prev.owner, `spire-lost-${id}-${now}`, 'spire', JSON.stringify({
               note: `${me?.name || me?.handle || 'Someone'} toppled ${spireName}. Walk back and take it.`,
-            }), now).run();
+            }), now, prev.owner).run();
         }
         return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null, level: won.level });
       }
@@ -2980,9 +3075,46 @@ export default {
          the player goes: players, backups (live + daily archive columns ride in
          the row), recovery, grants, friendships (either side), trades and
          pvp_fights (either side), leads (the survey row carries the player id
-         and an email). NOT deleted, with reasons: devices/events/reports are
-         keyed to the anonymous per-device id, never the player, and rate_limits
-         holds only keyed-HMAC buckets that expire on their own.
+         and an email). NOT deleted, with reasons: events is keyed to the
+         anonymous per-device id, never the player, and rate_limits holds only
+         keyed-HMAC buckets that expire on their own.
+
+         AND THE NAME, WHICH IS NOT KEYED TO THE PLAYER ANYWHERE IT LANDED.
+         Deleting every row that points AT this id was never the whole job: a
+         display name is copied by value into three places the id cannot reach,
+         and until 2026-09-02 all three kept it.
+           grants THIS PLAYER AUTHORED live under the RECIPIENT's id, so
+                  `player_id = ?` never saw them. A friend's inbox still read
+                  "Creaky Phalange #42 cheered you", carried `from` and
+                  `cheerFrom` verbatim, and the Cheer-back button built from
+                  that row answered 403 forever (the friendship is gone).
+           devices.label / reports.label are stamped from `me.name || me.handle`
+                  by the UNSIGNED /events and /report routes, which is why they
+                  are keyed by device and not by player. The retention sweep
+                  added on 2026-09-01 is TIME-based, so the name sat there for
+                  the full 365 days.
+         SCRUBBED, NOT DELETED, and that is the deliberate half. Deleting a
+         friend's inbox row destroys THEIR data (a gift they were paid, a cheer
+         they were sent) to satisfy this player's request, and a reward that
+         vanishes is a support ticket. So the value stays and the identity goes:
+         the row becomes exactly what the route already writes for a player with
+         no name at all, 'A Bonehead', which every shipped client renders
+         without knowing anything new (js/app.js paintCheers reads `r.from`
+         first and backs the name out of the note otherwise, and both now say
+         'A Bonehead'). Dropping `cheerFrom` is what takes the Cheer-back button
+         off the row, which is the honest answer: there is nobody to cheer back.
+
+         WHAT DELIBERATELY SURVIVES: the sender's id inside `grants.key`
+         ('cheer-<id>-<day>-...'). It is an opaque random id that now resolves
+         to nothing, and rewriting it is not free. A key is the CLIENT's ledger
+         key, and a client whose cursor rolled backwards (a restore from an old
+         backup; see the note on GRANT_RETENTION_DAYS) re-ingests the row: under
+         a new key that is a second payout of a real gift. Minting coins to tidy
+         an unresolvable token is the wrong trade, so the key is left alone.
+         Also left: a spire-lost note naming the topper. Its key carries the
+         SPIRE's id, not the sender's, so no index reaches it from here, and
+         finding it would mean an INSTR scan of the whole grants table inside
+         the delete batch. It carries no value and the grants pruner takes it.
 
          Spires: an unclaimed spire has NO row, by construction (see the schema
          and the /spires comment above), so deleting the rows IS returning the
@@ -3017,7 +3149,41 @@ export default {
         if (auth.err === 'unknown player') return json({ ok: true, already: true });
         if (auth.err) return json({ error: auth.err }, 401);
         const id = auth.playerId;
+        /* The two strings this account can have been labelled with anywhere.
+           handle is NOT NULL, so there are always exactly two bindings and the
+           statements below never have to change shape. */
+        const me = await env.DB.prepare('SELECT name, handle FROM players WHERE id = ?').bind(id).first();
+        const shown = (me && me.name) || (me && me.handle) || '', handle = (me && me.handle) || '';
+        /* Prefix ranges, not a scan. Every key a send-to-a-friend route mints
+           starts with the SENDER's id, and idx_grants_key makes each of these a
+           range seek; the same "no LIKE, playerIds contain '_'" shape
+           insertCappedGrant already uses to count them. */
+        const authored = ['cheer-', 'gift-free-', 'gift-spend-'].flatMap(p => [`${p}${id}-`, `${p}${id}-￿`]);
         await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE grants SET payload = json_remove(json_set(payload,
+               '$.from', 'A Bonehead',
+               '$.note', CASE type WHEN 'cheer' THEN 'A Bonehead cheered you' ELSE 'A Bonehead sent you a gift!' END
+             ), '$.cheerFrom')
+             WHERE (key >= ? AND key < ?) OR (key >= ? AND key < ?) OR (key >= ? AND key < ?)`)
+            .bind(...authored),
+          /* BY VALUE, because the value is the only key these rows have: neither
+             table holds a player id, by design (both are written by unsigned
+             routes). A handle is not unique and the pre-2026-08-08 name space
+             was not either, so this can clear a live player's label too. That
+             costs the admin dashboard one name it can re-learn on their next
+             /events post, and the other direction costs a deleted player's name
+             a year on disk. NULL is the same state a device that never went
+             online is in, so nothing downstream needs a new case.
+             AND IT IS A TABLE SCAN, stated rather than hidden: neither table
+             has an index on `label` and neither should grow one to serve a
+             route each account reaches exactly once (EXPLAIN QUERY PLAN, 2026-
+             09-02: SCAN devices). Both tables are bounded by the 365 day
+             retention rules above; if devices ever approaches the 5.26M row
+             ceiling that note computes, an index on label is the upgrade, not a
+             different shape of scrub. */
+          env.DB.prepare('UPDATE devices SET label = NULL WHERE label = ? OR label = ?').bind(shown, handle),
+          env.DB.prepare('UPDATE reports SET label = NULL WHERE label = ? OR label = ?').bind(shown, handle),
           env.DB.prepare('DELETE FROM spires WHERE owner = ?').bind(id),
           env.DB.prepare('DELETE FROM friendships WHERE a = ? OR b = ?').bind(id, id),
           env.DB.prepare('DELETE FROM trades WHERE from_p = ? OR to_p = ?').bind(id, id),
@@ -3737,6 +3903,24 @@ export default {
           .bind(b.test === false ? 0 : 1, String(b.playerId || '')).run();
         const row = await env.DB.prepare('SELECT id, is_test FROM players WHERE id = ?').bind(String(b.playerId || '')).first();
         return json({ ok: true, row: row || null });
+      }
+      /* STRAND A PLAYER'S ROWS: drop the players row and nothing else, which is
+         the state the unguarded writes used to leave behind and the ONLY way a
+         test can still build it. Every route that could produce an orphan now
+         refuses to (the EXISTS clauses on UPSERT_BACKUP and the spire claim),
+         so without this the sweep in pruneStale would be tested against a
+         fixture it can never see, which is a guard that cannot fail. DEV only.
+         GET counts what is currently orphaned, over the whole table, so the
+         sweep's assertions are never graded on an empty set. */
+      if (env.DEV === '1' && path === '/dev/orphan' && request.method === 'POST') {
+        const b = await request.json().catch(() => ({}));
+        const r = await env.DB.prepare('DELETE FROM players WHERE id = ?').bind(String(b.playerId || '')).run();
+        return json({ ok: true, stranded: Number((r.meta && r.meta.changes) || 0) });
+      }
+      if (env.DEV === '1' && path === '/dev/orphan' && request.method === 'GET') {
+        const n = async (t, c) => Number((await env.DB.prepare(
+          `SELECT COUNT(*) n FROM ${t} x WHERE NOT EXISTS (SELECT 1 FROM players p WHERE p.id = x.${c})`).first()).n);
+        return json({ backups: await n('backups', 'player_id'), spires: await n('spires', 'owner') });
       }
       if (env.DEV === '1' && path === '/dev/grant' && request.method === 'POST') {
         const b = await request.json();

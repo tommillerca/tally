@@ -3,6 +3,11 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import * as fsMod from 'node:fs';
+// node:sqlite prints one experimental warning on import. schema-plan.test.mjs
+// already lives with it; it is the only way to grade a claim about the DATABASE
+// from here rather than about an answer some route composed.
+import { DatabaseSync } from 'node:sqlite';
 import { flagFor } from '../test-flag.mjs';
 
 const BASE = process.env.API || 'http://127.0.0.1:8788';
@@ -1146,6 +1151,135 @@ await test('account delete: deleting an already-deleted account is ok, not a 500
   const r = await signedFetch(doomed.k.kp, doomed.p.playerId, 'POST', '/account/delete');
   assert.equal(r.status, 200);
   assert.equal((await r.json()).ok, true);
+});
+
+/* ---- what a deleted account leaves in EVERYBODY ELSE'S rows, added 2026-09-02 ----
+ *
+ * The cascade above deletes every row keyed to the player's id, and the tests
+ * above prove it. The name is not keyed to the player anywhere it landed: a
+ * cheer or a gift is stored under the RECIPIENT, and devices.label /
+ * reports.label are stamped by value from unsigned routes. Measured against
+ * 1681e58c with the fixture below, AFTER a successful delete, the name was
+ * still in five rows across three tables and the sender's id in four.
+ *
+ * GRADED FROM THE DATABASE FILE, not from an API answer. Every assertion the
+ * suite could make through a route reads a projection somebody wrote, and this
+ * is exactly the bug where the projection is fine and the row is not. So the
+ * check opens the local D1 sqlite read-only and walks sqlite_master: EVERY
+ * table, EVERY column, INSTR for the needle. Enumerating rather than listing is
+ * the point. A table nobody thought of is the shape of this whole finding, and
+ * a hand-written list of tables would have missed devices and reports in
+ * exactly the way the cascade did.
+ *
+ * The scan cannot reach a remote database, so a non-local BASE declares itself
+ * UNPROVEN rather than passing on nothing. */
+const D1_DIR = path.join(SERVER_DIR, '.wrangler/state/v3/d1/miniflare-D1DatabaseObject');
+function scanDb(needle) {
+  const { readdirSync } = fsMod, file = (() => {
+    let names = [];
+    try { names = readdirSync(D1_DIR); } catch { return null; }
+    return names.filter(n => n.endsWith('.sqlite'))[0] || null;
+  })();
+  if (!file) unprovable(`no local D1 file under ${D1_DIR}; this check reads the database, not the API`);
+  const db = new DatabaseSync(path.join(D1_DIR, file), { readOnly: true });
+  try {
+    const tables = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf%'").all();
+    const hits = []; let scanned = 0;
+    for (const { name } of tables) {
+      scanned += db.prepare(`SELECT COUNT(*) c FROM ${name}`).get().c;
+      for (const col of db.prepare(`PRAGMA table_info(${name})`).all()) {
+        const n = db.prepare(`SELECT COUNT(*) c FROM ${name} WHERE INSTR(COALESCE(${col.name},''), ?) > 0`).get(needle).c;
+        if (n) hits.push(`${name}.${col.name}x${n}`);
+      }
+    }
+    return { hits, tables: tables.length, scanned };
+  } finally { db.close(); }
+}
+
+const res = {};
+await test('delete residue: setup: a player who cheered, gifted and was labelled', async () => {
+  res.a = await makeKeys(); res.ap = await (await regFetch(res.a.pubJwk)).json();
+  res.b = await makeKeys(); res.bp = await (await regFetch(res.b.pubJwk)).json();
+  await signedFetch(res.a.kp, res.ap.playerId, 'POST', '/friends/request', JSON.stringify({ code: res.bp.friendCode }));
+  await signedFetch(res.b.kp, res.bp.playerId, 'POST', '/friends/request', JSON.stringify({ code: res.ap.friendCode }));
+  /* A CURATED NAME, not the generated handle. A handle is two words off a
+     shared list and could collide with a live player's, which would make the
+     "it is gone everywhere" assertion below depend on luck. '#N' is what makes
+     this needle this account's alone. buildName's indices; see src/index.js. */
+  const nm = await signedFetch(res.a.kp, res.ap.playerId, 'POST', '/name',
+    JSON.stringify({ adj: 5, noun: 13, num: 617 }));
+  assert.equal(nm.status, 200, 'PRECONDITION: the doomed player needs a name to leave behind');
+  res.name = (await nm.json()).name;
+  assert.ok(res.name && res.name.includes('#'), `PRECONDITION: expected a curated name, got ${res.name}`);
+
+  // one of each authored shape: the cheer carries the sender's id, both gifts carry value
+  assert.equal((await signedFetch(res.a.kp, res.ap.playerId, 'POST', '/cheer',
+    JSON.stringify({ to: res.bp.playerId, cheer: 3 }))).status, 200);
+  assert.equal((await signedFetch(res.a.kp, res.ap.playerId, 'POST', '/gift',
+    JSON.stringify({ to: res.bp.playerId, mode: 'free' }))).status, 200);
+  assert.equal((await signedFetch(res.a.kp, res.ap.playerId, 'POST', '/gift',
+    JSON.stringify({ to: res.bp.playerId, mode: 'spend', coins: 25 }))).status, 200);
+
+  // and the two unsigned routes that stamp the name by value
+  res.device = 'res-' + Math.random().toString(36).slice(2, 10);
+  const ip = { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() };
+  assert.equal((await fetch(BASE + '/events', { method: 'POST', headers: ip,
+    body: JSON.stringify({ device: res.device, label: res.name, appV: 'res', events: [{ name: 'app_open' }] }) })).status, 200);
+  assert.equal((await fetch(BASE + '/report', { method: 'POST', headers: ip,
+    body: JSON.stringify({ device: res.device, label: res.name, kind: 'den-nominate', lat: 1, lng: 2, note: 'n' }) })).status, 200);
+
+  /* THE CONTROL, and it runs before the delete on purpose: if the scan finds
+     nothing HERE then it is broken, the fixture never landed, or the needle is
+     wrong, and every assertion after the delete would be graded on an empty
+     set. Five rows across three tables is the measured shape. */
+  const before = scanDb(res.name);
+  assert.ok(before.scanned > 0, `CONTROL: the scan examined ${before.scanned} rows, so it proves nothing`);
+  assert.ok(before.hits.length >= 3,
+    `CONTROL: the name must be findable BEFORE the delete, found only in [${before.hits}]`);
+});
+
+await test('delete residue: the display name survives nowhere in the database', async () => {
+  assert.equal((await signedFetch(res.a.kp, res.ap.playerId, 'POST', '/account/delete')).status, 200);
+  const after = scanDb(res.name);
+  assert.ok(after.scanned > 0 && after.tables > 5,
+    `CONTROL: scanned ${after.scanned} rows over ${after.tables} tables; an empty database proves nothing`);
+  assert.deepEqual(after.hits, [],
+    `a deleted player's name is still in the database: ${after.hits.join(', ')}`);
+});
+
+await test('delete residue: the only trace of the id left is the opaque grant key', async () => {
+  /* NOT deleted, and deliberately: rewriting a grant's key rewrites the
+     CLIENT's ledger key, and a client whose cursor rolled backwards would then
+     be paid a real gift twice. See the note on the cascade. Asserted as an
+     EQUALITY against the exact expected set rather than "nothing else", so this
+     goes red the day a new table starts keeping the id. */
+  const after = scanDb(res.ap.playerId);
+  assert.ok(after.scanned > 0, `CONTROL: scanned ${after.scanned} rows`);
+  assert.deepEqual(after.hits, ['grants.keyx3'],
+    `the deleted id survives somewhere new: ${after.hits.join(', ')}`);
+});
+
+await test('delete residue: the friend keeps the reward and loses only the name', async () => {
+  const g = await (await signedFetch(res.b.kp, res.bp.playerId, 'GET', '/grants?since=0')).json();
+  const mine = g.grants.filter(x => x.type === 'cheer' || x.type === 'gift');
+  assert.equal(mine.length, 3, `PRECONDITION: the friend must still hold all three rows, got ${mine.length}`);
+  for (const row of mine) {
+    const p = row.payload;
+    /* WHAT THE CLIENT RENDERS. js/app.js paintCheers reads `from` first and
+       otherwise backs the name out of the note, so both have to say something.
+       An empty string or a missing `from` renders "undefined cheered you",
+       which is a worse bug than the residue this test exists for. */
+    assert.equal(p.from, 'A Bonehead', `${row.key}: from must be the same anonymous sender the route writes for a nameless player, got ${JSON.stringify(p.from)}`);
+    assert.ok(p.note && !p.note.includes(res.name) && !/undefined|null/.test(p.note),
+      `${row.key}: the note still names somebody or renders nothing: ${JSON.stringify(p.note)}`);
+    assert.equal(p.cheerFrom, undefined, `${row.key}: cheerFrom is the id Cheer-back posts to, and it 403s now`);
+  }
+  // THE VALUE IS UNTOUCHED. Scrubbing must not have cost the friend the gift.
+  const spend = mine.find(x => x.key.includes('gift-spend'));
+  assert.equal(spend.payload.coins, 25, 'the friend lost the coins they were sent');
+  assert.equal(mine.find(x => x.key.includes('gift-free')).payload.gift, true, 'the free gift stopped being a gift');
+  assert.equal(mine.find(x => x.type === 'cheer').payload.cheer, 3, 'the cheer lost WHICH cheer it was');
 });
 
 /* WHAT A PEER IS SERVED OUT OF YOUR SNAPSHOT, added 2026-09-01.

@@ -29,6 +29,7 @@
  * every other suite here.
  */
 import assert from 'node:assert/strict';
+import { flagFor } from './test-flag.mjs';
 
 const BASE = process.env.BASE || process.env.API || 'http://127.0.0.1:8788';
 const ADMIN = process.env.ADMIN_TOKEN || 'devtoken';
@@ -115,6 +116,44 @@ const plant = {
     assert.equal(r.status, 200, `POST /survey refused the fixture: ${r.text}`);
   },
 };
+
+/* The orphan fixture needs SIGNED writes, because there is no unsigned way to
+   store a backup or claim a tower. One throwaway account, signed inline: the
+   rest of this suite is unsigned by nature and does not need a shared harness
+   for it. Mirrors server/test/api.test.mjs's signedFetch exactly. */
+async function orphanFixture(spireId) {
+  const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const pubkey = await crypto.subtle.exportKey('jwk', kp.publicKey);
+  const reg = await postJson('/register', { test: flagFor(BASE), pubkey });
+  assert.equal(reg.status, 200, `register refused the fixture: ${reg.text}`);
+  const id = reg.json.playerId;
+  const signed = async (method, p, bodyObj = null) => {
+    const body = bodyObj === null ? '' : JSON.stringify(bodyObj);
+    const ts = Date.now();
+    const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, kp.privateKey,
+      new TextEncoder().encode(`${method}\n${p}\n${ts}\n${body}`));
+    return fetch(BASE + p, {
+      method,
+      headers: { 'content-type': 'application/json', 'x-bh-player': id, 'x-bh-ts': String(ts),
+        'x-bh-sig': Buffer.from(new Uint8Array(sig)).toString('base64') },
+      body: method === 'GET' ? undefined : body,
+    });
+  };
+  assert.equal((await signed('PUT', '/backup', { blob: 'A'.repeat(512), appV: 'staletest' })).status, 200,
+    'PRECONDITION: the fixture must actually have a backup row to strand');
+  /* LOCAL ONLY, and it says so rather than failing mysteriously: a non-local
+     BASE registers with test:true, and a flagged account is refused a tower on
+     purpose (see the is_test arm on /spires/<id>/claim). */
+  assert.equal((await signed('PUT', `/spires/${spireId}/claim`, { name: 'Stranded', lat: 3, lng: 4 })).status, 200,
+    'PRECONDITION: the fixture must actually hold a tower to strand (a non-local BASE flags it is_test and cannot)');
+  return id;
+}
+
+async function orphans() {
+  const r = await fetch(`${BASE}/dev/orphan`);
+  assert.equal(r.status, 200, `/dev/orphan needs DEV=1 (got ${r.status})`);
+  return r.json();
+}
 
 // ---------------------------------------------------------------------------
 await test('DEV hooks are reachable (otherwise every result below is vacuous)', async () => {
@@ -285,6 +324,51 @@ await test('the tick sweeps EXPIRED rate-limit rows, which is the gap /backup an
     'expired rate-limit rows survived the tick, so nothing sweeps after a signed write');
   assert.equal(await rlCount('rl_events_dev'), living,
     'the tick swept counters the limiter is still counting, which hands an attacker their budget back');
+});
+
+/* ---- rows whose player is gone, added 2026-09-02 ----
+   Not a window: ORPHAN_RULES asks "is there still an account this belongs to".
+   Both writes are guarded at write time now, so this sweep exists for the rows
+   the unguarded code already left, and as the backstop for the next signed
+   write that forgets. /dev/orphan strands a player (drops the players row and
+   nothing else), which is the only way left to build the state the guards
+   refuse to produce, and its GET counts what is orphaned across both tables.
+   KEEP is asserted as hard as DELETE: a sweep that empties `backups` because
+   its NOT EXISTS is wrong would destroy every live player's save. */
+await test('a stranded player\'s backup and tower are swept; a live player\'s are not', async () => {
+  /* A fresh map cell per run. The local D1 keeps every tower every past run
+     claimed, and re-claiming one this suite already holds hits the shield. */
+  const cell = () => 100000 + Math.floor(Math.random() * 900000);
+  const doomedSpire = `sp-${cell()}-${cell()}`, liveSpire = `sp-${cell()}-${cell()}`;
+  const doomedId = await orphanFixture(doomedSpire);
+  const liveId = await orphanFixture(liveSpire);
+
+  const strand = await postJson('/dev/orphan', { playerId: doomedId });
+  assert.equal(strand.status, 200, `/dev/orphan needs DEV=1: ${strand.text}`);
+  assert.equal(strand.json.stranded, 1, 'the fixture was not stranded, so there is nothing to sweep');
+
+  // CONTROL, before the sweep: the orphans are visible and countable. An
+  // assertion that they are gone afterwards proves nothing without this.
+  const before = await orphans();
+  assert.ok(before.backups > 0 && before.spires > 0,
+    `CONTROL: nothing is orphaned (backups=${before.backups}, spires=${before.spires}), so the sweep has no work`);
+
+  await drain();
+
+  /* THE KEEP HALF IS ASSERTED FIRST, on purpose. Both halves have to be able to
+     go red on their own, and they cannot if the DELETE assertions run first: a
+     predicate accidentally inverted sweeps every LIVE row and leaves every
+     orphan, which stops at the first assertion below and never reaches the one
+     that would name what actually happened. This order makes the data-loss
+     direction the one that reports itself. */
+  const warp = await postJson('/dev/backup-warp', { playerId: liveId, backMs: 0 });
+  assert.ok(warp.json.row, 'the sweep deleted a LIVE player\'s backup');
+  const sw = await postJson('/dev/spire-warp', { id: liveSpire, backMs: 0 });
+  assert.equal(sw.json.row && sw.json.row.owner, liveId, 'the sweep deleted a LIVE player\'s tower');
+
+  const after = await orphans();
+  assert.equal(after.backups, 0, `${after.backups} orphaned backup rows survived the tick`);
+  assert.equal(after.spires, 0, `${after.spires} towers owned by a deleted account survived the tick`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
