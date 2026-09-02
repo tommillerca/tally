@@ -505,13 +505,38 @@ async function bootReason({ pullAnswer = { status: 404, body: '{}' }, put = [], 
 const httpFail = await bootReason({ pullAnswer: { status: 500, body: '{"error":"boom"}' }, del: ['cloudOff'] });
 // the player turned cloud backup off: bootSync returns before it asks the server
 const optedOut = await bootReason({ put: [['cloudOff', true]] });
+/* THE SECOND OPEN OF AN INSTALL WHOSE REGISTRATION FAILED, and its twin. Round
+   14 item R14-P8, 2026-09-02: goOnline mints the identity BEFORE it calls
+   /register (js/social.js), so an install that failed to register while
+   navigator.onLine was true (captive wifi, the server down, a sandbox) opens
+   the second time holding a privJwk with no `social` row. bootSync read that as
+   a REINSTALL, failed again and returned 'offline', and the toast told somebody
+   two minutes into a brand-new install that their cloud backup could not be
+   reached. It arrives ONLINE, which is how it walked past the onLine guard that
+   quietens the other four.
+   THE PAIR IS THE POINT and neither half means anything alone. Both boots hold
+   an identity and no account; the ONLY difference between them is kv 'idMinted',
+   the mark ensureIdentity leaves when it makes the key itself. A fix that simply
+   quietened the branch would pass the first row and fail the second, because a
+   device whose key came off the keychain may really own a backup and must still
+   be warned. /register is not intercepted by this page's handler, so it 404s at
+   the static server and goOnline fails for real rather than by stub. */
+const neverReg = await bootReason({ put: [['idMinted', Date.now()]], del: ['cloudOff', 'social'] });
+const reinstall = await bootReason({ del: ['cloudOff', 'social', 'idMinted'] });
 // a first launch: no identity anywhere, the state bootSync refuses to mint one in
 const newPlayer = await bootReason({ del: ['cloudOff', 'identity', 'social'] });
 
-ok('QUIET SAMPLE all three boots ran and each reached its own branch (a boot that never happened is silent too)',
-  [optedOut, newPlayer, httpFail].every(s => s.booted > 0)
-    && optedOut.pulls === 0 && newPlayer.pulls === 0 && httpFail.pulls > 0,
-  JSON.stringify({ optedOut, newPlayer, httpFail }));
+ok('QUIET SAMPLE all five boots ran and each reached its own branch (a boot that never happened is silent too)',
+  [optedOut, newPlayer, httpFail, neverReg, reinstall].every(s => s.booted > 0)
+    && optedOut.pulls === 0 && newPlayer.pulls === 0 && httpFail.pulls > 0
+    && neverReg.pulls === 0 && reinstall.pulls === 0,
+  JSON.stringify({ optedOut, newPlayer, httpFail, neverReg, reinstall }));
+ok('QUIET an install whose FIRST registration failed is not warned about a backup it has never had',
+  !/backup|could not reach/i.test(neverReg.toast || ''),
+  neverReg.toast ? `said "${neverReg.toast}"` : 'silent');
+ok('QUIET CONTROL the same boot with a keychain-recovered key still SPEAKS (quietening the branch outright fails here)',
+  /could not reach your cloud backup/i.test(reinstall.toast || ''),
+  reinstall.toast ? `"${reinstall.toast}"` : 'no visible toast in 11s');
 ok('QUIET a brand-new install is not told its nonexistent backup could not be reached',
   !/backup|could not reach/i.test(newPlayer.toast || ''),
   newPlayer.toast ? `said "${newPlayer.toast}"` : 'silent');
@@ -539,8 +564,13 @@ const shippedQuiet = await cloud.evaluate(async u => {
    'new-player' before it will mint an identity, 'opted-out' when the player
    turned cloud backup off, and 'no-api' when no backend is configured; none of
    the three is a failure, and all three used to render "could not reach your
-   cloud backup" to somebody who has no cloud backup. */
-const DRIVEN_QUIET = ['new-player', 'opted-out'];
+   cloud backup" to somebody who has no cloud backup.
+   Provenance: round 14 item R14-P8, 2026-09-02, adds 'never-registered'. It is
+   the fourth path into that same wrong message and the first that arrives
+   online: a first registration that failed leaves a self-minted key with no
+   account, which bootSync used to call a reinstall. Driven above as the
+   neverReg / reinstall pair. */
+const DRIVEN_QUIET = ['new-player', 'opted-out', 'never-registered'];
 /* Provenance: PR #339, 2026-08-31. These three are the ORIGINAL quiet reasons,
    shipped long before the trio above and graded in cloud-restore-silent-audit,
    which owns the pull path. They are listed here only so the completeness check
