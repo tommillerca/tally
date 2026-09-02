@@ -1896,6 +1896,19 @@ export default {
            Honesty-only flag: a liar who omits it gains nothing but visibility,
            and a real client never sends it. */
         const isTest = body.test === true ? 1 : 0;
+        /* AND THE ROW A LOCAL RUN LEAVES BEHIND. 2026-09-02. `test` above is a
+           SUPPRESSION switch, so a local suite deliberately does not set it (an
+           invisible account cannot grade the leaderboard, the friend graph, the
+           race or the spires: hard-coding flagFor to true turned 49 of 174
+           server assertions red, measured on a cp -R copy the same day). That
+           left the local row looking exactly like a real player's.
+           `run` is the second mark, and NOTHING filters on it: a row carrying
+           one behaves identically to a real one and still says which suite made
+           it and when. A real client never sends it (js/social.js sends it only
+           under navigator.webdriver, which no player's browser sets), so NULL
+           keeps meaning "a person did this". Honesty-only, same as `test`.
+           Bounded because it is free text off the wire. */
+        const testRun = typeof body.run === 'string' && body.run ? body.run.slice(0, 120) : null;
         // retry on the (astronomically unlikely) friend-code collision
         for (let i = 0; i < 5; i++) {
           const id = newId(), handle = makeHandle(), code = makeFriendCode(), now = Date.now();
@@ -1905,8 +1918,8 @@ export default {
                transaction: a failure between them left a player who had joined
                the Crew and was never welcomed, and no later call would notice. */
             await env.DB.batch([
-              env.DB.prepare('INSERT INTO players (id, pubkey, handle, friend_code, created_at, last_seen, is_test) VALUES (?,?,?,?,?,?,?)')
-                .bind(id, pub, handle, code, now, now, isTest),
+              env.DB.prepare('INSERT INTO players (id, pubkey, handle, friend_code, created_at, last_seen, is_test, test_run) VALUES (?,?,?,?,?,?,?,?)')
+                .bind(id, pub, handle, code, now, now, isTest, testRun),
               // welcome grant: a little hello the client ingests as a ledger event
               env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
                 .bind(id, 'social-welcome', 'welcome', JSON.stringify({ coins: 50, xp: 10, note: 'Welcome to the Crew' }), now),
@@ -3848,7 +3861,13 @@ export default {
         // search for that text, not for every player in the table.
         const like = '%' + q.toLowerCase().replace(/[%_\\]/g, m => '\\' + m) + '%';
         const rows = (await env.DB.prepare(
+          /* isTest and testRun ride along because this lookup IS the operator's
+             view of the table, and until 2026-09-02 it showed neither: the two
+             marks that say "a bot made this" existed only in columns nobody
+             asking the question could see. A support search for a suspicious
+             level-1 now answers it in the row. */
           `SELECT id, name, handle, friend_code friendCode, app_v appV, last_seen lastSeen, created_at createdAt,
+                  COALESCE(is_test, 0) isTest, test_run testRun,
                   CAST(COALESCE(json_extract(profile,'$.level'), 1) AS INTEGER) level
              FROM players
             WHERE id = ? OR friend_code = ?
@@ -4188,7 +4207,10 @@ export default {
         return json({ n: Number((row && row.n) || 0) });
       }
       if (env.DEV === '1' && path === '/dev/player' && request.method === 'GET') {
-        const row = await env.DB.prepare('SELECT id, handle, friend_code, profile, app_v FROM players WHERE id = ?')
+        /* test_run rides along because NOTHING filters on it: a provenance mark
+           that changed no behaviour would otherwise be unassertable, and a mark
+           no test can read is a mark that quietly stops being written. */
+        const row = await env.DB.prepare('SELECT id, handle, friend_code, profile, app_v, test_run FROM players WHERE id = ?')
           .bind(url.searchParams.get('id')).first();
         return json(row || {});
       }

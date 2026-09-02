@@ -29,6 +29,22 @@
  *   - or the call is annotated on the line above with `live-api-lint: unflagged`
  *     plus a reason. Nothing needs that annotation today.
  *
+ * AND THE ROW A LOCAL RUN LEAVES BEHIND. 2026-09-02. Everything above is about
+ * a run that reaches a REAL database. It says nothing about the runs that happen
+ * every day, because `test:` is deliberately FALSE on a local base: an invisible
+ * account cannot grade the leaderboard, the friend graph, the race or the
+ * spires. MEASURED the same day on a cp -R copy with flagFor hard-coded to true:
+ * 49 of 174 server assertions went red (test/api 43 passed 23 failed, spires
+ * 6/22, security 22/4). is_test is a SUPPRESSION switch and cannot also be a
+ * provenance mark.
+ * So every register call carries `run: RUN` as well, RUN being the one
+ * per-process label in server/test-flag.mjs, and the server writes it to
+ * players.test_run. Nothing filters on that column, so a marked row still
+ * behaves exactly like a real one, and an operator reading the table gets "a bot
+ * made this" and "which run" without an investigation. This section checks the
+ * label the same way it checks the flag: present, and bound to the shared guard
+ * rather than to a local string.
+ *
  * AN EMPTY SAMPLE IS A FAILURE. If the scan finds no register calls at all, the
  * matcher has drifted (a helper renamed, a suite moved) and the lint would pass
  * by finding nothing, which is the failure mode this repo has been bitten by
@@ -63,6 +79,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ANNOTATION = 'live-api-lint: unflagged';
+const RUN_ANNOTATION = 'live-api-lint: unlabelled';
 
 function walk(dir, out = []) {
   for (const e of readdirSync(dir)) {
@@ -74,19 +91,27 @@ function walk(dir, out = []) {
   return out;
 }
 
-/* The call this scans is always `fetch(<something with /register>, {...})`, in
-   one of two spellings across the suites: a template literal (`${BASE}/register`)
-   or a concatenation (BASE + '/register'). So: find each /register, walk back to
-   the fetch( that opens the call, then paren-match forward to its end. Prose
-   mentions of /register in comments have no fetch( behind them and are skipped,
-   which is why the backward walk is bounded rather than greedy. */
+/* The call this scans is `<opener>(<something with /register>, {...})`, in one of
+   two spellings across the suites: a template literal (`${BASE}/register`) or a
+   concatenation (BASE + '/register'). So: find each /register, walk back to the
+   opener, then paren-match forward to its end. Prose mentions of /register in
+   comments have no opener behind them and are skipped, which is why the backward
+   walk is bounded rather than greedy.
+   TWO OPENERS, not one. Until 2026-09-02 this looked for `fetch(` alone, and
+   server/stale-retention.test.mjs registers through its own postJson() helper,
+   so its call was never scanned at all: the lint reported 13 and there were 14.
+   It happened to be flagged correctly, which is the worst version of the bug,
+   because nothing said otherwise. A third spelling would slip through the same
+   way, and the backstop for that is the empty-sample check below plus the count
+   printed on the summary line: if it drops, a call stopped being seen. */
+const OPENERS = ['fetch(', 'postJson('];
 function registerCalls(src) {
   const hits = [];
   for (let i = src.indexOf('/register'); i !== -1; i = src.indexOf('/register', i + 1)) {
-    const back = src.lastIndexOf('fetch(', i);
+    const back = Math.max(...OPENERS.map(o => src.lastIndexOf(o, i)));
     if (back === -1 || i - back > 200) continue;      // prose, not a call
     let depth = 0, end = -1;
-    for (let j = back + 'fetch'.length; j < src.length; j++) {
+    for (let j = src.indexOf('(', back); j < src.length; j++) {
       if (src[j] === '(') depth++;
       else if (src[j] === ')') { depth--; if (depth === 0) { end = j; break; } }
     }
@@ -100,7 +125,7 @@ function registerCalls(src) {
 const SELF = fileURLToPath(import.meta.url);
 const files = walk(path.join(ROOT, 'server')).concat(walk(path.join(ROOT, 'tests')))
   .filter(f => f !== SELF);          // this file quotes the pattern it is looking for
-let scanned = 0, bad = 0, annotated = 0;
+let scanned = 0, bad = 0, annotated = 0, labelled = 0, unlabelled = 0;
 for (const f of files) {
   const src = readFileSync(f, 'utf8');
   if (!src.includes('/register')) continue;
@@ -109,6 +134,10 @@ for (const f of files) {
      The binding itself is the guard, so the binding is what gets checked. */
   const boundToGuard = /\bIS_TEST\s*=\s*flagFor\s*\(/.test(src)
     && /from\s+'[^']*test-flag\.mjs'/.test(src);
+  /* Same shape of check for the label: importing RUN proves nothing if the file
+     then shadows it with a string of its own. */
+  const runFromGuard = /\bRUN\b[^\n]*from\s+'[^']*test-flag\.mjs'/.test(src)
+    && !/\bconst\s+RUN\s*=/.test(src);
   for (const hit of registerCalls(src)) {
     scanned++;
     const rel = path.relative(ROOT, f);
@@ -127,6 +156,21 @@ for (const f of files) {
       bad++;
       console.log(`FAIL  ${rel}:${line}  registers with \`test: ${m[1]}\`, which is not bound to flagFor(BASE)`);
     }
+    /* AND THE LABEL, which is the half `test:` cannot cover. `test:` is false on
+       a local run by design, so on the runs that happen every day it leaves a
+       row that reads exactly like a real player's. `run: RUN` marks it without
+       hiding it. A call that deliberately omits the label (the control in the
+       server suite, which has to prove an unlabelled row really is possible)
+       says so on the line above. */
+    const r = /\brun\s*:\s*([A-Za-z_$][\w$]*)/.exec(hit.text);
+    if (prev.includes(RUN_ANNOTATION)) { unlabelled++; continue; }
+    if (!r) {
+      bad++;
+      console.log(`FAIL  ${rel}:${line}  POST /register with no \`run:\` in the body, so the row it makes is unmarked`);
+    } else if (!(r[1] === 'RUN' && runFromGuard)) {
+      bad++;
+      console.log(`FAIL  ${rel}:${line}  registers with \`run: ${r[1]}\`, which is not RUN from server/test-flag.mjs`);
+    } else labelled++;
   }
 }
 
@@ -134,11 +178,19 @@ if (!scanned) {
   console.log('FAIL  scanned 0 register calls: the matcher has drifted, so this lint proves nothing');
   process.exit(1);
 }
-console.log(`${bad ? 'FAIL' : 'PASS'}  ${scanned} register calls, ${bad} unflagged, ${annotated} annotated`);
+/* BOTH SAMPLES NON-EMPTY. A run of this lint that labelled nothing is grading an
+   empty set, which is the way this repo has been fooled before. */
+if (!labelled) {
+  console.log('FAIL  0 register calls carried `run: RUN`: the label check matched nothing and proves nothing');
+  bad++;
+}
+console.log(`${bad ? 'FAIL' : 'PASS'}  ${scanned} register calls, ${bad} unflagged, ${annotated} annotated, ${labelled} labelled, ${unlabelled} deliberately unlabelled`);
 if (bad) {
-  console.log('      Fix: add `test: IS_TEST` beside `pubkey`, with IS_TEST = flagFor(BASE) from');
+  console.log('      Fix: add `test: IS_TEST, run: RUN` beside `pubkey`, both from');
   console.log('      server/test-flag.mjs, so a run pointed at the live API mints an account');
-  console.log(`      nobody can see. A deliberately VISIBLE one needs "${ANNOTATION} <reason>" above it.`);
+  console.log('      nobody can see AND every row it makes says which run made it.');
+  console.log(`      A deliberately VISIBLE one needs "${ANNOTATION} <reason>" above it;`);
+  console.log(`      a deliberately UNMARKED one needs "${RUN_ANNOTATION} <reason>".`);
 }
 
 /* =================== 2. A MASK WITHOUT ITS WALL =========================

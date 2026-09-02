@@ -8,7 +8,7 @@ import * as fsMod from 'node:fs';
 // already lives with it; it is the only way to grade a claim about the DATABASE
 // from here rather than about an answer some route composed.
 import { DatabaseSync } from 'node:sqlite';
-import { flagFor } from '../test-flag.mjs';
+import { flagFor, RUN } from '../test-flag.mjs';
 
 const BASE = process.env.API || 'http://127.0.0.1:8788';
 /* Registrations are flagged when this run is NOT local, so a suite pointed at
@@ -70,7 +70,7 @@ function regFetch(pubkey, ip = rndIp()) {
   return fetch(BASE + '/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
-    body: JSON.stringify({ test: IS_TEST, pubkey }),
+    body: JSON.stringify({ test: IS_TEST, run: RUN, pubkey }),
   });
 }
 async function makeKeys() {
@@ -936,7 +936,7 @@ await test('the settled podium leaves out a flagged account and keeps a real one
   const bp = await (await fetch(BASE + '/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
-    body: JSON.stringify({ pubkey: bot.pubJwk, test: true }),
+    body: JSON.stringify({ pubkey: bot.pubJwk, test: true, run: RUN }),
   })).json();
   assert.ok((await pay(rp.playerId, 1)).ok && (await pay(bp.playerId, 2)).ok, 'PRECONDITION: both payouts must be staged');
 
@@ -995,6 +995,40 @@ await test('names are unique: case-insensitive, and re-saving your OWN name stil
     'a player re-saving their own name must not be told it is taken');
 });
 
+/* A ROW A TEST MADE SAYS SO, AT THE MOMENT IT IS MADE (2026-09-02).
+   is_test below is a SUPPRESSION switch, and it is false on a local run on
+   purpose: an invisible account cannot grade the leaderboard, the friend graph,
+   the race or the spires, and hard-coding flagFor to true to see what that would
+   cost turned 49 of 174 server assertions red (measured 2026-09-02 on a cp -R
+   copy: this file 43 passed 23 failed, spires 6/22, security 22/4). So the rows
+   this suite makes every day looked exactly like a real player's.
+   players.test_run is the second mark, and nothing filters on it: the row still
+   behaves like a real one and still says which run made it.
+   BOTH SAMPLES NON-EMPTY. The control below registers with no label at all, so
+   "the labelled one has a label" is a comparison rather than a coincidence: it
+   proves an unmarked row is genuinely still possible, and that this assertion
+   would notice one.
+   PROVE-RED: drop `, test_run` from the INSERT in the /register route (or bind
+   null for it) and LABEL fails saying the row came back unmarked. */
+await test('a registration carrying a run label lands players.test_run, and one without does not', async () => {
+  const labelled = await makeKeys();
+  const lp = await (await regFetch(labelled.pubJwk)).json();
+  const unlabelled = await makeKeys();
+  // live-api-lint: unlabelled THE CONTROL. This one deliberately carries no run,
+  // so the row above is graded against a row that really is unmarked.
+  const up = await (await fetch(BASE + '/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
+    body: JSON.stringify({ test: IS_TEST, pubkey: unlabelled.pubJwk }),
+  })).json();
+  assert.ok(lp.playerId && up.playerId, `PRECONDITION: both registrations must succeed: ${JSON.stringify({ lp, up })}`);
+
+  const seen = id => fetch(BASE + `/dev/player?id=${id}`).then(r => r.json()).then(r => r.test_run ?? null);
+  const [got, control] = [await seen(lp.playerId), await seen(up.playerId)];
+  assert.equal(got, RUN, `LABEL the row must carry the run that made it, got ${JSON.stringify(got)}`);
+  assert.equal(control, null, `CONTROL an unlabelled registration must stay unmarked, got ${JSON.stringify(control)}`);
+});
+
 /* TEST ACCOUNTS (2026-08-22). A live-API test registers with {test:true}; the
    row lands is_test=1 and is invisible on every public surface, so test runs
    stop flooding the Crew with dead level-1 accounts (docs/BOT-CENSUS-2026-08-22.md).
@@ -1005,7 +1039,7 @@ await test('is_test account is hidden from the leaderboard and unfriendable', as
   const br = await (await fetch(BASE + '/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
-    body: JSON.stringify({ pubkey: bot.pubJwk, test: true }),
+    body: JSON.stringify({ pubkey: bot.pubJwk, test: true, run: RUN }),
   })).json();
   assert.ok(br.playerId, 'flagged registration still works: ' + JSON.stringify(br));
   // give it a profile: without the filter this is exactly a leaderboard row
@@ -1050,7 +1084,7 @@ await test('a flagged account cannot put a friend request in a real player\'s Cr
   const bp = await (await fetch(BASE + '/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
-    body: JSON.stringify({ pubkey: bot.pubJwk, test: true }),
+    body: JSON.stringify({ pubkey: bot.pubJwk, test: true, run: RUN }),
   })).json();
 
   // the bot reads the board and takes the real player's add handle off it

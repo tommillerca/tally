@@ -398,6 +398,28 @@ export async function renameOwed() {
   } catch { return null; }
 }
 
+/* A ROW A DRIVEN BROWSER MAKES SAYS SO. 2026-09-02.
+ *
+ * tests/crew-pair-audit.mjs is the only suite that drives the REAL client
+ * against a REAL Worker (it spawns wrangler and points the app at it with the
+ * ?api= hook), so its accounts are made by this function and not by any fetch()
+ * a test file wrote. tests/live-api-register-lint.mjs cannot see them: it scans
+ * register calls in test SOURCE, and this one is the app's. Those rows were
+ * therefore the one kind of test account with no mark of any sort on it.
+ *
+ * Webdriver-gated, the same pattern as __setApiDeadline / __testFriends /
+ * __testApplyGrant above. It cannot reach a real user: navigator.webdriver is
+ * set by an automation driver and by nothing else, so in a player's browser
+ * this spread is empty and the body posted is byte-identical to before.
+ *
+ * NOT `test: true`, deliberately. That is the suppression switch, and an
+ * invisible account cannot become a friend (requestFriendship refuses a flagged
+ * pair), which is the thing crew-pair-audit exists to grade. `run` marks the row
+ * without changing what the server will show, so the audit still measures the
+ * path a player takes.
+ */
+const driven = () => typeof navigator !== 'undefined' && navigator.webdriver === true;
+
 // Register a pubkey with the server WITHOUT touching local state. Split out of
 // goOnline so adoptIdentity can validate a restored bundle against the server
 // BEFORE swapping the device identity (a register that fails after the swap
@@ -410,7 +432,7 @@ async function registerKey(id) {
     const r = await apiFetch(base + '/register', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ pubkey: id.pubJwk }),
+      body: JSON.stringify({ pubkey: id.pubJwk, ...(driven() ? { run: `webdriver ${new Date().toISOString()}` } : {}) }),
     });
     if (!r.ok) return { ok: false, reason: 'register-failed', status: r.status };
     return { ok: true, me: await r.json() };

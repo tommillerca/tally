@@ -29,9 +29,14 @@
  * every other suite here.
  */
 import assert from 'node:assert/strict';
-import { flagFor } from './test-flag.mjs';
+import { flagFor, RUN } from './test-flag.mjs';
 
 const BASE = process.env.BASE || process.env.API || 'http://127.0.0.1:8788';
+/* The same binding every other suite uses. Inline flagFor(BASE) at the call site
+   read fine and behaved correctly, but it was invisible to
+   tests/live-api-register-lint.mjs, which checks the BINDING rather than the
+   import so that `const IS_TEST = false` cannot pass. */
+const IS_TEST = flagFor(BASE);
 const ADMIN = process.env.ADMIN_TOKEN || 'devtoken';
 const DAY = 86400000;
 const RETENTION_DAYS = 365;     // must match the devices/reports/leads rules in STALE_RULES
@@ -42,8 +47,9 @@ async function test(name, fn) {
   catch (e) { console.log(`FAIL  ${name}\n      ${e.message}`); failed++; }
 }
 
-const RUN = Math.random().toString(36).slice(2, 8);       // isolate this run from every other
-const dev = tag => `stale-${RUN}-${tag}`;
+// renamed off RUN 2026-09-02: RUN is now the shared run label imported above
+const KEYTAG = Math.random().toString(36).slice(2, 8);       // isolate this run from every other
+const dev = tag => `stale-${KEYTAG}-${tag}`;
 // A fresh address per fixture. Locally cf-connecting-ip is absent and every
 // request would otherwise share the 'unknown' bucket, which means one suite can
 // spend another's /survey budget and the fixture silently never lands.
@@ -104,14 +110,14 @@ const plant = {
   async reports(device) {
     const r = await postJson('/report', {
       device, kind: 'den-nominate', lat: 49.2827, lng: -123.1207,
-      target: 'Library', note: `fixture ${RUN}`, appV: 'staletest',
+      target: 'Library', note: `fixture ${KEYTAG}`, appV: 'staletest',
     });
     assert.equal(r.status, 200, `POST /report refused the fixture: ${r.text}`);
   },
   async leads(device) {
     const r = await postJson('/survey', {
-      device, name: 'Fixture', email: `${RUN}@example.invalid`, emailOptin: 0,
-      feedback: `fixture ${RUN}`, features: ['pit'], appV: 'staletest',
+      device, name: 'Fixture', email: `${KEYTAG}@example.invalid`, emailOptin: 0,
+      feedback: `fixture ${KEYTAG}`, features: ['pit'], appV: 'staletest',
     });
     assert.equal(r.status, 200, `POST /survey refused the fixture: ${r.text}`);
   },
@@ -124,7 +130,7 @@ const plant = {
 async function orphanFixture(spireId) {
   const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
   const pubkey = await crypto.subtle.exportKey('jwk', kp.publicKey);
-  const reg = await postJson('/register', { test: flagFor(BASE), pubkey });
+  const reg = await postJson('/register', { test: IS_TEST, run: RUN, pubkey });
   assert.equal(reg.status, 200, `register refused the fixture: ${reg.text}`);
   const id = reg.json.playerId;
   const signed = async (method, p, bodyObj = null) => {
@@ -208,7 +214,7 @@ await test('KEEPS a row in every one of the three tables when it is new', async 
 await test('KEEPS a LIVE rate-limit row, written by the real limiter', async () => {
   // Not a synthetic row: hit the unsigned availability probe, which is what
   // calls rateLimitRecovery(..., 'rl_ridcheck') in production.
-  const r = await fetch(`${BASE}/recovery/available/stale${RUN}`);
+  const r = await fetch(`${BASE}/recovery/available/stale${KEYTAG}`);
   assert.ok(r.status === 200 || r.status === 429, `availability probe answered ${r.status}`);
   await r.text();
   const before = await rlCount('rl_ridcheck');
@@ -306,7 +312,7 @@ await test('the tick sweeps EXPIRED rate-limit rows, which is the gap /backup an
      most rows here were the two that never cleared any: the sweep only ran on
      the first hit of a fresh rate-limit window. This proves the tick does it
      now, from rows the real limiter wrote. */
-  const r = await fetch(`${BASE}/recovery/available/sweep${RUN}`);
+  const r = await fetch(`${BASE}/recovery/available/sweep${KEYTAG}`);
   await r.text();
   await plant.devices(dev('sweep'));          // an rl_events_dev row, 1 hour window
   const expiring = await rlCount('rl_ridcheck');
