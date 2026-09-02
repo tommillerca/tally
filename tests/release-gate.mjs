@@ -530,7 +530,12 @@ const DECLARED = {
     + "with the device position overridden off his REAL heading: 45 m behind him he is drawn and lit and nothing happens, 45 m into his "
     + 'light the arena opens on his name. Each boot is the other\'s control. Run it on any change to refreshWanderer, the geolocation '
     + 'watch, or the cone. MapLibre needs WebGL and vector tiles, so on a machine with neither it reports UNPROVEN with exit 97 by name '
-    + 'rather than green, the same contract boneyard-audit.mjs runs under. About 60s.'],
+    + 'rather than green, the same contract boneyard-audit.mjs runs under. It needs a THIRD thing the capability probe does not cover and '
+    + "which used to exit 97 in silence: js/water.js's land oracle reads z14 .pbf tiles UNDER the style's one remote endpoint, and without "
+    + 'them every candidate reads as water, so the suite blamed his 45-minute loop for a network fault and named no missing property. It '
+    + 'now measures the oracle and reports it as ORACLE beside WEBGL and TILES (proven 2026-09-02 on a cp -R throwaway with TILEJSON_URL '
+    + 'pointed at a dead path). His loop really can carry him past WANDER_SHOW_M, but it is a 0 to 2% state: all 1440 minutes of five days '
+    + 'swept from HOME against the real oracle, 1414 to 1440 in range. About 60s.'],
   'wanderer-arena-audit.mjs': ['full', "the Wanderer LOOMS in the Pit, and nothing else on that stage moved. Tom's mockup has him filling the "
     + 'arena with the player small at the bottom left, and the gap is the design rather than the size. Every row is measured off the '
     + 'INK, never the stage box: his plate is a 640-square whose drawing occupies 562x417 of it, so 35% of the element is transparent '
