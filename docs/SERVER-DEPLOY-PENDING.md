@@ -31,9 +31,11 @@ Written 2026-08-23, after #77 merged.
 >   deployed Worker ignores them, `/health` is 200 and the gated routes still 401.
 >   What the deploy buys is the `is_test` filter for FUTURE test accounts; it is
 >   no longer what cleans the leaderboard, because those rows are gone.
-> - **`crons = []` is committed**, so deploying starts NO pruner. #77's 15-minute
->   pruner deletes rows from a live database and has never run against real data.
->   It stays off until somebody decides to watch the first tick.
+> - ~~**`crons = []` is committed**, so deploying starts NO pruner.~~ NO LONGER
+>   TRUE, corrected 2026-09-02. The schedule was turned on in 6a835865 and the
+>   pruner has been running every 15 minutes since; verified against production
+>   on 2026-09-02, three ticks 15.1 minutes apart. Do not read this file as
+>   evidence that a deploy starts nothing.
 
 ## State
 
