@@ -50,7 +50,7 @@
  *
  * Usage: node tests/honest-surfaces-audit.mjs
  */
-import { boot, seed, serveTree, sleep, dismissOverlays } from './godmode.js';
+import { boot, seed, serveTree, sleep, dismissOverlays, maskWebdriver } from './godmode.js';
 
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
@@ -274,9 +274,7 @@ await page.close();
 /* =================== 4. A CLOUD BACKUP THAT FAILS =================== */
 const API = srv.url.replace(/\/$/, '') + '/api';
 const cloud = await browser.newPage();
-await cloud.evaluateOnNewDocument(() => {
-  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
-});
+await maskWebdriver(cloud);
 await cloud.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
 
 let push = { status: 200, body: '{"ok":true,"updatedAt":1}' };

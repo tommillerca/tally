@@ -440,6 +440,84 @@ export async function boneyardCapability(page) {
   return { ok: checks.every(c => c.ok), checks };
 }
 
+/* AN AUDIT THAT MASKS webdriver STOPS TALKING TO THE REAL WORLD.
+ *
+ * WHY THE MASK IS CORRECT. Every automation gate in this app keys off the same
+ * flag: NOSOCIAL (`S.demo || navigator.webdriver === true`, js/app.js),
+ * CALM_BOOT, and the BOT gate in js/analytics.js. An unmasked page therefore
+ * exercises the calm boot, not the first run a player gets, so the suites that
+ * grade onboarding, the launch gates and the notification asks have to mask it.
+ * That is not the bug and it is not being taken away.
+ *
+ * WHY IT NEEDS A WALL. The mask also removes the only thing that was keeping
+ * those runs OFF the network. js/social.js falls back to PROD_API when no ?api=
+ * override is stored, so a masked virgin install boots, completes onboarding and
+ * registers for real. The server only stamps players.is_test when the client
+ * sends {test:true} (server/src/index.js), which the app itself never does.
+ *
+ * MEASURED 2026-09-02, one run of tests/profile-units-audit.mjs with a request
+ * log on every page: 20 requests to bonez-api.boneheadz.workers.dev, of which 3
+ * were POST /register carrying a real P-256 pubkey and 3 were POST /events
+ * shipping onboarding analytics. Production D1 went 73 -> 93 players in a day of
+ * local runs, level-1 skeleton handles in clusters that line up with gate runs.
+ *
+ * WHY A WALL AND NOT {test:true}. A flag still mints rows, still needs the
+ * server to honour it, and still depends on every future author remembering it.
+ * The bug is not "the audit registered", it is "the audit reached the real
+ * world"; the API is only the leak that left evidence. So the rule is the blunt
+ * one: localhost in every spelling continues, everything else is refused.
+ *
+ * WHY IT IS LOUD BUT DOES NOT FAIL THE RUN. Refusing is already the correct
+ * outcome and the app will keep TRYING (it has no local API to talk to), so a
+ * suite that failed on a refusal would be permanently red on healthy code, which
+ * is how a guard gets routed around. Instead each refused host is named once,
+ * with the suite that reached for it, plus a summary at exit, so a NEW external
+ * dependency is discovered the first time somebody runs the file. The hard
+ * failure lives where it can only go red on a real defect: live-api-register-lint
+ * refuses a mask installed without this wall.
+ *
+ * LOCALHOST MUST KEEP WORKING. serveTree hands out 127.0.0.1 URLs and several
+ * suites stub an API on a local port, so every spelling of the loopback host is
+ * allowed, on any port. Schemes with no host at all (data:, blob:, file:) never
+ * leave the machine and are not egress.
+ */
+const LOOPBACK = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\]|0\.0\.0\.0|.+\.localhost)$/i;
+const _refused = new Map();          // host -> the first request that wanted it
+export async function maskWebdriver(page) {
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
+  });
+  await page.setRequestInterception(true);
+  page.on('request', req => {
+    let host = null;
+    try { host = new URL(req.url()).hostname; } catch { /* data:, blob:, about: */ }
+    if (host && !LOOPBACK.test(host)) {
+      if (!_refused.size) process.on('exit', () => {
+        console.log(`\nEGRESS REFUSED  ${[..._refused.keys()].join(', ')}`);
+        for (const [h, first] of _refused) console.log(`  ${h}  first wanted by  ${first}`);
+        console.log('  A masked audit does not talk to the real world. If it needs an answer, serve');
+        console.log('  one locally and point the app at it with ?api=<local url>.');
+      });
+      if (!_refused.has(host)) {
+        const first = `${req.method()} ${req.url().slice(0, 120)}`;
+        _refused.set(host, first);
+        console.log(`EGRESS REFUSED  ${path.basename(process.argv[1] || 'audit')} -> ${host}  (${first})`);
+      }
+      /* Refused with no priority, so it lands immediately and nothing
+         registered later can vote it back open. */
+      req.abort('blockedbyclient').catch(() => {});
+      return;
+    }
+    /* A PRIORITY VOTE, not a plain continue. cloud-restore-silent-audit and
+       honest-surfaces-audit install their own stub handler AFTER the mask, and a
+       legacy continue here would resolve the request before their stub ever saw
+       it, which would silently un-stub them. A vote is deferred to the end of
+       the listener chain, so their respond() still wins and a page with no other
+       handler still gets its request through. */
+    req.continue({}, 0).catch(() => {});
+  });
+}
+
 /* NO BASE MEANS THIS CHECKOUT, NEVER PRODUCTION. This default used to be the
    literal live URL, and that is a footgun that fired repeatedly.
 

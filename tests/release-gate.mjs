@@ -146,7 +146,11 @@ if (own) console.log(`serving this repo at ${base}\n`);
    of dead accounts in Tom's Crew (47 total, docs/BOT-CENSUS-2026-08-22.md). It
    pins the one line that makes that harmless: every POST /register in a test
    carries `test: IS_TEST`, bound to flagFor(BASE), so a non-local run mints only
-   accounts players.is_test hides. */
+   accounts players.is_test hides. Its second section (2026-09-02) pins the
+   registration NO test file makes: a masked audit lets the app itself register
+   against PROD_API, which is how production went 73 -> 93 players in a day. It
+   drives godmode's maskWebdriver with a stand-in page rather than grepping for
+   it, so it is still instant and still needs no browser. */
 /* render-sink-lint is PURE for the same reason guard-hygiene-lint is: it reads
    js/*.js and finishes instantly. It exists because packCardHtml's `stats` slot
    and openPackReveal's `footerNote` were raw HTML held up by ONE caller

@@ -58,7 +58,7 @@
  *
  * Run: node tests/header-freshness-audit.mjs [baseUrl]
  */
-import { boot, sleep } from './godmode.js';
+import { boot, sleep, maskWebdriver } from './godmode.js';
 
 const fails = [];
 const ok = (n, pass, d = '') => { console.log(`${pass ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!pass) fails.push(n); };
@@ -84,14 +84,14 @@ const DAY_TRIES = 10;
 
 const { browser, page, base } = await boot(process.argv[2]);
 
-/* Before any app script on every later load. Two injections, one script: the
-   webdriver mask, and a Date that runs `__dayOffset` days ahead so a wiped
-   database opens on a day whose prize has not been drawn yet. Date is SHIFTED,
-   not frozen: the app measures elapsed time in several places and a stopped
-   clock is its own bug. */
+/* Before any app script on every later load. Two injections: the webdriver
+   mask (and the wall that comes with it), then a Date that runs `__dayOffset`
+   days ahead so a wiped database opens on a day whose prize has not been drawn
+   yet. Date is SHIFTED, not frozen: the app measures elapsed time in several
+   places and a stopped clock is its own bug. */
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+await maskWebdriver(page);
 await page.evaluateOnNewDocument(() => {
-  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
   let off = 0;
   try { off = Number(localStorage.getItem('__dayOffset') || 0) * 86400000; } catch { /* opaque origin */ }
   if (!off) return;

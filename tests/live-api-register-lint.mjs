@@ -34,6 +34,13 @@
  * by finding nothing, which is the failure mode this repo has been bitten by
  * before. It exits 1 with that said out loud.
  *
+ * AND THE REGISTRATION NO TEST FILE MAKES. 2026-09-02. The scan above cannot see
+ * a register call the APP makes on an audit's behalf, and that turned out to be
+ * the bigger hole: production went 73 -> 93 players in a day of local runs. The
+ * second section below closes it. Both live here because they are one rule, "a
+ * test run does not mint a real account", enforced at the only two places it can
+ * be broken.
+ *
  * PROVEN RED, 2026-08-23, both mutations made in the file itself and grepped
  * back before running:
  *   - drop `test: IS_TEST` from newPlayer() in server/security.test.mjs
@@ -41,6 +48,12 @@
  *   - defang the binding to `const IS_TEST = false;` (import left in place)
  *     -> "not bound to flagFor(BASE)" on both call sites, exit 1.
  *   Restored: 13 calls, 0 unflagged, exit 0.
+ *
+ * PROVEN RED for section 2, 2026-09-02, on a cp -R copy of the branch:
+ *   - delete the setRequestInterception block from maskWebdriver in godmode.js
+ *     -> WALL "refuses the production API host" goes red, exit 1.
+ *   - paste the raw defineProperty mask back into one audit
+ *     -> MASK "no audit installs the webdriver mask by hand" names it, exit 1.
  *
  *   node tests/live-api-register-lint.mjs
  */
@@ -83,6 +96,7 @@ function registerCalls(src) {
   return hits;
 }
 
+/* =================== 1. A REGISTER CALL A TEST MAKES ITSELF ============== */
 const SELF = fileURLToPath(import.meta.url);
 const files = walk(path.join(ROOT, 'server')).concat(walk(path.join(ROOT, 'tests')))
   .filter(f => f !== SELF);          // this file quotes the pattern it is looking for
@@ -126,4 +140,76 @@ if (bad) {
   console.log('      server/test-flag.mjs, so a run pointed at the live API mints an account');
   console.log(`      nobody can see. A deliberately VISIBLE one needs "${ANNOTATION} <reason>" above it.`);
 }
+
+/* =================== 2. A MASK WITHOUT ITS WALL =========================
+ *
+ * The section above only sees a register call a TEST file makes itself. It
+ * cannot see the one the APP makes on the test's behalf, and that is the bigger
+ * hole: an audit that masks navigator.webdriver turns off NOSOCIAL, and
+ * js/social.js then falls back to PROD_API because no ?api= override is stored,
+ * so a virgin install boots, finishes onboarding and registers for real. Nothing
+ * in that path is a fetch() this repo wrote, so `test: IS_TEST` can never reach
+ * it. MEASURED 2026-09-02: one run of tests/profile-units-audit.mjs made 20
+ * requests to bonez-api.boneheadz.workers.dev, 3 of them POST /register.
+ *
+ * godmode's maskWebdriver installs the mask and the egress wall together, which
+ * is the only reason they cannot drift apart. So the rule is: nobody else
+ * installs the mask by hand, and the wall really refuses.
+ *
+ * THE WALL ROW IS DRIVEN, NOT GREPPED. A presence check on a string in
+ * godmode.js would go red on a rename and green on a wall whose host test had
+ * been widened to allow everything. This calls the real maskWebdriver with a
+ * stand-in page and asks what it does with two requests, one of each kind. */
+const { maskWebdriver } = await import('./godmode.js');
+const fakeReq = url => {
+  const r = { url: () => url, method: () => 'POST', acted: null };
+  r.abort = () => { r.acted = 'abort'; return Promise.resolve(); };
+  r.continue = () => { r.acted = 'continue'; return Promise.resolve(); };
+  return r;
+};
+let handler = null;
+const exitBefore = process.listeners('exit');
+const quiet = console.log;
+console.log = () => {};                    // the wall SHOUTS by design; this is a probe, not a run
+await maskWebdriver({
+  evaluateOnNewDocument: async () => {},
+  setRequestInterception: async () => {},
+  on: (ev, h) => { if (ev === 'request') handler = h; },
+});
+const outside = fakeReq('https://bonez-api.boneheadz.workers.dev/register');
+const loopback = fakeReq('http://127.0.0.1:8765/index.html');
+if (handler) { handler(outside); handler(loopback); }
+console.log = quiet;
+/* Drop the exit summary this probe just armed, and only that one: a lint that
+   ends by announcing refused egress reads like the lint itself leaked. */
+for (const l of process.listeners('exit')) if (!exitBefore.includes(l)) process.off('exit', l);
+
+const wallRow = (name, pass, detail) => {
+  console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}  ${detail}`);
+  if (!pass) bad++;
+};
+wallRow('WALL maskWebdriver refuses the production API host',
+  outside.acted === 'abort', `${outside.url()} -> ${outside.acted || 'nothing at all'}`);
+/* THE CONTROL. Without it a wall that refused EVERYTHING, breaking every suite
+   that serves the tree or stubs an API on a local port, would pass the row
+   above. Both samples are non-empty on purpose. */
+wallRow('WALL CONTROL and lets a loopback request through',
+  loopback.acted === 'continue', `${loopback.url()} -> ${loopback.acted || 'nothing at all'}`);
+
+/* Every OTHER spelling of the mask is the drift this section exists to stop. */
+const MASK_RE = /defineProperty\(\s*navigator\s*,\s*['"]webdriver['"]/;
+const testFiles = readdirSync(path.join(ROOT, 'tests')).filter(f => /\.(mjs|js)$/.test(f));
+const inline = testFiles.filter(f => f !== 'godmode.js' && f !== path.basename(SELF)
+  && MASK_RE.test(readFileSync(path.join(ROOT, 'tests', f), 'utf8')));
+wallRow('MASK no audit installs the webdriver mask by hand',
+  inline.length === 0, inline.length
+    ? `${inline.length}: ${inline.join(', ')}. Call maskWebdriver(page) from godmode.js instead, so the mask cannot arrive without the wall.`
+    : `${testFiles.length} test files scanned, all masks go through godmode`);
+/* AN EMPTY SAMPLE IS A FAILURE, same as above: if nothing calls maskWebdriver
+   the two WALL rows are grading a helper nobody uses. */
+const callers = testFiles.filter(f => f !== 'godmode.js' && f !== path.basename(SELF)
+  && /\bmaskWebdriver\s*\(/.test(readFileSync(path.join(ROOT, 'tests', f), 'utf8')));
+wallRow('MASK SAMPLE the helper is actually used by audits',
+  callers.length >= 2, `${callers.length} caller(s): ${callers.join(', ') || 'none'}`);
+
 process.exit(bad ? 1 : 0);

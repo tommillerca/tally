@@ -44,7 +44,7 @@
  *
  * Usage: node tests/cloud-restore-silent-audit.mjs
  */
-import { boot, serveTree, sleep } from './godmode.js';
+import { boot, serveTree, sleep, maskWebdriver } from './godmode.js';
 
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
@@ -54,9 +54,7 @@ const API = srv.url.replace(/\/$/, '') + '/api';
 const { browser, page } = await boot(srv.url, { headless: process.env.HEADLESS_MODE || 'shell' });
 
 /* ---- make this page look like a real player's, not a test rig ---- */
-await page.evaluateOnNewDocument(() => {
-  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
-});
+await maskWebdriver(page);
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
 
 /* ---- the vault stub ---- */

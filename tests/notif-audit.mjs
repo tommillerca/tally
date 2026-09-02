@@ -37,7 +37,7 @@
  *      pressed, so "nobody asks" cannot be satisfied by an app that can
  *      no longer ask at all.
  */
-import { boot, sleep, serveTree } from './godmode.js';
+import { boot, sleep, serveTree, maskWebdriver } from './godmode.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -233,10 +233,10 @@ check('TEST  #notifTest button toasts success (not "Could not send")',
 /* ------ 5. nothing asks for notification permission at launch ------ */
 /* MASKED, and it is the point of the row. Every launch-time gate in this app
    suppresses itself under navigator.webdriver, and puppeteer IS webdriver, so an
-   unmasked page proves nothing about what a player's phone does. The spy is
-   installed in the same evaluateOnNewDocument, ahead of every app script. */
+   unmasked page proves nothing about what a player's phone does. The spy goes
+   in right behind the mask, both ahead of every app script. */
+await maskWebdriver(page);
 await page.evaluateOnNewDocument(() => {
-  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
   window.__permAsks = 0;
   const real = Notification.requestPermission.bind(Notification);
   Notification.requestPermission = (...a) => { window.__permAsks++; return real(...a); };
