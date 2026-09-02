@@ -109,6 +109,22 @@ for (const d of ['dev-a', 'dev-b']) {
 db.prepare('INSERT INTO events (device, name, props, app_v, day, ts) VALUES (?,?,?,?,?,?)')
   .run('iphash01', 'rl_ridcheck', '{}', '', '2026-08-17', Date.now());
 
+/* The three tables pruneStale() is the first thing ever to delete from, plus
+   the sweep's own table. Every fixture here is planted PAST its window (the
+   devices rows above already carry last_seen = 2), because a plan proves
+   nothing about a query that matched nothing, and the BOUND assertion in the
+   CASES loop grades exactly that. */
+db.prepare('INSERT INTO reports (device, label, kind, lat, lng, target, note, app_v, geo, ts) VALUES (?,?,?,?,?,?,?,?,?,?)')
+  .run('dev-a', 'Grim Tibia', 'den-nominate', 49.28, -123.12, 'Library', 'good spot', 'v385', 'Vancouver, BC, CA', 2);
+db.prepare('INSERT INTO leads (device, player, label, name, email, email_optin, feedback, most_wanted, features, app_v, geo, ts) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+  .run('dev-b', 'pa', 'Grim Tibia', 'Tom', 'tom@example.com', 1, 'more pets', 'pets', 'pit,steps', 'v385', 'Vancouver, BC, CA', 2);
+// Expired (window_start*2 in the past) and LIVE, so the sweep's plan is measured
+// against a table where its predicate has to actually choose.
+db.prepare('INSERT INTO rate_limits (bucket, name, window_start, hits, expires_at) VALUES (?,?,?,?,?)')
+  .run('deadbeef', 'sig', 1, 1, 2);
+db.prepare('INSERT INTO rate_limits (bucket, name, window_start, hits, expires_at) VALUES (?,?,?,?,?)')
+  .run('livebeef', 'rl_events_dev', Date.now(), 1, Date.now() + 7200000);
+
 /* The statements, kept in step with the source. Each carries a fragment that
    must still be present in src/index.js: if somebody rewrites the route, the
    COVERAGE test below goes red and forces this file to be updated rather than
@@ -286,6 +302,53 @@ const CASES = [
      `testers` case above reads e.name out of it. */
 ];
 
+/* ---- 2026-09-01: the tables nothing ever deleted from, and the bounded sweep
+   -------------------------------------------------------------------------
+   pruneStale() runs one statement shape against four tables, so these four
+   cases share a `fragment`: the templated DELETE in src/index.js is the only
+   place any of them is written down. What differs per table is the INDEX, and
+   that is the whole point of planning them separately. devices is the one that
+   needed a new index (migrations/2026-09-01-devices-retention.sql); without it
+   the plan is SCAN devices, which the cron would run every 15 minutes forever.
+
+   `${...}` below are literal characters in the source being searched for, not
+   interpolations: these are single-quoted strings on purpose. */
+const STALE_FRAGMENT = 'DELETE FROM ${rule.table} WHERE rowid IN (';
+const staleCase = (table, col, index) => ({
+  name: `the stale pruner reaches ${table} through ${index}`,
+  fragment: STALE_FRAGMENT,
+  mustIndex: `COVERING INDEX ${index}`,
+  mustNotScan: `SCAN ${table}`,
+  params: [Date.now(), 10],
+  // BOUND is checked against the candidate SELECT, since a DELETE returns no rows.
+  boundSql: `SELECT rowid FROM ${table} WHERE ${col} < ? LIMIT ?`,
+  sql: `DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE ${col} < ? LIMIT ?)`,
+});
+CASES.push(
+  staleCase('devices', 'last_seen', 'idx_devices_last_seen'),
+  staleCase('reports', 'ts', 'idx_reports_ts'),
+  staleCase('leads', 'ts', 'idx_leads_ts'),
+  staleCase('rate_limits', 'expires_at', 'idx_rate_limits_expiry'),
+);
+
+/* THE SWEEP ON THE REQUEST PATH, which is a different statement in a different
+   place from the one above and has to be planned on its own. It used to be an
+   unbounded `DELETE FROM rate_limits WHERE expires_at < ?` and round 12 measured
+   202,733 rows going in a single 700 ms call, with five live backups queued
+   behind D1's single writer paying about 675 ms each. This is the LIMITed form,
+   lifted out of rateLimit() verbatim. */
+const SWEEP_SQL =
+  'DELETE FROM rate_limits WHERE rowid IN (SELECT rowid FROM rate_limits WHERE expires_at < ? LIMIT ?)';
+CASES.push({
+  name: 'the request-path sweep is a COVERING seek, not a walk of the expired set',
+  fragment: SWEEP_SQL,
+  mustIndex: 'COVERING INDEX idx_rate_limits_expiry',
+  mustNotScan: 'SCAN rate_limits',
+  params: [Date.now(), 1000],
+  boundSql: 'SELECT rowid FROM rate_limits WHERE expires_at < ? LIMIT ?',
+  sql: SWEEP_SQL,
+});
+
 const planOf = (sql, params) =>
   db.prepare('EXPLAIN QUERY PLAN ' + sql).all(...params).map(r => r.detail).join(' | ');
 
@@ -391,6 +454,98 @@ test('GRANT_DORMANT_DAYS is never shorter than GRANT_RETENTION_DAYS', () => {
   assert.ok(dormant >= grant, `the dormancy window (${dormant}d) is inside the age bound (${grant}d), so it is clamped`);
 });
 
+/* THE SWEEP MAY NEVER GO BACK TO BEING UNBOUNDED. The plan case above proves
+   the LIMITed form reaches its rows well; it cannot prove the unbounded form is
+   GONE, because a source file can contain both and only one of them runs. This
+   is the assertion that goes red on the pre-2026-09-01 code, and it is on the
+   request path rather than the cron, which is why it matters: what it stalls is
+   somebody's backup finishing, not a background job. */
+test('the request-path sweep of rate_limits carries a LIMIT', () => {
+  assert.ok(source.includes(SWEEP_SQL),
+    'the sweep statement has changed; re-read rateLimit() and update SWEEP_SQL here');
+  assert.ok(!/DELETE FROM rate_limits WHERE expires_at < \?'/.test(source),
+    'the unbounded sweep is back in src/index.js. One call took 700 ms for 202,733 rows and ' +
+    'every signed write in flight queued behind it.');
+});
+
+/* STALE_RULES IS A LIST OF DECISIONS, so it is pinned as one. A table quietly
+   dropped out of it stops being pruned and NOTHING else goes red: the pruner
+   still runs, still reports a total, still says `more: false`, and the table it
+   forgot grows forever exactly as it did before any of this was written. Each
+   triple is (table, column, days) and each one was argued for in the note above
+   STALE_RULES; changing a window is fine, changing it without coming through
+   here is what this stops. */
+test('STALE_RULES still covers every table that had no deleter at all', () => {
+  const m = /const STALE_RULES = \[([\s\S]*?)\n\];/.exec(source);
+  assert.ok(m, 'STALE_RULES is gone from src/index.js');
+  const rules = [...m[1].matchAll(/\{ table: '(\w+)',\s*col: '(\w+)',\s*days: (\d+) \}/g)]
+    .map(r => `${r[1]}.${r[2]}@${r[3]}`);
+  assert.equal(rules.length, 4, `parsed ${rules.length} rules out of STALE_RULES, expected 4: ${rules}`);
+  for (const want of ['devices.last_seen@365', 'reports.ts@365', 'leads.ts@365', 'rate_limits.expires_at@0']) {
+    assert.ok(rules.includes(want), `STALE_RULES no longer contains ${want}, it has: ${rules.join(', ')}`);
+  }
+  /* The retention tables must come before the sweep. maxRows is shared across
+     the whole run, so a busy hour of signed writes in front of them would starve
+     the three tables this was written for. */
+  assert.ok(rules.indexOf('rate_limits.expires_at@0') === rules.length - 1,
+    `the rate_limits sweep is not last, so it can spend the tick's whole row budget: ${rules.join(', ')}`);
+});
+
+/* A PRUNER WITH NO CALLER IS AN INERT MECHANISM. pruneStale() can be perfect,
+   its own suite can drive it through /dev/prune-stale and go green on every
+   case, and if scheduled() does not call it then nothing is ever pruned in
+   production and no test in this directory says so. The behaviour suite cannot
+   see this either: it calls the DEV hook, which is a second caller. */
+test('scheduled() actually runs the stale pruner', () => {
+  const i = source.indexOf('async scheduled(event, env)');
+  assert.ok(i > 0, 'scheduled() is gone; re-read the default export');
+  const body = source.slice(i, source.indexOf('async fetch(request, env)', i));
+  assert.ok(/await pruneStale\(env, now/.test(body),
+    'scheduled() no longer calls pruneStale, so devices, reports and leads are back to growing forever');
+  // Order matters: events has the 10 GB deadline and gets the budget first.
+  assert.ok(body.indexOf('await pruneEvents(') < body.indexOf('await pruneStale('),
+    'the stale pass now runs before the events pass, which is the one with the deadline');
+});
+
+/* Nothing may outlive the table it joins to. Both /stats reads of reports and
+   leads LEFT JOIN devices for a label, and every surviving events row does too,
+   so the devices window has to be the longest of the four. Shorten it below any
+   of them and old rows silently lose their device without a single test
+   noticing: the join is a LEFT JOIN and a COALESCE, so it degrades rather than
+   throws, which is exactly why it needs saying here. */
+test('the devices window outlives everything that joins to it', () => {
+  const days = t => Number(new RegExp(`\\{ table: '${t}',\\s*col: '\\w+',\\s*days: (\\d+) \\}`).exec(source)?.[1]);
+  const events = Number(/const EVENT_RETENTION_DAYS = (\d+)/.exec(source)?.[1]);
+  const devices = days('devices');
+  assert.ok(events > 0 && devices > 0, 'EVENT_RETENTION_DAYS or the devices rule is missing');
+  assert.ok(devices >= events, `devices keeps ${devices} days of a table events keeps ${events} of`);
+  for (const t of ['reports', 'leads']) {
+    assert.ok(devices >= days(t), `devices keeps ${devices} days but ${t} keeps ${days(t)}, so old ${t} lose their label`);
+  }
+});
+
+/* THE CROWD LOCKOUT, as arithmetic on the two constants rather than as 612 HTTP
+   requests (security.test.mjs does it the expensive way against a real worker;
+   this one sees it with nothing running). rl_events_ip was 600/hour, which is
+   ten users posting 60 events an hour, and round 12 proved users 11 and 12 got
+   429 on every post including a brand-new install's very first one. The IP
+   bucket is a ceiling on ONE ABUSIVE SOURCE; the device bucket is the control.
+   So the IP budget has to clear a crowd of CROWD_DEVICES devices all spending
+   their per-device budget in full, or it is the binding constraint on a NAT and
+   the crowds worth measuring are the ones that go dark. */
+const CROWD_DEVICES = 100;
+test(`the /events IP budget clears ${CROWD_DEVICES} devices at the per-device ceiling`, () => {
+  const limitOf = n => Number(new RegExp(`${n}:\\s*\\{ limit: (\\d+)`).exec(source)?.[1]);
+  const perDevice = limitOf('rl_events_dev'), perIp = limitOf('rl_events_ip');
+  assert.ok(perDevice > 0 && perIp > 0, 'rl_events_dev / rl_events_ip are not in RATE_LIMITS any more');
+  assert.ok(perIp >= perDevice * CROWD_DEVICES,
+    `${perIp}/hour per IP is only ${Math.floor(perIp / perDevice)} devices at the ${perDevice}/hour device ceiling. ` +
+    'On NAT that locks every further install out of analytics, first POST included.');
+  // And the backstop must still EXIST: removing the IP bucket entirely would
+  // pass the line above and leave an unsigned 51-writes-a-request route open.
+  assert.ok(Number.isFinite(perIp), 'the IP backstop is gone from an unsigned route');
+});
+
 /* THE PREDICATE THAT DELETES SOMEBODY'S PRESENT, checked as SQL rather than as
    behaviour, because the behaviour suite needs a running worker and this file
    does not. The dormancy arm is only sound while BOTH of its clocks are in it.
@@ -486,6 +641,18 @@ test('recordPruneRun swallows its own failure, so a missing migration cannot sto
     'recordPruneRun no longer catches. A worker deployed before its migration would now fail every ' +
     'cron tick and prune nothing, which is strictly worse than having no trace at all.');
   assert.ok(!/\bthrow\b/.test(body), 'recordPruneRun rethrows, which is the same failure by another route');
+});
+
+/* A migration file and schema.sql are two descriptions of one database, and a
+   PRODUCTION database only ever gets the migration. The plan case above runs
+   against schema.sql, so without this the index could be in schema.sql, absent
+   from production, and the plan test would stay green while the live cron
+   scanned a million-row table every fifteen minutes. */
+test('the devices retention index is in both schema.sql and its migration', () => {
+  const migration = readFileSync(join(HERE, 'migrations', '2026-09-01-devices-retention.sql'), 'utf8');
+  const re = /CREATE INDEX IF NOT EXISTS idx_devices_last_seen\b/;
+  assert.ok(re.test(schema), 'schema.sql is missing idx_devices_last_seen');
+  assert.ok(re.test(migration), 'the migration is missing idx_devices_last_seen');
 });
 
 test('the prune_runs migration and schema.sql agree', () => {

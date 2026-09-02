@@ -388,6 +388,83 @@ await test('/events limiting is per device, not global: one abuser cannot mute e
   assert.equal(r.status, 200, 'an unrelated device must still be able to send');
 });
 
+/* THE CROWD, WHICH IS THE CASE THE TEST ABOVE CANNOT SEE, because it puts the
+   unrelated device on a DIFFERENT address. Round 12 put twelve users on ONE:
+   each posted 60 events an hour, half of what a single device is allowed, and
+   users 1 to 10 spent the 600/hour IP budget exactly while users 11 and 12 got
+   429 on every post for the rest of the window. A brand-new install's very
+   first POST came back 429 with a retry-after of 59 minutes. So an office,
+   school, gym or stadium behind one NAT went analytics-dark, and the devices
+   upsert with it, once about ten people were active on it.
+   This is the expensive form of the check: 612 real requests through one
+   address, which is the smallest number that crosses the old 600 ceiling and
+   therefore the smallest that goes RED on the old constant. The cheap form
+   (arithmetic on the two constants, no worker) lives in schema-plan.test.mjs;
+   neither covers the other, because a limit can be big enough on paper and
+   still be checked in an order that refuses the request. */
+await test('a NAT\'d crowd is not locked out: 12 devices behind one address all keep sending', async () => {
+  const ip = rndIp();
+  const crowd = Array.from({ length: 12 }, () => rndDevice());
+  const post = device => fetch(BASE + '/events', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
+    body: JSON.stringify({ device, appV: 'sectest', events: [{ name: 'app_open' }] }),
+  });
+  // 51 rounds x 12 devices = 612 requests on one IP, which is past the 600 the
+  // old budget allowed. Round-robin, so the last device is not simply the one
+  // that arrives after the budget is spent.
+  const refused = new Map();
+  for (let round = 0; round < 51; round++) {
+    const results = await Promise.all(crowd.map(post));
+    for (let i = 0; i < crowd.length; i++) {
+      if (results[i].status === 429) refused.set(crowd[i], (refused.get(crowd[i]) || 0) + 1);
+      await results[i].text();
+    }
+  }
+  // DIRECTION: any 429 at all is the failure, and the BOUND is that the run
+  // genuinely exceeded the old ceiling. 612 > 600, so a green result here could
+  // not have been produced by a run that stayed inside it.
+  assert.equal(refused.size, 0,
+    `${refused.size} of 12 devices behind one address were refused (${[...refused.values()].join(', ')} posts each). ` +
+    'On NAT that is every install past the tenth going dark, first POST included.');
+
+  // AND THE FIRST-INSTALL CASE BY NAME, because it is the one that hurts most:
+  // a phone that has never posted anything, arriving on a busy address.
+  const brandNew = await fetch(BASE + '/events', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
+    body: JSON.stringify({ device: rndDevice(), appV: 'sectest', events: [{ name: 'app_open' }] }),
+  });
+  await brandNew.text();
+  assert.equal(brandNew.status, 200,
+    'a first-time install on a busy address was refused, which is the exact 429 round 12 measured');
+});
+
+await test('and the same address still stops ONE abusive device', async () => {
+  /* The other direction of the same guard, on the SAME address the crowd just
+     used: raising the IP budget must not have removed the control. The device
+     bucket is the one that binds, so an abuser spends its own 120/hour and
+     stops, while the crowd around it is untouched. */
+  const ip = rndIp();
+  const abuser = rndDevice(), bystander = rndDevice();
+  const post = device => fetch(BASE + '/events', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
+    body: JSON.stringify({ device, appV: 'sectest', events: [{ name: 'app_open' }] }),
+  });
+  let saw429 = false, at = 0;
+  for (let i = 1; i <= 140 && !saw429; i++) {
+    at = i;
+    const r = await post(abuser);
+    if (r.status === 429) saw429 = true;
+    await r.text();
+  }
+  assert.ok(saw429, 'one device could post 140 times an hour unchecked, at 51 D1 writes a request');
+  assert.ok(at > 100, `and the ceiling must sit above honest volume, tripped at ${at}`);
+  // BOUND, and the whole point: the abuser is stopped and the address is not.
+  const other = await post(bystander);
+  await other.text();
+  assert.equal(other.status, 200,
+    'spending one device\'s budget locked out its neighbours, so the limiter is still a denial of service');
+});
+
 await test('/register is rate limited per IP, and only that IP', async () => {
   const ip = rndIp();
   const mint = async () => {
