@@ -2197,17 +2197,12 @@ export default {
            and toppling one sends a NAMED grant to the player who lost it. The
            read is free (is_test rides the SELECT that was already here). */
         if (me && me.is_test) return json({ error: 'test accounts do not hold towers', code: 'test-account' }, 403);
-        const prev = await env.DB.prepare('SELECT owner, owner_name, level, claimed_at FROM spires WHERE id = ?').bind(id).first();
+        const prev = await env.DB.prepare('SELECT owner, owner_name, claimed_at FROM spires WHERE id = ?').bind(id).first();
         // SHIELD: a tower just taken cannot be taken straight back. Two friends at
         // one corner could otherwise ping-pong a spire for 80 coins a pass, and
         // spire fights are free. Derived from claimed_at, so no new column.
         if (prev && prev.owner !== auth.playerId && (prev.claimed_at || 0) > now - SPIRE_SHIELD_MS) {
           return json({ error: 'shielded', until: (prev.claimed_at || 0) + SPIRE_SHIELD_MS }, 409);
-        }
-        if (prev && prev.owner === auth.playerId) {
-          await env.DB.prepare('UPDATE spires SET tended_at = ?, updated_at = ?, defender = ? WHERE id = ?')
-            .bind(now, now, me.profile || null, id).run();
-          return json({ ok: true, already: true, level: prev.level || 1 });
         }
         /* THE CAP AND THE SHIELD ARE PART OF THE WRITE, not `if`s in front of it.
            Both used to be read across an await and then trusted, and neither
@@ -2225,20 +2220,21 @@ export default {
            which is the number the client has to mirror -- computing it from the
            stale `prev` read published a level the database did not have.
 
-           AND SO IS "IT IS ALREADY MINE". The early return above is the only
-           thing that stopped a same-owner claim bumping the level, and it reads
-           `prev` an await before the write. Once a concurrent claim by this
-           same player flips ownership, a second request that read a pre-flip
-           prev sails past it, and the shield below could not stop it either:
-           `owner <> ?` is FALSE for a tower that is now mine, so NOT EXISTS was
-           true and `level = spires.level+1` fired a second time. Two levels for
-           one takeover, and js/app.js pays the full 80-coin branch for each.
+           AND SO IS "IT IS ALREADY MINE". An early return in front of this used
+           to be the only thing that stopped a same-owner claim bumping the
+           level, and it read `prev` an await before the write. Once a concurrent
+           claim by this same player flipped ownership, a second request that had
+           read a pre-flip prev sailed past it, and the shield below could not
+           stop it either: `owner <> ?` is FALSE for a tower that is now mine, so
+           NOT EXISTS was true and `level = spires.level+1` fired a second time.
+           Two levels for one takeover, and js/app.js pays the full 80-coin
+           branch for each.
            The clause is now "refuse if the row is mine OR was claimed inside the
            shield", which is the same test as before plus the same-owner case,
            on the same three bindings: the owner read is re-checked AT WRITE TIME
            instead of being trusted across the await. A refusal from the new arm
-           lands on the `already` path below, which is exactly what the early
-           return would have answered had it read the post-flip state. */
+           lands on the tend below, which is where "it is already mine" is
+           answered now, by a write rather than by a read. */
         const won = await env.DB.prepare(
           `INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at)
              SELECT ?,?,?,?,?,?,?,?,?,?,?
@@ -2253,16 +2249,45 @@ export default {
                 auth.playerId, now - SPIRE_DORMANT_MS,
                 id, auth.playerId, now - SPIRE_SHIELD_MS).first();
         if (!won) {
+          /* A CLAIM ON A TOWER THAT IS MINE IS A TEND, and the tend is now the
+             thing that answers it. This lived in an early return in front of the
+             upsert, taken on the `prev` read an await above, and it was the last
+             place in this route that trusted a read across an await: everything
+             else re-checks ownership at write time.
+             Its UPDATE carried no owner clause either, so once a rival's write
+             landed inside that gap the tend went onto the WINNER's row: the
+             loser's Bonehead on the pennant and in the tower sheet, and
+             tended_at dragged off the claimed_at the winner's own upsert wrote
+             it with, which is a free dormancy and cap-window refresh for them.
+             The owner was then told `already: true` about a tower they had just
+             LOST, and js/app.js pays the flat consolation on `already` (see
+             "Rewarded actions" in CLAUDE.md), so the SERVER was the authority
+             handing back a paid no-op.
+             Measured on 2026-09-01 against b81c11f9, racing an owner's routine
+             re-claim against a rival's now-legal takeover on a tower aged past
+             its 1h shield, 30 races per arm: the wrong defender, the dragged
+             tended_at and the false `already` each landed in 26 of 30 under the
+             concurrency suite's burst load, and in 30 of 30 with no artificial
+             delay at all. They are one event. Note it needs the owner's read
+             and the rival's write to interleave, which miniflare's in-process
+             D1 nearly forbids: one-against-one it showed up once in 120, and
+             the numbers above needed four owner claims in flight to hold the
+             gap open. On real D1 every statement is a network round trip and
+             one is enough.
+             One statement does both jobs now. `owner = ?` is the same rule the
+             /tend route below already uses, evaluated AT WRITE TIME so it can
+             only ever land on a row that is really mine, and RETURNING hands
+             back the level of the row it actually wrote rather than a level
+             computed from a stale read. A tower that has changed hands matches
+             nothing, falls through, and is answered by the rules under it. */
+          const tend = await env.DB.prepare(
+            `UPDATE spires SET tended_at = ?, updated_at = ?, defender = ? WHERE id = ? AND owner = ?
+             RETURNING level`)
+            .bind(now, now, me?.profile || null, id, auth.playerId).first();
+          if (tend) return json({ ok: true, already: true, level: tend.level || 1 });
           // Nothing landed, so say WHICH rule refused it. Read after the write,
           // never before: this only picks the message, it decides nothing.
-          const nowRow = await env.DB.prepare('SELECT owner, claimed_at, level FROM spires WHERE id = ?').bind(id).first();
-          // The tower is mine, so a claim by me is a tend, not a takeover: the
-          // same answer the early return gives, at the level the write that beat
-          // me actually produced. Answering 'cap' here would be a lie AND would
-          // tell the client its own concurrent claim failed.
-          if (nowRow && nowRow.owner === auth.playerId) {
-            return json({ ok: true, already: true, level: nowRow.level || 1 });
-          }
+          const nowRow = await env.DB.prepare('SELECT claimed_at FROM spires WHERE id = ?').bind(id).first();
           if (nowRow && (nowRow.claimed_at || 0) > now - SPIRE_SHIELD_MS) {
             return json({ error: 'shielded', until: (nowRow.claimed_at || 0) + SPIRE_SHIELD_MS }, 409);
           }

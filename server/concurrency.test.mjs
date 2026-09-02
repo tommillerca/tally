@@ -372,6 +372,130 @@ await test('the rate limiter counts exactly, under a burst (no lost or doubled h
   assert.equal(res.filter(r => r.status === 429).length, N - 10, 'the rest must be refused');
 });
 
+/* ---------------------------------------------------------------------------
+   11. PUT /spires/<id>/claim -- the OWNER's re-claim, against a rival, on an
+   AGED tower. Check 6 above races two rivals over a tower whose owner is not
+   doing anything. Nothing in this suite ever contested a tower while its owner
+   was tending it, which is exactly why the last read-across-an-await on this
+   route survived every one of them.
+
+   WAS: an early return in front of the upsert, taken on a `prev` read an await
+   earlier, which answered `{ ok, already, level }` and ran
+   `UPDATE spires SET tended_at, updated_at, defender WHERE id = ?` with NO owner
+   clause. Every other write on this route re-checks ownership inside the
+   statement; this one short-circuited in front of all of it.
+
+   WHY AN AGED TOWER. The 1h shield covers one hour of a tower's 7 day life, so
+   for the rest of it a rival takeover is perfectly legal, and an owner walking
+   back to tend theirs is the routine action. Both at once is an ordinary
+   Saturday, and the shielded fixtures above can never stage it.
+
+   WHAT IS AND IS NOT THE BUG. `already: true` is NOT wrong on its own: an owner
+   whose tend really did land a millisecond before a rival took the tower was
+   told the truth, and that outcome is unavoidable in any concurrent system. The
+   bug is `already` answered off a STALE READ, and it leaves a footprint. For the
+   answer to be false the rival's write has to fall between the owner's read and
+   the owner's UPDATE, and that unguarded UPDATE then necessarily lands on the
+   WINNER's row: the loser's Bonehead ends up on the pennant and in the tower
+   sheet, and tended_at is dragged off the claimed_at the winner's own upsert
+   wrote it with, handing the winner a free dormancy and cap-window refresh. So
+   the row itself says which of the two happened, and that is what is asserted
+   here. It matters because js/app.js pays the flat consolation on `already`
+   (see "Rewarded actions" in CLAUDE.md), so a false one is a paid no-op with
+   the SERVER as the authority handing it back.
+
+   WHY FOUR CLAIMS FROM THE OWNER. Same reason as BURST_LOAD, and it is a window
+   widener, not a claim that players send four. The gap this bug lives in is one
+   `if` wide, and on miniflare's in-process D1 a single owner request closes it
+   before any rival write can arrive: raced one-against-one it showed up 1 time
+   in 120, which is a guard that cannot fail. Four in flight give the rival's
+   write four gaps to land in and reproduce it 26-30 times in 30. On real D1
+   every statement is a network hop and one request is enough.
+
+   DIRECTION of failure: the loser's write ends up on the winner's row, and the
+   loser is paid for it. BOUND: zero, over every race that actually changed
+   hands. Not a rate and not "most of them": one is the bug.
+   Measured on 2026-09-01, 30 races per arm, against origin/main b81c11f9:
+     BURST_LOAD=300 -> 26/30 false `already`, 26/30 wrong defender, 26/30 stray write
+     BURST_LOAD=0   -> 30/30, 30/30, 30/30   (no artificial delay needed at all)
+   After: 0/30 on every count in both arms, with 8 and 30 truthful `already`
+   answers respectively, so the branch was still being exercised.
+--------------------------------------------------------------------------- */
+await test('a spire claim that loses the race never writes the winner\'s row, or gets paid for it', async () => {
+  const ROUNDS = 5, OWNER_CLAIMS = 4;
+  let changedHands = 0, falseAlready = 0, truthfulAlready = 0, strayWrite = 0, wrongDefender = 0;
+  for (let i = 0; i < ROUNDS; i++) {
+    // distinguishable builds, so the defender left on the row names WHO wrote it
+    const owner = await newPlayer({ level: 9, weapon: 'ownerblade' });
+    const rival = await newPlayer({ level: 9, weapon: 'rivalpike' });
+    const eye = await newPlayer();  // a third party: /spires masks defender from its own holder
+    const id = nextSpireId();
+    assert.equal((await owner.signed('PUT', `/spires/${id}/claim`, { name: 'Aged', lat: 7, lng: 8 })).status, 200,
+      'PRECONDITION: the owner must actually hold it');
+    // age it past the shield the owner's own claim just raised, so the rival's
+    // takeover is LEGAL and this is the race players really meet
+    const w = await (await fetch(`${BASE}/dev/spire-warp`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id, backMs: 2 * 3600000 }),
+    })).json();
+    assert.equal(w.row.owner, owner.id, 'PRECONDITION: the warp moves clocks, never ownership');
+    assert.ok(w.row.claimed_at < Date.now() - 3600000, 'PRECONDITION: the tower is really past its shield');
+
+    const fires = [];
+    for (let k = 0; k < OWNER_CLAIMS; k++) fires.push(await owner.sign('PUT', `/spires/${id}/claim`, { name: 'Aged', lat: 7, lng: 8 }));
+    fires.splice(1, 0, await rival.sign('PUT', `/spires/${id}/claim`, { name: 'Aged', lat: 7, lng: 8 }));
+    const res = await burst(fires);
+    const ownerBodies = await bodiesOf(res.filter((_, k) => k !== 1));
+    const row = (await (await eye.signed('GET', `/spires?ids=${id}`)).json()).spires[0];
+    if (row.owner !== rival.id) continue;   // the owner held it off; nothing was lost, nothing to judge
+    changedHands++;
+    const wrongDef = !!(row.defender && row.defender.weapon === 'ownerblade');
+    /* The winner's upsert writes claimed_at and tended_at from ONE `now`, so any
+       drift between them is somebody else's write landing after it. */
+    const late = wrongDef || row.tendedAt !== row.claimedAt;
+    if (wrongDef) wrongDefender++;
+    if (late) strayWrite++;
+    if (ownerBodies.some(b => b.ok === true && b.already === true)) (late ? falseAlready++ : truthfulAlready++);
+  }
+  /* changedHands is the denominator, and it is the only one worth asserting.
+     How many owners get answered `already` is NOT: once the rival's takeover
+     lands ahead of the owner's first claim every later one is correctly refused
+     as shielded and none of them says `already` at all, which is a legitimate
+     ordering and happened in about 1 run in 5. Asserting on it made this check
+     go red on healthy code. The positive control for that branch is the next
+     test down, where it is deterministic. */
+  assert.ok(changedHands > 0, `EMPTY SAMPLE: no race in ${ROUNDS} changed hands, so nothing was measured`);
+  assert.equal(wrongDefender, 0,
+    `the loser's build may never end up defending the winner's tower: ${wrongDefender} of ${changedHands}`);
+  assert.equal(strayWrite, 0,
+    `nothing may write the winner's row after its own claim: ${strayWrite} of ${changedHands} had tended_at dragged off claimed_at`);
+  assert.equal(falseAlready, 0,
+    `an 'already' answered off a stale read is a paid no-op: ${falseAlready} of ${changedHands} (${truthfulAlready} truthful), and js/app.js pays every one`);
+});
+
+/* And the CONTROL for it: uncontested, a re-claim is still a tend. If check 11
+   went green by breaking the ordinary path instead of fixing the race, this is
+   what says so. */
+await test('an uncontested re-claim of my own aged tower is still a tend that refreshes it', async () => {
+  const owner = await newPlayer({ level: 9, weapon: 'ownerblade' });
+  const eye = await newPlayer();
+  const id = nextSpireId();
+  assert.equal((await owner.signed('PUT', `/spires/${id}/claim`, { name: 'Quiet', lat: 9, lng: 10 })).status, 200);
+  await fetch(`${BASE}/dev/spire-warp`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id, backMs: 2 * 3600000 }),
+  });
+  const before = (await (await eye.signed('GET', `/spires?ids=${id}`)).json()).spires[0];
+  const again = await (await owner.signed('PUT', `/spires/${id}/claim`, { name: 'Quiet', lat: 9, lng: 10 })).json();
+  assert.equal(again.already, true, 're-claiming my own tower is a tend, and must still say so');
+  assert.equal(again.level, 1, 'a tend must not level the tower');
+  const after = (await (await eye.signed('GET', `/spires?ids=${id}`)).json()).spires[0];
+  assert.equal(after.owner, owner.id, 'and it must still be mine');
+  assert.ok(after.tendedAt > before.tendedAt,
+    `the tend must have moved tended_at: ${before.tendedAt} -> ${after.tendedAt}`);
+  assert.equal(after.claimedAt, before.claimedAt, 'a tend is not a takeover: claimed_at must not move');
+});
+
 async function befriend(x, y) {
   const cx = (await (await x.signed('GET', '/me')).json()).friendCode;
   const cy = (await (await y.signed('GET', '/me')).json()).friendCode;
