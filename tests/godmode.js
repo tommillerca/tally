@@ -1052,21 +1052,45 @@ export async function realWanderer(page, home, { offsetDeg = 0, metres = 45, any
       await new Promise(r => setTimeout(r, 500));
     }
     const date = dateKey();
+    /* COUNT THE POINTS THAT CAN ACTUALLY ANSWER, and report THAT as `tiles`.
+       It used to report pts.length, which is the number of points ASKED about
+       and is the constant 81 whatever happens, so every caller's sentence "N
+       water tiles warmed" printed 81 on a machine where not one tile had
+       loaded. A number that cannot move is not a measurement. */
+    const decided = pts.filter(([la, ln]) => water.isWater(la, ln) !== undefined).length;
     if (!w) {
-      /* WHICH EMPTY. "He is out there but past WANDER_SHOW_M" and "this cell is
-         effectively all water this lap" are different facts and the caller has
-         to be able to print the right one. */
+      /* WHICH EMPTY, and there are THREE, not two. "He is out there but past
+         WANDER_SHOW_M" and "this cell is effectively all water this lap" are
+         different facts and the caller has to be able to print the right one.
+         The third one is the dangerous one because it is not a fact about the
+         world at all: when js/water.js cannot reach its tile host, isWater
+         answers undefined everywhere, wanderersNear filters every candidate out,
+         and the empty set is IDENTICAL to "his loop carried him out of range".
+         Measured 2026-09-02 on a `cp -R` throwaway with TILEJSON_URL pointed at
+         a dead path: exit 97, seventeen rows ungraded, and the reason printed
+         was "no Wanderer is within WANDER_SHOW_M of HOME right now (81 water
+         tiles warmed over 30043ms: nobody within WANDER_SHOW_M (1 in range
+         without the land constraint))". Every load-bearing word of that is
+         wrong: he WAS in range, nothing was warmed, and the 30043ms is the
+         deadline expiring rather than a wait for a lap. A suite is allowed to
+         decline to grade; it is not allowed to blame the wrong thing while it
+         declines. So the oracle is checked FIRST and named as a missing
+         CAPABILITY, ahead of any claim about where he is standing. */
       const bare = W.wandererAt(cell.cx, cell.cy, date, undefined);
       const bareDist = bare ? Math.round(W.wanderersNear(date, home.latitude, home.longitude).length) : null;
-      return { date, tiles: pts.length, w: null, near: [], cell, waitedMs: Date.now() - t0,
-        why: bare ? `nobody within WANDER_SHOW_M (${bareDist} in range without the land constraint)` : 'no wanderer derives here at all' };
+      const why = decided === 0
+        ? `the land oracle never answered: 0 of ${pts.length} lattice points around HOME could be classified in ${Date.now() - t0}ms, `
+          + 'so js/water.js has no tiles and every candidate reads as water. This is the MACHINE, not his loop'
+        : (bare ? `nobody within WANDER_SHOW_M (${bareDist} in range without the land constraint, ${decided}/${pts.length} lattice points classified)`
+          : 'no wanderer derives here at all');
+      return { date, tiles: decided, oracle: decided > 0, w: null, near: [], cell, waitedMs: Date.now() - t0, why };
     }
     const R = 6371000, r = Math.PI / 180, dr = metres / R, brg = (w.heading + offsetDeg) * r;
     const f1 = w.lat * r, l1 = w.lng * r;
     const f2 = Math.asin(Math.sin(f1) * Math.cos(dr) + Math.cos(f1) * Math.sin(dr) * Math.cos(brg));
     const l2 = l1 + Math.atan2(Math.sin(brg) * Math.sin(dr) * Math.cos(f1), Math.cos(dr) - Math.sin(f1) * Math.sin(f2));
     const p = { lat: f2 / r, lng: l2 / r };
-    return { date, tiles: pts.length, p, cell, waitedMs: Date.now() - t0,
+    return { date, tiles: decided, oracle: true, p, cell, waitedMs: Date.now() - t0,
       w: { id: w.id, lat: w.lat, lng: w.lng, heading: w.heading, inst: w.inst, dist: Math.round(w.dist ?? 0) },
       near: near.map(x => x.id), predicted: W.inWandererCone(w, p.lat, p.lng) };
   }, { home, offsetDeg, metres, anyone, deadlineMs });

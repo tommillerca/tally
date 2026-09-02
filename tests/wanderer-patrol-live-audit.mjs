@@ -58,6 +58,30 @@
  * it measures the capability first and reports UNPROVEN with exit 97 rather than
  * green, the same contract tests/boneyard-audit.mjs runs under.
  *
+ * AND IT NEEDS A THIRD THING, WHICH IS WHY IT USED TO EXIT 97 WITHOUT SAYING SO.
+ * 2026-09-02, chasing an exit 97 recorded against this suite in the v470 release:
+ * boneyardCapability only proves the map STYLE's remote URL answers, and the
+ * style names exactly one, https://tiles.openfreemap.org/planet. js/water.js
+ * fetches the z14 .pbf tiles UNDER that endpoint, and nothing measured those. So
+ * a machine that could draw the map but not read its water tiles fell through to
+ * the empty-set branch and reported "no Wanderer is within WANDER_SHOW_M of HOME
+ * right now (81 water tiles warmed over 30043ms ...)", which blamed his loop for
+ * a network fault, quoted a tile count that was the constant 81 whatever
+ * happened, and printed an UNPROVEN banner naming no missing property at all.
+ * Reproduced on a `cp -R` throwaway with water.js's TILEJSON_URL pointed at a
+ * dead path (the map style untouched, so the capability probe stayed green):
+ * exit 97, all 17 rows ungraded, that exact sentence. It now measures the oracle
+ * and reports it as a missing capability by name, ORACLE, beside WEBGL and
+ * TILES. Same throwaway after the fix: exit 97, and "MISSING, measured in this
+ * run: ORACLE js/water.js could not classify a single one of the lattice points
+ * around HOME in 30034ms".
+ *
+ * HIS LOOP IS NOT THE USUAL EXPLANATION. Measured 2026-09-02 by sweeping all
+ * 1440 minutes of five consecutive days from HOME against the real land oracle:
+ * 1414 to 1440 minutes of 1440 have somebody inside WANDER_SHOW_M, so the empty
+ * set is a 0 to 2% state and an exit 97 that blames it should be doubted.
+ * On this machine, 2026-09-02, this suite runs and is GREEN: 17 of 17, exit 0.
+ *
  * THREE DICE THIS SUITE WAS ROLLING, ALL FIXED 2026-08-27, NONE OF THEM THE
  * APP. It failed a DIFFERENT row every run on clean main, which is the tell.
  *
@@ -483,15 +507,36 @@ if (cap || (ahead && ahead.cap)) {
   const why = 'the Boneyard could not draw on this machine';
   for (const n of ROWS) unproven(n, why);
 } else if (empty) {
-  /* A REAL DATA STATE, DECLARED. He walks a 140-220 m loop once every 45
-     minutes, so there are minutes when the nearest man is past WANDER_SHOW_M of
-     HOME and this suite has nobody to grade. It used to crash here. */
-  const why = 'no Wanderer is within WANDER_SHOW_M of HOME right now '
-    + `(${empty.tiles} water tiles warmed over ${empty.waitedMs}ms: ${empty.why}); nothing to stand in front of`;
+  /* NOBODY TO STAND IN FRONT OF, AND THE REASON IS MEASURED RATHER THAN ASSUMED.
+     This used to open with "no Wanderer is within WANDER_SHOW_M of HOME right
+     now", which is a claim about his loop, and it printed that claim even when
+     the truth was that js/water.js could not reach a tile and the land oracle
+     had answered nothing at all (see realWanderer in godmode.js for the
+     2026-09-02 measurement). Two different causes, one sentence, and the wrong
+     half of it was the load-bearing one. The lead clause now says only what is
+     certainly true, which is that there was nobody to grade; realWanderer's own
+     `why` names which of the three reasons it was.
+     His loop is a genuinely possible reason: he walks 140-220 m once every 45
+     minutes and can leave WANDER_SHOW_M inside an instance. Measured 2026-09-02
+     by sweeping all 1440 minutes of five consecutive days against the real land
+     oracle from HOME: 1414 to 1440 minutes of 1440 have somebody in range, so it
+     is a rare state and not the usual explanation for an exit 97. */
+  const why = `no Wanderer could be stood in front of on this run: ${empty.why}`;
   for (const n of ROWS.slice(emptyFrom)) unproven(n, why);
 }
 if (srv) await srv.close();
-unprovenReport('wanderer-patrol-live-audit.mjs', cap || (ahead && ahead.cap));
+/* THE BANNER MUST NAME A MISSING PROPERTY. On the empty path there is no
+   capability object, so it printed "did not fully run on this machine" and then
+   nothing at all about WHAT was missing: an exit 97 that would not say why. The
+   land oracle is measured on that path, so it is reported as a measured check
+   like WEBGL and TILES are. When it DID answer, the row lands under "PRESENT,
+   so these are NOT the reason", which is the honest reading. */
+const oracleCap = empty && { checks: [{ kind: 'ORACLE', ok: empty.oracle,
+  detail: empty.oracle
+    ? `js/water.js classified ${empty.tiles} lattice point(s) around HOME, so the land oracle is not the reason`
+    : `js/water.js could not classify a single one of the lattice points around HOME in ${empty.waitedMs}ms, `
+      + 'so no wanderer can be placed on land and the empty set says nothing about where he walks' }] };
+unprovenReport('wanderer-patrol-live-audit.mjs', cap || (ahead && ahead.cap) || oracleCap);
 console.log(fails ? '\nWANDERER PATROL LIVE AUDIT FAILED'
   : ((cap || empty) ? '\nWANDERER PATROL LIVE AUDIT UNPROVEN' : '\nWANDERER PATROL LIVE AUDIT VERIFIED'));
 process.exit(exitFor(fails));

@@ -174,7 +174,11 @@ try {
        position exactly as it does for a walker. */
     const target = await realWanderer(page, HOME);
     if (!target.w) {
-      const why = `no Wanderer walks within range of HOME right now (his loop can leave WANDER_SHOW_M inside an instance; ${target.tiles} water tiles warmed over ${target.waitedMs}ms: ${target.why})`;
+      /* SAME SENTENCE, SAME FIX AS THE PATROL SUITE. It opened by blaming his
+         loop, which is only one of the three things realWanderer can mean by an
+         empty set, and the other two include the land oracle being unreachable.
+         The lead clause now claims only what is certain. */
+      const why = `no Wanderer could be stood in front of on this run: ${target.why}`;
       unproven('BEFORE his own marker is on the map before the fight', why);
       unproven('DESPAWN he is gone from the map after the win', why);
       unproven('LEDGER the win is recorded on his instance key', why);
