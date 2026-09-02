@@ -12510,6 +12510,14 @@ async function renderSettings(el) {
 function profileFormHtml(p, units) {
   const imp = units !== 'kg';
   const { ft, inch } = cmToFtIn(p.heightCm || 178);
+  /* THE FORM TELLS THE TRUTH ABOUT WHAT IT WILL SAVE. Onboarding renders this
+     with a blank p, so `p.activity === a.id` compared against undefined and NO
+     Activity or Goal chip lit, while bindProfileForm below was already holding
+     moderate/recomp and Save stored exactly that. Two of the four questions
+     were answered invisibly. Defaulted here the same way the Sex seg already
+     defaults to Male, so the lit chip IS the stored value. Keep these two in
+     step with bindProfileForm's state; profile-units-audit asserts they match. */
+  const act = p.activity || 'moderate', goal = p.goal || 'recomp';
   return `
     <div class="field"><label>Units</label>
       <div class="seg"><button type="button" id="pfLb" class="${imp ? 'on' : ''}">lb / ft</button><button type="button" id="pfKg" class="${imp ? '' : 'on'}">kg / cm</button></div>
@@ -12528,10 +12536,10 @@ function profileFormHtml(p, units) {
       <div class="field"><label>Weight (<span id="wUnit">${imp ? 'lb' : 'kg'}</span>)</label><input id="pfW" type="text" inputmode="decimal" value="${p.weightKg ? (imp ? kgToLb(p.weightKg).toFixed(0) : p.weightKg.toFixed(1)) : ''}" placeholder="${imp ? '180' : '82'}"></div>
     </div>
     <div class="field"><label>Activity</label>
-      <div id="pfAct">${ACTIVITY_LEVELS.map(a => `<button type="button" class="chip ${p.activity === a.id ? 'on' : ''}" data-act="${a.id}" style="margin:0 6px 7px 0">${a.label}</button>`).join('')}</div>
+      <div id="pfAct">${ACTIVITY_LEVELS.map(a => `<button type="button" class="chip ${act === a.id ? 'on' : ''}" data-act="${a.id}" style="margin:0 6px 7px 0">${a.label}</button>`).join('')}</div>
     </div>
     <div class="field"><label>Goal</label>
-      <div id="pfGoal">${GOALS.map(g => `<button type="button" class="chip ${p.goal === g.id ? 'on' : ''}" data-goal="${g.id}" style="margin:0 6px 7px 0">${g.label}</button>`).join('')}</div>
+      <div id="pfGoal">${GOALS.map(g => `<button type="button" class="chip ${goal === g.id ? 'on' : ''}" data-goal="${g.id}" style="margin:0 6px 7px 0">${g.label}</button>`).join('')}</div>
       <p class="note" id="goalHint"></p>
     </div>
     <div class="card" style="background:var(--surface-2);margin:4px 0 12px">
@@ -12591,10 +12599,38 @@ function bindProfileForm(wrap, initial, onChange) {
     onChange?.(p, t);
   };
   const setSeg = (sel, on) => { $$(sel, wrap).forEach(x => x.classList.remove('on')); on.classList.add('on'); };
-  $('#pfLb', wrap).addEventListener('click', e => { state.units = 'lb'; setSeg('#pfLb,#pfKg', e.target); switchUnits(); });
-  $('#pfKg', wrap).addEventListener('click', e => { state.units = 'kg'; setSeg('#pfLb,#pfKg', e.target); switchUnits(); });
+  /* CONFIRMING A CHOICE MUST NOT CONVERT. Both buttons used to set the unit and
+     call switchUnits() unconditionally, and switchUnits() converts the fields by
+     the NEW unit alone with no memory of the unit they are already in. So
+     re-tapping the button that is already lit, which is how a lot of people
+     confirm a segmented choice, ran the conversion a second time on a value that
+     was already right: type 80 with kg selected, tap "kg / cm" again, and the
+     field reads 36.3. That saved a plan for a 36 kg body (1,920 kcal / 80 g
+     protein instead of ~2,540 / 176) with nothing on screen to say it had moved.
+     Nothing changed, so nothing converts. */
+  const pickUnits = (u, e) => {
+    if (state.units === u) return;
+    state.units = u; setSeg('#pfLb,#pfKg', e.target); switchUnits();
+  };
+  $('#pfLb', wrap).addEventListener('click', e => pickUnits('lb', e));
+  $('#pfKg', wrap).addEventListener('click', e => pickUnits('kg', e));
   function switchUnits() {
     const imp = state.units === 'lb';
+    /* HEIGHT FOLLOWS THE SWITCH TOO. Only the weight field used to convert; the
+       two height fields were merely toggled hidden, so the one now on screen
+       still held whatever it was rendered with. Type 165 cm, flip to lb for the
+       weight, and the height reads the 5'10 default and 5'10 is what saves.
+       This form is WYSIWYG, which is exactly why it was silent. Read BEFORE the
+       hidden flip, and carry null through the way the weight does: a blank
+       height must stay blank, not become a person 0 cm tall. */
+    const ft = num($('#pfFt', wrap).value), inch = num($('#pfIn', wrap).value);
+    const cm = imp
+      ? num($('#pfCm', wrap).value)
+      : (ft == null && inch == null ? null : ftInToCm(ft || 0, inch || 0));
+    if (cm != null) {
+      if (imp) { const h = cmToFtIn(cm); $('#pfFt', wrap).value = h.ft; $('#pfIn', wrap).value = h.inch; }
+      else $('#pfCm', wrap).value = Math.round(cm);
+    }
     $('#hImp', wrap).hidden = !imp; $('#hMet', wrap).hidden = imp;
     $('#wUnit', wrap).textContent = imp ? 'lb' : 'kg';
     const w = num($('#pfW', wrap).value);
@@ -12689,13 +12725,28 @@ function renderOnboarding(step = 0, ctx = {}) {
      are no settings). Left alone it paints as a live control and does nothing.
      Hide it; route() owns gear visibility from the first navigation on. */
   const gearBtn = $('#gearBtn'); if (gearBtn) gearBtn.hidden = true;
+  /* EVERY STEP OPENS AT THE TOP. route() resets #screen.scrollTop on every
+     navigation (see the end of route()); onboarding does not route, it writes
+     innerHTML straight into #screen, so whatever scroll the previous step was
+     left at survived into the next one. Tapping "That's me", which sits near the
+     bottom of the reveal on a short phone, scrolled #screen to 233 at 320x568,
+     and THE PLAN then opened with its back arrow at y=-203: off the top of the
+     screen, along with the dots and the title. Same rule as route(): a new
+     screen starts where its first line is. */
+  el.scrollTop = 0;
   /* AN INTERRUPTED INSTALL RESUMES WHERE IT STOPPED. Reproduced on the round-1
      playtest report: reach THE PLAN, quit, reopen, and you are back at the
      first screen with a freshly rolled skeleton, the one you liked gone. Every
      render stamps its step and the current pick; boot resumes from the stamp,
      and finishing onboarding clears it. Fire-and-forget: a lost write costs a
-     replayed step, never a stuck one. */
-  kvSet('onbProgress', { step, pick: ctx.pick || null }).catch(() => {});
+     replayed step, never a stuck one.
+     The step-1 pick is stamped by step 1 itself, not here: this line runs BEFORE
+     the reveal rolls a name, so on its own it always wrote pick:null and a
+     player who quit on the reveal came back to a different skeleton. Anything
+     that changes the name on screen re-stamps, so the name that resumes is the
+     name they were looking at. */
+  const stamp = () => kvSet('onbProgress', { step, pick: ctx.pick || null }).catch(() => {});
+  stamp();
   trackEvent('onb_step', { n: step });
   const dots = `<div class="onb-dots">${[0, 1, 2].map(i => `<i class="${i === step ? 'on' : i < step ? 'done' : ''}"></i>`).join('')}</div>`;
   const back = step > 0 ? `<button class="onb-back" id="onbBack" aria-label="Back">${ICONS.chev(18)}</button>` : '';
@@ -12727,7 +12778,7 @@ function renderOnboarding(step = 0, ctx = {}) {
   if (step === 1) {
     // the BARE starter (kicks default is null): gear is what you earn, so the
     // reveal shows what you start with, not a dressed promo shot
-    if (!ctx.pick) ctx.pick = randomName();
+    if (!ctx.pick) { ctx.pick = randomName(); stamp(); }
     el.innerHTML = `
     <div class="onb onb-in">
       ${back}${dots}
@@ -12754,6 +12805,7 @@ function renderOnboarding(step = 0, ctx = {}) {
     $('#onbReroll').addEventListener('click', () => {
       ctx.pick = randomName();
       $('#onbName').textContent = buildDisplayName(ctx.pick.adj, ctx.pick.noun, ctx.pick.num);
+      stamp();                      // the name on screen is the name that resumes
       popSound(S.sounds);
     });
     $('#onbMe').addEventListener('click', async () => {
