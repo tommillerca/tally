@@ -7,7 +7,16 @@ const DIR = shotDir('tally-shots');  // machine-local, see godmode shotDir
    the URL as an argument (which is how the release gate invokes every suite) fell
    through to godmode's boot() default, https://tommillerca.github.io/tally/, and
    graded PRODUCTION while reading as coverage of the tree under test. */
-const { browser, page } = await boot(process.argv[2] || process.env.URL);
+/* 'shell', not 'new': on this Mac Page.captureScreenshot never returns under
+   headless 'new', and this suite takes a screenshot. Measured 2026-09-03 on a
+   4-cell probe (headless new|shell x captureBeyondViewport default|false):
+   'new' hit the 45s protocolTimeout on BOTH cbv settings, 'shell' returned in
+   234ms. So the camera was the fault, not the clip. See boot(). The camera
+   matters here even though the surface below is retired: with the Today banner
+   put back in a throwaway copy, all 18 rows graded green and the run STILL
+   exited 1 on this screenshot, so the day spires get a surface again this file
+   would have come back reading like a fresh regression. */
+const { browser, page } = await boot(process.argv[2] || process.env.URL, { headless: process.env.HEADLESS_MODE || 'shell' });
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 
@@ -38,7 +47,25 @@ for (let i = 0; i < 30; i++) {
   if (ready) break;
   await sleep(500);
 }
-if (!ready) console.log('the Today card never appeared: not claiming a pass');
+/* THE SURFACE IS GONE, AND SAYING SO ONCE BEATS SAYING NOTHING FIFTEEN TIMES.
+   spireBannerHtml is only ever called from outThereHtml, and outThereHtml lost
+   its last caller on 2026-08-21 when the "Out there today" card came off Today.
+   So details.spire-banner cannot render, and every row below then graded a card
+   that was not there: 15 FAILs reading like the explainer copy had rotted, then
+   an unguarded TypeError at the geometry read, then a browser that was never
+   closed. None of that is true and none of it is this app's defect.
+   Stop here instead, with the one fact that is true, and stay NON-ZERO: the day
+   spires get a surface again this file wakes up and grades all of it for real.
+   Not exit 97. The gate's rule is that UNPROVEN is claimed against a missing
+   MACHINE capability measured in the same run, and this machine is fine.
+   Measured 2026-09-03 on origin/main a876d8f4. */
+if (!ready) {
+  console.log('NO SURFACE  details.spire-banner is not on Today: spireBannerHtml is called only');
+  console.log('            by outThereHtml, which js/app.js has not called since 2026-08-21.');
+  console.log('            Nothing was graded. release-gate.mjs skips this file for this reason.');
+  await browser.close();
+  process.exit(1);
+}
 await page.evaluate(() => { document.querySelector('.dw')?.remove(); document.querySelector('.drop-veil')?.remove(); document.querySelector('.spire-veil')?.remove(); });
 await page.evaluate(() => { const b = document.querySelector('details.spire-banner'); if (b) { b.open = true; b.scrollIntoView({ block: 'center' }); } });
 await sleep(700);

@@ -6,7 +6,12 @@ const DIR = shotDir('tally-shots');  // machine-local, see godmode shotDir
    the URL as an argument (which is how the release gate invokes every suite) fell
    through to godmode's boot() default, https://tommillerca.github.io/tally/, and
    graded PRODUCTION while reading as coverage of the tree under test. */
-const { browser, page } = await boot(process.argv[2] || process.env.URL);
+/* 'shell', not 'new': on this Mac Page.captureScreenshot never returns under
+   headless 'new', and this suite takes a screenshot. Measured 2026-09-03 on a
+   4-cell probe (headless new|shell x captureBeyondViewport default|false):
+   'new' hit the 45s protocolTimeout on BOTH cbv settings, 'shell' returned in
+   234ms. So the camera was the fault, not the clip. See boot(). */
+const { browser, page } = await boot(process.argv[2] || process.env.URL, { headless: process.env.HEADLESS_MODE || 'shell' });
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 
@@ -14,14 +19,28 @@ const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d 
 await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(1800);
 await page.evaluate(() => { document.querySelector('.dw')?.remove(); document.querySelector('.drop-veil')?.remove(); });
+/* RE-ANCHORED 2026-09-03 OFF A SIBLING AND ONTO THE TOKEN, and the app is fine.
+   This read the face off `.glutton-banner .gbn-txt b` ON TODAY and compared the
+   two. That element left Today on 2026-08-21 with the rest of the banner stack
+   (js/app.js, "EVICTED FROM THE DAY"); the only .glutton-banner left is on Crew
+   and inside the retired spire card. So `banner` came back null and the row went
+   red about a comparison it could no longer take, not about the quests header.
+   The rule it is FOR has not moved: app.css:3803 says the quests summary wears
+   "the display face, matching the feature dropdowns (.gbn-txt b)", and .gbn-txt b
+   is `font-family: var(--display)`. So compare against --display itself, read off
+   the live page rather than pinned, which is the same rule stated against the
+   thing both elements were always pointing at. BOTH sides must resolve, so a
+   missing header or a missing token is a red and not a pass on two nulls. */
 const fonts = await page.evaluate(() => {
   const q = document.querySelector('.q-collapse > summary');
-  const b = document.querySelector('.glutton-banner .gbn-txt b');
-  const f = el => el ? getComputedStyle(el).fontFamily.split(',')[0].replace(/['"]/g, '') : null;
-  return { quests: f(q), banner: f(b) };
+  const first = v => (v || '').split(',')[0].trim().replace(/['"]/g, '') || null;
+  return {
+    quests: q ? first(getComputedStyle(q).fontFamily) : null,
+    display: first(getComputedStyle(document.documentElement).getPropertyValue('--display')),
+  };
 });
 console.log('fonts:', JSON.stringify(fonts));
-check('the quests header matches the feature dropdowns', !!fonts.quests && fonts.quests === fonts.banner, JSON.stringify(fonts));
+check('the quests header matches the feature dropdowns', !!fonts.quests && !!fonts.display && fonts.quests === fonts.display, JSON.stringify(fonts));
 const el0 = await page.$('.q-collapse');
 if (el0) { await el0.screenshot({ path: `${DIR}/quests-font.png` }); console.log('shot quests-font'); }
 
