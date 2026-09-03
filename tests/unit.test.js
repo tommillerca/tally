@@ -2134,7 +2134,14 @@ test('NO-OP the spire claim treats an already-yours answer as no takeover', () =
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   const i = app.indexOf('claimSpireRemote');
   assert.ok(i > 0, 'the spire claim call is gone: this check has nothing to guard');
-  const block = app.slice(i, i + 1800);
+  /* WINDOW 1800 -> 4000, 2026-09-03. This slices a FIXED number of characters
+     after the call and string-matches inside it, so any comment added to the
+     claim path silently pushes `if (already)` out of the window and three
+     assertions go red on code that satisfies all of them. That is exactly what
+     the R20-P2 refund fix did. Measured at the time: the properties held at
+     2600 and the branch sat at offset 2376. 4000 buys headroom; if this drifts
+     again the answer is to anchor on the branch, not to widen it a third time. */
+  const block = app.slice(i, i + 4000);
   assert.ok(/already\s*=\s*!!\(remote/.test(block), 'the already flag is not read off the server answer');
   assert.ok(/refused \|\| already/.test(block), 'the local claim still runs when the server says already');
   // and it must not pay the takeover price for a no-op

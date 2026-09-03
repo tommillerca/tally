@@ -152,7 +152,7 @@ try {
     if (sc.querySelector('.hero-scene')) m.add('hero');
     if (sc.querySelector('.hero-actions')) m.add('doors');
     if (sc.querySelector('.q-collapse')) m.add('quests');
-    /* WAS 'promo' (the `.hype` banner) until 2026-09-03, when the promo slot came
+    /* WAS 'promo' (the .hype banner) until 2026-09-03, when the promo slot came
        off Today. The pill is what stands in that part of the screen now, and it
        is what has to survive a day change. */
     if (sc.querySelector('#newsBanner')) m.add('news');

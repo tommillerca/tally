@@ -2919,6 +2919,12 @@ export default {
             pet: jsonCol(r.pet),          // {id, level, shiny}: a shiny must draw as its shiny here too
             stats: jsonCol(r.stats),
             gearCount: r.gearCount || 0,
+            /* SELECTED SINCE THE BOARD EXISTED, NEVER SENT. board() has always
+               had `last_seen seenAt` and raceFreshHtml() has always read
+               p.seenAt to draw the "synced 5h ago" line Tom asked for on
+               2026-08-30 — but this map never carried it, so that label has
+               rendered for nobody, ever. One key. */
+            seenAt: r.seenAt || null,
             /* the add handle for this row, exactly as /leaderboard does it:
                opaque, expiring, NOT a friend code (see the note above that
                route for why publishing friend codes was a takeover vector).
