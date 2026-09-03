@@ -48,7 +48,7 @@
  * NOT RUN. This audit calls boot(), which launches puppeteer, and the session
  * that wrote it was under a machine rule forbidding browser audits (other lanes
  * were running). It has never been executed, green OR red. Before trusting it,
- * run `node tests/race-profile.mjs` on clean code, confirm 6/6, then apply each
+ * run `node tests/race-profile.mjs` on clean code, confirm every check passes, then apply each
  * mutation above one at a time and confirm the named check goes red.
  *
  * Usage: node tests/race-profile.mjs
@@ -134,6 +134,16 @@ await page.evaluate(async (crewId, crewName) => {
 await page.evaluate(() => { location.hash = '#/friends'; });
 await sleep(3500);
 
+/* THE BANNER IS A <details> AND IT SHIPS CLOSED. Inside a closed one the lanes
+   are in the DOM but display:none, so every box measures 0x0 and a tap lands on
+   nothing: a version of this that skipped the open would have failed TARGET on
+   correct code and passed IDENTITY only because .click() ignores geometry. Open
+   it the way a finger does, then let the reflow settle. */
+await page.evaluate(() => document.querySelector('#raceCard')?.querySelector('summary')?.click());
+await sleep(600);
+const opened = await page.evaluate(() => !!document.querySelector('#raceCard')?.open);
+ok('BANNER the race banner opens (a closed board measures 0x0 and grades nothing)', opened, `open: ${opened}`);
+
 /* The lanes as RENDERED. Read the tag off the live element, not off the source. */
 const lanes = await page.evaluate(() => [...document.querySelectorAll('#raceCard .race-lane')].map(l => {
   const r = l.getBoundingClientRect();
@@ -164,11 +174,13 @@ ok('TARGET a tappable lane clears the 44px touch floor',
   !!strangerLane && strangerLane.h >= 44 && strangerLane.w >= 44,
   JSON.stringify({ h: strangerLane?.h, w: strangerLane?.w }));
 
-/* Tap the lane the way a finger does (the real control, not the handler), then
-   read the sheet back. The level and badge count are what say WHICH racer. */
+/* Tap the lane the way a finger does: page.tap dispatches a real touch at the
+   element's centre, so a lane that is invisible, zero-sized or covered by
+   something else fails here. Calling the click handler, or even el.click(),
+   would pass over all three. */
 const openLane = async id => {
   await page.evaluate(() => document.querySelectorAll('.sheet-fp').forEach(s => s.remove()));
-  await page.evaluate(sel => document.querySelector(`#raceCard [data-raceview="${sel}"]`)?.click(), id);
+  await page.tap(`#raceCard [data-raceview="${id}"]`);
   await sleep(800);
   return page.evaluate(() => {
     const w = document.querySelector('.sheet-fp');
