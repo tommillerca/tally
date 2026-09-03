@@ -167,6 +167,13 @@ ok('NATIVE a tappable lane is a real <button>, not a div with a handler',
   !!strangerLane && strangerLane.tag === 'BUTTON' && strangerLane.type === 'button',
   JSON.stringify(strangerLane || null));
 
+/* crewLane was computed and never asserted on, so nothing proved an existing
+   friend's row is even tappable — the CREW row below would read the same
+   whether the lane was a button that refused Add or a plain div nobody can
+   open. Added 2026-09-03. */
+ok('CREW LANE an existing friend still gets a tappable lane',
+  !!crewLane && crewLane.tag === 'BUTTON', JSON.stringify(crewLane || null));
+
 ok('OWN LANE your own row is not a button into a stranger profile of yourself',
   !!ownLane && ownLane.tag !== 'BUTTON' && !ownLane.id, JSON.stringify(ownLane || null));
 
@@ -179,7 +186,15 @@ ok('TARGET a tappable lane clears the 44px touch floor',
    something else fails here. Calling the click handler, or even el.click(),
    would pass over all three. */
 const openLane = async id => {
-  await page.evaluate(() => document.querySelectorAll('.sheet-fp').forEach(s => s.remove()));
+  /* CLOSE THE SHEET, DO NOT RIP IT OUT. The first version called .remove() on
+     the node, which drops the element but never pops the app's sheetStack, so
+     the app still believed a sheet was open and REFUSED the next one. The
+     result: the first openLane passed and every one after it returned
+     {open:false, title:null} — which read exactly like the app failing to open
+     a crew member's profile. It was this line. Go back the way a player does
+     and wait for the stack to actually drain. */
+  await page.evaluate(() => { if (document.querySelector('.sheet-fp')) history.back(); });
+  await sleep(500);
   await page.tap(`#raceCard [data-raceview="${id}"]`);
   await sleep(800);
   return page.evaluate(() => {
