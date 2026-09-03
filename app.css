@@ -10959,6 +10959,48 @@ details:not([open]) > :not(summary) *::after { animation: none !important; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nb-date { font-size: 10.5px; color: var(--text-3); flex: none; }
 
+/* THE HERO SLOT, first thing behind the tap. Tom, 2026-09-03: "we need to have
+   one stand out banner that is showing more than a list of homework in the new
+   section that gets people excited." A list of forty-pixel tiles is the homework;
+   this is the one place in the pill where the art is the message and the words
+   are the caption.
+   IT IS THE OLD TODAY HYPE BANNER'S TREATMENT, not a new one: the same coral
+   radial over the card grain, the same measured plate boxes, the same figure
+   drop-shadow. The banner moved, its design language did not, and inventing a
+   second loud surface for the same job is how an app ends up with two of
+   everything.
+   WHY THE WASH IS THREE LAYERS WITH THREE SIZES. background-size applies to EVERY
+   layer, so tiling the grain at 150px tiled both gradients at 150px too and
+   painted the first render of the original banner in vertical bands. Caught in a
+   screenshot, not in the source; carried over here intact. */
+.nb-hero { display: block; width: 100%; padding: 12px 12px 11px; border: none;
+  border-bottom: 1px solid var(--line); text-align: center; cursor: pointer;
+  /* THE ONE KNOB FOR THE ART. hypePlateHtml emits percentages, so the creature
+     boxes are sized here and nowhere else. 320 is the narrowest phone this app
+     supports and it is what caps the small value: two plates and both lines of
+     copy have to sit on the pill's content width there. */
+  --hf: 88px;
+  background-image: radial-gradient(115% 95% at 18% 0%, rgba(253, 104, 87, .34), rgba(253, 104, 87, 0) 64%),
+    linear-gradient(158deg, rgba(253, 104, 87, .16), rgba(253, 104, 87, 0) 58%), var(--grain);
+  background-size: cover, cover, 150px 150px;
+  background-repeat: no-repeat, no-repeat, repeat;
+  background-blend-mode: normal, normal, soft-light; }
+@media (min-width: 380px) { .nb-hero { --hf: 104px; } }
+.nb-hero:active { transform: translateY(1px); }
+.nb-hero-figs { display: flex; align-items: flex-end; justify-content: center; gap: 0; min-width: 0; }
+/* The box is fixed and the plate inside it is absolutely placed by
+   hypePlateHtml's measured percentages, so both creatures stand on one floor. */
+.hype-fig { position: relative; display: block; flex: 0 0 auto; width: var(--hf); height: var(--hf);
+  overflow: visible; filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
+.hype-fig img { position: absolute; left: 0; top: 0; max-width: none; }
+.nb-hero-txt { display: grid; gap: 2px; margin-top: 6px; }
+/* CREAM, NOT CORAL. The wash's radial starts at 18% 0%, and coral-on-coral
+   measured 2.59:1 there on the original banner while cream on the same pixels is
+   8.55:1. The accent is the wash, not the word. */
+.nb-hero-txt b { font-family: var(--display); font-weight: 400; font-size: var(--fs-3);
+  line-height: 1.1; letter-spacing: .02em; color: var(--text); }
+.nb-hero-txt i { font-style: normal; font-size: 11.5px; color: var(--text-2); }
+
 /* THE DAY, COLLAPSED. The wheel and the macros are the summary; meals, wellness,
    the Kitchen and activity live behind the tap. Tom, 2026-08-27: "below the fold
    should be fully collapsed and only showing a banner with the wheel and macros". */

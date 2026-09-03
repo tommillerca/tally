@@ -4209,6 +4209,11 @@ async function renderToday(el) {
   $$('.nb-row', el).forEach(b => b.addEventListener('click', () => {
     NEWS.find(n => n.id === b.dataset.news)?.open();
   }));
+  /* The hero opens whatever it drew. newsHero() rather than a data-id, because
+     the fallback banner is not a NEWS entry and has no id to look up: one
+     function decides what the hero IS and both the markup and this binding ask
+     it, so the picture and the destination can never disagree. */
+  $('.nb-hero', el)?.addEventListener('click', () => newsHero().open());
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -11811,6 +11816,87 @@ function newsThumb(n, eq) {
   try { return n.thumb(eq) || ''; } catch { return ''; }
 }
 
+/* MEASURED ALPHA BOXES, as fractions of each file. Cam's plates carry very
+   different amounts of empty margin (the Mimic's ink fills its file edge to edge,
+   the Wanderer leaves 21% of his file empty below his feet), so dropping both into
+   the same object-fit box drew one of them standing fifteen pixels in the air.
+   Measured off the PNGs (alpha > 0 bounding box), not guessed. Same mechanism as
+   croppedPetImg: one box, one transform per plate, and no per-art nudges anywhere
+   else.
+   RECOVERED 2026-09-03. This and hypePlateHtml below were deleted with the Today
+   hype banner that morning, on a reading of Tom's note ("things will live in the
+   collapsed news pill") as DELETE. He meant RELOCATE, and the maths is the whole
+   reason the hero slot can seat art at any box size. Registration is also the
+   GATE: newsHero() only promotes an entry whose plate is listed here, so a NEWS
+   row pointing at an unmeasured file is skipped rather than rendered floating. */
+const HYPE_PLATES = {
+  'assets/bh/mimic/mimic.png':       { w: 640, h: 518, x0: 0, y0: 0, x1: 1, y1: 1 },
+  'assets/bh/wanderer/wanderer.png': { w: 640, h: 640, x0: 0.0938, y0: 0.1375, x1: 0.9719, y1: 0.7891 },
+  // The Live Wire, measured the same way on 2026-09-03: his ink fills his file.
+  'assets/bh/mage/mage.png':         { w: 1024, h: 905, x0: 0, y0: 0, x1: 1, y1: 1 },
+};
+/* EVERYTHING IN PERCENT, so the BOX size belongs to the stylesheet. The first
+   version took a px argument and emitted px, which pinned the art to one size in
+   markup: Tom asked for bigger creatures and there was no way to give a 393 phone
+   more than a 320 one without rendering the banner twice. The maths is linear in
+   the box, so the ratios are the same at every size, and a CSS transform's
+   percentages are relative to the element itself, which is exactly what the
+   offsets need. */
+function hypePlateHtml(src) {
+  const p = HYPE_PLATES[src];
+  const cw = (p.x1 - p.x0) * p.w, ch = (p.y1 - p.y0) * p.h;   // the ink, in file pixels
+  const s = 0.94 / Math.max(cw, ch);                          // ink fills 94% of the box's long edge
+  const iw = p.w * s, ih = p.h * s;                           // the plate, as a fraction of the box
+  const tx = (1 - cw * s) / 2 - p.x0 * iw;                    // ink centred across the box
+  const ty = 1 - p.y1 * ih;                                   // ink SEATED on the box floor
+  const pc = n => (n * 100).toFixed(2) + '%';
+  return `<span class="hype-fig"><img src="${src}" alt=""
+    style="width:${pc(iw)};height:${pc(ih)};transform:translate(${pc(tx / iw)},${pc(ty / ih)})"></span>`;
+}
+
+/* THE HERO SLOT: ONE BANNER AT THE TOP OF THE PILL, AND NEVER ZERO.
+   Tom, 2026-09-03: "just make sure there is always one banner that looks good and
+   the others below can be the list as is but we need to have one stand out banner
+   that is showing more than a list of homework in the new section that gets people
+   excited."
+   So the pill is a hero plus the list it already was. The list is untouched: the
+   thing that was missing is one surface where the art is the message, which is
+   what the deleted Today hype banner was for and why its plate maths is recovered
+   above rather than re-invented.
+
+   THE RULE, AND WHY IT CANNOT PRODUCE AN EMPTY HERO. Take the newest NEWS entry
+   that declares `hero` art measured in HYPE_PLATES; if none qualifies, the
+   creatures pair stands in. NEWS is an ordinary editable array and HYPE_PLATES is
+   an ordinary editable object, so "the newest entry with art" is a claim that can
+   go empty on somebody else's afternoon: reorder the array, drop the Wanderer row,
+   rename a file. The fallback is a literal in this file that depends on neither,
+   which is what turns "usually one" into "always one". It is not a placeholder or
+   an empty state: it is the same banner with the two Boneyard creatures in it.
+   ONE SUBJECT, NOT TWO HALVES. The old banner split into a Boneyard column and a
+   shop column and it needed a hairline, two captions and a count in each to stop
+   reading as a list. A hero that has to justify its own layout is the "list of
+   homework" problem in a different shape, so this is one target, one line of copy
+   and the art at full size. */
+const NEWS_HERO_FALLBACK = {
+  hero: ['assets/bh/mimic/mimic.png', 'assets/bh/wanderer/wanderer.png'],
+  title: 'Two want to eat you',
+  blurb: 'New creatures are out in the Boneyard.',
+  open: () => { location.hash = '#/boneyard'; },
+};
+function newsHero() {
+  return NEWS.find(n => n.hero && [].concat(n.hero).every(src => HYPE_PLATES[src])) || NEWS_HERO_FALLBACK;
+}
+function newsHeroHtml() {
+  const h = newsHero();
+  /* NOT .nb-thumb. The tile normaliser in bindToday scales every .nb-thumb child
+     to a 24px pixel-art step, which is right for a 40px row tile and would shrink
+     the hero's art to a badge. Its own class, so the two never meet. */
+  return `<button class="nb-hero" type="button">
+    <span class="nb-hero-figs">${[].concat(h.hero).map(hypePlateHtml).join('')}</span>
+    <span class="nb-hero-txt"><b>${esc(h.title)}</b><i>${esc(h.blurb)}</i></span>
+  </button>`;
+}
+
 function newsBannerHtml(unseen, eq) {
   const newest = NEWS[0];
   if (!newest) return '';
@@ -11823,6 +11909,14 @@ function newsBannerHtml(unseen, eq) {
       <span class="nb-chev">${ICONS.chev(16)}</span>
     </summary>
     <div class="nb-list">
+      ${/* THE HERO IS THE FIRST THING BEHIND THE TAP, above the settled race and
+           above the rows. Tom asked for "one stand out banner" in this section
+           that shows "more than a list of homework": a hero underneath a gold
+           result card and nine rows is not a hero, it is row ten. The race card
+           keeps its place directly under it, which is where it already was
+           relative to the old Today hype banner, so a player who opens the pill
+           for a race result still meets it before any announcement. */''}
+      ${newsHeroHtml()}
       ${/* THE SETTLED STEP RACE LIVES HERE NOW. Tom, 2026-09-03: "today still has
            the step challenge winner and monster banner at the bottom these should
            be gone now things will live in the collapsed news pill."
@@ -11870,6 +11964,13 @@ const NEWS = [
   { id: 'wanderer', date: 'Aug 25', title: 'You hear him first',
     blurb: 'Heavy footsteps, and a light sweeping the ground ahead of him. Do not stand in it.',
     thumb: () => `<img class="nw-img" src="assets/bh/wanderer/wanderer-192.png" alt="">`,
+    /* `hero` is the FULL PLATE for the pill's hero slot, and it is a separate
+       field from `thumb` on purpose: a thumb is a 40px tile that may be a
+       headshot, an app icon or a badge, and none of those survive being blown up
+       to 100px. The 192 above is the tile; this is the master. Only a file
+       measured in HYPE_PLATES qualifies, so adding this field alone is not enough
+       to promote a row. */
+    hero: 'assets/bh/wanderer/wanderer.png',
     goes: 'Boneyard',
     open: () => { location.hash = '#/boneyard'; } },
   { id: 'thanks', date: 'Aug 15', title: 'Thanks for being early',
@@ -11894,6 +11995,7 @@ const NEWS = [
   { id: 'mage', date: 'Aug 9', title: 'The Live Wire',
     blurb: 'Some of the dens out there are his, and nothing marks them.',
     thumb: () => `<img class="nw-img" src="assets/bh/mage/mage-192.png" alt="">`,
+    hero: 'assets/bh/mage/mage.png',
     open: () => openMageIntro() },
   /* The Bestiary is a TEASER and this is the only place it lives on after the
      one-time showing. It shows a sample of the cast and names nothing: meeting a
