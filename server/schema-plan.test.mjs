@@ -280,7 +280,15 @@ const CASES = [
     mustNotScan: 'SCAN players',
     params: [RACE_WEEK],
     sql:
-      `SELECT id, handle, name, json_extract(profile,'$.outfit') outfit, week_steps steps, last_seen seenAt
+      /* The profile columns were added when the race board learned to open a
+         racer's profile: they are per OUTPUT row, so the plan must be unchanged
+         by them, and this copy carries them so the test keeps planning the query
+         the route actually runs. */
+      `SELECT id, handle, name, json_extract(profile,'$.outfit') outfit, week_steps steps,
+              level lvl, json_extract(profile,'$.levelName') lvlName, badges,
+              json_extract(profile,'$.pet') pet, json_extract(profile,'$.stats') stats,
+              json_array_length(COALESCE(json_extract(profile,'$.gear'), '[]')) gearCount,
+              last_seen seenAt
          FROM players
         WHERE profile IS NOT NULL
           AND COALESCE(is_test, 0) = 0

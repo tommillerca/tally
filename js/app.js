@@ -11306,7 +11306,25 @@ async function renderFriends(el) {
         ${rows.length ? `<div class="race-lanes">
           ${rows.map(p => {
             const pct = lead > 0 ? Math.max(6, Math.round(p.steps / lead * 100)) : 6;
-            return `<div class="race-lane r${p.rank}${p.you ? ' you' : ''}">
+            /* A LANE IS A DOOR. Tom: "we should make it so when you are on the
+               step challenge leader board you can click the players you see and
+               then go to their player page and add them if you want."
+               A real <button>, not a div with a listener: keyboard and
+               screen-reader users get a native control (a11y-audit), and the
+               .tap rule in app.css strips the UA button chrome so the lane looks
+               identical to the one beside it.
+               NOT YOUR OWN LANE. Your row stays a plain div: the sheet this
+               opens is the STRANGER profile, whose only action is "add to my
+               Crew", and offering to add yourself is nonsense. Your own hub tab
+               is where you look at yourself.
+               NOT A LANE WITHOUT AN ID either: the client splices your own row
+               in from local truth (see above) and an old server sends no
+               playerId at all, and a lane with no identity has nothing to open.
+               Never match on name to recover one; names are not unique and the
+               wrong player's profile would open. */
+            const open = p.playerId && !p.you;
+            const tag = open ? 'button' : 'div';
+            return `<${tag} class="race-lane r${p.rank}${p.you ? ' you' : ''}${open ? ' tap' : ''}"${open ? ` type="button" data-raceview="${esc(p.playerId)}"` : ''}>
               <span class="rk">${p.rank}</span>
               <div class="bd">
                 <div class="nm"><b>${esc(p.name)}</b>${raceFreshHtml(p)}<span class="st">${p.steps.toLocaleString()}</span></div>
@@ -11314,7 +11332,7 @@ async function renderFriends(el) {
                   <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
                 </div>
               </div>
-            </div>`;
+            </${tag}>`;
           }).join('')}
         </div>` : '<p class="note" style="margin:0">Nobody has walked a step yet this race. The top of this board is going spare.</p>'}
         ${behind ? `<div class="race-gap">You are <b>${behind.toLocaleString()} steps</b> off first. About <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking.</div>` : ''}
@@ -11333,6 +11351,30 @@ async function renderFriends(el) {
       </div>`;
     card.hidden = false;
     composeAvatars(card);
+
+    /* Tapping a lane opens the SAME stranger profile the leaderboard opens (see
+       openFriendProfile's `stranger` mode) off the SAME payload: the /steps/week
+       row now carries everything that sheet renders, so this is a reader and not
+       a second request. Opening is free; adding is the deliberate second tap
+       inside the sheet, and nothing here sends a request.
+       CREW STATE IS READ AT TAP TIME, NOT AT RENDER TIME. hydrateRace runs
+       before paint() has filled `data`, so a set built up here would call every
+       existing friend a stranger and offer to add them again; read at tap, it is
+       also correct after an add without re-rendering the board. */
+    card.addEventListener('click', e => {
+      const lane = e.target.closest('[data-raceview]');
+      if (!lane) return;
+      const p = rows.find(x => x.playerId === lane.dataset.raceview);
+      if (!p) return;
+      openFriendProfile(
+        { name: p.name, playerId: p.playerId, addToken: p.addToken,
+          profile: { outfit: p.outfit, pet: p.pet, level: p.level, levelName: p.levelName,
+            badges: p.badges, stats: p.stats, gearCount: p.gearCount } },
+        null,
+        { stranger: true,
+          isCrew: (data.friends || []).some(f => f.playerId === p.playerId),
+          sent: (data.outgoing || []).some(f => f.playerId === p.playerId) });
+    });
   };
   hydrateRace();
 
@@ -11510,7 +11552,15 @@ function openFriendProfile(f, onChange, opts = {}) {
         ? `<p class="note" style="text-align:center;margin:6px 0 0">Already in your Crew.</p>`
         : opts.sent
           ? `<p class="note" style="text-align:center;margin:6px 0 0">Request sent. They accept by adding you back.</p>`
-          : `<button class="btn" id="fpAdd">+ Add to my Crew</button>`)
+          /* NO TOKEN, NO BUTTON. friendAdd(undefined) is a guaranteed failure
+             and all the player sees is "Could not send that request. Try
+             again.", forever. A row can legitimately arrive without one: a
+             server older than the release that started sending addToken on the
+             step-race board. Offer nothing rather than a button that cannot
+             work. */
+          : f.addToken
+            ? `<button class="btn" id="fpAdd">+ Add to my Crew</button>`
+            : '')
       : `<div class="fp-actions">
         <button class="btn ghost fp-gift" id="fpGift">${ICONS.coin(18)} Send a gift</button>
         <button class="btn ghost fp-cheer" id="fpCheer">📣 Cheer</button>
