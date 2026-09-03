@@ -54,8 +54,9 @@ ok('nothing offers to show them all', spoiler.rosterCta === 0, `${spoiler.roster
    "Out there today" card, so what this file has to hold now is the ABSENCE, and
    an absence needs a control: the teaser rows above are it. They opened a real
    wall of monsters on this same boot, so a blank page cannot pass the rows
-   below by having nothing on it. tests/hype-banner-audit.mjs grades the banner
-   that stands there instead. */
+   below by having nothing on it. The hype banner that stood there instead came off
+   in its turn on 2026-09-03, so the absence is now the whole of it and
+   tests/hype-banner-audit.mjs is retired in the gate. */
 const today = await page.evaluate(async () => {
   location.hash = '#/today';
   await new Promise(r => setTimeout(r, 1800));
@@ -65,11 +66,16 @@ const today = await page.evaluate(async () => {
     row: !!document.querySelector('.bestiary-banner'),
     card: !!document.querySelector('.out-there'),
     hunting: /out hunting today/i.test(screen?.textContent || ''),
-    hype: !!document.querySelector('.card.hype'),
+    /* THE CONTROL, and it was `.card.hype` until 2026-09-03, when the hype
+       banner came off Today with the whole promo slot. The five doors are the
+       one thing Today has always drawn and can never be a teaser, so they are
+       the positive control now: a blank screen still cannot pass the absences
+       below by having nothing on it. */
+    doors: document.querySelectorAll('.hero-actions .hero-act').length,
   };
 });
 ok('CONTROL Today really rendered (an empty screen would pass every absence below)',
-  today.rendered && today.hype, JSON.stringify(today));
+  today.rendered && today.doors >= 4, JSON.stringify(today));
 ok('no bestiary row on Today', !today.row);
 ok('no "Out there today" card to hold one', !today.card);
 ok('and nothing else names the day\'s hunt on Today', !today.hunting);

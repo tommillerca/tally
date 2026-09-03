@@ -3434,6 +3434,15 @@ body::before {
 .rr-banner .race-lanes { margin-bottom: 10px; }
 .rr-banner .note { margin: 0; font-size: var(--fs-1); line-height: 1.4; color: var(--text-3); }
 
+/* AND IT SITS INSIDE THE NEWS PILL SINCE 2026-09-03 (Tom: "things will live in
+   the collapsed news pill"), where it is a ROW of a list rather than a card on a
+   page. The gold gradient stays, because that is what makes a settled result read
+   as a result; the card furniture goes, or a rounded, shadowed, outlined box
+   floats inside a flush list of .nb-row siblings. Same border-bottom the rows
+   carry, so the seam between it and the first announcement is one hairline. */
+#newsBanner .rr-banner { border: none; border-bottom: 1px solid var(--line);
+  border-radius: 0; box-shadow: none; margin-bottom: 0; }
+
 .race-gap { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); font-size: var(--fs-1); color: var(--text-2); }
 .race-gap b { color: var(--accent); font-weight: 800; }
 

@@ -191,10 +191,16 @@ const REGISTER = [
   },
 ];
 
-/* Which surfaces COVERAGE polices. The promo banners on Today and nothing else:
-   the hero card's bonehead and its pet are ambient furniture, not an
-   announcement, and sweeping them in would make this row noise. */
-const TODAY_BANNERS = '#screen .glutton-banner, #screen .hype, #screen .race-banner, #screen .rr-banner';
+/* Which surfaces COVERAGE polices. Today's announcement surfaces and nothing
+   else: the hero card's bonehead and its pet are ambient furniture, not an
+   announcement, and sweeping them in would make this row noise.
+   RE-ANCHORED 2026-09-03. `.hype` came off Today with the whole promo slot (Tom:
+   "today still has the step challenge winner and monster banner at the bottom
+   these should be gone now things will live in the collapsed news pill"), which
+   left `.rr-banner` as the only surface this scan could still find and would
+   have taken the anti-vacuous COVERAGE row below under its floor of 2. The news
+   pill is where announcements live now, so it is what gets policed. */
+const TODAY_BANNERS = '#screen .nb, #screen .glutton-banner, #screen .race-banner, #screen .rr-banner';
 
 const puppeteer = await loadPuppeteer();
 
