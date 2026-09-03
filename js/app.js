@@ -1319,6 +1319,25 @@ async function boot() {
   // AWAITED, before the first route(): renderToday reads 'wbReturnDay' at paint
   // time, so the pending mark must be down before the first paint reads for it.
   await maybeWelcomeBack();
+  /* THE HASH IS NORMALISED BEFORE ANYTHING BINDS TO IT. Tom, 2026-09-03: "when i
+     double tapped home it took me to the top like i asked but not in a smooth
+     way where the phone scrolled back up it just refreshed me there, very
+     jarring."
+     currentTab() reads an ABSENT hash as 'today', so the app boots onto Today
+     holding location.hash === '' and nothing ever wrote it back. bindTabs then
+     compares the tapped tab against the hash: '' !== '#/today', so the FIRST tap
+     of his double-tap was classified as a cross-tab navigation and assigned the
+     hash, which is a hashchange -> route() -> full re-render landing at the top
+     instantly. His second tap was then the first SAME-tab tap, which starts the
+     DBL_MS timer and falls through to route() 300ms later: a second full
+     re-render, also landing at the top instantly. Two rebuilds and not one
+     scrolled pixel. That is the "refreshed me there", and toTop's smooth scroll
+     never ran at all.
+     replaceState, NOT an assignment: assigning fires a hashchange, and route()
+     runs on the next line anyway, so an assignment would route the boot twice.
+     Only when there is no hash: a deep link (#/boneyard, a share target) must be
+     honoured exactly as it arrives. */
+  if (!location.hash) history.replaceState(null, '', '#/today');
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
   route();
@@ -2850,7 +2869,13 @@ async function backupNudge() {
  * there is no #mapRecenter yet), because a tray tap that does nothing at all is
  * the complaint the block above this one exists to answer. */
 function bindTabs() {
-  const toTop = () => { $('#screen')?.scrollTo({ top: 0, behavior: 'smooth' }); return true; };
+  /* REDUCED MOTION GETS THE JUMP. Everywhere else in the app that scrolls on
+     purpose reads this flag; this one did not, so a player who asked the OS for
+     no animation still got a 900px glide. */
+  const toTop = () => {
+    $('#screen')?.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
+    return true;
+  };
   const TAB_DBL = {
     today: toTop,
     friends: toTop,   // the Crew tab (index.html data-tab="friends")
