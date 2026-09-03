@@ -241,9 +241,15 @@ const today = await page.evaluate(() => {
     /* THE CONTROL. It used to count the rows in "Out there today", which is the
        card the garden banner would have appeared in. That card came off Today on
        2026-08-21 (Tom: every banner but the step winner), and the hype banner
-       that replaced it came off in its turn on 2026-09-03 with the whole promo
-       slot. So the control is the five doors: the one thing Today has always
-       drawn, and every absence below is a measurement rather than a blank. */
+       that replaced it came off Today in its turn on 2026-09-03 with the whole
+       promo slot. So the control is the five doors: the one thing Today has always
+       drawn, and every absence below is a measurement rather than a blank.
+       IT STAYS THE DOORS now that banner exists again as the hero slot inside the
+       news pill. That pill is a <details> that is SHUT at rest, so its contents
+       are display:none and any measurement of them here would be a measurement of
+       nothing, and the hero's subject is chosen at render time from an editable
+       array. A control has to be the dullest, most unconditional thing on the
+       screen; the doors are, and the hero is deliberately not. */
     bannerRendered: document.querySelectorAll('.hero-actions .hero-act').length >= 4,
     gardenBanner: !!document.querySelector('.garden-banner'),
     gardenCta: !!document.getElementById('gardenToKitchen'),

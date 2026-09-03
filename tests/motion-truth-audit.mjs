@@ -200,7 +200,14 @@ const REGISTER = [
    left `.rr-banner` as the only surface this scan could still find and would
    have taken the anti-vacuous COVERAGE row below under its floor of 2. The news
    pill is where announcements live now, so it is what gets policed. */
-const TODAY_BANNERS = '#screen .nb, #screen .glutton-banner, #screen .race-banner, #screen .rr-banner';
+/* AND THE HERO SLOT IS NAMED, 2026-09-03. The pill got a featured banner at the
+   top of its list that day and `#screen .nb` already sweeps it (the scan walks
+   descendants), but naming it makes it its OWN scanned surface rather than a
+   detail of the pill's, which is what keeps the anti-vacuous count below honest
+   if the pill is ever restructured. Note the pill is SHUT at rest and app.css
+   stops every animation behind a shut disclosure, so a hero that appears to move
+   here is moving in an open pill, which is the only place it can be seen. */
+const TODAY_BANNERS = '#screen .nb, #screen .nb-hero, #screen .glutton-banner, #screen .race-banner, #screen .rr-banner';
 
 const puppeteer = await loadPuppeteer();
 

@@ -4020,17 +4020,24 @@ async function renderToday(el) {
        challenge winner and monster banner at the bottom these should be gone now
        things will live in the collapsed news pill."
        It held two things and they are NOT the same case:
-       - the hype banner ("New Creatures") was pure navigation, two buttons to the
-         Boneyard and to Gwart's shop. Both destinations are already reachable and
-         its creatures already have News rows ('wanderer' goes to the very same
-         Boneyard, 'bestiary' covers the cast), so it is deleted outright along
-         with hypeBannerHtml/hypePlateHtml/HYPE_PLATES;
+       - the hype banner ("New Creatures") MOVED. It was deleted outright first,
+         on a reading of the note above as DELETE, and Tom's next sentence the
+         same day settled it: "just make sure there is always one banner that
+         looks good and the others below can be the list as is but we need to
+         have one stand out banner that is showing more than a list of homework
+         in the new section that gets people excited." So it is rebuilt as the
+         hero slot at the top of the pill's list, one subject rather than two
+         halves, on the recovered hypePlateHtml maths (see newsHeroHtml);
        - the settled step race had NO other surface. js/app.js already said so
          where openRaceResults was deleted: "no News row, no banner, no button
          anywhere". Deleting it would have taken away a player's only notice that
          a race they were entered in had paid out, so #raceResultCard MOVED into
-         the news pill's list rather than dying here (see newsBannerHtml).
-       app.css still carries the .hype* rules; they are unreferenced now. */''}
+         the news pill's list rather than dying here (see newsBannerHtml). It
+         sits directly under the hero, which is where it already sat relative to
+         this banner when both were on Today.
+       WHAT IS GONE IS THE SLOT, not its contents: nothing promo-shaped renders
+       on Today itself any more, which is what today-container-audit's NESTED
+       rows and hype-banner-audit's IN-PILL rows hold from either side. */''}
   ${LOG_ONLY_LINE}
   `;
 
@@ -5707,7 +5714,8 @@ function bestiaryBannerHtml(den = remoteDen(dateKey())) {
 
 /* RETIRED FROM TODAY (2026-08-21), NOT DELETED. The hype banner replaced the
    whole "Out there today" card, which is the banner stack Tom asked to be gone,
-   and the hype banner itself came off on 2026-09-03. This builder and the four
+   and the hype banner itself came off Today on 2026-09-03 and now lives as the
+   news pill's hero slot. This card has no surface either way. This builder and the four
    row builders it calls are left intact and unreachable, the same way the garden
    was closed in cropsRipe: reviving the card
    is putting the call back in renderToday, and restoring the held-spires read to

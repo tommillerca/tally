@@ -3350,69 +3350,21 @@ body::before {
   white-space: nowrap; }
 .pz svg { flex: none; }
 
-/* THE HYPE BANNER, directly above the step-race result. It has to out-shout the
-   gold banner underneath it WITHOUT shouting in words (ten of them, all told), so
-   every bit of the weight is art and colour: a coral wash over the card grain, a
-   coral keyline, and figures at 78px, which is bigger than any row the "Out there
-   today" card it replaced ever drew.
-   ONE FRAME, TWO TARGETS. The halves are a grid, not two cards: the eyebrow and
-   the sentence both span the full width, and a single hairline is the only thing
-   between the Boneyard column and the shop column. That is what stops it reading
-   as a list of announcements. */
-.hype { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end; column-gap: 8px; padding: 9px 10px 10px;
-  /* THE ONE KNOB FOR THE ART. hypePlateHtml emits percentages, so the creature
-     boxes are sized here and nowhere else. 320 is the narrowest phone this app
-     supports and it is what caps the small value: two plates, the seal's cell and
-     both captions have to sit on 268px of content. */
-  --hf: 78px; }
-@media (min-width: 380px) { .hype { --hf: 100px; } }
-/* THE SEAL SCALES WITH THEM. petAsideHtml takes its size in px and writes it into
-   the markup, so unlike the two plates she cannot be sized from a custom property:
-   rendered at one number she was 92 against 100px monsters on a 393 phone and 92
-   against 78 on a 320 one, where she dwarfed them. zoom scales the cell's LAYOUT
-   box as well as its pixels, which is the whole requirement here, and one
-   declaration is cheaper than teaching the pet contract a second sizing path. */
-.hype-half.seal .hype-figs { zoom: .85; }
-@media (min-width: 380px) { .hype-half.seal .hype-figs { zoom: 1; } }
-/* THE WASH IS THREE LAYERS AND EACH NEEDS ITS OWN SIZE. .card sets
-   background-size: 150px 150px for the grain, and background-size applies to
-   EVERY layer: the first render tiled both gradients at 150px and painted the
-   banner in vertical bands. Caught in the screenshot, not in the source. */
-.hype { background-image: radial-gradient(115% 95% at 18% 0%, rgba(253, 104, 87, .34), rgba(253, 104, 87, 0) 64%),
-  linear-gradient(158deg, rgba(253, 104, 87, .16), rgba(253, 104, 87, 0) 58%), var(--grain);
-  background-size: cover, cover, 150px 150px;
-  background-repeat: no-repeat, no-repeat, repeat;
-  background-blend-mode: normal, normal, soft-light;
-  border-color: var(--ink); box-shadow: var(--sh), inset 0 0 0 1.5px rgba(253, 104, 87, .38); }
-/* The heading, not a chip. It spans both columns, which is a large part of what
-   keeps the two halves reading as one banner. */
-.hype-eye { grid-column: 1 / -1; justify-self: start; font-family: var(--display); font-weight: 400;
-  /* CREAM, NOT CORAL. The wash's radial starts at 18% 0%, which is exactly
-     where this heading sits, so coral-on-coral measured 2.59:1. Cream on the
-     same pixels is 8.55:1 and the banner still reads as the coral surface it
-     is: the accent is the wash, not the word. */
-  font-size: var(--fs-4); line-height: 1; letter-spacing: .04em; color: var(--text);
-  margin-bottom: 6px; }
-.hype-half { grid-row: 2; display: flex; flex-direction: column; align-items: center; gap: 5px;
-  background: none; border: 0; padding: 0; cursor: pointer; min-width: 0; }
-/* THE HAIRLINE, BACK. She stood on a sunken plate for one revision and Tom read
-   it as a button ("there shouldnt be any button thing around the bee"). Both
-   halves are tap targets and the left one has never carried a box, so neither
-   does she now: the columns are told apart by a line and the gap, and nothing in
-   either half looks pressable. */
-.hype-half.seal { grid-column: 2; padding-left: 9px; border-left: 1px solid var(--line-strong); }
-.hype-half:active { transform: translateY(1px); }
-.hype-figs { display: flex; align-items: flex-end; justify-content: center; gap: 0; min-width: 0; }
-/* The box is fixed and the plate inside it is absolutely placed by
-   hypePlateHtml's measured percentages, so both creatures stand on one floor. */
+/* THE HYPE BANNER'S SHELL IS GONE, ITS FIGURE BOX IS NOT, 2026-09-03. The banner
+   that stood on Today from 2026-08-21 was two halves in one frame: a coral wash,
+   an eyebrow spanning both columns, a caption under each and a hairline between
+   them. It moved into the news pill that day as ONE featured banner with one
+   subject (Tom: "we need to have one stand out banner that is showing more than a
+   list of homework in the new section"), so the two-column furniture had nothing
+   left to hold and is deleted rather than left as rules no selector can reach.
+   The wash and the --hf knob were not deleted, they were RE-HOMED on .nb-hero
+   further down this file, comments and measured background-size fix and all.
+   .hype-fig stays exactly where it was, because it is not banner furniture: it is
+   the box hypePlateHtml's measured percentages are computed against, and the hero
+   is its caller now. Its size comes from --hf on whatever contains it. */
 .hype-fig { position: relative; display: block; flex: 0 0 auto; width: var(--hf); height: var(--hf);
   overflow: visible; filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
 .hype-fig img { position: absolute; left: 0; top: 0; max-width: none; }
-.hype-half .petcrop { filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
-.hype-cap { font-family: var(--display); font-weight: 400; font-size: var(--fs-3); line-height: 1.1;
-  letter-spacing: .02em; color: var(--text); text-align: center; }
-.hype-half.seal .hype-cap { color: var(--coral); }
 
 /* THE TODAY BANNER: the permanent home for the result, and the surface that
    carries EVERY place's purse (the poster drops them to keep 4th and 5th above
@@ -10980,6 +10932,13 @@ details:not([open]) > :not(summary) *::after { animation: none !important; }
      supports and it is what caps the small value: two plates and both lines of
      copy have to sit on the pill's content width there. */
   --hf: 88px;
+  /* AND THE COLOUR LAYER IS EXPLICIT. The global `button { background: none }`
+     leaves this element's background-COLOUR transparent, and background-blend-mode
+     blends only within one element's own layers: soft-light against nothing is
+     nothing, so the grain would simply not paint here even though the pill behind
+     it is the very --surface the blend is written for. .card carries this
+     declaration for exactly the same reason. */
+  background-color: var(--surface);
   background-image: radial-gradient(115% 95% at 18% 0%, rgba(253, 104, 87, .34), rgba(253, 104, 87, 0) 64%),
     linear-gradient(158deg, rgba(253, 104, 87, .16), rgba(253, 104, 87, 0) 58%), var(--grain);
   background-size: cover, cover, 150px 150px;
@@ -10987,19 +10946,25 @@ details:not([open]) > :not(summary) *::after { animation: none !important; }
   background-blend-mode: normal, normal, soft-light; }
 @media (min-width: 380px) { .nb-hero { --hf: 104px; } }
 .nb-hero:active { transform: translateY(1px); }
+/* The figure boxes themselves are .hype-fig, defined once further up: fixed
+   squares of --hf with the plate inside absolutely placed by hypePlateHtml's
+   measured percentages, so two creatures stand on one floor. */
 .nb-hero-figs { display: flex; align-items: flex-end; justify-content: center; gap: 0; min-width: 0; }
-/* The box is fixed and the plate inside it is absolutely placed by
-   hypePlateHtml's measured percentages, so both creatures stand on one floor. */
-.hype-fig { position: relative; display: block; flex: 0 0 auto; width: var(--hf); height: var(--hf);
-  overflow: visible; filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
-.hype-fig img { position: absolute; left: 0; top: 0; max-width: none; }
 .nb-hero-txt { display: grid; gap: 2px; margin-top: 6px; }
-/* CREAM, NOT CORAL. The wash's radial starts at 18% 0%, and coral-on-coral
-   measured 2.59:1 there on the original banner while cream on the same pixels is
-   8.55:1. The accent is the wash, not the word. */
+/* CREAM ON BOTH LINES, AND THE SECOND ONE IS NOT A JUDGEMENT CALL. The accent is
+   the wash, not the word: coral-on-coral measured 2.59:1 on the original banner.
+   The blurb wanted --text-2 for hierarchy and cannot have it. Computed over the
+   worst pixel this wash can paint (both coral layers at full strength stacked on
+   --surface, rgb(130,62,60)): --text-2 is 3.48:1 against the 4.5 that 11.5px body
+   text needs, --text is 6.44:1. So the two lines are separated by SIZE and FACE,
+   which cost nothing, rather than by a tint that fails AA.
+   AND NOT BY OPACITY EITHER. a11y-audit reads the COMPUTED colour and samples the
+   background off the render, so an element faded with `opacity` reports the full
+   cream it is not painting: the measurement would come back 6.44 while the player
+   reads something dimmer. A colour that has to lie to a guard is the wrong fix. */
 .nb-hero-txt b { font-family: var(--display); font-weight: 400; font-size: var(--fs-3);
   line-height: 1.1; letter-spacing: .02em; color: var(--text); }
-.nb-hero-txt i { font-style: normal; font-size: 11.5px; color: var(--text-2); }
+.nb-hero-txt i { font-style: normal; font-size: 11.5px; color: var(--text); }
 
 /* THE DAY, COLLAPSED. The wheel and the macros are the summary; meals, wellness,
    the Kitchen and activity live behind the tap. Tom, 2026-08-27: "below the fold
