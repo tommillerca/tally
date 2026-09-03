@@ -87,7 +87,7 @@ import {
 } from './garden.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume, platformTag } from './native.js';
 import {
-  deriveStats, derived, STAT_META, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
+  deriveStats, legacyHabitStats, habitGrantPoints, derived, STAT_META, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
   applyAction, endTurn, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
@@ -13760,6 +13760,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
   // Opening a crate re-renders this screen in place (no route()), so the tab
   // badge is synced here too, off the same rows the tab is about to render.
   setCrateBadge(crates.length);
+  // Held crates are about to be tapped, so fetch and decode their reveal frames
+  // NOW rather than when the 2.6s choreography has already started (R20-P3).
+  // Memoised per kind, so re-rendering this screen (every equip does) is free.
+  for (const k of new Set(crates.map(c => c.crate))) warmCrateFrames(k);
   const boosts = inv.filter(r => r.kind === 'xp2').length;
   const vigors = inv.filter(r => r.kind === 'vigor').length;
   const ownedCount = inv.filter(r => r.kind === 'cos').length;
@@ -15168,10 +15172,48 @@ const CRATE_SEQ = {
   golden: { dir: 'golden', frames: 3, ms: [200, 120] },
 };
 const CRATE_SEQ_FRAMES = CRATE_SEQ.daily.frames;
+/* WARM THE CRATE FRAMES BEFORE THE TAP, NOT ON IT (R20-P3).
+   openPackReveal used to be the only thing that fetched these, which means the
+   fetch started at the same instant the 2.6s choreography did. Measured under a
+   3G profile that is not enough: f0-f2 of the golden crate were still in flight
+   a second into the reveal. Called when the Backpack renders, the frames are in
+   the cache and decoded long before a player picks a crate and taps OPEN.
+   The promise AND the Image objects are memoised per kind: a resolved promise
+   alone would let the decoded bitmap be collected again, and holding the
+   elements is what keeps the decode, not just the bytes. Two kinds, ~2KB a
+   frame; this is not a cache that needs eviction.
+   decode() rejections are swallowed per image so one broken frame degrades the
+   sequence to a skipped step instead of hanging the reveal for ever
+   (anti-regression rule 8). */
+const crateWarm = new Map();
+function warmCrateFrames(kind) {
+  const cfg = CRATE_SEQ[kind];
+  if (!cfg) return Promise.resolve();
+  let w = crateWarm.get(kind);
+  if (!w) {
+    const imgs = Array.from({ length: cfg.frames }, (_, i) => {
+      const im = new Image();
+      im.src = `assets/crates/${cfg.dir}/f${i}.png`;
+      return im;
+    });
+    w = { imgs, p: Promise.all(imgs.map(im => im.decode().catch(() => {}))) };
+    crateWarm.set(kind, w);
+  }
+  return w.p;
+}
 const EGG_SEQ_FRAMES = 15;
 function crateSeqHtml(kind = 'daily') {
   const cfg = CRATE_SEQ[kind];
-  const f = i => `<img src="assets/crates/${cfg.dir}/f${i}.png" alt="" class="cq-f${i === 0 ? ' on' : ''}" decoding="sync">`;
+  /* NO `on` IN THE MARKUP, NOT EVEN ON f0 (R20-P3).
+     Every frame after the first was gated behind the decode promise, and the
+     first one was gated behind nothing at all: it carried `.on` from the moment
+     this string was parsed. Measured under a 3G profile, the golden crate's
+     f0.png was on screen at opacity 1 with naturalWidth 0 for ~1s while f0-f2
+     were still being fetched, i.e. the sequence started on an undecoded first
+     frame, which is the one thing tally/CLAUDE.md says never to do. f0 now gets
+     `.on` from the SAME `ready` promise that drives every later step (see
+     playCrateSeq), so there is one gate, not two mechanisms. */
+  const f = i => `<img src="assets/crates/${cfg.dir}/f${i}.png" alt="" class="cq-f" decoding="sync">`;
   /* `pix` ON THE WRAPPERS. The drop and settle animations were written for the
      VECTOR crates, which are one static icon and therefore need faking: crDrop
      squashes with scale(1.06,.9) and crSettle wobbles up to scale(1.08). Both
@@ -15278,6 +15320,13 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily', tOpen = performa
     if (Math.abs(fy) > 0.001) seq.style.top = `${(-fy / dpr).toFixed(4)}px`;
   };
   ready.then(() => {
+    // THE FIRST FRAME IS A STEP LIKE THE OTHERS (R20-P3). It used to be painted
+    // by the markup, before decode; it is painted here, after it, by the same
+    // promise the loop below waits on. `shown` is still 0, so when decode is
+    // already done (the ordinary case now that the Backpack pre-warms the
+    // frames) this runs in the same task the sequence would have started in and
+    // the shipped timing is unchanged.
+    frames[0].classList.add('on');
     /* Whatever decode cost, spend it on the pre-roll (a closed crate mid-drop,
        where nobody can tell) instead of on the tail. If decode overran the whole
        pre-roll, compress the frame table into what is left rather than running
@@ -15542,16 +15591,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
      are only ~2KB each, but "small" is not "decoded", and the whole sequence
      runs inside a 260ms window between --b-lid and --b-card. A frame that has
      not decoded when its turn comes paints nothing, and a blank frame mid-open
-     is the exact v245 invisible-punch failure. decode() rejections are swallowed
-     per image so one broken frame degrades the sequence to a skipped step
-     instead of hanging the whole reveal (anti-regression rule 8). */
-  const crateSeqReady = CRATE_SEQ[crate]
-    ? Promise.all(Array.from({ length: CRATE_SEQ[crate].frames }, (_, i) => {
-        const im = new Image();
-        im.src = `assets/crates/${CRATE_SEQ[crate].dir}/f${i}.png`;
-        return im.decode().catch(() => {});
-      }))
-    : Promise.resolve();
+     is the exact v245 invisible-punch failure.
+     Starting the fetch HERE was always too late on a slow link, so the work
+     moved into warmCrateFrames, which the Backpack calls on render; this call
+     is now the memoised join, and only pays for the fetch if the reveal was
+     reached without the Backpack (a quest payout, a level-up). */
+  const crateSeqReady = warmCrateFrames(crate);
   return new Promise(resolve => {
     /* THE SEAM THAT MAKES THIS TESTABLE.
      *
@@ -19666,6 +19711,44 @@ async function renderBoneyard(el) {
 }
 
 
+/* ONE-TIME MAKE-GOOD FOR R21-P1, and the reason it can only ever pay once.
+ *
+ * The habit base is gone (js/pit.js deriveStats), so an established player would
+ * otherwise open the app after this update and find their fighter stripped back
+ * to 20s. This converts whatever base their history had earned into unspent
+ * training points, once, and never again.
+ *
+ * IDEMPOTENCY, which is the whole risk here: the STORED VALUE IS THE FLAG. There
+ * is no separate boolean that can be written while the grant is not, and no
+ * accumulator that a second run could add to. A run either finds a value and
+ * returns it verbatim, or computes and writes one. Two concurrent buildFighter()
+ * calls both racing a cold key compute the same number from the same behavior
+ * snapshot and write the same number, so even the race is a no-op rather than a
+ * double-pay. The same is true of a cloud restore onto a fresh device: the key
+ * comes back with the vault, and if it somehow did not, the recomputation is a
+ * pure function of history rather than of the previous grant.
+ *
+ * Same shape as wheelResetOnce_v61 in js/wheel.js (the codebase's existing
+ * one-shot make-good), with the version in the key for the same reason: a future
+ * make-good gets its own key rather than reopening this one.
+ *
+ * KNOWN CEILING, deliberately accepted: the grant is snapshotted the first time
+ * a player builds a fighter AFTER the update, not at the moment the update
+ * lands. Someone who does not open the Pit for a month keeps logging habits in
+ * the meantime and gets a slightly larger grant than they would have on day one.
+ * That errs toward the player, and the alternative (snapshotting at boot for
+ * everyone, Pit player or not) puts a migration write on a path that has nothing
+ * to do with fighting.
+ */
+const HABIT_GRANT_KEY = 'habitBaseGrant_v471';
+async function habitBaseGrantTp(behavior) {
+  const prev = await kvGet(HABIT_GRANT_KEY, null);
+  if (prev && typeof prev.tp === 'number') return prev.tp;
+  const tp = habitGrantPoints(legacyHabitStats(behavior));
+  await kvSet(HABIT_GRANT_KEY, { tp, at: Date.now() });
+  return tp;
+}
+
 async function buildFighter() {
   const [log, xpRows, health] = await Promise.all([db.all('log'), db.all('xp'), db.all('health')]);
   const behavior = {
@@ -19678,7 +19761,9 @@ async function buildFighter() {
     questsDone: xpRows.filter(r => r.type === 'quest').length,
     variety: new Set(log.filter(e => e.foodId).map(e => e.foodId)).size,
   };
-  const baseStats = deriveStats(behavior);
+  // Flat for everyone (R21-P1). `behavior` still feeds training points below,
+  // which is now the ONLY thing habits move.
+  const baseStats = deriveStats();
   const alloc = await kvGet('trainalloc', {});
   const [gearLo, gOwned, xpAll] = await Promise.all([gearLoadout(), ownedGearIds(), db.all('xp')]);
   const level = levelFor(xpAll.reduce((a, r) => a + (r.xp || 0), 0)).level;
@@ -19692,7 +19777,10 @@ async function buildFighter() {
   // training points: one per wellbeing-safe positive day (protein hit / day closed on
   // budget) PLUS one per 25,000 lifetime steps - walking earns build power too.
   // Derived from history, so it's retroactive and idempotent by construction.
-  const tpTotal = (behavior.proteinDays || 0) + (behavior.closes || 0) + Math.floor((behavior.lifetimeSteps || 0) / 25000);
+  // + the one-time R21-P1 conversion of the old habit base into unspent points,
+  // so nobody is weaker after the update than they were before it.
+  const tpTotal = (behavior.proteinDays || 0) + (behavior.closes || 0) + Math.floor((behavior.lifetimeSteps || 0) / 25000)
+    + await habitBaseGrantTp(behavior);
   const tpSpent = STAT_META.reduce((a, m) => a + (alloc[m.key] || 0), 0);
   const tpAvail = Math.max(0, tpTotal - tpSpent);
   const talents = await kvGet('talents', []);
@@ -19720,7 +19808,8 @@ async function buildFighter() {
     battlePet = buildBattlePet(petInst.sp, pl, picks, { shiny: !!petInst.shiny, lineage: petInst.lineage || 0 });
     petMeta = { id: petInst.sp, iid: petInst.iid, level: pl, picks, steps, lineage: petInst.lineage || 0, shiny: !!petInst.shiny };
   }
-  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, talents, fightTalents, battlePet, petMeta, setInfo };
+  // habitStats is gone with the habit base (R21-P1). Nothing read it.
+  return { stats, baseStats: gearedBase, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, talents, fightTalents, battlePet, petMeta, setInfo };
 }
 
 /* Talents that change ACTION ECONOMY rather than raw numbers. Gear and set
@@ -22339,7 +22428,7 @@ function buildFaqHtml(fighter, openAttr = '') {
   return `<details class="bsect faq-card" data-bsect="faq" ${openAttr}>
     <summary class="t3-faq">How do I build my fighter?<b>Start here ›</b></summary>
     <div class="bsect-body">
-      <p class="note" style="margin:2px 2px 12px">Your stats grow on their own from your real habits. <b>Training points are extra</b>, on top of that, and they are yours to place. There is no wrong answer and <b>nothing is permanent</b>: Reset training below refunds every point, any time.</p>
+      <p class="note" style="margin:2px 2px 12px">Every fighter starts from the same base. <b>Your habits pay training points</b>, and where they go is yours to place: that is the whole of what makes one fighter different from another. There is no wrong answer and <b>nothing is permanent</b>: Reset training below refunds every point, any time.</p>
 
       <div class="sect-h">Pick how you want to fight</div>
       ${BUILD_PLAYSTYLES.map(p => `<div class="faq-style">
@@ -22356,7 +22445,7 @@ function buildFaqHtml(fighter, openAttr = '') {
         ${STAT_META.map(m => `<div class="faq-stat">
           <b>${esc(m.label)}</b>
           <small>${esc(m.combat)}</small>
-          <small class="faq-put">Suits: ${esc(m.spec)} · grows from ${esc(m.fedBy)}</small>
+          <small class="faq-put">Suits: ${esc(m.spec)}</small>
         </div>`).join('')}
         <p class="note" style="margin:8px 2px 2px">Each training point adds <b>+${TRAIN_STEP}</b> to a stat, up to <b>+${TRAIN_CAP}</b> in any one of them. Points come from hitting your protein target, closing a day on budget, and every 25,000 steps you walk, so the build grows out of the habits, not out of grinding.</p>
       </details>
@@ -22364,7 +22453,7 @@ function buildFaqHtml(fighter, openAttr = '') {
       <details class="faq-deep">
         <summary>Common questions</summary>
         <div class="faq-qa"><b>Can I change my mind?</b><small>Yes, always. <b>Reset training</b> below hands back every point you have spent so you can place them again. It asks before it does it.</small></div>
-        <div class="faq-qa"><b>Do I need to do any of this?</b><small><b>No.</b> Leave every point unspent and the game plays perfectly well. Your habits already raise your stats, and Pit foes scale to you, so you are never locked out of anything. This is here for people who enjoy tinkering.</small></div>
+        <div class="faq-qa"><b>Do I need to do any of this?</b><small><b>No.</b> Leave every point unspent and the game plays perfectly well. Every fighter starts from the same base and Pit foes scale to you, so you are never locked out of anything. This is here for people who enjoy tinkering.</small></div>
         <div class="faq-qa"><b>Should I spread points around or stack one?</b><small>Stacking one or two is stronger than spreading five thin, because each stat only helps the things it is attached to. Two is the sweet spot.</small></div>
         <div class="faq-qa"><b>Do stats matter more than gear?</b><small>Neither wins on its own. Gear adds the same kinds of points, so a good piece can cover a stat you skipped. Check what you are wearing before you respec.</small></div>
         <div class="faq-qa"><b>What is Armor?</b><small>Damage reduction. <b>${nm('marrow')}</b> gives armor against melee, <b>${nm('reflex')}</b> against magic, and worn gear adds to both. You can see both percentages just below.</small></div>
@@ -22515,7 +22604,7 @@ async function renderTalents(wrap) {
   // meaning and real drawn +/- steppers.
   const statBlock = `
     <div class="t3-fighter">
-      <div class="n"><b>YOUR FIGHTER</b><small>${d.maxHp} HP · ${d.maxWind} Stamina · grows from your real habits</small></div>
+      <div class="n"><b>YOUR FIGHTER</b><small>${d.maxHp} HP · ${d.maxWind} Stamina · grows from the points you spend</small></div>
       ${fighter.tpAvail ? `<div class="tp"><b>${fighter.tpAvail}</b><small>TO SPEND</small></div>` : ''}
     </div>
     ` + buildFaqHtml(fighter, sectOpen('faq', false)) + `

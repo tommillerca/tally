@@ -204,7 +204,7 @@ const EMITTERS = {
   'js/app.js:openFight':            ['scene', 'the fight stage: enemy plates, the arena and the result card.'],
   'js/app.js:openDenSheet':         ['scene', 'the den preview art.'],
   'js/app.js:openHatchReveal':      ['scene', 'the hatching egg.'],
-  'js/app.js:openPackReveal':       ['scene', 'the cosmetic pack reveal stage.'],
+  'js/app.js:warmCrateFrames':      ['scene', 'pre-decodes the crate opening frames; R20-P3 moved this off openPackReveal so the Backpack can warm them before the tap.'],
   'js/app.js:presentGrantDelivery': ['scene', 'the delivered-grant card art.'],
   'js/app.js:revealGift':           ['scene', 'the gift reveal art.'],
   'js/app.js:openMageIntro':        ['scene', 'the Live Wire introduction art.'],
