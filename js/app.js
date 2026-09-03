@@ -2710,7 +2710,7 @@ function revealGift(g) {
   if (p.crate) cards.push({ iconHtml: crateIcon(p.crate, 130), name: p.crate === 'golden' ? 'Bone Crate' : 'Common Crate', rarity: p.crate === 'golden' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
   if (p.gearId && GEAR_BY_ID[p.gearId]) {
     const gear = GEAR_BY_ID[p.gearId];
-    cards.push({ iconHtml: `<img src="${bhAsset(BH_BY_ID[gear.artId])}" alt="" style="width:130px;height:130px;object-fit:contain">`, name: gear.name, rarity: gear.rarity, kind: 'GEAR', stats: 'Equip it in the Wardrobe' });
+    cards.push({ wear: gear.artId, imgSrc: bhAsset(BH_BY_ID[gear.artId]), name: gear.name, rarity: gear.rarity, kind: 'GEAR', stats: 'Equip it in the Wardrobe' });
   }
   if (p.dust) cards.push({ iconHtml: ICONS.dust(120), name: `${p.dust} Bone Dust`, rarity: 'uncommon', kind: 'DUST', stats: 'Spend it on how your gear looks' });
   if (!cards.length && p.coins) cards.push({ iconHtml: ICONS.coin(120), name: `${p.coins.toLocaleString()} coins`, rarity: 'common', kind: 'COINS', stats: 'Spend it in the Shop' });
@@ -5323,6 +5323,72 @@ function avatarLayersHtml(eq, opts = {}) {
 }
 
 // A leaderboard/podium row's Bonehead. The ONE renderer that keeps the pet
+/* ---------- A PIECE SHOWN WORN, NOT LOOSE ----------
+   Tom, 2026-09-03: "all gear in the app should now be shown like in the shop on
+   a base skeleton with context ... it no longer just shows the random PNG ...
+   this will fix the grillz scaling issue and it will allow the player to not see
+   how the sausage is made as far as certain items having strange cut outs."
+
+   Three failures, one cause. Every reveal drew the item's own PNG trimmed to its
+   alpha box and blown up to fill a 600px card, so:
+     - a grill (60px of ink on a 640 canvas) arrived the same size as a coat, and
+       nothing on the card said which end of a skeleton it belonged to;
+     - pieces authored to sit BEHIND or AROUND the skull (a hood's neck hole, a
+       mask's eye slots, a top's arm gaps) read as damaged art;
+     - the player had no idea what they had won until they went and equipped it.
+
+   The shop rack solved exactly this a release ago and nothing else reused it:
+   neutral base + the one piece + the pet skipped + a crop framing the body part
+   it goes on. These two tables WERE local to the Shop renderer; they are up here
+   now so the reveals share the one definition rather than growing a second,
+   drifting copy of the same idea. */
+/* THE NEUTRAL BASE. Taken from the data file's own slot defaults rather than
+   invented, which is the same pair randomOutfit() starts every splash figure
+   from: body B0-1, skull SK0-1, and nothing else. The only non-default thing in
+   a mannequin is the piece being shown. */
+const RACK_BASE = Object.fromEntries(BH_SLOTS.filter(x => x.default).map(x => [x.code, x.default]));
+/* WHICH BODY PART TO FRAME, per slot. The crop classes live in app.css and each
+   one's transform-origin is that slot's MEASURED alpha-bbox centre (see the
+   .fit-* block). M and IR were never needed by the rack (the rack does not sell
+   a mouth, and its weapon tile is the aura mannequin) but a crate rolls both, so
+   they are mapped here or a mouthpiece would reveal as a whole skeleton with a
+   speck on it. BG and C are deliberately absent: a backdrop is not worn by
+   anything, and a pet is a creature that stands beside you rather than a piece
+   of gear that goes on you. Both keep their loose art. */
+const RACK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', M: 'fit-head', SK: 'fit-head',
+  T: 'fit-torso', P: 'fit-hips', U: 'fit-waist', FW: 'fit-feet', S: 'fit-shin',
+  IL: 'fit-hand-l', IR: 'fit-hand', B: 'fit-body' };
+/* Can this id be shown worn at all? Anything the crop table has an answer for.
+   Callers use this rather than testing slots by hand so "what is wearable" has
+   one definition; a new slot that gets a .fit-* crop becomes wearable everywhere
+   the moment it is added above. */
+const canWear = id => !!(BH_BY_ID[id] && RACK_FIT[BH_BY_ID[id].slot]);
+/* `css` is the width the WHOLE 640 square ends up occupying AFTER the crop's
+   scale, not the width of the window it peeps through: a 222px card panel under
+   fit-waist's scale(2.8) is a 622px canvas behind a 222px hole. bhTierFor turns
+   that into a real tier (192/384) or the master, so the mannequin costs the
+   memory it actually draws. NEVER call this without a measured `css`: the census
+   caught a surface decoding ~100MB because one caller left the thumb off. */
+/* MEASURED OFF THE RENDERED CARD AT 390x844, not estimated. `.pc-worn` is a
+   1/0.86 box the full width of the art panel, and the crop then scales the 640
+   square on top of that, so the number that decides the tier is
+   panelWidth x maxScale. Measured: the reveal card's panel is 254px wide and the
+   steepest crop in the table is fit-waist's scale(2.8) -> 711 CSS; a boss-loot
+   card's panel is 156px -> 437 CSS. bhTierFor doubles for device pixels, so both
+   land on the 640 master, which is what the shop rack's hero shelf also draws
+   and what the loose PNG cost before this change. Re-measure these if the card
+   or the .fit-* scales move; a stale number here quietly buys a blurry
+   mannequin, which is the exact defect the tier system exists to prevent. */
+const PC_WEAR_CSS = 711, LOOT_WEAR_CSS = 437;
+function wornArtHtml(id, css) {
+  const it = BH_BY_ID[id];
+  // wpnAura: null -- the player's bought aura must not leak onto a piece they
+  // are being SHOWN. skip C for the same reason the rack does: their pet turning
+  // up in a reveal card would read as part of the prize.
+  return `<div class="pc-worn ${RACK_FIT[it.slot]}">${avatarLayersHtml(
+    { ...RACK_BASE, [it.slot]: id }, { wpnAura: null, skip: ['C'], thumb: bhTierFor(css) })}</div>`;
+}
+
 // inside the stack, so it must pass the row's own shiny flag through: reading
 // S.shinyPets here would paint every friend's pet from the VIEWER's collection
 // (how Brock's shiny lizard rendered base-purple on the board).
@@ -8536,12 +8602,9 @@ async function renderShop(el) {
      timezones and reads as nonsense when you open the app on a Monday). */
   const rackNo = Math.min(4, Math.ceil(new Date().getDate() / 7));
   const rackDaysLeft = (8 - (new Date().getDay() || 7)) % 7 || 7;
-  /* THE NEUTRAL BASE. Tom: "items should just be styled on a base skeleton so
-     that the item doesnt clash with the not for sale items". Taken from the data
-     file's own slot defaults rather than invented, which is the same pair
-     randomOutfit() starts every splash figure from: body B0-1, skull SK0-1, and
-     nothing else. The only non-default thing in a tile is the piece for sale. */
-  const RACK_BASE = Object.fromEntries(BH_SLOTS.filter(x => x.default).map(x => [x.code, x.default]));
+  /* RACK_BASE and RACK_FIT are module-level now (see wornArtHtml): the reveal
+     cards draw the same mannequin, and two copies of the neutral base would
+     drift apart the first time a slot default changed. */
   const rackIds = rk.ids;
   /* OWNERSHIP IS READ, NEVER FAKED. An owned piece stays on the rack for the
      rest of the week and shows as owned; the picker deliberately does not filter
@@ -8553,8 +8616,6 @@ async function renderShop(el) {
      2.22x on an earring, against 0.44x on a hat. They get motion instead, which
      adds no pixels. */
   const TINY_SLOTS = new Set(['G', 'E']);
-  const RACK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', SK: 'fit-head', T: 'fit-torso',
-    P: 'fit-hips', U: 'fit-waist', FW: 'fit-feet', S: 'fit-shin', IL: 'fit-hand-l', B: 'fit-body' };
   /* THE BUY ROW. Two prices for one piece are ALTERNATIVES, and two identical
      full-width pills stacked on top of each other do not say so: they read as
      "3,000 AND 200", a bill in two parts. The word between them is the fix.
@@ -14682,7 +14743,10 @@ function gearToCard(g) {
     .filter(([, v]) => Number.isFinite(v) && v > 0)
     .map(([k, v]) => [STAT_CODE[k] || k.toUpperCase(), v]);
   return {
-    id: g.id, imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity,
+    /* WORN, NOT LOOSE. `wear` is the art id, and packCardHtml draws it on the
+       neutral mannequin; imgSrc stays as the fallback for an art id whose slot
+       the crop table cannot place. */
+    id: g.id, wear: g.artId, imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity,
     kind: `GEAR · ${GEAR_SLOT_LABELS[g.slot] || g.slot}`,
     lvl: g.minLevel > 1 ? `Lv ${g.minLevel}` : '',
     statList: st, talent: g.talent ? g.talentName : '', plain: !st.length,
@@ -14932,7 +14996,16 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
 function packCardHtml(c, { selectable = false } = {}) {
   const rar = RARITIES[c.rarity] || RARITIES.common;
   const holo = RAR_ORDER.indexOf(c.rarity) >= 2 ? ' holo' : '';
-  const art = c.imgSrc ? `<canvas class="pc-canvas" width="600" height="600" data-art="${esc(c.imgSrc)}"></canvas>` : `<div class="pc-icon">${c.iconHtml || ''}</div>`;
+  /* `wear` (a Boneheadz art id) DRAWS THE PIECE ON A MANNEQUIN and beats the
+     loose PNG. It is set at the card-building sites rather than derived here
+     because only they know whether the thing being revealed is worn at all: a
+     crate, a pet, a pile of coins and an ingredient all reach this function too.
+     The measured widths behind PC_WEAR_CSS / LOOT_WEAR_CSS are in app.css beside
+     .pc-worn. Nothing else about the card moves: same rarity frame, same plate,
+     same band. */
+  const art = c.wear && canWear(c.wear) ? wornArtHtml(c.wear, selectable ? LOOT_WEAR_CSS : PC_WEAR_CSS)
+    : c.imgSrc ? `<canvas class="pc-canvas" width="600" height="600" data-art="${esc(c.imgSrc)}"></canvas>`
+    : `<div class="pc-icon">${c.iconHtml || ''}</div>`;
   const sparks = RAR_ORDER.indexOf(c.rarity) >= 3
     ? `<span class="pc-spark k1">${sparkIco(16)}</span><span class="pc-spark k2">${sparkIco(11)}</span><span class="pc-spark k3">${sparkIco(12)}</span><span class="pc-spark k4">${sparkIco(15)}</span>`
     : '';
@@ -15254,8 +15327,20 @@ const BURST = {
   legendary: { light: '#ffc961', amp: .55, haze: .07 },
 };
 function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
-  return Promise.all($$(sel, scope)
-    .map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined)));
+  /* A MANNEQUIN CARD HAS NO CANVAS, AND SILENCE HERE WOULD MEAN AN UNDECODED
+     ENTRANCE. Every caller uses this promise as "the art is ready": renderCard
+     races it before letting the card fly in, and wireLootChoice awaits it before
+     the boss-loot grid is touchable. A wear card's layers are plain <img>s, so
+     without this branch the promise resolved instantly and the card rose with an
+     empty panel -- the same failure the canvas path was built to avoid, and the
+     one tally/CLAUDE.md bans outright ("never start a sequence on an undecoded
+     first frame"). decode() rejections are swallowed per image so one missing
+     layer degrades the card to a missing garment, never to a hung reveal
+     (anti-regression rule 8). */
+  return Promise.all([
+    ...$$(sel, scope).map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined)),
+    ...$$('.pc-worn img', scope).map(im => im.decode().catch(() => {})),
+  ]);
 }
 
 /* Canvas art (imgSrc) already paints a plain plate when its load fails (see
@@ -15356,6 +15441,14 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
   // Warm every card's art up front so flicking through a multi-card pack never
   // waits: by the time you tap to advance, the next one is already decoded.
   for (const c of cards) {
+    /* A wear card's art is three layers at a tier only wornArtHtml knows, so it
+       warms itself by building the same markup into a node nobody attaches:
+       assigning innerHTML starts the loads, and re-deriving the URLs here would
+       be a second copy of the tier maths that could silently warm a size the
+       card never draws. Its `imgSrc` is deliberately NOT warmed: that master is
+       the fallback for an id the crop table cannot place, and warming both would
+       decode a 640 square the card never paints. */
+    if (c.wear && canWear(c.wear)) { document.createElement('div').innerHTML = wornArtHtml(c.wear, PC_WEAR_CSS); continue; }
     const src = c.imgSrc || c.art;
     if (src) { const im = new Image(); im.src = src; }
   }
@@ -15655,14 +15748,14 @@ function crateResultToCard(r) {
   if (r.type === 'ingredient') { const ing = INGREDIENTS[r.ingredient]; return { iconHtml: ingIconHtml(ing.id, 130), name: ing.name, rarity: 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }; }
   if (r.type === 'gear' || r.type === 'geardupe') {
     const g = r.gear, dup = r.type === 'geardupe';
-    if (dup) return { imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity, kind: 'GEAR · DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
+    if (dup) return { wear: g.artId, imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity, kind: 'GEAR · DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
     // the slot, the level gate, the stat line and the talent affix as separate
     // fields: the card lays them out itself instead of reading one packed string
     return gearToCard(g);
   }
   const isPet = r.item && r.item.slot === 'C';
-  if (r.type === 'dupe') return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
-  return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: '' };
+  if (r.type === 'dupe') return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
+  return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: '' };
 }
 
 async function openCrateReveal(result) {
@@ -21666,7 +21759,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
             // nothing like the gear it had just given you.
             const gArt = GEAR_BY_ID[r.gear.id] && BH_BY_ID[GEAR_BY_ID[r.gear.id].artId];
             extraCards.push({
-              ...(gArt ? { imgSrc: bhAsset(gArt) } : { iconHtml: badgePixHtml('tombstone', 96) }),
+              ...(gArt ? { wear: gArt.id, imgSrc: bhAsset(gArt) } : { iconHtml: badgePixHtml('tombstone', 96) }),
               slimed: !!r.gear.slimed,
               name: r.gear.name, rarity: r.gear.rarity, kind: r.gear.slimed ? 'SLIMED GEAR' : 'GEAR',
               stats: r.gear.slimed ? 'Dripping with Glutton slime. Equip it in your Wardrobe.' : 'Equip it in your Wardrobe.',
@@ -21790,7 +21883,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
                `pit-champ` badge this same win already mints (championTitle). */
             const skull = await grantCosmetic(CHAMP_PRIZE_ID, 'pit-champion');
             extraCards.push(
-              { iconHtml: `<img src="${bhAsset(BH_BY_ID[CHAMP_PRIZE_ID])}" style="width:118px;height:118px;object-fit:contain">`,
+              { wear: CHAMP_PRIZE_ID, imgSrc: bhAsset(BH_BY_ID[CHAMP_PRIZE_ID]),
                 name: BH_BY_ID[CHAMP_PRIZE_ID].name, rarity: 'legendary', kind: 'CHAMPION COSMETIC',
                 stats: skull ? `No crate can roll it. Wear it in your Wardrobe, and carry the ${CHAMP_TITLE} title.`
                              : `You already had it. The ${CHAMP_TITLE} title is yours from here.` },
