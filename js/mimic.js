@@ -61,11 +61,11 @@ export const MIMIC_ART = {
 };
 
 /* one in every MIMIC_SHARE buried crates is not a crate.
-   3 -> 5 on 2026-09-03 (Tom: "make it 1 in 5 chests"). Note this makes a Mimic
-   RARER per chest, not commoner; what makes them findable is the crate weight
-   going 1 -> 4 in js/hunt.js at the same time. Measured, as a share of ALL
-   spawns: was 2.4% (one per 42 spawns), now 4.7% (one per 21). */
-export const MIMIC_SHARE = 5;
+   WENT 3 -> 5 ON 2026-09-03 AND STRAIGHT BACK. The theory was that nobody had
+   ever reported meeting a Mimic, so it must be too rare. A player told Tom the
+   shipped rate is good, and the shipped rate is this one: nothing had been
+   deployed, so every opinion in the world was formed on 3. Leave it. */
+export const MIMIC_SHARE = 3;
 
 /* IS THIS CHEST A MIMIC? DERIVED, NEVER ROLLED.
  *
