@@ -3377,12 +3377,42 @@ export default {
           ? body.features.filter(f => typeof f === 'string').slice(0, 20).map(f => f.slice(0, 24)).join(',') || null
           : null;
         const appV = String(body.appV || '').slice(0, 16);
+        /* SURVEY V2 (2026-09-03). Everything above is one column per v1
+           question, which is why every change of question used to be a
+           migration. `form` says which survey produced the row and `answers` /
+           `ctx` carry the rest as JSON, so v3 needs no schema change at all.
+           A client that predates v2 sends no form and lands as 'dayone',
+           unchanged in every other respect. */
+        /* ABSENT STAYS NULL, and NULL READS AS 'dayone'. Every row already in
+           the table has form NULL and means v1, so writing the literal
+           'dayone' for a v1 client would give v1 TWO encodings and every
+           consumer would have to know both. The default lives at the read end
+           instead: COALESCE(l.form, 'dayone') in the dashboard select below,
+           which covers the old rows and the old clients with one rule.
+           A slug, because it reaches the dashboard's filter control; anything
+           that is not one is not a form name and reads as v1. */
+        const rawForm = typeof body.form === 'string' ? body.form.trim().slice(0, 24) : '';
+        const form = /^[a-z0-9_-]+$/.test(rawForm) ? rawForm : null;
+        /* THE CAP REFUSES, IT DOES NOT TRUNCATE. Slicing a JSON string at 4000
+           chars stores something no parser will ever read back, and the row
+           lives for a year: an unparseable blob is worse than no row. Objects
+           only; an array or a string here is a client bug, not a payload. */
+        const blob = (v, max, field) => {
+          if (v === undefined || v === null) return { s: null };
+          if (typeof v !== 'object' || Array.isArray(v)) return { err: `${field} must be an object` };
+          const s = JSON.stringify(v);
+          if (s.length > max) return { err: `${field} too long (${s.length} > ${max})` };
+          return { s };
+        };
+        const answersB = blob(body.answers, 4000, 'answers');
+        const ctxB = blob(body.ctx, 1000, 'ctx');
+        if (answersB.err || ctxB.err) return json({ error: answersB.err || ctxB.err }, 400);
         const cf = request.cf || {};
         const city = [cf.city, cf.region || cf.regionCode, cf.country].filter(Boolean).join(', ') || null;
         await env.DB.prepare(
-          `INSERT INTO leads (device, player, label, name, email, email_optin, feedback, most_wanted, features, app_v, geo, ts)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-        ).bind(device, player, label, name, email, optin, feedback, mostWanted, features, appV, city, Date.now()).run();
+          `INSERT INTO leads (device, player, label, name, email, email_optin, feedback, most_wanted, features, form, answers, ctx, app_v, geo, ts)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        ).bind(device, player, label, name, email, optin, feedback, mostWanted, features, form, answersB.s, ctxB.s, appV, city, Date.now()).run();
         return json({ ok: true });
       }
 
@@ -3604,8 +3634,15 @@ export default {
         const byCity = await all(`SELECT COALESCE(city,'?') city, COALESCE(region,'') region, COALESCE(country,'') country, COUNT(*) n FROM devices WHERE ${nin('device')} GROUP BY city, region, country ORDER BY n DESC LIMIT 30`);
         // community map feedback: newest first (den nominations + unreachable reports + general feedback)
         const reports = await all(`SELECT r.kind, r.lat, r.lng, r.target, r.note, r.geo, r.ts, COALESCE(r.label, d.label) label FROM reports r LEFT JOIN devices d ON d.device = r.device WHERE ${nin('r.device')} ORDER BY r.ts DESC LIMIT 100`);
-        // survey leads: newest first (name/email/feedback/most-wanted + opt-in flag)
-        const leads = await all(`SELECT l.name, l.email, l.email_optin optin, l.feedback, l.most_wanted mostWanted, l.features, l.geo, l.ts, COALESCE(l.label, d.label) label FROM leads l LEFT JOIN devices d ON d.device = l.device WHERE ${nin('l.device')} ORDER BY l.ts DESC LIMIT 200`);
+        /* survey leads: newest first (name/email/feedback/most-wanted + opt-in flag)
+           v2 adds form/answers/ctx. COALESCE on form is where "NULL means v1"
+           is actually implemented: every row written before 2026-09-03 and
+           every row from a client that predates v2 arrives here as 'dayone',
+           so the dashboard's form filter has one bucket for v1, not two.
+           answers/ctx go out as the raw JSON strings they are stored as; the
+           dashboard parses them, because a malformed blob must degrade one
+           card rather than take the whole payload down. */
+        const leads = await all(`SELECT l.name, l.email, l.email_optin optin, l.feedback, l.most_wanted mostWanted, l.features, COALESCE(l.form, 'dayone') form, l.answers, l.ctx, l.geo, l.ts, COALESCE(l.label, d.label) label FROM leads l LEFT JOIN devices d ON d.device = l.device WHERE ${nin('l.device')} ORDER BY l.ts DESC LIMIT 200`);
         /* CRASHES. Deliberately NOT filtered by nin(): the developer-device
            exclusion exists so one heavy tester cannot skew usage counts, but a
            crash is a crash and hiding Tom's would hide the ones we hear about
