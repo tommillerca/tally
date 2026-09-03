@@ -13620,6 +13620,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
   // Opening a crate re-renders this screen in place (no route()), so the tab
   // badge is synced here too, off the same rows the tab is about to render.
   setCrateBadge(crates.length);
+  // Held crates are about to be tapped, so fetch and decode their reveal frames
+  // NOW rather than when the 2.6s choreography has already started (R20-P3).
+  // Memoised per kind, so re-rendering this screen (every equip does) is free.
+  for (const k of new Set(crates.map(c => c.crate))) warmCrateFrames(k);
   const boosts = inv.filter(r => r.kind === 'xp2').length;
   const vigors = inv.filter(r => r.kind === 'vigor').length;
   const ownedCount = inv.filter(r => r.kind === 'cos').length;
@@ -15017,10 +15021,48 @@ const CRATE_SEQ = {
   golden: { dir: 'golden', frames: 3, ms: [200, 120] },
 };
 const CRATE_SEQ_FRAMES = CRATE_SEQ.daily.frames;
+/* WARM THE CRATE FRAMES BEFORE THE TAP, NOT ON IT (R20-P3).
+   openPackReveal used to be the only thing that fetched these, which means the
+   fetch started at the same instant the 2.6s choreography did. Measured under a
+   3G profile that is not enough: f0-f2 of the golden crate were still in flight
+   a second into the reveal. Called when the Backpack renders, the frames are in
+   the cache and decoded long before a player picks a crate and taps OPEN.
+   The promise AND the Image objects are memoised per kind: a resolved promise
+   alone would let the decoded bitmap be collected again, and holding the
+   elements is what keeps the decode, not just the bytes. Two kinds, ~2KB a
+   frame; this is not a cache that needs eviction.
+   decode() rejections are swallowed per image so one broken frame degrades the
+   sequence to a skipped step instead of hanging the reveal for ever
+   (anti-regression rule 8). */
+const crateWarm = new Map();
+function warmCrateFrames(kind) {
+  const cfg = CRATE_SEQ[kind];
+  if (!cfg) return Promise.resolve();
+  let w = crateWarm.get(kind);
+  if (!w) {
+    const imgs = Array.from({ length: cfg.frames }, (_, i) => {
+      const im = new Image();
+      im.src = `assets/crates/${cfg.dir}/f${i}.png`;
+      return im;
+    });
+    w = { imgs, p: Promise.all(imgs.map(im => im.decode().catch(() => {}))) };
+    crateWarm.set(kind, w);
+  }
+  return w.p;
+}
 const EGG_SEQ_FRAMES = 15;
 function crateSeqHtml(kind = 'daily') {
   const cfg = CRATE_SEQ[kind];
-  const f = i => `<img src="assets/crates/${cfg.dir}/f${i}.png" alt="" class="cq-f${i === 0 ? ' on' : ''}" decoding="sync">`;
+  /* NO `on` IN THE MARKUP, NOT EVEN ON f0 (R20-P3).
+     Every frame after the first was gated behind the decode promise, and the
+     first one was gated behind nothing at all: it carried `.on` from the moment
+     this string was parsed. Measured under a 3G profile, the golden crate's
+     f0.png was on screen at opacity 1 with naturalWidth 0 for ~1s while f0-f2
+     were still being fetched, i.e. the sequence started on an undecoded first
+     frame, which is the one thing tally/CLAUDE.md says never to do. f0 now gets
+     `.on` from the SAME `ready` promise that drives every later step (see
+     playCrateSeq), so there is one gate, not two mechanisms. */
+  const f = i => `<img src="assets/crates/${cfg.dir}/f${i}.png" alt="" class="cq-f" decoding="sync">`;
   /* `pix` ON THE WRAPPERS. The drop and settle animations were written for the
      VECTOR crates, which are one static icon and therefore need faking: crDrop
      squashes with scale(1.06,.9) and crSettle wobbles up to scale(1.08). Both
@@ -15127,6 +15169,13 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily', tOpen = performa
     if (Math.abs(fy) > 0.001) seq.style.top = `${(-fy / dpr).toFixed(4)}px`;
   };
   ready.then(() => {
+    // THE FIRST FRAME IS A STEP LIKE THE OTHERS (R20-P3). It used to be painted
+    // by the markup, before decode; it is painted here, after it, by the same
+    // promise the loop below waits on. `shown` is still 0, so when decode is
+    // already done (the ordinary case now that the Backpack pre-warms the
+    // frames) this runs in the same task the sequence would have started in and
+    // the shipped timing is unchanged.
+    frames[0].classList.add('on');
     /* Whatever decode cost, spend it on the pre-roll (a closed crate mid-drop,
        where nobody can tell) instead of on the tail. If decode overran the whole
        pre-roll, compress the frame table into what is left rather than running
@@ -15364,16 +15413,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
      are only ~2KB each, but "small" is not "decoded", and the whole sequence
      runs inside a 260ms window between --b-lid and --b-card. A frame that has
      not decoded when its turn comes paints nothing, and a blank frame mid-open
-     is the exact v245 invisible-punch failure. decode() rejections are swallowed
-     per image so one broken frame degrades the sequence to a skipped step
-     instead of hanging the whole reveal (anti-regression rule 8). */
-  const crateSeqReady = CRATE_SEQ[crate]
-    ? Promise.all(Array.from({ length: CRATE_SEQ[crate].frames }, (_, i) => {
-        const im = new Image();
-        im.src = `assets/crates/${CRATE_SEQ[crate].dir}/f${i}.png`;
-        return im.decode().catch(() => {});
-      }))
-    : Promise.resolve();
+     is the exact v245 invisible-punch failure.
+     Starting the fetch HERE was always too late on a slow link, so the work
+     moved into warmCrateFrames, which the Backpack calls on render; this call
+     is now the memoised join, and only pays for the fetch if the reveal was
+     reached without the Backpack (a quest payout, a level-up). */
+  const crateSeqReady = warmCrateFrames(crate);
   return new Promise(resolve => {
     /* THE SEAM THAT MAKES THIS TESTABLE.
      *
