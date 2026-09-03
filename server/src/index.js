@@ -2817,8 +2817,26 @@ export default {
              raceV stays a json_extract because there is no column for it, but it
              is a RESIDUAL now, applied to the handful of rows the index hands
              over rather than to every player who exists. */
+          /* THE PROFILE FIELDS THE SHEET RENDERS FROM, on the race board too.
+             Tom: "when you are on the step challenge leader board you can click
+             the players you see and then go to their player page and add them".
+             The board used to carry name + steps + outfit only, which is not
+             enough to open openFriendProfile: it draws level, class, badges,
+             pet, gear count and the stat bars, and every one of them would have
+             read "?" or 0. Matching a race row against the /leaderboard payload
+             instead was rejected: that board is the top 100 BY LEVEL, so a
+             low-level walker leading the race is simply absent from it, and
+             matching on NAME is not an identity at all (names are not unique
+             and it would open the wrong player's profile). These are per OUTPUT
+             row: 25 at most, on rows idx_players_week already handed over. */
           `SELECT id, handle, name, json_extract(profile,'$.outfit') outfit,
                   week_steps steps,
+                  level lvl,
+                  json_extract(profile,'$.levelName') lvlName,
+                  badges,
+                  json_extract(profile,'$.pet') pet,
+                  json_extract(profile,'$.stats') stats,
+                  json_array_length(COALESCE(json_extract(profile,'$.gear'), '[]')) gearCount,
                   last_seen seenAt
              FROM players
             WHERE profile IS NOT NULL
@@ -2880,6 +2898,8 @@ export default {
 
         const rows = await board(wk);
         const meIdx = rows.findIndex(r => r.id === auth.playerId);
+        const nowRace = Date.now();
+        const jsonCol = v => { try { return v ? JSON.parse(v) : null; } catch { return null; } };
         return json({
           week: wk,
           prize: { coins: STEP_RACE_PRIZE_COINS, crate: 'golden' },
@@ -2887,14 +2907,26 @@ export default {
           champion,                       // last week's winner, for the "who to beat" line
           yourRank: meIdx >= 0 ? meIdx + 1 : null,
           racers: rows.length,
-          players: rows.slice(0, 10).map((r, i) => ({
+          players: await Promise.all(rows.slice(0, 10).map(async (r, i) => ({
             rank: i + 1,
             playerId: r.id,
             name: r.name || r.handle,
             steps: r.steps,
-            outfit: (() => { try { return r.outfit ? JSON.parse(r.outfit) : null; } catch { return null; } })(),
+            outfit: jsonCol(r.outfit),
+            level: r.lvl || 1,
+            levelName: r.lvlName || null,
+            badges: r.badges || 0,
+            pet: jsonCol(r.pet),          // {id, level, shiny}: a shiny must draw as its shiny here too
+            stats: jsonCol(r.stats),
+            gearCount: r.gearCount || 0,
+            /* the add handle for this row, exactly as /leaderboard does it:
+               opaque, expiring, NOT a friend code (see the note above that
+               route for why publishing friend codes was a takeover vector).
+               null for yourself, which is also what stops your own lane from
+               offering to add you. */
+            addToken: r.id === auth.playerId ? null : await makeAddToken(env, r.id, nowRace),
             you: r.id === auth.playerId,
-          })),
+          }))),
         });
       }
 

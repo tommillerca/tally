@@ -3280,6 +3280,17 @@ body::before {
   background: var(--surface-3); border: 2px solid var(--ink); border-radius: 8px;
   box-shadow: var(--sh-sm);
 }
+/* A TAPPABLE LANE IS A REAL <button>, so it needs the UA chrome stripped rather
+   than a different layout: same grid, same colours, so the board does not
+   visibly split into two kinds of row. min-height is the touch target: the lane
+   measures about 43px of content (26px chip, or a 17px name row + 12px gap +
+   14px track), which rounds under the 44px minimum on the shortest lanes. */
+.race-lane.tap {
+  appearance: none; -webkit-appearance: none;
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: left; width: 100%;
+  min-height: 44px; cursor: pointer;
+}
 .race-lane.r1 .rk { background: var(--gold); }
 .race-lane.r2 .rk { background: #cdd3da; }
 .race-lane.r3 .rk { background: #d69a6a; }
