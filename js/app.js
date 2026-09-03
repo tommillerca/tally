@@ -1892,6 +1892,9 @@ function openRaceIntro() {
  * in some weeks, which is the worst version of wrong.
  */
 const raceResultKey = wk => 'raceResult:' + wk;
+/* The pill's unseen bookkeeping is a list of ids and the settled race is not a
+   NEWS row, so it carries its own, keyed by week: see hydrateRaceResult. */
+const raceSeenKey = wk => 'race:' + wk;
 /* RACE_RESULT_SEEN, raceOpensKey and RACE_RESULT_OPENS went with the poster on
    2026-08-25. All three counted SHOWINGS of a full-screen veil, and nothing
    shows itself any more. The cache key above stays: it is what stops the
@@ -1975,6 +1978,24 @@ async function hydrateRaceResult(el) {
     </div>`;
   card.hidden = false;
   composeAvatars(card);
+  /* AND THE PILL HAS TO SAY IT IS IN THERE. Tom's model for the pill, 2026-08-27:
+     "when there is new news there can be an icon letting them know otherwise it
+     stays collapsed and avoids being annoying." A result sealed inside a
+     collapsed pill with no dot is barely different from the deleted banner, and
+     this is the ONE announcement the player did not choose to miss.
+     Done here rather than in newsBannerHtml because the podium is fetched: the
+     markup is already on screen by the time settledPodium answers, so the count
+     renderToday computed could never have included it. Seen-ness is keyed by
+     WEEK, so next week's result lights the dot again on the same save. */
+  const seen = new Set(await kvGet('newsSeen', []));
+  if (seen.has(raceSeenKey(wk))) return;
+  const sum = card.closest('.nb')?.querySelector('summary');
+  if (!sum || sum.parentElement.open) return;
+  const dot = sum.querySelector('.nb-dot');
+  if (dot) dot.textContent = String((+dot.textContent || 0) + 1);
+  else sum.querySelector('.nb-t')?.insertAdjacentHTML('afterend', '<span class="nb-dot">1</span>');
+  const sub = sum.querySelector('.nb-sub');
+  if (sub && sub.textContent === 'Nothing new') sub.textContent = `${w.name} took the step race`;
 }
 
 /* Test hook (webdriver only), same pattern as __openFriendProfile. The poster is
@@ -4132,7 +4153,11 @@ async function renderToday(el) {
 
   $('#newsBanner', el)?.addEventListener('toggle', async e => {
     if (!e.target.open) return;
-    await kvSet('newsSeen', NEWS.map(n => n.id));
+    /* The settled race is in this list too, so opening the pill clears its dot
+       the same way it clears the rows'. lastSettledWeek() can be null before the
+       first race ever settles; filtered out rather than stored as 'race:null'. */
+    const wk = lastSettledWeek();
+    await kvSet('newsSeen', [...NEWS.map(n => n.id), wk && raceSeenKey(wk)].filter(Boolean));
     $('.nb-dot', el)?.remove();
   });
   /* EVERY NEWS TILE READS AT THE SAME SIZE, measured rather than hand-tuned.
