@@ -4407,6 +4407,12 @@ body::before {
    their 0.66 because .map-den-mark is 46x52 and genuinely does not fit, and
    Cam's tombstone is a smooth drawing that scales without stepping. */
 .leg-ico .map-den-mark { transform: scale(0.66); }
+/* THE WANDERER AND THE SPIRE IN THE KEY. Both are plain art rather than the
+   composed markers (the Wanderer's own marker carries a cone, which is a map
+   affordance and means nothing in a list). Sized to the same 44px cell as every
+   other row so the column stays flush. */
+.leg-wnd, .leg-spire { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; }
+.leg-wnd img, .leg-spire img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .leg-ico .map-den-mark .den-fx { animation: none; }
 .leg-txt { display: flex; flex-direction: column; line-height: 1.2; }
 .leg-txt b { font-weight: 800; font-size: 13px; }

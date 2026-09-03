@@ -32,7 +32,7 @@ import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQu
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP, manualWalksToday, logManualWalk, MANUAL_WALKS_PER_DAY } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
-import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, showWandererEncounter, WANDERER_FIGHT, CONE_RANGE_M } from './wanderer.js';
+import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, showWandererEncounter, WANDERER_FIGHT, CONE_RANGE_M, WANDERER_ART } from './wanderer.js';
 import { isWater } from './water.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
@@ -972,6 +972,15 @@ function mapLegendHtml(head = '<div class="leg-h">MAP KEY</div>') {
     [den(), 'Boss den', 'A landmark boss: rare gear'],
     [den(' roaming'), 'Roaming den', 'A daily den: here today, gone tomorrow'],
     [den(' secret'), 'Secret den', 'A hidden boss, only where one is buried'],
+    /* THE TWO THE KEY NEVER NAMED. Tom, 2026-09-03: "out there today doesnt even
+       have everything that is available on the boneyard". Both draw on the map
+       and neither had a row, so a player met them with no idea what they were.
+       Deliberately NOT adding the Mimic: a chest that turns out to have teeth
+       only works if the key has not already spoiled it. */
+    [`<span class="leg-wnd"><img src="${WANDERER_ART}" alt=""></span>`, 'The Wanderer',
+      'He walks a route. Step into his path'],
+    [`<span class="leg-spire"><img src="assets/brand/tomb.png" alt=""></span>`, 'Dark Spire',
+      'Take a tower and it pays you tribute'],
   ];
   return `${head}${rows.map(([m, n, d]) =>
     `<div class="leg-row"><span class="leg-ico">${m}</span><span class="leg-txt"><b>${n}</b><small>${d}</small></span></div>`).join('')}`;
@@ -17619,13 +17628,13 @@ async function renderBoneyard(el) {
           <p class="note" style="margin-bottom:6px">The Boneyard is your real neighborhood, skinned for skeletons. Fresh spawns appear around you every day: walk within ${COLLECT_RADIUS_M} m of one and collect it.</p>
           <p class="note" style="margin-bottom:14px">Your location is used on this phone only, never stored, never uploaded. Spawns are computed on-device; the map itself loads over the network.</p>
           <button class="btn" id="mapStart">Open the map</button>
-          <div class="card" style="margin-top:16px">
-            <div class="card-title">OUT THERE TODAY</div>
-            <div class="legend-row"><span class="legend-pix">${spawnIcon('bones', 24)}</span><div><b>Bone cache</b><span class="note"> · XP for your bonehead</span></div></div>
-            <div class="legend-row"><span class="legend-pix">${spawnIcon('coins', 24)}</span><div><b>Coin pile</b><span class="note"> · coins to spend in the shop</span></div></div>
-            <div class="legend-row"><span class="legend-pix">${spawnIcon('crate', 24)}</span><div><b>Buried crate</b><span class="note"> · a wearable inside</span></div></div>
-            <div class="legend-row"><span class="legend-pix rare">${spawnIcon('rare', 24)}</span><div><b>${MYSTERY_EGG.name}</b><span class="note"> · ${MYSTERY_EGG.desc}</span></div></div>
-          </div>
+          <!-- WAS A HAND-ROLLED COPY OF THE KEY, and it had drifted: four rows
+               against the key's nine, no Herb patch, no mini-boss, no dens, and
+               a crate described as "a wearable inside" where the key says "a
+               common crate of loot". mapLegendHtml exists precisely so the key
+               and the markers cannot drift, and the location-denied screen below
+               already reuses it. This one did not, so it rotted. -->
+          <div class="card" style="margin-top:16px">${mapLegendHtml('<div class="card-title">OUT THERE TODAY</div>')}</div>
         </div>
       </div>
     </div>`;
