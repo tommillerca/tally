@@ -3060,6 +3060,22 @@ function route({ keepScroll = false } = {}) {
   if (!keepScroll) el.scrollTop = 0;
   maybeCelebrate();
   return Promise.resolve(done).catch(() => {}).then(() => {
+    /* AND AGAIN, NOW THAT THERE IS SOMETHING TO SCROLL. Tom, 2026-09-03: "when
+       the app opened it shot me to the middle of the today screen not where my
+       bonehead was."
+       `el.scrollTop = 0` three lines up is the ONLY reset, and it runs
+       synchronously, before any screen renderer has written a byte: every one of
+       them is async and awaits its first IndexedDB read long before it touches
+       innerHTML. On a tab-to-tab navigation that is harmless, because #screen
+       still holds the OUTGOING screen and therefore has a real scroll range to be
+       reset. On a BOOT #screen is the empty <main> from index.html, the write is
+       a no-op against a zero scroll range, and nothing re-asserted it once Today
+       landed, so whatever offset the engine restored for the scroller after
+       layout was left standing. That is why the symptom is boot-only.
+       `!== 0` rather than an unconditional write, and NAV-ONLY: refresh() passes
+       keepScroll and must still preserve the reading position (see its own
+       comment, and today-container-audit's SCROLL rows). */
+    if (isNav && el.scrollTop !== 0) el.scrollTop = 0;
     composeAvatars(el);
     /* A route lands as ONE picture.
      *
