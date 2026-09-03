@@ -42,6 +42,15 @@
   .feat-chip { display: inline-block; font-size: 12px; background: #241b30; color: #d7a6ff; border: 1px solid #3a2d4d; border-radius: 999px; padding: 3px 9px; }
   .feat-chip b { color: #fff; margin-left: 2px; }
   .feat-tally { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  /* Survey v2: one block per question, and the tracked number on its own. */
+  .q-block { margin: 14px 0 18px; }
+  .q-head { font-size: 13px; color: #cfc6d6; font-weight: 700; margin-bottom: 6px; }
+  .q-n { color: #6f6a7a; font-weight: 400; margin-left: 6px; }
+  .q-pct { color: #6f6a7a; font-weight: 400; }
+  .q-block .bar-row .k { width: 240px; }
+  .lead-sum.q5 { border-color: #3a5a1a; }
+  .lead-sum.q5 b { color: #a5e847; font-size: 16px; }
+  select.mini { -webkit-appearance: none; appearance: none; border: none; }
   .rmeta { color: #6f6a7a; font-size: 12px; margin-top: 6px; }
   .rmeta a { color: #7cc4ff; }
   .err { color: #ff8080; }
@@ -103,7 +112,70 @@
       // ---- survey leads digest: a summary line + one clean card per response ----
       const FEAT_LABELS = { log:'Logging food', steps:'Walking / steps', pit:'The Pit', boneyard:'The Boneyard', pets:'Pets / Stable', kitchen:'The Kitchen', crew:'The Crew', quests:'Quests / wheel' };
       const featList = l => (l.features ? String(l.features).split(',').filter(Boolean) : []);
-      const leads = s.leads || [];
+      const allLeads = s.leads || [];
+      /* SURVEY V2. Two surveys asked different questions of overlapping people,
+         so a single averaged list would be a number with no meaning: the form
+         filter below is not a convenience, it is what keeps v1 and v2 apart.
+         Every row the server hands back carries a form (NULL coalesced to
+         'dayone' in the select), so the buckets are exhaustive. */
+      const FORM_LABELS = { dayone: 'Day One survey (v1)', v2: "The player report (v2)" };
+      /* The v2 answer keys, in the order the sheet asks them. These MUST match
+         what the client posts in `answers`; a key here with no data renders as
+         "not answered" rather than vanishing, which is how a client/server
+         drift shows up on the page instead of silently halving n. */
+      const Q_LABELS = {
+        q1: 'Why did you open the app today?',
+        q2: 'What keeps you coming back? (up to 2)',
+        q3: 'Anything you did not understand?',
+        q4: 'If we cut one thing, what should go?',
+        q5: 'Will you still be playing in a month?',
+      };
+      // Free text is listed, never tallied: two people never phrase it the same.
+      const FREE_LABELS = { q3text: 'Q3 · what was confusing', q6: 'Q6 · what nearly made them stop' };
+      const Q5_YES = ['definitely', 'probably'];   // the numerator of the one tracked number
+      const answersOf = l => { try { return JSON.parse(l.answers) || {}; } catch { return {}; } };
+      const asList = v => v == null || v === '' ? [] : (Array.isArray(v) ? v.filter(x => typeof x === 'string') : [String(v)]);
+      /* One question's tally: option, count, percent of the people who ANSWERED
+         IT (not of everyone), because every question is skippable and dividing
+         by the wrong n is how a survey lies. Multi-select questions have counts
+         that sum past n on purpose. */
+      const qTally = (rows, key) => {
+        const counts = {}; let answered = 0;
+        rows.forEach(l => {
+          const vals = asList(answersOf(l)[key]);
+          if (!vals.length) return;
+          answered++;
+          vals.forEach(v => { counts[v] = (counts[v] || 0) + 1; });
+        });
+        const ordered = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        if (!answered) return `<div class="q-block"><div class="q-head">${esc(Q_LABELS[key])} <span class="q-n">nobody answered</span></div></div>`;
+        const max = ordered[0][1];
+        return `<div class="q-block"><div class="q-head">${esc(Q_LABELS[key])} <span class="q-n">n=${answered}</span></div>`
+          + ordered.map(([opt, n]) => bar(`${esc(opt)} <span class="q-pct">${Math.round(n / answered * 100)}%</span>`, n, max)).join('')
+          + '</div>';
+      };
+      const freeList = (rows, key) => {
+        const items = rows.map(l => ({ who: l.name || l.label || 'anonymous', t: answersOf(l)[key] }))
+          .filter(x => typeof x.t === 'string' && x.t.trim());
+        if (!items.length) return '';
+        return `<div class="q-block"><div class="q-head">${esc(FREE_LABELS[key])} <span class="q-n">${items.length}</span></div>`
+          + items.map(x => `<div class="rpt lead"><div class="lead-v">${esc(x.t)}</div><div class="rmeta">${esc(x.who)}</div></div>`).join('')
+          + '</div>';
+      };
+      function renderV2(rows) {
+        // Q5 first and alone: it is the one number watched release over release.
+        const q5 = rows.map(l => answersOf(l).q5).filter(v => typeof v === 'string' && v);
+        const yes = q5.filter(v => Q5_YES.includes(v.toLowerCase())).length;
+        const q5line = q5.length
+          ? `<div class="lead-sum q5"><b>Still playing in a month: ${Math.round(yes / q5.length * 100)}%</b> (n=${q5.length})</div>`
+          : '';
+        return q5line + Object.keys(Q_LABELS).map(k => qTally(rows, k)).join('')
+          + Object.keys(FREE_LABELS).map(k => freeList(rows, k)).join('');
+      }
+      /* v1 rows keep the card-per-response shape they always had: five fixed
+         questions, two of them free text, and eleven of them is a readable
+         list. Only v2 is big enough to need tallying. */
+      function renderV1(leads) {
       const optedEmails = [...new Set(leads.filter(l => l.optin && l.email).map(l => l.email))];
       const withEmail = leads.filter(l => l.email).length;
       // feature-usage tally across all responses, most-used first
@@ -126,6 +198,32 @@
         const meta = [l.label ? 'Crew: ' + esc(l.label) : '', l.geo ? esc(l.geo) : '', new Date(l.ts).toLocaleString()].filter(Boolean).join(' · ');
         return `<div class="rpt lead"><div class="lead-head"><b>${esc(who)}</b> · ${mail}</div>${featChips}${fb}${want}<div class="rmeta">${meta}</div></div>`;
       }).join('') : '<p class="note">No survey responses yet.</p>';
+        return leadsSummary + leadsHtml;
+      }
+      /* Which forms actually have rows, newest form first, so the filter offers
+         only buckets that exist and lands on the survey currently running. */
+      const formsPresent = [...new Set(allLeads.map(l => l.form || 'dayone'))];
+      let leadForm = formsPresent[0] || 'dayone';
+      const formPicker = formsPresent.length > 1
+        ? `<select id="leadForm" class="mini">${formsPresent.map(f => `<option value="${esc(f)}">${esc(FORM_LABELS[f] || f)} (${allLeads.filter(l => (l.form || 'dayone') === f).length})</option>`).join('')}</select>`
+        : '';
+      function paintLeads() {
+        const rows = allLeads.filter(l => (l.form || 'dayone') === leadForm);
+        const box = document.getElementById('leadsBox');
+        if (!box) return;
+        box.innerHTML = leadForm === 'dayone' ? renderV1(rows) : renderV2(rows);
+        /* Re-bound on every paint: the button lives inside the HTML this just
+           replaced, so a listener attached once would be dead after a filter
+           change. Its clipboard payload is the FILTERED set, deliberately. */
+        const copyBtn = document.getElementById('copyEmails');
+        if (copyBtn) {
+          const mails = [...new Set(rows.filter(l => l.optin && l.email).map(l => l.email))];
+          copyBtn.onclick = async () => {
+            try { await navigator.clipboard.writeText(mails.join(', ')); copyBtn.textContent = 'Copied ✓'; }
+            catch { copyBtn.textContent = mails.join(', '); }
+          };
+        }
+      }
       /* TWO WINDOWS, AND A LABEL HAS TO SAY WHICH ONE IT MEANS.
          windowDays is how long the events table KEEPS rows (the retention
          cron). statsWindowDays is how far back /stats CHOSE to read, which is
@@ -245,13 +343,11 @@
           const meta = [esc(who), r.geo ? esc(r.geo) : '', new Date(r.ts).toLocaleString()].filter(Boolean).join(' · ');
           return `<div class="rpt">${tag}${r.target ? `<b>${esc(r.target)}</b> ` : ''}<span class="rnote">${esc(r.note) || '<i>(no note)</i>'}</span><div class="rmeta">${meta}${coords ? ' · ' + coords : ''}</div></div>`;
         }).join('') : '<p class="note">No reports yet. Testers can press and hold the map to nominate a den or flag an unreachable spot.</p>'}
-        <h2>Survey leads 💜</h2>${leadsSummary}${leadsHtml}
+        <h2>Survey leads 💜 ${formPicker}</h2><div id="leadsBox"></div>
         <p class="note">Names shown for testers who went online (Crew); location is coarse (country/city from IP, no GPS). Updated ${new Date(s.generatedAt).toLocaleString()}</p>`;
-      const copyBtn = document.getElementById('copyEmails');
-      if (copyBtn) copyBtn.onclick = async () => {
-        try { await navigator.clipboard.writeText(optedEmails.join(', ')); copyBtn.textContent = 'Copied ✓'; }
-        catch { copyBtn.textContent = optedEmails.join(', '); }
-      };
+      const picker = document.getElementById('leadForm');
+      if (picker) { picker.value = leadForm; picker.onchange = () => { leadForm = picker.value; paintLeads(); }; }
+      paintLeads();
     } catch (e) { $('#out').innerHTML = `<p class="err">Could not reach the server: ${e.message}</p>`; }
   }
   $('#go').onclick = load;
