@@ -220,9 +220,13 @@ try {
      out the moment the map opens, so a player sees it or the map key but never
      both, which is exactly why the two drifted unnoticed. This has to happen
      before the click below or there is nothing left to read. */
-  const intro = await page.evaluate(() => [...document.querySelectorAll('#mapIntro .legend-row')].map(r => ({
+  /* SELECTOR MOVED 2026-09-03. The intro card used to hand-roll its own
+     `.legend-row` markup; it now calls mapLegendHtml(), which emits `.leg-row`
+     with the description in a <small>, not a `.note`. Both spellings are read
+     so this keeps grading a tree that still has the old markup. */
+  const intro = await page.evaluate(() => [...document.querySelectorAll('#mapIntro .leg-row, #mapIntro .legend-row')].map(r => ({
     name: (r.querySelector('b')?.textContent || '').trim(),
-    note: (r.querySelector('.note')?.textContent || '').replace(/^\s*·\s*/, '').trim(),
+    note: (r.querySelector('small, .note')?.textContent || '').replace(/^\s*·\s*/, '').trim(),
   })));
   await page.evaluate(() => { const b = document.querySelector('#mapStart'); if (b && b.offsetParent) b.click(); });
   await sleep(13000);
@@ -345,7 +349,11 @@ try {
     out.push('UNPRV CONTROL  the map drew no mini-boss marker anywhere the walk stood, so the three '
       + 'mini rows are UNGRADED this run, not passed.');
   }
-  ok('CONTROL  the map key rendered all nine rows', s.legend.length === 9, `${s.legend.length} rows`);
+  /* NINE -> ELEVEN, 2026-09-03. The key gained a Wanderer row and a Dark Spire
+     row, both of which draw on the map and neither of which it had ever named.
+     Kept as an EXACT count on purpose: it is what catches a row silently
+     disappearing, which is the failure this control exists for. */
+  ok('CONTROL  the map key rendered all eleven rows', s.legend.length === 11, `${s.legend.length} rows`);
   /* POSITIVE CONTROL. Rows below pass for free if the probe is reading nodes
      that hold no pixel art at all, which is failure mode 2 and 4 of
      guard-hygiene-lint. Require that a real icons-pix PNG was seen AND decoded. */
@@ -371,8 +379,20 @@ try {
     !!introEgg && !!keyEgg, `intro "${introEgg?.name ?? 'MISSING'}", key "${keyEgg?.name ?? 'MISSING'}"`);
   ok(`NAME     the map key calls it "${EGG_NAME}"`, keyEgg?.name === EGG_NAME, `got "${keyEgg?.name}"`);
   ok(`NAME     the intro card calls it "${EGG_NAME}"`, introEgg?.name === EGG_NAME, `got "${introEgg?.name}"`);
-  ok('NAME     the two surfaces agree, character for character',
-    !!introEgg && introEgg.name === keyEgg?.name, `intro "${introEgg?.name}" vs key "${keyEgg?.name}"`);
+  /* THIS ROW WENT VACUOUS ON 2026-09-03 AND HAS BEEN RE-POINTED. It compared one
+     row's name across two surfaces to catch drift between two hand-maintained
+     lists. The intro card now CALLS mapLegendHtml(), so a single-row comparison
+     can no longer fail by construction — and a check that cannot fail is worse
+     than no check.
+     What can still break is somebody re-forking the intro card, which is exactly
+     what had happened before (four rows against the key's nine, and a crate
+     described as "a wearable inside"). So compare the WHOLE list, both ways. */
+  const introNames = intro.map(r => r.name).join('|');
+  const keyNames = s.legend.map(r => r.name.trim()).join('|');
+  ok('NAME     the intro card and the map key are the same list, row for row',
+    introNames === keyNames && intro.length > 0,
+    intro.length === 0 ? 'intro rendered NOTHING'
+      : `intro ${intro.length} rows vs key ${s.legend.length} rows${introNames === keyNames ? '' : `\n     intro: ${introNames}\n     key:   ${keyNames}`}`);
   ok(`NAME     both describe it as "${EGG_DESC}"`,
     introEgg?.note === EGG_DESC && s.legend.find(r => /egg/i.test(r.name))?.desc === EGG_DESC,
     `intro "${introEgg?.note}" vs key "${s.legend.find(r => /egg/i.test(r.name))?.desc}"`);
