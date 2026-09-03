@@ -122,10 +122,18 @@ export async function fetchOffProductEx(code, fetchFn = timedFetch) {
   for (const c of tryCodes) {
     try {
       const r = await fetchFn(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(c)}.json?fields=${OFF_FIELDS}`);
-      reached = true;            // it answered: a 404 here IS "not in this book"
-      if (r.status === 404) continue;
+      /* A RESPONSE OBJECT IS NOT AN ANSWER ABOUT THE PRODUCT. `reached` used to
+         be set right here, so an Open Food Facts 500, a 502 off the CDN edge, or
+         a captive-portal login page (200, HTML body, r.json() throws below into
+         the catch) all counted as "the book answered, the product is not in it".
+         The player got "Not in the books" with no Try again and was steered into
+         creating a permanent duplicate custom food. Only two things are evidence:
+         a 404, which really is this book saying no such code, and a body that
+         parsed as JSON. */
+      if (r.status === 404) { reached = true; continue; }
       if (!r.ok) continue;
       const j = await r.json();
+      reached = true;
       const food = mapOffProduct(j);
       if (food) return { food, reached: true };
     } catch { /* no answer from this host; `reached` stays as it was */ }
@@ -279,9 +287,14 @@ export async function fetchFdcByBarcodeEx(code, apiKey = 'DEMO_KEY', fetchFn = t
     const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${encodeURIComponent(apiKey)}` +
       `&query=${encodeURIComponent(code)}&dataType=Branded&pageSize=5`;
     const r = await fetchFn(url);
-    reached = true;
+    // Same misdirection as fetchOffProductEx above, and it lands in the same
+    // place: lookupBarcode ANDs the two `reached` flags, so a USDA 500 or an
+    // unparseable body was enough to turn an honest OFF miss into "not in the
+    // books". This is a search endpoint, so nothing short of a parsed body is
+    // an answer (there is no 404-means-absent case here).
     if (!r.ok) return { food: null, reached };
     const j = await r.json();
+    reached = true;
     const stripped = code.replace(/^0+/, '');
     for (const raw of j.foods || []) {
       const gtin = String(raw.gtinUpc || '').replace(/^0+/, '');
