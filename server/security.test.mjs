@@ -513,6 +513,67 @@ await test('/report and /survey are rate limited per device', async () => {
 });
 
 /* =====================================================================
+   SURVEY V2, 2026-09-03. POST /survey now takes a form slug and two JSON
+   blobs (answers, ctx). The structural half of this (the INSERT matches the
+   schema, the blob reads back through json_extract, the dashboard payload
+   carries it) runs with no worker in schema-plan.test.mjs. What only a live
+   route can answer is here.
+
+   MECHANISM. answers is capped at 4000 chars and ctx at 1000, and the cap
+   REFUSES with 400 rather than truncating. DIRECTION: a 200 for an over-cap
+   body is the failure, because a JSON string sliced at 4000 chars is
+   unparseable for the year the row survives, and it is unparseable silently:
+   json_extract answers NULL to every query and nothing anywhere goes red.
+   BOUND: exactly 4000 is accepted, so the cases below sit on both sides of the
+   same edge; a check that only ever posted 5000 could not tell a working cap
+   from an endpoint that refuses everything.
+   ===================================================================== */
+const postSurvey = (body, ip = rndIp()) => fetch(BASE + '/survey', {
+  method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
+  body: JSON.stringify(body),
+});
+// answers whose JSON.stringify lands on exactly `n` chars: {"pad":"..."}
+const blobOfLength = n => ({ pad: 'x'.repeat(n - '{"pad":""}'.length) });
+
+await test('an over-cap answers blob is refused, and the 4000th character still lands', async () => {
+  assert.equal(JSON.stringify(blobOfLength(4000)).length, 4000, 'the fixture does not measure what it claims');
+  const ok = await postSurvey({ device: rndDevice(), form: 'v2', answers: blobOfLength(4000) });
+  assert.equal(ok.status, 200, 'a payload exactly at the cap was refused, so the cap is off by one');
+  const over = await postSurvey({ device: rndDevice(), form: 'v2', answers: blobOfLength(5000) });
+  assert.equal(over.status, 400, 'a 5000-char answers blob was accepted; it is now truncated garbage in the table');
+  const overCtx = await postSurvey({ device: rndDevice(), form: 'v2', ctx: blobOfLength(1001) });
+  assert.equal(overCtx.status, 400, 'ctx has no cap of its own');
+  const okCtx = await postSurvey({ device: rndDevice(), form: 'v2', ctx: blobOfLength(1000) });
+  assert.equal(okCtx.status, 200, 'a ctx exactly at the cap was refused, so the cap is off by one');
+});
+
+await test('a v2 body reaches the dashboard payload with its answers parseable', async () => {
+  const device = rndDevice();
+  const answers = { q1: 'pit', q2: ['streak', 'pets'], q5: 'definitely', q6: 'sec-' + device };
+  assert.equal((await postSurvey({ device, form: 'v2', answers, ctx: { days: 12, level: 7 } })).status, 200);
+  const r = await fetch(`${BASE}/stats?token=${encodeURIComponent(process.env.ADMIN_TOKEN || 'devtoken')}`);
+  assert.equal(r.status, 200, `/stats answered ${r.status}; is ADMIN_TOKEN devtoken?`);
+  const leads = (await r.json()).leads || [];
+  assert.ok(leads.length, 'the leads list came back empty, so this case examined nothing');
+  const mine = leads.find(l => { try { return JSON.parse(l.answers || 'null')?.q6 === 'sec-' + device; } catch { return false; } });
+  assert.ok(mine, 'the v2 lead just posted is not in the dashboard payload');
+  assert.equal(mine.form, 'v2', 'the payload does not carry the form, so v1 and v2 cannot be told apart');
+  assert.deepEqual(JSON.parse(mine.answers), answers, 'the answers blob did not survive the round trip');
+  assert.equal(JSON.parse(mine.ctx).level, 7, 'the silent context did not survive');
+});
+
+/* v2 must not have bought itself a way around the limiter. rl_survey_dev is
+   3/day per device (RATE at the top of src/index.js), so the FOURTH post is
+   the first 429 and the third must NOT be: a limiter that had drifted to 2/day
+   would bite a player who edited an answer and resubmitted. */
+await test('the per-device survey limit still bites on the fourth v2 post', async () => {
+  const device = rndDevice();
+  const post = () => postSurvey({ device, form: 'v2', answers: { q1: 'pit' } });
+  for (let i = 1; i <= 3; i++) assert.equal((await post()).status, 200, `post ${i} of 3 was refused`);
+  assert.equal((await post()).status, 429, 'a fourth survey post got through; the device limit is not applied to v2 bodies');
+});
+
+/* =====================================================================
    FINDING 3. The leaderboard published the lookup key to every top player's
    encrypted identity bundle.
 

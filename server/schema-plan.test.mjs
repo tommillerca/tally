@@ -913,6 +913,26 @@ test('a v1 body still inserts with form NULL, and a v2 body reads back through j
   ldb.close();
 });
 
+/* THE ROUTE'S HALF OF "form NULL". The case above binds its own values, so it
+   proves the COLUMN can hold NULL and nothing about what POST /survey writes
+   when a pre-v2 client sends no form. Over HTTP that is invisible too: /stats
+   COALESCEs NULL to 'dayone', so the payload looks identical either way, and
+   the only thing that can tell them apart is the source. A source read is a
+   weak guard and this is one on purpose, for the same reason recordPruneRun's
+   is above: the alternative is a DEV route added for one assertion.
+   WHY IT MATTERS. A literal 'dayone' written here would give v1 two encodings,
+   NULL for every row before 2026-09-03 and a string for every one after, and
+   the dashboard's filter would quietly split the v1 cohort in half. */
+test('POST /survey writes form NULL, not a literal, when the client sends none', () => {
+  const i = source.indexOf("if (path === '/survey' && request.method === 'POST')");
+  assert.ok(i > 0, 'POST /survey is gone; re-read the route and update this file');
+  const route = source.slice(i, source.indexOf('INSERT INTO leads', i));
+  const m = /\.test\(rawForm\)\s*\?\s*rawForm\s*:\s*([^;]+);/.exec(route);
+  assert.ok(m, 'the form fallback is gone from POST /survey; re-read it and update this file');
+  assert.equal(m[1].trim(), 'null',
+    `an absent form falls back to ${m[1].trim()}, so v1 now has two encodings and the dashboard filter splits the cohort`);
+});
+
 /* Run dashboard.html's own script over a leads array and return what it painted
    into #leadsBox. The page is one <script> with no imports, so a four-method DOM
    stub is enough, and this grades the SHIPPED file rather than a copy of its
