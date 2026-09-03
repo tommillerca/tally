@@ -5703,8 +5703,8 @@ function bestiaryBannerHtml(den = remoteDen(dateKey())) {
 /* RETIRED FROM TODAY (2026-08-21), NOT DELETED. The hype banner replaced the
    whole "Out there today" card, which is the banner stack Tom asked to be gone,
    and the hype banner itself came off on 2026-09-03. This builder and the four
-   row builders it calls are left intact and
-   unreachable, the same way the garden was closed in cropsRipe: reviving the card
+   row builders it calls are left intact and unreachable, the same way the garden
+   was closed in cropsRipe: reviving the card
    is putting the call back in renderToday, and restoring the held-spires read to
    that function's Promise.all along with its import from js/spires.js (dropped
    here because it was the only caller, and unit.test.js lints app.js for spires
@@ -11810,8 +11810,9 @@ function newsBannerHtml(unseen, eq) {
            still finds it by id anywhere inside the rendered screen.
            It is NOT a NEWS row: the podium is fetched per week and hydrated after
            render, so it cannot be a static entry in the array below, and it stays
-           `hidden` until there is a settled race to show. The unseen dot still
-           counts NEWS ids only. */''}
+           `hidden` until there is a settled race to show. That is also why it
+           lights this pill's dot from hydrateRaceResult rather than from the
+           `unseen` count above: by then the summary is already on screen. */''}
       <details class="rr-banner" id="raceResultCard" hidden></details>
       ${/* A ROW THAT NAVIGATES SAYS WHERE IT GOES. Tom, 2026-08-27: "i clicked
            another and it took me to the boneyard with no explanation in between
