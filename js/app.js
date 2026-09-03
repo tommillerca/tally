@@ -2810,8 +2810,9 @@ async function cloudTroubleNotice() {
 
 async function backupNudge() {
   try {
-    const log = await db.all('log');
-    if (log.length < 20) return;
+    // count(), not all(): this only ever asked "are there 20 rows yet", and
+    // reading the whole log to answer it grows with every meal ever logged.
+    if (await db.count('log') < 20) return;
     const last = await kvGet('lastExportAt', 0);
     const nudged = await kvGet('lastNudgeAt', 0);
     const twoWeeks = 14 * 86400e3;
