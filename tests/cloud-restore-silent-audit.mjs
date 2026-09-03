@@ -44,7 +44,7 @@
  *
  * Usage: node tests/cloud-restore-silent-audit.mjs
  */
-import { boot, serveTree, sleep } from './godmode.js';
+import { boot, serveTree, sleep, maskWebdriver } from './godmode.js';
 
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
@@ -54,16 +54,25 @@ const API = srv.url.replace(/\/$/, '') + '/api';
 const { browser, page } = await boot(srv.url, { headless: process.env.HEADLESS_MODE || 'shell' });
 
 /* ---- make this page look like a real player's, not a test rig ---- */
-await page.evaluateOnNewDocument(() => {
-  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
-});
+await maskWebdriver(page);
 await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
 
 /* ---- the vault stub ---- */
 let mode = { kind: 'pass' };           // 'pass' | 'status' | 'abort'
 let backupHits = 0;
+/* register stub for the ADOPT section below: 'off' lets it through untouched
+   (the boot scenarios never reach it), 'ok' registers, 'abort' drops it. */
+let regMode = 'off';
+let regHits = 0;
 await page.setRequestInterception(true);
 page.on('request', req => {
+  if (regMode !== 'off' && /\/api\/register(\?|$)/.test(req.url())) {
+    regHits++;
+    if (regMode === 'abort') { req.abort('failed').catch(() => {}); return; }
+    req.respond({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ playerId: 'adopt-player', handle: 'Adopted Bone', friendCode: 'BONE-TEST-0001', name: null }) }).catch(() => {});
+    return;
+  }
   if (!/\/api\/backup(\?|$)/.test(req.url())) { req.continue().catch(() => {}); return; }
   backupHits++;
   if (mode.kind === 'abort') { req.abort('failed').catch(() => {}); return; }
@@ -137,7 +146,20 @@ const toastLook = () => page.evaluate(() => {
   let o = 1, n = t;
   while (n && n.nodeType === 1) { o *= parseFloat(getComputedStyle(n).opacity); n = n.parentElement; }
   const cs = getComputedStyle(t);
+  /* ASK WHETHER ANYTHING IS PAINTED OVER THE TOAST, NOT WHETHER THE TOAST TAKES
+     TAPS. This read `document.elementFromPoint(centre) === t` until 2026-09-01,
+     and the accessibility pass then gave .toast `pointer-events: none` on
+     purpose, because for the 2.2 to 3.6s a message is up it was eating the taps
+     meant for the Bonehead, Stable and Kitchen doors underneath it. A
+     tap-transparent element is never the answer elementFromPoint gives, so this
+     read false on every toast the app has ever shown and graded four correct
+     surfaces as silent. It asks the same question by making the toast
+     hit-testable for the length of one synchronous probe and putting the
+     property straight back: a splash painted over it still answers the splash. */
+  const pe = t.style.pointerEvents;
+  t.style.pointerEvents = 'auto';
   const hit = r.width && r.height ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+  t.style.pointerEvents = pe;
   return {
     exists: true, hidden: t.hidden, text: (t.textContent || '').trim(), eff: +o.toFixed(3),
     w: Math.round(r.width), h: Math.round(r.height), vis: cs.visibility, disp: cs.display,
@@ -223,6 +245,67 @@ ok('QUIET an already-restored boot does not even ASK the server',
   rAlready.hits === 0, `${rAlready.hits} request(s)`);
 ok('QUIET an already-restored boot says nothing to the player',
   !rAlready.best, rAlready.best ? `toasted "${rAlready.best.text}"` : 'silent for 9s');
+
+/* ================= 4. adoptIdentity: restore honesty ================= */
+/* The same one-shot rule applies to a phrase restore / account switch, plus one
+   more: the device identity must not swap until the server has ACCEPTED the
+   restored key. Before the fix, adoptIdentity swapped kv + keychain FIRST, so a
+   dead connection at register left a half-adopted device (signed as the new
+   account, none of its data, old identity destroyed), and it burned the
+   one-shot after ANY pull answer, so a dropped save download read "no save to
+   pull" forever. Driven at the module seam (social.adoptIdentity) on the live
+   page with /register and /backup both stubbed; no reload is needed because
+   nothing here depends on boot. */
+const adoptScenario = async ({ reg, backup }) => {
+  regMode = reg; mode = backup; regHits = 0; backupHits = 0;
+  await kvPut({ put: [], del: ['bootRestored'] });
+  const out = await page.evaluate(async () => {
+    const social = await import('/js/social.js');
+    const { kvGet } = await import('/js/db.js');
+    const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+    const bundle = { privJwk: await crypto.subtle.exportKey('jwk', kp.privateKey), pubJwk: await crypto.subtle.exportKey('jwk', kp.publicKey), createdAt: Date.now() };
+    const before = await kvGet('identity', null);
+    const r = await social.adoptIdentity(bundle).catch(e => ({ ok: false, threw: String(e) }));
+    const after = await kvGet('identity', null);
+    return {
+      r,
+      swapped: (before && before.privJwk && before.privJwk.d) !== (after && after.privJwk && after.privJwk.d),
+      adopted: !!(after && after.privJwk && after.privJwk.d === bundle.privJwk.d),
+    };
+  });
+  return { ...out, flag: await kvGet('bootRestored'), regHits, backupHits };
+};
+
+/* register unreachable: the device must be left exactly as it was */
+const aReg = await adoptScenario({ reg: 'abort', backup: { kind: 'status', status: 500, body: '{}' } });
+ok('ADOPT SAMPLE the register stub was reached', aReg.regHits > 0, `${aReg.regHits} request(s)`);
+ok('ADOPT a failed register refuses cleanly (ok:false, nothing thrown)',
+  aReg.r && aReg.r.ok === false && !aReg.r.threw, JSON.stringify(aReg.r));
+ok('ADOPT a failed register leaves the device identity UNTOUCHED (no half-adopted device)',
+  !aReg.swapped, `swapped=${aReg.swapped}`);
+
+/* register ok, the save download dies mid-restore: the finding's exact case */
+const aDrop = await adoptScenario({ reg: 'ok', backup: { kind: 'abort' } });
+ok('ADOPT SAMPLE the dropped-download stub was reached', aDrop.backupHits > 0, `${aDrop.backupHits} request(s)`);
+ok('ADOPT a dropped save download still adopts the identity (register already succeeded)',
+  aDrop.r && aDrop.r.ok === true && aDrop.adopted, JSON.stringify(aDrop.r));
+ok('ADOPT RETRY a dropped save download does NOT burn the one-shot: the next boot pulls again',
+  !(aDrop.flag.present && aDrop.flag.v === true), JSON.stringify(aDrop.flag));
+ok('ADOPT HONEST a dropped download is not reported as "no save" (pullReason is neither none nor empty)',
+  aDrop.r && aDrop.r.restored === false && !['none', 'empty'].includes(aDrop.r.pullReason), JSON.stringify(aDrop.r));
+
+/* register ok, http-500 on the pull: the other failure path, same rule */
+const a500 = await adoptScenario({ reg: 'ok', backup: { kind: 'status', status: 500, body: '{"error":"boom"}' } });
+ok('ADOPT RETRY an http-500 pull does not burn the one-shot either',
+  !(a500.flag.present && a500.flag.v === true), JSON.stringify(a500.flag));
+
+/* register ok, definitive 404: this IS "no save", and it settles the flag.
+   Positive control for the two rows above. */
+const aNone = await adoptScenario({ reg: 'ok', backup: { kind: 'status', status: 404, body: '{}' } });
+ok('ADOPT QUIET a definitive "no backup" settles the one-shot',
+  aNone.flag.present === true && aNone.flag.v === true, JSON.stringify(aNone.flag));
+ok('ADOPT HONEST a definitive "no backup" is the ONE case that may say "no save" (pullReason none)',
+  aNone.r && aNone.r.ok === true && aNone.r.pullReason === 'none' && aNone.r.restored === false, JSON.stringify(aNone.r));
 
 await browser.close(); srv.close?.();
 console.log(fails.length ? `\n${fails.length} FAILED: ${fails.join(', ')}` : '\na failed cloud restore speaks, and is retried');

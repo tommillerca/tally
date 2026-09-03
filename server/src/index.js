@@ -14,6 +14,9 @@ const json = (obj, status = 200, extraHeaders = null) =>
 
 const MAX_SKEW_MS = 5 * 60 * 1000;
 const MAX_PROFILE_BYTES = 24 * 1024;
+// A spire claim body is {name, lat, lng}. Three words and two floats; see the
+// cap's own note on the /spires/{id}/claim route for what it stops.
+const MAX_SPIRE_BYTES = 2 * 1024;
 /* THE BACKUP CAP, AND WHAT IT ACTUALLY COSTS (measured 2026-08-17).
  *
  * A backup blob is base64(iv || AES-GCM(JSON.stringify(exportAll()))), so its
@@ -140,17 +143,31 @@ const MAX_BACKUP_BYTES = 4 * 1024 * 1024; // encrypted full save (food log grows
    question a restore screen has to answer. */
 const BACKUP_DAILY_MS = 24 * 60 * 60 * 1000;
 const PROMOTE_DAILY = `backups.daily_at IS NULL OR excluded.updated_at - backups.daily_at >= ${BACKUP_DAILY_MS}`;
+/* THE PLAYER MUST STILL EXIST AT WRITE TIME, and that is a rule in the
+   statement rather than an `if` in front of it, for the same reason the spire
+   claim's cap and shield are (see the long note there). verifySigned reads the
+   players row and the upsert lands an await later, so a save pushed while
+   /account/delete is committing verified against a player that no longer exists
+   by the time it writes. Measured on 2026-09-02 against 1681e58c, racing one
+   backup push against the delete: 25 of 30 rounds left an orphaned row, and
+   backups is the one table in this database with no pruning rule at all, so
+   nothing would ever have taken them back. `EXISTS` costs a primary-key probe
+   and it is the difference between "delete your account" meaning it and not. */
 const UPSERT_BACKUP =
-  `INSERT INTO backups (player_id, blob, app_v, size, updated_at) VALUES (?,?,?,?,?)
+  `INSERT INTO backups (player_id, blob, app_v, size, updated_at)
+   SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM players WHERE id = ?)
    ON CONFLICT(player_id) DO UPDATE SET
      daily_blob = CASE WHEN ${PROMOTE_DAILY} THEN backups.blob       ELSE backups.daily_blob END,
      daily_size = CASE WHEN ${PROMOTE_DAILY} THEN backups.size       ELSE backups.daily_size END,
      daily_at   = CASE WHEN ${PROMOTE_DAILY} THEN excluded.updated_at ELSE backups.daily_at  END,
      blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at`;
-/* The pre-migration statement, kept verbatim. Only reachable from the "no such
-   column" fallback in PUT /backup; see the note there. */
+/* The pre-migration statement: the same one, minus the daily slot. Only
+   reachable from the "no such column" fallback in PUT /backup; see the note
+   there. It carries the EXISTS clause too, because production is the tree most
+   likely to be running unmigrated and an orphan is no less an orphan there. */
 const UPSERT_BACKUP_NO_DAILY =
-  'INSERT INTO backups (player_id, blob, app_v, size, updated_at) VALUES (?,?,?,?,?) ' +
+  'INSERT INTO backups (player_id, blob, app_v, size, updated_at) ' +
+  'SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM players WHERE id = ?) ' +
   'ON CONFLICT(player_id) DO UPDATE SET blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at';
 
 /* ---------------- names + friend codes ----------------
@@ -329,11 +346,38 @@ const RATE_LIMITS = {
      is a queue drain: QCAP is 300 events and each POST carries 50, so a client
      that was offline sends ceil(300/50) = 6 back-to-back POSTs on reconnect.
      120/hour per device is 100x the steady rate and 20x the worst burst.
-     The IP bucket has to survive carrier CGNAT, where thousands of real players
-     share one address, so it is deliberately loose and is a backstop against
-     device-id rotation, not the primary control. */
+
+     THE IP BUCKET WAS 600/HOUR AND THAT WAS A LOCKOUT, not a backstop. It was
+     described here as "deliberately loose"; it was not, and round 12 measured
+     what it actually did. Twelve users behind ONE address, each posting 60
+     events an hour, which is half of what the DEVICE budget above allows a
+     single honest client: users 1 to 10 succeeded and spent the 600 exactly,
+     and users 11 and 12 got 429 on EVERY post for the rest of the window. A
+     brand-new install's very FIRST POST came back 429 with a retry-after of 59
+     minutes. So a NAT'd office, school, gym or stadium went analytics-dark, and
+     the device upsert with it, once about ten people were active on it. Those
+     crowds are exactly the ones worth measuring, and nothing anywhere reported
+     that they had stopped being measured: the client discards the result.
+
+     SO THE DEVICE BUCKET IS THE CONTROL AND THE IP BUCKET IS A CEILING ON ONE
+     SOURCE, which is what the paragraph above always claimed and the number
+     never delivered. 20,000/hour is set so a crowd cannot reach it before the
+     per-device limit stops the individual: it is 166 devices at the per-device
+     ceiling of 120, 333 at the 60/hour round 12 stressed with, and roughly
+     16,000 at the 28-a-day rate a real client posts. It still bounds one
+     abusive address at 20,000 requests an hour, or 5.5 a second, which no crowd
+     of honest clients produces and which caps that address's D1 cost at 51
+     writes a request whatever it does.
+     SIGNED TRAFFIC WAS NEVER THE PROBLEM and is deliberately untouched: the
+     same round ramped 400 users through one IP and counted ZERO rate-limit 429s
+     on every signed route at every level. The only 429s were the daily cheer
+     cap, which is a game rule doing its job.
+     THIS IS STILL NOT A FLOOD DEFENCE, and raising it does not pretend to be
+     one. See the note on the route itself: every check here is a D1 write, so
+     volumetric protection belongs in a Cloudflare rate-limiting rule in front
+     of the Worker, which is a deploy-side change and not a code one. */
   rl_events_dev:  { limit: 120, windowMs: 3600000 },
-  rl_events_ip:   { limit: 600, windowMs: 3600000 },
+  rl_events_ip:   { limit: 20000, windowMs: 3600000 },
 
   /* --- account creation ---
      A device registers ONCE, ever, and again on a reinstall. 10/hour per IP
@@ -363,6 +407,12 @@ const RATE_LIMITS = {
      session is a few dozen an hour. 120/hour leaves that alone. */
   rl_profile:     { limit: 120, windowMs: 3600000 },
 };
+
+/* Expired rows cleared by one first-hit sweep inside rateLimit(). Deliberately
+   the same 1,000 as PRUNE_BATCH: it is the size the batching note down there
+   was measured at, and there is no reason for a sweep on a request path to be
+   more expensive than one on the cron. */
+const RL_SWEEP_BATCH = 1000;
 
 function hexOf(buf, bytes) {
   return [...new Uint8Array(buf)].slice(0, bytes).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -396,11 +446,28 @@ async function rateLimit(env, name, kind, value) {
      RETURNING hits`)
     .bind(bucket, name, windowStart, windowStart + cfg.windowMs * 2).first();
   const hits = Number(row?.hits || 1);
-  // Sweep on the FIRST hit of a fresh window only: self-throttling (one delete
-  // per bucket per window) and it keeps the table proportional to live traffic
-  // rather than to all traffic ever.
+  /* Sweep on the FIRST hit of a fresh window only: self-throttling (one delete
+     per bucket per window) and it keeps the table proportional to live traffic
+     rather than to all traffic ever.
+     AND BOUNDED, because it runs on a REQUEST PATH and the rows it clears are
+     never the caller's own. This table is not only counters: every signed write
+     claims a nonce row here (claimSignature below) with a 10 minute TTL, so the
+     expired set is the whole signed write volume of the last window rather than
+     a handful of buckets. Round 12 caught the consequence: 202,733 expired rows
+     went in ONE 700 ms call, and the five backups in flight behind D1's single
+     writer each paid about 675 ms against a 134 to 361 ms baseline. Re-measured
+     against the real schema in local SQLite with that same backlog: 117.5 ms
+     unbounded, 1.0 ms at LIMIT 1000, and the LIMITed form is a COVERING seek of
+     idx_rate_limits_expiry rather than a walk of the whole expired set.
+     What a batch leaves behind is not lost: the next first-hit through here
+     takes another batch, and pruneStale() sweeps the same rows on the 15 minute
+     tick, which is what closes the gap for PUT /backup and POST /cheer. Neither
+     of those calls a limiter, so before the tick learned to sweep, the routes
+     writing the MOST nonce rows were the two that never cleared any. */
   if (hits === 1) {
-    await env.DB.prepare('DELETE FROM rate_limits WHERE expires_at < ?').bind(now).run().catch(() => {});
+    await env.DB.prepare(
+      'DELETE FROM rate_limits WHERE rowid IN (SELECT rowid FROM rate_limits WHERE expires_at < ? LIMIT ?)')
+      .bind(now, RL_SWEEP_BATCH).run().catch(() => {});
   }
   if (hits <= cfg.limit) return null;
   const resetMs = windowStart + cfg.windowMs - now;
@@ -744,6 +811,173 @@ async function pruneGrants(env, now = Date.now(), opts = {}) {
   };
 }
 
+/* ---------------- the tables nobody had looked at ----------------
+   `grep -n "DELETE FROM" src/index.js` lists every deleter on this worker, and
+   until now it named rate_limits, events, grants, prune_runs, friendships and
+   the /account/delete cascade. NOTHING deleted from `devices` or `reports`, and
+   `leads` only ever lost the rows belonging to a player who deleted their
+   account. Three tables that only grew, on a database whose 10 GB per-database
+   limit cannot be bought past, which is the same wall the events note above is
+   written against.
+
+   WHAT WRITES THEM, AND HOW FAST IT COULD. All three are reached from UNSIGNED
+   routes keyed on a device id the caller chooses, so the only thing standing
+   between them and an infinite table is a per-IP budget:
+     devices  upserted by POST /events, 20,000/hour per IP. Round 12 grew it by
+              111 rows with nothing anywhere to stop it.
+     reports  inserted by POST /report, 60/hour per IP = 1,440 rows a day.
+              Round 12 grew it by 402 rows, same finding.
+     leads    inserted by POST /survey, 10/day per IP.
+   The rows are small (97 bytes/row measured over a 1,000,000 row devices
+   fixture), so this is a slow leak rather than an urgent one. It is still a
+   leak, and "slow" has no ceiling in it.
+
+   THE WINDOW IS 365 DAYS FOR ALL THREE, and it is one number on purpose.
+     1. It is the shortest window in which the figures these tables feed still
+        mean what the dashboard calls them. /stats reads `devices` for four
+        ALL-TIME figures (total devices, the returned rate, and the country and
+        city breakdowns); /admin reads the 100 newest reports and the 200 newest
+        leads. A year of installs is a yearly business's view of itself. Ninety
+        days is a quarter's, and nobody asked for that.
+     2. Nothing may outlive the table it joins to. Both /stats reads of reports
+        and leads LEFT JOIN devices for a label, and every surviving events row
+        does too. One window across all three means no join ever degrades, and
+        365 is 12x EVENT_RETENTION_DAYS, so no events row can lose its device.
+     3. It buys a CEILING, which is the entire point. At the budgets above one
+        address can mint 14,400 devices rows and 1,440 reports rows a day.
+        Unbounded those are infinite; at 365 days they are 5.26M rows (about
+        510 MB) and 526k rows. Both fit inside 10 GB. "Forever" does not.
+     4. `leads` holds the only contact PII in this database, an email and an
+        explicit opt-in to be mailed. A shorter window there would be a decision
+        about somebody's mailing list rather than about storage, and it is also
+        the least leaky of the three by 144x. 365 bounds it without taking that
+        decision on Tom's behalf.
+
+   DEVICES KEYS OFF last_seen, NOT first_seen, because the question a retention
+   rule asks is "is this row still about anybody", and the /events upsert moves
+   last_seen on every post. A device installed two years ago and used this
+   morning stays; one that has not been seen for a year goes, along with the
+   coarse geo it is carrying, which is the over-collection half of the same
+   argument the events note makes. last_seen is nullable and `NULL < cutoff` is
+   NULL rather than true, so a row with no last_seen is never deleted: the same
+   fail-safe direction as the grants pruner's NULL arm, and unreachable through
+   the route anyway, which stamps last_seen on insert and on update. */
+const STALE_RULES = [
+  /* ORDER MATTERS, because maxRows is shared across the whole run. The three
+     retention tables go first: they are the ones with the leak, they drain in a
+     few hundred rows a tick, and putting the high-volume sweep in front of them
+     would let a busy hour of signed writes starve them indefinitely. */
+  { table: 'devices',     col: 'last_seen',  days: 365 },
+  { table: 'reports',     col: 'ts',         days: 365 },
+  { table: 'leads',       col: 'ts',         days: 365 },
+  /* NOT RETENTION: expires_at already IS the cutoff ("when this row may be
+     swept"), so days = 0 means now, which is exactly the sweep rateLimit() runs
+     inline. It is here so that PUT /backup and POST /cheer, which claim a nonce
+     row on every write and call no limiter, are no longer relying on some OTHER
+     route hitting a fresh window to clear up after them. It is last because it
+     is the only one whose backlog can arrive in a burst. */
+  { table: 'rate_limits', col: 'expires_at', days: 0 },
+];
+
+/* ---------------- rows whose player is gone ----------------
+   NOT RETENTION AT ALL, which is why these are a second list rather than a
+   `days: 0` entry: the question is not "how old is this row" but "is there
+   still an account this belongs to". Both writes are now guarded at write time
+   (the EXISTS clauses on UPSERT_BACKUP and the spire claim), so this list
+   cannot grow any more; it exists for the rows the unguarded code already left,
+   and as the backstop for anything a future signed write forgets.
+
+   ONLY TWO TABLES, and both earn it. A backup is the largest row in this
+   database and the only table with no pruning rule of any kind, so an orphan
+   there is permanent bytes; measured on 2026-09-02, thirty racing deletes left
+   25 of them. A spire is worse than bytes: the map still serves a ghost tower,
+   a rival can take it, and the takeover mints another orphan. `grants` is
+   deliberately NOT here. Its own pruner already walks it, orphans arrive only
+   from the same race on a route that pays nothing, and the candidate scan would
+   be the whole 1.9M row table every fifteen minutes.
+
+   `pick` IS THE PERFORMANCE OF THIS WHOLE SWEEP. The candidate SELECT runs on
+   every tick and finds nothing on almost all of them, so it must never touch
+   the row bodies: backups rows carry a whole encrypted save, and scanning them
+   by rowid would read gigabytes of blob pages to answer "no orphans". Selecting
+   player_id keeps the scan inside the PRIMARY KEY's own index, which covers it:
+   EXPLAIN QUERY PLAN, 2026-09-02, reads SCAN x USING COVERING INDEX
+   sqlite_autoindex_backups_1, and the NOT EXISTS is a covering seek on the
+   players PK per candidate. spires is small and has no such problem, so it uses
+   the same rowid shape as the retention rules above (its candidate scan covers
+   through idx_spires_owner anyway). */
+const ORPHAN_RULES = [
+  { table: 'backups', col: 'player_id', pick: 'player_id' },
+  { table: 'spires',  col: 'owner',     pick: 'rowid' },
+];
+
+/** Delete rows past their window, table by table, in bounded batches. Same
+ *  contract as pruneEvents and pruneGrants: no cursor, every statement
+ *  independently correct, so a tick killed halfway leaves the rest for the next
+ *  one and nothing has to be remembered in between. */
+async function pruneStale(env, now = Date.now(), opts = {}) {
+  const batch = Math.max(1, Math.min(5000, Number(opts.batch) || PRUNE_BATCH));
+  const maxRows = Math.max(0, opts.maxRows === undefined ? PRUNE_MAX_ROWS : Number(opts.maxRows));
+  const budgetMs = Math.max(100, opts.budgetMs === undefined ? PRUNE_BUDGET_MS : Number(opts.budgetMs));
+  const started = Date.now();
+  const deleted = {}, cutoffs = {};
+  let total = 0, stopped = null;
+
+  for (const rule of STALE_RULES) {
+    const cutoff = now - rule.days * 86400000;
+    cutoffs[rule.table] = cutoff;
+    for (;;) {
+      if (total >= maxRows) { stopped = 'maxRows'; break; }
+      if (Date.now() - started >= budgetMs) { stopped = 'budgetMs'; break; }
+      const n = Math.min(batch, maxRows - total);
+      /* The table and column are interpolated from STALE_RULES and can never
+         come from a request; both bounds are parameters. Every column named
+         there is indexed (schema.sql), which is what makes the inner SELECT a
+         COVERING seek instead of a table walk: measured on 1,000,000 devices
+         rows, 2.3 ms a batch with idx_devices_last_seen against 22.3 ms and a
+         SCAN without it, and the scan is the one that grows with the table. */
+      const r = await env.DB.prepare(
+        `DELETE FROM ${rule.table} WHERE rowid IN (
+           SELECT rowid FROM ${rule.table} WHERE ${rule.col} < ? LIMIT ?)`)
+        .bind(cutoff, n).run();
+      const c = Number(r?.meta?.changes || 0);
+      if (c) { deleted[rule.table] = (deleted[rule.table] || 0) + c; total += c; }
+      if (c < n) break;   // that table is drained for this cutoff
+    }
+    if (stopped) break;
+  }
+
+  /* The orphan pass rides the SAME total, maxRows and budgetMs as the loop
+     above, so the tick keeps one ceiling rather than gaining a second one. It
+     goes last for the reason the retention rules go first: those are the ones
+     with a leak, and a backlog of orphans must not be able to starve them. */
+  for (const rule of ORPHAN_RULES) {
+    if (stopped) break;
+    for (;;) {
+      if (total >= maxRows) { stopped = 'maxRows'; break; }
+      if (Date.now() - started >= budgetMs) { stopped = 'budgetMs'; break; }
+      const n = Math.min(batch, maxRows - total);
+      // Table and columns are interpolated from ORPHAN_RULES and can never come
+      // from a request; the only bound value is the limit.
+      const r = await env.DB.prepare(
+        `DELETE FROM ${rule.table} WHERE ${rule.pick} IN (
+           SELECT x.${rule.pick} FROM ${rule.table} x
+            WHERE NOT EXISTS (SELECT 1 FROM players p WHERE p.id = x.${rule.col}) LIMIT ?)`)
+        .bind(n).run();
+      const c = Number(r?.meta?.changes || 0);
+      if (c) { deleted[rule.table] = (deleted[rule.table] || 0) + c; total += c; }
+      if (c < n) break;   // no orphans left in that table
+    }
+  }
+
+  return {
+    total, deleted, cutoffs,
+    stopped,                       // null = it finished; otherwise the bound that hit
+    more: stopped !== null,        // true = there is still a backlog for the next tick
+    ms: Date.now() - started,
+  };
+}
+
 /* ---------------- what the pruner did ----------------
    THE CRON WENT LIVE ON 2026-08-24 AND NOBODY COULD PROVE A TICK HAD FIRED.
    scheduled() console.log'd its result and nothing else. `wrangler tail` is a
@@ -807,7 +1041,45 @@ async function recordPruneRun(env, row) {
   }
 }
 
-/* ---------------- signature auth ---------------- */
+/* ---------------- signature auth ----------------
+
+   ONE SIGNATURE, ONE EFFECT. Everything below used to check exactly two things:
+   the signature, and that the timestamp was inside MAX_SKEW_MS. Neither of them
+   says a request is NEW. A captured signed POST re-sent byte for byte verified
+   again and landed a fresh effect every time, for as long as that five-minute
+   window stayed open, and this was PROVEN against /cheer: one original plus two
+   replays delivered three cheers to the recipient.
+
+   The `ck` idempotency key closes it for a cheer sent by a client that mints
+   one -- the replay carries the same ck, so the grant's UNIQUE (player_id, key)
+   absorbs it -- but that is a per-route patch: it does nothing for an older
+   client that sends no ck, nothing for a spire claim, and nothing for the next
+   signed route somebody adds. So the guard lives HERE, once, in front of every
+   signed write there will ever be.
+
+   ECDSA signing is randomised, so two honest requests never share a signature,
+   and a real retry re-signs with a fresh ts (js/social.js signedFetch mints
+   both per call): nothing legitimate is ever refused by this. That is also why
+   it is not a substitute for `ck` -- a retry is a DIFFERENT signature, which
+   this cannot dedupe and the client's key can.
+
+   `rate_limits` rather than a new table, because a nonce IS a limiter: a budget
+   of one per subject, in a table nothing but the limiter writes, with an
+   `expires_at` sweeper that already runs. The digest is UNKEYED, unlike
+   rlBucket, on purpose: a signature is 512 bits with nothing to reverse it to,
+   so there is no rainbow table to build, and the per-isolate fallback secret
+   would give the same replay a different bucket on a different isolate, which
+   is exactly how this guard would quietly stop catching anything. */
+async function claimSignature(env, sig, tsNum) {
+  const digest = hexOf(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sig)), 16);
+  const r = await env.DB.prepare(
+    "INSERT OR IGNORE INTO rate_limits (bucket, name, window_start, hits, expires_at) VALUES (?,'sig',?,1,?)")
+    // Swept at twice the skew window, so the row always outlives the signature
+    // it is remembering; the sweep itself is rateLimit()'s, on any rl_* route.
+    .bind(digest, Math.floor(tsNum), Math.floor(tsNum) + MAX_SKEW_MS * 2).run();
+  return !!(r.meta && r.meta.changes);
+}
+
 async function verifySigned(request, env, bodyText) {
   const playerId = request.headers.get('x-bh-player');
   const ts = request.headers.get('x-bh-ts');
@@ -830,14 +1102,23 @@ async function verifySigned(request, env, bodyText) {
   if (!row) return { err: 'unknown player' };
   const url = new URL(request.url);
   const msg = `${request.method}\n${url.pathname}${url.search}\n${ts}\n${bodyText || ''}`;
+  let ok = false;
   try {
     const key = await crypto.subtle.importKey('jwk', JSON.parse(row.pubkey), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
     const sigBytes = Uint8Array.from(atob(sig), c => c.charCodeAt(0));
-    const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sigBytes, new TextEncoder().encode(msg));
-    return ok ? { playerId } : { err: 'bad signature' };
+    ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sigBytes, new TextEncoder().encode(msg));
   } catch {
     return { err: 'bad signature' };
   }
+  if (!ok) return { err: 'bad signature' };
+  /* Writes only. A replayed READ changes nothing, and making every /grants and
+     /friends poll pay for a row would turn the guard into the write
+     amplification it is here to prevent. The claim is OUTSIDE the try above so
+     a database failure can never be laundered into 'bad signature'. */
+  if (request.method !== 'GET' && !(await claimSignature(env, sig, tsNum))) {
+    return { err: 'replayed request' };
+  }
+  return { playerId };
 }
 
 /* ---------------- routes ---------------- */
@@ -1038,9 +1319,78 @@ function classifyWeekKey(key, nowMs) {
  * What it can no longer do is assert an impossible one, walk up without the
  * elapsed time to justify it, or take a paying podium it did not walk for.
  */
+/* EVERY KEY buildSnapshot() IN js/app.js ACTUALLY SENDS, and nothing else.
+   `{ ...rawSnap }` kept whatever the caller wrote, and the clamps below only
+   ever spoke about a handful of NUMBERS, so an unknown key was copied into
+   players.profile verbatim, served to every accepted friend by GET /friends,
+   and copied again into spires.defender for every rival who opens a tower this
+   account holds. Measured on 2026-09-01 against 996f28b9: an `evilHtml` field,
+   C0 control characters, a bidi override, a 20KB note, a nested object and
+   `name` as an object all survived the round trip unchanged.
+   Keys are dropped rather than 400'd, for the same reason the numbers are
+   clamped rather than rejected (see WHY CLAMP AND NOT REJECT above): the
+   likeliest cause of a strange key is our own next feature, and taking a
+   player's whole yard offline over it is the worse failure. */
+const SNAP_KEYS = new Set([
+  'weekKey', 'weekSteps', 'raceV', 'plat',
+  'level', 'levelName', 'stats', 'talents', 'title', 'outfit', 'gearLo', 'gear', 'badges',
+  'pet', 'yard',
+]);
+/* MEASURED, not chosen. The longest string this snapshot can legitimately carry
+   is a level name: js/game.js LEVEL_NAMES tops out at "Calorie Cartographer"
+   (20), and past the twentieth level it gains a number, so "Calorie
+   Cartographer 999" at 24 is the true worst case (read off js/game.js on
+   2026-09-01). CHAMP_TITLE is 11, cosmetic ids top out at 7 ("IL10-1", of 370
+   in data/boneheadz.js), a weekKey is 10. 64 is that worst case with 2.5x of
+   room, which is what a bound wants: generous enough that a new level name
+   never truncates, small enough that no string in here can be a payload. */
+const MAX_SNAP_STR = 64;
+/* Above MAX_GEAR_IDS on purpose, so the gear clamp below stays the thing that
+   reports 'gear' in `bounded` and this pass never silently takes its job. */
+const MAX_SNAP_ARR = 512;
+/* yard -> pets -> a pet -> its `sp` string is the deepest real value, so a
+   value nested below that is not a field we ship and does not get to travel. */
+const MAX_SNAP_DEPTH = 4;
+
+/* Depth-limited copy that bounds every string and drops what cannot be JSON.
+   Structured ids are already graded against a fixed catalog on the client, so
+   this deliberately does not try to know what a valid `sp` or outfit slot is:
+   it bounds SIZE and nesting, which is the part the client cannot defend. */
+function boundSnapValue(v, depth) {
+  if (typeof v === 'string') {
+    /* C0 CONTROLS AND THE BIDI OVERRIDES COME OUT, they are not escaped. No
+       level name, title, platform tag or cosmetic id contains one, and both
+       families exist to make a string lie about itself to whoever reads it
+       next: a NUL or an ESC in a crew row, and U+202E to reverse a name in a
+       leaderboard the reader has no reason to distrust. Escaping is the
+       renderer's job and it does it; this is about what is worth STORING. */
+    const clean = v.replace(/[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
+    return clean.length > MAX_SNAP_STR ? clean.slice(0, MAX_SNAP_STR) : clean;
+  }
+  if (v === null || typeof v === 'boolean') return v;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (depth >= MAX_SNAP_DEPTH) return null;
+  if (Array.isArray(v)) return v.slice(0, MAX_SNAP_ARR).map(x => boundSnapValue(x, depth + 1));
+  if (typeof v === 'object') {
+    const out = {};
+    for (const [k, val] of Object.entries(v)) out[k.slice(0, MAX_SNAP_STR)] = boundSnapValue(val, depth + 1);
+    return out;
+  }
+  return null;   // a function or an undefined would not have survived JSON anyway
+}
+
 function sanitizeSnapshot(rawSnap, row, nowMs) {
-  const snap = { ...rawSnap };
+  const snap = {};
+  for (const [k, v] of Object.entries(rawSnap)) {
+    if (SNAP_KEYS.has(k)) snap[k] = boundSnapValue(v, 1);
+  }
   const bounded = [];
+  /* Named in `bounded` like every other clamp here, so a client or a test can
+     see it happened instead of diffing what came back. One stringify of a body
+     already capped at MAX_PROFILE_BYTES covers a dropped key, a truncated
+     string and an over-nested value alike, which is cheaper than three
+     counters that each only see their own third of the problem. */
+  if (JSON.stringify(snap) !== JSON.stringify(rawSnap)) bounded.push('shape');
 
   /* ---- level ----
      Two independent ceilings, and the lower of the two wins.
@@ -1174,6 +1524,16 @@ function sanitizeSnapshot(rawSnap, row, nowMs) {
     maxLevelAt: raisesMax ? nowMs : (row.max_level_at || null),
     weekKey: acceptedKey,
     weekSteps: acceptedSteps,
+    /* THE BOARD'S RANK KEY, so it can be a column instead of a json_extract the
+       ORDER BY has to compute for every player in the table. Current, not the
+       max_level ratchet above: the leaderboard has always shown where a player
+       IS, and ranking on the ratchet would reorder the board for anyone who has
+       ever been higher than they are now.
+       `level` is 0 here only when snap.level is absent (clamp holds a present
+       one at 1 or more), so `|| 1` is the board's own COALESCE default carried
+       into the column rather than left for the read to compute. */
+    boardLevel: level || 1,
+    boardBadges: intOrNull(snap.badges) || 0,
   };
 }
 /* =============== end snapshot bounds =============== */
@@ -1270,14 +1630,22 @@ async function requestFriendship(env, meId, otherId) {
    is unchanged and still deterministic (no timestamp, no random id -- the client
    ledger's idempotence depends on that).
 
-   Returns true when a row landed, false when the cap refused it. */
-async function insertCappedGrant(env, { to, prefix, cap, type, payload, now }) {
+   An explicit `key` (a client idempotency key, still inside `prefix` so it is
+   counted by the same cap) replaces the counted suffix: the row then dedupes on
+   UNIQUE (player_id, key), so a retry of a request whose answer was lost lands
+   nothing and changes nobody's total. The caller distinguishes that `false`
+   from a cap refusal by asking whether the row is there.
+
+   Returns true when a row landed, false when the cap refused it (or, with an
+   explicit key, when this exact request already landed). */
+async function insertCappedGrant(env, { to, prefix, cap, type, payload, now, key = null }) {
   const hi = prefix + '￿'; // prefix-range count: no LIKE, playerIds contain '_'
+  const count = 'SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ?';
   const r = await env.DB.prepare(
     `INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts)
-     SELECT ?, ? || (SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ?), ?, ?, ?
-      WHERE (SELECT COUNT(*) FROM grants WHERE player_id = ? AND key >= ? AND key < ?) < ?`)
-    .bind(to, prefix, to, prefix, hi, type, payload, now, to, prefix, hi, cap).run();
+     SELECT ?, ${key ? '?' : `? || (${count})`}, ?, ?, ?
+      WHERE (${count}) < ?`)
+    .bind(to, ...(key ? [key] : [prefix, to, prefix, hi]), type, payload, now, to, prefix, hi, cap).run();
   return !!(r.meta && r.meta.changes);
 }
 
@@ -1410,8 +1778,13 @@ function adminGrantPayload(b) {
 
 export default {
   /* THE CRON. Declared in wrangler.toml under [triggers], every 15 minutes.
-     This is the only thing on this worker that deletes anything, and the only
-     reason the events table has a ceiling at all.
+     It is the reason events, grants, devices, reports and leads have a ceiling
+     at all, and it is the only SCHEDULED deleter here. It is not the only
+     deleter, and the line that used to say so sent the next person looking in
+     the wrong place: `grep -n "DELETE FROM" src/index.js` is the real list, and
+     the other entries on it are rateLimit()'s expired-row sweep, /friends
+     removing a friendship, /account/delete's cascade, and recordPruneRun below
+     trimming its own trace.
 
      Awaited rather than handed to ctx.waitUntil, and the error is rethrown, so
      a broken prune shows up as a FAILED cron invocation in the Cloudflare
@@ -1420,7 +1793,7 @@ export default {
   async scheduled(event, env) {
     const now = Date.now();
     const cron = (event && event.cron) || null;
-    let r = null, g = null, thrown = null;
+    let r = null, g = null, s = null, thrown = null;
     try {
       r = await pruneEvents(env, now);
       /* Grants second, and with whatever wall clock the events pass left. Events
@@ -1431,7 +1804,13 @@ export default {
          pruner that silently stops is indistinguishable from one with nothing
          to do, right up until the cap arrives. */
       g = await pruneGrants(env, now, { budgetMs: Math.max(1000, PRUNE_BUDGET_MS - r.ms) });
-      console.log('prune', JSON.stringify({ cron, ...r, grants: g }));
+      /* Third, on what the first two left. Same reasoning as the paragraph
+         above and for the same reason it is safe: cursorless, so being cut
+         short costs it nothing. It goes last because its tables are the small
+         ones (a few hundred rows a tick at any plausible scale) while events is
+         the one with the deadline. */
+      s = await pruneStale(env, now, { budgetMs: Math.max(1000, PRUNE_BUDGET_MS - r.ms - g.ms) });
+      console.log('prune', JSON.stringify({ cron, ...r, grants: g, stale: s }));
     } catch (e) {
       thrown = e;
       console.error('prune failed', (e && e.stack) || e);
@@ -1439,7 +1818,16 @@ export default {
     /* THE TRACE IS WRITTEN ON BOTH PATHS, and the failing path is the one it
        exists for. A tick that threw is exactly the tick nobody will be watching,
        and `r` surviving while `g` is null is how "the events pass finished and
-       the grants pass died" stays legible afterwards. */
+       the grants pass died" stays legible afterwards.
+       THE STALE PASS GETS NO COLUMN HERE, deliberately. A column costs an ALTER
+       plus the schema/migration column-equality check in schema-plan.test.mjs,
+       and it would buy less than it looks: the tick's ok/err already covers "did
+       the stale pass throw", the console line above carries its full result, and
+       GET /admin/prune reports live row counts and the oldest surviving row for
+       every table in STALE_RULES, which answers "is it keeping pace" from the
+       tables themselves rather than from a log of what it claims to have done.
+       Give it a column the day the tables get big enough that per-tick history
+       matters, which is not today. */
     await recordPruneRun(env, {
       ts: now,
       ms: Date.now() - now,
@@ -1508,6 +1896,19 @@ export default {
            Honesty-only flag: a liar who omits it gains nothing but visibility,
            and a real client never sends it. */
         const isTest = body.test === true ? 1 : 0;
+        /* AND THE ROW A LOCAL RUN LEAVES BEHIND. 2026-09-02. `test` above is a
+           SUPPRESSION switch, so a local suite deliberately does not set it (an
+           invisible account cannot grade the leaderboard, the friend graph, the
+           race or the spires: hard-coding flagFor to true turned 49 of 174
+           server assertions red, measured on a cp -R copy the same day). That
+           left the local row looking exactly like a real player's.
+           `run` is the second mark, and NOTHING filters on it: a row carrying
+           one behaves identically to a real one and still says which suite made
+           it and when. A real client never sends it (js/social.js sends it only
+           under navigator.webdriver, which no player's browser sets), so NULL
+           keeps meaning "a person did this". Honesty-only, same as `test`.
+           Bounded because it is free text off the wire. */
+        const testRun = typeof body.run === 'string' && body.run ? body.run.slice(0, 120) : null;
         // retry on the (astronomically unlikely) friend-code collision
         for (let i = 0; i < 5; i++) {
           const id = newId(), handle = makeHandle(), code = makeFriendCode(), now = Date.now();
@@ -1517,8 +1918,8 @@ export default {
                transaction: a failure between them left a player who had joined
                the Crew and was never welcomed, and no later call would notice. */
             await env.DB.batch([
-              env.DB.prepare('INSERT INTO players (id, pubkey, handle, friend_code, created_at, last_seen, is_test) VALUES (?,?,?,?,?,?,?)')
-                .bind(id, pub, handle, code, now, now, isTest),
+              env.DB.prepare('INSERT INTO players (id, pubkey, handle, friend_code, created_at, last_seen, is_test, test_run) VALUES (?,?,?,?,?,?,?,?)')
+                .bind(id, pub, handle, code, now, now, isTest, testRun),
               // welcome grant: a little hello the client ingests as a ledger event
               env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
                 .bind(id, 'social-welcome', 'welcome', JSON.stringify({ coins: 50, xp: 10, note: 'Welcome to the Crew' }), now),
@@ -1582,9 +1983,11 @@ export default {
         await env.DB.batch([
           env.DB.prepare(
             `UPDATE players SET profile = ?, app_v = ?, last_seen = ?,
-               max_level = ?, max_level_at = ?, week_key = ?, week_steps = ? WHERE id = ?`)
+               max_level = ?, max_level_at = ?, week_key = ?, week_steps = ?,
+               level = ?, badges = ? WHERE id = ?`)
             .bind(snap, String(body.appV || ''), nowP,
                   checked.maxLevel || null, checked.maxLevelAt, checked.weekKey, checked.weekSteps,
+                  checked.boardLevel, checked.boardBadges,
                   auth.playerId),
           env.DB.prepare('UPDATE spires SET defender = ?, updated_at = ? WHERE owner = ?')
             .bind(snap, nowP, auth.playerId),
@@ -1606,8 +2009,13 @@ export default {
         if (typeof body.blob !== 'string' || !body.blob) return json({ error: 'missing blob' }, 400);
         const now = Date.now();
         try {
-          await env.DB.prepare(UPSERT_BACKUP)
-            .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now).run();
+          const r = await env.DB.prepare(UPSERT_BACKUP)
+            .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now, auth.playerId).run();
+          /* Nothing landed means the EXISTS refused it, which has exactly one
+             cause: the account was deleted between verifySigned and here. Say
+             the same thing every other route says about an id that is not
+             there, rather than answering ok about a save nobody stored. */
+          if (!(r.meta && r.meta.changes)) return json({ error: 'unknown player' }, 401);
         } catch (e) {
           /* THE MIGRATION IS NOT APPLIED YET, AND THIS IS THE ONE ROUTE WHERE
              THAT MUST NOT MATTER. Two migrations in server/migrations/ are
@@ -1620,8 +2028,9 @@ export default {
           if (/no such column/i.test(String(e))) {
             console.error('backups.daily_* missing; storing without the archive. ' +
               'Apply migrations/2026-08-25-backup-daily-slot.sql', (e && e.message) || e);
-            await env.DB.prepare(UPSERT_BACKUP_NO_DAILY)
-              .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now).run();
+            const nd = await env.DB.prepare(UPSERT_BACKUP_NO_DAILY)
+              .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now, auth.playerId).run();
+            if (!(nd.meta && nd.meta.changes)) return json({ error: 'unknown player' }, 401);
             return json({ ok: true, updatedAt: now });
           }
           /* D1 HAS ITS OWN VALUE LIMIT, AND IT IS LOWER THAN MAX_BACKUP_BYTES.
@@ -2128,12 +2537,25 @@ export default {
       // as every other award in this game, friends-scale, stated plainly).
       if (path.startsWith('/spires/') && path.endsWith('/claim') && request.method === 'PUT') {
         const bodyText = await request.text();
+        /* A CAP, LIKE /profile AND /backup ALREADY HAVE. This route had none, and
+           it is the one route in the file whose body is copied into a row that is
+           then handed to ANOTHER player: the spire-lost grant below. Measured on
+           2026-09-01 against 996f28b9, toppling a tower with a 100KB name gave the
+           victim a grant note of length 102,450. A tower name is three words, so
+           2KB is generous by two orders of magnitude and still refuses the abuse
+           before it is ever parsed. */
+        if (bodyText.length > MAX_SPIRE_BYTES) return json({ error: 'too large' }, 413);
         const auth = await verifySigned(request, env, bodyText);
         if (auth.err) return json({ error: auth.err }, 401);
         const id = path.slice('/spires/'.length, -'/claim'.length);
         if (!/^sp-[-0-9]+-[-0-9]+$/.test(id)) return json({ error: 'bad spire id' }, 400);
         const b = JSON.parse(bodyText || '{}');
         if (!b.name || typeof b.lat !== 'number' || typeof b.lng !== 'number') return json({ error: 'missing spire' }, 400);
+        /* ONE sliced name, and both the row and the grant note read it. The
+           note used to interpolate the RAW b.name while the row two lines below
+           took slice(0, 40) off the same value, so the bound the tower name had
+           was simply absent from the sentence a rival gets sent. */
+        const spireName = String(b.name).slice(0, 40);
         const now = Date.now();
         const me = await env.DB.prepare('SELECT id, name, handle, profile, is_test FROM players WHERE id = ?').bind(auth.playerId).first();
         /* A FLAGGED TEST ACCOUNT HOLDS NO TOWERS. Refused rather than hidden,
@@ -2142,17 +2564,12 @@ export default {
            and toppling one sends a NAMED grant to the player who lost it. The
            read is free (is_test rides the SELECT that was already here). */
         if (me && me.is_test) return json({ error: 'test accounts do not hold towers', code: 'test-account' }, 403);
-        const prev = await env.DB.prepare('SELECT owner, owner_name, level, claimed_at FROM spires WHERE id = ?').bind(id).first();
+        const prev = await env.DB.prepare('SELECT owner, owner_name, claimed_at FROM spires WHERE id = ?').bind(id).first();
         // SHIELD: a tower just taken cannot be taken straight back. Two friends at
         // one corner could otherwise ping-pong a spire for 80 coins a pass, and
         // spire fights are free. Derived from claimed_at, so no new column.
         if (prev && prev.owner !== auth.playerId && (prev.claimed_at || 0) > now - SPIRE_SHIELD_MS) {
           return json({ error: 'shielded', until: (prev.claimed_at || 0) + SPIRE_SHIELD_MS }, 409);
-        }
-        if (prev && prev.owner === auth.playerId) {
-          await env.DB.prepare('UPDATE spires SET tended_at = ?, updated_at = ?, defender = ? WHERE id = ?')
-            .bind(now, now, me.profile || null, id).run();
-          return json({ ok: true, already: true, level: prev.level || 1 });
         }
         /* THE CAP AND THE SHIELD ARE PART OF THE WRITE, not `if`s in front of it.
            Both used to be read across an await and then trusted, and neither
@@ -2168,35 +2585,107 @@ export default {
            cap subquery counts it, and its shield subquery sees the fresh
            claimed_at. RETURNING gives the level the write actually produced,
            which is the number the client has to mirror -- computing it from the
-           stale `prev` read published a level the database did not have. */
+           stale `prev` read published a level the database did not have.
+
+           AND SO IS "IT IS ALREADY MINE". An early return in front of this used
+           to be the only thing that stopped a same-owner claim bumping the
+           level, and it read `prev` an await before the write. Once a concurrent
+           claim by this same player flipped ownership, a second request that had
+           read a pre-flip prev sailed past it, and the shield below could not
+           stop it either: `owner <> ?` is FALSE for a tower that is now mine, so
+           NOT EXISTS was true and `level = spires.level+1` fired a second time.
+           Two levels for one takeover, and js/app.js pays the full 80-coin
+           branch for each.
+           The clause is now "refuse if the row is mine OR was claimed inside the
+           shield", which is the same test as before plus the same-owner case,
+           on the same three bindings: the owner read is re-checked AT WRITE TIME
+           instead of being trusted across the await. A refusal from the new arm
+           lands on the tend below, which is where "it is already mine" is
+           answered now, by a write rather than by a read.
+
+           AND SO IS "I STILL EXIST". Same shape, third read across the same
+           await: verifySigned and the `me` SELECT both saw a live player, and
+           /account/delete can commit before this statement runs. Measured on
+           2026-09-02 against 1681e58c, racing a claim against the delete: 22 of
+           30 rounds left a tower owned by an id with no players row. That is
+           not merely a stale row. The map still serves it, a rival can take it,
+           and the takeover then mints a spire-lost grant addressed to a deleted
+           account, which is a second orphan minted by the first. */
         const won = await env.DB.prepare(
           `INSERT INTO spires (id, name, lat, lng, owner, owner_name, defender, claimed_at, tended_at, level, updated_at)
              SELECT ?,?,?,?,?,?,?,?,?,?,?
               WHERE (SELECT COUNT(*) FROM spires WHERE owner = ? AND tended_at > ?) < 3
-                AND NOT EXISTS (SELECT 1 FROM spires WHERE id = ? AND owner <> ? AND claimed_at > ?)
+                AND NOT EXISTS (SELECT 1 FROM spires WHERE id = ? AND (owner = ? OR claimed_at > ?))
+                AND EXISTS (SELECT 1 FROM players WHERE id = ?)
              ON CONFLICT(id) DO UPDATE SET name=excluded.name, owner=excluded.owner, owner_name=excluded.owner_name,
                defender=excluded.defender, claimed_at=excluded.claimed_at, tended_at=excluded.tended_at,
                level=spires.level+1, updated_at=excluded.updated_at
            RETURNING level`)
-          .bind(id, String(b.name).slice(0, 40), b.lat, b.lng, auth.playerId, me?.name || me?.handle || null,
+          .bind(id, spireName, b.lat, b.lng, auth.playerId, me?.name || me?.handle || null,
                 me?.profile || null, now, now, 1, now,
                 auth.playerId, now - SPIRE_DORMANT_MS,
-                id, auth.playerId, now - SPIRE_SHIELD_MS).first();
+                id, auth.playerId, now - SPIRE_SHIELD_MS,
+                auth.playerId).first();
         if (!won) {
+          /* A CLAIM ON A TOWER THAT IS MINE IS A TEND, and the tend is now the
+             thing that answers it. This lived in an early return in front of the
+             upsert, taken on the `prev` read an await above, and it was the last
+             place in this route that trusted a read across an await: everything
+             else re-checks ownership at write time.
+             Its UPDATE carried no owner clause either, so once a rival's write
+             landed inside that gap the tend went onto the WINNER's row: the
+             loser's Bonehead on the pennant and in the tower sheet, and
+             tended_at dragged off the claimed_at the winner's own upsert wrote
+             it with, which is a free dormancy and cap-window refresh for them.
+             The owner was then told `already: true` about a tower they had just
+             LOST, and js/app.js pays the flat consolation on `already` (see
+             "Rewarded actions" in CLAUDE.md), so the SERVER was the authority
+             handing back a paid no-op.
+             Measured on 2026-09-01 against b81c11f9, racing an owner's routine
+             re-claim against a rival's now-legal takeover on a tower aged past
+             its 1h shield, 30 races per arm: the wrong defender, the dragged
+             tended_at and the false `already` each landed in 26 of 30 under the
+             concurrency suite's burst load, and in 30 of 30 with no artificial
+             delay at all. They are one event. Note it needs the owner's read
+             and the rival's write to interleave, which miniflare's in-process
+             D1 nearly forbids: one-against-one it showed up once in 120, and
+             the numbers above needed four owner claims in flight to hold the
+             gap open. On real D1 every statement is a network round trip and
+             one is enough.
+             One statement does both jobs now. `owner = ?` is the same rule the
+             /tend route below already uses, evaluated AT WRITE TIME so it can
+             only ever land on a row that is really mine, and RETURNING hands
+             back the level of the row it actually wrote rather than a level
+             computed from a stale read. A tower that has changed hands matches
+             nothing, falls through, and is answered by the rules under it. */
+          const tend = await env.DB.prepare(
+            `UPDATE spires SET tended_at = ?, updated_at = ?, defender = ? WHERE id = ? AND owner = ?
+             RETURNING level`)
+            .bind(now, now, me?.profile || null, id, auth.playerId).first();
+          if (tend) return json({ ok: true, already: true, level: tend.level || 1 });
           // Nothing landed, so say WHICH rule refused it. Read after the write,
           // never before: this only picks the message, it decides nothing.
-          const nowRow = await env.DB.prepare('SELECT owner, claimed_at FROM spires WHERE id = ?').bind(id).first();
-          if (nowRow && nowRow.owner !== auth.playerId && (nowRow.claimed_at || 0) > now - SPIRE_SHIELD_MS) {
+          const nowRow = await env.DB.prepare('SELECT claimed_at FROM spires WHERE id = ?').bind(id).first();
+          if (nowRow && (nowRow.claimed_at || 0) > now - SPIRE_SHIELD_MS) {
             return json({ error: 'shielded', until: (nowRow.claimed_at || 0) + SPIRE_SHIELD_MS }, 409);
           }
           return json({ error: 'cap', cap: 3 }, 409);
         }
-        // Tell the loser, through the grants channel the client already ingests.
+        /* Tell the loser, through the grants channel the client already ingests.
+           ONLY IF THERE IS STILL A LOSER: `prev` is a read from before the
+           write, and the tower it names can have belonged to an account that
+           deleted itself in between. A grant addressed to a missing player is
+           unreachable by definition and nothing prunes it (the grants pruner's
+           dormancy arm needs p.last_seen, and a NULL comparison is never true),
+           so the condition goes inside the statement like every other one on
+           this route. */
         if (prev && prev.owner !== auth.playerId) {
-          await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+          await env.DB.prepare(
+            `INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts)
+             SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM players WHERE id = ?)`)
             .bind(prev.owner, `spire-lost-${id}-${now}`, 'spire', JSON.stringify({
-              note: `${me?.name || me?.handle || 'Someone'} toppled ${b.name}. Walk back and take it.`,
-            }), now).run();
+              note: `${me?.name || me?.handle || 'Someone'} toppled ${spireName}. Walk back and take it.`,
+            }), now, prev.owner).run();
         }
         return json({ ok: true, tookFrom: prev ? (prev.owner_name || 'someone') : null, level: won.level });
       }
@@ -2234,9 +2723,25 @@ export default {
         if (auth.err) return json({ error: auth.err }, 401);
         const rows = await env.DB.prepare(
           `SELECT id, handle, name,
-                  CAST(COALESCE(json_extract(profile,'$.level'), 1) AS INTEGER) lvl,
+                  /* THE RANK KEY IS A COLUMN NOW, not an expression. It used to
+                     be CAST(COALESCE(json_extract(profile,'$.level'),1) AS INTEGER),
+                     and the same for badges, in the ORDER BY below. No index can
+                     serve a computed expression, so ranking a hundred players
+                     meant reading and JSON-parsing every player in the table and
+                     then sorting the lot in a temp b-tree: measured linear at
+                     about a microsecond a row, 111 ms at 200,000 players, on the
+                     one route every crew-tab open fetches.
+                     PUT /profile writes these two beside max_level and
+                     week_steps, carrying the COALESCE defaults above with them,
+                     so this reads back exactly what the expression computed and
+                     idx_players_board turns the sort into a walk of 100 index
+                     entries. 0.24 ms at the same 200,000, and flat: see
+                     migrations/2026-09-01-board-columns.sql for both plans.
+                     The remaining json_extracts are per OUTPUT row, not per
+                     table row, so they run 100 times rather than N. */
+                  level lvl,
                   json_extract(profile,'$.levelName') lvlName,
-                  CAST(COALESCE(json_extract(profile,'$.badges'), 0) AS INTEGER) badges,
+                  badges,
                   json_extract(profile,'$.outfit') outfit,
                   json_extract(profile,'$.pet') pet,
                   json_extract(profile,'$.stats') stats,
@@ -2253,7 +2758,7 @@ export default {
            FROM players
            WHERE profile IS NOT NULL -- a registration that never synced a snapshot COALESCEs to a level-1 "bot"; hide it
              AND COALESCE(is_test, 0) = 0 -- flagged test accounts never surface; also gates the "New Boneheadz" card and add-tokens, both derived from these rows
-           ORDER BY lvl DESC, badges DESC, last_seen DESC LIMIT 100`)
+           ORDER BY level DESC, badges DESC, last_seen DESC LIMIT 100`)
           .bind(Date.now() - SPIRE_DORMANT_MS, Date.now(), Date.now() - SPIRE_DORMANT_MS).all();
         const nowLb = Date.now();
         const players = await Promise.all((rows.results || []).map(async r => ({
@@ -2300,16 +2805,28 @@ export default {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(wk)) return json({ error: 'bad week' }, 400);
 
         const board = async weekKey => (await env.DB.prepare(
+          /* week_key and week_steps are COLUMNS, and always have been: PUT
+             /profile writes them from the same accepted pair it stamps into the
+             snapshot, so they cannot disagree with it. This route was
+             json_extracting the numbers back out of the JSON anyway, which made
+             the week filter and the ORDER BY computed expressions no index could
+             serve: a full walk of the table and a temp b-tree to hand back 25
+             rows, 108 ms at 200,000 players, and settlement calls this board
+             TWICE. On the columns, idx_players_week seeks straight to the week
+             and reads it already in step order: 0.02 ms at the same size.
+             raceV stays a json_extract because there is no column for it, but it
+             is a RESIDUAL now, applied to the handful of rows the index hands
+             over rather than to every player who exists. */
           `SELECT id, handle, name, json_extract(profile,'$.outfit') outfit,
-                  CAST(COALESCE(json_extract(profile,'$.weekSteps'),0) AS INTEGER) steps,
+                  week_steps steps,
                   last_seen seenAt
              FROM players
             WHERE profile IS NOT NULL
               AND COALESCE(is_test, 0) = 0 -- a test account must never place (or be paid) in the race
-              AND json_extract(profile,'$.weekKey') = ?
+              AND week_key = ?
               AND CAST(COALESCE(json_extract(profile,'$.raceV'),0) AS INTEGER) >= ${RACE_RULES}
-              AND CAST(COALESCE(json_extract(profile,'$.weekSteps'),0) AS INTEGER) > 0
-            ORDER BY steps DESC LIMIT 25`).bind(weekKey).all()).results || [];
+              AND week_steps > 0
+            ORDER BY week_steps DESC LIMIT 25`).bind(weekKey).all()).results || [];
 
         /* Settle the week just gone, once, before answering for this one.
            ONLY WHEN `wk` REALLY IS THIS WEEK. `wk` arrives in the query string,
@@ -2466,10 +2983,32 @@ export default {
         }
         const coins = Math.max(1, Math.min(1000, Math.floor(bd.coins || 0)));
         const reward = { coins };
+        /* A RETRY IS NOT A SECOND GIFT, and here that is not merely untidy, it
+           MINTS COINS. js/app.js deducts the sender locally BEFORE the send and
+           refunds only when the answer says it failed, so a gift that was
+           delivered but whose answer was lost refunds the sender while the
+           recipient keeps the coins. Two of them, both succeeding, debits the
+           sender twice and credits the friend twice. The counted cap key made
+           that unavoidable: it is the opposite of dedup, minting the NEXT n for
+           every retry. Same `ck` treatment as /cheer, for the same reason, with
+           the same shape: the client mints one key per amount chip and reuses
+           it for every retry of that chip, the grant's UNIQUE (player_id, key)
+           collapses them, and no ck (older clients) keeps the counted key. */
+        const ck = String(bd.ck || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+        const prefix = `gift-spend-${auth.playerId}-${day}-`;
         const landed = await insertCappedGrant(env, {
-          to, prefix: `gift-spend-${auth.playerId}-${day}-`, cap: 5, type: 'gift', now,
+          to, prefix, cap: 5, type: 'gift', now,
+          key: ck ? `${prefix}ck-${ck}` : null,
           payload: JSON.stringify({ ...reward, from: fromName, note: `${fromName} sent you ${coins} coins!`, gift: true, mode }),
         });
+        /* `false` has two causes with a ck: the cap refused it, or this exact
+           tap already landed. The retry MUST be answered ok, because the client
+           refunds itself on anything else and the friend keeps the coins. */
+        if (!landed && ck) {
+          const dupe = await env.DB.prepare('SELECT 1 FROM grants WHERE player_id = ? AND key = ?')
+            .bind(to, `${prefix}ck-${ck}`).first();
+          if (dupe) return json({ ok: true, duplicate: true, reward, mode });
+        }
         if (!landed) return json({ error: 'daily spend-gift limit', code: 'limit' }, 429);
         return json({ ok: true, reward, mode });
       }
@@ -2492,13 +3031,36 @@ export default {
         const me = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(auth.playerId).first();
         const fromName = (me && (me.name || me.handle)) || 'A Bonehead';
         const day = new Date(Date.now()).toISOString().slice(0, 10);
+        /* A RETRY IS NOT A SECOND CHEER. The cap key counts rows, so a client
+           that re-sends after a lost answer (the app's own network deadline
+           fires at 12s and the tap is re-armed) mints the NEXT n and delivers a
+           duplicate. The client mints one `ck` per tap and reuses it on retry;
+           the same UNIQUE (player_id, key) + INSERT OR IGNORE that enforces the
+           gift's once-a-day does the deduping here, and a duplicate answers ok
+           without a second cheer, because the sender did what they meant to do
+           exactly once. No ck (older clients) keeps the counted key. */
+        const ck = String(bd.ck || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+        const prefix = `cheer-${auth.playerId}-${day}-`;
         // same COUNT-then-key shape as the spend gift, and the same fix: the
         // count is evaluated inside the insert, so no two concurrent cheers can
-        // mint the same key and silently collapse into one.
+        // mint the same key and silently collapse into one. With a ck the key
+        // is the client's instead of the count, so the UNIQUE constraint does
+        // the deduping; the cap is counted over both shapes either way.
         const landed = await insertCappedGrant(env, {
-          to, prefix: `cheer-${auth.playerId}-${day}-`, cap: 10, type: 'cheer', now: Date.now(),
+          to, prefix, cap: 10, type: 'cheer', now: Date.now(),
+          key: ck ? `${prefix}ck-${ck}` : null,
           payload: JSON.stringify({ from: fromName, cheer, cheerFrom: auth.playerId, note: `${fromName} cheered you` }),
         });
+        /* A REFUSAL HAS TWO CAUSES AND ONLY ONE OF THEM IS AN ERROR. With a ck,
+           `false` means either the cap refused it or this exact tap already
+           landed. A retry of a delivered cheer must answer ok, or the app tells
+           the player it failed and they send a third. One SELECT, only on the
+           rare path, and it is the row's own existence that decides. */
+        if (!landed && ck) {
+          const dupe = await env.DB.prepare('SELECT 1 FROM grants WHERE player_id = ? AND key = ?')
+            .bind(to, `${prefix}ck-${ck}`).first();
+          if (dupe) return json({ ok: true, duplicate: true });
+        }
         if (!landed) return json({ error: 'daily cheer limit', code: 'limit' }, 429);
         return json({ ok: true });
       }
@@ -2517,6 +3079,135 @@ export default {
            update, it is still here. Cleared by /name when they actually rename. */
         return json({ handle: row.handle, friendCode: row.friend_code, name: row.name || null, createdAt: row.created_at,
           renameOf: row.rename_of || null });
+      }
+
+      /* Signed: delete this account and everything the server holds about it
+         (App Store guideline 5.1.1(v): in-app account deletion).
+
+         One batch, so a half-deleted account cannot exist. Every table keyed to
+         the player goes: players, backups (live + daily archive columns ride in
+         the row), recovery, grants, friendships (either side), trades and
+         pvp_fights (either side), leads (the survey row carries the player id
+         and an email). NOT deleted, with reasons: events is keyed to the
+         anonymous per-device id, never the player, and rate_limits holds only
+         keyed-HMAC buckets that expire on their own.
+
+         AND THE NAME, WHICH IS NOT KEYED TO THE PLAYER ANYWHERE IT LANDED.
+         Deleting every row that points AT this id was never the whole job: a
+         display name is copied by value into three places the id cannot reach,
+         and until 2026-09-02 all three kept it.
+           grants THIS PLAYER AUTHORED live under the RECIPIENT's id, so
+                  `player_id = ?` never saw them. A friend's inbox still read
+                  "Creaky Phalange #42 cheered you", carried `from` and
+                  `cheerFrom` verbatim, and the Cheer-back button built from
+                  that row answered 403 forever (the friendship is gone).
+           devices.label / reports.label are stamped from `me.name || me.handle`
+                  by the UNSIGNED /events and /report routes, which is why they
+                  are keyed by device and not by player. The retention sweep
+                  added on 2026-09-01 is TIME-based, so the name sat there for
+                  the full 365 days.
+         SCRUBBED, NOT DELETED, and that is the deliberate half. Deleting a
+         friend's inbox row destroys THEIR data (a gift they were paid, a cheer
+         they were sent) to satisfy this player's request, and a reward that
+         vanishes is a support ticket. So the value stays and the identity goes:
+         the row becomes exactly what the route already writes for a player with
+         no name at all, 'A Bonehead', which every shipped client renders
+         without knowing anything new (js/app.js paintCheers reads `r.from`
+         first and backs the name out of the note otherwise, and both now say
+         'A Bonehead'). Dropping `cheerFrom` is what takes the Cheer-back button
+         off the row, which is the honest answer: there is nobody to cheer back.
+
+         WHAT DELIBERATELY SURVIVES: the sender's id inside `grants.key`
+         ('cheer-<id>-<day>-...'). It is an opaque random id that now resolves
+         to nothing, and rewriting it is not free. A key is the CLIENT's ledger
+         key, and a client whose cursor rolled backwards (a restore from an old
+         backup; see the note on GRANT_RETENTION_DAYS) re-ingests the row: under
+         a new key that is a second payout of a real gift. Minting coins to tidy
+         an unresolvable token is the wrong trade, so the key is left alone.
+         Also left: a spire-lost note naming the topper. Its key carries the
+         SPIRE's id, not the sender's, so no index reaches it from here, and
+         finding it would mean an INSTR scan of the whole grants table inside
+         the delete batch. It carries no value and the grants pruner takes it.
+
+         Spires: an unclaimed spire has NO row, by construction (see the schema
+         and the /spires comment above), so deleting the rows IS returning the
+         towers to unowned. The map stays whole for everyone else because tower
+         placement and naming are deterministic from the map cell and the server
+         never invents a tower. Keeping the rows was considered and rejected:
+         owner_name and the defender snapshot are this player's data, and a row
+         pointing at a deleted owner renders as a ghost hold nobody can contest.
+
+         STEP RACE, delete-and-recreate inside one race week: SAFE. The board
+         (/steps/week) selects FROM players, so a deleted player is simply off
+         the board, and settlement pays only board rows: deletion pays nothing.
+         A re-registered account is a fresh player whose previous-week claim is
+         frozen at 0 (sanitizeSnapshot rule 2: the server recorded nothing for
+         it) and whose current week is rate-bounded from 0, so the cycle can
+         only LOSE steps, never gain a place. The welcome grant is re-minted per
+         registration, but its client ledger key ('social-welcome') is constant,
+         so a save that already claimed it ignores the duplicate; harvesting it
+         means erasing the whole local save each cycle, which costs far more
+         than the 50 coins it pays. One bounded residual: if the deleted player
+         held a settled week's ONLY podium row, that week reads as unsettled and
+         may settle again, but UNIQUE(player_id, key) + INSERT OR IGNORE means
+         no remaining player can ever be paid twice for it.
+
+         Idempotent: the second call finds no players row, verifySigned answers
+         'unknown player', and that IS the requested end state, so it returns ok
+         rather than 401. Harmless to a probe: there is nothing left to protect
+         and every other route already distinguishes known from unknown ids. */
+      if (path === '/account/delete' && request.method === 'POST') {
+        const bodyText = await request.text();
+        const auth = await verifySigned(request, env, bodyText);
+        if (auth.err === 'unknown player') return json({ ok: true, already: true });
+        if (auth.err) return json({ error: auth.err }, 401);
+        const id = auth.playerId;
+        /* The two strings this account can have been labelled with anywhere.
+           handle is NOT NULL, so there are always exactly two bindings and the
+           statements below never have to change shape. */
+        const me = await env.DB.prepare('SELECT name, handle FROM players WHERE id = ?').bind(id).first();
+        const shown = (me && me.name) || (me && me.handle) || '', handle = (me && me.handle) || '';
+        /* Prefix ranges, not a scan. Every key a send-to-a-friend route mints
+           starts with the SENDER's id, and idx_grants_key makes each of these a
+           range seek; the same "no LIKE, playerIds contain '_'" shape
+           insertCappedGrant already uses to count them. */
+        const authored = ['cheer-', 'gift-free-', 'gift-spend-'].flatMap(p => [`${p}${id}-`, `${p}${id}-￿`]);
+        await env.DB.batch([
+          env.DB.prepare(
+            `UPDATE grants SET payload = json_remove(json_set(payload,
+               '$.from', 'A Bonehead',
+               '$.note', CASE type WHEN 'cheer' THEN 'A Bonehead cheered you' ELSE 'A Bonehead sent you a gift!' END
+             ), '$.cheerFrom')
+             WHERE (key >= ? AND key < ?) OR (key >= ? AND key < ?) OR (key >= ? AND key < ?)`)
+            .bind(...authored),
+          /* BY VALUE, because the value is the only key these rows have: neither
+             table holds a player id, by design (both are written by unsigned
+             routes). A handle is not unique and the pre-2026-08-08 name space
+             was not either, so this can clear a live player's label too. That
+             costs the admin dashboard one name it can re-learn on their next
+             /events post, and the other direction costs a deleted player's name
+             a year on disk. NULL is the same state a device that never went
+             online is in, so nothing downstream needs a new case.
+             AND IT IS A TABLE SCAN, stated rather than hidden: neither table
+             has an index on `label` and neither should grow one to serve a
+             route each account reaches exactly once (EXPLAIN QUERY PLAN, 2026-
+             09-02: SCAN devices). Both tables are bounded by the 365 day
+             retention rules above; if devices ever approaches the 5.26M row
+             ceiling that note computes, an index on label is the upgrade, not a
+             different shape of scrub. */
+          env.DB.prepare('UPDATE devices SET label = NULL WHERE label = ? OR label = ?').bind(shown, handle),
+          env.DB.prepare('UPDATE reports SET label = NULL WHERE label = ? OR label = ?').bind(shown, handle),
+          env.DB.prepare('DELETE FROM spires WHERE owner = ?').bind(id),
+          env.DB.prepare('DELETE FROM friendships WHERE a = ? OR b = ?').bind(id, id),
+          env.DB.prepare('DELETE FROM trades WHERE from_p = ? OR to_p = ?').bind(id, id),
+          env.DB.prepare('DELETE FROM pvp_fights WHERE challenger = ? OR defender = ?').bind(id, id),
+          env.DB.prepare('DELETE FROM grants WHERE player_id = ?').bind(id),
+          env.DB.prepare('DELETE FROM backups WHERE player_id = ?').bind(id),
+          env.DB.prepare('DELETE FROM recovery WHERE player_id = ?').bind(id),
+          env.DB.prepare('DELETE FROM leads WHERE player = ?').bind(id),
+          env.DB.prepare('DELETE FROM players WHERE id = ?').bind(id),
+        ]);
+        return json({ ok: true });
       }
 
       // Anonymous analytics ingest. Unsigned (events carry only a random device
@@ -2989,7 +3680,7 @@ export default {
            break the aggregates below. Losing the counts is acceptable; losing
            "status: failing" and the recorded stack because of them is not. */
         let oldestDay = null, eventsRows = null, grantsRows = null, grantsDormant = null,
-            backups = null, tableErr = null;
+            backups = null, stale = null, tableErr = null;
         const dormantTs = now - GRANT_DORMANT_DAYS * 86400000;
         try {
           oldestDay = await env.DB.prepare('SELECT MIN(day) d FROM events').first('d');
@@ -3056,6 +3747,23 @@ export default {
                     COALESCE(SUM(size + COALESCE(daily_size, 0)), 0) bytes,
                     COALESCE(MAX(size + COALESCE(daily_size, 0)), 0) maxBytes,
                     COUNT(daily_at) withDaily FROM backups`).first();
+          /* THE STALE TABLES, AND WHY THIS IS THEIR ONLY AUDIT SURFACE. The
+             stale pass writes no prune_runs column (see scheduled()), so these
+             four rows are how anybody answers "is it keeping pace". `oldest`
+             next to `cutoff` is the whole check: oldest < cutoff means rows past
+             the window are still in the table, which is the same reading the
+             `behind` status makes of eventsOldestDay. Both figures are cheap
+             because every column named in STALE_RULES is indexed, so MIN() is a
+             seek to one end of the index rather than a scan. */
+          stale = {};
+          for (const rule of STALE_RULES) {
+            stale[rule.table] = {
+              days: rule.days,
+              cutoff: now - rule.days * 86400000,
+              rows: await env.DB.prepare(`SELECT COUNT(*) n FROM ${rule.table}`).first('n'),
+              oldest: await env.DB.prepare(`SELECT MIN(${rule.col}) t FROM ${rule.table}`).first('t'),
+            };
+          }
         } catch (e) { tableErr = (e && e.message) || String(e); }
         const avgBackup = backups && backups.n ? Math.round(backups.bytes / backups.n) : null;
 
@@ -3113,6 +3821,8 @@ export default {
                oversight, and the figures under tables.backups are what that
                decision was traded for. */
             backupDays: null,
+            // devices / reports / leads, plus the rate_limits sweep at 0 days.
+            staleDays: Object.fromEntries(STALE_RULES.map(s2 => [s2.table, s2.days])),
           },
           caps: { batch: PRUNE_BATCH, maxRowsPerTick: PRUNE_MAX_ROWS, budgetMs: PRUNE_BUDGET_MS },
           tables: {
@@ -3129,6 +3839,7 @@ export default {
               budgetFraction: BACKUPS_BUDGET_FRACTION, budgetBytes: Math.round(D1_LIMIT_BYTES * BACKUPS_BUDGET_FRACTION),
               playersAtBudget: avgBackup ? Math.round(D1_LIMIT_BYTES * BACKUPS_BUDGET_FRACTION / avgBackup) : null,
             } : null,
+            stale,
             error: tableErr,
           },
           runs, generatedAt: now,
@@ -3150,7 +3861,13 @@ export default {
         // search for that text, not for every player in the table.
         const like = '%' + q.toLowerCase().replace(/[%_\\]/g, m => '\\' + m) + '%';
         const rows = (await env.DB.prepare(
+          /* isTest and testRun ride along because this lookup IS the operator's
+             view of the table, and until 2026-09-02 it showed neither: the two
+             marks that say "a bot made this" existed only in columns nobody
+             asking the question could see. A support search for a suspicious
+             level-1 now answers it in the row. */
           `SELECT id, name, handle, friend_code friendCode, app_v appV, last_seen lastSeen, created_at createdAt,
+                  COALESCE(is_test, 0) isTest, test_run testRun,
                   CAST(COALESCE(json_extract(profile,'$.level'), 1) AS INTEGER) level
              FROM players
             WHERE id = ? OR friend_code = ?
@@ -3205,6 +3922,24 @@ export default {
           .bind(b.test === false ? 0 : 1, String(b.playerId || '')).run();
         const row = await env.DB.prepare('SELECT id, is_test FROM players WHERE id = ?').bind(String(b.playerId || '')).first();
         return json({ ok: true, row: row || null });
+      }
+      /* STRAND A PLAYER'S ROWS: drop the players row and nothing else, which is
+         the state the unguarded writes used to leave behind and the ONLY way a
+         test can still build it. Every route that could produce an orphan now
+         refuses to (the EXISTS clauses on UPSERT_BACKUP and the spire claim),
+         so without this the sweep in pruneStale would be tested against a
+         fixture it can never see, which is a guard that cannot fail. DEV only.
+         GET counts what is currently orphaned, over the whole table, so the
+         sweep's assertions are never graded on an empty set. */
+      if (env.DEV === '1' && path === '/dev/orphan' && request.method === 'POST') {
+        const b = await request.json().catch(() => ({}));
+        const r = await env.DB.prepare('DELETE FROM players WHERE id = ?').bind(String(b.playerId || '')).run();
+        return json({ ok: true, stranded: Number((r.meta && r.meta.changes) || 0) });
+      }
+      if (env.DEV === '1' && path === '/dev/orphan' && request.method === 'GET') {
+        const n = async (t, c) => Number((await env.DB.prepare(
+          `SELECT COUNT(*) n FROM ${t} x WHERE NOT EXISTS (SELECT 1 FROM players p WHERE p.id = x.${c})`).first()).n);
+        return json({ backups: await n('backups', 'player_id'), spires: await n('spires', 'owner') });
       }
       if (env.DEV === '1' && path === '/dev/grant' && request.method === 'POST') {
         const b = await request.json();
@@ -3316,6 +4051,72 @@ export default {
         });
         return json({ ok: true, ...r });
       }
+      /* Run the STALE prune on demand, DEV only. Its own route for the same
+         reason /dev/prune-grants is: the events suite asserts the shape
+         /dev/prune returns, and a third pruner must not be able to break those
+         assertions or hide behind them. The injected clock is what proves a 365
+         day window from both sides without waiting a year, and it proves it TO
+         THE ROW: the predicate is `col < now - days`, so a fixture planted at T
+         survives a run at exactly T + 365 days and dies one millisecond later. */
+      if (env.DEV === '1' && path === '/dev/prune-stale' && request.method === 'POST') {
+        const b = await request.json().catch(() => ({}));
+        const r = await pruneStale(env, Number(b.nowMs) || Date.now(), {
+          batch: b.batch, maxRows: b.maxRows, budgetMs: b.budgetMs,
+        });
+        return json({ ok: true, ...r });
+      }
+      /* Age a devices, reports or leads row, so a test can cross a 365 day
+         window without waiting a year. Same shape and same reasoning as
+         /dev/player-warp, /dev/backup-warp and /dev/spire-warp above: move
+         EVERY clock on the row together, which is why devices moves first_seen
+         with last_seen (a device somehow first seen this morning and last seen
+         a year ago is a state the real world cannot produce).
+         WHY A WARP RATHER THAN AN INJECTED CLOCK, which is what the events and
+         grants suites use. /dev/prune-stale takes a `nowMs` too, but a clock a
+         YEAR out puts EVERY row in these tables past its cutoff, not just the
+         fixture: it emptied `devices` while the 30-day events rows referencing
+         them survived, and api.test.mjs's tester-board case went red on the
+         second run against the same local database. That is an artefact of the
+         test clock and nothing production can do (the devices window is 365 days
+         and EVENT_RETENTION_DAYS is 30), but a suite that breaks its neighbours
+         on a re-run is not a suite anybody will keep running. Ageing one row
+         instead leaves the prune on the real clock, where only the fixture is a
+         candidate. DEV only; it moves timestamps and creates nothing. */
+      if (env.DEV === '1' && path === '/dev/stale-warp' && request.method === 'POST') {
+        const WARP = {
+          devices: { sql: 'UPDATE devices SET first_seen = first_seen - ?, last_seen = last_seen - ? WHERE device = ?', bind: (ms, d) => [ms, ms, d] },
+          reports: { sql: 'UPDATE reports SET ts = ts - ? WHERE device = ?', bind: (ms, d) => [ms, d] },
+          leads: { sql: 'UPDATE leads SET ts = ts - ? WHERE device = ?', bind: (ms, d) => [ms, d] },
+        };
+        const b = await request.json().catch(() => ({}));
+        const w = WARP[b.table];
+        if (!w) return json({ error: `table must be one of: ${Object.keys(WARP).join(', ')}` }, 400);
+        const r = await env.DB.prepare(w.sql).bind(...w.bind(Number(b.backMs) || 0, String(b.device || ''))).run();
+        return json({ ok: true, moved: Number((r.meta && r.meta.changes) || 0) });
+      }
+      /* Count the stale tables by device, DEV only, read only. A retention test
+         has to assert what SURVIVED as precisely as what went, and /stats only
+         exposes aggregates over whole tables. Three literal statements behind a
+         fixed map rather than a `table` parameter: a caller-supplied table name
+         in a DEV endpoint is a footgun for no gain, which is the same call
+         /dev/ratelimit-count made. All three tables carry `device`, so one
+         fixture id addresses a row in each. */
+      if (env.DEV === '1' && path === '/dev/stale-count' && request.method === 'GET') {
+        const BY_DEVICE = {
+          devices: 'SELECT COUNT(*) n, MIN(last_seen) at FROM devices WHERE device = ?',
+          reports: 'SELECT COUNT(*) n, MIN(ts) at FROM reports WHERE device = ?',
+          leads: 'SELECT COUNT(*) n, MIN(ts) at FROM leads WHERE device = ?',
+        };
+        const sql = BY_DEVICE[url.searchParams.get('table')];
+        if (!sql) return json({ error: `table must be one of: ${Object.keys(BY_DEVICE).join(', ')}` }, 400);
+        const row = await env.DB.prepare(sql).bind(url.searchParams.get('device') || '').first();
+        /* `at` is the STORED value of the column the rule prunes on, and it is
+           the reason the boundary can be asserted to the row rather than to the
+           minute. The test's own Date.now() is not the one the row carries, so
+           a cutoff computed from it would be a couple of milliseconds off and
+           the two sides of the boundary would be a guess. */
+        return json({ n: Number((row && row.n) || 0), at: row && row.at !== null ? Number(row.at) : null });
+      }
       /* Read grants back exactly, DEV only. A retention test has to assert what
          SURVIVED as precisely as what went, and GET /grants cannot do it: it
          only ever shows one player their own rows ABOVE their cursor, which is
@@ -3406,7 +4207,10 @@ export default {
         return json({ n: Number((row && row.n) || 0) });
       }
       if (env.DEV === '1' && path === '/dev/player' && request.method === 'GET') {
-        const row = await env.DB.prepare('SELECT id, handle, friend_code, profile, app_v FROM players WHERE id = ?')
+        /* test_run rides along because NOTHING filters on it: a provenance mark
+           that changed no behaviour would otherwise be unassertable, and a mark
+           no test can read is a mark that quietly stops being written. */
+        const row = await env.DB.prepare('SELECT id, handle, friend_code, profile, app_v, test_run FROM players WHERE id = ?')
           .bind(url.searchParams.get('id')).first();
         return json(row || {});
       }

@@ -10,7 +10,7 @@
  * suggestion), and the player who lost a tower has to be told.
  */
 import assert from 'node:assert/strict';
-import { flagFor } from './test-flag.mjs';
+import { flagFor, RUN } from './test-flag.mjs';
 
 const BASE = process.env.BASE || 'http://127.0.0.1:8788';
 /* Registrations are flagged when this run is NOT local, so a suite pointed at
@@ -35,7 +35,7 @@ async function newPlayer(name, flagged = false) {
   const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
   const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
   const res = await fetch(`${BASE}/register`, {
-    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() }, body: JSON.stringify({ test: IS_TEST || flagged, pubkey: pubJwk }),
+    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() }, body: JSON.stringify({ test: IS_TEST || flagged, run: RUN, pubkey: pubJwk }),
   });
   if (!res.ok) throw new Error(`register failed: ${res.status}`);
   const me = await res.json();
@@ -115,6 +115,37 @@ const run = async () => {
     const g = (j.grants || []).find(x => x.type === 'spire');
     assert.ok(g, 'a spire grant must be waiting for the previous owner');
     assert.match(g.payload.note, /toppled/i);   // the route already parses payload
+  });
+
+  /* WHAT A RIVAL CAN PUT IN YOUR INBOX, added 2026-09-01.
+     The claim body had no byte cap, and the grant note above was built from the
+     RAW b.name while the tower row two lines away took slice(0, 40) off the same
+     value. Measured against 996f28b9: toppling with a 100KB name gave the loser
+     a note of length 102,450, sitting in their grants until they opened the app.
+     Two bounds now, and this grades BOTH, because either one alone would let a
+     name just under the cap through into an unbounded sentence. */
+  await test('a rival cannot post an unbounded note into your inbox', async () => {
+    const P = await newPlayer('P');
+    const Q = await newPlayer('Q');
+    const sn = spire(Math.floor(Math.random() * 9000) + 9000);
+    assert.equal((await P.signed('PUT', `/spires/${sn.id}/claim`, { name: sn.name, lat: sn.lat, lng: sn.lng })).status, 200);
+    await warp(sn.id, 2 * 3600000);
+
+    // 1. the body cap refuses the 100KB name outright, before it is even parsed
+    const huge = await Q.signed('PUT', `/spires/${sn.id}/claim`, { name: 'X'.repeat(100000), lat: sn.lat, lng: sn.lng });
+    assert.equal(huge.status, 413, 'a 100KB claim body must be refused');
+
+    // 2. and a name UNDER the cap is still sliced before it reaches the note,
+    //    which is the half a byte cap on its own can never give you
+    const long = 'Z'.repeat(500);
+    const took = await Q.signed('PUT', `/spires/${sn.id}/claim`, { name: long, lat: sn.lat, lng: sn.lng });
+    assert.equal(took.status, 200, 'a 500-char name is legal input, just a bounded one');
+
+    const j = await (await P.signed('GET', '/grants?since=0')).json();
+    const g = (j.grants || []).find(x => x.type === 'spire' && x.payload.note.includes('Z'));
+    assert.ok(g, 'PRECONDITION: the loser must have been sent a note at all, or the bound below reads an empty sample');
+    assert.ok(g.payload.note.length < 120, `note is ${g.payload.note.length} chars, expected the 40-char slice`);
+    assert.equal((g.payload.note.match(/Z/g) || []).length, 40, 'the note must carry exactly the 40 characters the tower row kept');
   });
 
   await test('ownership actually moved', async () => {
@@ -206,10 +237,17 @@ const run = async () => {
     const before = await (await K.signed('GET', `/spires?ids=${s.id}`)).json();
     assert.equal(before.spires[0].defender.level, 9, 'the claim-time snapshot');
     // J levels up and pushes
-    await J.signed('PUT', '/profile', { snapshot: { level: 44, stats: { pow: 99, grit: 99 }, weapon: 'bonecrusher', talents: ['titan'] }, appV: 'test' });
+    await J.signed('PUT', '/profile', { snapshot: { level: 44, stats: { pow: 99, grit: 99 }, talents: ['titan'] }, appV: 'test' });
     const after = await (await K.signed('GET', `/spires?ids=${s.id}`)).json();
     assert.equal(after.spires[0].defender.level, 44, 'the tower must now be defended by the CURRENT build');
-    assert.equal(after.spires[0].defender.weapon, 'bonecrusher');
+    /* The second marker was `weapon: 'bonecrusher'`, which is not a field
+       buildSnapshot() has ever sent and not one the tower sheet reads: weapons
+       left the game in v445. sanitizeSnapshot's allowlist drops it, correctly,
+       and the row went red for the right reason. Re-pointed at `talents`, which
+       IS in the snapshot and IS what js/app.js hands the rival's fight
+       (`talents: d.talents || []`), so the assertion now grades a field the
+       feature depends on rather than an invented one. */
+    assert.deepEqual(after.spires[0].defender.talents, ['titan']);
   });
 
   await test('the leaderboard reports spires held and days held', async () => {

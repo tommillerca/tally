@@ -86,7 +86,11 @@ const ACTIONS = [
   { id: 'js/poi.js:claimGluttonWin', sites: 5, drive: 'glutton',
     transition: "today's Glutton goes from alive to beaten, for THIS appearance window",
     authority: 'the ledger key glutton-<date>-<slot>' },
-  { id: 'js/poi.js:claimDenWin', sites: 11, drive: 'denWin',
+  /* sites went 11 to 10 on 2026-08-31: the remote branch's own coinsAdd was
+     the double-pay half of a confirmed live money bug (banner +48, bank +96;
+     the settle already pays r.coins with the multipliers). Removing a paying
+     site on purpose is exactly what this count exists to make loud. */
+  { id: 'js/poi.js:claimDenWin', sites: 10, drive: 'denWin',
     transition: 'a boss den goes from uncleared to cleared for today (and its week, for the Pit ceiling)',
     authority: 'the ledger keys boss-<date>-<cell> / roam-… / remote-… and bossfirst-<week>-<cell>' },
   { id: 'js/poi.js:claimMiniWin', sites: 3, drive: 'miniWin',
@@ -129,6 +133,17 @@ const ACTIONS = [
   { id: 'js/cooking.js:collectDish', sites: 1, drive: 'dish',
     transition: 'a finished pot goes from full to empty',
     authority: 'the cook slot, nulled and written BEFORE the dish is banked' },
+  /* Was registered as undriven on the argument that it "moves an already-paid-for
+     queued dish into a pot". True of the QUEUE half and false of the other half:
+     it also banks whatever the pot it takes was holding, and that read-await-write
+     paid twice. Driven now, and graded on the Pantry count rather than a wallet
+     delta, because the leak here is a free combat consumable and not a coin. */
+  { id: 'js/cooking.js:advanceQueue', sites: 1, drive: 'advance',
+    transition: 'a finished pot goes from full to empty, on the clock rather than on a tap',
+    authority: "one kvUpdate on 'cooking': the pot is emptied and refilled in the same transaction, and the queue entry that refills it was taken from 'cookq' by a kvUpdate of its own" },
+  { id: 'js/energy.js:spendPitFight', sites: 0, drive: 'pitCharge',
+    transition: 'a Pit charge goes from held to spent: the free floor first, then one banked Vigor',
+    authority: "kvUpdate on 'pitEnergy': the charge is read and taken in one transaction" },
   /* RE-GRADED 2026-08-21, 7 -> 8 sites: the admin make-good gained a PET arm
      (`grantPet(p.pet, 'social')`), so /admin/grant can hand a named player back
      a species they lost to a mistake or a bug. The transition and the authority
@@ -167,13 +182,26 @@ const ACTIONS = [
   { id: 'js/wellness.js:logManualWalk', sites: 1, undriven: 'ledger key mwalk-<date>-<n>, capped 2/day in the write path' },
   { id: 'js/wellness.js:markRoutine', sites: 1, undriven: 'ledger key routine-<id>-<date>, and past ROUTINE_XP_CAP the row is minted with 0 XP on purpose' },
   { id: 'js/cooking.js:doTransmute', sites: 1, undriven: 'a once-a-day cooldown plus an ingredient spend; nothing is granted without both' },
-  { id: 'js/cooking.js:advanceQueue', sites: 1, undriven: 'moves an already-paid-for queued dish into a pot; the dish was bought with ingredients at startCook' },
   { id: 'js/garden.js:compostIngredient', sites: 1, undriven: 'spends an ingredient and is capped at COMPOSTS_PER_DAY; a conversion, not a payout' },
   { id: 'js/loot.js:buyShopItem', sites: 1, undriven: 'a purchase: the second attempt is MEANT to charge again. Was 3 until 2026-08-25: crates came off the coin shop (S0), so the two grantCrate branches went with them and only grantConsumable is left' },
   /* js/loot.js:buyWithDust stood here with 3 sites (grantEgg / grantCrate /
      grantConsumable). The Bone Dust shop closed on 2026-08-25 and dust is a
      cosmetic-only currency, so all three sites went with it. */
-  { id: 'js/loot.js:buyDropItem', sites: 1, undriven: 'a purchase, and it refuses when already owned' },
+  /* sites went 1 to 2 on 2026-08-31 with the atomic spend. The second site is a
+     REFUND of the coins this very call just took, on the one path where the
+     grant is lost to a concurrent tap (grantCosmetic addIfAbsent's `cos:<id>`
+     and returns null to whoever loses). It is bounded by the debit above it and
+     conserves the balance rather than adding to it, so it is not a payout and
+     needs no ledger key of its own. It is graded by the SPEND-ONCE row in
+     tests/purchase-firewall.mjs: four concurrent taps on a 3,000-coin piece
+     leave the wallet exactly 3,000 lighter, not 9,000. */
+  { id: 'js/loot.js:buyDropItem', sites: 2, undriven: 'a purchase, and it refuses when already owned; the second site is its own refund on a lost grant race, not a payout' },
+  /* Registered 2026-08-31: both gained their single "paying" site from the spend
+     reorder, and in both cases it is a REFUND of the balance the same call took
+     a line or two earlier, not a payout. Neither grants anything, so neither has
+     a state transition to earn; what they have is a bounded give-back. */
+  { id: 'js/loot.js:rerollRack', sites: 1, undriven: "the one site is a coinsAdd refunding a caller that paid for a reroll and then lost the rack kvUpdate on `used !== st.rr`. That claim was always atomic, so two rerolls could never double-charge each other; the reorder closes a reroll landing beside an ordinary BUY, each on its own stale read (measured on origin/main 2faa73b6: a 3,000-coin wallet paid a 500 reroll AND a 3,000 piece). It also covers the stale-PRICE case for free, since a caller quoting a cheap rung's price after somebody else advanced the counter is refused and refunded rather than underpaying. Graded by CROSS-REROLL in tests/purchase-firewall.mjs, alongside the REROLL-LADDER / REROLL-FLOOR / REROLL-WEEKLY rows that own the curve" },
+  { id: 'js/loot.js:applyTransmog', sites: 1, undriven: "the one site is a boneDustAdd refunding a caller whose look was banked by a concurrent tap. markPaid IS this function's receipt (a banked look is free to wear forever after) and it now reports whether IT added the key, so applyTransmog is the buyDropItem shape with the paid-look ledger playing grantCosmetic's part. Not a payout: bounded by the spendDust directly above it. Before the reorder both halves were broken, measured on 2faa73b6: two concurrent applies of one 12-dust look took 24 and applied one, and the read-then-debit overdrew against any other dust spend. Graded by CROSS-TRANSMOG in tests/purchase-firewall.mjs, with the WEAR-FREE rows owning the free-to-wear half" },
   { id: 'js/loot.js:disenchantGear', sites: 1, undriven: 'melts a piece the player owns: the gear row is the input, so a second run finds nothing' },
   { id: 'js/loot.js:salvagePet', sites: 1, undriven: 'as disenchantGear, on a pet instance' },
   { id: 'js/loot.js:salvageInstance', sites: 1, undriven: 'as salvagePet, by instance id' },
@@ -243,19 +271,51 @@ const ACTIONS = [
      grants once. Proven both ways by tests/purchase-write-failure-audit.mjs:
      red on unfixed main where the retry leaves the player owning nothing, and
      green here with zero coins taken on the retry. */
-  { id: 'js/loot.js:buyRackItem', sites: 2,
+  /* sites went 2 to 4 on 2026-08-31 with the spend reorder. The two new ones are
+     the REFUND on a lost claim, `currency === 'dust' ? boneDustAdd(price) :
+     coinsAdd(price)`, which the scanner counts twice because the ternary puts
+     both calls on one line. Bounded by the debit directly above it and
+     conserving the balance rather than adding to it, so it is not a payout;
+     graded by CROSS-RACK and CROSS-DUST in tests/purchase-firewall.mjs. */
+  { id: 'js/loot.js:buyRackItem', sites: 4,
     transition: 'a rack piece goes from unowned to owned, once and forever',
-    authority: 'db.addIfAbsent on the kv row rackbuy:<artId>, claimed BEFORE anything is deducted, so the check and the write are one transaction',
+    authority: 'db.addIfAbsent on the kv row rackbuy:<artId>. The money is spent FIRST and atomically (spendCoins/spendDust refuse inside the kv transaction and leave the balance byte-identical), and the claim then decides WHO GETS THE THING, with the loser of the claim refunded on the line under the debit. Reordered 2026-08-31: claiming first made a second tap on the SAME item free, which is the case that was tested, and hid the case that was not, two DIFFERENT items bought in the same instant each passing their own stale balance read with both clamped debits free. Measured pre-reorder on origin/main 2faa73b6: a 3,000-coin wallet took a 3,000 and a 2,400 piece together and kept both, and 160 dust took 160 + 130',
     undriven: "driven to destruction by tests/purchase-firewall.mjs, which is where the second-attempt proof lives rather than here: it buys through the real function against a real IndexedDB, measures every store either side, and performs the same purchase twice sequentially AND three times concurrently. Proven red there on a kvGet/kvSet claim (3 callers charged 7,200 for a 2,400 item) and on paying before the claim" },
-  { id: 'js/loot.js:buyPetItem', sites: 2,
+  /* sites went 2 to 3 on 2026-08-31 with the spend reorder: the new one is the
+     coinsAdd REFUND on a lost claim, bounded by the debit above it. Graded by
+     CROSS-PET in tests/purchase-firewall.mjs. */
+  { id: 'js/loot.js:buyPetItem', sites: 3,
     transition: 'Bumbleseal, or one piece of her wardrobe, goes from unowned to owned, once and forever',
-    authority: 'db.addIfAbsent on the kv row petbuy:<id>, claimed BEFORE anything is deducted, so the check and the write are one transaction. Identical to buyRackItem by design; the function header says that if the two ever diverge, the divergence is the bug',
+    authority: 'db.addIfAbsent on the kv row petbuy:<id>. The money is spent FIRST and atomically (spendCoins/spendDust refuse inside the kv transaction and leave the balance byte-identical), and the claim then decides WHO GETS THE THING, with the loser of the claim refunded on the line under the debit. Reordered 2026-08-31: claiming first made a second tap on the SAME item free, which is the case that was tested, and hid the case that was not, two DIFFERENT items bought in the same instant each passing their own stale balance read with both clamped debits free. Identical to buyRackItem by design; the function header says that if the two ever diverge, the divergence is the bug. Her shelf was the worst case for the old ordering because it is the only one where several affordable things each cost thousands: measured pre-reorder on 2faa73b6, an 8,000-coin wallet took an 8,000 and a 6,000 accessory together and kept both',
     undriven: "driven to destruction by tests/purchase-firewall.mjs, added 2026-08-21 when THIS ROW WAS THE THING THAT WAS MISSING: the function shipped on ext/bumbleseal-pets and reward-sop found it unregistered during the v421 merge. A registry row saying 'same shape as the one next door' is an argument, not evidence, and this is the most expensive button in the game, so it got the rack's own three legs instead. Measured green there: 50,000 spent exactly once, a second sequential buy pays 0, three concurrent buys of one 8,000 accessory spend 8,000 and grant 1. Plus a leg the rack has no equivalent for, PET-GATE: an accessory is refused with reason 'needs-pet' before she is owned AND the balance does not move, because every piece is drawn positioned for HER body and would hang in empty air on any other pet" },
+  /* THE DUST EGG, restored 2026-08-31 on Tom's ruling (the S0 removal of the
+     dust shop's egg was unintentional; dust is the deterministic hatch route
+     for a non-walker). A SPEND whose other side is a grant, so it is registered
+     the way buyRackItem/buyPetItem are. The negative boneDustAdd is correctly
+     not counted by the scanner; grantEgg is the one site (it appears at two
+     call sites in the function, main path and recovery, but the scanner counts
+     the recovery one too, which is why sites was 2). It went to 3 on 2026-08-31
+     with the spend reorder: the new site is the POSITIVE boneDustAdd refunding a
+     caller that paid and then lost the receipt claim, bounded by the debit above
+     it. The weekly receipt already made a second EGG impossible; what the
+     reorder closes is the egg landing beside another dust spend. */
+  { id: 'js/loot.js:buyDustEgg', sites: 3,
+    transition: "this week's Mystery Egg goes from unbought to bought; one per ISO week, and the week key IS the bound",
+    authority: 'db.addIfAbsent on the kv row dustegg:<isoWeek>. The money is spent FIRST and atomically (spendCoins/spendDust refuse inside the kv transaction and leave the balance byte-identical), and the claim then decides WHO GETS THE THING, with the loser of the claim refunded on the line under the debit. Reordered 2026-08-31: claiming first made a second tap on the SAME item free, which is the case that was tested, and hid the case that was not, two DIFFERENT items bought in the same instant each passing their own stale balance read with both clamped debits free. The granted flag on that receipt is flipped by a CONDITIONAL kvUpdate so the recovery of a paid-but-ungranted week has exactly one winner',
+    undriven: 'driven to destruction by tests/dust-egg-audit.mjs (PRICE / BOUND / ONCE-RACE / FAILURE / RECOVER), which is where the second-attempt and refused-write proofs live rather than here' },
   { id: 'js/loot.js:deliverPet', sites: 1,
     transition: 'a pet you have just paid for gains its FIRST copy in the Stable, and becomes the pet you fight with',
     authority: 'petInstances() itself, read immediately before the mint: it is the list every screen and every per-copy map answers from, and the read runs the reclaim, so a copy minted there a moment earlier is seen and not duplicated',
     undriven: "the tail of buyPetItem and unreachable without it: nothing else calls it, and buyPetItem's own claim (db.addIfAbsent on petbuy:<id>) is what makes it run once. Added 2026-08-21 with the fix for the v421 defect where buyPetItem wrote ownership and never a copy, so the 50,000-coin pet was owned, equipped, drawn on Today and absent from the Stable and the Paddock. The second-attempt proof lives in tests/pet-ownership-audit.mjs, which measures the copy count as a DELTA per species across the real grant (dupes legitimately stack, so an absolute 1 would be wrong) and requires exactly +1, then reproduces the broken account and requires three consecutive boots to heal it to exactly one copy" },
   { id: 'js/app.js:openGiftSheet', sites: 1, undriven: 'a REFUND of coins this device already deducted, on a failed send; not a payout' },
+  /* Added 2026-09-02 with the sibling-writer sweep. startCook and queueCook now
+     take the ingredients in one kvUpdate and claim the pot or the queue slot in
+     a second, because carrying the pot array across the ingredient spend was
+     restoring a dish collectDish had already banked. Two kv rows cannot ride one
+     transaction, so the take-first ordering leaves exactly one losing case: the
+     last pot fills between the two. This hands back what THIS call took, by
+     recipe, and it is the only thing that can reach it. */
+  { id: 'js/cooking.js:refundIngredients', sites: 1, undriven: 'a REFUND of the ingredients this call just spent, when the pot or the queue turned out to have no room; it can only ever return r.needs and only after payIngredients returned true, so it hands back exactly what was taken and nothing else' },
   { id: 'js/app.js:openSurveySheet', sites: 1, undriven: "one-time, gated on kv 'surveyDone' read before the grant" },
 ];
 
@@ -357,10 +417,11 @@ const { browser, page } = await boot(base);
 await sleep(800);
 
 const results = await page.evaluate(async () => {
-  const [loot, game, poi, hunt, spires, garden, cooking, quests, social, db, nutrition, gear] = await Promise.all([
+  const [loot, game, poi, hunt, spires, garden, cooking, quests, social, db, nutrition, gear, energy] = await Promise.all([
     import('/js/loot.js'), import('/js/game.js'), import('/js/poi.js'), import('/js/hunt.js'),
     import('/js/spires.js'), import('/js/garden.js'), import('/js/cooking.js'), import('/js/quests.js'),
     import('/js/social.js'), import('/js/db.js'), import('/js/nutrition.js'), import('/js/gear.js'),
+    import('/js/energy.js'),
   ]);
   const wallet = async () => ({ coins: await loot.coins(), dust: await loot.boneDust(), xp: await game.totalXp() });
   const diff = (a, b) => ({ coins: b.coins - a.coins, dust: b.dust - a.dust, xp: b.xp - a.xp });
@@ -416,8 +477,10 @@ const results = await page.evaluate(async () => {
          a refusal as a win and reported pay:{coins:0}. It is green today only
          because this driver claims exactly QUEST_N.day distinct ids and so lands
          ON the cap rather than past it; a fourth quest here would have made it
-         lie. Sitting on a boundary is not passing. */
-      return { act: () => quests.claimQuest('2099-01-02', q, 'day'), won: r => !!r && !r.capped };
+         lie. Sitting on a boundary is not passing.
+         { dayGuard } is now the FOURTH shape (the day-guard refusal, voiced
+         instead of null) and is likewise a refusal, never a win. */
+      return { act: () => quests.claimQuest('2099-01-02', q, 'day'), won: r => !!r && !r.capped && !r.dayGuard };
     },
     questAll: () => {
       const d = `2099-02-${String(1 + (n++ % 27)).padStart(2, '0')}`;
@@ -467,6 +530,36 @@ const results = await page.evaluate(async () => {
       act: () => cooking.collectDish(0),
       won: r => !!r,
       count: async () => (await cooking.pantryDishes()).length,
+    }),
+    /* One pot, one finished dish in it, one paid-for cook in the line: the state
+       the Kitchen's 1000ms tick meets every time a pot comes good. `count` is the
+       Pantry, because a dish pays no currency and a wallet delta would grade
+       nothing here. */
+    advance: () => ({
+      setup: async () => {
+        const done = cooking.RECIPES.find(r => !r.potion);
+        const next = cooking.RECIPES.find(r => !r.potion && r.id !== done.id) || done;
+        await db.kvSet('potsOwned', 1);
+        await db.kvSet('cooking', [{ recipeId: done.id, startedAt: 1, readyAt: 2 }]);
+        await db.kvSet('cookq', [{ recipeId: next.id }]);
+        await db.kvSet('pantry', []);
+      },
+      act: () => cooking.advanceQueue(),
+      won: r => r.length > 0,
+      count: async () => (await cooking.pantryDishes()).length,
+    }),
+    /* A GATE rather than a payout: what it hands over is the right to a staked
+       fight, so `count` is the charge actually taken off the meter. Grading it
+       on the wallet would grade nothing, and the CONTROL row would then pass on
+       a driver that never reached the state. */
+    pitCharge: () => ({
+      /* fromSteps pinned at the cap, so a refreshPitEnergy anywhere in this run
+         pays no step Vigor into the meter mid-measurement. A sibling probe read
+         "two arenas, one charge" on a healthy build for exactly that reason. */
+      setup: async () => { await db.kvSet('pitEnergy', { date: nutrition.dateKey(), freeUsed: energy.FREE_FIGHTS - 1, vigor: 0, fromSteps: energy.STEP_VIGOR_CAP, fromLog: 0 }); },
+      act: () => energy.spendPitFight(),
+      won: r => !!r.ok,
+      count: async () => ((await db.kvGet('pitEnergy', {})) || {}).freeUsed || 0,
     }),
     /* The payload carries a PET as well as currency, because the admin
        make-good arm added 2026-08-21 hands over a species by id and a species is
@@ -575,6 +668,96 @@ for (const [name, r] of Object.entries(results)) {
 }
 
 /* ===========================================================================
+ * CEILING: DISTINCT keys against ONE shared ceiling.
+ *
+ * WHY THIS EXISTS, and it is the half whose absence let three bugs ship. Every
+ * row above races THE SAME KEY, and the same key is precisely what addIfAbsent
+ * already makes safe: one row, one winner, by construction. This file had never
+ * once raced two DIFFERENT keys against a resource they SHARE. So a per-item
+ * claim that is perfectly atomic could sit in front of a ceiling that is not,
+ * and the whole audit stayed green over it. Measured in the round-9 sweep on
+ * 2026-09-01, against origin/main 3d4b208c:
+ *   the quest PERIOD cap  a weekly cap of 3 with one prior claim paid FOUR when
+ *                         three DISTINCT quest ids were claimed at once: +450
+ *                         coins, +210 XP, 2 golden crates and a Vigor Draught.
+ *                         A monthly cap of 2 paid 3. Reachable in ONE tab with
+ *                         no devtools, because the Claim handler is async and
+ *                         the button is neither disabled nor debounced.
+ *   the Pit charge        with one free fight left, two overlapping spends both
+ *                         returned ok, so one charge opened TWO staked arenas.
+ *
+ * TWO SHAPES, and both are here because they fail differently. A shared COUNT is
+ * a ceiling that several distinct claims are each measured against. A shared
+ * GATE is one indivisible thing several distinct callers want. The count leaks
+ * money; the gate leaks a fight. Neither is reachable by repeating one key.
+ *
+ * EVERY ROW HAS A CONTROL BESIDE IT, on the same code in the same session, with
+ * the ceiling NOT reached: the same N attempts must then pay the FULL set. A
+ * function that refused everything, or a driver that never reached the paying
+ * state, scores a perfect pass without it. Both sample sets are non-empty by
+ * assertion rather than by hope: a suite here passed vacuously once because
+ * Math.min of nothing is Infinity.
+ * ======================================================================== */
+const ceiling = await page.evaluate(async () => {
+  const [quests, energy, loot, db, nutrition] = await Promise.all([
+    import('/js/quests.js'), import('/js/energy.js'), import('/js/loot.js'),
+    import('/js/db.js'), import('/js/nutrition.js'),
+  ]);
+
+  // ---- a shared COUNT: the quest period cap, claimed with DISTINCT ids ----
+  const cap = quests.QUEST_N.week;
+  const ids = quests.WEEKLY_POOL.map(q => q.id);
+  const clear = async pk => { for (const r of await db.db.all('xp')) if (String(r.key).startsWith(`quest-${pk}-`)) await db.db.del('xp', r.key); };
+  const seed = async (pk, n) => { for (let i = 0; i < n; i++) await db.db.put('xp', { key: `quest-${pk}-${ids[i]}`, type: 'quest', xp: 25, label: 'sop seed', date: pk, ts: Date.now() }); };
+  /* All at once, and DISTINCT: the same id would be refused by the per-quest
+     ledger key, which is the protection that was already there and already
+     working. `capped` and `dayGuard` are refusals, never wins, same reading the
+     quest driver above takes. */
+  const claimAll = (pk, picks) => Promise.all(picks.map(id => quests.claimQuest(pk, { id, name: 'sop ceiling', coins: 150 }, 'week')));
+  const paidOf = rs => rs.filter(r => !!r && !r.capped && !r.dayGuard).length;
+  const rowsIn = async pk => quests.claimsThisPeriod(await db.db.all('xp'), pk, 'week');
+
+  // both keys are FUTURE periods, for the same reason the quest driver uses one:
+  // periodClosed refuses a period that has CLOSED and leaves a future one alone
+  const AT = '2099-03-01';
+  await clear(AT); await seed(AT, cap - 1);
+  const c0 = await loot.coins();
+  const atPaid = paidOf(await claimAll(AT, ids.slice(cap - 1, cap - 1 + cap)));
+  const count = { cap, paid: atPaid, rows: await rowsIn(AT), coins: await loot.coins() - c0 };
+
+  const FREEPK = '2099-03-08';
+  await clear(FREEPK);
+  const c1 = await loot.coins();
+  const freePaid = paidOf(await claimAll(FREEPK, ids.slice(0, cap)));
+  const countControl = { paid: freePaid, rows: await rowsIn(FREEPK), coins: await loot.coins() - c1 };
+
+  // ---- a shared GATE: one Pit charge, wanted by several overlapping taps ----
+  // fromSteps at the cap: see the pitCharge driver, a refresh must not top the meter up under the measurement
+  const setPit = free => db.kvSet('pitEnergy', { date: nutrition.dateKey(), freeUsed: energy.FREE_FIGHTS - free, vigor: 0, fromSteps: energy.STEP_VIGOR_CAP, fromLog: 0 });
+  const spendThrice = () => Promise.all([energy.spendPitFight(), energy.spendPitFight(), energy.spendPitFight()]);
+  const meter = async () => ((await db.kvGet('pitEnergy', {})) || {}).freeUsed || 0;
+  await setPit(1);
+  const gate = { ok: (await spendThrice()).filter(r => r.ok).length, freeUsed: await meter(), max: energy.FREE_FIGHTS };
+  await setPit(energy.FREE_FIGHTS);
+  const gateControl = { ok: (await spendThrice()).filter(r => r.ok).length, freeUsed: await meter() };
+
+  return { count, countControl, gate, gateControl };
+});
+
+ok('CEILING quest a period already at cap-1 pays exactly ONE of several DISTINCT quest ids claimed at once',
+  ceiling.count.paid === 1 && ceiling.count.rows === ceiling.count.cap,
+  JSON.stringify({ cap: ceiling.count.cap, claimedAtOnce: ceiling.count.cap, paid: ceiling.count.paid, rowsAfter: ceiling.count.rows, coins: ceiling.count.coins }));
+ok('CONTROL quest the SAME distinct ids on a virgin period all pay, so the row above is not passing by refusing everything',
+  ceiling.countControl.paid === ceiling.count.cap && ceiling.countControl.rows === ceiling.count.cap,
+  JSON.stringify({ paid: ceiling.countControl.paid, rowsAfter: ceiling.countControl.rows, coins: ceiling.countControl.coins }));
+ok('CEILING pit ONE remaining charge is taken by exactly one of three overlapping spends',
+  ceiling.gate.ok === 1 && ceiling.gate.freeUsed === ceiling.gate.max,
+  JSON.stringify({ ok: ceiling.gate.ok, freeUsedAfter: ceiling.gate.freeUsed, freeMax: ceiling.gate.max }));
+ok('CONTROL pit three charges in hand ARE taken by three overlapping spends, so the row above is not passing on a tapped-out account',
+  ceiling.gateControl.ok === 3 && ceiling.gateControl.freeUsed === ceiling.gate.max,
+  JSON.stringify(ceiling.gateControl));
+
+/* ===========================================================================
  * NO-OP: an action that decides it is owed NOTHING must not damage the record
  * it consulted.
  *
@@ -676,6 +859,36 @@ if (srv) srv.close();
  *      grown or lost a payout", registered 3 sites, source has 4.
  *    delete the collectSpawn row from ACTIONS -> "every paying call site
  *      belongs to a registered action", naming js/hunt.js:collectSpawn.
+ *
+ * PROVE-RED for the round-9 rows, CONFIRMED 2026-09-01 in a `cp -R` throwaway
+ * copy of the PRE-FIX tree (origin/main 3d4b208c) with only this file dropped
+ * in, one bug at a time. Nothing in the working tree was checked out.
+ *
+ *  js/cooking.js advanceQueue as it was (readQueue -> readSlots -> await the
+ *      grant -> writeSlots)
+ *      REPEAT advance "TWO OVERLAPPING attempts: exactly one takes the state",
+ *      wins 2, and "hand over one lot, not two", 2 Pantry dishes from ONE cook.
+ *  js/energy.js spendPitFight as it was (kvGet -> await -> kvSet)
+ *      REPEAT pitCharge, wins 2 while the meter moved by 1, so one free fight
+ *      bought two staked arenas. CEILING pit, THREE spends of ONE charge all
+ *      returned ok. CONTROL pit red too and for the bug's own reason: three
+ *      charges in hand were all spent and the meter moved by 1, not 3.
+ *  js/quests.js claimQuest as it was (db.all('xp') -> claimsThisPeriod -> award)
+ *      CEILING quest, paid 3 of 3 against a period already at cap-1: the ledger
+ *      ended holding 5 claims in a period whose ceiling is 3, +474 coins. Every
+ *      REPEAT row stayed green, and that is the whole reason this section
+ *      exists: the per-quest key was never the broken half.
+ *
+ * THE CONTROLS, and what actually needs them. Refusing everything is caught by
+ * the CEILING rows on their own (`return { capped: true, cap, period }` at the
+ * top of claimQuest turns CEILING quest red at paid 0; `return { ok: false }`
+ * from spendPitFight turns CEILING pit red at ok 0), so that is not the case
+ * they earn their place on. This is:
+ *      cap := already + 1, a ceiling that only ever lets ONE more through
+ *      CEILING quest passes PERFECTLY, paid 1 of 3 with the ledger on 3. It is
+ *      CONTROL quest that goes red, paid 1 where three virgin claims must pay
+ *      3. A ceiling row alone cannot tell "held the line" from "let nobody
+ *      through", and a lock that never opens is not a fixed cap.
  */
 console.log(`\n${fails ? `REWARD SOP AUDIT FAILED (${fails})` : 'REWARD SOP VERIFIED'}`);
 process.exit(fails ? 1 : 0);

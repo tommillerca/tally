@@ -241,6 +241,23 @@ try {
   if (!meA?.playerId || !meB?.playerId) die(`both players must register (A=${JSON.stringify(meA)} B=${JSON.stringify(meB)})`);
   if (meA.playerId === meB.playerId) die('the two browsers registered as the SAME account: this audit would prove nothing');
   console.log(`      A ${meA.playerId} ${meA.friendCode}\n      B ${meB.playerId} ${meB.friendCode}`);
+  /* MARK. These two rows are the only accounts in the repo made by the REAL
+     client rather than by a fetch() a test file wrote, so
+     tests/live-api-register-lint.mjs cannot see them: it scans test SOURCE, and
+     this registration lives in js/social.js. That made them the one kind of test
+     account with no mark of any sort on it. registerKey now sends a `run` label
+     under navigator.webdriver, and this reads the row back off the Worker to
+     check it landed, because a mark asserted at the client is a mark asserted
+     one hop short of the database.
+     The pair is friends by the end of this file, which is the point of NOT using
+     `test: true` here: that flag would suppress the row and requestFriendship
+     refuses a flagged pair, so the audit would be grading a path no player
+     takes. */
+  const runOf = id => fetch(`${api.url}/dev/player?id=${id}`).then(r => r.json()).then(r => r.test_run ?? null);
+  const [runA, runB] = [await runOf(meA.playerId), await runOf(meB.playerId)];
+  ok('MARK   both rows the real client made carry a run label',
+    /^webdriver /.test(runA || '') && /^webdriver /.test(runB || ''),
+    `A=${JSON.stringify(runA)} B=${JSON.stringify(runB)}`);
   // drain the welcome grant on both, so every later coin delta is the thing under test
   await sync(A); await sync(B);
   await kvPut(A, 'coins', 9000); await kvPut(B, 'coins', 1000);

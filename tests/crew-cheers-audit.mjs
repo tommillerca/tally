@@ -51,6 +51,10 @@
  *             still LISTS, with the server's sentence, and simply offers no
  *             reply button. A cheer you cannot answer beats a cheer you were
  *             never shown.
+ *   SCRUBBED  the same row shape /account/delete now leaves behind when the
+ *             SENDER deletes their account: an anonymous name, the phrase still
+ *             quoted, no id to reply to. It has to read as a cheer from
+ *             somebody, not as "undefined cheered you".
  *
  * PROVE-RED: see the block at the end of this file.
  *
@@ -169,6 +173,17 @@ try {
       key: 'cheer-legacy-row', type: 'cheer',
       payload: { note: 'DUSTY LULU cheered you' },   // a row as it was written BEFORE the fix
     }));
+    /* A SCRUBBED ROW: the sender deleted their account, so /account/delete
+       replaced the name with the same anonymous sender the route writes for a
+       nameless player and dropped the id the reply would be addressed to (see
+       the cascade in server/src/index.js). This is the shape a friend of a
+       deleted player is actually served, and it has to READ as something. An
+       empty `from` renders "undefined cheered you", which is a worse bug than
+       the residue the scrub exists to remove. */
+    out.push(await social.__testApplyGrant({
+      key: 'cheer-scrubbed-row', type: 'cheer',
+      payload: { from: 'A Bonehead', cheer: 2, note: 'A Bonehead cheered you' },
+    }));
     out.push(await social.__testApplyGrant({
       key: 'social-gift-fixture', type: 'social',
       payload: { coins: 120, note: 'RIB TICKLER sent you 120 coins!' },
@@ -182,7 +197,7 @@ try {
     return out;
   }, SENT);
   setup('SAMPLE every fixture grant was applied through the real applyGrant',
-    applied.length === 5 && applied.every(Boolean), `applied ${applied.filter(Boolean).length} of 5`);
+    applied.length === 6 && applied.every(Boolean), `applied ${applied.filter(Boolean).length} of 6`);
 
   const presets = await page.evaluate(() => (window.__cheerPresets ? window.__cheerPresets() : []).length);
   setup('SAMPLE the preset cheer list has entries, so an index means something',
@@ -333,6 +348,22 @@ try {
   ok('LEGACY a cheer stored before the fix still lists, with the server sentence and no reply button',
     !!legacy && legacy.back === null && /cheered you/i.test(legacy.said),
     legacy ? `who "${legacy.who.trim()}" said "${legacy.said.trim()}" back=${legacy.back}` : 'the legacy row was dropped from the list');
+
+  /* ---- SCRUBBED: the sender deleted their account ----
+     Graded at the RENDER, because that is where the failure would show. The
+     server can only prove the payload no longer names anybody; whether the row
+     still reads as a cheer from someone is a question about this list, and the
+     answer "undefined cheered you" is the one worth catching. It still shows
+     WHAT was sent, because the phrase index is not identifying and throwing it
+     away would cost the recipient the only content the row has. */
+  const scrubbed = card.rows.find(r => /A Bonehead/.test(r.who));
+  const scrubWant = presetsList[2];
+  ok('SCRUBBED a cheer whose sender deleted their account still names a sender and still quotes the phrase, and offers no reply',
+    !!scrubbed && scrubbed.back === null
+      && !/undefined|null|^\s*$/.test(scrubbed.who)
+      && scrubbed.said.trim() === scrubWant.txt && scrubbed.face.includes(scrubWant.emo),
+    scrubbed ? `who "${scrubbed.who.trim()}" said "${scrubbed.said.trim()}" face "${scrubbed.face.trim()}" back=${scrubbed.back}`
+             : 'the scrubbed row was dropped from the list');
 
   /* ---- KEPT: nothing expires unseen ---- */
   await page.reload({ waitUntil: 'networkidle2' });

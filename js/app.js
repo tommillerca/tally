@@ -22,10 +22,11 @@ import {
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   stripAll, stripAllPlan,
   DROP, buyDropItem, refundStreakFreezes,
-  RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_REROLL_LADDER, RACK_RARITY_PRICE,
+  RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_RARITY_PRICE,
   setWornAura, ownsAura,
-  rack, rerollRack, buyRackItem, wornAura,
+  rack, rerollRack, rackRerollCost, buyRackItem, wornAura,
   buyPetItem,
+  DUST_EGG, buyDustEgg, dustEggBought,
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP, manualWalksToday, logManualWalk, MANUAL_WALKS_PER_DAY } from './wellness.js';
@@ -92,7 +93,7 @@ import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CR
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
-  computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays,
+  computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, ACTIVITY_LEVELS, GOALS, kcalConsistent,
   activeCalorieBonus, assumedActiveBurn,
@@ -938,7 +939,9 @@ const MINI_SKULL_PX = 24;
 // The Boneyard map key: every marker type that can appear out there, rendered with
 // the EXACT same marker markup the map draws (so the legend and the map never drift).
 // Covers spawns + all three den looks incl. the pink secret dens.
-function mapLegendHtml() {
+// `head` lets the location-denied screen reuse the key inside a .card with its
+// own title; the map overlay keeps the default MAP KEY header.
+function mapLegendHtml(head = '<div class="leg-h">MAP KEY</div>') {
   const den = (cls = '') => `<div class="map-den-mark${cls}"><div class="den-fx"><span class="den-eyes"><i></i><i></i></span><img src="assets/brand/tombstone.png" alt=""><span class="den-skulls">${bhIcon('badge-skull', 13, 'currentColor').repeat(2)}</span></div></div>`;
   /* 24 EXPLICITLY, because that is what the map draws (the `s.far ? 16 : 24` in
      the spawn pass below). The default was 20, which pixCur snaps DOWN to 16, so
@@ -970,7 +973,7 @@ function mapLegendHtml() {
     [den(' roaming'), 'Roaming den', 'A daily den: here today, gone tomorrow'],
     [den(' secret'), 'Secret den', 'A hidden boss, only where one is buried'],
   ];
-  return `<div class="leg-h">MAP KEY</div>${rows.map(([m, n, d]) =>
+  return `${head}${rows.map(([m, n, d]) =>
     `<div class="leg-row"><span class="leg-ico">${m}</span><span class="leg-txt"><b>${n}</b><small>${d}</small></span></div>`).join('')}`;
 }
 function consumableIcon(type, s = 20) {
@@ -1015,6 +1018,7 @@ function armToConfirm(btn, confirmLabel, onConfirm, { cooloff = ARM_COOLOFF_MS }
   if (!btn || btn.dataset.armWired === '1') return;
   btn.dataset.armWired = '1';
   let t = null;
+  let busy = false;
   const restore = () => {
     if (!btn.isConnected) return;
     btn.dataset.armed = '0';
@@ -1024,6 +1028,7 @@ function armToConfirm(btn, confirmLabel, onConfirm, { cooloff = ARM_COOLOFF_MS }
   btn.addEventListener('click', async e => {
     e.preventDefault();
     e.stopPropagation();
+    if (busy) return;   // a spend is in flight: a queued tap is not a new decision
     if (btn.dataset.armed !== '1') {
       if (btn.dataset.armLabel == null) btn.dataset.armLabel = btn.innerHTML;
       btn.dataset.armed = '1';
@@ -1035,8 +1040,21 @@ function armToConfirm(btn, confirmLabel, onConfirm, { cooloff = ARM_COOLOFF_MS }
     }
     clearTimeout(t);
     haptic.heavy();   // the second tap commits: every spend/destroy thumps once
-    restore();
-    await onConfirm();
+    /* DISARM AFTER THE SPEND, NEVER BEFORE IT. restore() used to run here, above
+       the await, so the button was back in its unarmed state inside the same
+       frame and a synchronous tap burst simply re-armed and committed again:
+       N taps bought floor(N/2) items. `busy` is set before the first await, so
+       every tap queued behind this one lands on a button already out of the
+       running, the same job the crate OPEN button does with `disabled`.
+       IT IS A CLOSURE FLAG AND NOT `btn.disabled` ON PURPOSE. `disabled` is the
+       CALLER's state on these buttons: the gift chips open with
+       `if (b.disabled) return` and re-disable themselves by affordability after
+       a send, so setting it here made every gift a silent no-op and clearing it
+       afterwards would have re-offered amounts the player can no longer afford.
+       A flag also works on the chips and rows here that are not <button>. */
+    busy = true;
+    try { await onConfirm(); }
+    finally { busy = false; restore(); }
   });
 }
 
@@ -1195,12 +1213,53 @@ async function boot() {
   const NOSOCIAL = S.demo || navigator.webdriver === true;
   await social.initFromQuery();
   const cloudRestore = NOSOCIAL ? null : await social.bootSync().catch(() => null);
+  /* THE REASONS THAT ARE NOT A FAILURE, so the boot toast stays silent for them.
+     'none'/'empty' (no backup on the server) and 'already' (restored on an
+     earlier boot) were always here. The other three were NOT, and each one made
+     the app lie to somebody who has no cloud backup to fail:
+       'new-player'  a brand-new install, which bootSync returns BEFORE it will
+                     mint an identity (js/social.js: registering at boot once
+                     filled the leaderboard with abandoned level-1 players). A
+                     first launch was greeted with "could not reach your cloud
+                     backup", over onboarding, for a backup that cannot exist.
+       'opted-out'   the player turned cloud backup OFF. Telling them we could
+                     not reach it is the one thing they explicitly declined.
+       'no-api'      no backend is configured at all, so there is nothing to
+                     reach and nothing the player could do about it.
+     A KNOWN-OFFLINE DEVICE is silent too, on the same principle: the player put
+     the phone in airplane mode, they do not need the app to report the weather.
+     bootSync genuinely retries on the next open either way, so nothing is lost
+     by saying nothing. Round 7 caught this walking the launch path an App Store
+     reviewer walks, which is offline and brand new: both conditions at once.
+       'never-registered'  the fourth way into the same wrong message, and it
+                     arrives ONLINE, which is how it got past the guard below.
+                     goOnline mints the identity before /register, so an install
+                     whose registration failed opens the second time holding a
+                     key with no account, bootSync reads that as a reinstall,
+                     fails again and used to call it 'offline'. The key was
+                     minted on this device (js/social.js: kv 'idMinted'), so
+                     nothing has ever been registered under it and there is no
+                     backup to have failed. A key recovered from the keychain is
+                     still 'offline' and still speaks. */
+  const CLOUD_QUIET_REASONS = ['none', 'empty', 'already', 'new-player', 'opted-out', 'no-api', 'never-registered'];
+
   if (cloudRestore && cloudRestore.restored) {
     S.settings = await kvGet('settings');
     snapSettings();
     S.userFoods = await db.all('foods');
     setTimeout(() => toast('Welcome back. Your progress was restored from your cloud backup.', 4600), 900);
-  } else if (cloudRestore && cloudRestore.reason && !['none', 'empty', 'already'].includes(cloudRestore.reason)) {
+  } else if (cloudRestore && cloudRestore.reason === 'decrypt') {
+    /* HONEST DECRYPT FAILURE. A backup EXISTS but this device's key cannot
+       read it (written under a different key: see pushBackup's
+       mint-before-snapshot note in js/social.js). Telling this player "could
+       not reach your cloud backup, we will retry" is a lie on both halves:
+       the server answered fine, and no retry with this key can ever succeed.
+       The device holding the right key re-pushes daily and self-heals the
+       cloud copy, so nothing is deleted and honesty costs nothing. */
+    try { trackEvent('cloud_restore_failed', { reason: 'decrypt' }); } catch { /* analytics never breaks the app */ }
+    setTimeout(() => toast('A cloud backup exists, but it was written by a different key and this device cannot unlock it. Nothing has been deleted. If another device still has your progress, opening the app there will repair the cloud copy.', 6500), 900);
+  } else if (cloudRestore && cloudRestore.reason && !CLOUD_QUIET_REASONS.includes(cloudRestore.reason)
+             && !(typeof navigator !== 'undefined' && navigator.onLine === false)) {
     /* A FAILED CLOUD RESTORE MUST SAY SO. The file-import path already gets this
        right ("Import failed: your old data is unchanged"); the cloud path said
        nothing at all, so a player whose backup failed to come down saw an empty
@@ -1219,7 +1278,12 @@ async function boot() {
     setTimeout(() => toast('Could not reach your cloud backup just now. Nothing has been lost; we will try again next time you open the app.', 5200), 900);
   }
 
-  if (!S.settings) { renderOnboarding(); return; }
+  if (!S.settings) {
+    const saved = await kvGet('onbProgress', null);
+    renderOnboarding(saved && Number.isInteger(saved.step) ? Math.min(2, Math.max(0, saved.step)) : 0,
+      saved && saved.pick ? { pick: saved.pick } : {});
+    return;
+  }
 
   /* FIRST PAINT COMES BEFORE THE AWARDING WORK, NOT AFTER IT.
    *
@@ -1252,6 +1316,9 @@ async function boot() {
   await refreshShinyPets();
   await refreshSlimedSlots();
   await refreshPetWear();
+  // AWAITED, before the first route(): renderToday reads 'wbReturnDay' at paint
+  // time, so the pending mark must be down before the first paint reads for it.
+  await maybeWelcomeBack();
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
   route();
@@ -1312,23 +1379,43 @@ async function boot() {
   await refreshShinyPets();
   await refreshSlimedSlots();
   const closed = await awardDayCloseIfDue(S.settings.targets);
-  if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Bone Crate earned', 3400), 2400);
-  else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 2400);
+  if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 2400);
+  else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 2400);
   await ingestHkPayload(hkTaken);
+  /* THE SCREEN PAINTED BEFORE ANY OF THAT PAID. route() ran sixty lines up, and
+     everything since writes coins, XP and crates behind a standing DOM: the
+     welcome kit, the starter pouch, the garden and merchant closures, the den
+     ceiling, the day close, the health backfill. Nothing repainted, so the
+     header carried the pre-payout numbers until the player happened to change
+     tabs. Measured on a masked first open of a new day: the header sat on
+     74 coins and 105 XP while storage already held 224 and 180.
+     A REPAINT, NOT A PILL REFRESH. __refreshWalletPill fixes this class for the
+     Pit, but it only touches the four wallet numbers, and the day close moves
+     the LEVEL plate and adds a crate chip that has to appear at all. Same
+     `route({ keepScroll: true })` the import branch above already does for the
+     same reason ("the screen painted at their old level"), and only when
+     something actually paid, so a boot that owed nothing still paints once.
+     Guarded on the sheet stack for the reason the resume refresh below is:
+     route() closes every open sheet, and yanking one shut is a worse bug. */
+  if ((kit || pouch || settled || merch || ceil || closed || hkTaken) && !sheetStack.length) route({ keepScroll: true });
   backupNudge();
   nativeAutoSync();
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
   // social: push the game snapshot + encrypted backup, pull server grants
   // (throttled, silent). initFromQuery + bootSync already ran above.
-  if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
+  if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(cloudTroubleNotice).then(() => checkFriendRequests()).then(checkSieges);
   /* touchServerDay BEFORE rollDayIfNeeded: coming back to the app is exactly
      when a new day gets opened, and the day guard's ceiling (js/db.js rule 3)
      is only as fresh as the last /health we saw. Unsigned, anonymous, fails
      soft; skipped under NOSOCIAL so audits and ?demo never phone production. */
   onAppResume(() => {
     if (!NOSOCIAL) social.touchServerDay();
+    /* A RESUME IS AN OPEN. iOS suspends the WebView for days without a boot, so
+       the return gap has to be checked here too. The refresh below may already
+       have painted by the time the kv lands, so a fresh detection repaints. */
+    maybeWelcomeBack().then(back => { if (back && !sheetStack.length) refresh(); }).catch(() => {});
     rollDayIfNeeded(); nativeAutoSync();
-    if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(() => checkFriendRequests()).then(checkSieges);
+    if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(cloudTroubleNotice).then(() => checkFriendRequests()).then(checkSieges);
     flushAnalytics(); refreshNotifSchedules();
     /* COMING BACK MEANS READING THE STORE AGAIN. With the app open twice, the
        other tab has been spending and earning while this one sat there, and
@@ -1350,7 +1437,17 @@ async function boot() {
 
   // daily haunted prize wheel: once per day, after the splash intro. Self-gates
   // (once/day kv, waits for splash, skips webdriver). Fire-and-forget.
-  maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
+  /* AND IT REPAINTS WHEN IT PAYS. The wheel grants on SPIN and resolves true on
+     COLLECT; nothing behind it re-read anything. Measured on a masked first
+     open: "You won 30 coins", then the header held 224 for the whole eight
+     seconds it was watched while storage already held 254, and it only caught
+     up when the player moved between tabs. A new player's very first spin looks
+     unpaid. Same class as the Pit's stale wallet pill (__refreshWalletPill),
+     repainted the same way as the boot payouts above rather than through the
+     pill, because a spin can pay a CRATE and that chip has to appear at all.
+     resolve(false) means the wheel never opened, so a skipped day paints
+     nothing. Sheet-stack guarded like every other unprompted refresh here. */
+  maybeShowDailyWheel({ sounds: S.sounds }).then(spun => { if (spun && !sheetStack.length) refresh(); }).catch(() => {});
   refundStreakFreezes().then(r => {
     if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
   }).catch(() => {});
@@ -1422,12 +1519,34 @@ async function rollDayIfNeeded() {
     if (wasOnToday) S.date = today;
     const closed = await awardDayCloseIfDue(S.settings.targets);
     if (wasOnToday) route(); // a new day starts at the top, like a fresh open
-    if (closed?.closed) setTimeout(() => toast('Yesterday closed on budget: Bone Crate earned', 3400), 1400);
-    else if (closed?.consoled) setTimeout(() => toast("You logged yesterday. You'll get 'em next time: Common Crate earned", 3600), 1400);
-    maybeShowDailyWheel({ sounds: S.sounds }).catch(() => {});
+    if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 1400);
+    else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 1400);
+    // pays on COLLECT, so it repaints on COLLECT: see the boot call site
+    maybeShowDailyWheel({ sounds: S.sounds }).then(spun => { if (spun && !sheetStack.length) refresh(); }).catch(() => {});
     refreshNotifSchedules();
     return true;
   } finally { _rolling = false; }
+}
+
+/* THE RETURN CARD's gate. A player who has been away 2+ days gets one gentle
+   card on Today (see renderToday). Same rule as the Hollow keeper's HLW_SAY.back
+   lines: no day count, no question, no welcome-back fanfare. A number is an
+   accusation, and somebody away for a fortnight was probably unwell.
+   kv 'lastOpenDay' is the last day this ran (boot + every resume, because the
+   native shell resumes for days without ever booting; see rollDayIfNeeded).
+   kv 'wbReturnDay' is the pending card, stamped with the return date so it
+   expires with the day on its own; dismissing clears it. Resolves true only
+   when a new return was just detected, so the resume path knows to repaint. */
+async function maybeWelcomeBack() {
+  if (!S.settings) return false;               // never during onboarding
+  const today = dateKey();
+  const prev = await kvGet('lastOpenDay', null);
+  if (prev === today) return false;
+  await kvSet('lastOpenDay', today);
+  if (!prev) return false;                     // first run: seed, no card
+  if (!(dayOrdinal(today) - dayOrdinal(prev) >= 2)) return false;
+  await kvSet('wbReturnDay', today);
+  return true;
 }
 
 /* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowWhatsNew opened the What's New sheet over the app on the first launch after every update. What's New is still reachable from Settings and from the Crew tab, and the unseen-entry dot still points at it */
@@ -2430,6 +2549,20 @@ function setCrewBadge(n) {
   if (n > 0) { el.textContent = n > 9 ? '9+' : String(n); el.hidden = false; }
   else el.hidden = true;
 }
+// Badge on the Bonehead tab: unopened crates, so earned loot cannot pile up
+// invisibly (a playtest week ended with 6 unopened crates nobody knew about).
+// The count is unopenedCrates(), the SAME inv read the Backpack's crates tab
+// renders from (both are inv rows with kind === 'crate'), so the badge and the
+// screen it points at can never disagree.
+function setCrateBadge(n) {
+  const el = $('#crateBadge');
+  if (!el) return;
+  if (n > 0) { el.textContent = n > 9 ? '9+' : String(n); el.hidden = false; }
+  else el.hidden = true;
+}
+async function refreshCrateBadge() {
+  try { setCrateBadge((await unopenedCrates()).length); } catch { /* keep the last count rather than lie with a blank */ }
+}
 /* THE DELIVERIES INBOX.
  *
  * Tom, 2026-08-06: "if you miss the pop up from a gift then you don't know your
@@ -2585,6 +2718,46 @@ async function checkFriendRequests() {
 }
 
 /* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeRequestNotifPermission raised the iOS notification dialog on the boot path, before the player had asked for a single notification. The ask now happens where it earns its keep: renderSettings calls requestNotifPermission() on the three toggles that turn notifications on, so the OS is asked at the moment somebody says yes */
+
+/* WHAT A FAILED CLOUD BACKUP SAYS. One function, because Settings and the boot
+   notice below both need it and must never disagree about what is wrong.
+   js/social.js pushBackup writes the reason; this is the only place it is read
+   into words. */
+function cloudFailLine(reason, skewMs = 0) {
+  if (reason === 'clock') {
+    const days = Math.round(Math.abs(skewMs) / 86400e3);
+    const how = days >= 1 ? `${days} day${days === 1 ? '' : 's'} ${skewMs > 0 ? 'ahead' : 'behind'}` : 'wrong';
+    return `Backup is blocked: this device's clock is ${how}. Check your date and time. Everything catches up on its own once it is right.`;
+  }
+  if (reason === 'too-large') {
+    return 'Backup is blocked: this save has outgrown its slot on the server, and playing makes it bigger. Your progress is safe on this phone. Export a copy below until this is fixed.';
+  }
+  return 'The last backup did not go through. Your progress is safe on this phone and it keeps retrying.';
+}
+
+/* THE VOICE FOR A CLOUD BACKUP THAT IS FAILING. Chained onto autoSync at boot
+   and on resume, so the reason it reads is the one that sync's own push just
+   wrote rather than a stale mark from a previous session.
+   Why it exists: pushBackup's blanket catch used to turn every failure into a
+   bare `return false`, so `backupAt` stopped moving and NOTHING said a word. A
+   wrong device clock 401s every signed call (server MAX_SKEW_MS is five
+   minutes) and autoSync then returns {applied:0}, which is exactly what a
+   healthy empty sync returns. Neither of the two named states heals by waiting
+   and the too-large one gets worse with play, so the player is told rather than
+   left to notice a number that never moves in a screen they never open.
+   Once a day: it is a standing condition, not an event. */
+async function cloudTroubleNotice() {
+  try {
+    const fail = await kvGet('backupFail', null);
+    if (!fail || !(await social.cloudBackupOn())) return;
+    if (Date.now() - ((await kvGet('cloudNudgeAt', 0)) || 0) < 86400e3) return;
+    await kvSet('cloudNudgeAt', Date.now());
+    // staggered like every other boot notice here: there is ONE toast element,
+    // and a grant delivery firing 3.6s of its own would otherwise be stomped
+    const line = cloudFailLine(fail.reason, Number(await kvGet('clockSkewMs', 0)) || 0);
+    setTimeout(() => toast(line, 5600), 4200);
+  } catch { /* a notice must never break the boot chain behind it */ }
+}
 
 async function backupNudge() {
   try {
@@ -2857,6 +3030,7 @@ function route({ keepScroll = false } = {}) {
   // than leaving the bar with nothing selected.
   const navTab = tab === 'shop' ? 'bonehead' : tab;
   $$('#tabbar .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === navTab));
+  refreshCrateBadge(); // fire-and-forget: every nav/refresh re-reads the crate count
   // Redundant on Settings itself, and the Boneyard is full-bleed map.
   const gear = $('#gearBtn');
   // Today carries its own gear in the day strip, so the floating one stays out
@@ -2992,7 +3166,9 @@ function nextToast() {
   const job = toastQ.shift();
   if (!job) { toastBusy = false; return; }
   toastBusy = true;
-  if (!t.getAttribute('aria-live')) { t.setAttribute('aria-live', 'polite'); t.setAttribute('role', 'status'); }
+  /* aria-live and role are in index.html now. Attaching them here meant the
+     region came into existence in the same tick as the message it carried, so
+     the first toast of a session announced to nobody. */
   t.classList.remove('out');
   t.textContent = job.msg;
   t.hidden = false;
@@ -3271,6 +3447,17 @@ async function dayBudget() {
    up sometimes is worse than none at all. */
 const LOG_ONLY_LINE = '<p class="log-only">Nothing you grow or cook in the Kitchen counts as food you ate. This diary only records what you log yourself.</p>';
 
+/* ONE LINE PER DAY-GUARD RULE (js/db.js claimDay). Keyed by the reason claimDay
+   itself returns, so a rule added there without copy here degrades to `other`
+   rather than to silence. Each names its own cause: "paused" with no reason is
+   what a player reads as "broken". */
+const DAY_GUARD_COPY = {
+  backwards: 'This device says it is an earlier day than the app has already seen, so today is not a new day yet. Rewards return when the date catches up.',
+  'too-fast': 'The date on this device has jumped further ahead than time actually passed. Rewards are paused until the calendar catches up.',
+  unwitnessed: 'Rewards are paused until the app can check the clock with the server. Any connection, even a moment, fixes it.',
+  other: 'Daily rewards are paused while the date settles. They return with the next fresh day.',
+};
+
 /* Set the first time Today renders Gwart; see the note at its read site below. */
 let gwEntranceSeen = false;
 
@@ -3344,7 +3531,13 @@ async function renderToday(el) {
   ];
   const tot = dayTotals(entries);
   const remaining = Math.round(t.kcal - tot.kcal);
-  const pct = Math.min(1, tot.kcal / t.kcal);
+  /* The zero guard its sibling at hudPct already has. NOT reachable today:
+     computeTargets floors kcal at 1200 and the manual editor's own minimum is
+     800, so t.kcal cannot be 0 or missing on any path that reaches here. It is
+     here because the two expressions are the same reading of the same number,
+     and a divergence between them is the kind of thing that survives a refactor
+     of the floor and shows up as NaN in the ring. */
+  const pct = t.kcal ? Math.min(1, tot.kcal / t.kcal) : 0;
   const over = tot.kcal > t.kcal;
   const isToday = S.date === dateKey();
   // quest header status: how many are claimable right now (drives the accent cue)
@@ -3352,6 +3545,33 @@ async function renderToday(el) {
      2026-08-23: "make past day quests read-only"), so nothing there is ready for
      anything and the badge and its accent would both be lying. */
   const questClaimable = isToday ? questTiers.reduce((n, tier) => n + tier.quests.filter(q => { const st = questState(q, tier.ctx); return st.done && !st.claimed; }).length, 0) : 0;
+  /* THE RETURN CARD. Pending only while 'wbReturnDay' IS today (it expires with
+     the day on its own), only on the live day, and never for a player with no
+     logging history (allLog is already in hand). The voice rule is the one on
+     HLW_SAY.back: no day count, no streak talk, no guilt, nothing invented.
+     One greeting, then at most two things that are TRUE RIGHT NOW, read off
+     state this render already computed: a finished weekly quest waiting to
+     claim, unopened crates. "Today's quests are new" only stands in when
+     neither is live, so the card never pads itself. */
+  const wbShow = isToday && allLog.length > 0 && (await kvGet('wbReturnDay', null)) === S.date;
+  /* THE DAY GUARD'S ONE LINE OF VOICE. After a clock set-back or a westbound
+     date-line hop, the high-water mark (js/db.js claimDay, rule 1) sits AHEAD
+     of the device's today, so every daily gate quietly refuses: no wheel, no
+     day-close crate, quests pre-checked. The guard is right and is not touched
+     here; this line only tells the player why the day looks spent. STRICTLY
+     behind, never equal: today EQUALLING the mark is the normal state of every
+     ordinary day once it has been opened. Display only, read off the read-only
+     mark; it decides no award. Expires on its own when the calendar catches up. */
+  const preSpent = isToday && dayOrdinal(await kvGet('dayHighWater', null)) > dayOrdinal(S.date);
+  let wbFacts = [];
+  if (wbShow) {
+    const wk = questTiers.find(tier => tier.period === 'week');
+    const wkReady = wk.quests.filter(q => { const st = questState(q, wk.ctx); return st.done && !st.claimed; }).length;
+    if (wkReady) wbFacts.push(wkReady === 1 ? 'A weekly quest is finished and waiting to claim.' : `${wkReady} weekly quests are finished and waiting to claim.`);
+    if (crates.length) wbFacts.push(crates.length === 1 ? 'A crate is waiting in your backpack.' : `${crates.length} crates are waiting in your backpack.`);
+    if (!wbFacts.length) wbFacts.push("Today's quests are new.");
+    wbFacts = wbFacts.slice(0, 2);
+  }
   // v146 unlock guidance: surface Build/gear/weapon moments the player would miss
   /* READ ON EVERY DAY, NOT ONLY TODAY (v425). Tom, 2026-08-22: "accidentally
      changing the day on your macros makes all the news above disappear and makes
@@ -3375,7 +3595,12 @@ async function renderToday(el) {
   const [y, m, d] = S.date.split('-').map(Number);
   const dObj = new Date(y, m - 1, d);
   const title = isToday ? 'Today' : dObj.toLocaleDateString(undefined, { weekday: 'long' });
-  const sub = dObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' });
+  /* A day AHEAD of the device clock exists after a clock set-back or a westbound
+     hop (its entries are real, logged before the clock moved). Mark it quietly in
+     the header so it does not read as corruption; the data itself is untouched. */
+  const aheadOfClock = dayOrdinal(S.date) > dayOrdinal(dateKey());
+  const sub = dObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' })
+    + (aheadOfClock ? ' · dated ahead of this clock' : '');
 
   const heroPet = petFrom(null, eq.C);   // yours, so S.shinyPets answers (the figure contract)
   /* HOW BIG SHE STANDS, AS A SHARE OF THE BONEHEAD. PET_HERO_REL is a ratio, so
@@ -3594,15 +3819,26 @@ async function renderToday(el) {
        nudge card is gone entirely and the banners are evicted below the day, so
        this is now the only thing between the doors and the day itself. */''}
   <details class="q-collapse${questClaimable ? ' has-claim' : ''}">
-    <summary><span class="q-sum-ico">${pixCur('scroll', 24) || ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready</span>` : ''}</summary>
+    <summary><span class="q-sum-ico">${pixCur('scroll', 24) || ICONS.quest(18)}</span>QUESTS${questClaimable ? `<span class="q-badge">${questClaimable} ready to claim</span>` : ''}</summary>
     <div class="q-card-body">
     ${isToday ? '' : `<p class="note">A record of ${esc(title)}. Quests are claimed on the day.</p>`}
-    ${questTiers.map(tier => `
+    ${questTiers.map(tier => {
+      let monthEndNote = '';
+      if (tier.period === 'month') {
+        const [y, m, d] = S.date.split('-').map(Number);
+        const daysInMonth = new Date(y, m, 0).getDate();
+        const daysRemaining = daysInMonth - d;
+        if (daysRemaining <= 3 && tier.quests.some(q => questState(q, tier.ctx).cur > 0)) {
+          monthEndNote = '<p class="note" style="margin-top: 4px; margin-bottom: 8px;">Monthly quests reset on the 1st</p>';
+        }
+      }
+      return `
     <div class="q-tier ${tier.period}">
       ${/* the daily tier is labelled "TODAY'S QUESTS", which is a lie on a day
              that is not today. The tier list is built before isToday exists, so
              the label is corrected here rather than reordering that block. */''}
       <div class="q-tier-h">${tier.period === 'day' && !isToday ? 'DAILY QUESTS' : tier.label}</div>
+      ${monthEndNote}
       <div class="q-list">
       ${tier.quests.map(q => {
         const st = questState(q, tier.ctx);
@@ -3626,7 +3862,8 @@ async function renderToday(el) {
         </div>`;
       }).join('')}
       </div>
-    </div>`).join('')}
+    </div>`;
+    }).join('')}
     <button class="link" id="qProg" style="margin-top:4px">Quest progress</button>
     </div>
   </details>
@@ -3662,6 +3899,14 @@ async function renderToday(el) {
   </div>
 
   <div class="dayflow">
+  ${preSpent ? `
+  <p class="note">This day already passed on this clock. Fresh rewards return tomorrow.</p>` : ''}
+  ${wbShow ? `
+  <div class="card wb-back" id="wbCard">
+    <b>Everything is where you left it.</b>
+    <span>${wbFacts.join(' ')}</span>
+    <button class="btn small ghost" id="wbOk">Good to be back</button>
+  </div>` : ''}
   ${hkStale ? `
   <button class="card hk-stale" id="hkStaleFix">
     <b>⚠️ Steps aren't syncing</b>
@@ -3803,6 +4048,21 @@ async function renderToday(el) {
   $('#pitBtn')?.addEventListener('click', openPit);
   $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
   $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
+  /* refreshWalletPill: repaint the four numbers in place, nothing else. The
+     Pit is a sheet OVER this screen, and a fight settle pays coins while this
+     DOM stands behind it; only #pitBody was re-rendered on close, so the pill
+     showed the pre-fight balance until the next full render. That staleness is
+     what let a remote den pay DOUBLE its banner for weeks without one player
+     noticing (round-2 playtest, the +48/+96 pair). A full re-render here would
+     reset scroll and animation state the anti-regression rules protect, so
+     this touches exactly the numbers. */
+  window.__refreshWalletPill = async () => {
+    const btn = $('#coinBtn'); if (!btn || !btn.isConnected) return;
+    const [c, d, pe] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
+    const put = (sel, v) => { const b = $(sel + ' b'); if (b) b.textContent = v; };
+    put('#coinBtn', c.toLocaleString()); put('#dustBtn', d.toLocaleString());
+    put('#vigorBtn', String(pe.ready));
+  };
   $('#dustBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#vigorBtn')?.addEventListener('click', openPit);
   $('#cratesBtn')?.addEventListener('click', () => openCharacter('crates'));
@@ -3936,6 +4196,14 @@ async function renderToday(el) {
     setTimeout(() => { location.hash = '#/boneyard'; setTimeout(() => $('#mapStart')?.click(), 900); }, 1200);
   }
   $('#hkSync', el)?.addEventListener('click', syncFromClipboard);
+  /* Dismissing the return card clears its pending mark, so it is gone until the
+     next 2+ day gap stamps a new one. Removed in place, no re-render: nothing
+     else on the screen depends on it. */
+  $('#wbOk', el)?.addEventListener('click', async e => {
+    e.currentTarget.disabled = true;           // one tap, one write
+    await kvSet('wbReturnDay', null);
+    $('#wbCard', el)?.remove();
+  });
   $('#hkStaleFix', el)?.addEventListener('click', async () => {
     // best case: a manual native sync brings steps right back
     if (isNative() && S.settings.hkNative) {
@@ -3962,6 +4230,16 @@ async function renderToday(el) {
       const when = period === 'day' ? 'today' : period === 'week' ? 'this week' : 'this month';
       toast(`All ${res.cap} quests for ${when} are already claimed. Fresh ones ${period === 'day' ? 'tomorrow' : 'next ' + period}.`, 3600);
       refresh();
+      return;
+    }
+    /* The day guard refused (js/db.js claimDay). Its decision stands; this is
+       only the voice, so the button is never silently dead. Each of the three
+       rules gets its OWN line, because they are three different situations and
+       only one of them (unwitnessed, the lapsed player: 7+ days without the
+       server confirming the date) used to name its cause. The fallback covers a
+       bare `true` from an older caller and any rule added later. */
+    if (res?.dayGuard) {
+      toast(DAY_GUARD_COPY[res.dayGuard] || DAY_GUARD_COPY.other, 4200);
       return;
     }
     if (!res) return;
@@ -4614,7 +4892,7 @@ const GUIDE_ENTRIES = [
   { id: 'dust', title: 'Bone Dust', body: [
     'The other currency, and the one everybody ignores. Coins buy things. Dust is for changing your mind about them.',
     'Melting gear you are never going to wear is where most of it comes from. A piece he has outgrown is not waste, it is dust.',
-    'It pays for one thing: how your gear LOOKS. Wearing one piece and showing another, and the weekly Rack. It used to buy eggs, crates and charms, and it used to pay to breed pets; none of that is true any more. Dust is for looks, and nothing you buy with it can make you stronger.',
+    'It pays for how your gear LOOKS: wearing one piece and showing another, and the weekly Rack. One exception, on purpose: once a week it buys a Mystery Egg in the Shop, so a pet is never out of reach. Crates and charms are still gone, and breeding is free.',
     'You pay for a look once. Putting it back on in that same slot is free forever after that.',
   ] },
   /* ADDED 2026-08-23 at integration, and it is a real defect neither branch could
@@ -7707,6 +7985,10 @@ function openQuickAdd(getMeal, entry = null) {
       kcal, p: p.value, c: c.value, f: f.value,
     };
     await db.put('log', e);
+    // the fourth commit path, and the one that was skipping this: a Quick add to
+    // Dinner reopened the add sheet on Lunch. Quick add is how most people log
+    // their first meal, so it is where "meals remember" most needs to work.
+    await recordMealUsed(e.meal);
     const game = await onFoodLogged(e, { targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
     if (!entry && btn && btn.isConnected) {
       const r = btn.getBoundingClientRect();
@@ -8157,7 +8439,10 @@ function petShelfHtml(ownedCos, coinBal) {
   const pet = BH_BY_ID[PET_SHOP.pet.id];
   if (!pet) return '';
   const hasPet = ownedCos.has(PET_SHOP.pet.id);
-  const hero = hasPet ? '' : `
+  /* After the buy the NEW ARRIVAL hero vanishes on the next render with no
+     acknowledgment, which reads like the shop forgot the 50,000 coins. One line
+     in its place says where she went. */
+  const hero = hasPet ? `<p class="note" style="margin:0 2px 10px">${esc(pet.name)} is yours. She lives in your Stable, and everything below is drawn for her.</p>` : `
   <div class="pet-hero">
     <span class="pet-new">NEW ARRIVAL</span>
     <div class="pet-hero-art">${petSpriteHtml(PET_SHOP.pet.id, 176, true, { thumb: true })}</div>
@@ -8193,8 +8478,8 @@ function petShelfHtml(ownedCos, coinBal) {
   </div>`;
 }
 async function renderShop(el) {
-  const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn] =
-    await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura()]);
+  const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn, eggBought] =
+    await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura(), dustEggBought()]);
   const rerender = () => renderShop(el);
 
   // No page heading or back button: the Shop is a tab inside Your Bonehead now,
@@ -8447,16 +8732,14 @@ async function renderShop(el) {
       tonBurst = mountCrateBurst($('#tonBurst', wrap), { color: b.light, amp: Math.max(b.amp, .12), haze: b.haze });
     }
   };
-  /* REROLL HAS A CEILING AND THE SCREEN HAS TO CARRY IT. A control reading
-     "Reroll the rack / FREE" with nothing beside it says unlimited, and an
-     unlimited reroll destroys the rack: you spam it until your piece appears and
-     the countdown beside the theme becomes noise. Two words carry the limit,
-     "N left this week", and the small line under the label says what a reroll draws
-     from, which is the thing a curated theme and a random reroll otherwise fight
-     about: another nine FROM THE SAME THEME, never a random pull out of the
-     whole game. */
-  const rerollCost = RACK_REROLL_LADDER[rk.rr] ?? null;
-  const rerollsLeft = RACK_REROLL_LADDER.length - rk.rr;
+  /* THE REROLL IS A PRICE CURVE, NOT A COUNT (Tom, 2026-08-31: "players should
+     be able to pay an increasing amount to reroll the rack thats fine"). It
+     moves ONLY the rotating shelf: the themed nine keep their week identity,
+     which is why the button lives on that shelf and its copy names which shelf
+     stays put. The price rises per reroll to a hard cap and resets Monday; the
+     button always carries the price and disables when the wallet cannot cover
+     it, so its only states are "afford it" and "visibly can't". */
+  const rerollCost = rackRerollCost(rk.rr);
   // what this wallet actually reaches, counted rather than implied
   /* THE ROTATING SHELF, and the wallet line has to count it. Tom, 2026-08-27:
      "players are pissed and have no where to spend their gold so make the rack
@@ -8490,9 +8773,6 @@ async function renderShop(el) {
     ${rackAuraTile()}
     ${rackIds.slice(RACK_AURA_CELL).map((id, i) => rackTile(id, RACK_POOLS[i + RACK_AURA_CELL][0], RACK_DUST[i + RACK_AURA_CELL])).join('')}
   </div>
-  <button class="rk-reroll" id="rackReroll"><span class="rk-rr"><b>Reroll the rack</b><small>A new ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())} nine, and a new shelf below</small></span>
-    <span class="rk-left">${rerollsLeft > 0 ? `${rerollsLeft} left this week` : 'none left this week'}</span>
-    ${rerollCost == null ? '' : rerollCost ? `<span class="t3-price">${ICONS.coin(13)} ${rerollCost}</span>` : '<span class="t3-price free">FREE</span>'}</button>
   ${rotIds.length ? `
   <!-- THE OTHER 355. The themed rungs above sell nine a week out of a catalogue
        of 370, which is why there was nowhere to spend coins: 361 finished pieces
@@ -8503,7 +8783,13 @@ async function renderShop(el) {
   <div class="rk-theme"><b>ALSO ON THE RACK</b><i></i><span>${rotIds.length} pieces &middot; new every day</span></div>
   <div class="rk-grid rot">
     ${rotIds.map(id => rackTile(id, rotPrice(id)[0], rotPrice(id)[1], 384)).join('')}
-  </div>` : ''}
+  </div>
+  <!-- The reroll sits ON the shelf it moves. Its copy names the boundary out
+       loud (the themed nine above never reroll), the price is on the button
+       before the tap, and a wallet that cannot cover it sees a disabled button
+       rather than a taunt. -->
+  <button class="rk-reroll" id="rackReroll"${coinBal < rerollCost ? ' disabled' : ''}><span class="rk-rr"><b>Reroll this shelf</b><small>A fresh ${rotIds.length}, drawn from the whole catalogue. The ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())} nine above stay put.</small></span>
+    <span class="t3-price">${rerollCost === 0 ? 'FREE' : `${ICONS.coin(13)} ${rerollCost.toLocaleString()}`}</span></button>` : ''}
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Potions and charms</b><small>Supplies ›</small></button>
   <div id="shopRestBody" hidden>
 
@@ -8548,10 +8834,21 @@ async function renderShop(el) {
     </button>`).join('')}
   </div>
 
-  <!-- The Bone Dust shop stood here until 2026-08-25. It sold an egg, a crate
-       and a charm, all three of them power, so it closed with the coin shop's
-       crates (S0). Dust now buys looks and nothing else, which is why the only
-       dust control left on this screen is the route to EARN it. -->
+  <!-- The Bone Dust shop stood here until 2026-08-25 (S0: an egg, a crate and a
+       charm, all three power). The EGG came back on 2026-08-31, alone: Tom ruled
+       its removal unintentional, because dust is the one deterministic route to
+       a hatch for a player who cannot walk the step milestones. Historical price
+       (60), new bound (one per ISO week; the old cell was unbounded). The crate
+       and the charm stay gone. -->
+  <div class="t3-sect"><b>Bone Dust</b><i></i></div>
+  <div class="t3-cells">
+    <button class="t3-cell" data-dustegg="1" ${eggBought || dustBal < DUST_EGG.cost ? 'disabled' : ''}>
+      <span class="art">${crateIcon('egg', 54)}</span>
+      <b>${esc(DUST_EGG.label).toUpperCase()}</b>
+      <span class="t3-price${eggBought ? '' : ' dust'}">${eggBought ? `${ICONS.check(13)} Yours this week` : `${ICONS.dust(13)} ${DUST_EGG.cost}`}</span>
+      <small>${eggBought ? 'A new one lands Monday' : `${DUST_EGG.desc} · 1 a week`}</small>
+    </button>
+  </div>
   <button class="t3-forage" id="shopSalvage" style="margin-top:10px">${ICONS.dust(20)}<b>Melt gear for Bone Dust</b><small>Salvage Bench ›</small></button>
 
   <button class="t3-forage" id="shopForage">${ingIconHtml('graveroot', 24)}<b>Forage for ingredients</b><small>in the Kitchen ›</small></button>
@@ -8563,25 +8860,47 @@ async function renderShop(el) {
   // which would wipe a Tier 3 cell's art and price chip on the first tap.
   el.querySelectorAll('[data-buy]').forEach(b => armToConfirm(b, `Spend ${SHOP.find(s => s.id === b.dataset.buy)?.cost ?? ''}?`, async () => {
     const r = await buyShopItem(b.dataset.buy);
-    if (!r.ok) { toast(`Not enough coins. That costs ${r.need}, you have ${r.have}.`, 2600); return; }
+    if (!r.ok) { toast(`Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600); return; }
     popSound(S.sounds);
-    toast(`${r.label} bought. −${r.cost} coins, ${r.coins} left. You now have ${r.owned}.`, 3000);
+    toast(`${r.label} bought. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. You now have ${r.owned}.`, 3000);
+    rerender();
+  }));
+  /* THE DUST EGG. armToConfirm like every spend. buyDustEgg claims the weekly
+     receipt before the dust moves and recovers a paid-but-ungranted week on the
+     next tap, the same shape as buyRackItem, so nothing here needs to know. */
+  el.querySelectorAll('[data-dustegg]').forEach(b => armToConfirm(b, `Spend ${DUST_EGG.cost}?`, async () => {
+    const r = await buyDustEgg();
+    if (!r.ok) {
+      toast(r.reason === 'limit' ? (r.recovered ? 'The egg you already paid for is in the nest now. Walk it warm.' : 'One a week. A fresh egg lands Monday.')
+        : r.reason === 'write' ? `${DUST_EGG.label} did not save. Your dust is safe, tap again.`
+        : r.reason === 'dust' ? `Need ${DUST_EGG.cost} Bone Dust (you have ${(r.have ?? dustBal).toLocaleString()}). Melt gear at the Salvage Bench.`
+        : 'That is not for sale right now.', 2800);
+      if (r.recovered) rerender();
+      return;
+    }
+    popSound(S.sounds);
+    trackEvent('buy_dustegg', { cost: r.cost });
+    toast(`${r.label} is incubating. −${r.cost} dust, ${r.dust.toLocaleString()} left. Walk to hatch it.`, 3200);
     rerender();
   }));
   // Drop pieces: same two-tap arm-then-buy ritual as the coin shop, because these
   // are the most expensive single taps in the game.
   el.querySelectorAll('[data-buydrop]').forEach((b => {
     let t = null;
+    let busy = false;
     const reset = () => { b.dataset.armed = '0'; b.innerHTML = b.dataset.label || b.innerHTML; };
     b.addEventListener('click', async () => {
+      if (busy) return;   // same latch as armToConfirm: a queued tap is not a new decision
       if (b.dataset.armed !== '1') {
         b.dataset.label = b.dataset.label || b.innerHTML;
         b.dataset.armed = '1'; b.textContent = 'Tap again to buy';
         clearTimeout(t); t = setTimeout(() => { if (b.isConnected) reset(); }, 2600);
         return;
       }
-      clearTimeout(t); reset();
-      const r = await buyDropItem(b.dataset.buydrop);
+      // reset() moved below the await for the armToConfirm reason: disarming
+      // first re-armed the button in the same frame and let a burst buy twice.
+      clearTimeout(t); busy = true;
+      const r = await buyDropItem(b.dataset.buydrop).finally(() => { busy = false; reset(); });
       if (!r.ok) {
         toast(r.reason === 'owned' ? 'Already in your Wardrobe.' : `Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600);
         return;
@@ -8654,7 +8973,14 @@ async function renderShop(el) {
     toast(r.isPet
       ? `${esc(r.label)} is yours, and she is out with you now. −${r.cost.toLocaleString()} coins.`
       : `${esc(r.label)} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left.`, 3400);
-    if (r.isPet) S.shinyPets = new Set(await shinyPetIds());
+    if (r.isPet) {
+      S.shinyPets = new Set(await shinyPetIds());
+      /* The pet herself goes through the celebration funnel, same as a level-up:
+         the toast above lands first (maybeCelebrate waits 380ms for exactly that)
+         and then the takeover shows her own art. Accessories keep the toast. */
+      queueCelebration({ newPet: { sp: id } });
+      maybeCelebrate();
+    }
     rerender();
   }));
   /* WEAR / TAKE OFF, and deliberately NOT behind armToConfirm. The two-tap arm
@@ -8666,15 +8992,16 @@ async function renderShop(el) {
     rerender();
   }));
   el.querySelectorAll('[data-tryon]').forEach(b => b.addEventListener('click', () => rackTryOn(b.dataset.tryon, +b.dataset.coin, +b.dataset.dust)));
-  /* THE REROLL SPENDS, so it arms first like every other spend in the game. The
-     free one does not, because there is nothing to protect the player from. */
+  /* THE REROLL SPENDS, so it arms first like every other spend in the game.
+     There is no free rung on the curve anymore, so it always arms. The coins
+     toast stays as the backstop for a balance that fell between render and tap
+     (the disabled state covers the common case). */
   const rrBtn = $('#rackReroll', el);
   if (rrBtn) {
     const doReroll = async () => {
       const r = await rerollRack();
       if (!r.ok) {
-        toast(r.reason === 'limit' ? 'No rerolls left this week. A fresh rack lands Monday.'
-          : r.reason === 'coins' ? `Not enough coins. That reroll costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`
+        toast(r.reason === 'coins' ? `Not enough coins. That reroll costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`
           : 'Try that again.', 2800);
         return;
       }
@@ -8682,8 +9009,7 @@ async function renderShop(el) {
       trackEvent('rack_reroll', { n: r.rr, cost: r.cost });
       rerender();
     };
-    if (rerollCost) armToConfirm(rrBtn, `Spend ${rerollCost}?`, doReroll);
-    else rrBtn.addEventListener('click', doReroll);
+    armToConfirm(rrBtn, rerollCost === 0 ? 'Reroll free?' : `Spend ${rerollCost.toLocaleString()}?`, doReroll);
   }
   /* The other departments are one tap away rather than gone. The control that
      hides them owns un-hiding them (anti-regression rule 8), and there is no
@@ -8803,8 +9129,22 @@ async function renderTrends(el) {
   const kmWk = stepsWk * 0.000762;
   const sleepWk = days7.filter(d => d.sleepHours != null);
   const avgSleep = sleepWk.length ? sleepWk.reduce((a, d) => a + d.sleepHours, 0) / sleepWk.length : null;
-  let streak = 0;
-  for (let i = days.length - 1; i >= 0; i--) { if (days[i].logged || days[i].steps >= 3000) streak++; else break; }
+  /* THE WHOLE HISTORY, NOT THE HEATMAP'S WINDOW. This counted backwards through
+     `days`, which is the 56-day heatmap slice, so every streak of 56 or more
+     rendered as exactly 56 forever: a verified 400-day run displayed 56. It is
+     the one number a long-term player is proudest of, and it was capped by an
+     array length that has nothing to do with streaks.
+     `log` and `health` are already the FULL stores here, so the set costs
+     nothing extra. streakFrom (js/nutrition.js) brings the same one-day grace
+     the loop hand-rolled: a day with no log YET is a streak waiting on today,
+     not a broken one, which is why this pill no longer reads 0 every morning
+     or all day after a westbound timezone hop.
+     Display only: streak milestone payouts still come off streakFrom in
+     js/game.js and are untouched. */
+  const activeDates = new Set(log.map(e => e.date));
+  for (const h of health) if ((h.steps || 0) >= 3000) activeDates.add(h.date);   // a walked day counts, as it always has here
+  const streak = streakFrom([...activeDates], dateKey());
+  const streakGraced = streak > 0 && !activeDates.has(dateKey());
 
   const xp = await totalXp();
   const lvl = levelFor(xp);
@@ -8851,7 +9191,7 @@ async function renderTrends(el) {
       ${pill(`${loggedWk}<small>/7</small>`, 'days logged')}
       ${pill(stepsWk ? `${kmWk.toFixed(1)}<small>km</small>` : '·', 'walked (7d)')}
       ${pill(avgSleep != null ? `${avgSleep.toFixed(1)}<small>h</small>` : '·', 'avg sleep')}
-      ${pill(`${streak}<small>${ICONS.flame(13)}</small>`, 'day streak')}
+      ${pill(`${streak}<small>${ICONS.flame(13)}</small>`, streakGraced && streak > 0 ? 'day streak · log today to keep it' : 'day streak')}
     </div>
     <div class="recap-lvl">
       <div class="rl-top"><b>Lv ${lvl.level} · ${esc(lvl.name)}</b><span class="note">${(lvl.need - lvl.into).toLocaleString()} XP to Lv ${lvl.level + 1}</span></div>
@@ -9882,8 +10222,8 @@ async function renderFriends(el) {
     $('#crewWhatsNew', el)?.addEventListener('click', openWhatsNew);
     $('#crewGoOnline', el)?.addEventListener('click', async () => {
       const btn = $('#crewGoOnline', el); btn.disabled = true; btn.textContent = 'Connecting...';
-      const r = await social.goOnline();
-      if (!r.ok) { btn.disabled = false; btn.textContent = 'Go Online'; toast('Could not connect. Try again in a bit.'); return; }
+      const r = await social.goOnline().catch(() => ({ ok: false, reason: 'network' }));
+      if (!r.ok) { btn.disabled = false; btn.textContent = 'Go Online'; toast(navigator.onLine === false ? "You're offline. Try again when you have signal." : 'Could not connect. Try again in a bit.'); return; }
       trackEvent('go_online');
       confettiRain(60); levelSound(S.sounds);
       await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V).catch(() => {});
@@ -11202,6 +11542,16 @@ async function openGiftSheet(f) {
      different cooloff windows, and that drift is what the helper was written to
      stop. The label stays short: the sheet header already names who this is
      going to, and a long label reflows the chip row on a small phone. */
+  /* ONE KEY PER AMOUNT, REUSED BY ITS RETRIES, and this one is about coins
+     rather than confetti. The refund below runs on any answer that is not ok,
+     including a send that was DELIVERED and lost its reply on the 12s deadline:
+     the friend keeps the coins, the sender gets them back, and coins are minted
+     out of nothing. Tapping the same chip again then charged twice for one
+     gift. The server collapses two sends carrying the same key into one grant
+     and answers the second ok, so the retry keeps its deduction and the friend
+     is credited exactly once. Dropped on success, so a deliberate second gift
+     of the same amount is a real one. */
+  const giftKeys = new Map();
   $$('.gift-amt', wrap).forEach(b => armToConfirm(b, `Send ${b.dataset.amt}?`, async () => {
     if (b.disabled) return;
     const amt = +b.dataset.amt;
@@ -11209,8 +11559,10 @@ async function openGiftSheet(f) {
     if (amt > have) { toast("You don't have that many coins."); return; }
     b.disabled = true;
     await coinsAdd(-amt); // deduct locally first; refund if the send fails
-    const r = await social.sendGift(f.playerId, 'spend', amt);
+    if (!giftKeys.has(amt)) giftKeys.set(amt, social.newSendKey());
+    const r = await social.sendGift(f.playerId, 'spend', amt, giftKeys.get(amt));
     if (r.ok) {
+      giftKeys.delete(amt);
       coinSound(S.sounds);
       toast(`You sent ${esc(f.alias || f.name)} ${amt} coins!`, 3400);
       const nb = await coins(); const bl = $('#giftBal', wrap); if (bl) bl.textContent = `you have ${nb}`;
@@ -11232,13 +11584,29 @@ function openCheerSheet(f) {
       <div class="cheer-grid">${CHEERS.map((c, i) => `<button class="cheer-chip" data-cheer="${i}"><span class="cheer-emo">${c.emo}</span><span class="cheer-txt">${esc(c.txt)}</span></button>`).join('')}</div>
     </div>
   `, { cls: 'sheet-cheer' });
+  /* ONE KEY PER TAP, REUSED BY ITS RETRIES. A send whose answer is lost (the
+     12s API deadline, a dead socket) re-enables the chips and the player taps
+     the same cheer again, which used to deliver a second one. The key is kept
+     until that cheer actually succeeds, so the server can tell a retry from a
+     new cheer; a different chip is a different cheer and gets its own. */
+  const keys = new Map();
   $('.cheer-grid', wrap).addEventListener('click', async e => {
     const b = e.target.closest('[data-cheer]'); if (!b) return;
     const i = +b.dataset.cheer;
     $$('.cheer-chip', wrap).forEach(x => x.disabled = true);
-    const r = await social.sendCheer(f.playerId, i);
-    if (r.ok) { popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${esc(f.alias || f.name)}!`, 3000); history.back(); }
-    else { $$('.cheer-chip', wrap).forEach(x => x.disabled = false); toast(r.status === 429 ? "You've cheered them plenty today. Give 'em a rest!" : 'Could not send. Try again.', 3200); }
+    if (!keys.has(i)) keys.set(i, social.newSendKey());
+    const r = await social.sendCheer(f.playerId, i, keys.get(i));
+    if (r.ok) { keys.delete(i); popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${esc(f.alias || f.name)}!`, 3000); history.back(); }
+    /* 403 IS NOT "TRY AGAIN", AND IT IS REACHABLE FROM THE ONE BUTTON THAT DOES
+       NOT COME OFF THE FRIENDS LIST. Cheer back is built from the inbox ROW on
+       purpose (so it works offline), so it is still offered after the sender
+       has left the Crew or deleted their account, and /cheer answers 'not
+       friends'. "Could not send. Try again." sends the player round that loop
+       forever. Say what actually happened instead. */
+    else { $$('.cheer-chip', wrap).forEach(x => x.disabled = false); toast(
+      r.status === 429 ? "You've cheered them plenty today. Give 'em a rest!"
+      : r.status === 403 ? "They're not in your Crew any more."
+      : 'Could not send. Try again.', 3200); }
   });
 }
 
@@ -11681,6 +12049,12 @@ async function diagnosticsLine() {
     bits.push(`sw ${m ? m[1] : '?'}`);
   } catch { bits.push('sw unreachable'); }
   try { bits.push(navigator.serviceWorker && navigator.serviceWorker.controller ? 'sw controlling' : 'sw not controlling'); } catch { /* no sw api */ }
+  /* Absent on every honest device, so anything printed here is a signal and not
+     noise: the server clamped a field this client claimed. See syncProfile in
+     js/social.js for why it is kept, and server/src/index.js /profile for what
+     it means. Dated because a stale one and a fresh one are different news. */
+  const bounded = await kvGet('profileBounded', null);
+  if (bounded && bounded.fields && bounded.fields.length) bits.push(`bounded ${bounded.fields.join(',')}@${new Date(bounded.at).toISOString().slice(0, 10)}`);
 
   const P = (window.Capacitor && window.Capacitor.Plugins) || {};
   const seen = [];
@@ -11741,8 +12115,16 @@ async function renderSettings(el) {
   const friendCount = crewReached ? crewData.friends.length : 0;
   const backupOn = apiConfigured ? await social.cloudBackupOn() : false;
   const backupAt = apiConfigured ? await kvGet('backupAt', 0) : 0;
+  const backupFail = apiConfigured ? await kvGet('backupFail', null) : null;
+  const backupAge = backupAt ? (Date.now() - backupAt < 36e5 ? 'just now' : Math.round((Date.now() - backupAt) / 36e5) + 'h ago') : 'never';
+  /* A FAILED PUSH USED TO READ EXACTLY LIKE A HEALTHY ONE. pushBackup returned a
+     bare false, so `backupAt` just stopped moving and this row went on quoting an
+     age that got older and older with nothing to say why. The reason comes from
+     js/social.js and the age rides along, because "it failed" and "the last good
+     copy is 40h old" are different facts and the player needs both. */
   const backupLabel = !backupOn ? 'Off: your progress lives only on this phone'
-    : backupAt ? `On · last backup ${Date.now() - backupAt < 36e5 ? 'just now' : Math.round((Date.now() - backupAt) / 36e5) + 'h ago'}`
+    : backupFail ? `${cloudFailLine(backupFail.reason, Number(await kvGet('clockSkewMs', 0)) || 0)} Last good backup: ${backupAge}.`
+    : backupAt ? `On · last backup ${backupAge}`
     : 'On · backing up automatically';
   const np = await notifPrefs();
   const notifPlat = notifPlatform();
@@ -11797,6 +12179,7 @@ async function renderSettings(el) {
     <div class="settings-row"><div class="lab"><b>Import backup</b><span>Restore from a Boneheadz Gym export</span></div><button class="btn small ghost" id="importBtn">Import</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden>
     <div class="settings-row"><div class="lab"><b>Erase all data</b><span>Removes log, foods, weights, gear</span></div><button class="btn small danger" id="eraseBtn">Erase</button></div>
+    ${me ? `<div class="settings-row"><div class="lab"><b>Delete account &amp; cloud data</b><span>Removes your cloud account, friends + backup</span></div><button class="btn small danger" id="delAcctBtn">Delete</button></div>` : ''}
   </div>
 
   ${notifPlat !== 'none' ? `
@@ -11934,7 +12317,17 @@ async function renderSettings(el) {
     if (!r.ok) return toast(r.reason || 'Could not switch to it.', 3600);
     S.settings = await kvGet('settings', S.settings);
     snapSettings();
-    toast(r.restored ? 'Switched. Welcome back.' : 'Switched, but there was no save to pull.', 4200);
+    /* FOUR outcomes, not two. 'decrypt' means the save exists but this key
+       cannot read it; 'none'/'empty' means there is genuinely nothing to pull;
+       anything else is "could not fetch it", which is NOT "no save" and which
+       adoptIdentity leaves unsettled so the next boot pulls again. */
+    const noSave = r.pullReason === 'none' || r.pullReason === 'empty';
+    toast(r.restored ? 'Switched. Welcome back.'
+      : r.pullReason === 'decrypt'
+        ? 'Switched, but the cloud save was written by a different key and could not be unlocked. Nothing was deleted.'
+        : noSave ? 'Switched, but there was no save to pull.'
+          : 'Switched, but the save could not be downloaded. It will retry next time you open the app.',
+    r.pullReason === 'decrypt' ? 6000 : 4200);
     route();
   });
   $('#goOnlineBtn', el)?.addEventListener('click', async () => {
@@ -12065,19 +12458,14 @@ async function renderSettings(el) {
     a.click();
     await kvSet('lastExportAt', Date.now());
     toast('Backup exported');
+    refresh(); // the "Never backed up yet" / "Last backup" row reads lastExportAt
   });
   $('#importBtn').addEventListener('click', () => $('#importFile').click());
   $('#importFile').addEventListener('change', async e => {
     const file = e.target.files[0];
+    e.target.value = ''; // so re-picking the same file fires change again
     if (!file) return;
-    try {
-      const counts = await importAll(JSON.parse(await file.text()));
-      S.settings = await kvGet('settings') || S.settings;
-      snapSettings();
-      S.userFoods = await db.all('foods');
-      toast(`Imported ${counts.log} log entries, ${counts.foods} foods`);
-      refresh();
-    } catch (err) { toast('Import failed: ' + err.message, 3200); }
+    await importBackupFromFile(file);
   });
   $('#eraseBtn').addEventListener('click', () => {
     const wrap = openSheet(`
@@ -12086,10 +12474,28 @@ async function renderSettings(el) {
         <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
       </div>
       <div class="sheet-body">
-        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. If cloud backup is on, the vault copy survives and can be restored later.</p>
+        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. <span id="erVault">Checking whether a cloud copy exists...</span></p>
         <div class="t1-field"><label>Type ERASE to confirm</label><input id="erIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ERASE"></div>
       </div>
       <div class="t1-foot"><button class="btn danger-ish" id="erGo" disabled>Erase it all</button></div>`, { cls: 't1', name: 'Erase' });
+    /* ONE LOOKUP INSTEAD OF AN "IF". This line used to read "If cloud backup is
+       on, the vault copy survives", which handed the player the job of working
+       out whether that if applied to them, on the one dialog whose entire point
+       is that it cannot be undone. The app can just ask: social.hasCloudBackup()
+       answers for THIS account, and its three answers are three sentences.
+       UNKNOWN READS AS NO ON PURPOSE. An unreachable server must never be
+       reported as a copy that survives, because that is the one wrong answer
+       that costs somebody their save. Off the click path so the sheet still
+       opens instantly, and the typed-ERASE gate is slower than the probe. */
+    social.hasCloudBackup().then(has => {
+      const line = $('#erVault', wrap);
+      if (!line) return;   // sheet already dismissed
+      line.innerHTML = has === true
+        ? 'A cloud backup <b>does</b> exist for this account: that copy survives and can be restored later.'
+        : has === false
+          ? 'There is <b>no</b> cloud backup for this account, so this is the only copy.'
+          : 'The cloud could not be reached, so no vault copy can be confirmed. Treat this as the only copy.';
+    });
     const input = $('#erIn', wrap), go = $('#erGo', wrap);
     input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'ERASE'; });
     go.addEventListener('click', async () => {
@@ -12112,6 +12518,38 @@ async function renderSettings(el) {
          second tab writing continuously: zero rows in every store.
          See js/db.js STORES and eraseAll. */
       await eraseAll();
+      location.reload();
+    });
+  });
+  /* Account deletion (App Store 5.1.1(v)). Same typed-confirm pattern as Erase.
+     ORDER MATTERS: the server delete goes FIRST, and the local wipe only runs
+     after it answers ok. Offline or a failed call aborts with the save intact,
+     because a local wipe with the account still on the server is the one
+     outcome that satisfies nobody. */
+  $('#delAcctBtn')?.addEventListener('click', () => {
+    const wrap = openSheet(`
+      <div class="sheet-head">
+        <div class="hd"><h2>Delete account?</h2><div class="sub">This cannot be undone</div></div>
+        <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
+      </div>
+      <div class="sheet-body">
+        <p class="note" style="margin-bottom:12px">Your cloud account is deleted for good: friends, step race entry, cloud backup and recovery phrase. The local save on <b>this phone</b> is wiped too, and there is no vault copy to restore.</p>
+        <div class="t1-field"><label>Type DELETE to confirm</label><input id="daIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="DELETE"></div>
+      </div>
+      <div class="t1-foot"><button class="btn danger-ish" id="daGo" disabled>Delete account</button></div>`, { cls: 't1', name: 'DeleteAccount' });
+    const input = $('#daIn', wrap), go = $('#daGo', wrap);
+    input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'DELETE'; });
+    go.addEventListener('click', async () => {
+      if (input.value.trim().toUpperCase() !== 'DELETE') return;   // belt and braces
+      go.disabled = true; go.textContent = 'Deleting...';
+      const res = await social.deleteAccount();
+      if (!res.ok) {
+        go.disabled = false; go.textContent = 'Delete account';
+        toast('Could not reach the server. Nothing was deleted. Try again when you are online.', 3600);
+        return;
+      }
+      await social.forgetIdentity();   // else the vault re-adopts the dead identity on the next boot
+      await eraseAll();                // the same everything-in-one-transaction wipe Erase uses
       location.reload();
     });
   });
@@ -12141,6 +12579,14 @@ async function renderSettings(el) {
 function profileFormHtml(p, units) {
   const imp = units !== 'kg';
   const { ft, inch } = cmToFtIn(p.heightCm || 178);
+  /* THE FORM TELLS THE TRUTH ABOUT WHAT IT WILL SAVE. Onboarding renders this
+     with a blank p, so `p.activity === a.id` compared against undefined and NO
+     Activity or Goal chip lit, while bindProfileForm below was already holding
+     moderate/recomp and Save stored exactly that. Two of the four questions
+     were answered invisibly. Defaulted here the same way the Sex seg already
+     defaults to Male, so the lit chip IS the stored value. Keep these two in
+     step with bindProfileForm's state; profile-units-audit asserts they match. */
+  const act = p.activity || 'moderate', goal = p.goal || 'recomp';
   return `
     <div class="field"><label>Units</label>
       <div class="seg"><button type="button" id="pfLb" class="${imp ? 'on' : ''}">lb / ft</button><button type="button" id="pfKg" class="${imp ? '' : 'on'}">kg / cm</button></div>
@@ -12159,10 +12605,10 @@ function profileFormHtml(p, units) {
       <div class="field"><label>Weight (<span id="wUnit">${imp ? 'lb' : 'kg'}</span>)</label><input id="pfW" type="text" inputmode="decimal" value="${p.weightKg ? (imp ? kgToLb(p.weightKg).toFixed(0) : p.weightKg.toFixed(1)) : ''}" placeholder="${imp ? '180' : '82'}"></div>
     </div>
     <div class="field"><label>Activity</label>
-      <div id="pfAct">${ACTIVITY_LEVELS.map(a => `<button type="button" class="chip ${p.activity === a.id ? 'on' : ''}" data-act="${a.id}" style="margin:0 6px 7px 0">${a.label}</button>`).join('')}</div>
+      <div id="pfAct">${ACTIVITY_LEVELS.map(a => `<button type="button" class="chip ${act === a.id ? 'on' : ''}" data-act="${a.id}" style="margin:0 6px 7px 0">${a.label}</button>`).join('')}</div>
     </div>
     <div class="field"><label>Goal</label>
-      <div id="pfGoal">${GOALS.map(g => `<button type="button" class="chip ${p.goal === g.id ? 'on' : ''}" data-goal="${g.id}" style="margin:0 6px 7px 0">${g.label}</button>`).join('')}</div>
+      <div id="pfGoal">${GOALS.map(g => `<button type="button" class="chip ${goal === g.id ? 'on' : ''}" data-goal="${g.id}" style="margin:0 6px 7px 0">${g.label}</button>`).join('')}</div>
       <p class="note" id="goalHint"></p>
     </div>
     <div class="card" style="background:var(--surface-2);margin:4px 0 12px">
@@ -12222,10 +12668,38 @@ function bindProfileForm(wrap, initial, onChange) {
     onChange?.(p, t);
   };
   const setSeg = (sel, on) => { $$(sel, wrap).forEach(x => x.classList.remove('on')); on.classList.add('on'); };
-  $('#pfLb', wrap).addEventListener('click', e => { state.units = 'lb'; setSeg('#pfLb,#pfKg', e.target); switchUnits(); });
-  $('#pfKg', wrap).addEventListener('click', e => { state.units = 'kg'; setSeg('#pfLb,#pfKg', e.target); switchUnits(); });
+  /* CONFIRMING A CHOICE MUST NOT CONVERT. Both buttons used to set the unit and
+     call switchUnits() unconditionally, and switchUnits() converts the fields by
+     the NEW unit alone with no memory of the unit they are already in. So
+     re-tapping the button that is already lit, which is how a lot of people
+     confirm a segmented choice, ran the conversion a second time on a value that
+     was already right: type 80 with kg selected, tap "kg / cm" again, and the
+     field reads 36.3. That saved a plan for a 36 kg body (1,920 kcal / 80 g
+     protein instead of ~2,540 / 176) with nothing on screen to say it had moved.
+     Nothing changed, so nothing converts. */
+  const pickUnits = (u, e) => {
+    if (state.units === u) return;
+    state.units = u; setSeg('#pfLb,#pfKg', e.target); switchUnits();
+  };
+  $('#pfLb', wrap).addEventListener('click', e => pickUnits('lb', e));
+  $('#pfKg', wrap).addEventListener('click', e => pickUnits('kg', e));
   function switchUnits() {
     const imp = state.units === 'lb';
+    /* HEIGHT FOLLOWS THE SWITCH TOO. Only the weight field used to convert; the
+       two height fields were merely toggled hidden, so the one now on screen
+       still held whatever it was rendered with. Type 165 cm, flip to lb for the
+       weight, and the height reads the 5'10 default and 5'10 is what saves.
+       This form is WYSIWYG, which is exactly why it was silent. Read BEFORE the
+       hidden flip, and carry null through the way the weight does: a blank
+       height must stay blank, not become a person 0 cm tall. */
+    const ft = num($('#pfFt', wrap).value), inch = num($('#pfIn', wrap).value);
+    const cm = imp
+      ? num($('#pfCm', wrap).value)
+      : (ft == null && inch == null ? null : ftInToCm(ft || 0, inch || 0));
+    if (cm != null) {
+      if (imp) { const h = cmToFtIn(cm); $('#pfFt', wrap).value = h.ft; $('#pfIn', wrap).value = h.inch; }
+      else $('#pfCm', wrap).value = Math.round(cm);
+    }
     $('#hImp', wrap).hidden = !imp; $('#hMet', wrap).hidden = imp;
     $('#wUnit', wrap).textContent = imp ? 'lb' : 'kg';
     const w = num($('#pfW', wrap).value);
@@ -12315,6 +12789,33 @@ function renderOnboarding(step = 0, ctx = {}) {
      shell itself or the gear stays behind app.css's failsafe for 8 seconds. */
   markBooted();
   $('#tabbar').style.display = 'none';
+  /* The floating gear lives outside #screen and its click handler is bound in
+     bindTabs(), which never ran on this path (boot returns before it when there
+     are no settings). Left alone it paints as a live control and does nothing.
+     Hide it; route() owns gear visibility from the first navigation on. */
+  const gearBtn = $('#gearBtn'); if (gearBtn) gearBtn.hidden = true;
+  /* EVERY STEP OPENS AT THE TOP. route() resets #screen.scrollTop on every
+     navigation (see the end of route()); onboarding does not route, it writes
+     innerHTML straight into #screen, so whatever scroll the previous step was
+     left at survived into the next one. Tapping "That's me", which sits near the
+     bottom of the reveal on a short phone, scrolled #screen to 233 at 320x568,
+     and THE PLAN then opened with its back arrow at y=-203: off the top of the
+     screen, along with the dots and the title. Same rule as route(): a new
+     screen starts where its first line is. */
+  el.scrollTop = 0;
+  /* AN INTERRUPTED INSTALL RESUMES WHERE IT STOPPED. Reproduced on the round-1
+     playtest report: reach THE PLAN, quit, reopen, and you are back at the
+     first screen with a freshly rolled skeleton, the one you liked gone. Every
+     render stamps its step and the current pick; boot resumes from the stamp,
+     and finishing onboarding clears it. Fire-and-forget: a lost write costs a
+     replayed step, never a stuck one.
+     The step-1 pick is stamped by step 1 itself, not here: this line runs BEFORE
+     the reveal rolls a name, so on its own it always wrote pick:null and a
+     player who quit on the reveal came back to a different skeleton. Anything
+     that changes the name on screen re-stamps, so the name that resumes is the
+     name they were looking at. */
+  const stamp = () => kvSet('onbProgress', { step, pick: ctx.pick || null }).catch(() => {});
+  stamp();
   trackEvent('onb_step', { n: step });
   const dots = `<div class="onb-dots">${[0, 1, 2].map(i => `<i class="${i === step ? 'on' : i < step ? 'done' : ''}"></i>`).join('')}</div>`;
   const back = step > 0 ? `<button class="onb-back" id="onbBack" aria-label="Back">${ICONS.chev(18)}</button>` : '';
@@ -12346,7 +12847,7 @@ function renderOnboarding(step = 0, ctx = {}) {
   if (step === 1) {
     // the BARE starter (kicks default is null): gear is what you earn, so the
     // reveal shows what you start with, not a dressed promo shot
-    if (!ctx.pick) ctx.pick = randomName();
+    if (!ctx.pick) { ctx.pick = randomName(); stamp(); }
     el.innerHTML = `
     <div class="onb onb-in">
       ${back}${dots}
@@ -12373,6 +12874,7 @@ function renderOnboarding(step = 0, ctx = {}) {
     $('#onbReroll').addEventListener('click', () => {
       ctx.pick = randomName();
       $('#onbName').textContent = buildDisplayName(ctx.pick.adj, ctx.pick.noun, ctx.pick.num);
+      stamp();                      // the name on screen is the name that resumes
       popSound(S.sounds);
     });
     $('#onbMe').addEventListener('click', async () => {
@@ -12439,6 +12941,16 @@ async function saveInitialSettings(np) {
   if (!(S.demo || navigator.webdriver === true)) {
     social.goOnline().then(r => { if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
   }
+  enterAppFromOnboarding();
+}
+
+/* Leaving onboarding for the app proper: finishing it (saveInitialSettings above)
+   and a successful restore mid-onboarding (cloud phrase or backup file) all land
+   here. boot() returned before binding any of this when it found no settings, so
+   whoever ends onboarding owns the shell latch: without it a restored player gets
+   Today with a hidden tab bar, unbound tabs and a dead hashchange. */
+function enterAppFromOnboarding() {
+  kvSet('onbProgress', null).catch(() => {});   // onboarding is over; nothing to resume
   $('#tabbar').style.display = '';
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
@@ -12459,10 +12971,12 @@ async function saveInitialSettings(np) {
 
 function queueCelebration(game) {
   if (!game) return;
-  if (game.levelUp || (game.newBadges && game.newBadges.length) || game.streakMilestone) {
+  if (game.levelUp || (game.newBadges && game.newBadges.length) || game.streakMilestone || game.newPet) {
     const prev = S.celebration || {};
     S.celebration = {
       levelUp: game.levelUp || prev.levelUp,
+      /* a premium pet purchase gets the same takeover a level-up does; { sp } */
+      newPet: game.newPet || prev.newPet,
       /* fromLevel has to travel WITH its own levelUp. This funnel merges queued
          celebrations, so taking it independently could pair a new level with a
          stale "from" and misreport the size of the jump. */
@@ -12497,14 +13011,54 @@ const LEVELUP_LINES = [
   'That XP went straight to my spine.',
 ];
 
+/* ONE PENDING CEREMONY AT A TIME. The payload is read when the timer FIRES, not
+   when it is scheduled, so anything queued during the 380ms wait joins the sheet
+   that is already on its way instead of opening a second one behind it. A food
+   log that crosses a level queues twice in that window: the `bh-levelup` event
+   fires mid-log, and the caller then queues the badges and the "what you just
+   did" note. Both belong on one screen, and openLevelUpMoment already takes the
+   badges as `extras`. Nothing is dropped: a queue that lands after the timer has
+   fired schedules a fresh one, exactly as before. */
+let celebrateTimer = null;
 function maybeCelebrate() {
-  if (!S.celebration) return;
-  const c = S.celebration;
-  S.celebration = null;
-  setTimeout(() => openCelebration(c), 380);
+  if (!S.celebration || celebrateTimer) return;
+  celebrateTimer = setTimeout(() => {
+    celebrateTimer = null;
+    const c = S.celebration;
+    S.celebration = null;
+    if (c) openCelebration(c);
+  }, 380);
 }
 
-async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null, note = null }) {
+async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null, note = null, newPet = null }) {
+  /* A PREMIUM PET PURCHASE gets a takeover, not just a toast. 50,000 coins is
+     the biggest spend in the game and the shelf it was bought from disappears on
+     the very next render, so the moment needs the same weight a level-up gets.
+     All existing machinery: openSheet takeover, the breed reveal's rays and
+     stage, the pet's own art. Anything else queued alongside is re-queued so a
+     coinciding level-up or badge is shown after, never dropped. */
+  if (newPet) {
+    const rest = { levelUp, fromLevel, levelRewards, streakMilestone, newBadges, note };
+    const it = BH_BY_ID[newPet.sp] || {};
+    levelSound(S.sounds);
+    haptic.reward();
+    const wrap = openSheet(`
+      <div class="reveal-take cool">
+        <div class="grainy"></div>
+        <div class="reveal-eyebrow">New arrival</div>
+        <div class="reveal-sub">${esc(it.name || newPet.sp)} is yours</div>
+        <div class="reveal-body">
+          <div class="lvlup-stage"><div class="lvl-rays"></div><div class="bh-stage lg petlvl-avatar newpet-avatar r-${it.rarity || 'common'}">${petPortraitHtml(newPet.sp, 104, false, { thumb: true })}</div></div>
+          <div class="cele-bubble">Out with you now, and home in your Stable whenever you visit.</div>
+        </div>
+        <div class="reveal-foot">
+          <button class="btn" id="celeOk">Welcome home</button>
+        </div>
+      </div>`, { cls: 'takeover', onClose: () => setFxLayer() });
+    setFxLayer(305);
+    $('#celeOk', wrap).addEventListener('click', () => { history.back(); queueCelebration(rest); maybeCelebrate(); });
+    return;
+  }
   const bits = [];
   if (streakMilestone) bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP</div>`);
   for (const b of newBadges) bits.push(`<div class="cele-badge"><span>${badgeIconHtml(b.icon,26)}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)} · +25 XP</small></div></div>`);
@@ -12885,6 +13439,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const lvl = levelFor(xp);
   const chShiny = await ownShinyPetId(eq);   // your own stack, so your own collection answers
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
+  // Opening a crate re-renders this screen in place (no route()), so the tab
+  // badge is synced here too, off the same rows the tab is about to render.
+  setCrateBadge(crates.length);
   const boosts = inv.filter(r => r.kind === 'xp2').length;
   const vigors = inv.filter(r => r.kind === 'vigor').length;
   const ownedCount = inv.filter(r => r.kind === 'cos').length;
@@ -13138,15 +13695,17 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="ward-grid" data-wslot="${slot}">
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
         ${items.map(i => `
-          <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)}">
-            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" role="img" aria-label="${esc(i.name)}"></canvas>
+          <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)} · ${esc(i.rarity)}">
+            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>
+            ${rarityTagHtml(i.rarity)}
           </button>`).join('')}
         ${gearItems.map(g => {
           const art = BH_BY_ID[g.artId];
           const locked = wLevel < g.minLevel;
           return `
-          <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
-            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}" data-pad="0.14" role="img" aria-label="${esc(g.name)}"></canvas>
+          <button class="ward-cell gear r-${g.rarity} ${slimedSet.has(g.id) ? 'slimed' : ''} ${gearLo[slot] === g.id ? 'equipped' : ''} ${S.wardrobePreview === g.id ? 'selected' : ''} ${locked ? 'locked' : ''}" data-equipgear="${g.id}" title="${esc(g.name)} · ${esc(g.rarity)}${slimedSet.has(g.id) ? ' (SLIMED)' : ''}">
+            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}" data-pad="0.14" role="img" aria-label="${esc(g.name)}, ${esc(g.rarity)}"></canvas>
+            ${rarityTagHtml(g.rarity)}
             <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
           </button>`;
@@ -13332,7 +13891,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         }
         const res = await applyFit(chip.dataset.fit);
         if (!res.ok) {
-          toast(res.reason === 'dust' ? `That fit needs ${res.need} dust, you have ${res.have}.` : 'Could not wear that fit.', 2800);
+          toast(res.reason === 'dust' ? `That fit needs ${res.need.toLocaleString()} dust, you have ${res.have.toLocaleString()}.` : 'Could not wear that fit.', 2800);
           return;
         }
         S.lookPreview = null;
@@ -13413,7 +13972,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const val = btn.dataset.lookApply;
       const res = val === '' ? await clearTransmog(slot) : await applyTransmog(slot, val);
       if (!res.ok) {
-        toast(res.reason === 'dust' ? `Need ${res.need} dust, you have ${res.have}.` : 'Could not change that look.', 2600);
+        toast(res.reason === 'dust' ? `Need ${res.need.toLocaleString()} dust, you have ${res.have.toLocaleString()}.` : 'Could not change that look.', 2600);
         return;
       }
       S.lookPreview = null;
@@ -13763,7 +14322,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       renderCharacter(wrap, 'crates');
     });
     $('#useVigor', content)?.addEventListener('click', async () => {
-      if (await consumeConsumable('vigor')) { const e = await addVigor(VIGOR_DRAUGHT_AMOUNT); popSound(S.sounds); toast(`Vigor Draught drunk: +${VIGOR_DRAUGHT_AMOUNT} Vigor. You have ${e.ready} Pit fights ready.`, 3000); }
+      if (await consumeConsumable('vigor')) { const e = await addVigor(VIGOR_DRAUGHT_AMOUNT); popSound(S.sounds); toast(`Vigor Draught drunk: +${VIGOR_DRAUGHT_AMOUNT} Vigor. You have ${e.ready} Pit ${e.ready === 1 ? 'fight' : 'fights'} ready.`, 3000); }
       renderCharacter(wrap, 'crates');
     });
     $('#openStableFromBp', content)?.addEventListener('click', () => openStable());
@@ -13856,19 +14415,23 @@ async function renderCharacter(wrap, tab, opts = {}) {
     $('#bpKitchen', content)?.addEventListener('click', () => openKitchen());
     $$('[data-buy]', content).forEach((b => {
       let t = null;
+      let busy = false;
       const reset = () => { b.dataset.armed = '0'; b.textContent = b.dataset.label || b.textContent; };
       b.addEventListener('click', async () => {
+        if (busy) return;   // same latch as armToConfirm: a queued tap is not a new decision
         if (b.dataset.armed !== '1') {
           b.dataset.label = b.dataset.label || b.textContent;
           b.dataset.armed = '1'; b.textContent = 'Tap again to buy';
           clearTimeout(t); t = setTimeout(() => { if (b.isConnected) reset(); }, 2600);
           return;
         }
-        clearTimeout(t); reset();
-        const r = await buyShopItem(b.dataset.buy);
-        if (!r.ok) { toast(`Not enough coins. That costs ${r.need}, you have ${r.have}.`, 2600); return; }
+        // reset() moved below the await for the armToConfirm reason: disarming
+        // first re-armed the button in the same frame and let a burst buy twice.
+        clearTimeout(t); busy = true;
+        const r = await buyShopItem(b.dataset.buy).finally(() => { busy = false; reset(); });
+        if (!r.ok) { toast(`Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600); return; }
         popSound(S.sounds);
-        toast(`${r.label} bought. −${r.cost} coins, ${r.coins} left. You now have ${r.owned}.`, 3000);
+        toast(`${r.label} bought. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. You now have ${r.owned}.`, 3000);
         renderCharacter(wrap, 'crates');
       });
     }));
@@ -13945,7 +14508,7 @@ function gearToCard(g) {
     kind: `GEAR · ${GEAR_SLOT_LABELS[g.slot] || g.slot}`,
     lvl: g.minLevel > 1 ? `Lv ${g.minLevel}` : '',
     statList: st, talent: g.talent ? g.talentName : '', plain: !st.length,
-    stats: g.talent ? `<div class="pc-perk-desc">${esc(TALENT_DESC[g.talent] || 'special ability')}</div>` : '',
+    statsHtml: g.talent ? `<div class="pc-perk-desc">${esc(TALENT_DESC[g.talent] || 'special ability')}</div>` : '',
   };
 }
 function lootCardHtml(g) { return packCardHtml(gearToCard(g), { selectable: true }); }
@@ -14014,6 +14577,17 @@ function petPanelHtml(petId, fighter) {
 }
 
 const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+
+/* THE TIER, IN SOMETHING OTHER THAN COLOUR. Wardrobe tiles carried rarity in
+   the border colour alone, which a colourblind player cannot read at all. The
+   initial fits a 78px tile; the word itself goes in the tile's accessible name
+   and its title, and it is the same vocabulary the crate odds sheet already
+   prints. Bottom-left, because the equipped tick owns the top-right corner and
+   the SLIMED tag owns the top-left. */
+function rarityTagHtml(rarity) {
+  const r = String(rarity || '');
+  return RAR_ORDER.includes(r) ? `<span class="ward-rar" aria-hidden="true">${r[0].toUpperCase()}</span>` : '';
+}
 
 // Trim an image to its non-transparent content and draw it CENTERED + as large as
 // fits into the canvas. Fixes art (pets, gear, cosmetics) that sits parked in a
@@ -14175,7 +14749,7 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
 }
 
 // Shared pack-card markup.
-// card: {imgSrc?|iconHtml?, name, rarity, kind, lvl?, statList?, talent?, plain?, stats?, id?}
+// card: {imgSrc?|iconHtml?, name, rarity, kind, lvl?, statList?, talent?, plain?, stats?, statsHtml?, id?}
 // Image art uses a canvas that hydratePackArt() fills (trimmed + centered).
 function packCardHtml(c, { selectable = false } = {}) {
   const rar = RARITIES[c.rarity] || RARITIES.common;
@@ -14187,13 +14761,24 @@ function packCardHtml(c, { selectable = false } = {}) {
   /* The BAND under the plate is where a drop says what it does: real stat chips
      when it rolled some, the talent affix on top of them, and an explicit
      "no stats" line for pure cosmetics. An empty shelf under a legendary's
-     nameplate reads as a bug, not as "this one is looks-only". `stats` stays the
-     free-form HTML slot every older call site already fills. */
+     nameplate reads as a bug, not as "this one is looks-only".
+
+     `stats` IS TEXT NOW, AND THE SINK IS WHAT ESCAPES IT. It used to be the
+     free-form HTML slot every older call site filled, and two of those call
+     sites hand it a sentence the SERVER wrote around another player's typed
+     name: the spire-lost inbox card and the "Taken from ..." claim card. That
+     was safe only because those callers remembered esc(), which is caller
+     discipline holding up a raw sink, and the first refactor that forgets it
+     turns a rival's display name into script in your reveal.
+     Two callers genuinely need markup (a talent's perk block, a dupe's coin
+     glyph) and they now say so by name in `statsHtml`, which only ever carries
+     literals this app wrote. tests/render-sink-lint.mjs pins that split. */
   const chips = (c.statList || []).map(([k, v]) =>
     `<span class="pcs" data-k="${esc(k)}"><b>+${esc(v)}</b><small>${esc(k)}</small></span>`).join('');
+  const statsBit = c.statsHtml || (c.stats ? esc(c.stats) : '');
   const bandBits = (chips ? `<div class="pc-chips">${chips}</div>` : '')
     + (c.talent ? `<div class="pc-talent"><i></i>${esc(c.talent)}</div>` : '')
-    + (c.stats ? `<div class="pc-stats">${c.stats}</div>` : '')
+    + (statsBit ? `<div class="pc-stats">${statsBit}</div>` : '')
     + (!chips && !c.talent && c.plain ? '<div class="pc-plain">Plain cosmetic · no stats</div>' : '');
   /* name + rarity sit on a bottom PLATE. The rarity is a chip tinted by the
      card's own .r-<rarity> class, not inline-coloured text, so the frame and
@@ -14495,6 +15080,23 @@ function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
     .map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined)));
 }
 
+/* Canvas art (imgSrc) already paints a plain plate when its load fails (see
+   drawTrimmedArt). iconHtml cards are raw <img> tags, and an uncached one
+   rendered the browser's broken-image glyph in the middle of the reveal. Swap
+   the whole art panel for a quiet note instead; the name and rarity on the
+   plate are untouched, so the pull still reads. Replacing the panel removes
+   the <img>, and { once: true } clears the handler, so this can never loop. */
+function wirePackArtFallback(scope) {
+  for (const img of $$('.pc-icon img', scope)) {
+    const fail = () => {
+      const icon = img.closest('.pc-icon');
+      if (icon) icon.innerHTML = '<span class="note" style="text-align:center">Art on its way</span>';
+    };
+    if (img.complete && img.naturalWidth === 0) fail();
+    else img.addEventListener('error', fail, { once: true });
+  }
+}
+
 /* Crate crack: the crate LANDS, strains, the lid blows off on an arc, light
    climbs out of the mouth, and the card rises out of the box as it sinks away.
    Beats live in app.css as --b-* on .pack-reveal, so the timing table is in one
@@ -14648,7 +15250,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
             </div>
           </div>
           <div class="pack-foot" id="packFoot">
-            ${footerNote ? `<span class="pack-coins">${footerNote}</span>` : ''}
+            ${/* ESCAPED AT THE SINK, same reason packCardHtml's `stats` is. The
+                  gift reveal builds this from giftSender(), which reads a name
+                  out of a note the SERVER wrote from another player's payload,
+                  and nothing on the way here escapes it. Every other caller
+                  passes "+N XP", which esc() leaves untouched. */''}
+            ${footerNote ? `<span class="pack-coins">${esc(footerNote)}</span>` : ''}
             ${coins ? `<span class="pack-coins">+${coins} ${ICONS.coin(14)} coins</span>` : ''}
             ${cards.length ? '<span class="pack-hint" id="packHint"></span>' : ''}
             <div class="pack-dots" id="packDots"></div>
@@ -14700,6 +15307,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       deck.classList.remove('go');
       deck.innerHTML = ghosts
         + `<div class="pack-tilt"><div class="pc-rise"><div class="pc-sway">${packCardHtml(c)}</div></div></div>`;
+      wirePackArtFallback(deck);
       const tilt = $('.pack-tilt', deck), sway = $('.pc-sway', deck), glare = $('.pc-glare', deck);
 
       if (!burstTried) {
@@ -14865,17 +15473,17 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
 
 // Normalize a crate result row into a pack card.
 function crateResultToCard(r) {
-  if (r.type === 'consumable') { const c = CONSUMABLES[r.consumable]; return { iconHtml: consumableIcon(r.consumable, 130), name: c.label, rarity: 'uncommon', kind: 'ITEM', stats: esc(c.desc) }; }
+  if (r.type === 'consumable') { const c = CONSUMABLES[r.consumable]; return { iconHtml: consumableIcon(r.consumable, 130), name: c.label, rarity: 'uncommon', kind: 'ITEM', stats: c.desc }; }
   if (r.type === 'ingredient') { const ing = INGREDIENTS[r.ingredient]; return { iconHtml: ingIconHtml(ing.id, 130), name: ing.name, rarity: 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }; }
   if (r.type === 'gear' || r.type === 'geardupe') {
     const g = r.gear, dup = r.type === 'geardupe';
-    if (dup) return { imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity, kind: 'GEAR · DUPE', stats: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
+    if (dup) return { imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity, kind: 'GEAR · DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
     // the slot, the level gate, the stat line and the talent affix as separate
     // fields: the card lays them out itself instead of reading one packed string
     return gearToCard(g);
   }
   const isPet = r.item && r.item.slot === 'C';
-  if (r.type === 'dupe') return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', stats: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
+  if (r.type === 'dupe') return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
   return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: '' };
 }
 
@@ -15172,8 +15780,23 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
       ? `left:${p.x0}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-range:${Math.max(0, (p.x1 - p.x0) - p.w)}px;--pdk-dur:${9 + ([...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 5)}s`
       : p.kind === 'fly'
         ? `left:0;top:${p.y - Math.round(p.w * .5)}px;width:${p.w}px;height:${Math.round(p.w * .8)}px;--pdk-dur:${p.dur}s;--pdk-phase:${p.phase || 0}s`
-        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px`;
-    return `<div class="pdk-pet pdk-${p.kind}${glow}" data-pdk="${r.sp}" style="${pos}">
+        /* HOVERERS AND FLOPPERS GET A PHASE, or a row of them breathes as one
+           animal. The one-packer rework puts hoverers on a single sky row and
+           floppers on shared ground rows, which is what makes this visible: four
+           clouds at the same y, drifting and bobbing on the same clock, read as a
+           chorus line rather than as four animals. Same `--pdk-phase` the fly
+           lanes already use, derived from the iid the way the walkers derive
+           their duration, so it is deterministic (a pet drifts the same way every
+           visit) and needs no randomness. Negative, so the animation starts
+           mid-stride instead of pausing first. */
+        : `left:${p.x}px;top:${p.y - p.w}px;width:${p.w}px;height:${p.w}px;--pdk-phase:-${[...r.iid].reduce((a, c) => a + c.charCodeAt(0), 0) % 9}s`;
+    /* THE SPRITE NAMES THE COPY, not just the species. `data-pdk` alone meant the field
+       was a species picker: tapping the fourth Bulldog opened the slider on the first
+       one, so the animal you pressed and the card you got were different animals. The
+       iid is what the bond is banked against, so it is what the tap has to carry. A
+       friend's field passes positional ids (`y0`, `y1`) and opens nothing, which is
+       unchanged: it has no card to open. */
+    return `<div class="pdk-pet pdk-${p.kind}${glow}" data-pdk="${r.sp}" data-iid="${r.iid}" style="${pos}">
       <span class="pdk-flip"><span class="pdk-bob">${art}</span></span>
       ${p.kind === 'walk' || p.kind === 'flop' ? '<span class="pdk-shadow"></span>' : ''}
     </div>`;
@@ -15250,7 +15873,8 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
  * fork per screen. The hanging sign stays. */
 async function openPaddock() {
   const { paddockRoster, paddockEggs, placePaddock, PDK_SCENE, rotHash } = await import('./paddock.js');
-  const [roster, eggs, eqOwn, ownedIds] = await Promise.all([paddockRoster(), paddockEggs(), equipped(), ownedCosmeticIds()]);
+  const [roster, eggs, eqOwn, ownedIds, petTapped] = await Promise.all([
+    paddockRoster(), paddockEggs(), equipped(), ownedCosmeticIds(), kvGet('pdkPetTapped', false)]);
   /* THE HERD TURNS OVER WHEN THE PLAYER'S DAY DOES. placePaddock's rotation seed
      defaults to toISOString(), which is UTC, and calling it with no day meant a
      collection past the walk cap swapped its herd at 17:00 local here while
@@ -15265,40 +15889,62 @@ async function openPaddock() {
      source the wardrobe trusts) instead of the instance roster, which missed
      legacy grants like the Founder's Lizard and showed veterans their own pet;
      and the tease is now a shiny you have NOT collected, of a species you DO
-     own (never spoils an unseen pet), rotating daily. The CX secret keeps
-     priority for players who genuinely lack it. CX has no shiny variant, so it
-     is never a shiny candidate. Nothing missing = no lurker: an empty tease
-     would be a lie. */
+     own (never spoils an unseen pet), rotating daily. CX has no shiny variant,
+     so it is never a shiny candidate. Nothing missing = no lurker: an empty
+     tease would be a lie.
+     AND THE BUSHES ARE NEVER THE LIZARD ANY MORE. Both playtesters hit the same
+     wall from opposite sides: the bushes and the panel's founder banner opened a
+     BYTE-IDENTICAL locked card, so the screen carried two prominent mysteries
+     that both dead-ended on the one pet a non-beta player can never obtain.
+     Tom's ruling (2026-08-31) is that a mystery pet is a pet you do not have YET
+     and the founders' lizard is the sole exception to that; so the exception
+     lives in exactly one place, the banner, which is now shown only to players
+     who do not already own it (paddock-cards.js panelHtml). The bushes go back
+     to teasing something huntable. */
   /* shiny ownership comes off the INSTANCES already in hand, not S.shinyPets:
      that cache refreshes at boot + hatch, so a mid-session grant or restore
      would leave the bushes teasing a shiny the player just collected */
   const shinyOwned = new Set(roster.filter(r => r.shiny).map(r => r.sp));
   const shinyGaps = [...ownedIds].filter(id => (BH_BY_ID[id] || {}).slot === 'C' && id !== 'CX' && !shinyOwned.has(id)).sort();
-  const lurkSp = !ownedIds.has('CX') ? 'CX'
-    : shinyGaps.length ? shinyGaps[rotHash('lurk:' + dateKey()) % shinyGaps.length] : null;
+  const lurkSp = shinyGaps.length ? shinyGaps[rotHash('lurk:' + dateKey()) % shinyGaps.length] : null;
 
   const K = PDK_SCENE.KEEPER;
   const wrap = openSheet(`
     <div class="sheet-head"><h2>The Paddock</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" style="padding:0">
-      ${paddockSceneHtml({ roster, places, eggCount: eggs.count, eq: eqOwn, keeper: K, lurkSp, coach: 'Tap a pet to say hi' })}
+      ${/* THE COACH MARK IS ONBOARDING, SO IT LEAVES WHEN ONBOARDING IS OVER.
+           It re-rendered on EVERY entry and only cleared on a scene-pet tap
+           inside that one visit, so the veteran tester with 16 pets was told
+           how to greet a pet every single time he walked in. Gated on the one
+           honest fact: has this player ever tapped a pet. Same quiet-kv shape
+           as 'mapLpHint' and 'map-seen'. */''}
+      ${paddockSceneHtml({ roster, places, eggCount: eggs.count, eq: eqOwn, keeper: K, lurkSp, coach: petTapped ? null : 'Tap a pet to say hi' })}
       <div class="pdk-panel" id="pdkPanel"><!-- Lane W mounts here (walt/paddock-ui) --></div>
     </div>`, { cls: 'sheet-paddock' });
 
   /* Lane W's collection panel is the screen's lower half, not a tap target, so it is
      mounted as the sheet opens rather than on first interaction. Failure degrades to
-     an empty panel, never to a thrown render. */
-  import('./paddock-cards.js').then(m => m.mountPaddockPanel()).catch(() => {});
+     an empty panel, never to a thrown render.
+     IT IS HANDED THE TWO THINGS ONLY THIS FUNCTION KNOWS: how many of the roster
+     actually got a place in the field (so the panel can say what the field cannot),
+     and whether this player already owns the pet the founder banner teases. */
+  import('./paddock-cards.js').then(m => m.mountPaddockPanel({
+    inField: Object.keys(places).length,
+    showTeaser: !ownedIds.has('CX'),
+  })).catch(() => {});
 
   $('#pdkScene', wrap)?.addEventListener('click', e => {
     const hit = e.target.closest('[data-pdk]');
     if (!hit) return;
     $('#pdkCoach', wrap)?.remove();
+    if (!petTapped) kvSet('pdkPetTapped', true);
     const sp = hit.dataset.pdk;
     /* Lane W's module; a tap before it lands degrades to nothing, never to an
        error (anti-regression rule 8's spirit: absent halves degrade visibly
-       calm, not broken). */
-    import('./paddock-cards.js').then(m => m.openPaddockCards(sp)).catch(() => {});
+       calm, not broken). `from` is the FIGURE that was tapped: the card measures
+       itself against it rather than being told where to go, because a fixed y284
+       card lands on top of the animal it describes. */
+    import('./paddock-cards.js').then(m => m.openPaddockCards(sp, hit.dataset.iid, { from: hit })).catch(() => {});
   });
   $('#pdkNest', wrap)?.addEventListener('click', () => {
     import('./paddock-cards.js').then(m => m.openPaddockCards('egg')).catch(() => {});
@@ -15566,8 +16212,17 @@ async function openStable(opts = {}) {
 
 
 
+    /* The chips carry what tells the two copies apart, because with two of the
+       same species the names are identical and this feed is irreversible: level
+       and lineage off the instance row (nickname first when the player gave one),
+       plus which side of the trade each chip currently sits on. */
     const spChips = pair ? [a, b]
-      .map(x => `<button class="chip ${offSp === x.iid ? 'on' : ''}" data-offsp="${x.iid}">${esc((BH_BY_ID[x.sp] || {}).name || x.sp)}${x.shiny ? ' ✦' : ''}</button>`).join('') : '';
+      .map(x => {
+        const lbl = nicks[x.iid] || (BH_BY_ID[x.sp] || {}).name || x.sp;
+        const bits = [`Lv ${petLevel(bank[x.iid] || 0)}`];
+        if (x.lineage) bits.push(`lineage ${x.lineage}`);
+        return `<button class="chip ${offSp === x.iid ? 'on' : ''}" data-offsp="${x.iid}">${esc(lbl)}${x.shiny ? ' ✦' : ''} &middot; ${bits.join(' &middot; ')} &middot; <b>${offSp === x.iid ? 'KEPT' : 'FED'}</b></button>`;
+      }).join('') : '';
 
     /* THE WAY IN. Tom, 2026-08-11: the Paddock's entry was the FOURTH CHIP in the row
        below, `chip chip-btn`, measured 134x38 and therefore the same class and the same
@@ -16223,6 +16878,46 @@ async function openStable(opts = {}) {
       const inst = insts.find(x => x.iid === btn.dataset.destroy);
       const isShiny = !!(inst && inst.shiny);
       const dustVal = btn.dataset.dust || '?';
+      const doSalvage = async () => {
+        const res = await salvageInstance(btn.dataset.destroy);
+        if (!res.ok) { toast('Could not destroy that pet.'); return false; }
+        popSound(S.sounds);
+        toast(`${res.name} salvaged into ${res.dust} Bone Dust.`, 2600);
+        return true;
+      };
+      /* THE LAST COPY OF A PREMIUM PET is not a dupe melt. The two-tap arm below
+         is sized for a spare that hatches again next week; a 50,000-coin shop pet
+         or a legendary the player owns exactly ONE of does not come back for 120
+         dust, so it gets the same typed-confirm the app already uses for Erase
+         and Delete account. A dupe of the same species keeps the light arm:
+         salvaging spares is routine and the heavier gate would just teach players
+         to type through it. */
+      const petIt = inst ? (BH_BY_ID[inst.sp] || {}) : {};
+      const lastCopy = !!inst && insts.filter(x => x.sp === inst.sp).length === 1;
+      if (lastCopy && (inst.sp === PET_SHOP.pet.id || petIt.rarity === 'legendary')) {
+        const nm = petIt.name || inst.sp;
+        const wrap = openSheet(`
+          <div class="sheet-head">
+            <div class="hd"><h2>Destroy ${esc(nm)}?</h2><div class="sub">This cannot be undone</div></div>
+            <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
+          </div>
+          <div class="sheet-body">
+            <p class="note" style="margin-bottom:12px">This is your <b>only ${esc(nm)}</b>${isShiny ? ', and it is SHINY' : ''}. Destroying it pays <span class="dust-ico">${ICONS.dust(13)}</span><b>${dustVal} Bone Dust</b> and it does not come back.</p>
+            <div class="t1-field"><label>Type ${esc(nm.toUpperCase())} or DESTROY to confirm</label><input id="pdIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="DESTROY"></div>
+          </div>
+          <div class="t1-foot"><button class="btn danger-ish" id="pdGo" disabled>Destroy it</button></div>`, { cls: 't1', name: 'DestroyPet' });
+        const input = $('#pdIn', wrap), go = $('#pdGo', wrap);
+        const typedOk = () => { const t = input.value.trim().toUpperCase(); return t === 'DESTROY' || t === nm.toUpperCase(); };
+        input.addEventListener('input', () => { go.disabled = !typedOk(); });
+        go.addEventListener('click', async () => {
+          if (!typedOk()) return;   // belt and braces
+          go.disabled = true;
+          const done = await doSalvage();
+          history.back();   // close the confirm; the Stable is the sheet underneath
+          if (done) render();
+        });
+        return;
+      }
       if (btn.dataset.armed !== '1') {
         btn.dataset.armed = '1'; const t = btn.innerHTML;
         btn.innerHTML = isShiny ? `SHINY! Melt for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?` : `Melt for <span class="dust-ico">${ICONS.dust(13)}</span>${dustVal}?`;
@@ -16230,11 +16925,7 @@ async function openStable(opts = {}) {
         setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.innerHTML = t; } }, isShiny ? 4600 : 2800);
         return;
       }
-      const res = await salvageInstance(btn.dataset.destroy);
-      if (!res.ok) { toast('Could not destroy that pet.'); return; }
-      popSound(S.sounds);
-      toast(`${res.name} salvaged into ${res.dust} Bone Dust.`, 2600);
-      render();
+      if (await doSalvage()) render();
     }));
     $$('[data-offsp]', body).forEach(c => c.addEventListener('click', () => { offSp = c.dataset.offsp; render(); }));
     $('#doBreed', body)?.addEventListener('click', async e => {
@@ -16458,7 +17149,7 @@ async function syncFromClipboard() {
     await kvSet('hkClipLast', { ...clipId, date: payload.date });
     refresh();
   } catch {
-    toast('Clipboard not available. Run the shortcut, then tap Sync again.', 3200);
+    toast('Nothing to paste yet. Run the Sync Boneheadz shortcut (it copies your steps), then come back and tap Sync.', 3200);
   }
 }
 
@@ -16602,6 +17293,56 @@ async function openRecoverySheet() {
   });
 }
 
+/* One toast for everything a file restore brought back. Only nonzero categories
+   speak: "0 foods" reads as data loss to a player whose custom-foods store was
+   simply empty (confirmed playtest ticket, 2026-08). */
+function importSummary(counts) {
+  const parts = [];
+  if (counts.log) parts.push(`${counts.log} log entr${counts.log === 1 ? 'y' : 'ies'}`);
+  if (counts.foods) parts.push(`${counts.foods} custom food${counts.foods === 1 ? '' : 's'}`);
+  if (counts.weights) parts.push(`${counts.weights} weigh-in${counts.weights === 1 ? '' : 's'}`);
+  if (!parts.length) return 'Backup restored';
+  return 'Restored ' + (parts.length > 1
+    ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1]
+    : parts[0]);
+}
+
+/* THE one file-import path, shared by Settings > Import and the restore sheet
+   (which onboarding opens). Routing and copy only: importAll owns the actual
+   restore and is untouched. Lands the player on Today afterwards; a restore
+   mid-onboarding also ends onboarding, exactly like a successful cloud restore. */
+async function importBackupFromFile(file) {
+  const wasOnb = !S.settings;   // onboarding is exactly "no settings yet"
+  let counts;
+  try {
+    counts = await importAll(JSON.parse(await file.text()));
+  } catch (err) {
+    /* A wrong pick is a SyntaxError out of JSON.parse or importAll's own
+       'Not a Tally backup file' shape check; both mean "not our file", and the
+       raw parser message ("Unexpected token...") is useless to a player.
+       Every other importAll failure carries player-facing copy: pass it on. */
+    const wrongFile = err instanceof SyntaxError || /Not a Tally backup/i.test(err.message || '');
+    toast(wrongFile
+      ? "That doesn't look like a Boneheadz Gym backup. Pick the .json file you exported."
+      : 'Import failed: ' + err.message, 4200);
+    return;
+  }
+  S.settings = await kvGet('settings') || S.settings;
+  snapSettings();
+  S.userFoods = await db.all('foods');
+  closeAllSheetsViaHistory();   // no-op when no sheet is open (Settings > Import)
+  toast(importSummary(counts), 4200);
+  if (wasOnb) {
+    /* A real export always carries settings; if this one somehow did not,
+       onboarding stays on screen and finishes normally over the imported data.
+       Routing into the app without settings would just re-hit the boot gate. */
+    if (S.settings) { levelSound(S.sounds); enterAppFromOnboarding(); }
+    return;
+  }
+  location.hash = '#/today';
+  route();
+}
+
 async function openRestoreSheet() {
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Restore an account</h2><button class="sheet-close">Done</button></div>
@@ -16617,9 +17358,20 @@ async function openRestoreSheet() {
       </div>
       <p class="rc-err" id="rsErr" hidden></p>
       <button class="btn" id="rsGo" style="margin-top:14px">Restore my Bonehead</button>
+      <p class="note" style="margin:16px 2px 0;text-align:center">Got a backup file instead? Use the .json you exported from Settings.</p>
+      <button class="btn ghost" id="rsFileBtn" style="margin-top:8px">Restore from a backup file</button>
+      <input type="file" id="rsFile" accept="application/json,.json" hidden>
     </div>`, { cls: '', name: 'Restore' });
   const err = m => { const e = $('#rsErr', wrap); e.hidden = !m; e.textContent = m || ''; };
+  $('#rsFileBtn', wrap).addEventListener('click', () => $('#rsFile', wrap).click());
+  $('#rsFile', wrap).addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = ''; // so re-picking the same file fires change again
+    if (!file) return;
+    await importBackupFromFile(file);
+  });
   $('#rsGo', wrap).addEventListener('click', async () => {
+    const wasOnb = !S.settings;   // this sheet is also onboarding's restore path
     const btn = $('#rsGo', wrap); btn.disabled = true; btn.textContent = 'Restoring...';
     const r = await social.restoreWithPhrase($('#rsCode', wrap).value, $('#rsPhrase', wrap).value);
     btn.disabled = false; btn.textContent = 'Restore my Bonehead';
@@ -16628,7 +17380,30 @@ async function openRestoreSheet() {
     snapSettings();
     levelSound(S.sounds);
     closeAllSheetsViaHistory();
-    toast(r.restored ? 'Welcome back. Your Bonehead is restored.' : 'Account restored, but there was no save to pull.', 4600);
+    /* Same four-way as the vault-adopt toast. 'decrypt' is NOT "no save": the
+       save is there, sealed under a different key (js/social.js pullBackup),
+       and saying "no save" here is the exact lie the backup-key bug hid behind.
+       Nor is a dropped download "no save": that one retries at the next boot,
+       because adoptIdentity no longer burns the one-shot on a failure. */
+    const noSave = r.pullReason === 'none' || r.pullReason === 'empty';
+    toast(r.restored ? 'Welcome back. Your Bonehead is restored.'
+      : r.pullReason === 'decrypt'
+        ? 'Account restored, but the cloud save was written by a different key and could not be unlocked. Nothing was deleted. If your old device still has the app, opening it there will repair the cloud copy.'
+        : noSave ? 'Account restored, but there was no save to pull.'
+          : 'Account restored, but the save could not be downloaded. It will retry next time you open the app.',
+    r.pullReason === 'decrypt' ? 6500 : 4600);
+    /* Restoring FROM ONBOARDING must also end onboarding: boot() returned before
+       binding the shell, so a bare route() here left Today with a hidden tab bar
+       and no bound tabs. enterAppFromOnboarding is the same latch finishing
+       onboarding uses, and it routes. An account with no save to pull has no
+       settings either: onboarding continues instead of routing into the gate. */
+    if (wasOnb) {
+      if (S.settings) { enterAppFromOnboarding(); return; }
+      const saved = await kvGet('onbProgress', null);
+      renderOnboarding(saved && Number.isInteger(saved.step) ? Math.min(2, Math.max(0, saved.step)) : 0,
+        saved && saved.pick ? { pick: saved.pick } : {});
+      return;
+    }
     route();
   });
 }
@@ -16758,12 +17533,24 @@ async function renderBoneyard(el) {
   const eq = await equipped();
   let map = null, maplibregl = null;
   let cleanupExtras = () => {};
-  const cleanup = () => {
+  let mapAttempt = 0;   // bumped per startMap call; stale timers/handlers no-op against it
+  /* Everything a map ATTEMPT owns: the instance (and its WebGL context), the
+     world intervals, the listeners, the GPS watch. Runs on teardown AND at the
+     top of every startMap, so Retry is genuinely fresh: before this, a failed
+     attempt left a zombie map plus its 5s world timer running against removed
+     markers (the repeated maplibre TypeErrors), and each Retry leaked another
+     WebGL context until the new map could not render at all. */
+  const teardownMap = () => {
     stopHuntWatch();
-    if (huntStopOrient) huntStopOrient();
     cleanupExtras();
+    cleanupExtras = () => {};
     try { map?.remove(); } catch { /* already gone */ }
     map = null;
+  };
+  const cleanup = () => {
+    mapAttempt++;   // orphan any pending boot timer
+    if (huntStopOrient) huntStopOrient();
+    teardownMap();
   };
   const wrap = el;
   screenCleanup = cleanup;            // route() tears the map down when you leave
@@ -16798,8 +17585,28 @@ async function renderBoneyard(el) {
   huntStopOrient = stopOrient;
 
   async function startMap() {
-    stopHuntWatch();
-    if (!('geolocation' in navigator)) { body.innerHTML = '<p class="warn" style="margin:16px">This device has no location support.</p>'; return; }
+    teardownMap();   // Retry lands here too: kill any half-made attempt first
+    const attempt = ++mapAttempt;
+    let bootT = 0;
+    const NET_MSG = 'The Boneyard needs a network signal to draw the map. Your spawns are safe; try again when you are back online.';
+    /* The floor. Every dead end on this screen lands here: a labeled error, a
+       Retry that re-enters startMap on a clean slate, and the seeded map key so
+       the space is not 90% dead. */
+    const floorMap = msg => {
+      if (attempt !== mapAttempt) return;   // a newer attempt owns the screen
+      clearTimeout(bootT);
+      teardownMap();
+      body.innerHTML = `<p class="warn" style="margin:16px">${msg}</p><button class="btn ghost" id="mapRetry" style="margin:0 16px;width:calc(100% - 32px)">Retry</button>
+        <div class="card" style="margin:16px">${mapLegendHtml('<div class="card-title">OUT THERE TODAY</div>')}</div>`;
+      $('#mapRetry', body)?.addEventListener('click', startMap);
+    };
+    /* BOUND THE LOAD. Nothing on this path may hang forever (a stuck vendor
+       import, a tile server that never answers): if the map has not reached a
+       usable state (maplibre 'load', or any tile arriving) in 25s, floor to the
+       error card. Cleared on 'load' and by floorMap. */
+    let tilesSeen = false, tileErrs = 0, errGrace = null;
+    bootT = setTimeout(() => { if (!tilesSeen) floorMap(NET_MSG); }, 25000);
+    if (!('geolocation' in navigator)) { clearTimeout(bootT); body.innerHTML = '<p class="warn" style="margin:16px">This device has no location support.</p>'; return; }
     // compass permission must be requested inside this tap
     try {
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -16828,13 +17635,13 @@ async function renderBoneyard(el) {
       const locDenied = isAndroid
         ? 'Location is off. Allow it in Settings → Apps → Boneheadz Gym → Permissions → Location, then retry.'
         : 'Location is off. Allow it in Settings → Boneheadz Gym → Location, then retry.';
-      body.innerHTML = `<p class="warn" style="margin:16px">${geoErr && err.code === 1
+      floorMap(geoErr && err.code === 1
         ? locDenied
         : geoErr ? 'No location fix yet. Step outside or near a window and retry.'
-        : 'The map could not load. The Boneyard needs a network signal; your spawns are safe and will be here when you are back online.'}</p><button class="btn ghost" id="mapRetry" style="margin:0 16px">Retry</button>`;
-      $('#mapRetry', body)?.addEventListener('click', startMap);
+        : NET_MSG);
       return;
     }
+    if (attempt !== mapAttempt) return;   // player left (or retried) during the await
 
     let lat = boot.coords.latitude, lng = boot.coords.longitude;
 
@@ -16904,7 +17711,7 @@ async function renderBoneyard(el) {
     $('#mapKeyBtn', body)?.addEventListener('click', e => { e.stopPropagation(); legendEl.hidden = !legendEl.hidden; });
     $('#mapCanvas', body)?.addEventListener('pointerdown', () => { if (!legendEl.hidden) legendEl.hidden = true; });
 
-    let loaded = false, follow = true;
+    let follow = true;
 
     /* Move the scouting anchor (see SCOUT_STEP_M above). Declared here, below
        `follow`, deliberately: this file has already shipped a bug where a hoisted
@@ -16927,11 +17734,11 @@ async function renderBoneyard(el) {
     try {
       map = createBoneyardMap(maplibregl, $('#mapCanvas', body), { lat, lng });
     } catch (e) {
-      body.innerHTML = `<p class="warn" style="margin:16px">The map renderer could not start on this device.</p>`;
+      floorMap('The map renderer could not start on this device. Give it a moment and retry.');
       return;
     }
     if (navigator.webdriver) window.__map = map;
-    map.on('load', () => { loaded = true; map.resize(); });
+    map.on('load', () => { clearTimeout(bootT); map.resize(); });
     // one-time discovery hint: the press-and-hold report/nominate feature is
     // invisible otherwise (zero den nominations since launch = nobody found it)
     kvGet('mapLpHint', false).then(seen => {
@@ -16946,10 +17753,31 @@ async function renderBoneyard(el) {
     ro.observe(stageEl);
     const prevCleanupRO = cleanupExtras;
     cleanupExtras = () => { prevCleanupRO(); try { ro.disconnect(); } catch { /* noop */ } };
-    map.once('error', e => {
-      if (!loaded) {
-        body.innerHTML = `<p class="warn" style="margin:16px">The Boneyard needs a network signal to draw the map. Your spawns are safe; try again when you are back online.</p><button class="btn ghost" id="mapRetry" style="margin:0 16px">Retry</button>`;
-        $('#mapRetry', body)?.addEventListener('click', startMap);
+    /* THE TILE-ERROR FLOOR. maplibre emits 'error' per failed tile/glyph
+       fetch, and a dead network produces a stream of them (the console full of
+       vendor TypeErrors). One errored tile on a working map is routine: it
+       retries and the map lives. The dead shape is repeated errors with ZERO
+       tiles ever loaded, so floor only on that, never on a transient. 'data'
+       events carry a `tile` property exactly when a tile actually arrived.
+       Deferred a tick because floorMap removes the map from inside its own
+       event dispatch. `tilesSeen`/`tileErrs` are declared with bootT above. */
+    map.on('data', e => { if (e && e.tile) { tilesSeen = true; if (errGrace) { clearTimeout(errGrace); errGrace = null; } } });
+    map.on('error', () => {
+      tileErrs++;
+      /* AN ERROR BEFORE ANY TILE ARMS A GRACE WINDOW, IT DOES NOT FLOOR.
+         Three shapes had to separate, and each earlier version broke one:
+         BLOCKED (style local, host dead: maplibre errors once per SOURCE, so
+         a six-error count never fires and the player stares at "Raising the
+         map" for the whole boot bound; measured red in map-offline-audit at
+         its 8s window), THROTTLED (slow but alive: an instant first-error
+         floor tears the map down at ~1.8s and marker population stops dead;
+         measured in boneyard-audit as final spawn count 5 against the
+         pre-rework 49), and WORKING (tilesSeen: never floors from here at
+         all). The grace window answers all three: the first pre-tile error
+         starts a 6s clock, any tile cancels it, and a host that produces
+         errors but no tile inside 6s is dead by every measure this app has. */
+      if (!tilesSeen && !errGrace) {
+        errGrace = setTimeout(() => { if (!tilesSeen && attempt === mapAttempt) floorMap(NET_MSG); }, 6000);
       }
     });
     map.on('dragstart', () => { follow = false; const r = $('#mapRecenter', body); if (r) r.hidden = false; });
@@ -17179,6 +18007,9 @@ async function renderBoneyard(el) {
     // = ~29 km/h: comfortably above running/cycling, clearly a vehicle.
     const MAX_LOOT_SPEED = 8;
     let youSpeed = 0, lastFix = null;
+    // the open den Fight/Flee prompt, if any, so a live GPS fix can withdraw it
+    // once the player has walked out of range (see the watchPosition handler)
+    let denPrompt = null;
 
     // Place a POI onto reachable ground. A POI is only SHOWN once we've confirmed
     // it snaps to a walkable feature (road / path / park) within ~80m; otherwise
@@ -17358,9 +18189,11 @@ async function renderBoneyard(el) {
         if (denRec) {
           hidePoiTip();
           const d = denRec.den;
-          openDenSheet(d, {
-            cleared: claimedBoss.has(denKey(dateKey(), d)),
-            inRange: d.dist != null && d.dist <= DEN_RADIUS_M,
+          const cleared = claimedBoss.has(denKey(dateKey(), d));
+          const inRange = d.dist != null && d.dist <= DEN_RADIUS_M;
+          const sheet = openDenSheet(d, {
+            cleared,
+            inRange,
             // reuse the existing #mapDen path rather than rebuilding the fight:
             // it owns escalation, the paired add and the too-fast gate. Point it
             // at the den that was actually TAPPED, since two dens can be in
@@ -17372,6 +18205,9 @@ async function renderBoneyard(el) {
               btn.click();
             },
           });
+          // only a sheet holding a LIVE Fight button gets withdrawn by distance;
+          // an out-of-range or cleared den sheet is informational, let them read it
+          if (inRange && !cleared) denPrompt = { den: d, wrap: sheet };
         } else showPoiTip(el);
         ev.stopPropagation();
       } else hidePoiTip();
@@ -18135,7 +18971,15 @@ async function renderBoneyard(el) {
       if (tooFastToAct()) return;
       const id = $('#mapDen', body).dataset.denId;
       const rec = denMarkers.get(id);
-      if (!rec || rec.den.dist > DEN_RADIUS_M) return;
+      if (!rec) return;
+      /* REVALIDATE AT THE TAP. rec.den.dist is only as fresh as the last
+         refreshDens pass, and the den sheet's Fight button can fire minutes
+         after the prompt opened (round-3 GPS walk: a fight started from ~600 m
+         because this read a stale distance). Measure from the freshest cached
+         fix now; 1.5x the trigger radius is GPS-jitter grace for a player who
+         was genuinely in range when the prompt opened. */
+      rec.den.dist = distanceM(lat, lng, rec.den.lat, rec.den.lng);
+      if (rec.den.dist > DEN_RADIUS_M * 1.5) { toast('Too far away now. Walk back to the den.', 3200); return; }
       const den = rec.den;
       const fighter = await buildFighter();
       // landmark dens escalate with your progression; roaming dens use their raw
@@ -18426,6 +19270,19 @@ async function renderBoneyard(el) {
       youWalk.move(lat, lng);
       if (follow && map) map.easeTo({ center: [lng, lat], duration: 900 });
       refreshWorld();
+      /* WITHDRAW A STALE FIGHT PROMPT. The den sheet never expired: round-3 GPS
+         walk held a live Fight button 600 m from the den. Close it the moment a
+         fix puts the player beyond the same 1.5x grace the tap check uses.
+         Top-of-stack only, because history.back() pops the TOP sheet: mid-walk
+         the prompt is the only sheet open, and if something is stacked on it
+         the tap-time revalidation still guards the fight itself. */
+      if (denPrompt && !denPrompt.wrap.isConnected) denPrompt = null;
+      if (denPrompt && sheetStack.length && sheetStack[sheetStack.length - 1].wrap === denPrompt.wrap
+          && distanceM(lat, lng, denPrompt.den.lat, denPrompt.den.lng) > DEN_RADIUS_M * 1.5) {
+        denPrompt = null;
+        history.back();
+        toast('You walked out of range of the den.', 3200);
+      }
     }, () => { /* transient errors after boot: keep last position */ }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
   }
   $('#mapStart', wrap).addEventListener('click', () => { mapWanted = true; kvSet('map-seen', true); startMap(); });
@@ -18576,7 +19433,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v469'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v470'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -18600,24 +19457,24 @@ function presentGrantDelivery(r) {
     if (p.gift) giftInfos.push({ from: p.from, label: giftRewardLabel(p) });
     const note = p.note || (p.gift ? `A gift${p.from ? ' from ' + p.from : ''}` : 'From the Crew');
     let hadCard = false;
-    if (p.crate && CRATES[p.crate]) { cards.push({ iconHtml: crateIcon(p.crate, 120), name: CRATES[p.crate].label, rarity: p.crate === 'daily' ? 'uncommon' : 'rare', kind, stats: esc(note) }); hadCard = true; }
+    if (p.crate && CRATES[p.crate]) { cards.push({ iconHtml: crateIcon(p.crate, 120), name: CRATES[p.crate].label, rarity: p.crate === 'daily' ? 'uncommon' : 'rare', kind, stats: note }); hadCard = true; }
     /* A PET, AND AN EGG, BOTH LANDED SILENTLY BEFORE THIS. Added 2026-08-21 with
        the admin make-good arm: a payload carrying only a pet paid no coins and
        no XP and built no card, so every branch below fell through and the player
        got a Day One Lizard back with no reveal, no toast and nothing to look at.
        That is the end of the chain and it is the only part she experiences.
        Same shape as the crate line above; a pet is drawn from its own art. */
-    if (p.pet && BH_BY_ID[p.pet]) { const it = BH_BY_ID[p.pet]; cards.push({ imgSrc: bhAsset(it), name: it.name, rarity: it.rarity, kind, stats: esc(note) }); hadCard = true; }
-    if (p.egg) { cards.push({ iconHtml: crateIcon('egg', 120), name: CRATES.egg.label, rarity: 'rare', kind, stats: esc(note) }); hadCard = true; }
+    if (p.pet && BH_BY_ID[p.pet]) { const it = BH_BY_ID[p.pet]; cards.push({ imgSrc: bhAsset(it), name: it.name, rarity: it.rarity, kind, stats: note }); hadCard = true; }
+    if (p.egg) { cards.push({ iconHtml: crateIcon('egg', 120), name: CRATES.egg.label, rarity: 'rare', kind, stats: note }); hadCard = true; }
     if (p.gearId && GEAR_BY_ID[p.gearId]) { cards.push({ ...gearToCard(GEAR_BY_ID[p.gearId]), kind }); hadCard = true; }
-    if (p.consumable && CONSUMABLES[p.consumable]) { cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind, stats: esc(note) }); hadCard = true; }
+    if (p.consumable && CONSUMABLES[p.consumable]) { cards.push({ iconHtml: consumableIcon(p.consumable, 120), name: CONSUMABLES[p.consumable].label, rarity: 'uncommon', kind, stats: note }); hadCard = true; }
     if (p.gift && !hadCard && p.coins) coinGifts.push(`${p.from || 'A friend'} sent you ${p.coins} coins!`);
   }
   for (const p of spireNews) {
     cards.push({
       iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain;filter:grayscale(1) brightness(.75)">`,
       name: 'Spire Lost', rarity: 'rare', kind: 'DARK SPIRE',
-      stats: esc(p.note || 'One of your towers no longer flies your name.'),
+      stats: p.note || 'One of your towers no longer flies your name.',
     });
   }
   // OS notification for friend gifts + cheers (so it feels like an event, not
@@ -18919,7 +19776,7 @@ async function renderPit(wrap) {
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
       <div class="t3-row"><span class="t3-med">${ICONS.pit(24)}</span>
         <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · +15 coins on a win</small></div>
-        <button class="btn ghost" data-spar="${m}" data-name="${name}">FIGHT</button>
+        <button class="btn ghost" data-spar="${m}" data-name="${name}" aria-label="Fight ${esc(name)}">FIGHT</button>
       </div>`).join('')}`;
   const ladderSect = `
     <div class="t3-sect"><b>The ladder</b><i></i><span class="r chip" style="font-size:11px">${champOpen ? 'Cleared' : `Rung ${Math.min(rungsBeaten + 1, LADDER.length)} of ${LADDER.length}`}</span></div>
@@ -18928,8 +19785,8 @@ async function renderPit(wrap) {
       const locked = r.rung > rungsBeaten + 1;
       return `<div class="t3-row${done ? ' done' : ''}">
         <span class="t3-rung">${r.rung}</span>
-        <div class="t3-tx"><b>${r.name}</b><small>${Math.round(r.mult * 100)}% stats · ${done ? `rematch · ${ICONS.coin(12)}${r.repeatCoins}` : `first win ${ICONS.coin(12)}${r.coins} + ${r.xp} XP`}</small></div>
-        ${locked ? `<span class="t3-lock">BEAT RUNG ${rungsBeaten + 1}</span>` : `<button class="btn ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate}>${done ? 'REMATCH' : 'FIGHT'}</button>`}
+        <div class="t3-tx"><b>${r.name}</b><small>${Math.round(r.mult * 100)}% stats · ${done ? `rematch · ${ICONS.coin(12)}${r.repeatCoins}` : `first win ${ICONS.coin(12)}${r.coins} + ${r.xp}+10 XP`}</small></div>
+        ${locked ? `<span class="t3-lock">BEAT RUNG ${rungsBeaten + 1}</span>` : `<button class="btn ${done ? 'ghost' : ''}" data-rung="${r.rung}" ${gate} aria-label="${done ? 'Rematch' : 'Fight'} ${esc(r.name)}, rung ${r.rung}">${done ? 'REMATCH' : 'FIGHT'}</button>`}
       </div>`;
     }).join('')}`;
   /* THE REMOTE DEN. Tom, 2026-08-06: "People that can't get out for walks feel
@@ -18962,21 +19819,21 @@ async function renderPit(wrap) {
         /* denRewardLabel takes the REWARD, not the den: passing rDen read every
            field as undefined and rendered a bare "· · free". */
         : `${denRewardLabel(rDen.reward)} · free`}</small></div>
-      ${rDone ? '<span class="t3-lock">TOMORROW</span>' : '<button class="btn" id="remoteDenBtn">FIGHT</button>'}
+      ${rDone ? '<span class="t3-lock">TOMORROW</span>' : `<button class="btn" id="remoteDenBtn" aria-label="Fight ${esc(rDen.boss)}, the remote den">FIGHT</button>`}
     </div>`;
 
   const champSect = `
     <div class="t3-sect"><b>After the ladder</b><i></i></div>
     <div class="t3-row${champBeaten ? ' done' : ''}">
       <span class="t3-med">${crateIcon('golden', 22)}</span>
-      <div class="t3-tx"><b>${CHAMPION.name}</b><small>${champBeaten ? `rematch · ${ICONS.coin(12)}${CHAMPION.repeatCoins}` : 'Wields the Bonecrusher · first win drops it + a Bone Crate'}</small></div>
-      ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate}>${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
+      <div class="t3-tx"><b>${CHAMPION.name}</b><small>${champBeaten ? `rematch · ${ICONS.coin(12)}${CHAMPION.repeatCoins}` : 'Wields the Moonlit Skull · first win drops it + the Marrow King title'}</small></div>
+      ${champOpen ? `<button class="btn ${champBeaten ? 'ghost' : ''}" id="champBtn" ${gate} aria-label="${champBeaten ? 'Rematch' : 'Fight'} ${esc(CHAMPION.name)}, the Champion">${champBeaten ? 'REMATCH' : 'FIGHT'}</button>` : `<span class="t3-lock">BEAT RUNG ${LADDER.length}</span>`}
     </div>`;
   const endlessSect = `
     <div class="t3-sect"><b>Endless · The Gauntlet</b><i></i>${champBeaten ? `<span class="r chip" style="font-size:11px">${canNewRank ? `Rank ${fightRank}` : 'At the cap'}</span>` : ''}</div>
     ${champBeaten ? `
     ${canNewRank
-      ? `<p class="note" style="margin:2px 2px 8px">Foes scale <b>forever</b>, the Pit never runs dry. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
+      ? `<p class="note" style="margin:2px 2px 8px">Foes scale as you climb ranks. World bosses raise the ceiling by 3 each. Cleared <b>${endlessBeaten}</b> rank${endlessBeaten === 1 ? '' : 's'} of a possible ${ceiling}.</p>`
       : `<div class="pit-gate">
           <div class="pg-head"><span class="pg-ico">${badgePixHtml('tombstone', 22)}</span><b>You have hit the ceiling at rank ${ceiling}</b></div>
           <p class="pg-why">The Gauntlet does not go higher until you beat a <b>world boss den</b>. Each one raises the ceiling by <b>3 ranks</b>. <b>The remote den above counts</b>, so this moves whether or not you can get out today.</p>
@@ -18992,7 +19849,7 @@ async function renderPit(wrap) {
     : `
     <div class="t3-row">
       <span class="t3-med">${ICONS.lock(20)}</span>
-      <div class="t3-tx"><b>The Gauntlet</b><small>Foes scale <b>forever</b>. The climb never ends.</small></div>
+      <div class="t3-tx"><b>The Gauntlet</b><small>Foes scale with world bosses you beat. The climb keeps growing.</small></div>
       <span class="t3-lock">BEAT THE CHAMPION</span>
     </div>`}`;
   // beaten the Champion → your live endless fight leads, spent content tucks below.
@@ -19073,6 +19930,20 @@ async function renderPit(wrap) {
   const start = (foeCfg) => openFight(wrap, fighter, foeCfg);
   // sparring is always free (practice); real fights spend the hybrid energy
   const startPit = async (foeCfg) => {
+    /* ONE TAP, ONE ARENA. This function is async and the FIGHT buttons are never
+       disabled, so a double tap ran the whole body twice before either arena
+       appeared. The atomic spend in js/energy.js is the money half and refuses
+       the second charge; this is the other half, because a player holding two
+       charges would still stack two arenas on one tap-tap. Set SYNCHRONOUSLY,
+       before the first await, which is the only thing a second tap already
+       sitting in the same task queue cannot get past, and released once
+       openFight has drawn the arena (it resolves at "Round one", not at the end
+       of the fight), by which time the Pit's buttons are covered anyway. */
+    if (pitOpening) return;
+    pitOpening = true;
+    try { await startPitInner(foeCfg); } finally { pitOpening = false; }
+  };
+  const startPitInner = async (foeCfg) => {
     /* An unacknowledged loss BLOCKS the next staked fight. Before this gate,
        FIGHT after an unresolved defeat spent a fresh charge with the old loss
        still standing (the play-riz auto-loss P0). Re-read the record at the
@@ -19091,7 +19962,7 @@ async function renderPit(wrap) {
     }
     const spent = await spendPitFight();
     if (!spent.ok) { toast('Rest up! Log a meal or take a walk to earn Vigor. Free fights refill tomorrow.', 3400); renderPit(wrap); return; }
-    openFight(wrap, fighter, foeCfg);
+    await openFight(wrap, fighter, foeCfg);   // awaited so the guard above holds until the arena is up
   };
   $$('[data-spar]', body).forEach(b => b.addEventListener('click', () =>
     start({ mode: 'spar', name: b.dataset.name, mult: Number(b.dataset.spar) })));
@@ -19241,6 +20112,11 @@ function fighterStatuses(f) {
  * spend: FIGHT routes the player to that panel until they acknowledge it. */
 const PIT_STAKED_MODES = ['rung', 'champ', 'endless'];
 
+/* Module scope on purpose, not a renderPit closure: startPit's early-return path
+   re-renders the Pit, and a flag living in the closure would be a fresh false on
+   every re-render, which is a guard that is not there. See startPit. */
+let pitOpening = false;
+
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
   const food = await foodCombatBuff(); // active dish buffs (damage / hype / regen / pet-free)
@@ -19355,9 +20231,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
      The Wanderer is the identical fight one boss later, so both are named
      rather than fixing only the path this change added. Neither launcher goes
      stale: the marker they came from is gone on the next refreshWorld. */
-  const fromMap = foeCfg.mode === 'mini' || foeCfg.mode === 'boss' || foeCfg.mode === 'secret'
+  const fromMap = foeCfg.mode === 'mini' || (foeCfg.mode === 'boss' && foeCfg.week) || foeCfg.mode === 'secret'
     || foeCfg.mode === 'glutton' || foeCfg.mode === 'spire'
-    || foeCfg.mode === 'mimic' || foeCfg.mode === 'wanderer';
+    || foeCfg.mode === 'mimic' || foeCfg.mode === 'wanderer';  // boss with week = walked-to den (map); boss without week = remote den (pit)
   const seamOwner = {};   // identity token: which fight installed the test seams
   const wrap = openSheet(`
     <div class="sheet-head"><div class="fight-title"><h2>${esc(foeCfg.name)}</h2><span class="fight-venue">${esc(venue)}</span></div><button class="sheet-close">Flee</button></div>
@@ -20514,6 +21390,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
   async function settle() {
     if (settled) return; settled = true;
+    /* A gate intro still standing when the outcome is known is stale by
+       definition. It normally removes itself, but its animationend sentinel and
+       7s failsafe are timers, and a backgrounded tab throttles timers: round-3
+       GPS walk had the intro overlay outlive a whole lost fight. Removing the
+       node is safe: showGateIntro's finish() is idempotent and nobody awaits
+       its promise on this path. */
+    document.querySelectorAll('body > .gi').forEach(n => n.remove());
     await consumeFightFoodBuffs(); // combat dish buffs are spent one fight at a time
     const won = fight.over.winner === 'p';
     /* Resolve the staked-fight record the moment the outcome is known (see the
@@ -20643,7 +21526,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
           const lv = (res && res.level) || (foeCfg.spire.level || 1) + 1;
           extraCards.push({ iconHtml: `<img src="assets/brand/tomb.png" style="width:110px;height:110px;object-fit:contain">`,
             name: foeCfg.spire.name, rarity: 'epic', kind: `SIEGE BROKEN · LV ${lv}`,
-            stats: `${esc(foeCfg.name)} is scattered. The tower is level ${lv} now and pays more tribute for it.` });
+            stats: `${foeCfg.name} is scattered. The tower is level ${lv} now and pays more tribute for it.` });
           dispatchEvent(new CustomEvent('bh-spire-claimed', { detail: { id: foeCfg.spire.id } }));
         }
       }
@@ -20822,12 +21705,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
         extras.push(`Feast +${bonus} coins`);
       }
       if (coins) await coinsAdd(coins);
+      window.__refreshWalletPill?.();   // the hub behind this sheet shows the balance this just changed
       const badges = await evaluateBadges();
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
     } else if (fight.over.winner === 'f') {
       coins = 5;
       await coinsAdd(coins);
+      window.__refreshWalletPill?.();
     }
     /* Spend the day's attempt on this tower, whatever the outcome. Outside the
        win/lose branches on purpose: a loss and a draw have to consume it too, or
@@ -20930,7 +21815,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
            openFight call sites, so a NEW mode that never states where a win
            drops you FAILS instead of silently inheriting the Pit's behaviour. */
         const STALE_LAUNCHER = ['glutton', 'spire'];
-        if (STALE_LAUNCHER.includes(foeCfg.mode) && won) { closeAllSheetsViaHistory(); closeAllSheets(); maybeCelebrate(); return; }
+        /* A glutton/spire LOSS deliberately backs out ONE level (the shared
+           history.back() below): the launcher sheet beneath is still valid and
+           offers the retry. Every OTHER map-launched fight closes the whole
+           stack on win AND loss, not only the STALE_LAUNCHER wins: its launcher
+           is a map button or a den prompt that already dismissed itself, so
+           anything still stacked under this sheet is stale (round-3 GPS walk: a
+           lost den fight left the den prompt plus a Turn-1 battle sheet standing
+           for minutes). The map is a route, not a sheet, so this always lands on
+           the map. */
+        const retryLoss = STALE_LAUNCHER.includes(foeCfg.mode) && !won;
+        if (fromMap && !retryLoss) { closeAllSheetsViaHistory(); closeAllSheets(); maybeCelebrate(); return; }
         history.back(); if (!fromMap && foeCfg.mode !== 'friend') setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate();
       });
     }, fast ? 80 : 750);
@@ -21188,7 +22083,12 @@ const STAT_BAR_COLOR = {
 async function renderTalents(wrap) {
   const body = $('#talBody', wrap) || (wrap && wrap.id === 'talBody' ? wrap : null);
   if (!body) return;
-  const [xpRows, takenArr, fighter, coinBal, dustBal] = await Promise.all([db.all('xp'), kvGet('talents', []), buildFighter(), coins(), boneDust()]);
+  const [xpRows, takenArr, fighter, coinBal, dustBal, treesOpenKv] = await Promise.all([db.all('xp'), kvGet('talents', []), buildFighter(), coins(), boneDust(), kvGet('taltrees', {})]);
+  // Which tree folds the player left open, kv-backed. Open used to be re-derived
+  // from points-in-tree on EVERY render, and renderTalents re-renders after every
+  // spend, so a tree the player collapsed snapped back open mid-pass (layout
+  // jumping under the finger) and everything reset on leaving the screen.
+  const treesOpen = treesOpenKv || {};
   const taken = new Set(takenArr);
   const tranks = talentRanks(takenArr);
   const lvl = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0));
@@ -21257,8 +22157,9 @@ async function renderTalents(wrap) {
     ${TALENT_TREES.map(tree => {
       const treeMax = tree.nodes.reduce((a, n) => a + nodeRanks(n), 0);
       const treeIn = tree.nodes.reduce((a, n) => a + Math.min(tranks[n.id] || 0, nodeRanks(n)), 0);
+      const treeOpen = (tree.id in treesOpen) ? treesOpen[tree.id] : treeIn > 0;
       return `
-      <details class="tal-tree" ${treeIn > 0 ? 'open' : ''}>
+      <details class="tal-tree" data-tree="${tree.id}" ${treeOpen ? 'open' : ''}>
         <summary class="tal-tree-head">
           <b style="color:${tree.color}">${tree.name}</b>
           <span class="tal-tag">${tree.tag}</span>
@@ -21280,7 +22181,11 @@ async function renderTalents(wrap) {
               ? `<span class="tal-ranks">${Array.from({ length: max }, (_, r) => `<i class="${r < cur ? 'on' : ''}" style="${r < cur ? `background:${tree.color}` : ''}"></i>`).join('')}</span>`
               : '';
             const pipTxt = max > 1 ? `${cur}/${max}` : (full ? ICONS.check(11) : tier === 4 ? ICONS.star(11) : 'T' + tier);
-            return `<button class="tal-node ${cls}" data-talent="${n.id}" data-tree="${tree.id}" data-idx="${i}" ${can ? '' : 'disabled'}>
+            // NOT disabled: a disabled button eats the tap with zero feedback,
+            // which round-3 playtests read as a dead screen. Every node stays
+            // live and the click handler either spends or SAYS why it cannot;
+            // aria-disabled keeps the semantics the attribute carried.
+            return `<button class="tal-node ${cls}" data-talent="${n.id}" data-tree="${tree.id}" data-idx="${i}" ${can ? '' : 'aria-disabled="true"'}>
               <span class="tal-pip" style="${cur > 0 ? `background:${tree.color};border-color:${tree.color}` : ''}">${pipTxt}</span>
               <span class="tal-body"><b>${n.name}${n.move ? ' <span class="tal-move">NEW MOVE</span>' : ''}</b><small>${n.desc}</small>${pips}</span>
             </button>`;
@@ -21343,9 +22248,31 @@ async function renderTalents(wrap) {
     } else if (badge) badge.remove();
   }
 
+  // A toggled fold is remembered where it stands (quiet: no sound, no re-render).
+  $$('.tal-tree', body).forEach(dt => dt.addEventListener('toggle', () => {
+    treesOpen[dt.dataset.tree] = dt.open;
+    kvSet('taltrees', treesOpen);
+  }));
+
   $$('[data-talent]', body).forEach(b => b.addEventListener('click', async () => {
     const arr = await kvGet('talents', []); // rank = one entry each, so push (never dedupe)
-    if (!canTakeTalent(arr, b.dataset.tree, Number(b.dataset.idx))) return;
+    // The old handler checked the tier gate and nothing else, silently: a refused
+    // tap looked identical to a dead one, and it never checked the point balance
+    // at all (the disabled attribute did, off a render that could be stale).
+    // Check both here, and SAY which rule refused the tap.
+    const left = Math.max(0, talentPoints(levelFor(await totalXp()).level) - arr.length);
+    if (left <= 0 || !canTakeTalent(arr, b.dataset.tree, Number(b.dataset.idx))) {
+      const tree = TALENT_TREES.find(t => t.id === b.dataset.tree);
+      const node = tree && tree.nodes[Number(b.dataset.idx)];
+      const gate = node ? { 1: 0, 2: 2, 3: 6, 4: 10 }[node.tier] : 0;
+      toast(!node ? 'That talent is locked.'
+        : (talentRanks(arr)[node.id] || 0) >= nodeRanks(node) ? `${node.name} is already maxed.`
+        : left <= 0 ? 'No talent points to spend. You earn one every level.'
+        : `Locked: needs ${gate} point${gate === 1 ? '' : 's'} spent in ${tree.name} first.`);
+      // a node drawn spendable that refused means the screen is stale: redraw it
+      if (b.classList.contains('can')) renderTalents(wrap);
+      return;
+    }
     arr.push(b.dataset.talent);
     await kvSet('talents', arr);
     popSound(S.sounds);

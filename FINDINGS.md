@@ -435,3 +435,20 @@ instead (the analytics init comment in the app source calls out the same
 distinction). If we ever want ops-grade "who is on which build", add a second
 column rather than repurposing this one; friend rows already ship app_v to
 clients, so changing its meaning is a silent protocol change.
+
+## The onboarding reroll changes the name, and only the name (2026-08-31)
+
+Playtest TRIAGE said rerolling the starter skeleton shows no visible change.
+Driven tonight: the reroll works, the name moves (Golden Molar #83 appeared on
+one press), but the art cannot move because every new player starts with the
+one default body and skull; there is nothing else for the die to land on. So
+the button quietly promises more than the game has. Two honest options, both
+Tom's call: label it as what it is (a name reroll), or leave it until starter
+looks exist. No code change made.
+
+## Timezone gains policy (Tom, 2026-08-31)
+
+Ruled: accept the eastbound double-dip as bounded. Local mornings are mornings;
+a real traveler banking an extra daily per hop is rare and capped, and the day
+guard's job stays catching the clock CHEAT (which it does, now with a voice).
+No 24-hour spacing code will be added to the reward paths.

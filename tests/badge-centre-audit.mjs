@@ -58,13 +58,19 @@
  *            elementFromPoint over the disc. This is what a half-covered Bone
  *            cache on the Boneyard looks like: box offset 0.0%, ink 35.3%, the
  *            same 5.38,-5.10px on three consecutive runs.
- *   OVERLAP  two discs whose rects intersect cannot be weighed by this method,
+ *   OVERLAP  two discs whose rects intersect AND whose overlapper is actually
+ *            visible inside the rect they share cannot be weighed by this method,
  *            because every glyph is hidden in one capture and the ink that
  *            disappears inside disc A includes part of disc B's drawing. Out on
  *            the Boneyard the loot markers routinely sit on each other. This is
  *            not hypothetical caution: before the gate existed, a Bone cache
  *            that is centred to 2.3% came back reading 35.3%, twice in a row,
- *            reproducibly and wrongly both times.
+ *            reproducibly and wrongly both times. The "visible in the shared
+ *            rect" half is what stops the reverse error: the readout disc sits
+ *            on an OPAQUE card above the loot markers, so a marker whose rect
+ *            clips the disc is behind it and cannot bleed a pixel into it, and
+ *            rect math alone kept throwing the reported badge out of its own
+ *            COVERAGE row. Measured 2026-09-01: same ink either way, 7.7%.
  *   MOVING   a badge whose region or rect changed between the bracketing
  *            captures was in motion while it was weighed.
  *   NO-INK   a badge that contributed no difference at all. Reported, and it is

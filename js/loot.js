@@ -69,11 +69,24 @@ export async function buyDropItem(itemId) {
   if (!d) throw new Error('not a drop item');
   const item = BH_BY_ID[itemId];
   if ((await ownedCosmeticIds()).has(itemId)) return { ok: false, reason: 'owned' };
-  const c = await coins();
-  if (c < d.cost) return { ok: false, reason: 'coins', need: d.cost, have: c };
-  await coinsAdd(-d.cost);
-  await grantCosmetic(itemId, 'drop');
-  return { ok: true, label: item.name, cost: d.cost, coins: await coins() };
+  /* CHARGED ONCE, GRANTED ONCE, and this used to be neither. Reading the balance
+     and then calling coinsAdd let overlapping taps all pass one stale check:
+     measured on origin/main 13583e42, four taps on a 3,000-coin jacket with
+     7,000 coins took the WHOLE 7,000 (the clamp ate the overdraft) and
+     delivered one jacket.
+     grantCosmetic is already the receipt here, so no second ledger row is
+     needed: it addIfAbsent's `cos:<id>` and returns null to whoever loses. The
+     money moves first, atomically, and the loser of the grant race gets it
+     straight back, so exactly one caller is out of pocket. Same receipt-decides
+     principle as buyRackItem, without a `dropbuy:` key that would then need its
+     own recovery branch. */
+  const left = await spendCoins(d.cost);
+  if (left === null) return { ok: false, reason: 'coins', need: d.cost, have: await coins() };
+  if (!await grantCosmetic(itemId, 'drop')) {
+    await coinsAdd(d.cost);   // somebody else's tap landed the piece: give it back
+    return { ok: false, reason: 'owned' };
+  }
+  return { ok: true, label: item.name, cost: d.cost, coins: left };
 }
 
 /* ---------- the rack: the weekly cosmetic shop (v409) ----------
@@ -118,16 +131,27 @@ export const RACK_DUST = [200, 175, 160, 130, 95, 90, 75, 35];
    three-wide grid. */
 export const RACK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 1200, dust: 110 };
 export const RACK_AURA_CELL = 4;
-/* REROLL HAS A CEILING AND THE SCREEN HAS TO CARRY IT. A reroll reading FREE
-   with nothing beside it says unlimited, and an unlimited reroll destroys the
-   rack: you spam it until your piece appears and the weekly countdown becomes
-   noise. One free, then six paid ones totalling exactly 2,000 coins, and the
-   allowance resets daily. */
-export const RACK_REROLL_LADDER = [0, 100, 200, 300, 400, 500, 500];
+/* THE REROLL IS A PRICE CURVE, NOT A COUNT CAP. Tom, 2026-08-31: "players
+   should be able to pay an increasing amount to reroll the rack thats fine".
+   This is deliberately a coin sink: post-Bumbleseal players sit on ~30,000
+   inert coins with the crate shop closed. So the count is unlimited within the
+   week and the PRICE is the ceiling: it starts at a quarter of a legendary
+   (RACK_RARITY_PRICE tops at 2,000), doubles per reroll, and holds at the cap.
+   Five rerolls cost 15,500; a 30,000 hoard funds about seven. The counter (and
+   with it the curve) resets weekly with the rack record (rr: 0 in rack()).
+   The old count-capped weekly ladder (one free + six paid, 2,000 total,
+   approved 2026-08-20) is superseded by the 2026-08-31 ruling, with ONE thing
+   kept: the free first reroll. Tom's ruling adds a paid increasing tail as an
+   endgame coin sink; it never asked to take away the freebie casual players
+   already had, so the ladder opens at 0 and the sink starts at rung two.
+   Reviewer-set from the shelf economy: five paid rerolls run 15,500 against
+   the ~30,000 endgame hoard the ticket measured. */
+export const RACK_REROLL_LADDER = [0, 500, 1000, 2000, 4000, 8000];
 
 // Same FNV-1a the dens turn over on, so the rack changes every Monday with no
-// server. The salt is the reroll counter: rerolling is a new deterministic draw
-// from the SAME theme pools, never a random pull out of the whole game.
+// server. The salt is the reroll counter, and since 2026-08-31 it moves ONLY
+// the rotating shelf below: the themed nine keep their week identity, so a
+// reroll can never fish a specific themed piece out of its 3-deep rungs.
 /* ============ THE SECOND HALF OF THE RACK: VARIETY ============
  * Tom, 2026-08-27: "we need to be offering for more for sale there now that we
  * have removed chests for sale from the game players are pissed and have no
@@ -233,19 +257,24 @@ export async function rack() {
     && (!Array.isArray(cur.rot) || cur.rotDay !== day);
   if (staleRot) {
     const rot = rackRotatePick(day, cur.salt || 0, cur.ids);
-    await kvSet('rack', { ...cur, rot, rotDay: day });
+    /* Spread the record the TRANSACTION reads, not the one read above it:
+       rerollRack claims `rr` on this same row, and writing `cur` whole handed a
+       spent reroll back, which is a rung of the price ladder for free. It
+       refuses outright once somebody else has already rotated today. */
+    await kvUpdate('rack', prev => (prev && prev.rotDay !== day) ? { ...prev, rot, rotDay: day } : undefined, null);
     cur.rot = rot; cur.rotDay = day;
   }
   if (cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length) {
-    /* THE ALLOWANCE IS WEEKLY, and the week check three lines up is the whole
+    /* THE COUNTER IS WEEKLY, and the week check three lines up is the whole
        mechanism: a record that survives to here belongs to THIS week, so its
-       reroll count stands, and a new week rebuilds the record from scratch with
-       rr: 0. It used to reset on rrDay, which made the first reroll free EVERY
-       DAY. Seven free full-rack draws a week against 3-deep rungs surfaces any
-       specific piece 94% of weeks (1 - (2/3)^7) for nothing, which is exactly
-       what the comment beside RACK_REROLL_LADDER says a reroll must not do:
-       "you spam it until your piece appears and the countdown becomes noise".
-       Tom approved weekly on 2026-08-20. `day` is no longer read here. */
+       reroll count (and with it the price curve) stands, and a new week
+       rebuilds the record from scratch with rr: 0. It used to reset on rrDay,
+       which handed back the cheap end of the ladder EVERY DAY; seven cheap
+       full-rack draws a week against 3-deep rungs surfaced any specific themed
+       piece 94% of weeks (1 - (2/3)^7). Since 2026-08-31 a reroll cannot touch
+       the themed nine at all (rerollRack keeps cur.ids), but the weekly reset
+       still matters: it is what makes the rising curve a curve rather than a
+       daily 500-coin flat rate. `day` is no longer read here. */
     return { ...cur, rr: cur.rr || 0 };
   }
   const ids = rackPick(week, 0);
@@ -254,7 +283,9 @@ export async function rack() {
   return st;
 }
 
-export function rackRerollCost(rr) { return RACK_REROLL_LADDER[rr] ?? null; }
+/* Clamped, never null: past the last rung the price holds at the cap, because
+   the count is unlimited and a null cost would brick the button mid-week. */
+export function rackRerollCost(rr) { return RACK_REROLL_LADDER[Math.min(rr, RACK_REROLL_LADDER.length - 1)]; }
 
 /* A SPEND, GUARDED THE SAME WAY A PAYOUT IS. kvUpdate does the read and the
    write in ONE IndexedDB transaction, so two taps racing cannot both take the
@@ -268,10 +299,24 @@ export async function rerollRack() {
      every breed threw ReferenceError at the last line. */
   const { dateKey } = await import('./nutrition.js');
   const day = dateKey();
-  if (st.rr >= RACK_REROLL_LADDER.length) return { ok: false, reason: 'limit' };
-  const cost = RACK_REROLL_LADDER[st.rr];
-  const bal = await coins();
-  if (bal < cost) return { ok: false, reason: 'coins', need: cost, have: bal };
+  const cost = rackRerollCost(st.rr);
+  /* Mirror buyRackItem's NaN-wallet guard: a curve edit that makes cost
+     undefined must be a dead button, never `bal < undefined` (false) followed
+     by a NaN wallet write. */
+  if (!Number.isFinite(cost)) return { ok: false, reason: 'price' };
+  /* SPEND FIRST, and spendCoins IS the right primitive here even though a
+     reroll is a price rung rather than an item. The rack kvUpdate below is
+     already an atomic claim on the counter, so two rerolls could never
+     double-charge each other; what the old read-then-coinsAdd still allowed was
+     a reroll and a BUY landing together, each passing its own stale read.
+     Measured on origin/main 2faa73b6: a 3,000-coin wallet paid for a 500-coin
+     reroll and a 3,000-coin piece at once and got both, 500 coins free.
+     The stale-PRICE case is covered by the same refund: `cost` is read off the
+     rr this caller saw, so if another reroll advances the counter first the
+     kvUpdate refuses on `used !== st.rr` and the money goes straight back,
+     rather than this caller buying a dear rung at a cheap rung's price. */
+  const left = await spendCoins(cost);
+  if (left === null) return { ok: false, reason: 'coins', need: cost, have: await coins() };
   const next = await kvUpdate('rack', cur => {
     /* Weekly, per above. The `cur.week !== st.week` guard on the next line is
        what makes reading cur.rr straight off the record safe: a record from
@@ -279,12 +324,15 @@ export async function rerollRack() {
     const used = (cur && cur.rr) || 0;
     if (!cur || cur.week !== st.week || used !== st.rr) return undefined;   // somebody else moved it
     const salt = (cur.salt || 0) + 1;
-    const ids = rackPick(cur.week, salt);
-    return { week: cur.week, salt, ids, rot: rackRotatePick(day, salt, ids), rotDay: day, rr: used + 1 };
+    /* ONLY THE ROTATING SHELF MOVES. `ids: cur.ids` is the 2026-08-31 ruling's
+       boundary: the themed nine keep their week identity, so a reroll can
+       never fish a specific themed piece out of its rung. The new salt seeds
+       the rotating draw alone, against the SAME themed ids, so the two shelves
+       stay disjoint and buyRackItem's indexOf pricing cannot cross. */
+    return { week: cur.week, salt, ids: cur.ids, rot: rackRotatePick(day, salt, cur.ids), rotDay: day, rr: used + 1 };
   });
-  if (!next) return { ok: false, reason: 'race' };
-  if (cost) await coinsAdd(-cost);
-  return { ok: true, cost, rr: next.rr, left: RACK_REROLL_LADDER.length - next.rr, coins: await coins() };
+  if (!next) { await coinsAdd(cost); return { ok: false, reason: 'race' }; }
+  return { ok: true, cost, rr: next.rr, coins: left };
 }
 
 /* THE AURA YOU BOUGHT IS THE AURA YOU WEAR. There is exactly one aura in the
@@ -359,16 +407,42 @@ export async function buyRackItem(artId, currency = 'coins') {
     : i >= 0
       ? (currency === 'dust' ? RACK_DUST[i] : RACK_POOLS[i][0])
       : (currency === 'dust' ? rar[1] : rar[0]);
+  /* A rung added to RACK_POOLS without its RACK_DUST twin makes price
+     undefined here; `bal < undefined` is false, so the sale would PASS and
+     write NaN into the wallet itself. Refuse before the receipt claim, so a
+     mispriced shelf is a dead button and never a corrupted balance. The
+     PARALLEL row in rack-rotate-audit pins the arrays; this line is for the
+     day that audit is wrong. */
+  if (!Number.isFinite(price)) return { ok: false, reason: 'not-stocked' };
   const already = aura ? (await wornAura()) === artId : (await ownedCosmeticIds()).has(artId);
   if (already) return { ok: false, reason: 'owned' };
-  const bal = currency === 'dust' ? await boneDust() : await coins();
-  if (bal < price) return { ok: false, reason: currency, need: price, have: bal };
+  /* THE MONEY MOVES FIRST, and it moves ATOMICALLY. This used to read the
+     balance, compare, claim the receipt and only then debit. The receipt made a
+     second tap on the SAME piece free, which is the case that was tested, and
+     hid the case that was not: two DIFFERENT pieces bought at once each pass
+     their own stale read, each claim their own receipt, and both debits clamp
+     at zero. Measured on origin/main 2faa73b6: a 3,000-coin wallet bought a
+     3,000 and a 2,400 piece together and kept both, so the rack handed over
+     2,400 coins of legendary for nothing. In dust, 160 bought 160 + 130.
+     Spending first cannot do that: spendCoins/spendDust refuse inside the
+     transaction and leave the balance byte-identical. The receipt still decides
+     WHO GETS THE PIECE, and the loser of that claim is refunded below, so the
+     "charged exactly once" guarantee the old ordering gave is unchanged. */
+  const left = currency === 'dust' ? await spendDust(price) : await spendCoins(price);
+  if (left === null) {
+    return { ok: false, reason: currency, need: price,
+      have: currency === 'dust' ? await boneDust() : await coins() };
+  }
   if (!(await db.addIfAbsent('kv', { k: `rackbuy:${artId}`, v: { ts: Date.now(), price, currency } }))) {
     /* THE RECEIPT EXISTS, WHICH IS NOT THE SAME AS OWNING THE PIECE.
-       The claim below is won BEFORE the money moves and before the grant, which
-       is what makes a double-spend impossible. The cost of that ordering is a
-       gap: if any write after the claim rejects (db.js rejects on abort, on
-       quota, and on the wipe-protocol freeze flag), the player has paid and owns
+       REFUND FIRST: this caller paid a moment ago and is not getting the piece,
+       because either somebody else's tap holds the receipt or the receipt is a
+       stuck one from an earlier run. Either way the money it just spent buys it
+       nothing, and the bounded give-back directly under the debit is what keeps
+       the total charged for this piece at exactly one price.
+       The gap the old ordering left is still here and still needs this branch:
+       if any write after the claim rejects (db.js rejects on abort, on quota,
+       and on the wipe-protocol freeze flag), the player has paid and owns
        nothing, and every later tap lands here. This branch used to answer
        `owned`, so the UI told them "Already in your Wardrobe" about a piece that
        was not in it, and js/loot.js:194 means that receipt is never removed, so
@@ -384,6 +458,7 @@ export async function buyRackItem(artId, currency = 'coins') {
        ownership record, so an aura receipt cannot be stuck. An aura that reads
        as unowned while a receipt exists is the separate worn-versus-bought bug
        in the try-on sheet, and paying it out here would be wrong. */
+    if (currency === 'dust') await boneDustAdd(price); else await coinsAdd(price);
     if (aura) return { ok: false, reason: 'owned' };
     if ((await ownedCosmeticIds()).has(artId)) return { ok: false, reason: 'owned' };
     await grantCosmetic(artId, 'rack');
@@ -400,7 +475,6 @@ export async function buyRackItem(artId, currency = 'coins') {
        recovered flag is only so the UI can refresh the tile it is looking at. */
     return { ok: false, reason: 'owned', recovered: true };
   }
-  if (currency === 'dust') await boneDustAdd(-price); else await coinsAdd(-price);
   try {
   if (aura) {
     await kvSet('wpnaura', artId);
@@ -471,21 +545,29 @@ export async function buyPetItem(id) {
   if (!isPet && !owned.has(PET_SHOP.pet.id)) return { ok: false, reason: 'needs-pet', pet: PET_SHOP.pet.id };
 
   const price = entry.coin;
-  const bal = await coins();
-  if (bal < price) return { ok: false, reason: 'coins', need: price, have: bal };
+  /* Spend first, atomically, then claim: same ordering as buyRackItem and for
+     the same measured reason. Her accessories are the worst case in the game
+     for the old shape, because they are the only shelf where several things are
+     affordable at once and every one of them is thousands of coins. Measured on
+     origin/main 2faa73b6: an 8,000-coin wallet bought an 8,000 and a 6,000
+     accessory together and kept both, 6,000 coins of goods free. */
+  const left = await spendCoins(price);
+  if (left === null) return { ok: false, reason: 'coins', need: price, have: await coins() };
 
   if (!(await db.addIfAbsent('kv', { k: `petbuy:${id}`, v: { ts: Date.now(), price } }))) {
-    /* Paid but never granted: finish it rather than answering 'owned' about
-       something the player does not have. Reported as 'owned' and not as a
-       fresh purchase, because this branch cannot tell a stuck receipt from a
-       losing caller in a race, and answering ok:true there makes one purchase
-       report several successes. Same reasoning as buyRackItem. */
+    /* Refund first: this caller paid a moment ago and is not getting the piece,
+       so the give-back bounded by the debit above keeps the total charged for it
+       at exactly one price. Then: paid but never granted, finish it rather than
+       answering 'owned' about something the player does not have. Reported as
+       'owned' and not as a fresh purchase, because this branch cannot tell a
+       stuck receipt from a losing caller in a race, and answering ok:true there
+       makes one purchase report several successes. Same as buyRackItem. */
+    await coinsAdd(price);
     if ((await ownedCosmeticIds()).has(id)) return { ok: false, reason: 'owned' };
     await grantCosmetic(id, 'petshop');
     if (isPet) await deliverPet(id);
     return { ok: false, reason: 'owned', recovered: true };
   }
-  await coinsAdd(-price);
   try {
     await grantCosmetic(id, 'petshop');
     if (isPet) await deliverPet(id);
@@ -493,6 +575,97 @@ export async function buyPetItem(id) {
     return { ok: false, reason: 'write', label: art.name };
   }
   return { ok: true, label: art.name, cost: price, isPet, coins: await coins() };
+}
+
+/* THE MYSTERY EGG, BACK ON DUST, ONCE A WEEK.
+ *
+ * The Bone Dust shop sold this egg for 60 dust, unbounded, until S0 closed the
+ * whole shop on 2026-08-25 (commit 23de102b). Tom ruled on 2026-08-31 that the
+ * egg's removal was unintentional: dust needs a deterministic egg source so a
+ * player who cannot walk enough for step milestones can still hatch. The
+ * historical price (60) is kept; the historical bound (none) is NOT, it is one
+ * per ISO week, because the old shop predates the exploit sweeps and an
+ * unbounded dust-to-pet pump is exactly the class they closed.
+ *
+ *   TRANSITION  this week's Mystery Egg goes from unbought to bought. Once per
+ *               ISO week, and the week key is the whole mechanism.
+ *   AUTHORITY   db.addIfAbsent on the kv row `dustegg:<isoWeek>`, claimed
+ *               BEFORE the dust moves, same ordering as buyRackItem/buyPetItem.
+ *   NO-OP       a second attempt in the same week loses the claim and returns
+ *               reason 'limit', having deducted nothing.
+ *
+ * THE GRANTED FLAG replaces what ownedCosmeticIds() is to the rack's recovery
+ * branch. A cosmetic is owned forever, so "receipt exists but not owned" proves
+ * a stuck write; an egg HATCHES and its inv row is deleted, so inventory absence
+ * proves nothing. The receipt itself carries `granted`, flipped by a CONDITIONAL
+ * kvUpdate (one transaction, one winner) so a retry after a failed write grants
+ * exactly one egg and a double-tap racing the recovery cannot grant two. */
+export const DUST_EGG = { label: 'Mystery Egg', cost: 60, desc: 'Incubate, then hatch a pet' };
+
+const dustEggKey = async () => {
+  // lazy import: poi.js imports this module, so a top-level import is a cycle
+  const { isoWeekKey } = await import('./poi.js');
+  return `dustegg:${isoWeekKey(new Date())}`;
+};
+
+/* Bought AND granted this week. `granted` and not mere receipt existence, so a
+   paid-but-stuck purchase keeps its shop cell pressable and the next tap runs
+   the recovery branch below instead of reading "yours" over a missing egg. */
+export async function dustEggBought() {
+  const r = await kvGet(await dustEggKey(), null);
+  return !!(r && r.granted);
+}
+
+export async function buyDustEgg() {
+  const key = await dustEggKey();
+  const price = DUST_EGG.cost;
+  if (!Number.isFinite(price)) return { ok: false, reason: 'not-stocked' };
+  /* Spend first, atomically, same ordering as buyRackItem. The weekly receipt
+     already made a second EGG impossible, so what this closes is the egg landing
+     alongside another dust spend: two stale reads, two clamped debits, dust that
+     was never there. */
+  const left = await spendDust(price);
+  if (left === null) return { ok: false, reason: 'dust', need: price, have: await boneDust() };
+  if (!(await db.addIfAbsent('kv', { k: key, v: { ts: Date.now(), price } }))) {
+    /* Refund first: this caller paid and is not getting THIS week's egg from
+       this branch unless it wins the flip below, and if it does win it is paying
+       for the stuck receipt's egg, which was already charged for. Either way the
+       dust it just spent buys it nothing.
+       The receipt is down: this week's egg was already bought, OR a write failed
+       after payment and the egg never landed. The conditional kvUpdate is both
+       the test and the claim in one transaction: exactly one caller ever flips
+       granted, so a losing caller cannot re-grant. */
+    await boneDustAdd(price);
+    let won;
+    try { won = !!(await kvUpdate(key, v => v && !v.granted ? { ...v, granted: true } : undefined)); }
+    catch { won = false; }
+    if (!won) return { ok: false, reason: 'limit' };
+    try { await grantEgg('dust'); }
+    catch {
+      /* Reopen the recovery for the next tap; best-effort, because the world
+         where this write also fails is the world the receipt exists for. */
+      try { await kvUpdate(key, v => v ? { ...v, granted: false } : undefined); } catch { /* say so below */ }
+      return { ok: false, reason: 'write', label: DUST_EGG.label };
+    }
+    /* 'limit', not ok:true: this branch cannot tell a stuck receipt from a
+       losing caller in a race (same reasoning as buyRackItem), and by the time
+       it returns the egg really has been granted for this week. */
+    return { ok: false, reason: 'limit', recovered: true };
+  }
+  /* Flip granted BEFORE the grant, conditionally. If a concurrent recovery call
+     already flipped it (receipt from a prior failed run), it also granted, so
+     this caller must not grant a second egg for one week's payment. */
+  let mine;
+  try { mine = !!(await kvUpdate(key, v => v && !v.granted ? { ...v, granted: true } : undefined)); }
+  catch { return { ok: false, reason: 'write', label: DUST_EGG.label }; }
+  if (mine) {
+    try { await grantEgg('dust'); }
+    catch {
+      try { await kvUpdate(key, v => v ? { ...v, granted: false } : undefined); } catch { /* recovery stays open best-effort */ }
+      return { ok: false, reason: 'write', label: DUST_EGG.label };
+    }
+  }
+  return { ok: true, label: DUST_EGG.label, cost: price, dust: await boneDust() };
 }
 
 /* WHAT THE PET IS WEARING. One kv row, `petWear`, shaped { slotCode: itemId }:
@@ -556,6 +729,36 @@ function rng() {
    unchanged, it just happens inside the transaction now. */
 export async function coins() { return (await kvGet('coins', 0)) || 0; }
 export async function coinsAdd(n) { return kvBump('coins', n); }
+
+/* THE ATOMIC SPEND, and it is the only honest way to take money in this file.
+   Every buy used to read the balance, compare it to the price, and THEN call
+   coinsAdd(-price) in a second transaction. That is check-then-act: concurrent
+   callers all pass the same stale read, and because kvBump clamps at min 0 the
+   surplus debits cost NOTHING. Measured on origin/main 13583e42: three
+   overlapping buyShopItem('vigor') calls on a 90-coin wallet returned ok three
+   times, granted three 90-coin Draughts and charged 90. Past the first item the
+   goods were free, and Vigor is Pit energy, so thumb speed bought power.
+   Deciding affordability and taking the money inside ONE kv transaction is the
+   shape that cannot do that: kvUpdate writes nothing when fn returns undefined,
+   so a wallet that cannot cover the price is left byte-identical.
+   Returns the REAL post-spend balance, or null for "could not afford it". The
+   balance is returned rather than re-read because a re-read can already carry
+   somebody else's concurrent spend, and a receipt should say what this purchase
+   left behind. */
+export async function spendCoins(cost) { return spendBalance('coins', cost); }
+/* THE SAME THING FOR BONE DUST, because the rack takes both and a shop that is
+   exact in one currency and sloppy in the other is just a slower version of the
+   same bug. Measured on origin/main 2faa73b6: two different rack pieces bought
+   concurrently for 160 and 130 dust, on 160 dust, delivered both and left 0. */
+export async function spendDust(cost) { return spendBalance('bonedust', cost); }
+async function spendBalance(k, cost) {
+  if (!Number.isFinite(cost) || cost < 0) return null;
+  const left = await kvUpdate(k, cur => {
+    const bal = Number(cur) || 0;
+    return bal < cost ? undefined : bal - cost;
+  }, 0);
+  return left === undefined ? null : left;
+}
 
 /* ---------- inventory ---------- */
 export async function inventory() { return db.all('inv'); }
@@ -790,6 +993,17 @@ export async function repairEggAnchors() {
 // obtainable even after you own every pet: a shiny roll on a dupe upgrades an
 // owned pet to shiny instead of paying coins.
 export const SHINY_CHANCE = 0.03;
+/* WHICH SPECIES HAVE SHINY ART. The shiny render path builds
+   assets/bh/C/shiny/<id>.png, and minting a shiny instance for a species with
+   no file there hands the player a broken image on what may be the most
+   premium item in the game (Bumbleseal is 50,000 coins and 1% of eggs; her
+   shiny would be 1 in 3,333). A browser cannot read the folder, so this list
+   is the folder's contents by hand, and pet-pool-audit pins the two to each
+   other in both directions: an id here without art fails, and NEW SHINY ART
+   SHIPPED WITHOUT EXTENDING THIS LIST FAILS TOO, which is what lets a future
+   shiny C6 turn on by adding one file and one id. CX is absent on purpose:
+   the amethyst art IS its look (the render guards say the same). */
+export const SHINY_ART = ['C1', 'C2', 'C3', 'C4', 'C5'];
 
 /* ONE PET POOL, TWO CALLERS, AND THAT IS THE POINT.
  *
@@ -826,7 +1040,9 @@ export function pickRandomPet(owned) {
 }
 
 // Crack a ready egg: rolls a PET (slot C). A NEW species if you're missing any
-// (rarity-weighted, uncommon floor), otherwise a DUPLICATE that stacks in your
+// (commons drop out of the pool and the pick is UNIFORM over what survives;
+// pickRandomPet's own doc is the authority, this line once claimed a rarity
+// weighting that never existed), otherwise a DUPLICATE that stacks in your
 // crew as breeding stock (v126: no more coins dead-end when you own them all).
 export async function hatchEgg(invId) {
   const inv = await inventory();
@@ -840,8 +1056,13 @@ export async function hatchEgg(invId) {
      hands the row to exactly one caller; anybody else sees it already gone. */
   if (!(await db.take('inv', row.id))) return { ready: false };
   const owned = await ownedCosmeticIds();
-  const isShiny = rng() < SHINY_CHANCE;
+  /* The roll stays UNCONDITIONAL so the rng stream is identical to before; only
+     the RESULT is gated. A species outside SHINY_ART must never mint shiny:
+     the instance is persistent state, and state with no art is a broken image
+     on every screen that honours it (see SHINY_ART above). */
+  const shinyRoll = rng() < SHINY_CHANCE;
   const pick = pickRandomPet(owned);
+  const isShiny = shinyRoll && SHINY_ART.includes(pick.id);
   await addPetInstance(pick.id, { shiny: isShiny });
   /* DUPE IS ASKED OF THE PICK, not of whether a fresh species existed. It drives
      one line of copy ("ANOTHER ONE!" against "IT HATCHED!") and the two agreed
@@ -1630,16 +1851,22 @@ export async function openCrate(invId) {
 export async function buyShopItem(shopId) {
   const s = SHOP.find(x => x.id === shopId);
   if (!s) throw new Error('unknown item');
-  const c = await coins();
-  if (c < s.cost) return { ok: false, reason: 'coins', need: s.cost, have: c };
-  await coinsAdd(-s.cost);
+  /* THE MONEY DECIDES, not a read of the money. A consumable is bought over and
+     over, so there is no per-item receipt to claim the way buyRackItem does; the
+     debit itself has to be the gate. spendCoins refuses inside the transaction,
+     which is why the grant below can only ever follow a real payment. An earlier
+     pass met this same double-tap and fixed only the TOAST (the `owned` count
+     the comment below explains); the race underneath it was never touched, so
+     the wallet went on minting free Draughts. */
+  const left = await spendCoins(s.cost);
+  if (left === null) return { ok: false, reason: 'coins', need: s.cost, have: await coins() };
   await grantConsumable(shopId, 'shop');
   // Report WHAT was bought, what it cost, the new balance and how many you now
   // hold. The old bare {ok:true} left the UI with nothing to say beyond
   // "Purchased", which reads as a no-op when you tap twice, so people kept
   // tapping and drained their coins without ever seeing a purchase land.
   const owned = await consumableCount(shopId);
-  return { ok: true, label: s.label, cost: s.cost, coins: await coins(), owned };
+  return { ok: true, label: s.label, cost: s.cost, coins: left, owned };
 }
 
 /* ---------- the Bone Merchant's closing payout ----------
@@ -1771,13 +1998,31 @@ export async function paidLooks() {
     const k = paidKey(slot, artId);
     if (artId !== TRANSMOG_HIDE && !set.has(k)) { set.add(k); add.push(k); }
   }
-  if (add.length) await kvSet('paidlooks', [...stored, ...add]);
+  /* kvUpdate, not kvSet: `stored` was read before the transmogMap await, and
+     markPaid CLAIMS on this same row. Writing the list whole dropped a receipt
+     markPaid had just banked, and a lost receipt bills the player dust a second
+     time for a look they already own. */
+  if (add.length) await kvUpdate('paidlooks', cur => [...new Set([...(cur || []), ...add])], []);
   return set;
 }
+/* THE PAID-LOOK LEDGER, and it is a CLAIM, not a note. It returns true only to
+   the caller that actually added the key, which is what lets applyTransmog use
+   it as a receipt: whoever loses gets the dust back rather than paying a second
+   time for a look somebody else's tap just banked.
+   kvUpdate rather than the old kvGet/push/kvSet, which lost one of two
+   concurrent additions every time it interleaved. A dropped entry here is not
+   cosmetic: paidlooks is what makes a bought look free to wear forever, so
+   losing one charges the player again for something they own. */
 export async function markPaid(slot, artId) {
-  const list = (await kvGet('paidlooks', [])) || [];
   const k = paidKey(slot, artId);
-  if (!list.includes(k)) { list.push(k); await kvSet('paidlooks', list); }
+  let claimed = false;
+  await kvUpdate('paidlooks', cur => {
+    const list = Array.isArray(cur) ? cur : [];
+    if (list.includes(k)) return undefined;          // already banked: write nothing
+    claimed = true;
+    return [...list, k];
+  }, []);
+  return claimed;
 }
 // What this slot change would cost right now (0 if free or already bought).
 /* A LOOK WITH NO STATS BEHIND IT IS FREE. Tom, 2026-08-11: "you can transmog
@@ -1810,22 +2055,43 @@ export async function applyTransmog(slot, artId) {
     return { ok: true, cost: 0, already: true };
   }
   const cost = await transmogPrice(slot, artId);
+  /* SPEND, THEN CLAIM THE LOOK, THEN REFUND IF THE CLAIM WAS ALREADY WON.
+     There is no per-item receipt here the way the rack has one, but there does
+     not need to be a new one: markPaid IS the receipt, because a banked look is
+     free to wear forever after. So this is the buyDropItem shape with the
+     paid-look ledger playing the part grantCosmetic plays there.
+     Both halves of the old shape were measured broken on origin/main 2faa73b6.
+     Two concurrent applies of the SAME look at 12 dust took 24 and applied one,
+     charging twice for one change; and the read-then-debit overdrew against any
+     other dust spend the same way the rack did. */
+  let paid = 0;
   if (cost > 0) {
-    const bal = await boneDust();
-    if (bal < cost) return { ok: false, reason: 'dust', need: cost, have: bal };
-    await boneDustAdd(-cost);
+    const left = await spendDust(cost);
+    if (left === null) return { ok: false, reason: 'dust', need: cost, have: await boneDust() };
+    paid = cost;
   }
-  if (artId !== TRANSMOG_HIDE) await markPaid(slot, artId);
-  tm[slot] = artId;
-  await kvSet('transmog', tm);
-  return { ok: true, cost };
+  if (artId !== TRANSMOG_HIDE && !(await markPaid(slot, artId)) && paid) {
+    await boneDustAdd(paid);   // somebody else's tap banked this look: give it back
+    paid = 0;
+  }
+  /* kvUpdate, not read-mutate-kvSet: `tm` was read before the spend, so writing
+     it whole put back whatever another slot's concurrent apply had just set. */
+  await kvUpdate('transmog', cur => ({ ...(cur || {}), [slot]: artId }), {});
+  return { ok: true, cost: paid, already: cost > 0 && !paid };
 }
 
+/* Drop ONE slot's override, in one transaction, for the reason applyTransmog
+   states above: a whole-map write puts back whatever another slot's concurrent
+   apply had just set. */
+const dropTransmog = slot => kvUpdate('transmog', cur => {
+  const t = { ...(cur || {}) };
+  if (t[slot] == null) return undefined;
+  delete t[slot];
+  return t;
+}, {});
+
 export async function clearTransmog(slot) {
-  const tm = await transmogMap();
-  if (!(slot in tm)) return { ok: true, cost: 0 };
-  delete tm[slot];
-  await kvSet('transmog', tm);
+  await dropTransmog(slot);
   return { ok: true, cost: 0 };
 }
 
@@ -2074,8 +2340,7 @@ export async function equip(slot, itemId, { keepGear = false } = {}) {
        gear, which never cleared it) would suddenly reapply and silently change how an
        existing player looks the moment they updated. A look you chose should only
        change when you choose. markPaid means re-picking it later is still free. */
-    const tm = await transmogMap();
-    if (tm[slot] != null) { delete tm[slot]; await kvSet('transmog', tm); }
+    await dropTransmog(slot);
   }
   return eq;
 }

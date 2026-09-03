@@ -1,9 +1,14 @@
 /* The FAQ has to be reachable, readable and TRUE. The failure that matters is not a
  * crash: it is copy that drifts from what the engine does, or a fold nobody can open. */
-import { boot, sleep } from './godmode.js';
-const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
+import { boot, sleep, shotDir } from './godmode.js';
+const DIR = shotDir('tally-shots');  // machine-local, see godmode shotDir
 const base = process.argv[2] || process.env.URL;
-const { browser, page } = await boot(base);
+/* 'shell', not 'new': on this Mac Page.captureScreenshot never returns under
+   headless 'new', and this suite takes a screenshot. Measured 2026-09-03 on a
+   4-cell probe (headless new|shell x captureBeyondViewport default|false):
+   'new' hit the 45s protocolTimeout on BOTH cbv settings, 'shell' returned in
+   234ms. So the camera was the fault, not the clip. See boot(). */
+const { browser, page } = await boot(base, { headless: process.env.HEADLESS_MODE || 'shell' });
 let bad = 0;
 /* DYING IS WORSE THAN FAILING. This suite crashed inside an evaluate on a selector
    that had been renamed away, so it produced a stack and NOT ONE assertion: the gate
@@ -115,8 +120,6 @@ check('and does NOT still tell them to go buy one', !weapons.stillSelling);
 await guard('shooting the FAQ card', async () => {
   const el = await page.$('.faq-card');
   if (!el) throw new Error('no .faq-card to shoot');
-  const { mkdirSync } = await import('node:fs');
-  mkdirSync(DIR, { recursive: true });   // the dir belongs to another session's scratchpad
   await el.screenshot({ path: `${DIR}/build-faq.png` });
   console.log('shot build-faq');
 });

@@ -187,6 +187,16 @@ async function ensureIdentity() {
     createdAt: Date.now(),
   };
   await kvSet('identity', id);
+  /* WHOSE KEY THIS IS, recorded where the answer is still known. A key MINTED
+     here has never been registered anywhere, so no server account and no cloud
+     backup can exist for it; a key recovered from the vault above may own both.
+     Both look identical afterwards (the recovery branch writes kv 'identity'
+     too), so by the next boot nothing could tell them apart, and bootSync was
+     calling a failed first registration a REINSTALL and warning a brand-new
+     install about a backup it has never had. Reads in bootSync. Never cleared:
+     a reinstall wipes the container, so a mark that survives is this device's
+     own, and adoptIdentity only lands after a register that succeeded. */
+  await kvSet('idMinted', Date.now());
   await mirrorIdentity(id);   // no-ops if the vault is unreadable or holds someone else
   return id;
 }
@@ -210,14 +220,85 @@ async function backupKey() {
   return crypto.subtle.importKey('jwk', id.aesJwk, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
 
-const u8ToB64 = u8 => btoa(String.fromCharCode(...u8));
+/* CHUNKED, BECAUSE THE SPREAD WAS A SILENT CEILING ON EVERY MATURE SAVE.
+   This was `btoa(String.fromCharCode(...u8))`, which passes the WHOLE ciphertext
+   as individual arguments to one call. That blows the engine's call stack, and
+   the throw is a RangeError that pushBackup's blanket catch turns into a plain
+   `return false`: no toast, no log, no retry, `backupAt` never moves. So every
+   push path (autoSync at boot and resume, both Go Online buttons, the cloud
+   toggle) failed with ZERO WORDS forever once a save got big enough, which is a
+   few weeks of heavy play. The backup-key discipline above was protecting a
+   backup that a mature save never got to write.
+
+   It is a STACK limit, not a fixed argument cap, so it is not even a stable
+   cliff: measured at 109,841 bytes here and ~124,385 in the reporter's Chromium,
+   and it moves with stack depth, so the same save can push on one device and
+   fail on another, or fail only sometimes.
+
+   0x8000 per chunk keeps each apply() call three orders of magnitude clear of
+   any engine's limit and is the conventional size for exactly this. The decode
+   side (b64ToU8 below) never had the problem: it maps, it does not spread.
+   tests/backup-encoder-audit.mjs, proven red against the spread. */
+const B64_CHUNK = 0x8000;
+const u8ToB64 = u8 => {
+  let s = '';
+  for (let i = 0; i < u8.length; i += B64_CHUNK) s += String.fromCharCode.apply(null, u8.subarray(i, i + B64_CHUNK));
+  return btoa(s);
+};
 const b64ToU8 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+/* GZIP THE SNAPSHOT, BECAUSE A MATURE SAVE RUNS OUT OF ROOM IN THE ROW.
+   The blob the encoder above has to carry is one D1 column, and the server
+   archives the REPLACED blob into daily_blob on the SAME row when it promotes a
+   daily (server/src/index.js UPSERT_BACKUP). So an established account stores
+   live + daily together and the binding constraint is the per-ROW limit, not the
+   per-value one: measured on the local emulator 2026-09-01, a 2,174,864-byte
+   blob stores fine as a first push and the SAME save 413s on the re-push once
+   the daily slot is populated. Effective ceiling on a real account is therefore
+   about exportAll 0.8MB, which a long-term player reaches. It fails honestly
+   ('too-large' -> "outgrown its slot"), but honest is not the same as fixed.
+
+   ORDER MATTERS AND IT IS NOT NEGOTIABLE: JSON -> gzip -> encrypt -> base64.
+   AES-GCM output is indistinguishable from random, so compressing AFTER
+   encrypting spends the CPU and saves nothing. The snapshot is JSON with seven
+   stores of repeated keys, which is the best case gzip has.
+
+   HOW A READER TELLS THE TWO APART: the gzip magic 1f 8b on the decrypted
+   plaintext. Every backup ever written before this line was JSON.stringify of an
+   OBJECT, so byte 0 is always '{' (0x7b) and the two can never be confused. That
+   is why there is no version field: adding one would need the old clients to
+   already understand it, and they do not. Every uncompressed blob sitting in the
+   cloud right now still restores, which matters more than the ceiling does.
+
+   CompressionStream IS NOT EVERYWHERE. It arrived in Safari 16.4 and this app's
+   iOS deployment target is 15.0 (native/ios/App/App.xcodeproj), so a real device
+   in the fleet can be running this code without it. Such a device pushes
+   uncompressed, which every reader still accepts. It also cannot READ a
+   compressed blob: that throws and pullBackup reports 'decrypt'.
+   ponytail: known ceiling, an iOS 15 restore of a compressed blob gets the
+   wrong failure copy. Give it its own reason only if anyone actually hits it. */
+const through = async (u8, stream) =>
+  new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(stream)).arrayBuffer());
 
 // Encrypt an object -> base64(iv(12) || ciphertext). Server can never read this.
 async function encryptBackup(obj) {
   const key = await backupKey();
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const pt = new TextEncoder().encode(JSON.stringify(obj));
+  let pt = new TextEncoder().encode(JSON.stringify(obj));
+  /* STAGED ON PURPOSE: THIS RELEASE READS THE FORMAT AND DOES NOT WRITE IT.
+     The line that compresses is below, commented out, and it is the whole of
+     the write side. It stays off until the native builds in the field can READ
+     a compressed blob, because the store binary BUNDLES a frozen copy of this
+     web build: a player whose PWA pushed a compressed backup and who then
+     installs an older bundled build gets a device that cannot read its own
+     backup, and autoSync would push that device's empty save over the good
+     blob. That is save loss, and it is not worth a size ceiling that already
+     fails honestly. iOS 15 cannot read the format at all (CompressionStream is
+     Safari 16.4+), which is the same argument twice.
+     TO FINISH THE ROLLOUT: uncomment the line, once the oldest build a player
+     can still be running understands gzip. Nothing else changes; the reader,
+     the sniff and every test are already here and already green. */
+  // if (typeof CompressionStream === 'function') pt = await through(pt, new CompressionStream('gzip'));
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt));
   const out = new Uint8Array(iv.length + ct.length);
   out.set(iv, 0); out.set(ct, iv.length);
@@ -227,7 +308,8 @@ async function decryptBackup(b64s) {
   const key = await backupKey();
   const buf = b64ToU8(b64s);
   const iv = buf.slice(0, 12), ct = buf.slice(12);
-  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+  let pt = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct));
+  if (pt[0] === 0x1f && pt[1] === 0x8b) pt = await through(pt, new DecompressionStream('gzip'));
   return JSON.parse(new TextDecoder().decode(pt));
 }
 
@@ -316,21 +398,68 @@ export async function renameOwed() {
   } catch { return null; }
 }
 
+/* A ROW A DRIVEN BROWSER MAKES SAYS SO. 2026-09-02.
+ *
+ * tests/crew-pair-audit.mjs is the only suite that drives the REAL client
+ * against a REAL Worker (it spawns wrangler and points the app at it with the
+ * ?api= hook), so its accounts are made by this function and not by any fetch()
+ * a test file wrote. tests/live-api-register-lint.mjs cannot see them: it scans
+ * register calls in test SOURCE, and this one is the app's. Those rows were
+ * therefore the one kind of test account with no mark of any sort on it.
+ *
+ * Webdriver-gated, the same pattern as __setApiDeadline / __testFriends /
+ * __testApplyGrant above. It cannot reach a real user: navigator.webdriver is
+ * set by an automation driver and by nothing else, so in a player's browser
+ * this spread is empty and the body posted is byte-identical to before.
+ *
+ * NOT `test: true`, deliberately. That is the suppression switch, and an
+ * invisible account cannot become a friend (requestFriendship refuses a flagged
+ * pair), which is the thing crew-pair-audit exists to grade. `run` marks the row
+ * without changing what the server will show, so the audit still measures the
+ * path a player takes.
+ */
+const driven = () => typeof navigator !== 'undefined' && navigator.webdriver === true;
+
+// Register a pubkey with the server WITHOUT touching local state. Split out of
+// goOnline so adoptIdentity can validate a restored bundle against the server
+// BEFORE swapping the device identity (a register that fails after the swap
+// left a half-adopted device: signed as the new account, none of its data).
+// Never throws: a dropped connection is { ok:false }, same as every sibling.
+async function registerKey(id) {
+  const base = await apiBase();
+  if (!base) return { ok: false, reason: 'no-api' };
+  try {
+    const r = await apiFetch(base + '/register', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ pubkey: id.pubJwk, ...(driven() ? { run: `webdriver ${new Date().toISOString()}` } : {}) }),
+    });
+    if (!r.ok) return { ok: false, reason: 'register-failed', status: r.status };
+    return { ok: true, me: await r.json() };
+  } catch { return { ok: false, reason: 'network' }; }
+}
+
 // Opt in: register this device's pubkey. Re-running (or restoring a backup)
 // returns the same account.
 export async function goOnline() {
-  const base = await apiBase();
-  if (!base) return { ok: false, reason: 'no-api' };
   const id = await ensureIdentity();
-  const r = await apiFetch(base + '/register', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ pubkey: id.pubJwk }),
-  });
-  if (!r.ok) return { ok: false, reason: 'register-failed', status: r.status };
-  const me = await r.json();
+  const r = await registerKey(id);
+  if (!r.ok) return r;
+  const me = r.me;
   await kvSet('social', { playerId: me.playerId, handle: me.handle, friendCode: me.friendCode, name: me.name || null, onlineAt: Date.now() });
   return { ok: true, me };
+}
+
+/* Delete the server account (App Store 5.1.1(v)). Server-first, on purpose:
+   the caller must only wipe local data AFTER this answers ok, so an offline
+   tap aborts with everything intact. { ok:false } covers no-network, timeout
+   and any non-2xx alike; the caller shows the normal error toast. */
+export async function deleteAccount() {
+  try {
+    const r = await signedFetch('POST', '/account/delete', null);
+    const d = await r.json().catch(() => ({}));
+    return { ok: r.ok && d.ok === true };
+  } catch { return { ok: false }; }
 }
 
 // Your display name for the UI: the curated name if set, else the bone-name.
@@ -393,25 +522,44 @@ export async function friendAdd(token) { return friendship('/friends/add', { tok
 export async function acceptFriend(id) { try { return (await signedFetch('POST', '/friends/accept', { id })).ok; } catch { return false; } }
 export async function removeFriend(id) { try { return (await signedFetch('POST', '/friends/remove', { id })).ok; } catch { return false; } }
 
-// Send a gift to a friend. mode 'free' = the once-a-day server-rolled gift;
-// mode 'spend' = your own coins (the CALLER deducts locally first). The gift is
-// delivered as a grant the friend reveals on their next open. Returns
-// { ok, status, reward?, code? }.
-export async function sendGift(toId, mode, coins) {
+/* Send a gift to a friend. mode 'free' = the once-a-day server-rolled gift;
+   mode 'spend' = your own coins (the CALLER deducts locally first). The gift is
+   delivered as a grant the friend reveals on their next open. Returns
+   { ok, status, reward?, duplicate?, code? }.
+   `ck` IS THE TAP, NOT THE REQUEST, exactly as it is for a cheer, and here it
+   is coins rather than confetti: the caller has already spent locally, and it
+   refunds itself on anything but ok. A spend gift that was DELIVERED and lost
+   its answer therefore refunds the sender while the friend keeps the coins, and
+   a retry that also succeeds charges twice for one gift. One key per amount
+   chip, reused by every retry of it, and the server answers a retry ok. */
+export async function sendGift(toId, mode, coins, ck = null) {
   try {
-    const r = await signedFetch('POST', '/gift', { to: toId, mode, coins });
+    const r = await signedFetch('POST', '/gift', { to: toId, mode, coins, ck: ck || newSendKey() });
     const d = await r.json().catch(() => ({}));
     return { ok: r.ok, status: r.status, ...d };
   } catch { return { ok: false }; }
 }
-// Send a preset cheer (index into the client-side CHEERS list; no free text).
-export async function sendCheer(toId, cheer) {
+/* Send a preset cheer (index into the client-side CHEERS list; no free text).
+   `ck` IS THE TAP, NOT THE REQUEST. A cheer send that loses its answer (the
+   12s deadline above fires, or the socket goes quiet) re-arms the chips and the
+   player taps again for the same cheer they already sent; without a key the
+   server counts a second row and the friend gets two. The caller mints one key
+   per TAP and passes the same one to every retry of it, so the server's
+   INSERT OR IGNORE collapses them and answers ok. Minted here when the caller
+   does not pass one, so a fresh tap is never accidentally deduped against the
+   previous one. */
+export async function sendCheer(toId, cheer, ck = null) {
   try {
-    const r = await signedFetch('POST', '/cheer', { to: toId, cheer });
+    const r = await signedFetch('POST', '/cheer', { to: toId, cheer, ck: ck || newSendKey() });
     const d = await r.json().catch(() => ({}));
     return { ok: r.ok, status: r.status, ...d };
   } catch { return { ok: false }; }
 }
+// One idempotency key for one player action, shared by cheers and gifts (it was
+// newCheerKey until gifts needed the same thing, and one minter called
+// `newCheerKey` from the gift sheet is the sort of thing nobody reads twice).
+// [a-zA-Z0-9_-]{1,32}, which is exactly what the server keeps of it.
+export const newSendKey = () => crypto.randomUUID().replace(/-/g, '').slice(0, 24);
 
 // Private, local-only nicknames: what YOU call a friend so a generic bone-name
 // is memorable ("Bone Guy" -> "Coach Mike"). Stored on-device in kv, so it's
@@ -580,8 +728,23 @@ export async function leaderboard() {
 
 /* ---------------- profile snapshot up ---------------- */
 // snapshot comes from app.js (it owns buildFighter etc.); social.js only ships it
+/* WHAT THE SERVER CLAMPED, KEPT WHERE A DEVELOPER CAN SEE IT.
+   /profile answers with `bounded`, naming every field it pulled down to its
+   ceiling, and the handler says why (server/src/index.js): the list is empty on
+   every honest sync, so a client that starts seeing entries is telling us
+   something, a real cheat or one of our own bugs. This returned r.ok and dropped
+   the body on the floor, so the one signal the server sends about a lying client
+   was unreadable on the only machine that could have carried it home.
+   STICKY AND DATED, not last-wins-including-empty: one clamped sync followed by
+   a clean one is still exactly the event worth knowing about, and clearing it
+   would hide it. Rides out on the Settings diagnostics line, which is a note for
+   us and not a message for the player. 2026-09-02. */
 export async function syncProfile(snapshot, appV = '') {
   const r = await signedFetch('PUT', '/profile', { snapshot, appV });
+  if (r.ok) {
+    const d = await r.json().catch(() => ({}));
+    if (d && Array.isArray(d.bounded) && d.bounded.length) await kvSet('profileBounded', { at: Date.now(), fields: d.bounded });
+  }
   return r.ok;
 }
 
@@ -607,12 +770,63 @@ export async function pushBackup(appV = '') {
        turning backup back on still pushes immediately.
        tests/cloud-optout-audit.mjs, proven red against the missing guard. */
     if (await kvGet('cloudOff', false)) return false;
+    /* MINT THE KEY BEFORE THE SNAPSHOT. encryptBackup() below lazily mints
+       aesJwk into kv 'identity' AFTER exportAll has already read kv, so a
+       device's FIRST-EVER blob embedded an identity row WITHOUT the backup
+       key. A second device restoring that blob by phrase then merged the
+       keyless identity over its own good one (see importAll's DEVICE_KV
+       guard), minted a fresh key on its next push, and the two devices
+       encrypted under DIFFERENT keys forever after: the cloud copy's
+       decryptability flipped with whoever pushed last. One extra call to the
+       same lazy function; everything after it is unchanged. */
+    await backupKey();
     const snapshot = await exportAll();
     const blob = await encryptBackup(snapshot);
     const r = await signedFetch('PUT', '/backup', { blob, appV });
-    if (r.ok) await kvSet('backupAt', Date.now());
-    return r.ok;
-  } catch { return false; }
+    /* A 200 IS NOT AN ACKNOWLEDGEMENT. This read `if (r.ok)` alone, so anything
+       that answers 200 counted as a stored save: a captive portal's login page,
+       a proxy interstitial, a truncated body. `backupAt` was stamped to now and
+       any standing `backupFail` was cleared, so Settings reported a fresh backup
+       and cloudTroubleNotice stayed quiet for a save that never left the phone.
+       That is the one path where this app says the OPPOSITE of the truth, which
+       is worse than the silence the rest of this function was written to fix.
+       `{ ok: true, updatedAt }` is what every success return of PUT /backup
+       sends (server/src/index.js, all three of them: the upsert, the no-daily
+       fallback and nothing else), so `d.ok === true` is the server's own word
+       and not a stricter contract than it honours. Same shape deleteAccount
+       already demands before it lets the caller wipe the phone.
+       'bad-body' renders through cloudFailLine's generic line, which is the
+       honest one here: nobody can name the portal, and it really does heal by
+       retrying on a real network. No new failure surface. */
+    if (r.ok) {
+      const d = await r.json().catch(() => ({}));
+      if (d && d.ok === true) { await kvSet('backupAt', Date.now()); await kvSet('backupFail', null); return true; }
+      await kvSet('backupFail', { at: Date.now(), reason: 'bad-body' });
+      return false;
+    }
+    /* NAME THE FAILURE. Everything below used to be `return r.ok` into a caller
+       that reads nothing, so `backupAt` simply stopped moving and a dead backup
+       was indistinguishable from a healthy one. Two of these the player can and
+       must be told about by name, because neither heals by waiting:
+         413  the save has outgrown D1's row (server/src/index.js, code
+              'too-large'), and it gets BIGGER with every session, so "try again
+              later" would be a lie.
+         401 'stale timestamp'  the device clock is more than MAX_SKEW_MS out, so
+              EVERY signed call is refused and the whole cloud goes dark. Read
+              from the body rather than assumed, because a 401 is also how a
+              deleted account and a bad signature come back and those need the
+              generic line. Nothing else consumes this body. */
+    let reason = 'http-' + r.status;
+    if (r.status === 413) reason = 'too-large';
+    else if (r.status === 401) {
+      const b = await r.json().catch(() => ({}));
+      if (/stale timestamp/i.test(String(b && b.error))) reason = 'clock';
+    }
+    await kvSet('backupFail', { at: Date.now(), reason });
+    return false;
+    // .catch: the header promises this never throws to the caller, and during an
+    // "Erase all data" every write in a frozen tab rejects on purpose
+  } catch { await kvSet('backupFail', { at: Date.now(), reason: 'network' }).catch(() => {}); return false; }
 }
 
 // Pull + decrypt the cloud backup and merge it in (additive importAll). Returns
@@ -631,7 +845,21 @@ export async function pullBackup({ slot = null, replace = false } = {}) {
     if (!r.ok) return { restored: false, reason: 'http-' + r.status };
     const data = await r.json();
     if (!data.blob) return { restored: false, reason: 'empty' };
-    const snapshot = await decryptBackup(data.blob);
+    /* A DECRYPT FAILURE IS NOT "NO SAVE" AND NOT A NETWORK BLIP. AES-GCM
+       rejects here when the blob was written under a DIFFERENT key (the
+       poisoned-identity chain pushBackup's mint-before-snapshot note
+       describes). The catch-all below would launder that into a generic
+       reason string and the player would be told nothing was found or that
+       we will retry, both lies. Named 'decrypt' so both surfaces (the boot
+       toast and the phrase-restore flow in js/app.js) can say honestly that
+       the backup exists but this device's key cannot read it. Nothing is
+       written: the server copy is left untouched, because the device that
+       DOES hold the right key re-pushes daily and self-heals the cloud copy.
+       The unrecoverable case is a phrase-only restore against a poisoned
+       blob, which is exactly why the copy must be honest. */
+    let snapshot;
+    try { snapshot = await decryptBackup(data.blob); }
+    catch { return { restored: false, reason: 'decrypt' }; }
     /* `replace: false` PINS TODAY'S BEHAVIOUR HERE ON PURPOSE. importAll now
        defaults to a true restore (it clears each declared store first) so the
        Settings Import button cannot be farmed for coins. This path is not that
@@ -658,12 +886,19 @@ export async function pullBackup({ slot = null, replace = false } = {}) {
    yesterday's copy is that today's is wrong. */
 export async function restoreDailyBackup() { return pullBackup({ slot: 'daily', replace: true }); }
 
-// Is there a backup on the server for this identity? (cheap existence probe)
+/* Is there a backup on the server for this identity? (cheap existence probe)
+   THREE ANSWERS, NOT TWO, BECAUSE THE CALLER IS A DESTRUCTIVE CONFIRMATION.
+   The erase sheet asks this to decide whether to promise the player a vault
+   copy survives, and "the server says there is none" and "we could not ask" are
+   different facts: collapsing them into false would have the sheet state, flatly
+   and wrongly, that a save it never checked on is not there. Returns true (the
+   server has a blob), false (a 404, which is the server's definitive no) or
+   null (offline, no identity, or any other status: unknown). 2026-09-02. */
 export async function hasCloudBackup() {
   try {
     const r = await signedFetch('GET', '/backup', null);
-    return r.ok;
-  } catch { return false; }
+    return r.ok ? true : r.status === 404 ? false : null;
+  } catch { return null; }
 }
 
 /* ---------------- grants feed down ---------------- */
@@ -1020,19 +1255,46 @@ export async function restoreWithPhrase(handle, phrase) {
 // Become this identity and pull its save. Shared by phrase restore and by
 // adopting the bundle the vault is already holding (vaultConflict), which needs
 // no phrase because the key itself is right there.
+/* ORDERED SO A FAILURE CANNOT HALF-ADOPT. This used to swap the device identity
+   (kv plus a FORCED keychain overwrite) before its first network call, so a
+   dead connection at register left the device signed as the new account with
+   none of its data and the old identity already destroyed. Now the one network
+   call that can refuse (register) runs FIRST, against the bundle directly, and
+   nothing local is written until it answers ok: any failure up to that line
+   leaves the device exactly as it was. After the swap the only network step
+   left is the backup pull, and a failed pull is RETRIED at the next boot
+   instead of being reported as "no save":
+
+   DO NOT BURN THE ONE-SHOT ON A FAILURE (same rule as bootSync below). This
+   used to set bootRestored true whatever pullBackup answered, so a dropped
+   connection during the save download told the player "there was no save to
+   pull" (false) and permanently forfeited the boot retry: adopted identity,
+   fresh save, good backup on the server, silence. Only a success or a
+   definitive "no backup exists" (404 / empty) settles the flag; every other
+   answer leaves it false so bootSync pulls again next open, and `pullReason`
+   tells the caller which of them actually happened. */
 export async function adoptIdentity(bundle) {
   if (!bundle || !bundle.privJwk || !bundle.pubJwk) return { ok: false, reason: 'That recovery data is damaged.' };
+  const reg = await registerKey(bundle);
+  if (!reg.ok) return { ok: false, reason: 'Could not reach the server. Nothing was changed; try again.' };
+  const me = reg.me;
+  // The swap. Local writes only from here on, so it lands whole.
   await kvSet('identity', bundle);
   await mirrorIdentity(bundle, { force: true });   // deliberate account swap
-  await kvSet('social', null);                   // re-register under the restored key
-  await kvSet('bootRestored', false);            // let the backup pull run again
+  await kvSet('social', { playerId: me.playerId, handle: me.handle, friendCode: me.friendCode, name: me.name || null, onlineAt: Date.now() });
+  await kvSet('bootRestored', false);            // let the backup pull run (and re-run at boot if it fails below)
   await kvSet('vaultConflict', null);
-  const on = await goOnline();
-  if (!on.ok) return { ok: false, reason: 'Restored the key but could not go online.' };
-  const pulled = await pullBackup();
-  await kvSet('bootRestored', true);
   await kvSet('recoverySetAt', Date.now());
-  return { ok: true, restored: !!(pulled && pulled.restored), counts: pulled && pulled.counts };
+  const pulled = await pullBackup();
+  // exactly bootSync's rule below: only a success or a definitive "there is no
+  // backup" settles the one-shot. 'decrypt' is deliberately NOT settled either:
+  // the device holding the right key re-pushes daily and self-heals the cloud
+  // copy, so a later boot CAN succeed.
+  if (pulled.restored || pulled.reason === 'none' || pulled.reason === 'empty') await kvSet('bootRestored', true);
+  /* pullReason rides along so the UI can tell "no save exists" from "a save
+     exists but was written by a different key" ('decrypt') and from "could not
+     fetch the save", which is the one that retries at the next boot. */
+  return { ok: true, restored: !!pulled.restored, counts: pulled.counts, pullReason: pulled.reason || null };
 }
 
 /* THE ONE CLOCK THE PLAYER CANNOT MOVE (js/db.js, RULE 3 of the day guard).
@@ -1057,6 +1319,15 @@ export async function touchServerDay() {
     const r = await apiFetch(base + '/health', { cache: 'no-store' });
     if (!r.ok) return null;
     const j = await r.json();
+    /* MEASURE THE SKEW WHILE WE ARE HERE. This is the only call that still
+       ANSWERS when the clock is wrong, so it is the only place a number can be
+       had: `j.ts` is the server's own instant, and the difference is what
+       verifySigned is refusing every signed call over. Round-trip latency is a
+       second at worst and the threshold this feeds is five minutes, so no
+       correction is worth the complexity. Overwritten on every boot and resume,
+       so a clock the player has since fixed reads 0 on the next answer. */
+    const sv = Number(j && j.ts);
+    if (Number.isFinite(sv) && sv > 0) await kvSet('clockSkewMs', Date.now() - sv);
     return await witnessServerDay(j && j.ts);
   } catch { return null; }
 }
@@ -1086,7 +1357,18 @@ export async function bootSync() {
         if (!(kc.id && kc.id.privJwk)) return { restored: false, reason: 'new-player' };
       }
       const r = await goOnline();
-      if (!r.ok) return { restored: false, reason: 'offline' };
+      /* A FAILED FIRST REGISTRATION IS NOT A REINSTALL. goOnline mints the
+         identity before it calls /register, so an install whose register failed
+         (captive wifi, the server down, a sandbox) comes back on its next open
+         holding a privJwk with no `social` row: exactly the shape the reinstall
+         branch above is looking for. It then failed again and returned
+         'offline', which is not quiet, which told somebody two minutes into a
+         brand-new install that their cloud backup could not be reached.
+         'idMinted' says this device made the key itself, so nothing was ever
+         registered under it and no backup can exist to fail. A key that came off
+         the keychain keeps saying 'offline' and keeps warning, because for that
+         player a backup plausibly does exist and the warning is true. */
+      if (!r.ok) return { restored: false, reason: (await kvGet('idMinted', null)) ? 'never-registered' : 'offline' };
     }
     if (await kvGet('bootRestored', false)) return { restored: false, reason: 'already' };
     const res = await pullBackup();

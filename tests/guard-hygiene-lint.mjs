@@ -170,6 +170,17 @@ const SEAM_ONLY_KNOWN = [
   'motion-truth-audit.mjs',
   'nav-perf-audit.mjs',
   'newcomers-audit.mjs',
+  /* pack-sink-audit drives window.__packReveal because the pack reveal is the
+     one screen no click can reach with a chosen payload: it is entered from a
+     crate open, a boss settle or an ingested grant, and none of those lets a
+     test choose the string. The hook is not a fixture either, it is
+     `(cards, opts) => openPackReveal(cards, opts || {})`, so the audit runs the
+     shipped function and the shipped markup builder. render-sink-lint is here
+     for a different reason: it is a STATIC source scan that boots nothing, and
+     it trips this row only because its header quotes the hook by name while
+     explaining what went wrong. */
+  'pack-sink-audit.mjs',
+  'render-sink-lint.mjs',
   'race-audit.mjs',
   'race-you.mjs',
   'speech-audit.mjs',

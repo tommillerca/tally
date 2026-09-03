@@ -32,17 +32,37 @@
  *            naive kvGet/kvSet form passes the sequential half and was MEASURED
  *            printing 16,500 coins to three concurrent callers on the garden
  *            refund.
+ *   SPEND    the money decides, not a read of the money. The two shops with no
+ *            per-item receipt (the coin shop's consumables, which are meant to
+ *            be bought over and over, and the drop) are driven with MORE
+ *            concurrent callers than the wallet can fund: a repeatable item
+ *            grants exactly what was paid for and no more, an idempotent grant
+ *            is charged exactly once, and a wallet a coin short moves not at
+ *            all. Both directions matter because they are one bug wearing two
+ *            faces: read-then-debit over kvBump's min:0 clamp mints free goods
+ *            for a repeatable item and double-charges a once-only one.
+ *   CROSS    two DIFFERENT things bought in the SAME INSTANT. Every ONCE row
+ *            above drives the same item repeatedly, which a per-item receipt
+ *            passes trivially, and that is exactly what hid this: each of two
+ *            different purchases passed its own stale balance read, claimed its
+ *            own receipt, and both debits clamped to zero. Graded on one
+ *            currency-agnostic invariant, THE VALUE DELIVERED NEVER EXCEEDS WHAT
+ *            WAS TAKEN, on a wallet funded for the dearer item only. Five legs:
+ *            the rack in coins, the rack in dust, Gwart's accessories, a reroll
+ *            beside a buy, and the same transmog applied twice (the mirror
+ *            image, where the player is charged twice for one change).
  *   WEAR     a bought look is FREE TO WEAR. Transmog is priced in Bone Dust, so
  *            without the `paidlooks` row a player who just paid 3,000 coins for
  *            a look is asked for dust the first time they put it on. The row is
  *            graded against a NEGATIVE CONTROL in the same slot on the same
  *            save: a collected-but-unbought look must still cost dust, so a
  *            transmogPrice that returns 0 for everything cannot pass.
- *   REROLL   the ladder runs out. A spend with no ceiling is the other way this
- *            screen could take an unbounded amount of money, so the ladder is
- *            drained to exhaustion and two attempts past it: each reroll charges
- *            exactly its rung, the total is 2,000 coins, and a refused reroll
- *            spends nothing.
+ *   REROLL   the price curve holds. Tom, 2026-08-31: rerolls are UNLIMITED in
+ *            count and the rising price is the only ceiling (a deliberate coin
+ *            sink), so what must hold instead of a count cap is: each reroll
+ *            charges exactly its rung (rising, then capped), it moves the
+ *            ROTATING shelf and never the themed nine, and a reroll the wallet
+ *            cannot cover is refused, spends nothing and moves nothing.
  *
  * CONTROL ROWS. Every measurement here is preceded by a row that fails if the
  * check is looking in the wrong place: the static scanner must have found real
@@ -59,12 +79,31 @@
  *      -> ONCE-RACE goes red (three concurrent callers all pay)
  *   4. move the spend above the claim
  *      -> ONCE-SEQ goes red
- *   5. drop the `st.rr >= RACK_REROLL_LADDER.length` limit in rerollRack
- *      -> REROLL-CAP goes red (the ladder never runs out and keeps charging)
- *   6. key the reroll allowance back on the day (`cur.rrDay === day`) in both
- *      rack() and rerollRack()
- *      -> REROLL-WEEKLY goes red (a stale day hands back a whole free ladder)
+ *   5. redraw the themed nine in rerollRack (ids: rackPick(cur.week, salt)
+ *      instead of ids: cur.ids)
+ *      -> REROLL-SCOPE goes red (the reroll fishes themed pieces out of rungs)
+ *   6. key the reroll counter back on the day in rack() (reset rr with rotDay)
+ *      -> REROLL-WEEKLY goes red (a stale day hands back the cheap rungs)
  *
+ * PROVE-RED for the CROSS rows, 2026-08-31, on a cp -R throwaway copy of
+ * origin/main 2faa73b6 (the tree with the #338 atomic spend but NOT the reorder)
+ * with this file copied in:
+ *   FAIL CROSS-RACK      delivered 2500 against 1500 spent (both cost 2500)
+ *   FAIL CROSS-DUST      delivered 165 against 90 spent (both cost 165)
+ *   FAIL CROSS-PET       delivered 15000 against 9000 spent (both cost 15000)
+ *   FAIL CROSS-TRANSMOG  2 ok, spent 24 against price 12
+ *   FAIL CROSS-REROLL    delivered 800 against 500 spent (both cost 800)
+ *   ok   both CONTROL rows green there, so every leg really ran
+ *
+ * PROVE-RED for the SPEND rows, 2026-08-31, on a cp -R throwaway copy of
+ * origin/main 13583e42 (the PRE-FIX tree) with this file copied in:
+ *   FAIL SPEND-MINT   4 callers, 4 granted (wallet funded 2), 4 reported ok
+ *   FAIL SPEND-EXACT  spent 180 for 4 x 90, 0 left
+ *   FAIL SPEND-ONCE   4 callers, 4 ok, 1 owned, spent 9000 against price 3000
+ *   ok   SPEND-FLOOR  and the CONTROL row, both green pre-fix, so a green run
+ *                     of this leg is grading something rather than not running
+ *
+
  * Usage: node tests/purchase-firewall.mjs            (serves this tree)
  *        node tests/purchase-firewall.mjs <base-url>
  */
@@ -247,21 +286,32 @@ const res = await page.evaluate(async () => {
     break;
   }
 
-  /* THE REROLL LADDER, drained. A spend with no ceiling is the other way this
-     screen could take an unbounded amount of money: the ladder is FREE then
-     100/200/300/400/500/500, six paid a day, and it must stop. Driven to
-     exhaustion and one attempt past it. */
+  /* THE REROLL CURVE, driven past its ladder. Tom, 2026-08-31: the count is
+     unlimited and the rising price is the ceiling, so the invariants are the
+     CHARGE (each reroll costs exactly its rung, rising then capped), the SCOPE
+     (the rotating shelf moves, the themed nine never do), and the FLOOR (a
+     wallet below the price is refused, spends nothing, moves nothing). */
   await db.kvSet('coins', 100000);
   const rrStart = await loot.coins();
   const rrSteps = [];
   for (let n = 0; n < loot.RACK_REROLL_LADDER.length + 2; n++) {
     const c0 = await loot.coins();
-    const ids0 = (await loot.rack()).ids.join(',');
+    const st0 = await loot.rack();
+    const ids0 = st0.ids.join(','), rot0 = (st0.rot || []).join(',');
     const r = await loot.rerollRack();
+    const st1 = await loot.rack();
     rrSteps.push({ n, ok: r.ok, reason: r.reason || null, spent: c0 - (await loot.coins()),
-      changed: (await loot.rack()).ids.join(',') !== ids0 });
+      rotChanged: (st1.rot || []).join(',') !== rot0, idsChanged: st1.ids.join(',') !== ids0 });
   }
   const rrSpent = rrStart - (await loot.coins());
+  /* the floor: a wallet below the (now capped) price must be refused unmoved */
+  await db.kvSet('coins', 10);
+  const rb0 = await loot.rack();
+  const brokeTry = await loot.rerollRack();
+  const rb1 = await loot.rack();
+  const rrBroke = { ok: !!brokeTry.ok, reason: brokeTry.reason || null, need: brokeTry.need ?? null,
+    coinsAfter: await loot.coins(), rotChanged: (rb1.rot || []).join(',') !== (rb0.rot || []).join(','),
+    rrMoved: rb1.rr !== rb0.rr };
 
   /* ---- THE PET SHOP, driven the same way and for the same reason ----
      buyPetItem is buyRackItem's twin (its own header says so: "If this ever
@@ -311,9 +361,156 @@ const res = await page.evaluate(async () => {
 
   const petOwned = [...(await loot.ownedCosmeticIds())];
 
-  return { target: { ...target, gear: target.gear.id }, coinPrice, dustPrice, before, after, afterTwice,
+  /* ================= THE ATOMIC SPEND (R5-P1-a / R5-P1-b) =================
+     Every leg above it claims a per-item receipt, so its debit runs at most
+     once whatever the wallet says. The two shops that DO NOT have that shape
+     are graded here, because the receipt was never the whole guard: the
+     affordability check and the debit were two separate kv transactions, so
+     concurrent callers all passed the same stale read and kvBump's min:0 clamp
+     made every overdrawn debit FREE.
+     BOTH DIRECTIONS OF THAT ARE MEASURED, because they present as opposite
+     symptoms of one bug: a repeatable item MINTS goods (more granted than paid
+     for), a once-only item DOUBLE CHARGES (more paid than granted). */
+
+  /* A. THE REPEATABLE SHOP. A wallet funding exactly k of them, driven with
+        2k concurrent callers. It must grant exactly k and take exactly k*price.
+        Measured on origin/main 13583e42: 3 concurrent calls on a 90-coin wallet
+        granted 3 Vigor Draughts for 90 coins. Vigor is Pit energy, so past the
+        first Draught this was coins buying power for nothing. */
+  const shopItem = loot.SHOP[0];
+  const K = 2;                       // items the wallet can honestly afford
+  const shopFund = shopItem.cost * K;
+  await db.kvSet('coins', shopFund);
+  const shopHeld0 = await loot.consumableCount(shopItem.id);
+  const shopRs = await Promise.all(
+    Array.from({ length: K * 2 }, () => loot.buyShopItem(shopItem.id)));
+  const shopSpend = {
+    id: shopItem.id, price: shopItem.cost, k: K, drove: K * 2, funded: shopFund,
+    ok: shopRs.filter(r => r.ok).length,
+    granted: (await loot.consumableCount(shopItem.id)) - shopHeld0,
+    left: await loot.coins(),
+    spent: shopFund - (await loot.coins()),
+  };
+
+  /* B. THE ONCE-ONLY SHOP, the same drive against an idempotent grant. The drop
+        pieces are ordinary cosmetics, so grantCosmetic's `cos:<id>` row already
+        made the GRANT once-only; only the money was unguarded. Measured on
+        origin/main 13583e42: 4 concurrent taps on a 3,000-coin jacket with
+        7,000 coins took all 7,000 and delivered one jacket. */
+  const ownedNow = await loot.ownedCosmeticIds();
+  const dropDef = loot.DROP.items.find(x => !ownedNow.has(x.id)) || null;
+  const dropFund = dropDef ? dropDef.cost * 3 : 0;
+  if (dropDef) await db.kvSet('coins', dropFund);
+  const dropRs = dropDef ? await Promise.all(
+    Array.from({ length: 4 }, () => loot.buyDropItem(dropDef.id))) : [];
+  const dropSpend = !dropDef ? null : {
+    id: dropDef.id, price: dropDef.cost, drove: 4, funded: dropFund,
+    ok: dropRs.filter(r => r.ok).length,
+    owned: (await loot.ownedCosmeticIds()).has(dropDef.id) ? 1 : 0,
+    left: await loot.coins(),
+    spent: dropFund - (await loot.coins()),
+  };
+
+  /* C. THE FLOOR. A wallet one coin short of a single item, driven eight ways.
+        Nothing may be granted and the balance must not move, because "the debit
+        clamped at zero" is exactly how the free goods were minted. */
+  await db.kvSet('coins', shopItem.cost - 1);
+  const brokeHeld0 = await loot.consumableCount(shopItem.id);
+  const brokeRs = await Promise.all(
+    Array.from({ length: 8 }, () => loot.buyShopItem(shopItem.id)));
+  const shopFloor = {
+    funded: shopItem.cost - 1, ok: brokeRs.filter(r => r.ok).length,
+    granted: (await loot.consumableCount(shopItem.id)) - brokeHeld0,
+    left: await loot.coins(),
+  };
+
+  /* ============== TWO DIFFERENT THINGS AT ONCE (the cross overdraft) ========
+     Every ONCE-RACE row above drives the SAME item several times, and a
+     per-item receipt passes that trivially. What it cannot see is two DIFFERENT
+     items bought in the same instant: each passes its own stale balance read,
+     each claims its own receipt, and both debits clamp at zero. The wallet is
+     funded for the DEARER item only, so an honest shop can deliver exactly one.
+     The invariant graded is currency-agnostic and is the whole point: THE VALUE
+     DELIVERED NEVER EXCEEDS WHAT WAS TAKEN. */
+  const priceOf = (ids, prices, owned) => ids.reduce((sum, id, i) => sum + (owned.has(id) ? prices[i] : 0), 0);
+  const freshRungs = async () => {
+    const rk2 = await loot.rack();
+    const own = await loot.ownedCosmeticIds();
+    const out = [];
+    for (let i = 0; i < rk2.ids.length; i++) {
+      if (!own.has(rk2.ids[i])) out.push({ id: rk2.ids[i], coin: loot.RACK_POOLS[i][0], dust: loot.RACK_DUST[i] });
+    }
+    return out;
+  };
+
+  /* A. THE RACK, IN COINS. Measured on origin/main 2faa73b6: 3,000 coins bought
+        a 3,000 and a 2,400 piece together and kept both. */
+  const rcPool = await freshRungs();
+  const crossRack = rcPool.length < 2 ? null : await (async () => {
+    const [a, b] = rcPool;
+    const fund = Math.max(a.coin, b.coin);
+    await db.kvSet('coins', fund);
+    await Promise.all([loot.buyRackItem(a.id, 'coins'), loot.buyRackItem(b.id, 'coins')]);
+    const own = await loot.ownedCosmeticIds();
+    return { ids: [a.id, b.id], prices: [a.coin, b.coin], funded: fund,
+      delivered: priceOf([a.id, b.id], [a.coin, b.coin], own),
+      spent: fund - (await loot.coins()), bothCost: a.coin + b.coin };
+  })();
+
+  /* B. THE RACK, IN BONE DUST. The same function, the other currency: a shop
+        exact in one and sloppy in the other is the same bug on a slower clock.
+        Measured pre-fix: 160 dust bought 160 + 130 and kept both. */
+  const rdPool = await freshRungs();
+  const crossDust = rdPool.length < 2 ? null : await (async () => {
+    const [a, b] = rdPool;
+    const fund = Math.max(a.dust, b.dust);
+    await db.kvSet('bonedust', fund);
+    await Promise.all([loot.buyRackItem(a.id, 'dust'), loot.buyRackItem(b.id, 'dust')]);
+    const own = await loot.ownedCosmeticIds();
+    return { ids: [a.id, b.id], prices: [a.dust, b.dust], funded: fund,
+      delivered: priceOf([a.id, b.id], [a.dust, b.dust], own),
+      spent: fund - (await loot.boneDust()), bothCost: a.dust + b.dust };
+  })();
+
+  /* C. GWART'S MENAGERIE. The worst case in the game for the old shape: the only
+        shelf where several affordable things all cost thousands. Measured
+        pre-fix: 8,000 coins bought an 8,000 and a 6,000 accessory, kept both. */
+  const accPool = PET_SHOP.items.filter(x => !(new Set(petOwned)).has(x.id));
+  const crossPet = accPool.length < 2 ? null : await (async () => {
+    const [a, b] = accPool;
+    const fund = Math.max(a.coin, b.coin);
+    await db.kvSet('coins', fund);
+    await Promise.all([loot.buyPetItem(a.id), loot.buyPetItem(b.id)]);
+    const own = await loot.ownedCosmeticIds();
+    return { ids: [a.id, b.id], prices: [a.coin, b.coin], funded: fund,
+      delivered: priceOf([a.id, b.id], [a.coin, b.coin], own),
+      spent: fund - (await loot.coins()), bothCost: a.coin + b.coin };
+  })();
+
+  /* D. THE SAME TRANSMOG TWICE. Not an overdraft but its mirror image, the
+        player-negative half: markPaid is the only receipt a look has, it was
+        written after the debit, so two taps in the same instant paid twice for
+        one change. Measured pre-fix: 24 dust for one 12-dust look. The negative
+        control's art is used because it is COLLECTED but never bought, which is
+        the only state where transmogPrice is non-zero. */
+  const crossTm = !other ? null : await (async () => {
+    await db.kvSet('bonedust', 5000);
+    const price = await loot.transmogPrice(target.slot, other.artId);
+    const d0 = await loot.boneDust();
+    const rs = await Promise.all([
+      loot.applyTransmog(target.slot, other.artId),
+      loot.applyTransmog(target.slot, other.artId),
+    ]);
+    return { art: other.artId, price, spent: d0 - (await loot.boneDust()),
+      ok: rs.filter(r => r.ok).length,
+      applied: (await loot.transmogMap())[target.slot] === other.artId };
+  })();
+
+  return { shopSpend, dropSpend, shopFloor,
+    target: { ...target, gear: target.gear.id }, coinPrice, dustPrice, before, after, afterTwice,
+    crossRack, crossDust, crossPet, crossTm,
     buy1, buy2, wearBefore, wearAfter, wearOther, otherArt: other ? other.artId : null, race, dustLeg,
-    ladder: loot.RACK_REROLL_LADDER, rrSteps, rrSpent,
+    ladder: loot.RACK_REROLL_LADDER, rrSteps, rrSpent, rrBroke,
     pet: { petId, accId, petPrice, accPrice, gate, gateSpent, petBuy1, petBuy2, petSpent, petSpent2,
       petRace, ownsPet: petOwned.includes(petId), ownsAcc: petOwned.includes(accId),
       petBefore, petAfter } };
@@ -405,6 +602,46 @@ else {
     !!P && P.petBefore.gearloadout === P.petAfter.gearloadout,
     P ? `${P.petBefore.gearloadout} -> ${P.petAfter.gearloadout}` : 'not run');
 
+  /* ---- THE ATOMIC SPEND: a buy cannot mint free goods or charge twice ---- */
+  const SS = res.shopSpend, DS = res.dropSpend, SF = res.shopFloor;
+  ok('CONTROL the atomic-spend leg drove a real, non-zero price with a real wallet',
+    !!SS && SS.price > 0 && SS.k > 0 && SS.drove > SS.k && SS.funded === SS.price * SS.k
+      && !!DS && DS.price > 0 && DS.drove > 1,
+    SS ? `${SS.drove} concurrent x ${SS.id} at ${SS.price} on a ${SS.funded} wallet; ${DS.drove} x ${DS.id} at ${DS.price} on ${DS.funded}` : 'not run');
+  ok('SPEND-MINT concurrent buys grant exactly what the wallet paid for, never more',
+    !!SS && SS.granted === SS.k && SS.ok === SS.k,
+    SS ? `${SS.drove} callers, ${SS.granted} granted (wallet funded ${SS.k}), ${SS.ok} reported ok` : 'not run');
+  ok('SPEND-EXACT the debit is exactly k x price, and the wallet never goes below zero',
+    !!SS && SS.spent === SS.price * SS.k && SS.left === 0 && SS.spent === SS.granted * SS.price,
+    SS ? `spent ${SS.spent} for ${SS.granted} x ${SS.price}, ${SS.left} left` : 'not run');
+  ok('SPEND-ONCE an idempotent grant is charged exactly once, however many taps land',
+    !!DS && DS.owned === 1 && DS.spent === DS.price && DS.ok === 1,
+    DS ? `${DS.drove} callers, ${DS.ok} ok, ${DS.owned} owned, spent ${DS.spent} against price ${DS.price} (${DS.left} left of ${DS.funded})` : 'not run');
+  ok('SPEND-FLOOR a wallet a coin short grants nothing and is left byte-identical',
+    !!SF && SF.ok === 0 && SF.granted === 0 && SF.left === SF.funded,
+    SF ? `8 callers on ${SF.funded} coins: ${SF.ok} ok, ${SF.granted} granted, ${SF.left} left` : 'not run');
+
+  /* ---- CROSS: two DIFFERENT things bought in the same instant ---- */
+  const XR = res.crossRack, XD = res.crossDust, XP = res.crossPet, XT = res.crossTm;
+  const crossOk = (X) => !!X && X.delivered === X.spent && X.delivered > 0
+    && X.funded < X.bothCost;   // the wallet genuinely could not cover both
+  ok('CONTROL the cross legs each drove two DIFFERENT priced items on a wallet that funds one',
+    crossOk(XR) !== null && !!XR && !!XD && !!XP
+      && XR.funded < XR.bothCost && XD.funded < XD.bothCost && XP.funded < XP.bothCost
+      && XR.prices[0] > 0 && XD.prices[0] > 0 && XP.prices[0] > 0,
+    XR ? `rack ${XR.ids} @${XR.prices} on ${XR.funded}; dust ${XD.ids} @${XD.prices} on ${XD.funded}; pet ${XP.ids} @${XP.prices} on ${XP.funded}` : 'a leg found fewer than two unowned items: nothing to grade');
+  ok('CROSS-RACK two different rack pieces at once deliver only what was paid for',
+    crossOk(XR), XR ? `delivered ${XR.delivered} against ${XR.spent} spent (both would cost ${XR.bothCost}, wallet had ${XR.funded})` : 'not run');
+  ok('CROSS-DUST and the same holds in Bone Dust, not just in coins',
+    crossOk(XD), XD ? `delivered ${XD.delivered} against ${XD.spent} spent (both would cost ${XD.bothCost}, dust had ${XD.funded})` : 'not run');
+  ok('CROSS-PET two different accessories at once deliver only what was paid for',
+    crossOk(XP), XP ? `delivered ${XP.delivered} against ${XP.spent} spent (both would cost ${XP.bothCost}, wallet had ${XP.funded})` : 'not run');
+  ok('CONTROL the transmog leg ran on a look with a real, non-zero dust price',
+    !!XT && XT.price > 0, XT ? `${XT.art} at ${XT.price} dust` : 'no negative-control art to price');
+  ok('CROSS-TRANSMOG the same look applied twice at once is charged exactly once',
+    !!XT && XT.spent === XT.price && XT.applied === true,
+    XT ? `${XT.ok} ok, spent ${XT.spent} against price ${XT.price}, applied=${XT.applied}` : 'not run');
+
   /* ---- DUST ---- */
   ok('CONTROL the dust leg ran with a real, non-zero dust price',
     !!res.dustLeg && res.dustLeg.price > 0 && res.dustLeg.ok === true,
@@ -413,58 +650,90 @@ else {
     !!res.dustLeg && res.dustLeg.dustSpent === res.dustLeg.price && res.dustLeg.coinDelta === 0,
     res.dustLeg ? `dust fell ${res.dustLeg.dustSpent} (price ${res.dustLeg.price}), coins moved ${res.dustLeg.coinDelta}` : 'not run');
 
-  /* ---- REROLL: a spend that must run out ---- */
+  /* ---- REROLL: the curve, the scope, the floor (Tom, 2026-08-31) ---- */
   const granted = res.rrSteps.filter(r => r.ok);
-  const refused = res.rrSteps.filter(r => !r.ok);
-  ok('CONTROL the reroll ladder actually granted rerolls, and they changed the rack',
-    granted.length === res.ladder.length && granted.every(r => r.changed),
-    `${granted.length} of ${res.ladder.length} granted, ${granted.filter(r => r.changed).length} changed the nine`);
-  ok('REROLL-LADDER each reroll charges exactly its rung, first one free',
-    granted.every((r, i) => r.spent === res.ladder[i]),
-    `spent ${granted.map(r => r.spent).join(', ')} against ladder ${res.ladder.join(', ')}`);
-  ok('REROLL-CAP the day\'s rerolls run out, and the ceiling is 2,000 coins',
-    refused.length === 2 && refused.every(r => r.reason === 'limit') && res.rrSpent === 2000,
-    `${refused.length} refused (${[...new Set(refused.map(r => r.reason))].join('/')}) after ${res.rrSpent} coins spent in total`);
-  /* ---- THE ALLOWANCE IS WEEKLY, NOT DAILY ----
-     Tom approved weekly on 2026-08-20. The old code reset the ladder on rrDay,
-     so the first reroll was free EVERY DAY: seven free full-rack draws a week
-     against 3-deep rungs surfaces any specific piece 94% of weeks (1-(2/3)^7)
-     for nothing, which is the exact outcome the ladder exists to prevent.
-     Driven by ageing the PERSISTED record rather than by faking a clock: the
-     ladder is already exhausted above, so a stale day must change nothing while
-     a stale week must hand the allowance back. The first half is what goes red
-     if the reset is ever keyed on the day again. */
+  const expSpend = res.rrSteps.map((_, i) => res.ladder[Math.min(i, res.ladder.length - 1)]);
+  ok('CONTROL the reroll curve actually granted rerolls, and each moved the rotating shelf',
+    granted.length === res.rrSteps.length && res.rrSteps.length > res.ladder.length && granted.every(r => r.rotChanged),
+    `${granted.length} of ${res.rrSteps.length} granted, ${granted.filter(r => r.rotChanged).length} moved the shelf`);
+  ok('REROLL-LADDER each reroll charges exactly its rung, rising then held at the cap',
+    granted.length === expSpend.length && granted.every((r, i) => r.spent === expSpend[i]),
+    `spent ${granted.map(r => r.spent).join(', ')} against curve ${expSpend.join(', ')}`);
+  ok('REROLL-SCOPE the themed nine never move on a reroll (they keep their week identity)',
+    granted.length > 0 && granted.every(r => !r.idsChanged),
+    `${granted.filter(r => r.idsChanged).length} of ${granted.length} rerolls moved the themed nine`);
+  ok('REROLL-FLOOR a reroll the wallet cannot cover is refused at the capped price, spends nothing, moves nothing',
+    res.rrBroke.ok === false && res.rrBroke.reason === 'coins'
+      && res.rrBroke.need === res.ladder[res.ladder.length - 1]
+      && res.rrBroke.coinsAfter === 10 && !res.rrBroke.rotChanged && !res.rrBroke.rrMoved,
+    `ok=${res.rrBroke.ok} reason=${res.rrBroke.reason} need=${res.rrBroke.need} coins=${res.rrBroke.coinsAfter} rotChanged=${res.rrBroke.rotChanged}`);
+  /* ---- THE COUNTER IS WEEKLY, NOT DAILY ----
+     Since 2026-08-31 the count is unlimited, so what a day change must not
+     hand back is the CHEAP END OF THE CURVE: a counter re-keyed on the day
+     would sell a 500-coin reroll every morning where the week's curve says
+     8,000. Driven by ageing the PERSISTED record rather than faking a clock,
+     with the wallet at 0 so the probe itself cannot spend: the refusal's
+     `need` field exposes which rung the code believes it is on. A stale DAY
+     must still quote the cap; a stale WEEK must rebuild the record at rr 0. */
   const weekly = await page.evaluate(async () => {
     const loot = await import('./js/loot.js');
     const { kvGet, kvSet } = await import('./js/db.js');
     const before = await kvGet('rack', null);
     const out = { rrAtStart: before ? before.rr : null };
 
-    await kvSet('rack', { ...before, rrDay: '2000-01-01' });      // yesterday, same week
+    await kvSet('coins', 0);
+    await kvSet('rack', { ...before, rotDay: '2000-01-01' });      // yesterday, same week
     const staleDay = await loot.rerollRack();
-    out.staleDay = { ok: !!staleDay.ok, reason: staleDay.reason || null };
+    out.staleDay = { ok: !!staleDay.ok, reason: staleDay.reason || null, need: staleDay.need ?? null };
 
     await kvSet('rack', { ...before, week: 'stale-week' });        // a week that is not this one
     const staleWeek = await loot.rack();
     out.staleWeekRr = staleWeek.rr;
     out.staleWeekRegenerated = staleWeek.week !== 'stale-week';
+
+    /* A REROLL AND A BUY IN THE SAME INSTANT. Last, because it needs the fresh
+       week above: rr is 0 here, so the free rung is burned first to give the
+       reroll a real price. The rack kvUpdate already stopped two rerolls
+       double-charging each other; what it never saw was a reroll landing beside
+       an ordinary purchase, each on its own stale read. Measured on origin/main
+       2faa73b6: a 3,000-coin wallet paid a 500 reroll AND a 3,000 piece. */
+    await kvSet('coins', 999999);
+    await loot.rerollRack();                                       // burn the free rung
+    const st = await loot.rack();
+    const cost = loot.rackRerollCost(st.rr);
+    const owned = await loot.ownedCosmeticIds();
+    let pick = null;
+    for (let i = 0; i < st.ids.length; i++) {
+      if (!owned.has(st.ids[i])) { pick = { id: st.ids[i], coin: loot.RACK_POOLS[i][0] }; break; }
+    }
+    if (pick) {
+      const fund = Math.max(cost, pick.coin);
+      await kvSet('coins', fund);
+      const rs = await Promise.all([loot.rerollRack(), loot.buyRackItem(pick.id, 'coins')]);
+      const own2 = await loot.ownedCosmeticIds();
+      out.crossReroll = { rerollCost: cost, buyCost: pick.coin, funded: fund,
+        delivered: (rs[0].ok ? cost : 0) + (own2.has(pick.id) ? pick.coin : 0),
+        spent: fund - (await loot.coins()), bothCost: cost + pick.coin };
+    }
     return out;
   });
-  ok('CONTROL the ladder really was exhausted before the weekly probe ran',
-    weekly.rrAtStart === res.ladder.length, `rr was ${weekly.rrAtStart} of ${res.ladder.length}`);
-  ok('REROLL-WEEKLY a new DAY inside the same week hands back no rerolls',
-    weekly.staleDay.ok === false && weekly.staleDay.reason === 'limit',
-    `ok=${weekly.staleDay.ok} reason=${weekly.staleDay.reason}`);
-  ok('REROLL-WEEKLY and a new WEEK does hand the allowance back',
+  ok('CONTROL the drive really pushed the counter past the ladder before the weekly probe ran',
+    weekly.rrAtStart === res.rrSteps.length && res.rrSteps.length > res.ladder.length,
+    `rr was ${weekly.rrAtStart} after ${res.rrSteps.length} rerolls over a ${res.ladder.length}-rung curve`);
+  ok('REROLL-WEEKLY a new DAY inside the same week hands back no cheap rungs (still quotes the cap)',
+    weekly.staleDay.ok === false && weekly.staleDay.reason === 'coins'
+      && weekly.staleDay.need === res.ladder[res.ladder.length - 1],
+    `ok=${weekly.staleDay.ok} reason=${weekly.staleDay.reason} need=${weekly.staleDay.need} (a day-keyed reset would quote ${res.ladder[0]})`);
+  ok('REROLL-WEEKLY and a new WEEK does reset the curve',
     weekly.staleWeekRegenerated === true && weekly.staleWeekRr === 0,
     `regenerated=${weekly.staleWeekRegenerated} rr=${weekly.staleWeekRr}`);
-
-  /* `refused.every(...)` on an EMPTY set is true, and this row passed vacuously
-     on the prove-red where the ladder never ran out. An empty sample is a
-     failure, never a pass. */
-  ok('REROLL-CAP a refused reroll spends nothing',
-    refused.length > 0 && refused.every(r => r.spent === 0),
-    refused.length ? `${refused.length} refused attempts spent ${refused.map(r => r.spent).join(', ')}` : 'NO reroll was ever refused, so this row graded nothing');
+  const XX = weekly.crossReroll;
+  ok('CONTROL the cross-reroll leg drove a real, non-zero reroll price beside a real piece',
+    !!XX && XX.rerollCost > 0 && XX.buyCost > 0 && XX.funded < XX.bothCost,
+    XX ? `reroll ${XX.rerollCost} + piece ${XX.buyCost} on a ${XX.funded} wallet` : 'no unowned rung on the fresh week');
+  ok('CROSS-REROLL a reroll and a buy at once deliver only what was paid for',
+    !!XX && XX.delivered === XX.spent && XX.delivered > 0,
+    XX ? `delivered ${XX.delivered} against ${XX.spent} spent (both would cost ${XX.bothCost}, wallet had ${XX.funded})` : 'not run');
 }
 
 ok('CONTROL the page threw nothing while the purchases ran', errors.length === 0, errors.join(' | ') || 'no page errors');

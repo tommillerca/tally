@@ -5,7 +5,7 @@
    real control; a card that renders but links nowhere is the failure mode.
    PROVE-RED (run): wrong invite URL fails LINK; the "free chat app" line
    removed fails COPY; the kvSet dropped from the boot path fails ONCE. */
-import { boot, sleep, serveTree } from './godmode.js';
+import { boot, sleep, serveTree, maskWebdriver } from './godmode.js';
 const fails = [];
 const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? '  ' + d : ''}`); if (!p) fails.push(n); };
 const DISCORD_URL = 'https://discord.gg/HrMReZe9D';
@@ -81,9 +81,7 @@ ok('and the tab bar is tappable again (hit-tested)', after.tabReachable, JSON.st
    context is also the honest fixture for a first-launch check. */
 const coldCtx = await browser.createBrowserContext();
 const coldPage = await coldCtx.newPage();
-await coldPage.evaluateOnNewDocument(() => {
-  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
-});
+await maskWebdriver(coldPage);
 const bootShow = async () => {
   await coldPage.goto(base + '?demo', { waitUntil: 'networkidle2' });
   await sleep(9000);   // past the 4s the old gate used, plus its retries

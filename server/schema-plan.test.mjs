@@ -49,10 +49,19 @@ db.exec(schema);
    The grants pruner's third arm turns on the recipient's own clock, so a fixture
    where every player looks equally dormant could not tell the arm apart from a
    delete-on-age rule. */
+/* The board columns ride along, because from 2026-09-01 both boards RANK on
+   them: a fixture whose level/badges/week_key are all NULL would match nothing
+   and the BOUND assertion below would fail every board case for the wrong
+   reason. RACE_WEEK is the week the /steps/week case asks for. */
+const RACE_WEEK = '2026-08-31';
 const P = ['pa', 'pb', 'pc'];
 for (const id of P) {
-  db.prepare('INSERT INTO players (id, pubkey, handle, friend_code, profile, created_at, last_seen) VALUES (?,?,?,?,?,?,?)')
-    .run(id, 'k-' + id, 'Grim Tibia', 'BONE-' + id.toUpperCase() + '-AAAA', '{"outfit":{}}', 1, Date.now());
+  db.prepare(`INSERT INTO players (id, pubkey, handle, friend_code, profile, created_at, last_seen,
+                                   level, badges, week_key, week_steps)
+              VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, 'k-' + id, 'Grim Tibia', 'BONE-' + id.toUpperCase() + '-AAAA',
+         JSON.stringify({ outfit: {}, raceV: 2, weekKey: RACE_WEEK, weekSteps: 40000 }),
+         1, Date.now(), 7, 3, RACE_WEEK, 40000);
 }
 db.prepare('INSERT INTO players (id, pubkey, handle, friend_code, profile, created_at, last_seen) VALUES (?,?,?,?,?,?,?)')
   .run('pd', 'k-pd', 'Grim Tibia', 'BONE-PD-AAAA', '{"outfit":{}}', 1, 2);
@@ -99,6 +108,22 @@ for (const d of ['dev-a', 'dev-b']) {
 // The rate limiter's own counter rows, which share this table by design.
 db.prepare('INSERT INTO events (device, name, props, app_v, day, ts) VALUES (?,?,?,?,?,?)')
   .run('iphash01', 'rl_ridcheck', '{}', '', '2026-08-17', Date.now());
+
+/* The three tables pruneStale() is the first thing ever to delete from, plus
+   the sweep's own table. Every fixture here is planted PAST its window (the
+   devices rows above already carry last_seen = 2), because a plan proves
+   nothing about a query that matched nothing, and the BOUND assertion in the
+   CASES loop grades exactly that. */
+db.prepare('INSERT INTO reports (device, label, kind, lat, lng, target, note, app_v, geo, ts) VALUES (?,?,?,?,?,?,?,?,?,?)')
+  .run('dev-a', 'Grim Tibia', 'den-nominate', 49.28, -123.12, 'Library', 'good spot', 'v385', 'Vancouver, BC, CA', 2);
+db.prepare('INSERT INTO leads (device, player, label, name, email, email_optin, feedback, most_wanted, features, app_v, geo, ts) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+  .run('dev-b', 'pa', 'Grim Tibia', 'Tom', 'tom@example.com', 1, 'more pets', 'pets', 'pit,steps', 'v385', 'Vancouver, BC, CA', 2);
+// Expired (window_start*2 in the past) and LIVE, so the sweep's plan is measured
+// against a table where its predicate has to actually choose.
+db.prepare('INSERT INTO rate_limits (bucket, name, window_start, hits, expires_at) VALUES (?,?,?,?,?)')
+  .run('deadbeef', 'sig', 1, 1, 2);
+db.prepare('INSERT INTO rate_limits (bucket, name, window_start, hits, expires_at) VALUES (?,?,?,?,?)')
+  .run('livebeef', 'rl_events_dev', Date.now(), 1, Date.now() + 7200000);
 
 /* The statements, kept in step with the source. Each carries a fragment that
    must still be present in src/index.js: if somebody rewrites the route, the
@@ -214,6 +239,56 @@ const CASES = [
     boundSql: 'SELECT id FROM events WHERE day < ? AND name NOT IN (?,?) LIMIT ?',
     sql: 'DELETE FROM events WHERE id IN (SELECT id FROM events WHERE day < ? AND name NOT IN (?,?) LIMIT ?)',
   },
+  /* ---- 2026-09-01: the two boards stop reading every player ------------- */
+  {
+    /* THE HOTTEST READ ON THE WORKER. Every crew-tab open fetches this, and it
+       used to rank on CAST(json_extract(profile,'$.level')) plus
+       json_extract(profile,'$.badges'), which no index can serve: a full walk
+       of players, six json_extracts a row, and a temp b-tree to sort the lot
+       for a hundred rows. Measured linear at about a microsecond a player,
+       111 ms at 200,000 of them, against 0.24 ms and FLAT on idx_players_board.
+       "SCAN players USING INDEX" is the ordered walk, which is the answer here;
+       the temp b-tree is the thing that costs N and the thing this pins. */
+    name: '/leaderboard ranks through idx_players_board with no sort',
+    fragment: 'ORDER BY level DESC, badges DESC, last_seen DESC LIMIT 100',
+    mustIndex: 'idx_players_board',
+    mustNotScan: 'USE TEMP B-TREE FOR ORDER BY',
+    params: [Date.now() - 7 * 86400000, Date.now(), Date.now() - 7 * 86400000],
+    sql:
+      `SELECT id, handle, name, level lvl, json_extract(profile,'$.levelName') lvlName, badges,
+              json_extract(profile,'$.outfit') outfit, json_extract(profile,'$.pet') pet,
+              json_extract(profile,'$.stats') stats,
+              json_array_length(COALESCE(json_extract(profile,'$.gear'), '[]')) gearCount,
+              last_seen, created_at,
+              (SELECT COUNT(*) FROM spires sp WHERE sp.owner = players.id AND sp.tended_at > ?) spires,
+              (SELECT COALESCE(SUM(? - sp.claimed_at), 0) FROM spires sp WHERE sp.owner = players.id AND sp.tended_at > ?) held_ms
+       FROM players
+       WHERE profile IS NOT NULL AND COALESCE(is_test, 0) = 0
+       ORDER BY level DESC, badges DESC, last_seen DESC LIMIT 100`,
+  },
+  {
+    /* Same class, and settlement calls this board TWICE. week_key and
+       week_steps have been columns since 2026-08-16-hardening.sql and PUT
+       /profile has always written them, so the JSON this route was re-parsing
+       was never the only copy. On the columns the week is a SEEK and the order
+       comes out of the index: 108 ms -> 0.02 ms at 200,000 players. raceV has
+       no column and stays a json_extract, which is fine because it is now a
+       residual on the 25 rows the index hands over. */
+    name: '/steps/week seeks the race week through idx_players_week',
+    fragment: 'ORDER BY week_steps DESC LIMIT 25',
+    mustIndex: 'idx_players_week',
+    mustNotScan: 'SCAN players',
+    params: [RACE_WEEK],
+    sql:
+      `SELECT id, handle, name, json_extract(profile,'$.outfit') outfit, week_steps steps, last_seen seenAt
+         FROM players
+        WHERE profile IS NOT NULL
+          AND COALESCE(is_test, 0) = 0
+          AND week_key = ?
+          AND CAST(COALESCE(json_extract(profile,'$.raceV'),0) AS INTEGER) >= 2
+          AND week_steps > 0
+        ORDER BY week_steps DESC LIMIT 25`,
+  },
   /* REMOVED, not lost: 'rateLimitRecovery seeks on device AND name'.
      It planned `SELECT COUNT(*) AS n FROM events WHERE device = ? AND name = ?
      AND ts > ?`, which was the recovery limiter counting its own rows in the
@@ -226,6 +301,53 @@ const CASES = [
      The index it guarded, idx_events_device_name_day, is still covered: the
      `testers` case above reads e.name out of it. */
 ];
+
+/* ---- 2026-09-01: the tables nothing ever deleted from, and the bounded sweep
+   -------------------------------------------------------------------------
+   pruneStale() runs one statement shape against four tables, so these four
+   cases share a `fragment`: the templated DELETE in src/index.js is the only
+   place any of them is written down. What differs per table is the INDEX, and
+   that is the whole point of planning them separately. devices is the one that
+   needed a new index (migrations/2026-09-01-devices-retention.sql); without it
+   the plan is SCAN devices, which the cron would run every 15 minutes forever.
+
+   `${...}` below are literal characters in the source being searched for, not
+   interpolations: these are single-quoted strings on purpose. */
+const STALE_FRAGMENT = 'DELETE FROM ${rule.table} WHERE rowid IN (';
+const staleCase = (table, col, index) => ({
+  name: `the stale pruner reaches ${table} through ${index}`,
+  fragment: STALE_FRAGMENT,
+  mustIndex: `COVERING INDEX ${index}`,
+  mustNotScan: `SCAN ${table}`,
+  params: [Date.now(), 10],
+  // BOUND is checked against the candidate SELECT, since a DELETE returns no rows.
+  boundSql: `SELECT rowid FROM ${table} WHERE ${col} < ? LIMIT ?`,
+  sql: `DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE ${col} < ? LIMIT ?)`,
+});
+CASES.push(
+  staleCase('devices', 'last_seen', 'idx_devices_last_seen'),
+  staleCase('reports', 'ts', 'idx_reports_ts'),
+  staleCase('leads', 'ts', 'idx_leads_ts'),
+  staleCase('rate_limits', 'expires_at', 'idx_rate_limits_expiry'),
+);
+
+/* THE SWEEP ON THE REQUEST PATH, which is a different statement in a different
+   place from the one above and has to be planned on its own. It used to be an
+   unbounded `DELETE FROM rate_limits WHERE expires_at < ?` and round 12 measured
+   202,733 rows going in a single 700 ms call, with five live backups queued
+   behind D1's single writer paying about 675 ms each. This is the LIMITed form,
+   lifted out of rateLimit() verbatim. */
+const SWEEP_SQL =
+  'DELETE FROM rate_limits WHERE rowid IN (SELECT rowid FROM rate_limits WHERE expires_at < ? LIMIT ?)';
+CASES.push({
+  name: 'the request-path sweep is a COVERING seek, not a walk of the expired set',
+  fragment: SWEEP_SQL,
+  mustIndex: 'COVERING INDEX idx_rate_limits_expiry',
+  mustNotScan: 'SCAN rate_limits',
+  params: [Date.now(), 1000],
+  boundSql: 'SELECT rowid FROM rate_limits WHERE expires_at < ? LIMIT ?',
+  sql: SWEEP_SQL,
+});
 
 const planOf = (sql, params) =>
   db.prepare('EXPLAIN QUERY PLAN ' + sql).all(...params).map(r => r.detail).join(' | ');
@@ -332,6 +454,98 @@ test('GRANT_DORMANT_DAYS is never shorter than GRANT_RETENTION_DAYS', () => {
   assert.ok(dormant >= grant, `the dormancy window (${dormant}d) is inside the age bound (${grant}d), so it is clamped`);
 });
 
+/* THE SWEEP MAY NEVER GO BACK TO BEING UNBOUNDED. The plan case above proves
+   the LIMITed form reaches its rows well; it cannot prove the unbounded form is
+   GONE, because a source file can contain both and only one of them runs. This
+   is the assertion that goes red on the pre-2026-09-01 code, and it is on the
+   request path rather than the cron, which is why it matters: what it stalls is
+   somebody's backup finishing, not a background job. */
+test('the request-path sweep of rate_limits carries a LIMIT', () => {
+  assert.ok(source.includes(SWEEP_SQL),
+    'the sweep statement has changed; re-read rateLimit() and update SWEEP_SQL here');
+  assert.ok(!/DELETE FROM rate_limits WHERE expires_at < \?'/.test(source),
+    'the unbounded sweep is back in src/index.js. One call took 700 ms for 202,733 rows and ' +
+    'every signed write in flight queued behind it.');
+});
+
+/* STALE_RULES IS A LIST OF DECISIONS, so it is pinned as one. A table quietly
+   dropped out of it stops being pruned and NOTHING else goes red: the pruner
+   still runs, still reports a total, still says `more: false`, and the table it
+   forgot grows forever exactly as it did before any of this was written. Each
+   triple is (table, column, days) and each one was argued for in the note above
+   STALE_RULES; changing a window is fine, changing it without coming through
+   here is what this stops. */
+test('STALE_RULES still covers every table that had no deleter at all', () => {
+  const m = /const STALE_RULES = \[([\s\S]*?)\n\];/.exec(source);
+  assert.ok(m, 'STALE_RULES is gone from src/index.js');
+  const rules = [...m[1].matchAll(/\{ table: '(\w+)',\s*col: '(\w+)',\s*days: (\d+) \}/g)]
+    .map(r => `${r[1]}.${r[2]}@${r[3]}`);
+  assert.equal(rules.length, 4, `parsed ${rules.length} rules out of STALE_RULES, expected 4: ${rules}`);
+  for (const want of ['devices.last_seen@365', 'reports.ts@365', 'leads.ts@365', 'rate_limits.expires_at@0']) {
+    assert.ok(rules.includes(want), `STALE_RULES no longer contains ${want}, it has: ${rules.join(', ')}`);
+  }
+  /* The retention tables must come before the sweep. maxRows is shared across
+     the whole run, so a busy hour of signed writes in front of them would starve
+     the three tables this was written for. */
+  assert.ok(rules.indexOf('rate_limits.expires_at@0') === rules.length - 1,
+    `the rate_limits sweep is not last, so it can spend the tick's whole row budget: ${rules.join(', ')}`);
+});
+
+/* A PRUNER WITH NO CALLER IS AN INERT MECHANISM. pruneStale() can be perfect,
+   its own suite can drive it through /dev/prune-stale and go green on every
+   case, and if scheduled() does not call it then nothing is ever pruned in
+   production and no test in this directory says so. The behaviour suite cannot
+   see this either: it calls the DEV hook, which is a second caller. */
+test('scheduled() actually runs the stale pruner', () => {
+  const i = source.indexOf('async scheduled(event, env)');
+  assert.ok(i > 0, 'scheduled() is gone; re-read the default export');
+  const body = source.slice(i, source.indexOf('async fetch(request, env)', i));
+  assert.ok(/await pruneStale\(env, now/.test(body),
+    'scheduled() no longer calls pruneStale, so devices, reports and leads are back to growing forever');
+  // Order matters: events has the 10 GB deadline and gets the budget first.
+  assert.ok(body.indexOf('await pruneEvents(') < body.indexOf('await pruneStale('),
+    'the stale pass now runs before the events pass, which is the one with the deadline');
+});
+
+/* Nothing may outlive the table it joins to. Both /stats reads of reports and
+   leads LEFT JOIN devices for a label, and every surviving events row does too,
+   so the devices window has to be the longest of the four. Shorten it below any
+   of them and old rows silently lose their device without a single test
+   noticing: the join is a LEFT JOIN and a COALESCE, so it degrades rather than
+   throws, which is exactly why it needs saying here. */
+test('the devices window outlives everything that joins to it', () => {
+  const days = t => Number(new RegExp(`\\{ table: '${t}',\\s*col: '\\w+',\\s*days: (\\d+) \\}`).exec(source)?.[1]);
+  const events = Number(/const EVENT_RETENTION_DAYS = (\d+)/.exec(source)?.[1]);
+  const devices = days('devices');
+  assert.ok(events > 0 && devices > 0, 'EVENT_RETENTION_DAYS or the devices rule is missing');
+  assert.ok(devices >= events, `devices keeps ${devices} days of a table events keeps ${events} of`);
+  for (const t of ['reports', 'leads']) {
+    assert.ok(devices >= days(t), `devices keeps ${devices} days but ${t} keeps ${days(t)}, so old ${t} lose their label`);
+  }
+});
+
+/* THE CROWD LOCKOUT, as arithmetic on the two constants rather than as 612 HTTP
+   requests (security.test.mjs does it the expensive way against a real worker;
+   this one sees it with nothing running). rl_events_ip was 600/hour, which is
+   ten users posting 60 events an hour, and round 12 proved users 11 and 12 got
+   429 on every post including a brand-new install's very first one. The IP
+   bucket is a ceiling on ONE ABUSIVE SOURCE; the device bucket is the control.
+   So the IP budget has to clear a crowd of CROWD_DEVICES devices all spending
+   their per-device budget in full, or it is the binding constraint on a NAT and
+   the crowds worth measuring are the ones that go dark. */
+const CROWD_DEVICES = 100;
+test(`the /events IP budget clears ${CROWD_DEVICES} devices at the per-device ceiling`, () => {
+  const limitOf = n => Number(new RegExp(`${n}:\\s*\\{ limit: (\\d+)`).exec(source)?.[1]);
+  const perDevice = limitOf('rl_events_dev'), perIp = limitOf('rl_events_ip');
+  assert.ok(perDevice > 0 && perIp > 0, 'rl_events_dev / rl_events_ip are not in RATE_LIMITS any more');
+  assert.ok(perIp >= perDevice * CROWD_DEVICES,
+    `${perIp}/hour per IP is only ${Math.floor(perIp / perDevice)} devices at the ${perDevice}/hour device ceiling. ` +
+    'On NAT that locks every further install out of analytics, first POST included.');
+  // And the backstop must still EXIST: removing the IP bucket entirely would
+  // pass the line above and leave an unsigned 51-writes-a-request route open.
+  assert.ok(Number.isFinite(perIp), 'the IP backstop is gone from an unsigned route');
+});
+
 /* THE PREDICATE THAT DELETES SOMEBODY'S PRESENT, checked as SQL rather than as
    behaviour, because the behaviour suite needs a running worker and this file
    does not. The dormancy arm is only sound while BOTH of its clocks are in it.
@@ -429,6 +643,18 @@ test('recordPruneRun swallows its own failure, so a missing migration cannot sto
   assert.ok(!/\bthrow\b/.test(body), 'recordPruneRun rethrows, which is the same failure by another route');
 });
 
+/* A migration file and schema.sql are two descriptions of one database, and a
+   PRODUCTION database only ever gets the migration. The plan case above runs
+   against schema.sql, so without this the index could be in schema.sql, absent
+   from production, and the plan test would stay green while the live cron
+   scanned a million-row table every fifteen minutes. */
+test('the devices retention index is in both schema.sql and its migration', () => {
+  const migration = readFileSync(join(HERE, 'migrations', '2026-09-01-devices-retention.sql'), 'utf8');
+  const re = /CREATE INDEX IF NOT EXISTS idx_devices_last_seen\b/;
+  assert.ok(re.test(schema), 'schema.sql is missing idx_devices_last_seen');
+  assert.ok(re.test(migration), 'the migration is missing idx_devices_last_seen');
+});
+
 test('the prune_runs migration and schema.sql agree', () => {
   const migration = readFileSync(join(HERE, 'migrations', '2026-08-25-prune-runs.sql'), 'utf8');
   const re = /CREATE TABLE IF NOT EXISTS prune_runs\b/;
@@ -440,6 +666,154 @@ test('the prune_runs migration and schema.sql agree', () => {
     .split('\n').map(l => (/^\s*(\w+)\s/.exec(l) || [])[1]).filter(Boolean).sort().join(',');
   assert.equal(cols(migration), cols(schema),
     'prune_runs has different columns in schema.sql and its migration');
+});
+
+/* ===========================================================================
+   2026-09-01: THE BOARD MUST HAND BACK THE SAME PLAYERS IN THE SAME ORDER.
+   ===========================================================================
+   The plan cases above only prove the new queries are cheap. Cheap and wrong is
+   the failure that matters here, and it has two distinct shapes:
+
+     1. THE RATCHET. max_level was already sitting there and is tempting, but it
+        is monotone: rank on it and every player who has ever been higher than
+        they are now moves up the board. So `level` has to be the CURRENT claim.
+     2. THE UN-BACKFILLED ROW. A new column is NULL until its owner next syncs,
+        and NULL sorts LAST under DESC, so without the backfill the top 100 is
+        rebuilt out of whoever happened to open the app since the deploy and
+        everybody else silently vanishes. That is a worse bug than a slow board.
+
+   So this runs the OLD json_extract query and the NEW column query over one
+   fixture and requires an identical list of ids. The fixture is built with
+   level/badges NULL, exactly as a live database looks the moment before the
+   migration, and filled by the UPDATE statements READ OUT OF THE MIGRATION
+   FILE ITSELF, so a backfill that stops matching what the board used to compute
+   goes red here rather than on the Crew tab.
+
+   TIES: level ties and (level, badges) ties are both in the fixture and both
+   are broken by last_seen, which is unique across it, so the whole order is
+   determined and an exact id sequence is a fair thing to demand. A THREE-WAY
+   tie is deliberately not asserted on: neither plan promises an order for it,
+   the old one no more than the new one, so pinning it would be pinning
+   SQLite's sorter rather than this change. */
+test('the board ranks the same players in the same order after the migration', () => {
+  const bdb = new DatabaseSync(':memory:');
+  bdb.exec(schema);
+
+  /* Every row is left with level/badges NULL, which is exactly what a live
+     database looks like the moment before the migration: the JSON is the only
+     copy of the rank key. last_seen is unique and deliberately NOT in board
+     order, so a board that has lost its ranking key falls back to last_seen and
+     produces a visibly different list.
+     The cases: a plain high row; one that beats the next two on badges alone;
+     two on the same level AND badges, split by last_seen; a snapshot with NO
+     level key at all (the board's COALESCE default of 1, and 0 badges); a
+     flagged test account that must never appear at any rank; and a registration
+     that has never synced a snapshot. */
+  const add = (id, snap, seen, isTest = 0) =>
+    bdb.prepare('INSERT INTO players (id, pubkey, handle, friend_code, profile, created_at, last_seen, is_test) VALUES (?,?,?,?,?,?,?,?)')
+      .run(id, 'k-' + id, 'Grim Tibia', 'BONE-' + id.toUpperCase() + '-AAAA',
+           snap === null ? null : JSON.stringify(snap), 1, seen, isTest);
+  add('top', { level: 40, badges: 2 }, 1000);
+  add('tie-a', { level: 30, badges: 9 }, 500);
+  add('tie-b', { level: 30, badges: 4 }, 900);
+  add('tie-c', { level: 30, badges: 4 }, 300);   // same level AND badges as tie-b
+  add('nolevel', {}, 700);
+  /* THE THREE ROWS THAT MAKE THE COALESCE DEFAULTS LOAD-BEARING, and each one
+     needs a NEIGHBOUR at the defaulted value or the slip changes nothing.
+     `lvl1` states level 1 outright, below `nolevel` on last_seen, so defaulting
+     an absent level to 0 drops nolevel under it. `nobadges` states a level and
+     no badge count, and `badge1` sits at exactly one badge below it on
+     last_seen, so defaulting absent badges to anything but 0 lifts nobadges
+     over it. Both were silently green without the neighbour: an affected row
+     that is already last stays last however it is scored. */
+  add('lvl1', { level: 1, badges: 0 }, 200);
+  add('nobadges', { level: 30 }, 400);
+  add('badge1', { level: 30, badges: 1 }, 100);
+  add('cheat', { level: 999, badges: 999 }, 800, 1);
+  add('never', null, 600);
+
+  const OLD = `SELECT id FROM players
+                WHERE profile IS NOT NULL AND COALESCE(is_test, 0) = 0
+                ORDER BY CAST(COALESCE(json_extract(profile,'$.level'), 1) AS INTEGER) DESC,
+                         CAST(COALESCE(json_extract(profile,'$.badges'), 0) AS INTEGER) DESC,
+                         last_seen DESC LIMIT 100`;
+  const NEW = `SELECT id FROM players
+                WHERE profile IS NOT NULL AND COALESCE(is_test, 0) = 0
+                ORDER BY level DESC, badges DESC, last_seen DESC LIMIT 100`;
+  const before = bdb.prepare(OLD).all().map(r => r.id);
+  assert.ok(before.length > 0, 'the fixture matched nothing, so the comparison proves nothing');
+  assert.ok(!before.includes('cheat') && !before.includes('never'),
+    'the fixture is wrong: the excluded rows are on the old board too');
+
+  /* THE BACKFILL IS LOAD-BEARING, and this is where that is proved rather than
+     asserted: with the columns still NULL, which is every row on the day the
+     migration lands, the new ORDER BY has nothing to rank on and hands back a
+     different board. If somebody deletes the UPDATE below and this test still
+     passes, the fixture has stopped reaching the bug. */
+  const unbackfilled = bdb.prepare(NEW).all().map(r => r.id);
+  assert.notDeepEqual(unbackfilled, before,
+    'an un-backfilled board matched the old one, so the backfill below proves nothing');
+
+  /* The migration's own backfill, not a copy of it. */
+  const backfill = readFileSync(join(HERE, 'migrations', '2026-09-01-board-backfill.sql'), 'utf8');
+  const updates = backfill.replace(/^\s*--.*$/gm, '').split(';').map(s => s.trim())
+    .filter(s => /^UPDATE players\b/i.test(s) && /\blevel\b/.test(s));
+  assert.equal(updates.length, 1, `expected one level backfill in the migration, found ${updates.length}`);
+  bdb.exec(updates[0]);
+
+  const after = bdb.prepare(NEW).all().map(r => r.id);
+  assert.deepEqual(after, before,
+    `the board reordered.\n      before ${before.join(',')}\n      after  ${after.join(',')}`);
+  bdb.close();
+});
+
+test('the 2026-09-01 migration and schema.sql agree on both board indexes', () => {
+  const migration = readFileSync(join(HERE, 'migrations', '2026-09-01-board-columns.sql'), 'utf8');
+  const backfill = readFileSync(join(HERE, 'migrations', '2026-09-01-board-backfill.sql'), 'utf8');
+  /* THE BACKFILL IS A SEPARATE FILE SO IT CAN BE RUN TWICE, which is the whole
+     mechanism that closes the window between this migration and the deploy.
+     `wrangler d1 execute --file` stops at the first error and a second
+     ADD COLUMN always errors, so one ALTER in here silently makes the re-run a
+     no-op that reports a failure and changes nothing. Measured on the local
+     database 2026-09-01, which is how the split came to exist. */
+  assert.ok(!/ALTER TABLE/i.test(backfill.replace(/^\s*--.*$/gm, '')),
+    'the backfill file contains an ALTER, so re-running it aborts before the UPDATEs and the post-deploy sweep does nothing');
+  for (const idx of ['idx_players_board', 'idx_players_week']) {
+    assert.ok(new RegExp(`CREATE INDEX IF NOT EXISTS ${idx}\\b`).test(schema), `schema.sql is missing ${idx}`);
+    assert.ok(new RegExp(`CREATE INDEX IF NOT EXISTS ${idx}\\b`).test(migration), `the migration is missing ${idx}`);
+  }
+  /* A column the migration adds but schema.sql does not declare means a fresh
+     database and a migrated one are different shapes, and the board is broken on
+     exactly one of them. */
+  for (const col of ['level', 'badges']) {
+    assert.ok(new RegExp(`ALTER TABLE players ADD COLUMN ${col}\\b`).test(migration),
+      `the migration never adds players.${col}`);
+    assert.ok(new RegExp(`^\\s*${col} INTEGER`, 'm').test(schema),
+      `schema.sql does not declare players.${col}`);
+  }
+});
+
+/* PUT /profile IS THE ONLY WRITER, so it is the only thing keeping the columns
+   equal to the snapshot the board used to read. If somebody adds a route that
+   writes `profile` without writing `level` beside it, both boards start ranking
+   on a value that has stopped moving, and nothing else in this suite would see
+   it: the answer stays plausible and only the ORDER is wrong. */
+test('every write of players.profile also writes the materialised rank key', () => {
+  const writes = [...source.matchAll(/UPDATE players SET[\s\S]{0,400}?WHERE/g)]
+    .map(m => m[0]).filter(s => /\bprofile\s*=/.test(s));
+  assert.ok(writes.length >= 2, `only ${writes.length} writes of players.profile found; the parse is wrong`);
+  for (const w of writes) {
+    const oneLine = w.replace(/\s+/g, ' ').slice(0, 120);
+    /* /dev/week-warp writes only the two race fields, through json_set, and it
+       writes week_key/week_steps beside them. Anything that writes the whole
+       snapshot has to write level and badges too. */
+    if (/json_set\(/.test(w)) {
+      assert.ok(/week_key\s*=/.test(w), `a json_set write of profile does not write week_key: ${oneLine}`);
+      continue;
+    }
+    assert.ok(/\blevel\s*=/.test(w) && /\bbadges\s*=/.test(w),
+      `this write replaces the snapshot without updating the board's rank key: ${oneLine}`);
+  }
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

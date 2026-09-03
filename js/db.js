@@ -222,11 +222,16 @@ const QUIET_KV = new Set([
   'spiresIntroSeen', 'bossesIntroSeen', 'mageIntroSeen', 'raceIntroSeen', 'raceResultSeen',
   'gardenIntroSeen', 'discordIntroSeen', 'discordIntroShown', 'discordJoined',
   'betaThanksSeen', 'cosmeticTeaserSeen', 'changelogSeen', 'grantsSeen', 'seenUnlocks',
+  'onbProgress',
   'hlwSeen', 'siegeSeen', 'map-seen', 'mapLpHint', 'namePrompted', 'notifAsked',
   'surveyDone', 'surveySnoozeAt', 'renameRequired', 'petSeenLevel',
+  'lastOpenDay', 'wbReturnDay',
   // "when did I last do X" throttles: a lost timestamp costs one extra attempt
   'lastNudgeAt', 'racePushAt', 'socialSyncAt', 'crewSeenTs', 'hkLastSync',
   'hkStaleNotified', 'hkSleepDiag', 'lastExportAt', 'backupAt', 'transmuteAt',
+  // cloud-health diagnostics + their once-a-day nudge throttle: all three are
+  // re-derived by the next push / the next /health, same class as backupAt
+  'backupFail', 'clockSkewMs', 'cloudNudgeAt',
   // idempotent one-shot migrations and backfills: they re-run next launch
   'game-init', 'loot-init', 'bootRestored', 'dayOneEquipFix', 'denceil-backfill',
   'seedpouch-backfill', 'freeze-refunded', 'wheelResetOnce_v61', 'petLvlV', 'hkScopesV',
@@ -719,7 +724,21 @@ export async function exportAll() {
  * and only for keys the payload does not itself carry. The payload always
  * wins where it has an opinion, which means the outcome for every one of
  * these keys is byte-identical to what upsert-only produced. Nothing here
- * is game state: no coins, no dust, no progress. */
+ * is game state: no coins, no dust, no progress.
+ *
+ * ON THE MERGE PATH (replace:false, the cloud pull) the payload does NOT
+ * win these keys: a device key the DEVICE already holds is kept and the
+ * payload's copy is dropped. Verified 2026-08-31 by reading every importAll
+ * caller: no flow supplies identity via a blob. The Settings file import is
+ * replace:true; the cloud pull cannot even START without a local identity
+ * (signedFetch signs with it), and a phrase restore installs the identity
+ * via adoptIdentity BEFORE pulling. So the only thing a blob's identity row
+ * could ever do on a merge is OVERWRITE a live key, and that is exactly the
+ * total-loss bug this closes: device A's first-ever blob carried a keyless
+ * identity (see pushBackup), device B pulled it over its good one, re-keyed
+ * on the next push, and the two devices encrypted under different keys.
+ * A device key the device does NOT hold yet still lands from the payload,
+ * which keeps the pre-existing fresh-device behaviour byte-identical. */
 const DEVICE_KV = ['identity', 'social', 'recoveryId', 'recoverySetAt', 'vaultConflict', 'bootRestored', 'cloudOff', 'apiBase'];
 
 /* IMPORT IS ALL-OR-NOTHING. Tom, 2026-08-13, after Vlad's demonstration:
@@ -814,12 +833,19 @@ export async function importAll(data, { replace = true } = {}) {
      queue and we would be back to piecewise commit, which is exactly what
      this function was rewritten to stop. */
   let keptKv = [];
+  let kvRows = data.kv;
   if (declared.has('kv')) {
     const payloadKeys = new Set(data.kv.map(r => r && r.k));
     let localKv;
     try { localKv = await db.all('kv'); }
     catch (e) { throw new Error('the restore could not read storage. Your old data is unchanged. Try again.'); }
     if (replace) keptKv = localKv.filter(r => DEVICE_KV.includes(r.k) && !payloadKeys.has(r.k));
+    /* MERGE: the payload never overwrites a device key this device holds
+       (see the DEVICE_KV header). Non-device keys keep payload-wins. */
+    if (!replace) {
+      const localKeys = new Set(localKv.map(r => r && r.k));
+      kvRows = data.kv.filter(r => !(r && DEVICE_KV.includes(r.k) && localKeys.has(r.k)));
+    }
     /* THE DAY WITNESS ONLY EVER GOES UP, INCLUDING THROUGH A RESTORE, and
        unlike DEVICE_KV above the payload does NOT get to win. Every other mark
        in this app can be rewound by restoring an export taken before it moved
@@ -849,7 +875,7 @@ export async function importAll(data, { replace = true } = {}) {
         /* Clear and puts in one transaction, so they land together or not
            at all. Only for stores the file declares: see the header. */
         if (replace && declared.has(s)) os.clear();
-        for (const row of (data[s] || [])) os.put(row);
+        for (const row of (s === 'kv' ? (kvRows || []) : (data[s] || []))) os.put(row);
         if (s === 'kv') for (const row of keptKv) os.put(row);
       }
       /* An import replaces the contents of every store, so every derived cache

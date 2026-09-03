@@ -3,7 +3,12 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { flagFor } from '../test-flag.mjs';
+import * as fsMod from 'node:fs';
+// node:sqlite prints one experimental warning on import. schema-plan.test.mjs
+// already lives with it; it is the only way to grade a claim about the DATABASE
+// from here rather than about an answer some route composed.
+import { DatabaseSync } from 'node:sqlite';
+import { flagFor, RUN } from '../test-flag.mjs';
 
 const BASE = process.env.API || 'http://127.0.0.1:8788';
 /* Registrations are flagged when this run is NOT local, so a suite pointed at
@@ -55,13 +60,17 @@ const b64 = buf => Buffer.from(buf).toString('base64');
    cf-connecting-ip is set by Cloudflare at the edge in production and a
    client-supplied value is replaced there, so this is only settable locally,
    which is what makes the IP-keyed limiter testable at all.
-   Passing a FIXED ip is how a test drives the limiter deliberately. */
+   Passing a FIXED ip is how a test drives the limiter deliberately.
+   SO EVERY REGISTRATION IN THIS FILE GOES THROUGH regFetch. Three of the backup
+   cases used to POST /register by hand with no cf-connecting-ip, which puts them
+   in the one bucket every header-less caller shares, and that bucket is spent by
+   the fourth consecutive run of this suite against one local database. */
 const rndIp = () => `198.18.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
 function regFetch(pubkey, ip = rndIp()) {
   return fetch(BASE + '/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
-    body: JSON.stringify({ test: IS_TEST, pubkey }),
+    body: JSON.stringify({ test: IS_TEST, run: RUN, pubkey }),
   });
 }
 async function makeKeys() {
@@ -80,6 +89,23 @@ async function signedFetch(kp, playerId, method, path, body = '', tsOverride = n
     headers: { 'content-type': 'application/json', 'x-bh-player': playerId, 'x-bh-ts': String(ts), 'x-bh-sig': b64(sig) },
     body: method === 'GET' ? undefined : body,
   });
+}
+
+/* SIGN ONCE, SEND AS MANY TIMES AS YOU LIKE. signedFetch above re-signs on every
+   call, which is what an honest client does and is therefore exactly what CANNOT
+   test a replay. This returns a thunk over one frozen set of headers and one
+   frozen body, so calling it twice puts the SAME bytes on the wire twice, which
+   is what a captured request is. */
+async function signedReq(kp, playerId, method, path, body = '') {
+  const ts = Date.now();
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, kp.privateKey,
+    new TextEncoder().encode(`${method}\n${path}\n${ts}\n${body}`));
+  const init = {
+    method,
+    headers: { 'content-type': 'application/json', 'x-bh-player': playerId, 'x-bh-ts': String(ts), 'x-bh-sig': b64(sig) },
+    body: method === 'GET' ? undefined : body,
+  };
+  return () => fetch(BASE + path, init);
 }
 
 const { kp, pubJwk } = await makeKeys();
@@ -245,7 +271,7 @@ await test('backup: PUT requires a valid signature (wrong key rejected)', async 
    cap rejects nothing" are both failures and only one of them looks like one. */
 await test('backup: a 2 MB blob STORES, and comes back byte-for-byte', async () => {
   const fresh = await makeKeys();
-  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ test: IS_TEST, pubkey: fresh.pubJwk }) })).json();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
   // 2,000,000 bytes: comfortably over the p50 one-year save (2.23 MB is p50 at
   // 365 days, so this is roughly the median player at eleven months), and
   // comfortably under D1's own value limit measured at 2,199,942 bytes.
@@ -258,7 +284,7 @@ await test('backup: a 2 MB blob STORES, and comes back byte-for-byte', async () 
 
 await test('backup: a blob D1 cannot hold answers 413, not an unhandled 500', async () => {
   const fresh = await makeKeys();
-  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ test: IS_TEST, pubkey: fresh.pubJwk }) })).json();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
   /* 3 MB sits in the gap nobody knew was there: under MAX_BACKUP_BYTES, so the
      route's own check passes it, and over D1's value limit, so the INSERT throws
      SQLITE_TOOBIG. Before 2026-08-17 that fell through to the generic handler
@@ -294,7 +320,7 @@ await test('backup: a blob D1 cannot hold answers 413, not an unhandled 500', as
 
 await test('backup: a blob over the cap is refused with 413, and nothing is stored', async () => {
   const fresh = await makeKeys();
-  const reg = await (await fetch(BASE + '/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ test: IS_TEST, pubkey: fresh.pubJwk }) })).json();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
   const blob = 'A'.repeat(4 * 1024 * 1024 + 1024);
   const put = await signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup', JSON.stringify({ blob }));
   assert.equal(put.status, 413, 'the cap is not being enforced at all');
@@ -548,6 +574,118 @@ await test('cheer: preset cheer delivers a reward-less grant; self + bad index r
   assert.equal(bad.status, 400);
 });
 
+/* A RETRY IS NOT A SECOND CHEER. The client's send has a 12s deadline, so an
+   answer lost in flight re-arms the chips and the player taps again; without an
+   idempotency key the server counted a second row and the friend got two. */
+const cheerRows = async (to, keys) => {
+  const g = await (await signedFetch(keys.kp, to, 'GET', '/grants?since=0')).json();
+  return (g.grants || []).filter(x => x.type === 'cheer');
+};
+await test('cheer: the same ck twice delivers ONE cheer; a different ck delivers a second', async () => {
+  const rk = await makeKeys();
+  const r = await (await regFetch(rk.pubJwk)).json();
+  await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: r.friendCode }));
+  await signedFetch(rk.kp, r.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
+  const ck = 'tap-' + RUNSUF;
+  const send = c => signedFetch(kp, player.playerId, 'POST', '/cheer', JSON.stringify({ to: r.playerId, cheer: 1, ck: c }));
+  const a = await send(ck);
+  assert.equal(a.status, 200);
+  const before = await cheerRows(r.playerId, rk);
+  assert.equal(before.length, 1, 'the first send delivers exactly one');
+  const b = await send(ck);
+  assert.equal(b.status, 200, 'a retry is answered ok, not 429');
+  assert.equal((await b.json()).duplicate, true, 'and is named as the duplicate it is');
+  assert.equal((await cheerRows(r.playerId, rk)).length, 1, 'the same ck twice delivers ONE cheer');
+  const c = await send(ck + '-2');
+  assert.equal(c.status, 200);
+  assert.equal((await cheerRows(r.playerId, rk)).length, 2, 'a different ck IS a second cheer');
+});
+
+/* A RETRY IS NOT A SECOND GIFT, and unlike a cheer this one moves coins. The
+   client deducts locally BEFORE the send and refunds on anything that is not
+   ok, so a delivered gift whose answer was lost refunds the sender while the
+   friend keeps the coins: two of them mint coins out of nothing. */
+const befriend = async (bk, b) => {
+  await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: b.friendCode }));
+  await signedFetch(bk.kp, b.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
+};
+const spendGiftRows = async (to, keys) => {
+  const g = await (await signedFetch(keys.kp, to, 'GET', '/grants?since=0')).json();
+  return (g.grants || []).filter(x => x.type === 'gift' && x.payload.mode === 'spend');
+};
+const sendGift = (to, ck, coins = 50) => signedFetch(kp, player.playerId, 'POST', '/gift',
+  JSON.stringify(ck === null ? { to, mode: 'spend', coins } : { to, mode: 'spend', coins, ck }));
+
+await test('gift: the same ck twice delivers ONE spend gift; a different ck delivers a second', async () => {
+  const rk = await makeKeys();
+  const r = await (await regFetch(rk.pubJwk)).json();
+  await befriend(rk, r);
+  const ck = 'gtap-' + RUNSUF;
+  assert.equal((await sendGift(r.playerId, ck)).status, 200);
+  assert.equal((await spendGiftRows(r.playerId, rk)).length, 1, 'the first send delivers exactly one');
+  const b = await sendGift(r.playerId, ck);
+  assert.equal(b.status, 200, 'a retry must be answered ok: the client refunds itself on anything else');
+  const bj = await b.json();
+  assert.equal(bj.duplicate, true, 'and is named as the duplicate it is');
+  assert.equal(bj.reward.coins, 50, 'the retry still reports the reward, so the sheet can settle');
+  assert.equal((await spendGiftRows(r.playerId, rk)).length, 1, 'the same ck twice delivers ONE gift');
+  assert.equal((await sendGift(r.playerId, ck + '-2')).status, 200);
+  assert.equal((await spendGiftRows(r.playerId, rk)).length, 2, 'a different ck IS a second gift');
+});
+
+await test('gift: the 5/friend/day cap still refuses at its bound, counting ck and no-ck alike', async () => {
+  const rk = await makeKeys();
+  const r = await (await regFetch(rk.pubJwk)).json();
+  await befriend(rk, r);
+  // Three keyed and two unkeyed, because the cap counts the whole key RANGE and
+  // an older client sending no ck must not buy itself extra gifts.
+  for (const c of ['cap1-' + RUNSUF, 'cap2-' + RUNSUF, 'cap3-' + RUNSUF, null, null]) {
+    assert.equal((await sendGift(r.playerId, c)).status, 200, 'the first five are under the cap');
+  }
+  assert.equal((await spendGiftRows(r.playerId, rk)).length, 5, 'five delivered, and no more');
+  const over = await sendGift(r.playerId, 'cap6-' + RUNSUF);
+  assert.equal(over.status, 429, 'the sixth is refused by the cap, not deduped');
+  assert.equal((await over.json()).code, 'limit');
+  assert.equal((await spendGiftRows(r.playerId, rk)).length, 5, 'and nothing landed for it');
+});
+
+/* THE REPLAY, which is the sharpest form of all of this and the reason a client
+   token alone is not the answer. verifySigned checked a signature and a
+   five-minute skew window and nothing else, so a captured signed POST re-sent
+   BYTE FOR BYTE verified again and landed again: one original plus two replays
+   was measured as three cheers. The no-ck body below is deliberate. It is what
+   an older client sends, so the grant key falls back to the counted shape and
+   the client token cannot absorb anything: only the server-side nonce can. */
+await test('replay: one signed POST sent three times lands ONE effect', async () => {
+  const rk = await makeKeys();
+  const r = await (await regFetch(rk.pubJwk)).json();
+  await befriend(rk, r);
+  const fire = await signedReq(kp, player.playerId, 'POST', '/cheer',
+    JSON.stringify({ to: r.playerId, cheer: 2 }));
+  assert.equal((await fire()).status, 200, 'PRECONDITION: the original must be accepted');
+  assert.equal((await cheerRows(r.playerId, rk)).length, 1, 'PRECONDITION: it delivered one cheer');
+
+  const again = await fire();
+  assert.equal(again.status, 401, 'the same bytes a second time must be refused');
+  assert.equal((await again.json()).error, 'replayed request', 'and told why, not "bad signature"');
+  assert.equal((await fire()).status, 401, 'and a third time');
+  assert.equal((await cheerRows(r.playerId, rk)).length, 1,
+    'one original plus two replays is ONE cheer');
+
+  /* THE CONTROL. A guard that refuses everything would pass every line above.
+     The same player, same friend, same body, RE-SIGNED, is an ordinary second
+     cheer and must land: that is what separates a replay guard from an outage. */
+  const fresh = await signedFetch(kp, player.playerId, 'POST', '/cheer', JSON.stringify({ to: r.playerId, cheer: 2 }));
+  assert.equal(fresh.status, 200, 'a re-signed send is not a replay');
+  assert.equal((await cheerRows(r.playerId, rk)).length, 2, 'and it delivers a second cheer');
+
+  // Reads are exempt on purpose: a replayed GET changes nothing, and nonce-ing
+  // the polling routes would be the write amplification the guard exists to avoid.
+  const read = await signedReq(rk.kp, r.playerId, 'GET', '/grants?since=0');
+  assert.equal((await read()).status, 200);
+  assert.equal((await read()).status, 200, 'a signed READ may be repeated');
+});
+
 await test('friends: accept endpoint seals a one-way request', async () => {
   const p3keys = await makeKeys();
   const p3 = await (await regFetch(p3keys.pubJwk)).json();
@@ -595,6 +733,39 @@ await test('leaderboard: hides never-synced players, carries pet.shiny', async (
   assert.ok(me, 'synced player is on the board');
   assert.ok(me.pet && me.pet.shiny === true && me.pet.id === 'C3', 'pet rides the leaderboard payload with shiny intact');
   assert.ok(!board.players.some(x => x.playerId === gp.playerId), 'never-synced registration is hidden');
+});
+
+/* THE BOARD RANKS ON THE CURRENT LEVEL, NOT ON THE RATCHET.
+   2026-09-01 moved the rank key out of json_extract(profile,'$.level') and into
+   a real column, because no index can serve an expression and the board was
+   reading every player in the table to publish a hundred. players.max_level was
+   already sitting there and looks like the same number, but it is MONOTONE by
+   design: it is the server's memory of the highest level it has ever accepted,
+   and the no-teleporting bound measures against it. Rank on that instead and
+   every player who has ever been higher than they are now quietly moves up.
+   A level can go down: sanitizeSnapshot clamps a claim from above and never
+   from below, and a restore from an older backup is exactly that. So this walks
+   one account down and asks the BOARD, which is the consumer that would be
+   wrong, rather than asking the row.
+   PROVE-RED: bind checked.maxLevel where PUT /profile binds checked.boardLevel,
+   and this fails with the ratchet's number. */
+await test('leaderboard: a level that goes DOWN goes down on the board too', async () => {
+  const k = await makeKeys();
+  const p = await (await regFetch(k.pubJwk)).json();
+  const put = lvl => signedFetch(k.kp, p.playerId, 'PUT', '/profile',
+    JSON.stringify({ snapshot: { level: lvl, outfit: { SK: 'SK0-1' }, gear: [] }, appV: 'test' }));
+  /* Climb to this account's own ceiling first, so "one below the top" is a real
+     rank on a dev DB that has accumulated a synced player per past run, rather
+     than a modest level that legitimately misses a LIMIT 100 page. */
+  assert.equal((await put(999999)).status, 200);
+  const peak = JSON.parse((await (await fetch(BASE + `/dev/player?id=${p.playerId}`)).json()).profile).level;
+  assert.ok(peak > 1, `PRECONDITION: the first sync landed a real level, got ${peak}`);
+  assert.equal((await put(peak - 1)).status, 200);
+  const board = await (await signedFetch(k.kp, p.playerId, 'GET', '/leaderboard')).json();
+  const me = board.players.find(x => x.playerId === p.playerId);
+  assert.ok(me, 'PRECONDITION: the player is on the board at all');
+  assert.equal(me.level, peak - 1,
+    `the board must show where the player is NOW (${peak - 1}), not the highest they have ever been (${peak})`);
 });
 
 /* THE WEEKLY STEP RACE. Tom, 2026-08-08: a weekly most-steps event with a prize
@@ -765,7 +936,7 @@ await test('the settled podium leaves out a flagged account and keeps a real one
   const bp = await (await fetch(BASE + '/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
-    body: JSON.stringify({ pubkey: bot.pubJwk, test: true }),
+    body: JSON.stringify({ pubkey: bot.pubJwk, test: true, run: RUN }),
   })).json();
   assert.ok((await pay(rp.playerId, 1)).ok && (await pay(bp.playerId, 2)).ok, 'PRECONDITION: both payouts must be staged');
 
@@ -824,6 +995,40 @@ await test('names are unique: case-insensitive, and re-saving your OWN name stil
     'a player re-saving their own name must not be told it is taken');
 });
 
+/* A ROW A TEST MADE SAYS SO, AT THE MOMENT IT IS MADE (2026-09-02).
+   is_test below is a SUPPRESSION switch, and it is false on a local run on
+   purpose: an invisible account cannot grade the leaderboard, the friend graph,
+   the race or the spires, and hard-coding flagFor to true to see what that would
+   cost turned 49 of 174 server assertions red (measured 2026-09-02 on a cp -R
+   copy: this file 43 passed 23 failed, spires 6/22, security 22/4). So the rows
+   this suite makes every day looked exactly like a real player's.
+   players.test_run is the second mark, and nothing filters on it: the row still
+   behaves like a real one and still says which run made it.
+   BOTH SAMPLES NON-EMPTY. The control below registers with no label at all, so
+   "the labelled one has a label" is a comparison rather than a coincidence: it
+   proves an unmarked row is genuinely still possible, and that this assertion
+   would notice one.
+   PROVE-RED: drop `, test_run` from the INSERT in the /register route (or bind
+   null for it) and LABEL fails saying the row came back unmarked. */
+await test('a registration carrying a run label lands players.test_run, and one without does not', async () => {
+  const labelled = await makeKeys();
+  const lp = await (await regFetch(labelled.pubJwk)).json();
+  const unlabelled = await makeKeys();
+  // live-api-lint: unlabelled THE CONTROL. This one deliberately carries no run,
+  // so the row above is graded against a row that really is unmarked.
+  const up = await (await fetch(BASE + '/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
+    body: JSON.stringify({ test: IS_TEST, pubkey: unlabelled.pubJwk }),
+  })).json();
+  assert.ok(lp.playerId && up.playerId, `PRECONDITION: both registrations must succeed: ${JSON.stringify({ lp, up })}`);
+
+  const seen = id => fetch(BASE + `/dev/player?id=${id}`).then(r => r.json()).then(r => r.test_run ?? null);
+  const [got, control] = [await seen(lp.playerId), await seen(up.playerId)];
+  assert.equal(got, RUN, `LABEL the row must carry the run that made it, got ${JSON.stringify(got)}`);
+  assert.equal(control, null, `CONTROL an unlabelled registration must stay unmarked, got ${JSON.stringify(control)}`);
+});
+
 /* TEST ACCOUNTS (2026-08-22). A live-API test registers with {test:true}; the
    row lands is_test=1 and is invisible on every public surface, so test runs
    stop flooding the Crew with dead level-1 accounts (docs/BOT-CENSUS-2026-08-22.md).
@@ -834,7 +1039,7 @@ await test('is_test account is hidden from the leaderboard and unfriendable', as
   const br = await (await fetch(BASE + '/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
-    body: JSON.stringify({ pubkey: bot.pubJwk, test: true }),
+    body: JSON.stringify({ pubkey: bot.pubJwk, test: true, run: RUN }),
   })).json();
   assert.ok(br.playerId, 'flagged registration still works: ' + JSON.stringify(br));
   // give it a profile: without the filter this is exactly a leaderboard row
@@ -879,7 +1084,7 @@ await test('a flagged account cannot put a friend request in a real player\'s Cr
   const bp = await (await fetch(BASE + '/register', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
-    body: JSON.stringify({ pubkey: bot.pubJwk, test: true }),
+    body: JSON.stringify({ pubkey: bot.pubJwk, test: true, run: RUN }),
   })).json();
 
   // the bot reads the board and takes the real player's add handle off it
@@ -905,6 +1110,316 @@ await test('a flagged account cannot put a friend request in a real player\'s Cr
   const all2 = [...(seen2.friends || []), ...(seen2.incoming || []), ...(seen2.outgoing || []), ...(seen2.pending || [])];
   assert.ok(all2.some(x => x.playerId === op.playerId || x.id === op.playerId),
     'an UNflagged request must still arrive, or the guard is refusing everybody');
+});
+
+/* ---- account deletion (App Store 5.1.1(v)) ----
+   One doomed player and one friend who watches them vanish, staged once so
+   each requirement is its own test and a failure names itself. Order matters:
+   the wrong-key attempt runs BEFORE the real delete, because "the account
+   survives" is only a claim while the account exists. */
+const doomed = {}, witness = {};
+let delWk = null;
+await test('account delete: setup: a friended, backed-up racer exists', async () => {
+  doomed.k = await makeKeys();
+  doomed.p = await (await regFetch(doomed.k.pubJwk)).json();
+  witness.k = await makeKeys();
+  witness.p = await (await regFetch(witness.k.pubJwk)).json();
+  // on this week's step board (same week arithmetic as the race test above)
+  const epoch = Date.parse('2026-08-07T00:00:00Z');
+  const weekStart = epoch + Math.floor((Date.now() - epoch) / (7 * 86400000)) * 7 * 86400000;
+  delWk = new Date(weekStart).toISOString().slice(0, 10);
+  const body = JSON.stringify({ snapshot: { level: 4, outfit: { SK: 'SK0-1' }, gear: [], weekKey: delWk, weekSteps: 20000, raceV: 2 }, appV: 'test' });
+  assert.equal((await signedFetch(doomed.k.kp, doomed.p.playerId, 'PUT', '/profile', body)).status, 200);
+  // a backup to lose
+  assert.equal((await signedFetch(doomed.k.kp, doomed.p.playerId, 'PUT', '/backup', JSON.stringify({ blob: bl('doomed') }))).status, 200);
+  // a friendship to sever (reciprocal request auto-accepts, as above)
+  await signedFetch(doomed.k.kp, doomed.p.playerId, 'POST', '/friends/request', JSON.stringify({ code: witness.p.friendCode }));
+  await signedFetch(witness.k.kp, witness.p.playerId, 'POST', '/friends/request', JSON.stringify({ code: doomed.p.friendCode }));
+  // PRECONDITIONS, positively: without these the deletion tests prove nothing
+  const seen = await (await signedFetch(witness.k.kp, witness.p.playerId, 'GET', '/friends')).json();
+  assert.ok(seen.friends.some(x => x.playerId === doomed.p.playerId), 'PRECONDITION: the witness must actually hold the friendship');
+  assert.equal((await signedFetch(doomed.k.kp, doomed.p.playerId, 'GET', '/backup')).status, 200, 'PRECONDITION: the backup must exist');
+  const board = await (await signedFetch(witness.k.kp, witness.p.playerId, 'GET', `/steps/week?week=${delWk}`)).json();
+  assert.ok(board.players.some(x => x.playerId === doomed.p.playerId), 'PRECONDITION: the racer must be on the board');
+});
+
+await test('account delete: a wrong key gets 401 and the account survives', async () => {
+  const other = await makeKeys();
+  const r = await signedFetch(other.kp, doomed.p.playerId, 'POST', '/account/delete');
+  assert.equal(r.status, 401, 'a signature by the wrong key must be refused');
+  assert.equal((await signedFetch(doomed.k.kp, doomed.p.playerId, 'GET', '/me')).status, 200, 'the refused delete must leave the account standing');
+});
+
+await test('account delete: the owner\'s signed delete answers ok', async () => {
+  const r = await signedFetch(doomed.k.kp, doomed.p.playerId, 'POST', '/account/delete');
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).ok, true);
+});
+
+await test('account delete: the player disappears from a friend\'s Crew', async () => {
+  const seen = await (await signedFetch(witness.k.kp, witness.p.playerId, 'GET', '/friends')).json();
+  const all = [...(seen.friends || []), ...(seen.incoming || []), ...(seen.outgoing || [])];
+  assert.ok(!all.some(x => x.playerId === doomed.p.playerId), 'the deleted player is still in the witness\'s Crew');
+});
+
+await test('account delete: the backup is gone (404 on the restore path)', async () => {
+  // the row itself is gone, not merely unreadable behind the dead identity
+  const warp = await fetch(BASE + '/dev/backup-warp', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ playerId: doomed.p.playerId, backMs: 0 }),
+  });
+  assert.equal(warp.status, 200, `/dev/backup-warp needs DEV=1 (got ${warp.status})`);
+  assert.equal((await warp.json()).row, null, 'a backups row survived the deletion');
+  // and the user-visible restore path: the same device re-registers (same
+  // pubkey), gets a FRESH account, and finds no backup waiting for it
+  const re = await (await regFetch(doomed.k.pubJwk)).json();
+  assert.notEqual(re.playerId, doomed.p.playerId, 'PRECONDITION: re-registering must mint a fresh account, or the players row survived');
+  const r = await signedFetch(doomed.k.kp, re.playerId, 'GET', '/backup');
+  assert.equal(r.status, 404, 'a re-registered account was handed the deleted account\'s backup');
+});
+
+await test('account delete: the deleted player is off the step board', async () => {
+  const board = await (await signedFetch(witness.k.kp, witness.p.playerId, 'GET', `/steps/week?week=${delWk}`)).json();
+  assert.ok(!board.players.some(x => x.playerId === doomed.p.playerId), 'the deleted player still ranks');
+  // CONTROL: the board is not simply empty (an absence needs a denominator)
+  assert.ok(board.players.length > 0, 'CONTROL: the board answered empty, so the absence above proves nothing');
+});
+
+await test('account delete: deleting an already-deleted account is ok, not a 500', async () => {
+  const r = await signedFetch(doomed.k.kp, doomed.p.playerId, 'POST', '/account/delete');
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).ok, true);
+});
+
+/* ---- what a deleted account leaves in EVERYBODY ELSE'S rows, added 2026-09-02 ----
+ *
+ * The cascade above deletes every row keyed to the player's id, and the tests
+ * above prove it. The name is not keyed to the player anywhere it landed: a
+ * cheer or a gift is stored under the RECIPIENT, and devices.label /
+ * reports.label are stamped by value from unsigned routes. Measured against
+ * 1681e58c with the fixture below, AFTER a successful delete, the name was
+ * still in five rows across three tables and the sender's id in four.
+ *
+ * GRADED FROM THE DATABASE FILE, not from an API answer. Every assertion the
+ * suite could make through a route reads a projection somebody wrote, and this
+ * is exactly the bug where the projection is fine and the row is not. So the
+ * check opens the local D1 sqlite read-only and walks sqlite_master: EVERY
+ * table, EVERY column, INSTR for the needle. Enumerating rather than listing is
+ * the point. A table nobody thought of is the shape of this whole finding, and
+ * a hand-written list of tables would have missed devices and reports in
+ * exactly the way the cascade did.
+ *
+ * The scan cannot reach a remote database, so a non-local BASE declares itself
+ * UNPROVEN rather than passing on nothing. */
+const D1_DIR = path.join(SERVER_DIR, '.wrangler/state/v3/d1/miniflare-D1DatabaseObject');
+function scanDb(needle) {
+  const { readdirSync } = fsMod, file = (() => {
+    let names = [];
+    try { names = readdirSync(D1_DIR); } catch { return null; }
+    return names.filter(n => n.endsWith('.sqlite'))[0] || null;
+  })();
+  if (!file) unprovable(`no local D1 file under ${D1_DIR}; this check reads the database, not the API`);
+  const db = new DatabaseSync(path.join(D1_DIR, file), { readOnly: true });
+  try {
+    const tables = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf%'").all();
+    const hits = []; let scanned = 0;
+    for (const { name } of tables) {
+      scanned += db.prepare(`SELECT COUNT(*) c FROM ${name}`).get().c;
+      for (const col of db.prepare(`PRAGMA table_info(${name})`).all()) {
+        const n = db.prepare(`SELECT COUNT(*) c FROM ${name} WHERE INSTR(COALESCE(${col.name},''), ?) > 0`).get(needle).c;
+        if (n) hits.push(`${name}.${col.name}x${n}`);
+      }
+    }
+    return { hits, tables: tables.length, scanned };
+  } finally { db.close(); }
+}
+
+const res = {};
+await test('delete residue: setup: a player who cheered, gifted and was labelled', async () => {
+  res.a = await makeKeys(); res.ap = await (await regFetch(res.a.pubJwk)).json();
+  res.b = await makeKeys(); res.bp = await (await regFetch(res.b.pubJwk)).json();
+  await signedFetch(res.a.kp, res.ap.playerId, 'POST', '/friends/request', JSON.stringify({ code: res.bp.friendCode }));
+  await signedFetch(res.b.kp, res.bp.playerId, 'POST', '/friends/request', JSON.stringify({ code: res.ap.friendCode }));
+  /* A CURATED NAME, not the generated handle. A handle is two words off a
+     shared list and could collide with a live player's, which would make the
+     "it is gone everywhere" assertion below depend on luck. '#N' is what makes
+     this needle this account's alone. buildName's indices; see src/index.js. */
+  const nm = await signedFetch(res.a.kp, res.ap.playerId, 'POST', '/name',
+    JSON.stringify({ adj: 5, noun: 13, num: 617 }));
+  assert.equal(nm.status, 200, 'PRECONDITION: the doomed player needs a name to leave behind');
+  res.name = (await nm.json()).name;
+  assert.ok(res.name && res.name.includes('#'), `PRECONDITION: expected a curated name, got ${res.name}`);
+
+  // one of each authored shape: the cheer carries the sender's id, both gifts carry value
+  assert.equal((await signedFetch(res.a.kp, res.ap.playerId, 'POST', '/cheer',
+    JSON.stringify({ to: res.bp.playerId, cheer: 3 }))).status, 200);
+  assert.equal((await signedFetch(res.a.kp, res.ap.playerId, 'POST', '/gift',
+    JSON.stringify({ to: res.bp.playerId, mode: 'free' }))).status, 200);
+  assert.equal((await signedFetch(res.a.kp, res.ap.playerId, 'POST', '/gift',
+    JSON.stringify({ to: res.bp.playerId, mode: 'spend', coins: 25 }))).status, 200);
+
+  // and the two unsigned routes that stamp the name by value
+  res.device = 'res-' + Math.random().toString(36).slice(2, 10);
+  const ip = { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() };
+  assert.equal((await fetch(BASE + '/events', { method: 'POST', headers: ip,
+    body: JSON.stringify({ device: res.device, label: res.name, appV: 'res', events: [{ name: 'app_open' }] }) })).status, 200);
+  assert.equal((await fetch(BASE + '/report', { method: 'POST', headers: ip,
+    body: JSON.stringify({ device: res.device, label: res.name, kind: 'den-nominate', lat: 1, lng: 2, note: 'n' }) })).status, 200);
+
+  /* THE CONTROL, and it runs before the delete on purpose: if the scan finds
+     nothing HERE then it is broken, the fixture never landed, or the needle is
+     wrong, and every assertion after the delete would be graded on an empty
+     set. Five rows across three tables is the measured shape. */
+  const before = scanDb(res.name);
+  assert.ok(before.scanned > 0, `CONTROL: the scan examined ${before.scanned} rows, so it proves nothing`);
+  assert.ok(before.hits.length >= 3,
+    `CONTROL: the name must be findable BEFORE the delete, found only in [${before.hits}]`);
+});
+
+await test('delete residue: the display name survives nowhere in the database', async () => {
+  assert.equal((await signedFetch(res.a.kp, res.ap.playerId, 'POST', '/account/delete')).status, 200);
+  const after = scanDb(res.name);
+  assert.ok(after.scanned > 0 && after.tables > 5,
+    `CONTROL: scanned ${after.scanned} rows over ${after.tables} tables; an empty database proves nothing`);
+  assert.deepEqual(after.hits, [],
+    `a deleted player's name is still in the database: ${after.hits.join(', ')}`);
+});
+
+await test('delete residue: the only trace of the id left is the opaque grant key', async () => {
+  /* NOT deleted, and deliberately: rewriting a grant's key rewrites the
+     CLIENT's ledger key, and a client whose cursor rolled backwards would then
+     be paid a real gift twice. See the note on the cascade. Asserted as an
+     EQUALITY against the exact expected set rather than "nothing else", so this
+     goes red the day a new table starts keeping the id. */
+  const after = scanDb(res.ap.playerId);
+  assert.ok(after.scanned > 0, `CONTROL: scanned ${after.scanned} rows`);
+  assert.deepEqual(after.hits, ['grants.keyx3'],
+    `the deleted id survives somewhere new: ${after.hits.join(', ')}`);
+});
+
+await test('delete residue: the friend keeps the reward and loses only the name', async () => {
+  const g = await (await signedFetch(res.b.kp, res.bp.playerId, 'GET', '/grants?since=0')).json();
+  const mine = g.grants.filter(x => x.type === 'cheer' || x.type === 'gift');
+  assert.equal(mine.length, 3, `PRECONDITION: the friend must still hold all three rows, got ${mine.length}`);
+  for (const row of mine) {
+    const p = row.payload;
+    /* WHAT THE CLIENT RENDERS. js/app.js paintCheers reads `from` first and
+       otherwise backs the name out of the note, so both have to say something.
+       An empty string or a missing `from` renders "undefined cheered you",
+       which is a worse bug than the residue this test exists for. */
+    assert.equal(p.from, 'A Bonehead', `${row.key}: from must be the same anonymous sender the route writes for a nameless player, got ${JSON.stringify(p.from)}`);
+    assert.ok(p.note && !p.note.includes(res.name) && !/undefined|null/.test(p.note),
+      `${row.key}: the note still names somebody or renders nothing: ${JSON.stringify(p.note)}`);
+    assert.equal(p.cheerFrom, undefined, `${row.key}: cheerFrom is the id Cheer-back posts to, and it 403s now`);
+  }
+  // THE VALUE IS UNTOUCHED. Scrubbing must not have cost the friend the gift.
+  const spend = mine.find(x => x.key.includes('gift-spend'));
+  assert.equal(spend.payload.coins, 25, 'the friend lost the coins they were sent');
+  assert.equal(mine.find(x => x.key.includes('gift-free')).payload.gift, true, 'the free gift stopped being a gift');
+  assert.equal(mine.find(x => x.type === 'cheer').payload.cheer, 3, 'the cheer lost WHICH cheer it was');
+});
+
+/* WHAT A PEER IS SERVED OUT OF YOUR SNAPSHOT, added 2026-09-01.
+   sanitizeSnapshot did `{ ...rawSnap }` and clamped four NUMBERS. It stripped no
+   unknown key, bounded no string and refused no nesting, and players.profile is
+   not a private field: GET /friends hands the whole blob to every accepted
+   friend, and the same blob is copied into spires.defender for every rival who
+   opens a tower this account holds. Measured against 996f28b9, all six of the
+   values below came back to the peer VERBATIM, bounded only by the 24KB body cap.
+   Graded at the PEER's readback rather than on the PUT response, because that is
+   the end of the chain and the response is not what anybody renders. */
+await test('snapshot: a peer is never served unknown keys, long strings or deep nesting', async () => {
+  const owner = await makeKeys();
+  const op = await (await regFetch(owner.pubJwk)).json();
+  const peer = await makeKeys();
+  const pp = await (await regFetch(peer.pubJwk)).json();
+  // reciprocate so the friendship is ACCEPTED and /friends returns the blob
+  await signedFetch(owner.kp, op.playerId, 'POST', '/friends/request', JSON.stringify({ code: pp.friendCode }));
+  await signedFetch(peer.kp, pp.playerId, 'POST', '/friends/request', JSON.stringify({ code: op.friendCode }));
+
+  const put = await signedFetch(owner.kp, op.playerId, 'PUT', '/profile', JSON.stringify({
+    snapshot: {
+      // the legitimate half, and the CONTROL: every one of these must survive
+      level: 12, levelName: 'Bruiser', badges: 4, title: 'Marrow King',
+      stats: { power: 20, guard: 11 }, outfit: { SK: 'SK0-1' }, gear: ['g-1', 'g-2'],
+      pet: { id: 'C3', level: 6, shiny: true },
+      yard: { n: 2, pets: [{ sp: 'C3', shiny: true }], wear: { G: 'PA1' } },
+      // the six the reviewers proved came back to a peer untouched
+      evilHtml: '<img src=x onerror=alert(1)>',
+      ctrl: 'a\u0000bc',
+      note: 'N'.repeat(20000),
+      nested: { a: { b: { c: { d: 'too deep' } } } },
+      name: { toString: 'not a string' },
+      levelNameLong: 'L'.repeat(500),
+    },
+    appV: 'test',
+  }));
+  assert.equal(put.status, 200, 'a strange snapshot is bounded, not rejected');
+  const putBody = await put.json();
+
+  const list = await (await signedFetch(peer.kp, pp.playerId, 'GET', '/friends')).json();
+  const seen = (list.friends || []).find(x => x.playerId === op.playerId);
+  assert.ok(seen && seen.profile, 'PRECONDITION: the peer must actually be served a profile, or every absence below is vacuous');
+  const prof = seen.profile;
+
+  /* CONTROL FIRST. An allowlist that dropped a key the client renders would
+     break the crew sheet and the tower sheet, and every absence asserted below
+     would pass on an empty object. */
+  assert.equal(prof.level, 12, 'CONTROL level');
+  assert.equal(prof.levelName, 'Bruiser', 'CONTROL levelName');
+  assert.equal(prof.title, 'Marrow King', 'CONTROL title');
+  assert.equal(prof.stats.power, 20, 'CONTROL stats');
+  assert.equal(prof.outfit.SK, 'SK0-1', 'CONTROL outfit');
+  assert.equal(prof.pet.id, 'C3', 'CONTROL pet');
+  assert.equal(prof.yard.pets[0].sp, 'C3', 'CONTROL yard is still three levels deep');
+  assert.equal(prof.yard.wear.G, 'PA1', 'CONTROL the paddock wardrobe');
+  assert.equal(prof.gear.length, 2, 'CONTROL gear');
+
+  for (const k of ['evilHtml', 'ctrl', 'note', 'nested', 'name', 'levelNameLong']) {
+    assert.ok(!(k in prof), `unknown key '${k}' reached the peer`);
+  }
+  const blob = JSON.stringify(prof);
+  assert.ok(blob.length < 1024, `the peer was served ${blob.length} bytes of snapshot`);
+  assert.ok(!/onerror/.test(blob), 'the payload reached the peer somewhere in the blob');
+
+  /* Asserted LAST on purpose. `bounded` is a convenience for a client and a
+     test, and it is only present when it is non-empty, so reading it first made
+     the pre-fix run die on `undefined.includes` before it had said a word about
+     the actual leak. The rows above are the finding; this one is the receipt. */
+  assert.ok((putBody.bounded || []).includes('shape'),
+    `\`bounded\` must name that the shape was cut, got ${JSON.stringify(putBody.bounded)}`);
+});
+
+/* THE OTHER HALF, and the one an allowlist on its own does not answer: an
+   ALLOWED key can still carry an unbounded string or a control character, and
+   levelName is rendered straight into a crew row. */
+await test('snapshot: an allowed key is still bounded, stripped and depth-limited', async () => {
+  const owner = await makeKeys();
+  const op = await (await regFetch(owner.pubJwk)).json();
+  const peer = await makeKeys();
+  const pp = await (await regFetch(peer.pubJwk)).json();
+  await signedFetch(owner.kp, op.playerId, 'POST', '/friends/request', JSON.stringify({ code: pp.friendCode }));
+  await signedFetch(peer.kp, pp.playerId, 'POST', '/friends/request', JSON.stringify({ code: op.friendCode }));
+
+  await signedFetch(owner.kp, op.playerId, 'PUT', '/profile', JSON.stringify({
+    snapshot: {
+      level: 9,
+      levelName: 'L'.repeat(5000),
+      title: 'Mar\u0000row\u202eKing',
+      plat: 'ios',                                   // CONTROL: a short honest string is untouched
+      yard: { n: 1, pets: [{ sp: 'C3', deeper: { a: 1 } }] },
+    },
+    appV: 'test',
+  }));
+  const list = await (await signedFetch(peer.kp, pp.playerId, 'GET', '/friends')).json();
+  const prof = ((list.friends || []).find(x => x.playerId === op.playerId) || {}).profile;
+  assert.ok(prof, 'PRECONDITION: the peer must be served a profile');
+  assert.equal(prof.plat, 'ios', 'CONTROL: a legitimate short string passes through untouched');
+  assert.equal(prof.levelName.length, 64, `levelName came back ${prof.levelName.length} chars`);
+  assert.equal(prof.title, 'MarrowKing', 'a NUL and a bidi override survived into a rendered name');
+  assert.equal(prof.yard.pets[0].sp, 'C3', 'CONTROL: the real field at that depth still travels');
+  assert.equal(prof.yard.pets[0].deeper, null, 'a value nested below the deepest real field still travelled');
 });
 
 console.log(`\n${passed} passed, ${failed} failed${unproven ? `, ${unproven} UNPROVEN here (see the note on UNPROVEN above)` : ''}`);

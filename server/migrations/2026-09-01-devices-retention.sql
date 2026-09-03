@@ -1,0 +1,30 @@
+-- The index the devices retention prune reaches its candidates through.
+--
+-- Apply local:  npx wrangler d1 execute bonez --local  --file=migrations/2026-09-01-devices-retention.sql
+-- Apply remote: npx wrangler d1 execute bonez --remote --file=migrations/2026-09-01-devices-retention.sql
+--
+-- Purely additive: one new index, nothing dropped, nothing renamed, no column
+-- added. Safe to run twice.
+--
+-- WHY IT EXISTS. pruneStale() in src/index.js is new, and it is the first thing
+-- on this worker that has ever deleted a `devices` row. `devices` is upserted by
+-- the UNSIGNED POST /events route on a device id the caller chooses, so before
+-- this it grew without any ceiling at all: at the per-IP budget one address can
+-- mint 14,400 rows a day, forever, and D1's 10 GB per-database limit cannot be
+-- bought past. The window is 365 days on last_seen; the reasoning is in the long
+-- note above STALE_RULES in src/index.js.
+--
+-- WHY IT IS NOT OPTIONAL. `reports` and `leads` already have idx_reports_ts and
+-- idx_leads_ts, so the other two rules in STALE_RULES are index-driven the day
+-- they ship. `devices` had nothing on last_seen, and without it the pruner's
+-- inner SELECT is SCAN devices: measured against a 1,000,000 row fixture in
+-- local SQLite, 22.3 ms per 1,000 row batch scanning versus 2.3 ms as a COVERING
+-- seek of this index. The scan is the number that grows with the table, on a
+-- statement the cron runs every 15 minutes. schema-plan.test.mjs asserts the
+-- plan, so a database missing this index is a red test rather than a silent
+-- hundredfold cost.
+--
+-- RUN THIS BEFORE ./deploy.sh, like every other migration here. Deploying the
+-- worker without it is not a correctness failure (the prune deletes exactly the
+-- same rows either way), it is a cost one.
+CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices (last_seen);

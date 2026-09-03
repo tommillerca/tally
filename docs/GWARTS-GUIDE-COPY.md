@@ -199,9 +199,10 @@ stale when somebody fixes it.
 > Melting gear you are never going to wear is where most of it comes from. A
 > piece he has outgrown is not waste, it is dust.
 >
-> It pays for transmog, which is wearing one thing and showing another, and it
-> pays to breed two pets into one. It used to buy eggs, crates and charms; that
-> shop is closed, so dust is for looks now.
+> It pays for how your gear LOOKS: wearing one piece and showing another, and
+> the weekly Rack. One exception, on purpose: once a week it buys a Mystery Egg
+> in the Shop, so a pet is never out of reach. Crates and charms are still gone,
+> and breeding is free.
 >
 > You pay for a look once. Putting it back on in that same slot is free forever
 > after that.
@@ -215,6 +216,13 @@ Merchant, and the Bone Dust shop closed later the same day, so the Mystery Egg /
 Common Crate / Battle Charm line went with it. Dust is a COSMETIC currency now,
 with breeding as the one remaining exception, and this copy has to say so
 plainly rather than leave a player hunting a shop that is not there.
+
+Corrected again 2026-08-31: the Mystery Egg is back, alone, on Tom's ruling that
+its removal was unintentional (dust is the deterministic hatch route for a
+player who cannot walk the step milestones). One per ISO week at the historical
+60 dust (`js/loot.js:buyDustEgg`, `DUST_EGG`). Breeding stopped costing dust on
+2026-08-27, so the paragraph now names the egg as the one non-cosmetic dust
+spend, which is also what the S0 register in tests/unit.test.js declares.
 
 The last line is the non-obvious one and the reason it is in: a (slot, look) pair
 is paid for once and is free forever after (`paidLooks`, `js/loot.js:1563-1582`).

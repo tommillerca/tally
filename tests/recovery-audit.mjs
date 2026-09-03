@@ -15,10 +15,11 @@
  *   INTACT   after every failure above, the log rows, XP and coins are byte
  *            identical to what they were before the attempt
  *
- * The INTACT checks are the point. js/social.js adoptIdentity writes the new
- * identity, nulls `social` and clears `bootRestored` BEFORE it goes online and
- * pulls the backup, so the interesting question is what a player is left with
- * when the pull fails. This audit measures that rather than assuming it.
+ * The INTACT checks are the point. js/social.js adoptIdentity now registers
+ * the restored key BEFORE writing anything local, so a failure on the way in
+ * must leave the device untouched; the swapped-then-failed states are pinned
+ * separately in cloud-restore-silent-audit.mjs. This audit measures what a
+ * player is left with rather than assuming it.
  *
  * PROVE-RED: make the id validator accept anything and REJECT fails; make a
  * failure path skip its early return and INTACT fails naming the rows lost.

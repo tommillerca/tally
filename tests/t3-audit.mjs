@@ -9,6 +9,14 @@
  * shop markup, or drop the `armToConfirm` wiring from `[data-buy]`, and the
  * matching check exits non-zero naming the screen.
  *
+ * The BURST row is the exception to "arms rather than spends": arming is only
+ * half the promise and the other half is what actually shipped broken. Proven
+ * red 2026-08-31 on a cp -R of origin/main 13583e42, this file copied in:
+ *   FAIL six taps in one frame buy ONE item
+ *        {"id":"vigor","price":90,"wallet":4000,"spent":270,"bought":3}
+ *   ok   a first tap in the coin shop ARMS and spends nothing  (green there,
+ *        so the leg ran and the ARM row alone could never have caught it)
+ *
  * An empty sample set is a FAILURE, never a pass.
  *
  * Usage: node tests/t3-audit.mjs   (URL=https://... to run against live)
@@ -69,12 +77,18 @@ await hubTab('shop');
    nothing else may claim one, with the denominator printed. `SHOP.length > 0`
    keeps an emptied catalogue from satisfying `0 === 0`. */
 const shopSize = await page.evaluate(async () => (await import('./js/loot.js')).SHOP.length);
+/* + the ONE dust-priced cell outside SHOP: the Mystery Egg, restored 2026-08-31
+   (Tom's ruling; see the S0 register in tests/unit.test.js). It renders as a
+   [data-dustegg] t3-cell, and tests/dust-egg-audit.mjs owns its behaviour; this
+   row only keeps the census exact, so a second uncatalogued cell still fails. */
 const shop = {
   drop: await count('.t3-drop'), prices: await count('.t3-price'),
-  cells: await count('.t3-cell'), forage: await count('.t3-forage'), catalogue: shopSize,
+  cells: await count('.t3-cell'), dustEgg: await count('[data-dustegg]'),
+  forage: await count('.t3-forage'), catalogue: shopSize,
 };
 ok('Shop renders the Tier 3 language',
-   shop.drop === 1 && shop.prices >= 4 && shopSize > 0 && shop.cells === shopSize && shop.forage >= 1,
+   shop.drop === 1 && shop.prices >= 4 && shopSize > 0 && shop.dustEgg === 1
+   && shop.cells === shopSize + shop.dustEgg && shop.forage >= 1,
    JSON.stringify(shop));
 // the drop poster IS the disclosure: opening it must reveal the real per-item grid
 await page.evaluate(() => document.querySelector('.t3-drop')?.click());
@@ -92,6 +106,31 @@ const armed = await page.evaluate(async () => {
 });
 ok('a first tap in the coin shop ARMS and spends nothing',
   !armed.err && armed.armed === true && armed.spent === 0, JSON.stringify(armed));
+/* AND A BURST BUYS ONE THING, not floor(taps / 2). The row above is only half
+   the arm-to-confirm promise: armToConfirm used to call restore() ABOVE its
+   await, so the button was unarmed again inside the same frame and a thumb roll
+   simply re-armed and committed, over and over. Six synchronous clicks in one
+   JS turn is that thumb roll with the timing removed. MEASURED on origin/main
+   13583e42: 6 taps, 3 Vigor Draughts, 270 coins. Vigor is Pit energy, so this
+   was tap speed buying power. The module-level guard for the same money lives
+   in tests/purchase-firewall.mjs (SPEND-*); this row is the only one that can
+   see the BUTTON regress, which is where the bug actually was. */
+const burst = await page.evaluate(async () => {
+  const loot = await import('./js/loot.js');
+  const b = document.querySelector('[data-buy]');
+  if (!b) return { err: 'no coin-shop button' };
+  const id = b.dataset.buy;
+  const price = loot.SHOP.find(s => s.id === id).cost;
+  const c0 = await loot.coins();
+  const held0 = await loot.consumableCount(id);
+  for (let i = 0; i < 6; i++) b.click();          // one synchronous burst, no awaits
+  await new Promise(r => setTimeout(r, 2500));
+  return { id, price, wallet: c0, spent: c0 - (await loot.coins()),
+    bought: (await loot.consumableCount(id)) - held0 };
+});
+ok('six taps in one frame buy ONE item, and the wallet could have afforded more',
+  !burst.err && burst.bought === 1 && burst.spent === burst.price
+  && burst.price > 0 && burst.wallet >= burst.price * 3, JSON.stringify(burst));
 
 /* ---------------- BACKPACK ---------------- */
 await hubTab('backpack');

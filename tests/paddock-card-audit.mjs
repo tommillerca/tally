@@ -102,6 +102,53 @@ ok('the Paddock scene opened', screen.scene, JSON.stringify(screen));
 ok('the collection panel mounted itself with the screen', screen.panelMounted && screen.tiles > 0,
   `${screen.tiles} tiles, footer ${screen.foot}`);
 
+/* REACH. The new playtester tapped a tile in the collection grid and the card
+ * appeared 278px up inside the scene, over the keeper, with nothing on the tile
+ * to say the card belonged to it (measured 2026-08-31 at 430x932: tile centre
+ * y754, card centre y476). Two things are wrong there and both are measured
+ * here, in the SAME tap: how far the card lands from the finger, and whether the
+ * tile that was pressed looks pressed.
+ * Driven with a real mouse click at the tile's real coordinates, not a
+ * dispatched event, because the complaint is about where a finger goes.
+ * The tile's class is read BEFORE and AFTER, so this compares two renders of the
+ * same element rather than asserting that a class name exists somewhere.
+ * PROVE-RED, run on a cp -R of the pre-fix tree: FAIL, "gap 142px, tile lit
+ * false -> false". The lit-tile half is what carries that red; the 200px ceiling
+ * on the gap is a DRIFT bound (the pre-fix card sat at 142px here and 278px
+ * centre-to-centre on a full roster), there to stop the card creeping back up
+ * the scene, not to catch today's bug. Both halves are named so nobody later
+ * mistakes the ceiling for the proof. */
+const reach = await page.evaluate(() => {
+  const tile = [...document.querySelectorAll('#pdkPanel .pdk-tile[data-sp]')].find(t => !t.classList.contains('pdk-lockt'));
+  if (!tile) return { why: 'no owned tile in the grid' };
+  tile.scrollIntoView({ block: 'center' });
+  const r = tile.getBoundingClientRect();
+  return { sp: tile.dataset.sp, selectedBefore: tile.classList.contains('on'),
+    x: r.left + r.width / 2, y: r.top + r.height / 2 };
+});
+if (!reach.why) {
+  await page.mouse.click(reach.x, reach.y);
+  await settle(page, 350);
+  Object.assign(reach, await page.evaluate(sp => {
+    const tile = document.querySelector(`#pdkPanel .pdk-tile[data-sp="${sp}"]`);
+    const card = document.querySelector('#pdkCards .pdk-card');
+    if (!tile || !card) return { card: !!card };
+    const tr = tile.getBoundingClientRect(), cr = card.getBoundingClientRect();
+    /* EDGE to EDGE, not centre to centre: a 179px card and an 84px tile are 246px
+       apart by their middles while their nearest edges are 120px apart, and the
+       edges are what the eye travels. Zero when they touch or overlap. */
+    return { card: true, selectedAfter: tile.classList.contains('on'),
+      gap: Math.round(Math.max(0, Math.max(tr.top - cr.bottom, cr.top - tr.bottom))),
+      onScreen: cr.top >= 0 && cr.bottom <= window.innerHeight };
+  }, reach.sp));
+}
+ok('REACH: a grid tap puts the card within reach of the finger and lights the tile',
+  !reach.why && reach.card === true && reach.selectedBefore === false && reach.selectedAfter === true
+  && reach.onScreen === true && reach.gap < 200,
+  reach.why || `gap ${reach.gap}px, tile lit ${reach.selectedBefore} -> ${reach.selectedAfter}, on screen ${reach.onScreen}`);
+await page.evaluate(async () => { (await import('./js/paddock-cards.js')).closePaddockCards(); });
+await settle(page, 200);
+
 const mounted = await page.evaluate(async () => window.__pdkMountCards ? await window.__pdkMountCards('C5') : null);
 ok('the seam mounts real cards for a real roster', !!mounted && mounted.opened && mounted.copies === 3,
   JSON.stringify(mounted));
@@ -268,10 +315,22 @@ const hearts = await page.evaluate(() => {
   return { pips: pips.length, withIcon: pips.filter(p => p.querySelector('svg.bhi')).length,
            /* a CSS circle would have a border-radius and no svg: that is the "red dots"
               Tom reported, so assert the ICON is there rather than trusting the class */
-           stillCircles: pips.filter(p => !p.querySelector('svg') && getComputedStyle(p).borderRadius !== '0px').length };
+           stillCircles: pips.filter(p => !p.querySelector('svg') && getComputedStyle(p).borderRadius !== '0px').length,
+           /* AND THE STATE HAS TO BE READABLE IN PIXELS. bhIcon inlines the manifest tint
+              (`style="color:#fd6857"`), which beats `.pdk-heart`'s own colour on the
+              wrapper, so every pip painted coral and a bond of 1 looked like a bond of 5:
+              a meter that cannot be wrong is not a meter. Read the PAINTED colour off the
+              svg, not the class, because the class was always right. */
+           onPaint: [...new Set(pips.filter(p => p.classList.contains('on')).map(p => getComputedStyle(p.querySelector('svg') || p).color))],
+           offPaint: [...new Set(pips.filter(p => !p.classList.contains('on')).map(p => getComputedStyle(p.querySelector('svg') || p).color))] };
 });
 ok('the bond meter draws real heart icons, not CSS dots', hearts.pips === 5 && hearts.withIcon === 5 && hearts.stillCircles === 0,
   JSON.stringify(hearts));
+/* both sets must be non-empty or the comparison proves nothing: w1 is mid-bond here
+   (one press above, five below the cap), so there are filled pips AND empty ones */
+ok('a filled pip and an empty pip are painted DIFFERENT colours',
+  hearts.onPaint.length === 1 && hearts.offPaint.length === 1 && hearts.onPaint[0] !== hearts.offPaint[0],
+  `on ${hearts.onPaint.join('/') || 'NONE'}, off ${hearts.offPaint.join('/') || 'NONE'}`);
 
 /* ---- W-PADDOCK-1: every way out of the card ------------------------------ */
 await ensureOpen('C5');

@@ -105,7 +105,7 @@ await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile
    time the machine is busy. These observers fire on mutations the app was
    performing anyway. */
 const BEAT_RECORDER = () => {
-  const S = window.__beat = { entry: null, reveal: null, marks: [], decoy: null };
+  const S = window.__beat = { entry: null, stageAt: null, reveal: null, revealLoaded: null, marks: [], decoy: null };
   /* The five marker classes, 2026-08-23. The same list KINDS is keyed on above,
      restated because this runs in page context where KINDS is not in scope. Not
      a tunable: a sixth marker type belongs in both places. */
@@ -146,7 +146,27 @@ const BEAT_RECORDER = () => {
     const watchStage = () => {
       const st = document.querySelector('#mapStage');
       if (!st) { setTimeout(watchStage, 16); return; }
-      const fire = () => { S.reveal = now(); S.marks.forEach(settle); };
+      /* WHEN THE APP'S OWN REVEAL CAP STARTED RUNNING. js/app.js writes the map
+         markup (this element included) and then immediately calls
+         createBoneyardMap, which is where the 1800ms cap is armed. Measured
+         2026-09-02 over twelve boots on this box: the stage appearing and the
+         map instance appearing land on the same millisecond every run
+         (55/55, 49/49, 54/54, 52/52, 45/45 ...), so this stamps the cap's t0
+         without the app having to hand it over. */
+      S.stageAt = now();
+      const fire = () => {
+        S.reveal = now();
+        /* WHICH OF THE TWO TRIGGERS FIRED, read at the instant it mattered.
+           js/app.js reveals from its GATE (`placedOnce && worldPassDone`, and
+           `placedOnce` only ever flips inside `if (map.loaded())`) or from the
+           1800ms CAP. So map.loaded() here IS the app's own gate condition,
+           sampled at the reveal: false means the cap won its race with the
+           tiles. The instance is exposed under navigator.webdriver by
+           js/app.js; a null here means it was not, and the rows that read this
+           then grade normally rather than quietly excusing themselves. */
+        try { S.revealLoaded = window.__map ? !!window.__map.loaded() : null; } catch { S.revealLoaded = null; }
+        S.marks.forEach(settle);
+      };
       if (st.classList.contains('markers-in')) { fire(); return; }
       const mo = new MutationObserver(() => {
         if (!st.classList.contains('markers-in')) return;
@@ -670,7 +690,74 @@ ok('ARRIVAL the legend is not counted as markers (a decoy in the count is a code
   arr.legendDecoys === 0 && (!revealMeasured || arr.revealDecoys === 0),
   `${arr.legendDecoys} decoy(s) in the final count and ${revealMeasured ? arr.revealDecoys : 'not graded (no reveal this run)'} at reveal, both must be 0 when measured. Guarding BOTH sites on purpose: reverting only the recorder's scoping leaves the final count clean and inflates revealDom, which a single-site check would pass. The key is built from real marker markup, sits inside #mapStage, and [hidden] does not zero computed opacity, so it used to supply exactly 9`);
 
-if (!(arr.finalDom > 0)) {
+/* ==== WAS THE FAST LAP ACTUALLY FAST? 2026-09-02 ============================
+   The two reveal-time rows below grade what placement had produced when the
+   reveal fired. That is only the APP's decision when the app's GATE fired it.
+   js/app.js has exactly two reveal triggers: the gate (`placedOnce &&
+   worldPassDone`, and `placedOnce` only ever flips inside `if (map.loaded())`)
+   and a hard 1800ms cap that exists precisely so a slow tile server can never
+   leave the map blank. When the cap wins that race, "how much was placed" is
+   the tile round trip's answer and not ours, and grading it here is the +60ms
+   window all over again: the row moves when the network moves with the code
+   held constant, which is the rule that retired the +60ms row on 2026-08-13.
+
+   MEASURED, twelve consecutive Boneyard boots on this box, every tile request
+   HTTP 200 and not one request failure or console error in any run:
+     tiles 1275-1442ms -> map.loaded() 1613-1776ms -> GATE reveals, 44/45 placed
+     tiles 1703-1773ms -> map.loaded() 1937-2399ms -> CAP reveals @1801ms, 1/45
+   Bimodal, nothing in between, and the entire difference is whether one network
+   round trip beat 1800ms. Across seven full audit runs the same day the fast
+   lap read 1/46, 1/46, 1/47, 1/47 against 45/46, 46/47, 46/47.
+
+   AND THE APP'S ANSWER TO A LATE TILE STAYS GREEN IN EXACTLY THOSE RUNS, which
+   is why this is not the app arriving in pieces: BEATS read `2 beat(s) of
+   [1, 46]`, every one of the 46 stragglers faded in inside 162ms against a
+   250ms budget, no `.poi-in` was ever set, and the whole ARRIVAL-SLOW block
+   passed. The map still arrives whole; on a late tile it arrives in two beats,
+   which is the behaviour v372 shipped and Tom signed off after rejecting v371's
+   wait-for-tiles reveal.
+
+   BOTH CLAUSES BELOW ARE LOAD-BEARING and dropping either one breaks a case:
+     revealLoaded === false   the gate had not armed, so the cap fired this.
+       `placedOnce` only flips inside `if (map.loaded())`, so a reveal with
+       loaded() false cannot have come from the gate.
+     reveal at the cap        a build that reveals stupidly early ALSO has no
+       tiles yet, so the loaded() clause on its own would report the very defect
+       these rows exist for as "not gradeable". A reveal landing well before the
+       cap was somebody's decision, never the tile server's, so it is graded.
+   PROVE-RED (confirmed 2026-09-02 on a `cp -R` throwaway): force js/app.js's
+   reveal cap to 500ms, which is this file's own documented way of injecting a
+   stupidly early reveal. Both rows go RED at 1/47 rather than being excused, so
+   the gate below does not swallow the defect they were written for.
+   AND THE INJECTION THAT DOES NOT REPRODUCE, written down so the next person
+   does not spend the run I spent on it. Neither "drop `placedOnce` from
+   tryReveal" nor "flip `placedOnce` without the `map.loaded()` guard" (the real
+   v370 bug) shows up on the FAST lap on a loaded box: measured the same day,
+   the first revealed at 2128ms because worldPassDone itself was that late and
+   the 1800ms cap had already fired anyway, and the second passed at 43/44
+   because moveend happened to land after the tiles. The fast lap is a race, and
+   that is exactly why the SLOW lap exists. Inject into the slow lap, or force
+   the cap, but do not conclude from a green fast lap that a build is clean.
+   THE BAND THIS CANNOT SEE, on record rather than left implicit: a reveal
+   between 1500ms and the cap, with no tiles, is excused. That is at most 300ms
+   earlier than the reveal the app is sanctioned to make anyway, and anything
+   earlier than 1500ms is graded. */
+/* PROVENANCE 2026-09-02: 1800 is js/app.js's own `setTimeout(revealMarkers,
+   1800)`, read from source, not a threshold of this file. The 300ms of slack is
+   the observed spread of cap-fired reveals in the twelve boots above (1755 to
+   1805ms measured from stage creation, i.e. rAF plus event-loop jitter). Gate-
+   fired reveals in the same sample span 1515-1886ms, so the two bands overlap
+   at the top and the loaded() clause is what separates them there; this clause
+   only has to exclude a reveal that is obviously early. Re-derive from
+   js/app.js if the cap ever moves; never nudge it to turn a row green. */
+const REVEAL_CAP_MS = 1800;
+const capBeatTheTiles = beat.revealLoaded === false
+  && beat.reveal != null && beat.stageAt != null
+  && (beat.reveal - beat.stageAt) >= REVEAL_CAP_MS - 300;
+const capWhy = `the ${REVEAL_CAP_MS}ms reveal cap fired ahead of the tiles (reveal ${beat.reveal == null || beat.stageAt == null ? '?' : beat.reveal - beat.stageAt}ms after the stage was built, map.loaded() still false), so placement COULD NOT have finished and this row would be grading one network round trip. The app's answer to a late tile is graded by BEATS, LATENCY, SHAPE and the whole ARRIVAL-SLOW block, which run in this same lap`;
+if (capBeatTheTiles) {
+  unproven('ARRIVAL the map drew a plausible sample (SAMPLE: the floor the two rows below stand on)', capWhy);
+} else if (!(arr.finalDom > 0)) {
   unproven('ARRIVAL the map drew a plausible sample (SAMPLE: the floor the two rows below stand on)',
     `the map drew 0 MapLibre-owned markers on this machine, so there is no sample to grade. Not a code failure: boneyardCapability passed, meaning WebGL works, but placement never produced a marker. Seen on a contended box 2026-08-23`);
 } else {
@@ -678,12 +765,47 @@ if (!(arr.finalDom > 0)) {
     arr.finalDom >= MIN_PLAUSIBLE_MARKERS && arr.revealDom >= MIN_PLAUSIBLE_MARKERS,
     `${arr.finalDom} MapLibre-owned markers at rest and ${arr.revealDom} at reveal, floor ${MIN_PLAUSIBLE_MARKERS}`);
 }
-ok('ARRIVAL the reveal SHOWED every marker it already had (nothing placed was withheld to fade in afterwards)',
-  arr.revealDom > 0 && arr.revealSettled != null && arr.revealSettled >= arr.revealDom,
-  `${arr.revealSettled ?? 'null'} visible once the fade settled, against ${arr.revealDom ?? 'null'} already placed at reveal (the reveal-instant reading is ${arr.revealCount}, mid-fade, which is what the retired MAJORITY row graded)`);
-ok('ARRIVAL placement was essentially finished before the reveal fired (revealing with almost nothing placed is not "arrives whole")',
-  arr.finalDom > 0 && arr.revealDom * 2 > arr.finalDom,
-  `${arr.revealDom}/${arr.finalDom} markers placed at reveal`);
+/* `revealDom > 0` IS A PREMISE, NOT HALF THE ASSERTION, and it took the scoped
+   counters to make that visible. This row asks whether anything the app had
+   ALREADY PLACED was held back from the reveal. With nothing placed there is
+   nothing that could have been held, so the question has no sample: that is
+   UNPROVEN, and grading it as a FAIL says "the app withheld markers" about a
+   run where the app had none to withhold. Measured 2026-09-02: on runs where
+   the cap beat the tiles this read `0 visible ... against 0 already placed` and
+   went red on a build the rest of the lap graded green.
+   THE ASSERTION ITSELF IS UNTOUCHED. Whenever a reveal-time population exists,
+   `revealSettled >= revealDom` is compared exactly as before, and both sides
+   are non-empty by construction of the premise.
+   PROVE-RED (confirmed 2026-09-02 on a `cp -R` throwaway): in js/map.js drop
+   holdArrival's pre-reveal early return AND its rAF release, so markers placed
+   BEFORE the reveal are held at opacity 0 and never let go. The premise holds
+   at 50 placed and the assertion goes RED at `0 visible once the fade settled,
+   against 50 already placed at reveal`. Moving the floor to a premise did not
+   hollow the row out; it still catches the withholding it was written for.
+   AND THE COMPANION THAT COVERS THE PREMISE, because a premise that can never
+   be false is a blind spot rather than a fix. A genuinely empty map (js/app.js
+   placeWalkable forced to return null, tile host left perfectly reachable)
+   makes this row UNPROVEN, but the suite still exits 1: `ARRIVAL markers were
+   actually counted` is hard-graded on the FAST lap and goes RED at `1 count
+   changes recorded`. Measured the same day. That row is deliberately NOT gated
+   the way its ARRIVAL-SLOW twin is, and this is why: the fast recorder was
+   already scoped, so it never depended on the map key, and it is the row that
+   tells "the map drew nothing" apart from "nothing was placed by the reveal". */
+if (!(arr.revealDom > 0)) {
+  unproven('ARRIVAL the reveal SHOWED every marker it already had (nothing placed was withheld to fade in afterwards)',
+    `nothing at all was placed when the reveal fired (${arr.revealDom ?? 'null'} MapLibre-owned markers), so no marker could have been withheld from it. Whether revealing that early is itself acceptable is the placement row's question, not this one${capBeatTheTiles ? ', and the cap beat the tiles this run' : ''}`);
+} else {
+  ok('ARRIVAL the reveal SHOWED every marker it already had (nothing placed was withheld to fade in afterwards)',
+    arr.revealSettled != null && arr.revealSettled >= arr.revealDom,
+    `${arr.revealSettled ?? 'null'} visible once the fade settled, against ${arr.revealDom} already placed at reveal (the reveal-instant reading is ${arr.revealCount}, mid-fade, which is what the retired MAJORITY row graded)`);
+}
+if (capBeatTheTiles) {
+  unproven('ARRIVAL placement was essentially finished before the reveal fired (revealing with almost nothing placed is not "arrives whole")', capWhy);
+} else {
+  ok('ARRIVAL placement was essentially finished before the reveal fired (revealing with almost nothing placed is not "arrives whole")',
+    arr.finalDom > 0 && arr.revealDom * 2 > arr.finalDom,
+    `${arr.revealDom}/${arr.finalDom} markers placed at reveal`);
+}
 
 /* ---- BEATS -----------------------------------------------------------------
    Arrival GROUPING. See the header: this is the only row that grades the
@@ -985,19 +1107,41 @@ await slowPage.evaluateOnNewDocument(() => {
   };
   attachMO();
 
+  /* MARKERS THE MAP OWNS, NOT EVERY NODE WEARING MARKER MARKUP. The identical
+     fix the FAST recorder got on 2026-08-20, applied here 2026-09-02 because
+     this lap never got it and has been counting the map key ever since.
+     #mapLegend is built from the real marker markup on purpose, sits inside
+     #mapStage so the marker CSS reaches it, and [hidden] does not zero computed
+     opacity, so it supplied exactly nine permanently-visible phantoms: 5
+     .map-spawn, 3 .map-den-mark, 1 .map-mini-mark.
+     MEASURED, seven full runs 2026-09-02: this lap reported "10 visible once
+     the fade settled, against 10 already placed at reveal" in EVERY SINGLE RUN,
+     the healthy ones with 46 real markers and the degraded ones with one, and
+     its final timeline read {spawn:5, den:3, mini:1} on a map that had drawn
+     nothing. Nine of that ten was the key and the tenth was the Glutton. So the
+     `revealDom > 0` floor under the row below was met by decoys alone and the
+     row could not fail on a dead map, which is the exact defect the ratchet in
+     this file exists to catch. maplibregl-marker is an allowlist and that is
+     the point: map.js does `new maplibregl.Marker({ element: el })`, so
+     MapLibre stamps it on what it owns and never on the key's copies. */
+  const owned = sel => [...document.querySelectorAll(sel)].filter(e => e.closest('.maplibregl-marker'));
   setInterval(() => {
     const s = window.__slow;
     if (s.entry == null) return;
     const snap = { t: Math.round(performance.now() - s.entry) };
     for (const [sel, k] of Object.entries(KINDS))
-      snap[k] = [...document.querySelectorAll(sel)].filter(e => +getComputedStyle(e).opacity > 0.01).length;
+      snap[k] = owned(sel).filter(e => +getComputedStyle(e).opacity > 0.01).length;
     const last = s.tl[s.tl.length - 1];
     if (!last || Object.values(KINDS).some(k => last[k] !== snap[k])) s.tl.push(snap);
     const st = document.querySelector('#mapStage');
     if (st && st.classList.contains('markers-in') && s.reveal == null) {
       s.reveal = snap.t;
       s.revealCount = Object.values(KINDS).reduce((sum, k) => sum + snap[k], 0);
-      s.revealDom = Object.keys(KINDS).reduce((sum, sel) => sum + document.querySelectorAll(sel).length, 0);
+      s.revealDom = Object.keys(KINDS).reduce((sum, sel) => sum + owned(sel).length, 0);
+      /* Decoys ADMITTED BY THE PREDICATE, the same shape the fast lap records,
+         so a revert of the scoping above shows up as a number rather than as a
+         row quietly passing again. */
+      s.revealDecoys = Object.keys(KINDS).reduce((sum, sel) => sum + owned(sel).filter(e => e.closest('#mapLegend')).length, 0);
     }
     if (s.reveal != null && s.revealSettled == null && snap.t >= s.reveal + 400) {
       s.revealSettled = Object.values(KINDS).reduce((sum, k) => sum + snap[k], 0);
@@ -1037,22 +1181,36 @@ const POP_BACKSTOP_MS = 4000;
 /* ---- BEATS-SLOW -----------------------------------------------------------------
    Arrival GROUPING. See the header: this is the only row that grades the
    pre-reveal population, and it grades grouping, NOT that anything was painted. */
+/* DID THIS LAP'S MAP DRAW AT ALL. One measurement, read by BEATS-SLOW and by
+   every row below that stands on a drawn population (the timeline row, the
+   straggler pair, the withholding row and the pop backstop), because they all
+   stand on the same fact and this file's own rule is that rows must not fail
+   together for one cause. Taken from the BEAT recorder because that tracker is
+   scoped to MapLibre-owned markers and so cannot be answered by the map key.
+   THIS IS THE DISAGREEMENT THAT SENT ME HERE, measured 2026-09-02 across seven
+   runs: in four of them BEATS-SLOW said UNPROVEN with `tracked 1` while the
+   straggler rows one section down said FAIL on the identical fact. Same file,
+   same run, same dead map, two different verdicts. UNPROVEN is the honest one:
+   a map that drew nothing is a hosting fact and a red row sends the next
+   person after code that is fine, which is the mistake this file has already
+   recorded making twice on the fast lap. */
+const slowSeen = (slowBeat.marks || []).filter(m => m.vis != null).length;
+const slowMapDrewNothing = slowSeen < BEAT_MIN_SAMPLE;
 {
   const B = beatsOf(slowBeat.marks || []);
-  const seen = (slowBeat.marks || []).filter(m => m.vis != null).length;
   ok('BEATS-SLOW the map key is present and the marker predicate rejects all of it',
     slowBeat.decoy.present === 9 && slowBeat.decoy.admitted === 0,
     `${slowBeat.decoy.present} #mapLegend nodes wearing marker markup (must be 9: 5 spawn + 3 den + 1 mini, or the check is vacuous), ${slowBeat.decoy.admitted} admitted by the predicate (must be 0)`);
-  if (seen < BEAT_MIN_SAMPLE) {
+  if (slowMapDrewNothing) {
     /* UNPROVEN, not FAIL: a map that drew nothing is a hosting fact, and a red
        row here would send someone after code that is fine. */
     unproven('BEATS-SLOW the map drew a sample that could fail the grouping row (PREMISE)',
-      `only ${seen} marker(s) became visible, floor ${BEAT_MIN_SAMPLE}. tracked ${(slowBeat.marks || []).length}, reveal ${slowBeat.reveal}`);
+      `only ${slowSeen} marker(s) became visible, floor ${BEAT_MIN_SAMPLE}. tracked ${(slowBeat.marks || []).length}, reveal ${slowBeat.reveal}`);
     unproven(`BEATS-SLOW the markers arrive in at most ${MAX_BEATS} coordinated beats, never a per-marker trickle`,
       'no gradeable sample');
   } else {
     ok('BEATS-SLOW the map drew a sample that could fail the grouping row (PREMISE)',
-      true, `${seen} of ${slowBeat.marks.length} tracked markers became visible`);
+      true, `${slowSeen} of ${slowBeat.marks.length} tracked markers became visible`);
     ok(`BEATS-SLOW the markers arrive in at most ${MAX_BEATS} coordinated beats, never a per-marker trickle`,
       B.length > 0 && B.length <= MAX_BEATS,
       `${B.length} beat(s) of [${B.map(b => b.n).join(', ')}] markers, window ${BEAT_MS}ms, throttled line. Ceiling ${MAX_BEATS} = the reveal, the tile-informed pass, and the spire's round trip`);
@@ -1061,8 +1219,22 @@ const POP_BACKSTOP_MS = 4000;
 
 ok('ARRIVAL-SLOW the reveal happened at all under real-network tile timing (never revealing is a FAILURE)',
   slow.reveal != null, `reveal at ${slow.reveal}ms from Boneyard entry`);
-ok('ARRIVAL-SLOW markers were actually counted (an empty timeline is a FAILURE)',
-  slow.tl.length >= 2, `${slow.tl.length} count changes recorded`);
+/* THE THIRD THING THE MAP KEY WAS HOLDING UP, found by fixing the counter above
+   rather than by argument. This row asks whether the RECORDER worked, and until
+   the scoping fix it always said yes: the nine key swatches flip to opacity 1
+   when `markers-in` lands, so the timeline gained a second entry on any run at
+   all, dead map included. With the counter honest, a map that drew nothing
+   leaves exactly the all-zero baseline and this went red on a hosting fact.
+   Graded against the OTHER instrument, so it still catches what it is for: if
+   the BEAT recorder saw a population and this timeline is still empty, the
+   recorder really is broken and this is a FAIL. */
+if (slowMapDrewNothing) {
+  unproven('ARRIVAL-SLOW markers were actually counted (an empty timeline is a FAILURE)',
+    `this lap's map drew only ${slowSeen} MapLibre-owned marker(s), floor ${BEAT_MIN_SAMPLE}, so an all-zero timeline is the honest reading and not a broken recorder`);
+} else {
+  ok('ARRIVAL-SLOW markers were actually counted (an empty timeline is a FAILURE)',
+    slow.tl.length >= 2, `${slow.tl.length} count changes recorded, against ${slowSeen} markers the map actually drew`);
+}
 
 /* THE SAME QUESTION WHERE IT HAS TEETH. The fast lap reveals in ~15ms, so its
    pre-reveal window is one sample wide and "nothing was lit" there is very
@@ -1091,9 +1263,30 @@ ok('ARRIVAL-SLOW no marker was already lit when the reveal fired (the window the
    happens if the cap is above the slow-tile arrival time, which defeats the
    point of the slow contract) OR the map never revealed at all. Either way
    the latency assertion below would pass vacuously, so fail here first. */
-ok('ARRIVAL-SLOW at least one straggler was observed (empty sample is a FAILURE: latency assertion would pass vacuously)',
-  slow.stragglers.length > 0,
-  `${slow.stragglers.length} stragglers tracked`);
+/* AND THE ONE CASE IT MUST NOT CALL A FAILURE. Zero stragglers has two causes
+   and they need opposite verdicts. If this lap's map DREW a population and
+   still produced no straggler, the scenario stopped exercising its own
+   mechanism and that is a real red, exactly as written above: the tiles are
+   held until the reveal precisely so a post-reveal arrival is true by
+   construction, and no straggler means that construction failed. If the map
+   drew nothing at all, there was never anything to straggle, and calling that a
+   code failure is the mistake BEATS-SLOW does not make three rows earlier.
+   `slowMapDrewNothing` is the discriminator and it is measured, not assumed.
+   THE ANTI-VACUOUS GUARD IS UNCHANGED where it bites: on a healthy map the
+   comparison is still `stragglers.length > 0` and still a FAIL.
+   PROVE-RED (confirmed 2026-09-02 on a `cp -R` throwaway): raise js/app.js's
+   reveal cap from 1800 to 9000 so the gate always wins and everything is placed
+   before the reveal. The map drew 45 markers, `slowMapDrewNothing` was false,
+   and BOTH this row and its latency twin went RED at 0 stragglers rather than
+   excusing themselves. The anti-vacuous guard is intact where it bites. */
+if (slowMapDrewNothing) {
+  const why = `this lap's map drew only ${slowSeen} MapLibre-owned marker(s), floor ${BEAT_MIN_SAMPLE}, so there was never anything that could arrive after the reveal. Not a code failure and not an empty sample being waved through: BEATS-SLOW reports the same fact as UNPROVEN three rows up`;
+  unproven('ARRIVAL-SLOW at least one straggler was observed (empty sample is a FAILURE: latency assertion would pass vacuously)', why);
+} else {
+  ok('ARRIVAL-SLOW at least one straggler was observed (empty sample is a FAILURE: latency assertion would pass vacuously)',
+    slow.stragglers.length > 0,
+    `${slow.stragglers.length} stragglers tracked, against ${slowSeen} markers the map actually drew`);
+}
 /* HELD-BACK, the same check as the fast row and for the same reason (see the
    MAJORITY retirement note above, 2026-08-22). Deliberately NOT paired with the
    fast row's placement-completeness twin: this scenario throttles the network on
@@ -1101,9 +1294,32 @@ ok('ARRIVAL-SLOW at least one straggler was observed (empty sample is a FAILURE:
    be grading the throttle rather than the code. Withholding is still fully
    testable on a slow line, because it compares what was shown against what was
    placed AT THAT MOMENT, whenever that moment happens to be. */
-ok('ARRIVAL-SLOW the reveal SHOWED every marker it already had (nothing placed was withheld to fade in afterwards)',
-  slow.revealDom > 0 && slow.revealSettled != null && slow.revealSettled >= slow.revealDom,
-  `${slow.revealSettled ?? 'null'} visible once the fade settled, against ${slow.revealDom ?? 'null'} already placed at reveal (reveal-instant reading ${slow.revealCount}, mid-fade)`);
+/* GATED ON THE SAME MEASURED FACT, and the scoping fix above is why it now
+   needs to be. Until 2026-09-02 this row read the map key: `revealDom > 0` was
+   satisfied by nine phantom swatches whatever the map did, so it passed 10 >= 10
+   on a dead map and on a healthy one alike. With the counter honest, a map that
+   drew nothing gives 0 >= 0 with a zero floor, i.e. a RED on a hosting fact, so
+   the same discriminator that governs the row above governs this one. */
+if (slowMapDrewNothing || !(slow.revealDom > 0)) {
+  unproven('ARRIVAL-SLOW the reveal SHOWED every marker it already had (nothing placed was withheld to fade in afterwards)',
+    `${slowSeen} MapLibre-owned marker(s) drawn this lap (floor ${BEAT_MIN_SAMPLE}) and ${slow.revealDom ?? 'null'} of them placed when the reveal fired, so there is no reveal-time population to compare against. ZERO IS THE EXPECTED READING HERE and not a defect: this scenario HOLDS the first tiles until the reveal on purpose, precisely so the markers arrive after it, which is what the straggler rows above grade. Until the counter was scoped on 2026-09-02 this floor was met by the nine map-key swatches and the case never showed`);
+} else {
+  /* The decoy clause guards THIS row's own counter, rather than earning a
+     separate row that would only ever fail alongside it, which is the
+     protection the fast lap gets from its own decoy row.
+     PROVE-RED (confirmed 2026-09-02 on a `cp -R` throwaway): revert the scoping
+     above to a bare querySelectorAll and this goes RED naming `9 map-key
+     decoy(s) admitted at reveal and that must be 0`, against 63 counted. The
+     cap was raised in the same copy for one reason only, to guarantee this lap
+     drew a population at all; it touches nothing this row reads.
+     WORTH KNOWING BEFORE YOU TRY IT: on a contended box this lap draws NOTHING
+     about half the time, and the run then reports UNPROVEN and proves neither
+     way. That is the gate above doing its job, not the injection failing. Read
+     `BEATS-SLOW the map drew a sample` first and re-run until it is green. */
+  ok('ARRIVAL-SLOW the reveal SHOWED every marker it already had (nothing placed was withheld to fade in afterwards)',
+    slow.revealDecoys === 0 && slow.revealDom > 0 && slow.revealSettled != null && slow.revealSettled >= slow.revealDom,
+    `${slow.revealSettled ?? 'null'} visible once the fade settled, against ${slow.revealDom ?? 'null'} already placed at reveal (reveal-instant reading ${slow.revealCount}, mid-fade), ${slow.revealDecoys ?? 'null'} map-key decoy(s) admitted at reveal and that must be 0`);
+}
 /* THE CONTRACT: each straggler fades in within 250ms of being added. Bounded
    by the CSS opacity transition (220ms), NOT by tile latency. A marker added
    at t=3170ms because tiles arrived at t=3170ms must still fade in by 3420ms.
@@ -1117,13 +1333,19 @@ const badLatencies = slow.stragglers.filter(s => s.latency == null || s.latency 
    sample of zero. The empty-sample row beside this is the primary guard, but
    a latency check that CANNOT self-verify its own input is a bug in a test,
    which is still a bug. */
-ok(`ARRIVAL-SLOW every straggler fades in within ${STRAGGLER_LATENCY_MS}ms of DOM add (bounded by our 220ms opacity transition, not by tile latency)`,
-  slow.stragglers.length > 0 && badLatencies.length === 0,
-  slow.stragglers.length === 0
-    ? 'no stragglers in the sample; latency cannot be measured on an empty set (see empty-sample row above)'
-    : badLatencies.length
-      ? `${badLatencies.length}/${slow.stragglers.length} stragglers exceeded: ${JSON.stringify(badLatencies.slice(0, 3))}`
-      : `all ${slow.stragglers.length} stragglers within budget: max ${Math.max(...slow.stragglers.map(s => s.latency))}ms, median ${slow.stragglers.map(s => s.latency).sort((a, b) => a - b)[Math.floor(slow.stragglers.length / 2)]}ms`);
+if (slowMapDrewNothing) {
+  unproven(`ARRIVAL-SLOW every straggler fades in within ${STRAGGLER_LATENCY_MS}ms of DOM add (bounded by our 220ms opacity transition, not by tile latency)`,
+    `this lap's map drew only ${slowSeen} MapLibre-owned marker(s), floor ${BEAT_MIN_SAMPLE}, so there is no straggler to time. The `
+    + `stragglers.length > 0 clause below is kept for the case that matters: a map that DID draw and still produced none is a FAIL`);
+} else {
+  ok(`ARRIVAL-SLOW every straggler fades in within ${STRAGGLER_LATENCY_MS}ms of DOM add (bounded by our 220ms opacity transition, not by tile latency)`,
+    slow.stragglers.length > 0 && badLatencies.length === 0,
+    slow.stragglers.length === 0
+      ? 'no stragglers in the sample; latency cannot be measured on an empty set (see empty-sample row above)'
+      : badLatencies.length
+        ? `${badLatencies.length}/${slow.stragglers.length} stragglers exceeded: ${JSON.stringify(badLatencies.slice(0, 3))}`
+        : `all ${slow.stragglers.length} stragglers within budget: max ${Math.max(...slow.stragglers.map(s => s.latency))}ms, median ${slow.stragglers.map(s => s.latency).sort((a, b) => a - b)[Math.floor(slow.stragglers.length / 2)]}ms`);
+}
 ok('ARRIVAL-SLOW stragglers appear via opacity fade, not the trickle-guard poi-in scale (no .poi-in on any POI marker during the initial load)',
   slow.poiInEver === false,
   slow.poiInEver ? 'saw .poi-in class on at least one marker after reveal (holdArrival !interacted branch is not owning the initial-load second wave)' : 'no .poi-in class seen; fade path owned the second wave');
@@ -1132,9 +1354,19 @@ ok('ARRIVAL-SLOW stragglers appear via opacity fade, not the trickle-guard poi-i
    pathological (cap never fired, tiles hung past 3s, or the recorder
    itself broke), so treat a red row here as an investigation trigger, not
    a number to tune. */
-ok(`ARRIVAL-SLOW total-pop backstop <=${POP_BACKSTOP_MS}ms (NOT the contract: a red row means investigate, not widen)`,
-  slowPop != null && slowPop <= POP_BACKSTOP_MS,
-  `reveal=${slow.reveal}ms  last=${slowLast.t}ms  pop=${slowPop}ms  final=${JSON.stringify(slowLast)}`);
+/* GATED, and the reason is a row that PASSED on nonsense rather than one that
+   failed. With the counter scoped, a map that drew nothing leaves the timeline
+   at its all-zero baseline, which is timestamped BEFORE the reveal, so `pop`
+   came out at -2090ms and sailed through `<= 4000` green. A negative elapsed
+   time is not a fast map, it is an absent one. Measured 2026-09-02. */
+if (slowMapDrewNothing) {
+  unproven(`ARRIVAL-SLOW total-pop backstop <=${POP_BACKSTOP_MS}ms (NOT the contract: a red row means investigate, not widen)`,
+    `this lap's map drew only ${slowSeen} MapLibre-owned marker(s), floor ${BEAT_MIN_SAMPLE}, so there is no population to time filling in (pop reads ${slowPop}ms against a baseline taken before the reveal)`);
+} else {
+  ok(`ARRIVAL-SLOW total-pop backstop <=${POP_BACKSTOP_MS}ms (NOT the contract: a red row means investigate, not widen)`,
+    slowPop != null && slowPop >= 0 && slowPop <= POP_BACKSTOP_MS,
+    `reveal=${slow.reveal}ms  last=${slowLast.t}ms  pop=${slowPop}ms  final=${JSON.stringify(slowLast)}`);
+}
 
 /* INTERACTED GATE, both directions. Programmatic camera moves (map.easeTo,
    flyTo) must NOT flip `interacted`, or the initial second wave would land

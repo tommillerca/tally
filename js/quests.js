@@ -78,6 +78,13 @@ export function questCtx(period, base) {
     // today-scoped (daily quests)
     entries: base.entries || [],
     weighedToday: base.weighedToday,
+    /* q-first says "Log anything at all", and the app's own UI calls a manual
+       walk, a weigh-in, water, sleep and a routine "logging". Every one of
+       those writes a type-'wellness' xp row (js/wellness.js) or the weights
+       store, never the food 'log' store this quest used to read exclusively,
+       so a player whose first act of the day was a manual walk sat on 0/1. */
+    loggedAnyToday: (base.entries || []).length > 0 || !!base.weighedToday
+      || base.allXp.some(r => r.type === 'wellness' && r.date === base.date),
     priorFoodIds: base.priorFoodIds || new Set(),
     scanToday: base.allXp.some(r => r.type === 'scan' && r.date === base.date),
     targets: base.targets,
@@ -87,7 +94,16 @@ export function questCtx(period, base) {
     workoutToday,
     workoutDays: base.allXp.filter(r => r.type === 'actcrate' && inP(r)).length, // ≥500 active-kcal days
     pitWins: countType('fight'),
-    bossWins: countType('boss'),
+    /* 'boss' is a LEGACY row type: nothing has written it since den wins moved
+       to 'bossday' (landmark + remote) and 'roamboss' (roaming) in js/poi.js
+       claimDenWin. Counting only the dead type left w-boss and m-boss at 0
+       forever, on every kill. 'bossfirst' rows are excluded on purpose: they
+       are 0-XP gate markers minted ALONGSIDE the day row, so counting them
+       would double-count a first clear. The Boneyard Wanderer ('wanderer'
+       rows) is also excluded: he re-rolls every 45 minutes and is deliberately
+       kept out of boss progression (see the CEILING note in js/app.js and
+       tests/wanderer-boneyard-audit.mjs). */
+    bossWins: base.allXp.filter(r => (r.type === 'bossday' || r.type === 'roamboss' || r.type === 'boss') && inP(r)).length,
     spawns: countType('spawn'),
     proteinDays: countType('protein'),
     cookedToday: base.allXp.some(r => r.type === 'cook' && r.date === base.date),
@@ -111,7 +127,7 @@ const clamp = (v, t) => ({ cur: Math.min(t, Math.max(0, Math.round(v))), target:
 
 export const DAILY_POOL = [
   { id: 'q-first', name: 'Show up', desc: 'Log anything at all', coins: 30,
-    progress: c => clamp(c.entries.length, 1) },
+    progress: c => clamp(c.loggedAnyToday ? 1 : 0, 1) },
   { id: 'q-log5', name: 'Deep log', desc: 'Log 5 items today', coins: 50,
     progress: c => clamp(c.entries.length, 5) },
   { id: 'q-3meals', name: 'Square meals', desc: 'Log breakfast, lunch, and dinner', coins: 60,
@@ -367,8 +383,16 @@ export async function claimQuest(periodKey, q, period = 'day') {
      periodKey, because periodKey is a week or month key for the other two
      tiers and only dayOrdinal-comparable for 'day'. Gating all three on the
      current day is also the stronger rule: a week and a month roll over off
-     the same clock, so a distrusted today must not pay a weekly either. */
-  if (!(await claimDay(dateKey())).fresh) return null;
+     the same clock, so a distrusted today must not pay a weekly either.
+     A REFUSAL HERE GETS A VOICE. This used to return null, which reaches the
+     click handler as a glowing Claim button whose tap does nothing: exactly how
+     a lapsed player (7+ days with no /health, reason 'unwitnessed') experienced
+     the app. The DECISION is untouched and stays the guard's; this only names
+     it, shaped like { capped } below: truthy, carries no xp/coins, and every
+     counter that scores wins must exclude it (clock-trust and reward-sop's
+     predicates were updated alongside). */
+  const day = await claimDay(dateKey());
+  if (!day.fresh) return { dayGuard: day.reason || true };
   /* THE BOUND, not a trend. Ordering the pool stops the set from churning, but
      it is a property of one function that a later edit could quietly undo. This
      is the ceiling that holds regardless: a period pays at most QUEST_N claims,
@@ -378,14 +402,44 @@ export async function claimQuest(periodKey, q, period = 'day') {
   const cap = QUEST_N[period] || QUEST_N.day;
   const rows = await db.all('xp');
   const already = claimsThisPeriod(rows, periodKey, period);
-  if (already >= cap && !rows.some(r => r.key === `quest-${periodKey}-${q.id}`)) {
-    /* Say so rather than returning null. A null here reaches a click handler that
-       does nothing at all, and a button that silently does nothing is the exact
-       failure the write-failure work went after. */
-    return { capped: true, cap, period };
+  const mine = rows.some(r => r.key === `quest-${periodKey}-${q.id}`);
+  /* RESERVE A SLOT, DO NOT MERELY COUNT ONE. The per-quest key below is atomic,
+     so the SAME quest can never pay twice, but the period TOTAL was a read, an
+     await and a write: two claims of DIFFERENT quests both saw themselves under
+     the ceiling and both paid. Measured 2026-09-01 on origin/main 3d4b208c, a
+     weekly cap of 3 with one prior claim paid FOUR when three distinct ids were
+     claimed at once (+450 coins, +210 XP, 2 golden crates and a Vigor Draught),
+     and a monthly cap of 2 paid 3. Reachable in one tab with no devtools: the
+     Claim handler is async and the button is neither disabled nor debounced, so
+     a second tap before the first await settles runs both.
+     WHY A LEDGER ROW AND NOT A COUNTER IN kv. The ledger is already this file's
+     authority, it is what claimsThisPeriod counts, and it survives a backup and
+     restore. A kv counter would be new state that a restored save or a mid-period
+     rollout starts from zero, handing every player a fresh capful. The slots are
+     numbered from `already` so the rows that exist today are honoured without a
+     backfill, and the walk up to `cap` is what settles a tie: two callers racing
+     for slot n cannot both get it, and the loser takes n+1 or is refused.
+     The id `slot-<n>` is deliberately not in any quest pool, so these rows are
+     invisible to claimsThisPeriod, and they carry 0 XP, the same shape
+     backfillDenCeilingIfNeeded's markers use. */
+  let slotKey = null;
+  if (!mine) {
+    for (let n = already; n < cap; n++) {
+      const key = `quest-${periodKey}-slot-${n}`;
+      if (await db.addIfAbsent('xp', { key, type: 'questslot', xp: 0, label: 'Quest slot', date: dateKey(), ts: Date.now() })) { slotKey = key; break; }
+    }
+    if (!slotKey) {
+      /* Say so rather than returning null. A null here reaches a click handler that
+         does nothing at all, and a button that silently does nothing is the exact
+         failure the write-failure work went after. */
+      return { capped: true, cap, period };
+    }
   }
   const xp = await award(`quest-${periodKey}-${q.id}`, 'quest', REWARD_XP[period] || 25, `Quest: ${q.name}`);
-  if (!xp) return null;
+  /* Nothing was minted, so give the slot back rather than burning it. Only the
+     caller that created this row is here to delete it, and it deletes only on
+     the path where it paid for nothing. */
+  if (!xp) { if (slotKey) await db.del('xp', slotKey); return null; }
   // Keeper's Boon: holding any Dark Spire pays a little extra on every quest.
   // This is the always-on perk that makes losing your last tower sting even when
   // nobody else is competing for it.

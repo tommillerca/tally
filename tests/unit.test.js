@@ -947,7 +947,12 @@ test('transmog: the paid-once credit must be persisted, not derived', () => {
   const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
   const fn = src.match(/export async function paidLooks\(\)\s*\{[\s\S]*?\n\}/);
   assert.ok(fn, 'paidLooks present');
-  assert.ok(/kvSet\('paidlooks'/.test(fn[0]), 'paidLooks persists the grandfathered seed');
+  /* EITHER WRITING PRIMITIVE. What this test is about is that the seed is
+     WRITTEN BACK rather than re-derived; it is not about which call does it.
+     Pinned to kvSet alone until 2026-09-02, when paidLooks moved to kvUpdate so
+     that a receipt markPaid banks during the transmogMap await is not dropped,
+     and this row went red on a strictly better version of the same behaviour. */
+  assert.ok(/kv(?:Set|Update)\('paidlooks'/.test(fn[0]), 'paidLooks persists the grandfathered seed');
   // and re-confirming a look you are already wearing must bank it too
   const ap = src.match(/export async function applyTransmog[\s\S]*?\n\}/);
   assert.ok(/already: true/.test(ap[0]) && /markPaid[\s\S]*?already: true/.test(ap[0]),
@@ -1726,7 +1731,9 @@ test('no control that spends coins or dust buys on a single tap', () => {
     // [data-buyweapon] stood here. The Bone Merchant closed on 2026-08-25 (S0);
     // there is no weapon left to buy on any number of taps. The dust shop's
     // cell went the same way later that day, and the test above ("S0: dust buys
-    // looks") is what keeps a dust-priced product from coming back at all.
+    // looks") is what keeps a dust-priced product from coming back UNDECLARED:
+    // the egg returned on 2026-08-31 as that register's one declared exception.
+    ['[data-dustegg]', 'the dust egg'],
   ];
   const unguarded = [];
   const lines = src.split('\n');
@@ -1908,8 +1915,12 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
        3. no declared dust spend reaches a grant of an item.
      Row 2 is the load-bearing one. It used to carry ONE declared exception,
      breedPets, written down rather than quietly excluded because a register that
-     hides its exception is a lie. That exception was retired on 2026-08-27, so
-     the claim is now unqualified: every dust spend in the tree is cosmetic. */
+     hides its exception is a lie. That exception was retired on 2026-08-27.
+     A NEW exception arrived on 2026-08-31: Tom ruled the dust shop EGG was
+     removed unintentionally (dust is the deterministic hatch route for a player
+     who cannot walk the step milestones), so buyDustEgg sells one Mystery Egg a
+     week for 60 dust. Row 3 pins the exception to exactly grantEgg: the crate,
+     the charm and every other grant stay unreachable from a dust spend. */
   const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
 
@@ -1918,8 +1929,20 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
     assert.ok(!src.includes(gone) && !app.includes(gone), `${gone} is back in the tree`);
 
   /* 2. every dust SPEND, by the function that makes it, against a declaration.
-        A spend is boneDustAdd with a negative argument; the positive ones are
-        income (melting, quests, the wheel) and are not this test's business. */
+        A spend is `await spendDust(...)` OR boneDustAdd with a negative
+        argument; the positive ones are income (melting, quests, the wheel) and
+        are not this test's business.
+        BOTH SHAPES, and the pattern widened rather than moved on 2026-08-31.
+        The spends became atomic that day (spendDust decides affordability and
+        debits in ONE kv transaction, because the old read-then-boneDustAdd let
+        two concurrent dust buys pass the same stale read and clamp their
+        overdrafts to free), and this register went momentarily blind: it found
+        0 spends and said so, which is the floor row below doing its job. Keeping
+        `boneDustAdd(-` in the pattern matters as much as adding the new one, so
+        a future hand-rolled negative debit still lands in this register instead
+        of slipping past a check that now only knows about spendDust. The
+        `await` is what keeps spendDust's own one-line definition out of the
+        census. */
   const DECLARED = {
     buyRackItem: 'COSMETIC. Buys a piece off the rack: grantCosmetic, or the aura kv. tests/purchase-firewall.mjs asserts statically that this path cannot reach grantGear or grantCrate.',
     applyTransmog: 'COSMETIC. Pays for a look on a slot. One changes your stats, one costs dust and changes only the picture.',
@@ -1930,28 +1953,46 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
        that breeding stops costing dust, so the exception this register existed
        to flag is gone and EVERY remaining dust spend is cosmetic. The floor
        below moved 3 -> 2 with it. */
+    buyDustEgg: 'NOT COSMETIC, BY RULING (Tom, 2026-08-31): the dust shop egg was removed unintentionally, and dust is the deterministic hatch route for a non-walker. One Mystery Egg per ISO week for 60 dust, bounded by the dustegg:<week> receipt. If dust is ever sold for real money, this is the first thing to look at.',
   };
+  /* The one dust spend allowed to reach a grant, and ONLY grantEgg. Not a skip:
+     row 3 still forbids it every other grant, so the crate and the charm cannot
+     ride back in on the egg's ruling. */
+  const POWER_EXCEPTIONS = { buyDustEgg: /grantEgg/ };
   const owners = [...src.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/gm)].map(m => [m.index, m[1]]);
   const ownerAt = i => { let n = '(top level)'; for (const [ix, name] of owners) { if (ix <= i) n = name; else break; } return n; };
-  const spends = [...src.matchAll(/boneDustAdd\(\s*-/g)].map(m => ownerAt(m.index));
+  const DUST_SPEND = /boneDustAdd\(\s*-|await spendDust\(/g;
+  const spends = [...src.matchAll(DUST_SPEND)].map(m => ownerAt(m.index));
   assert.ok(spends.length >= 2, `found ${spends.length} dust spends; the lint is reading the wrong thing`);
   assert.deepEqual([...new Set(spends)].sort(), Object.keys(DECLARED).sort(),
     `an undeclared dust spend: ${spends.join(', ')}`);
 
-  // 3. and none of them hands out an item
+  // 3. and none of them hands out an item, except the one declared exception,
+  //    which may reach EXACTLY its declared grant and nothing else
   const GRANTS = /grantEgg|grantCrate|grantConsumable|grantGear|grantPet\b|addPetInstance/;
   for (const fn of Object.keys(DECLARED)) {
     const from = src.slice(src.indexOf(`function ${fn}(`));
     const body = from.slice(0, from.indexOf('\n}\n'));
     assert.ok(body.length > 40, `failed to slice ${fn}; the lint is reading the wrong thing`);
-    assert.ok(!GRANTS.test(body), `${fn} spends dust and grants an item`);
+    const allowed = POWER_EXCEPTIONS[fn];
+    if (allowed) {
+      assert.ok(allowed.test(body), `${fn} is a declared exception for ${allowed} and no longer reaches it; retire the exception`);
+      const others = body.replace(new RegExp(allowed.source, 'g'), '');
+      assert.ok(!GRANTS.test(others), `${fn} reaches a grant beyond its declared exception ${allowed}`);
+    } else {
+      assert.ok(!GRANTS.test(body), `${fn} spends dust and grants an item`);
+    }
   }
 
   /* 4. CONTROL. Each row above only proves something if it can fire, so fire
         every pattern against a forgery of the thing it hunts for. */
   const forgery = "function buyWithDust(id) {\n  await boneDustAdd(-60);\n  await grantEgg('dust');\n}\n";
   assert.ok(forgery.includes('buyWithDust'), 'the name pattern cannot detect a violation');
-  assert.equal([...forgery.matchAll(/boneDustAdd\(\s*-/g)].length, 1, 'the spend pattern cannot find a spend');
+  assert.equal([...forgery.matchAll(new RegExp(DUST_SPEND.source, 'g'))].length, 1, 'the spend pattern cannot find a legacy boneDustAdd spend');
+  /* and the same for the shape every real spend uses now, so the widened half
+     of the pattern is proven to fire rather than merely present */
+  const forgery2 = "function buyWithDust2(id) {\n  await spendDust(60);\n}\n";
+  assert.equal([...forgery2.matchAll(new RegExp(DUST_SPEND.source, 'g'))].length, 1, 'the spend pattern cannot find a spendDust spend');
   assert.ok(GRANTS.test(forgery), 'the grant pattern cannot detect a violation');
 });
 
@@ -2728,34 +2769,80 @@ test('paddock names are deterministic, collision-free, order-independent', async
 });
 
 
-test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule)', async () => {
-  const { assignBands, placePaddock, PDK_SCENE } = await import('../js/paddock.js');
-  for (const n of [1, 2, 3, 5, 7, 9, 14]) {
-    const bands = assignBands(Array.from({ length: n }, (_, i) => ({ iid: 'w' + i, motion: 'walk' })));
-    assert.equal(bands.length, n, `lost a walker at n=${n}`);
-    let checked = 0;
-    for (const a of bands) for (const b of bands) {
-      if (a.iid >= b.iid) continue;
-      if (Math.abs(a.y - b.y) < 40) {
-        checked++;
-        const ov = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
-        assert.ok(ov <= 20, `n=${n}: ${a.iid}@${a.y} and ${b.iid}@${b.y} share ${ov}px of x-range (rule: <=20)`);
-      }
-    }
-    if (n >= 2) assert.ok(checked > 0, `n=${n}: no same-cluster pairs were checked, the rule never ran`);
-    for (const b of bands) {
-      assert.ok(b.y < PDK_SCENE.PANEL_Y, `feet below the panel edge at n=${n}`);
-      /* the graveyard corner (tombstone x16-42 base y330, cross x62-78): a
-         walker whose feet sit above that base must never enter its x-range,
-         because the herd layer would draw it over props it stands behind */
-      assert.ok(b.x0 >= PDK_SCENE.ROW_XMIN(b.y), `n=${n}: ${b.iid}@${b.y} band starts at ${b.x0}, inside the row's left exclusion (${PDK_SCENE.ROW_XMIN(b.y)})`);
-    }
-    /* and the exclusion itself is pinned to the measured graveyard edge (the
-       cross ends at x78), so weakening the spec cannot pass the loop above */
-    assert.ok(PDK_SCENE.ROW_XMIN(322) >= 86, 'top-row left exclusion regressed below the graveyard edge');
-    /* and the bottom-left corner is the player's own bonehead now */
-    assert.ok(PDK_SCENE.ROW_XMIN(460) >= 152, 'bottom-row left exclusion regressed into the keeper corner');
+/* THE WHOLE CAST, NOT ONE OF ITS THREE PACKERS.
+ *
+ * The old pin measured walkers against walkers, which is exactly why it stayed
+ * green while a catfish sat 59x46px inside a bulldog: floppers and hoverers were
+ * placed by two other systems and nothing compared the three. This one measures
+ * every placed figure's SPRITE BOX against every other's, which is what the two
+ * playtesters measured on the live screen (2026-08-31: eight offending pairs,
+ * worst 66x96px).
+ *
+ * FLYERS ARE EXCLUDED, and it is a stated exemption rather than an oversight:
+ * they cross the entire width on a CSS animation at their own depth (z-index 4,
+ * behind everything on the ground), so they have no static x to compare and
+ * passing over a cloud is what the design asks them to do. */
+const pdkBox = p => (p.kind === 'walk'
+  ? { x0: p.x0, x1: Math.max(p.x1, p.x0 + p.w), y0: p.y - p.w, y1: p.y }
+  : { x0: p.x, x1: p.x + p.w, y0: p.y - p.w, y1: p.y });
+function pdkClashes(placed, tol = 20) {
+  const boxes = Object.entries(placed).filter(([, p]) => p.kind !== 'fly').map(([iid, p]) => ({ iid, ...pdkBox(p) }));
+  const bad = [];
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+    const a = boxes[i], b = boxes[j];
+    const ox = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+    const oy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+    if (ox > tol && oy > tol) bad.push(`${a.iid}/${b.iid} ${Math.round(ox)}x${Math.round(oy)}px`);
   }
+  return { bad, pairs: (boxes.length * (boxes.length - 1)) / 2, boxes };
+}
+
+test('paddock figures never stack: no pair shares more than 20px in BOTH axes', async () => {
+  const { assignRows, placePaddock, PDK_SCENE, OVERLAP } = await import('../js/paddock.js');
+  /* every mix that has ever been on this screen, walkers alone through a herd
+     past the cap with catfish and clouds in it */
+  const mixes = [
+    [['walk', 1]], [['walk', 3]], [['walk', 8]], [['walk', 14]],
+    [['walk', 8], ['flop', 3]], [['walk', 11], ['flop', 3], ['hover', 5], ['fly', 2]],
+    [['flop', 6], ['hover', 6], ['walk', 6], ['fly', 4]],
+  ];
+  let comparisons = 0;
+  for (const mix of mixes) {
+    const roster = mix.flatMap(([motion, n]) => Array.from({ length: n }, (_, i) => ({ iid: `${motion}${i}`, motion })));
+    const placed = placePaddock(roster, undefined, '2026-08-31');
+    const { bad, pairs, boxes } = pdkClashes(placed);
+    assert.ok(boxes.length > 0, `${JSON.stringify(mix)}: nothing was placed, so the rule never ran (an empty sample is a failure)`);
+    comparisons += pairs;
+    assert.equal(bad.length, 0, `${JSON.stringify(mix)}: ${bad.join(', ')}`);
+    for (const [iid, p] of Object.entries(placed)) {
+      if (p.kind === 'fly') continue;
+      assert.ok(pdkBox(p).y1 <= PDK_SCENE.PANEL_Y, `${iid} stands below the panel edge at ${pdkBox(p).y1}`);
+    }
+  }
+  assert.ok(comparisons > 50, `only ${comparisons} pairs were compared across every mix: the rule barely ran`);
+  /* and the geometry the guarantee rests on, pinned where weakening it shows:
+     rows further apart than the sprite minus the tolerance is what makes two
+     rows independent, so the loop above cannot be satisfied by luck */
+  const ys = PDK_SCENE.GROUND_ROWS.map(r => r.y);
+  for (let i = 1; i < ys.length; i++) {
+    assert.ok(ys[i] - ys[i - 1] >= 76 - 20, `ground rows ${ys[i - 1]} and ${ys[i]} are ${ys[i] - ys[i - 1]}px apart, closer than the 76px sprite minus the 20px tolerance`);
+  }
+  assert.ok(OVERLAP <= 20, 'the allocator hands out more overlap than the layout rule tolerates');
+  /* the graveyard corner (tombstone x16-42 base y330, cross x62-78): a figure
+     whose feet sit above that base must never enter its x-range, because the
+     herd layer draws over the backdrop and would hide the props */
+  assert.ok(PDK_SCENE.GROUND_ROWS[0].xmin >= 86, 'top-row left exclusion regressed below the graveyard edge');
+  /* and the bottom-left corner is the player's own bonehead */
+  for (const r of PDK_SCENE.GROUND_ROWS.filter(r => r.y >= 376)) {
+    assert.ok(r.xmin >= 152, `row ${r.y} reaches into the keeper corner at x${r.xmin}`);
+  }
+  /* the allocator DROPS what will not fit rather than stacking it, and says so
+     by returning fewer rows than it was handed: the panel's "N of M out today"
+     line is built on that difference being real */
+  const crowd = Array.from({ length: 40 }, (_, i) => ({ iid: 'c' + i, w: 76 }));
+  const rows = assignRows(crowd, PDK_SCENE.GROUND_ROWS);
+  assert.ok(rows.length > 0 && rows.length < crowd.length, `assignRows placed ${rows.length} of ${crowd.length}: it must fill the rows and drop the rest`);
+
   // every motion kind gets placed, none invents a position off-scene
   const cast = [...Array(4)].flatMap((_, i) => [
     { iid: `a${i}`, motion: 'walk' }, { iid: `b${i}`, motion: 'fly' },
@@ -2763,15 +2850,13 @@ test('paddock walkers own exclusive x-bands (the handoff\'s paid-for layout rule
   const placed = placePaddock(cast);
   assert.equal(Object.keys(placed).length, cast.length, 'a pet vanished in placement');
 
-  /* THE WALK CAP (Aggie's measured ceiling, 2026-08-11): the rule is measured
-     on 76px sprites, so same-cluster spacing (bandW + GUTTER) must stay >= 56,
-     which the top cluster's 202px span can only give 4 walkers. A big herd
-     rotates by day instead of crushing the clusters. */
+  /* THE WALK CAP (Aggie's measured ceiling, 2026-08-11), unchanged at 8: a big
+     herd rotates by day instead of crushing the rows. */
   const herd = Array.from({ length: 20 }, (_, i) => ({ iid: 'h' + i, motion: 'walk' }));
   const capped = placePaddock(herd, undefined, '2026-08-11');
   const walks = Object.entries(capped).filter(([, p]) => p.kind === 'walk');
   assert.equal(walks.length, 8, `walk cap must render exactly 8 of 20, got ${walks.length}`);
-  for (const [iid, p] of walks) assert.ok(p.x1 - p.x0 >= 32, `${iid}: capped band ${p.x1 - p.x0}px, below the 32px floor the 56px spacing rule implies`);
+  for (const [iid, p] of walks) assert.ok(p.x1 - p.x0 >= p.w, `${iid}: band ${p.x1 - p.x0}px is narrower than its own ${p.w}px sprite`);
   const again = placePaddock(herd, undefined, '2026-08-11');
   assert.deepEqual(Object.keys(again).sort(), Object.keys(capped).sort(), 'same day must pick the same herd');
   const other = placePaddock(herd, undefined, '2026-08-12');

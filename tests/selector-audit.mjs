@@ -57,6 +57,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripComments } from './godmode.js';
 
 const ROOT = process.env.ROOT
   ? path.resolve(process.env.ROOT)
@@ -64,40 +65,13 @@ const ROOT = process.env.ROOT
 const results = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
 
-/* ------------------------------------------------------------------ the lexer
- * Strip comments, KEEP string and template contents (emissions live inside
- * them). A regex cannot do this, 'https://x' would lose its tail, so walk
- * the file: code / 'sq' / "dq" / `template` (with ${ } nesting back into
- * code) / line and block comments. Regex literals are not modelled; a token
- * inside /re/ would count as alive, which errs toward silence, not noise. */
-export function stripComments(src) {
-  let out = '', i = 0, mode = 'code';
-  const tmpl = [];                       // brace depth per nested template
-  while (i < src.length) {
-    const c = src[i], d = src[i + 1];
-    if (mode === 'code') {
-      if (c === '/' && d === '/') { mode = 'line'; i += 2; continue; }
-      if (c === '/' && d === '*') { mode = 'block'; i += 2; continue; }
-      if (c === "'") mode = 'sq';
-      else if (c === '"') mode = 'dq';
-      else if (c === '`') { mode = 'tmpl'; tmpl.push(0); }
-      else if (c === '}' && tmpl.length && tmpl[tmpl.length - 1] === 0) { tmpl.pop(); mode = 'tmpl'; out += c; i++; continue; }
-      else if (c === '{' && tmpl.length) tmpl[tmpl.length - 1]++;
-      else if (c === '}' && tmpl.length) tmpl[tmpl.length - 1]--;
-      out += c; i++; continue;
-    }
-    if (mode === 'line') { if (c === '\n') { mode = 'code'; out += c; } i++; continue; }
-    if (mode === 'block') { if (c === '*' && d === '/') { mode = 'code'; i += 2; out += ' '; continue; } if (c === '\n') out += c; i++; continue; }
-    // inside a quoted string or template: escapes pass through whole
-    if (c === '\\') { out += c + (d ?? ''); i += 2; continue; }
-    if (mode === 'sq' && c === "'") mode = 'code';
-    else if (mode === 'dq' && c === '"') mode = 'code';
-    else if (mode === 'tmpl' && c === '`') { mode = 'code'; tmpl.pop(); }
-    else if (mode === 'tmpl' && c === '$' && d === '{') { mode = 'code'; tmpl[tmpl.length - 1] = 0; out += '${'; i += 2; continue; }
-    out += c; i++; continue;
-  }
-  return out;
-}
+/* The lexer that does the stripping moved to godmode.js on 2026-09-03, when a
+   second static lint needed it (flaky-network-audit, which was reading a
+   sentence about `fetch()` as a call site). It carried a bug out with it: a
+   template with two ${ } holes desynced the walk and left the whole rest of the
+   file read as string body. That was silence rather than noise here, so this
+   file was green throughout, but it was sweeping less than it claimed: the
+   corrected lexer finds 840 literal query sites where this read 829. */
 
 /* ------------------------------------------------------- extraction + verdicts */
 const QUERY_RE = [

@@ -48,6 +48,14 @@
  *   the cancel moved below the hash check (the shape this was written from)
  *     STALE alone, at 2 map builds for one arrival.
  *
+ * STALE'S LEAVE IS RETRIED THREE TIMES like every other double here, since
+ * 2026-09-01. It was the one two-tap measurement in the file that got a single
+ * attempt, and the gate reported it ungraded with "the second tap landed
+ * Infinityms after the first": an ABSENT timestamp wearing a lateness message.
+ * A tap that was never delivered now says so in its own words, and is kept
+ * apart from a tap delivered too late, which is the app correctly seeing two
+ * singles. Both stay UNPROVEN; only a delivered double grades the app.
+ *
  * Run: node tests/tab-doubletap-audit.mjs [baseUrl]   (serves this repo if omitted)
  */
 import fs from 'node:fs';
@@ -95,9 +103,21 @@ const tapTab = async (tab, n = 1, gap = 120) => {
    retried up to three times, and a machine that can never deliver one reports
    UNPROVEN rather than a red. `reset` puts the state back before each attempt
    and is given time for any route a failed attempt left in flight. */
+/* ON `document`, NOT ON #tabbar, so a tap that MISSED the bar is evidence
+   rather than silence. The gate reported this suite UNPROVEN on 2026-09-01 with
+   "the second tap landed Infinityms after the first": Infinity is what an ABSENT
+   timestamp reads as, and the old listener could only ever say "I saw fewer
+   than two", never whether a click was delivered somewhere else or never
+   delivered at all. `__tapAt` still counts only taps that reached the bar, so
+   every gap measured below means exactly what it meant before. */
 await page.evaluate(() => {
   window.__tapAt = [];
-  document.getElementById('tabbar').addEventListener('click', () => window.__tapAt.push(performance.now()), true);
+  window.__tapMiss = [];
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (t.closest && t.closest('#tabbar')) window.__tapAt.push(performance.now());
+    else window.__tapMiss.push(`${t.tagName}${t.id ? '#' + t.id : ''}`);
+  }, true);
 });
 const DBL_WINDOW = 300;
 const doubleTap = async (tab, reset = async () => {}) => {
@@ -105,7 +125,7 @@ const doubleTap = async (tab, reset = async () => {}) => {
   for (let i = 0; i < 3; i++) {
     await sleep(700);                       // let a previous attempt's route land
     await reset();
-    await page.evaluate(() => { window.__tapAt = []; });
+    await page.evaluate(() => { window.__tapAt = []; window.__tapMiss = []; });
     if (!await tapTab(tab, 2, 0)) return { taps: false, gap: best };
     const at = await page.evaluate(() => window.__tapAt);
     const gap = at.length >= 2 ? at[at.length - 1] - at[at.length - 2] : Infinity;
@@ -345,26 +365,59 @@ if (!hasMap) {
     Object.defineProperty(window, '__map', { configurable: true, get: () => m, set: v => { m = v; window.__mapBuilds = ++n; } });
     window.__mapBuilds = 0;
   });
-  await tapTab('today', 1);
-  await sleep(1600);
-  await page.evaluate(() => { window.__mapBuilds = 0; });
-  await page.evaluate(() => { window.__tapAt = []; });
-  await tapTab('today', 1);      // arms the same-tab wait on Today
-  await sleep(60);
-  await tapTab('boneyard', 1);   // navigates away; the armed wait must not survive it
-  const leaveGap = await page.evaluate(() => (window.__tapAt.length >= 2 ? window.__tapAt[1] - window.__tapAt[0] : Infinity));
-  await sleep(2400);
-  const builds = await page.evaluate(() => window.__mapBuilds);
-  /* The same delivery condition as every double above, and in the same
-     direction: a stretched gap lets the armed wait fire on its own, which
-     leaves ONE build and would read as health rather than as a run that never
-     held the state. */
-  if (!(leaveGap < DBL_WINDOW - 50)) {
-    unproven('STALE leaving a tab inside the double-tap window builds the next screen ONCE',
-      `the second tap landed ${Math.round(leaveGap)}ms after the first, outside the ${DBL_WINDOW}ms window`);
+  /* RETRIED THREE TIMES, exactly as doubleTap retries every other double in this
+     file, because this was the one two-tap measurement in the suite that got a
+     single attempt. The leave ends where it starts (on the Boneyard, with a
+     map), so an attempt is repeatable, and each one re-zeroes both probes.
+     Reported on 2026-09-01 as `1 check(s) not graded: the second tap landed
+     Infinityms after the first`, which is an absent timestamp wearing a
+     lateness message: one of the two taps was never seen by the page. It is NOT
+     the read racing the click. Measured on a cp -R throwaway of this tree:
+     blocking the renderer main thread for 900ms before the second tap still
+     produced both timestamps (a truthful 965ms gap), and so did the whole
+     sequence under 20x CPU throttling (88ms), both read with no wait at all. So
+     the fix is delivery, not settling. */
+  let leaveGap = Infinity, builds = null, miss = [];
+  for (let i = 0; i < 3 && !(leaveGap < DBL_WINDOW - 50); i++) {
+    await tapTab('today', 1);   // an attempt ends on the Boneyard, so the next one starts by leaving it
+    await sleep(1600);
+    await page.evaluate(() => { window.__mapBuilds = 0; window.__tapAt = []; window.__tapMiss = []; });
+    await tapTab('today', 1);      // arms the same-tab wait on Today
+    await sleep(60);
+    await tapTab('boneyard', 1);   // navigates away; the armed wait must not survive it
+    /* THE LAST TWO TAPS, not the first two. doubleTap has always measured it
+       this way; this row read __tapAt[1] - __tapAt[0], so a stray click still in
+       flight from the tap before the reset would have been measured against the
+       arming tap and reported as a ~1.6s gap the app never saw. */
+    const g = await page.evaluate(() => (window.__tapAt.length >= 2
+      ? window.__tapAt[window.__tapAt.length - 1] - window.__tapAt[window.__tapAt.length - 2] : Infinity));
+    await sleep(2400);
+    /* Kept as a PAIR: the build count only means anything next to the gap that
+       was delivered on the same attempt. */
+    if (g < leaveGap) { leaveGap = g; builds = await page.evaluate(() => window.__mapBuilds); }
+    miss = await page.evaluate(() => window.__tapMiss.slice(0, 4));
+  }
+  const STALE_ROW = 'STALE leaving a tab inside the double-tap window builds the next screen ONCE';
+  /* THREE OUTCOMES, NOT TWO, and the middle one is the whole point of this
+     change: a tap that was never delivered is the INSTRUMENT failing and has to
+     say so, a tap delivered late is the app correctly seeing two singles, and
+     only a tap delivered inside the window grades the app. All three stay
+     non-green until the last, so nothing is certified on a leave that never
+     happened. */
+  if (!Number.isFinite(leaveGap)) {
+    unproven(STALE_ROW, 'the page never saw two tab taps on any of 3 attempts, so the leave was never '
+      + 'delivered and NOTHING was measured about the app'
+      + (miss.length ? `. Clicks that landed off the tab bar: ${miss.join(', ')}` : ''));
+  } else if (!(leaveGap < DBL_WINDOW - 50)) {
+    /* The same delivery condition as every double above, and in the same
+       direction: a stretched gap lets the armed wait fire on its own, which
+       leaves ONE build and would read as health rather than as a run that never
+       held the state. */
+    unproven(STALE_ROW,
+      `the second tap landed ${Math.round(leaveGap)}ms after the first (closest of 3 attempts), outside the ${DBL_WINDOW}ms window`);
   } else {
-    ok('STALE leaving a tab inside the double-tap window builds the next screen ONCE',
-      builds === 1, `${builds} map builds on one arrival, taps ${Math.round(leaveGap)}ms apart (a stale route() rebuilds it)`);
+    ok(STALE_ROW, builds === 1,
+      `${builds} map builds on one arrival, taps ${Math.round(leaveGap)}ms apart (a stale route() rebuilds it)`);
   }
 }
 

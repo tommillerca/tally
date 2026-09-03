@@ -48,6 +48,43 @@
  * side of the worst moment were dropped). CDP `Animation.setPlaybackRate` slows
  * the animation the real control already started; nothing here starts it.
  *
+ * AND THE MOMENT CAN STILL BE MISSED, so a miss is retried rather than graded.
+ * 2026-09-02: this suite came back FAIL at 440x956 with "0 of 49 frames, swing
+ * top 31.7 bottom 26.5". Read it: both bands really moved, so the takeover slid,
+ * and the sampler simply never landed on the half-gone instant. The window it
+ * has to land in is not the animation's 200ms and cannot be widened by slowing
+ * the clock further: closeTopSheet buries the sheet on a setTimeout(320) that
+ * the CDP animation clock does not touch, so whatever the playback rate there
+ * are ~250ms of WALL CLOCK in which any frame can be half-gone.
+ * Measured on this tree at 440x956, 18 solo runs plus one under 14 cores of
+ * competing load:
+ *                       half-gone frames   total frames   biggest inter-frame gap
+ *   solo, x18                 15 to 18       50 to 66            36 to 222ms
+ *   under load, x1                   5             20                   122ms
+ * The floor is 3. So the margin is real but it is the COMPOSITOR's to give, and
+ * a run that is handed none of those frames has measured nothing at all. One
+ * bounded retry, logged, exactly like godmode's retryOnDetach; a takeover that
+ * really snaps returns an empty set every time it is asked and the second
+ * attempt is GRADED (proven below).
+ *
+ * AND THE ROW NOW SAYS WHICH IT WAS. "0 frames were half-gone" is printed
+ * identically by a snap and by a blink, so MIDSLIDE prints the two crossing
+ * times and the biggest gap between frames. Healthy: the top band leaves at
+ * t+462ms and the bottom band arrives at t+713ms, 251ms apart, biggest gap 39ms.
+ * Snapped: both at t+725ms, the SAME frame, biggest gap 30ms.
+ *
+ * PROVEN RED, 2026-09-02, for the retry and the crossing times. Two `cp -R`
+ * throwaways with .git removed, one mutation each, exit code read from a FILE:
+ *   app.css `.sheet.takeover.closing` given `animation: none` (the takeover
+ *     SNAPS) -> exit 1, MIDSLIDE red at BOTH viewports AFTER the retry, "0 of 65
+ *     frames ... top band left the reveal t+724ms, bottom band reached the
+ *     screen behind t+724ms ... biggest gap between frames 36ms". The retry is
+ *     not a blindfold.
+ *   app.css `.sheet.takeover.closing` and `@keyframes sheetOutFlat` deleted (the
+ *     shipped sideways drift) -> exit 1, FLICKER red at both, 99.3% and 99.2% of
+ *     the bottom band against 7.1% and 8.8% here, with MIDSLIDE still GREEN as
+ *     its control.
+ *
  * PROVEN RED, 2026-08-19, in a throwaway worktree at pristine origin/main
  * (5bf8af1, and again at 7b43954 before it), asserted first to carry neither
  * `sheetOutFlat` nor `.sheet.takeover.closing`: FLICKER fails at BOTH viewports,
@@ -108,7 +145,8 @@ const MEASURE = async (page, b64) => page.evaluate(async data => {
 
 const bandDiff = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]); return s / a.length; };
 
-async function runViewport(W, H) {
+async function runViewport(W, H, attempt = 1) {
+  const tag = attempt > 1 ? `${W}x${H} retry` : `${W}x${H}`;
   const { browser, page } = await boot(base, {
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
   });
@@ -143,7 +181,7 @@ async function runViewport(W, H) {
       b.scrollIntoView({ block: 'center' });
       return true;
     });
-    ok(`${W}x${H} SETUP the Backpack offers a Common Crate to open`, !!btn);
+    ok(`${tag} SETUP the Backpack offers a Common Crate to open`, !!btn);
     if (!btn) return;
     await sleep(300);
     const box = await page.evaluate(() => { const r = document.querySelector('[data-open]').getBoundingClientRect(); return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; });
@@ -170,7 +208,7 @@ async function runViewport(W, H) {
         return { stuck: true };
       }, n > 0);
       if (state.gone) break;
-      if (state.stuck) { ok(`${W}x${H} SETUP the reveal reached a tappable card`, false, JSON.stringify(state)); return; }
+      if (state.stuck) { ok(`${tag} SETUP the reveal reached a tappable card`, false, JSON.stringify(state)); return; }
       await sleep(400);
       frames = [];
       await cdp.send('Animation.setPlaybackRate', { playbackRate: 1 });
@@ -200,7 +238,10 @@ async function runViewport(W, H) {
       await sleep(350);
     }
 
-    ok(`${W}x${H} SAMPLE frames were captured across the exit (an empty sample is a FAILURE)`,
+    /* AN EMPTY SAMPLE IS A MISSED SHOT ON THE FIRST ATTEMPT, A VERDICT ON THE
+       SECOND. See the RETRY note at the foot of this file. */
+    if (frames.length < 8 && attempt === 1) return 'MISS';
+    ok(`${tag} SAMPLE frames were captured across the exit (an empty sample is a FAILURE)`,
       frames.length >= 8, `${frames.length} frames over ${frames.length ? frames[frames.length - 1].t : 0}ms`);
     if (frames.length < 8) return;
 
@@ -218,13 +259,27 @@ async function runViewport(W, H) {
        reading of "the takeover is still covering this". */
     const swingTop = bandDiff(ref.top, last.top), swingBot = bandDiff(ref.bot, last.bot);
     const mid = m.filter(f => bandDiff(ref.top, f.top) > swingTop * 0.45 && bandDiff(last.bot, f.bot) > swingBot * 0.45);
-    ok(`${W}x${H} MIDSLIDE the takeover was caught half-gone, in pixels (top band has left the reveal, bottom band has not reached the screen behind)`,
+    /* WHEN THE ROW GOES RED IT HAS TO SAY WHICH OF TWO THINGS HAPPENED, because
+       "0 frames were half-gone" is printed identically by a takeover that SNAPPED
+       and by a screencast that blinked. The two crossing times tell them apart: a
+       slide leaves the top band and reaches the bottom band at two different
+       moments with the biggest inter-frame gap sitting well inside that span; a
+       snap does both on the SAME frame however densely it is photographed. */
+    const crossed = f => { const h = m.find(f); return h ? `t+${h.t}ms` : 'never'; };
+    const topLeft = crossed(f => bandDiff(ref.top, f.top) > swingTop * 0.45);
+    const botHome = crossed(f => bandDiff(last.bot, f.bot) <= swingBot * 0.45);
+    let gap = 0;
+    for (let i = 1; i < m.length; i++) gap = Math.max(gap, m[i].t - m[i - 1].t);
+    const shape = `top band left the reveal ${topLeft}, bottom band reached the screen behind ${botHome}, `
+      + `${m.length} frames over ${m[0].t}..${m[m.length - 1].t}ms, biggest gap between frames ${gap}ms`;
+    if (mid.length < 3 && attempt === 1) { console.log(`MISS   ${tag} MIDSLIDE caught nothing: ${shape}`); return 'MISS'; }
+    ok(`${tag} MIDSLIDE the takeover was caught half-gone, in pixels (top band has left the reveal, bottom band has not reached the screen behind)`,
       mid.length >= 3 && swingTop > 4 && swingBot > 4,
-      `${mid.length} of ${m.length} frames, swing top ${swingTop.toFixed(1)} bottom ${swingBot.toFixed(1)}`);
+      `${mid.length} of ${m.length} frames, swing top ${swingTop.toFixed(1)} bottom ${swingBot.toFixed(1)}; ${shape}`);
     if (mid.length < 3) return;
 
     const worst = mid.reduce((a, b) => (b.vSeamPct > a.vSeamPct ? b : a));
-    ok(`${W}x${H} FLICKER the leaving takeover never puts its own edge inside the screen`,
+    ok(`${tag} FLICKER the leaving takeover never puts its own edge inside the screen`,
       worst.vSeamPct < 25,
       `tallest vertical edge in the right 45% of the bottom band: ${worst.vSeamPct.toFixed(1)}% of that band at x=${worst.vSeamX} (t+${worst.t}ms); `
       + `all mid-slide frames ${mid.map(f => f.vSeamPct.toFixed(0) + '%').join(' ')}`);
@@ -233,9 +288,32 @@ async function runViewport(W, H) {
   }
 }
 
+/* ONE RETRY, AND ONLY WHEN THE INSTRUMENT CAME BACK EMPTY.
+ *
+ * MIDSLIDE is a CONTROL: it exists so FLICKER cannot be graded against a frame
+ * that is not mid-slide. It is graded by PHOTOGRAPHING a moment, and the moment
+ * is short: closeTopSheet buries the sheet on a 320ms setTimeout that the CDP
+ * animation clock does not slow, so however slowly the slide is played there are
+ * only ~250ms of wall clock in which a frame can be half-gone. Measured on this
+ * tree at 440x956, 18 runs: 15 to 18 half-gone frames of 50 to 66, biggest
+ * inter-frame gap 36 to 222ms. Under 14 cores of competing load: 5 of 20. So the
+ * margin over the 3-frame floor is real but it is the COMPOSITOR's to give, and
+ * a run that delivers none of those frames has measured nothing.
+ *
+ * Bounded exactly like godmode's retryOnDetach, and for the same reason: ONE
+ * retry, it LOGS, and it can never become a blindfold. A takeover that really
+ * snaps hands back an empty mid-slide set every time it is asked, so the second
+ * attempt is graded and goes red, with the crossing times above naming the snap.
+ * Proven both ways on cp -R throwaways, listed at the head of this file.
+ */
+const exitAt = async (W, H) => {
+  if (await runViewport(W, H) !== 'MISS') return;
+  console.log(`RETRY  ${W}x${H}: the screencast caught no half-gone frame; running the exit ONCE more, and grading it.`);
+  await runViewport(W, H, 2);
+};
 // Tom is on an iPhone 17 Pro Max; 393 is the ordinary phone width.
-await runViewport(440, 956);
-await runViewport(393, 852);
+await exitAt(440, 956);
+await exitAt(393, 852);
 
 if (srvHandle) srvHandle.close();
 const failed = results.filter(r => !r.pass).length;

@@ -124,85 +124,123 @@ export async function paddockEggs() {
   for (const row of rows) {
     const p = eggProgress(row, lifetime);
     const togo = Math.max(0, (p.goal | 0) - (p.walked | 0));
-    if (!nearest || togo < nearest.togo) nearest = { togo, pct: p.goal ? Math.min(1, p.walked / p.goal) : 0, ready: !!p.ready };
+    /* A READY EGG IS 100%, WHATEVER ITS GOAL. `goal: 0` is how a ready egg is handed
+       out (loot.js grantEgg), so `goal ? walked/goal : 0` printed an empty bar over the
+       one egg the player can crack right now. Ready is the answer, not the divisor. */
+    if (!nearest || togo < nearest.togo) nearest = { togo, pct: p.ready ? 1 : (p.goal ? Math.min(1, p.walked / p.goal) : 0), ready: !!p.ready };
   }
   return { count: rows.length, nearest };
 }
 
 /* ================= scene placement (Lane R part 2) =========================
- * The layout rule from the handoff, made an algorithm because the demo's
- * hand-placed bands cannot survive a real roster: each WALKER owns an
- * exclusive x-band, and two pets whose foot rows sit within 40px vertically
- * must never share more than ~20px of x-range. The README marks this as a
- * review defect the design already paid for once; here it is enforced by
- * construction and pinned by unit test, not by eyeballing. */
+ * ONE PACKER FOR EVERY FIGURE, because three packers that cannot see each
+ * other pack into each other.
+ *
+ * v1 gave WALKERS an exclusive-x-band rule, put FLOPPERS on three hand-picked
+ * spots and HOVERERS on three more, and wrapped the fourth of anything back
+ * onto the first spot with a small nudge. The walkers' own rule held; nothing
+ * BETWEEN the systems did. Measured in the live DOM on a 21-pet roster at
+ * 430x932 (2026-08-31): eight pairs of sprites overlapped by more than 20px in
+ * BOTH axes, worst 66x96px (two Drizzles wrapped onto one hover spot), 59x46px
+ * (a Bulldog standing inside a Catfish) and 52x30px (two Catfish on one flop
+ * spot). Both playtesters reported it as a clump on the mid-left with the
+ * right half left to the props.
+ *
+ * So the geometry is DATA and there is one allocator over it:
+ *   - ROWS ARE 58px APART, which is more than the 76px sprite minus the 20px
+ *     the paid-for layout rule tolerates, so two figures on different rows can
+ *     never break the rule vertically whatever their x. That is what makes a
+ *     row's occupants the only figures its x-space has to share.
+ *   - WITHIN A ROW starts are spaced (width - OVERLAP) apart and the leftover
+ *     span is handed out as wander room, so two figures on the same row can
+ *     never share more than OVERLAP px of x, wander included.
+ *   - EACH ROW CARRIES ITS OWN x BOUNDS, measured against the props its sprite
+ *     BOX actually touches rather than against its foot line: the graveyard
+ *     (tombstone x16-42 and cross x62-78, both based at y330), the hay bale
+ *     (x306-358, y316-346), the nest (x296-389, y334-388) and the keeper, who
+ *     is the player's own bonehead standing in the bottom-left (x10-182,
+ *     y316-488). A row whose feet land BELOW a prop's base passes in FRONT of
+ *     it, which is correct perspective and stays allowed.
+ * A figure that fits nowhere is left UNPLACED rather than stacked on somebody,
+ * and the collection panel says how many are resting (paddock-cards.js
+ * panelHtml) instead of the field quietly lying about the roster.
+ */
+
+/* px two neighbours on one row may share. The paid-for rule tolerates 20; this
+   allocates at 12 so the guard has margin rather than luck. */
+export const OVERLAP = 12;
+const SPRITE = 76;              // walkers and floppers: one ground sprite size
+const CLOUD = 96;               // hoverers
+
 export const PDK_SCENE = {
   W: 390, PANEL_Y: 498,                 // feet must stay above the panel edge
   FLY_LANES: [{ y: 112, w: 122, dur: 15 }, { y: 152, w: 102, dur: 19, phase: -12 }],
-  /* measured on the first live render: clouds at y176-210 sat on the keeper's
-     hat and inside the duck lanes; they drift LOW over the fence line now */
-  HOVER_SPOTS: [{ x: 64, y: 244 }, { x: 306, y: 252 }, { x: 196, y: 232 }],
-  /* third flop spot moved off the bottom-left corner: the keeper (your own
-     bonehead) stands there now (Tom, 2026-08-11) */
-  FLOP_SPOTS: [{ x: 304, y: 420, w: 88 }, { x: 232, y: 434, w: 82 }, { x: 140, y: 458, w: 58 }],
-  WALK_ROWS: [322, 318, 356, 350, 396, 398, 428, 460],
-  /* the props own the right flank above y~370 (hay 306,316; nest 300,352):
-     walker bands on those rows stop short of them. Measured, not assumed: the
-     first render parked a beardie on the hay bale. */
-  ROW_XMAX: y => (y <= 370 ? 288 : 382),
-  /* and the graveyard corner owns the LEFT flank on the top rows: the
-     tombstone (x16-42, base y330) and cross (x62-78) sit at ground y330, so a
-     walker whose feet land ABOVE that base (rows 318/322) is BEHIND them in
-     world space, yet the herd layer draws over the backdrop SVG and hides
-     them. Rows below the base pass in FRONT, which is correct perspective and
-     stays allowed. Measured on the first live render, same class as the hay. */
-  ROW_XMIN: y => (y <= 340 ? 86 : y >= 420 ? 152 : 8),
-  /* the keeper is the PLAYER's bonehead now, standing low in the bottom-left
-     grass (Tom, 2026-08-11); rows at y>=420 keep out of that corner for the
-     same world-depth reason as the tombstone: their feet land above his */
+  /* ONE sky row rather than three hand-placed spots. y260 is the only band
+     that clears BOTH the low fly lane above it (its box ends at y183, so 19px)
+     and the top ground row below it (that box starts at y242, so 18px), and it
+     keeps the design's "drift LOW over the fence line" (rails at y262/286). */
+  HOVER_ROW: { y: 260, xmin: 8, xmax: 382 },
+  GROUND_ROWS: [
+    /* box y242-318: 2px into the hay's top edge and clear of the nest, so it
+       runs the full width; feet ABOVE the graveyard base means behind it */
+    { y: 318, xmin: 86, xmax: 382 },
+    /* box y300-376: 30px into the hay and 42px into the nest, so it stops at
+       the nest's left edge; left half is behind the keeper */
+    { y: 376, xmin: 152, xmax: 296 },
+    /* feet below the nest's base (y388): passes in FRONT of it */
+    { y: 434, xmin: 152, xmax: 382 },
+    { y: 492, xmin: 152, xmax: 382 },
+  ],
+  /* the keeper is the PLAYER's bonehead, standing low in the bottom-left grass
+     (Tom, 2026-08-11). It is a figure, not a control, and it swallows taps
+     rather than letting them fall through to a pet nobody can see behind it
+     (app.css .pdk-keeper). */
   KEEPER: { x: 96, y: 402, px: 172 },
 };
 
-/* PURE: partition walkers into exclusive x-bands.
- * Walkers are dealt round-robin onto foot rows; rows within 40px of each other
- * form a vertical CLUSTER; each cluster's occupants split the scene width into
- * disjoint bands with a 24px gutter (> the 20px the rule tolerates, so the
- * guard has margin, not luck). Deterministic from roster order (iid-sorted
- * upstream), no randomness, so the same herd always grazes the same way. */
-export function assignBands(walkers, scene = PDK_SCENE) {
-  const rows = scene.WALK_ROWS;
-  const placed = walkers.map((w, i) => ({ iid: w.iid, y: rows[i % rows.length] }));
-  // cluster rows vertically (<40px apart share x-space budget)
-  const clusters = [];
-  for (const p of placed) {
-    let c = clusters.find(c => c.some(q => Math.abs(q.y - p.y) < 40));
-    if (!c) { c = []; clusters.push(c); }
-    c.push(p);
-  }
-  const PAD = 8, GUTTER = 24;
-  for (const c of clusters) {
-    // the row group's usable width starts past the graveyard and ends where
-    // the props begin (both bounds conservative across the cluster)
-    const xmax = Math.min(...c.map(p => (scene.ROW_XMAX ? scene.ROW_XMAX(p.y) : scene.W - PAD)));
-    const xmin = Math.max(...c.map(p => (scene.ROW_XMIN ? scene.ROW_XMIN(p.y) : PAD)));
-    const span = xmax - xmin;
-    const bandW = Math.floor((span - GUTTER * (c.length - 1)) / c.length);
-    c.forEach((p, i) => {
-      p.x0 = xmin + i * (bandW + GUTTER);
-      p.x1 = p.x0 + bandW;
-    });
-  }
-  return placed;   // [{iid, y, x0, x1}]
+/* the x a row needs to hold figures of these widths, laid left to right */
+function rowNeed(widths) {
+  return widths.reduce((s, w, i) => s + (i === widths.length - 1 ? w : w - OVERLAP), 0);
 }
 
-/* THE WALK CAP. The paid-for layout rule is measured on SPRITES (76px wide),
- * not bands: two same-cluster walkers may share at most 20px, so their band
- * spacing (bandW + GUTTER) must stay >= 56px. The top cluster's span is 202
- * after the graveyard exclusion, which holds floor((202+24)/56) = 4 walkers,
- * and round-robin dealing splits walkers evenly across the two row clusters,
- * so the scene renders at most 8. Copies beyond that are not dropped, they
- * ROTATE: a day-seeded hash picks today's herd, so every copy in a big
- * collection takes its turn in the scene. The renderer skips placeless rows. */
+/* PURE: deal figures round-robin onto rows, skipping any row that cannot take
+ * one more, then carve each row left to right. Deterministic from the input
+ * order (iid-sorted upstream), no randomness, so the same herd always grazes
+ * the same way. Returns [{ ...figure, y, x0, x1 }]; x1 - x0 is the figure's
+ * width PLUS its share of the row's slack, which is what a walker wanders
+ * across, so x0..x1 is the whole space that figure can ever occupy.
+ * A figure that fits in no row is DROPPED from the result, never stacked. */
+export function assignRows(figures, rows) {
+  const slots = rows.map(r => ({ ...r, items: [] }));
+  let next = 0;
+  for (const f of figures) {
+    for (let t = 0; t < slots.length; t++) {
+      const s = slots[(next + t) % slots.length];
+      if (rowNeed([...s.items.map(i => i.w), f.w]) <= s.xmax - s.xmin) {
+        s.items.push(f);
+        next = (next + t + 1) % slots.length;
+        break;
+      }
+    }
+  }
+  const out = [];
+  for (const s of slots) {
+    if (!s.items.length) continue;
+    const extra = Math.floor(Math.max(0, (s.xmax - s.xmin) - rowNeed(s.items.map(i => i.w))) / s.items.length);
+    let x = s.xmin;
+    for (const f of s.items) {
+      out.push({ ...f, y: s.y, x0: x, x1: x + f.w + extra });
+      x += f.w - OVERLAP + extra;
+    }
+  }
+  return out;
+}
+
+/* THE WALK CAP. Unchanged at 8: the rows hold more than that, but a field of
+ * eight walkers plus the floppers, the clouds and the ducks is already a busy
+ * 390px scene. Copies beyond the cap are not dropped, they ROTATE: a
+ * day-seeded hash picks today's herd, so every copy in a big collection takes
+ * its turn. The renderer skips placeless rows and the panel counts them. */
 export const WALK_CAP = 8;
 
 /* Rotation seed. Raw FNV has NO avalanche on trailing characters: sorting by
@@ -216,17 +254,11 @@ export function rotHash(s) {
   return (h ^ h >>> 16) >>> 0;
 }
 
-/* PURE: the whole scene cast from a roster. Walkers through assignBands;
- * flyers/hoverers/floppers onto their fixed lanes and spots, extras wrapping
- * with a small offset so a fourth catfish still lands somewhere sane.
- * `day` only seeds the rotation; any stable per-day string works. */
-/* THE DEFAULT DAY IS LOCAL, because every real caller passes dateKey() and a
-   default that disagrees with all of them is a trap for the next one. UTC rolls
-   over at 8pm for an EDT player, so a caller that took this default would shuffle
-   the paddock four hours before their day actually turned, out of step with
-   quests, spawns and readiness. Not a live bug: js/app.js:15053 and :15134 both
-   pass dateKey() today. Fixed so it cannot become one. */
-export function placePaddock(roster, scene = PDK_SCENE, day = (d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)(new Date())) {
+/* PURE: the whole scene cast from a roster. Flyers keep their crossing lanes
+ * (they are the one cast that is MEANT to travel the whole width, at their own
+ * depth); everything else goes through assignRows.
+ * `day` only seeds the walk rotation; any stable per-day string works. */
+export function placePaddock(roster, scene = PDK_SCENE, day = new Date().toISOString().slice(0, 10)) {
   const by = m => roster.filter(r => r.motion === m);
   const out = {};
   by('fly').forEach((r, i) => {
@@ -247,21 +279,25 @@ export function placePaddock(roster, scene = PDK_SCENE, day = (d => `${d.getFull
       phase: (lane.phase || 0) - i * 5.5 - (drift % 100) / 25,       // spread along the lane
     };
   });
-  by('hover').forEach((r, i) => {
-    const s = scene.HOVER_SPOTS[i % scene.HOVER_SPOTS.length];
-    out[r.iid] = { kind: 'hover', x: s.x + Math.floor(i / scene.HOVER_SPOTS.length) * 30, y: s.y, w: 96 };
-  });
-  by('flop').forEach((r, i) => {
-    const s = scene.FLOP_SPOTS[i % scene.FLOP_SPOTS.length];
-    out[r.iid] = { kind: 'flop', x: s.x, y: s.y - Math.floor(i / scene.FLOP_SPOTS.length) * 22, w: s.w };
-  });
+  for (const h of assignRows(by('hover').map(r => ({ iid: r.iid, w: CLOUD })), [scene.HOVER_ROW])) {
+    out[h.iid] = { kind: 'hover', x: h.x0, y: h.y, w: h.w };
+  }
   let walkers = by('walk');
   if (walkers.length > WALK_CAP) {
     walkers = [...walkers]
       .sort((a, b) => rotHash(day + ':' + a.iid) - rotHash(day + ':' + b.iid))
       .slice(0, WALK_CAP);
   }
-  const bands = assignBands(walkers, scene);
-  for (const b of bands) out[b.iid] = { kind: 'walk', y: b.y, x0: b.x0, x1: b.x1, w: 76 };
+  /* floppers are dealt FIRST so the catfish are spread across the rows rather
+     than filling whatever the walkers left over on one row */
+  const ground = assignRows([
+    ...by('flop').map(r => ({ iid: r.iid, w: SPRITE, kind: 'flop' })),
+    ...walkers.map(r => ({ iid: r.iid, w: SPRITE, kind: 'walk' })),
+  ], scene.GROUND_ROWS);
+  for (const g of ground) {
+    out[g.iid] = g.kind === 'walk'
+      ? { kind: 'walk', y: g.y, x0: g.x0, x1: g.x1, w: g.w }
+      : { kind: 'flop', x: g.x0, y: g.y, w: g.w };
+  }
   return out;
 }

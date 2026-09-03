@@ -39,7 +39,38 @@ CREATE TABLE IF NOT EXISTS players (
   -- depend on), so a test run can never again flood the Crew with dead level-1
   -- "players". Existing DBs: migrations/2026-08-22-test-accounts.sql, applied
   -- BEFORE deploying the worker that filters on it.
-  is_test INTEGER DEFAULT 0
+  is_test INTEGER DEFAULT 0,
+  -- WHICH RUN MADE THIS ROW (2026-09-02). is_test above is a SUPPRESSION switch,
+  -- not a provenance mark, and it cannot be both: hard-coding flagFor to true so
+  -- local runs flagged too turned 49 of 174 server assertions red, because the
+  -- suites that grade the leaderboard, friends, the race and the spires need an
+  -- account the server will actually show. So a test-made row carries a second
+  -- mark that NO route filters on: the suite that made it and when, written at
+  -- the moment of creation. NULL means a real client made it. Answers "is this a
+  -- bot" and "which run" in one column, which is what the 2026-08-22 census had
+  -- to reconstruct from registration timing and grant counts.
+  -- Existing DBs: migrations/2026-09-02-test-run-provenance.sql, applied BEFORE
+  -- deploying the worker whose INSERT names it. Same landmine as is_test: the
+  -- register route 500s with "no such column" if the deploy lands first.
+  test_run TEXT,
+  /* THE RANKING KEY, MATERIALISED (2026-09-01). Both boards ranked on
+     json_extract(profile, ...), which is a computed expression no index can
+     serve, so every crew-tab open read and parsed EVERY player row: linear at
+     roughly a microsecond a row, measured 111 ms at 200,000 players against
+     0.24 ms with these. They hold the same two numbers /leaderboard already
+     published, written by the same PUT /profile UPDATE that writes max_level
+     and week_steps, so they agree with the snapshot by construction.
+     CURRENT, NOT A RATCHET. max_level above is monotone by design (it is what
+     the no-teleporting bound measures against), which makes it the wrong key
+     for a board that has always shown where a player is NOW. These two carry
+     the current claim, post-clamp, and they carry the board's own COALESCE
+     defaults with it (an absent level ranks as 1, absent badges as 0) so the
+     ORDER BY needs no expression wrapped around them.
+     NULL means "has never synced a snapshot", which sorts LAST under DESC and
+     is exactly where a row with no profile belongs. Existing rows are filled
+     from their own JSON by migrations/2026-09-01-board-columns.sql. */
+  level INTEGER,                     -- current snapshot level: the leaderboard's rank key
+  badges INTEGER                     -- current snapshot badge count: its first tiebreak
 );
 
 -- Names are one-of-a-kind, case-insensitively. /name enforces this in code too
@@ -49,6 +80,13 @@ CREATE TABLE IF NOT EXISTS players (
 -- has never picked a name has NULL here and any number of those is fine.
 -- Applied to production 2026-08-08, once the one duplicate had resolved itself.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_players_name_ci ON players (lower(name)) WHERE name IS NOT NULL;
+
+-- The two boards' ORDER BYs, in the exact column order each one sorts in, so
+-- SQLite walks the index and stops at the LIMIT instead of sorting the whole
+-- table in a temp b-tree. See migrations/2026-09-01-board-columns.sql for the
+-- before/after plans and timings at 25k / 100k / 200k players.
+CREATE INDEX IF NOT EXISTS idx_players_board ON players (level DESC, badges DESC, last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_players_week ON players (week_key, week_steps DESC);
 
 CREATE TABLE IF NOT EXISTS friendships (
   a TEXT NOT NULL,                   -- canonical: a < b
@@ -214,6 +252,13 @@ CREATE TABLE IF NOT EXISTS devices (
   last_seen INTEGER,
   plat TEXT              -- ios / android / mac-web / ios-pwa ... (v311)
 );
+-- The retention pruner's own index (pruneStale in src/index.js). Without it the
+-- 15 minute tick reaches its candidates with SCAN devices, which is a walk of
+-- the whole table every batch: measured on 1,000,000 rows, 22.3 ms a batch
+-- scanning against 2.3 ms as a COVERING seek, and only the scan grows with the
+-- table. last_seen rather than first_seen because retention asks "is this row
+-- still about anybody", and POST /events moves last_seen on every post.
+CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices (last_seen);
 
 -- player-submitted map feedback: den nominations ("this landmark should be a
 -- boss den, because...") + unreachable-spot reports ("this coin/boss is on

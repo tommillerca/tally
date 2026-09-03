@@ -1,0 +1,30 @@
+-- Test-run provenance, 2026-09-02. DRAFTED, NOT YET APPLIED TO PRODUCTION.
+--
+-- Why: is_test (2026-08-22) is a SUPPRESSION switch. It answers "should anyone
+-- see this row", and every public read filters on it, which is exactly why it
+-- cannot double as "did a bot make this". MEASURED 2026-09-02 on a cp -R copy
+-- with flagFor hard-coded to true so local runs flagged as well: 49 of 174
+-- server assertions went red (test/api 43 passed 23 failed, spires 6/22,
+-- security 22/4), because the suites that grade the leaderboard, the friend
+-- graph, the race and the spires need an account the server will actually show.
+--
+-- So a row a test made gets a SECOND mark that no route filters on, written at
+-- the moment of creation: the suite that made it and when. An operator reading
+-- the table gets "is this a bot" AND "which run" from one column, instead of
+-- reconstructing it from registration timing and grant counts the way
+-- docs/BOT-CENSUS-2026-08-22.md had to.
+--
+-- NULL means a real client made it. Nothing backfills the 47 rows the 2026-08-23
+-- migration flagged: their provenance was reconstructed, not recorded, and
+-- writing a guess into a provenance column is worse than leaving it empty.
+--
+-- ORDER MATTERS: apply this BEFORE deploying the worker whose INSERT names
+-- test_run, or POST /register 500s with "no such column". Same landmine as
+-- 2026-08-22-test-accounts.sql above.
+--
+-- Run once, by hand; re-running errors with "duplicate column name" (harmless):
+--   npx wrangler d1 execute bonez --remote --file=migrations/2026-09-02-test-run-provenance.sql
+--
+-- Afterwards, the census that used to take an investigation:
+--   SELECT test_run, COUNT(*) FROM players WHERE test_run IS NOT NULL GROUP BY 1;
+ALTER TABLE players ADD COLUMN test_run TEXT;

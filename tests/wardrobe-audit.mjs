@@ -3,14 +3,19 @@
  *   FLASH  -> is unrelated DOM being destroyed on each tap? Stamp a marker and see
  *             if it survives.
  *   BACKDROP -> is the background inside the element carrying the idle animation? */
-import { boot, sleep, retryOnDetach } from './godmode.js';
-const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
+import { boot, sleep, retryOnDetach, shotDir } from './godmode.js';
+const DIR = shotDir('tally-shots');  // machine-local, see godmode shotDir
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
    year-readout-audit already use. Reading env.URL ONLY meant that any run passing
    the URL as an argument (which is how the release gate invokes every suite) fell
    through to godmode's boot() default, https://tommillerca.github.io/tally/, and
    graded PRODUCTION while reading as coverage of the tree under test. */
-const { browser, page } = await boot(process.argv[2] || process.env.URL);
+/* 'shell', not 'new': on this Mac Page.captureScreenshot never returns under
+   headless 'new', and this suite takes a screenshot. Measured 2026-09-03 on a
+   4-cell probe (headless new|shell x captureBeyondViewport default|false):
+   'new' hit the 45s protocolTimeout on BOTH cbv settings, 'shell' returned in
+   234ms. So the camera was the fault, not the clip. See boot(). */
+const { browser, page } = await boot(process.argv[2] || process.env.URL, { headless: process.env.HEADLESS_MODE || 'shell' });
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 

@@ -21,12 +21,33 @@
  *   await openPit(page);
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* WHERE A SCREENSHOT LANDS, AND WHY IT IS NOT A PASTED PATH ANY MORE.
+ *
+ * Nine files carried the SAME absolute path into a DIFFERENT Claude session's
+ * scratchpad, /private/tmp/claude-502/.../a40abded-.../scratchpad/shots. That
+ * directory is temporary and gets collected, and when it goes the screenshot
+ * throws AFTER every row has already printed ok: the suite exits non-zero for a
+ * reason that has nothing to do with the app, and reads as app breakage to
+ * whoever is holding the release. Six of the nine had no mkdirSync at all, so
+ * they could not even recreate it.
+ *
+ * A machine-local temp directory belongs to no session, and creating it here on
+ * every call means the shot is always writable and the exit code always means
+ * what it says. Callers pass a subdirectory so two suites cannot fight over a
+ * filename. 2026-09-02. */
+export const shotDir = sub => {
+  const d = path.join(os.tmpdir(), sub);
+  fs.mkdirSync(d, { recursive: true });
+  return d;
+};
 
 /* THE DETACHED-FRAME RACE IS A HARNESS FAULT, SO THE GUARD BELONGS HERE.
  *
@@ -285,6 +306,59 @@ export function exitFor(failCount) {
   return _unproven.length ? UNPROVEN_EXIT : 0;
 }
 
+/* ------------------------------------------------------------------ the lexer
+ * Strip comments, KEEP string and template contents (emissions live inside
+ * them). A regex cannot do this, 'https://x' would lose its tail, so walk
+ * the file: code / 'sq' / "dq" / `template` (with ${ } nesting back into
+ * code) / line and block comments. Regex literals are not modelled; a token
+ * inside /re/ would count as alive, which errs toward silence, not noise.
+ * Newlines survive every branch, so a scanner that reports file:line off the
+ * stripped text still reports the file's own line numbers.
+ * LIVES HERE rather than in one suite because it is what stops a static lint
+ * reading PROSE as code: selector-audit needs it to keep a sentence naming
+ * `.q-claim` from counting as a query, and flaky-network-audit needs it to keep
+ * a sentence naming `fetch()` from counting as a call. 2026-09-03. */
+export function stripComments(src) {
+  let out = '', i = 0, mode = 'code';
+  const tmpl = [];                       // brace depth per nested template
+  while (i < src.length) {
+    const c = src[i], d = src[i + 1];
+    if (mode === 'code') {
+      if (c === '/' && d === '/') { mode = 'line'; i += 2; continue; }
+      if (c === '/' && d === '*') { mode = 'block'; i += 2; continue; }
+      if (c === "'") mode = 'sq';
+      else if (c === '"') mode = 'dq';
+      else if (c === '`') { mode = 'tmpl'; tmpl.push(0); }
+      /* CLOSING A ${ } HOLE RETURNS TO THE TEMPLATE, IT DOES NOT END IT. This
+         popped the depth here until 2026-09-03, so the SECOND hole in one
+         template found an empty stack: `${` could not record its depth, its `}`
+         was read as ordinary code, and the template's closing backtick then
+         OPENED a template that was never closed. Everything after it in the file
+         was treated as string body, so no comment past that point was stripped.
+         Measured on js/social.js, whose signing line is
+         `${me.playerId}:${ts}:${body}` (line 374): every comment from line 382
+         to the end of the file survived, including the sentence at line 405 that
+         made tests/flaky-network-audit read prose as a fetch( call site. The
+         depth is popped by the closing backtick below, which is the only place
+         a template actually ends. */
+      else if (c === '}' && tmpl.length && tmpl[tmpl.length - 1] === 0) { mode = 'tmpl'; out += c; i++; continue; }
+      else if (c === '{' && tmpl.length) tmpl[tmpl.length - 1]++;
+      else if (c === '}' && tmpl.length) tmpl[tmpl.length - 1]--;
+      out += c; i++; continue;
+    }
+    if (mode === 'line') { if (c === '\n') { mode = 'code'; out += c; } i++; continue; }
+    if (mode === 'block') { if (c === '*' && d === '/') { mode = 'code'; i += 2; out += ' '; continue; } if (c === '\n') out += c; i++; continue; }
+    // inside a quoted string or template: escapes pass through whole
+    if (c === '\\') { out += c + (d ?? ''); i += 2; continue; }
+    if (mode === 'sq' && c === "'") mode = 'code';
+    else if (mode === 'dq' && c === '"') mode = 'code';
+    else if (mode === 'tmpl' && c === '`') { mode = 'code'; tmpl.pop(); }
+    else if (mode === 'tmpl' && c === '$' && d === '{') { mode = 'code'; tmpl[tmpl.length - 1] = 0; out += '${'; i += 2; continue; }
+    out += c; i++; continue;
+  }
+  return out;
+}
+
 /* EVERY ROW IN THE FILE MUST BE CLASSIFIED, or the unproven list rots.
  *
  * The failure mode this closes: somebody adds a tenth Boneyard assertion and
@@ -438,6 +512,84 @@ export async function boneyardCapability(page) {
   }
 
   return { ok: checks.every(c => c.ok), checks };
+}
+
+/* AN AUDIT THAT MASKS webdriver STOPS TALKING TO THE REAL WORLD.
+ *
+ * WHY THE MASK IS CORRECT. Every automation gate in this app keys off the same
+ * flag: NOSOCIAL (`S.demo || navigator.webdriver === true`, js/app.js),
+ * CALM_BOOT, and the BOT gate in js/analytics.js. An unmasked page therefore
+ * exercises the calm boot, not the first run a player gets, so the suites that
+ * grade onboarding, the launch gates and the notification asks have to mask it.
+ * That is not the bug and it is not being taken away.
+ *
+ * WHY IT NEEDS A WALL. The mask also removes the only thing that was keeping
+ * those runs OFF the network. js/social.js falls back to PROD_API when no ?api=
+ * override is stored, so a masked virgin install boots, completes onboarding and
+ * registers for real. The server only stamps players.is_test when the client
+ * sends {test:true} (server/src/index.js), which the app itself never does.
+ *
+ * MEASURED 2026-09-02, one run of tests/profile-units-audit.mjs with a request
+ * log on every page: 20 requests to bonez-api.boneheadz.workers.dev, of which 3
+ * were POST /register carrying a real P-256 pubkey and 3 were POST /events
+ * shipping onboarding analytics. Production D1 went 73 -> 93 players in a day of
+ * local runs, level-1 skeleton handles in clusters that line up with gate runs.
+ *
+ * WHY A WALL AND NOT {test:true}. A flag still mints rows, still needs the
+ * server to honour it, and still depends on every future author remembering it.
+ * The bug is not "the audit registered", it is "the audit reached the real
+ * world"; the API is only the leak that left evidence. So the rule is the blunt
+ * one: localhost in every spelling continues, everything else is refused.
+ *
+ * WHY IT IS LOUD BUT DOES NOT FAIL THE RUN. Refusing is already the correct
+ * outcome and the app will keep TRYING (it has no local API to talk to), so a
+ * suite that failed on a refusal would be permanently red on healthy code, which
+ * is how a guard gets routed around. Instead each refused host is named once,
+ * with the suite that reached for it, plus a summary at exit, so a NEW external
+ * dependency is discovered the first time somebody runs the file. The hard
+ * failure lives where it can only go red on a real defect: live-api-register-lint
+ * refuses a mask installed without this wall.
+ *
+ * LOCALHOST MUST KEEP WORKING. serveTree hands out 127.0.0.1 URLs and several
+ * suites stub an API on a local port, so every spelling of the loopback host is
+ * allowed, on any port. Schemes with no host at all (data:, blob:, file:) never
+ * leave the machine and are not egress.
+ */
+const LOOPBACK = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\]|0\.0\.0\.0|.+\.localhost)$/i;
+const _refused = new Map();          // host -> the first request that wanted it
+export async function maskWebdriver(page) {
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
+  });
+  await page.setRequestInterception(true);
+  page.on('request', req => {
+    let host = null;
+    try { host = new URL(req.url()).hostname; } catch { /* data:, blob:, about: */ }
+    if (host && !LOOPBACK.test(host)) {
+      if (!_refused.size) process.on('exit', () => {
+        console.log(`\nEGRESS REFUSED  ${[..._refused.keys()].join(', ')}`);
+        for (const [h, first] of _refused) console.log(`  ${h}  first wanted by  ${first}`);
+        console.log('  A masked audit does not talk to the real world. If it needs an answer, serve');
+        console.log('  one locally and point the app at it with ?api=<local url>.');
+      });
+      if (!_refused.has(host)) {
+        const first = `${req.method()} ${req.url().slice(0, 120)}`;
+        _refused.set(host, first);
+        console.log(`EGRESS REFUSED  ${path.basename(process.argv[1] || 'audit')} -> ${host}  (${first})`);
+      }
+      /* Refused with no priority, so it lands immediately and nothing
+         registered later can vote it back open. */
+      req.abort('blockedbyclient').catch(() => {});
+      return;
+    }
+    /* A PRIORITY VOTE, not a plain continue. cloud-restore-silent-audit and
+       honest-surfaces-audit install their own stub handler AFTER the mask, and a
+       legacy continue here would resolve the request before their stub ever saw
+       it, which would silently un-stub them. A vote is deferred to the end of
+       the listener chain, so their respond() still wins and a page with no other
+       handler still gets its request through. */
+    req.continue({}, 0).catch(() => {});
+  });
 }
 
 /* NO BASE MEANS THIS CHECKOUT, NEVER PRODUCTION. This default used to be the
@@ -1052,21 +1204,45 @@ export async function realWanderer(page, home, { offsetDeg = 0, metres = 45, any
       await new Promise(r => setTimeout(r, 500));
     }
     const date = dateKey();
+    /* COUNT THE POINTS THAT CAN ACTUALLY ANSWER, and report THAT as `tiles`.
+       It used to report pts.length, which is the number of points ASKED about
+       and is the constant 81 whatever happens, so every caller's sentence "N
+       water tiles warmed" printed 81 on a machine where not one tile had
+       loaded. A number that cannot move is not a measurement. */
+    const decided = pts.filter(([la, ln]) => water.isWater(la, ln) !== undefined).length;
     if (!w) {
-      /* WHICH EMPTY. "He is out there but past WANDER_SHOW_M" and "this cell is
-         effectively all water this lap" are different facts and the caller has
-         to be able to print the right one. */
+      /* WHICH EMPTY, and there are THREE, not two. "He is out there but past
+         WANDER_SHOW_M" and "this cell is effectively all water this lap" are
+         different facts and the caller has to be able to print the right one.
+         The third one is the dangerous one because it is not a fact about the
+         world at all: when js/water.js cannot reach its tile host, isWater
+         answers undefined everywhere, wanderersNear filters every candidate out,
+         and the empty set is IDENTICAL to "his loop carried him out of range".
+         Measured 2026-09-02 on a `cp -R` throwaway with TILEJSON_URL pointed at
+         a dead path: exit 97, seventeen rows ungraded, and the reason printed
+         was "no Wanderer is within WANDER_SHOW_M of HOME right now (81 water
+         tiles warmed over 30043ms: nobody within WANDER_SHOW_M (1 in range
+         without the land constraint))". Every load-bearing word of that is
+         wrong: he WAS in range, nothing was warmed, and the 30043ms is the
+         deadline expiring rather than a wait for a lap. A suite is allowed to
+         decline to grade; it is not allowed to blame the wrong thing while it
+         declines. So the oracle is checked FIRST and named as a missing
+         CAPABILITY, ahead of any claim about where he is standing. */
       const bare = W.wandererAt(cell.cx, cell.cy, date, undefined);
       const bareDist = bare ? Math.round(W.wanderersNear(date, home.latitude, home.longitude).length) : null;
-      return { date, tiles: pts.length, w: null, near: [], cell, waitedMs: Date.now() - t0,
-        why: bare ? `nobody within WANDER_SHOW_M (${bareDist} in range without the land constraint)` : 'no wanderer derives here at all' };
+      const why = decided === 0
+        ? `the land oracle never answered: 0 of ${pts.length} lattice points around HOME could be classified in ${Date.now() - t0}ms, `
+          + 'so js/water.js has no tiles and every candidate reads as water. This is the MACHINE, not his loop'
+        : (bare ? `nobody within WANDER_SHOW_M (${bareDist} in range without the land constraint, ${decided}/${pts.length} lattice points classified)`
+          : 'no wanderer derives here at all');
+      return { date, tiles: decided, oracle: decided > 0, w: null, near: [], cell, waitedMs: Date.now() - t0, why };
     }
     const R = 6371000, r = Math.PI / 180, dr = metres / R, brg = (w.heading + offsetDeg) * r;
     const f1 = w.lat * r, l1 = w.lng * r;
     const f2 = Math.asin(Math.sin(f1) * Math.cos(dr) + Math.cos(f1) * Math.sin(dr) * Math.cos(brg));
     const l2 = l1 + Math.atan2(Math.sin(brg) * Math.sin(dr) * Math.cos(f1), Math.cos(dr) - Math.sin(f1) * Math.sin(f2));
     const p = { lat: f2 / r, lng: l2 / r };
-    return { date, tiles: pts.length, p, cell, waitedMs: Date.now() - t0,
+    return { date, tiles: decided, oracle: true, p, cell, waitedMs: Date.now() - t0,
       w: { id: w.id, lat: w.lat, lng: w.lng, heading: w.heading, inst: w.inst, dist: Math.round(w.dist ?? 0) },
       near: near.map(x => x.id), predicted: W.inWandererCone(w, p.lat, p.lng) };
   }, { home, offsetDeg, metres, anyone, deadlineMs });

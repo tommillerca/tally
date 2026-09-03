@@ -273,7 +273,7 @@ const SITES = [
     key: 'paddock-herd', claim: 'petSpriteHtml(r.sp', paired: false, undriven:
       'the scene is driven end-to-end by tests/paddock-scene-audit.mjs '
       + '(gate FULL tier): real Stable chip tap, decoded herd from a real '
-      + 'roster, band-overlap assertion in the live DOM, and motion asserted '
+      + 'roster, a whole-cast packing assertion in the live DOM, and motion asserted '
       + 'as rendered pixels (headless freezes the main-thread animation clock, '
       + 'so gBCR lies; screenshots are the layer the player sees).',
   },
@@ -309,6 +309,14 @@ const SITES = [
     key: 'breed-waiting', claim: 'bw-pet', paired: false, undriven:
       'only rendered while exactly one pet is flagged for breeding; the state is '
       + 'driven by the Stable checks rather than from here',
+  },
+  {
+    /* The shop-pet purchase reveal (fix/premium-weight). Pet-only takeover,
+       no Bonehead beside it. shiny is a hardcoded false because the shop never
+       sells a shiny: deliverPet grants the base variant, shinies are hatch-only. */
+    key: 'shop-pet-reveal', claim: 'newpet-avatar', paired: false, undriven:
+      'the celebration only opens after a real 50,000-coin purchase, which needs '
+      + 'the coin balance and the unowned-pet state to be staged inside the run',
   },
 ];
 

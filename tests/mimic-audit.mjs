@@ -102,7 +102,14 @@ const ok = (label, pass, detail = '') => {
 const srv = process.env.URL ? null : await serveTree(ROOT);
 const base = process.env.URL || srv.url;
 console.log(`URL UNDER TEST  ${base}`);
-const { browser, page } = await boot(base, { seed: true });
+/* HEADLESS 'shell', LIKE EVERY OTHER PIXEL AUDIT HERE. This called boot()
+   without a headless option, so it took godmode's default of 'new', and on this
+   Mac Page.captureScreenshot never returns under 'new' (godmode.js:484). Both
+   pixel halves of this file go through that path: the CDP screencast handed back
+   ZERO frames for the ground shot, so the run stopped at the UNPROVEN exit below
+   with the blink and the reveal ungraded, every time, on a healthy app. It was
+   the only capture-based suite in tests/ that never named its mode. */
+const { browser, page } = await boot(base, { seed: true, headless: process.env.HEADLESS_MODE || 'shell' });
 const errs = [];
 page.on('pageerror', e => errs.push(String(e)));
 
@@ -352,7 +359,11 @@ try {
     console.log('UNPROVEN: the screencast delivered zero frames for the ground shot (still screen, no damage events); the reveal pacing rows cannot be graded on this run');
     await cdp.send('Page.stopScreencast').catch(() => {});
     await browser.close(); srv?.stop?.();
-    process.exit(97);
+    /* A REAL DEFECT OUTRANKS AN UNPROVEN ROW, which is godmode exitFor()'s own
+       rule. This exited 97 unconditionally, so a red already printed by the roll
+       or the money section above would have left the gate as "could not run"
+       rather than "the Mimic is broken". */
+    process.exit(fails ? 1 : 97);
   }
   const groundFrame = frames[frames.length - 1];
 

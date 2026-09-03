@@ -425,7 +425,15 @@ export async function claimDenWin(den, day = dateKey(), week = isoWeekKey()) {
     if (xp === 0) return null;
     await award(`bossfirst-${den.id}`, 'bossfirst', 0, `Remote clear: ${den.name}`);
     if (r.crate) await grantCrate(r.crate, 'remote-den');
-    if (r.coins) await coinsAdd(r.coins);
+    /* COINS ARE PAID BY THE FIGHT SETTLE, NOT HERE. This branch used to pay
+       coinsAdd(r.coins) itself, and the settle read r.coins out of the return
+       and paid it AGAIN: every remote den win banked double its banner (the
+       playtest measured +48 announced, +96 banked, on every win). The landmark
+       branch below never paid internally, which is why only remote dens
+       doubled. The settle is the right single payer because the Battle Charm
+       and Feast multipliers live there and apply to what the banner shows.
+       den-ceiling-audit's REMOTE-PAYS-NOTHING row pins this function to a zero
+       wallet delta. */
     return { xp, ...r, gearChoices: null };
   }
   // landmark: once per day for loot/coins/xp, logged non-gating
@@ -460,11 +468,16 @@ export async function claimDenWin(den, day = dateKey(), week = isoWeekKey()) {
   const lvl = levelFor(await totalXp()).level;
   const choices = rollDenLoot(den, day, owned, lvl + 3, await dominantArch(), await lootSalt());
   if (choices) {
-    const pending = (await kvGet('denloot', [])) || [];
-    if (!pending.some(p => p.key === denKey(day, den))) {
-      pending.push({ key: denKey(day, den), den: den.name, choices: choices.map(g => g.id), ts: Date.now() });
-      await kvSet('denloot', pending.slice(-6));
-    }
+    /* ONE TRANSACTION, because claimDenLoot TAKES from this row. Reading the
+       list and writing it whole put a drop the player had ALREADY picked back
+       into the pending list, and a boss's other piece could then be taken too,
+       which is exactly the claim claimDenLoot was made atomic to close. */
+    await kvUpdate('denloot', (list) => {
+      const pending = list || [];
+      if (pending.some(p => p.key === denKey(day, den))) return undefined;
+      return [...pending,
+        { key: denKey(day, den), den: den.name, choices: choices.map(g => g.id), ts: Date.now() }].slice(-6);
+    }, []);
   } else {
     await coinsAdd(60); // full collection consolation
   }

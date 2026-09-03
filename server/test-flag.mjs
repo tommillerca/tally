@@ -23,6 +23,31 @@
 export const flagFor = base =>
   !/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])([:/]|$)/i.test(String(base || ''));
 
+/* AND THE ROW A LOCAL RUN LEAVES BEHIND. 2026-09-02.
+ *
+ * flagFor above answers "will this hurt anyone", and for a local run the answer
+ * is no, so it returns false and the row is born looking exactly like a real
+ * player. That is deliberate and it is not negotiable: MEASURED 2026-09-02, on a
+ * cp -R copy with flagFor hard-coded to true, 49 of 174 server assertions went
+ * red (api 43/23, spires 6/22, security 22/4). is_test does not mean "a test
+ * made this", it means "suppress this everywhere", and the suites whose whole
+ * job is to grade the leaderboard, the friend graph, the race and the spires
+ * need an account the server will actually show. Mark them with is_test and the
+ * suite stops grading the path a player takes.
+ *
+ * So the row gets a SECOND mark that nothing filters on. Every registration also
+ * passes `run: RUN`, and the server stores it in players.test_run. A row with a
+ * test_run behaves identically to a real one, and it says, in its own column and
+ * at the moment it was made, which file made it and when. No operator has to
+ * reverse-engineer registration timing and grant counts to find out, which is
+ * what the 2026-08-22 census had to do.
+ *
+ * ONE LABEL PER PROCESS, so every account a run mints shares it and the run can
+ * be selected out whole. argv[1] is the suite; the timestamp is taken once, at
+ * import, rather than per registration.
+ */
+export const RUN = `${String(process.argv[1] || 'node').split('/').pop()} ${new Date().toISOString()}`;
+
 /* Self-check: node server/test-flag.mjs */
 if (process.argv[1] && process.argv[1].endsWith('test-flag.mjs')) {
   const cases = [
@@ -40,6 +65,10 @@ if (process.argv[1] && process.argv[1].endsWith('test-flag.mjs')) {
     const got = flagFor(url);
     if (got !== want) { bad++; console.log(`FAIL  flagFor(${JSON.stringify(url)}) = ${got}, want ${want}`); }
   }
-  console.log(`${bad ? 'FAIL' : 'PASS'}  flagFor: ${cases.length} cases, ${bad} wrong`);
+  /* RUN is checked too, because an empty or undated label is the failure that
+     would leave an operator guessing again while this file still said PASS. */
+  const runOk = /^test-flag\.mjs \d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(RUN);
+  if (!runOk) { bad++; console.log(`FAIL  RUN = ${JSON.stringify(RUN)}, want "<suite> <ISO date>"`); }
+  console.log(`${bad ? 'FAIL' : 'PASS'}  flagFor: ${cases.length} cases, RUN: ${JSON.stringify(RUN)}, ${bad} wrong`);
   process.exit(bad ? 1 : 0);
 }
