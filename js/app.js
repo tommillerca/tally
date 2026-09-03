@@ -4341,8 +4341,7 @@ async function renderToday(el) {
     if (res.crate) crates2.push(res.crate);
     // daily all-clear bonus crate
     if (period === 'day') {
-      const dateXp2 = (await db.all('xp')).filter(r => r.date === S.date);
-      const bonus = await claimAllBonusIfDue(S.date, tier.quests, dateXp2);
+      const bonus = await claimAllBonusIfDue(S.date, tier.quests);
       if (bonus) { bonusXp = bonus.xp; crates2.push('daily'); }
     }
     if (crates2.length) {
