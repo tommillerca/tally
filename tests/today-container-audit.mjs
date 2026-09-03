@@ -23,8 +23,8 @@
  *            answers something other than that control (rule 6: the gear once
  *            covered the next-day arrow and nobody noticed for a release).
  *   NESTED   a day-scoped section is a SIBLING of `.dayblk` rather than a
- *            descendant, or the promo banner is inside the day, or it comes
- *            before the day in document order.
+ *            descendant, or the evicted promo slot is back on Today at all,
+ *            or the settled step race is no longer inside the news pill.
  *   PASTDAY  a past day is missing a section today has. The bound is a DECLARED
  *            exception list, not a trend: TODAY_ONLY below has exactly one
  *            entry with a reason, so a NEW today-only section goes red here
@@ -53,7 +53,7 @@
  * and shipped two pre-fix commits while the audits kept passing):
  *   R1  js/app.js, app.css and js/quests.js from the pre-fix base d8819940
  *       29 red: SETUP, all of ORPHAN, all of NESTED, all of NUDGE, PASTDAY
- *       (3 markers on a past day against 11 on today; quests, promo, meals and
+ *       (3 markers on a past day against 11 on today; quests, news, meals and
  *       the sign-off all gone) and READONLY. SCROLL and ESCAPE stay GREEN,
  *       correctly: the pre-fix screen already refreshed in place and its arrows
  *       still worked.
@@ -152,7 +152,10 @@ try {
     if (sc.querySelector('.hero-scene')) m.add('hero');
     if (sc.querySelector('.hero-actions')) m.add('doors');
     if (sc.querySelector('.q-collapse')) m.add('quests');
-    if (sc.querySelector('.hype')) m.add('promo');
+    /* WAS 'promo' (the `.hype` banner) until 2026-09-03, when the promo slot came
+       off Today. The pill is what stands in that part of the screen now, and it
+       is what has to survive a day change. */
+    if (sc.querySelector('#newsBanner')) m.add('news');
     if (sc.querySelector('.ring-card')) m.add('calories');
     if (sc.querySelector('.tsec-meals')) m.add('meals');
     if (sc.querySelector('.day-signoff')) m.add('signoff');
@@ -205,12 +208,23 @@ try {
       // day-scoped things: inside the day block, never a sibling of it
       nested: ['.ring-card', '.tsec-meals', '.day-signoff', '.tsec']
         .map(s => [s, sc.querySelectorAll(s).length, blk ? blk.querySelectorAll(s).length : 0]),
-      // the promo is the opposite claim: outside the day, and after it
-      promoInDay: !!(blk && blk.querySelector('.hype')),
-      promoAfterDay: (() => {
-        const p = sc.querySelector('.promo-slot');
-        return !!(p && blk && (blk.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING));
-      })(),
+      /* THE PROMO SLOT IS GONE ENTIRELY, 2026-09-03. Tom: "today still has the
+         step challenge winner and monster banner at the bottom these should be
+         gone now things will live in the collapsed news pill." This used to be
+         two rows asserting the slot sat OUTSIDE the day and AFTER it; both are
+         vacuous now that it does not exist, and a vacuous row is the failure
+         mode this file's own header is about. So it flips to an ABSENCE, with
+         the news pill as its positive control: without that control, a Today
+         that failed to render its news pill at all would read green here. */
+      promoSlot: !!sc.querySelector('.promo-slot, .hype'),
+      newsPill: !!sc.querySelector('#newsBanner'),
+      /* AND THE STEP RACE SURVIVED THE EVICTION, in the pill rather than on
+         Today. It is the one thing in that slot that had no other surface, so
+         deleting it would have taken away a player's only notice that a race
+         they were entered in had paid out. Presence of the ELEMENT, not of a
+         podium: it renders hidden until hydrateRaceResult finds a settled week,
+         and tests/race-results-audit.mjs is what drives the populated card. */
+      raceInPill: !!sc.querySelector('#newsBanner #raceResultCard'),
       nudge: !!sc.querySelector('.unlock-nudge, #ulSkip'),
       afterDoors: doors?.nextElementSibling?.className || null,
       sections: sc.querySelectorAll('.tsec').length,
@@ -243,8 +257,9 @@ try {
     ok(`NESTED every ${sel} is inside the day container, none beside it`,
       inScreen > 0 && inScreen === inDay, `${inDay} of ${inScreen}`);
   }
-  ok('NESTED the promo banner is NOT inside the day', !todayShape.promoInDay);
-  ok('NESTED and it comes after the whole day, not before it', todayShape.promoAfterDay);
+  ok('NESTED the news pill is on the screen (the control for the two rows below)', todayShape.newsPill);
+  ok('NESTED the promo slot and its banners are gone from Today', !todayShape.promoSlot);
+  ok('NESTED the settled step race moved INTO the news pill, it was not deleted', todayShape.raceInPill);
 
   // --------------------------------------------------------------- LEDGER
   /* THE DAY IS A LEDGER, NOT A BOX OF BOXES. Tom's sentence is that the screen
@@ -430,7 +445,7 @@ try {
   const missing = todayMarks.filter(m => !pastMarks.includes(m));
   ok('PASTDAY a past day keeps every section today has, bar the declared exception',
     missing.every(m => TODAY_ONLY.includes(m)), `missing: ${missing.join(', ') || 'nothing'}`);
-  for (const m of ['hero', 'doors', 'quests', 'promo', 'calories', 'meals', 'signoff']) {
+  for (const m of ['hero', 'doors', 'quests', 'news', 'calories', 'meals', 'signoff']) {
     ok(`PASTDAY the news above survives the day change: ${m}`, pastMarks.includes(m));
   }
   ok('PASTDAY the day is still one container with its header on it',

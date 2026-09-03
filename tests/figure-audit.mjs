@@ -215,17 +215,6 @@ const SITES = [
       + 'asserts the pet is absent on a first visit and present afterwards.',
   },
   {
-    key: 'today-hype-banner', claim: "petAsideHtml(petFrom(null, 'C6')", paired: false, undriven:
-      'the Today hype banner draws Bumbleseal as a MARKETING PLATE of a species, not as '
-      + "anybody's pet: there is no Bonehead beside her, so paired alignment has nothing to "
-      + 'measure, and there is no instance to be shiny (C6 ships no shiny art, and the player '
-      + 'being teased does not own her). It still goes through petFrom + petAsideHtml rather '
-      + 'than a hand-placed img, which is what this contract is for: she is mass-normalised '
-      + 'against every other species instead of being sized off her 2048 canvas. The one '
-      + 'failure mode here that IS real, a layer that never decodes, is asserted on pixels in '
-      + "tests/hype-banner-audit.mjs (ART, naturalWidth after an awaited decode, both viewports).",
-  },
-  {
     key: 'emporium-pet-hero', claim: 'pet-hero-art', paired: false, undriven:
       'the SHOP SHELF, not the player\'s own figure: Bumbleseal is drawn at 176 in Gwart\'s '
       + 'Menagerie before anybody owns her, so there is no Bonehead in the frame to stand '

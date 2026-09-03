@@ -1319,6 +1319,25 @@ async function boot() {
   // AWAITED, before the first route(): renderToday reads 'wbReturnDay' at paint
   // time, so the pending mark must be down before the first paint reads for it.
   await maybeWelcomeBack();
+  /* THE HASH IS NORMALISED BEFORE ANYTHING BINDS TO IT. Tom, 2026-09-03: "when i
+     double tapped home it took me to the top like i asked but not in a smooth
+     way where the phone scrolled back up it just refreshed me there, very
+     jarring."
+     currentTab() reads an ABSENT hash as 'today', so the app boots onto Today
+     holding location.hash === '' and nothing ever wrote it back. bindTabs then
+     compares the tapped tab against the hash: '' !== '#/today', so the FIRST tap
+     of his double-tap was classified as a cross-tab navigation and assigned the
+     hash, which is a hashchange -> route() -> full re-render landing at the top
+     instantly. His second tap was then the first SAME-tab tap, which starts the
+     DBL_MS timer and falls through to route() 300ms later: a second full
+     re-render, also landing at the top instantly. Two rebuilds and not one
+     scrolled pixel. That is the "refreshed me there", and toTop's smooth scroll
+     never ran at all.
+     replaceState, NOT an assignment: assigning fires a hashchange, and route()
+     runs on the next line anyway, so an assignment would route the boot twice.
+     Only when there is no hash: a deep link (#/boneyard, a share target) must be
+     honoured exactly as it arrives. */
+  if (!location.hash) history.replaceState(null, '', '#/today');
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
   route();
@@ -1873,6 +1892,9 @@ function openRaceIntro() {
  * in some weeks, which is the worst version of wrong.
  */
 const raceResultKey = wk => 'raceResult:' + wk;
+/* The pill's unseen bookkeeping is a list of ids and the settled race is not a
+   NEWS row, so it carries its own, keyed by week: see hydrateRaceResult. */
+const raceSeenKey = wk => 'race:' + wk;
 /* RACE_RESULT_SEEN, raceOpensKey and RACE_RESULT_OPENS went with the poster on
    2026-08-25. All three counted SHOWINGS of a full-screen veil, and nothing
    shows itself any more. The cache key above stays: it is what stops the
@@ -1956,6 +1978,24 @@ async function hydrateRaceResult(el) {
     </div>`;
   card.hidden = false;
   composeAvatars(card);
+  /* AND THE PILL HAS TO SAY IT IS IN THERE. Tom's model for the pill, 2026-08-27:
+     "when there is new news there can be an icon letting them know otherwise it
+     stays collapsed and avoids being annoying." A result sealed inside a
+     collapsed pill with no dot is barely different from the deleted banner, and
+     this is the ONE announcement the player did not choose to miss.
+     Done here rather than in newsBannerHtml because the podium is fetched: the
+     markup is already on screen by the time settledPodium answers, so the count
+     renderToday computed could never have included it. Seen-ness is keyed by
+     WEEK, so next week's result lights the dot again on the same save. */
+  const seen = new Set(await kvGet('newsSeen', []));
+  if (seen.has(raceSeenKey(wk))) return;
+  const sum = card.closest('.nb')?.querySelector('summary');
+  if (!sum || sum.parentElement.open) return;
+  const dot = sum.querySelector('.nb-dot');
+  if (dot) dot.textContent = String((+dot.textContent || 0) + 1);
+  else sum.querySelector('.nb-t')?.insertAdjacentHTML('afterend', '<span class="nb-dot">1</span>');
+  const sub = sum.querySelector('.nb-sub');
+  if (sub && sub.textContent === 'Nothing new') sub.textContent = `${w.name} took the step race`;
 }
 
 /* Test hook (webdriver only), same pattern as __openFriendProfile. The poster is
@@ -2850,7 +2890,13 @@ async function backupNudge() {
  * there is no #mapRecenter yet), because a tray tap that does nothing at all is
  * the complaint the block above this one exists to answer. */
 function bindTabs() {
-  const toTop = () => { $('#screen')?.scrollTo({ top: 0, behavior: 'smooth' }); return true; };
+  /* REDUCED MOTION GETS THE JUMP. Everywhere else in the app that scrolls on
+     purpose reads this flag; this one did not, so a player who asked the OS for
+     no animation still got a 900px glide. */
+  const toTop = () => {
+    $('#screen')?.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
+    return true;
+  };
   const TAB_DBL = {
     today: toTop,
     friends: toTop,   // the Crew tab (index.html data-tab="friends")
@@ -3060,6 +3106,22 @@ function route({ keepScroll = false } = {}) {
   if (!keepScroll) el.scrollTop = 0;
   maybeCelebrate();
   return Promise.resolve(done).catch(() => {}).then(() => {
+    /* AND AGAIN, NOW THAT THERE IS SOMETHING TO SCROLL. Tom, 2026-09-03: "when
+       the app opened it shot me to the middle of the today screen not where my
+       bonehead was."
+       `el.scrollTop = 0` three lines up is the ONLY reset, and it runs
+       synchronously, before any screen renderer has written a byte: every one of
+       them is async and awaits its first IndexedDB read long before it touches
+       innerHTML. On a tab-to-tab navigation that is harmless, because #screen
+       still holds the OUTGOING screen and therefore has a real scroll range to be
+       reset. On a BOOT #screen is the empty <main> from index.html, the write is
+       a no-op against a zero scroll range, and nothing re-asserted it once Today
+       landed, so whatever offset the engine restored for the scroller after
+       layout was left standing. That is why the symptom is boot-only.
+       `!== 0` rather than an unconditional write, and NAV-ONLY: refresh() passes
+       keepScroll and must still preserve the reading position (see its own
+       comment, and today-container-audit's SCROLL rows). */
+    if (isNav && el.scrollTop !== 0) el.scrollTop = 0;
     composeAvatars(el);
     /* A route lands as ONE picture.
      *
@@ -3954,13 +4016,21 @@ async function renderToday(el) {
   </div>
   </section>
 
-  ${/* EVICTED FROM THE DAY. An announcement is not something that happened on
-       Aug 21, so it stops interrupting the line between the day header and the
-       day's own numbers and queues below the whole thing instead. */''}
-  <div class="promo-slot">
-    ${hypeBannerHtml()}
-    <details class="rr-banner" id="raceResultCard" hidden></details>
-  </div>
+  ${/* THE PROMO SLOT IS GONE. Tom, 2026-09-03: "today still has the step
+       challenge winner and monster banner at the bottom these should be gone now
+       things will live in the collapsed news pill."
+       It held two things and they are NOT the same case:
+       - the hype banner ("New Creatures") was pure navigation, two buttons to the
+         Boneyard and to Gwart's shop. Both destinations are already reachable and
+         its creatures already have News rows ('wanderer' goes to the very same
+         Boneyard, 'bestiary' covers the cast), so it is deleted outright along
+         with hypeBannerHtml/hypePlateHtml/HYPE_PLATES;
+       - the settled step race had NO other surface. js/app.js already said so
+         where openRaceResults was deleted: "no News row, no banner, no button
+         anywhere". Deleting it would have taken away a player's only notice that
+         a race they were entered in had paid out, so #raceResultCard MOVED into
+         the news pill's list rather than dying here (see newsBannerHtml).
+       app.css still carries the .hype* rules; they are unreferenced now. */''}
   ${LOG_ONLY_LINE}
   `;
 
@@ -4069,10 +4139,6 @@ async function renderToday(el) {
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
-  /* THE HYPE BANNER'S TWO HALVES, each going where its own subject lives. The
-     handlers that used to sit here belonged to the "Out there today" rows and
-     came off with them (the spire CTA, the bestiary row's delegate and its
-     compose, the teaser strip's deferred wall, and the garden row's two). */
   /* OPENING IT IS READING IT. The dot is about "is there something", not "did
      you tap every row", so one open clears it. Written on toggle rather than on
      each row so a player who opens, reads the summaries and closes is not shown
@@ -4087,7 +4153,11 @@ async function renderToday(el) {
 
   $('#newsBanner', el)?.addEventListener('toggle', async e => {
     if (!e.target.open) return;
-    await kvSet('newsSeen', NEWS.map(n => n.id));
+    /* The settled race is in this list too, so opening the pill clears its dot
+       the same way it clears the rows'. lastSettledWeek() can be null before the
+       first race ever settles; filtered out rather than stored as 'race:null'. */
+    const wk = lastSettledWeek();
+    await kvSet('newsSeen', [...NEWS.map(n => n.id), wk && raceSeenKey(wk)].filter(Boolean));
     $('.nb-dot', el)?.remove();
   });
   /* EVERY NEWS TILE READS AT THE SAME SIZE, measured rather than hand-tuned.
@@ -4139,8 +4209,6 @@ async function renderToday(el) {
   $$('.nb-row', el).forEach(b => b.addEventListener('click', () => {
     NEWS.find(n => n.id === b.dataset.news)?.open();
   }));
-  $('#hypeYard', el)?.addEventListener('click', () => { location.hash = '#/boneyard'; });
-  $('#hypeShop', el)?.addEventListener('click', () => openCharacter('shop'));
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -5632,92 +5700,11 @@ function bestiaryBannerHtml(den = remoteDen(dateKey())) {
   </button>`;
 }
 
-/* THE HYPE BANNER. Tom, 2026-08-21: "remove all banners on the today page except
-   the step winner but above it we need to create a new hypebanner that is bold
-   and stands out and shows the 2 new creatures that are out in the boneyard and
-   simultaneously teases bumbleseal being sold in the shop. this all needs to be
-   in the same banner and feel cohesive not like a verbose list it should just be
-   minimal wording, clean easy marketing that excites."
-   BOLD ART, ELEVEN WORDS. That is the only way both halves of the brief hold at
-   once: his standing taste rules forbid ad-speak, urgency and verbosity, so the
-   loud part has to be the picture. A banner that needs a sentence to explain its
-   own picture is a press release.
-   REVISION, from Tom's markup on the first render (2026-08-21, "something like
-   this is better for the banner, clean it up"). Three things changed and each is
-   the same idea executed better, not a new element:
-     - the tiny NEW chip became "New Creatures", a coral label that reads as the
-       banner's heading rather than a decoration;
-     - the one spanning sentence became TWO CAPTIONS, one under each half. He
-       struck "one wants your coins" out and wrote "Likes to shop" under the seal.
-       Each half now says what it is, which is honest about what they already
-       were: two different tap targets going to two different places;
-     - the creatures got BIGGER. The wide undivided strip was what made three
-       large plates read as thumbnails.
-   SECOND REVISION (2026-08-21, same day): "there shouldnt be any button thing
-   around the bee remove that. and it is meant to say ONE likes to shop not just
-   likes to shop." So:
-     - the seal's sunken plate is GONE. It was meant to set her apart and it read
-       as a button instead, which is worse than the problem it solved: her half
-       IS a button and so is the other one, and the other one has no box. She
-       stands on the banner's own ground now, told apart by the hairline and the
-       gap. See .hype-half.seal in app.css;
-     - the caption carries its COUNT. "Two want to eat you." / "One likes to
-       shop" is a pair of tallies, and dropping the number off one of them left
-       the joke doing half its work.
-   It is still ONE banner: one frame, one heading across the top, one grid. The
-   halves are columns in it, never two cards pushed together.
-   NO PRICE ON THE SEAL. Bumbleseal has no rack listing on any branch here, so a
-   number would be a promise the shop cannot keep today, and Tom has not settled
-   it. "One likes to shop" is true the day she lands and funny before it. */
-/* MEASURED ALPHA BOXES, as fractions of each file. Cam's two plates carry very
-   different amounts of empty margin (the Mimic's ink fills its file edge to edge,
-   the Wanderer leaves 21% of his file empty below his feet), so dropping both into
-   the same object-fit box drew one of them standing fifteen pixels in the air.
-   Measured off the PNGs, not guessed. Same mechanism as croppedPetImg: one box,
-   one transform per plate, and no per-art nudges anywhere else. */
-const HYPE_PLATES = {
-  'assets/bh/mimic/mimic.png':       { w: 640, h: 518, x0: 0, y0: 0, x1: 1, y1: 1 },
-  'assets/bh/wanderer/wanderer.png': { w: 640, h: 640, x0: 0.0938, y0: 0.1375, x1: 0.9719, y1: 0.7891 },
-};
-/* EVERYTHING IN PERCENT, so the BOX size belongs to the stylesheet. The first
-   version took a px argument and emitted px, which pinned the art to one size in
-   markup: Tom asked for bigger creatures and there was no way to give a 393 phone
-   more than a 320 one without rendering the banner twice. The maths is linear in
-   the box, so the ratios are the same at every size, and a CSS transform's
-   percentages are relative to the element itself, which is exactly what the
-   offsets need. */
-function hypePlateHtml(src) {
-  const p = HYPE_PLATES[src];
-  const cw = (p.x1 - p.x0) * p.w, ch = (p.y1 - p.y0) * p.h;   // the ink, in file pixels
-  const s = 0.94 / Math.max(cw, ch);                          // ink fills 94% of the box's long edge
-  const iw = p.w * s, ih = p.h * s;                           // the plate, as a fraction of the box
-  const tx = (1 - cw * s) / 2 - p.x0 * iw;                    // ink centred across the box
-  const ty = 1 - p.y1 * ih;                                   // ink SEATED on the box floor
-  const pc = n => (n * 100).toFixed(2) + '%';
-  return `<span class="hype-fig"><img src="${src}" alt=""
-    style="width:${pc(iw)};height:${pc(ih)};transform:translate(${pc(tx / iw)},${pc(ty / ih)})"></span>`;
-}
-function hypeBannerHtml() {
-  return `<div class="card hype">
-    <span class="hype-eye">New Creatures</span>
-    <button class="hype-half" id="hypeYard" type="button" aria-label="Two new creatures in the Boneyard">
-      <span class="hype-figs">
-        ${hypePlateHtml('assets/bh/mimic/mimic.png')}
-        ${hypePlateHtml('assets/bh/wanderer/wanderer.png')}
-      </span>
-      <b class="hype-cap">Two want to eat you.</b>
-    </button>
-    <button class="hype-half seal" id="hypeShop" type="button" aria-label="A new pet, in the shop">
-      <span class="hype-figs">${petAsideHtml(petFrom(null, 'C6'), 92, { thumb: true })}</span>
-      <b class="hype-cap">One likes to shop</b>
-    </button>
-  </div>`;
-}
-
-/* RETIRED FROM TODAY (2026-08-21), NOT DELETED. The hype banner above replaced
-   the whole "Out there today" card, which is the banner stack Tom asked to be
-   gone. This builder and the four row builders it calls are left intact and
-   unreachable, the same way the garden was closed in cropsRipe: reviving the card
+/* RETIRED FROM TODAY (2026-08-21), NOT DELETED. The hype banner replaced the
+   whole "Out there today" card, which is the banner stack Tom asked to be gone,
+   and the hype banner itself came off on 2026-09-03. This builder and the four
+   row builders it calls are left intact and unreachable, the same way the garden
+   was closed in cropsRipe: reviving the card
    is putting the call back in renderToday, and restoring the held-spires read to
    that function's Promise.all along with its import from js/spires.js (dropped
    here because it was the only caller, and unit.test.js lints app.js for spires
@@ -11836,6 +11823,20 @@ function newsBannerHtml(unseen, eq) {
       <span class="nb-chev">${ICONS.chev(16)}</span>
     </summary>
     <div class="nb-list">
+      ${/* THE SETTLED STEP RACE LIVES HERE NOW. Tom, 2026-09-03: "today still has
+           the step challenge winner and monster banner at the bottom these should
+           be gone now things will live in the collapsed news pill."
+           It is the one thing that came off Today with no other home: the poster
+           was deleted on 2026-08-25 and the comment left behind said the result
+           had "no News row, no banner, no button anywhere" apart from the Today
+           card. So the card itself moved, element and all, and hydrateRaceResult
+           still finds it by id anywhere inside the rendered screen.
+           It is NOT a NEWS row: the podium is fetched per week and hydrated after
+           render, so it cannot be a static entry in the array below, and it stays
+           `hidden` until there is a settled race to show. That is also why it
+           lights this pill's dot from hydrateRaceResult rather than from the
+           `unseen` count above: by then the summary is already on screen. */''}
+      <details class="rr-banner" id="raceResultCard" hidden></details>
       ${/* A ROW THAT NAVIGATES SAYS WHERE IT GOES. Tom, 2026-08-27: "i clicked
            another and it took me to the boneyard with no explanation in between
            on what i just clicked."

@@ -202,8 +202,6 @@ const TARGETS = [
    background is the modal pixel off the render, which is the only honest read
    of a grain-blended card or a coral radial wash. */
 const CONTRAST = [
-  { surface: 'today', sel: '.hype-eye',        why: 'coral eyebrow over the coral wash', optional: true },
-  { surface: 'today', sel: '.hype-half.seal .hype-cap', why: 'coral caption over the coral wash', optional: true },
   { surface: 'today', sel: '.tsec-h',          why: '--text-3 over a grain-blended card' },
   { surface: 'today', sel: '.day-title .sub',  why: '--text-3 subtitle' },
   { surface: 'today', sel: '.q-coins',         why: '--text-3 note', optional: true },

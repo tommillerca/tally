@@ -39,9 +39,8 @@ check('the ring label matches its own number', r.ringLblFont==='Bangers', r.ring
 check('but section headers stay chrome, not voice', r.sectHFont!=='Bangers', r.sectHFont);
 check('an empty meal now says something', r.emptyLines.length>0, JSON.stringify(r.emptyLines));
 /* RE-ANCHORED 2026-09-03, and the app did NOT regress. This read
-   `#screen > :last-child` and required day-signoff. Two things are now queued
-   deliberately BELOW the whole day: .promo-slot (js/app.js, "EVICTED FROM THE
-   DAY": the hype banner and the race card) and LOG_ONLY_LINE, whose own app.css
+   `#screen > :last-child` and required day-signoff. One thing is now queued
+   deliberately BELOW the whole day: LOG_ONLY_LINE, whose own app.css
    comment calls it "fine print you can find rather than a notice". So #screen's
    tail is p.log-only and is meant to be, and this row was grading page furniture
    rather than its own subject.
