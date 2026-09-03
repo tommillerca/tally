@@ -17683,7 +17683,7 @@ async function renderBoneyard(el) {
         <div class="map-topbar">
           <div class="mt-tx"><h1>Boneyard</h1><small id="mapCount">Reading the bones</small></div>
           <button class="map-ctl" id="mapRecenter" hidden aria-label="Recentre">${ICONS.crosshair(18)}</button>
-          <button class="map-ctl" id="mapKeyBtn" aria-label="Map key">${bhIcon('badge-map', 19)}</button>
+          <button class="map-ctl map-key" id="mapKeyBtn" aria-label="Map key" aria-expanded="false" aria-controls="mapLegend">${bhIcon('badge-map', 19)}<span class="mk-lbl">Key</span></button>
         </div>
         <div class="map-legend" id="mapLegend" hidden>${mapLegendHtml()}</div>
         <button class="btn map-den" id="mapDen" hidden>Enter the den</button>
@@ -17703,8 +17703,11 @@ async function renderBoneyard(el) {
 
     // Map key: toggle the legend; tapping the map closes it.
     const legendEl = $('#mapLegend', body);
-    $('#mapKeyBtn', body)?.addEventListener('click', e => { e.stopPropagation(); legendEl.hidden = !legendEl.hidden; });
-    $('#mapCanvas', body)?.addEventListener('pointerdown', () => { if (!legendEl.hidden) legendEl.hidden = true; });
+    const keyBtn = $('#mapKeyBtn', body);
+    // one setter, so the button's state can never disagree with the panel's
+    const showLegend = on => { legendEl.hidden = !on; keyBtn?.setAttribute('aria-expanded', String(on)); };
+    keyBtn?.addEventListener('click', e => { e.stopPropagation(); showLegend(legendEl.hidden); });
+    $('#mapCanvas', body)?.addEventListener('pointerdown', () => { if (!legendEl.hidden) showLegend(false); });
 
     let follow = true;
 

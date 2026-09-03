@@ -7057,15 +7057,25 @@ body::before {
 }
 .map-topbar small { display: block; font-size: var(--fs-1); color: var(--text-3); margin-top: 3px; }
 .map-topbar small b { color: var(--accent); font-weight: 800; }
+/* 44px, not 38: these are the only two controls on the Boneyard and both were
+   under the comfortable touch target. */
 .map-ctl {
-  flex: none; width: 38px; height: 38px; border-radius: 11px;
+  flex: none; width: 44px; height: 44px; border-radius: 11px;
   background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   display: grid; place-items: center; color: var(--text);
 }
 .map-ctl svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .map-ctl .bhi svg, .map-ctl svg.bhi { stroke: none; }
-/* the legend hangs off the top bar now, not off a floating bubble */
-.map-legend { top: calc(var(--sat, 0px) + 66px); left: auto; right: 12px; border: 2px solid var(--ink); box-shadow: var(--sh); }
+/* THE MAP KEY WORE ITS PURPOSE AS AN 18px PICTURE (Tom, device pass: "too small
+   and not intuitive for a player to click and see what it is"). A map badge on a
+   map screen says nothing about opening anything, so the control says the word.
+   Same plate, same ink, same 44px height as its neighbour: only wider, and the
+   word takes the type the other small buttons on the app use. */
+.map-ctl.map-key { width: auto; padding: 0 12px; display: flex; gap: 7px; }
+.map-key .mk-lbl { font-family: var(--display); font-weight: 400; font-size: var(--fs-2); letter-spacing: .06em; text-transform: uppercase; }
+/* the legend hangs off the top bar now, not off a floating bubble. The offset
+   tracks the bar's height, which the 44px controls raised by 3px. */
+.map-legend { top: calc(var(--sat, 0px) + 69px); left: auto; right: 12px; border: 2px solid var(--ink); box-shadow: var(--sh); }
 
 /* one action card: what is nearest, how far, and the verb. Replaces the pill
    readout AND the separately floating Collect button. */
