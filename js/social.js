@@ -768,7 +768,27 @@ export async function pushBackup(appV = '') {
     const snapshot = await exportAll();
     const blob = await encryptBackup(snapshot);
     const r = await signedFetch('PUT', '/backup', { blob, appV });
-    if (r.ok) { await kvSet('backupAt', Date.now()); await kvSet('backupFail', null); return true; }
+    /* A 200 IS NOT AN ACKNOWLEDGEMENT. This read `if (r.ok)` alone, so anything
+       that answers 200 counted as a stored save: a captive portal's login page,
+       a proxy interstitial, a truncated body. `backupAt` was stamped to now and
+       any standing `backupFail` was cleared, so Settings reported a fresh backup
+       and cloudTroubleNotice stayed quiet for a save that never left the phone.
+       That is the one path where this app says the OPPOSITE of the truth, which
+       is worse than the silence the rest of this function was written to fix.
+       `{ ok: true, updatedAt }` is what every success return of PUT /backup
+       sends (server/src/index.js, all three of them: the upsert, the no-daily
+       fallback and nothing else), so `d.ok === true` is the server's own word
+       and not a stricter contract than it honours. Same shape deleteAccount
+       already demands before it lets the caller wipe the phone.
+       'bad-body' renders through cloudFailLine's generic line, which is the
+       honest one here: nobody can name the portal, and it really does heal by
+       retrying on a real network. No new failure surface. */
+    if (r.ok) {
+      const d = await r.json().catch(() => ({}));
+      if (d && d.ok === true) { await kvSet('backupAt', Date.now()); await kvSet('backupFail', null); return true; }
+      await kvSet('backupFail', { at: Date.now(), reason: 'bad-body' });
+      return false;
+    }
     /* NAME THE FAILURE. Everything below used to be `return r.ok` into a caller
        that reads nothing, so `backupAt` simply stopped moving and a dead backup
        was indistinguishable from a healthy one. Two of these the player can and
