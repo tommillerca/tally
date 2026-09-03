@@ -1,5 +1,5 @@
-import { boot, sleep } from './godmode.js';
-const D='/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
+import { boot, sleep, shotDir } from './godmode.js';
+const D = shotDir('tally-shots');  // machine-local, see godmode shotDir
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
    year-readout-audit already use. Reading env.URL ONLY meant that any run passing
    the URL as an argument (which is how the release gate invokes every suite) fell

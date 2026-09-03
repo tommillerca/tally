@@ -3,11 +3,14 @@
 Region-aware: the old build did a GLOBAL hue rotation that recolored eyes/tongue/
 shirt too. Here we protect/target those features and drop rejected colorways."""
 from PIL import Image, ImageDraw, ImageFont
-import numpy as np, os
+import numpy as np, os, tempfile
 from scipy.ndimage import label as cclabel, binary_dilation as bd
 
 BASE="/Users/tommiller/Documents/Hyperframes Editor/tally/assets/bh/C"
-SP="/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad"
+# SP was an absolute path into a DIFFERENT Claude session's scratchpad, and that
+# directory is long gone: rerunning this recreated a dead session's tree and hid
+# the sheets somewhere nobody would look. Machine-local, or $OUT_DIR. 2026-09-02.
+SP=os.environ.get("OUT_DIR") or os.path.join(tempfile.gettempdir(),"tally-pet-recolor")
 OUT=os.path.join(SP,"colorways-pets-v2"); os.makedirs(OUT,exist_ok=True)
 
 def hsv(im):

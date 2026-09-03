@@ -1,8 +1,8 @@
 /* The victory screen's gear reward card rendered EMPTY. A card-exists check would
  * pass on the bug, so this reads the canvas PIXELS: a hydrated card has non-blank
  * pixels, an unhydrated one is fully transparent. */
-import { boot, sleep } from './godmode.js';
-const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
+import { boot, sleep, shotDir } from './godmode.js';
+const DIR = shotDir('tally-shots');  // machine-local, see godmode shotDir
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
    year-readout-audit already use. Reading env.URL ONLY meant that any run passing
    the URL as an argument (which is how the release gate invokes every suite) fell

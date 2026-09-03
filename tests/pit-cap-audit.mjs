@@ -1,7 +1,7 @@
 /* Hitting the Gauntlet ceiling must be OBVIOUS. Failure = the cap only readable in
  * body text, or the section summary still claiming a rank you cannot fight. */
-import { boot, sleep } from './godmode.js';
-const DIR = '/private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/a40abded-9d02-469c-8111-2200136500f1/scratchpad/shots';
+import { boot, sleep, shotDir } from './godmode.js';
+const DIR = shotDir('tally-shots');  // machine-local, see godmode shotDir
 /* argv FIRST, env.URL second: the convention error-telemetry-audit and
    year-readout-audit already use. Reading env.URL ONLY meant that any run passing
    the URL as an argument (which is how the release gate invokes every suite) fell
@@ -121,7 +121,7 @@ await sleep(400);
 /* the shot used to query the dead `.pit-sect` and skip in silence, so a moved
    anchor cost the evidence too. */
 const el = await page.$('.t3-sect');
-if (el) { const { mkdirSync } = await import('node:fs'); mkdirSync(DIR, { recursive: true }); await el.screenshot({ path: `${DIR}/pit-uncapped.png` }); }
+if (el) await el.screenshot({ path: `${DIR}/pit-uncapped.png` });
 else { console.log('note: no .t3-sect to shoot'); }
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nPIT CEILING IS UNMISSABLE');
