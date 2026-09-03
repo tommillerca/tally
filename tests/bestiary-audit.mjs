@@ -55,8 +55,9 @@ ok('nothing offers to show them all', spoiler.rosterCta === 0, `${spoiler.roster
    an absence needs a control: the teaser rows above are it. They opened a real
    wall of monsters on this same boot, so a blank page cannot pass the rows
    below by having nothing on it. The hype banner that stood there instead came off
-   in its turn on 2026-09-03, so the absence is now the whole of it and
-   tests/hype-banner-audit.mjs is retired in the gate. */
+   Today in its turn on 2026-09-03 and was rebuilt as the hero slot inside the news
+   pill, so the absence ON TODAY is now the whole of it and
+   tests/hype-banner-audit.mjs follows the banner into the pill. */
 const today = await page.evaluate(async () => {
   location.hash = '#/today';
   await new Promise(r => setTimeout(r, 1800));
@@ -70,7 +71,13 @@ const today = await page.evaluate(async () => {
        banner came off Today with the whole promo slot. The five doors are the
        one thing Today has always drawn and can never be a teaser, so they are
        the positive control now: a blank screen still cannot pass the absences
-       below by having nothing on it. */
+       below by having nothing on it.
+       AND THEY STAY THE CONTROL now the banner exists again in the news pill.
+       Moving back to it would make this file's setup depend on a surface behind
+       a SHUT disclosure, whose contents are display:none, and on a hero whose
+       subject is chosen at render time from an editable array. A control should
+       be the least interesting thing on the screen, not the most: the doors are
+       unconditional markup and the banner is neither. */
     doors: document.querySelectorAll('.hero-actions .hero-act').length,
   };
 });

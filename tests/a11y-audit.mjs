@@ -202,6 +202,19 @@ const TARGETS = [
    background is the modal pixel off the render, which is the only honest read
    of a grain-blended card or a coral radial wash. */
 const CONTRAST = [
+  /* NO ROW FOR THE NEWS PILL'S HERO BANNER, 2026-09-03, and it is the driver that
+     stops it rather than the subject. Two .hype rows lived here until the Today
+     hype banner was deleted that morning; the banner came back the same day as the
+     hero slot inside the news pill, which is a <details> that is SHUT at rest. The
+     element finder below requires `offsetParent !== null`, and everything behind a
+     shut disclosure is display:none, so a row here would find nothing on every
+     run: `optional: true` would make it a check that cannot fail, and without it
+     the file goes red on healthy code. Teaching this pass to open a disclosure is
+     the honest fix and it is a change to the driver, not a row.
+     UNTIL THEN THE ARITHMETIC IS PINNED IN app.css, over the worst pixel that
+     coral wash can paint (rgb(130,62,60), both coral layers at full strength):
+     both lines of the hero's copy are --text at 6.44:1, and the comment there
+     records why the blurb cannot take --text-2 (3.48:1) or an opacity. */
   { surface: 'today', sel: '.tsec-h',          why: '--text-3 over a grain-blended card' },
   { surface: 'today', sel: '.day-title .sub',  why: '--text-3 subtitle' },
   { surface: 'today', sel: '.q-coins',         why: '--text-3 note', optional: true },
