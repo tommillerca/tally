@@ -21,12 +21,33 @@
  *   await openPit(page);
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* WHERE A SCREENSHOT LANDS, AND WHY IT IS NOT A PASTED PATH ANY MORE.
+ *
+ * Nine files carried the SAME absolute path into a DIFFERENT Claude session's
+ * scratchpad, /private/tmp/claude-502/.../a40abded-.../scratchpad/shots. That
+ * directory is temporary and gets collected, and when it goes the screenshot
+ * throws AFTER every row has already printed ok: the suite exits non-zero for a
+ * reason that has nothing to do with the app, and reads as app breakage to
+ * whoever is holding the release. Six of the nine had no mkdirSync at all, so
+ * they could not even recreate it.
+ *
+ * A machine-local temp directory belongs to no session, and creating it here on
+ * every call means the shot is always writable and the exit code always means
+ * what it says. Callers pass a subdirectory so two suites cannot fight over a
+ * filename. 2026-09-02. */
+export const shotDir = sub => {
+  const d = path.join(os.tmpdir(), sub);
+  fs.mkdirSync(d, { recursive: true });
+  return d;
+};
 
 /* THE DETACHED-FRAME RACE IS A HARNESS FAULT, SO THE GUARD BELONGS HERE.
  *

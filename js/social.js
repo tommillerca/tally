@@ -728,8 +728,23 @@ export async function leaderboard() {
 
 /* ---------------- profile snapshot up ---------------- */
 // snapshot comes from app.js (it owns buildFighter etc.); social.js only ships it
+/* WHAT THE SERVER CLAMPED, KEPT WHERE A DEVELOPER CAN SEE IT.
+   /profile answers with `bounded`, naming every field it pulled down to its
+   ceiling, and the handler says why (server/src/index.js): the list is empty on
+   every honest sync, so a client that starts seeing entries is telling us
+   something, a real cheat or one of our own bugs. This returned r.ok and dropped
+   the body on the floor, so the one signal the server sends about a lying client
+   was unreadable on the only machine that could have carried it home.
+   STICKY AND DATED, not last-wins-including-empty: one clamped sync followed by
+   a clean one is still exactly the event worth knowing about, and clearing it
+   would hide it. Rides out on the Settings diagnostics line, which is a note for
+   us and not a message for the player. 2026-09-02. */
 export async function syncProfile(snapshot, appV = '') {
   const r = await signedFetch('PUT', '/profile', { snapshot, appV });
+  if (r.ok) {
+    const d = await r.json().catch(() => ({}));
+    if (d && Array.isArray(d.bounded) && d.bounded.length) await kvSet('profileBounded', { at: Date.now(), fields: d.bounded });
+  }
   return r.ok;
 }
 
@@ -871,12 +886,19 @@ export async function pullBackup({ slot = null, replace = false } = {}) {
    yesterday's copy is that today's is wrong. */
 export async function restoreDailyBackup() { return pullBackup({ slot: 'daily', replace: true }); }
 
-// Is there a backup on the server for this identity? (cheap existence probe)
+/* Is there a backup on the server for this identity? (cheap existence probe)
+   THREE ANSWERS, NOT TWO, BECAUSE THE CALLER IS A DESTRUCTIVE CONFIRMATION.
+   The erase sheet asks this to decide whether to promise the player a vault
+   copy survives, and "the server says there is none" and "we could not ask" are
+   different facts: collapsing them into false would have the sheet state, flatly
+   and wrongly, that a save it never checked on is not there. Returns true (the
+   server has a blob), false (a 404, which is the server's definitive no) or
+   null (offline, no identity, or any other status: unknown). 2026-09-02. */
 export async function hasCloudBackup() {
   try {
     const r = await signedFetch('GET', '/backup', null);
-    return r.ok;
-  } catch { return false; }
+    return r.ok ? true : r.status === 404 ? false : null;
+  } catch { return null; }
 }
 
 /* ---------------- grants feed down ---------------- */

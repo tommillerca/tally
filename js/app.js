@@ -12045,6 +12045,12 @@ async function diagnosticsLine() {
     bits.push(`sw ${m ? m[1] : '?'}`);
   } catch { bits.push('sw unreachable'); }
   try { bits.push(navigator.serviceWorker && navigator.serviceWorker.controller ? 'sw controlling' : 'sw not controlling'); } catch { /* no sw api */ }
+  /* Absent on every honest device, so anything printed here is a signal and not
+     noise: the server clamped a field this client claimed. See syncProfile in
+     js/social.js for why it is kept, and server/src/index.js /profile for what
+     it means. Dated because a stale one and a fresh one are different news. */
+  const bounded = await kvGet('profileBounded', null);
+  if (bounded && bounded.fields && bounded.fields.length) bits.push(`bounded ${bounded.fields.join(',')}@${new Date(bounded.at).toISOString().slice(0, 10)}`);
 
   const P = (window.Capacitor && window.Capacitor.Plugins) || {};
   const seen = [];
@@ -12464,10 +12470,28 @@ async function renderSettings(el) {
         <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
       </div>
       <div class="sheet-body">
-        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. If cloud backup is on, the vault copy survives and can be restored later.</p>
+        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. <span id="erVault">Checking whether a cloud copy exists...</span></p>
         <div class="t1-field"><label>Type ERASE to confirm</label><input id="erIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ERASE"></div>
       </div>
       <div class="t1-foot"><button class="btn danger-ish" id="erGo" disabled>Erase it all</button></div>`, { cls: 't1', name: 'Erase' });
+    /* ONE LOOKUP INSTEAD OF AN "IF". This line used to read "If cloud backup is
+       on, the vault copy survives", which handed the player the job of working
+       out whether that if applied to them, on the one dialog whose entire point
+       is that it cannot be undone. The app can just ask: social.hasCloudBackup()
+       answers for THIS account, and its three answers are three sentences.
+       UNKNOWN READS AS NO ON PURPOSE. An unreachable server must never be
+       reported as a copy that survives, because that is the one wrong answer
+       that costs somebody their save. Off the click path so the sheet still
+       opens instantly, and the typed-ERASE gate is slower than the probe. */
+    social.hasCloudBackup().then(has => {
+      const line = $('#erVault', wrap);
+      if (!line) return;   // sheet already dismissed
+      line.innerHTML = has === true
+        ? 'A cloud backup <b>does</b> exist for this account: that copy survives and can be restored later.'
+        : has === false
+          ? 'There is <b>no</b> cloud backup for this account, so this is the only copy.'
+          : 'The cloud could not be reached, so no vault copy can be confirmed. Treat this as the only copy.';
+    });
     const input = $('#erIn', wrap), go = $('#erGo', wrap);
     input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'ERASE'; });
     go.addEventListener('click', async () => {
