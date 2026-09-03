@@ -12342,10 +12342,31 @@ async function renderSettings(el) {
        nudge on 2026-08-25: nothing reads it now that nothing prompts at boot. */
     if (!(await social.socialMe())?.name) setTimeout(() => openNameBuilder(() => renderSettings(el)), 500);
   });
+  /* THIS TOGGLE USED TO PROMISE SAFETY IT HAD NOT CHECKED. It awaited
+     pushBackup with a `.catch(() => {})` and then toasted "Your progress is
+     safe" unconditionally. pushBackup does not throw (its header says so): it
+     RETURNS FALSE and writes kv `backupFail`, so the catch never fired and the
+     boolean was dropped on the floor. Measured against a dead API: the PUT
+     aborted at the 12s deadline, `backupFail` was written with reason
+     'network', and the toast still said the progress was safe. Fix #367 made
+     this worse in one sense: a 200 that is not a real acknowledgement now lands
+     as reason 'bad-body', so detection is good and only this line was lying.
+     The failure copy is cloudFailLine's, not a second wording, because Settings
+     and the boot notice already speak through it and a third voice would
+     eventually disagree with them about what is wrong.
+     `disabled` before the first await is the whole re-entry guard: two taps
+     120ms apart sent two PUT /backup, and the browser does not dispatch a click
+     on a disabled button. renderSettings() below rebuilds the segment anyway. */
   $('#cbOn', el)?.addEventListener('click', async () => {
+    const btn = $('#cbOn', el);
+    btn.disabled = true;
     await social.setCloudBackup(true);
-    await social.pushBackup(APP_SOCIAL_V).catch(() => {});
-    toast('Cloud backup on. Your progress is safe.');
+    const pushed = await social.pushBackup(APP_SOCIAL_V).catch(() => false);
+    if (pushed) toast('Cloud backup on. Your progress is safe.');
+    else {
+      const fail = await kvGet('backupFail', null);
+      toast(`Cloud backup on. ${cloudFailLine(fail && fail.reason, Number(await kvGet('clockSkewMs', 0)) || 0)}`, 5600);
+    }
     renderSettings(el);
   });
   $('#cbOff', el)?.addEventListener('click', async () => {
