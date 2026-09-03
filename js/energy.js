@@ -132,3 +132,28 @@ export async function spendPitFight() {
   }, {});
   return used ? { ok: true, used } : { ok: false };
 }
+
+/* Hand a spent Pit fight back. Takes the `used` half of spendPitFight's answer,
+ * so a refund puts the charge back where it came from and can never launder a
+ * free fight into banked Vigor.
+ *
+ * QA round 20 (R20-P2): a rival spire takeover debits a fight at the tap, and a
+ * server 409 (the tower's 1h shield, or the attacker already at SPIRE_CAP) means
+ * NO ownership changed. The charge was gone anyway: measured, a refused takeover
+ * cost one fight and paid 40 consolation coins for a state transition that never
+ * happened. The caller carries `used` through the fight in foeCfg.charge and
+ * hands it back here on a refusal.
+ *
+ * One kvUpdate transaction for the same reason spendPitFight is one: a Pit
+ * render overlapping a read-then-write pair here would drop the refund.
+ * ponytail: a refund landing after a day rollover credits Vigor rather than the
+ * (already reset) free floor. Bounded to one charge, and only reachable by a
+ * refusal that straddles midnight; not worth a dated receipt. */
+export async function refundPitFight(used) {
+  if (used !== 'free' && used !== 'vigor') return;
+  await kvUpdate('pitEnergy', cur => {
+    const s = cur || {};
+    if (used === 'free') return { ...s, freeUsed: Math.max(0, (s.freeUsed || 0) - 1) };
+    return { ...s, vigor: clampVigor((s.vigor || 0) + 1) };
+  }, {});
+}
