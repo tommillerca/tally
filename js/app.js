@@ -7,7 +7,7 @@ import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
-  awardCapped, XP_DAILY_CAP,
+  awardCapped, XP_DAILY_CAP, BADGE_XP,
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
@@ -54,7 +54,7 @@ import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } fr
 import { hollowBackdropHtml } from './hollow-scene.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor,
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
-  SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
+  SPIRE_RADIUS_M, SPIRE_CAP, SPIRE_SHIELD_MS, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
@@ -66,7 +66,7 @@ import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { installPaddockSeam } from './paddock-cards.js';
 import { attachWalk } from './walk.js';
-import { refreshPitEnergy, spendPitFight, addVigor, FREE_FIGHTS } from './energy.js';
+import { refreshPitEnergy, spendPitFight, refundPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
   spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
@@ -6052,6 +6052,19 @@ function openDenSheet(den, { cleared = false, inRange = false, onFight = null } 
 
 function openSpireSheet(s, view, rival = null) {
   const holder = rival ? (rival.ownerName || 'A rival') : s.warden;
+  /* NEVER OFFER A FIGHT THE SERVER WILL REFUSE (QA round 20, R20-P2). A rival
+     takeover debits a Pit fight at the tap and the claim is only asked for after
+     the win, so a tower still inside its 1h shield sold a full fight, took the
+     charge and the day's attempt, and settled into a 409 with no state
+     transition at all. The client already has everything it needs to know: the
+     poll carries the holder's claimedAt, and the shield is a fixed hour from it.
+     So the button goes, and the sheet says when to come back.
+     Residual race, closed on the other side: the poll is 60s old at worst, so a
+     shield that starts between the poll and the tap still gets through to the
+     server refusal, and settle() hands the charge back there (foeCfg.charge). */
+  const shieldUntil = rival && rival.claimedAt ? rival.claimedAt + SPIRE_SHIELD_MS : 0;
+  const shieldMins = Math.max(1, Math.ceil((shieldUntil - Date.now()) / 60000));
+  const shielded = shieldUntil > Date.now();
   const wrap = openSheet(`
     <div class="sheet-head"><h2>${esc(s.name)}</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
@@ -6069,7 +6082,10 @@ function openSpireSheet(s, view, rival = null) {
         <li>You can hold <b>${SPIRE_CAP}</b> at once, so pick towers you actually walk past.</li>
         ${rival ? '<li>Taking one off another player costs <b>one Pit fight</b>, and a tower just taken holds its walls for an hour.</li>' : ''}
       </ul>
-      <button class="btn" id="spireFight" style="width:100%">Face ${esc(holder)}</button>
+      ${shielded
+        ? `<button class="btn" disabled style="width:100%">Walls hold for ${shieldMins} min</button>
+           <div class="why">${esc(holder)} only just took it. Come back in ${shieldMins} min and it can change hands again: fighting now costs you a Pit fight and wins you nothing.</div>`
+        : `<button class="btn" id="spireFight" style="width:100%">Face ${esc(holder)}</button>`}
     </div>`, { cls: '', name: 'Dark Spire' });
   $('#spireFight', wrap)?.addEventListener('click', async () => {
     const fighter = await buildFighter();
@@ -6091,6 +6107,9 @@ function openSpireSheet(s, view, rival = null) {
       openFight(wrap, fighter, {
         mode: 'spire', name: rival.ownerName || 'Rival Warden', mult: 1,
         aiLevel: 3, venue: s.name, spire: s, rival: true,
+        // which charge paid for this fight, so settle() can hand it back if the
+        // server refuses the claim (R20-P2). 'free' | 'vigor'.
+        charge: spent.used,
         // the exact fields the friend-battle clone builder already reads, so a
         // rival's tower is defended by their real build, not an invented one
         foeStats: d.stats || null, foeOutfit: d.outfit || null,
@@ -18821,6 +18840,20 @@ async function renderBoneyard(el) {
             // pennant and the tribute multiplier agree with every other phone.
             for (const r of rows) if (r.mine && r.level) await setSpireLevel(r.id, r.level);
           }
+          /* A SIEGE THAT STARTS MID-SESSION HAS TO SAY SO (QA round 20, R20-P5).
+             checkSieges only ran on boot and on resume, so a siege that rolled
+             while the app was open announced itself as a pennant change on this
+             poll and nothing else: no toast, no push, no reminder scheduled, on a
+             48h clock. It rides the once-a-minute throttle above rather than the
+             5s world tick, and it asks /spires/mine because this poll only sees
+             the towers NEARBY, and a siege lands wherever your towers are.
+             It cannot toast twice for one siege: syncSieges returns only sieges
+             whose until is new to the local record, and checkSieges then filters
+             those against the 'siegeSeen' ledger (id:until), which it persists
+             before announcing. Both existed already; only the call site is new.
+             Not awaited: this is a notification, and the marker refresh below
+             must not wait on the network for it. */
+          if (!S.demo) checkSieges();
         } finally { spireFetching = false; }
       }
       const live = new Set(near.map(s => s.id));
@@ -20297,6 +20330,21 @@ const PIT_STAKED_MODES = ['rung', 'champ', 'endless'];
    every re-render, which is a guard that is not there. See startPit. */
 let pitOpening = false;
 
+/* THE LEDGER ROW SAYS WHAT YOU ACTUALLY FOUGHT (QA round 20, R20-P6).
+   Every win except a friend battle mints one capped `fight` row through the
+   shared path in settle(), and that row was hard-labelled 'Pit win' for all of
+   them: beating the Boneyard Wanderer filed a "Pit win" in the XP ledger next to
+   its own "Boneyard: the Wanderer" row. The label is display-only (the xp-row
+   list and the delivery sheet read r.label); the TYPE stays 'fight' for every
+   mode, because that is what buildStats counts for pitWins and the Blooded
+   badge, and re-typing rows would silently move a badge nobody asked to move.
+   Anything not listed keeps 'Pit win', which is the ladder itself: rung, champ
+   and endless are Pit fights and should read as such. */
+const FIGHT_ROW_LABEL = {
+  spar: 'Sparring win', boss: 'Den win', mini: 'Mini-boss win', secret: 'Secret boss win',
+  glutton: 'Glutton win', spire: 'Spire fight', mimic: 'Boneyard win', wanderer: 'Boneyard win',
+};
+
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
   const food = await foodCombatBuff(); // active dish buffs (damage / hype / regen / pet-free)
@@ -21605,10 +21653,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (won) {
         confettiRain(90); levelSound(S.sounds);
         const badges = await evaluateBadges();
+        xp += badges.length * BADGE_XP;   // same under-report as the main win path (R20-P6)
         if (badges.length) queueCelebration({ newBadges: badges });
       }
     } else if (won) {
-      await awardCapped('fight', 'fight', 10, 'Pit win', XP_DAILY_CAP.fight);
+      await awardCapped('fight', 'fight', 10, FIGHT_ROW_LABEL[foeCfg.mode] || 'Pit win', XP_DAILY_CAP.fight);
       trackEvent(foeCfg.mode === 'boss' ? 'boss_win' : foeCfg.mode === 'mini' ? 'mini_win' : 'pit_win', { mode: foeCfg.mode });
       xp += 10;
       if (foeCfg.mode === 'spar') { coins = 15; }
@@ -21721,6 +21770,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // rule the whole social layer is built on.
         const remote = await social.claimSpireRemote(foeCfg.spire).catch(() => ({ ok: false, reason: 'offline' }));
         const refused = remote && remote.ok === false && remote.reason !== 'offline';
+        /* A REFUSED TAKEOVER HANDS THE CHARGE BACK (QA round 20, R20-P2).
+           A 409 (shielded, or the attacker at SPIRE_CAP) changes nothing on the
+           server, so the Pit fight this player spent at the tap bought a state
+           transition that never happened: measured, one charge and the day's
+           spiretry gone for a 40-coin consolation. openSpireSheet now refuses to
+           open the fight at all while a shield it can see is up; this is the
+           other half, for the refusals it cannot see from here (a shield that
+           starts inside the 60s poll gap, and the cap, which the server counts).
+           Only the charge is returned. The consolation coins and the spiretry row
+           are deliberate and stay: a fight was still fought. */
+        if (refused && foeCfg.charge) await refundPitFight(foeCfg.charge);
         /* A NO-OP IS NOT A WIN. Tom, 2026-08-07: "You can still exploit the spire
            system just like the glutton was. After beating you can take the same
            spire again when it's already yours."
@@ -21887,6 +21947,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (coins) await coinsAdd(coins);
       window.__refreshWalletPill?.();   // the hub behind this sheet shows the balance this just changed
       const badges = await evaluateBadges();
+      /* THE CARD REPORTS WHAT WAS MINTED, BADGES INCLUDED (QA round 20, R20-P6).
+         A win that unlocks a badge mints BADGE_XP on top of the fight's own XP,
+         and the victory card counted only the fight's half: measured, a Wanderer
+         win that also earned Blooded showed +160 XP against a ledger of 185
+         (150 wanderer + 10 fight + 25 badge). Counted from the badges
+         evaluateBadges actually claimed, so a duplicate can never inflate it. */
+      xp += badges.length * BADGE_XP;
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
     } else if (fight.over.winner === 'f') {

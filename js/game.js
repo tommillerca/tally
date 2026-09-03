@@ -453,7 +453,13 @@ async function buildStats() {
   };
 }
 
-// Awards any newly earned badges (+25 xp each). Returns the badge objects.
+/* What one badge pays. Exported because the screen that TRIGGERS a badge has to
+   be able to say what it just minted: a fight that unlocks one mints this on top
+   of its own reward, and the victory card used to report only the fight's half
+   (QA round 20, R20-P6: the Wanderer card said +160 XP against a ledger of 185). */
+export const BADGE_XP = 25;
+
+// Awards any newly earned badges (+BADGE_XP each). Returns the badge objects.
 export async function evaluateBadges() {
   const st = await buildStats();
   const out = [];
@@ -466,7 +472,7 @@ export async function evaluateBadges() {
        its answer that is unambiguous: `xp` is 25 for a fresh badge and 0 for a
        duplicate, but it is also 0 for any payload that legitimately pays no XP,
        which is the v390 ambiguity this pair exists to end. */
-    if (badgeCheck(b.id, st) && (await awardOnce('badge-' + b.id, 'badge', 25, b.name)).claimed) out.push(b);
+    if (badgeCheck(b.id, st) && (await awardOnce('badge-' + b.id, 'badge', BADGE_XP, b.name)).claimed) out.push(b);
   }
   return out;
 }
