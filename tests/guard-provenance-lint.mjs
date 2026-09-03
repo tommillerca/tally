@@ -140,7 +140,6 @@ const KNOWN_UNDATED = [
   'facegate-audit.mjs:HELD_SLOTS',
   'fight-exit-audit.mjs:NO_MAP_ROWS',
   'figure-audit.mjs:SITES',
-  'flaky-network-audit.mjs:DEADLINE_FILES',
   'flaky-network-audit.mjs:FRIENDS',
   'flaky-network-audit.mjs:LOCAL_ONLY',
   'fx-audit.js:MOVES',

@@ -64,7 +64,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boot, serveTree, sleep, dismissOverlays } from './godmode.js';
+import { boot, serveTree, sleep, dismissOverlays, stripComments } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const results = [];
@@ -88,10 +88,20 @@ const BOUND_MS = TEST_DEADLINE_MS * 2;
    module graph rather than from a hand-written one.
    A failing result looks like: "js/social.js:412 fetch(" printed below. */
 const fs = await import('node:fs');
+/* PROSE IS NOT A CALL SITE, and both scans below read the file through the
+   lexer for that reason. js/social.js:405 is a sentence explaining that test
+   accounts are "made by this function and not by any fetch() a test file wrote",
+   and on 2026-09-02 that sentence alone turned this row red with no line of app
+   code having changed. stripComments (tests/godmode.js) keeps STRING and
+   TEMPLATE bodies, which both scans need: a URL literal survives it intact, and
+   so does the `from './social.js'` the LOCAL_ONLY scan below matches on. It also
+   preserves newlines, so the file:line this row prints is still the file's own.
+   The rule itself is untouched: a real bare fetch( in code still fails here. */
+const src = f => stripComments(fs.readFileSync(path.join(ROOT, f), 'utf8'));
 const DEADLINE_FILES = ['js/social.js', 'js/analytics.js', 'js/sources.js'];
 const bare = [];
 for (const f of DEADLINE_FILES) {
-  const lines = fs.readFileSync(path.join(ROOT, f), 'utf8').split('\n');
+  const lines = src(f).split('\n');
   lines.forEach((ln, i) => {
     // the two wrapper bodies are the only places a bare fetch belongs, and they
     // are recognised by the signal they attach, not by their line number
@@ -114,8 +124,8 @@ ok('STATIC  every network call in social.js, analytics.js and sources.js goes th
    A failing result looks like: "js/loot.js references the network". */
 const LOCAL_ONLY = ['js/loot.js', 'js/pit.js', 'js/cooking.js', 'js/wheel.js', 'js/quests.js', 'js/game.js', 'js/gear.js', 'js/pets.js', 'js/energy.js', 'js/garden.js'];
 const networked = LOCAL_ONLY.filter(f => {
-  const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
-  return /(?<![A-Za-z_$.])fetch\s*\(/.test(src) || /from '\.\/social\.js'/.test(src) || /XMLHttpRequest|navigator\.sendBeacon/.test(src);
+  const code = src(f);
+  return /(?<![A-Za-z_$.])fetch\s*\(/.test(code) || /from '\.\/social\.js'/.test(code) || /XMLHttpRequest|navigator\.sendBeacon/.test(code);
 });
 ok('OFFLINE-FIRST  the local game modules reach no network at all, so crates, the wheel, the Pit and the Kitchen cannot stop working on a plane',
   networked.length === 0 && LOCAL_ONLY.length === 10,

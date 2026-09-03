@@ -306,6 +306,59 @@ export function exitFor(failCount) {
   return _unproven.length ? UNPROVEN_EXIT : 0;
 }
 
+/* ------------------------------------------------------------------ the lexer
+ * Strip comments, KEEP string and template contents (emissions live inside
+ * them). A regex cannot do this, 'https://x' would lose its tail, so walk
+ * the file: code / 'sq' / "dq" / `template` (with ${ } nesting back into
+ * code) / line and block comments. Regex literals are not modelled; a token
+ * inside /re/ would count as alive, which errs toward silence, not noise.
+ * Newlines survive every branch, so a scanner that reports file:line off the
+ * stripped text still reports the file's own line numbers.
+ * LIVES HERE rather than in one suite because it is what stops a static lint
+ * reading PROSE as code: selector-audit needs it to keep a sentence naming
+ * `.q-claim` from counting as a query, and flaky-network-audit needs it to keep
+ * a sentence naming `fetch()` from counting as a call. 2026-09-03. */
+export function stripComments(src) {
+  let out = '', i = 0, mode = 'code';
+  const tmpl = [];                       // brace depth per nested template
+  while (i < src.length) {
+    const c = src[i], d = src[i + 1];
+    if (mode === 'code') {
+      if (c === '/' && d === '/') { mode = 'line'; i += 2; continue; }
+      if (c === '/' && d === '*') { mode = 'block'; i += 2; continue; }
+      if (c === "'") mode = 'sq';
+      else if (c === '"') mode = 'dq';
+      else if (c === '`') { mode = 'tmpl'; tmpl.push(0); }
+      /* CLOSING A ${ } HOLE RETURNS TO THE TEMPLATE, IT DOES NOT END IT. This
+         popped the depth here until 2026-09-03, so the SECOND hole in one
+         template found an empty stack: `${` could not record its depth, its `}`
+         was read as ordinary code, and the template's closing backtick then
+         OPENED a template that was never closed. Everything after it in the file
+         was treated as string body, so no comment past that point was stripped.
+         Measured on js/social.js, whose signing line is
+         `${me.playerId}:${ts}:${body}` (line 374): every comment from line 382
+         to the end of the file survived, including the sentence at line 405 that
+         made tests/flaky-network-audit read prose as a fetch( call site. The
+         depth is popped by the closing backtick below, which is the only place
+         a template actually ends. */
+      else if (c === '}' && tmpl.length && tmpl[tmpl.length - 1] === 0) { mode = 'tmpl'; out += c; i++; continue; }
+      else if (c === '{' && tmpl.length) tmpl[tmpl.length - 1]++;
+      else if (c === '}' && tmpl.length) tmpl[tmpl.length - 1]--;
+      out += c; i++; continue;
+    }
+    if (mode === 'line') { if (c === '\n') { mode = 'code'; out += c; } i++; continue; }
+    if (mode === 'block') { if (c === '*' && d === '/') { mode = 'code'; i += 2; out += ' '; continue; } if (c === '\n') out += c; i++; continue; }
+    // inside a quoted string or template: escapes pass through whole
+    if (c === '\\') { out += c + (d ?? ''); i += 2; continue; }
+    if (mode === 'sq' && c === "'") mode = 'code';
+    else if (mode === 'dq' && c === '"') mode = 'code';
+    else if (mode === 'tmpl' && c === '`') { mode = 'code'; tmpl.pop(); }
+    else if (mode === 'tmpl' && c === '$' && d === '{') { mode = 'code'; tmpl[tmpl.length - 1] = 0; out += '${'; i += 2; continue; }
+    out += c; i++; continue;
+  }
+  return out;
+}
+
 /* EVERY ROW IN THE FILE MUST BE CLASSIFIED, or the unproven list rots.
  *
  * The failure mode this closes: somebody adds a tenth Boneyard assertion and

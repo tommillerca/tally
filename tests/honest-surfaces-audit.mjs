@@ -237,6 +237,50 @@ await page.reload({ waitUntil: 'networkidle2' }); await sleep(2600); await dismi
 const today = await page.evaluate(async () => (await import('/js/nutrition.js')).dateKey());
 const ord = Math.floor(Date.parse(today + 'T00:00:00Z') / 86400000);
 
+/* THE SLATE IS A FUNCTION OF THE DATE, SO SEED THE WHOLE POOL AND NOT TODAY'S THREE.
+   dailyQuests() is pick(DAILY_POOL, 'quests:' + date, 3) in js/quests.js, so
+   WHICH three quests are on offer rotates every morning and nothing a test does
+   moves it. This section shipped on 2026-08-31, whose slate was q-weigh /
+   q-log5 / q-first, and "Log anything at all" is satisfied by the one row a day
+   the streak seed above writes. By 2026-09-03 the slate had rolled to q-log5 /
+   q-protein, one 500 kcal 30g lunch finishes neither, and there was no
+   [data-claim] in the DOM at all: all three scenarios fired nothing and the four
+   rows below were reading an empty string. The SAMPLE row refused to let them
+   pass on it, which is the whole reason it is there.
+   Finishing EVERY daily quest is what takes the calendar back out of this, and
+   it weakens nothing: the rows below still fire a real button and read a real
+   toast off the screen. Every figure here is the target read off DAILY_POOL in
+   js/quests.js on 2026-09-03: 5 entries (q-log5), meals 0/1/2 (q-3meals), 200g
+   of protein a row against the 150g default target (q-protein), a foodId never
+   logged before (q-new-food), 12,000 steps (q-steps11 asks 11,000), 600 active
+   kcal (q-active asks 500), 3 'fight' rows (q-pit3), 2 'spawn' rows (q-hunt).
+   The xp rows carry 0 XP, the same shape the app's own gate markers use, so
+   nothing levels up underneath the measurement. */
+const seedEveryDailyQuest = d => page.evaluate(async today => {
+  const idb = await new Promise(r => { const q = indexedDB.open('tally-demo'); q.onsuccess = () => r(q.result); });
+  const mark = (key, type, extra = {}) => ({ key, type, xp: 0, label: 'audit seed', date: today, ts: Date.now(), ...extra });
+  await new Promise(res => {
+    const tx = idb.transaction(['log', 'health', 'weights', 'xp'], 'readwrite');
+    const log = tx.objectStore('log');
+    for (let i = 0; i < 5; i++) {
+      log.put({ id: 'hs-q' + i, date: today, name: 'audit quest ' + i, kcal: 500, p: 200, c: 10, f: 5, qty: 1, unit: 'serving', meal: i % 3, foodId: 'hs-food-' + i, ts: Date.now() });
+    }
+    tx.objectStore('health').put({ date: today, steps: 12000, activeKcal: 600 });
+    tx.objectStore('weights').put({ date: today, kg: 80 });
+    const xp = tx.objectStore('xp');
+    for (const row of [
+      mark(`bed-${today}`, 'wellness'), mark(`water-${today}`, 'wellness'), mark(`sleep-${today}`, 'wellness'),
+      mark('hs-scan', 'scan'), mark('hs-cook', 'cook'), mark('hs-friendbattle', 'friendbattle', { friendId: 'hs-f1' }),
+      mark('hs-fight-1', 'fight'), mark('hs-fight-2', 'fight'), mark('hs-fight-3', 'fight'),
+      mark('hs-spawn-1', 'spawn'), mark('hs-spawn-2', 'spawn'),
+    ]) xp.put(row);
+    tx.oncomplete = res;
+  });
+  idb.close();
+}, d);
+await seedEveryDailyQuest(today);
+await page.reload({ waitUntil: 'networkidle2' }); await sleep(2600); await dismissOverlays(page);
+
 const guardScenarios = {
   // RULE 1: a mark strictly ahead of today, so today is not a new day
   backwards: [['dayHighWater', addD(today, 5)], ['dayPaceKey', today], ['dayPaceAt', Date.now()], ['dayWitnessOrd', ord]],
