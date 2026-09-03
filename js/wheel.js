@@ -359,7 +359,15 @@ function showWheel(idx, prize, result, commit, { sounds }) {
     let done = false;
     const finish = () => { if (done) return; done = true; dw.classList.add('dw-out'); setTimeout(() => { dw.remove(); resolve(true); }, 300); };
 
+    /* SKIP. The prize is already decided (idx is fixed before the wheel is even
+       built) so ending the spin early reveals nothing sooner than it should; it
+       only stops costing the player five seconds a day. reveal() now guards
+       itself because a skip, the transitionend and the 5.2s safety net can all
+       reach it, and it is not idempotent: sub is replaced on the first run. */
+    let revealed = false;
     const reveal = () => {
+      if (revealed) return;
+      revealed = true;
       const detail = result.coinDelta > 0
         ? `You won <b>${result.coinDelta} coins</b>`
         : `You won <b>${prize.name}</b>`;
@@ -402,7 +410,16 @@ function showWheel(idx, prize, result, commit, { sounds }) {
       }));
       wheel.addEventListener('transitionend', reveal, { once: true });
       // safety net if transitionend never fires
-      setTimeout(() => { if (!dw.querySelector('.dw-result')) reveal(); }, reducedMotion ? 50 : 5200);
+      setTimeout(reveal, reducedMotion ? 50 : 5200);
+      // the CTA becomes the skip: same button, same place, no new furniture
+      spinBtn.disabled = false;
+      spinBtn.textContent = 'SKIP';
+      spinBtn.addEventListener('click', () => {
+        if (revealed) return;
+        wheel.classList.remove('dw-spinning');   // drop the transition so the snap is instant
+        wheel.style.transform = `rotate(${landingRotation(idx)}deg)`;
+        reveal();
+      }, { once: true });
     };
 
     spinBtn.addEventListener('click', spin, { once: true });

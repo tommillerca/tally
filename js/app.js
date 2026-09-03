@@ -8942,9 +8942,17 @@ async function renderShop(el) {
       S.wpnAura = await wornAura();
       levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
       trackEvent('buy_rack', { id: b.dataset.buyrack, cur: currency, cost: r.cost });
-      toast(r.currency === 'dust'
-        ? `${r.label} is yours. −${r.cost} dust, ${r.dust.toLocaleString()} left. Free to wear in your Wardrobe.`
-        : `${r.label} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. Free to wear in your Wardrobe.`, 3400);
+      /* AN AURA IS NOT IN THE WARDROBE, and saying it is sent Tom hunting for a
+         thing that was already on his weapon. It auto-wears at buy (loot.js
+         writes kv `wpnaura` inside the spend) and its ONLY control is the rack
+         tile that just flipped to Worn. Say both, or the player concludes the
+         1,200 coins bought nothing. */
+      const spent = r.currency === 'dust'
+        ? `−${r.cost} dust, ${r.dust.toLocaleString()} left.`
+        : `−${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left.`;
+      toast(r.isAura
+        ? `${r.label} is on already, and every weapon you carry wears it. ${spent} Take it off on this tile any time.`
+        : `${r.label} is yours. ${spent} Free to wear in your Wardrobe.`, 3400);
       // bought from inside the try-on sheet: close it, so the rack behind it is
       // the thing the player lands on and the new Owned state is what they see
       if (inSheet && sheetStack.length) history.back();
@@ -13317,8 +13325,26 @@ function openHatchReveal(res, charWrap) {
   const revealEl = $('.hatch-reveal', wrap2);
   // draw the pet big + centered (the source PNG parks it in a corner)
   if (item) { const cv = $('.hatch-art', wrap2); if (cv) drawTrimmedArt(cv, res.shiny ? `assets/bh/C/shiny/${item.id}.png` : bhAsset(item)); }
+  const okBtn = $('#hatchOk', wrap2);
+  /* ADOPT USED TO CLOSE THE SHEET, and the cinematic is 5.75s long, so any
+     player who tapped it early dismissed a pet they never saw. Tom hit exactly
+     that. The button is now two states: while the egg is still cracking it
+     SKIPS to the reveal, and only once the pet is on screen does it leave.
+     The relabel plus the short input lock stop a fast double tap racing
+     through both states straight back out the door. */
+  const timers = [];
+  let revealed = false;
   // once the pet is revealed, retire the egg cinematic so the pet is centred
-  const finish = () => { if (stage) stage.style.display = 'none'; revealEl.classList.add('show'); confettiRain(80); levelSound(S.sounds); };
+  const finish = () => {
+    if (revealed) return;                       // the 5750 timer and a skip tap both land here
+    revealed = true;
+    for (const id of timers) clearTimeout(id);  // else burst frames and a second confetti fire after a skip
+    timers.length = 0;
+    if (stage) stage.style.display = 'none';
+    revealEl.classList.add('show');
+    confettiRain(80); levelSound(S.sounds);
+    if (item && okBtn) { okBtn.textContent = 'Take them home'; okBtn.disabled = true; setTimeout(() => { okBtn.disabled = false; }, 320); }
+  };
   if (reduced || !item) {
     finish();
   } else {
@@ -13364,12 +13390,12 @@ function openHatchReveal(res, charWrap) {
       [5130, 14, false, null],
     ];
     for (const [t, n, shake, snd] of BEATS) {
-      setTimeout(() => { show(n); if (shake) wob(); if (snd) hitSound(S.sounds, snd); }, t);
+      timers.push(setTimeout(() => { show(n); if (shake) wob(); if (snd) hitSound(S.sounds, snd); }, t));
     }
-    setTimeout(() => { if (stage.isConnected) { show(15); stage.classList.add('egg-burst'); hitSound(S.sounds, 'zap'); } }, 5200);
-    setTimeout(() => { if (revealEl.isConnected) finish(); }, 5750);
+    timers.push(setTimeout(() => { if (stage.isConnected) { show(15); stage.classList.add('egg-burst'); hitSound(S.sounds, 'zap'); } }, 5200));
+    timers.push(setTimeout(() => { if (revealEl.isConnected) finish(); }, 5750));
   }
-  $('#hatchOk', wrap2).addEventListener('click', () => history.back());
+  okBtn.addEventListener('click', () => { if (revealed) history.back(); else finish(); });
   if (charWrap) setTimeout(() => renderCharacter(charWrap, 'crates'), 400);
 }
 

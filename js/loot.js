@@ -494,7 +494,7 @@ export async function buyRackItem(artId, currency = 'coins') {
     return { ok: false, reason: 'write', label: aura ? RACK_AURA.name : art.name };
   }
   return { ok: true, label: aura ? RACK_AURA.name : art.name, cost: price, currency,
-    coins: await coins(), dust: await boneDust() };
+    isAura: aura, coins: await coins(), dust: await boneDust() };
 }
 
 /* BUYING FROM GWART'S MENAGERIE.
