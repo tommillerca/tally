@@ -19548,7 +19548,7 @@ async function renderBoneyard(el) {
  * everyone, Pit player or not) puts a migration write on a path that has nothing
  * to do with fighting.
  */
-const HABIT_GRANT_KEY = 'habitBaseGrant_v431';
+const HABIT_GRANT_KEY = 'habitBaseGrant_v471';
 async function habitBaseGrantTp(behavior) {
   const prev = await kvGet(HABIT_GRANT_KEY, null);
   if (prev && typeof prev.tp === 'number') return prev.tp;
