@@ -8071,7 +8071,22 @@ async function openScanner(getMeal) {
     else toast('Enter at least 8 digits');
   });
 
+  /* ONE LOOKUP AT A TIME, WHATEVER FIRES IT.
+     The camera path is safe by construction (scanner.js stops the read loop
+     before it calls onCode), but "Look up" and the miss sheet's Try again are
+     plain buttons: two taps 121ms apart ran two lookups and stacked two
+     identical portion sheets, each with its own working Add. Same eventual cost
+     as the misdirection below, by a different road. The flag is held only for
+     the await window, so Try again still works the moment a sheet is up. */
+  let lookingUp = false;
   async function handleBarcode(code, getMeal) {
+    if (lookingUp) return;
+    lookingUp = true;
+    try { await runBarcodeLookup(code, getMeal); }
+    finally { lookingUp = false; }
+  }
+
+  async function runBarcodeLookup(code, getMeal) {
     scanner.stop();
     $('.scan-hint', wrap)?.setAttribute('hidden', '');
     status.innerHTML = `<span class="plate"><span class="spin" style="display:inline-block;vertical-align:-3px"></span> Looking up ${esc(code)}</span>`;
