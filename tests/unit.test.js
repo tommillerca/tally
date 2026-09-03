@@ -22,7 +22,7 @@ import {
   wardenTier, WARDEN_TIERS,
 } from '../js/spires.js';
 import { parseNutritionText } from '../js/labelparse.js';
-import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
+import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct, fetchOffProductEx } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
 import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins } from '../js/game.js';
 import { STAT_META, STYLES } from '../js/pit.js';
@@ -310,6 +310,19 @@ test('fetchOffProduct retries UPC-A with leading zero', async () => {
   assert.ok(f);
   assert.equal(calls.length, 2);
   assert.ok(calls[1].includes('/0038000138416.json'));
+});
+/* `reached` decides which of two sheets the player sees, and the wrong one has
+   no Try again and offers to create a duplicate custom food. A response object
+   is not an answer: only a 404 or a parsed body is. Both halves matter, so the
+   404 control is asserted alongside the two failures. */
+test('fetchOffProductEx: only a 404 or a parsed body counts as reached', async () => {
+  const off = (fetchFn) => fetchOffProductEx('5000112637922', fetchFn);
+  const notFound = await off(async () => ({ status: 404, ok: false }));
+  assert.equal(notFound.reached, true, '404 is the book saying no such code');
+  const boom = await off(async () => ({ status: 500, ok: false }));
+  assert.equal(boom.reached, false, 'a 500 says nothing about the product');
+  const portal = await off(async () => ({ status: 200, ok: true, json: async () => { throw new SyntaxError('Unexpected token <'); } }));
+  assert.equal(portal.reached, false, 'a captive portal page says nothing either');
 });
 
 // ---- FDC mapper ----
