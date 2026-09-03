@@ -16,7 +16,7 @@ import {
   migrateLegacyEggs, eggProgress, repairEggAnchors, hatchEgg, lifetimeStepsSum,
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, consumeConsumable, VIGOR_DRAUGHT_AMOUNT, redeemCode,
   retireMerchantIfNeeded,
-  boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, slimedGearIds,
+  boneDust, boneDustAdd, disenchantGear, salvagePet, gearDustValue, petDustValue, slimedGearIds,
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
