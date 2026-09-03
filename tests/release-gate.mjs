@@ -478,7 +478,14 @@ const DECLARED = {
   'arena-static-probe.mjs': ['skip', 'a PROBE by its own first line: it measures whether .arena shifts when the action tray changes button count, and prints the numbers. The guard for that behaviour is fight-layout-audit.mjs.'],
   'today-d2-shots.mjs': ['skip', "capture only: the four Today states at 390x844 dark, for review. tests/today-container-audit.mjs is the guard, and it is in FAST."],
   'badges-audit.mjs': ['skip', 'seeds the four Warden badges and shoots the wall for review; a screenshot script, not a regression guard.'],
-  'ledger-voice-audit.mjs': ['skip', 'shoots the ledger copy for reading, into a fixed scratch dir; asserts nothing about layout.'],
+  /* UN-SKIPPED 2026-09-03. Both halves of that note had gone stale: the fixed
+     scratch dir became godmode's shotDir, and it does assert layout, six rows
+     of it. The one that matters is DAY TAIL, which grades that the day ends on
+     the sign-off with the micronutrient line before it, re-anchored in #370 to
+     the day block rather than the page (the promo slot and the log-only line
+     are queued below the whole day on purpose). Verified green twice solo on
+     this tree, on a machine that was NOT quiet, before it was added here. */
+  'ledger-voice-audit.mjs': ['full', 'the ledger speaks in his voice and the day ends on him, not on a lab result.'],
   'small-fixes-audit.mjs': ['skip', 'a one-off batch for three named fixes, kept as the record of how they were verified.'],
   'v279-audit.mjs': ['skip', 'the v279 bug batch, one check per reported bug, kept as the record of that release.'],
   'newart-audit.mjs': ['skip', 'needs a <base> argument and a mode (see tally/CLAUDE.md), so it cannot join a URL-only run list.'],
