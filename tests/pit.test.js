@@ -1,7 +1,7 @@
 // The Pit engine vs the combat math spec's own numbers.
 import assert from 'node:assert/strict';
 import {
-  deriveStats, derived, STYLES, ACTIONS, counterMult, resolveHit, makeFighter,
+  deriveStats, legacyHabitStats, habitGrantPoints, derived, STYLES, ACTIONS, counterMult, resolveHit, makeFighter,
   createFight, actionsFor, applyAction, endTurn, aiTakeTurn,
   simulate, LADDER, CHAMPION, scaleStats, expectedDamage, MISS_CHANCE, allocatedStats, TRAIN_STEP,
   petActionsFor, applyPetAction, dealDamage, armorDR, makePetBody, talentRanks, nodeRanks,
@@ -267,12 +267,31 @@ test('actionsFor: core moves always offered, retired range moves gone, hype gate
 });
 
 // ---- stat derivation ----
-test('deriveStats: fresh ~20, capped at 100, monotonic', () => {
-  const fresh = deriveStats({});
+/* The base is FLAT since R21-P1: history no longer touches it, so what used to
+   be asserted here (monotonic in protein days, capped at 100) is now asserted
+   against legacyHabitStats, which exists only to size the one-time migration.
+   tests/stat-source-audit.mjs is the guard that the live base stays flat. */
+test('deriveStats: the same flat base for everyone', () => {
+  const fresh = deriveStats();
   for (const k of Object.keys(fresh)) assert.equal(fresh[k], 20, k);
   const big = deriveStats({ proteinDays: 999, streak: 999, closes: 999, lifetimeSteps: 99e6, spawns: 999, eggDays: 999, questsDone: 999, variety: 999 });
+  assert.deepEqual(big, fresh, 'history cannot move the base');
+});
+
+test('legacyHabitStats: fresh ~20, capped at 100, monotonic (migration input only)', () => {
+  const fresh = legacyHabitStats({});
+  for (const k of Object.keys(fresh)) assert.equal(fresh[k], 20, k);
+  const big = legacyHabitStats({ proteinDays: 999, streak: 999, closes: 999, lifetimeSteps: 99e6, spawns: 999, eggDays: 999, questsDone: 999, variety: 999 });
   for (const k of Object.keys(big)) assert.equal(big[k], 100, k);
-  assert.ok(deriveStats({ proteinDays: 20 }).power > deriveStats({ proteinDays: 5 }).power);
+  assert.ok(legacyHabitStats({ proteinDays: 20 }).power > legacyHabitStats({ proteinDays: 5 }).power);
+});
+
+test('habitGrantPoints: hands back every stat point the flat base removed', () => {
+  const habit = legacyHabitStats({ proteinDays: 30, streak: 20, closes: 20, lifetimeSteps: 200000 });
+  const tp = habitGrantPoints(habit);
+  const removed = Object.keys(habit).reduce((a, k) => a + Math.max(0, habit[k] - 20), 0);
+  assert.ok(tp * TRAIN_STEP >= removed, `${tp} points must cover ${removed} stat points`);
+  assert.equal(habitGrantPoints(legacyHabitStats({})), 0, 'a fresh account is owed nothing');
 });
 
 // ---- pacing: 200 mid-vs-mid sims should land near the 5-7 turn target ----
