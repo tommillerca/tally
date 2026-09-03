@@ -3,7 +3,12 @@
 import { boot, sleep, shotDir } from './godmode.js';
 const DIR = shotDir('tally-shots');  // machine-local, see godmode shotDir
 const base = process.argv[2] || process.env.URL;
-const { browser, page } = await boot(base);
+/* 'shell', not 'new': on this Mac Page.captureScreenshot never returns under
+   headless 'new', and this suite takes a screenshot. Measured 2026-09-03 on a
+   4-cell probe (headless new|shell x captureBeyondViewport default|false):
+   'new' hit the 45s protocolTimeout on BOTH cbv settings, 'shell' returned in
+   234ms. So the camera was the fault, not the clip. See boot(). */
+const { browser, page } = await boot(base, { headless: process.env.HEADLESS_MODE || 'shell' });
 let bad = 0;
 /* DYING IS WORSE THAN FAILING. This suite crashed inside an evaluate on a selector
    that had been renamed away, so it produced a stack and NOT ONE assertion: the gate
