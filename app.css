@@ -5273,8 +5273,14 @@ body::before {
    crop is given its own box of the rack's proportions and centred in the panel
    rather than re-deriving thirteen origins for a second aspect ratio.
    No drop-shadow: a figure standing on a stage does not float, and the halo on
-   the tiny slots was measured at 6.6x the art's own area (see TINY_SLOTS). */
-.pc-worn { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+   the tiny slots was measured at 6.6x the art's own area (see TINY_SLOTS).
+   IT FILLS THE PANEL ON HEIGHT, NOT ON WIDTH. Measured on the rendered card at
+   390x844: the art panel is 211x282, so a width-fitted 1/0.86 box left 100px of
+   empty plate under the figure with a hard horizontal seam across it where the
+   crop ended. Fitting the height overflows the box sideways instead, and
+   .pc-art already clips it. Every .fit-* crop is centred on its target ink, so
+   what leaves the frame is empty canvas at the edges. */
+.pc-worn { position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%);
   aspect-ratio: 1 / 0.86; overflow: hidden; }
 .pc-worn .bh-anim { position: absolute; inset: 0; }
 .pc-worn .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }

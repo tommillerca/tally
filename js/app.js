@@ -5369,17 +5369,22 @@ const canWear = id => !!(BH_BY_ID[id] && RACK_FIT[BH_BY_ID[id].slot]);
    that into a real tier (192/384) or the master, so the mannequin costs the
    memory it actually draws. NEVER call this without a measured `css`: the census
    caught a surface decoding ~100MB because one caller left the thumb off. */
-/* MEASURED OFF THE RENDERED CARD AT 390x844, not estimated. `.pc-worn` is a
-   1/0.86 box the full width of the art panel, and the crop then scales the 640
-   square on top of that, so the number that decides the tier is
-   panelWidth x maxScale. Measured: the reveal card's panel is 254px wide and the
-   steepest crop in the table is fit-waist's scale(2.8) -> 711 CSS; a boss-loot
-   card's panel is 156px -> 437 CSS. bhTierFor doubles for device pixels, so both
-   land on the 640 master, which is what the shop rack's hero shelf also draws
-   and what the loose PNG cost before this change. Re-measure these if the card
-   or the .fit-* scales move; a stale number here quietly buys a blurry
-   mannequin, which is the exact defect the tier system exists to prevent. */
-const PC_WEAR_CSS = 711, LOOT_WEAR_CSS = 437;
+/* MEASURED OFF THE RENDERED CARD AT 390x844, never estimated. `.pc-worn` is a
+   1/0.86 box the full width of the art panel, and the crop scales the 640 square
+   on top of that, so the number that decides the tier is panelWidth x cropScale.
+   Measured: a reveal card's .pc-worn is 212px wide, a boss-loot card's is 150px,
+   and the steepest crop in the table is fit-waist's scale(2.8). Worst case
+   212 x 2.8 = 594 CSS px.
+   ONE NUMBER, THE WORST CASE, AND IT RESOLVES TO THE MASTER. Being straight
+   about this rather than dressing it up: bhTierFor doubles for device pixels, so
+   594 asks for 1188 and no tier can serve it -- the mannequin on a reveal card
+   draws the 640 master whatever is passed here, and even that is a 0.66x
+   UPSCALE. `thumb` is still passed, and passed honestly, because the tiers are
+   what a smaller consumer of this helper would get and a caller that omits it
+   is how a QA round measured ~100MB of bitmaps on one surface. A per-slot
+   number would be three lines of arithmetic that produce 640 every time, so
+   there is one. Re-measure if the card, the panel or the .fit-* scales move. */
+const PC_WEAR_CSS = 594;
 function wornArtHtml(id, css) {
   const it = BH_BY_ID[id];
   // wpnAura: null -- the player's bought aura must not leak onto a piece they
@@ -15000,10 +15005,9 @@ function packCardHtml(c, { selectable = false } = {}) {
      loose PNG. It is set at the card-building sites rather than derived here
      because only they know whether the thing being revealed is worn at all: a
      crate, a pet, a pile of coins and an ingredient all reach this function too.
-     The measured widths behind PC_WEAR_CSS / LOOT_WEAR_CSS are in app.css beside
-     .pc-worn. Nothing else about the card moves: same rarity frame, same plate,
-     same band. */
-  const art = c.wear && canWear(c.wear) ? wornArtHtml(c.wear, selectable ? LOOT_WEAR_CSS : PC_WEAR_CSS)
+     Nothing else about the card moves: same rarity frame, same plate, same
+     band. */
+  const art = c.wear && canWear(c.wear) ? wornArtHtml(c.wear, PC_WEAR_CSS)
     : c.imgSrc ? `<canvas class="pc-canvas" width="600" height="600" data-art="${esc(c.imgSrc)}"></canvas>`
     : `<div class="pc-icon">${c.iconHtml || ''}</div>`;
   const sparks = RAR_ORDER.indexOf(c.rarity) >= 3
@@ -15376,6 +15380,13 @@ function wirePackArtFallback(scope) {
    see those states, and it never exists for a player. */
 if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__packReveal = (cards, opts) => openPackReveal(cards, opts || {});
+  /* THE APP'S OWN CARD BUILDERS, so the mannequin audit grades what a player
+     gets rather than a card object typed into the test. A hand-built
+     `{ wear: 'G3' }` would agree with the renderer by construction and stay
+     green through a builder that stopped setting `wear` at all -- which is the
+     regression worth catching, since that is how the loose PNG comes back. */
+  window.__gearCard = id => GEAR_BY_ID[id] ? gearToCard(GEAR_BY_ID[id]) : null;
+  window.__crateCard = row => crateResultToCard(row);
   /* A den fight with TWO targets, the case Tom has reported three times ("fighting
      a boss den with two enemy targets doesn't have a clear health bar for the
      second target at all"). It needs 5 den wins AND standing inside a den's
