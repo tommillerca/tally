@@ -936,6 +936,17 @@ a { color: var(--accent); text-decoration: none; }
 .pot-serve { width: auto; padding: 5px 12px; font-size: 12px; }
 .crate-row.transmute { border: 1px solid rgba(180,140,255,.4); background: rgba(180,140,255,.07); border-radius: 12px; }
 .crate-row.transmute.lack { opacity: .72; }
+/* THE LABEL WAS SPILLING OUT OF ITS OWN STICKER (Tom, device pass). Nothing on
+   this row can shrink except the button: the copy column is floored by the tmx
+   strip (seven 30px sockets plus gaps, none of them shrinkable), so at 390px the
+   button is handed less width than the word "Transmute", which is one unbreakable
+   word and paints straight over its own border. The strip and the label are both
+   incompressible, so the row gets a second line instead of squeezing one of them.
+   flex-wrap only spends that line when the two genuinely do not fit, so a wider
+   screen or a short label ("20h 4m") still reads as one row, and a longer label
+   or larger Dynamic Type drops the button below rather than overflowing it. */
+.crate-row.transmute { flex-wrap: wrap; }
+.crate-row.transmute > .btn { flex: 0 0 auto; margin-left: auto; }
 .cook-bar { height: 7px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin: 6px 0 4px; }
 .cook-bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #ff9628, #8bd450); transition: width 0.8s linear; }
 .cauldron-serve { grid-column: 1 / -1; width: 100%; }
