@@ -34,6 +34,11 @@
  *                 three answers, boots the app for real, and reads BOTH the boot
  *                 toast and the Settings row. Red pre-fix: nothing is said and
  *                 all three Settings rows are identical.
+ *                 The FOURTH answer is the one that lied rather than went quiet:
+ *                 a captive portal's 200 carrying login HTML. pushBackup read
+ *                 `r.ok` alone, so it stamped backupAt and cleared any standing
+ *                 failure for a save that never left the phone. Red pre-fix:
+ *                 backupAt is stamped and the row reads "last backup just now".
  *
  * PHASE 4 IS NOT A ?demo PAGE, for the same reason cloud-restore-silent-audit is
  * not: app.js sets NOSOCIAL = S.demo || navigator.webdriver === true, so under a
@@ -395,7 +400,11 @@ async function cloudScenario(mode, ts) {
   const t = await watchToast(cloud);
   await cloud.evaluate(() => { location.hash = '#/settings'; });
   await sleep(2600);
-  return { hits: pushHits, toast: t.best ? t.best.text : '', row: await cloudRow() };
+  /* backupAt IS THE CLAIM ITSELF, not decoration on the row: the Settings copy
+     is derived from it, so reading both is what separates "the row happens to
+     read badly" from "the app recorded a backup that never happened". */
+  const at = await cloud.evaluate(async () => (await (await import('/js/db.js')).kvGet('backupAt', 0)) || 0);
+  return { hits: pushHits, toast: t.best ? t.best.text : '', row: await cloudRow(), at };
 }
 
 /* One warm-up boot before the measured ones, so the fresh-install one-shots
@@ -407,13 +416,21 @@ const healthy = await cloudScenario({ status: 200, body: '{"ok":true,"updatedAt"
 const tooBig = await cloudScenario({ status: 413, body: '{"error":"backup too large for the database","code":"too-large","bytes":2300000}' }, () => Date.now());
 // the device clock is three days ahead: the server's own instant is three days behind ours
 const skewed = await cloudScenario({ status: 401, body: '{"error":"stale timestamp"}' }, () => Date.now() - 3 * 86400e3);
+/* A 200 THAT IS NOT THE SERVER. A captive portal, a hotel proxy or a corporate
+   interstitial answers every request 200 with its own login HTML, and pushBackup
+   used to read `r.ok` and nothing else, so this landed as a COMPLETED backup:
+   backupAt stamped to now, any standing failure cleared, Settings quoting a
+   fresh age for a save that never left the phone. Not a network failure and not
+   a success, so it gets the generic 'bad-body' line, which is the only honest
+   thing to say about a body nobody can name. */
+const portal = await cloudScenario({ status: 200, body: '<!doctype html><html><body>Sign in to continue</body></html>' }, () => Date.now());
 
-ok('CLOUD SAMPLE all three scenarios actually pushed (zero intercepted PUTs means this measured NOTHING)',
-  healthy.hits > 0 && tooBig.hits > 0 && skewed.hits > 0,
-  `healthy=${healthy.hits} too-large=${tooBig.hits} clock=${skewed.hits}`);
-ok('CLOUD SAMPLE the Settings row rendered and is visible in all three states',
-  [healthy, tooBig, skewed].every(s => s.row && s.row.w > 0 && s.row.h > 0 && s.row.text),
-  JSON.stringify([healthy.row, tooBig.row, skewed.row]));
+ok('CLOUD SAMPLE all four scenarios actually pushed (zero intercepted PUTs means this measured NOTHING)',
+  healthy.hits > 0 && tooBig.hits > 0 && skewed.hits > 0 && portal.hits > 0,
+  `healthy=${healthy.hits} too-large=${tooBig.hits} clock=${skewed.hits} portal=${portal.hits}`);
+ok('CLOUD SAMPLE the Settings row rendered and is visible in all four states',
+  [healthy, tooBig, skewed, portal].every(s => s.row && s.row.w > 0 && s.row.h > 0 && s.row.text),
+  JSON.stringify([healthy.row, tooBig.row, skewed.row, portal.row]));
 
 /* Scoped to the CLASS under test rather than to "any toast at all": this page is
    a fresh install and the app legitimately has its own first-run things to say.
@@ -425,6 +442,13 @@ ok('CLOUD HEALTHY a good push says nothing about the backup',
 ok('CLOUD HEALTHY the Settings row reports an ON, working backup',
   !!healthy.row && /^on\b/i.test(healthy.row.text) && !/fail|blocked/i.test(healthy.row.text),
   `"${healthy.row && healthy.row.text}"`);
+/* THE CONTROL THAT OUTRANKS EVERY ROW BELOW IT. Demanding a body from PUT
+   /backup is one keystroke away from refusing the answer the server really
+   sends, and a fix that quietly stops real backups is far worse than the bug it
+   fixes. So: the healthy scenario's own `{ok:true,updatedAt}` still stamps the
+   mark the rest of this phase is about. */
+ok('CLOUD HEALTHY CONTROL a real `{ok:true}` push still records the backup (a body check must not refuse the server)',
+  healthy.at > 0, `backupAt = ${healthy.at || 'never stamped'}`);
 
 ok('CLOUD TOO-LARGE the failure SPEAKS (a 413 used to be a silent `return false`)',
   !!tooBig.toast, tooBig.toast ? `"${tooBig.toast}"` : 'no visible toast in 11s');
@@ -448,10 +472,27 @@ ok('CLOUD CLOCK the Settings row DIFFERS from both the healthy and the too-large
     && skewed.row.text !== healthy.row.text && skewed.row.text !== tooBig.row.text
     && /clock/i.test(skewed.row.text),
   `"${skewed.row && skewed.row.text}"`);
+/* THE TWO HALVES OF THE LIE, ASSERTED SEPARATELY. The mark is what the app
+   believes and the row is what it says, and pre-fix BOTH were wrong: a portal's
+   200 stamped backupAt to now and Settings then read "On · last backup just
+   now". Either one alone would let a half-fix pass. */
+ok('CLOUD PORTAL a 200 that is not the server does NOT record a backup',
+  portal.at === 0, `backupAt = ${portal.at || 'not stamped'}`);
+ok('CLOUD PORTAL the Settings row does not claim a fresh backup, and DIFFERS from the healthy one',
+  !!portal.row && !!healthy.row && portal.row.text !== healthy.row.text
+    && !/last backup (just now|\d+h ago)/i.test(portal.row.text),
+  `"${portal.row && portal.row.text}"`);
+/* Named, not silent, and generic on purpose: nobody can tell a player what a
+   captive portal is, but "it did not go through and it keeps retrying" is true
+   and actionable, which is the whole point of this phase. */
+ok('CLOUD PORTAL the row says the push did not go through',
+  !!portal.row && /did not go through/i.test(portal.row.text), `"${portal.row && portal.row.text}"`);
+
 ok('CLOUD HONEST no message claims the player has lost data',
-  ![tooBig.toast, skewed.toast, tooBig.row && tooBig.row.text, skewed.row && skewed.row.text]
+  ![tooBig.toast, skewed.toast, portal.toast, tooBig.row && tooBig.row.text, skewed.row && skewed.row.text,
+    portal.row && portal.row.text]
     .some(s => /lost your|data (was )?lost|deleted|gone/i.test(s || '')),
-  'checked both toasts and both rows');
+  'checked all three toasts and all three rows');
 
 /* ========== 5. THE BOOT TOAST STAYS QUIET WHEN NOTHING FAILED ==========
  *

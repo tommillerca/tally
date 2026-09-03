@@ -248,11 +248,34 @@ wallRow('WALL maskWebdriver refuses the production API host',
 wallRow('WALL CONTROL and lets a loopback request through',
   loopback.acted === 'continue', `${loopback.url()} -> ${loopback.acted || 'nothing at all'}`);
 
-/* Every OTHER spelling of the mask is the drift this section exists to stop. */
-const MASK_RE = /defineProperty\(\s*navigator\s*,\s*['"]webdriver['"]/;
+/* Every OTHER spelling of the mask is the drift this section exists to stop.
+   WIDENED 2026-09-02, from `defineProperty\(\s*navigator\s*,` alone. That one
+   spelling is what godmode.js happens to use, and the row was written by reading
+   godmode rather than by asking what a person writes: the Playwright
+   addInitScript idiom is `Object.defineProperty(Navigator.prototype,
+   'webdriver', ...)`, which is what the scratch probes on this machine use, and
+   it sailed past. A file spelled that way installs the mask by hand, gets past
+   the egress wall with it, and the row underneath still says all masks go
+   through godmode. Zero files in tests/ used it, so nothing leaked; the promise
+   was the thing that was broken.
+   The receiver alternation covers the two objects the property can live on and
+   the two ways a script reaches the global; the second pattern covers `delete`,
+   which is the other idiom that really works (webdriver is an accessor ON the
+   prototype, so deleting it there removes the getter).
+   DELIBERATELY NOT COVERED, because a lint that cries wolf gets deleted and
+   these cannot be told from ordinary code cheaply: a variable alias (`const n =
+   navigator; ... defineProperty(n, ...)`), a computed key (`['web' + 'driver']`),
+   Reflect.defineProperty, and defineProperties with a webdriver key in the
+   descriptor object. Anyone reaching for those is working around the wall on
+   purpose, and this row has never been a fence against that. It is a ratchet
+   against the spelling somebody pastes in without knowing the wall exists. */
+const MASK_RES = [
+  /defineProperty\(\s*(?:(?:window|globalThis)\.)?(?:navigator|Navigator\.prototype)\s*,\s*['"]webdriver['"]/,
+  /delete\s+(?:(?:window|globalThis)\.)?(?:navigator|Navigator\.prototype)\.webdriver/,
+];
 const testFiles = readdirSync(path.join(ROOT, 'tests')).filter(f => /\.(mjs|js)$/.test(f));
 const inline = testFiles.filter(f => f !== 'godmode.js' && f !== path.basename(SELF)
-  && MASK_RE.test(readFileSync(path.join(ROOT, 'tests', f), 'utf8')));
+  && MASK_RES.some(re => re.test(readFileSync(path.join(ROOT, 'tests', f), 'utf8'))));
 wallRow('MASK no audit installs the webdriver mask by hand',
   inline.length === 0, inline.length
     ? `${inline.length}: ${inline.join(', ')}. Call maskWebdriver(page) from godmode.js instead, so the mask cannot arrive without the wall.`
