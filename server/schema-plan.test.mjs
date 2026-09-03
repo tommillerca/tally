@@ -38,6 +38,14 @@ function test(name, fn) {
   catch (e) { console.log(`FAIL  ${name}\n      ${e.message}`); failed++; }
 }
 
+/* test() is synchronous and would report a REJECTED PROMISE AS A PASS, so the
+   async cases at the bottom of this file use this instead and await it at the
+   call site. A guard that cannot go red is not a guard. */
+async function atest(name, fn) {
+  try { await fn(); console.log(`  ok  ${name}`); passed++; }
+  catch (e) { console.log(`FAIL  ${name}\n      ${e.message}`); failed++; }
+}
+
 const db = new DatabaseSync(':memory:');
 db.exec(schema);
 
@@ -822,6 +830,183 @@ test('every write of players.profile also writes the materialised rank key', () 
     assert.ok(/\blevel\s*=/.test(w) && /\bbadges\s*=/.test(w),
       `this write replaces the snapshot without updating the board's rank key: ${oneLine}`);
   }
+});
+
+/* ===========================================================================
+   2026-09-03: SURVEY V2. THE ROW GROWS A FORM AND A JSON ANSWER BLOB.
+   ===========================================================================
+   `leads` was one fixed column per v1 question, so every change of question was
+   a migration. form/answers/ctx end that. Four things can break here and none
+   of them would show up anywhere else in this directory:
+
+     1. THE TWO DESCRIPTIONS DRIFT. A production database only ever gets the
+        migration; every suite here builds schema.sql. A column in one and not
+        the other means the INSERT throws on exactly one of the two databases,
+        and it is the one with the players on it.
+     2. THE INSERT AND THE SCHEMA DISAGREE. POST /survey names fifteen columns
+        now. A typo there is a 500 on submit and no source-reading test can see
+        it; this one RUNS the statement.
+     3. THE BLOB GOES IN UNREADABLE. The reason the cap refuses instead of
+        truncating is that a sliced JSON string can never be read back, so the
+        readback is asserted through json_extract, which is how these rows will
+        actually be queried.
+     4. THE DASHBOARD AVERAGES TWO SURVEYS TOGETHER. Different questions, same
+        column: one list of both is a number with no meaning.
+
+   No worker and no wrangler for any of it: the real statements are lifted out
+   of src/index.js and run against schema.sql in local SQLite, and dashboard.html
+   is rendered by running its own script. The HTTP half of S1 (the 400 at the
+   cap, the rate limit) is in security.test.mjs, which needs a running worker.
+   =========================================================================== */
+test('the survey v2 migration and schema.sql agree on leads', () => {
+  const migration = readFileSync(join(HERE, 'migrations', '2026-09-03-survey-v2.sql'), 'utf8');
+  for (const col of ['form', 'answers', 'ctx']) {
+    assert.ok(new RegExp(`ALTER TABLE leads ADD COLUMN ${col}\\b`).test(migration),
+      `the migration never adds leads.${col}`);
+    assert.ok(new RegExp(`^\\s*${col} TEXT`, 'm').test(schema),
+      `schema.sql does not declare leads.${col}, so a fresh database and a migrated one are different shapes`);
+  }
+});
+
+/* The real INSERT and the real dashboard SELECT, lifted out of the route rather
+   than retyped, so a column added to one and not the other goes red HERE rather
+   than on submit. */
+const surveyInsert = (/INSERT INTO leads \([^)]*\)\s*VALUES \([^)]*\)/.exec(source) || [])[0];
+const leadsSelect = (/SELECT l\.name[\s\S]*?LIMIT 200/.exec(source) || [])[0];
+const runnable = sql => sql.replace(/\$\{nin\('l\.device'\)\}/, "l.device NOT IN ('')");
+
+test('a v1 body still inserts with form NULL, and a v2 body reads back through json_extract', () => {
+  assert.ok(surveyInsert, 'the leads INSERT is gone from src/index.js; re-read POST /survey and update this file');
+  const ldb = new DatabaseSync(':memory:');
+  ldb.exec(schema);
+  const ins = ldb.prepare(surveyInsert);
+  const now = Date.now();
+  /* A v1 client sends no form, no answers, no ctx. It must still land, and it
+     must land as NULL: every row written before today is NULL and means v1, and
+     two encodings of one form is a bucket the dashboard would split in half. */
+  ins.run('dev-v1', null, null, 'Tom', 't@example.com', 1, 'nice', 'more pets', 'pit,log', null, null, null, '1.0', 'Vancouver', now);
+  const v1 = ldb.prepare('SELECT form, answers, ctx, feedback, most_wanted FROM leads WHERE device = ?').get('dev-v1');
+  assert.equal(v1.form, null, 'a v1 body did not land with form NULL');
+  assert.equal(v1.answers, null, 'a v1 body invented an answers blob');
+  assert.equal(v1.ctx, null, 'a v1 body invented a ctx blob');
+  assert.equal(v1.feedback, 'nice', 'a v1 field stopped working');
+  assert.equal(v1.most_wanted, 'more pets', 'a v1 field stopped working');
+
+  const answers = { q1: 'pit', q2: ['streak', 'pets'], q5: 'definitely', q6: 'too much tapping' };
+  ins.run('dev-v2', null, null, null, null, 0, null, null, null, 'v2',
+    JSON.stringify(answers), JSON.stringify({ days: 12, level: 7 }), '1.0', 'Vancouver', now);
+  /* json_extract is the point. It is how the blob will be queried and it only
+     works on a string that is still valid JSON, which is why the route refuses
+     an over-cap payload instead of slicing it: a truncated blob would answer
+     NULL to every one of these, forever, in a row nothing prunes for a year. */
+  const got = ldb.prepare(`SELECT form,
+      json_extract(answers, '$.q1') q1,
+      json_extract(answers, '$.q2[1]') q2b,
+      json_extract(answers, '$.q5') q5,
+      json_extract(ctx, '$.level') lvl
+    FROM leads WHERE device = ?`).get('dev-v2');
+  assert.equal(got.form, 'v2', 'the form slug did not land');
+  assert.equal(got.q1, 'pit');
+  assert.equal(got.q2b, 'pets', 'a multi-select answer did not survive as an array');
+  assert.equal(got.q5, 'definitely');
+  assert.equal(got.lvl, 7, 'the silent context did not land');
+  ldb.close();
+});
+
+/* Run dashboard.html's own script over a leads array and return what it painted
+   into #leadsBox. The page is one <script> with no imports, so a four-method DOM
+   stub is enough, and this grades the SHIPPED file rather than a copy of its
+   logic. getElementById only finds ids the page has actually WRITTEN, so a case
+   cannot assert against a control the render never emitted. */
+async function renderLeads(leads, form = null) {
+  const page = readFileSync(join(HERE, 'dashboard.html'), 'utf8');
+  const src = /<script>([\s\S]*?)<\/script>\s*<\/body>/.exec(page)[1];
+  const nodes = {};
+  const make = id => (nodes[id] = { id, value: '', innerHTML: '', textContent: '', onclick: null, onchange: null });
+  for (const id of ['out', 'api', 'token', 'go']) make(id);
+  const drawn = () => Object.values(nodes).map(n => n.innerHTML).join('');
+  const document = {
+    querySelector: s => nodes[s.replace(/^#/, '')] || make(s),
+    getElementById: id => nodes[id] || (drawn().includes(`id="${id}"`) ? make(id) : null),
+  };
+  const payload = {
+    windowDays: 60, statsWindowDays: 14, totalDevices: 1, dau: 1, wau: 1, totalEvents: 1,
+    byName: [{ name: 'a', n: 1 }], activeByDay: [{ day: '2026-09-01', n: 1 }], newByDay: [],
+    screenTime: [], featureOpens: [], featureTime: [], playMinutes: 1, sessions: 1, avgSessionMin: 1,
+    returnRate: 0.5, testers: [], byCountry: [], byCity: [], reports: [], leads, errors: [],
+    errorsByBuild: [], vault: {}, generatedAt: Date.now(),
+  };
+  const fetchStub = async u => (String(u).includes('/admin/prune') ? { ok: false } : { ok: true, json: async () => payload });
+  const app = new Function('document', 'localStorage', 'navigator', 'fetch', src + '\nreturn { load };')(
+    document, {}, { clipboard: { writeText: async () => {} } }, fetchStub);
+  nodes.api.value = 'http://x'; nodes.token.value = 't';
+  await app.load();
+  if (form) {
+    assert.ok(nodes.leadForm, 'dashboard.html painted no form filter at all');
+    nodes.leadForm.value = form; nodes.leadForm.onchange();
+  }
+  assert.ok(nodes.leadsBox, 'dashboard.html painted no #leadsBox at all');
+  // asserted on TEXT, so a change of markup is not a false red
+  return nodes.leadsBox.innerHTML.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+}
+
+await atest('a seeded v2 lead reaches the dashboard payload with its answers parsed', async () => {
+  assert.ok(leadsSelect, 'the dashboard leads SELECT is gone from src/index.js; re-read /stats and update this file');
+  const ldb = new DatabaseSync(':memory:');
+  ldb.exec(schema);
+  const now = Date.now();
+  const answers = { q1: 'pit', q2: ['streak'], q3: ['pit'], q3text: 'The Pit rules', q4: 'spires', q5: 'probably', q6: 'too much tapping' };
+  const ins = ldb.prepare(surveyInsert);
+  ins.run('dev-seed', null, null, 'Seed', null, 0, null, null, null, 'v2', JSON.stringify(answers), '{}', '1.0', 'Vancouver', now);
+  // one pre-v2 row, so the COALESCE that makes NULL read as v1 is exercised
+  ins.run('dev-old', null, null, 'Old', null, 0, 'nice', null, null, null, null, null, '1.0', 'x', now - 1);
+  const rows = ldb.prepare(runnable(leadsSelect)).all();
+  assert.equal(rows.length, 2, 'the seeded leads did not come back at all');
+  const seeded = rows.find(r => r.name === 'Seed');
+  assert.ok(seeded, 'the v2 lead is missing from the payload');
+  assert.equal(seeded.form, 'v2', 'the payload does not carry the form');
+  assert.deepEqual(JSON.parse(seeded.answers), answers, 'the answers blob did not survive the round trip');
+  assert.equal(rows.find(r => r.name === 'Old').form, 'dayone',
+    'a pre-v2 row did not COALESCE to dayone, so the dashboard would grow a third, nameless bucket');
+  ldb.close();
+
+  /* AND THE PAGE ACTUALLY RENDERS IT. A correct payload is half of S2; the
+     other half is dashboard.html tallying it, and a tally that divides by the
+     wrong n is a plausible-looking wrong number. */
+  const painted = await renderLeads(rows);
+  assert.match(painted, /Still playing in a month: 100% \(n=1\)/,
+    'the Q5 line is missing, or it counted the v1 row, which never answered Q5');
+  assert.match(painted, /Why did you open the app today\?[\s\S]{0,60}n=1/, 'Q1 has no tally');
+  assert.match(painted, /too much tapping/, 'the Q6 free text is not listed');
+  assert.ok(!/nice/.test(painted), 'a v1 answer leaked into the v2 tally');
+});
+
+await atest('the dashboard form filter keeps v1 and v2 apart', async () => {
+  const now = Date.now();
+  const leads = [
+    { form: 'v2', name: 'New', answers: JSON.stringify({ q1: 'pit', q5: 'definitely' }), ctx: '{}', ts: now },
+    { form: 'dayone', name: 'Old', feedback: 'nice', mostWanted: 'more pets', features: 'pit', ts: now - 1 },
+  ];
+  const v2 = await renderLeads(leads);
+  assert.match(v2, /Still playing in a month/, 'the v2 view is not the v2 view');
+  assert.ok(!/more pets/.test(v2), 'a v1 card rendered inside the v2 tally');
+  const v1 = await renderLeads(leads, 'dayone');
+  assert.match(v1, /more pets/, 'switching the filter to v1 did not bring the v1 cards back');
+  assert.ok(!/Still playing in a month/.test(v1), 'the v2 tally survived a switch to v1');
+  /* THE COUNT, NOT THE RENDERER. Which renderer runs is decided by the filter's
+     VALUE, and that still looks right when the filter passes every row through:
+     an earlier version of this case stayed green against a build with the
+     filter deleted. n is the state that actually differs. */
+  assert.match(v1, /\b1 response\b/, 'the v1 view counted a v2 row, so the filter is not filtering');
+});
+
+/* A malformed blob must cost one card, not the page. answers is written by a
+   client and read a year later; one bad row taking the whole dashboard down is
+   how a data bug becomes an outage. */
+await atest('an unparseable answers blob does not take the dashboard down', async () => {
+  const painted = await renderLeads([{ form: 'v2', name: 'x', answers: '{not json', ctx: '{}', ts: Date.now() }]);
+  assert.match(painted, /Why did you open the app today\?/, 'the page did not render at all');
+  assert.match(painted, /nobody answered/, 'a garbage blob was counted as an answer');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
