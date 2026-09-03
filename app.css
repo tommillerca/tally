@@ -6298,6 +6298,17 @@ body::before {
    someone who does not think of themselves as a gamer; the mechanics are folded so
    they are available without being homework. */
 .faq-card { border-color: rgba(124, 196, 255, .35); }
+/* CLOSED, THE CARD WAS A FRAME AROUND A CONTAINER (Tom, device pass: "not centred
+   right within a larger pill that it likely doesnt need the border of"). .bsect
+   has no padding, so the pill sat flush against the frame's top and sides with
+   the card's only spacing underneath it, and .bsect's overflow:hidden clipped the
+   pill's round ends against the card's 16px corners: two borders, 1px apart,
+   drawing the same box badly. Shut, the pill IS the control and needs nothing
+   around it. Open, there is a body to group, so the card comes back. The border
+   is made transparent rather than removed, and no margin is touched, so every
+   box on the tab keeps the position it has today and opening the card does not
+   shift by the 1px the frame occupies. */
+.faq-card:not([open]) { border-color: transparent; background: none; overflow: visible; }
 .faq-card > summary .note { color: var(--protein); }
 .faq-style { display: flex; gap: 11px; align-items: flex-start; padding: 10px 2px; border-bottom: 1px solid var(--line); }
 .faq-style:last-of-type { border-bottom: none; }
