@@ -936,6 +936,17 @@ a { color: var(--accent); text-decoration: none; }
 .pot-serve { width: auto; padding: 5px 12px; font-size: 12px; }
 .crate-row.transmute { border: 1px solid rgba(180,140,255,.4); background: rgba(180,140,255,.07); border-radius: 12px; }
 .crate-row.transmute.lack { opacity: .72; }
+/* THE LABEL WAS SPILLING OUT OF ITS OWN STICKER (Tom, device pass). Nothing on
+   this row can shrink except the button: the copy column is floored by the tmx
+   strip (seven 30px sockets plus gaps, none of them shrinkable), so at 390px the
+   button is handed less width than the word "Transmute", which is one unbreakable
+   word and paints straight over its own border. The strip and the label are both
+   incompressible, so the row gets a second line instead of squeezing one of them.
+   flex-wrap only spends that line when the two genuinely do not fit, so a wider
+   screen or a short label ("20h 4m") still reads as one row, and a longer label
+   or larger Dynamic Type drops the button below rather than overflowing it. */
+.crate-row.transmute { flex-wrap: wrap; }
+.crate-row.transmute > .btn { flex: 0 0 auto; margin-left: auto; }
 .cook-bar { height: 7px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin: 6px 0 4px; }
 .cook-bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #ff9628, #8bd450); transition: width 0.8s linear; }
 .cauldron-serve { grid-column: 1 / -1; width: 100%; }
@@ -6287,6 +6298,17 @@ body::before {
    someone who does not think of themselves as a gamer; the mechanics are folded so
    they are available without being homework. */
 .faq-card { border-color: rgba(124, 196, 255, .35); }
+/* CLOSED, THE CARD WAS A FRAME AROUND A CONTAINER (Tom, device pass: "not centred
+   right within a larger pill that it likely doesnt need the border of"). .bsect
+   has no padding, so the pill sat flush against the frame's top and sides with
+   the card's only spacing underneath it, and .bsect's overflow:hidden clipped the
+   pill's round ends against the card's 16px corners: two borders, 1px apart,
+   drawing the same box badly. Shut, the pill IS the control and needs nothing
+   around it. Open, there is a body to group, so the card comes back. The border
+   is made transparent rather than removed, and no margin is touched, so every
+   box on the tab keeps the position it has today and opening the card does not
+   shift by the 1px the frame occupies. */
+.faq-card:not([open]) { border-color: transparent; background: none; overflow: visible; }
 .faq-card > summary .note { color: var(--protein); }
 .faq-style { display: flex; gap: 11px; align-items: flex-start; padding: 10px 2px; border-bottom: 1px solid var(--line); }
 .faq-style:last-of-type { border-bottom: none; }
@@ -7035,15 +7057,25 @@ body::before {
 }
 .map-topbar small { display: block; font-size: var(--fs-1); color: var(--text-3); margin-top: 3px; }
 .map-topbar small b { color: var(--accent); font-weight: 800; }
+/* 44px, not 38: these are the only two controls on the Boneyard and both were
+   under the comfortable touch target. */
 .map-ctl {
-  flex: none; width: 38px; height: 38px; border-radius: 11px;
+  flex: none; width: 44px; height: 44px; border-radius: 11px;
   background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   display: grid; place-items: center; color: var(--text);
 }
 .map-ctl svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .map-ctl .bhi svg, .map-ctl svg.bhi { stroke: none; }
-/* the legend hangs off the top bar now, not off a floating bubble */
-.map-legend { top: calc(var(--sat, 0px) + 66px); left: auto; right: 12px; border: 2px solid var(--ink); box-shadow: var(--sh); }
+/* THE MAP KEY WORE ITS PURPOSE AS AN 18px PICTURE (Tom, device pass: "too small
+   and not intuitive for a player to click and see what it is"). A map badge on a
+   map screen says nothing about opening anything, so the control says the word.
+   Same plate, same ink, same 44px height as its neighbour: only wider, and the
+   word takes the type the other small buttons on the app use. */
+.map-ctl.map-key { width: auto; padding: 0 12px; display: flex; gap: 7px; }
+.map-key .mk-lbl { font-family: var(--display); font-weight: 400; font-size: var(--fs-2); letter-spacing: .06em; text-transform: uppercase; }
+/* the legend hangs off the top bar now, not off a floating bubble. The offset
+   tracks the bar's height, which the 44px controls raised by 3px. */
+.map-legend { top: calc(var(--sat, 0px) + 69px); left: auto; right: 12px; border: 2px solid var(--ink); box-shadow: var(--sh); }
 
 /* one action card: what is nearest, how far, and the verb. Replaces the pill
    readout AND the separately floating Collect button. */
