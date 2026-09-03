@@ -17,7 +17,7 @@
 // Nothing here can kill a crop or lose a seed. Missing the watering window costs
 // you the top yield, never the plant.
 
-import { kvGet, kvSet, kvUpdate } from './db.js';
+import { kvGet, kvUpdate } from './db.js';
 import { dateKey } from './nutrition.js';
 import { INGREDIENTS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, grantIngredient, ingredients } from './cooking.js';
 
@@ -58,7 +58,19 @@ function migrate(rawIn) {
   return g;
 }
 async function read() { return migrate(await kvGet('garden', null)); }
-async function write(g) { await kvSet('garden', g); }
+/* EVERY MUTATION IS ONE TRANSACTION, because harvestPlot and clearGarden claim
+   beds on this same row through kvUpdate. A mutator that read the garden, then
+   wrote the WHOLE record back, put a crop straight back in the bed a harvest
+   had just emptied, and the same crop could be taken twice. `fn` gets the
+   migrated garden and mutates it in place; return false to write nothing, which
+   is how a refusal (no seed, bed occupied, already watered) says it took
+   nothing. migrate is pure so it can run in here; nothing may await. */
+function mutate(fn) {
+  return kvUpdate('garden', (raw) => {
+    const g = migrate(raw);
+    return fn(g) === false ? undefined : g;
+  }, null);
+}
 
 /* ---------- seeds ---------- */
 export async function seeds() { return (await read()).seeds; }
@@ -68,10 +80,9 @@ export async function seedCount(g) {
 }
 export async function grantSeed(id, n = 1) {
   if (!SEED_IDS.includes(id) || n <= 0) return 0;
-  const g = await read();
-  g.seeds[id] = (g.seeds[id] || 0) + n;
-  await write(g);
-  return g.seeds[id];
+  let out = 0;
+  await mutate(g => { out = g.seeds[id] = (g.seeds[id] || 0) + n; });
+  return out;
 }
 // a map spawn sometimes also drops a seed of what it yielded (walking stays the
 // best seed source, which is the point)
@@ -102,22 +113,27 @@ export async function compostIngredient(id, now = Date.now(), rand = Math.random
   // spend the ingredient first, then bank the seeds, so a mid-write failure can
   // only ever cost the player nothing rather than duplicating
   await grantIngredient(id, -1);
-  const g = await read();
-  g.seeds[id] = (g.seeds[id] || 0) + n;
-  g.composts = { date: dateKey(new Date(now)), used: (g.composts.date === dateKey(new Date(now)) ? g.composts.used : 0) + 1 };
-  await write(g);
-  return { ok: true, id, seeds: n, left: COMPOSTS_PER_DAY - g.composts.used };
+  const today = dateKey(new Date(now));
+  let used = 0;
+  await mutate(g => {
+    g.seeds[id] = (g.seeds[id] || 0) + n;
+    used = (g.composts.date === today ? g.composts.used : 0) + 1;
+    g.composts = { date: today, used };
+  });
+  return { ok: true, id, seeds: n, left: COMPOSTS_PER_DAY - used };
 }
 
 /* ---------- plots ---------- */
 export function plotPrice(owned) { return owned >= PLOTS_MAX ? null : PLOT_PRICES[owned - PLOTS_FREE]; }
 export async function addPlot() {   // caller charges the coins; this only grows the bed count
-  const g = await read();
-  if (g.plotsOwned >= PLOTS_MAX) return g.plotsOwned;
-  g.plotsOwned += 1;
-  g.plots.push(null);
-  await write(g);
-  return g.plotsOwned;
+  let owned = 0;
+  await mutate(g => {
+    owned = g.plotsOwned;
+    if (owned >= PLOTS_MAX) return false;
+    g.plotsOwned = owned += 1;
+    g.plots.push(null);
+  });
+  return owned;
 }
 
 /* SETTLE THE GARDEN, in one transaction. Empties the pouch and every bed and
@@ -163,27 +179,31 @@ export async function cropsReady(now = Date.now()) { return (await gardenState(n
 
 export async function plantSeed(id, slot = null, now = Date.now()) {
   if (!SEED_IDS.includes(id)) return { ok: false, reason: 'unknown' };
-  const g = await read();
-  if (!(g.seeds[id] > 0)) return { ok: false, reason: 'seeds' };
-  const idx = slot == null ? g.plots.findIndex(p => !p) : slot;
-  if (idx < 0 || idx >= g.plots.length) return { ok: false, reason: 'full' };
-  if (g.plots[idx]) return { ok: false, reason: 'occupied' };
-  g.seeds[id] -= 1;
-  if (g.seeds[id] <= 0) delete g.seeds[id];
-  g.plots[idx] = { ing: id, plantedAt: now, readyAt: now + growMinutes(id) * 60e3, watered: false };
-  await write(g);
-  return { ok: true, slot: idx, readyAt: g.plots[idx].readyAt };
+  let out = { ok: false, reason: 'seeds' };
+  await mutate(g => {
+    if (!(g.seeds[id] > 0)) { out = { ok: false, reason: 'seeds' }; return false; }
+    const idx = slot == null ? g.plots.findIndex(p => !p) : slot;
+    if (idx < 0 || idx >= g.plots.length) { out = { ok: false, reason: 'full' }; return false; }
+    if (g.plots[idx]) { out = { ok: false, reason: 'occupied' }; return false; }
+    g.seeds[id] -= 1;
+    if (g.seeds[id] <= 0) delete g.seeds[id];
+    g.plots[idx] = { ing: id, plantedAt: now, readyAt: now + growMinutes(id) * 60e3, watered: false };
+    out = { ok: true, slot: idx, readyAt: g.plots[idx].readyAt };
+  });
+  return out;
 }
 
 export async function waterPlot(index, now = Date.now()) {
-  const g = await read();
-  const p = g.plots[index];
-  if (!p) return { ok: false, reason: 'empty' };
-  if (now >= p.readyAt) return { ok: false, reason: 'ready' };
-  if (p.watered) return { ok: false, reason: 'already' };
-  p.watered = true;
-  await write(g);
-  return { ok: true, ing: p.ing };
+  let out = { ok: false, reason: 'empty' };
+  await mutate(g => {
+    const p = g.plots[index];
+    if (!p) { out = { ok: false, reason: 'empty' }; return false; }
+    if (now >= p.readyAt) { out = { ok: false, reason: 'ready' }; return false; }
+    if (p.watered) { out = { ok: false, reason: 'already' }; return false; }
+    p.watered = true;
+    out = { ok: true, ing: p.ing };
+  });
+  return out;
 }
 
 // pure yield rule, so the numbers can be checked without a clock or a database

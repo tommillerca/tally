@@ -308,6 +308,14 @@ const ACTIONS = [
     authority: 'petInstances() itself, read immediately before the mint: it is the list every screen and every per-copy map answers from, and the read runs the reclaim, so a copy minted there a moment earlier is seen and not duplicated',
     undriven: "the tail of buyPetItem and unreachable without it: nothing else calls it, and buyPetItem's own claim (db.addIfAbsent on petbuy:<id>) is what makes it run once. Added 2026-08-21 with the fix for the v421 defect where buyPetItem wrote ownership and never a copy, so the 50,000-coin pet was owned, equipped, drawn on Today and absent from the Stable and the Paddock. The second-attempt proof lives in tests/pet-ownership-audit.mjs, which measures the copy count as a DELTA per species across the real grant (dupes legitimately stack, so an absolute 1 would be wrong) and requires exactly +1, then reproduces the broken account and requires three consecutive boots to heal it to exactly one copy" },
   { id: 'js/app.js:openGiftSheet', sites: 1, undriven: 'a REFUND of coins this device already deducted, on a failed send; not a payout' },
+  /* Added 2026-09-02 with the sibling-writer sweep. startCook and queueCook now
+     take the ingredients in one kvUpdate and claim the pot or the queue slot in
+     a second, because carrying the pot array across the ingredient spend was
+     restoring a dish collectDish had already banked. Two kv rows cannot ride one
+     transaction, so the take-first ordering leaves exactly one losing case: the
+     last pot fills between the two. This hands back what THIS call took, by
+     recipe, and it is the only thing that can reach it. */
+  { id: 'js/cooking.js:refundIngredients', sites: 1, undriven: 'a REFUND of the ingredients this call just spent, when the pot or the queue turned out to have no room; it can only ever return r.needs and only after payIngredients returned true, so it hands back exactly what was taken and nothing else' },
   { id: 'js/app.js:openSurveySheet', sites: 1, undriven: "one-time, gated on kv 'surveyDone' read before the grant" },
 ];
 

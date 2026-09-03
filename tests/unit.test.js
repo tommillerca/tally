@@ -947,7 +947,12 @@ test('transmog: the paid-once credit must be persisted, not derived', () => {
   const src = readFileSync(join(here, '..', 'js', 'loot.js'), 'utf8');
   const fn = src.match(/export async function paidLooks\(\)\s*\{[\s\S]*?\n\}/);
   assert.ok(fn, 'paidLooks present');
-  assert.ok(/kvSet\('paidlooks'/.test(fn[0]), 'paidLooks persists the grandfathered seed');
+  /* EITHER WRITING PRIMITIVE. What this test is about is that the seed is
+     WRITTEN BACK rather than re-derived; it is not about which call does it.
+     Pinned to kvSet alone until 2026-09-02, when paidLooks moved to kvUpdate so
+     that a receipt markPaid banks during the transmogMap await is not dropped,
+     and this row went red on a strictly better version of the same behaviour. */
+  assert.ok(/kv(?:Set|Update)\('paidlooks'/.test(fn[0]), 'paidLooks persists the grandfathered seed');
   // and re-confirming a look you are already wearing must bank it too
   const ap = src.match(/export async function applyTransmog[\s\S]*?\n\}/);
   assert.ok(/already: true/.test(ap[0]) && /markPaid[\s\S]*?already: true/.test(ap[0]),
