@@ -36,7 +36,11 @@ import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWand
 import { isWater } from './water.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
-import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
+/* js/changelog.js is 155KB of prose: 234 player-facing entries, the largest
+   single module in js/, and NOTHING on the boot path or on Today needs it. It
+   is imported on demand at its four use sites (What's New, the two unseen
+   badges, the onboarding catch-up mark) instead of being parsed at boot.
+   sw.js still precaches it, so opening What's New offline works as before. */
 import { bhIcon, hasBhIcon, BH_ICON_TINTS } from './icons-pack.js';
 import { pixCur } from './icons-pix.js';
 import * as social from './social.js';
@@ -2810,8 +2814,9 @@ async function cloudTroubleNotice() {
 
 async function backupNudge() {
   try {
-    const log = await db.all('log');
-    if (log.length < 20) return;
+    // count(), not all(): this only ever asked "are there 20 rows yet", and
+    // reading the whole log to answer it grows with every meal ever logged.
+    if (await db.count('log') < 20) return;
     const last = await kvGet('lastExportAt', 0);
     const nudged = await kvGet('lastNudgeAt', 0);
     const twoWeeks = 14 * 86400e3;
@@ -4340,8 +4345,7 @@ async function renderToday(el) {
     if (res.crate) crates2.push(res.crate);
     // daily all-clear bonus crate
     if (period === 'day') {
-      const dateXp2 = (await db.all('xp')).filter(r => r.date === S.date);
-      const bonus = await claimAllBonusIfDue(S.date, tier.quests, dateXp2);
+      const bonus = await claimAllBonusIfDue(S.date, tier.quests);
       if (bonus) { bonusXp = bonus.xp; crates2.push('daily'); }
     }
     if (crates2.length) {
@@ -10298,7 +10302,7 @@ async function renderFriends(el) {
   // audits seed these instead of a live account.
   const me = (apiConfigured ? await social.socialMe() : null)
     || (navigator.webdriver && window.__testMe) || null;
-  const clUnseen = changelogUnseen(await kvGet('changelogSeen', 0));
+  const clUnseen = (await import('./changelog.js')).changelogUnseen(await kvGet('changelogSeen', 0));
   const whatsNewCard = `
     <button class="card crew-friends" id="crewWhatsNew" style="margin-bottom:12px">
       <span>What's New${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</span>
@@ -12178,6 +12182,7 @@ function newsHtml(eq) {
 }
 
 async function openWhatsNew() {
+  const { CHANGES, changelogLatest } = await import('./changelog.js');
   const cards = CHANGES.map(c => `
     <div class="wn-entry">
       <div class="wn-head"><b>${esc(c.title)}</b><span class="wn-date">${esc(c.date)}</span></div>
@@ -12384,7 +12389,7 @@ async function renderSettings(el) {
   const np = await notifPrefs();
   const notifPlat = notifPlatform();
   const notifPerm = await notifPermissionState();
-  const clUnseen = changelogUnseen(await kvGet('changelogSeen', 0));
+  const clUnseen = (await import('./changelog.js')).changelogUnseen(await kvGet('changelogSeen', 0));
   const surveyDone = await kvGet('surveyDone', false);
   const notifRow = (key, label, sub) => `
     <div class="settings-row">
@@ -13208,7 +13213,7 @@ async function saveInitialSettings(np) {
   settingsBase = {};
   await saveSettings();
   await kvSet('game-init', true); // fresh install: nothing to backfill
-  await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
+  await kvSet('changelogSeen', (await import('./changelog.js')).changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
   if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer

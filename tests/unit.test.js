@@ -3486,6 +3486,60 @@ test('every cosmetic any tier can be asked for is on disk', async () => {
   assert.deepEqual(missing, [], `${missing.length} tier files are absent; run scripts/build-bh-thumbs.py`);
 });
 
+/* ---- R17-P2: the hot paths do not GAIN a full-store read -----------------
+ *
+ * WHAT THIS IS AND WHAT IT IS NOT. `db.all(store)` reads every row a player has
+ * ever written. On a hot path that is unbounded linear growth: measured at 51
+ * vs 5001 log rows on one rig, boot-to-first-paint went 404ms -> 908ms, heap
+ * after boot 5.1MB -> 23.2MB, and a day-back tap 140ms -> 355ms. Nothing
+ * crashed. It just gets worse for a player forever, which is why a number-based
+ * check would be useless here and this is a SOURCE check instead.
+ *
+ * IT IS A RATCHET, NOT A ZERO. renderToday still has three full-store reads and
+ * they are not removable today: `allLog` feeds `priorFoodIds` (every food ever
+ * logged before this date, for the Explorer quest) and questCtx's logDays;
+ * `allXp` feeds the whole quest ledger across day/week/month periods plus
+ * all-time pitTried/fightWins; `healthRows` feeds period step and active totals.
+ * So this pins the CURRENT set and fails on a fourth. It also fails when the set
+ * SHRINKS, on purpose: that is the moment to come back here and lower the bar
+ * rather than leave a guard that has quietly stopped measuring anything.
+ *
+ * WHAT IT CANNOT SEE: a full-store read reached indirectly through a helper
+ * renderToday awaits (totalXp, cookState, unopenedCrates, getWellness...). Only
+ * literal db.all() calls in this function body are in scope. Statically finding
+ * the rest would mean walking the call graph of a 22k-line module; the four
+ * named callers below are the ones the finding measured. */
+test('R17-P2 renderToday keeps exactly its three known full-store reads', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const m = app.match(/\nasync function renderToday\(el\) \{\n([\s\S]*?)\n\}\n/);
+  assert.ok(m, 'renderToday not found; the guard is reading the wrong shape and is measuring nothing');
+  const body = m[1];
+  // SETUP: prove the extraction reached the real body, not an empty match.
+  assert.ok(body.length > 4000 && body.includes('questTiers'),
+    `extracted body looks wrong (${body.length} chars); an empty sample passes every check below for free`);
+  const found = [...body.matchAll(/db\.all\(\s*'([a-z]+)'\s*\)/g)].map(x => x[1]).sort();
+  assert.deepEqual(found, ['health', 'log', 'xp'],
+    `renderToday's full-store reads changed to [${found}]. A NEW one is unbounded growth on the tap that runs on every #prevDay / #nextDay and after every log: use db.byIndex('log','date',d) or a point db.get. FEWER is progress: update this list.`);
+});
+
+test('R17-P2 backupNudge counts the log, it does not read it', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const body = app.match(/async function backupNudge\(\) \{([\s\S]*?)\n\}\n/)[1];
+  assert.ok(!/db\.all\(/.test(body), 'backupNudge is reading the whole log again; it only ever asks whether there are 20 rows');
+  assert.ok(/db\.count\(\s*'log'\s*\)/.test(body), 'backupNudge lost its db.count check');
+});
+
+/* ---- R18-P5: js/changelog.js stays off the boot path -------------------- */
+test('R18-P5 js/app.js does not statically import the changelog', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(!/^import .*from '\.\/changelog\.js';/m.test(app),
+    "js/changelog.js is 155KB and nothing on the boot path reads it; import() it at the use site instead");
+  assert.ok(/await import\('\.\/changelog\.js'\)/.test(app), 'no dynamic changelog import left; the What\'s New sheet has lost its data');
+  // and it must stay precached, or What's New breaks offline
+  const sw = readFileSync(join(here, '..', 'sw.js'), 'utf8');
+  assert.ok(sw.includes("'./js/changelog.js'"), 'changelog.js dropped out of the service-worker precache: a lazy import offline is a blank sheet');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
