@@ -90,7 +90,15 @@ export function bearingDeg(lat1, lng1, lat2, lng2) {
 export const SPAWN_TYPES = {
   bones: { label: 'Bone cache', xp: 16, weight: 5 },
   coins: { label: 'Coin pile', coins: 12, xp: 6, weight: 5 },
-  crate: { label: 'Buried crate', crate: 'daily', xp: 6, weight: 1 },
+  /* WEIGHT 1 -> 4, 2026-09-03. At weight 1 a buried crate was 7.1% of spawns and
+     a Mimic (one in three of them) 2.4%, i.e. one per 42 spawns walked, which is
+     why the Mimic shipped in August and no player had ever reported meeting one.
+     Tom: "make more chests on the map to accommodate for this change in actually
+     finding loot". MEASURED at weight 4 with MIMIC_SHARE 5: chests 23.5% of
+     spawns, Mimics 4.7% (one per 21), real loot chests 18.8% (was 4.8%).
+     THIS IS THE DIAL. Loot chests are ~4x commoner than before; if the economy
+     runs hot, lower this weight before touching MIMIC_SHARE. */
+  crate: { label: 'Buried crate', crate: 'daily', xp: 6, weight: 4 },
   rare:  { label: 'RARE spawn', crate: 'egg', xp: 80, weight: 0 }, // placed explicitly on lucky days
   /* THE FOOD SPAWN. It used to be the garden's presence on the map and its whole
      identity was `seeds: 2`. The Bone Garden is coming out, so seeds are on their
