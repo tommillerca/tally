@@ -144,6 +144,14 @@ ok('PARSES every audit is something Node will actually execute',
    FIXED ONE? Delete its line. The row fails on a stale entry too, so the
    inventory cannot quietly rot into a list nobody maintains. */
 const SEAM_ONLY_KNOWN = [
+  /* reveal-mannequin-audit builds its cards through the webdriver-only __gearCard
+     and __crateCard seams. Reaching a real reveal needs a crate in hand or a den
+     win inside a GPS radius, neither of which a harness can arrange without
+     faking the very grant under test. The compensating control is its COVERAGE
+     row, which is STATIC and derived from js/app.js: a new reveal that ships a
+     bare `imgSrc: bhAsset(...)` card fails there even though this audit never
+     taps it. Added 2026-09-03. */
+  'reveal-mannequin-audit.mjs',
   /* The two levelpaid tools (#265) are skip-tiered INVESTIGATION instruments,
      not guards: the tracer asserts nothing and the repro deliberately exits 1
      on machines too fast to mint the race it reproduces. Neither is evidence
@@ -167,7 +175,6 @@ const SEAM_ONLY_KNOWN = [
   'fight-tray-audit.mjs',
   'freeze-reveal-audit.mjs',
   'lb-profile.mjs',
-  'motion-truth-audit.mjs',
   'nav-perf-audit.mjs',
   'newcomers-audit.mjs',
   /* pack-sink-audit drives window.__packReveal because the pack reveal is the

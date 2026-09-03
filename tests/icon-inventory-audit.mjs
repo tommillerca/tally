@@ -206,7 +206,12 @@ const EMITTERS = {
   'js/app.js:openHatchReveal':      ['scene', 'the hatching egg.'],
   'js/app.js:warmCrateFrames':      ['scene', 'pre-decodes the crate opening frames; R20-P3 moved this off openPackReveal so the Backpack can warm them before the tap.'],
   'js/app.js:presentGrantDelivery': ['scene', 'the delivered-grant card art.'],
-  'js/app.js:revealGift':           ['scene', 'the gift reveal art.'],
+  /* revealGift UN-DECLARED 2026-09-03. It matched SIG on a raw <img> in its gear
+     branch; the reveal-on-a-mannequin change replaced that with `wear:`/`imgSrc`
+     DATA handed to packCardHtml, so the function no longer emits any markup of
+     its own. Its crate/dust/coin branches call ICONS drawers, which are icon
+     SITES and graded as such. If an <img> ever returns here, the undeclared row
+     above catches it. */
   'js/app.js:openMageIntro':        ['scene', 'the Live Wire introduction art.'],
   'js/app.js:openSpireIntro':       ['scene', 'the spire announcement art.'],
   'js/app.js:openSpireSheet':       ['scene', 'the spire sheet art.'],

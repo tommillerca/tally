@@ -133,6 +133,13 @@ const measure = () => page.evaluate(() => {
 
 /* The cases. Real ids, one per builder path, chosen so the two halves Tom named
    are both present: a grill (the scaling complaint) and a hat with a cut-out. */
+/* PROVENANCE. Tom, 2026-09-03: "all gear in the app should now be shown like in
+   the shop on a base skeleton with context ... it no long just shows the random
+   PNG it shows it on a base skeleton with no other gear in situ so that the
+   player understands better what theyre looking at. this will fix the grillz
+   scaling issue and it will allow the player to not see how the sausage is made".
+   Measured before the change: G3 rendered a ~30px unidentifiable blob in a
+   212x283 panel. After: a silver tooth seated in the skeleton's teeth. */
 const CASES = [
   ['grillz (his named case)', 'crate', { item: { id: 'G3', slot: 'G', name: 'Grillz', rarity: 'rare' } }],
   ['gear · hat', 'gear', 'g-H10-1-gravewarden'],
