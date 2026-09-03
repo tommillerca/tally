@@ -32,7 +32,8 @@
  *                                    motion on      under reduce
  *   #tzWall  (36 bobbing heads)         49.6 %           0.000 %
  *   #tzReel  (grid->solo->quad)         29.9 %           0.000 %
- *   .hype    (declared STATIC)          0.000 %          0.000 %
+ *   .nb-hero (declared STATIC)          0.000 %          0.000 %   (was .hype
+ *                                                                until 2026-09-03)
  *
  * The gap has no overlap in either direction, so MOVE_FLOOR = 3% is not a knife
  * edge, and a surface declared still reads EXACTLY zero rather than "small".
@@ -78,16 +79,19 @@
  *   MOVES     `.tz-head-in .bh-anim { animation: none !important; }` in app.css
  *   BEATS     drop `!reducedMotion` from the reel gate's inverse, or pause the
  *             stepper; simplest is to make TZ_BEATS a single beat
- *   STILL     give `.hype` any looping animation
- *   COVERAGE  give `.hype` a looping animation and leave it unregistered
+ *   STILL     give `.nb-hero` any looping animation
+ *   COVERAGE  give `.nb-hero` a looping animation and leave it unregistered
  *   REDUCE    a plain looping animation is NOT enough here: app.css's global
  *             reduce block kills it, which is the behaviour this row asserts. It
  *             needs one that SURVIVES reduce, so add both of these to app.css:
  *               @keyframes hypeWob { 50% { transform: translateX(7px); } }
- *               .hype { animation: hypeWob 1s linear infinite; }
- *               @media (prefers-reduced-motion: reduce) { .hype {
+ *               .nb-hero { animation: hypeWob 1s linear infinite; }
+ *               @media (prefers-reduced-motion: reduce) { .nb-hero {
  *                 animation-duration: 1s !important;
  *                 animation-iteration-count: infinite !important; } }
+ *             (The three selectors above read `.hype` until 2026-09-03, when
+ *             that surface was replaced by the news pill's hero; the recipes are
+ *             otherwise unchanged.)
  *             Ran on a throwaway tree 2026-08-27, on this exact file: REDUCE
  *             hype-banner peak 28.838% against a bound of 0, red, and STILL went
  *             red the same run at 30.481%. That run ALSO discarded a sample to
@@ -95,7 +99,7 @@
  *             knowing: the two preconditions below reject a corrupt sample
  *             without swallowing a real one.
  * THE PRECONDITIONS HAVE CONTROLS OF THEIR OWN, both printed on a normal run:
- *   overlay   `NOTE sample of .hype discarded: [toast] was over the clip`. Seen
+ *   overlay   `NOTE sample of the still row discarded: [toast] was over the clip`. Seen
  *             on 4 of 8 runs on 2026-08-27, each reading 0.000% on the retake.
  *   blank     `MEAN_DEBUG=1` prints every capture's std. 251 captures over 3
  *             runs: 63 rejected, all at 1.21 or 2.67; 188 accepted, 27.19 up.
@@ -172,21 +176,40 @@ const REGISTER = [
     reach: async page => page.evaluate(() => { window.__cosmeticTeaser?.(); }),
   },
   {
-    key: 'hype-banner',
-    what: 'the Today hype banner, declared STATIC: bold art and ten words, no motion anywhere in it',
-    sel: '.hype',
+    /* RE-POINTED FROM `.hype` TO `.nb-hero`, 2026-09-03. The promo slot came off
+       Today that morning (Tom: "today still has the step challenge winner and
+       monster banner at the bottom these should be gone now things will live in
+       the collapsed news pill") and the featured banner was rebuilt as the hero
+       at the top of the news pill's list. `.hype` no longer exists anywhere on
+       Today, so REACH read `.hype absent or under 8px` and the whole row, which
+       is this instrument's own negative control, graded nothing. Same surface,
+       same claim, new selector: it is still bold art and a caption with no
+       motion in it, and if this file ever counts compositor noise as movement
+       it is still the row that says so. */
+    key: 'news-hero',
+    what: 'the news pill hero banner, declared STATIC: bold art and a caption, no motion anywhere in it',
+    sel: '.nb-hero',
     moves: false,
     windowMs: 3000,
     /* BACK OUT OF THE TEASER FIRST. The two rows above leave a sheet over the
        whole screen, and a clip is a RECTANGLE: with the popup still up, this row
-       measured the reel through .hype's coordinates and reported 29.259% on a
-       banner with no animation in it. The STILL row caught it, which is the
-       entire reason a still control is in the register. */
+       measured the reel through the banner's coordinates and reported 29.259% on
+       a surface with no animation in it. The STILL row caught it, which is the
+       entire reason a still control is in the register.
+       THEN OPEN THE PILL, new since the move: the hero lives behind a disclosure
+       that is shut at rest, and app.css stops every animation behind a shut one
+       (see the .nb block), so a shut pill would grade a surface that CANNOT move
+       and this row would pass on a rule instead of on the art. Open is where the
+       claim has teeth. */
     reach: async page => {
       for (let i = 0; i < 4 && await page.evaluate(() => !!document.querySelector('#sheets > *')); i++) {
         await page.evaluate(() => history.back());
         await sleep(700);
       }
+      await page.evaluate(() => { location.hash = '#/today'; });
+      await sleep(1400);
+      await page.click('#newsBanner > summary').catch(() => {});
+      await sleep(600);
     },
   },
 ];

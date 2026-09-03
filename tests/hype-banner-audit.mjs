@@ -29,9 +29,18 @@
  *      to stop. IN-PILL grades that here; today-container-audit grades the same
  *      claim from the other side.
  *
- * THE PILL IS COLLAPSED BY DEFAULT and a closed <details> is display:none, so
- * every measurement below goes through a real tap on the summary first. Without
- * it every rect is 0 and every row reads on a surface nobody can reach.
+ * THE PILL IS COLLAPSED BY DEFAULT, so every measurement below goes through a
+ * real tap on the summary first: the rows here grade the banner a player is
+ * looking at, and nobody looks at a shut pill.
+ *
+ * WHAT THAT TAP DOES NOT GIVE YOU, corrected 2026-09-03. This header used to say
+ * a closed <details> is display:none and that without the tap every rect would
+ * be 0. That is false on the Chrome this runs on: a shut `.nb` collapses by
+ * CLIPPING its content, and measured on this tree with the pill shut, `.nb-hero`
+ * still reports display:block, opacity 1 and a 357x184 box. So every row below
+ * SETUP reads the same number open or closed, and the tap is not the gate the
+ * old comment claimed it was. It stays because the state it puts the pill in is
+ * the state the claims are about, not because anything downstream depends on it.
  *
  * Both viewports are graded because the copy and the figures fail differently at
  * 320 (the narrowest phone this app supports) than at 393. An empty sample is a
@@ -65,18 +74,33 @@ page.on('pageerror', e => errs.push(e.message));
 async function measure() {
   await page.evaluate(() => { location.hash = '#/today'; });
   await sleep(1600);
+  /* SHUT IT FIRST, 2026-09-03. measure() runs once per viewport against ONE
+     browser, and re-navigating to #/today does not reset a pill the previous
+     viewport left open: `open` survives the re-render. So the 393 pass opened
+     it, the 320 pass tapped an already-open pill, and the tap CLOSED it. The
+     SETUP row went red at 320 every run on healthy code, and the cause was this
+     file's own leaked state, not the app. Proven: force it shut here and the
+     same page.click() opens it at 320x568 every time.
+     Programmatic, and deliberately so: this is the RESET, not the assertion.
+     The assertion is the real tap below. */
+  await page.evaluate(() => { const d = document.getElementById('newsBanner'); if (d) d.open = false; });
+  await sleep(250);
+  /* THE RING AT REST, read while the pill is still shut. See BASE_RING_TOP. */
+  const restRingTop = await page.evaluate(() => {
+    const r = document.querySelector('.ring-card');
+    return r ? Math.round(r.getBoundingClientRect().top) : null;
+  });
   /* A REAL TAP ON THE SUMMARY, not `details.open = true`. The pill is a control
      the player operates, and rule 5 of the anti-regression list is that UI is
-     verified by operating controls. It also matters mechanically: a closed
-     <details> renders its contents display:none, so without this every rect
-     below is 0x0 and every row grades a surface nobody reached. */
+     verified by operating controls: a summary that stopped responding to a tap
+     is a pill nobody can open, and only a tap can catch that. */
   await page.click('#newsBanner > summary').catch(() => {});
   await sleep(500);
   await page.evaluate(async () => {
     const imgs = [...document.querySelectorAll('.nb-hero img')];
     await Promise.all(imgs.map(i => i.decode().catch(() => {})));
   });
-  return page.evaluate(() => {
+  const read = await page.evaluate(() => {
     const screen = document.getElementById('screen');
     const card = document.querySelector('.nb-hero');
     const pillOpen = !!document.querySelector('#newsBanner')?.open;
@@ -139,14 +163,30 @@ async function measure() {
       viewport: innerHeight,
     };
   });
+  return { ...read, restRingTop };
 }
 
 /* Measured on 6212e75, where Today still carried the "Out there today" card:
    .ring-card top, per viewport. It is a CEILING, not a pin: whatever stands above
-   the ring may not push it lower than that 275px banner stack did. The hero lives
-   behind a disclosure that is SHUT at rest, so at rest it costs the ring nothing;
-   this is measured with the pill OPEN, which is the state where it can push, and
-   is rule 12 (measure in the state the complaint is about). */
+   the ring may not push it lower than that 275px banner stack did.
+
+   RE-POINTED AT THE REST STATE, 2026-09-03. THE NUMBERS ARE UNCHANGED. This row
+   used to read the ring with the pill OPEN, on the argument that open is the
+   state where the pill can push. That argument does not survive what the pill
+   now contains: on 6212e75 the ceiling was set against a banner stack that was
+   ALWAYS on the screen, and the thing being compared to it today is a disclosure
+   that is shut until a player taps it and now holds a 184px hero AND the settled
+   race card. Measured on this tree: ring top 960 at 393x852 and 520 at 320x568
+   with the pill CLOSED, against 1675 and 1218 OPEN. Grading the open number
+   against a permanent stack's number compares two different claims, and it is
+   what put this row 542px red on healthy code.
+   So the comparison moved to the state the player's screen is actually in, and
+   the ceiling stays exactly where it was measured. It is not slack: at rest the
+   ring is 173px HIGHER than the 393 bound and 453 higher than the 320 one, so
+   anything that grows the permanently-visible part of Today past what the old
+   banner stack cost still goes red. Raising 1133 to fit today's open number is
+   the thing this comment exists to refuse: it would leave a bound no growth
+   could ever cross. */
 const BASE_RING_TOP = { '393x852': 1133, '320x568': 973 };
 
 for (const [w, h] of [[393, 852], [320, 568]]) {
@@ -155,7 +195,12 @@ for (const [w, h] of [[393, 852], [320, 568]]) {
   const m = await measure();
   const tag = `${w}x${h}`;
   ok(`SETUP ${tag} Today rendered`, m.rendered);
-  ok(`SETUP ${tag} the news pill opened on a real tap (a shut one is display:none and every row below would grade a 0x0 box)`, m.pillOpen);
+  /* THE ROW NAME USED TO SAY "a shut one is display:none and every row below
+     would grade a 0x0 box". Corrected 2026-09-03: it collapses by clipping, the
+     hero still measures 357x184 shut, and no row below depends on this. What
+     this row still holds is that the summary is a working control: a pill that
+     stopped opening on a tap is a hero no player will ever see. */
+  ok(`SETUP ${tag} the news pill opened on a real tap (the summary is the only way in; nothing below depends on it, see the header)`, m.pillOpen);
   ok(`SETUP ${tag} the hero banner is in it (nothing below can pass without this)`, !m.missing);
   if (m.missing) continue;
 
@@ -189,9 +234,9 @@ for (const [w, h] of [[393, 852], [320, 568]]) {
   ok(`ART ${tag} every figure is a whole creature, not a thumbnail`,
     m.figBoxes.length > 0 && Math.min(...m.figBoxes) >= 72, m.figBoxes.join(' / ') + 'px');
   ok(`FIT ${tag} the hero does not run off the right edge`, m.right <= w + 1, `right ${m.right}`);
-  ok(`FIT ${tag} the ring card sits no lower than the old banner stack left it`,
-    m.ringTop !== null && m.ringTop <= BASE_RING_TOP[tag],
-    `ring top ${m.ringTop}, was ${BASE_RING_TOP[tag]}`);
+  ok(`FIT ${tag} at rest the ring card sits no lower than the old banner stack left it`,
+    m.restRingTop !== null && m.restRingTop <= BASE_RING_TOP[tag],
+    `ring top ${m.restRingTop} with the pill shut (${m.ringTop} open), ceiling ${BASE_RING_TOP[tag]}`);
   /* IT IS A BANNER, NOT A SCREEN. The bound is arithmetic on the shipped rules
      rather than a pin on the current render: 23px of padding + --hf (104 at 393,
      88 at 320) + 6px gap + a ~17px display title + a blurb that may wrap to four

@@ -132,6 +132,37 @@ async function tapDay(page, id, want) {
 const shotPath = name => join(repo, '_feedback_shots', 'today-d2', name);
 
 const { browser, page, errors } = await boot(base);
+
+/* THE LEDGER CONTROL'S SAMPLE MOVED ROUTES, 2026-09-03. It used to be read off
+   Today itself: every `#screen .card` that was not inside `.dayblk`, which in
+   practice was the banner stack at the bottom of the screen. That stack was
+   deleted the same day the promo slot went (Tom: "today still has the step
+   challenge winner and monster banner at the bottom these should be gone now
+   things will live in the collapsed news pill"), so Today's top level is now
+   today-plate / hero-card / hero-actions / details.nb / details.q-collapse /
+   section.dayblk / p.log-only and NOTHING on it carries `.card`. The row read
+   `outside: []` and went red on healthy code: the change took away its sample,
+   it did not flatten the skin. Measured 2026-09-03 on this tree: a `.card` on
+   #/boneyard reports borderTopWidth 2 with a box-shadow, while `.card` and
+   `.card.wellness-card` INSIDE the day report bw 0 and no shadow. So the claim
+   still holds and only the sample had to move.
+   `.hero-card` was the other candidate and is the wrong one: since the 2026-08-21
+   "no frame" rework it is only the negative margin that cancels .screen's
+   padding, so it carries no keyline and no shadow to lose, and a control that
+   cannot tell the two states apart is not a control.
+   READ BEFORE THE RUN NAVIGATES TO TODAY, so no row below is grading a screen
+   this detour left behind. */
+await page.evaluate(() => { location.hash = '#/boneyard'; });
+await sleep(2400);
+const skin = c => {
+  const st = getComputedStyle(c);
+  return {
+    el: (c.className || c.tagName).toString().split(' ').filter(Boolean).slice(0, 3).join('.'),
+    bw: parseFloat(st.borderTopWidth) || 0, shadow: st.boxShadow !== 'none',
+  };
+};
+const offDay = await page.evaluate(`[...document.querySelectorAll('#screen .card')].map(${skin})`);
+
 try {
   await page.evaluate(() => { location.hash = '#/today'; });
   await sleep(2600);
@@ -332,15 +363,19 @@ try {
       el: label(el), w: parseFloat(getComputedStyle(el).borderTopWidth) || 0,
       style: getComputedStyle(el).borderTopStyle,
     }));
-    const outside = [...sc.querySelectorAll('.card')].filter(c => !day.contains(c)).map(c => {
+    /* THE OTHER HALF OF THE CONTROL, added 2026-09-03: the same skin, read on
+       the cards INSIDE the day. The claim was never "a card somewhere has a
+       keyline", it is "an outside card differs from an inside one", and that
+       needs both readings from one run. */
+    const inDay = [...day.querySelectorAll('.card')].map(c => {
       const st = getComputedStyle(c);
-      return { hasBanner, el: label(c), bw: parseFloat(st.borderTopWidth) || 0, shadow: st.boxShadow !== 'none' };
+      return { el: label(c), bw: parseFloat(st.borderTopWidth) || 0, shadow: st.boxShadow !== 'none' };
     });
     return {
       sections: secs.length,
       cardsInDay: day.querySelectorAll('.card, .meal').length,
       panels: outermost.map(el => ({ el: label(el), h: Math.round(el.getBoundingClientRect().height) })),
-      seams, outside,
+      seams, inDay, hasBanner,
     };
   });
   console.log('LEDGER', JSON.stringify(ledger));
@@ -372,9 +407,21 @@ try {
   ok('LEDGER SEAMS every section after the first is still separated by a real rule',
     Array.isArray(ledger.seams) && ledger.seams.length >= 2 && ledger.seams.every(s => s.w >= 1 && s.style !== 'none'),
     JSON.stringify(ledger.seams));
+  /* SAMPLE MOVED TO #/boneyard, 2026-09-03; the drift and the measurement are
+     written up where `offDay` is read, at the top of the run. The row is the
+     same claim it always made and still takes two readings to pass: the cards
+     off the day KEEP the keyline and the shadow, the cards in the day do NOT.
+     Delete `.card`'s skin app-wide and the first half goes red; give the day's
+     cards their panels back and the second half does. The ring-card is excluded
+     for the same reason the panel row excludes it: Tom approved that one surface
+     on 2026-08-27 as the collapsed day's own banner. */
+  const flatInDay = (ledger.inDay || []).filter(c => !/ring-card/.test(c.el || ''));
   ok('LEDGER CONTROL a card OUTSIDE the day keeps the hand-inked skin, so this was not bought by flattening every card in the app',
-    Array.isArray(ledger.outside) && ledger.outside.length >= 1 && ledger.outside.every(c => c.bw >= 2 && c.shadow),
-    JSON.stringify(ledger.outside));
+    Array.isArray(offDay) && offDay.length >= 1 && offDay.every(c => c.bw >= 2 && c.shadow),
+    `#/boneyard: ${JSON.stringify(offDay)}`);
+  ok('LEDGER CONTROL and the cards INSIDE the day are flat, so the two states really do differ',
+    flatInDay.length >= 1 && flatInDay.every(c => c.bw === 0 && !c.shadow),
+    `in day: ${JSON.stringify(flatInDay)}`);
 
   // ---------------------------------------------------------------- NUDGE
   /* COMMENTS ARE NOT EVIDENCE OF LIFE, the same call tests/selector-audit.mjs
