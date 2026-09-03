@@ -3381,8 +3381,8 @@ export default {
            question, which is why every change of question used to be a
            migration. `form` says which survey produced the row and `answers` /
            `ctx` carry the rest as JSON, so v3 needs no schema change at all.
-           A client that predates v2 sends no form and lands as 'dayone',
-           unchanged in every other respect. */
+           A client that predates v2 sends none of the three and is unchanged in
+           every respect. */
         /* ABSENT STAYS NULL, and NULL READS AS 'dayone'. Every row already in
            the table has form NULL and means v1, so writing the literal
            'dayone' for a v1 client would give v1 TWO encodings and every
