@@ -15,7 +15,7 @@
  * state is keyed by spire id in one kv record. Sparser cells than dens (2.2 km
  * vs 1.1 km) so each one reads as a monument rather than litter.
  */
-import { kvGet, kvSet, kvUpdate } from './db.js';
+import { kvGet, kvUpdate } from './db.js';
 import { dateKey } from './nutrition.js';
 
 export const SPIRE_CELL_DEG = 0.02;      // ~2.2 km cells: a couple within a good walk
@@ -93,6 +93,18 @@ function distM(aLat, aLng, bLat, bLng) {
 
 export async function spireState() { return (await kvGet(KV, {})) || {}; }
 
+/* EVERY MUTATION IS ONE TRANSACTION, because collectTribute claims tribute on
+   this same row through kvUpdate. A mutator that read the whole map and wrote
+   the whole map back handed an emptied tower its old collectedAt straight back,
+   and the same tribute could then be collected a second time. `fn` mutates the
+   state in place; return false to write nothing. Nothing in `fn` may await. */
+function mutate(fn) {
+  return kvUpdate(KV, (state) => {
+    const st = state || {};
+    return fn(st) === false ? undefined : st;
+  }, {});
+}
+
 const DAY = 86400000;
 const daysBetween = (from, to = Date.now()) => Math.max(0, (to - from) / DAY);
 
@@ -167,24 +179,26 @@ export async function keepersBoon(now = Date.now()) {
 
 /** Claim after beating the warden. Refuses past the cap so choice stays real. */
 export async function claimSpire(s, now = Date.now()) {
-  const state = await spireState();
-  const held = Object.keys(state).filter(id => !readSpire(state, { id }, now).dormant);
-  if (!state[s.id] && held.length >= SPIRE_CAP) return { ok: false, reason: 'cap', cap: SPIRE_CAP };
-  state[s.id] = {
-    claimedAt: state[s.id]?.claimedAt || now,
-    tendedAt: now,
-    collectedAt: now,
-    // NOT incremented here any more. A spire is a shared object, so its level has
-    // to read the same on every phone: the SERVER owns it (+1 per takeover, +1 per
-    // successful defense) and refreshSpires mirrors it back into this record. Local
-    // increments here were double-counting against the server's and diverging.
-    level: state[s.id]?.level || 1,
-    // keep the identity with the record so heldSpires can name a spire the
-    // player is nowhere near (Today card, future leaderboard)
-    meta: { name: s.name, lat: s.lat, lng: s.lng, cx: s.cx, cy: s.cy, warden: s.warden },
-  };
-  await kvSet(KV, state);
-  return { ok: true, level: state[s.id].level };
+  let out = { ok: false, reason: 'cap', cap: SPIRE_CAP };
+  await mutate(state => {
+    const held = Object.keys(state).filter(id => !readSpire(state, { id }, now).dormant);
+    if (!state[s.id] && held.length >= SPIRE_CAP) return false;
+    state[s.id] = {
+      claimedAt: state[s.id]?.claimedAt || now,
+      tendedAt: now,
+      collectedAt: now,
+      // NOT incremented here any more. A spire is a shared object, so its level has
+      // to read the same on every phone: the SERVER owns it (+1 per takeover, +1 per
+      // successful defense) and refreshSpires mirrors it back into this record. Local
+      // increments here were double-counting against the server's and diverging.
+      level: state[s.id]?.level || 1,
+      // keep the identity with the record so heldSpires can name a spire the
+      // player is nowhere near (Today card, future leaderboard)
+      meta: { name: s.name, lat: s.lat, lng: s.lng, cx: s.cx, cy: s.cy, warden: s.warden },
+    };
+    out = { ok: true, level: state[s.id].level };
+  });
+  return out;
 }
 
 /** Mirror the SERVER's level onto a local record. The server owns this number
@@ -195,12 +209,10 @@ export async function claimSpire(s, now = Date.now()) {
 export async function setSpireLevel(id, level, now = Date.now()) {
   const lv = Math.max(1, Math.floor(Number(level) || 0));
   if (!lv) return false;
-  const state = await spireState();
-  if (!state[id]) return false;
-  if (state[id].level === lv) return false;
-  state[id].level = lv;
-  await kvSet(KV, state);
-  return true;
+  return !!(await mutate(state => {
+    if (!state[id] || state[id].level === lv) return false;
+    state[id].level = lv;
+  }));
 }
 
 /** Mirror the server's siege state onto local records. The server is the only
@@ -209,34 +221,35 @@ export async function setSpireLevel(id, level, now = Date.now()) {
  *  can announce them exactly once. */
 export async function syncSieges(rows, now = Date.now()) {
   if (!Array.isArray(rows)) return [];
-  const state = await spireState();
-  const fresh = [];
-  let dirty = false;
-  for (const r of rows) {
-    const rec = state[r.id];
-    if (!rec) continue;                     // a tower this device has never claimed
-    const had = rec.siege && rec.siege.until;
-    if (r.siegeUntil && r.siegeUntil > now) {
-      if (had !== r.siegeUntil) { rec.siege = { until: r.siegeUntil, name: r.siegeName || 'The siege' }; dirty = true; fresh.push({ id: r.id, name: rec.meta?.name || r.name, until: r.siegeUntil, siegeName: r.siegeName }); }
-    } else if (rec.siege) { delete rec.siege; dirty = true; }
-    // the server also owns level and the true claim date (which survives reinstall)
-    if (r.level && rec.level !== r.level) { rec.level = r.level; dirty = true; }
-    if (r.claimedAt && r.claimedAt < (rec.claimedAt || Infinity)) { rec.claimedAt = r.claimedAt; dirty = true; }
-    if (r.tendedAt && r.tendedAt !== rec.tendedAt) { rec.tendedAt = r.tendedAt; dirty = true; }
-  }
-  if (dirty) await kvSet(KV, state);
+  let fresh = [];
+  await mutate(state => {
+    fresh = [];
+    let dirty = false;
+    for (const r of rows) {
+      const rec = state[r.id];
+      if (!rec) continue;                     // a tower this device has never claimed
+      const had = rec.siege && rec.siege.until;
+      if (r.siegeUntil && r.siegeUntil > now) {
+        if (had !== r.siegeUntil) { rec.siege = { until: r.siegeUntil, name: r.siegeName || 'The siege' }; dirty = true; fresh.push({ id: r.id, name: rec.meta?.name || r.name, until: r.siegeUntil, siegeName: r.siegeName }); }
+      } else if (rec.siege) { delete rec.siege; dirty = true; }
+      // the server also owns level and the true claim date (which survives reinstall)
+      if (r.level && rec.level !== r.level) { rec.level = r.level; dirty = true; }
+      if (r.claimedAt && r.claimedAt < (rec.claimedAt || Infinity)) { rec.claimedAt = r.claimedAt; dirty = true; }
+      if (r.tendedAt && r.tendedAt !== rec.tendedAt) { rec.tendedAt = r.tendedAt; dirty = true; }
+    }
+    if (!dirty) return false;   // the poll said nothing new: leave the record alone
+  });
   return fresh;
 }
 
 /** Won the defense: the tower is safe and counts as visited. The server also
  *  levels it, and syncSieges mirrors that number back on the next poll. */
 export async function breakSiege(id, now = Date.now()) {
-  const state = await spireState();
-  if (!state[id]) return false;
-  delete state[id].siege;
-  state[id].tendedAt = now;
-  await kvSet(KV, state);
-  return true;
+  return !!(await mutate(state => {
+    if (!state[id]) return false;
+    delete state[id].siege;
+    state[id].tendedAt = now;
+  }));
 }
 
 /** Towers of mine with an open siege, soonest deadline first. */
@@ -250,11 +263,11 @@ export async function besiegedSpires(now = Date.now()) {
 
 /** Visiting restores resolve. Free, and the reason a weekly circuit exists. */
 export async function tendSpire(id, now = Date.now()) {
-  const state = await spireState();
-  if (!state[id]) return { ok: false };
-  state[id].tendedAt = now;
-  await kvSet(KV, state);
-  return { ok: true };
+  const done = await mutate(state => {
+    if (!state[id]) return false;
+    state[id].tendedAt = now;
+  });
+  return { ok: !!done };
 }
 
 /** Collect accrued tribute. In person only: that is the walk trigger.

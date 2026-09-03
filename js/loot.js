@@ -257,7 +257,11 @@ export async function rack() {
     && (!Array.isArray(cur.rot) || cur.rotDay !== day);
   if (staleRot) {
     const rot = rackRotatePick(day, cur.salt || 0, cur.ids);
-    await kvSet('rack', { ...cur, rot, rotDay: day });
+    /* Spread the record the TRANSACTION reads, not the one read above it:
+       rerollRack claims `rr` on this same row, and writing `cur` whole handed a
+       spent reroll back, which is a rung of the price ladder for free. It
+       refuses outright once somebody else has already rotated today. */
+    await kvUpdate('rack', prev => (prev && prev.rotDay !== day) ? { ...prev, rot, rotDay: day } : undefined, null);
     cur.rot = rot; cur.rotDay = day;
   }
   if (cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length) {
@@ -1994,7 +1998,11 @@ export async function paidLooks() {
     const k = paidKey(slot, artId);
     if (artId !== TRANSMOG_HIDE && !set.has(k)) { set.add(k); add.push(k); }
   }
-  if (add.length) await kvSet('paidlooks', [...stored, ...add]);
+  /* kvUpdate, not kvSet: `stored` was read before the transmogMap await, and
+     markPaid CLAIMS on this same row. Writing the list whole dropped a receipt
+     markPaid had just banked, and a lost receipt bills the player dust a second
+     time for a look they already own. */
+  if (add.length) await kvUpdate('paidlooks', cur => [...new Set([...(cur || []), ...add])], []);
   return set;
 }
 /* THE PAID-LOOK LEDGER, and it is a CLAIM, not a note. It returns true only to
@@ -2072,11 +2080,18 @@ export async function applyTransmog(slot, artId) {
   return { ok: true, cost: paid, already: cost > 0 && !paid };
 }
 
+/* Drop ONE slot's override, in one transaction, for the reason applyTransmog
+   states above: a whole-map write puts back whatever another slot's concurrent
+   apply had just set. */
+const dropTransmog = slot => kvUpdate('transmog', cur => {
+  const t = { ...(cur || {}) };
+  if (t[slot] == null) return undefined;
+  delete t[slot];
+  return t;
+}, {});
+
 export async function clearTransmog(slot) {
-  const tm = await transmogMap();
-  if (!(slot in tm)) return { ok: true, cost: 0 };
-  delete tm[slot];
-  await kvSet('transmog', tm);
+  await dropTransmog(slot);
   return { ok: true, cost: 0 };
 }
 
@@ -2325,8 +2340,7 @@ export async function equip(slot, itemId, { keepGear = false } = {}) {
        gear, which never cleared it) would suddenly reapply and silently change how an
        existing player looks the moment they updated. A look you chose should only
        change when you choose. markPaid means re-picking it later is still free. */
-    const tm = await transmogMap();
-    if (tm[slot] != null) { delete tm[slot]; await kvSet('transmog', tm); }
+    await dropTransmog(slot);
   }
   return eq;
 }

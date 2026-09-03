@@ -468,11 +468,16 @@ export async function claimDenWin(den, day = dateKey(), week = isoWeekKey()) {
   const lvl = levelFor(await totalXp()).level;
   const choices = rollDenLoot(den, day, owned, lvl + 3, await dominantArch(), await lootSalt());
   if (choices) {
-    const pending = (await kvGet('denloot', [])) || [];
-    if (!pending.some(p => p.key === denKey(day, den))) {
-      pending.push({ key: denKey(day, den), den: den.name, choices: choices.map(g => g.id), ts: Date.now() });
-      await kvSet('denloot', pending.slice(-6));
-    }
+    /* ONE TRANSACTION, because claimDenLoot TAKES from this row. Reading the
+       list and writing it whole put a drop the player had ALREADY picked back
+       into the pending list, and a boss's other piece could then be taken too,
+       which is exactly the claim claimDenLoot was made atomic to close. */
+    await kvUpdate('denloot', (list) => {
+      const pending = list || [];
+      if (pending.some(p => p.key === denKey(day, den))) return undefined;
+      return [...pending,
+        { key: denKey(day, den), den: den.name, choices: choices.map(g => g.id), ts: Date.now() }].slice(-6);
+    }, []);
   } else {
     await coinsAdd(60); // full collection consolation
   }
