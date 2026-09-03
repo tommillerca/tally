@@ -13638,7 +13638,12 @@ function openHatchReveal(res, charWrap) {
     timers.length = 0;
     if (stage) stage.style.display = 'none';
     revealEl.classList.add('show');
-    confettiRain(80); levelSound(S.sounds);
+    /* confettiBurst, NOT confettiRain. confettiRain has been a bare `return;`
+       since v322 (f22df77b, "retire confetti") where it was cut for drag lag,
+       and its 17 call sites were left calling it. So the hatch reveal has been
+       asking for confetti and getting nothing. Burst still works and is what
+       the shop already spends on a cosmetic purchase. */
+    confettiBurst(innerWidth / 2, innerHeight * 0.38, 22); levelSound(S.sounds);
     if (item && okBtn) { okBtn.textContent = 'Take them home'; okBtn.disabled = true; setTimeout(() => { okBtn.disabled = false; }, 320); }
   };
   if (reduced || !item) {
