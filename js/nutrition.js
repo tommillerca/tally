@@ -43,6 +43,25 @@ export function computeTargets(profile) {
   return { kcal, p, c, f, bmr: Math.round(bmr), tdee: Math.round(tdee) };
 }
 
+/* A hand-typed target (Settings > Daily targets). QA round 25, M2: the editor
+   wrote kcal, protein, carbs and fat as four INDEPENDENT fields, so 800 kcal was
+   stored with the 2,571 kcal of macros computed for the old figure still on top,
+   and 800 went under the floor the computed path applies, for anyone. Here the
+   calorie figure is the truth: protein and fat may be typed (null = the plan's
+   own numbers), carbs is always the remainder, and a figure the floor or the
+   arithmetic cannot honour is refused rather than stored.
+   Returns {ok:true, targets:{kcal,p,c,f}} or {ok:false, problem}. */
+export function manualTargets(profile, { kcal, p = null, f = null }) {
+  const floor = kcalFloor(profile);
+  if (kcal < floor) return { ok: false, problem: `Calorie target must be at least ${floor} kcal, your resting rate` };
+  const goal = GOALS.find(g => g.id === profile.goal) || GOALS[2];
+  const pp = p == null ? Math.round(goal.protein * profile.weightKg) : Math.round(p);
+  const ff = f == null ? Math.max(Math.round(kcal * 0.25 / 9), Math.round(0.6 * profile.weightKg)) : Math.round(f);
+  const c = Math.round((kcal - pp * 4 - ff * 9) / 4);
+  if (c < 0) return { ok: false, problem: 'Protein and fat alone add up to more than the calorie target' };
+  return { ok: true, targets: { kcal: Math.round(kcal), p: pp, c, f: ff } };
+}
+
 // Your activity level IS an assumed daily active burn: BMR x (factor - 1). That
 // amount is already baked into your target, so only measured active energy ABOVE
 // it is genuinely "extra" and earns calories back.

@@ -11,7 +11,7 @@ import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, kcalConsistent,
   dateKey, addDays, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
-  assumedActiveBurn, activeCalorieBonus, bmrMifflin,
+  assumedActiveBurn, activeCalorieBonus, bmrMifflin, kcalFloor,
 } from '../js/nutrition.js';
 import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume } from '../js/cooking.js';
 import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
@@ -104,6 +104,48 @@ test('R25-M3 no sedentary cut is targeted below its own resting rate', () => {
 test('computeTargets female floor', () => {
   const t = computeTargets({ sex: 'f', age: 45, heightCm: 158, weightKg: 52, activity: 'sedentary', goal: 'cut' });
   assert.ok(t.kcal >= 1200);
+});
+test('R25-M2 a manual target write keeps the macros on the calorie figure and above the floor', async () => {
+  /* QA round 25, M2. Settings > Daily targets wrote the four fields
+     INDEPENDENTLY: type 800 into kcal and Save, and the app stored 800 kcal with
+     the 2,571 kcal of protein/carbs/fat computed for the old figure still on top,
+     and 800 sailed under the 1,200 floor the computed path applies (for anyone,
+     a child included). The write now routes through nutrition.manualTargets:
+     protein and fat may be typed, carbs is the remainder, the floor is
+     kcalFloor(profile), and anything that cannot agree is refused, not stored. */
+  const nut = await import('../js/nutrition.js');
+  assert.equal(typeof nut.manualTargets, 'function', 'manualTargets is missing: the editor still writes fields independently');
+  const { manualTargets } = nut;
+  const prof = { sex: 'f', age: 10, heightCm: 138, weightKg: 32, activity: 'sedentary', goal: 'cut' };
+  const floor = kcalFloor(prof);
+  assert.ok(floor >= 1200);
+  // below the floor: refused, nothing to store
+  const low = manualTargets(prof, { kcal: 800, p: null, f: null });
+  assert.equal(low.ok, false); assert.match(low.problem, /at least/);
+  // protein + fat alone over the figure: refused
+  const over = manualTargets({ ...prof, weightKg: 70 }, { kcal: 1400, p: 200, f: 100 }); // floor 1352, 800+900 > 1400
+  assert.equal(over.ok, false); assert.match(over.problem, /more than/);
+  // every accepted write: p*4 + c*4 + f*9 lands on kcal within carb rounding (4 kcal)
+  for (const prof2 of [prof, { sex: 'm', age: 32, heightCm: 180, weightKg: 84, activity: 'moderate', goal: 'recomp' }])
+    for (const kcal of [kcalFloor(prof2), 2000, 2571, 3200])
+      for (const [p, f] of [[null, null], [150, null], [null, 60], [120, 50]]) {
+        const r = manualTargets(prof2, { kcal, p, f });
+        assert.equal(r.ok, true, `${kcal}/${p}/${f}: ${r.problem}`);
+        const t = r.targets;
+        assert.equal(t.kcal, kcal);
+        assert.ok(t.kcal >= kcalFloor(prof2));
+        assert.ok(t.p >= 0 && t.c >= 0 && t.f >= 0);
+        assert.ok(Math.abs(t.p * 4 + t.c * 4 + t.f * 9 - kcal) <= 4, `${kcal}: macros sum to ${t.p * 4 + t.c * 4 + t.f * 9}`);
+        if (p != null) assert.equal(t.p, p);
+        if (f != null) assert.equal(t.f, f);
+      }
+  // and the Settings handler is glue over it: no independent four-field write left
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const i = app.indexOf("$('#saveTargets').addEventListener");
+  assert.ok(i > 0, 'saveTargets handler not found: this check has drifted');
+  const block = app.slice(i, app.indexOf('await saveSettings();', i));
+  assert.ok(block.includes('manualTargets('), 'saveTargets does not route through manualTargets');
+  assert.ok(!/c:\s*Math\.round\(c\.value/.test(block), 'saveTargets still stores a typed carb figure independently of kcal');
 });
 test('active calorie-back: only burn ABOVE the activity baseline credits, at 50%', () => {
   const p = { sex: 'm', age: 32, heightCm: 180, weightKg: 84, activity: 'moderate', goal: 'recomp' };

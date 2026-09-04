@@ -100,7 +100,7 @@ import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, ACTIVITY_LEVELS, GOALS, kcalConsistent,
-  activeCalorieBonus, assumedActiveBurn,
+  activeCalorieBonus, assumedActiveBurn, manualTargets,
 } from './nutrition.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
 import { lookupBarcode, searchOnline } from './sources.js';
@@ -12525,7 +12525,10 @@ async function renderSettings(el) {
     <div class="grid4">
       <div class="field"><label>kcal</label><input id="tKcal" type="text" inputmode="numeric" value="${t.kcal}"></div>
       <div class="field"><label>Protein</label><input id="tP" type="text" inputmode="numeric" value="${t.p}"></div>
-      <div class="field"><label>Carbs</label><input id="tC" type="text" inputmode="numeric" value="${t.c}"></div>
+      <!-- Carbs is the remainder of kcal after protein and fat (R25-M2), so it
+           is shown, not typed: a typed figure was stored beside a kcal it did
+           not add up to. -->
+      <div class="field"><label>Carbs</label><input id="tC" type="text" inputmode="numeric" value="${t.c}" readonly></div>
       <div class="field"><label>Fat</label><input id="tF" type="text" inputmode="numeric" value="${t.f}"></div>
     </div>
     <button class="btn small ghost" id="saveTargets">Save targets</button>
@@ -12600,13 +12603,18 @@ async function renderSettings(el) {
        1e9 sailed through and every day read as 100% left. */
     const k = readNum($('#tKcal'), { name: 'Calorie target', ...LIMITS.targetKcal, unit: ' kcal' });
     if (!k.ok) return;
-    const p2 = readNum($('#tP'), { name: 'Protein target', ...LIMITS.macroG, optional: true, unit: ' g' });
+    const p2 = readNum($('#tP'), { name: 'Protein target', ...LIMITS.macroG, optional: true, blank: null, unit: ' g' });
     if (!p2.ok) return;
-    const c = readNum($('#tC'), { name: 'Carb target', ...LIMITS.macroG, optional: true, unit: ' g' });
-    if (!c.ok) return;
-    const f = readNum($('#tF'), { name: 'Fat target', ...LIMITS.macroG, optional: true, unit: ' g' });
+    const f = readNum($('#tF'), { name: 'Fat target', ...LIMITS.macroG, optional: true, blank: null, unit: ' g' });
     if (!f.ok) return;
-    S.settings.targets = { ...S.settings.targets, kcal: Math.round(k.value), p: Math.round(p2.value || 0), c: Math.round(c.value || 0), f: Math.round(f.value || 0) };
+    /* QA round 25, M2: these four used to be written INDEPENDENTLY, so 800 kcal
+       was saved with the 2,571 kcal of macros computed for the old figure still
+       on top, and 800 slipped under the floor the computed path applies (for
+       anyone, a child included). One pure function now owns the arithmetic and
+       the floor; carbs is its remainder; a figure it cannot honour is refused. */
+    const mt = manualTargets(S.settings.profile, { kcal: k.value, p: p2.value, f: f.value });
+    if (!mt.ok) { toast(mt.problem, 3600); $('#tKcal').focus(); return; }
+    S.settings.targets = { ...S.settings.targets, ...mt.targets };
     /* saveSettings(), not a whole-snapshot write of S.settings: the snapshot
        write is what let an older tab's copy undo another tab's change. The
        validation above is unchanged; only the write is. */
