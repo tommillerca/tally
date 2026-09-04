@@ -146,8 +146,8 @@ export async function removeRoutine(id) {
 
 // Which routines are done today. Read from the LEDGER, not a separate flag, so
 // it cannot drift out of step with what was actually awarded.
-export async function routinesDone(date = dateKey()) {
-  const rows = await db.all('xp');
+export async function routinesDone(date = dateKey(), xpRows = null) {
+  const rows = xpRows || await db.all('xp');   // renderToday hands in the xp rows it holds (QA round 28 G3)
   const done = new Set();
   for (const r of rows) {
     if (r.type === 'wellness' && r.date === date && r.key.startsWith('routine-')) {

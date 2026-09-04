@@ -230,6 +230,25 @@ const TARGETS = [
   { surface: 'wardrobe', sel: '.mog-bar .mog-go',    why: 'Dressing Room: Wear it (79x43 until W12)', inject: 'mog-panel' },
   { surface: 'wardrobe', sel: '.fit-chip.add',       why: 'fit rail: + Save this fit (128x34 until W12)', inject: 'mog-panel' },
   { surface: 'wardrobe', sel: '.fit-chip.reset',     why: 'fit rail: Take it all off (120x34 until W12)', inject: 'mog-panel' },
+  /* B2's own "Wear it" row is dropped here on purpose: W12's row above measures the same
+     control AND dresses the panel first (inject: 'mog-panel'). B2's copy carried no inject,
+     so on a fresh profile it would have gone red because the panel was never built, which is
+     a red for the wrong reason. The chevron row below is genuinely new. */
+  /* QA round 28 B2, 2026-09-04, WRITTEN NOT RUN (static-only session; the round
+     that runs this must state the prove-red). Two controls the M20 release left
+     under its own floor, both in this registry's blind spot:
+       - the "Change portion" chevron in a recents row of the Add sheet
+         (recentRowHtml, `.t1-frow-split .t1-icon-btn`), 40x40 because the M20
+         rule was scoped to .t1-tools. Recents exist only once the profile has
+         logged something; godmode's seeded profile has, and if it has not this
+         row FAILS rather than skipping (a missing recents list is a seed bug).
+       - "Wear it" in the Wardrobe's mog dock (`.look-bar.mog-bar .btn.mog-go`),
+         79x42 from 10px padding on 13.5px text. At rest the bar shows the
+         disabled "Wear it" (mogState().changed is false until a look is picked),
+         which is the same box; a disabled control still has to be reachable.
+     PROVE-RED (expected, to be confirmed by the first run): revert the two B2
+     rules in app.css and exactly these two rows go red at both widths. */
+  { surface: 'add', sel: '#results .t1-frow-split .t1-icon-btn', why: 'Add sheet: the "Change portion" chevron on a recents row (40x40 until R28-B2)' },
 ];
 
 /* CONTRAST PAIRS THIS PASS IS RESPONSIBLE FOR, and where the thresholds come
