@@ -144,6 +144,16 @@ ok('PARSES every audit is something Node will actually execute',
    FIXED ONE? Delete its line. The row fails on a stale entry too, so the
    inventory cannot quietly rot into a list nobody maintains. */
 const SEAM_ONLY_KNOWN = [
+  /* dead-shell-audit's exposeFunction binding is an INSTRUMENT, not a stand-in
+     for the feature. It kills a real shell and drives a real reload; the binding
+     only COUNTS document loads from outside the page, which is the whole point
+     — reading a flag the page sets would trust the thing under test. It replaced
+     a framenavigated listener on 2026-09-03 because that event also fires for
+     same-document navigation and was calling a healthy app a reloading one.
+     The distinction this list cares about — an audit that passes while the
+     player-facing path is broken — does not apply: the player-facing path IS
+     what it drives. */
+  'dead-shell-audit.mjs',
   /* reveal-mannequin-audit builds its cards through the webdriver-only __gearCard
      and __crateCard seams. Reaching a real reveal needs a crate in hand or a den
      win inside a GPS radius, neither of which a harness can arrange without
