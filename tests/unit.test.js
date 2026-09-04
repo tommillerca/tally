@@ -4066,6 +4066,33 @@ test('Crew count reads N+ with a note when the server truncated the bucket', () 
   assert.match(app, /id="cfanTrunc" hidden/, 'the fan note has no mount in the Crew markup');
 });
 
+/* QA round 27 R3: THE PENDING RENDERER READS ONLY WHAT THE SERVER STILL SENDS.
+   GET /friends used to ship the other player's complete plaintext profile on a
+   PENDING row, so a one-sided request read anybody's profile. The server now
+   shapes pending rows to exactly the set below (server/src/index.js, the
+   `shape` in GET /friends). This pins the client half: every `f.<field>` and
+   `f.profile.<field>` read inside requestRowsHtml, friendRowAvatar and
+   nameWithAlias must be in that set, so a renderer that grows a new read goes
+   red here instead of rendering blank against the live server. `alias` is
+   client-local (friendAliases kv), never on the wire. */
+test('R27-R3 the pending-request renderer reads no field the server no longer sends', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const fn = name => {
+    const a = app.indexOf(`function ${name}(`);
+    assert.ok(a > 0, `${name} is not in js/app.js`);
+    const b = app.indexOf('\n}\n', a);
+    return app.slice(a, b);
+  };
+  const src = fn('requestRowsHtml') + fn('friendRowAvatar') + fn('nameWithAlias');
+  const PENDING = new Set(['playerId', 'name', 'handle', 'profile', 'alias']);
+  const PENDING_PROFILE = new Set(['outfit', 'pet', 'level']);
+  const top = [...src.matchAll(/\bf\.(\w+)/g)].map(m => m[1]);
+  const prof = [...src.matchAll(/\bf\.profile\.(\w+)/g)].map(m => m[1]);
+  assert.ok(top.length >= 4 && prof.length >= 3, `CONTROL: too few reads found (${top.length}/${prof.length}), the slice is wrong`);
+  assert.deepEqual([...new Set(top)].filter(k => !PENDING.has(k)), [], 'the pending renderer reads a row field the server no longer sends on pending rows');
+  assert.deepEqual([...new Set(prof)].filter(k => !PENDING_PROFILE.has(k)), [], 'the pending renderer reads a profile field the server no longer sends on pending rows');
+});
+
 /* A BLOWN DAY LOOKED LIKE A PERFECT ONE. QA round 24 L8: macroRow had no over
    branch and the bar clamps at 100%, so 299 g of fat against 71 rendered byte-
    identical to 71 against 71, and 419 g of protein against 185 still wore the

@@ -1422,5 +1422,80 @@ await test('snapshot: an allowed key is still bounded, stripped and depth-limite
   assert.equal(prof.yard.pets[0].deeper, null, 'a value nested below the deepest real field still travelled');
 });
 
+/* ---- QA round 27 R2: the survey row dies with the account ----
+   `sendSurvey` wrote `me.id || me.handle` into leads.player and the kv social
+   record has no `id`, so every survey row in production is keyed by the HANDLE
+   while /account/delete bound the player id: a delete that had never matched a
+   row, and the name + email + opt-in outlived the account for 365 days.
+   Two rows via the real POST /survey: one keyed the way the fixed client keys it
+   (playerId), one keyed the way every existing row is (handle). One real
+   DELETE. Zero rows for that player afterwards, observed through /stats, the
+   only reader of leads. Prove-red on 96c1104a: the handle-keyed row survived
+   ("R2: the legacy handle-keyed survey row survived the account delete"). */
+await test('R2: account delete removes the survey row, id-keyed AND legacy handle-keyed', async () => {
+  const k = await makeKeys();
+  const p = await (await regFetch(k.pubJwk)).json();
+  const tag = `r27-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const post = (device, player, email) => fetch(BASE + '/survey', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
+    body: JSON.stringify({ device, player, label: p.handle, name: 'Doomed Tester', email, emailOptin: true, feedback: tag }),
+  });
+  assert.equal((await post(`dev-${tag}-a`, p.playerId, `${tag}-id@example.test`)).status, 200, 'PRECONDITION: id-keyed survey POST');
+  assert.equal((await post(`dev-${tag}-b`, p.handle, `${tag}-handle@example.test`)).status, 200, 'PRECONDITION: handle-keyed survey POST');
+  const leadsOf = async () => ((await (await fetch(BASE + '/stats?token=devtoken')).json()).leads || []).filter(l => l.feedback === tag);
+  assert.equal((await leadsOf()).length, 2, 'PRECONDITION: both survey rows must be visible in /stats before the delete');
+  assert.equal((await signedFetch(k.kp, p.playerId, 'POST', '/account/delete')).status, 200);
+  const left = await leadsOf();
+  assert.ok(!left.some(l => l.email.endsWith('-id@example.test')), 'R2: the id-keyed survey row survived the account delete');
+  assert.ok(!left.some(l => l.email.endsWith('-handle@example.test')), 'R2: the legacy handle-keyed survey row survived the account delete');
+  assert.equal(left.length, 0, `R2: ${left.length} survey row(s) still carry the deleted player's name and email`);
+});
+
+/* ---- QA round 27 R3: a pending friendship reveals no profile ----
+   GET /friends shaped every row alike, so an unanswered request I sent carried
+   the target's COMPLETE plaintext profile (weekSteps, yard, gear, everything).
+   Sending a request needs nothing from the other side, so anyone could read
+   anyone. A pending row now carries the pending renderer's set (playerId, name,
+   handle, profile.outfit / .pet / .level, all public on the leaderboard) and
+   nothing else; the accepted row keeps the whole profile. Prove-red on
+   96c1104a: "R3: a pending outgoing row carries a private profile field
+   (yard)". (weekSteps is not a marker: sanitizeSnapshot lifts it into the
+   week_steps column, so it never sits in the blob; yard and gear do.) */
+await test('R3: pending outgoing carries no profile blob; accepted carries it', async () => {
+  const a = await makeKeys(), b = await makeKeys();
+  const ap = await (await regFetch(a.pubJwk)).json();
+  const bp = await (await regFetch(b.pubJwk)).json();
+  const secret = { level: 7, outfit: { SK: 'SK0-1' }, pet: { id: 'C1', level: 2 }, gear: ['g1'], yard: { n: 1, pets: [{ sp: 'C1' }] }, stats: { power: 9 } };
+  assert.equal((await signedFetch(b.kp, bp.playerId, 'PUT', '/profile', JSON.stringify({ snapshot: secret, appV: 'test' }))).status, 200, 'PRECONDITION: target profile stored');
+  assert.equal((await signedFetch(a.kp, ap.playerId, 'POST', '/friends/request', JSON.stringify({ code: bp.friendCode }))).status, 200);
+  const PENDING = ['playerId', 'name', 'handle', 'profile'];
+  const PENDING_PROFILE = ['outfit', 'pet', 'level'];
+  const check = (row, who) => {
+    assert.ok(row, `PRECONDITION: ${who} row missing`);
+    assert.ok(!(row.profile && 'yard' in row.profile), `R3: a pending ${who} row carries a private profile field (yard)`);
+    assert.ok(!(row.profile && 'gear' in row.profile), `R3: a pending ${who} row carries a private profile field (gear)`);
+    assert.deepEqual(Object.keys(row).filter(k => !PENDING.includes(k)), [], `R3: pending ${who} row carries fields beyond the pending set`);
+    assert.deepEqual(Object.keys(row.profile || {}).filter(k => !PENDING_PROFILE.includes(k)), [], `R3: pending ${who} profile carries fields beyond outfit/pet/level`);
+    // CONTROL: the renderer's fields still travel (the avatar and the Lv line are not blank)
+    assert.equal(row.profile && row.profile.level, 7, `CONTROL: pending ${who} row lost profile.level, the renderer goes blank`);
+    assert.equal(row.profile && row.profile.outfit && row.profile.outfit.SK, 'SK0-1', `CONTROL: pending ${who} row lost profile.outfit`);
+  };
+  const aList = await (await signedFetch(a.kp, ap.playerId, 'GET', '/friends')).json();
+  check(aList.outgoing.find(x => x.playerId === bp.playerId), 'outgoing');
+  // the incoming side of the same row: A's profile is unset here, so only the field set is checked
+  const bList = await (await signedFetch(b.kp, bp.playerId, 'GET', '/friends')).json();
+  const inc = bList.incoming.find(x => x.playerId === ap.playerId);
+  assert.ok(inc, 'PRECONDITION: incoming row missing');
+  assert.deepEqual(Object.keys(inc).filter(k => !PENDING.includes(k)), [], 'R3: pending incoming row carries fields beyond the pending set');
+  // accepted: the whole profile, as before
+  assert.equal((await signedFetch(b.kp, bp.playerId, 'POST', '/friends/request', JSON.stringify({ code: ap.friendCode }))).status, 200);
+  const now = await (await signedFetch(a.kp, ap.playerId, 'GET', '/friends')).json();
+  const fr = now.friends.find(x => x.playerId === bp.playerId);
+  assert.ok(fr, 'PRECONDITION: reciprocation must accept');
+  assert.equal(fr.profile && fr.profile.yard && fr.profile.yard.n, 1, 'an ACCEPTED friend lost the full profile (yard)');
+  assert.deepEqual(fr.profile && fr.profile.gear, ['g1'], 'an ACCEPTED friend lost the full profile (gear)');
+  assert.ok(fr.friendCode && fr.since, 'an ACCEPTED friend lost friendCode/since');
+});
+
 console.log(`\n${passed} passed, ${failed} failed${unproven ? `, ${unproven} UNPROVEN here (see the note on UNPROVEN above)` : ''}`);
 process.exit(failed ? 1 : 0);

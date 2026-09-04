@@ -120,9 +120,16 @@ export async function sendSurvey(data = {}) {
     const base = await apiBase();
     if (!base) return { ok: false, reason: 'offline' };
     const me = await socialMe().catch(() => null);
+    /* QA round 27 R2. This read `me.id || me.handle`, and the kv `social`
+       record (js/social.js kvSet('social', { playerId, handle, friendCode,
+       name, onlineAt })) has NO `id` field, so every survey row ever written
+       carried the HANDLE in leads.player while /account/delete binds the
+       player ID: the delete has never matched a row and the name + email
+       outlived the account. The real id is `playerId`, the same field every
+       signed call puts in x-bh-player. The handle still travels in `label`. */
     const body = {
       device: await deviceId(), appV,
-      player: me ? (me.id || me.handle || null) : null,
+      player: me ? (me.playerId || null) : null,
       label: me ? (me.name || me.handle || null) : null,
       name: data.name ? String(data.name).slice(0, 60) : null,
       email: data.email ? String(data.email).slice(0, 120) : null,
