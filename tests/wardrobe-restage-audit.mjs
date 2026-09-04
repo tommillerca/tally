@@ -58,6 +58,17 @@ const granted = await page.evaluate(async ({ WORN, TRY, SLOT }) => {
   await loot.grantCosmetic(WORN, 'wardrobe-restage-audit');
   await loot.grantCosmetic(TRY, 'wardrobe-restage-audit');
   await loot.equip(SLOT, WORN);
+  /* gate7 2026-09-04, first run: SETUP read transmogPrice = 0 because a look is
+     free when the slot carries no STATS (transmogPrice: "no stats in the slot:
+     free"). A cosmetic in H is not gear in H. Seed the slot the way
+     transmog-clarity-audit does: grant and equip the lowest-level H gear. */
+  const { GEAR_ITEMS } = await import(new URL('js/gear.js', location.href).href);
+  const { totalXp, levelFor } = await import(new URL('js/game.js', location.href).href);
+  const lvl = levelFor(await totalXp()).level;
+  const gearH = GEAR_ITEMS.filter(x => x.slot === SLOT && (x.minLevel || 1) <= lvl).sort((a, b) => (a.minLevel || 1) - (b.minLevel || 1))[0];
+  if (!gearH) return { error: 'no H gear at level ' + lvl };
+  await loot.grantGear(gearH.id, 'wardrobe-restage-audit');
+  await loot.equipGear(SLOT, gearH.id);
   return { ok: true, price: await loot.transmogPrice(SLOT, TRY) };
 }, { WORN, TRY, SLOT });
 if (granted.error) { console.log('FAIL  SETUP ' + granted.error); process.exit(1); }
