@@ -8105,9 +8105,12 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
   function preview() {
     const n = nutrientsFor(food, sel) || { kcal: 0, p: 0, c: 0, f: 0 };
     $('#pvKcal', wrap).textContent = Math.round(n.kcal).toLocaleString();
-    $('#pvP', wrap).textContent = fmtG(n.p) + 'g';
-    $('#pvC', wrap).textContent = fmtG(n.c) + 'g';
-    $('#pvF', wrap).textContent = fmtG(n.f) + 'g';
+    // QA r25 M19 follow-up: custom foods now keep untyped macros as null, and
+    // fmtG(null) is '-', which read '-g'. Unknown stays a bare dash.
+    const gOr = v => v == null ? '-' : fmtG(v) + 'g';
+    $('#pvP', wrap).textContent = gOr(n.p);
+    $('#pvC', wrap).textContent = gOr(n.c);
+    $('#pvF', wrap).textContent = gOr(n.f);
     $('#pvServ', wrap).textContent = portionLabel(food, sel) || '';
     /* The bars show THIS food's own macro split, not its share of the day. A
        single apple against a daily protein target is 1% and every bar reads as
@@ -8703,7 +8706,7 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
       </div>` : ''}
       <div class="warn" id="ffWarn"${warnings.length ? '' : ' hidden'}>${warnings.map(esc).join('<br>')}</div>
       ${t1Sect('What is it')}
-      <div class="t1-field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || '')}"></div>
+      <div class="t1-field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || pv.name || '')}"></div>
       <div class="t1-field"><label>Brand</label><input id="ffBrand" placeholder="Optional" value="${esc(f?.brand || '')}"></div>
       ${t1Sect('One serving')}
       <div class="t1-g2">

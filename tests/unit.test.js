@@ -4244,7 +4244,7 @@ test('M21 the online row carries the offline hint, a retry on failure, and reset
 });
 
 test('M18 the empty local result offers Create a food with the query; a hit list does not', () => {
-  const { localResultsHtml } = addSheetHelpers();
+  const { localResultsHtml, app } = addSheetHelpers();
   const empty = localResultsHtml([], 'kombucha');
   assert.ok(empty.includes('Nothing local matches.'), 'the empty-state line is gone');
   assert.match(empty, /<button[^>]*data-create="kombucha"/, 'the empty result has no create control carrying the query');
@@ -4252,6 +4252,8 @@ test('M18 the empty local result offers Create a food with the query; a hit list
   const hits = localResultsHtml([{ id: 'g-1' }, { id: 'g-2' }], 'oats');
   assert.equal(hits, '<row g-1><row g-2>', 'a non-empty result must be the plain rows');
   assert.ok(!/data-create/.test(hits), 'the create control leaked into a non-empty result');
+  // the offer is consumed: the create form seeds its name from the prefill (M18 follow-up, 2026-09-04)
+  assert.match(app, /id="ffName"[^>]*value="\$\{esc\(f\?\.name \|\| pv\.name \|\| ''\)\}"/, 'openFoodForm ignores prefill.name, so the empty-search offer opens a blank form');
 });
 
 /* QA round 25 M19 + M18 (data half): the create-food Save mapping. Sliced out of
