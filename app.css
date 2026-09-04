@@ -5962,6 +5962,8 @@ body::before {
    button carries. Nothing is spent and nothing is lost. The armed state borrows
    the gold every other arm-then-confirm control in the app uses. */
 .fit-chip.add, .fit-chip.reset { color: var(--text-3); border-style: dashed; padding: 7px 13px; }
+/* at the fits cap the save chip stays as a ghost and its tap toasts the rule (QA round 23 F8) */
+.fit-chip.add[aria-disabled="true"] { opacity: .45; }
 .fit-chip.arming { border-color: var(--gold); border-style: solid; color: var(--gold); }
 .fit-note { text-align: center; margin: 2px 0 10px; }
 
@@ -11150,7 +11152,8 @@ button.t3-price::before {
    audit said so. The tier goes to the top-left corner instead, which is a
    corner and not an offset, and the only thing that ever uses it is the SLIMED
    tag. Cosmetic tiles have no stat line and keep the bottom-left.
-   .ward-cell.look never gets here: transmog tiles carry no r-* class. */
+   .ward-cell.look tiles carry r-* and the tag too since QA round 23 F6; they
+   have no stat line, so they keep the bottom-left like cosmetic tiles. */
 .ward-cell.gear .ward-rar { bottom: auto; top: 3px; }
 /* and under the SLIMED tag on the pieces that carry both */
 .ward-cell.gear.slimed .ward-rar { top: 18px; }
