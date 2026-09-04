@@ -1100,6 +1100,14 @@ function randomOutfit() {
 }
 
 async function showSplash(userEq) {
+  /* QA round 27 R14(a). On a fresh install this full-screen montage sat over
+     the onboarding for ~2.7s (measured: the first CTA refused taps for
+     2,676 ms) and a tap on it only dismissed the splash, so the player's first
+     tap did nothing visible. The onboarding IS the intro on a first run (FEED
+     THE BONES + poster + Gwart), so the montage adds nothing there and costs
+     the first tap. Returning players keep it. Checked before `forced` so the
+     onb-audit tap row can prove itself on the real gate. */
+  if (!S.settings) return;
   const forced = location.search.includes('splash=1');
   if (navigator.webdriver && !forced) return;
   if (reducedMotion && !forced) return;
@@ -18782,6 +18790,25 @@ function warmMapArt() {
   return _mapArtWarm;
 }
 
+const NET_MSG = 'The Boneyard needs a network signal to draw the map. Your spawns are safe; try again when you are back online.';
+/* THE ONE PLACE THE BONEYARD'S DEAD-END COPY IS CHOSEN. QA round 27 R14(b): a
+   geolocation callback that never fires (no success, no error, not even the
+   API's own 20s timeout) used to fall through to the 25s boot bound, which
+   blamed the NETWORK. Denial (code 1) and an answered no-fix (code 2/3) already
+   produced the right copy; this routes the never-answered case to the same
+   no-fix line, so the message names what actually failed. Pure so
+   tests/unit.test.js can drive it. */
+function boneyardFloorMsg({ err = null, fixSeen = true, isAndroid = false } = {}) {
+  const geoErr = !!err && typeof err.code === 'number';
+  if (geoErr && err.code === 1) {
+    return isAndroid
+      ? 'Location is off. Allow it in Settings → Apps → Boneheadz Gym → Permissions → Location, then retry.'
+      : 'Location is off. Allow it in Settings → Boneheadz Gym → Location, then retry.';
+  }
+  if (geoErr || !fixSeen) return 'No location fix yet. Step outside or near a window and retry.';
+  return NET_MSG;
+}
+
 // The Boneyard is a screen, not a modal. It used to be a "full" sheet opened by
 // a special case in the tab handler, which is why it had a Done button and its
 // own back semantics while every other tab was a route.
@@ -18845,7 +18872,6 @@ async function renderBoneyard(el) {
     teardownMap();   // Retry lands here too: kill any half-made attempt first
     const attempt = ++mapAttempt;
     let bootT = 0;
-    const NET_MSG = 'The Boneyard needs a network signal to draw the map. Your spawns are safe; try again when you are back online.';
     /* The floor. Every dead end on this screen lands here: a labeled error, a
        Retry that re-enters startMap on a clean slate, and the seeded map key so
        the space is not 90% dead. */
@@ -18862,7 +18888,10 @@ async function renderBoneyard(el) {
        usable state (maplibre 'load', or any tile arriving) in 25s, floor to the
        error card. Cleared on 'load' and by floorMap. */
     let tilesSeen = false, tileErrs = 0, errGrace = null;
-    bootT = setTimeout(() => { if (!tilesSeen) floorMap(NET_MSG); }, 25000);
+    /* geoAnswered: did getCurrentPosition call EITHER callback? If the bound
+       fires with no answer, the map is not the problem, the fix is (R14(b)). */
+    let geoAnswered = false;
+    bootT = setTimeout(() => { if (!tilesSeen) floorMap(boneyardFloorMsg({ fixSeen: geoAnswered })); }, 25000);
     if (!('geolocation' in navigator)) { clearTimeout(bootT); body.innerHTML = '<p class="warn" style="margin:16px">This device has no location support.</p>'; return; }
     // compass permission must be requested inside this tap
     try {
@@ -18878,7 +18907,9 @@ async function renderBoneyard(el) {
     try {
       [maplibregl, boot] = await Promise.all([
         loadMaplibre(),
-        new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 })),
+        new Promise((res, rej) => navigator.geolocation.getCurrentPosition(
+          pos => { geoAnswered = true; res(pos); }, e => { geoAnswered = true; rej(e); },
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 })),
       ]);
     } catch (err) {
       const geoErr = err && typeof err.code === 'number';
@@ -18888,14 +18919,7 @@ async function renderBoneyard(el) {
          were silent, and this was the loudest of them. Coarse code only, no
          coordinates, per the analytics contract. */
       if (geoErr) { try { trackEvent('geo_err', { code: err.code }); } catch { /* analytics never breaks the app */ } }
-      const isAndroid = /android/i.test(navigator.userAgent || '');
-      const locDenied = isAndroid
-        ? 'Location is off. Allow it in Settings → Apps → Boneheadz Gym → Permissions → Location, then retry.'
-        : 'Location is off. Allow it in Settings → Boneheadz Gym → Location, then retry.';
-      floorMap(geoErr && err.code === 1
-        ? locDenied
-        : geoErr ? 'No location fix yet. Step outside or near a window and retry.'
-        : NET_MSG);
+      floorMap(boneyardFloorMsg({ err, fixSeen: true, isAndroid: /android/i.test(navigator.userAgent || '') }));
       return;
     }
     if (attempt !== mapAttempt) return;   // player left (or retried) during the await

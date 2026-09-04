@@ -6,6 +6,8 @@ import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
 /* eggProgress is PURE (no db, no DOM), so it unit-tests directly. */
 import { eggProgress } from '../js/loot.js';
+/* onAppResume touches window/document only when CALLED, so it imports clean (O24). */
+import { onAppResume } from '../js/native.js';
 
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, kcalConsistent,
@@ -4831,6 +4833,142 @@ test('R26-O5 the post-log bounce is one finite animation, and renderToday ends i
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   assert.match(app, /addEventListener\('animationend',[\s\S]{0,200}animationName === 'bhbounce'[\s\S]{0,80}classList\.remove\('bounce'\)/,
     'renderToday no longer removes .bounce on bhbounce animationend, so the idle never restarts alone');
+});
+
+/* ---------------------------------------------------------------------------
+ * QA round 27 R13. The Android manifest declared 17 Health Connect READ_
+ * permissions and HealthPlugin.kt requested all 17 as a "full superset", while
+ * queryToday() read 7 record types. Over-declared health permissions are a
+ * routine Play data-safety query, and a grant sheet that asks for VO2 max and
+ * body fat the app never reads is a trust problem with the player too.
+ *
+ * Three sets, all parsed from source, must be EQUAL:
+ *   manifest   <uses-permission android.permission.health.READ_X />
+ *   requested  HealthPermission.getReadPermission(XRecord::class) in readPerms
+ *   read       XRecord::class / XRecord.SOMETHING_TOTAL anywhere else in the plugin
+ * A mismatch in either direction goes red: a declared-but-unread permission
+ * (the R13 defect) and a read-but-undeclared one (requestAuth can never satisfy
+ * containsAll(readPerms), so Health stays "not connected" forever).
+ *
+ * PROVE-RED (2026-09-04, on origin/main v472): fails at the "manifest declares
+ * permissions the bridge never reads" assertion listing the 10 extras.
+ * ------------------------------------------------------------------------- */
+test('QA round 27 R13: Android manifest declares exactly the Health Connect types the bridge reads', () => {
+  const manifest = readFileSync(join(here, '..', 'native', 'android', 'app', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
+  const kt = readFileSync(join(here, '..', 'native', 'android', 'app', 'src', 'main', 'java', 'com', 'boneheadz', 'gym', 'HealthPlugin.kt'), 'utf8');
+
+  const declared = new Set([...manifest.matchAll(/android\.permission\.health\.(READ_[A-Z_]+)/g)].map(m => m[1]));
+  assert.ok(declared.size > 0, 'no health permissions found in the manifest: the regex or the path has drifted, this has not passed');
+
+  // Record class -> permission name. Health Connect's names are the class minus
+  // "Record" in UPPER_SNAKE, except the three it shortens.
+  const IRREGULAR = { ExerciseSessionRecord: 'READ_EXERCISE', HeartRateVariabilityRmssdRecord: 'READ_HEART_RATE_VARIABILITY', SleepSessionRecord: 'READ_SLEEP' };
+  const permOf = rec => IRREGULAR[rec] || 'READ_' + rec.replace(/Record$/, '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
+
+  const permsBlock = kt.match(/private val readPerms = setOf\(([\s\S]*?)\n    \)/);
+  assert.ok(permsBlock, 'readPerms set not found in HealthPlugin.kt: re-anchor this test');
+  const requested = new Set([...permsBlock[1].matchAll(/getReadPermission\((\w+Record)::class\)/g)].map(m => permOf(m[1])));
+
+  // everything outside the imports and the request set is a READ SITE
+  const body = kt.replace(permsBlock[0], '').split('\n').filter(l => !/^import /.test(l)).join('\n');
+  const read = new Set([...body.matchAll(/\b(\w+Record)(?:::class|\.[A-Z_]+_TOTAL)/g)].map(m => permOf(m[1])));
+  assert.ok(read.size > 0, 'no read sites found in HealthPlugin.kt: the regex has drifted, this has not passed');
+
+  const diff = (a, b) => [...a].filter(x => !b.has(x)).sort();
+  assert.deepEqual(diff(declared, read), [], `manifest declares permissions the bridge never reads: ${diff(declared, read).join(', ')}`);
+  assert.deepEqual(diff(read, declared), [], `bridge reads types the manifest does not declare: ${diff(read, declared).join(', ')}`);
+  assert.deepEqual(diff(requested, read), [], `readPerms requests permissions the bridge never reads: ${diff(requested, read).join(', ')}`);
+  assert.deepEqual(diff(read, requested), [], `bridge reads types readPerms never requests (requestAuth can never be satisfied): ${diff(read, requested).join(', ')}`);
+  assert.equal(read.size, 7, `expected the 7 read types traced in R13, saw ${[...read].sort().join(', ')}: if a read was added on purpose, update this count with it`);
+});
+
+/* ---------------------------------------------------------------------------
+ * QA round 27 R14(a). The first CTA of a fresh install refused taps for
+ * 2,676 ms because the #splash montage (fixed, inset 0, z-index 400, opaque)
+ * sat over the onboarding. showSplash now returns before it builds anything
+ * when there is no profile yet, and it does so BEFORE the ?splash=1 force so
+ * the onb-audit row can tap through a forced splash and prove the gate.
+ * PROVE-RED (2026-09-04, origin/main v472): the gate is absent, fails at the
+ * first assertion.
+ * ------------------------------------------------------------------------- */
+test('QA round 27 R14(a): no splash is built over a fresh install\'s onboarding', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const fn = app.match(/async function showSplash\(userEq\) \{([\s\S]*?)\n\}/);
+  assert.ok(fn, 'showSplash not found: re-anchor this test');
+  const head = fn[1].slice(0, fn[1].indexOf("const forced"));
+  assert.match(head, /if \(!S\.settings\) return;/, 'showSplash builds the montage over onboarding again (no S.settings gate before the forced check)');
+  assert.ok(!/document\.createElement/.test(head), 'the gate must run before the splash element exists');
+  // the CSS half: the moment the splash fades it must stop eating taps
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
+  assert.match(css, /#splash\.out \{[^}]*pointer-events: none/, 'a fading splash must be non-interactive');
+});
+
+/* ---------------------------------------------------------------------------
+ * QA round 27 R14(b). Geolocation callback never fires -> the Boneyard waited
+ * 25.3 s and then blamed the network. boneyardFloorMsg is the single chooser:
+ * denied -> platform copy; answered no-fix OR never-answered -> the no-fix copy;
+ * everything else -> the network copy. floorMap always renders #mapRetry, so
+ * every branch here carries a retry.
+ * PROVE-RED (2026-09-04, origin/main v472): fails at the first assertion, the
+ * 25s bound hardcoding NET_MSG.
+ * ------------------------------------------------------------------------- */
+test('QA round 27 R14(b): a never-answered geolocation wait yields the no-fix copy, not the network copy', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(!/if \(!tilesSeen\) floorMap\(NET_MSG\); \}, 25000\)/.test(app),
+    'the 25s boot bound floors to NET_MSG unconditionally again: a silent geolocation blames the network');
+  const start = app.indexOf('function boneyardFloorMsg(');
+  assert.ok(start > 0, 'boneyardFloorMsg is gone');
+  const src = app.slice(start, app.indexOf('\n}\n', start) + 2);
+  const net = app.match(/const NET_MSG = '([^']+)';/);
+  assert.ok(net, 'NET_MSG constant not found at module level');
+  const chooser = new Function('NET_MSG', src + '\nreturn boneyardFloorMsg;')(net[1]);
+  const noFix = chooser({ err: { code: 3 } });                         // answered: timeout
+  assert.match(noFix, /No location fix yet/, 'an answered no-fix must say no fix');
+  assert.equal(chooser({ fixSeen: false }), noFix, 'a never-answered wait must produce the SAME no-fix copy, not the network copy');
+  assert.equal(chooser({ err: { code: 2 } }), noFix, 'position-unavailable is a no-fix too');
+  assert.match(chooser({ err: { code: 1 } }), /Location is off\. Allow it in Settings → Boneheadz Gym/, 'iOS denial copy');
+  assert.match(chooser({ err: { code: 1 }, isAndroid: true }), /Settings → Apps → Boneheadz Gym → Permissions/, 'Android denial copy');
+  assert.equal(chooser({}), net[1], 'a map that got a fix but no tiles is a network problem');
+  assert.equal(chooser({ err: new Error('import failed') }), net[1], 'a non-geo error (vendor import) is a network problem');
+  // the bound feeds the chooser what it knows, and the wait state is labelled
+  const sm = app.slice(app.indexOf('async function startMap()'), app.indexOf('if (attempt !== mapAttempt) return;   // player left'));
+  assert.match(sm, /floorMap\(boneyardFloorMsg\(\{ fixSeen: geoAnswered \}\)\); \}, 25000\)/, 'the 25s bound must pass geoAnswered to the chooser');
+  assert.match(sm, /pos => \{ geoAnswered = true; res\(pos\); \}, e => \{ geoAnswered = true; rej\(e\); \}/, 'both geolocation callbacks must mark the wait answered');
+  assert.match(sm, /Raising the map from the dirt\.\.\./, 'the wait state lost its label');
+  assert.match(app, /id="mapRetry"/, 'floorMap lost its Retry button');
+});
+
+/* ---------------------------------------------------------------------------
+ * QA round 26 O24. Inside the Capacitor shell both appStateChange(isActive)
+ * and visibilitychange fire on one foregrounding, so the resume body in app.js
+ * (rollover, health sync, social sync, refresh) ran twice per resume. Driven
+ * here with stub listeners: two triggers inside the 500 ms window run the body
+ * once; two transitions further apart run it twice.
+ * PROVE-RED (2026-09-04, origin/main v472): body ran 2 times on the first
+ * assertion.
+ * ------------------------------------------------------------------------- */
+test('QA round 26 O24: one resume body per foreground transition, both listeners kept', () => {
+  const handlers = { app: null, vis: null };
+  const savedWin = globalThis.window, savedDoc = globalThis.document, savedNow = Date.now;
+  globalThis.window = { Capacitor: { Plugins: { App: { addListener: (name, fn) => { if (name === 'appStateChange') handlers.app = fn; } } } } };
+  globalThis.document = { hidden: false, addEventListener: (name, fn) => { if (name === 'visibilitychange') handlers.vis = fn; } };
+  let t = 1_000_000; Date.now = () => t;
+  try {
+    let runs = 0;
+    onAppResume(() => { runs++; });
+    assert.ok(handlers.app && handlers.vis, 'both listeners must still be registered (each is the only one on its platform)');
+    // one foregrounding, both platforms report it a few ms apart
+    handlers.app({ isActive: true }); t += 20; handlers.vis();
+    assert.equal(runs, 1, `body ran ${runs} times for ONE foreground transition`);
+    handlers.app({ isActive: false }); // backgrounding never runs the body
+    globalThis.document.hidden = true; handlers.vis(); globalThis.document.hidden = false;
+    assert.equal(runs, 1, 'backgrounding ran the resume body');
+    // a second, real transition later
+    t += 600; handlers.vis(); t += 20; handlers.app({ isActive: true });
+    assert.equal(runs, 2, `two transitions must run the body twice, ran ${runs}`);
+  } finally {
+    globalThis.window = savedWin; globalThis.document = savedDoc; Date.now = savedNow;
+  }
 });
 
 await runAll();

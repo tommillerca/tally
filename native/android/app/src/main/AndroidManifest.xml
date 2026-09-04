@@ -72,22 +72,19 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
-    <!-- Health Connect: read-only steps, active calories, weight (mirrors iOS HealthKit reads) -->
+    <!-- Health Connect: read-only, and ONLY the record types HealthPlugin.kt actually
+         reads (steps, active calories, weight, exercise sessions, resting HR, HRV,
+         sleep). QA round 27 R13: this block declared 17 READ_ permissions while the
+         bridge read 7; the other 10 (total calories, distance, floors, heart rate,
+         VO2 max, respiratory rate, SpO2, height, body fat, lean mass) were a routine
+         Play data-safety query. tests/unit.test.js pins this list to the bridge's
+         request set AND its read sites, so adding a read here without a read there
+         (or the reverse) goes red. -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
-    <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
-    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
-    <uses-permission android:name="android.permission.health.READ_FLOORS_CLIMBED" />
-    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY" />
-    <uses-permission android:name="android.permission.health.READ_VO2_MAX" />
-    <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE" />
-    <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
-    <uses-permission android:name="android.permission.health.READ_HEIGHT" />
-    <uses-permission android:name="android.permission.health.READ_BODY_FAT" />
-    <uses-permission android:name="android.permission.health.READ_LEAN_BODY_MASS" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
 </manifest>

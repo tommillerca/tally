@@ -53,10 +53,28 @@ export async function nativeQueryToday() {
 }
 
 // Fires cb when the app returns to the foreground (native + web fallbacks).
+/* ONE RESUME PER FOREGROUND TRANSITION. QA round 26 O24: inside the Capacitor
+   shell BOTH listeners fire on the same foregrounding (appStateChange
+   isActive from the plugin, visibilitychange from the WebView), so the whole
+   resume body in app.js (day rollover, health sync, social sync, refresh) ran
+   twice. Not measured on a device (needs the shell), fixed defensively: both
+   listeners stay (each is the only one on its platform) and share a single
+   entry that ignores a second fire inside 500 ms. Two real transitions are
+   always further apart than that, so both still run.
+   ponytail: a fixed window, not a hidden->visible state flag; the flag would
+   need both events to agree on "hidden", and the plugin does not fire on
+   background reliably enough to trust. */
 export function onAppResume(cb) {
+  let lastAt = -Infinity;
+  const fire = () => {
+    const now = Date.now();
+    if (now - lastAt < 500) return;
+    lastAt = now;
+    cb();
+  };
   try {
     const AppP = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
-    if (AppP && AppP.addListener) AppP.addListener('appStateChange', s => { if (s.isActive) cb(); });
+    if (AppP && AppP.addListener) AppP.addListener('appStateChange', s => { if (s.isActive) fire(); });
   } catch { /* app plugin absent */ }
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) cb(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) fire(); });
 }
