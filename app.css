@@ -6481,6 +6481,35 @@ body::before {
   .wpn-sheen { display: none; }
 }
 
+/* ===== Football kit, 2026-09-04: the team tint =====
+   One master per garment, coloured per team by two multiply layers, each a span
+   masked by an alpha PNG (mask-a the primary region, mask-b the secondary). The
+   same registration contract as .wpn-sheen above: mask-size and mask-position
+   read the surface's --av-fit/--av-pos so the colour cannot slide off the art.
+   Multiply against a master whose team regions are normalised to white lands the
+   team hex exactly (scripts/football-masks.py prints the numbers); the facemask,
+   glass and outlines are outside both masks and keep Cam's colour. Pet and
+   paddock layers pass their geometry inline (.pw / inkFitStyle) and their mask
+   is stretched to that box, since the <img> beside them is too. */
+.fb-tint {
+  position: absolute; inset: 0; pointer-events: none;
+  -webkit-mask-image: var(--fbm); mask-image: var(--fbm);
+  -webkit-mask-size: var(--av-fit, cover); mask-size: var(--av-fit, cover);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: var(--av-pos, center); mask-position: var(--av-pos, center);
+  mix-blend-mode: multiply;
+}
+.petcrop .fb-tint, .pdk-thumb .fb-tint, .pdk-tile .fb-tint { -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
+/* the kit room */
+.fb-pick { display: flex; align-items: center; gap: 10px; margin: 0 2px 12px; font-size: 13px; color: var(--text-2); }
+.fb-pick select { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--surface-2);
+  color: var(--text); border: 1px solid var(--line-strong); font: inherit; }
+.fb-swatch { width: 26px; height: 26px; border-radius: 50%; border: 4px solid; flex: 0 0 auto; }
+.drop-item.fb::before { content: 'KIT'; }
+.fb-worn { position: relative; width: 88px; height: 88px; margin: 0 auto; overflow: hidden; border-radius: 10px; }
+.drop-item.fb .petcrop { display: block; margin: 0 auto; }
+.drop-buy[data-buyfb]:disabled { background: var(--surface-3); color: var(--text-3); opacity: 1; }
+
 /* ===== A spire under siege (v266) =====
    The one state on the map with a deadline attached, so it gets the loudest
    treatment: coral, a pulse, and the countdown where the tribute number usually
