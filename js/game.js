@@ -127,8 +127,23 @@ let quietLevelups = false; // backfills replay history; they must not celebrate 
      cook    8 x  8 =  64
      siege   5 x 12 =  60     sieges are rare anyway, this is a backstop
    Levels are NOT capped and are not meant to be (Tom, 2026-08-16). The ladder
-   just has to be climbed rather than farmed. */
-export const XP_DAILY_CAP = { fight: 12, garden: 10, cook: 8, siege: 5 };
+   just has to be climbed rather than farmed.
+     log    20 x 10 = 200     QA round A, 2026-09-03 (L1): the log key was
+                             `log-${entry.id}` and entry.id is newId(), which is
+                             Date.now() plus randomness, so it was the SAME bug
+                             one variable hop away and the static lint missed it.
+                             5 re-logs from the recents row = 15 taps for +50 XP,
+                             uncapped, level 20 in ~53 minutes of tapping. The
+                             ledger row also outlived its log row, so log-then-
+                             delete kept every XP. Twenty is above any honest
+                             day (three meals of five items each is fifteen);
+                             past it a log still counts for streak, variety,
+                             marrow and badges, which are recomputed from the log
+                             store and so fall honestly when rows are deleted.
+                             The minted XP is now bounded per DAY by construction,
+                             like every other repeatable, which is the invariant
+                             that lets a permanent mint stand after a delete. */
+export const XP_DAILY_CAP = { fight: 12, garden: 10, cook: 8, siege: 5, log: 20 };
 
 /* Award a repeatable action against its daily ceiling.
    The key is `${prefix}-${date}-${n}`, so it is bounded by construction: dedupe
@@ -501,7 +516,9 @@ async function streakAwards(streak) {
 // A level crossed by this log is announced by awardOnce's `bh-levelup` event, not here.
 export async function onFoodLogged(entry, { via = null, targets = null, entriesForDate = [] } = {}) {
   let gained = 0;
-  const logXp = await award(`log-${entry.id}`, 'log', 10, 'Logged a food', entry.date);
+  /* Capped and keyed by DATE, never by entry.id: see XP_DAILY_CAP.log. The
+     date is the entry's own, so a backdated log spends that day's ceiling. */
+  const logXp = await awardCapped('log', 'log', 10, 'Logged a food', XP_DAILY_CAP.log, entry.date);
   gained += logXp;
   gained += await award(`firstlog-${entry.date}`, 'firstlog', 15, 'First log of the day', entry.date);
   if (via === 'scan') gained += await award(`scan-${entry.date}-${entry.foodId || entry.id}`, 'scan', 15, 'Barcode scan', entry.date);
@@ -881,10 +898,17 @@ async function runInitBackfill(targets, onProgress) {
      list is derived deterministically (IndexedDB key order for log and weights,
      a sorted date set), which is what makes an index into one of them a
      resumable position at all. */
+  /* The replay keys log XP the way onFoodLogged does now, `log-<date>-<n>`,
+     with n the row's ordinal within its day (byDate is in IndexedDB key order,
+     so it is deterministic), and stops paying at XP_DAILY_CAP.log. Computed
+     here rather than probed through awardCapped: probing costs n adds per row
+     and this is the boot path the 12s dead-shell timer watches. */
+  const ord = new Map();
+  for (const es of byDate.values()) es.forEach((e, i) => ord.set(e.id, i + 1));
   const phases = [
     { id: 'log', items: log.slice(-400),
-      key: e => `log-${e.id}`,
-      run: e => award(`log-${e.id}`, 'log', 10, 'Logged a food', e.date) },
+      key: e => `log-${e.id}`,   // checkpoint label only, not an award key
+      run: e => { const n = ord.get(e.id); return n > XP_DAILY_CAP.log ? 0 : award(`log-${e.date}-${n}`, 'log', 10, 'Logged a food', e.date); } },
     { id: 'firstlog', items: dates,
       key: d => `firstlog-${d}`,
       run: d => award(`firstlog-${d}`, 'firstlog', 15, 'First log of the day', d) },
