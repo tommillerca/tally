@@ -22663,7 +22663,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
        One extra <small> under the hint, same values actionsFor already decided
        on: the cost when the move is legal, the reason when it is not (AP first,
        then Stamina; flurry's floor is the 30 actionsFor tests, not its windCost,
-       which is "all of it"). No new copy beyond the value strings. */
+       which is "all of it"). No new copy beyond the value strings.
+       ONE <small>, not two (2026-09-04): a second sub-line added ~14px per row
+       and fight-layout-audit ROWS went red at 393x852 (2 of 3 rows inside a
+       188px tray). The cost rides the existing hint line when the move is
+       legal and REPLACES it with the reason when it is not: zero extra height. */
     const costLine = a => {
       if (!a.enabled && !fight.over) {
         if (fight.ap < a.ap) return `Needs ${a.ap} AP`;
@@ -22673,7 +22677,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     };
     const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
       <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" title="${esc(moveDetail(a.id))}" ${a.enabled ? '' : 'disabled'}>
-        <b>${a.label}</b><small>${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>${a.windCost ? ' ' + a.windCost + 'w' : ''}`}</small><small class="cost">${costLine(a)}</small>
+        <b>${a.label}</b><small>${a.enabled || fight.over ? `${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>`} · <span class="cost">${costLine(a)}</span>` : `<span class="cost">${costLine(a)}</span>`}</small>
       </button>` : '';
     const dmgHint = id => {
       const est = expectedDamage(id, player, null, foe);
@@ -22691,7 +22695,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
     let html = '';
     const sig = get('signature');
-    if (sig) html += `<button class="fight-act sig" data-act="signature" title="${esc(moveDetail('signature'))}" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · full power${player.sigsUsed ? ' · encore' : ''}</small><small class="cost">${costLine(sig)}</small></button>`;
+    if (sig) html += `<button class="fight-act sig" data-act="signature" title="${esc(moveDetail('signature'))}" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>${sig.enabled || fight.over ? `~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · full power${player.sigsUsed ? ' · encore' : ''} · ` : ''}<span class="cost">${costLine(sig)}</span></small></button>`;
 
     const casterRow = () => {
       let h = '';

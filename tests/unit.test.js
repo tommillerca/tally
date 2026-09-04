@@ -5507,7 +5507,8 @@ test('QA round 28 P2: every move button carries its cost in visible text, the re
   const sig = render({ ap: 2, over: false }, { wind: 50, hype: 100 }, { id: 'signature', label: 'Signature', ap: 2, windCost: 0, enabled: true });
   assert.match(visible(sig), /2 AP · 100 Hype/, 'Signature does not print the Hype it spends');
   // the full-width SIGNATURE button in renderActions carries the same sub-line
-  assert.match(app, /data-act="signature"[^\n]*<small class="cost">\$\{costLine\(sig\)\}<\/small>/, 'the SIGNATURE button has no cost sub-line');
+  assert.match(app, /data-act="signature"[^\n]*<span class="cost">\$\{costLine\(sig\)\}<\/span><\/small>/, 'the SIGNATURE button has no cost on its hint line');
+  assert.ok(!/<small class="cost">/.test(app), 'a second <small> per move row breaks the three-rows-no-scroll tray (fight-layout ROWS at 393x852)');
   // HP number: printed in the HUD, updated from the same value that drives the width
   assert.match(app, /<span id="youHpN">\$\{Math\.round\(player\.hp\)\}\/\$\{player\.d\.maxHp\}<\/span>/, 'the You HUD has no HP number');
   assert.match(app, /<span id="foeHpN">\$\{Math\.round\(foe\.hp\)\}\/\$\{foe\.d\.maxHp\}<\/span>/, 'the foe HUD has no HP number');
