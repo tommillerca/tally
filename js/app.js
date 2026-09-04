@@ -1368,6 +1368,7 @@ async function boot() {
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
   route();
+  restoreAddDraft().catch(() => {});   // QA round 25 M16: reopen a half-finished entry a reload would have lost
   /* Paddock cards: a webdriver-only mount seam so the audit drives the REAL builders
      and handlers before the scene shell exists, and after it lands too. A no-op in
      every real session (navigator.webdriver !== true). */
@@ -7679,7 +7680,75 @@ async function recordMealUsed(meal) {
 
 /* ================= add flow ================= */
 
-function openAdd(meal = 0) {
+/* THE HALF-FINISHED ENTRY SURVIVES A RELOAD (QA round 25, M16).
+   Measured: backgrounding for 30 s and 600 s kept the sheet, the query, the
+   1.5 servings, the 423 kcal preview and the meal chip. A reload lost all of
+   it, because every piece was closure state inside openAdd and openPortion.
+   Onboarding already solves this with one kv row ('onbProgress', stamped on
+   every change, cleared when the flow ends, read once at boot); this is the
+   same shape. One row, one blob, no schema: { sheet, q, meal, foodId, sel, ts }.
+   Stamped on every change while the add sheet is up, cleared on commit and on
+   the add sheet's own close, ignored after 24 h (a stale draft on a new day is
+   worse than none) and when nothing was actually typed or picked. Restored by
+   restoreAddDraft() once at boot, after the hash is settled and route() ran. */
+const ADD_DRAFT_TTL = 24 * 3600e3;
+let addDraft = null;              // in-memory mirror; null means no add flow is live
+function addDraftUsable(d, now = Date.now()) {
+  return !!(d && typeof d === 'object' && typeof d.ts === 'number'
+    && now - d.ts < ADD_DRAFT_TTL && (d.q || d.foodId));
+}
+function stampAddDraft(patch) {
+  addDraft = { ...(addDraft || {}), ...patch, ts: Date.now() };
+  kvSet('addDraft', addDraft).catch(() => {});
+}
+function clearAddDraft() {
+  addDraft = null;
+  kvSet('addDraft', null).catch(() => {});
+}
+async function restoreAddDraft() {
+  const d = await kvGet('addDraft', null);
+  if (!addDraftUsable(d) || currentTab() !== 'today' || sheetStack.length) return;
+  openAdd(d.meal || 0, d.q || '');
+  /* Only a food findFood still resolves (built-in or custom): an online result
+     lived in S.onlineCache, which the reload emptied. The query is kept either
+     way, so the search is one Enter from being back. */
+  const food = d.sheet === 'portion' && d.foodId ? findFood(d.foodId) : null;
+  if (food) openPortion(food, { meal: d.meal || 0, sel: d.sel || null });
+}
+
+/* THE ONLINE ROW IN ITS THREE STATES (QA round 25, M21). Measured offline:
+   the row was offered live with no hint, became a dead paragraph after the
+   tap, and never came back when signal did. Idle carries the offline hint in
+   its own label when navigator.onLine is false and stays tappable; failed keeps
+   the message and adds the barcode miss sheet's "Try again", on the same
+   [data-online] hook the idle row uses so the existing handler is the retry.
+   restoreOnlineRow puts a failed (or offline-hinted) row back to idle when the
+   'online' event fires; results rows carry no [data-online], so it never
+   touches a list that actually came back. */
+function onlineRowHtml(q, { offline = false, error = null } = {}) {
+  if (error) {
+    return `<p class="note" style="padding:8px 2px">${error}</p>
+      <button class="btn ghost" data-online>Try again</button>`;
+  }
+  return `<button class="t1-frow" data-online><span class="t1-med">${ICONS.searchIco(19)}</span><span class="nm"><b style="color:var(--accent)">Search online for "${esc(q)}"</b><small>${offline ? 'Offline right now' : 'USDA + Open Food Facts'}</small></span></button>`;
+}
+function restoreOnlineRow(sect, q) {
+  if (!sect || !sect.querySelector('[data-online]')) return false;
+  sect.innerHTML = onlineRowHtml(q);
+  return true;
+}
+
+/* THE EMPTY RESULT OFFERS THE FORM (QA round 25, M18, third bullet). Round 24
+   measured "Nothing local matches." 21 times in 48 searches, and the one
+   screen where a person needs "Create a food" did not offer it. The control
+   carries the query; the handler is the existing openFoodForm. */
+function localResultsHtml(local, q) {
+  if (local.length) return local.map(foodRowHtml).join('');
+  return `<p class="note" style="padding:14px 2px 6px;text-align:center">Nothing local matches.</p>
+    <button class="t1-frow" data-create="${esc(q)}"><span class="t1-med">+</span><span class="nm"><b>Create a food</b><small>"${esc(q)}"</small></span></button>`;
+}
+
+function openAdd(meal = 0, q0 = '') {
   const wrap = openSheet(`
     <div class="sheet-head">
       <div class="hd"><h2>Add food</h2></div>
@@ -7699,7 +7768,8 @@ function openAdd(meal = 0) {
       <div style="height:12px"></div>
       <div class="t1-search">${ICONS.searchIco()}<input id="q" type="search" placeholder="Search ${GENERIC_FOODS.length}+ foods" autocomplete="off" enterkeyhint="search"></div>
       <div id="results"></div>
-    </div>`, { cls: 'full t1' });
+    </div>`, { cls: 'full t1', onClose: () => { clearAddDraft(); window.removeEventListener('online', onOnline); } });
+  addDraft = { sheet: 'add', q: '', meal };   // M16: the flow is live; stamps write from here
 
   // the number you are deciding against. Async so the sheet opens instantly.
   dayBudget().then(b => {
@@ -7719,6 +7789,7 @@ function openAdd(meal = 0) {
   $$('#mealChips button', wrap).forEach(c => c.addEventListener('click', () => {
     curMeal = Number(c.dataset.meal);
     $$('#mealChips button', wrap).forEach(x => x.classList.toggle('on', x === c));
+    stampAddDraft({ meal: curMeal });   // M16
     // L4: the recents are ranked per meal, so a chip change re-ranks them
     // (only while the default list is showing; a live search is left alone).
     if (!input.value.trim()) showDefault();
@@ -7762,11 +7833,23 @@ function openAdd(meal = 0) {
       toast(`Added ${src.name}${game.xp ? ` · +${game.xp} XP` : ''}`);
       S.justLogged = true;
       queueCelebration(game);
+      clearAddDraft();   // M16: committed, nothing left to resume
       history.back();
       setTimeout(refresh, 60);
     }));
-    $$('[data-online]', results).forEach(b => b.addEventListener('click', () => runOnlineSearch(input.value.trim())));
+    bindOnline(results);
+    // M18: the empty result's create control; prefill is passed for the form to
+    // pick up the name (it reads only nutrient keys from prefill today).
+    $$('[data-create]', results).forEach(b => b.addEventListener('click', () => openFoodForm({ meal: curMeal, prefill: { name: b.dataset.create } })));
   }
+  /* Scoped, not results-wide: bindRows rebinds every [data-food] in #results,
+     so re-running it for one row would double-bind the local list. */
+  function bindOnline(scope) {
+    $$('[data-online]', scope).forEach(b => b.addEventListener('click', () => runOnlineSearch(input.value.trim())));
+  }
+  // M21 (3): signal is back, so a failed or offline-hinted row is tappable again
+  const onOnline = () => { if (restoreOnlineRow($('#onlineSect', results), input.value.trim())) bindOnline(results); };
+  window.addEventListener('online', onOnline);
 
   function onlineById(id) {
     for (const list of S.onlineCache.values()) {
@@ -7797,11 +7880,14 @@ function openAdd(meal = 0) {
       /* 'unreachable' is thrown only when NEITHER database answered, so this is
          the no-signal case and it gets the no-signal words. Everything else
          reached a server and got a real refusal. */
-      if (sect) sect.innerHTML = `<p class="note" style="padding:8px 2px">${e.message === 'rate_limit'
+      if (!sect) return;
+      // M21 (2): the same words as before, plus the miss sheet's "Try again"
+      sect.innerHTML = onlineRowHtml(q, { error: e.message === 'rate_limit'
         ? 'Online search limit reached for now. Add a free USDA key in Settings for 1,000 searches/hour.'
         : e.message === 'unreachable'
         ? 'No signal, so the food databases could not be searched. Your own foods are all still here, and this will work again when you are back online.'
-        : 'Online search unavailable right now.'}</p>`;
+        : 'Online search unavailable right now.' });
+      bindOnline(sect);
     }
   }
 
@@ -7809,18 +7895,20 @@ function openAdd(meal = 0) {
   input.addEventListener('input', () => {
     clearTimeout(debounce);
     const q = input.value.trim();
+    stampAddDraft({ sheet: 'add', q });   // M16
     if (!q) { showDefault(); return; }
     debounce = setTimeout(() => {
       const local = searchFoods(allSearchableFoods(), q, 25);
-      results.innerHTML =
-        (local.length ? local.map(foodRowHtml).join('') : '<p class="note" style="padding:14px 2px 6px;text-align:center">Nothing local matches.</p>') +
-        `<div id="onlineSect">${q.length >= 3 ? `<button class="t1-frow" data-online><span class="t1-med">${ICONS.searchIco(19)}</span><span class="nm"><b style="color:var(--accent)">Search online for "${esc(q)}"</b><small>USDA + Open Food Facts</small></span></button>` : ''}</div>`;
+      results.innerHTML = localResultsHtml(local, q) +
+        `<div id="onlineSect">${q.length >= 3 ? onlineRowHtml(q, { offline: navigator.onLine === false }) : ''}</div>`;
       bindRows();
     }, 120);
   });
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runOnlineSearch(input.value.trim()); } });
 
-  showDefault();
+  // M16: a restored draft re-types its query; the default list is for a fresh open
+  if (q0) { input.value = q0; input.dispatchEvent(new Event('input')); }
+  else showDefault();
 }
 
 const t1Sect = (label, extra = '') => `<div class="t1-sect"><b>${label}</b><i></i>${extra}</div>`;
@@ -7859,8 +7947,9 @@ function recentRowHtml(r) {
 
 /* ================= portion sheet ================= */
 
-function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
-  const sel = entry ? (entry.sel ? { ...entry.sel } : { mode: 'serving', idx: 0, qty: entry.qty || 1 }) : defaultSel(food);
+function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = null } = {}) {
+  // sel0: a restored draft's portion (QA round 25 M16), else the food's default
+  const sel = entry ? (entry.sel ? { ...entry.sel } : { mode: 'serving', idx: 0, qty: entry.qty || 1 }) : (sel0 ? { ...sel0 } : defaultSel(food));
   if (sel.mode === 'serving' && (!food.servings || !food.servings[sel.idx])) { sel.idx = 0; }
   let curMeal = entry ? entry.meal : meal;
   const editing = !!entry;
@@ -7901,7 +7990,13 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       ${editing ? '<button class="btn danger" id="delBtn">Delete entry</button>' : ''}
       ${food.source === 'custom' ? '<div style="height:8px"></div><button class="btn ghost" id="editFoodBtn">Edit food details</button>' : ''}
     </div>
-    <div class="t1-foot"><button class="btn" id="addBtn">${editing ? 'Save changes' : 'Add'}</button></div>`, { cls: 't1' });
+    <div class="t1-foot"><button class="btn" id="addBtn">${editing ? 'Save changes' : 'Add'}</button></div>`, {
+    cls: 't1',
+    /* M16: Cancel drops back to the add sheet, so the draft drops back with it.
+       No-op when the flow is not live (edit from Today, My foods) or already
+       committed (commit clears before the sheets close). */
+    onClose: () => { if (addDraft && !editing) stampAddDraft({ sheet: 'add', foodId: null, sel: null }); },
+  });
 
   /* THE PAYOFF. Every row is an award onFoodLogged already pays; none of it was
      visible before the tap, which is why the XP economy read as invisible.
@@ -8005,6 +8100,9 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
     };
     bar('#pvPBar', kp); bar('#pvCBar', kc); bar('#pvFBar', kf);
     renderPayoff(n);
+    // M16: preview() runs on open and on every portion or meal change, so it is
+    // the one place the draft learns about this sheet
+    if (addDraft && !editing) stampAddDraft({ sheet: 'portion', foodId: food.id, sel: { ...sel }, meal: curMeal });
   }
 
   $$('#servChips button', wrap).forEach(c => c.addEventListener('click', () => {
@@ -8118,6 +8216,7 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
     S.justLogged = !editing;
     if (!editing) game.note = `${food.name} logged · ${Math.round(n.kcal)} kcal`;
     queueCelebration(game);
+    clearAddDraft();   // M16: committed, nothing left to resume
     closeAllSheetsViaHistory();
     setTimeout(refresh, 80);
   });

@@ -4132,6 +4132,74 @@ test('M8 the protein average divides by logged days and is labelled that way', (
   assert.match(app, /loggedAvg\(days14, 'kcal'\)\?\.toLocaleString\(\) \?\? '·'/, 'the calorie stat left the shared helper');
 });
 
+/* ---- QA round 25, M16 / M21 / M18: the add sheet's helpers, run for real ----
+   The block between ADD_DRAFT_TTL and openAdd holds every pure helper of the
+   add flow; slice it once and run the shipped functions with a kv stub. */
+function addSheetHelpers() {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('const ADD_DRAFT_TTL'), b = app.indexOf('\nfunction openAdd(');
+  assert.ok(a > 0 && b > a, 'the add-sheet helpers (ADD_DRAFT_TTL .. openAdd) are not in js/app.js');
+  const kv = new Map();
+  const mod = new Function('kvSet', 'kvGet', 'esc', 'ICONS', 'foodRowHtml', 'currentTab', 'sheetStack', 'openAdd', 'openPortion', 'findFood',
+    `${app.slice(a, b)}; return { addDraftUsable, stampAddDraft, clearAddDraft, onlineRowHtml, restoreOnlineRow, localResultsHtml, ADD_DRAFT_TTL };`)(
+    (k, v) => { kv.set(k, JSON.parse(JSON.stringify(v))); return Promise.resolve(); },   // IndexedDB round-trips a structured clone; JSON is the stricter stand-in
+    k => Promise.resolve(kv.has(k) ? kv.get(k) : null),
+    String, { searchIco: () => '<svg/>' }, f => `<row ${f.id}>`, () => 'today', [], () => {}, () => {}, () => null);
+  return { ...mod, kv, app };
+}
+
+test('M16 the add-sheet draft round-trips, expires after 24 h and is cleared on commit', () => {
+  const { addDraftUsable, stampAddDraft, clearAddDraft, ADD_DRAFT_TTL, kv, app } = addSheetHelpers();
+  const sel = { mode: 'serving', idx: 1, qty: 1.5 };
+  stampAddDraft({ sheet: 'add', q: 'chicken', meal: 2 });
+  stampAddDraft({ sheet: 'portion', foodId: 'g-chicken', sel, meal: 1 });
+  const d = kv.get('addDraft');
+  assert.deepEqual({ sheet: d.sheet, q: d.q, foodId: d.foodId, sel: d.sel, meal: d.meal },
+    { sheet: 'portion', q: 'chicken', foodId: 'g-chicken', sel, meal: 1 }, 'query, food, sel and meal did not survive the kv row');
+  assert.ok(addDraftUsable(d, d.ts + 1000), 'a fresh draft is not usable');
+  assert.ok(!addDraftUsable(d, d.ts + ADD_DRAFT_TTL + 1), 'a draft older than 24 h must be ignored');
+  assert.ok(!addDraftUsable({ sheet: 'add', q: '', meal: 0, ts: d.ts }, d.ts), 'an empty sheet (nothing typed, nothing picked) is not a draft');
+  clearAddDraft();
+  assert.equal(kv.get('addDraft'), null, 'clearAddDraft left the row behind');
+  assert.ok(!addDraftUsable(kv.get('addDraft')), 'a cleared draft reads as usable');
+  // and the two commit paths clear it before the sheets close
+  const add = app.slice(app.indexOf("$('#addBtn', wrap).addEventListener"), app.indexOf('if (editing) $(\'#delBtn\''));
+  assert.ok(/clearAddDraft\(\);[\s\S]{0,80}closeAllSheetsViaHistory\(\);/.test(add), 'the portion sheet Add commit does not clear the draft before closing');
+  const relog = app.slice(app.indexOf("$$('[data-relog]', results)"), app.indexOf('function bindOnline('));
+  assert.ok(/clearAddDraft\(\);[\s\S]{0,80}history\.back\(\);/.test(relog), 'the one-tap relog commit does not clear the draft');
+  assert.match(app, /\n  route\(\);\n  restoreAddDraft\(\)/, 'boot no longer restores the draft right after route()');
+});
+
+test('M21 the online row carries the offline hint, a retry on failure, and resets on the online event', () => {
+  const { onlineRowHtml, restoreOnlineRow } = addSheetHelpers();
+  const idle = onlineRowHtml('chicken');
+  assert.match(idle, /<button[^>]*data-online/, 'the idle row is not tappable through [data-online]');
+  assert.ok(idle.includes('Search online for "chicken"') && !/Offline/.test(idle), 'the idle row reads offline while online');
+  const off = onlineRowHtml('chicken', { offline: true });
+  assert.ok(off.includes('Offline right now') && /<button[^>]*data-online/.test(off), 'offline: the row must say so in its label AND stay tappable');
+  const failed = onlineRowHtml('chicken', { error: 'No signal, so the food databases could not be searched.' });
+  assert.ok(failed.includes('No signal, so the food databases could not be searched.'), 'the failure message was dropped');
+  assert.match(failed, /<button[^>]*data-online[^>]*>Try again<\/button>/, 'a failed row has no Try again on the shared [data-online] hook');
+  // the online-event handler: a failed (or hinted) row goes back to idle; a results list is left alone
+  const sect = { innerHTML: failed, querySelector: s => (sect.innerHTML.includes(s.replace(/[[\]]/g, '')) ? {} : null) };
+  assert.equal(restoreOnlineRow(sect, 'chicken'), true, 'restoreOnlineRow did not act on a failed row');
+  assert.equal(sect.innerHTML, idle, 'the restored row is not the plain idle row');
+  const list = { innerHTML: '<row a><row b>', querySelector: () => null };
+  assert.equal(restoreOnlineRow(list, 'chicken'), false, 'a list of real online results was wiped by the online event');
+  assert.equal(list.innerHTML, '<row a><row b>');
+});
+
+test('M18 the empty local result offers Create a food with the query; a hit list does not', () => {
+  const { localResultsHtml } = addSheetHelpers();
+  const empty = localResultsHtml([], 'kombucha');
+  assert.ok(empty.includes('Nothing local matches.'), 'the empty-state line is gone');
+  assert.match(empty, /<button[^>]*data-create="kombucha"/, 'the empty result has no create control carrying the query');
+  assert.ok(empty.includes('Create a food'), 'the create control is not labelled as the create-food entry point');
+  const hits = localResultsHtml([{ id: 'g-1' }, { id: 'g-2' }], 'oats');
+  assert.equal(hits, '<row g-1><row g-2>', 'a non-empty result must be the plain rows');
+  assert.ok(!/data-create/.test(hits), 'the create control leaked into a non-empty result');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
