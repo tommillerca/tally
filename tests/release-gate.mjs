@@ -282,6 +282,7 @@ const BROWSER = [
   'selector-audit.mjs',      // a query nothing emits: the .pit-sect class of dead guard
   'lb-memory-audit.mjs',     // the board defers its art: 312MB in one open killed the WKWebView renderer
   'log-write-failure-audit.mjs', // a failed save must not look like a saved meal
+  'add-double-tap-audit.mjs', // two fast taps on the portion sheet's Add log ONE meal: the button is disabled before the first await (it used to be re-enabled in the catch without ever being disabled), graded on log rows and 'log' xp rows after two synchronous clicks. QA round A 2026-09-03 L2. Written in a lane that could not run a browser: prove red by running it on 28f4e1bb (expect ROWS before+2, DISABLED false), then green on the fix
   'freeze-reveal-audit.mjs', // a backgrounded app must not come back invisible: rAF does not run in a frozen page
   'screen-sweep.mjs',        // no screen renders blank or throws
   'crash-guard-audit.mjs',   // a '%' in the URL fragment must not brick boot; a dead network must not freeze the name-builder Save button; the vault diagnostic must not call an unreadable vault "empty"
