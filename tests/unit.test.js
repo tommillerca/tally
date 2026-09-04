@@ -4132,6 +4132,48 @@ test('M8 the protein average divides by logged days and is labelled that way', (
   assert.match(app, /loggedAvg\(days14, 'kcal'\)\?\.toLocaleString\(\) \?\? '·'/, 'the calorie stat left the shared helper');
 });
 
+/* QA round 25 M19 + M18 (data half): the create-food Save mapping. Sliced out of
+   js/app.js as customFoodDraft so it runs at node level with no DOM.
+   M19: calories-only input keeps null macros (it used to write p:0,c:0,f:0 via
+   `mp.value || 0`, asserting zero protein into a template that is re-logged for
+   ever); 0 kcal with 60 g of macros yields a warning BEFORE the write; a
+   consistent food yields none. M18: a name matching a built-in or a custom food,
+   case/whitespace/accent-insensitive, yields the "You already have" warning. */
+test('Create food: null macros stay null, kcal-vs-macros and duplicate names warn before save', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('const normFoodName ='), b = app.indexOf('\nfunction openFoodForm(');
+  assert.ok(a > 0 && b > a, 'customFoodDraft is not in js/app.js: the Save mapping is inline again and untestable (QA round 25 M19)');
+  const { customFoodDraft } = new Function('newId', 'scaleToPer100', 'kcalConsistent',
+    `${app.slice(a, b)}; return { customFoodDraft };`)(() => 'x', (n) => n, kcalConsistent);
+  const foods = [
+    { id: 'g-apple', source: 'generic', name: 'Apple', per100: { kcal: 52, p: 0.3, c: 14, f: 0.2 }, servings: [['1 medium', 182]] },
+    { id: 'c-1', source: 'custom', name: 'Crème brûlée', perServing: { kcal: 300 }, servings: [{ label: '1 ramekin', g: null }] },
+  ];
+  const base = { name: 'Protein granola', brand: '', serving: '1 bowl', grams: null, fiber: null, sugar: null, sodium: null };
+  // calories-only: macros unknown, not zero
+  const only = customFoodDraft({ ...base, kcal: 200, p: null, c: null, f: null }, { foods });
+  assert.deepEqual([only.food.perServing.p, only.food.perServing.c, only.food.perServing.f], [null, null, null],
+    'calories-only input recorded 0 macros instead of null (QA round 25 M19)');
+  assert.deepEqual(only.warnings, [], 'a calories-only food must not be nagged about macros it never claimed');
+  // 0 kcal + 60 g macros (20/20/20 = 340 kcal) of real food
+  const zero = customFoodDraft({ ...base, kcal: 0, p: 20, c: 20, f: 20 }, { foods });
+  assert.ok(zero.warnings.length > 0 && /340 kcal, not 0/.test(zero.warnings[0]), '0 kcal with 60 g of macros saved without a warning (QA round 25 M19)');
+  // consistent food: nothing to say
+  assert.deepEqual(customFoodDraft({ ...base, kcal: 200, p: 10, c: 20, f: 8.9 }, { foods }).warnings, []);
+  // duplicates, folded (M18)
+  for (const name of ['apple', ' APPLE  ', 'Apple']) {
+    const d = customFoodDraft({ ...base, name, kcal: 999, p: null, c: null, f: null }, { foods });
+    assert.deepEqual(d.warnings, ["You already have 'Apple' (52 kcal per 100 g). Save anyway?"], `duplicate "${name}" not caught (QA round 25 M18)`);
+  }
+  assert.deepEqual(customFoodDraft({ ...base, name: 'creme brulee', kcal: 300, p: null, c: null, f: null }, { foods }).warnings,
+    ["You already have 'Crème brûlée' (300 kcal per 1 ramekin). Save anyway?"], 'accent-folded duplicate not caught');
+  // editing a food is not a duplicate of itself
+  assert.deepEqual(customFoodDraft({ ...base, name: 'Crème brûlée', kcal: 300, p: null, c: null, f: null }, { foods, existing: foods[1] }).warnings, []);
+  // per100 derives from the same nulls, never NaN
+  const g = customFoodDraft({ ...base, kcal: 100, p: null, c: 25, f: null, grams: 50 }, { foods });
+  assert.deepEqual(g.food.perServing, { kcal: 100, p: null, c: 25, f: null, fiber: null, sugar: null, sodium: null });
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
