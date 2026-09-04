@@ -21443,7 +21443,7 @@ let pitOpening = false;
    badge, and re-typing rows would silently move a badge nobody asked to move.
    Anything not listed keeps 'Pit win', which is the ladder itself: rung, champ
    and endless are Pit fights and should read as such. */
-/* QA round 28 P5: the defeat copy said "eat well, walk far", which since R21-P1's
+/* QA round 28 P5: the defeat copy told the loser to eat well and walk far, which since R21-P1's
    flat base feeds no stat at all. The truthful sentence is the Build tab's own
    (see the Training points note in openCharacter), reused here verbatim. */
 const DEFEAT_STATS_NOTE = 'Your bones keep every stat. Points come from hitting your protein target, closing a day on budget, and every 25,000 steps you walk: run it back.';

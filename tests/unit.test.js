@@ -4757,6 +4757,115 @@ test('SW update checks bypass the HTTP cache (GitHub Pages max-age=600 held a de
   assert.match(calls[0], /updateViaCache:\s*'none'/, 'register() does not pass updateViaCache: none, so a deploy can hide behind the HTTP cache');
 });
 
+/* ---- QA round 28 P4: sparring paid with no state transition ----
+   Driven on v472: start() in the Pit skips spendPitFight (on purpose, practice
+   is free), two spars left freeUsed 0 / vigor 3, and settle() paid 15 coins per
+   win and 5 per loss off literals, with no ledger key, no cooldown and no cap.
+   The Glutton class, in the Pit itself. Runs the REAL js/game.js under mem-idb.
+   The cap NUMBER is SPAR_DAILY_CAP = XP_DAILY_CAP.fight, flagged for Tom, so the
+   hammer is read off the constant rather than pinned here. */
+test('QA round 28 P4: N spars pay at most the daily cap, and one fight id pays once', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-r28-p4-spar');
+  assert.equal(typeof g.claimSpar, 'function', 'game.js exports claimSpar');
+  assert.ok(Number.isInteger(g.SPAR_DAILY_CAP) && g.SPAR_DAILY_CAP > 0, 'SPAR_DAILY_CAP is a positive integer');
+  const DAY = '2031-07-07';
+  // CONTROL: the first spar of the day actually pays the shipped 15
+  const first = await g.claimSpar('r28-fight-0', true, DAY);
+  assert.deepEqual(first, { claimed: true, coins: 15 }, 'the first spar win must pay 15 (the shipped amount)');
+  // the same fight settled again pays nothing: the ref is the fight id
+  assert.deepEqual(await g.claimSpar('r28-fight-0', true, DAY), { claimed: false, coins: 0 }, 'a repeated settle of ONE fight took a second slot');
+  // hammer: cap + 5 distinct fights on one day pay exactly cap x 15 in total
+  let total = 15;
+  for (let i = 1; i < g.SPAR_DAILY_CAP + 5; i++) total += (await g.claimSpar(`r28-fight-${i}`, true, DAY)).coins;
+  assert.equal(total, g.SPAR_DAILY_CAP * 15, `${g.SPAR_DAILY_CAP + 5} spar wins paid ${total}, the ceiling is ${g.SPAR_DAILY_CAP * 15}`);
+  const rows = (await dbm.db.all('xp')).filter(r => r.type === 'spar' && r.date === DAY);
+  assert.equal(rows.length, g.SPAR_DAILY_CAP, 'the ledger holds exactly cap spar rows for the day');
+  assert.ok(rows.every(r => r.xp === 0), 'a spar slot carries 0 XP: the win XP is the fight cap in settle(), not here');
+  // a loss draws from the SAME pool: past the cap it pays 0 too
+  assert.deepEqual(await g.claimSpar('r28-fight-loss', false, DAY), { claimed: false, coins: 0 }, 'a spar loss past the cap still paid');
+  // and a loss inside the cap pays the shipped 5 (a different day)
+  assert.deepEqual(await g.claimSpar('r28-fight-loss', false, '2031-07-08'), { claimed: true, coins: 5 }, 'a spar loss inside the cap must pay 5');
+  /* Two OVERLAPPING settles of one fight are NOT graded here: tests/mem-idb.mjs
+     commits each transaction on its own macrotask, so two concurrent addIfAbsent
+     on one key BOTH resolve true (measured 2026-09-04: awardCapped with one ref
+     paid 10 + 10 and left one row, which real IndexedDB cannot do because it
+     serialises readwrite transactions on a store). The concurrent half is the
+     REPEAT spar row in tests/reward-sop-audit.mjs, against a real IndexedDB. */
+  // the settle wires it: no bare literal for the spar win, and the loss branch routes spars too
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.equal((app.match(/mode === 'spar'\) \{ coins = 15/g) || []).length, 0, 'settle() still assigns the 15-coin spar win off a literal');
+  assert.match(app, /mode === 'spar'\) \{ coins = \(await claimSpar\(fightId, true\)\)\.coins/, 'the spar win does not read its coins off claimSpar');
+  assert.match(app, /coins = foeCfg\.mode === 'spar' \? \(await claimSpar\(fightId, false\)\)\.coins : 5/, 'the spar loss does not read its coins off claimSpar');
+  assert.match(app, /const fightId = newId\(\);/, 'openFight mints no fightId for the spar ref');
+  // awardCapped callers are untouched by the claimCapped split: the number still means "granted"
+  assert.equal(await g.awardCapped('r28cap', 'fight', 10, 'x', 1, DAY), 10, 'awardCapped no longer returns the xp it granted');
+  assert.equal(await g.awardCapped('r28cap', 'fight', 10, 'x', 1, DAY), 0, 'awardCapped no longer returns 0 at the ceiling');
+});
+
+/* ---- QA round 28 P2: nothing on a button says what a move costs ----
+   Driven on v472 over 111 turns: Haymaker's 2 AP / 35 Stamina, Bone Guard's +22
+   and Signature's Hype dump lived only in title= (hover, absent on a phone);
+   Haymaker sat disabled on 71 of 111 turns while advertising "~45 dmg · 88%
+   hit" with no reason; HP was a bar with no number on 0 of 111 turns. The move
+   button renderer is a closure inside openFight, so its `costLine` + `btn`
+   source is sliced and run here with the values actionsFor would have handed it. */
+test('QA round 28 P2: every move button carries its cost in visible text, the reason when disabled, and the HP bars carry a number', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a0 = app.indexOf('    const costLine = a => {');
+  const a1 = app.indexOf("      </button>` : '';", a0);
+  assert.ok(a0 > 0 && a1 > a0, 'the costLine/btn block moved: re-anchor this slice');
+  const src = app.slice(a0, a1 + "      </button>` : '';".length);
+  const render = (fight, player, a) => new Function('fight', 'player', 'esc', 'moveDetail', 'GUARD_STAMINA',
+    src + '\nreturn btn(a, { hint: "~45 dmg · 88% hit" });'.replace('btn(a,', 'btn(arguments[5],'))(fight, player, String, () => 'TITLE', 22, a);
+  const visible = html => html.replace(/title="[^"]*"/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const hay = { id: 'haymaker', label: 'Haymaker', ap: 2, windCost: 35 };
+  // CONTROL: the hint itself still renders, so the slice is the real renderer
+  const on = render({ ap: 2, over: false }, { wind: 80, hype: 0 }, { ...hay, enabled: true });
+  assert.match(visible(on), /~45 dmg · 88% hit/, 'the slice did not render the hint: this test is looking at the wrong code');
+  assert.match(visible(on), /2 AP · 35 Stamina/, 'an enabled Haymaker does not print its 2 AP / 35 Stamina outside title=');
+  assert.ok(!/ disabled/.test(on), 'an enabled move rendered disabled');
+  // disabled for AP: the reason, with the same value actionsFor compared
+  const noAp = render({ ap: 1, over: false }, { wind: 80, hype: 0 }, { ...hay, enabled: false });
+  assert.match(noAp, / disabled/, 'control: the disabled attribute is present');
+  assert.match(visible(noAp), /Needs 2 AP/, 'a Haymaker disabled for AP does not say "Needs 2 AP" in visible text');
+  // disabled for Stamina: current/needed
+  const noWind = render({ ap: 2, over: false }, { wind: 12.6, hype: 0 }, { ...hay, enabled: false });
+  assert.match(visible(noWind), /Stamina 12\/35/, 'a Haymaker disabled for Stamina does not say "Stamina 12/35"');
+  assert.ok(!/Needs 2 AP/.test(visible(noWind)), 'the Stamina case is misreported as an AP case');
+  // Bone Guard's +22 (GUARD_STAMINA) and Signature's Hype are values, not prose
+  const guard = render({ ap: 1, over: false }, { wind: 50, hype: 0 }, { id: 'guard', label: 'Bone Guard', ap: 1, windCost: 12, enabled: true });
+  assert.match(visible(guard), /1 AP · 12 Stamina · \+22 Stamina/, 'Bone Guard does not print its +22 Stamina');
+  const sig = render({ ap: 2, over: false }, { wind: 50, hype: 100 }, { id: 'signature', label: 'Signature', ap: 2, windCost: 0, enabled: true });
+  assert.match(visible(sig), /2 AP · 100 Hype/, 'Signature does not print the Hype it spends');
+  // the full-width SIGNATURE button in renderActions carries the same sub-line
+  assert.match(app, /data-act="signature"[^\n]*<small class="cost">\$\{costLine\(sig\)\}<\/small>/, 'the SIGNATURE button has no cost sub-line');
+  // HP number: printed in the HUD, updated from the same value that drives the width
+  assert.match(app, /<span id="youHpN">\$\{Math\.round\(player\.hp\)\}\/\$\{player\.d\.maxHp\}<\/span>/, 'the You HUD has no HP number');
+  assert.match(app, /<span id="foeHpN">\$\{Math\.round\(foe\.hp\)\}\/\$\{foe\.d\.maxHp\}<\/span>/, 'the foe HUD has no HP number');
+  const ub = app.slice(app.indexOf('  function updateBars() {'), app.indexOf("    el('youHp').style.width"));
+  assert.match(ub, /el\('youHpN'\)\.textContent = `\$\{Math\.max\(0, Math\.round\(player\.hp\)\)\}\/\$\{player\.d\.maxHp\}`/, 'updateBars does not refresh the You HP number');
+  assert.match(ub, /el\('foeHpN'\)\.textContent = `\$\{Math\.max\(0, Math\.round\(foe\.hp\)\)\}\/\$\{foe\.d\.maxHp\}`/, 'updateBars does not refresh the foe HP number');
+});
+
+/* ---- QA round 28 P5: the defeat copy fed a stat that no longer exists ----
+   "eat well, walk far" told the loser their habits would rebuild the fighter,
+   and since R21-P1's flat base habits feed training POINTS, not stats. The
+   Build tab already says so; the defeat panel and the settle note reuse it.
+   The quit-0 / loss-5 asymmetry is Tom's call and is NOT graded here. */
+test('QA round 28 P5: the stale "eat well, walk far" sentence is gone and both defeat surfaces carry the Training-points sentence', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.equal((app.match(/eat well, walk far/g) || []).length, 0, 'the false sentence is still in app.js');
+  const def = app.match(/const DEFEAT_STATS_NOTE = '([^']+)';/);
+  assert.ok(def, 'DEFEAT_STATS_NOTE is not defined once as a const');
+  assert.match(def[1], /hitting your protein target, closing a day on budget, and every 25,000 steps you walk/, 'the sentence is not the Build tab\'s own Training-points copy');
+  // CONTROL: the copy it reuses still exists where it came from
+  assert.match(app, /Points come from hitting your protein target, closing a day on budget, and every 25,000 steps you walk, so the build grows/, 'the Build tab source sentence moved: re-check the reuse');
+  assert.equal((app.match(/\$\{DEFEAT_STATS_NOTE\}/g) || []).length, 2, 'the note must be used on both defeat surfaces (the DOWN, NOT OUT panel and the settle note)');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
