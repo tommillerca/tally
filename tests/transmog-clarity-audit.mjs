@@ -385,8 +385,15 @@ await sleep(1000); await settle(page);
 const econ = await page.evaluate(async () => {
   const loot = await import('./js/loot.js');
   const cells = [...document.querySelectorAll('.mog-panel .look-grid .ward-cell.look')];
-  const t = cells.find(c => /^\d+/.test((c.querySelector('.look-cost')?.textContent || '').trim()));
-  if (!t) return { why: 'no priced look on screen' };
+  /* AN AFFORDABLE priced tile, not the first priced one. QA r23 F6 (2026-09-04)
+     sorts the look grid rarity-descending, so the first priced tile became a
+     60-dust legendary against the 40 dust seeded above: the button was the
+     disabled "Need 20 more dust", carried no data-look-apply, and this row read
+     authority 0 / wearing undefined on healthy code. Guard drift. */
+  const dust0 = await loot.boneDust();
+  const priceOf = c => parseInt((c.querySelector('.look-cost')?.textContent || '').trim(), 10);
+  const t = cells.find(c => priceOf(c) > 0 && priceOf(c) <= dust0);
+  if (!t) return { why: `no priced look on screen that ${dust0} dust affords` };
   t.click();
   await new Promise(r => setTimeout(r, 700));
   const btn = document.querySelector('.mog-go');
