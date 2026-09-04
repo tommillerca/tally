@@ -350,11 +350,14 @@ ok('the arena holds its height across turns', jitter.arenaDrift <= 2, `${jitter.
    every tap for 1,391ms after FIGHT died on the card. The fix sets
    pointer-events none in the same tick the fade starts. Under webdriver the
    card is skipped (fast path), so __giForce puts it back the way batch-audit
-   does for the gate intro, and the sample is taken at +200ms after the fade
-   begins (1350ms after FIGHT): the card is still in the DOM at ~0 opacity.
-   PROVE-RED: on main elementFromPoint over End Turn returns .vs-card and the
-   click never reaches the button. Written 2026-09-04 on a static-only machine;
-   not yet run. */
+   does for the gate intro. The clock is anchored on the card APPEARING, not on
+   the seam call: __denFight awaits buildFighter() (IndexedDB) before openFight
+   builds the card, so a fixed delay from the call could sample before the fade
+   and read a false red. Fade starts at +1150, removal at +1420 from appearance;
+   the sample at +1300 is 150ms into the fade with 120ms to spare, still in the
+   DOM at ~0 opacity. PROVE-RED: on main elementFromPoint over End Turn returns
+   .vs-card and the click never reaches the button. Written 2026-09-04 on a
+   static-only machine; not yet run. */
 await page.evaluate(() => document.querySelector('.sheet-close')?.click());
 await sleep(600);
 const vsTap = await page.evaluate(async () => {
@@ -363,11 +366,15 @@ const vsTap = await page.evaluate(async () => {
      INTRO branch and never builds a versus card. Spar is the Pit's own fight,
      the surface O12 was measured on. */
   window.__denFight(1.6, 0, { mode: 'spar' });     // fire-and-forget: we sample DURING the card
-  await new Promise(r => setTimeout(r, 1350));     // fade started at 1150; card removed at 1420
+  const t0 = performance.now();
+  while (!document.querySelector('.vs-card') && performance.now() - t0 < 4000) await new Promise(r => setTimeout(r, 20));
+  const shown = performance.now();
+  if (!document.querySelector('.vs-card')) { window.__giForce = false; return { why: 'no versus card appeared within 4s of the seam call (empty sample = failure)' }; }
+  await new Promise(r => setTimeout(r, 1300));     // fade started at +1150; card removed at +1420
   window.__giForce = false;
   const card = document.querySelector('.vs-card');
   const btn = document.getElementById('endTurn');
-  if (!card) return { why: 'the versus card was not on screen at +1350ms (empty sample = failure)' };
+  if (!card) return { why: `the versus card was already gone at +${Math.round(performance.now() - shown)}ms (empty sample = failure)` };
   if (!btn) return { why: 'no End Turn under the card to tap' };
   const pe = getComputedStyle(card).pointerEvents;
   const r = btn.getBoundingClientRect();
