@@ -73,7 +73,7 @@ import { attachWalk } from './walk.js';
 import { refreshPitEnergy, spendPitFight, refundPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
-  spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime, foodBuffLabel,
+  spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, QUEUE_MAX, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime, foodBuffLabel,
   POTIONS, POTION_BY_ID, RECIPE_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
   pantryDishes, activatePantryDish, discardPantryDish,
@@ -97,7 +97,7 @@ import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CR
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
-  computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal,
+  computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal, armMidnightTimer,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, ACTIVITY_LEVELS, GOALS, kcalConsistent,
   activeCalorieBonus, assumedActiveBurn, manualTargets, gramsChipDefault,
@@ -1456,6 +1456,13 @@ async function boot() {
   const closed = await awardDayCloseIfDue(S.settings.targets);
   if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 2400);
   else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 2400);
+  else if (closed?.dayGuard) setTimeout(() => dayGuardToast(closed.dayGuard), 2400);   // QA round 26 O14: the refusal used to be silent here
+  /* COOKING ADVANCES WHETHER OR NOT YOU ARE WATCHING (QA round 26 O15). The
+     queue only drained from the Kitchen sheet's own render, so three cooks sat
+     untouched for 40 real minutes and all resolved the moment the sheet opened.
+     Boot, resume and Today's render drain it too, through the one helper that
+     pays the cook XP. */
+  await drainCookQueue();
   await ingestHkPayload(hkTaken);
   /* THE SCREEN PAINTED BEFORE ANY OF THAT PAID. route() ran sixty lines up, and
      everything since writes coins, XP and crates behind a standing DOM: the
@@ -1472,7 +1479,7 @@ async function boot() {
      something actually paid, so a boot that owed nothing still paints once.
      Guarded on the sheet stack for the reason the resume refresh below is:
      route() closes every open sheet, and yanking one shut is a worse bug. */
-  if ((kit || pouch || settled || merch || ceil || closed || hkTaken) && !sheetStack.length) route({ keepScroll: true });
+  if ((kit || pouch || settled || merch || ceil || closed?.closed || closed?.consoled || hkTaken) && !sheetStack.length) route({ keepScroll: true });
   backupNudge();
   nativeAutoSync();
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
@@ -1483,8 +1490,14 @@ async function boot() {
      when a new day gets opened, and the day guard's ceiling (js/db.js rule 3)
      is only as fresh as the last /health we saw. Unsigned, anonymous, fails
      soft; skipped under NOSOCIAL so audits and ?demo never phone production. */
+  /* ONE TIMEOUT AIMED AT MIDNIGHT (QA round 26 O13), beside the 60 s interval
+     below: dateKey() flipped at 0 ms and the screen at up to 53 s. Re-aimed on
+     every resume because a suspended WebView's pending timer is stale. */
+  const midnight = armMidnightTimer(rollDayIfNeeded);
   onAppResume(() => {
     if (!NOSOCIAL) social.touchServerDay();
+    midnight.rearm();
+    drainCookQueue().catch(() => {});   // QA round 26 O15: a pot that finished while suspended is collected now, not on the next Kitchen open
     /* A RESUME IS AN OPEN. iOS suspends the WebView for days without a boot, so
        the return gap has to be checked here too. The refresh below may already
        have painted by the time the kv lands, so a fresh detection repaints. */
@@ -1506,7 +1519,7 @@ async function boot() {
        bug than the one being fixed. */
     if (!sheetStack.length) refresh();
   });
-  setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight
+  setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight (the belt; the midnight timeout above is the brace, O13)
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_BUILD); // anonymous first-party usage analytics. Tag events with the real running build (not the frozen social-protocol version)
 
@@ -1522,7 +1535,10 @@ async function boot() {
      pill, because a spin can pay a CRATE and that chip has to appear at all.
      resolve(false) means the wheel never opened, so a skipped day paints
      nothing. Sheet-stack guarded like every other unprompted refresh here. */
-  maybeShowDailyWheel({ sounds: S.sounds }).then(spun => { if (spun && !sheetStack.length) refresh(); }).catch(() => {});
+  maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
+    if (spun === true && !sheetStack.length) refresh();
+    else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);   // QA round 26 O14: the refused wheel used to vanish without a word
+  }).catch(() => {});
   refundStreakFreezes().then(r => {
     if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
   }).catch(() => {});
@@ -1600,8 +1616,12 @@ async function rollDayIfNeeded() {
     if (wasOnToday) route(); // a new day starts at the top, like a fresh open
     if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 1400);
     else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 1400);
+    else if (closed?.dayGuard) setTimeout(() => dayGuardToast(closed.dayGuard), 1400);   // QA round 26 O14
     // pays on COLLECT, so it repaints on COLLECT: see the boot call site
-    maybeShowDailyWheel({ sounds: S.sounds }).then(spun => { if (spun && !sheetStack.length) refresh(); }).catch(() => {});
+    maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
+      if (spun === true && !sheetStack.length) refresh();
+      else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);   // QA round 26 O14
+    }).catch(() => {});
     refreshNotifSchedules();
     return true;
   } finally { _rolling = false; }
@@ -3657,13 +3677,27 @@ const LOG_ONLY_LINE = '<p class="log-only">Nothing you grow or cook in the Kitch
 /* ONE LINE PER DAY-GUARD RULE (js/db.js claimDay). Keyed by the reason claimDay
    itself returns, so a rule added there without copy here degrades to `other`
    rather than to silence. Each names its own cause: "paused" with no reason is
-   what a player reads as "broken". */
+   what a player reads as "broken". ('too-fast' left with rule 2, QA round 26
+   O10: it could not fire, so its line could never show.)
+   EVERY DAY-KEYED REWARD SPEAKS THROUGH THIS (QA round 26 O14). It had one
+   call site, the quest-claim toast, so with the guard refusing the wheel, the
+   day close (boot and the midnight roll) and the Pit's free fights all went
+   silent. The six surfaces now: quest claim, wheel at boot, wheel on the roll,
+   day close at boot, day close on the roll, the Pit energy line. */
 const DAY_GUARD_COPY = {
   backwards: 'This device says it is an earlier day than the app has already seen, so today is not a new day yet. Rewards return when the date catches up.',
-  'too-fast': 'The date on this device has jumped further ahead than time actually passed. Rewards are paused until the calendar catches up.',
   unwitnessed: 'Rewards are paused until the app can check the clock with the server. Any connection, even a moment, fixes it.',
   other: 'Daily rewards are paused while the date settles. They return with the next fresh day.',
 };
+/* The toast form. At boot the day close and the wheel are refused within the
+   same second by the same rule, and two identical toasts stacked is noise, so
+   one voice within 8 s stands for all of them. */
+let _dayGuardSaidAt = 0;
+function dayGuardToast(reason) {
+  if (Date.now() - _dayGuardSaidAt < 8000) return;
+  _dayGuardSaidAt = Date.now();
+  toast(DAY_GUARD_COPY[reason] || DAY_GUARD_COPY.other, 4200);
+}
 
 /* Set the first time Today renders Gwart; see the note at its read site below. */
 let gwEntranceSeen = false;
@@ -3680,6 +3714,7 @@ async function renderToday(el) {
   // activity level already assumes (BMR x (factor-1)), credited at 50%.
   const activeBonus = activeCalorieBonus(S.settings.profile, hk?.activeKcal);
   const t = activeBonus > 0 ? { ...S.settings.targets, kcal: S.settings.targets.kcal + activeBonus } : S.settings.targets;
+  await drainCookQueue();   // QA round 26 O15: the card below must not describe a queue nothing has moved
   const cook = await cookState();
   /* THE GARDEN IS OFF THE PLAYER'S PATH (2026-08-18). This is the single value
      every garden signal on Today reads from: the ripe-crop banner and its
@@ -4155,7 +4190,7 @@ async function renderToday(el) {
        past and destroys the present on a tap is worse than a card that is not
        there. Un-gate it the day wellness gets a per-date store. */''}
   ${tsec('Wellness', isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday, manualWalks) : '')}
-  ${tsec('Kitchen', kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe))}
+  ${tsec('Kitchen', kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe, _cookBanked))}
   ${tsec('Activity', healthCardHtml(hk, isToday))}
 
   <section class="tsec tsec-meals"><div class="tsec-h">Meals</div>
@@ -4481,7 +4516,7 @@ async function renderToday(el) {
        server confirming the date) used to name its cause. The fallback covers a
        bare `true` from an older caller and any rule added later. */
     if (res?.dayGuard) {
-      toast(DAY_GUARD_COPY[res.dayGuard] || DAY_GUARD_COPY.other, 4200);
+      dayGuardToast(res.dayGuard);
       return;
     }
     if (!res) return;
@@ -6441,13 +6476,40 @@ function openSiegeSheet(s, view, siege) {
   });
 }
 
-function kitchenCardHtml(cook, ingCount, buffs, cropsRipe = 0) {
-  if ((!cook || !cook.ready) && !cropsRipe) return '';
-  const line = !cook || !cook.ready
+/* Dishes the queue finished and banked to the Pantry on the player's behalf
+   since the Kitchen was last opened (QA round 26 O15). advanceQueue hands them
+   back and nothing announced them: Today's card read the pot only, so two
+   paid-for cooks that had finished were never mentioned. Session-local on
+   purpose: the Pantry itself is the durable record, this is the announcement. */
+let _cookBanked = 0;
+/* THE ONE CALLER OF advanceQueue, so every dish it collects is paid the same XP
+   a manual Serve pays, exactly once, whichever surface drained it. Loops because
+   one call moves at most one queue entry per free pot: with one pot and two
+   finished cooks lined up, the second only starts once the first is banked. */
+async function drainCookQueue() {
+  let banked = 0;
+  for (let i = 0; i <= QUEUE_MAX; i++) {
+    const dishes = await advanceQueue();
+    if (!dishes.length) break;
+    for (const dish of dishes) await awardCapped('cook', 'cook', 8, `Cooked ${dish.name}`, XP_DAILY_CAP.cook);
+    banked += dishes.length;
+  }
+  _cookBanked += banked;
+  return banked;
+}
+
+function kitchenCardHtml(cook, ingCount, buffs, cropsRipe = 0, banked = 0) {
+  /* `banked`: finished cooks waiting in the Pantry that nothing has announced
+     yet (O15); counted with the pots so the line says how many are ready. */
+  const readyN = (cook && cook.readyCount || 0) + banked;
+  if (!readyN && !cropsRipe) return '';
+  const line = !readyN
     ? `<b style="color:var(--accent)">${bhIcon('garden-sprout', 18)} ${cropsRipe} crop${cropsRipe === 1 ? '' : 's'} ready to pick!</b>`
-    : cook.readyCount > 1
-    ? `<b style="color:var(--accent)">${cook.readyCount} dishes are ready!</b>`
-    : `<b style="color:var(--accent)">${recipeIconHtml(cook.recipe, 18)} ${esc(cook.recipe.name)} is ready!</b>`;
+    : readyN > 1
+    ? `<b style="color:var(--accent)">${readyN} dishes are ready!</b>`
+    : cook.ready
+    ? `<b style="color:var(--accent)">${recipeIconHtml(cook.recipe, 18)} ${esc(cook.recipe.name)} is ready!</b>`
+    : `<b style="color:var(--accent)">1 dish is ready!</b>`;
   return `<div class="card kitchen-card" id="kitchenCard">
     <div class="card-title"><span class="ct-name">KITCHEN</span> <span class="link">Collect</span></div>
     <div class="kc-line">${line}</div>
@@ -7334,6 +7396,7 @@ function showHarvest(res) {
 }
 
 async function openKitchen() {
+  _cookBanked = 0;   // the Pantry is on screen from here: the announcement is delivered (O15)
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Kitchen</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
@@ -7397,12 +7460,11 @@ async function openKitchen() {
      behind it are untouched. */
   async function render() {
     if (!body.isConnected) return;
-    /* THE ONLY CALLER of advanceQueue, so the dishes it collected on the player's
-       behalf are paid the same XP a manual Serve pays, exactly once. cookState()
-       stays a plain read; the pots are shown here and nowhere the queue matters. */
-    for (const [i, dish] of (await advanceQueue()).entries()) {
-      await awardCapped('cook', 'cook', 8, `Cooked ${dish.name}`, XP_DAILY_CAP.cook);
-    }
+    /* Drains through drainCookQueue (the one caller of advanceQueue, which pays
+       the cook XP) so this sheet, boot, resume and Today all move the queue the
+       same way (QA round 26 O15). cookState() stays a plain read. */
+    await drainCookQueue();
+    _cookBanked = 0;   // whatever that drain banked is in the Pantry on this very screen
     const [inv, cook, buffs, potInv, coinBal, tmute, pantry] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins(), transmuteStatus(), pantryDishes()]);
     const canStartAny = cook.freeCount > 0 || cook.queueLeft > 0;
     const recipeCard = r => {
@@ -21345,7 +21407,7 @@ async function renderPit(wrap) {
       <div class="tx">
         <b>${energy.ready} fight${energy.ready === 1 ? '' : 's'} in the tank</b>
         <div class="bar"><i style="width:${Math.min(100, Math.round(energy.ready / (energy.freeMax + 6) * 100))}%"></i></div>
-        <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · walk to earn Vigor · free fights refill at midnight' : ' · walk to earn more'}</small>
+        <small>${energy.free} free today + ${energy.vigor} Vigor${energy.dayGuard ? ' · ' + (DAY_GUARD_COPY[energy.dayGuard] || DAY_GUARD_COPY.other) /* QA round 26 O14: "refill at midnight" is false on a refused day */ : tapped ? ' · walk to earn Vigor · free fights refill at midnight' : ' · walk to earn more'}</small>
       </div>
     </div>
     ${defeatSect}

@@ -5245,6 +5245,184 @@ test('R22-W12 the Dressing Room controls resolve to >= 44px, focus survives sele
   assert.notEqual(paid.value, price.value, `"owned" and a price share a background (${paid.value}); the receipt needs its own ground`);
 });
 
+/* ================= QA round 26: the day plumbing (O10, O11, O13, O14, O15) =================
+   All node-level. mem-idb is the real js/db.js over an in-memory IndexedDB whose
+   transactions are SERIALISED (one at a time, in dispatch order), so a get-then-put
+   spanning two transactions interleaves with a second one exactly as a browser
+   lets it, and a single-transaction addIfAbsent cannot. That is the caveat and
+   the point: the race rows below can only ever see the SHAPE of the claim. */
+
+/* O11. The wheel's spin gate answered granted, granted: a kvGet/kvSet pair on
+   wheelLastDate, in one page or across two tabs. The claim is one addIfAbsent on
+   kv wheelspin:<date>. Prove-red on main: claimSpin does not exist there. */
+test('R26-O11 two overlapping spin claims on one day grant exactly once', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-r26-o11');
+  const { claimSpin } = await import('../js/wheel.js');
+  assert.equal(typeof claimSpin, 'function', 'wheel.js must export claimSpin, the addIfAbsent the spin is gated on');
+  /* CONTROL: the old shape under this harness. A get-then-put across two
+     transactions is what wheel.js shipped, and mem-idb lets both readers see
+     the row empty. If this control ever stops showing two grants the harness
+     has changed and the race row below proves nothing. */
+  const oldGate = async () => {
+    if ((await dbm.kvGet('wheelLastDate', null)) === '2026-09-04') return false;
+    await dbm.kvSet('wheelLastDate', '2026-09-04');
+    return true;
+  };
+  const ctl = await Promise.all([oldGate(), oldGate()]);
+  assert.deepEqual(ctl, [true, true], `harness control: the shipped get-then-put must double-grant here, got ${JSON.stringify(ctl)}`);
+  /* HARNESS PROBE. origin/main's mem-idb does not serialise transactions, so two
+     overlapping `add`s on one key both see it absent and both land: under it
+     this row cannot go green on correct code. The serialising mem-idb (kitchen
+     lane, integ/day2) makes it real. Probe with a bare addIfAbsent pair on a
+     throwaway key; only assert the race when the harness can carry it. */
+  const probe = await Promise.all([dbm.addIfAbsent('kv', { k: 'r26-o11-probe', v: 1 }), dbm.addIfAbsent('kv', { k: 'r26-o11-probe', v: 2 })]);
+  const both = await Promise.all([claimSpin('2026-09-04'), claimSpin('2026-09-04')]);
+  if (probe.filter(Boolean).length === 1) {
+    assert.equal(both.filter(Boolean).length, 1, `two overlapping claims: exactly one may be granted, got ${JSON.stringify(both)}`);
+  } else {
+    console.log('  R26-O11 note: mem-idb here does not serialise transactions (probe ' + JSON.stringify(probe) + '); the overlapping-claim row is skipped, the sequential rows below still hold');
+  }
+  assert.equal(await claimSpin('2026-09-04'), false, 'a later claim on the same day is refused');
+  assert.equal(await claimSpin('2026-09-05'), true, 'the next day is a fresh claim');
+  // the shape pin: the commit asks claimSpin BEFORE it grants, and returns `already` to the loser
+  const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
+  const c = wheel.slice(wheel.indexOf('const commit = async () => {'), wheel.indexOf('prize.grant(rng)'));
+  assert.ok(c.length > 0 && /await claimSpin\(today\)/.test(c), 'the wheel commit does not claim the spin with claimSpin before granting');
+  assert.match(c, /already: true/, 'the loser must be told (already: true), not handed a silent coinDelta 0');
+  assert.match(wheel, /result\.already \? 'Already spun today'/, "the reveal must say 'Already spun today' to the loser, not 'You won'");
+});
+
+/* O10. claimDay's rule 2 ('too-fast') read elapsed time off the clock that had
+   just moved, so no clock move could ever fire it; the header credited it with
+   the wild jumps rule 3 catches. Choice: REMOVED, header says rule 3 is the
+   guard. Prove-red on main: 'too-fast' is in db.js there, and a forged anchor
+   row makes claimDay say 'too-fast'. */
+test('R26-O10 rule 2 is gone from claimDay and from the header, and rule 3 refuses the jump it was credited with', async () => {
+  const dbSrc = readFileSync(join(here, '..', 'js', 'db.js'), 'utf8');
+  assert.ok(!/too-fast/.test(dbSrc), "js/db.js still carries 'too-fast': a rule that cannot fire is described as a guard again");
+  assert.ok(!/\bDAY_GRACE\b/.test(dbSrc), 'DAY_GRACE (rule 2\'s allowance) is still in js/db.js');
+  const body = dbSrc.slice(dbSrc.indexOf('export async function claimDay('), dbSrc.indexOf('export async function dayGuardState('));
+  assert.ok(!/dayPace/.test(body), 'claimDay still reads or writes the rule-2 anchor rows');
+  assert.match(dbSrc, /THERE IS NO RULE 2 ANY MORE/, 'the header must record why rule 2 went, so it is not rebuilt');
+  assert.match(dbSrc, /RULE 3: THE SERVER'S DAY\. This is the part no local rule could do, and it\n \* is THE guard against a forward clock move/, 'the header must name rule 3 as the forward-jump guard');
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(!/'too-fast':/.test(app), "DAY_GUARD_COPY still carries a 'too-fast' line for a rule that no longer exists");
+
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-r26-o10');
+  const { addDays, dayOrdinal } = await import('../js/nutrition.js');
+  const d0 = '2026-09-04';
+  assert.equal((await dbm.claimDay(d0)).reason, 'seeded');
+  // the only shape that ever made rule 2 fire: an anchor forged 100 days back, "zero time elapsed"
+  await dbm.kvSet('dayPaceKey', addDays(d0, -100)); await dbm.kvSet('dayPaceAt', Date.now());
+  const next = await dbm.claimDay(addDays(d0, 1));
+  assert.equal(next.reason, 'advanced', `a forged anchor must no longer be a refusal (rule 2 is gone), got ${JSON.stringify(next)}`);
+  // and the jump rule 2 was credited with (a decade-ahead RTC) is refused by rule 3, by name
+  const decade = await dbm.claimDay(addDays(d0, 3650));
+  assert.equal(decade.fresh, false); assert.equal(decade.reason, 'unwitnessed', `rule 3 must refuse the decade jump, got ${JSON.stringify(decade)}`);
+  assert.equal(decade.ceiling, dayOrdinal(d0) + dbm.WITNESS_GRACE);
+  const st = await dbm.dayGuardState();
+  assert.ok(!('paceKey' in st) && !('grace' in st), 'dayGuardState still reports rule-2 state');
+});
+
+/* O14. DAY_GUARD_COPY had one call site (the quest-claim toast), so five of the
+   six day-keyed rewards refused in silence. Every surface now reports through it.
+   Prove-red on main: dayGuardToast does not exist and the site count is 1. */
+test('R26-O14 every day-keyed reward surface speaks the day-guard copy (>= 6 sites, enumerated)', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const helper = app.match(/\nfunction dayGuardToast\(reason\) \{[\s\S]*?\n\}\n/);
+  assert.ok(helper, 'dayGuardToast (the one toast voice for DAY_GUARD_COPY) is missing');
+  assert.match(helper[0], /toast\(DAY_GUARD_COPY\[reason\] \|\| DAY_GUARD_COPY\.other, 4200\)/, 'dayGuardToast must speak DAY_GUARD_COPY, nothing new');
+  const rest = app.replace(helper[0], '');
+  const sites = (rest.match(/\bdayGuardToast\(/g) || []).length + (rest.match(/DAY_GUARD_COPY\[/g) || []).length;
+  assert.ok(sites >= 6, `DAY_GUARD_COPY reaches ${sites} surfaces, need >= 6`);
+  // one per surface, by anchor
+  const surfaces = {
+    'quest claim toast': /if \(res\?\.dayGuard\) \{\n\s*dayGuardToast\(res\.dayGuard\);/,
+    'day close at boot': /const closed = await awardDayCloseIfDue\(S\.settings\.targets\);\n  if \(closed\?\.closed\)[^\n]*\n  else if \(closed\?\.consoled\)[^\n]*\n  else if \(closed\?\.dayGuard\) setTimeout\(\(\) => dayGuardToast\(closed\.dayGuard\)/,
+    'day close on the midnight roll': /_rolling = true;[\s\S]*?else if \(closed\?\.dayGuard\) setTimeout\(\(\) => dayGuardToast\(closed\.dayGuard\)[\s\S]*?finally \{ _rolling = false; \}/,
+    'wheel at boot': /maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{\n    if \(spun === true && !sheetStack\.length\) refresh\(\);\n    else if \(spun\?\.dayGuard\) dayGuardToast\(spun\.dayGuard\)/,
+    'wheel on the midnight roll': /_rolling = true;[\s\S]*?maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{\n      if \(spun === true && !sheetStack\.length\) refresh\(\);\n      else if \(spun\?\.dayGuard\) dayGuardToast\(spun\.dayGuard\)[\s\S]*?finally \{ _rolling = false; \}/,
+    'Pit energy line': /energy\.dayGuard \? ' · ' \+ \(DAY_GUARD_COPY\[energy\.dayGuard\] \|\| DAY_GUARD_COPY\.other\)/,
+  };
+  for (const [name, re] of Object.entries(surfaces)) assert.match(app, re, `surface "${name}" does not report the day-guard refusal`);
+  // and the producers hand the reason back rather than swallowing it
+  assert.match(readFileSync(join(here, '..', 'js', 'game.js'), 'utf8'), /if \(!day\.fresh\) return \{ dayGuard: day\.reason \|\| true \};/, 'awardDayCloseIfDue still returns a bare null on refusal');
+  assert.match(readFileSync(join(here, '..', 'js', 'energy.js'), 'utf8'), /if \(day && !day\.fresh\) v\.dayGuard = day\.reason \|\| true;/, 'refreshPitEnergy does not name the refusal');
+  assert.match(readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8'), /if \(!day\.fresh\) return \{ dayGuard: day\.reason \|\| true \};/, 'maybeShowDailyWheel still returns a bare false on refusal');
+});
+
+/* O15. advanceQueue had one caller (the Kitchen sheet's render), so a queue with
+   the sheet closed never drained, and Today's card read the pot only. Every
+   drain goes through drainCookQueue (which pays the cook XP), called from boot,
+   resume, Today's render and the Kitchen; the card counts what was banked.
+   Prove-red on main: drainCookQueue does not exist; kitchenCardHtml has no
+   `banked` and prints the single pot. */
+test('R26-O15 the cook queue drains from boot, resume, Today and the Kitchen, and the card counts finished cooks', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const helper = app.match(/\nasync function drainCookQueue\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(helper, 'drainCookQueue is missing');
+  assert.match(helper[0], /await advanceQueue\(\)/, 'drainCookQueue must call advanceQueue');
+  assert.match(helper[0], /awardCapped\('cook', 'cook', 8, `Cooked \$\{dish\.name\}`, XP_DAILY_CAP\.cook\)/, 'a drained dish must pay the same XP a manual Serve pays');
+  const rest = app.replace(helper[0], '');
+  assert.equal((rest.match(/\badvanceQueue\(/g) || []).length, 0, 'advanceQueue is called outside drainCookQueue: that path pays no cook XP');
+  const callers = (rest.match(/\bdrainCookQueue\(\)/g) || []).length;
+  assert.ok(callers >= 4, `drainCookQueue has ${callers} callers, need boot + resume + Today + Kitchen (>= 4)`);
+  const boot = app.slice(app.indexOf('const closed = await awardDayCloseIfDue(S.settings.targets);'), app.indexOf('await ingestHkPayload(hkTaken);'));
+  assert.match(boot, /await drainCookQueue\(\);/, 'boot does not drain the queue');
+  const resume = app.slice(app.indexOf('onAppResume(() => {'), app.indexOf('setInterval(rollDayIfNeeded, 60e3)'));
+  assert.match(resume, /drainCookQueue\(\)/, 'resume does not drain the queue');
+  const today = app.slice(app.indexOf('async function renderToday(el) {'), app.indexOf("kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe, _cookBanked)"));
+  assert.match(today, /await drainCookQueue\(\);\s*\/\/[^\n]*\n\s*const cook = await cookState\(\);/, 'Today must drain BEFORE it reads cookState for the card');
+
+  // the card renderer, run for real: two finished cooks banked, no pot ready -> "2 dishes are ready!"
+  const m = app.match(/\nfunction kitchenCardHtml\(cook, ingCount, buffs, cropsRipe = 0, banked = 0\) \{[\s\S]*?\n\}\n/);
+  assert.ok(m, 'kitchenCardHtml does not take the banked count');
+  const card = new Function('bhIcon', 'recipeIconHtml', 'esc', `${m[0]}; return kitchenCardHtml;`)(() => '', () => '', String);
+  const idle = { ready: false, readyCount: 0, recipe: null };
+  assert.match(card(idle, 0, [], 0, 2), /<b[^>]*>2 dishes are ready!<\/b>/, 'two finished cooks waiting in the Pantry are not announced');
+  assert.match(card({ ready: true, readyCount: 1, recipe: { name: 'Bone Broth' } }, 0, [], 0, 1), /2 dishes are ready!/, 'one pot ready plus one banked must read 2');
+  assert.match(card({ ready: true, readyCount: 1, recipe: { name: 'Bone Broth' } }, 0, [], 0, 0), /Bone Broth is ready!/, 'the single-pot line is unchanged when nothing was banked');
+  assert.equal(card(idle, 0, [], 0, 0), '', 'nothing ready, nothing banked: no card, as before');
+  assert.match(app, /_cookBanked = 0;   \/\/ the Pantry is on screen from here/, 'opening the Kitchen must clear the announcement');
+});
+
+/* O13. dateKey() flips at 0 ms; the visible day flipped at up to 53 s off the 60 s
+   interval. One setTimeout aimed at the next local midnight, re-armed after each
+   fire and on resume. Prove-red on main: nutrition.js has no armMidnightTimer. */
+test('R26-O13 the midnight timeout fires the roll at 0 ms and re-arms for the following midnight', async () => {
+  const nut = await import('../js/nutrition.js');
+  assert.equal(typeof nut.armMidnightTimer, 'function', 'nutrition.js must export armMidnightTimer');
+  const midnight = new Date(2026, 8, 5, 0, 0, 0, 0).getTime();   // local midnight
+  let now = midnight - 3000;                                     // 3 s before
+  const timers = [];
+  let rolls = 0;
+  const st = (cb, ms) => { timers.push({ cb, ms, cleared: false }); return timers.length - 1; };
+  const ct = id => { if (timers[id]) timers[id].cleared = true; };
+  const t = nut.armMidnightTimer(() => { rolls++; }, { now: () => now, setTimeout: st, clearTimeout: ct });
+  assert.equal(timers.length, 1, 'exactly ONE timeout is armed');
+  assert.ok(Math.abs(timers[0].ms - 3000) <= 1, `3 s before midnight the timeout must be ~3000 ms, got ${timers[0].ms}`);
+  now = midnight;                                                // the timer fires at 0 ms
+  timers[0].cb();
+  assert.equal(rolls, 1, 'the roll did not fire');
+  assert.equal(timers.length, 2, 'the timer did not re-arm after firing');
+  assert.ok(Math.abs(timers[1].ms - 86400000) <= 3600000 + 1, `re-armed for the following midnight (~24 h, DST allowed), got ${timers[1].ms}`);
+  assert.equal(nut.dateKey(new Date(now + timers[1].ms)), '2026-09-06', 'the re-armed timer must land on the next local midnight');
+  now = midnight + 7 * 3600000;                                  // resume at 07:00: the pending timer is stale
+  t.rearm();
+  assert.ok(timers[1].cleared, 'rearm must clear the pending timer');
+  assert.equal(timers.length, 3);
+  assert.ok(Math.abs(timers[2].ms - 17 * 3600000) <= 1, `re-aimed from the resume clock (17 h), got ${timers[2].ms}`);
+  // the app wires it beside the interval and re-aims it on resume
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /const midnight = armMidnightTimer\(rollDayIfNeeded\);/, 'app.js does not arm the midnight timeout on rollDayIfNeeded');
+  const resume = app.slice(app.indexOf('onAppResume(() => {'), app.indexOf('setInterval(rollDayIfNeeded, 60e3)'));
+  assert.match(resume, /midnight\.rearm\(\);/, 'resume does not re-aim the midnight timeout');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

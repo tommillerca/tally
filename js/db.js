@@ -442,7 +442,8 @@ export function newId() {
  * It does not stop anyone who opens a console. A local-first offline app
  * cannot, and pretending otherwise in a comment is how a guard rots.
  *
- * THE TWO RULES, and an honest account of what each one is worth.
+ * THE RULES, and an honest account of what each one is worth. Two of them,
+ * numbered 1 and 3; the number 2 is retired, see below.
  *
  *  1. BACKWARDS IS REFUSED. A day strictly before the high-water mark never
  *     counts as fresh. THIS IS THE LOAD-BEARING RULE and very nearly the whole
@@ -455,52 +456,44 @@ export function newId() {
  *     they set it right and every real day until the calendar catches up pays
  *     nothing. Fourteen farmed days now costs fourteen dead real ones.
  *
- *  2. THE LOCAL DATE MAY NOT OUTRUN UTC ELAPSED by more than DAY_GRACE days,
- *     measured from a drifting anchor. BE CLEAR ABOUT ITS LIMIT: Date.now()
- *     below is the SAME clock dateKey() reads, so moving the clock forward one
- *     day moves both terms by one day and this rule cannot see it. It is not a
- *     rate limiter on clock-moving and must never be described as one. What it
- *     does catch is a local date that advances without UTC advancing, which is
- *     what a TIMEZONE change does: switching region hands you tomorrow for
- *     free, no clock movement at all. Rule 1 already caps that at one hop
- *     (there is nowhere further east to go), so rule 2 is belt and braces
- *     there. Its real job is the second half: capping banked allowance so an
- *     idle month cannot be spent in one sitting. Cheap, and no false positive
- *     a traveller can trip inside DAY_GRACE.
+ *  2. THERE IS NO RULE 2 ANY MORE (QA round 26 O10, round 28 G4). It read
+ *     "days claimed since an anchor may not outrun days elapsed since it",
+ *     with both terms read off Date.now(), the SAME clock dateKey() reads. A
+ *     clock move shifts both terms together, so across 33 walked days, a +30
+ *     and a +31 jump and four skip-aheads it never fired once, while this
+ *     header credited it with catching wild jumps and a banked idle month.
+ *     Its only reachable trigger was a TIMEZONE change (a local date advancing
+ *     with no UTC elapsed), which rule 1 already caps at one hop. A rule that
+ *     cannot fire is worse than no rule: it is described as a guard, tested as
+ *     a guard, and guards nothing. The one clock the player cannot move is the
+ *     server's, and that is rule 3, so "give rule 2 a trustable clock" IS rule
+ *     3. Do not rebuild it. Its kv rows (dayPaceKey, dayPaceAt) are left in
+ *     place in old saves and never read.
  *
- * WHAT NEITHER RULE CAN DO, stated so nobody has to rediscover it: nothing
- * here detects a plain forward clock move, because there is no trustworthy
+ * WHAT RULE 1 CANNOT DO, stated so nobody has to rediscover it: nothing
+ * local detects a plain forward clock move, because there is no trustworthy
  * clock on the device to compare against. `performance.now()` is monotonic but
- * resets on every page load, so a force-quit erases it. A server timestamp
- * would work and this app is offline-first, and server/ is not ours to change.
- * The guard's value is entirely that the move cannot be undone.
+ * resets on every page load, so a force-quit erases it. Rule 1's value is
+ * entirely that the move cannot be undone; rule 3 is what bounds it.
  *
  * WHY NOT A ROLLING "20 HOURS SINCE THE LAST DAY WE SAW". It was the first
  * design and it BRICKS HONEST PLAYERS, every day, for free. The stamp would be
  * rewritten on the player's last interaction of the day, so somebody who opens
  * the app at 23:00 and again at 08:00 the next morning has nine hours between
  * a real day boundary, is refused, and loses a genuine day of rewards. Any
- * evening-then-morning player hits it. The anchor below is not restamped on
- * same-day activity and does not care WHERE in the day the anchor sat, because
- * DAY_GRACE absorbs the partial day once rather than once per day.
- *
- * WHY THE ANCHOR DRIFTS FORWARD. If it never moved, a player who did not open
- * the app for a month would bank thirty days of allowance and could then spend
- * them in one sitting. So whenever real time has run AHEAD of the claimed day
- * count, the anchor is pulled up to now. Headroom is therefore capped at
- * DAY_GRACE permanently, and for a player who opens the app daily it sits at
- * 2 to 3 days and never erodes toward zero.
+ * evening-then-morning player hits it. Nothing here measures hours: rule 1
+ * compares calendar days and rule 3 compares them to the server's.
  *
  * NTP / FLAT BATTERY, and why this cannot brick an honest player. A flat
  * battery leaves a phone booting on its RTC default, and NTP corrects it a few
  * seconds later, usually before the app is open at all.
  *   - Corrected BACKWARDS (the RTC had run fast, or read a future default):
- *     the wrong future day is refused by rule 2 only if it is more than
- *     DAY_GRACE days out, and a refusal WRITES NOTHING, so the high-water mark
- *     never learns the bad date. When NTP lands, the true date is still at or
- *     above the mark and the player carries on with nothing lost. Inside
- *     DAY_GRACE the bad day is accepted and the mark moves a day or two ahead,
- *     which costs at most those days of dailies once, and never repeats.
+ *     the wrong future day is refused by rule 3 if it is past the server's
+ *     day plus WITNESS_GRACE, and a refusal WRITES NOTHING, so the high-water
+ *     mark never learns the bad date. When NTP lands, the true date is still
+ *     at or above the mark and the player carries on with nothing lost. Inside
+ *     WITNESS_GRACE the bad day is accepted and the mark moves ahead, which
+ *     costs at most those days of dailies once, and never repeats.
  *   - Corrected FORWARDS (the RTC was stuck in the past): the stale day is
  *     refused by rule 1, so no rewards are paid while the clock is wrong; the
  *     player would have got the wrong day's keys anyway. The moment NTP lands,
@@ -511,7 +504,7 @@ export function newId() {
  * unpaid for the window their clock was wrong. Nothing is ever clawed back.
  *
  * THE TRAVELLER. Flying EAST is free: the date jumps forward, rule 1 does not
- * care and rule 2 has DAY_GRACE to spend, so an LA-to-Sydney flight (Monday
+ * care and rule 3 has a week of allowance, so an LA-to-Sydney flight (Monday
  * 22:00 PDT to Wednesday 06:00 AEST, two local dates in fifteen hours) opens
  * both days and pays normally. Flying WEST across the date line is the one
  * honest case that costs something: you land on a local date BEFORE the mark,
@@ -532,26 +525,18 @@ export function newId() {
  * device's idea of today trustworthy enough to open a new day at all".
  * ------------------------------------------------------------------------ */
 const DAY_MS = 86400000;
-/* 3 days, and each one is spoken for: ONE for the partial day the anchor was
-   set in (an anchor at 23:00 is a whole day behind an anchor at 00:01), ONE
-   for the largest honest jump a calendar can make in no time at all, which is
-   an eastward date-line crossing from UTC-12 to UTC+14 and is worth up to two
-   local dates for 26 hours of offset, and ONE spare for DST, a manual timezone
-   change and the fact that this is a speed bump, so it should err toward the
-   traveller. The farmer's prize for all of it is three days, ever, once. */
-export const DAY_GRACE = 3;
 
 /* ------------------------------------------------------------------------
- * RULE 3: THE SERVER'S DAY. This is the part rules 1 and 2 could not do.
+ * RULE 3: THE SERVER'S DAY. This is the part no local rule could do, and it
+ * is THE guard against a forward clock move: the only one, not the last line.
  *
- * Rules 1 and 2 are both read off the SAME clock the farmer is moving, so a
- * plain forward walk (jump 24h, collect, jump 24h again) satisfies both: the
- * day advances, and Date.now() advances with it, so "days claimed" never
- * outruns "time elapsed". tests/clock-trust-audit.mjs measured that walk at
- * 176.4 XP and 64.6 coins per reset with no ceiling in sight, and the header
- * above says plainly that no local rule can see it. It cannot. There is
- * exactly one clock in this system the player's Settings app cannot move, and
- * it is the server's.
+ * Rule 1 is read off the SAME clock the farmer is moving (and so was the
+ * retired rule 2), so a plain forward walk (jump 24h, collect, jump 24h again)
+ * satisfies it: the day advances, and Date.now() advances with it.
+ * tests/clock-trust-audit.mjs measured that walk at 176.4 XP and 64.6 coins
+ * per reset with no ceiling in sight, and the header above says plainly that
+ * no local rule can see it. It cannot. There is exactly one clock in this
+ * system the player's Settings app cannot move, and it is the server's.
  *
  * WHAT IS WITNESSED. `GET /health` (server/src/index.js:190) already answers
  * `{ ok, ts }` with the server's own Date.now(). It is UNSIGNED and takes no
@@ -640,8 +625,6 @@ export async function claimDay(key) {
   // FIRST RUN, or a mark we cannot read: seed and let the player through.
   if (!Number.isFinite(oh)) {
     await kvSet('dayHighWater', key);
-    await kvSet('dayPaceKey', key);
-    await kvSet('dayPaceAt', Date.now());
     // ...and rule 3's mark with it, if the server has never been seen. A device
     // that has only ever been offline gets a ceiling from here, not a free run.
     if (!(Number(await kvGet(DAY_WITNESS_KEY, 0)) || 0)) await kvSet(DAY_WITNESS_KEY, o);
@@ -657,41 +640,20 @@ export async function claimDay(key) {
      evening-then-morning players. */
   if (o === oh) return { fresh: true, reason: 'same-day' };
 
-  /* RULE 2. Days claimed since the anchor may not outrun days elapsed since it.
-     ITS WRITE IS DEFERRED to the bottom of the function. Rule 3 below can still
-     refuse, and "a refusal writes nothing" is the property that stops this
-     guard latching, so nothing may be committed until every rule has spoken. */
-  const anchorKey = await kvGet('dayPaceKey', hw);
-  const anchorAt = Number(await kvGet('dayPaceAt', 0)) || 0;
-  const oa = dayOrdinal(anchorKey);
-  let movePace = false;
-  if (Number.isFinite(oa) && anchorAt > 0) {
-    const elapsedDays = Math.floor((Date.now() - anchorAt) / DAY_MS);
-    const allowed = elapsedDays + DAY_GRACE;
-    if (o - oa > allowed) {
-      return { fresh: false, reason: 'too-fast', highWater: hw, allowed, claimed: o - oa };
-    }
-    /* Pull the anchor up when wall time has outrun the day count, so an idle
-       month cannot be banked and spent in one sitting. */
-    movePace = elapsedDays > o - oa;
-  } else {
-    movePace = true;
-  }
+  /* (Rule 2 stood here until QA round 26 O10. It could not fire: see the header.)
 
-  /* RULE 3. A day the SERVER has not reached, plus an offline allowance. The
-     one rule here that is not read off the clock being moved. Seeds and lets
-     through when there is nothing to judge against; see the header.
-     LAST, deliberately: rule 2 catches the wild jumps (a decade-ahead RTC, a
-     banked idle month) and names them 'too-fast', which is the more specific
-     diagnosis. What is left for rule 3 is the one shape rule 2 is blind to and
-     was written to admit it is blind to, the patient one-day-at-a-time walk. */
+     RULE 3. A day the SERVER has not reached, plus an offline allowance. The
+     one rule here that is not read off the clock being moved, so it is what
+     refuses the wild jumps (a decade-ahead RTC) as well as the patient
+     one-day-at-a-time walk. Seeds and lets through when there is nothing to
+     judge against; see the header. "A refusal writes nothing" is the property
+     that stops this guard latching, so nothing is committed until it has spoken. */
   const witness = Number(await kvGet(DAY_WITNESS_KEY, 0)) || 0;
   if (witness && o > witness + WITNESS_GRACE) {
     return { fresh: false, reason: 'unwitnessed', highWater: hw, witness, ceiling: witness + WITNESS_GRACE, claimed: o };
   }
   if (!witness) await kvSet(DAY_WITNESS_KEY, o);
 
-  if (movePace) { await kvSet('dayPaceKey', key); await kvSet('dayPaceAt', Date.now()); }
   await kvSet('dayHighWater', key);
   return { fresh: true, reason: 'advanced' };
 }
@@ -699,12 +661,9 @@ export async function claimDay(key) {
 /* Read-only view for UI and for tests. Never writes, so it can be called from
    a render path without opening a day as a side effect. */
 export async function dayGuardState() {
-  const [highWater, paceKey, paceAt, witness] = await Promise.all([
-    kvGet('dayHighWater', null), kvGet('dayPaceKey', null), kvGet('dayPaceAt', 0), kvGet(DAY_WITNESS_KEY, 0),
-  ]);
+  const [highWater, witness] = await Promise.all([kvGet('dayHighWater', null), kvGet(DAY_WITNESS_KEY, 0)]);
   const w = Number(witness) || 0;
-  return { highWater, paceKey, paceAt: Number(paceAt) || 0, grace: DAY_GRACE,
-    witness: w, witnessGrace: WITNESS_GRACE, ceiling: w ? w + WITNESS_GRACE : null };
+  return { highWater, witness: w, witnessGrace: WITNESS_GRACE, ceiling: w ? w + WITNESS_GRACE : null };
 }
 
 export async function exportAll() {

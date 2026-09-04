@@ -221,8 +221,8 @@ ok(`COLLECT the header's coins match storage within ${AGREE_MS}ms of COLLECT (th
  * day on, which is the state the report describes: the one day the backfill
  * could not have closed is the day the player was last using the app, and
  * awardDayCloseIfDue pays it at boot, sixty lines after the screen was painted.
- * The clock moves one day, which is inside the day guard's DAY_GRACE, so the
- * app opens the day honestly rather than being forced through a refusal. */
+ * The clock moves one day, which is inside the day guard's WITNESS_GRACE, so
+ * the app opens the day honestly rather than being forced through a refusal. */
 await openDay(0);
 for (let i = 0; i < 24 && !(await wheelUp()); i++) await sleep(1000);
 await sleep(4000);                       // let the install day's backfill and its own repaint land

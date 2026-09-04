@@ -757,7 +757,12 @@ export async function awardDayCloseIfDue(targets) {
      device has honestly arrived at a new day, and yesterday's own key is what
      the award() ledger already dedupes on. */
   const today = dateKey();
-  if (!(await claimDay(today)).fresh) return null;
+  const day = await claimDay(today);
+  /* Handed back rather than swallowed (QA round 26 O14): boot and the midnight
+     roll toast DAY_GUARD_COPY off this, where a bare null was indistinguishable
+     from "nothing owed". Carries no closed/consoled, so nothing counts it as a
+     payout; tests/gap-settle-audit.mjs reads it that way. */
+  if (!day.fresh) return { dayGuard: day.reason || true };
   let y = addDays(today, -1);
   let es = await db.byIndex('log', 'date', y);
   if (!es.length) {

@@ -9,7 +9,7 @@
 // skipped under webdriver (unless window.__wheelForce) like the other intros.
 // Reduced motion still grants + shows the prize, just without the spin.
 
-import { kvGet, kvSet, claimDay } from './db.js';
+import { db, kvGet, kvSet, claimDay } from './db.js';
 import { dateKey } from './nutrition.js';
 import { coinsAdd, grantCrate, grantConsumable, coins } from './loot.js';
 import { grantIngredient, INGREDIENTS, COMMON_INGREDIENT_IDS } from './cooking.js';
@@ -299,7 +299,13 @@ export async function maybeShowDailyWheel({ sounds = true, force = false } = {})
      is a whole extra spin. Ask whether today is a day this device has honestly
      reached before offering one. Deliberately AFTER the force/preview escapes:
      ?wheel=1 grants nothing, so it must not open a day either. */
-  if (!force && !preview && !(await claimDay(today)).fresh) return false;
+  if (!force && !preview) {
+    const day = await claimDay(today);
+    /* The refusal is HANDED BACK, not swallowed (QA round 26 O14): the caller in
+       js/app.js owns the toast copy (DAY_GUARD_COPY) and this used to be one of
+       the five day-keyed rewards that said nothing when the guard refused. */
+    if (!day.fresh) return { dayGuard: day.reason || true };
+  }
 
   await waitForSplash();
   if (sheetStackOpen()) return false;              // don't stack over an open sheet
@@ -319,7 +325,17 @@ export async function maybeShowDailyWheel({ sounds = true, force = false } = {})
   // prize is date-seeded so it can't be rerolled by reloading.
   const commit = async () => {
     if (preview) return { coinDelta: 0 };
-    if ((await kvGet('wheelLastDate', null)) === today) return { coinDelta: 0 };
+    if ((await kvGet('wheelLastDate', null)) === today) return { coinDelta: 0, already: true };
+    /* THE SPIN IS ONE addIfAbsent (QA round 26 O11). The get-then-put above was
+       the whole gate, and executed as written it answered granted, granted: two
+       overlapping spins (one page, or two tabs) both read a stale date and both
+       paid. Measured bound: two real spins, one prize, so a primitive defect
+       rather than a farm, but the same shape the ledger's addIfAbsent exists to
+       close (js/db.js). The per-day kv row is the claim; the loser is told
+       'already spun' and grants nothing. wheelLastDate is still written because
+       the SHOW gate above and tests/wheel-audit.mjs read it; it is no longer
+       what decides. */
+    if (!(await claimSpin(today))) return { coinDelta: 0, already: true };
     await kvSet('wheelLastDate', today);
     const before = await coins();
     await prize.grant(rng);
@@ -327,6 +343,13 @@ export async function maybeShowDailyWheel({ sounds = true, force = false } = {})
   };
   const result = { iconHtml: pixPrizeImg(prize) || iconHtml(prize, 40), name: prize.name, gold: prize.gold, coinDelta: 0 };
   return showWheel(idx, prize, result, commit, { sounds });
+}
+
+/* The day's spin claim: a test-and-set on kv `wheelspin:<date>`. Exactly one
+   caller anywhere on the device is ever told true for a given day. Exported so
+   the race can be driven in node (tests/unit.test.js, mem-idb). */
+export function claimSpin(today) {
+  return db.addIfAbsent('kv', { k: `wheelspin:${today}`, v: Date.now() });
 }
 
 function sheetStackOpen() {
@@ -368,7 +391,8 @@ function showWheel(idx, prize, result, commit, { sounds }) {
     const reveal = () => {
       if (revealed) return;
       revealed = true;
-      const detail = result.coinDelta > 0
+      const detail = result.already ? 'Already spun today'
+        : result.coinDelta > 0
         ? `You won <b>${result.coinDelta} coins</b>`
         : `You won <b>${prize.name}</b>`;
       const card = dw.querySelector('.dw-card');
@@ -382,13 +406,13 @@ function showWheel(idx, prize, result, commit, { sounds }) {
       collect.addEventListener('click', finish, { once: true });
       card.appendChild(collect);
       if (sounds) { try { levelSound(true); } catch { /* no audio */ } }
-      try { window.dispatchEvent(new CustomEvent('bh-wheel-won', { detail: result })); } catch { /* noop */ }
+      if (!result.already) try { window.dispatchEvent(new CustomEvent('bh-wheel-won', { detail: result })); } catch { /* noop */ }
     };
 
     const spin = async () => {
       spinBtn.disabled = true;
       // consume the day + grant the prize the moment they commit to spinning
-      try { const c = await commit(); result.coinDelta = c.coinDelta; } catch { /* grant best-effort */ }
+      try { const c = await commit(); result.coinDelta = c.coinDelta; result.already = !!c.already; } catch { /* grant best-effort */ }
       if (sounds) { try { popSound(true); } catch { /* no audio */ } }
       /* Any landing whose rest angle sits in the 90..270 band would leave every
          label upside down, so counter-flip them (see .dw-flip in STYLE). The

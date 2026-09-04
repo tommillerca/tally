@@ -21,10 +21,10 @@
  *                 group separator in it.
  *
  *  3. DAY GUARD   The Claim button's refusal keyed only on 'unwitnessed', so
- *                 'backwards' and 'too-fast' shared one line that named no cause.
- *                 Forces all three rules through kv, fires the REAL Claim button
- *                 and reads the toast. Red pre-fix: two of the three toasts are
- *                 byte-identical.
+ *                 'backwards' (and the since-retired 'too-fast', QA round 26 O10)
+ *                 shared one line that named no cause. Forces both remaining
+ *                 rules through kv, fires the REAL Claim button and reads the
+ *                 toast. Red pre-fix: the two toasts are byte-identical.
  *
  *  4. CLOUD       pushBackup ended in a blanket `return false`, so a 413
  *                 ('too-large', the save has outgrown its D1 row) and a 401
@@ -283,11 +283,10 @@ await page.reload({ waitUntil: 'networkidle2' }); await sleep(2600); await dismi
 
 const guardScenarios = {
   // RULE 1: a mark strictly ahead of today, so today is not a new day
-  backwards: [['dayHighWater', addD(today, 5)], ['dayPaceKey', today], ['dayPaceAt', Date.now()], ['dayWitnessOrd', ord]],
-  // RULE 2: 100 days claimed since an anchor set 0 days ago
-  'too-fast': [['dayHighWater', addD(today, -1)], ['dayPaceKey', addD(today, -100)], ['dayPaceAt', Date.now()], ['dayWitnessOrd', ord]],
+  backwards: [['dayHighWater', addD(today, 5)], ['dayWitnessOrd', ord]],
+  // (rule 2, 'too-fast', was retired in QA round 26 O10: it could not fire)
   // RULE 3: the server was last seen 20 days ago, well past WITNESS_GRACE
-  unwitnessed: [['dayHighWater', addD(today, -1)], ['dayPaceKey', today], ['dayPaceAt', Date.now()], ['dayWitnessOrd', ord - 20]],
+  unwitnessed: [['dayHighWater', addD(today, -1)], ['dayWitnessOrd', ord - 20]],
 };
 const guardSeen = {};
 for (const [want, put] of Object.entries(guardScenarios)) {
@@ -303,18 +302,16 @@ for (const [want, put] of Object.entries(guardScenarios)) {
   const t = await watchToast(page, 3000);
   guardSeen[want] = { reason: reason && reason.reason, fired, text: t.best ? t.best.text : '' };
 }
-ok('DAYGUARD SAMPLE all three rules were actually reached and a real Claim button was fired each time',
+ok('DAYGUARD SAMPLE both rules were actually reached and a real Claim button was fired each time',
   Object.entries(guardSeen).every(([want, s]) => s.reason === want && s.fired && s.text),
   JSON.stringify(guardSeen));
 const guardTexts = Object.values(guardSeen).map(s => s.text);
-ok('DAYGUARD each refusal renders its OWN line (three reasons, three distinct messages)',
-  new Set(guardTexts).size === 3, JSON.stringify(guardSeen, null, 1));
+ok('DAYGUARD each refusal renders its OWN line (two reasons, two distinct messages)',
+  new Set(guardTexts).size === 2, JSON.stringify(guardSeen, null, 1));
 /* Deliberately NOT /date/: the generic pre-fix line was "paused while the DATE
    settles", so a regex that loose passed on the very bug this row is for. */
 ok('DAYGUARD the clock-backwards refusal NAMES the clock rather than saying only "paused"',
   /earlier day|gone back|behind/i.test(guardSeen.backwards.text), `"${guardSeen.backwards.text}"`);
-ok('DAYGUARD the too-fast refusal NAMES the jump rather than saying only "paused"',
-  /jump|ahead|further/i.test(guardSeen['too-fast'].text), `"${guardSeen['too-fast'].text}"`);
 ok('DAYGUARD the lapsed-witness refusal still names the server check',
   /server/i.test(guardSeen.unwitnessed.text), `"${guardSeen.unwitnessed.text}"`);
 
