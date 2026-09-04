@@ -3624,6 +3624,55 @@ test('R18-P5 js/app.js does not statically import the changelog', () => {
   assert.ok(sw.includes("'./js/changelog.js'"), 'changelog.js dropped out of the service-worker precache: a lazy import offline is a blank sheet');
 });
 
+/* ---- QA round 24, L3: built-in foods remember their portion across a relaunch ----
+   persistFoodUse returned on its first line for generics, so the lastPortion the
+   Add button wrote onto the GENERIC_FOODS singleton never reached storage: 60 days
+   of chicken at "1 breast" (284 kcal) came back after a relaunch as "1 small
+   breast" (198 kcal), 30.3% low. This runs the REAL persistFoodUse and
+   hydrateGenericUse out of js/app.js against an in-memory kv, then throws the
+   in-memory food objects away (the relaunch) and hydrates fresh ones. */
+test('L3 generic food use (portion, count, star) survives a cold relaunch via kv', async () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('const GEN_USE_KEY'), b = app.indexOf('\nasync function entriesFor');
+  assert.ok(a > 0 && b > a, 'persistFoodUse/hydrateGenericUse block not found in js/app.js');
+  const kv = new Map();                         // the fake kv store, k -> v
+  const kvUpdate = async (k, fn, fallback) => { kv.set(k, fn(kv.has(k) ? kv.get(k) : fallback)); };
+  const db = {
+    all: async (store) => { assert.equal(store, 'kv'); return [...kv].map(([k, v]) => ({ k, v })); },
+    put: async (store, row) => { assert.equal(store, 'kv', 'a generic must never become a foods row'); kv.set(row.k, row.v); },
+  };
+  const mk = () => [{ id: 'g-chicken-breast', source: 'generic', name: 'Chicken breast' }, { id: 'g-rice', source: 'generic', name: 'Rice' }];
+  const load = (foods) => new Function('kvUpdate', 'db', 'GENERIC_FOODS', 'S',
+    `${app.slice(a, b)}; return { persistFoodUse, hydrateGenericUse };`)(kvUpdate, db, foods, { userFoods: [] });
+
+  // session 1: log chicken at "1 breast" twice, star it (what #favBtn does: kvSet('fav-'+id))
+  const s1 = mk(); const fx1 = load(s1);
+  s1[0].lastPortion = { mode: 'serving', idx: 1, qty: 1 };
+  await fx1.persistFoodUse(s1[0]);
+  await fx1.persistFoodUse(s1[0]);
+  await db.put('kv', { k: 'fav-g-chicken-breast', v: true });
+
+  // session 2: fresh module objects, hydrate from kv
+  const s2 = mk(); const fx2 = load(s2);
+  await fx2.hydrateGenericUse();
+  assert.deepEqual(s2[0].lastPortion, { mode: 'serving', idx: 1, qty: 1 }, 'lastPortion did not survive the relaunch: the recents row will offer the wrong portion');
+  assert.equal(s2[0].useCount, 2, 'useCount did not survive the relaunch');
+  assert.ok(s2[0].lastUsedAt > 0, 'lastUsedAt did not survive the relaunch');
+  assert.equal(s2[0].favorite, true, 'the star did not survive the relaunch');
+  assert.equal(s2[1].favorite, false); assert.equal(s2[1].lastPortion, undefined);
+
+  // the bound: 200 ids kept, least recently used pruned first
+  const now = Date.now(); let t = 0;
+  const realNow = Date.now; Date.now = () => now + (t++);
+  try {
+    for (let i = 0; i < 205; i++) await fx2.persistFoodUse({ id: 'g-x' + i, source: 'generic' });
+  } finally { Date.now = realNow; }
+  const rec = kv.get('genUse');
+  assert.equal(Object.keys(rec).length, 200, 'genUse record is unbounded');
+  assert.ok(!rec['g-chicken-breast'] && !rec['g-x0'] && !rec['g-x4'], 'pruning did not drop the least recently used');
+  assert.ok(rec['g-x5'] && rec['g-x204'], 'pruning dropped a recent id');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

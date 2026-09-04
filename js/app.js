@@ -1147,6 +1147,7 @@ async function boot() {
   if (S.demo && !S.settings) { await seedDemo(); S.settings = await kvGet('settings'); }
   snapSettings();
   S.userFoods = await db.all('foods');
+  await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
 
   // One-off: players who claimed the Day One Lizard before v241 got it filed in
   // the Stable and never put on their shoulder, so the celebration was followed by
@@ -1272,6 +1273,7 @@ async function boot() {
     S.settings = await kvGet('settings');
     snapSettings();
     S.userFoods = await db.all('foods');
+    await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
     setTimeout(() => toast('Welcome back. Your progress was restored from your cloud backup.', 4600), 900);
   } else if (cloudRestore && cloudRestore.reason === 'decrypt') {
     /* HONEST DECRYPT FAILURE. A backup EXISTS but this device's key cannot
@@ -3457,13 +3459,55 @@ function findFood(id) {
   return S.userFoods.find(f => f.id === id) || GENERIC_FOODS.find(f => f.id === id) || null;
 }
 
+/* GENERIC FOOD USE LIVES IN KV, NOT IN THE FOODS STORE (QA round 24, L3).
+   This function used to return on its first line for generics ("they ship with
+   the app"), so the lastPortion the Add button had just written onto the
+   in-memory GENERIC_FOODS object died with the tab. Measured: 60 days of chicken
+   logged at "1 breast" (284 kcal), and after a relaunch the recents row offered
+   "1 small breast" at 198 kcal, a 30.3% undercount waiting for one careless tap;
+   588 meals through the real UI left 0 use counts and 0 remembered portions.
+   Generic favourites already round-trip through kv (fav-<id>, see openPortion),
+   so use does the same: ONE kv record, GEN_USE_KEY, mapping food id to
+   { useCount, lastUsedAt, lastPortion }. Never a row in 'foods' (that store is
+   customs and scans; renderFoods counts them). Bounded to GEN_USE_CAP ids, the
+   least recently used pruned first, so a player who tries every built-in food
+   over years still holds one small record. kvUpdate keeps the read-modify-write
+   in one transaction, so two tabs logging at once cannot lose a count. */
+const GEN_USE_KEY = 'genUse';
+const GEN_USE_CAP = 200;
 async function persistFoodUse(food) {
-  if (food.source === 'generic') return; // generics ship with the app
   food.useCount = (food.useCount || 0) + 1;
   food.lastUsedAt = Date.now();
+  if (food.source === 'generic') {
+    const mine = { useCount: food.useCount, lastUsedAt: food.lastUsedAt, lastPortion: food.lastPortion || null };
+    await kvUpdate(GEN_USE_KEY, cur => {
+      const m = { ...(cur || {}), [food.id]: mine };
+      const keep = Object.entries(m).sort((a, b) => (b[1].lastUsedAt || 0) - (a[1].lastUsedAt || 0)).slice(0, GEN_USE_CAP);
+      return Object.fromEntries(keep);
+    }, {});
+    return;
+  }
   await db.put('foods', food);
   const i = S.userFoods.findIndex(f => f.id === food.id);
   if (i >= 0) S.userFoods[i] = food; else S.userFoods.push(food);
+}
+
+/* The read side of the above, run wherever S.userFoods is (re)loaded: boot,
+   cloud restore, file import. GENERIC_FOODS are module singletons that every
+   consumer (defaultSel, recents, the home favourites strip at renderHome) reads
+   directly, so the persisted use AND the fav-<id> star are copied back onto the
+   objects once and nothing downstream changes. The star was persisted before
+   this but only re-read inside openPortion and renderFoods, so a cold relaunch
+   showed the home favourites strip without it (round 24). */
+async function hydrateGenericUse() {
+  const rows = await db.all('kv');
+  const use = rows.find(r => r.k === GEN_USE_KEY)?.v || {};
+  const favs = new Set(rows.filter(r => r.k.startsWith('fav-') && r.v).map(r => r.k.slice(4)));
+  for (const g of GENERIC_FOODS) {
+    const u = use[g.id];
+    if (u) { g.useCount = u.useCount || 0; g.lastUsedAt = u.lastUsedAt || 0; g.lastPortion = u.lastPortion || undefined; }
+    g.favorite = favs.has(g.id);
+  }
 }
 
 async function entriesFor(date) {
@@ -17782,6 +17826,7 @@ async function importBackupFromFile(file) {
   S.settings = await kvGet('settings') || S.settings;
   snapSettings();
   S.userFoods = await db.all('foods');
+  await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
   closeAllSheetsViaHistory();   // no-op when no sheet is open (Settings > Import)
   toast(importSummary(counts), 4200);
   if (wasOnb) {
