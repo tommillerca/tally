@@ -4,6 +4,9 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 472, date: '2026-09-04', title: 'Updates arrive when they are published', items: [
+    'A new build used to hide for up to ten minutes behind your phone\'s own cache, even after a force quit. The app now asks the server directly, so Get latest means latest.',
+  ] },
   { n: 471, date: '2026-09-04', title: 'Logging tells the truth, and the Dressing Room has an order', items: [
     'Scanning a European label with two columns now reads the per-serving column, and if the numbers still add up to more than the serving weighs, the sheet says so before you save.',
     'A food you make yourself now warns you before saving when the calories and the macros disagree, or when you already have one by that name. Macros you leave blank stay blank instead of pretending to be zero.',

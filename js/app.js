@@ -1162,7 +1162,14 @@ async function boot() {
   } catch { /* cosmetic backfill; never block boot */ }
 
   if ('serviceWorker' in navigator && !S.demo && location.protocol === 'https:') {
-    navigator.serviceWorker.register('sw.js').then(reg => {
+    /* updateViaCache: 'none' (2026-09-04). GitHub Pages serves sw.js with
+       max-age=600 and the default update check honours the HTTP cache, so for
+       ten minutes after a deploy a device asked "is there a new worker?" was
+       answered from its own stale copy: Settings read v470 on a phone that had
+       force-quit twice while the server served v471. Bypass the cache for the
+       worker script itself; the app's own network-first rule already covers
+       everything the worker serves. */
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
       // resumed PWAs never re-navigate, so check for updates whenever we come back
       document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
     }).catch(() => {});
@@ -20742,7 +20749,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v471'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v472'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
