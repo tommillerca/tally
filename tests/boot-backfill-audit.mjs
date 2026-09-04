@@ -172,7 +172,18 @@ const SEED = async (DAYS, PER_DAY) => {
   // THE REFERENCE. Derived here, from the seed, never from the replay.
   const dates = [...new Set(logRows.map(e => e.date))].sort();
   const want = [];
-  for (const e of logRows.slice(-400)) want.push(`log-${e.id}`);
+  /* Log XP is keyed `log-<date>-<n>` and stops at 20 a day since QA round A L1
+     (js/game.js XP_DAILY_CAP.log, 2026-09-03); before that it was `log-<id>`,
+     uncapped, and this line modelled that. gate7 (2026-09-04) went red at
+     1520/1920 with the old reference on the new replay: guard drift, not a
+     replay bug. n is the row's ordinal within its day over ALL rows (that is
+     what the replay's `ord` is built from), and only the last 400 rows are
+     replayed. 20 is written here as the spec, not imported: a reference that
+     reads the cap from game.js cannot notice game.js changing it. */
+  const LOG_CAP = 20;
+  const ordInDay = new Map(); const seen = {};
+  for (const e of logRows) ordInDay.set(e.id, seen[e.date] = (seen[e.date] || 0) + 1);
+  for (const e of logRows.slice(-400)) { const n = ordInDay.get(e.id); if (n <= LOG_CAP) want.push(`log-${e.date}-${n}`); }
   for (const d of dates) want.push(`firstlog-${d}`);
   for (const w of wRows.slice(-60)) want.push(`weigh-${w.date}`);
   for (const d of dates) {
