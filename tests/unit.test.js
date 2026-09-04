@@ -4757,6 +4757,53 @@ test('SW update checks bypass the HTTP cache (GitHub Pages max-age=600 held a de
   assert.match(calls[0], /updateViaCache:\s*'none'/, 'register() does not pass updateViaCache: none, so a deploy can hide behind the HTTP cache');
 });
 
+/* ---------------------------------------------------------------------------
+ * QA round 27 R13. The Android manifest declared 17 Health Connect READ_
+ * permissions and HealthPlugin.kt requested all 17 as a "full superset", while
+ * queryToday() read 7 record types. Over-declared health permissions are a
+ * routine Play data-safety query, and a grant sheet that asks for VO2 max and
+ * body fat the app never reads is a trust problem with the player too.
+ *
+ * Three sets, all parsed from source, must be EQUAL:
+ *   manifest   <uses-permission android.permission.health.READ_X />
+ *   requested  HealthPermission.getReadPermission(XRecord::class) in readPerms
+ *   read       XRecord::class / XRecord.SOMETHING_TOTAL anywhere else in the plugin
+ * A mismatch in either direction goes red: a declared-but-unread permission
+ * (the R13 defect) and a read-but-undeclared one (requestAuth can never satisfy
+ * containsAll(readPerms), so Health stays "not connected" forever).
+ *
+ * PROVE-RED (2026-09-04, on origin/main v472): fails at the "manifest declares
+ * permissions the bridge never reads" assertion listing the 10 extras.
+ * ------------------------------------------------------------------------- */
+test('QA round 27 R13: Android manifest declares exactly the Health Connect types the bridge reads', () => {
+  const manifest = readFileSync(join(here, '..', 'native', 'android', 'app', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
+  const kt = readFileSync(join(here, '..', 'native', 'android', 'app', 'src', 'main', 'java', 'com', 'boneheadz', 'gym', 'HealthPlugin.kt'), 'utf8');
+
+  const declared = new Set([...manifest.matchAll(/android\.permission\.health\.(READ_[A-Z_]+)/g)].map(m => m[1]));
+  assert.ok(declared.size > 0, 'no health permissions found in the manifest: the regex or the path has drifted, this has not passed');
+
+  // Record class -> permission name. Health Connect's names are the class minus
+  // "Record" in UPPER_SNAKE, except the three it shortens.
+  const IRREGULAR = { ExerciseSessionRecord: 'READ_EXERCISE', HeartRateVariabilityRmssdRecord: 'READ_HEART_RATE_VARIABILITY', SleepSessionRecord: 'READ_SLEEP' };
+  const permOf = rec => IRREGULAR[rec] || 'READ_' + rec.replace(/Record$/, '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
+
+  const permsBlock = kt.match(/private val readPerms = setOf\(([\s\S]*?)\n    \)/);
+  assert.ok(permsBlock, 'readPerms set not found in HealthPlugin.kt: re-anchor this test');
+  const requested = new Set([...permsBlock[1].matchAll(/getReadPermission\((\w+Record)::class\)/g)].map(m => permOf(m[1])));
+
+  // everything outside the imports and the request set is a READ SITE
+  const body = kt.replace(permsBlock[0], '').split('\n').filter(l => !/^import /.test(l)).join('\n');
+  const read = new Set([...body.matchAll(/\b(\w+Record)(?:::class|\.[A-Z_]+_TOTAL)/g)].map(m => permOf(m[1])));
+  assert.ok(read.size > 0, 'no read sites found in HealthPlugin.kt: the regex has drifted, this has not passed');
+
+  const diff = (a, b) => [...a].filter(x => !b.has(x)).sort();
+  assert.deepEqual(diff(declared, read), [], `manifest declares permissions the bridge never reads: ${diff(declared, read).join(', ')}`);
+  assert.deepEqual(diff(read, declared), [], `bridge reads types the manifest does not declare: ${diff(read, declared).join(', ')}`);
+  assert.deepEqual(diff(requested, read), [], `readPerms requests permissions the bridge never reads: ${diff(requested, read).join(', ')}`);
+  assert.deepEqual(diff(read, requested), [], `bridge reads types readPerms never requests (requestAuth can never be satisfied): ${diff(read, requested).join(', ')}`);
+  assert.equal(read.size, 7, `expected the 7 read types traced in R13, saw ${[...read].sort().join(', ')}: if a read was added on purpose, update this count with it`);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

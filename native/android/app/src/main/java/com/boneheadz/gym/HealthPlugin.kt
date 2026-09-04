@@ -6,21 +6,11 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
-import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
-import androidx.health.connect.client.records.DistanceRecord
-import androidx.health.connect.client.records.FloorsClimbedRecord
 import androidx.health.connect.client.records.StepsRecord
-import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
-import androidx.health.connect.client.records.Vo2MaxRecord
-import androidx.health.connect.client.records.RespiratoryRateRecord
-import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.WeightRecord
-import androidx.health.connect.client.records.HeightRecord
-import androidx.health.connect.client.records.BodyFatRecord
-import androidx.health.connect.client.records.LeanBodyMassRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import com.getcapacitor.JSArray
 import java.time.Duration
@@ -55,24 +45,19 @@ class HealthPlugin : Plugin() {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private val permContract = PermissionController.createRequestPermissionResultContract()
 
-    // Full superset requested ONCE so future features never need a new grant sheet.
+    // Exactly the record types queryToday() reads, no more. QA round 27 R13: this
+    // used to be a 17-type "full superset requested ONCE so future features never
+    // need a new grant sheet", which over-declared 10 permissions the app never
+    // read (a Play data-safety liability) and asked the player to grant data we
+    // did not use. A future read needs its permission added here AND in
+    // AndroidManifest.xml; tests/unit.test.js asserts the three sets are equal.
     private val readPerms = setOf(
         HealthPermission.getReadPermission(StepsRecord::class),
         HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
-        HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
+        HealthPermission.getReadPermission(WeightRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
-        HealthPermission.getReadPermission(DistanceRecord::class),
-        HealthPermission.getReadPermission(FloorsClimbedRecord::class),
-        HealthPermission.getReadPermission(HeartRateRecord::class),
         HealthPermission.getReadPermission(RestingHeartRateRecord::class),
         HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class),
-        HealthPermission.getReadPermission(Vo2MaxRecord::class),
-        HealthPermission.getReadPermission(RespiratoryRateRecord::class),
-        HealthPermission.getReadPermission(OxygenSaturationRecord::class),
-        HealthPermission.getReadPermission(WeightRecord::class),
-        HealthPermission.getReadPermission(HeightRecord::class),
-        HealthPermission.getReadPermission(BodyFatRecord::class),
-        HealthPermission.getReadPermission(LeanBodyMassRecord::class),
         HealthPermission.getReadPermission(SleepSessionRecord::class)
     )
 
