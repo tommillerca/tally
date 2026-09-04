@@ -73,7 +73,7 @@ import { attachWalk } from './walk.js';
 import { refreshPitEnergy, spendPitFight, refundPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
-  spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
+  spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime, foodBuffLabel,
   POTIONS, POTION_BY_ID, RECIPE_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
   pantryDishes, activatePantryDish, discardPantryDish,
@@ -5785,15 +5785,7 @@ function healthCardHtml(hk, isToday) {
 }
 
 // ---- Kitchen: cook scavenged ingredients into buff dishes ----
-function foodBuffLabel(b) {
-  if (b.kind === 'coins') return `+${Math.round(b.pct * 100)}% coins · ${fmtCookTime(Math.max(0, b.untilMs - Date.now()))} left`;
-  const bits = [];
-  if (b.damagePct) bits.push(`+${Math.round(b.damagePct * 100)}% dmg`);
-  if (b.hype) bits.push(`+${b.hype} Hype start`);
-  if (b.regenPct) bits.push(`heal ${Math.round(b.regenPct * 100)}%/turn`);
-  if (b.petFree) bits.push('pet special free');
-  return `${bits.join(' · ')} · ${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left`;
-}
+// foodBuffLabel moved to js/cooking.js (QA round 26 O17) so the node suite can format every recipe
 function potionShort(p) {
   const e = p.effect || {};
   if (e.heal && e.stamina) return 'refill + heal';
@@ -7507,7 +7499,13 @@ async function openKitchen() {
     }
     $('#transmuteBtn', body)?.addEventListener('click', async () => {
       const res = await doTransmute();
-      if (!res.ok) { toast(res.reason === 'cooldown' ? `Transmute recharges in ${fmtCookTime(res.msLeft)}.` : `Need ${res.need} common ingredients. You have ${res.have}.`, 3000); return; }
+      if (!res.ok) {
+        // 'day' is the day guard (QA round 26 O3): the device's date is one the guard cannot vouch for yet
+        toast(res.reason === 'cooldown' ? `Transmute recharges in ${fmtCookTime(res.msLeft)}.`
+          : res.reason === 'day' ? 'The cauldron is not sure what day it is. Try again when the calendar catches up.'
+          : `Need ${res.need} common ingredients. You have ${res.have}.`, 3000);
+        return;
+      }
       trackEvent('transmute');
       /* THE POT TAKES THEM. Option B's moment: each filled socket's icon flies
          into the Ectoplasm socket, staggered, then the socket blooms in option

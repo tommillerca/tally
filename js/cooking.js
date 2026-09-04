@@ -567,6 +567,27 @@ export async function consumeFightFoodBuffs(now = Date.now()) {
   if (changed || live.length !== buffs.length) await kvSet('foodbuffs', live);
 }
 
+/* One line under a dish, for a LIVE buff (kv 'foodbuffs', carries untilMs or
+   fightsLeft) or a dish still sitting in the Pantry (the recipe's bare `buff`).
+   QA round 26 O17: the Pantry handed a coins dish here with no `untilMs`, so
+   `untilMs - Date.now()` was NaN and every coins dish read "NaNh NaNm left". A
+   dish in the Pantry has a DURATION (`hours`), not a deadline: the clock only
+   starts when it is eaten, so it says how long it will run. The recipe data was
+   right; the formatter assumed every coins buff was already ticking. Lives here
+   rather than in app.js so a node test can format every recipe. */
+export function foodBuffLabel(b, now = Date.now()) {
+  if (b.kind === 'coins') {
+    const pct = `+${Math.round(b.pct * 100)}% coins`;
+    return b.untilMs == null ? `${pct} for ${fmtCookTime(b.hours * 3600e3)}` : `${pct} · ${fmtCookTime(Math.max(0, b.untilMs - now))} left`;
+  }
+  const bits = [];
+  if (b.damagePct) bits.push(`+${Math.round(b.damagePct * 100)}% dmg`);
+  if (b.hype) bits.push(`+${b.hype} Hype start`);
+  if (b.regenPct) bits.push(`heal ${Math.round(b.regenPct * 100)}%/turn`);
+  if (b.petFree) bits.push('pet special free');
+  return `${bits.join(' · ')} · ${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left`;
+}
+
 export function fmtCookTime(ms) {
   const m = Math.ceil(ms / 60000);
   if (m < 60) return `${m}m`;

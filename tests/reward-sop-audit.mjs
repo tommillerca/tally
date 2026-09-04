@@ -181,7 +181,19 @@ const ACTIONS = [
      cannot see it (the race pays real prizes). */
   { id: 'js/wellness.js:logManualWalk', sites: 1, undriven: 'ledger key mwalk-<date>-<n>, capped 2/day in the write path' },
   { id: 'js/wellness.js:markRoutine', sites: 1, undriven: 'ledger key routine-<id>-<date>, and past ROUTINE_XP_CAP the row is minted with 0 XP on purpose' },
-  { id: 'js/cooking.js:doTransmute', sites: 1, undriven: 'a once-a-day cooldown plus an ingredient spend; nothing is granted without both' },
+  /* WAS EXEMPT, on the sentence "a once-a-day cooldown plus an ingredient spend;
+     nothing is granted without both". QA round 26 O2 falsified it: the cooldown
+     was read in one transaction and stamped in another, with the spend and the
+     grant awaited between, so two overlapping taps both read "ready" and both
+     paid (8/8 on one page, 4/5 across two real tabs). An exemption is a guard
+     told not to look, so this one is driven. `sites` went 1 to 0 with the fix:
+     the Ectoplasm is no longer a grantIngredient call but rides inside the same
+     kvUpdate that takes the six commons, the way collectTribute's payout lives
+     inside its own kvUpdate. The driver's `count` grades BOTH halves the
+     ticket named, one payout AND one spend: see DRIVERS.transmute. */
+  { id: 'js/cooking.js:doTransmute', sites: 0, drive: 'transmute',
+    transition: 'the transmute goes from due to spent for the next 20 hours',
+    authority: "kvUpdate on 'transmuteAt': the cooldown is re-read and the stamp written in ONE transaction, and the loser is refused before the larder is touched; the spend and the Ectoplasm then land in one kvUpdate on 'ingredients'" },
   { id: 'js/garden.js:compostIngredient', sites: 1, undriven: 'spends an ingredient and is capped at COMPOSTS_PER_DAY; a conversion, not a payout' },
   { id: 'js/loot.js:buyShopItem', sites: 1, undriven: 'a purchase: the second attempt is MEANT to charge again. Was 3 until 2026-08-25: crates came off the coin shop (S0), so the two grantCrate branches went with them and only grantConsumable is left' },
   /* js/loot.js:buyWithDust stood here with 3 sites (grantEgg / grantCrate /
@@ -548,6 +560,25 @@ const results = await page.evaluate(async () => {
       won: r => r.length > 0,
       count: async () => (await cooking.pantryDishes()).length,
     }),
+    /* TWELVE commons in, so that on the pre-fix tree BOTH overlapping taps can
+       afford to pay and the leak is visible as inventory, not only as two ok:true.
+       `count` is the number of transmutes the larder shows evidence of, taking
+       the LARGER of Ectoplasm minted and six-common lots spent: one honest
+       transmute reads 1 from both sides; a double payout reads 2 on the mint, a
+       double spend with one mint reads 2 on the commons. That is the ticket's
+       "ONE payout and ONE ingredient spend" in a single graded number. The
+       stamp is reset to 0 so the day guard sees a due transmute; today's date is
+       whatever the page has, which claimDay seeds or reads as same-day. */
+    transmute: () => ({
+      setup: async () => { await db.kvSet('ingredients', { marrow: 12 }); await db.kvSet('transmuteAt', 0); },
+      act: () => cooking.doTransmute(),
+      won: r => !!r.ok,
+      count: async () => {
+        const inv = await cooking.ingredients();
+        const commons = cooking.COMMON_INGREDIENT_IDS.reduce((a, id) => a + (inv[id] || 0), 0);
+        return Math.max(inv.ectoplasm || 0, (12 - commons) / cooking.TRANSMUTE.commons);
+      },
+    }),
     /* A GATE rather than a payout: what it hands over is the right to a staked
        fight, so `count` is the charge actually taken off the meter. Grading it
        on the wallet would grade nothing, and the CONTROL row would then pass on
@@ -889,6 +920,20 @@ if (srv) srv.close();
  *      CONTROL quest that goes red, paid 1 where three virgin claims must pay
  *      3. A ceiling row alone cannot tell "held the line" from "let nobody
  *      through", and a lock that never opens is not a fixed cap.
+ */
+/* PROVE-RED for the QA round 26 transmute row, STATED NOT RUN (2026-09-04): the
+ * machine rule for that session was static only, no browser, so this row has
+ * not been executed here. What it must do on the PRE-FIX tree (origin/main
+ * 96c1104a, doTransmute as it was: transmuteStatus -> kvUpdate ingredients ->
+ * grantIngredient -> kvSet transmuteAt):
+ *      REPEAT transmute "TWO OVERLAPPING attempts: exactly one takes the state",
+ *      wins 2; and "hand over one lot, not two", count 2 against 1: twelve
+ *      commons became two Ectoplasm. That is the ticket's own measurement (8/8
+ *      on one page) in this harness's terms. The same race under a real
+ *      IndexedDB in node (tests/kitchen-atomic-audit.mjs, mem-idb serialising
+ *      transactions) WAS run red on that tree: ectoplasm 2, commons 0. The
+ *      SEQUENTIAL row was green before and after: sequentially it always
+ *      refused, which is exactly why the exemption sentence read as true.
  */
 console.log(`\n${fails ? `REWARD SOP AUDIT FAILED (${fails})` : 'REWARD SOP VERIFIED'}`);
 process.exit(fails ? 1 : 0);
