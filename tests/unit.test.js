@@ -4373,6 +4373,126 @@ test('My foods: most recent first, then name A to Z when lastUsedAt ties', () =>
   assert.match(rf, /customs\.filter\(f => normFoodName\(f\.name\)\.includes\(q\)\)/, 'the filter does not narrow the customs list');
 });
 
+/* ===== Survey v2 S3 (spec: surveyv2spec.md section 2 and S3). The sheet is
+   dark until S4 flips a trigger, so these are the only thing that says the
+   questions, the wire shape and the kv facts are what the spec and the server
+   expect. Slices the REAL block out of js/app.js and runs it with stubbed
+   plumbing; the DOM half (the sheet itself) is S3's browser audit, not this. */
+const survey2Load = (stubs = {}) => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('/* Survey v2 S3: the sheet'), b = app.indexOf("\n// What's New: the player-facing changelog");
+  assert.ok(a > 0 && b > a, 'the Survey v2 S3 block is not in js/app.js (openSurvey2Sheet does not exist here)');
+  const kv = {};
+  const env = {
+    esc: String, kvGet: async (k, d = null) => (k in kv ? kv[k] : d), kvSet: async (k, v) => { kv[k] = v; },
+    trackEvent: () => {}, sendSurvey: async () => ({ ok: true }),
+    buildStats: async () => ({ streak: 3, logs: 41, pitWins: 7 }), levelFor: () => ({ level: 12 }), totalXp: async () => 0,
+    db: { all: async () => [{ ts: Date.now() - 9 * 86400000 }, { ts: Date.now() }] }, petInstances: async () => [1, 2, 3],
+    social: { socialMe: async () => ({ id: 'x' }) }, APP_BUILD: 'v470', platformTag: () => 'ios',
+    openSheet: () => {}, $: () => null, $$: () => [], ...stubs,
+  };
+  const names = Object.keys(env);
+  const out = new Function(...names, `${app.slice(a, b)}; return { SURVEY2_QUESTIONS, SURVEY2_TEXT_MAX, survey2QuestionsHtml, survey2Answers, survey2Ctx, survey2Submit, survey2Dismiss, drainSurvey2Pending };`)(...names.map(n => env[n]));
+  return { ...out, kv, app };
+};
+
+test('Survey v2 S3 (a): the question list is the spec, in order, with its ids, types, option counts and copy', () => {
+  const { SURVEY2_QUESTIONS: Q, survey2QuestionsHtml, SURVEY2_TEXT_MAX } = survey2Load();
+  // spec section 2: six questions, five of them taps
+  assert.deepEqual(Q.map(q => q.id), ['q1', 'q2', 'q3', 'q4', 'q5', 'q6'], 'question ids or order drifted from the spec');
+  assert.deepEqual(Q.map(q => q.type), ['single', 'multi', 'multi', 'single', 'single', 'text']);
+  assert.deepEqual(Q.map(q => (q.opts || []).length), [9, 9, 10, 10, 4, 0], 'option counts drifted from the spec (9, 9, 10, 10, 4)');
+  assert.equal(Q[1].max, 2, 'Q2 lost its two-pick cap');
+  assert.equal(Q[2].text && Q[2].text.id, 'q3text', 'Q3 lost its reveal-on-tick text field (dashboard key q3text)');
+  assert.equal(Q[2].text.reveal.length, 9, 'Q3 reveals on the nine areas only, never on "Nothing, it made sense"');
+  assert.ok(!Q[2].text.reveal.includes('nothing'));
+  assert.deepEqual(Q[4].opts.map(o => o[0]), ['definitely', 'probably', 'not_sure', 'probably_not'], 'Q5 slugs: the dashboard counts definitely/probably as the yes');
+  // verbatim copy, spec section 2
+  assert.deepEqual(Q.map(q => q.label), [
+    'Why did you open the app today?', 'What keeps you coming back?', 'Was there anything you did not understand?',
+    'If we cut one thing to make this simpler, what should go?', 'Will you still be playing in a month?', 'What nearly made you stop playing?']);
+  assert.deepEqual(Q[0].opts.map(o => o[1]), ['Log my food', 'Check my steps', 'Fight in the Pit', 'The Boneyard map', 'My pets', 'Cook something', 'See what my crew did', 'A quest or the wheel', 'Just checking in']);
+  assert.deepEqual(Q[1].opts.map(o => o[1]), ['My streak', 'Watching my Bonehead get stronger', 'The pets', 'Beating my friends', 'The daily wheel', 'Walking the Boneyard', 'Logging food properly', 'The fights', 'Honestly, not much yet']);
+  assert.deepEqual(Q[2].opts.map(o => o[1]), ['The Pit', 'Stats and training', 'The Boneyard map', 'Cooking', 'Dark Spires', 'Quests', 'Gear and the Wardrobe', 'Pets and the Stable', 'The Crew', 'Nothing, it made sense']);
+  assert.equal(Q[3].opts[9][1], "Don't cut anything");
+  assert.equal(Q[2].text.label, 'What was confusing about it?');
+  assert.equal(SURVEY2_TEXT_MAX, 240, 'free text is 240 chars in the spec');
+  // the renderer emits every question, in order, with the right control kind
+  const html = survey2QuestionsHtml();
+  const grids = [...html.matchAll(/<div class="survey-feats" data-q="(q\d)"/g)].map(m => m[1]);
+  assert.deepEqual(grids, ['q1', 'q2', 'q3', 'q4', 'q5'], 'the rendered chip grids are not the five tap questions in order');
+  for (const q of Q.filter(x => x.opts)) {
+    const n = (html.match(new RegExp(`<input type="${q.type === 'single' ? 'radio' : 'checkbox'}" name="sv2-${q.id}"`, 'g')) || []).length;
+    assert.equal(n, q.opts.length, `${q.id} rendered ${n} ${q.type} inputs, spec has ${q.opts.length}`);
+  }
+  assert.match(html, /data-q="q2" data-max="2"/, 'Q2 grid does not carry its cap for the two-pick handler');
+  assert.match(html, /<textarea id="sv2-q3text"[^>]*maxlength="240"[^>]*hidden>/, 'Q3 text field is not hidden until a chip is ticked');
+  assert.match(html, /<textarea id="sv2-q6"[^>]*maxlength="240"/, 'Q6 free text lost its 240 cap');
+  assert.ok(html.indexOf('data-q="q5"') < html.indexOf('id="sv2-q6"'), 'Q6 renders before Q5');
+});
+
+test('Survey v2 S3 (b): the body is form/answers/ctx in the S2 wire shape and stays under the caps with every text at its cap', async () => {
+  const { survey2Answers, survey2Ctx, survey2Submit, app } = survey2Load();
+  const full = { q1: 'log', q2: ['streak', 'stronger'], q3: ['pit', 'stats', 'boneyard', 'cooking', 'spires', 'quests', 'gear', 'pets', 'crew'],
+    q3text: 'x'.repeat(240), q4: 'dontcut', q5: 'probably_not', q6: 'y'.repeat(240) };
+  const body = await survey2Submit(full, { email: 'a@b.co', emailOptin: true });
+  assert.equal(body.form, 'v2', 'form slug is not v2 (the dashboard filter key)');
+  assert.deepEqual(Object.keys(body.answers), ['q1', 'q2', 'q3', 'q3text', 'q4', 'q5', 'q6'], 'answers keys are not the dashboard Q_LABELS/FREE_LABELS keys');
+  assert.deepEqual(body.answers.q2, ['streak', 'stronger']);
+  assert.equal(typeof body.ctx, 'object');
+  assert.ok(JSON.stringify(body.answers).length <= 4000, `answers blob ${JSON.stringify(body.answers).length} > server cap 4000`);
+  assert.ok(JSON.stringify(body.ctx).length <= 1000, `ctx blob ${JSON.stringify(body.ctx).length} > server cap 1000`);
+  // the silent context, spec section 2: every named field present with the stubbed sources
+  const ctx = await survey2Ctx();
+  assert.deepEqual(ctx, { build: 'v470', plat: 'ios', streak: 3, foods: 41, pitWins: 7, level: 12, days: 9, pets: 3, crew: true });
+  // skipped questions are ABSENT, not empty (the dashboard counts n by presence)
+  assert.deepEqual(survey2Answers({ q1: '', q2: [], q3text: '   ', q5: 'definitely' }), { q5: 'definitely' });
+  // and the transport forwards the three fields (js/analytics.js sendSurvey)
+  const an = readFileSync(join(here, '..', 'js', 'analytics.js'), 'utf8');
+  assert.match(an, /\.\.\.\(data\.form \? \{ form: String\(data\.form\)\.slice\(0, 24\), answers: data\.answers \|\| \{\}, ctx: data\.ctx \|\| \{\} \} : \{\}\)/, 'sendSurvey no longer forwards form/answers/ctx to POST /survey');
+  // nothing on the launch path opens it (spec section 0): definition + webdriver handle only
+  assert.deepEqual(app.match(/\w* ?openSurvey2Sheet\(/g), ['function openSurvey2Sheet('], 'openSurvey2Sheet is CALLED somewhere in js/app.js; S4 (the trigger) is not this ticket');
+});
+
+test('Survey v2 S3 (c): free text over the cap is cut, never sent long', () => {
+  const { survey2Answers, SURVEY2_TEXT_MAX } = survey2Load();
+  const out = survey2Answers({ q6: 'z'.repeat(1500), q3text: ' ' + 'w'.repeat(1200) });
+  assert.equal(out.q6.length, SURVEY2_TEXT_MAX, `q6 went out at ${out.q6.length} chars`);
+  assert.equal(out.q3text.length, SURVEY2_TEXT_MAX, `q3text went out at ${out.q3text.length} chars`);
+  assert.ok(out.q6.length <= 1000 && out.q3text.length <= 1000);
+});
+
+test('Survey v2 S3 (d): submit writes survey2Done, Not now writes survey2SnoozeAt, both as timestamps', async () => {
+  const { survey2Submit, survey2Dismiss, kv } = survey2Load();
+  const t0 = Date.now();
+  await survey2Submit({ q1: 'pit' });
+  assert.ok(typeof kv.survey2Done === 'number' && kv.survey2Done >= t0, 'survey2Done is not a submit timestamp');
+  assert.equal(kv.survey2SnoozeAt, undefined);
+  await survey2Dismiss();
+  assert.ok(typeof kv.survey2SnoozeAt === 'number' && kv.survey2SnoozeAt >= t0, 'survey2SnoozeAt is not a dismiss timestamp');
+  assert.equal(kv.survey2Pending, undefined, 'a successful post left a pending row');
+});
+
+test('Survey v2 S3 (e): a failed post keeps the exact body pending and a retry drains it once it lands', async () => {
+  let online = false, posted = [];
+  const { survey2Submit, drainSurvey2Pending, kv } = survey2Load({ sendSurvey: async b => { posted.push(b); return { ok: online }; } });
+  const body = await survey2Submit({ q1: 'pit', q6: 'late nights' });
+  assert.deepEqual(kv.survey2Pending, body, 'the failed body was not kept in survey2Pending');
+  assert.equal(kv.survey2Done > 0, true, 'done was not marked before the network answered');
+  assert.equal(await drainSurvey2Pending(), false, 'a retry that failed reported success');
+  assert.deepEqual(kv.survey2Pending, body, 'a failed retry dropped the row');
+  online = true;
+  assert.equal(await drainSurvey2Pending(), true);
+  assert.equal(kv.survey2Pending, null, 'a successful retry left the row behind');
+  assert.deepEqual(posted[posted.length - 1], body, 'the retry did not send the original body');
+  assert.equal(await drainSurvey2Pending(), false, 'an empty queue reported a send');
+  // boot and the online event both call the drain (js/app.js boot())
+  const { app } = survey2Load();
+  const bootBody = app.slice(app.indexOf('async function boot()'), app.indexOf('/* DAY ROLLOVER (v224).'));
+  assert.match(bootBody, /drainSurvey2Pending\(\)/, 'boot() no longer retries a pending survey');
+  assert.match(bootBody, /addEventListener\('online', \(\) => \{ drainSurvey2Pending\(\)/, "the 'online' event no longer retries a pending survey");
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
