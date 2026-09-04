@@ -6554,12 +6554,21 @@ body::before {
 .fbr-lead { text-align: center; margin: 0 2px 8px; }
 .fbr-fig { display: flex; justify-content: center; margin-bottom: 8px; }
 .fb-rail {
-  scroll-snap-type: x mandatory; scroll-behavior: smooth;
+  /* NO scroll-snap-type of its own: .pw-row above already declares
+     `x mandatory`, which is the point of reusing that row. A second copy here
+     was written first and is exactly the duplication that lets the two drift.
+     What IS different is the ALIGNMENT (centre, not start) and it lives on the
+     tile below. */
+  scroll-behavior: smooth;
   scrollbar-width: none; margin: 0 calc(var(--pad) * -1); padding: 2px var(--pad) 6px;
-  /* the first and last tiles have to be able to REACH the centre, or the rail
-     can never select them: half the rail minus half a tile, at both ends */
-  scroll-padding-inline: 50%;
 }
+/* No scroll-padding: the end margins below let the first and last tiles reach
+   the centre with no snapport arithmetic at all. `scroll-padding-inline: 50%`
+   is the other way to do it and it collapses the snapport to zero width, which
+   is a strange enough state that it is not worth relying on. (It was blamed for
+   a snap landing six teams away on 2026-09-04; that was mis-measured -- the real
+   cause was reading scrollLeft back in the middle of a smooth scroll -- and it
+   does NOT reproduce on its own, so this is a preference, not a fix.) */
 .fb-rail::-webkit-scrollbar { display: none; }
 .pw-item.fbr { width: 88px; scroll-snap-align: center; padding: 7px 5px 8px; }
 .pw-item.fbr:first-child { margin-left: calc(50% - 44px - var(--pad)); }

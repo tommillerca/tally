@@ -5455,11 +5455,17 @@ const fbTintAttr = item => {
   const t = footballTints(item);
   return t ? ` data-tints='${JSON.stringify(t)}'` : '';
 };
-/* `data-fbslot` IS WHAT MAKES A COLOURWAY CHANGEABLE IN PLACE. A stack can wear
+/* `data-fbslot` NAMES WHICH GARMENT A TINT SPAN BELONGS TO. A stack can wear
    four football pieces at once (helmet, jersey, cleats, and the lizard's two),
-   so `.fb-tint` on its own addresses all of them and recolouring "the helmet"
-   would repaint the jersey too. The slot is on the item already; emitting it
-   costs nothing and it is the only handle the wardrobe's colourway rail needs:
+   and the wardrobe's colourway rail repaints exactly one of them.
+   IT IS THE SECOND OF TWO SCOPES, NOT THE ONLY ONE, and saying so honestly
+   matters: the painter also pairs each span to a tint BY MASK FILENAME, and
+   since no two garments share a mask, that pairing alone already leaves the
+   jersey untouched during a helmet slide (proved by mutation 2026-09-04:
+   dropping [data-fbslot] from the painter's selector leaves every row green).
+   The attribute stays because it makes the selector say what it means at the
+   place it is read, and because it is one string on a span that already exists.
+   The rail needs it in this form:
    every team shares ONE master PNG and ONE pair of masks per garment, so
    sliding from one team to the next is two `style.background` writes on spans
    that are already on screen, with no image to decode and no stage to rebuild.
@@ -15374,16 +15380,38 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const rail = $('.fb-rail', content);
       if (!rail) return;
       const cells = $$('[data-fbteam]', rail);
-      const centreOn = (cell, behavior) =>
-        rail.scrollTo({ left: cell.offsetLeft - (rail.clientWidth - cell.offsetWidth) / 2, behavior });
+      /* RECTS, NOT offsetLeft. offsetLeft happens to be right here (nothing
+         between the tile and the page is positioned) and it stops being right
+         the moment anything in the wardrobe grows a `position`, because it is
+         measured from the offsetParent and not from the scroller. Two rects
+         plus the scroller's own scrollLeft cannot be wrong about which box is
+         where, whatever the layout does later. */
+      const centreOn = (cell, behavior) => {
+        const cr = cell.getBoundingClientRect(), rr = rail.getBoundingClientRect();
+        rail.scrollTo({ left: rail.scrollLeft + (cr.left - rr.left) - (rail.clientWidth - cr.width) / 2, behavior });
+      };
       const paint = teamId => {
         const tints = footballTints(BH_BY_ID[fbId(teamId)]) || [];
         /* BOTH copies of the character, and NOT the look panel's "Now" figure:
            that one states what is currently worn and a rail preview repainting
            it would erase the only before-picture on the screen. */
         const spans = $$(`.bh-stage.lg .fb-tint[data-fbslot="${slot}"], .fbr-fig .fb-tint[data-fbslot="${slot}"]`, content);
-        spans.forEach((s, i) => { if (tints[i]) s.style.background = tints[i].hex; });
-        return spans.length;
+        /* PAIRED BY MASK, NEVER BY INDEX. There are TWO stacks on screen (the
+           paper doll and the rail's own figure), so the span list runs
+           [a, b, a, b] while `tints` is [a, b]: zipping them by position painted
+           the doll and left the figure -- the copy the player is actually
+           looking at while sliding -- on the old team, and reported a healthy
+           span count while doing it. Measured 2026-09-04: spans 4, painted 2.
+           The mask filename IS the region, so it is the key that cannot drift
+           with the number of stacks or with a one-colour garment. */
+        const byMask = new Map(tints.map(t => [t.mask.slice(t.mask.lastIndexOf('/') + 1), t.hex]));
+        let painted = 0;
+        for (const s of spans) {
+          const m = (s.style.getPropertyValue('--fbm').match(/([^/'"]+\.png)/) || [])[1];
+          const hex = byMask.get(m);
+          if (hex) { s.style.background = hex; painted++; }
+        }
+        return painted;
       };
       const wireBar = () => {
         $('[data-fbwear]', content)?.addEventListener('click', async e => {

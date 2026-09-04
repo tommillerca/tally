@@ -578,6 +578,46 @@ ok('PRICE-BUYPATH buyFootballItem still refuses on the same two conditions this 
   buyGuarded,
   buyGuarded ? 'js/loot.js: `!FOOTBALL_KIT_LIVE || !ids.length || !Number.isFinite(cost) || cost <= 0`' : 'the guard in buyFootballItem changed shape: re-read it and re-state the predicate above');
 
+/* ---------------------------------------------------------------------------
+   THE WARDROBE'S COLOURWAY RAIL rests on ONE arithmetic fact, and this is the
+   pure half of grading it. The rail slides through 32 teams and recolours the
+   player's Bonehead as it goes, and it can only be cheap enough to do that on a
+   scroll handler because every team of a garment is THE SAME master PNG behind
+   THE SAME masks: a team change is two `style.background` writes, with nothing
+   to fetch and nothing to decode. If a garment ever grew per-team art, or if a
+   team's masks stopped being shared, the rail would silently become 32 image
+   loads on a drag and this row is what says so. The pixels of the slide itself
+   are tests/football-rail-audit.mjs. -------------------------------------- */
+const railGarments = GARMENTS.map(g => {
+  const perTeam = TEAMS.map(t => ITEMS.find(i => i.id === FB.footballItemId(t.id, g.key)));
+  const files = new Set(perTeam.map(i => i.file));
+  const maskSets = new Set(perTeam.map(i => (FB.footballTints(i) || []).map(x => x.mask).join('|')));
+  const hexSets = new Set(perTeam.map(i => (FB.footballTints(i) || []).map(x => x.hex).join('|')));
+  return { key: g.key, files: files.size, maskSets: maskSets.size, hexSets: hexSets.size, layers: (FB.footballTints(perTeam[0]) || []).length };
+});
+ok('RAIL-SHARED every team of a garment is one master behind one pair of masks, so sliding the rail changes only two colours',
+  railGarments.every(r => r.files === 1 && r.maskSets === 1 && r.hexSets === TEAMS.length),
+  railGarments.map(r => `${r.key}: ${r.files} master, ${r.maskSets} mask set, ${r.hexSets} distinct colourways over ${r.layers} layer${r.layers === 1 ? '' : 's'}`).join('; '));
+/* The negative that makes the row above mean something: the SAME three counters
+   over a garment deliberately given per-team art report a different shape. */
+const forked = TEAMS.map(t => ({ ...ITEMS[0], file: `x/${t.id}.png` }));
+ok('RAIL-SHARED-CONTROL the same three counters report a fork when a garment really does carry per-team art',
+  new Set(forked.map(i => i.file)).size === TEAMS.length,
+  `a forked garment counts ${new Set(forked.map(i => i.file)).size} masters instead of 1`);
+
+/* The rail repaints ONE slot's tint spans. `.fb-tint` alone matches every
+   football layer on the stack (a player can wear a helmet, a jersey and cleats
+   at once), so the span has to carry its slot and the painter has to use it.
+   Both halves are pinned here as source shape, the same way PRICE-BUYPATH pins
+   the till's guard: the pixel proof that the jersey survives a helmet slide is
+   tests/football-rail-audit.mjs row RAIL-SCOPE. */
+const tagEmitted = /class="fb-tint" data-fbslot="\$\{item\.slot\}"/.test(appSrc);
+const paintScoped = /\.fb-tint\[data-fbslot="\$\{slot\}"\]/.test(appSrc);
+ok('RAIL-SLOT-TAG a football tint span declares its slot, and the wardrobe\'s painter selects by it',
+  tagEmitted && paintScoped,
+  `${tagEmitted ? 'footballTintHtml emits data-fbslot' : 'the tint span no longer carries its slot'}; ` +
+  `${paintScoped ? 'the rail painter selects .fb-tint[data-fbslot="${slot}"]' : 'the rail painter is no longer scoped by slot: a helmet slide would repaint the jersey'}`);
+
 console.log(fails
   ? '\nFOOTBALL KIT AUDIT: FAILED'
   : `\nFOOTBALL KIT AUDIT: ${TEAMS.length} teams read apart, ${ITEMS.length} items on eight triplets, the tint lands on the hex, and an unpriced kit is not for sale`);
