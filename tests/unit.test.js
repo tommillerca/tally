@@ -4388,7 +4388,7 @@ const survey2Load = (stubs = {}) => {
     trackEvent: () => {}, sendSurvey: async () => ({ ok: true }),
     buildStats: async () => ({ streak: 3, logs: 41, pitWins: 7 }), levelFor: () => ({ level: 12 }), totalXp: async () => 0,
     db: { all: async () => [{ ts: Date.now() - 9 * 86400000 }, { ts: Date.now() }] }, petInstances: async () => [1, 2, 3],
-    social: { socialMe: async () => ({ id: 'x' }) }, APP_BUILD: 'v472', platformTag: () => 'ios',
+    social: { socialMe: async () => ({ id: 'x' }) }, APP_BUILD: 'v473', platformTag: () => 'ios',
     openSheet: () => {}, $: () => null, $$: () => [], ...stubs,
   };
   const names = Object.keys(env);
@@ -4444,7 +4444,7 @@ test('Survey v2 S3 (b): the body is form/answers/ctx in the S2 wire shape and st
   assert.ok(JSON.stringify(body.ctx).length <= 1000, `ctx blob ${JSON.stringify(body.ctx).length} > server cap 1000`);
   // the silent context, spec section 2: every named field present with the stubbed sources
   const ctx = await survey2Ctx();
-  assert.deepEqual(ctx, { build: 'v472', plat: 'ios', streak: 3, foods: 41, pitWins: 7, level: 12, days: 9, pets: 3, crew: true });
+  assert.deepEqual(ctx, { build: 'v473', plat: 'ios', streak: 3, foods: 41, pitWins: 7, level: 12, days: 9, pets: 3, crew: true });
   // skipped questions are ABSENT, not empty (the dashboard counts n by presence)
   assert.deepEqual(survey2Answers({ q1: '', q2: [], q3text: '   ', q5: 'definitely' }), { q5: 'definitely' });
   // and the transport forwards the three fields (js/analytics.js sendSurvey)
@@ -4755,6 +4755,22 @@ test('SW update checks bypass the HTTP cache (GitHub Pages max-age=600 held a de
   const calls = [...app.matchAll(/serviceWorker\.register\(([^)]*)\)/g)].map(m => m[1]);
   assert.equal(calls.length, 1, `expected exactly one register() call, found ${calls.length}`);
   assert.match(calls[0], /updateViaCache:\s*'none'/, 'register() does not pass updateViaCache: none, so a deploy can hide behind the HTTP cache');
+});
+
+test('a downloaded build can actually start: boot posts SKIP_WAITING to a waiting worker', () => {
+  /* Tom's phone sat on v470 for hours while the server served v472. sw.js does not
+     call skipWaiting() on purpose, so a new build waits for every client to close;
+     inside the native WKWebView that never happens, and NOTHING in the app had ever
+     posted SKIP_WAITING. The download completed and then had nowhere to go. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const sw = readFileSync(join(here, '..', 'sw.js'), 'utf8');
+  assert.match(sw, /SKIP_WAITING'\s*\)\s*self\.skipWaiting\(\)|=== 'SKIP_WAITING'/, 'sw.js no longer honours the SKIP_WAITING message the app sends');
+  assert.match(app, /postMessage\('SKIP_WAITING'\)/, 'nothing in the app tells a waiting worker to take over, so a downloaded build can never start');
+  const start = app.indexOf("serviceWorker.register('sw.js'");
+  const reg = app.slice(start, app.indexOf("controllerchange", start));
+  assert.ok(reg.length > 200, 'setup: the registration block was not found, so the assertions below prove nothing');
+  assert.match(reg, /letItIn\(reg\)/, 'the handshake is not run at boot for a build that was already waiting');
+  assert.match(reg, /updatefound/, 'a build that arrives mid-session is never let in');
 });
 
 await runAll();
