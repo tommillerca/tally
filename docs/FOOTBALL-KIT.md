@@ -264,28 +264,33 @@ rectangle of the same frame**, never a `getBoundingClientRect`.
 
 **Tom ruled on four of these on 2026-09-04 (7.2, 7.3, 7.6, 7.7): they are built
 and measured, and are kept here as the record of what was decided and why.**
-What is still OPEN is 7.1 (the two numbers), 7.4 (the live date) and 7.5 (which
-pools).
+Tom also named the two prices (7.1) the same day. What is still OPEN is 7.4 (the
+live date) and 7.5 (which pools).
 
-**7.1 The two prices.** `FOOTBALL_KIT_PRICE_PLACEHOLDER` and
-`FOOTBALL_BUNDLE_PRICE_PLACEHOLDER` are both `null` in `data/football-teams.js`.
-Both buy paths refuse a non-finite price and the guard refuses a live kit
-without one, so nothing can ship broken, but nothing can ship at all until there
-are numbers. For scale, the rack's own tiles and the drop sit in the hundreds of
-coins. The bundle also has to be BELOW the five tiles added up, or
-`footballBundleSellable` refuses it. **No default: these have to be answered.**
+**7.1 The two prices. ANSWERED 2026-09-04.** Tom named them and they are in
+`data/football-teams.js`:
+
+| | coins | how it was set |
+|---|---|---|
+| `FOOTBALL_KIT_PRICE_PLACEHOLDER` | **4,200** a garment | 3x the epic rung (1,400) |
+| `FOOTBALL_BUNDLE_PRICE_PLACEHOLDER` | **16,800** a team | 20% off the 21,000 sum, so the saving is exactly one garment |
+
+Beta wallets are deep, so both are marked to be re-priced at launch. Both buy
+paths still refuse a non-finite price and `footballBundleSellable` still refuses
+a bundle at or above the sum, so the guards do not go quiet now that the numbers
+are real. **What is still open is 7.4 and 7.5: the date, and which pools.**
 
 **7.2 Per-garment AND a team bundle. DECIDED 2026-09-04, built.** Tom: "per
 garment only with a bundle of everything for a slightly cheaper but expensive
 price." Five per-garment tiles as before, plus ONE bundle tile per team that
 grants every sold garment of that team in one purchase (8 ids for 5 tiles: the
 helmet still drags its three visors). `FOOTBALL_BUNDLE_PRICE_PLACEHOLDER` is
-`null` beside the per-garment one and **both numbers are still 7.1**. The maths,
-the tile, the buy path and the "you save N" line are wired:
+**16,800** against **21,000** for the five tiles (7.1). The maths, the tile, the
+buy path and the "you save N" line are wired:
 
 ```
-full  = FOOTBALL_KIT_PRICE_PLACEHOLDER x 5        the five tiles added up
-save  = full - FOOTBALL_BUNDLE_PRICE_PLACEHOLDER  what the tile prints
+full  = FOOTBALL_KIT_PRICE_PLACEHOLDER x 5        4,200 x 5 = 21,000
+save  = full - FOOTBALL_BUNDLE_PRICE_PLACEHOLDER  21,000 - 16,800 = 4,200
 ```
 
 `footballBundleSellable` refuses a live bundle with no number AND one priced at
