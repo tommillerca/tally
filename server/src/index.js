@@ -3888,10 +3888,13 @@ export default {
         return json({ windowDays: EVENT_RETENTION_DAYS, statsWindowDays: STATS_WINDOW_DAYS, totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, leads, errors, errorsByBuild, vault, generatedAt: Date.now() });
       }
 
-      /* IS THE PRUNER HEALTHY. Gated by ADMIN_TOKEN, read via ?token= or the
-       * x-bh-admin header, which is the same pair /stats takes and the same
-       * secret; dashboard.html already holds it. No new auth scheme, and
-       * nothing here is reachable without the token.
+      /* IS THE PRUNER HEALTHY. Gated by ADMIN_TOKEN through adminAuth(), the
+       * same gate /stats takes and the same secret; dashboard.html already
+       * holds it. No new auth scheme, and nothing here is reachable without
+       * the token. (QA round 29 S2: this paragraph used to say "read via
+       * ?token= or the x-bh-admin header". The query string is refused now
+       * unless ADMIN_QUERY_TOKEN_OK=1, because head_sampling_rate = 1 retains
+       * every request URL; Authorization: Bearer is the way in.)
        *
        * THE QUESTION THIS ROUTE HAS TO SURVIVE is the one that had no answer on
        * 2026-08-24: the cron was enabled, the deploy output confirmed the
