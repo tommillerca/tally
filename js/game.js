@@ -521,8 +521,12 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
   const logXp = await awardCapped('log', 'log', 10, 'Logged a food', XP_DAILY_CAP.log, entry.date);
   gained += logXp;
   gained += await award(`firstlog-${entry.date}`, 'firstlog', 15, 'First log of the day', entry.date);
-  if (via === 'scan') gained += await award(`scan-${entry.date}-${entry.foodId || entry.id}`, 'scan', 15, 'Barcode scan', entry.date);
-  if (via === 'label') gained += await award(`label-${entry.foodId || entry.id}`, 'label', 20, 'Label scan', entry.date);
+  /* The fallback used to be `|| entry.id`, which is newId() and so a fresh key
+     per scan: tests/xp-key-provenance-lint.mjs (QA round A, 2026-09-03) traced
+     both to the clock. Every food-backed log carries food.id, so the fallback
+     only ever names an id-less scan, and one such award per key is the bound. */
+  if (via === 'scan') gained += await award(`scan-${entry.date}-${entry.foodId || 'nofood'}`, 'scan', 15, 'Barcode scan', entry.date);
+  if (via === 'label') gained += await award(`label-${entry.foodId || 'nofood'}`, 'label', 20, 'Label scan', entry.date);
 
   const tot = dayTotals(entriesForDate);
   if (targets && targets.p && tot.p >= targets.p) {

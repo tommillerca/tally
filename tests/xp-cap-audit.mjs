@@ -14,9 +14,9 @@
  * FLOOR, because js/analytics.js caps its queue at 300 and evicts oldest-first.
  *
  * WHAT IT ASSERTS
- *   STATIC   no award() call site anywhere builds its key from a clock or a
- *            random source. This is the whole bug class, caught at the source,
- *            including call sites that do not exist yet.
+ *   (STATIC, the key-text lint, moved to tests/xp-key-provenance-lint.mjs; it
+ *            traces provenance now, because the text of `log-${entry.id}`
+ *            contained no clock while entry.id was one.)
  *   CAP      hammering each repeatable source 60 times grants exactly its daily
  *            ceiling and not one XP more, driven through the real awardCapped
  *            against a real IndexedDB rather than against a mock.
@@ -24,7 +24,6 @@
  *   CONTROL  the sources actually paid something, so a helper that silently
  *            granted nothing at all could not pass the cap check by paying zero.
  */
-import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boot, sleep, serveTree } from './godmode.js';
@@ -37,33 +36,12 @@ const ok = (m, cond, detail = '') => {
   else { fails++; out.push(`FAIL ${m}${detail ? '  ' + detail : ''}`); }
 };
 
-/* ---- STATIC: the bug class, at the source ---- */
-const CLOCKY = /(Date\.now|Math\.random|performance\.now|crypto\.randomUUID|Date\(\))/;
-const jsDir = path.join(ROOT, 'js');
-const offenders = [];
-let scanned = 0, callSites = 0;
-for (const f of readdirSync(jsDir).filter(n => n.endsWith('.js'))) {
-  const src = readFileSync(path.join(jsDir, f), 'utf8');
-  scanned++;
-  /* The key is everything between `award(` and the first top-level comma. Only
-     award( and awardCapped( are matched, and awardCapped's first argument is a
-     PREFIX, which is exactly as forbidden: a clock in the prefix reintroduces
-     the bug one level down. */
-  const re = /\baward(?:Capped)?\(\s*((?:[^,()`]|`[^`]*`|\([^()]*\))*)/g;
-  let m;
-  while ((m = re.exec(src))) {
-    callSites++;
-    const key = m[1];
-    if (CLOCKY.test(key)) {
-      const line = src.slice(0, m.index).split('\n').length;
-      offenders.push(`${f}:${line}  ${key.trim().slice(0, 70)}`);
-    }
-  }
-}
-ok(`CONTROL the scanner found award call sites to grade`, callSites >= 20,
-  `${callSites} call sites across ${scanned} module(s)`);
-if (!offenders.length) ok(`STATIC no award key is built from a clock or a random source`, true, `${callSites} keys checked`);
-else for (const o of offenders) ok(`STATIC an award key is built from a clock or a random source, so award() can never dedupe it`, false, o);
+/* ---- STATIC moved to tests/xp-key-provenance-lint.mjs (PURE tier) ----
+   The regex that lived here graded the key TEXT for Date.now|Math.random and
+   passed `log-${entry.id}` while entry.id was newId(), a clock two hops away
+   (QA round A, 2026-09-03, L1). The lint that replaced it resolves each key's
+   provenance through locals, object literals and call sites, and runs on
+   every gate pass rather than only in this browser tier. */
 
 /* ---- BEHAVIOUR: drive the real helper against a real IndexedDB ---- */
 const srv = process.argv[2] ? null : await serveTree(ROOT);
