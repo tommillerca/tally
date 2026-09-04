@@ -76,6 +76,22 @@ ok('DELETE deleting the day and logging again mints nothing new', afterDelete ==
 await logOne(OTHER);
 ok('ROLLOVER a different date pays again', (await logXp()) === afterDelete + 10, `${await logXp()} XP`);
 
+/* REPEAT (gate7 red 2026-09-04, found by reward-sop-audit's streak driver):
+   the date-and-ordinal key made the cap hold, but it also made a SECOND
+   onFoodLogged for the SAME entry pay a fresh slot. On origin/main the key was
+   log-<entry.id>, so a repeat paid 0 by construction; the farm fix lost that.
+   A retried commit (R25-M4), a second tab, or the reward-sop driver itself must
+   pay once per entry: awardCapped now carries `ref: entry.id` on the ledger row
+   and returns 0 when a slot of that day already names this entry. */
+const THIRD = '2031-05-07';
+const rep = { id: newId(), date: THIRD, meal: 0, ts: Date.now(), foodId: null, name: 'audit food', kcal: 100, p: 5, c: 5, f: 5 };
+await db.put('log', rep);
+const before = await logXp();
+await g.onFoodLogged(rep, { entriesForDate: [rep] });
+await g.onFoodLogged(rep, { entriesForDate: [rep] });
+ok('REPEAT the same entry through onFoodLogged twice pays its log XP once', (await logXp()) === before + 10,
+  `${before} -> ${await logXp()} XP after two calls for one entry (one slot is 10)`);
+
 console.log(out.join('\n'));
 console.log(fails ? `\nFAIL (${fails})` : `\nall green, ${out.length} checks`);
 process.exit(fails ? 1 : 0);

@@ -152,17 +152,29 @@ export const XP_DAILY_CAP = { fight: 12, garden: 10, cook: 8, siege: 5, log: 20 
    once the day's ceiling for that source is spent, which is the same thing
    award() already returns for a duplicate, so every caller's `if (g)` still
    means "something was actually granted". */
-export async function awardCapped(prefix, type, xp, label, cap, date) {
+export async function awardCapped(prefix, type, xp, label, cap, date, ref = null) {
   const d = date || dateKey();
   for (let n = 1; n <= cap; n++) {
     const key = `${prefix}-${d}-${n}`;
+    /* `ref` is the thing being paid for (the log entry's id). Keying by ordinal
+       made the ceiling hold but dropped the per-entry dedupe the old
+       `log-<entry.id>` key gave for free: reward-sop-audit's streak driver
+       (gate7, 2026-09-04) ran onFoodLogged twice on ONE entry and the second
+       call took slot n+1 for 10 XP. So: a slot that already names this ref
+       means this entry was paid, return 0; a slot naming another ref is simply
+       taken, move on. The row carries `ref` (awardOnce's extra) so the check is
+       one keyed get per slot, no store scan. */
+    if (ref != null) {
+      const have = await db.get('xp', key);
+      if (have) { if (have.ref === ref) return 0; continue; }
+    }
     /* `claimed`, not the xp number, decides whether this slot was ours. A
        second tab racing for the same n loses the addIfAbsent inside awardOnce
        and must move on to n+1 rather than being paid for a row it did not
        write. Measured before this: two tabs each pushing 12 awards against a
        12/day ceiling wrote the correct 12 rows and PAID 190 XP against a cap
        of 120, because both were told they had granted the same key. */
-    const r = await awardOnce(key, type, xp, label, d);
+    const r = await awardOnce(key, type, xp, label, d, ref != null ? { ref } : null);
     if (r.claimed) return r.xp;
   }
   return 0;
@@ -526,7 +538,7 @@ export async function onFoodLogged(entry, { via = null, targets = null, entriesF
   let gained = 0;
   /* Capped and keyed by DATE, never by entry.id: see XP_DAILY_CAP.log. The
      date is the entry's own, so a backdated log spends that day's ceiling. */
-  const logXp = await awardCapped('log', 'log', 10, 'Logged a food', XP_DAILY_CAP.log, entry.date);
+  const logXp = await awardCapped('log', 'log', 10, 'Logged a food', XP_DAILY_CAP.log, entry.date, entry.id);
   gained += logXp;
   gained += await award(`firstlog-${entry.date}`, 'firstlog', 15, 'First log of the day', entry.date);
   /* The fallback used to be `|| entry.id`, which is newId() and so a fresh key
@@ -920,7 +932,7 @@ async function runInitBackfill(targets, onProgress) {
   const phases = [
     { id: 'log', items: log.slice(-400),
       key: e => `log-${e.id}`,   // checkpoint label only, not an award key
-      run: e => { const n = ord.get(e.id); return n > XP_DAILY_CAP.log ? 0 : award(`log-${e.date}-${n}`, 'log', 10, 'Logged a food', e.date); } },
+      run: e => { const n = ord.get(e.id); return n > XP_DAILY_CAP.log ? 0 : awardOnce(`log-${e.date}-${n}`, 'log', 10, 'Logged a food', e.date, { ref: e.id }).then(r => r.xp); } },
     { id: 'firstlog', items: dates,
       key: d => `firstlog-${d}`,
       run: d => award(`firstlog-${d}`, 'firstlog', 15, 'First log of the day', d) },
