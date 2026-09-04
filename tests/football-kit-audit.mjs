@@ -49,16 +49,28 @@
  * is pinned by a static read, which is the honest way to grade a branch you
  * cannot execute. 0.2s, no browser.
  *
- * PROVE-RED, each row against a real defect (all confirmed 2026-09-04, see
- * docs/FOOTBALL-KIT.md):
- *   DE          set gravel-gulls a to #9AA3AC, 1 unit from ironhaven's grey
- *   CONTRAST    set glasswater-gannets b to #7FB3D5, a light-on-light pair
- *   HEX         set windrow-wasps a to '#F9DC1' (five digits)
- *   ASSETS      rename assets/bh/football/jersey.mask-a.png
- *   TINT        blank the luminance normalisation in normalised_grey (k = 1)
- *   REGIONS     drop `oneColour` from the cleats, so an empty mask is painted
- *   GATE        set FOOTBALL_KIT_LIVE = true with the price still null
- *   PRICE       the same mutation, caught by a second row for a second reason
+ * PROVE-RED, each row against a real defect, every mutation on a throwaway tree
+ * and every one asserted to have LANDED before its result was believed. All
+ * eight confirmed 2026-09-04, with the FAIL line each produced:
+ *   DE + CONTRAST  gravel-gulls a -> #5B6B80, onto ironhaven's grey.
+ *                  "closest gravel-gulls vs ironhaven-anvils at dE 0.61", and
+ *                  both -HEADER rows red too: the recorded minimum has moved.
+ *   HEX            windrow-wasps a -> '#F9DC1'. "windrow-wasps.a=#F9DC1"
+ *   ASSETS         mv jersey.mask-a.png away. "1 missing: .../jersey.mask-a.png"
+ *   TINT           helmet master re-exported without normalised_grey's x4.08
+ *                  (region-a mean luminance 254.3 -> 62.3, asserted).
+ *                  "worst 188.60/255, OFF: helmet/mask-a x windrow-wasps"
+ *   REGIONS        drop `oneColour` from the cleats. "cleats: 0 core px in
+ *                  mask-b, oneColour=false, 2 tint layers"
+ *   GATE           delete the `unreleased` spread. "256 missing the flag, 256
+ *                  leaked into the pool of 626"
+ *   GRANT          the helmet stops granting its visors. "fb-...-helmet" alone
+ *   VISOR-EYES     E11-1 -> E11-9 in VISOR_BLOCKED_EYES. "NOT IN CATALOGUE"
+ *   PRICE          FOOTBALL_KIT_LIVE = true with the price still null.
+ *                  "FOOTBALL_KIT_LIVE=true, price=null"
+ * NOTE that flipping LIVE alone does NOT redden GATE, and correctly so: with
+ * the flag true the items are supposed to be in the pool, and the row grades
+ * the branch that is live. PRICE is what catches that mutation.
  *
  *   node tests/football-kit-audit.mjs
  */
@@ -259,8 +271,11 @@ function regionMean(masterPath, maskPath, hex) {
 
 /* THREE TEAMS, NOT ONE, and deliberately spread across the gamut: a very dark
    navy, a bright yellow and a mid teal. A single mid-tone team would pass on a
-   master whose normalisation is off, because the error scales with the tint. */
-const TINT_TEAMS = ['boneyard-bruisers', 'windrow-wasps', 'brightwater-barracudas'];  // 2026-09-04
+   master whose normalisation is off, because the error scales with the tint:
+   the prove-red above measured 46.1/255 on the navy and 188.6/255 on the yellow
+   for the SAME broken master. Picked 2026-09-04 from the 32 rows for spread,
+   not from any instruction; any three that span the gamut do the same job. */
+const TINT_TEAMS = ['boneyard-bruisers', 'windrow-wasps', 'brightwater-barracudas'];
 const tintRows = [];
 let tintErr = null;
 try {

@@ -299,6 +299,7 @@ const SUBFLOOR = {
   'js/app.js:openKitchen|coin':           '12-13px cook prices.',
   'js/app.js:renderShop|coin':            '12-13px shop price chips, set in the price line.',
   'js/app.js:renderShop|dust':            '13px dust price chips.',
+  'js/app.js:footballShelfHtml|coin':     '13px in the kit room\'s price line and 12px on its buy buttons, the same chips as renderShop|coin above and set in the same t3-price and drop-buy rules. Football kit, 2026-09-04.',
   'js/app.js:openRenameNotice|coin':      '15px in the rename notice copy. CANDIDATE for 16: one step away.',
   'js/app.js:openRenameNotice|dust':      '15px in the rename notice copy. CANDIDATE for 16: one step away.',
   'js/app.js:renderFriends|coin':         '13px in the gift row.',
