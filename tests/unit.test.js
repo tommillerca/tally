@@ -389,6 +389,60 @@ test('macro mismatch warning fires', () => {
   assert.ok(r.warnings.some(w => w.includes('Double-check')));
 });
 
+/* QA round 25 M7 (HIGH): the +20 XP Label route minted a 2.22x wrong food with no
+   warning. On a two-column European panel the parser took the FIRST number on
+   every line, which is the per-100 g column. A 45 g serving that should read
+   203 kcal reached the log as 451 kcal, 189 g fat, 76 g fibre, servingGrams null,
+   warnings []. The 4/4/9 check cannot catch it: per-100 g figures are internally
+   consistent. The >250 clearing rule cannot either: any macro under 25 g survives
+   a lost decimal point. Four cases below; (a) and (d) proved red on the tip. */
+const EU_TWO_COL = `Nutrition Information
+Typical values Per 100 g Per 45 g serving
+Energy 1892 kJ / 451 kcal 851 kJ / 203 kcal
+Fat 18.9 g 8.5 g
+of which saturates 2.1 g 0.9 g
+Carbohydrate 58 g 26 g
+of which sugars 15 g 6.8 g
+Fibre 7.6 g 3.4 g
+Protein 12 g 5.4 g
+Salt 0.5 g 0.2 g`;
+test('label M7 (a): two-column EU panel reads the per-serving column, not per-100 g', () => {
+  const r = parseNutritionText(EU_TWO_COL);
+  assert.equal(r.kcal, 203, `kcal ${r.kcal}: 451 is the per-100 g column`);
+  assert.equal(r.fat, 8.5); assert.equal(r.satFat, 0.9);
+  assert.equal(r.carbs, 26); assert.equal(r.sugar, 6.8);
+  assert.equal(r.fiber, 3.4); assert.equal(r.protein, 5.4);
+  assert.equal(r.servingGrams, 45, 'serving mass sits in the header, not on a "Serving size" line');
+  assert.ok(r.warnings.some(w => /per serving column/i.test(w)), `no column-choice warning: ${JSON.stringify(r.warnings)}`);
+  assert.ok(!r.warnings.some(w => /per-100 g, not per serving/.test(w)), 'mass check must not fire on the correct column');
+});
+test('label M7 (a2): serving column FIRST is honoured too', () => {
+  const r = parseNutritionText('Per serving (30 g) Per 100 g\nEnergy 120 kcal 400 kcal\nFat 3 g 10 g\nCarbohydrate 15 g 50 g\nProtein 6 g 20 g');
+  assert.equal(r.kcal, 120); assert.equal(r.fat, 3); assert.equal(r.carbs, 15); assert.equal(r.protein, 6);
+  assert.equal(r.servingGrams, 30);
+});
+test('label M7 (b): one-column per-serving panel is unchanged, no spurious warning', () => {
+  const r = parseNutritionText(US_LABEL);
+  assert.equal(r.kcal, 230); assert.equal(r.fat, 8); assert.equal(r.fiber, 4); assert.equal(r.protein, 3);
+  assert.deepEqual(r.warnings, []);
+});
+test('label M7 (c): per-100 g only panel with no serving still parses, servingGrams null', () => {
+  const r = parseNutritionText('Nutrition per 100 g\nEnergy 1892 kJ / 451 kcal\nFat 18.9 g\nCarbohydrate 58 g\nFibre 7.6 g\nProtein 12 g');
+  assert.equal(r.kcal, 451); assert.equal(r.fat, 18.9); assert.equal(r.fiber, 7.6); assert.equal(r.protein, 12);
+  assert.equal(r.servingGrams, null);
+  assert.ok(!r.warnings.some(w => /column/i.test(w)), `no column warning on a one-column panel: ${JSON.stringify(r.warnings)}`);
+});
+test('label M7 (d): macro grams above the stated serving mass carry the per-100 g warning', () => {
+  // the QA panel with its decimal points lost by OCR: 18.9 -> 189 style, all
+  // under 250 so the clearing rule keeps every one of them.
+  const r = parseNutritionText('Serving size 45 g\nCalories 451\nTotal Fat 19 g\nTotal Carbohydrate 58 g\nDietary Fiber 76 g\nProtein 12 g');
+  assert.equal(r.servingGrams, 45);
+  assert.ok(r.warnings.some(w => /per-100 g, not per serving/.test(w)), `no mass warning: ${JSON.stringify(r.warnings)}`);
+  // a serving whose macros fit inside it stays quiet (55 g serving, 48 g macros)
+  const ok = parseNutritionText(US_LABEL);
+  assert.ok(!ok.warnings.some(w => /per-100 g/.test(w)));
+});
+
 // ---- OFF mapper ----
 test('mapOffProduct coca-cola fixture', () => {
   const f = mapOffProduct(fx('off_cocacola.json'));
