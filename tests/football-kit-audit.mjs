@@ -553,8 +553,12 @@ const shelfSold = FB.FOOTBALL_SOLD.map(g => g.key);
 ok('SHELF-DATA the shop shelf is exactly the five sold garments, each with a label, a slot and a finite price',
   SHELF.length === 5 && shelfKeys.join() === shelfSold.join() &&
   SHELF.every(r => r.label && r.slot && Number.isFinite(r.price) && r.price > 0) &&
-  SHELF.every(r => FB.FOOTBALL_GARMENT_BY_KEY[r.key]),
-  `${SHELF.length} tiles${SHELF.length > 8 ? ' (first 8)' : ''}: ${SHELF.slice(0, 8).map(r => `${r.label} (${r.slot}) ${r.price}`).join(' · ')}; FOOTBALL_SOLD is ${shelfSold.length} deep`);
+  SHELF.every(r => FB.FOOTBALL_GARMENT_BY_KEY[r.key]) &&
+  /* the pet tiles have to keep their species, or the shelf draws a lizard
+     garment on the human mannequin and the tile is a smear */
+  SHELF.every(r => (r.pets || null)?.join() === (FB.FOOTBALL_GARMENT_BY_KEY[r.key].pets || null)?.join()),
+  `${SHELF.length} tiles${SHELF.length > 8 ? ' (first 8)' : ''}: ${SHELF.slice(0, 8).map(r => `${r.label} (${r.slot}) ${r.price}${r.pets ? ` pets:${r.pets.join('/')}` : ''}`).join(' · ')}; ` +
+  `FOOTBALL_SOLD is ${shelfSold.length} deep, ${FB.FOOTBALL_SOLD.filter(g => g.pets).length} of them pet garments`);
 
 /* ---- 9. A LIVE KIT WITH NO PRICE ----------------------------------------- */
 /* The rule, as the buy path states it (js/loot.js buyFootballItem): a piece is

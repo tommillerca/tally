@@ -228,6 +228,7 @@ export const FOOTBALL_SOLD = FOOTBALL_GARMENTS.filter(g => g.sold);
    number in this table rather than a new constant and a new branch. */
 export const FOOTBALL_SHELF = FOOTBALL_SOLD.map(g => ({
   key: g.key, slot: g.slot, label: g.label, price: FOOTBALL_KIT_PRICE_PLACEHOLDER,
+  ...(g.pets ? { pets: g.pets } : {}),   // the tile draws a pet garment ON the pet
 }));
 
 /* A piece is for sale only when the kit is live AND the price is a real number
