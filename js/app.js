@@ -1147,6 +1147,7 @@ async function boot() {
   if (S.demo && !S.settings) { await seedDemo(); S.settings = await kvGet('settings'); }
   snapSettings();
   S.userFoods = await db.all('foods');
+  await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
 
   // One-off: players who claimed the Day One Lizard before v241 got it filed in
   // the Stable and never put on their shoulder, so the celebration was followed by
@@ -1272,6 +1273,7 @@ async function boot() {
     S.settings = await kvGet('settings');
     snapSettings();
     S.userFoods = await db.all('foods');
+    await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
     setTimeout(() => toast('Welcome back. Your progress was restored from your cloud backup.', 4600), 900);
   } else if (cloudRestore && cloudRestore.reason === 'decrypt') {
     /* HONEST DECRYPT FAILURE. A backup EXISTS but this device's key cannot
@@ -3457,13 +3459,55 @@ function findFood(id) {
   return S.userFoods.find(f => f.id === id) || GENERIC_FOODS.find(f => f.id === id) || null;
 }
 
+/* GENERIC FOOD USE LIVES IN KV, NOT IN THE FOODS STORE (QA round 24, L3).
+   This function used to return on its first line for generics ("they ship with
+   the app"), so the lastPortion the Add button had just written onto the
+   in-memory GENERIC_FOODS object died with the tab. Measured: 60 days of chicken
+   logged at "1 breast" (284 kcal), and after a relaunch the recents row offered
+   "1 small breast" at 198 kcal, a 30.3% undercount waiting for one careless tap;
+   588 meals through the real UI left 0 use counts and 0 remembered portions.
+   Generic favourites already round-trip through kv (fav-<id>, see openPortion),
+   so use does the same: ONE kv record, GEN_USE_KEY, mapping food id to
+   { useCount, lastUsedAt, lastPortion }. Never a row in 'foods' (that store is
+   customs and scans; renderFoods counts them). Bounded to GEN_USE_CAP ids, the
+   least recently used pruned first, so a player who tries every built-in food
+   over years still holds one small record. kvUpdate keeps the read-modify-write
+   in one transaction, so two tabs logging at once cannot lose a count. */
+const GEN_USE_KEY = 'genUse';
+const GEN_USE_CAP = 200;
 async function persistFoodUse(food) {
-  if (food.source === 'generic') return; // generics ship with the app
   food.useCount = (food.useCount || 0) + 1;
   food.lastUsedAt = Date.now();
+  if (food.source === 'generic') {
+    const mine = { useCount: food.useCount, lastUsedAt: food.lastUsedAt, lastPortion: food.lastPortion || null };
+    await kvUpdate(GEN_USE_KEY, cur => {
+      const m = { ...(cur || {}), [food.id]: mine };
+      const keep = Object.entries(m).sort((a, b) => (b[1].lastUsedAt || 0) - (a[1].lastUsedAt || 0)).slice(0, GEN_USE_CAP);
+      return Object.fromEntries(keep);
+    }, {});
+    return;
+  }
   await db.put('foods', food);
   const i = S.userFoods.findIndex(f => f.id === food.id);
   if (i >= 0) S.userFoods[i] = food; else S.userFoods.push(food);
+}
+
+/* The read side of the above, run wherever S.userFoods is (re)loaded: boot,
+   cloud restore, file import. GENERIC_FOODS are module singletons that every
+   consumer (defaultSel, recents, the home favourites strip at renderHome) reads
+   directly, so the persisted use AND the fav-<id> star are copied back onto the
+   objects once and nothing downstream changes. The star was persisted before
+   this but only re-read inside openPortion and renderFoods, so a cold relaunch
+   showed the home favourites strip without it (round 24). */
+async function hydrateGenericUse() {
+  const rows = await db.all('kv');
+  const use = rows.find(r => r.k === GEN_USE_KEY)?.v || {};
+  const favs = new Set(rows.filter(r => r.k.startsWith('fav-') && r.v).map(r => r.k.slice(4)));
+  for (const g of GENERIC_FOODS) {
+    const u = use[g.id];
+    if (u) { g.useCount = u.useCount || 0; g.lastUsedAt = u.lastUsedAt || 0; g.lastPortion = u.lastPortion || undefined; }
+    g.favorite = favs.has(g.id);
+  }
 }
 
 async function entriesFor(date) {
@@ -8068,6 +8112,23 @@ async function openEntryEdit(entryId) {
 
 /* ================= quick add ================= */
 
+/* THE ENTRY'S OWN SNAPSHOT IS AUTHORITATIVE ON EDIT (QA round 25, M5).
+   A logged meal carries every number it will ever need (kcal, p, c, f, fiber,
+   sugar, sodium, brand, portionLabel, sel, foodId); it must never depend on
+   the food it came from still existing. Deleting a custom food asks nothing,
+   and the orphaned entry then reaches this editor through openEntryEdit, which
+   used to rebuild it from the four boxes on screen with foodId: null and
+   portionLabel: ''. Measured on one save: fibre 5 gone, sugar gone, sodium 800
+   gone, portion label, brand and serving gone, and the day's micronutrient
+   line read permanently lighter. Now an edit spreads the stored entry first and
+   overrides ONLY what this sheet can actually change; a fresh quick add is
+   built exactly as before. The relog path (data-relog) already copies
+   `{ ...src }` for the same reason. */
+function quickAddEntry(entry, { meal, name, kcal, p, c, f }) {
+  if (entry) return { ...entry, meal, name, kcal, p, c, f };
+  return { id: newId(), date: S.date, meal, ts: Date.now(), foodId: null, name, portionLabel: '', kcal, p, c, f };
+}
+
 function openQuickAdd(getMeal, entry = null) {
   const wrap = openSheet(`
     <div class="sheet-head">
@@ -8102,21 +8163,16 @@ function openQuickAdd(getMeal, entry = null) {
     if (!c.ok) return;
     const f = readNum($('#qaF', wrap), { name: 'Fat', ...LIMITS.macroG, optional: true, unit: ' g' });
     if (!f.ok) return;
-    const kcal = k.value;
-    const e = {
-      id: entry ? entry.id : newId(),
-      date: entry ? entry.date : S.date,
-      meal: getMeal(),
-      ts: entry ? entry.ts : Date.now(),
-      foodId: null,
-      name: $('#qaName', wrap).value.trim() || 'Quick add',
-      portionLabel: '',
-      kcal, p: p.value, c: c.value, f: f.value,
-    };
-    /* commitLogEntry owns the write, recordMealUsed (the fourth commit path,
-       and the one that used to skip it: a Quick add to Dinner reopened the add
-       sheet on Lunch) and the XP receipt. QA round 25 M4: this path had NO
-       try/catch, so a failed write escaped to the page with the sheet open. */
+    /* TWO FIXES MEET HERE, and they compose. quickAddEntry (QA round 25 M5)
+       BUILDS the row: on an edit it spreads the stored entry so fibre, sugar,
+       sodium, brand, portionLabel and foodId survive when the food it came from
+       has been deleted; a fresh quick add is built exactly as before.
+       commitLogEntry (QA round 25 M4) OWNS THE WRITE, recordMealUsed (the
+       fourth commit path, the one that used to skip it) and the XP receipt,
+       inside the try/catch this path never had, so a failed write cannot
+       escape to the page with the sheet open. */
+    const e = quickAddEntry(entry, { meal: getMeal(), name: $('#qaName', wrap).value.trim() || 'Quick add', kcal: k.value, p: p.value, c: c.value, f: f.value });
+    const kcal = e.kcal;
     const game = await commitLogEntry(e, btn);
     if (!game) return;
     if (!entry && btn && btn.isConnected) {
@@ -17832,6 +17888,7 @@ async function importBackupFromFile(file) {
   S.settings = await kvGet('settings') || S.settings;
   snapSettings();
   S.userFoods = await db.all('foods');
+  await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
   closeAllSheetsViaHistory();   // no-op when no sheet is open (Settings > Import)
   toast(importSummary(counts), 4200);
   if (wasOnb) {
