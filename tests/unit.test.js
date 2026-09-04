@@ -81,6 +81,26 @@ test('computeTargets male recomp', () => {
   assert.ok(t.f >= Math.round(0.6 * 84));
   approx(t.p * 4 + t.c * 4 + t.f * 9, t.kcal, 0.03);
 });
+test('R25-M3 no sedentary cut is targeted below its own resting rate', () => {
+  /* QA round 25, M3. Sedentary x Lose fat is 1.2 x 0.80 = 0.96 x BMR, so the
+     computed target sat BELOW the person's own resting metabolic rate for 1,816
+     of 54,600 realistic adult profiles (all in this one bucket), and the 1,200
+     floor caught none of them. The floor now includes the BMR itself. Sweep the
+     realistic grid at the pure function: the layer the bug lives at. */
+  let n = 0, below = [];
+  for (const sex of ['m', 'f'])
+    for (let age = 18; age <= 80; age += 2)
+      for (let heightCm = 145; heightCm <= 200; heightCm += 5)
+        for (let weightKg = 45; weightKg <= 150; weightKg += 5) {
+          const p = { sex, age, heightCm, weightKg, activity: 'sedentary', goal: 'cut' };
+          const t = computeTargets(p);
+          n++;
+          if (t.kcal < Math.round(bmrMifflin(p))) below.push(`${sex}/${age}/${heightCm}/${weightKg}: ${t.kcal} < ${t.bmr}`);
+          assert.ok(t.kcal >= 1200, 'the old 1200 floor still holds');
+        }
+  assert.ok(n > 10000, `grid too small to mean anything: ${n}`);
+  assert.equal(below.length, 0, `${below.length}/${n} below BMR, e.g. ${below.slice(0, 3).join('; ')}`);
+});
 test('computeTargets female floor', () => {
   const t = computeTargets({ sex: 'f', age: 45, heightCm: 158, weightKg: 52, activity: 'sedentary', goal: 'cut' });
   assert.ok(t.kcal >= 1200);

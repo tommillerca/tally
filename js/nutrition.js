@@ -20,13 +20,23 @@ export function bmrMifflin({ sex, age, heightCm, weightKg }) {
   return 10 * weightKg + 6.25 * heightCm - 5 * age + (sex === 'm' ? 5 : -161);
 }
 
+/* The lowest calorie target this app will hand anyone: the person's own resting
+   metabolic rate, and never under 1,200. QA round 25, M3: Sedentary x Lose fat
+   is 1.2 x 0.80 = 0.96 x BMR, so 1,816 of 54,600 realistic adult profiles were
+   targeted BELOW what their body burns lying still, and the bare 1,200 floor
+   (which has no sex term, unlike every other line here) caught none of them.
+   Shared by computeTargets and the manual editor so the two paths cannot drift. */
+export function kcalFloor(profile) {
+  return Math.max(1200, Math.round(bmrMifflin(profile)));
+}
+
 // profile: {sex, age, heightCm, weightKg, activity (id), goal (id)}
 export function computeTargets(profile) {
   const act = ACTIVITY_LEVELS.find(a => a.id === profile.activity) || ACTIVITY_LEVELS[1];
   const goal = GOALS.find(g => g.id === profile.goal) || GOALS[2];
   const bmr = bmrMifflin(profile);
   const tdee = bmr * act.factor;
-  const kcal = Math.max(1200, Math.round(tdee * (1 + goal.adj) / 10) * 10);
+  const kcal = Math.max(kcalFloor(profile), Math.round(tdee * (1 + goal.adj) / 10) * 10);
   const p = Math.round(goal.protein * profile.weightKg);
   const f = Math.max(Math.round(kcal * 0.25 / 9), Math.round(0.6 * profile.weightKg));
   const c = Math.max(0, Math.round((kcal - p * 4 - f * 9) / 4));
