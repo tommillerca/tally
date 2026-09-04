@@ -4174,6 +4174,28 @@ test('Create food: null macros stay null, kcal-vs-macros and duplicate names war
   assert.deepEqual(g.food.perServing, { kcal: 100, p: null, c: 25, f: null, fiber: null, sugar: null, sodium: null });
 });
 
+/* QA round 25 M18 (list half): My foods sorted by lastUsedAt only, so never-used
+   foods compared equal and came back in database key order. The comparator is
+   module-level in js/app.js so it can be sliced here. */
+test('My foods: most recent first, then name A to Z when lastUsedAt ties', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('const byLastUsedThenName ='), b = app.indexOf('\nconst MY_FOODS_FILTER_AT');
+  assert.ok(a > 0 && b > a, 'byLastUsedThenName is not in js/app.js: the My foods sort is back to lastUsedAt only (QA round 25 M18)');
+  const { byLastUsedThenName, MY_FOODS_FILTER_AT } = new Function(`${app.slice(a, b)}; ${app.slice(b, app.indexOf('\n', b + 1))}; return { byLastUsedThenName, MY_FOODS_FILTER_AT };`)();
+  const rows = [
+    { id: 'c-3', name: 'Zucchini bread' }, { id: 'c-1', name: 'Protein granola', lastUsedAt: 5 },
+    { id: 'c-2', name: 'apple crumble' }, { id: 'c-4', name: 'Banana bread', lastUsedAt: 9 },
+  ];
+  assert.deepEqual([...rows].sort(byLastUsedThenName).map(r => r.name),
+    ['Banana bread', 'Protein granola', 'apple crumble', 'Zucchini bread'],
+    'never-used foods did not fall back to name order (QA round 25 M18)');
+  assert.equal(MY_FOODS_FILTER_AT, 15, 'the filter threshold moved off the measured bound (unusable at N = 15)');
+  // the filter is wired: renders over the bound, filters by the same folded name
+  const rf = app.slice(app.indexOf('async function renderFoods('), app.indexOf('/* ================= settings'));
+  assert.match(rf, /customs\.length > MY_FOODS_FILTER_AT\) html \+= `<div class="t1-search"/, 'the My foods filter input is not rendered over the bound');
+  assert.match(rf, /customs\.filter\(f => normFoodName\(f\.name\)\.includes\(q\)\)/, 'the filter does not narrow the customs list');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

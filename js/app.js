@@ -10271,9 +10271,16 @@ function openWeightSheet() {
 
 /* ================= foods tab ================= */
 
+/* QA round 25 M18: My foods sorted by lastUsedAt ONLY, so never-used foods all
+   compared equal and 40 seeded customs came back in database key order (a
+   5,367 px list). Most recent first, then name A to Z as the stable tiebreak. */
+const byLastUsedThenName = (a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0) || String(a.name || '').localeCompare(String(b.name || ''));
+// Past this many custom rows the list is a scroll, not a browse: a name filter appears above it.
+const MY_FOODS_FILTER_AT = 15;
+
 async function renderFoods(el) {
-  const customs = S.userFoods.filter(f => f.source === 'custom').sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0));
-  const scanned = S.userFoods.filter(f => f.source !== 'custom').sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0)).slice(0, 12);
+  const customs = S.userFoods.filter(f => f.source === 'custom').sort(byLastUsedThenName);
+  const scanned = S.userFoods.filter(f => f.source !== 'custom').sort(byLastUsedThenName).slice(0, 12);
   const favIds = S.userFoods.filter(f => f.favorite).map(f => f.id);
   const kvRows = await db.all('kv');
   const genFavs = kvRows.filter(r => r.k.startsWith('fav-') && r.v).map(r => GENERIC_FOODS.find(g => g.id === r.k.slice(4))).filter(Boolean);
@@ -10288,7 +10295,12 @@ async function renderFoods(el) {
   function base() {
     let html = '<button class="btn ghost" id="newFood" style="margin:4px 0 6px">+ Create a food</button>';
     if (favs.length) html += '<div class="sect-h">Favorites</div>' + favs.map(foodRowHtml).join('');
-    if (customs.length) html += '<div class="sect-h">My foods</div>' + customs.map(foodRowHtml).join('');
+    if (customs.length) {
+      html += '<div class="sect-h">My foods</div>';
+      // QA round 25 M18: over 15 rows, a filter (same .t1-search recipe as the Add sheet). No pagination.
+      if (customs.length > MY_FOODS_FILTER_AT) html += `<div class="t1-search" style="margin-bottom:8px">${ICONS.searchIco()}<input id="myFoodsQ" type="search" placeholder="Filter my ${customs.length} foods" autocomplete="off"></div>`;
+      html += `<div id="myFoodsList">${customs.map(foodRowHtml).join('')}</div>`;
+    }
     if (scanned.length) html += '<div class="sect-h">Recently scanned</div>' + scanned.map(foodRowHtml).join('');
     if (!favs.length && !customs.length && !scanned.length) html += '<p class="note" style="text-align:center;padding:14px 20px 6px">Foods you scan, create, or favorite collect here.</p>';
     const sample = [...GENERIC_FOODS].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 40);
@@ -10297,12 +10309,22 @@ async function renderFoods(el) {
     list.innerHTML = html;
     bind();
   }
-  function bind() {
-    $$('[data-food]', list).forEach(b => b.addEventListener('click', () => {
+  function bindRows(root) {
+    $$('[data-food]', root).forEach(b => b.addEventListener('click', () => {
       const f = findFood(b.dataset.food);
       if (f) openPortion(f, { meal: mealForHour(new Date().getHours()) });
     }));
+  }
+  function bind() {
+    bindRows(list);
     $('#newFood', list)?.addEventListener('click', () => openFoodForm({}));
+    $('#myFoodsQ', list)?.addEventListener('input', e => {
+      const q = normFoodName(e.target.value);
+      const hit = q ? customs.filter(f => normFoodName(f.name).includes(q)) : customs;
+      const mine = $('#myFoodsList', list);
+      mine.innerHTML = hit.length ? hit.map(foodRowHtml).join('') : '<p class="note" style="text-align:center;padding:12px">None of your foods match.</p>';
+      bindRows(mine);
+    });
   }
   $('#fq', el).addEventListener('input', e => {
     const q = e.target.value.trim();
