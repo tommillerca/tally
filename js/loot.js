@@ -4,6 +4,7 @@
 
 import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
+import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, footballGrantIds, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
 
@@ -63,6 +64,25 @@ export const DROP = {
     { id: 'H13-5', cost: 1500 }, { id: 'H13-6', cost: 1500 },
   ],
 };
+
+/* Football kit, 2026-09-04: one tile, one flat price, the helmet tile granting
+   its three visors too. Same receipt-decides shape as buyDropItem: money first,
+   atomically; the grant race's loser is refunded. Refuses while the kit is not
+   live or has no price, so a flipped flag without a number sells nothing. */
+export async function buyFootballItem(itemId) {
+  const ids = footballGrantIds(itemId);
+  const cost = FOOTBALL_KIT_PRICE_PLACEHOLDER;
+  if (!FOOTBALL_KIT_LIVE || !ids.length || !Number.isFinite(cost) || cost <= 0) return { ok: false, reason: 'not-stocked' };
+  if ((await ownedCosmeticIds()).has(itemId)) return { ok: false, reason: 'owned' };
+  const left = await spendCoins(cost);
+  if (left === null) return { ok: false, reason: 'coins', need: cost, have: await coins() };
+  if (!await grantCosmetic(itemId, 'football')) {
+    await coinsAdd(cost);
+    return { ok: false, reason: 'owned' };
+  }
+  for (const id of ids) if (id !== itemId) await grantCosmetic(id, 'football');
+  return { ok: true, label: BH_BY_ID[itemId].name, cost, coins: left };
+}
 
 export async function buyDropItem(itemId) {
   const d = DROP.items.find(x => x.id === itemId);
@@ -192,8 +212,10 @@ export const RACK_RARITY_PRICE = {
   legendary: [2000, 160],
 };
 const RACK_PET_SLOTS = new Set(['C', 'CE', 'CB', 'CG', 'CM']);
+/* Football kit, 2026-09-04: kits have their own shelf at their own price, and
+   an id on two shelves is the indexOf collision rack-theme-lint exists for. */
 export const RACK_ROTATE_POOL = BH_ITEMS
-  .filter(i => !RACK_PET_SLOTS.has(i.slot) && !i.exclusive && !i.default && RACK_RARITY_PRICE[i.rarity])
+  .filter(i => !RACK_PET_SLOTS.has(i.slot) && !i.exclusive && !i.default && !i.football && RACK_RARITY_PRICE[i.rarity])
   .map(i => i.id)
   .sort();
 
@@ -1739,7 +1761,8 @@ export function crateOdds(kind) {
    Wire Stinger). Derived from PET_SLOTS rather than listed, so a sixth accessory
    cannot arrive without inheriting the exclusion. */
 const petSlots = new Set(PET_SLOTS.map(s => s.code));
-export const crateEligible = i => !i.default && !i.exclusive && i.slot !== 'C' && !petSlots.has(i.slot);
+// Football kit, 2026-09-04: rack-only until Tom rules on crate drops (docs/FOOTBALL-KIT.md).
+export const crateEligible = i => !i.default && !i.exclusive && i.slot !== 'C' && !petSlots.has(i.slot) && !i.football;
 
 function candidates(rarity, owned, slotBias) {
   let pool = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === rarity && !owned.has(i.id));
@@ -2326,6 +2349,9 @@ export async function equip(slot, itemId, { keepGear = false } = {}) {
     if (!item || item.slot !== slot) throw new Error('bad item');
     const owned = await ownedCosmeticIds();
     if (!owned.has(itemId)) throw new Error('not owned');
+    /* Football kit, 2026-09-04: the 'refuse' branch of VISOR_EYES_POLICY. Under
+       'hide' (the default) this is inert and the renderer skips the eyes instead. */
+    if (visorRefusesEquip({ ...eq, [slot]: itemId })) throw new Error('visor');
     eq[slot] = itemId;
   }
   await kvSet('equipped', eq);

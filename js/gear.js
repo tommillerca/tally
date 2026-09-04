@@ -107,6 +107,10 @@ export const GEAR_ITEMS = (() => {
   const out = [];
   for (const art of BH_ITEMS) {
     if (!GEAR_SLOTS.includes(art.slot) || art.default) continue;
+    // Football kit, 2026-09-04: kits are flat-priced cosmetics, never statted
+    // variants, or a coin shelf would sell power. Deriving gear would also make
+    // 384 "Bruiser's Helmet" rows drop from crates carrying the shop's art.
+    if (art.football) continue;
     const h = hashStr('gear:' + art.id);
     const i1 = h % ARCH_KEYS.length;
     let i2 = (h >>> 3) % ARCH_KEYS.length;
