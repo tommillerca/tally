@@ -183,6 +183,31 @@ export function addDays(key, n) {
   return dateKey(x);
 }
 
+/* THE DAY BOUNDARY IS A TIMEOUT, NOT A 60 s LOTTERY (QA round 26 O13). dateKey()
+   flips at 0 ms; everything the player could see flipped at up to 53 s because
+   the day roll ran on a 60 s setInterval (measured across four real midnights:
+   53.2, 44.4, 42.2, 41.2 s). One setTimeout aimed at the next LOCAL midnight
+   lands the visible flip within ~1 s. setHours(24,0,0,0) is local-time
+   arithmetic, so DST folds and a 23 or 25 hour day are already in the number.
+   If a timer fires a hair EARLY the roll sees the same day and does nothing,
+   and the re-arm computes the few ms left and fires again: self-healing. The
+   interval stays behind it as the belt to this brace. */
+export function msToNextMidnight(now = Date.now()) {
+  const d = new Date(now);
+  d.setHours(24, 0, 0, 0);
+  return Math.max(1, d.getTime() - now);
+}
+/* Arms one timeout for the next midnight and re-arms itself after each fire.
+   `rearm()` is for resume: a suspended WebView's timers stop with it, so the
+   one that was pending is thrown away and re-aimed from the current clock.
+   The deps are injectable so node can drive it with a fake clock. */
+export function armMidnightTimer(fn, { now = Date.now, setTimeout: st = globalThis.setTimeout, clearTimeout: ct = globalThis.clearTimeout } = {}) {
+  let id = null;
+  const arm = () => { id = st(() => { fn(); arm(); }, msToNextMidnight(now())); };
+  arm();
+  return { rearm() { ct(id); arm(); }, cancel() { ct(id); } };
+}
+
 /* MONOTONIC DAY GUARD, part 1 of 2. Part 2 is claimDay() in js/db.js.
  *
  * Turn a 'YYYY-MM-DD' key into an integer count of days since 1970-01-01.
