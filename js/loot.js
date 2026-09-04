@@ -1993,10 +1993,18 @@ export async function paidLooks() {
   // This WRITES on read, deliberately: seeding from the live transmog map alone
   // is not durable, because clearing the slot would erase the only evidence and
   // charge the player a second time for a look they already bought.
+  /* ONLY A LOOK WORN OVER STATTED GEAR IS SEEDED (QA round 22 W1). Under v221
+     an override only ever applied over gear, so that is the only shape a real
+     v221 purchase can have. A look sitting on a slot with NO gear got there for
+     0 dust under the 2026-08-11 free rule, and seeding it here was the second
+     of the two paths that turned a free apply into a permanent receipt:
+     unequip, apply the 60-dust look for 0, and the next paidLooks() read banked
+     it before the gear even went back on. */
   const add = [];
+  const lo = await gearLoadout();
   for (const [slot, artId] of Object.entries(await transmogMap())) {
     const k = paidKey(slot, artId);
-    if (artId !== TRANSMOG_HIDE && !set.has(k)) { set.add(k); add.push(k); }
+    if (artId !== TRANSMOG_HIDE && lo[slot] && !set.has(k)) { set.add(k); add.push(k); }
   }
   /* kvUpdate, not kvSet: `stored` was read before the transmogMap await, and
      markPaid CLAIMS on this same row. Writing the list whole dropped a receipt
@@ -2050,10 +2058,11 @@ export async function applyTransmog(slot, artId) {
     if (!(await collectedLooks()).has(artId)) return { ok: false, reason: 'not-collected' };
   }
   const tm = await transmogMap();
-  if (tm[slot] === artId) {
-    if (artId !== TRANSMOG_HIDE) await markPaid(slot, artId); // banked, not just worn
-    return { ok: true, cost: 0, already: true };
-  }
+  /* NO RECEIPT FOR RE-TAPPING A WORN LOOK (QA round 22 W1). This branch used
+     to markPaid, so a look worn for 0 through an empty slot became "owned" on
+     the next tap. A paid look was already banked by the spend below; a free one
+     must stay free-and-unbanked. */
+  if (tm[slot] === artId) return { ok: true, cost: 0, already: true };
   const cost = await transmogPrice(slot, artId);
   /* SPEND, THEN CLAIM THE LOOK, THEN REFUND IF THE CLAIM WAS ALREADY WON.
      There is no per-item receipt here the way the rack has one, but there does
@@ -2069,10 +2078,18 @@ export async function applyTransmog(slot, artId) {
     const left = await spendDust(cost);
     if (left === null) return { ok: false, reason: 'dust', need: cost, have: await boneDust() };
     paid = cost;
-  }
-  if (artId !== TRANSMOG_HIDE && !(await markPaid(slot, artId)) && paid) {
-    await boneDustAdd(paid);   // somebody else's tap banked this look: give it back
-    paid = 0;
+    /* THE RECEIPT IS BANKED ONLY WHEN DUST ACTUALLY MOVED (QA round 22 W1).
+       markPaid used to run on every apply, zero-cost ones included, so the
+       free rule in transmogPrice (no statted gear in the slot: 0) became an
+       exploit: unequip, apply a 60-dust look for 0, re-equip, and the look read
+       "owned" forever. Lane G measured an epic chest look taken for 0. The free
+       rule itself is unchanged (Tom, 2026-08-11); what changed is that a free
+       wear is a wear, not a purchase. Receipts already banked this way by
+       existing players are kept: no migration, on purpose. */
+    if (artId !== TRANSMOG_HIDE && !(await markPaid(slot, artId))) {
+      await boneDustAdd(paid);   // somebody else's tap banked this look: give it back
+      paid = 0;
+    }
   }
   /* kvUpdate, not read-mutate-kvSet: `tm` was read before the spend, so writing
      it whole put back whatever another slot's concurrent apply had just set. */
@@ -2149,9 +2166,6 @@ export async function fitPrice(fit) {
 export async function applyFit(id) {
   const fit = (await fits()).find(f => f.id === id);
   if (!fit) return { ok: false, reason: 'missing' };
-  const cost = await fitPrice(fit);
-  const bal = await boneDust();
-  if (cost > bal) return { ok: false, reason: 'dust', need: cost, have: bal };
   /* gear first (v425): a recorded piece goes back into a slot that is EMPTY
      right now, through equipGear so the owned/level checks all run. Empty-only,
      because the v222 contract holds for a dressed doll: a player who re-geared
@@ -2167,6 +2181,17 @@ export async function applyFit(id) {
       await equipGear(slot, gid).catch(() => {});
     }
   }
+  /* PRICE AFTER THE GEAR PASS, NOT BEFORE IT (QA round 22 W11). transmogPrice is
+     0 on a slot with no statted gear, so pricing the fit before its gear went
+     back on read every look against the wrong loadout: a fit saved with gear
+     and an unpaid look priced 0 for a stripped player and then applyTransmog
+     below charged full price anyway. Unreachable until W1, because every apply
+     banked a receipt so no fit could hold an unpaid look; the order is the
+     latent half of that ticket. Gear restore is free and reversible, so a fit
+     refused for dust here leaves the player re-geared and no poorer. */
+  const cost = await fitPrice(fit);
+  const bal = await boneDust();
+  if (cost > bal) return { ok: false, reason: 'dust', need: cost, have: bal };
   // gear slots: the fit's tm replaces the whole map, so a slot the fit does not
   // mention goes back to its gear's own look rather than keeping a stale override
   for (const slot of GEAR_SLOTS) {
@@ -2358,11 +2383,23 @@ export async function equipGear(slot, gearId) {
   if (!owned.has(gearId)) throw new Error('not owned');
   const { totalXp, levelFor } = await import('./game.js'); // lazy: avoids circular init
   if (levelFor(await totalXp()).level < g.minLevel) throw new Error('level ' + g.minLevel + ' required');
+  /* AN UNPAID OVERRIDE DOES NOT SURVIVE STATS ENTERING THE SLOT (QA round 22
+     W1). transmogPrice charges 0 when the slot holds no statted gear, because
+     with nothing to disguise the look is a no-op. The moment gear goes in, that
+     premise is gone: the same override is now a real disguise over real stats,
+     the thing that costs dust. Unequip, apply for 0, re-equip was the exploit,
+     and this is the hop that closes it. A PAID look stays put (rule 3: your look
+     sticks as the gear underneath it changes). Read paidLooks() BEFORE the
+     loadout write: its seed is gear-gated, so the order is what keeps a free
+     look from being banked by this very call. */
+  const tm = await transmogMap();
+  const unpaidLook = tm[slot] && tm[slot] !== TRANSMOG_HIDE && !(await paidLooks()).has(paidKey(slot, tm[slot]));
   lo[slot] = gearId;
   await kvSet('gearloadout', lo);
   const eq = await equipped({ raw: true });
   eq[slot] = g.artId;
   await kvSet('equipped', eq);
+  if (unpaidLook) await dropTransmog(slot);
   return lo;
 }
 

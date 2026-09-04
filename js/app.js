@@ -15210,16 +15210,28 @@ async function renderCharacter(wrap, tab, opts = {}) {
       levelSound(S.sounds); pushProfileSoon();
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
-    $$('[data-melt-gear]', content).forEach(btn => btn.addEventListener('click', async () => {
-      // arm-then-confirm so a piece is never melted by accident
-      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Tap again to melt'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = `Melt · +${gearDustValue(GEAR_BY_ID[btn.dataset.meltGear])} dust`; } }, 2600); return; }
-      const res = await disenchantGear(btn.dataset.meltGear);
-      if (!res.ok) { toast('Could not melt that piece.'); return; }
-      S.wardrobePreview = null; S.lookPreview = null;
-      popSound(S.sounds);
-      toast(`${res.name} melted into ${res.dust} Bone Dust. Its look is yours forever.`, 3200);
-      renderCharacter(wrap, 'wardrobe', { instant: true });
-    }));
+    /* MELT IS ON armToConfirm, THE SAME ARM AS EVERY SPEND (QA round 22 W2, W3).
+       This was its own inline dataset.armed dance: "Tap again to melt" named
+       nothing, a 2600 ms literal cool-off against ARM_COOLOFF_MS, no `.arming`
+       class, no haptic, no busy guard. So the one irreversible control on the
+       screen asked LESS than a 12-dust look, and melting the WORN piece took it
+       off (disenchantGear clears the loadout slot: Power 21 -> 20, Hype 29 -> 27
+       in lane D) with no string saying so. The label now names that consequence
+       when the piece is on the doll. W3: six rapid taps ran the second against
+       a row db.take had already spent and toasted "Could not melt that piece."
+       after a melt that worked; armToConfirm's `busy` swallows the burst. */
+    $$('[data-melt-gear]', content).forEach(btn => {
+      const g = GEAR_BY_ID[btn.dataset.meltGear];
+      const worn = !!g && gearLo[g.slot] === g.id;
+      armToConfirm(btn, worn ? `Tap again: melts ${g.name} and takes it off` : 'Tap again to melt', async () => {
+        const res = await disenchantGear(btn.dataset.meltGear);
+        if (!res.ok) { toast('Could not melt that piece.'); return; }
+        S.wardrobePreview = null; S.lookPreview = null;
+        popSound(S.sounds);
+        toast(`${res.name} melted into ${res.dust} Bone Dust. Its look is yours forever.`, 3200);
+        renderCharacter(wrap, 'wardrobe', { instant: true });
+      });
+    });
     $$('[data-petpick]', content).forEach(b => b.addEventListener('click', async () => {
       const petId = b.dataset.pet, tier = Number(b.dataset.tier), node = b.dataset.petpick;
       const meta = fighter.petMeta;

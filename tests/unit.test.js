@@ -5088,6 +5088,60 @@ test('R26 O6 after the Glutton sheet leaves the DOM its visibilitychange listene
   assert.equal(gone.length, 1, 'once the sheet is gone the SAME visibilitychange handler must be removed from document');
 });
 
+test('melt: the worn piece is named as coming off, the arm is armToConfirm, a burst tap melts once (QA round 22 W2, W3)', async () => {
+  /* W2: melting the equipped piece takes it off (disenchantGear clears the loadout
+   * slot) and nothing said so; the melt button had its own inline arm with a 2600
+   * literal, no .arming class, no haptic, no busy guard. W3: six rapid taps ran a
+   * second melt against a row db.take had already spent and toasted a failure
+   * after a melt that worked. This drives the REAL handler slice through the REAL
+   * armToConfirm with a fake button: two synchronous clicks on an armed button
+   * must call disenchantGear once and toast no failure. */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const start = src.indexOf("$$('[data-melt-gear]', content)");
+  const end = src.indexOf("$$('[data-petpick]', content)", start);
+  assert.ok(start > 0 && end > start, 'the melt handler moved: re-anchor this slice');
+  const handler = src.slice(start, end);
+  assert.ok(!/2600/.test(handler), 'the melt cool-off must be ARM_COOLOFF_MS, not a 2600 literal');
+  assert.match(handler, /armToConfirm\(btn/, 'the melt button must arm through armToConfirm (class, haptic, busy, cool-off)');
+  const helper = src.slice(src.indexOf('const ARM_COOLOFF_MS'), src.indexOf('function badgeIconHtml'));
+  assert.match(helper, /const ARM_COOLOFF_MS = 3200;/, 'ARM_COOLOFF_MS moved; the helper slice is stale');
+
+  const run = async (worn) => {
+    const calls = { melt: 0, toasts: [], haptic: 0, rendered: 0, timers: [] };
+    const g = { id: 'g-x', slot: 'H', name: 'Bone Crown', rarity: 'rare' };
+    const btn = {
+      dataset: { meltGear: 'g-x' }, isConnected: true, innerHTML: 'Melt · +12 dust',
+      classes: new Set(), classList: { add(c) { this.classes.add(c); }, remove(c) { this.classes.delete(c); } },
+      addEventListener(_, fn) { this.fire = fn; },
+    };
+    btn.classList.classes = btn.classes;
+    const env = {
+      $$: () => [btn], content: null, GEAR_BY_ID: { 'g-x': g }, gearLo: worn ? { H: 'g-x' } : {},
+      disenchantGear: async () => { calls.melt++; return calls.melt === 1 ? { ok: true, dust: 12, name: g.name } : { ok: false, reason: 'not-owned' }; },
+      toast: m => calls.toasts.push(m), S: {}, popSound: () => {}, renderCharacter: () => { calls.rendered++; },
+      wrap: null, esc: s => String(s), haptic: { heavy: () => { calls.haptic++; } },
+      setTimeout: (fn, ms) => { calls.timers.push(ms); return 0; }, clearTimeout: () => {},
+    };
+    new Function(...Object.keys(env), helper + '\n' + handler)(...Object.values(env));
+    const ev = { preventDefault() {}, stopPropagation() {} };
+    await btn.fire(ev);                        // arm
+    const label = btn.innerHTML, arming = btn.classes.has('arming'), cooloff = calls.timers[0];
+    const p1 = btn.fire(ev), p2 = btn.fire(ev); // burst: two taps in one frame on the armed button
+    await Promise.all([p1, p2]);
+    return { label, arming, cooloff, ...calls };
+  };
+  const w = await run(true);
+  assert.ok(w.label.includes('Bone Crown') && w.label.includes('takes it off'), `worn piece: arm label must name the piece and say it comes off, got "${w.label}"`);
+  assert.ok(w.arming, 'the armed melt button must carry .arming like every other spend');
+  assert.equal(w.cooloff, 3200, 'the melt cool-off must be ARM_COOLOFF_MS (3200)');
+  assert.equal(w.melt, 1, `a burst of two taps on the armed button must melt once, melted ${w.melt}`);
+  assert.deepEqual(w.toasts.filter(t => /Could not melt/.test(t)), [], 'a swallowed second tap is not a failure to report');
+  assert.equal(w.haptic, 1, 'the committing tap thumps once');
+  const u = await run(false);
+  assert.equal(u.label, 'Tap again to melt', `unworn piece: plain melt label, got "${u.label}"`);
+  assert.ok(!u.label.includes('takes it off'), 'an unworn piece is not "taken off"');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
