@@ -1,8 +1,8 @@
 /* "MEALS REMEMBER" HAS TO COVER THE WAY MOST PEOPLE LOG. 2026-09-02, R14-P9.
  *
  * mealDefault reads kv 'lastMealToday' so the add sheet reopens on the meal you
- * were just logging, and recordMealUsed writes it. Four paths commit a log row
- * and THREE of them called it: the search path, the relog path and the
+ * were just logging, and recordMealUsed writes it. Four paths committed a log row
+ * and THREE of them called it (a fifth, My foods, is row MYFOODS below): the search path, the relog path and the
  * copy-yesterday path. Quick add did not.
  *
  * Measured on the reviewer walk: after a Quick add to Dinner the add button
@@ -28,6 +28,12 @@
  *            the sheet and the reader can see a remembered meal at all, so QUICK
  *            failing means the feature is missing and not that the check is
  *            looking in the wrong place.
+ *   MYFOODS  (QA round 24 L10) the FIFTH path. A chip tap with nothing committed,
+ *            then "My foods", then a row: the portion sheet must open on the
+ *            tapped chip. Red on the pre-fix tip twice over: the tap left no mark
+ *            (recordMealUsed fired only on a commit) and renderFoods asked the
+ *            clock, so it opened on the hour default, which SETUP has already
+ *            proven differs from the tapped meal.
  *
  * Run: node tests/meal-memory-audit.mjs [baseUrl]
  */
@@ -120,6 +126,25 @@ const afterQuick = await openAdd();
 const picked = await searchAdd(control, 'banana');
 const afterSearch = await openAdd();
 
+/* MYFOODS: on the add sheet that is now open (on `control`), tap the `target` chip
+   and commit NOTHING, take the My foods route, open the first row on the Foods
+   page and read which portion chip is on. */
+await page.evaluate(m => document.querySelector(`#mealChips button[data-meal="${m}"]`)?.click(), target);
+await sleep(400);
+await page.evaluate(() => document.querySelector('#actMyFoods')?.click());
+await sleep(1400);
+const myFoods = await page.evaluate(() => {
+  const row = document.querySelector('#fList [data-food]');
+  if (!row) return { row: null };
+  row.click();
+  return { row: (row.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 32), hash: location.hash };
+});
+await sleep(1200);
+const portionOn = await page.evaluate(() => {
+  const chips = [...document.querySelectorAll('#pMealChips button')];
+  return { count: chips.length, on: chips.findIndex(c => c.classList.contains('on')) };
+});
+
 ok('SETUP the add sheet opened on a real chip row and both logged meals differ from the hour default',
   hourDefault.count >= 3 && hourDefault.on >= 0
     && target !== hourDefault.on && control !== hourDefault.on && target !== control
@@ -136,8 +161,13 @@ ok('CONTROL the search path still reopens on its meal (this row proves the drive
   afterSearch.on === control,
   `logged to ${control} (${hourDefault.labels[control]}), reopened on ${afterSearch.on} (${afterSearch.label})`);
 
+ok('MYFOODS a chip tap with nothing committed, then My foods, opens the portion sheet on the tapped meal',
+  myFoods.row && portionOn.count >= 3 && portionOn.on === target,
+  `tapped ${target} (${hourDefault.labels[target]}), My foods row "${myFoods.row}" at ${myFoods.hash}, portion chip on ${portionOn.on}` +
+  (portionOn.on === hourDefault.on ? ': the clock picked it, the tap was never read' : ''));
+
 await browser.close();
 console.log(fails.length
   ? `\n${fails.length} FAILED: ${fails.join(', ')}`
-  : '\nall four commit paths leave the same mark: the add sheet reopens where you were');
+  : '\nall five commit paths leave the same mark: the add sheet reopens where you were');
 process.exit(fails.length ? 1 : 0);

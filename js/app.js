@@ -7688,13 +7688,27 @@ function mealBlock(name, i, entries, yEntries, budget = 0) {
 // where mealForHour() would flip to dinner and force a re-selection.
 // Reads lastMealToday kv; on day boundary, falls back to mealForHour().
 // P0 ORIGIN: playtest found players flipped away from their meal by the clock.
+/* THE MEAL YOU PICKED IS REMEMBERED (QA round 24 L10). Measured: open the sheet
+   on Snacks, tap Dinner, close, reopen: Snacks. curMeal was closure state in
+   openAdd and recordMealUsed fired only on a committed row, so a tap alone left
+   no mark. Worse, "My foods" closed every sheet, left Today, and renderFoods
+   picked the meal BY THE CLOCK: a fifth commit path around the memory the other
+   four share (tests/meal-memory-audit.mjs, row MYFOODS). ONE precedence, in ONE
+   place, read by every reopen (the fab, restoreAddDraft, renderFoods):
+     a usable draft's meal  >  the meal remembered today  >  the clock.
+   The draft wins because it is the flow that was live at the reload; the
+   memory is lastMealToday, now written on every chip tap as well as on commit.
+   mealPrecedence is pure so tests/unit.test.js can run it; mealDefault only
+   fetches its two rows. */
+function mealPrecedence({ draft, last, date, hour, now = Date.now() }) {
+  if (addDraftUsable(draft, now) && Number.isInteger(draft.meal)) return draft.meal;
+  if (last !== null && typeof last === 'object' && last.date === date) return last.meal;
+  return mealForHour(hour);
+}
 async function mealDefault() {
-  const last = await kvGet('lastMealToday', null);
-  if (last !== null && typeof last === 'object' && last.date === S.date) {
-    return last.meal;
-  }
+  const [draft, last] = await Promise.all([kvGet('addDraft', null), kvGet('lastMealToday', null)]);
   const now = new Date();
-  return mealForHour(now.getHours() + now.getMinutes() / 60);
+  return mealPrecedence({ draft, last, date: S.date, hour: now.getHours() + now.getMinutes() / 60 });
 }
 
 // Record the meal a player just used, so the next log defaults to it.
@@ -7732,12 +7746,13 @@ function clearAddDraft() {
 async function restoreAddDraft() {
   const d = await kvGet('addDraft', null);
   if (!addDraftUsable(d) || currentTab() !== 'today' || sheetStack.length) return;
-  openAdd(d.meal || 0, d.q || '');
+  const meal = await mealDefault();   // L10: the one precedence; a usable draft's meal wins here
+  openAdd(meal, d.q || '');
   /* Only a food findFood still resolves (built-in or custom): an online result
      lived in S.onlineCache, which the reload emptied. The query is kept either
      way, so the search is one Enter from being back. */
   const food = d.sheet === 'portion' && d.foodId ? findFood(d.foodId) : null;
-  if (food) openPortion(food, { meal: d.meal || 0, sel: d.sel || null });
+  if (food) openPortion(food, { meal, sel: d.sel || null });
 }
 
 /* THE ONLINE ROW IN ITS THREE STATES (QA round 25, M21). Measured offline:
@@ -7835,6 +7850,7 @@ function openAdd(meal = 0, q0 = '') {
     curMeal = Number(c.dataset.meal);
     setChipOn($$('#mealChips button', wrap), c);   // M17: .on and aria-pressed together
     stampAddDraft({ meal: curMeal });   // M16
+    recordMealUsed(curMeal).catch(() => {});   // L10: a tap is a decision; the reopen reads it
     // L4: the recents are ranked per meal, so a chip change re-ranks them
     // (only while the default list is showing; a live search is left alone).
     if (!input.value.trim()) showDefault();
@@ -8180,6 +8196,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
   $$('#pMealChips button', wrap).forEach(c => c.addEventListener('click', () => {
     curMeal = Number(c.dataset.meal);
     setChipOn($$('#pMealChips button', wrap), c);   // M17: .on and aria-pressed together
+    recordMealUsed(curMeal).catch(() => {});   // L10: same memory as the add sheet's chips
     preview(); // the all-meals bonus depends on which meal this lands in
   }));
 
@@ -10461,9 +10478,10 @@ async function renderFoods(el) {
     bind();
   }
   function bindRows(root) {
-    $$('[data-food]', root).forEach(b => b.addEventListener('click', () => {
+    $$('[data-food]', root).forEach(b => b.addEventListener('click', async () => {
       const f = findFood(b.dataset.food);
-      if (f) openPortion(f, { meal: mealForHour(new Date().getHours()) });
+      // L10: the meal you picked on the add sheet, not the clock (mealDefault owns the precedence)
+      if (f) openPortion(f, { meal: await mealDefault() });
     }));
   }
   function bind() {
@@ -13905,6 +13923,16 @@ function enterAppFromOnboarding() {
    a new bare put to the log store. The browser guard is
    tests/log-write-failure-audit.mjs (FAIL=log and FAIL=xp). */
 async function commitLogEntry(e, btn, via = null) {
+  /* MIDNIGHT IS A DECISION, NOT A TIMER (QA round 24 L17). With the app open on
+     Today, a log at 00:00 landed on YESTERDAY while dateKey() already said today:
+     rollDayIfNeeded ran only on resume and on a 60 s interval (measured catch-up
+     45,038 ms), and every caller stamps `date: S.date` when it builds the row.
+     So the commit asks the clock first. If the roll moved the day, a FRESH row
+     built for the day that just ended follows it; an edit (a row already in the
+     store) keeps the day it was eaten on. The timer stays for the idle case. */
+  const dayBefore = S.date;
+  await rollDayIfNeeded();
+  if (S.date !== dayBefore && e.date === dayBefore && !(await db.get('log', e.id))) e.date = S.date;
   try {
     await db.put('log', e);
   } catch (err) {

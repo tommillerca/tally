@@ -4493,6 +4493,111 @@ test('Survey v2 S3 (e): a failed post keeps the exact body pending and a retry d
   assert.match(bootBody, /addEventListener\('online', \(\) => \{ drainSurvey2Pending\(\)/, "the 'online' event no longer retries a pending survey");
 });
 
+/* ---- QA round 24, L10: the meal you picked is remembered, and My foods reads it ----
+   Measured: open the sheet on Snacks, tap Dinner, close, reopen: Snacks. curMeal
+   was closure state and recordMealUsed fired only on a committed row. And
+   renderFoods (the "My foods" route) picked the meal BY THE CLOCK, a fifth commit
+   path around the memory the other four share. Runs the REAL mealPrecedence out
+   of js/app.js (with the real addDraftUsable and mealForHour) and pins, statically,
+   that every reopen reads it: renderFoods no longer calls mealForHour, mealDefault
+   is the only caller, and both chip handlers write the memory on a tap.
+   Prove-red on the pre-fix tip: the first assert (mealPrecedence absent). */
+test('R24-L10 mealPrecedence is draft > remembered meal > clock, and every reopen reads it', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const ttl = app.match(/const ADD_DRAFT_TTL = [^\n]+\n/);
+  const usable = app.match(/function addDraftUsable\([\s\S]*?\n\}\n/);
+  const prec = app.match(/function mealPrecedence\([\s\S]*?\n\}\n/);
+  assert.ok(ttl && usable, 'ADD_DRAFT_TTL / addDraftUsable not found in js/app.js');
+  assert.ok(prec, 'mealPrecedence not found in js/app.js: the reopen meal has no single owner (L10)');
+  const mealPrecedence = new Function('mealForHour', `${ttl[0]}${usable[0]}${prec[0]}; return mealPrecedence;`)(mealForHour);
+  const now = 1_700_000_000_000, date = '2026-09-04', hour = 8;   // 08:00 is breakfast (0) by the clock
+  assert.equal(mealForHour(hour), 0, 'precondition: the clock says breakfast');
+  // 1. a usable draft wins over the memory and the clock
+  assert.equal(mealPrecedence({ draft: { meal: 2, q: 'ban', ts: now - 1000 }, last: { date, meal: 1 }, date, hour, now }), 2);
+  // 2. no draft: the meal remembered today wins over the clock
+  assert.equal(mealPrecedence({ draft: null, last: { date, meal: 1 }, date, hour, now }), 1, 'the remembered meal lost to the clock');
+  // 3. a chip-tap-only draft (nothing typed or picked) is not usable: the memory carries the tap
+  assert.equal(mealPrecedence({ draft: { meal: 2, q: '', ts: now - 1000 }, last: { date, meal: 3 }, date, hour, now }), 3);
+  // 4. a stale draft and yesterday's memory both fall through to the clock
+  assert.equal(mealPrecedence({ draft: { meal: 2, q: 'ban', ts: now - 25 * 3600e3 }, last: { date: '2026-09-03', meal: 1 }, date, hour, now }), 0);
+  assert.equal(mealPrecedence({ draft: null, last: null, date, hour, now }), 0);
+  // the one place: mealDefault feeds mealPrecedence, and nothing else asks the clock
+  const md = app.match(/async function mealDefault\(\) \{([\s\S]*?)\n\}\n/);
+  assert.ok(md && /mealPrecedence\(/.test(md[1]), 'mealDefault no longer routes through mealPrecedence');
+  const clockCalls = app.match(/\bmealForHour\([^)]/g) || [];
+  assert.equal(clockCalls.length, 1, `js/app.js asks mealForHour in ${clockCalls.length} places; only mealPrecedence may (a second one is a path around the meal memory)`);
+  // renderFoods (My foods) reads the precedence, not the clock
+  const rfStart = app.indexOf('async function renderFoods(el)');
+  assert.ok(rfStart > 0, 'renderFoods not found');
+  const rf = app.slice(rfStart, app.indexOf('\nasync function ', rfStart + 10));
+  assert.ok(!/mealForHour\(/.test(rf), 'renderFoods picks the meal by the clock again (the fifth commit path, L10)');
+  assert.ok(/openPortion\(f, \{ meal: await mealDefault\(\) \}\)/.test(rf), 'renderFoods does not open the portion sheet on mealDefault()');
+  // a chip tap writes the memory, on both chip sets
+  for (const id of ['#mealChips', '#pMealChips']) {
+    const i = app.indexOf(`$$('${id} button', wrap).forEach(c => c.addEventListener('click', () => {`);
+    assert.ok(i > 0, `${id} click handler not found`);
+    const handler = app.slice(i, app.indexOf('\n  }));', i));
+    assert.ok(/recordMealUsed\(curMeal\)/.test(handler), `${id} tap no longer records the meal: closing and reopening forgets the chip (L10)`);
+  }
+});
+
+/* ---- QA round 24, L17: midnight is a decision, not a timer ----
+   With the app open on Today, a log at 00:00 landed on YESTERDAY while dateKey()
+   already said today: rollDayIfNeeded ran only on resume and on a 60 s interval
+   (measured catch-up 45,038 ms), and the callers stamp `date: S.date` when they
+   build the row. Pins the source order (the roll precedes the write) and runs the
+   REAL rollDayIfNeeded + commitLogEntry out of js/app.js with a clock that has
+   crossed midnight: a fresh row follows the day, an edit keeps its day.
+   Prove-red on the pre-fix tip: the source-order assert (no rollDayIfNeeded in
+   commitLogEntry). */
+test('R24-L17 commitLogEntry rolls the day before the row is written, and a fresh row follows it', async () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const cle = app.match(/\nasync function commitLogEntry\(e, btn, via = null\) \{([\s\S]*?)\n\}\n/);
+  assert.ok(cle, 'commitLogEntry not found');
+  const roll = cle[1].indexOf('await rollDayIfNeeded()'), put = cle[1].indexOf("db.put('log', e)");
+  assert.ok(roll >= 0 && roll < put, 'commitLogEntry does not roll the day before db.put: a log at 00:00 lands on yesterday until the 60 s timer fires (L17)');
+  const rdn = app.match(/let _dayAnchor = dateKey\(\);\nlet _rolling = false;\nasync function rollDayIfNeeded\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(rdn, 'rollDayIfNeeded (with its _dayAnchor / _rolling) not found in js/app.js');
+
+  let clock = '2026-09-03';                       // the anchor is taken at 23:59
+  const S = { settings: { targets: {} }, date: '2026-09-03' };
+  const store = new Map([['old', { id: 'old', date: '2026-09-03', meal: 2, kcal: 300 }]]);
+  const db = {
+    put: async (st, v) => { store.set(v.id, { ...v }); },
+    get: async (st, id) => store.get(id) || undefined,
+  };
+  const routed = [];
+  const load = () => new Function('S', 'db', 'dateKey', 'awardDayCloseIfDue', 'route', 'toast', 'maybeShowDailyWheel',
+    'refreshNotifSchedules', 'recordMealUsed', 'onFoodLogged', 'entriesFor', 'trackEvent',
+    `${rdn[0]}${cle[0]}; return { commitLogEntry, rollDayIfNeeded };`)(
+    S, db, () => clock, async () => null, () => routed.push(S.date), () => {}, () => Promise.resolve(false),
+    () => {}, async () => {}, async () => ({ xp: 10 }), async () => [], () => {});
+  const { commitLogEntry } = load();
+
+  clock = '2026-09-04';                           // midnight passed; the 60 s timer has not fired
+  assert.equal(S.date, '2026-09-03', 'precondition: the app still sits on yesterday');
+  const fresh = { id: 'new', date: S.date, meal: 3, kcal: 120 };   // what quickAddEntry / openPortion build
+  const game = await commitLogEntry(fresh, null);
+  assert.equal(S.date, '2026-09-04', 'the commit did not roll the day');
+  assert.equal(store.get('new').date, '2026-09-04', 'a log at 00:00 was written to the day that had ended (L17)');
+  assert.deepEqual(routed, ['2026-09-04'], 'rollDayIfNeeded did not behave as it does on the timer (route on the new day)');
+  assert.ok(game && game.xp === 10, 'the commit lost its receipt');
+
+  // an EDIT of a row eaten yesterday keeps yesterday, even across the same roll
+  const S2 = { settings: { targets: {} }, date: '2026-09-03' };
+  clock = '2026-09-03';
+  const again = new Function('S', 'db', 'dateKey', 'awardDayCloseIfDue', 'route', 'toast', 'maybeShowDailyWheel',
+    'refreshNotifSchedules', 'recordMealUsed', 'onFoodLogged', 'entriesFor', 'trackEvent',
+    `${rdn[0]}${cle[0]}; return { commitLogEntry };`)(
+    S2, db, () => clock, async () => null, () => {}, () => {}, () => Promise.resolve(false),
+    () => {}, async () => {}, async () => ({ xp: 0 }), async () => [], () => {});
+  clock = '2026-09-04';
+  await again.commitLogEntry({ ...store.get('old'), kcal: 350 }, null);
+  assert.equal(S2.date, '2026-09-04');
+  assert.equal(store.get('old').date, '2026-09-03', 'editing a row eaten yesterday moved it to today');
+  assert.equal(store.get('old').kcal, 350);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
