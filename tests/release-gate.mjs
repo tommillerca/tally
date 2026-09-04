@@ -151,6 +151,11 @@ if (own) console.log(`serving this repo at ${base}\n`);
    against PROD_API, which is how production went 73 -> 93 players in a day. It
    drives godmode's maskWebdriver with a stand-in page rather than grepping for
    it, so it is still instant and still needs no browser. */
+/* football-kit-audit is PURE for the same reason pet-accessory-lint is: it
+   imports data/football-teams.js and data/boneheadz.js, decodes the eight kit
+   PNGs with node:zlib and composites the tint in process. No browser, 0.2s, and
+   it is the only thing standing between an art revision and 256 items in the
+   wrong colour, so it belongs on every gate run rather than in --all. */
 /* render-sink-lint is PURE for the same reason guard-hygiene-lint is: it reads
    js/*.js and finishes instantly. It exists because packCardHtml's `stats` slot
    and openPackReveal's `footerNote` were raw HTML held up by ONE caller
@@ -208,7 +213,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
 /* drip-badge-audit is PURE for the same reason (mem-idb under the real js/db.js
    and js/game.js, ~1s): QA round 23 F4, the Full drip badge counts the look the
    player actually wears (transmog resolved, a hidden slot is not drip). */
-const PURE = ['today-reads-lint.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs', 'unit.test.js', 'log-xp-farm-audit.mjs', 'drip-badge-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs', 'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs', 'render-sink-lint.mjs'];
+const PURE = ['today-reads-lint.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs', 'unit.test.js', 'log-xp-farm-audit.mjs', 'drip-badge-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs', 'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs', 'render-sink-lint.mjs', 'football-kit-audit.mjs'];
 const BROWSER = [
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
      repo has watched shape assertions stay green over broken state, so this one
