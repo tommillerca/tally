@@ -34,9 +34,12 @@ function view(st) {
 // today's healthy-behaviour signal: steps walked. Meals deliberately excluded.
 async function todaySignals() {
   const today = dateKey();
-  const health = await db.all('health');
-  const steps = health.filter(h => h.date === today).reduce((a, h) => a + (h.steps || 0), 0);
-  return { steps };
+  /* QA round 25 M13 follow-up: this was a full 'health' scan filtered to one
+     date, on every Today, Pit and wallet-pill refresh. The store's keyPath IS
+     the date (js/db.js createObjectStore('health', { keyPath: 'date' })), so
+     one row per day and one keyed get answers it. */
+  const row = await db.get('health', today);
+  return { steps: (row && row.steps) || 0 };
 }
 
 // Recompute today's energy, awarding Vigor from STEPS IDEMPOTENTLY
