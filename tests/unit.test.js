@@ -11,7 +11,7 @@ import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, kcalConsistent,
   dateKey, addDays, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
-  assumedActiveBurn, activeCalorieBonus, bmrMifflin, kcalFloor, gramsChipDefault,
+  assumedActiveBurn, activeCalorieBonus, bmrMifflin, kcalFloor, gramsChipDefault, fmtG,
 } from '../js/nutrition.js';
 import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume } from '../js/cooking.js';
 import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
@@ -4041,6 +4041,95 @@ test('Crew count reads N+ with a note when the server truncated the bucket', () 
   assert.match(app, /` · \$\{crewCount\(data\.friends, truncated\)\}`/, 'the fan count is not built through crewCount');
   assert.match(app, /truncBox\.hidden = unreached \|\| !truncated;/, 'the fan note is not hidden when the list is complete');
   assert.match(app, /id="cfanTrunc" hidden/, 'the fan note has no mount in the Crew markup');
+});
+
+/* A BLOWN DAY LOOKED LIKE A PERFECT ONE. QA round 24 L8: macroRow had no over
+   branch and the bar clamps at 100%, so 299 g of fat against 71 rendered byte-
+   identical to 71 against 71, and 419 g of protein against 185 still wore the
+   green hit dot. Runs the REAL macroRow (sliced with calorieRingCard and
+   shownTotals, the three live together). Prove-red on the integ tip: the
+   over-class assertion; 299/71 and 71/71 differed only in the printed number. */
+test('L8 macroRow shows an over state and drops the hit dot past the protein band', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('function calorieRingCard('), b = app.indexOf('\nconst bubbleSideCache');
+  assert.ok(a > 0 && b > a, 'calorieRingCard/macroRow are not where the slice expects');
+  const { macroRow } = new Function('fmtG', 'ICONS', 'dayTotals',
+    `${app.slice(a, b)}; return { macroRow };`)(fmtG, { check: () => '<svg/>' }, dayTotals);
+  const fatOver = macroRow('Fat', 299, 71, 'fat', 100, false);
+  const fatHit = macroRow('Fat', 71, 71, 'fat', 100, false);
+  const fatUnder = macroRow('Fat', 70, 71, 'fat', 98.6, false);
+  assert.match(fatOver, /class="macro over"/, '299/71 fat does not carry the over class');
+  assert.ok(fatOver.includes('228 over'), `299/71 fat does not read its overage ("228 over"): ${fatOver}`);
+  assert.ok(fatOver.includes('299 / 71 g'), 'the reading itself must stay "299 / 71 g"');
+  assert.ok(!/-\d/.test(fatOver), 'an overage is never printed negative');
+  for (const [html, name] of [[fatHit, '71/71'], [fatUnder, '70/71']]) {
+    assert.ok(!html.includes('over'), `${name} fat carries an over marker it has not earned`);
+    assert.ok(!html.includes('hit-dot'), `${name} fat grew a hit dot (only protein has one)`);
+  }
+  assert.ok(fatUnder.includes('70 / 71 g') && fatUnder.includes('width:98.6%'), '70/71 no longer renders as before');
+  // protein: over is fine up to 1.5x the target, past that the dot goes and the row reads over
+  const pWay = macroRow('Protein', 419, 185, 'protein', 100, true);
+  const pHit = macroRow('Protein', 200, 185, 'protein', 100, true);
+  assert.ok(!pWay.includes('hit-dot') && !pWay.includes('glow'), '419/185 protein still wears the "target hit" dot');
+  assert.ok(pWay.includes('macro over') && pWay.includes('234 over'), '419/185 protein does not read as over');
+  assert.ok(pHit.includes('hit-dot') && pHit.includes('glow') && !pHit.includes('over'), '200/185 protein lost its hit dot: the band is too tight');
+  assert.ok(app.indexOf('function shownTotals(') > a && app.indexOf('function shownTotals(') < b, 'shownTotals is not in js/app.js: the ring rounds the raw sum again');
+  assert.match(app, /const tot = shownTotals\(entries\);/, 'renderToday no longer builds its ring total through shownTotals');
+  assert.match(app, /const tToday = shownTotals\(byDate\[dateKey\(\)\] \|\| \[\]\);/, 'the Trends ring no longer rounds the way Today does');
+});
+
+/* THE RING SAID 1,023, THE ROWS ADDED TO 1,022. Same ticket: the ring rounded
+   the raw sum, each meal row rounds its own entry, and a .5 boundary splits
+   them. Runs the REAL calorieRingCard and the REAL mealBlock on one seeded day
+   whose raw total lands on exactly .5 and asserts the ring's number equals the
+   sum of the row numbers. Prove-red on the integ tip: the shownTotals presence
+   assertion (the helper did not exist); with the helper mutated back to the raw
+   dayTotals the equality assertion is the one that fires (1023 vs 1022). */
+test('L8 the ring headline and the meal rows agree on a .5-boundary day', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('function calorieRingCard('), b = app.indexOf('\nconst bubbleSideCache');
+  const c = app.indexOf('function mealBlock('), d = app.indexOf('\n\n/* ================= meal defaults');
+  assert.ok(a > 0 && b > a && c > 0 && d > c, 'calorieRingCard or mealBlock moved');
+  assert.ok(app.indexOf('function shownTotals(') > a && app.indexOf('function shownTotals(') < b, 'shownTotals is not in js/app.js: the ring rounds the raw sum, the rows round each entry');
+  const { calorieRingCard, shownTotals } = new Function('fmtG', 'ICONS', 'dayTotals',
+    `${app.slice(a, b)}; return { calorieRingCard, shownTotals };`)(fmtG, { check: () => '<svg/>' }, dayTotals);
+  const mealBlock = new Function('esc', 'emptyMealLine', 'shownTotals', 'dayTotals',
+    `${app.slice(c, d)}; return mealBlock;`)(String, () => '', shownTotals, dayTotals);
+  const mk = (id, kcal) => ({ id, name: id, meal: 0, kcal, p: 10, c: 10, f: 10, fiber: 0, sugar: 0, sodium: 0 });
+  const entries = [mk('a', 340.4), mk('b', 340.4), mk('c', 341.7)];   // raw 1022.5: round-of-sum 1023, sum-of-rounded 1022
+  assert.equal(dayTotals(entries).kcal, 1022.5, 'the seed must sit on the .5 boundary or this test proves nothing');
+  const tot = shownTotals(entries);
+  const t = { kcal: 2570, p: 185, c: 298, f: 71 };
+  const ring = calorieRingCard({ tot, t, over: false, remaining: t.kcal - tot.kcal, protHit: false, startBig: tot.kcal, live: false });
+  const rows = mealBlock('Breakfast', 0, entries, []);
+  const rowSum = [...rows.matchAll(/<span class="kc">(\d+)<\/span>/g)].map(m => Number(m[1])).reduce((x, y) => x + y, 0);
+  assert.equal(rowSum, 1022, 'the seeded rows should add to 1022');
+  const big = Number(ring.match(/<div class="big"[^>]*>([\d,]+)</)[1].replace(',', ''));
+  const eaten = Number(ring.match(/<span>Eaten<\/span><b>([\d,]+)</)[1].replace(',', ''));
+  assert.equal(big, rowSum, `ring headline ${big} disagrees with the meal rows ${rowSum}`);
+  assert.equal(eaten, rowSum, `ring "Eaten" ${eaten} disagrees with the meal rows ${rowSum}`);
+  assert.ok(rows.includes('>1,022 kcal<'), 'the meal heading rounds differently from its own rows');
+});
+
+/* THE PROTEIN AVERAGE ALWAYS DIVIDED BY SEVEN. QA round 25 M8: a blank week
+   read "0 g protein avg / day", one missed day understated 148 g as 127, a
+   day-one install read 23 g. The calorie stat one line above divided by days
+   logged and said so. Runs the REAL loggedAvg both stats now share, and pins
+   the protein line to it. Prove-red on the integ tip: the `/ 7` assertion. */
+test('M8 the protein average divides by logged days and is labelled that way', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(!/const pAvg = [^\n]*\/ 7;/.test(app), 'the protein average still divides by a literal 7');
+  const a = app.indexOf('function loggedAvg('), b = app.indexOf('\nasync function renderTrends(');
+  assert.ok(a > 0 && b > a, 'loggedAvg is not in js/app.js');
+  const loggedAvg = new Function(`${app.slice(a, b)}; return loggedAvg;`)();
+  const day = (p, logged) => ({ p, kcal: logged ? 1800 : 0, logged });
+  const week = [day(148, true), day(0, false), day(148, true), day(0, false), day(0, false), day(148, true), day(0, false)];
+  assert.equal(loggedAvg(week, 'p'), 148, '3 logged days at 148 g must average 148, not 63');
+  assert.equal(loggedAvg(week.map(() => day(0, false)), 'p'), null, 'a blank week must be the empty state, not 0');
+  assert.equal(loggedAvg(week, 'kcal'), 1800, 'the calorie stat runs through the same helper');
+  assert.match(app, /loggedAvg\(days7, 'p'\) != null \? `\$\{loggedAvg\(days7, 'p'\)\} g` : '·'/, 'the protein stat does not render loggedAvg with the calorie stat\'s "·" empty state');
+  assert.ok(app.includes('protein avg / logged day · target'), 'the protein stat is not labelled "/ logged day" like the calorie stat');
+  assert.match(app, /loggedAvg\(days14, 'kcal'\)\?\.toLocaleString\(\) \?\? '·'/, 'the calorie stat left the shared helper');
 });
 
 await runAll();

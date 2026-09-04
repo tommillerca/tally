@@ -63,7 +63,11 @@ await page.evaluate(async () => {
     tx.objectStore('log').put({
       id: 'v279-protein', date, meal: 'lunch', ts: Date.now(), foodId: null,
       name: 'Audit Protein Slab', brand: null, portionLabel: '1 slab', sel: {},
-      kcal: 900, p: 250, c: 10, f: 10, fiber: 0, sugar: 0, sodium: 0,
+      /* 150, not 250. The demo day already logs ~94 g and the target is 185 g;
+         since QA r24 L8 the hit dot holds only to 1.5x target (277 g) and past
+         that the row reads over, so 250 (344 g, 1.86x) would drop the very dot
+         this check wants. 150 lands at ~244 g: hit, with margin either way. */
+      kcal: 900, p: 150, c: 10, f: 10, fiber: 0, sugar: 0, sodium: 0,
     });
     tx.oncomplete = res; tx.onerror = () => rej(tx.error);
   });

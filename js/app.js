@@ -3684,7 +3684,7 @@ async function renderToday(el) {
     { period: 'week', label: 'THIS WEEK', quests: weeklyQuests(S.date, qopts), ctx: questCtx('week', qbase) },
     { period: 'month', label: 'THIS MONTH', quests: monthlyQuests(S.date, qopts), ctx: questCtx('month', qbase) },
   ];
-  const tot = dayTotals(entries);
+  const tot = shownTotals(entries);   // sum of the rounded rows, so the ring agrees with them (L8)
   const remaining = Math.round(t.kcal - tot.kcal);
   /* The zero guard its sibling at hudPct already has. NOT reachable today:
      computeTargets floors kcal at 1200 and the manual editor's own minimum is
@@ -4521,11 +4521,41 @@ function calorieRingCard({ tot, t, over, remaining, protHit, startPct = 0, start
   </div>`;
 }
 
+/* OVER IS A STATE, NOT A FULL BAR. QA round 24 L8: the bars clamp at 100% and
+   this row had no over branch, so 299 g of fat against a 71 g target rendered
+   pixel-identical to 71 against 71, and 419 g of protein against 185 still wore
+   the green "target hit" dot. A blown day read as a perfect one.
+   Now: the bar still fills to 100% (the width is clamped upstream and stays
+   so), the row gains `over`, the bar gets an end-cap marker (app.css), and a
+   quiet line underneath reads the overage the way the ring does ("228 over":
+   absolute, never negative, never a scolding). Protein is different: over on
+   protein is fine up to a point, so the hit dot and glow hold until 1.5x the
+   target and only past that does the row flip to over. Carbs and fat flip on
+   any excess that rounds to a gram. `glow` is only ever true for protein-at-
+   target (calorieRingCard passes false for the other two), which is why it
+   doubles as the "this is protein" flag here. */
 function macroRow(label, val, target, cls, prevPct = 0, glow = false) {
-  return `<div class="macro">
-    <div class="row"><span>${label}${glow ? ` <span class="hit-dot">${ICONS.check(11)}</span>` : ''}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
-    <div class="bar ${cls} ${glow ? 'glow' : ''}"><i style="width:${prevPct}%"></i></div>
+  const overBy = Math.round(val - target);
+  const over = glow ? val > target * 1.5 : overBy > 0;
+  const hit = glow && !over;
+  return `<div class="macro${over ? ' over' : ''}">
+    <div class="row"><span>${label}${hit ? ` <span class="hit-dot">${ICONS.check(11)}</span>` : ''}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
+    <div class="bar ${cls} ${hit ? 'glow' : ''}"><i style="width:${prevPct}%"></i></div>
+    ${over ? `<div class="over-by">${overBy.toLocaleString()} over</div>` : ''}
   </div>`;
+}
+
+/* ONE ROUNDING FOR THE WHOLE SCREEN. QA round 24 L8: the ring headline read
+   1,023 while the meal rows under it summed to 1,022. The ring rounded the raw
+   sum; each row rounds its own entry; 340.4 + 340.4 + 341.7 lands on a .5 and
+   the two disagree by one. The rows are the atoms a person adds up, so the
+   day's shown kcal is defined as the sum of the shown rows. Macros are left as
+   dayTotals returns them (fmtG rounds those once, at display). Display only:
+   budget and crate logic keep the raw dayTotals in js/db.js. */
+function shownTotals(entries) {
+  const tot = dayTotals(entries);
+  tot.kcal = entries.reduce((a, e) => a + Math.round(e.kcal || 0), 0);
+  return tot;
 }
 
 const bubbleSideCache = {};
@@ -7604,7 +7634,7 @@ function signOffLine(count, tot, targets) {
 }
 
 function mealBlock(name, i, entries, yEntries, budget = 0) {
-  const kcal = Math.round(dayTotals(entries).kcal);
+  const kcal = shownTotals(entries).kcal;   // already the sum of the rounded rows (L8)
   const over = budget > 0 && kcal > budget;
   return `<section class="meal">
     <div class="meal-head">
@@ -9333,6 +9363,17 @@ function stepAvgWithToday(days) {
   return { avg: Math.round(sum / n), weight: w, partial: today.steps > 0 };
 }
 
+/* AVERAGE OVER THE DAYS THAT EXIST. QA round 25 M8: the protein stat divided by
+   a literal 7 while the calorie stat one line above divided by days logged. A
+   blank week read "0 g protein avg / day"; one missed day understated a real
+   148 g as 127; a day-one install read 23 g. Both stats now come through here,
+   so the denominator cannot drift apart again. null when nothing is logged,
+   which the callers render as the same '·' the calorie stat always has. */
+function loggedAvg(days, key) {
+  const logged = days.filter(d => d.logged);
+  return logged.length ? Math.round(logged.reduce((a, d) => a + d[key], 0) / logged.length) : null;
+}
+
 async function renderTrends(el) {
   const t = S.settings.targets;
   const weights = (await db.all('weights')).sort((a, b) => a.date.localeCompare(b.date));
@@ -9394,9 +9435,7 @@ async function renderTrends(el) {
   const xp = await totalXp();
   const lvl = levelFor(xp);
   const earned = await earnedBadgeIds();
-  const pAvg = days7.reduce((a, d) => a + d.p, 0) / 7;
   const loggedDays7 = days7.filter(d => d.logged).length;
-  const kcalLogged14 = days14.filter(d => d.logged);
 
   /* Today COUNTS now, at the share of a normal day's steps that has actually
      happened (see stepAvgWithToday). It used to be excluded outright. */
@@ -9416,7 +9455,7 @@ async function renderTrends(el) {
      window of days, and an unlabelled daily ring on a weekly page reads as a
      period summary. `live: false` drops the ids, so Today's tween keeps hunting
      exactly one element and this copy is simply static. */
-  const tToday = dayTotals(byDate[dateKey()] || []);
+  const tToday = shownTotals(byDate[dateKey()] || []);   // same rounding as Today's ring (L8)
   const remToday = t.kcal - tToday.kcal;
 
   el.innerHTML = `
@@ -9480,9 +9519,9 @@ async function renderTrends(el) {
 
   <div class="card">
     <div class="card-title">INTAKE · CALORIES 14D · PROTEIN 7D</div>
-    <div class="big-stat"><span class="v">${kcalLogged14.length ? Math.round(kcalLogged14.reduce((a, d) => a + d.kcal, 0) / kcalLogged14.length).toLocaleString() : '·'}</span><span class="d">avg kcal / logged day · target ${t.kcal.toLocaleString()}</span></div>
+    <div class="big-stat"><span class="v">${loggedAvg(days14, 'kcal')?.toLocaleString() ?? '·'}</span><span class="d">avg kcal / logged day · target ${t.kcal.toLocaleString()}</span></div>
     <div class="chart">${kcalChart(days14.map(d => ({ date: d.date, tot: { kcal: d.kcal } })), t.kcal)}</div>
-    <div class="big-stat" style="margin-top:12px"><span class="v">${Math.round(pAvg)} g</span><span class="d">protein avg / day · target ${t.p} g</span></div>
+    <div class="big-stat" style="margin-top:12px"><span class="v">${loggedAvg(days7, 'p') != null ? `${loggedAvg(days7, 'p')} g` : '·'}</span><span class="d">protein avg / logged day · target ${t.p} g</span></div>
     <div class="chart">${proteinChart(days7.map(d => ({ date: d.date, tot: { p: d.p } })), t.p)}</div>
     ${loggedDays7 < 5 ? '<p class="note" style="margin-top:8px">Log most days for a meaningful average.</p>' : ''}
   </div>

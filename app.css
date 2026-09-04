@@ -730,6 +730,13 @@ a { color: var(--accent); text-decoration: none; }
 .xp-row.dim { color: var(--text-3); border-bottom-style: dashed; }
 
 .macro .hit-dot { color: var(--protein); font-weight: 800; font-size: 11px; }
+/* The over state (QA r24 L8, see macroRow). The bar is still full; the end cap
+   is what says "and then some", because carbs' own colour IS --amber, so no
+   fill colour could carry it. --text is the one token that reads against all
+   three macro fills. The line under it is the ring's "N over" at row scale. */
+.macro.over .bar { position: relative; }
+.macro.over .bar::after { content: ''; position: absolute; right: 0; top: 0; height: 100%; width: 3px; background: var(--text); }
+.macro .over-by { font-size: 11px; color: var(--text-3); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; margin-top: -2px; }
 .bar.glow i { box-shadow: 0 0 10px rgba(111, 208, 255, 0.65); }
 .bar.steps i { background: var(--accent); }
 
