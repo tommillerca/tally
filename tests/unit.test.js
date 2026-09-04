@@ -4132,6 +4132,60 @@ test('M8 the protein average divides by logged days and is labelled that way', (
   assert.match(app, /loggedAvg\(days14, 'kcal'\)\?\.toLocaleString\(\) \?\? '·'/, 'the calorie stat left the shared helper');
 });
 
+/* ---- QA round 25 M9 / M23: the wipe says nothing, and persist() is asked and ignored ----
+   Measured: 3,780 rows to zero in 72 ms, the reloaded tab booted with #toast
+   EMPTY (nothing was ever queued: both wipe paths call eraseAll() then
+   location.reload(), and toast() state dies with the document), and
+   `persisted()` read false with a year of data because db.js discarded the
+   answer. The wipe half runs the REAL js/db.js eraseAll under mem-idb; the
+   boot half is a static read of app.js because app.js cannot load in node. */
+test('QA round 25 M9(a): eraseAll leaves the erased flag for the reloaded tab, and boot toasts erasure from it', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-m9-wipe');
+  /* node has a real BroadcastChannel and an open one keeps the process alive
+     forever (this runner has no process.exit on success), so the wipe protocol
+     runs its single-tab degrade path here. */
+  globalThis.BroadcastChannel = undefined;
+  const store = new Map();
+  globalThis.sessionStorage = { getItem: k => store.has(k) ? store.get(k) : null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) };
+  await dbm.kvSet('probe', 1);
+  await dbm.eraseAll();
+  assert.equal(typeof dbm.ERASED_FLAG, 'string', 'db.js exports ERASED_FLAG');
+  assert.equal(store.get(dbm.ERASED_FLAG), '1', 'eraseAll did not leave the erased flag for the reload to read');
+  assert.equal(await dbm.kvGet('probe', null), null, 'the flag must ride sessionStorage, not a kv row the wipe just cleared');
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const m = app.match(/sessionStorage\.getItem\(ERASED_FLAG\)[\s\S]{0,240}?toast\('([^']+)'/);
+  assert.ok(m, 'boot does not read ERASED_FLAG and toast a literal');
+  assert.match(m[1], /erased/i, 'the post-wipe toast does not mention erasure');
+});
+test('QA round 25 M9(b): the erase confirm carries the no-recovery-code sentence only when no code exists', async () => {
+  const s = await import('../js/social.js');
+  assert.equal(typeof s.recoveryWarning, 'function', 'social.js exports recoveryWarning');
+  assert.match(s.NO_RECOVERY_CODE_MSG, /^No recovery code yet\. Delete the app and this account is gone/, 'the existing sentence, not a new one');
+  assert.equal(s.recoveryWarning(true, 'ABC123'), '', 'with a phrase AND an id the confirm stays as it was');
+  assert.equal(s.recoveryWarning(false, 'ABC123'), s.NO_RECOVERY_CODE_MSG, 'no phrase');
+  assert.equal(s.recoveryWarning(true, null), s.NO_RECOVERY_CODE_MSG, 'phrase but no recovery id (the v230 gap)');
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf("$('#eraseBtn')"), b = app.indexOf("name: 'Erase' }"), c = app.indexOf("name: 'DeleteAccount'");
+  assert.ok(a > 0 && b > a && c > b, 'erase sheet anchors moved');
+  assert.ok(!app.slice(a, b).includes('No recovery code yet'), 'the sentence is baked into the template for the with-code state too');
+  assert.match(app.slice(b, c), /recoveryWarning\(/, 'the Erase confirm never asks recoveryWarning');
+  assert.equal((app.match(/No recovery code yet\. Delete the app/g) || []).length, 0, 'app.js still carries its own copy of the sentence; reuse social.NO_RECOVERY_CODE_MSG');
+});
+test('QA round 25 M23: the persist() answer is kept, not thrown away', async () => {
+  const dbm = await import('../js/db.js');
+  assert.equal(typeof dbm.persistenceGranted, 'function', 'db.js exports persistenceGranted');
+  for (const v of [true, false]) {
+    navigator.storage = { persist: async () => v };
+    assert.equal(await dbm.requestPersistence(), v, `requestPersistence() resolves the browser's answer (${v})`);
+    assert.equal(dbm.persistenceGranted(), v, `persistenceGranted() reads ${v} after the browser said so`);
+  }
+  delete navigator.storage;
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /requestPersistence\(\)\.then\([\s\S]{0,160}?trackEvent\('persist'/, 'boot does not log the persist outcome');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
