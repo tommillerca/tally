@@ -217,7 +217,7 @@ const R = [
   ['Macaroni and cheese', 170, 6.5, 20, 7, 1.1, 3.5, 420, [['1 cup', 198]], 'approx kraft'],
   ['Spaghetti with meat sauce', 132, 6, 17, 4, 2, 3.4, 320, [['1 cup', 250], ['1.5 cups', 375]], 'approx bolognese'],
   ['Fried rice, chicken', 168, 7, 20, 6.5, 1, 1.2, 450, [['1 cup', 198], ['1.5 cups', 297]], 'approx'],
-  ['Chicken curry', 120, 9, 6, 7, 1.2, 2.2, 350, [['1 cup', 235]], 'approx'],
+  ['Chicken curry', 120, 9, 6, 7, 1.2, 2.2, 350, [['1 cup', 235]], 'approx tikka masala korma'], // QA r24 L5: "chicken tikka masala" returned nothing
   ['Chili with beans', 107, 7, 11, 3.6, 3.7, 1.6, 380, [['1 cup', 256]], 'approx con carne'],
   ['Soup, chicken noodle', 26, 1.6, 3.2, 0.6, 0.3, 0.4, 370, [['1 cup', 245], ['1 can prepared', 490]], 'approx'],
   ['Instant ramen', 447, 9.5, 62, 17.6, 2.1, 1.9, 1855, [['1 package dry', 85], ['1/2 package', 43]], 'noodles'],
@@ -278,33 +278,70 @@ export const GENERIC_FOODS = R.map(([name, kcal, p, c, f, fiber, sugar, sodium, 
 }));
 
 // Local instant search over generic + user foods.
+// QA round 24 L5: 21 of 48 real queries returned NOTHING (20 of them an empty screen).
+// Three matcher rules caused every miss and are fixed here, nothing fuzzy added:
+//  1. plurals/spellings: "eggs" missed "Egg, large", "yoghurt" missed five yogurts,
+//     "oatmilk" missed "Oat milk". Query terms are stemmed (eggs->egg) and a tiny
+//     alias map covers the spellings; the corpus already hand-patched "crisps".
+//  2. hard AND: "fish and chips" required the word "and"; "chicken tikka masala"
+//     required all three. Stop words are dropped and ANY-match is the fallback when
+//     ALL-match finds nothing, ranked by how many terms hit. Nonsense still returns [].
+//  3. shortest-name tiebreak: "chicken" gave curry, nuggets, thigh (breast 4th);
+//     "rice" gave Rice cake; "potato" gave Potato chips. A term that names what the
+//     food IS (last word of the pre-comma head: "White rice", "Potato") now outranks
+//     one that only starts the name ("Rice cake"), a food the player has logged before
+//     outranks one they never have, and the final tiebreak is corpus order (the curated
+//     rows list the canonical item first) via the stable sort, not name length.
 const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const ALIAS = { yoghurt: 'yogurt', oatmilk: 'oat milk' };
+const STOP = new Set(['and', 'with', 'the', 'a', 'of', 'in']);
+// ponytail: naive English singular; good enough for a food list (eggs, tomatoes, berries).
+const stem = t => t.length <= 3 ? t
+  : t.endsWith('ies') ? t.slice(0, -3) + 'y'
+  : /(?:oes|ses|xes|ches|shes)$/.test(t) ? t.slice(0, -2)
+  : t.endsWith('s') && !t.endsWith('ss') ? t.slice(0, -1) : t;
+// "white rice" IS rice; "rice cake" is a cake; "caesar salad with chicken" is a salad.
+// head = name up to the first comma or " with ". 2 = the whole head, 1 = its last word.
+const headMatch = (head, t) => head === t ? 2
+  : head.endsWith(t) && head[head.length - t.length - 1] === ' ' ? 1 : 0;
 export function searchFoods(foods, query, limit = 30) {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  const terms = q.split(/\s+/);
+  const terms = q.split(/\s+/).flatMap(w => (ALIAS[w] || w).split(' ')).filter(w => !STOP.has(w));
+  if (!terms.length) return [];
+  const stems = terms.map(stem);
   const res = terms.map(t => new RegExp(`(?:^|[^a-z0-9])${escRe(t)}`));
-  const scored = [];
+  const full = [], partial = [];
   for (const f of foods) {
     const name = f.name.toLowerCase();
+    const ci = name.search(/,| with /);
+    const head = ci < 0 ? name : name.slice(0, ci);
     const hay = `${name} ${(f.brand || '').toLowerCase()} ${f.kws || ''}`;
-    let ok = true, score = 0;
+    let hits = 0, score = 0;
     for (let i = 0; i < terms.length; i++) {
-      const t = terms[i];
+      let t = terms[i], pen = 0;
       // short terms must match at a word boundary; longer terms may match mid-word
-      if (t.length <= 2 ? !res[i].test(hay) : !hay.includes(t)) { ok = false; break; }
-      if (name.startsWith(t)) score += 6;
+      if (t.length <= 2 ? !res[i].test(hay) : !hay.includes(t)) {
+        if (stems[i] === t || !hay.includes(stems[i])) continue; // this term missed
+        t = stems[i]; pen = 1; // stem hit ranks just under a literal hit ("oats" before "Oat milk")
+      }
+      hits++;
+      const hm = headMatch(head, t);
+      if (hm) score += 6 + hm;
+      else if (name.startsWith(t)) score += 6;
       else if (res[i].test(name)) score += 4;
       else if (name.includes(t)) score += 2;
       else score += 1;
+      score -= pen;
     }
-    if (!ok) continue;
+    if (!hits) continue;
     if (name === q) score += 10;
     score += Math.min(3, (f.useCount || 0));
     if (f.favorite) score += 2;
     if (f.source === 'custom') score += 1;
-    scored.push({ f, score });
+    (hits === terms.length ? full : partial).push({ f, hits, score });
   }
-  scored.sort((a, b) => b.score - a.score || a.f.name.length - b.f.name.length);
-  return scored.slice(0, limit).map(s => s.f);
+  const pool = full.length ? full : partial;
+  pool.sort((a, b) => b.hits - a.hits || b.score - a.score || (b.f.useCount || 0) - (a.f.useCount || 0));
+  return pool.slice(0, limit).map(s => s.f);
 }

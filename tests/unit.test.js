@@ -272,6 +272,36 @@ test('search: multi-term and keyword', () => {
   assert.ok(searchFoods(GENERIC_FOODS, 'oj')[0].name.includes('Orange juice'));
   assert.equal(searchFoods(GENERIC_FOODS, 'zzzz').length, 0);
 });
+// QA round 24 L5: 21 of 48 real queries found nothing (20 an empty screen). These are
+// the probes QA typed into the real input; every one asserts a non-empty list AND the
+// obvious food in the top 3. On the pre-fix tip all eight failed (five empty, three
+// ranked wrong). The nonsense control keeps the ANY-match fallback from turning
+// silence into noise.
+test('search: QA r24 L5 probes land the obvious food in the top 3', () => {
+  const top3 = q => searchFoods(GENERIC_FOODS, q, 3).map(f => f.name);
+  const expect = {
+    'eggs': 'Egg, large',                 // plural vs "Egg, large"
+    'yoghurt': 'Yogurt, plain whole milk',   // UK spelling vs five yogurts
+    'oatmilk': 'Oat milk',                // missing space
+    'chicken tikka masala': 'Chicken curry', // hard AND killed every dish
+    'fish and chips': 'Potato chips',     // "and" was a required term
+    'chicken': 'Chicken breast, cooked',  // was 4th behind curry/nuggets/thigh
+    'tomatoes': 'Tomato', 'bananas': 'Banana', 'carrots': 'Carrot',
+  };
+  for (const [q, want] of Object.entries(expect)) {
+    const got = top3(q);
+    assert.ok(got.length > 0, `"${q}" returned an empty list`);
+    assert.ok(got.includes(want), `"${q}" top 3 lacks "${want}": ${got.join(' | ')}`);
+  }
+  assert.notEqual(top3('rice')[0], 'Rice cake', 'rice -> Rice cake first');
+  assert.notEqual(top3('potato')[0], 'Potato chips', 'potato -> Potato chips first');
+  assert.equal(top3('oats')[0], 'Oats, dry rolled', 'stem hit must not outrank a literal hit');
+  assert.equal(searchFoods(GENERIC_FOODS, 'zzqx').length, 0, 'fallback must not invent rows for nonsense');
+  // a food the player has logged before outranks one they never have
+  const used = GENERIC_FOODS.map(f => ({ ...f }));
+  used.find(f => f.name === 'Chicken curry').useCount = 5;
+  assert.equal(searchFoods(used, 'chicken')[0].name, 'Chicken curry');
+});
 
 // ---- label parser ----
 const US_LABEL = `Nutrition Facts
