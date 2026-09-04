@@ -4750,6 +4750,13 @@ test('R23 F8: the fits cap is printed and the save chip stays, ghosted, with its
   assert.match(handler, /fitList\.length >= MAX_FITS[\s\S]*toast\(fitsFullMsg/, 'a tap on the ghosted save chip must toast the rule before any sheet opens');
 });
 
+test('SW update checks bypass the HTTP cache (GitHub Pages max-age=600 held a device on v470 for ten minutes after v471 was live)', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const calls = [...app.matchAll(/serviceWorker\.register\(([^)]*)\)/g)].map(m => m[1]);
+  assert.equal(calls.length, 1, `expected exactly one register() call, found ${calls.length}`);
+  assert.match(calls[0], /updateViaCache:\s*'none'/, 'register() does not pass updateViaCache: none, so a deploy can hide behind the HTTP cache');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

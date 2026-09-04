@@ -1162,7 +1162,14 @@ async function boot() {
   } catch { /* cosmetic backfill; never block boot */ }
 
   if ('serviceWorker' in navigator && !S.demo && location.protocol === 'https:') {
-    navigator.serviceWorker.register('sw.js').then(reg => {
+    /* updateViaCache: 'none' (2026-09-04). GitHub Pages serves sw.js with
+       max-age=600 and the default update check honours the HTTP cache, so for
+       ten minutes after a deploy a device asked "is there a new worker?" was
+       answered from its own stale copy: Settings read v470 on a phone that had
+       force-quit twice while the server served v471. Bypass the cache for the
+       worker script itself; the app's own network-first rule already covers
+       everything the worker serves. */
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
       // resumed PWAs never re-navigate, so check for updates whenever we come back
       document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
     }).catch(() => {});
