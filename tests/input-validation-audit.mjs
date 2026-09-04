@@ -200,6 +200,13 @@ async function reset(units = 'kg') {
   await evalPage(async u => {
     const { db, kvGet, kvSet } = await import('./js/db.js');
     await db.clear('weights'); await db.clear('log'); await db.clear('foods');
+    /* The add-sheet DRAFT lives in kv and survives this reset (QA r25 M16,
+       2026-09-04): the previous ACCEPT case's Save opened the portion sheet,
+       which stamped a draft, and the reload below RESTORED that sheet over the
+       food form, so the next case's Save tap never reached #ffSave and gate8
+       read rows:0 on four healthy cases. The feature is right; the fixture
+       predates it. A fresh case starts with no draft, like a fresh install. */
+    await db.del('kv', 'addDraft');
     const s = (await kvGet('settings', null)) || {};
     s.units = u;
     s.profile = { sex: 'm', age: 30, heightCm: 178, weightKg: 82, activity: 'moderate', goal: 'recomp' };
