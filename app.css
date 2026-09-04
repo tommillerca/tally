@@ -6765,6 +6765,18 @@ body::before {
   background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   display: grid; place-items: center; color: var(--text-3);
 }
+/* THE SHEET-HEAD ICON BUTTONS ARE THE 44px ONES (QA round 25 M20). `.sheet-close`
+   declares min-height: 44px at line ~445 and `.t1-icon-btn` above declares
+   min-height: 40px: same specificity (one class each), so the rule written
+   6,283 lines later wins and `<button class="sheet-close t1-icon-btn">` shipped
+   at 44x41 with the a11y audit green (its registry never held a sheet control,
+   see M24 in tests/a11y-audit.mjs). `#favBtn` beside it is a bare .t1-icon-btn
+   and measured 40x41. Two classes beat one regardless of order, so this cannot
+   be re-shadowed by a later one-class rule; scoped to .t1-tools so the 40px
+   "Change portion" chevron inside a result row keeps its size. The glyph stays
+   17px; only the box grows to Apple's floor. Guarded statically by
+   tests/unit.test.js "R25-M20 sheet-head icon buttons resolve to >= 44px". */
+.t1-tools .t1-icon-btn { width: 44px; height: 44px; min-height: 44px; }
 .t1-icon-btn.gold { color: var(--gold); }
 .t1-icon-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 /* the body has to be the shrinking child or a pinned foot pushes off-screen */
@@ -6926,9 +6938,14 @@ body::before {
   transform: translate(-50%, -50%);
 }
 .t1-step button.plus::after { transform: translate(-50%, -50%) rotate(90deg); }
-.t1-step .val { text-align: center; padding: 9px 2px 8px; }
+/* THE AMOUNT INPUT IS ITS OWN TAP TARGET (QA round 25 M20): #qtyIn measured
+   181x31, because the 28px display face at line-height 1 is all the height an
+   <input> gets and the 56px .val box around it is a div, not the control. The
+   input takes the 44px floor itself; the .val padding gives back 10 of the 13px
+   so the stepper row grows by ~3px instead of 13. Same for #gramsIn. */
+.t1-step .val { text-align: center; padding: 3px 2px 4px; }
 .t1-step .val input {
-  width: 100%; background: none; border: none; text-align: center; outline: none;
+  width: 100%; min-height: 44px; background: none; border: none; text-align: center; outline: none;
   font-family: var(--display); font-size: var(--fs-6); letter-spacing: .02em; line-height: 1;
   font-variant-numeric: tabular-nums;
 }

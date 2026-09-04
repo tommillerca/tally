@@ -1601,6 +1601,75 @@ test('css: the scroll container still reserves the safe area', () => {
     '.screen must pad the safe area, or every screen starts under the notch');
 });
 
+/* ---- QA round 25 M20: the 44px floor on the logging path, resolved through
+   the CASCADE, not read off one rule. `.sheet-close` (app.css ~445) declares
+   min-height: 44px and the a11y audit was green, yet the button measured 44x41:
+   `<button class="sheet-close t1-icon-btn">` also matches `.t1-icon-btn`
+   (min-height: 40px, app.css ~6763), same specificity (one class), written
+   6,283 lines later, so the later rule wins. A grep for "min-height: 44px" on
+   .sheet-close is exactly the guard that stays green over this bug. This
+   resolves min-height for the real element (its classes plus its ancestors'
+   classes) by specificity then source order, the way the browser does, for the
+   three controls QA measured under the floor. The pixel proof is
+   tests/a11y-audit.mjs (M24 rows); this is the static half. ---- */
+test('R25-M20 sheet-head icon buttons and the amount input resolve to >= 44px', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  /* Simple selectors only: `.a`, `.a.b`, `.a .b`, `tag`, `.a input`. Anything
+     with an id, pseudo, attribute or combinator other than descendant is
+     skipped, which is safe here because a skipped rule can only make this
+     resolver report a SMALLER winner than the browser if that rule raised the
+     value, and every rule in these three chains is plain classes. */
+  const compound = tok => { const m = tok.match(/^([a-z]+)?((?:\.[\w-]+)*)$/i); return m ? { tag: m[1] || null, classes: (m[2].match(/[\w-]+/g) || []) } : null; };
+  const matchesCompound = (c, el) => (!c.tag || c.tag === el.tag) && c.classes.every(k => el.classes.includes(k));
+  // el = { tag, classes, ancestors: [{tag, classes}, ...] nearest first }
+  const matches = (selector, el) => {
+    const parts = selector.trim().split(/\s+/).map(compound);
+    if (parts.some(p => !p) || /[#:>+~\[]/.test(selector)) return null;
+    if (!matchesCompound(parts[parts.length - 1], el)) return false;
+    let anc = 0;
+    for (let i = parts.length - 2; i >= 0; i--) {
+      while (anc < el.ancestors.length && !matchesCompound(parts[i], el.ancestors[anc])) anc++;
+      if (anc++ >= el.ancestors.length) return false;
+    }
+    return true;
+  };
+  const specificity = sel => (sel.match(/\.[\w-]+/g) || []).length * 10 + (sel.match(/(^|\s)[a-z]+/gi) || []).length;
+  const resolve = (el, prop, sheet = css) => {
+    let win = null, order = 0;
+    for (const m of sheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      order++;
+      const decl = m[2].match(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`));
+      if (!decl) continue;
+      for (const sel of m[1].split(',')) {
+        if (!matches(sel, el)) continue;
+        const sp = specificity(sel);
+        if (!win || sp > win.sp || (sp === win.sp && order >= win.order)) win = { sp, order, sel: sel.trim(), value: decl[1].trim() };
+      }
+    }
+    return win;
+  };
+  const px = v => { assert.match(v, /^\d+(\.\d+)?px$/, `expected a px value, got "${v}"`); return parseFloat(v); };
+  const sheetHead = [{ tag: 'div', classes: ['t1-tools'] }, { tag: 'div', classes: ['sheet-head'] }, { tag: 'div', classes: ['sheet', 't1'] }];
+  const close = { tag: 'button', classes: ['sheet-close', 't1-icon-btn'], ancestors: sheetHead };
+  const fav = { tag: 'button', classes: ['t1-icon-btn'], ancestors: sheetHead };
+  const qty = { tag: 'input', classes: [], ancestors: [{ tag: 'div', classes: ['val'] }, { tag: 'div', classes: ['t1-step'] }, { tag: 'div', classes: ['sheet-body'] }] };
+  for (const [name, el] of [['.sheet-close.t1-icon-btn', close], ['#favBtn (.t1-icon-btn)', fav], ['#qtyIn (.t1-step .val input)', qty]]) {
+    const w = resolve(el, 'min-height');
+    assert.ok(w, `${name}: no rule sets min-height at all`);
+    assert.ok(px(w.value) >= 44, `${name}: the winning min-height is "${w.sel} { min-height: ${w.value} }", under the 44px floor (QA round 25 M20)`);
+  }
+  /* THE INSTRUMENT MUST SEE THE SHADOWING IT EXISTS FOR (control). With the
+     two-class fix stripped out, the resolver has to land on the one-class
+     .t1-icon-btn at 40px by source order, exactly the cascade that shipped
+     44x41. If it reports .sheet-close here, it is reading the first rule and
+     not the winning one, and every green above is worthless. */
+  const stripped = css.replace(/\.t1-tools \.t1-icon-btn\s*\{[^}]*\}/, '');
+  assert.notEqual(stripped, css, 'the .t1-tools .t1-icon-btn rule is gone from app.css');
+  const shadow = resolve(close, 'min-height', stripped);
+  assert.equal(shadow.sel, '.t1-icon-btn', `CONTROL: without the fix the resolver picked "${shadow.sel}", not the later same-specificity .t1-icon-btn`);
+  assert.equal(px(shadow.value), 40, `CONTROL: the shadowing rule should read 40px, got ${shadow.value}`);
+});
+
 // ---- the Puffer Pack drop: manifest and shop must agree ----
 test('drop items exist in the manifest, legendary, with drop names', () => {
   const data = readFileSync(join(here, '..', 'data', 'boneheadz.js'), 'utf8');
