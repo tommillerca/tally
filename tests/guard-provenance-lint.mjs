@@ -136,7 +136,8 @@ const KNOWN_UNDATED = [
   'crate-palette-audit.mjs:CRATES',
   'crate-reveal-audit.mjs:KINDS',
   'crew-fan-audit.mjs:FRIENDS',
-  'ember-cohesion-audit.mjs:CLASSES',
+  // ember-cohesion-audit.mjs:CLASSES paid off 2026-09-03: the note above the
+  // constant now carries a dated measurement, so the ratchet drops it.
   'facegate-audit.mjs:HELD_SLOTS',
   'fight-exit-audit.mjs:NO_MAP_ROWS',
   'figure-audit.mjs:SITES',

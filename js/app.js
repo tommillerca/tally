@@ -3152,7 +3152,10 @@ function route({ keepScroll = false } = {}) {
      * changing the day, closing a sheet) and hiding the screen for that would
      * flash the whole tab on every small edit. */
     const child = el.firstElementChild;
-    if (!isNav) { el.classList.add('screen-in'); markBooted(); child?.classList.add('route-in'); return; }
+    // startTalkBoxes: an in-place refresh rebuilds the screen's markup, so it
+    // rebuilds its talk boxes too, and the reveal path below is the only thing
+    // that ever typed into them. See startTalkBoxes' own note (2026-09-03).
+    if (!isNav) { el.classList.add('screen-in'); markBooted(); child?.classList.add('route-in'); startTalkBoxes(el); return; }
     return revealWhenReady(el, { cls: 'screen-in', cap: 700 }).then(() => {
       markBooted();
       /* NO FADE AT ALL ON A SWAP, AND THE CLASS STAYS EITHER WAY.
@@ -5476,6 +5479,46 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__lbAvatar = lb
    old picture rather than to a permanently hidden shell. */
 const markBooted = () => document.documentElement.classList.add('booted');
 
+/* DIALOGUE STARTS WHEN THE SCREEN ARRIVES, and this sweep is the one place that
+   knows when that is. A talk box types at 26ms a character, so starting it at
+   render time would spend up to revealWhenReady's whole 700ms cap typing behind
+   an invisible screen: on a cold load the player would arrive 27 characters into
+   the sentence. Sweeping centrally means no screen and no sheet has to remember,
+   which is the same reason the reveal itself lives in one place.
+   THE LATCH IS ON THE BOX, NOT ON root. apply() runs on both the frame and the
+   300ms timer, so something has to stop the line restarting a third of a second
+   in. It cannot be root: #screen is the SAME element on every route, so a flag
+   there is set by the first navigation of the session and silences every talk
+   box for the rest of it (measured: the line never typed at all after the first
+   route). A box is rebuilt by its screen's innerHTML, so the flag on the box is
+   fresh exactly as often as the line is.
+
+   HOISTED OUT OF revealWhenReady ON 2026-09-03, BECAUSE ONLY HALF THE RENDERS
+   WENT THROUGH IT. route() calls revealWhenReady on a NAVIGATION only; an
+   in-place refresh() (logging water or sleep, stepping the day, closing a sheet)
+   takes the `!isNav` branch, which adds `screen-in` by hand and returns. Today
+   is rebuilt from innerHTML either way, so a refresh handed the player a brand
+   new .gw-box carrying its line in `data-tb` and NOTHING in .tb-txt, and no
+   later code ever typed it: Gwart sat there in a fully painted speech bubble
+   saying nothing at all, until the next real navigation.
+   It has been that way on main too. It stayed invisible because the guard
+   (tests/talkbox-audit.mjs) reached Today with `location.hash = '#/today'` from
+   an EMPTY hash, which is a navigation and re-typed the line on the way in. Boot
+   now writes '#/today' when the hash is absent, so that assignment became a
+   no-op, the audit finally read the screen a refresh had left behind, and the
+   row went red: "typed 0 of 46 chars". The guard was right and always had been
+   pointing at this.
+   Calling it from the !isNav branch is safe on both of the counts the paragraph
+   above cares about: that branch runs after the render has resolved, and nothing
+   is hidden during a refresh, so there is no invisible screen to type behind. */
+function startTalkBoxes(root) {
+  root?.querySelectorAll('.talkbox').forEach(b => {
+    if (b._tbStarted) return;
+    b._tbStarted = true;
+    runTalkBox(b);
+  });
+}
+
 async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
   if (!root) return;
   let shown = false;
@@ -5501,24 +5544,7 @@ async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
   const apply = () => {
     if (!root.isConnected) return;
     root.classList.add(cls);
-    /* DIALOGUE STARTS WHEN THE SCREEN ARRIVES, and this is the one place that
-       knows when that is. A talk box types at 26ms a character, so starting it at
-       render time would spend up to this function's whole 700ms cap typing behind
-       an invisible screen: on a cold load the player would arrive 27 characters
-       into the sentence. Sweeping here means no screen and no sheet has to
-       remember, which is the same reason the reveal itself lives in one place.
-       THE LATCH IS ON THE BOX, NOT ON root. apply() runs on both the frame and
-       the 300ms timer, so something has to stop the line restarting a third of a
-       second in. It cannot be root: #screen is the SAME element on every route,
-       so a flag there is set by the first navigation of the session and silences
-       every talk box for the rest of it (measured: the line never typed at all
-       after the first route). A box is rebuilt by its screen's innerHTML, so the
-       flag on the box is fresh exactly as often as the line is. */
-    root.querySelectorAll('.talkbox').forEach(b => {
-      if (b._tbStarted) return;
-      b._tbStarted = true;
-      runTalkBox(b);
-    });
+    startTalkBoxes(root);
   };
   const show = () => {
     if (shown || !root.isConnected) return;
