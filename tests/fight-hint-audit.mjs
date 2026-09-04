@@ -87,6 +87,8 @@ const readTray = () => page.evaluate(() => {
         name: (b.querySelector('b')?.textContent || '').trim(),
         hint: (b.querySelector('small')?.textContent || '').trim(),
         nameLines: lines(b.querySelector('b')), hintLines: lines(b.querySelector('small')),
+        // QA round 28 P2: the cost sub-line, and whether the button is disabled
+        cost: (b.querySelector('small.cost')?.textContent || '').trim(), disabled: b.disabled,
         h: +r.height.toFixed(1),
         inView: r.top >= tr.top - 1 && r.bottom <= tr.bottom + 1,
       };
@@ -127,6 +129,19 @@ for (const [W, H] of [[375, 667], [393, 852], [430, 932]]) {
   ok(`${W}x${H}: every move label is one line`, wrapped.length === 0,
     wrapped.length ? wrapped.map(m => `"${m.name}"(${m.nameLines}L)/"${m.hint}"(${m.hintLines}L)`).join(', ')
                    : `${t.moves.length} buttons, rows ${JSON.stringify(t.rowHs)}`);
+
+  /* QA round 28 P2 (WRITTEN, NOT RUN on the machine that wrote it: static-only
+     rule that day). Every move button prints its cost in VISIBLE text, not only
+     in title=, and a disabled one prints the reason in the same values
+     ("Needs 2 AP" / "Stamina 12/35"). Driven on v472: Haymaker disabled on 71 of
+     111 turns still advertising "~45 dmg · 88% hit" with no reason. */
+  const costless = t.moves.filter(m => !/\d+ AP|Needs \d+ AP|Stamina \d+\/\d+/.test(m.cost));
+  ok(`${W}x${H}: every move button prints its cost or its reason in visible text`, costless.length === 0,
+    costless.length ? costless.map(m => `"${m.name}" cost="${m.cost}"`).join(', ') : t.moves.map(m => `"${m.name}": ${m.cost}`).join(', '));
+  const dis = t.moves.filter(m => m.disabled);
+  const mute = dis.filter(m => !/^Needs \d+ AP$|^Stamina \d+\/\d+$/.test(m.cost));
+  ok(`${W}x${H}: a disabled move says why (${dis.length} disabled in this tray)`, mute.length === 0,
+    mute.length ? mute.map(m => `"${m.name}" cost="${m.cost}"`).join(', ') : dis.map(m => `"${m.name}": ${m.cost}`).join(', ') || 'none disabled here');
 
   /* the 44px floor from app.css: "8/7 plus a 44px floor keeps every button a
      legal tap target". Nothing here is allowed to buy a row with it. */
