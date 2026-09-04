@@ -5590,6 +5590,35 @@ const RACK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', M: 'fit-head', S
    one definition; a new slot that gets a .fit-* crop becomes wearable everywhere
    the moment it is added above. */
 const canWear = id => !!(BH_BY_ID[id] && RACK_FIT[BH_BY_ID[id].slot]);
+/* A FOOTBALL HELMET IS NOT A HAT, and the crop has to know it. Tom annotated the
+   Kit room's helmet tile, 2026-09-04: "too zoomed in".
+   MEASURED on the rendered tile at 88px, before and after, the garment's own
+   silhouette read as an ALPHA (the layer alone over a black ground and again
+   over a white one) so the number is the art and not its contrast against the
+   tile:
+
+     garment         ink % of tile      does the art run off the tile?
+     helmet        94.2  ->  43.4     ALL FOUR (L83 R45 T88 B46)  ->  none
+     jersey        42.6      42.6     none                        (unchanged)
+     cleats        33.4      33.4     none                        (unchanged)
+     lizard helm   23.6      23.6     none                        (unchanged)
+     lizard jersey 20.7      20.7     none                        (unchanged)
+
+   .fit-head's origin and its 2.3 scale are a measured frame for HEADWEAR sitting
+   on a skull. A football helmet is a bigger object: shell plus facemask hanging
+   down over the whole face, so the same frame blew it off every edge of the
+   square. It is not a tile bug and not a shop bug -- the same crop draws this
+   helmet on the rack, on a reveal card and on the wardrobe's colourway rail --
+   so the fix keys off the ITEM rather than the surface, and all four of them
+   move together. Only the helmet's number moves; the other four garments are
+   untouched, which is what "surgical" looks like when it is checked.
+   Only slot H: the four head pieces (helmet plus its three visors) are one
+   drawing with different glass. The jersey and the cleats measure correctly
+   under fit-torso and fit-feet and keep them.
+   The number in app.css .fit-fbhead came from a seven-scale sweep of the real
+   tile, not from an estimate, and tests/football-tile-crop-audit.mjs
+   re-measures it (and demonstrates its own failure) on every run. */
+const fitClass = it => (it && it.football && it.slot === 'H' ? 'fit-fbhead' : RACK_FIT[it.slot]);
 /* `css` is the width the WHOLE 640 square ends up occupying AFTER the crop's
    scale, not the width of the window it peeps through: a 222px card panel under
    fit-waist's scale(2.8) is a 622px canvas behind a 222px hole. bhTierFor turns
@@ -5617,7 +5646,7 @@ function wornArtHtml(id, css) {
   // wpnAura: null -- the player's bought aura must not leak onto a piece they
   // are being SHOWN. skip C for the same reason the rack does: their pet turning
   // up in a reveal card would read as part of the prize.
-  return `<div class="pc-worn ${RACK_FIT[it.slot]}">${avatarLayersHtml(
+  return `<div class="pc-worn ${fitClass(it)}">${avatarLayersHtml(
     { ...RACK_BASE, [it.slot]: id }, { wpnAura: null, skip: ['C'], thumb: bhTierFor(css) })}</div>`;
 }
 
@@ -9256,7 +9285,7 @@ async function renderShop(el) {
   const rackTile = (id, coin, dust, thumb) => {
     const it = BH_BY_ID[id];
     return `<div class="rk r-${it.rarity}${rackOwns(id) ? ' owned' : ''}">
-      <button class="rk-stage ${RACK_FIT[it.slot] || ''}" data-tryon="${id}" data-coin="${coin}" data-dust="${dust}" aria-label="Try on ${esc(it.name)}"
+      <button class="rk-stage ${fitClass(it) || ''}" data-tryon="${id}" data-coin="${coin}" data-dust="${dust}" aria-label="Try on ${esc(it.name)}"
         >${avatarLayersHtml({ ...RACK_BASE, [it.slot]: id }, { wpnAura: null, skip: ['C'], ...(thumb ? { thumb } : {}) })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
       ${rackTag(it.rarity)}<b>${esc(it.name)}</b>
       ${rackBuyRow(id, coin, dust)}

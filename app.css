@@ -10138,8 +10138,38 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    animate `transform`, and a running animation outranks a plain declaration in
    the cascade. Without it the crop simply does not happen. */
 .fit-head .bh-anim, .fit-torso .bh-anim, .fit-hips .bh-anim, .fit-feet .bh-anim, .fit-hand .bh-anim,
-.fit-hand-l .bh-anim, .fit-body .bh-anim, .fit-shin .bh-anim, .fit-waist .bh-anim { animation: none; }
+.fit-hand-l .bh-anim, .fit-body .bh-anim, .fit-shin .bh-anim, .fit-waist .bh-anim, .fit-fbhead .bh-anim { animation: none; }
 .fit-head .bh-anim { transform-origin: 43% 21%; transform: translate(4%, 26%) scale(2.3); }
+/* A FOOTBALL HELMET IS NOT A HAT (Tom, 2026-09-04: the Kit room's helmet tile is
+   "too zoomed in"). .fit-head above frames a skull for HEADWEAR; a football
+   helmet is shell plus a facemask hanging down over the whole face, and at 2.3
+   it blew off all four edges of its square.
+
+   MEASURED on the rendered 88px tile, the garment's own silhouette read as an
+   ALPHA -- the layer alone over a black ground and again over a white one --
+   because the obvious background diff measures the CONTRAST rather than the art
+   and reported this same helmet at two different sizes on two differently
+   coloured surfaces:
+
+     garment         ink % of tile      does the art run off the tile?
+     helmet        94.2  ->  43.4     ALL FOUR (L83 R45 T88 B46)  ->  none
+     jersey        42.6      42.6     none                        (unchanged)
+     cleats        33.4      33.4     none                        (unchanged)
+     lizard helm   23.6      23.6     none                        (unchanged)
+     lizard jersey 20.7      20.7     none                        (unchanged)
+
+   1.40 was picked from a seven-scale sweep of the real tile (2.30, 2.00, 1.80,
+   1.60, 1.40, 1.20, 1.00, then three translate variants around the winner). It
+   lands the helmet level with the jersey Tom said reads correctly and inside its
+   frame on every side, which is what a discrete object wants: the jersey's
+   sleeve and the cleats' soles are allowed to leave their frames because those
+   are crops of a body, not of a thing. The translate moves with the scale so the
+   art stays centred -- measured centre 48%/49% of the tile, against 46%/45% if
+   the old translate is kept. Same 1/0.86 window as every other .fit-*, so this
+   one declaration serves the Kit-room tile, the rack stage, a reveal card and
+   the wardrobe's colourway rail. Re-measured, with its own negative control,
+   by tests/football-tile-crop-audit.mjs on every run. */
+.fit-fbhead .bh-anim { transform-origin: 43% 21%; transform: translate(7%, 31%) scale(1.4); }
 .fit-torso .bh-anim { transform-origin: 46% 51%; transform: translate(4%, -1%) scale(1.7); }
 .fit-hips .bh-anim { transform-origin: 51% 66%; transform: translate(-1%, -16%) scale(2.0); }
 .fit-feet .bh-anim { transform-origin: 49% 83%; transform: translate(1%, -33%) scale(2.2); }
