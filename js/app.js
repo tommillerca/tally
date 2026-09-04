@@ -398,18 +398,22 @@ function staticMassScale(petId) {
 }
 // A pet's display scale, whichever way it is drawn. Flat species (lizards) would
 // otherwise render a third shorter than round ones (the cloud) in the same box.
-/* THE SCALE FOLLOWS THE RENDERER, NOT THE SPECIES. The two functions are two
-   normalisations of the same rule ("bring every species to the same ART
-   HEIGHT") over two different stages, so asking petMassScale about a lizard
-   that is being drawn STATICALLY hands the static renderer the animated stage's
-   number. That was free while ANIMATED_PETS and "drawn animated" were the same
-   set; the football kit breaks that (see petSpriteHtml), so the caller says
-   which stage it is on. staticMassScale and petMassScale disagree by 1.28% on
-   C4 and 0.69% on CX, which is a visible jump the moment the kit goes on and a
-   number nobody would look for. tests/football-render-audit.mjs row PET-SIZE
-   measures the drawn INK on both sides rather than trusting either. */
-function petScale(petId, animated = ANIMATED_PETS.has(petId)) {
-  return animated ? petMassScale(petId) : staticMassScale(petId);
+/* THE SPECIES' OWN SCALE, EVEN WHEN THE FOOTBALL KIT DRAWS IT STATICALLY, and
+   that is a measured choice rather than an oversight. When the kit forces a
+   lizard onto the static canvas (see petSpriteHtml) the two normalisations are
+   both available and they disagree by 1.28% on C4. MEASURED on the Stable card
+   at 124px, ink from a screenshot diff with the garments off and the clock
+   pinned (tests/football-render-audit.mjs row PET-SIZE):
+       animated lizard                     264 x 179 device px, 30941 px of ink
+       static under petMassScale (this)    260 x 194,           30257
+       static under staticMassScale        257 x 191,           29655
+   petMassScale is nearer on width (4px vs 7) and on area (684 vs 1286) and
+   staticMassScale is nearer on height (12px vs 15), so the scale is NOT what
+   makes the animal change size: the two DRAWINGS do, at aspect 1.475 animated
+   against 1.345 static. Switching the function would buy nothing measurable and
+   cost a fork in a function eleven surfaces call, so it does not switch. */
+function petScale(petId) {
+  return ANIMATED_PETS.has(petId) ? petMassScale(petId) : staticMassScale(petId);
 }
 // Render a static pet image cropped to its content and scaled to ~fill a px box.
 // ground=true seats the art on the box floor; else it's vertically centered (hover).
@@ -432,12 +436,8 @@ function petScale(petId, animated = ANIMATED_PETS.has(petId)) {
 const wearOf = wear => (wear === undefined ? S.petWear : wear);
 /* Is this pet wearing a football garment? A non-null tint list IS the answer:
    petWornTints returns footballTints per worn layer, which is null for anything
-   else. Used by petSpriteHtml to force the static canvas (see there) and by
-   Today's hero to size the CSS box the same way. */
+   else. Used by petSpriteHtml to force the static canvas (see there). */
 const petWearsFootball = (petId, wear) => petWornTints(petId, wearOf(wear)).some(Boolean);
-/* The scale petSpriteHtml WILL use for this pet and this wardrobe, so a caller
-   that has to reproduce the box (Today's --pet-rel) cannot drift from it. */
-const petDrawScale = (petId, wear) => petScale(petId, ANIMATED_PETS.has(petId) && !petWearsFootball(petId, wear));
 /* WHICH SHEET THESE LAYERS COME OFF, AND WHY THE CALLER DECIDES.
  *
  * This function was untiered everywhere, which was fine while every pet was a
@@ -691,7 +691,7 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
      canvas, so the static branch below draws the kit on it with no per-variant
      art, and CX (Day One, amethyst) is that same canvas again. */
   const wearsFootball = petWearsFootball(petId, wear);
-  const S2 = mass ? Math.round(px * petDrawScale(petId, wear)) : px;
+  const S2 = mass ? Math.round(px * petScale(petId)) : px;
   const isShiny = shiny !== undefined ? !!shiny : S.shinyPets.has(petId);
   /* SHINIES ANIMATE TOO. Tom, 2026-08-08: "make all animations apply for shinies
      of the same variety too."
@@ -3840,7 +3840,7 @@ async function renderToday(el) {
   const heroPetRel = heroPet ? (PET_HERO_REL[heroPet.id] || PET_HERO_HOUSE) : 0;
   const heroPetBig = heroPetRel > PET_HERO_HOUSE;
   const heroPetPx = Math.round(heroPetRel * PET_HERO_REF);
-  const heroPetBoxRel = heroPet ? Math.round(heroPetPx * petDrawScale(heroPet.id, heroPet.wear)) / PET_HERO_REF : 0;
+  const heroPetBoxRel = heroPet ? Math.round(heroPetPx * petScale(heroPet.id)) / PET_HERO_REF : 0;
   /* THE ONE PET SURFACE WHERE THE SHEET'S STRICT RULE IS A PIXEL SHORT, named
      here rather than tuned into bhTierFor for the whole app.
      Measured 430x932 DPR 2: a solo-canvas pet's whole square lands in a 192.4px
