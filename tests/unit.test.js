@@ -3624,6 +3624,39 @@ test('R18-P5 js/app.js does not statically import the changelog', () => {
   assert.ok(sw.includes("'./js/changelog.js'"), 'changelog.js dropped out of the service-worker precache: a lazy import offline is a blank sheet');
 });
 
+/* ---- R25-M4: a committed meal is never reported as a failed one ---------- */
+test('R25-M4 every UI log write routes through commitLogEntry, and its two outcomes are honest', () => {
+  /* QA round 25 M4, 2026-09-03: abort the xp store AFTER the log row committed and
+     the sheet stayed open, the button live, the toast read "That did not save",
+     and a second tap wrote a second row (167 -> 168, unbounded in taps). The
+     follow-on (recordMealUsed, onFoodLogged) sat OUTSIDE the try/catch around
+     db.put('log'), and Quick add had no try/catch at all. The browser-level
+     guard is tests/log-write-failure-audit.mjs (FAIL=xp); this row is the
+     shape it cannot check statically: ONE owner of the write sequence, and
+     all four log writers (portion sheet, Quick add, relog, copy yesterday)
+     going through it. SETUP asserts the extraction is real. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const m = app.match(/\nasync function commitLogEntry\(e, btn, via = null\) \{([\s\S]*?)\n\}\n/);
+  assert.ok(m, 'commitLogEntry(e, btn, via) is gone from js/app.js: the log write and its follow-on have lost their one owner');
+  const body = m[1];
+  assert.ok(body.length > 300 && body.includes("db.put('log', e)"), `commitLogEntry body looks wrong (${body.length} chars)`);
+  // outcome 1: NOT committed -> the button is re-armed and the caller gets null
+  const notCommitted = body.match(/try \{\s*await db\.put\('log', e\);\s*\} catch \(err\) \{([\s\S]*?)return null;/);
+  assert.ok(notCommitted, "db.put('log', e) is no longer in a try whose catch returns null (the not-committed outcome)");
+  assert.ok(/btn\.disabled = false/.test(notCommitted[1]), 'the not-committed catch no longer re-arms the button');
+  // outcome 2: committed, receipt failed -> a stub game object, the button stays as it was
+  const committed = body.match(/try \{[\s\S]*?onFoodLogged\(e,[\s\S]*?\} catch \(err\) \{([\s\S]*?)\}\s*$/);
+  assert.ok(committed, 'onFoodLogged is no longer inside a try/catch: a failed XP receipt escapes and re-arms Add on a committed row');
+  assert.ok(/receiptFailed: true/.test(committed[1]), 'the committed-but-receipt-failed catch no longer returns receiptFailed: true');
+  assert.ok(!/btn\.disabled/.test(committed[1]), 'the committed catch touches btn.disabled: a committed row must never re-arm Add');
+  // every UI writer goes through it; only the helper and the ?demo seed write the log store directly
+  const puts = app.match(/db\.put\('log'/g) || [];
+  assert.equal(puts.length, 2, `js/app.js has ${puts.length} db.put('log' sites; expected 2 (commitLogEntry + the demo seed). A new bare one has the M4 hole.`);
+  const calls = (app.match(/await commitLogEntry\(/g) || []).length;
+  assert.ok(calls >= 4, `only ${calls} callers of commitLogEntry; the portion sheet, Quick add, relog and copy-yesterday make 4`);
+  assert.ok(!/await onFoodLogged\(/.test(app.replace(m[0], '')), 'a caller still awaits onFoodLogged directly, outside commitLogEntry');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

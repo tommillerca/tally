@@ -4379,9 +4379,8 @@ async function renderToday(el) {
     let gained = 0, last = null;
     for (const e of src) {
       const copy = { ...e, id: newId(), date: S.date, ts: Date.now() };
-      await db.put('log', copy);
-      await recordMealUsed(copy.meal);
-      last = await onFoodLogged(copy, { targets: S.settings.targets, entriesForDate: await entriesFor(S.date) });
+      last = await commitLogEntry(copy, null);
+      if (!last) return;           // not committed: commitLogEntry has told the player
       gained += last.xp;
     }
     confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 300, 14);
@@ -7663,9 +7662,8 @@ function openAdd(meal = 0) {
       const src = rows.find(r => r.id === b.dataset.relog);
       if (!src) return;
       const copy = { ...src, id: newId(), date: S.date, meal: curMeal, ts: Date.now() };
-      await db.put('log', copy);
-      await recordMealUsed(curMeal);
-      const game = await onFoodLogged(copy, { targets: S.settings.targets, entriesForDate: await entriesFor(S.date) });
+      const game = await commitLogEntry(copy, null);
+      if (!game) return;           // not committed: commitLogEntry has told the player
       confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 300, 12);
       popSound(S.sounds);
       toast(`Added ${src.name}${game.xp ? ` · +${game.xp} XP` : ''}`);
@@ -7975,22 +7973,9 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       kcal: n.kcal, p: n.p || 0, c: n.c || 0, f: n.f || 0,
       fiber: n.fiber || 0, sugar: n.sugar || 0, sodium: n.sodium || 0,
     };
-    /* A FAILED WRITE MUST NOT LOOK LIKE A SAVED MEAL.
-       Measured 2026-08-13: reject this put the way a full quota does and the
-       meal vanishes with NO error, while an unrelated toast ("New talent points
-       ready") stays on screen reading like success. 166 log rows before, 166
-       after. Everything below this line is skipped, so the sheet closes and the
-       player believes the meal is in.
-       Storage really does fill: measured growth is ~2.4MB a year, and a phone
-       with 500MB free hits its origin quota in about four years of daily use.
-       Tom, 2026-08-13, chose the behaviour: "tell you and leave the entry on
-       screen so the user knows whats happening and that they have to make room
-       on the storage of their device". So the sheet STAYS OPEN with the portion
-       still selected and the button live, because a player who has just been
-       told to free up space needs somewhere to land when they come back. */
     /* ONE TAP, ONE ROW. Disabled here, before the first await, because the
-       catch below re-enables a button nothing had disabled: two fast taps on
-       Add each ran this handler to the put and logged the meal twice, +20 XP
+       not-committed path re-enables a button nothing had disabled: two fast taps
+       on Add each ran this handler to the put and logged the meal twice, +20 XP
        from one food (QA round A, 2026-09-03, L2). Only the fast double tap
        escapes: the CONCURRENT case is already correct, awardOnce's addIfAbsent
        checks and writes in one request. A disabled button drops the second
@@ -7998,28 +7983,21 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
        armToConfirm's `busy`. Not re-enabled on success: the sheet closes.
        Guard: tests/add-double-tap-audit.mjs. */
     btn.disabled = true;
-    try {
-      await db.put('log', e);
-    } catch (err) {
-      btn.disabled = false;
-      const full = err && /quota/i.test(err.name + ' ' + err.message);
-      toast(full
-        ? 'Could not save: this device is out of storage. Free up some space and tap Add again.'
-        : 'Could not save that meal. Tap Add to try again.', 5200);
-      trackEvent('log_write_failed', { quota: !!full });
-      return;                       // the sheet stays open, the entry stays put
-    }
-    await recordMealUsed(e.meal);
+    /* The write and its follow-ons live in commitLogEntry (QA round 25 M4).
+       null means the row did not commit: Add is re-armed and the sheet stays open. */
+    const game = await commitLogEntry(e, btn, via);
+    if (!game) return;
     food.lastPortion = { ...sel };
-    await persistFoodUse(food);
-    const game = await onFoodLogged(e, { via, targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
+    /* Bookkeeping on a committed row: a failure here is reported by db.js's
+       sink and must not re-open the sheet or re-arm Add. */
+    await persistFoodUse(food).catch(() => {});
     if (!editing) trackEvent('food_log', { via: via || 'search' });
     if (!editing && btn && btn.isConnected) {
       const r = btn.getBoundingClientRect();
       confettiBurst(r.left + r.width / 2, r.top, 18);
       popSound(S.sounds);
     }
-    toast(editing ? 'Saved' : `Added · ${Math.round(n.kcal)} kcal${game.xp ? ` · +${game.xp} XP` : ''}`);
+    toast(editing ? 'Saved' : `Added · ${Math.round(n.kcal)} kcal${game.receiptFailed ? ' · XP did not record' : game.xp ? ` · +${game.xp} XP` : ''}`);
     S.justLogged = !editing;
     if (!editing) game.note = `${food.name} logged · ${Math.round(n.kcal)} kcal`;
     queueCelebration(game);
@@ -8135,18 +8113,18 @@ function openQuickAdd(getMeal, entry = null) {
       portionLabel: '',
       kcal, p: p.value, c: c.value, f: f.value,
     };
-    await db.put('log', e);
-    // the fourth commit path, and the one that was skipping this: a Quick add to
-    // Dinner reopened the add sheet on Lunch. Quick add is how most people log
-    // their first meal, so it is where "meals remember" most needs to work.
-    await recordMealUsed(e.meal);
-    const game = await onFoodLogged(e, { targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
+    /* commitLogEntry owns the write, recordMealUsed (the fourth commit path,
+       and the one that used to skip it: a Quick add to Dinner reopened the add
+       sheet on Lunch) and the XP receipt. QA round 25 M4: this path had NO
+       try/catch, so a failed write escaped to the page with the sheet open. */
+    const game = await commitLogEntry(e, btn);
+    if (!game) return;
     if (!entry && btn && btn.isConnected) {
       const r = btn.getBoundingClientRect();
       confettiBurst(r.left + r.width / 2, r.top, 16);
       popSound(S.sounds);
     }
-    toast(entry ? 'Saved' : `Added · ${Math.round(kcal)} kcal${game.xp ? ` · +${game.xp} XP` : ''}`);
+    toast(entry ? 'Saved' : `Added · ${Math.round(kcal)} kcal${game.receiptFailed ? ' · XP did not record' : game.xp ? ` · +${game.xp} XP` : ''}`);
     S.justLogged = !entry;
     queueCelebration(game);
     closeAllSheetsViaHistory();
@@ -13325,6 +13303,58 @@ function enterAppFromOnboarding() {
 }
 
 /* ================= game: celebrations + progress ================= */
+
+/* ONE OWNER OF "THE MEAL IS IN". QA round 25 M4, 2026-09-03.
+   Writes the log row, then runs its follow-ons (meal memory, XP receipts), and
+   returns ONE honest outcome:
+     null    the row did NOT commit. The player is told, the button is re-armed,
+             the sheet stays open with the entry on it (Tom, 2026-08-13).
+     game    the row DID commit. Always, even if the XP follow-on failed, in
+             which case `receiptFailed` is set and the numbers are zero.
+   THE BUG. The put sat in a try/catch but onFoodLogged did not (and Quick add
+   had no try/catch at all). QA aborted the xp store AFTER the log row committed:
+   the rejection escaped the click handler, the sheet stayed open with Add live,
+   db.js's write sink toasted "That did not save", and a second tap wrote a
+   second row (167 -> 168, +189 kcal, unbounded in taps). The meal is the truth
+   and the XP row is a receipt for it: a lost receipt must never re-arm the
+   button on a committed row. A null-message rejection (an explicit abort) no
+   longer escapes to the page either.
+   Every UI log writer routes through here; tests/unit.test.js R25-M4 fails on
+   a new bare put to the log store. The browser guard is
+   tests/log-write-failure-audit.mjs (FAIL=log and FAIL=xp). */
+async function commitLogEntry(e, btn, via = null) {
+  try {
+    await db.put('log', e);
+  } catch (err) {
+    /* A FAILED WRITE MUST NOT LOOK LIKE A SAVED MEAL.
+       Measured 2026-08-13: reject this put the way a full quota does and the
+       meal vanished with NO error, while an unrelated toast ("New talent points
+       ready") stayed on screen reading like success. 166 log rows before, 166
+       after. Storage really does fill: measured growth is ~2.4MB a year, and a
+       phone with 500MB free hits its origin quota in about four years of daily
+       use. Tom, 2026-08-13, chose the behaviour: "tell you and leave the entry
+       on screen so the user knows whats happening and that they have to make
+       room on the storage of their device". */
+    if (btn) btn.disabled = false;
+    const full = err && /quota/i.test(err.name + ' ' + err.message);
+    toast(full
+      ? 'Could not save: this device is out of storage. Free up some space and tap Add again.'
+      : 'Could not save that meal. Tap Add to try again.', 5200);
+    trackEvent('log_write_failed', { quota: !!full });
+    return null;                       // the sheet stays open, the entry stays put
+  }
+  try {
+    await recordMealUsed(e.meal);
+    return await onFoodLogged(e, { via, targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
+  } catch (err) {
+    /* COMMITTED, RECEIPT LOST. db.js's guard has already reported the failed
+       write (telemetry + its own throttled toast); this only keeps the caller
+       on the success path so the sheet closes and Add cannot write the meal
+       twice. The XP is the one thing that did not land, and the toast says so. */
+    trackEvent('log_receipt_failed', { store: (err && err.tallyWrite && err.tallyWrite.store) || null });
+    return { xp: 0, total: 0, newBadges: [], streakMilestone: null, streak: 0, boosted: false, crates: 0, receiptFailed: true };
+  }
+}
 
 function queueCelebration(game) {
   if (!game) return;
