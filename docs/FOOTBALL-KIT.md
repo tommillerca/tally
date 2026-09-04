@@ -20,6 +20,10 @@ game can see it. Section 7 is the list of things only Tom can answer.
 | The guard (arithmetic) | `tests/football-kit-audit.mjs` | PURE, 0.3s, 34 rows, FAST tier |
 | The guard (pixels) | `tests/football-render-audit.mjs` | a real browser, ~150s, 12 rows, FULL tier until the kit goes live |
 | The bundle | `data/football-teams.js` `footballBundleMath` + `js/loot.js` `buyFootballBundle` | one tile per team, every sold garment, priced as a discount |
+| The colourway rail | `js/app.js` `fbRailHtml` + `app.css` `.fb-rail` | the Wardrobe's east-west slide through the 32 tints, see section 8 |
+| The garment frame | `js/app.js` `fitClass` + `app.css` `.fit-fbhead` | a football helmet is not a hat: its own tile crop, see section 9 |
+| The guard (the rail) | `tests/football-rail-audit.mjs` | a real browser, ~35s, 19 rows, FULL tier until the kit goes live |
+| The guard (the crop) | `tests/football-tile-crop-audit.mjs` | a real browser, ~35s, 6 rows, FULL tier until the kit goes live |
 
 **The model.** One master PNG per garment plus two alpha masks; a team is two hex
 colours; an item is team x garment with a stable id `fb-<team>-<garment>`. So 32
@@ -392,3 +396,75 @@ makes the animal change size: the two DRAWINGS do, at aspect 1.475 animated
 against 1.340 static. `petScale` is therefore left exactly as it was, and
 PET-SIZE bounds the linear ratio (0.9889 today) at 5%, which still catches a
 lost `mass: true` at 24%.
+
+## 8. The colourway rail (the Wardrobe)
+
+Tom, 2026-09-04: *"you still have yet to show me the dressing room/wardrobe
+where you can slide from east to west on the different tints."*
+
+Put a football garment on and the Wardrobe grows a horizontal rail under the fit
+grid: one tile per team, the tile under the CENTRE is the one being tried on,
+and the player's own Bonehead recolours as they slide. Nothing is worn until the
+bar says so.
+
+**It is cheap because of the model in section 1.** Every team of a garment is
+the same master PNG behind the same pair of masks, so a team change is two
+`style.background` values on spans already in the document: no restage, no
+innerHTML, no decode, no reflow. That is what makes it safe to drive from a
+scroll handler. Measured on the rendered rail: **32 tiles are 96 `<img>` from
+THREE distinct sources** and 64 tint spans, 442 nodes, and the Wardrobe's first
+paint with the rail on it is 516ms. `football-kit-audit` row `RAIL-SHARED` is
+the pure guard on that invariant, with its own control.
+
+**The precedent is `.pw-row`**, the Stable's pet-accessory row, reused rather
+than copied: `.fb-rail` carries `.pw-row` and every tile carries `.pw-item`, so
+the flex, the gap, the mandatory x-snap and the `on` state are that row's. Only
+the centre snap, the end margins and the locked state are new CSS.
+
+**Two Boneheads recolour.** At 430x932 the rail's top edge is at document y 1151
+while the paper doll ends near y 400, so the rail carries its own figure (the
+same `figure` helper and `.mog-fig` box the look panel's Now/After pair uses).
+The big doll keeps in step because it costs nothing.
+
+**An unowned colourway is SHOWN, locked, with its price.** Not hidden: a player
+owning one helmet would otherwise get a one-tile rail, and seeing their own
+Bonehead in the other 31 sets is the argument for a second one. Every tile
+previews on the doll; the lock lives on the BAR. **The rail never sells** -- the
+locked bar routes to the Kit room with the team already picked and the shelf
+already open (`S.fbJump`), so `buyFootballItem` stays the one and only till.
+
+**Not offered on a disguised slot.** If a transmog is making a gear piece look
+like a football helmet then `eq[slot]` is football while `rawEq[slot]` is not,
+and "wear this colourway" would mean re-buying a transmog. The rail wants both
+to be the same football item.
+
+## 9. Why a football helmet has its own tile crop
+
+Tom annotated the Kit room's helmet tile, 2026-09-04: *"too zoomed in."* He was
+right, and the number was 94.2%. Measured on the rendered 88px tile, the
+garment's own silhouette read as an ALPHA (the layer alone over a black ground
+and again over a white one, corners squared):
+
+| garment | ink, before | ink, after | runs off the tile, before | after |
+|---|---|---|---|---|
+| helmet | **94.2%** | **43.4%** | **all four edges** (L83 R45 T88 B46) | none |
+| jersey | 42.6% | 42.6% | none | none |
+| cleats | 33.4% | 33.4% | none | none |
+| lizard helmet | 23.6% | 23.6% | none | none |
+| lizard jersey | 20.7% | 20.7% | none | none |
+
+`.fit-head` is a measured frame for HEADWEAR sitting on a skull. A football
+helmet is a bigger object -- shell plus a facemask over the whole face -- so the
+same frame blew it off every edge. The fix keys off the ITEM (`fitClass`), not
+the surface, because the same crop draws this helmet on the Kit-room tile, the
+rack stage, a reveal card and the colourway rail; a tile-scoped override would
+have fixed one of four. Only slot H, so the helmet and its three visors move
+together and nothing else moves at all.
+
+**Read `tests/football-tile-crop-audit.mjs` before re-measuring anything here.**
+Three instruments were wrong before the one that runs, and each returned a
+confident number: hiding the whole mannequin measures the base skeleton
+(`object-fit: cover`, 98% of every tile); hiding just the garment and diffing
+measures the CONTRAST (this same helmet read 61.3% in the shop and 20.7% on the
+rail, on provably identical geometry); and reading an alpha with the tile's
+corners left rounded counts the corner arcs as garment.
