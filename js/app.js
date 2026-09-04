@@ -8124,6 +8124,23 @@ async function openEntryEdit(entryId) {
 
 /* ================= quick add ================= */
 
+/* THE ENTRY'S OWN SNAPSHOT IS AUTHORITATIVE ON EDIT (QA round 25, M5).
+   A logged meal carries every number it will ever need (kcal, p, c, f, fiber,
+   sugar, sodium, brand, portionLabel, sel, foodId); it must never depend on
+   the food it came from still existing. Deleting a custom food asks nothing,
+   and the orphaned entry then reaches this editor through openEntryEdit, which
+   used to rebuild it from the four boxes on screen with foodId: null and
+   portionLabel: ''. Measured on one save: fibre 5 gone, sugar gone, sodium 800
+   gone, portion label, brand and serving gone, and the day's micronutrient
+   line read permanently lighter. Now an edit spreads the stored entry first and
+   overrides ONLY what this sheet can actually change; a fresh quick add is
+   built exactly as before. The relog path (data-relog) already copies
+   `{ ...src }` for the same reason. */
+function quickAddEntry(entry, { meal, name, kcal, p, c, f }) {
+  if (entry) return { ...entry, meal, name, kcal, p, c, f };
+  return { id: newId(), date: S.date, meal, ts: Date.now(), foodId: null, name, portionLabel: '', kcal, p, c, f };
+}
+
 function openQuickAdd(getMeal, entry = null) {
   const wrap = openSheet(`
     <div class="sheet-head">
@@ -8158,17 +8175,8 @@ function openQuickAdd(getMeal, entry = null) {
     if (!c.ok) return;
     const f = readNum($('#qaF', wrap), { name: 'Fat', ...LIMITS.macroG, optional: true, unit: ' g' });
     if (!f.ok) return;
-    const kcal = k.value;
-    const e = {
-      id: entry ? entry.id : newId(),
-      date: entry ? entry.date : S.date,
-      meal: getMeal(),
-      ts: entry ? entry.ts : Date.now(),
-      foodId: null,
-      name: $('#qaName', wrap).value.trim() || 'Quick add',
-      portionLabel: '',
-      kcal, p: p.value, c: c.value, f: f.value,
-    };
+    const e = quickAddEntry(entry, { meal: getMeal(), name: $('#qaName', wrap).value.trim() || 'Quick add', kcal: k.value, p: p.value, c: c.value, f: f.value });
+    const kcal = e.kcal;
     await db.put('log', e);
     // the fourth commit path, and the one that was skipping this: a Quick add to
     // Dinner reopened the add sheet on Lunch. Quick add is how most people log

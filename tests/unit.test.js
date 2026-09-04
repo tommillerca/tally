@@ -3673,6 +3673,48 @@ test('L3 generic food use (portion, count, star) survives a cold relaunch via kv
   assert.ok(rec['g-x5'] && rec['g-x204'], 'pruning dropped a recent id');
 });
 
+/* ---- QA round 25, M5: a logged meal survives the deletion of its food ----------
+   Delete asks nothing; the orphaned entry then routes (openEntryEdit: findFood is
+   null) into the quick-add editor, whose save rebuilt it from four boxes. Measured
+   on one save: fibre 5, sugar, sodium 800, portionLabel, brand and sel all gone.
+   Runs the REAL findFood (the routing decision) and the REAL quickAddEntry (the
+   rebuild) out of js/app.js. */
+test('M5 editing an entry whose custom food was deleted keeps every nutrient and label', async () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const ff = app.match(/function findFood\(id\) \{[\s\S]*?\n\}\n/);
+  const qa = app.match(/function quickAddEntry\([\s\S]*?\n\}\n/);
+  assert.ok(ff, 'findFood not found in js/app.js');
+  assert.ok(qa, 'quickAddEntry not found in js/app.js: the quick-add save is rebuilding entries from the boxes again');
+  const S = { userFoods: [{ id: 'c-abc', source: 'custom', name: 'Oat bar', brand: 'Bobs' }], date: '2026-09-03' };
+  const { findFood, quickAddEntry } = new Function('S', 'GENERIC_FOODS', 'newId',
+    `${ff[0]}${qa[0]}; return { findFood, quickAddEntry };`)(S, [], () => 'new-id');
+
+  // what the portion sheet's Add wrote for this custom food (the `e` literal in openPortion)
+  const logged = {
+    id: 'e1', date: '2026-09-03', meal: 1, ts: 1700000000000, foodId: 'c-abc',
+    name: 'Oat bar', brand: 'Bobs', portionLabel: '1 bar (45 g)', sel: { mode: 'serving', idx: 0, qty: 1 },
+    kcal: 190, p: 4, c: 30, f: 6, fiber: 5, sugar: 12, sodium: 800,
+  };
+  assert.ok(findFood('c-abc'), 'precondition: the food resolves before the delete');
+
+  // Foods > Edit > Delete: db.del('foods') and the S.userFoods filter, no prompt
+  S.userFoods = S.userFoods.filter(x => x.id !== 'c-abc');
+  assert.equal(findFood(logged.foodId), null, 'precondition: the entry is now orphaned and openEntryEdit routes it to quick add');
+
+  // Save in the quick-add editor with the boxes untouched (prefilled from the entry)
+  const saved = quickAddEntry(logged, { meal: logged.meal, name: logged.name, kcal: 190, p: 4, c: 30, f: 6 });
+  assert.deepEqual(saved, logged, 'an untouched save changed the entry: the deleted food took nutrients out of a meal already logged');
+
+  // Save with a corrected kcal: only the edited fields move
+  const edited = quickAddEntry(logged, { meal: 2, name: 'Oat bar', kcal: 200, p: 4, c: 30, f: 6 });
+  assert.deepEqual(edited, { ...logged, meal: 2, kcal: 200 });
+
+  // A fresh quick add is built exactly as before
+  const { ts, ...fresh } = quickAddEntry(null, { meal: 0, name: 'Quick add', kcal: 300, p: 0, c: 0, f: 0 });
+  assert.ok(Math.abs(ts - Date.now()) < 5000);
+  assert.deepEqual(fresh, { id: 'new-id', date: '2026-09-03', meal: 0, foodId: null, name: 'Quick add', portionLabel: '', kcal: 300, p: 0, c: 0, f: 0 });
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
