@@ -4493,6 +4493,88 @@ test('Survey v2 S3 (e): a failed post keeps the exact body pending and a retry d
   assert.match(bootBody, /addEventListener\('online', \(\) => \{ drainSurvey2Pending\(\)/, "the 'online' event no longer retries a pending survey");
 });
 
+/* QA ROUND 23 F6. Measured on a heavy account: 57 collected looks made a 1420px
+   Dressing Room grid in BH_ITEMS declaration order with no organisation, and 56
+   of 56 look tiles carried no rarity class while the fit grid twelve lines above
+   carries r-<rarity> plus the tag. Runs the REAL `cell` + `lookTilesHtml` slice
+   on a fixture in SHUFFLED declaration order: tiles come out in the Looks tab's
+   order (rarity descending, declaration order kept inside a band), every look
+   tile carries r-<rarity> and the ward-rar tag, and the two fixed cells (own look
+   and Hide) stay first and untiered. */
+test('R23 F6: Dressing Room look tiles are sorted by rarity and carry r-<rarity> like the fit grid', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('const cell = (val, inner, title');
+  const b = app.indexOf('/* ---------------------------------------------------------------- v2', a);
+  assert.ok(a > 0 && b > a, 'the transmog `cell` helper moved: re-anchor this slice');
+  const slice = app.slice(a, b);
+  assert.ok(slice.includes('const lookTilesHtml ='), 'lookTilesHtml is gone: the look grid is back to an unsorted, untiered arts.map');
+  const rarOrder = app.match(/^const RAR_ORDER = .*$/m)[0];
+  const tagFn = app.match(/function rarityTagHtml\(rarity\) \{[\s\S]*?\n\}/)[0];
+  const lookTilesHtml = new Function('cur', 'sel', 'esc', 'ownArt', 'wornGear', 'bhTrim', 'bhAsset', 'ICONS', 'TRANSMOG_HIDE', 'costTag',
+    `${rarOrder}; ${tagFn}; ${slice}; return lookTilesHtml;`)(
+    '', '', String, { id: 'own' }, null, x => x, i => i.id + '.png', { hidden: () => '<svg/>' }, '__hide__', () => '<span class="look-cost paid">owned</span>');
+  // declaration order deliberately interleaves tiers, the way BH_ITEMS does
+  const arts = [
+    { id: 'c1', name: 'C one', rarity: 'common' }, { id: 'l1', name: 'L one', rarity: 'legendary' },
+    { id: 'r1', name: 'R one', rarity: 'rare' }, { id: 'c2', name: 'C two', rarity: 'common' },
+    { id: 'e1', name: 'E one', rarity: 'epic' }, { id: 'u1', name: 'U one', rarity: 'uncommon' },
+    { id: 'r2', name: 'R two', rarity: 'rare' },
+  ];
+  const html = lookTilesHtml(arts);
+  const tiles = [...html.matchAll(/<button class="ward-cell look ([^"]*)" data-look="([^"]*)"/g)].map(m => ({ cls: m[1], id: m[2] }));
+  assert.deepEqual(tiles.slice(0, 2).map(t => t.id), ['', '__hide__'], 'the As equipped / Hide cells must stay first');
+  assert.ok(tiles.slice(0, 2).every(t => !/\br-/.test(t.cls)), 'the two fixed cells carry no tier');
+  assert.deepEqual(tiles.slice(2).map(t => t.id), ['l1', 'e1', 'r1', 'r2', 'u1', 'c1', 'c2'],
+    'look tiles are not in the Looks tab order (rarity desc, declaration order inside a band)');
+  for (const t of tiles.slice(2)) {
+    const rar = arts.find(x => x.id === t.id).rarity;
+    assert.ok(t.cls.split(/\s+/).includes(`r-${rar}`), `tile ${t.id} lacks r-${rar}: ${t.cls}`);
+  }
+  assert.equal((html.match(/class="ward-rar"/g) || []).length, arts.length, 'every look tile must carry the rarity tag the fit grid carries');
+  // and the input is not mutated: lookPriceMap and the panel read slotArts in place
+  assert.equal(arts[0].id, 'c1', 'lookTilesHtml must sort a copy, not the caller\'s array');
+});
+
+/* QA ROUND 23 F8. At 6 fits [data-fit-save] used to vanish, so the only storage
+   cap in the app printed no total, and "You can keep 6 fits. Bin one first." was
+   dead code (captureFit can only return `full` from a control that only rendered
+   while not full). Runs the REAL fitRail slice at 5 and 6 fits, the REAL
+   ward-head at both counts, and pins that the string has more than one user. */
+test('R23 F8: the fits cap is printed and the save chip stays, ghosted, with its rule reachable', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const MAX = 6;
+  const a = app.indexOf('const fitRail = `');
+  const b = app.indexOf('\n    content.innerHTML = `', a);
+  assert.ok(a > 0 && b > a, 'the fitRail template moved: re-anchor this slice');
+  const rail = n => new Function('fitList', 'fitPrices', 'S', 'fitThumbArt', 'esc', 'ICONS', 'MAX_FITS', 'stripPlan',
+    `${app.slice(a, b)}; return fitRail;`)(
+    Array.from({ length: n }, (_, i) => ({ id: 'f' + i, name: 'Fit ' + i, gear: {} })), Array(n).fill(0),
+    { fitEdit: null }, () => null, String, { dust: () => '', close: () => '' }, MAX, { slots: [], mogs: [] });
+  const five = rail(5), six = rail(6);
+  const save = /<button class="fit-chip add" data-fit-save="1"([^>]*)>/;
+  assert.match(five, save, 'at 5 fits the save chip is missing');
+  assert.ok(!/aria-disabled/.test(five.match(save)[1]), 'at 5 fits the save chip must be enabled');
+  assert.match(six, save, 'at 6 fits the save chip vanished again: the cap is silent');
+  assert.match(six.match(save)[1], /aria-disabled="true"/, 'at the cap the save chip must be ghosted (aria-disabled), not live');
+  assert.ok(!/ disabled/.test(six.match(save)[1]), 'a `disabled` button swallows the tap that toasts the rule');
+
+  const h = app.indexOf('<div class="ward-head">');
+  const hEnd = app.indexOf("</div>` : tab === 'shop'", h);
+  assert.ok(h > 0 && hEnd > h, 'the ward-head template moved: re-anchor this slice');
+  const head = n => new Function('lvl', 'coinBal', 'dustBal', 'ownedCount', 'boost', 'ICONS', 'sparkIco', 'looksAll', 'looksHave', 'esc', 'fitCount', 'MAX_FITS',
+    'return `' + app.slice(h, hEnd) + '</div>`;')(
+    { level: 1, name: 'x' }, 0, 0, 0, 0, { coin: () => '', dust: () => '', bone: () => '', boltIco: () => '' }, () => '', [], new Set(), String, n, MAX);
+  assert.match(head(5), /<span class="bh-pill ward-fits">5\/6 fits<\/span>/, 'the header does not print 5/6 fits');
+  assert.match(head(6), /<span class="bh-pill ward-fits">6\/6 fits<\/span>/, 'the header does not print 6/6 fits');
+
+  // the explaining string: defined once, used by the ghosted chip AND by captureFit's `full`
+  assert.equal((app.match(/You can keep \$\{MAX_FITS\} fits\. Bin one first\./g) || []).length, 1, 'the cap string must be defined once, as fitsFullMsg');
+  const uses = (app.match(/\bfitsFullMsg\b/g) || []).length;
+  assert.ok(uses > 2, `fitsFullMsg is dead code again: ${uses} occurrence(s), need the definition plus two users`);
+  const handler = app.slice(app.indexOf("$('[data-fit-save]', content)"), app.indexOf('openTextSheet', app.indexOf("$('[data-fit-save]', content)")));
+  assert.match(handler, /fitList\.length >= MAX_FITS[\s\S]*toast\(fitsFullMsg/, 'a tap on the ghosted save chip must toast the rule before any sheet opens');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

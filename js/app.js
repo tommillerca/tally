@@ -14447,6 +14447,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const unspentTal = Math.max(0, talentPoints(levelFor(xp).level) - takenTal.length);
   const looksAll = BH_ITEMS.filter(i => !i.default);
   const looksHave = await collectedLooks();
+  // the fits cap, printed like every other cap in the app (QA round 23 F8)
+  const fitCount = tab === 'wardrobe' ? (await fits()).length : 0;
 
   const curtains = false; // dressing-room curtains retired (Tom's call)
   body.innerHTML = `
@@ -14467,6 +14469,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
             layout; it is a <button> with an accent edge so it reads as tappable
             rather than as one more read-only tally. */''}
       <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${looksAll.filter(i => looksHave.has(i.id)).length}/${looksAll.length} looks</button>
+      ${/* THE FITS CAP, STATED (QA round 23 F8). At 6 fits the save chip used to
+            vanish with no copy and no total, the only storage cap in the app
+            with none (the yard prints 24, favourites 6, recents 8, and the looks
+            pill beside this one prints N/M). Same .bh-pill as the looks count. */''}
+      <span class="bh-pill ward-fits">${fitCount}/${MAX_FITS} fits</span>
     </div>` : tab === 'shop' ? gwartHeroHtml() : `
     <div class="bh-hero mini">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny })}</div>
@@ -14716,7 +14723,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ${S.fitEdit === f.id ? '<i class="fc-x" data-fit-del="' + f.id + '">' + ICONS.close(12) + '</i>' : ''}
           </button>`;
         }).join('')}
-        ${fitList.length < MAX_FITS ? '<button class="fit-chip add" data-fit-save="1">+ Save this fit</button>' : ''}
+        ${/* AT THE CAP THE CHIP STAYS, GHOSTED, AND A TAP EXPLAINS (QA round 23 F8).
+              It used to be removed outright, so "You can keep 6 fits. Bin one
+              first." (the handler below) was unreachable: captureFit can only
+              return `full` from a control that only rendered while not full.
+              aria-disabled, not disabled: a disabled button swallows the tap that
+              is supposed to toast the rule. "Replace which one" is design, not
+              built here. */''}
+        <button class="fit-chip add" data-fit-save="1"${fitList.length >= MAX_FITS ? ' aria-disabled="true"' : ''}>+ Save this fit</button>
         ${/* A player asked for one tap that clears the doll so a new outfit starts
               from nothing, and Tom's call on 2026-08-22 is that it takes the
               STATTED GEAR too. It UNEQUIPS and nothing else: every piece and every
@@ -14808,7 +14822,22 @@ async function renderCharacter(wrap, tab, opts = {}) {
           : '';
         const { cur, sel, cost, afford, changed } = mogState();
         const arts = slotArts;
-        const cell = (val, inner, title) => `<button class="ward-cell look ${cur === val ? 'equipped' : ''} ${sel === val ? 'selected' : ''}" data-look="${esc(val)}" title="${esc(title)}">${inner}</button>`;
+        const cell = (val, inner, title, extra = '') => `<button class="ward-cell look ${extra} ${cur === val ? 'equipped' : ''} ${sel === val ? 'selected' : ''}" data-look="${esc(val)}" title="${esc(title)}">${inner}</button>`;
+        /* THE LOOK TILES, ONE RENDERER (QA round 23 F6). Measured on a heavy
+           account: 57 collected looks made a 1420px grid in BH_ITEMS declaration
+           order with NO organisation, and 56 of 56 tiles carried no rarity class
+           while the "pick your fit" grid above carries r-<rarity> plus the tag.
+           The precedent is the Looks tab (grep `RAR_ORDER.indexOf(a.rarity)`
+           below): rarity descending, stable, so declaration order survives inside
+           a band. Same r-<rarity> class and rarityTagHtml as the fit grid, so the
+           tier reads in the half of the screen where it is bought. The two fixed
+           cells (own look / Hide) stay first and carry no tier. The module-level
+           RAR_ORDER runs common -> legendary, hence b - a for legendary first.
+           No search, favourites or sort controls: that is design, Tom's call. */
+        const lookTilesHtml = arts => `${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+            ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
+            ${[...arts].sort((a, b) => RAR_ORDER.indexOf(b.rarity) - RAR_ORDER.indexOf(a.rarity))
+              .map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>${costTag(i.id)}${rarityTagHtml(i.rarity)}`, `${i.name} · ${i.rarity}`, `r-${i.rarity}`)).join('')}`;
         /* ---------------------------------------------------------------- v2
            THE NEW-PLAYER GRILL, 2026-08-23, measured at 430x932 on a seeded
            mid-game account. Four findings, and this branch answers them in order:
@@ -14870,9 +14899,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ${mogFigsHtml()}
           </div>
           <div class="ward-grid look-grid">
-            ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
-            ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
-            ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${costTag(i.id)}`, i.name)).join('')}
+            ${lookTilesHtml(arts)}
           </div>
           <p class="note mog-safe">Nothing is destroyed. The piece stays on, keeps its stats and stays in your Backpack.${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>
         </div>`;
@@ -14938,11 +14965,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
       S.fitEdit = null; popSound(S.sounds);
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
+    // one string, said from both the ghosted chip and captureFit's own `full` (QA round 23 F8)
+    const fitsFullMsg = `You can keep ${MAX_FITS} fits. Bin one first.`;
     $('[data-fit-save]', content)?.addEventListener('click', async () => {
+      if (fitList.length >= MAX_FITS) { toast(fitsFullMsg, 2800); return; }
       openTextSheet({ title: 'Name this fit', value: `Fit ${fitList.length + 1}`, cta: 'Save fit' }, async name => {
         if (!name) return;
         const res = await captureFit(name);
-        if (!res.ok) { toast(res.reason === 'full' ? `You can keep ${res.max} fits. Bin one first.` : 'Could not save that fit.', 2800); return; }
+        if (!res.ok) { toast(res.reason === 'full' ? fitsFullMsg : 'Could not save that fit.', 2800); return; }
         levelSound(S.sounds);
         toast(`Saved "${res.fit.name}". Tap it any time to put it back on.`, 2600);
         renderCharacter(wrap, 'wardrobe', { instant: true });
