@@ -1217,6 +1217,14 @@ export async function setRecoveryPhrase(phrase, recoveryId = null) {
 export async function myRecoveryId() { return kvGet('recoveryId', null); }
 
 export async function hasRecoveryPhrase() { return !!(await kvGet('recoverySetAt', 0)); }
+/* ONE SENTENCE, ONE PREDICATE, for both places that warn about a missing
+   recovery code: the weekly boot nudge and (QA round 25 M9) the Erase confirm,
+   which said nothing about it at the one moment it was irreversible. On the web
+   there is no keychain, so once the local save is wiped the cloud ciphertext is
+   unreadable forever unless a phrase AND a recovery id were set first. "Covered"
+   needs both: a v230 phrase with no id still needs the friend code to restore. */
+export const NO_RECOVERY_CODE_MSG = 'No recovery code yet. Delete the app and this account is gone: set one in Settings.';
+export function recoveryWarning(hasPhrase, recoveryId) { return hasPhrase && recoveryId ? '' : NO_RECOVERY_CODE_MSG; }
 
 // Rebuild the account on a fresh device: fetch the wrapped bundle by friend code,
 // unwrap with the phrase, install the identity, then the normal backup pull works.

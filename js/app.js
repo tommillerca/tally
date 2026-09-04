@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -1180,8 +1180,21 @@ async function boot() {
       else { updatePending = true; toast('Update ready. Leave this screen to apply', 3600); }
     });
   }
-  requestPersistence();
+  /* QA round 25 M23: the persist() answer used to be discarded. Logged once as
+     a boot fact, the way cloud_restore_failed is, so telemetry can say how many
+     devices are actually protected from eviction. No UI row yet (Tom's call). */
+  requestPersistence().then(granted => { try { trackEvent('persist', { granted }); } catch { /* analytics never breaks the app */ } });
   watchForWipe();   // listen for another tab wiping this save before it happens
+  /* QA round 25 M9: the tab that just wiped (or was wiped by another tab)
+     reloaded onto a fresh start with an EMPTY toast. db.js eraseAll() and its
+     `erased` handler leave ERASED_FLAG in sessionStorage because nothing else
+     survives the reload (kv was just cleared). Read once, then say what happened. */
+  try {
+    if (sessionStorage.getItem(ERASED_FLAG)) {
+      sessionStorage.removeItem(ERASED_FLAG);
+      toast('Everything on this device was erased.', 4600);
+    }
+  } catch { /* private mode */ }
   /* THE OTHER HALF OF THE WRITE-FAILURE SEAM. js/db.js routes every rejected
      write through one reporter and then RE-THROWS, so callers keep their control
      flow, but the reporter only calls a sink and nothing registered one: the
@@ -12967,7 +12980,7 @@ async function renderSettings(el) {
         <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
       </div>
       <div class="sheet-body">
-        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. <span id="erVault">Checking whether a cloud copy exists...</span></p>
+        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. <span id="erVault">Checking whether a cloud copy exists...</span><span id="erRecov"></span></p>
         <div class="t1-field"><label>Type ERASE to confirm</label><input id="erIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ERASE"></div>
       </div>
       <div class="t1-foot"><button class="btn danger-ish" id="erGo" disabled>Erase it all</button></div>`, { cls: 't1', name: 'Erase' });
@@ -12989,6 +13002,15 @@ async function renderSettings(el) {
           ? 'There is <b>no</b> cloud backup for this account, so this is the only copy.'
           : 'The cloud could not be reached, so no vault copy can be confirmed. Treat this as the only copy.';
     });
+    /* QA round 25 M9: on the web there is no keychain, so a wipe with no
+       recovery code set makes the cloud ciphertext unreadable forever. The app
+       already owns the sentence (the weekly nudge); it now appears HERE, before
+       the irreversible tap, and only when no code exists. Same async fill
+       pattern as #erVault, same predicate as the nudge (social.recoveryWarning). */
+    Promise.all([social.hasRecoveryPhrase(), social.myRecoveryId()]).then(([phrase, id]) => {
+      const warn = social.recoveryWarning(phrase, id), el = $('#erRecov', wrap);
+      if (warn && el) el.innerHTML = ` <b>${warn}</b>`;
+    }).catch(() => {});
     const input = $('#erIn', wrap), go = $('#erGo', wrap);
     input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'ERASE'; });
     go.addEventListener('click', async () => {
@@ -13489,9 +13511,11 @@ async function commitLogEntry(e, btn, via = null) {
        Measured 2026-08-13: reject this put the way a full quota does and the
        meal vanished with NO error, while an unrelated toast ("New talent points
        ready") stayed on screen reading like success. 166 log rows before, 166
-       after. Storage really does fill: measured growth is ~2.4MB a year, and a
-       phone with 500MB free hits its origin quota in about four years of daily
-       use. Tom, 2026-08-13, chose the behaviour: "tell you and leave the entry
+       after. Storage really does fill: measured growth is 3.6MB in the first
+       year and 6.7MB by the second (QA round 25 M23, 2026-09-03; the earlier
+       ~2.4MB/year figure was 50% low), so a phone with 500MB free hits its
+       origin quota in well under the four years that figure implied.
+       Tom, 2026-08-13, chose the behaviour: "tell you and leave the entry
        on screen so the user knows whats happening and that they have to make
        room on the storage of their device". */
     if (btn) btn.disabled = false;
@@ -18182,11 +18206,12 @@ async function maybeNudgeRecovery() {
     // A v230 phrase with no recovery ID still needs the friend code to restore,
     // which is the gap v231 exists to close. Checking only for a phrase left every
     // early player silently uninvited to the fix, so both count as "not covered".
-    if (await social.hasRecoveryPhrase() && await social.myRecoveryId()) return;
+    const warn = social.recoveryWarning(await social.hasRecoveryPhrase(), await social.myRecoveryId());
+    if (!warn) return;
     const last = await kvGet('recoveryNudgeAt', 0);
     if (Date.now() - last < 7 * 86400e3) return;
     await kvSet('recoveryNudgeAt', Date.now());
-    setTimeout(() => toast('No recovery code yet. Delete the app and this account is gone: set one in Settings.', 5200), 6000);
+    setTimeout(() => toast(warn, 5200), 6000);
   } catch { /* never block boot */ }
 }
 

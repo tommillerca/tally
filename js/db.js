@@ -962,6 +962,7 @@ function chan() {
         try { wipeChannel.postMessage({ t: 'frozen', id: m.id }); } catch { /* channel gone */ }
       } else if (m.t === 'erased') {
         frozen = true;
+        markErased();
         try { if (typeof location !== 'undefined') location.reload(); } catch { /* not a document */ }
       }
     };
@@ -970,6 +971,19 @@ function chan() {
 }
 // Called once at boot so a tab is listening before any OTHER tab erases.
 export function watchForWipe() { chan(); }
+
+/* THE WIPE HAS TO SAY WHAT IT DID, AND IT CANNOT SAY IT HERE. QA round 25 M9
+   measured 3,780 rows to zero in 72 ms and the reloaded tab booting with an
+   EMPTY toast: both wipe paths (Erase, Delete account) run eraseAll() and then
+   location.reload(), the watching tabs reload from the `erased` message, and
+   toast() is in-memory state that dies with the document. A kv row cannot
+   carry the message either, because kv is one of the stores this wipe just
+   cleared (and multitab-audit asserts zero rows afterwards). sessionStorage is
+   per-tab and survives a reload, and app.js already uses it for exactly this
+   shape (the per-tab 'bhg-splash' flag), so the wiping tab and every frozen
+   tab drop this flag and app.js boot reads it once and toasts. */
+export const ERASED_FLAG = 'tally-erased';
+function markErased() { try { sessionStorage.setItem(ERASED_FLAG, '1'); } catch { /* not a document, or private mode */ } }
 
 export async function eraseAll() {
   const ch = chan();
@@ -1004,11 +1018,23 @@ export async function eraseAll() {
     t.onabort = () => reject(t.error || new Error('erase aborted'));
   });
   if (ch) try { ch.postMessage({ t: 'erased' }); } catch { /* channel gone */ }
+  markErased();
 }
 
-// Ask the browser to protect this origin's storage from automatic eviction.
+/* Ask the browser to protect this origin's storage from automatic eviction,
+   AND KEEP THE ANSWER. QA round 25 M23: this used to `.catch(() => {})` the
+   promise and drop the boolean, so `navigator.storage.persisted()` read FALSE
+   with a full year of data on board and nothing in the app could have known.
+   Module state, like `frozen` and `writeFailureSink` beside it: null until the
+   browser answers (or when the API is missing), then the persist() boolean.
+   No UI reads it yet (Tom's call); app.js logs it once at boot. */
+let persistGranted = null;
+export function persistenceGranted() { return persistGranted; }
 export function requestPersistence() {
   try {
-    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    if (navigator.storage && navigator.storage.persist) {
+      return navigator.storage.persist().then(v => { persistGranted = !!v; return persistGranted; }, () => null);
+    }
   } catch { /* unsupported */ }
+  return Promise.resolve(null);
 }
