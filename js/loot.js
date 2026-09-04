@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
-import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAM_BY_ID, footballGrantIds, footballBundleIds, footballBundleMath, footballBundleSellable, visorRefusesEquip } from '../data/football-teams.js';
+import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, footballGrantIds, footballBundleIds, footballBundleMath, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
 
@@ -65,14 +65,30 @@ export const DROP = {
   ],
 };
 
-/* Football kit, 2026-09-04: one tile, one flat price, the helmet tile granting
-   its three visors too. Same receipt-decides shape as buyDropItem: money first,
+/* Football kit, 2026-09-04: one tile per GARMENT, one flat price, and what it
+   hands over is that garment in every team's colours (footballGrantIds; the
+   helmet still drags its three visors, so 128 ids). Tom: "buy the garment get
+   all 32 colours." Same receipt-decides shape as buyDropItem: money first,
    atomically; the grant race's loser is refunded. Refuses while the kit is not
-   live or has no price, so a flipped flag without a number sells nothing. */
-export async function buyFootballItem(itemId) {
+   live or has no price, so a flipped flag without a number sells nothing.
+
+   ALREADY OWNED MEANS ANY COLOURWAY. A second helmet in a different team is not
+   a second purchase, it is the same purchase, so the ownership check has to
+   refuse it before the coins move. It does, and not by accident: the 32 rows
+   granted above are all in ownedCosmeticIds(), so `owned.has(itemId)` is already
+   true for every team's copy. Graded by tests/football-kit-audit.mjs row REPEAT,
+   which asserts the coin delta is zero.
+
+   `stocked` is a parameter for the same reason footballBundleSellable's are: the
+   shop is shut until Tom flips FOOTBALL_KIT_LIVE, and a buy path nobody can call
+   is a buy path nobody has tested. Production callers pass nothing. */
+export async function buyFootballItem(itemId, stocked = footballPieceSellable()) {
   const ids = footballGrantIds(itemId);
   const cost = FOOTBALL_KIT_PRICE_PLACEHOLDER;
-  if (!FOOTBALL_KIT_LIVE || !ids.length || !Number.isFinite(cost) || cost <= 0) return { ok: false, reason: 'not-stocked' };
+  const garment = FOOTBALL_GARMENT_BY_KEY[(BH_BY_ID[itemId] || {}).football?.garment];
+  // `sold` and not merely "a football item": the three visors are granted, never
+  // sold, so a stray tile id for one must not take 4,200 for a piece of a hat.
+  if (!stocked || !ids.length || !garment?.sold || !Number.isFinite(cost) || cost <= 0) return { ok: false, reason: 'not-stocked' };
   if ((await ownedCosmeticIds()).has(itemId)) return { ok: false, reason: 'owned' };
   const left = await spendCoins(cost);
   if (left === null) return { ok: false, reason: 'coins', need: cost, have: await coins() };
@@ -81,23 +97,26 @@ export async function buyFootballItem(itemId) {
     return { ok: false, reason: 'owned' };
   }
   for (const id of ids) if (id !== itemId) await grantCosmetic(id, 'football');
-  return { ok: true, label: BH_BY_ID[itemId].name, cost, coins: left };
+  return { ok: true, label: `${garment.label} · ${FOOTBALL_TEAMS.length} colourways`, granted: ids.length, cost, coins: left };
 }
 
-/* THE TEAM BUNDLE. Tom, 2026-09-04: "per garment only with a bundle of
-   everything for a slightly cheaper but expensive price." One purchase, every
-   sold garment of one team (8 ids: the helmet still drags its three visors).
+/* THE BUNDLE. Tom, 2026-09-04: "per garment only with a bundle of everything for
+   a slightly cheaper but expensive price." One purchase, all five sold garments,
+   each in all 32 colourways (256 ids: the helmet still drags its three visors).
+   There is one bundle now, not one per team; the first argument is the team tile
+   the player tapped and is IGNORED, kept only so js/app.js keeps working until
+   its shelf patch lands (docs/FOOTBALL-KIT.md).
    Same receipt-decides shape as above, with one deliberate simplification:
-   a player who already owns SOME of the team pays the full bundle price and is
-   granted the rest. Pro-rating would need a second price table and a second
-   refusal to explain in the tile; the tile prints what is already owned, so the
-   choice is in front of them. Owning ALL of it is refused outright.
+   a player who already owns SOME of it pays the full bundle price and is granted
+   the rest. Pro-rating would need a second price table and a second refusal to
+   explain in the tile; the tile prints what is already owned, so the choice is in
+   front of them. Owning ALL of it is refused outright.
    ponytail: flat bundle price regardless of what is already owned; pro-rate if
    players start buying a piece and then the bundle. */
-export async function buyFootballBundle(teamId) {
-  const ids = footballBundleIds(teamId);
+export async function buyFootballBundle(_teamId, stocked = footballBundleSellable()) {
+  const ids = footballBundleIds();
   const cost = FOOTBALL_BUNDLE_PRICE_PLACEHOLDER;
-  if (!FOOTBALL_TEAM_BY_ID[teamId] || !ids.length || !footballBundleSellable()) return { ok: false, reason: 'not-stocked' };
+  if (!ids.length || !stocked) return { ok: false, reason: 'not-stocked' };
   const owned = await ownedCosmeticIds();
   const want = ids.filter(id => !owned.has(id));
   if (!want.length) return { ok: false, reason: 'owned' };
@@ -111,7 +130,7 @@ export async function buyFootballBundle(teamId) {
     return { ok: false, reason: 'owned' };
   }
   for (const id of want.slice(1)) await grantCosmetic(id, 'football');
-  return { ok: true, label: `${FOOTBALL_TEAM_BY_ID[teamId].name} kit`, granted: want.length, cost, coins: left, save: footballBundleMath().save };
+  return { ok: true, label: `The full kit · ${FOOTBALL_TEAMS.length} colourways`, granted: want.length, cost, coins: left, save: footballBundleMath().save };
 }
 
 export async function buyDropItem(itemId) {
