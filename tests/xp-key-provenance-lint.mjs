@@ -42,6 +42,28 @@
  * `log-${entry.id}` TAINTED via app.js `copy.id <- newId()` (three call sites)
  * and `e.id <- editing ? entry.id : newId()`. Green on the fixed tree.
  *
+ * QA ROUND 28 G2 (2026-09-04). The lint above was GREEN on the same bug spelled
+ * through a callback: `run: e => award(`log-${e.id}`)` (js/game.js:881 on the
+ * v470 tree, 00979897), because an anonymous callback's parameter resolved
+ * UNRESOLVED and UNRESOLVED was tolerated (REACH allowed 50%, the tree sat at
+ * 42%). Three changes, each printed in its trail:
+ *   - a callback parameter is bound to the COLLECTION it iterates: the receiver
+ *     of `.map/.forEach/.filter/...(p =>`, or the `items:` of the enclosing
+ *     phase object; elementOf peels `.slice/.filter/.sort`, `[...X]`,
+ *     `new Set(X)` and follows `X.map(p => body)` into body;
+ *   - a callback parameter that STILL cannot be resolved is TAINTED unless the
+ *     chain is date-shaped (last segment `date`): a row can hand a key its date
+ *     and nothing else that is stable across calls;
+ *   - a store read (`db.all/get/byIndex(`) is no longer a CLEAN terminal: `.id`
+ *     of a row is newId() at its write site, TAINTED; other properties UNRESOLVED.
+ * Named arrows (`const start = async (foeCfg) =>`, `const f = g =>`) were also
+ * being double-bound as anonymous, hiding 14 foeCfg chains; fixed in defsOf.
+ * REACH after the fix: 26 of 81 chains UNRESOLVED (32%; was 34, 42%). The row
+ * now allows 35%, a two-chain margin; never lower it back.
+ * PROVE-RED: `node tests/xp-key-provenance-lint.mjs <v470 tree>` reports
+ * game.js:881 `log-${e.id}` TAINTED (e is a parameter of an anonymous callback
+ * ... iterates log.slice(-400)), alongside the three L1 keys. Green on main.
+ *
  * ponytail: scope is "nearest preceding definition", not a real lexical
  * scope walk. Right for every shape in this tree today; if a same-named local
  * in an earlier sibling block ever shadows a use, the answer is a printed
@@ -113,6 +135,29 @@ function splitTop(s) {   // split on top-level commas
   if (cur.trim()) parts.push(cur.trim());
   return parts;
 }
+/* The receiver expression ending just before `dot` (the `.` of `.map(`): walks
+   back over identifier chains and balanced `(...)`/`[...]` groups, so both
+   `log` in `log.map(` and `$$('[data-x]', body)` in `$$('[data-x]', body).forEach(`
+   come back whole. QA round 28 G2. */
+function receiverBefore(src, dot) {
+  let j = dot - 1;
+  while (j >= 0) {
+    while (j >= 0 && /\s/.test(src[j])) j--;
+    if (src[j] === ')' || src[j] === ']') {
+      const close = src[j], open = close === ')' ? '(' : '[';
+      let depth = 0;
+      for (; j >= 0; j--) {
+        if (src[j] === '"' || src[j] === "'" || src[j] === '`') { const q = src[j]; j--; while (j >= 0 && !(src[j] === q && src[j - 1] !== '\\')) j--; continue; }
+        if (src[j] === close) depth++;
+        else if (src[j] === open && --depth === 0) { j--; break; }
+      }
+      continue;
+    }
+    if (/[\w$]/.test(src[j])) { while (j >= 0 && /[\w$]/.test(src[j])) j--; if (src[j] === '.') { j--; continue; } break; }
+    break;
+  }
+  return { expr: src.slice(j + 1, dot).trim(), at: j + 1 };
+}
 const lineOf = (src, i) => src.slice(0, i).split('\n').length;
 const isChain = s => new RegExp(`^${ID}(?:\\.${ID})*$`).test(s);
 
@@ -160,7 +205,35 @@ function defsOf(src) {
   }
   // bare arrow param:  name =>   |  (name) =>
   for (const m of src.matchAll(new RegExp(String.raw`(?:\(\s*(${ID})\s*\)|(?<![\w$.])(${ID}))\s*=>`, 'g'))) {
-    add(m[1] || m[2], { idx: m.index, kind: 'param', fn: null, index: 0, anonymous: true });
+    const before = src.slice(Math.max(0, m.index - 120), m.index);
+    /* QA round 28 G2 (1 of 3): `const start = async (foeCfg) =>` was bound TWICE,
+       once by HEADERS[1] as a parameter of start() and once here as anonymous,
+       and nearestDef took the later (anonymous) one, so every foeCfg key ended
+       UNRESOLVED (14 chains). A parenthesised list that a named header already
+       claimed is not re-added. */
+    const named = before.match(new RegExp(String.raw`(?:const|let|var)?\s*(${ID})\s*=\s*(?:async\s*)?$`));
+    if (m[1] && named) continue;
+    // `export const f = g => ...` (js/social.js __testApplyGrant): a NAMED function with a bare parameter
+    if (named) { add(m[2], { idx: m.index, kind: 'param', fn: named[1], index: 0 }); continue; }
+    /* QA round 28 G2 (2 of 3): an anonymous callback's parameter is bound to the
+       COLLECTION it iterates, so `e` in `log.map(e => ...)` or in a
+       `{ items: X, run: e => ... }` phase object resolves through X. Two shapes,
+       read off the tree: an array-method receiver, and the `items:` of the
+       enclosing object literal (js/game.js runInitBackfill). Anything else stays
+       an unbound anonymous parameter, which the tracer now grades TAINTED unless
+       the chain is date-shaped (see resolveChainUncached). */
+    let iter = null;
+    const recv = before.match(/\.(?:map|forEach|filter|some|every|find|findIndex|flatMap|reduce)\(\s*(?:async\s*)?$/);
+    if (recv) iter = receiverBefore(src, m.index - (before.length - recv.index));
+    else if (/\b[\w$]+\s*:\s*(?:async\s*)?$/.test(before)) {
+      const items = src.lastIndexOf('items', m.index);
+      const open = items < 0 ? -1 : src.lastIndexOf('{', items);
+      if (open >= 0 && /^items\s*:/.test(src.slice(items, items + 12)) && closeFrom(src, open + 1, '{', '}') > m.index) {
+        const c = src.indexOf(':', items) + 1;
+        iter = { expr: exprFrom(src, c), at: c + src.slice(c, c + 80).match(/^\s*/)[0].length };
+      }
+    }
+    add(m[1] || m[2], { idx: m.index, kind: 'param', fn: null, index: 0, anonymous: true, iter });
   }
   for (const list of byName.values()) list.sort((x, y) => x.idx - y.idx);
   defIndex.set(src, byName);
@@ -214,6 +287,16 @@ function makeTracer(files) {   // files: Map<name, src>
       return r('UNRESOLVED', `.${rest[0]} not a literal property`);
     }
     if (SOURCE.test(expr)) return r('TAINTED', `source in: ${expr.slice(0, 60)}`);
+    /* A STORE ROW (QA round 28 G2). `db.all('log')` used to fall through to
+       "terminal expression, no source" and read CLEAN, so `const log = await
+       db.all('log'); ... award(\`log-${row.id}\`)` was one refactor away from a
+       silent green. A row's `.id` in this tree is minted by newId() at the write
+       site (js/db.js keyPath 'id' stores: foods, log, inv), so it is TAINTED; any
+       other property of a row is UNRESOLVED and counted, never CLEAN. */
+    if (/^(?:await\s+)?db\.(?:all|get|byIndex)\s*\(/.test(expr)) {
+      if (rest[0] === 'id') return r('TAINTED', `.id of a store row is newId() at its write site (${expr.slice(0, 40)})`);
+      return r('UNRESOLVED', `property .${rest[0] ?? '?'} of a store row (${expr.slice(0, 40)})`);
+    }
     // ternary: either arm
     const tern = expr.match(/^([^?]+)\?(.+):(.+)$/s);
     if (tern && !/^[{[(]/.test(expr)) {
@@ -229,6 +312,43 @@ function makeTracer(files) {   // files: Map<name, src>
       return resolveChain(segs[0], [...segs.slice(1), ...rest], file, pos, depth + 1, seen, trail);
     }
     return r('CLEAN', 'terminal expression, no source');
+  }
+  /* ONE ELEMENT of a collection expression, with `rest` still to read off it.
+     Peels what does not change the element (`.slice/.filter/.sort/.reverse/
+     .concat(...)`, `[...X]`, `new Set(X)`, `Array.from(X)`), follows `X.map(p =>
+     BODY)` into BODY with p bound (p's own def carries iter = X, indexed by
+     defsOf), and hands anything else to resolveExpr. QA round 28 G2. */
+  function elementOf(expr, rest, file, at, depth, seen) {
+    const src = files.get(file);
+    expr = expr.replace(/^await\s+/, '');
+    if (depth > 16) return { state: 'UNRESOLVED', trail: ['depth'] };
+    let m;
+    if ((m = expr.match(/^\[\s*\.\.\.(.+)\]$/s)) && closeFrom(m[1], 0, '[', ']') === m[1].length) return elementOf(m[1].trim(), rest, file, at + expr.indexOf(m[1]), depth + 1, seen);
+    if ((m = expr.match(/^(?:new\s+Set|Array\.from)\s*\((.+)\)$/s)) && closeFrom(m[1], 0, '(', ')') === m[1].length) return elementOf(m[1].trim(), rest, file, at + expr.indexOf(m[1]), depth + 1, seen);
+    // trailing `.method(...)`: find the last top-level `.name(` whose parens run to the end
+    for (let i = expr.length - 2; i > 0; i--) {
+      if (expr[i] !== '(') continue;
+      if (closeFrom(expr, i + 1, '(', ')') !== expr.length - 1) continue;
+      const head = expr.slice(0, i).match(/\.([\w$]+)$/);
+      if (!head) break;
+      const recvText = expr.slice(0, i - head[0].length);
+      if (/^(slice|filter|sort|reverse|concat|toSorted)$/.test(head[1])) return elementOf(recvText, rest, file, at, depth + 1, seen);
+      if (head[1] === 'map' || head[1] === 'flatMap') {
+        const arrow = expr.slice(i + 1, expr.length - 1).match(/^\s*(?:async\s*)?(?:\(\s*[\w$]+\s*\)|[\w$]+)\s*=>\s*/);
+        if (!arrow) break;
+        const bodyAt = at + i + 1 + arrow[0].length;
+        let body = expr.slice(i + 1 + arrow[0].length, expr.length - 1).trim();
+        if (body.startsWith('{')) return { state: 'UNRESOLVED', trail: [`${file}:${lineOf(src, at)} map body is a block`] };
+        return resolveExpr(body, rest, file, bodyAt, depth + 1, seen);
+      }
+      break;
+    }
+    // a bare name for a collection (`items: dates`): an element of the LOCAL's initialiser, not the local itself
+    if (isChain(expr) && !expr.includes('.')) {
+      const def = nearestDef(src, expr, at);
+      if (def && def.kind === 'local') return elementOf(def.expr, rest, file, def.at + src.slice(def.at, def.at + 80).match(/^\s*/)[0].length, depth + 1, seen);
+    }
+    return resolveExpr(expr, rest, file, at, depth + 1, seen);
   }
   function resolveChain(root, rest, file, pos, depth, seen, trailIn = []) {
     const src = files.get(file);
@@ -254,12 +374,25 @@ function makeTracer(files) {   // files: Map<name, src>
     if (def.kind === 'loop') return r('UNRESOLVED', `${root} is a loop item`);
     if (def.kind === 'counter') return r('CLEAN', `${root} is a for-counter`);
     if (def.kind === 'local') {
-      const sub = resolveExpr(def.expr, rest, file, def.idx, depth + 1, seen);
+      // positioned at the initialiser itself, so a `.map(p => ...)` body inside it can bind p (QA round 28 G2)
+      const sub = resolveExpr(def.expr, rest, file, def.at + src.slice(def.at, def.at + 80).match(/^\s*/)[0].length, depth + 1, seen);
       return { state: sub.state, trail: [...trail, ...sub.trail] };
     }
     // parameter
     if (def.destructured) return r('UNRESOLVED', `${root} is destructured in a parameter list`);
-    if (!def.fn) return r('UNRESOLVED', `${root} is a parameter of an anonymous function`);
+    if (!def.fn) {
+      /* QA round 28 G2: the hole. `run: e => award(\`log-${e.id}\`)` (js/game.js:881
+         on the v470 tree, the L1 farm spelled through a phase callback) read
+         UNRESOLVED here, and UNRESOLVED was tolerated, so the lint written for
+         that exact bug was green on it. Now the parameter follows the collection
+         it iterates (elementOf), and if that still cannot be resolved the chain
+         is TAINTED unless it is date-shaped: a `.date` read is the one thing a
+         row or a date list can hand a key that is stable across calls. */
+      const sub = def.iter ? elementOf(def.iter.expr, rest, file, def.iter.at, depth + 1, seen) : null;
+      if (sub && sub.state !== 'UNRESOLVED') return { state: sub.state, trail: [...trail, `param ${root} of a callback <- element of ${def.iter.expr.slice(0, 50)}`, ...sub.trail] };
+      if (rest.at(-1) === 'date') return r('CLEAN', `${root}${rest.length ? '.' + rest.join('.') : ''}: date-shaped read off an anonymous callback parameter${sub ? ' (collection unresolved: ' + sub.trail.at(-1) + ')' : ''}`);
+      return r('TAINTED', `${root} is a parameter of an anonymous callback the tracer cannot follow${def.iter ? ' (iterates ' + def.iter.expr.slice(0, 40) + ', ' + sub.trail.at(-1) + ')' : ''}, and .${rest.at(-1) ?? root} is not date-shaped: a per-row id here is a clock (QA round 28 G2)`);
+    }
     const sites = callSites(def.fn);
     if (!sites.length) return r('UNRESOLVED', `${def.fn}() has no call site in js/`);
     let anyUnresolved = null;
@@ -311,6 +444,10 @@ function makeTracer(files) {   // files: Map<name, src>
     ['db.js', `export function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }\n`],
     ['game.js', `export async function onFoodLogged(entry, { via = null } = {}) {\n  await award(\`log-\${entry.id}\`, 'log', 10, 'x', entry.date);\n  await award(\`firstlog-\${entry.date}\`, 'firstlog', 15, 'x', entry.date);\n  for (let n = 1; n <= 5; n++) await award(\`cap-\${d}-\${n}\`, 't', 1, 'x');\n}\n`],
     ['app.js', `b.addEventListener('click', async () => {\n  const copy = { ...src, id: newId(), date: S.date, ts: 5 };\n  await db.put('log', copy);\n  const game = await onFoodLogged(copy, { via: 'x' });\n});\n`],
+    /* QA round 28 G2: the v470 spelling of the same bug, through a phase
+       callback whose parameter iterates store rows, beside its date-keyed
+       neighbours (bare `d` over a dates list, `w.date` off a row). */
+    ['init.js', `async function backfill() {\n  const log = await db.all('log');\n  const weights = await db.all('weights');\n  const dates = [...new Set(log.map(e => e.date))].sort();\n  const phases = [\n    { id: 'log', items: log.slice(-400), key: e => \`log-\${e.id}\`, run: e => award(\`rlog-\${e.id}\`, 'log', 10, 'x', e.date) },\n    { id: 'firstlog', items: dates, run: d => award(\`rfirst-\${d}\`, 'firstlog', 15, 'x', d) },\n    { id: 'weigh', items: weights.slice(-60), run: w => award(\`rweigh-\${w.date}\`, 'weigh', 15, 'x', w.date) },\n  ];\n}\n`],
   ]);
   const rows = makeTracer(fixture).grade();
   const byKey = k => rows.find(r => r.key.startsWith(k));
@@ -319,6 +456,10 @@ function makeTracer(files) {   // files: Map<name, src>
     byKey('`log-')?.chains[0].res.trail.join(' -> '));
   ok('SELF a date read off the same parameter is not tainted', st('`firstlog-', 'entry.date') !== 'TAINTED', st('`firstlog-', 'entry.date'));
   ok('SELF a for-counter in the key is CLEAN', st('`cap-', 'n') === 'CLEAN', st('`cap-', 'n'));
+  ok('SELF G2: a callback parameter iterating store rows, keyed on .id, is TAINTED', st('`rlog-', 'e.id') === 'TAINTED',
+    byKey('`rlog-')?.chains[0].res.trail.at(-1));
+  ok('SELF G2: a bare callback parameter over a dates list is CLEAN', st('`rfirst-', 'd') === 'CLEAN', byKey('`rfirst-')?.chains[0].res.trail.at(-1));
+  ok('SELF G2: a .date read off a row callback parameter is CLEAN', st('`rweigh-', 'w.date') === 'CLEAN', byKey('`rweigh-')?.chains[0].res.trail.at(-1));
 }
 
 /* ---- the SEED is derived: newId() really is a clock ---- */
@@ -334,7 +475,11 @@ const rows = makeTracer(files).grade();
 const chains = rows.flatMap(r => r.chains);
 const n = s => chains.filter(c => c.res.state === s).length;
 ok('REACH the scanner found award call sites to grade', rows.length >= 20, `${rows.length} call sites across ${files.size} module(s), ${chains.length} identifier chains in their keys`);
-ok('REACH the tracer resolves most chains (a broken regex reads as everything UNRESOLVED)', chains.length > 0 && n('UNRESOLVED') / chains.length <= 0.5,
+/* 0.35, not 0.5 (QA round 28 G2): the tree resolves 68% (26 of 81 UNRESOLVED,
+   all loop items or params whose call sites hand an object without the property,
+   every one printed under VERBOSE). A hole that hides behind UNRESOLVED now has a
+   two-chain margin to hide in, not a nineteen-chain one. Never raise this back. */
+ok('REACH the tracer resolves most chains (a broken regex reads as everything UNRESOLVED)', chains.length > 0 && n('UNRESOLVED') / chains.length <= 0.35,
   `${n('CLEAN')} clean, ${n('TAINTED')} tainted, ${n('UNRESOLVED')} unresolved`);
 /* DECIDED, NOT HIDDEN. A key that derives from a clock through the identity of
    a PERSISTED entity the player creates once (a custom food's id is
