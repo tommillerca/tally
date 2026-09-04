@@ -5892,7 +5892,9 @@ body::before {
 .mog-lines em img, .mog-lines em svg { flex: none; }
 /* .btn is width:100%, and .look-bar's flex:none does NOT undo that: the
    shipped v1 bar has the button lying across its own status text. */
-.look-bar.mog-bar .btn.mog-go { width: auto; flex: none; padding: 10px 15px; font-size: 13.5px; }
+/* min-height (QA round 28 B2): 10px padding on 13.5px text measured 79x42, two
+   under the 44px floor. The padding and glyph are untouched; the box meets the floor. */
+.look-bar.mog-bar .btn.mog-go { width: auto; flex: none; padding: 10px 15px; font-size: 13.5px; min-height: 44px; }
 .mog-safe { text-align: center; margin-top: 8px; }
 /* THE COMMIT COMES TO THE THUMB (QA round 23 F3). 23 commits in the app spend a
    currency; 21 arm the control under the thumb, and this one, the cheapest of
@@ -6789,6 +6791,12 @@ body::before {
    17px; only the box grows to Apple's floor. Guarded statically by
    tests/unit.test.js "R25-M20 sheet-head icon buttons resolve to >= 44px". */
 .t1-tools .t1-icon-btn { width: 44px; height: 44px; min-height: 44px; }
+/* QA round 28 B2: the M20 rule above was scoped to .t1-tools on purpose and left
+   the "Change portion" chevron in a recents row (.t1-frow-split, recentRowHtml)
+   at 40x40, two pixels under the floor the same release declared. Same recipe,
+   second scope; the 18px glyph stays where it is, only the box grows. Pinned by
+   "R25-M20" in tests/unit.test.js and the `add` rows of tests/a11y-audit.mjs. */
+.t1-frow-split .t1-icon-btn { width: 44px; height: 44px; min-height: 44px; }
 .t1-icon-btn.gold { color: var(--gold); }
 .t1-icon-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 /* the body has to be the shrinking child or a pinned foot pushes off-screen */

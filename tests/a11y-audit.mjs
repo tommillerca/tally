@@ -220,6 +220,22 @@ const TARGETS = [
   { surface: 'portion', sel: '#qtyIn',             why: 'Portion sheet: the amount input (181x31 until M20)' },
   { surface: 'portion', sel: '#pMealChips button', why: 'Portion sheet: meal chips', all: true },
   { surface: 'portion', sel: '#addBtn',            why: 'Portion sheet: commit' },
+  /* QA round 28 B2, 2026-09-04, WRITTEN NOT RUN (static-only session; the round
+     that runs this must state the prove-red). Two controls the M20 release left
+     under its own floor, both in this registry's blind spot:
+       - the "Change portion" chevron in a recents row of the Add sheet
+         (recentRowHtml, `.t1-frow-split .t1-icon-btn`), 40x40 because the M20
+         rule was scoped to .t1-tools. Recents exist only once the profile has
+         logged something; godmode's seeded profile has, and if it has not this
+         row FAILS rather than skipping (a missing recents list is a seed bug).
+       - "Wear it" in the Wardrobe's mog dock (`.look-bar.mog-bar .btn.mog-go`),
+         79x42 from 10px padding on 13.5px text. At rest the bar shows the
+         disabled "Wear it" (mogState().changed is false until a look is picked),
+         which is the same box; a disabled control still has to be reachable.
+     PROVE-RED (expected, to be confirmed by the first run): revert the two B2
+     rules in app.css and exactly these two rows go red at both widths. */
+  { surface: 'add', sel: '#results .t1-frow-split .t1-icon-btn', why: 'Add sheet: the "Change portion" chevron on a recents row (40x40 until R28-B2)' },
+  { surface: 'wardrobe', sel: '.mog-dock .look-bar.mog-bar .btn.mog-go', why: 'Wardrobe: the mog dock\'s "Wear it" (79x42 until R28-B2)' },
 ];
 
 /* CONTRAST PAIRS THIS PASS IS RESPONSIBLE FOR, and where the thresholds come
