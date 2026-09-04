@@ -13982,7 +13982,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <span class="ward-lv">Lv ${lvl.level}</span>
       <span class="ward-rank">${esc(lvl.name)}</span>
       <span class="bh-pill">${ICONS.coin(16)} ${coinBal.toLocaleString()}</span>
-      <span class="bh-pill">${ICONS.dust(16)} ${dustBal.toLocaleString()}</span>
+      <span class="bh-pill ward-dust">${ICONS.dust(16)} ${dustBal.toLocaleString()}</span>
       <span class="bh-pill">${ICONS.bone(14)} ${ownedCount} found</span>
       ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
       ${/* THE DOOR TO THE LOOKS COLLECTION. v395 removed the hub's LOOKS card,
@@ -14096,7 +14096,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
   if (tab === 'wardrobe') {
     const owned = await ownedCosmeticIds();
-    const [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal, fitList] = await Promise.all([
+    // tm and dustBal are reassigned by restageLook after a paid commit (QA round 23 F1)
+    let [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal, fitList] = await Promise.all([
       ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(),
     ]);
     const fitPrices = await Promise.all(fitList.map(f => fitPrice(f)));
@@ -14107,7 +14108,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     // `eq` is the RAW equipment (what the grids tick as equipped); `look` is what
     // you actually appear as once transmog resolves, so the doll and the stage
     // agree with the rest of the app.
-    const look = await equipped();
+    let look = await equipped();   // let: refreshed in place after a look commit (QA round 23 F1)
     const rawEq = await equipped({ raw: true });   // pre-transmog: what is actually ON
     const wLevel = levelFor(await totalXp()).level;
     const slot = S.wardrobeSlot || 'H';
@@ -14157,7 +14158,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
        to key off wornGear alone, so a slot holding a cosmetic showed no transmog
        panel at all, which is what Tom hit. */
     const baseArtId = wornGear ? wornGear.artId : (rawEq[slot] || null);
-    const stageEq = (() => {
+    // a function, not a value: restageLook re-reads it after every look tap
+    const previewEq = () => {
       const p = S.lookPreview;
       if (p == null || !baseArtId) return look;
       const e = { ...look };
@@ -14165,13 +14167,66 @@ async function renderCharacter(wrap, tab, opts = {}) {
       else if (p === '') e[slot] = baseArtId;
       else if (BH_BY_ID[p]) e[slot] = p;
       return e;
-    })();
+    };
+    const stageEq = previewEq();
     // Prices are paid-aware: a look you have already bought for this slot reads
     // free forever, which is what lets fits swap without a tax.
     const slotArts = baseArtId
       ? BH_ITEMS.filter(i => i.slot === slot && looks.has(i.id) && i.id !== baseArtId) : [];
     const lookPriceMap = {};
     for (const i of slotArts) lookPriceMap[i.id] = await transmogPrice(slot, i.id);
+
+    /* THE LOOK PANEL'S MOVING PARTS, as functions of S.lookPreview and the `let`
+       tm / dustBal / look above, so ONE piece of markup serves the first render
+       and the in-place refresh in restageLook below (QA round 23 F1). Only what
+       a look tap can change lives here: the Now/After pair, a tile's price tag
+       and the bar. The tiles themselves never move. */
+    const mogOn = S.mogv2 && GEAR_SLOTS.includes(slot) && !!baseArtId;
+    const mogState = () => {
+      const cur = tm[slot] ?? '';                        // '' = the gear's own look
+      const sel = S.lookPreview == null ? cur : S.lookPreview;
+      const cost = (sel === '' || sel === TRANSMOG_HIDE) ? 0 : (lookPriceMap[sel] || 0);
+      return { cur, sel, cost, afford: dustBal >= cost, changed: sel !== cur };
+    };
+    const ownArt = BH_BY_ID[baseArtId];
+    const nameOf = v => v === ''
+      ? (wornGear ? `${wornGear.name}, its own look` : `${ownArt?.name || 'What you are wearing'}, as equipped`)
+      : v === TRANSMOG_HIDE ? 'Nothing, slot hidden' : (BH_BY_ID[v]?.name || '');
+    const dustIco = ICONS.dust(16);
+    const figure = eqMap => `<div class="bh-stage mog-fig">${avatarLayersHtml(eqMap, { noYard: true, skip: ['C', 'BG'] })}</div>`;
+    const mogFigsHtml = () => {
+      const { changed } = mogState();
+      return `<figure><span class="mog-cap">Now</span>${figure(look)}</figure>
+            <span class="mog-arrow" aria-hidden="true">${ICONS.chev(18)}</span>
+            <figure class="${changed ? 'after' : 'same'}"><span class="mog-cap">${changed ? 'After' : 'Pick one below'}</span>${figure(previewEq())}</figure>`;
+    };
+    const costTag = id => lookPriceMap[id] ? `<span class="look-cost dust">${lookPriceMap[id]}${dustIco}</span>` : '<span class="look-cost paid">owned</span>';
+    /* THE BAR IS A CHILD OF .mog-dock, NOT OF .mog-panel (QA round 23 F3). It is
+       `position: sticky; bottom: 0`, and sticky is clamped by its containing
+       block: inside the panel it could only float while the panel was on screen,
+       which at 375x667 is a document offset of ~1810, 78% of the scroll range.
+       23 commits in the app spend a currency and this was the only one you had
+       to scroll to. The dock opens at the paper doll, so the bar sits at the
+       bottom of the viewport from scrollTop 0 and settles into place under the
+       panel once you get there. Same construction as .breed-dock in openStable.
+       The figures and the You keep / You get / You pay lines stay: the inline
+       bar answered a measured grill on 2026-08-23, only the TRAVEL was wrong. */
+    const mogBarHtml = () => {
+      if (!mogOn) return '';
+      const { sel, cost, afford, changed } = mogState();
+      return `<div class="look-bar mog-bar${changed ? ' armed' : ''}">
+            <div class="mog-lines">
+              <span><i>You keep</i><b>${wornGear ? gearLabel(wornGear) : 'every piece you own'}</b></span>
+              <span><i>You get</i><b>${esc(nameOf(sel))}</b></span>
+              <span class="pay"><i>You pay</i><b>${cost ? `${cost} Bone Dust` : 'nothing'}</b>${cost ? `<em>${dustIco} you have ${dustBal}</em>` : ''}</span>
+            </div>
+            ${changed
+              ? (afford
+                  ? `<button class="btn mog-go" data-look-apply="${esc(sel)}" data-look-price="${cost || 0}">Wear it</button>`
+                  : `<button class="btn ghost mog-go" disabled>Need ${cost - dustBal} more dust</button>`)
+              : '<button class="btn ghost mog-go" disabled>Wear it</button>'}
+          </div>`;
+    };
 
     // SAVED FITS: a look you can put back on in one tap. Stats never move.
     const fitRail = `
@@ -14207,6 +14262,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
     content.innerHTML = `
       ${fitRail}
+      <div class="mog-dock">
       <div class="paperdoll">
         <div class="pd-col">${LEFT.map(pdSlot).join('')}</div>
         <div class="pd-center">
@@ -14277,17 +14333,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
           ? `<div class="sect-h mog-h" style="margin-top:14px"><span>The Dressing Room · ${esc(GEAR_SLOT_LABELS[slot])}</span></div>
              <p class="note mog-empty">This slot is empty, so there is nothing to disguise yet. Put something on above and the look picker appears here.</p>`
           : '';
-        const cur = tm[slot] ?? '';                        // '' = the gear's own look
-        const sel = S.lookPreview == null ? cur : S.lookPreview;
+        const { cur, sel, cost, afford, changed } = mogState();
         const arts = slotArts;
         const cell = (val, inner, title) => `<button class="ward-cell look ${cur === val ? 'equipped' : ''} ${sel === val ? 'selected' : ''}" data-look="${esc(val)}" title="${esc(title)}">${inner}</button>`;
-        const ownArt = BH_BY_ID[baseArtId];
-        const nameOf = v => v === ''
-          ? (wornGear ? `${wornGear.name}, its own look` : `${ownArt?.name || 'What you are wearing'}, as equipped`)
-          : v === TRANSMOG_HIDE ? 'Nothing, slot hidden' : (BH_BY_ID[v]?.name || '');
-        const cost = (sel === '' || sel === TRANSMOG_HIDE) ? 0 : (lookPriceMap[sel] || 0);
-        const afford = dustBal >= cost;
-        const changed = sel !== cur;
         /* ---------------------------------------------------------------- v2
            THE NEW-PLAYER GRILL, 2026-08-23, measured at 430x932 on a seeded
            mid-game account. Four findings, and this branch answers them in order:
@@ -14327,8 +14375,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
            looks are offered. This is presentation. */
         if (S.mogv2) {
           const slotLc = esc(GEAR_SLOT_LABELS[slot].toLowerCase());
-          const dustIco = ICONS.dust(16);
-          const figure = eqMap => `<div class="bh-stage mog-fig">${avatarLayersHtml(eqMap, { noYard: true, skip: ['C', 'BG'] })}</div>`;
           return `
         <div class="mog-panel">
           <div class="sect-h mog-h"><span>The Dressing Room · ${esc(GEAR_SLOT_LABELS[slot])}</span>
@@ -14348,26 +14394,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ? `Your ${slotLc} keeps <b>${gearLabel(wornGear)}</b>. Only the picture changes.`
             : `Nothing with stats is in this ${slotLc}, so changing the picture here is free.`}</p>
           <div class="mog-figs">
-            <figure><span class="mog-cap">Now</span>${figure(look)}</figure>
-            <span class="mog-arrow" aria-hidden="true">${ICONS.chev(18)}</span>
-            <figure class="${changed ? 'after' : 'same'}"><span class="mog-cap">${changed ? 'After' : 'Pick one below'}</span>${figure(stageEq)}</figure>
+            ${mogFigsHtml()}
           </div>
           <div class="ward-grid look-grid">
             ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
             ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
-            ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost dust">${lookPriceMap[i.id]}${dustIco}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
-          </div>
-          <div class="look-bar mog-bar${changed ? ' armed' : ''}">
-            <div class="mog-lines">
-              <span><i>You keep</i><b>${wornGear ? gearLabel(wornGear) : 'every piece you own'}</b></span>
-              <span><i>You get</i><b>${esc(nameOf(sel))}</b></span>
-              <span class="pay"><i>You pay</i><b>${cost ? `${cost} Bone Dust` : 'nothing'}</b>${cost ? `<em>${dustIco} you have ${dustBal}</em>` : ''}</span>
-            </div>
-            ${changed
-              ? (afford
-                  ? `<button class="btn mog-go" data-look-apply="${esc(sel)}" data-look-price="${cost || 0}">Wear it</button>`
-                  : `<button class="btn ghost mog-go" disabled>Need ${cost - dustBal} more dust</button>`)
-              : '<button class="btn ghost mog-go" disabled>Wear it</button>'}
+            ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${costTag(i.id)}`, i.name)).join('')}
           </div>
           <p class="note mog-safe">Nothing is destroyed. The piece stays on, keeps its stats and stays in your Backpack.${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>
         </div>`;
@@ -14391,6 +14423,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
           ? `Your ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} keeps <b>${gearLabel(wornGear)}</b> whatever it looks like. Trying one on is free, you only spend Bone Dust when you wear it. You have <b><span class="dust-ico">${ICONS.dust(12)}</span> ${dustBal}</b>.`
           : `Nothing with stats in this ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} slot, so a look here is only a look: <b>switching is free</b>.`}${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>`;
       })()}
+      ${mogBarHtml()}
+      </div>
       ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; pieces marked with a bolt grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''}
       ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''}`;
     // --- saved fits: tap to wear, long-press for rename / bin ---
@@ -14467,7 +14501,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
        (Tom, 2026-08-11: "they should be a larger size so you can see what you
        are transmogging"). Same trim as the doll slots. */
     hydratePackArt(content, '.pd-art[data-art], .ward-art[data-art]');
-    $$('[data-pd]', content).forEach(b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); }));
+    const wirePd = b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); });
+    $$('[data-pd]', content).forEach(wirePd);
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
       await equip(slot, cell.dataset.equip || null);
       S.lookPreview = null;
@@ -14479,20 +14514,69 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const done = await restageWardrobe(content, slot);
       if (!done) renderCharacter(wrap, 'wardrobe', { instant: true });   // fall back rather than leave it stale
     }));
+    /* A LOOK TAP MOVES FOUR THINGS AND REBUILDS NOTHING (QA round 23 F1).
+       Preview and commit used to call renderCharacter(wrap, 'wardrobe',
+       { instant: true }). That rebuilds #chBody, so #chContent held ZERO elements
+       for 2 frames on a paid commit (3 on a preview, with all eight doll layers
+       naturalWidth 0 while visible for 86ms), and re-hydrated every canvas on the
+       screen: 65.2 MB discarded and 645ms to settle per tap at collection scale.
+       `instant: true` never suppressed a transition; opts is read in exactly one
+       place, to keep the scroll position. There was no transition to kill.
+       The equip path had the fix already (restageWardrobe, decode then swap).
+       Both taps go through it now. What a look tap changes: the big doll, the
+       Now/After pair, the rings on the look tiles, the bar. A COMMIT also moves
+       dust, the slot's tile on the paper doll (its art and its "look changed"
+       mark), the paid tile's price tag and the fit grid's ring, so those are
+       re-read and re-drawn too, still without touching the rest of the screen.
+       Anything unexpected in the DOM falls back to the full render rather than
+       leaving a stale character up. */
+    async function restageLook({ committed = false } = {}) {
+      if (committed) {
+        [tm, dustBal, look] = await Promise.all([transmogMap(), boneDust(), equipped()]);
+        for (const i of slotArts) lookPriceMap[i.id] = await transmogPrice(slot, i.id);
+      }
+      const done = committed ? await restageWardrobe(content, slot) : await restageDoll(content, previewEq());
+      const panel = $('.mog-panel', content), figs = $('.mog-figs', content), bar = $('.mog-bar', content);
+      if (!done || !panel || !figs || !bar) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
+      const { cur, sel } = mogState();
+      figs.innerHTML = mogFigsHtml();
+      for (const c of $$('[data-look]', panel)) {
+        c.classList.toggle('equipped', c.dataset.look === cur);
+        c.classList.toggle('selected', c.dataset.look === sel);
+        const tag = $('.look-cost', c);
+        if (tag && lookPriceMap[c.dataset.look] !== undefined) tag.outerHTML = costTag(c.dataset.look);
+      }
+      bar.outerHTML = mogBarHtml();
+      wireMogBar();
+      if (committed) {
+        const pill = $('.ward-dust', wrap);
+        if (pill) pill.innerHTML = `${ICONS.dust(16)} ${dustBal.toLocaleString()}`;
+        const tile = $(`.pd-slot[data-pd="${slot}"]`, content);
+        if (tile) {
+          tile.outerHTML = pdSlot(slot);
+          const fresh = $(`.pd-slot[data-pd="${slot}"]`, content);
+          wirePd(fresh);
+          hydratePackArt(fresh, '.pd-art[data-art]');
+        }
+      }
+    }
     // Tap a look to try it on: free, instant, no commitment. Dust is only spent
     // by the Apply button in the bar.
     $$('[data-look]', content).forEach(cell => cell.addEventListener('click', () => {
       S.lookPreview = cell.dataset.look;
       popSound(S.sounds);
-      renderCharacter(wrap, 'wardrobe', { instant: true });
+      restageLook();
     }));
-    $$('[data-look-apply]', content).forEach(btn => {
-      // free actions (revert to the gear's own look, or hide the slot) stay one tap:
-      // a confirm on something that costs nothing is just friction
-      const price = Number(btn.dataset.lookPrice || 0);
-      if (price > 0) { armToConfirm(btn, `Spend ${price} dust?`, () => applyLook(btn)); return; }
-      btn.addEventListener('click', () => applyLook(btn));
-    });
+    function wireMogBar() {
+      $$('[data-look-apply]', content).forEach(btn => {
+        // free actions (revert to the gear's own look, or hide the slot) stay one tap:
+        // a confirm on something that costs nothing is just friction
+        const price = Number(btn.dataset.lookPrice || 0);
+        if (price > 0) { armToConfirm(btn, `Spend ${price} dust?`, () => applyLook(btn)); return; }
+        btn.addEventListener('click', () => applyLook(btn));
+      });
+    }
+    wireMogBar();
     async function applyLook(btn) {
       const val = btn.dataset.lookApply;
       const res = val === '' ? await clearTransmog(slot) : await applyTransmog(slot, val);
@@ -14503,7 +14587,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       S.lookPreview = null;
       levelSound(S.sounds); pushProfileSoon();
       toast(res.cost ? `Look changed. −${res.cost} dust.` : 'Look changed.', 2000);
-      renderCharacter(wrap, 'wardrobe', { instant: true });
+      restageLook({ committed: true });
     }
     // tapping a gear cell INSPECTS it (preview): the panel below shows its stats +
     // special ability. Tapping the already-selected piece, or the panel button, equips.
@@ -22686,9 +22770,29 @@ function buildFaqHtml(fighter, openAttr = '') {
  * empty for a frame, which is the same class of bug as the invisible punch: a
  * layer stack is only ever meaningful complete. */
 async function restageWardrobe(content, slot) {
+  const eqNow = await equipped();
+  if (!(await restageDoll(content, eqNow))) return false;
+  // move the ring inside THIS slot's grid only: every slot renders its own grid, so
+  // a global toggle would light up the wrong cells in every other section
+  const grid = $(`.ward-grid[data-wslot="${slot}"]`, content);
+  if (!grid) return false;
+  const wanted = eqNow[slot] || '';
+  for (const c of $$('[data-equip]', grid)) {
+    c.classList.toggle('equipped', (c.dataset.equip || '') === wanted);
+  }
+  return true;
+}
+
+/* The doll half of restageWardrobe on its own, taking the look to draw, so a
+ * PREVIEW (a look tried on, nothing equipped, nothing paid) can use the same
+ * decode-then-swap without moving the fit grid's ring onto a cosmetic the player
+ * never picked. QA round 23 F1: the preview and commit taps in the Dressing Room
+ * went through renderCharacter() instead of this, which is why they were the two
+ * places in the Wardrobe that still flashed (see restageLook in the wardrobe
+ * render). Returns false if the stage is not there. */
+async function restageDoll(content, eqNow) {
   const stage = $('.bh-stage.lg', content);
   if (!stage) return false;
-  const eqNow = await equipped();
   const html = (eqNow.BG && BH_BY_ID[eqNow.BG] ? `<img class="bh-backdrop" src="${bhAsset(BH_BY_ID[eqNow.BG])}" alt="">` : '')
     + avatarLayersHtml(eqNow, { noYard: true, skip: ['C', 'BG'] });
   // preload every layer, capped, so the swap lands on decoded art
@@ -22705,14 +22809,6 @@ async function restageWardrobe(content, slot) {
   stage.innerHTML = html + curtains;
   // NOT composeAvatars(): that hides the stack until it decodes, and we just
   // decoded it. Calling it here would reintroduce the very flash this removes.
-  // move the ring inside THIS slot's grid only: every slot renders its own grid, so
-  // a global toggle would light up the wrong cells in every other section
-  const grid = $(`.ward-grid[data-wslot="${slot}"]`, content);
-  if (!grid) return false;
-  const wanted = eqNow[slot] || '';
-  for (const c of $$('[data-equip]', grid)) {
-    c.classList.toggle('equipped', (c.dataset.equip || '') === wanted);
-  }
   return true;
 }
 
