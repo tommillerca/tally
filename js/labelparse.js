@@ -58,7 +58,10 @@ function detectColumns(line) {
   const hundred = line.match(/per\s*100|100\s*(g|ml)\b/i);
   if (!hundred) return null;
   const rest = line.slice(0, hundred.index) + ' '.repeat(hundred[0].length) + line.slice(hundred.index + hundred[0].length);
-  const serving = rest.match(/serving|portion|(\d+(?:\.\d+)?)\s*(g|ml)\b/i);
+  // The serving marker is "per serving"/"per portion" or a SECOND gram figure.
+  // A bare "serving" is not enough: a plain US "Serving size 100 g" line has
+  // the word and the 100 g and is one column (review catch, 2026-09-04).
+  const serving = rest.match(/\bper\s*(serving|portion)|(\d+(?:\.\d+)?)\s*(g|ml)\b/i);
   if (!serving) return null;
   const grams = rest.match(/(\d+(?:\.\d+)?)\s*(g|ml)\b/i); // "Per serving (30 g)": word first, grams later
   return {

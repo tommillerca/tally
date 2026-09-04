@@ -421,6 +421,16 @@ test('label M7 (a2): serving column FIRST is honoured too', () => {
   assert.equal(r.kcal, 120); assert.equal(r.fat, 3); assert.equal(r.carbs, 15); assert.equal(r.protein, 6);
   assert.equal(r.servingGrams, 30);
 });
+test('label M7 (b2): "Serving size 100 g" on a one-column US panel is NOT a two-column header', async () => {
+  // Review catch 2026-09-04: the word "serving" plus "100 g" on one line matched
+  // detectColumns, pushing a bogus two-column warning and skipping the serving parse.
+  const { parseNutritionText } = await import('../js/labelparse.js');
+  const r = parseNutritionText('Nutrition Facts\nServing size 100 g\nCalories 250\nTotal Fat 10 g\nTotal Carbohydrate 30 g\nProtein 8 g');
+  assert.equal(r.servingGrams, 100, 'serving grams read from the serving line');
+  assert.equal(r.kcal, 250);
+  assert.deepEqual(r.warnings, [], 'no two-column warning on a one-column panel');
+});
+
 test('label M7 (b): one-column per-serving panel is unchanged, no spurious warning', () => {
   const r = parseNutritionText(US_LABEL);
   assert.equal(r.kcal, 230); assert.equal(r.fat, 8); assert.equal(r.fiber, 4); assert.equal(r.protein, 3);
