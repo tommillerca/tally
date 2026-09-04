@@ -805,6 +805,46 @@ ok("NO-OP collectTribute on an already-emptied tower leaves kv 'spires' exactly 
 ok("NO-OP harvestPlot on an empty bed leaves kv 'garden' a garden, not undefined",
   noop.harvest === false && noop.plotsAfter === 3, `harvest ok: ${noop.harvest}, plots after: ${noop.plotsAfter} (expected false and 3)`);
 
+/* ===========================================================================
+ * W1 (QA round 22): A FREE WEAR IS NOT A PURCHASE.
+ *
+ * transmogPrice is 0 on a slot with no statted gear (deliberate, Tom 2026-08-11:
+ * a plain cosmetic already looks like itself). applyTransmog then banked a receipt
+ * through markPaid on EVERY apply, zero-cost ones included, and paidLooks() seeded
+ * a receipt for anything in the live transmog map. So: unequip the statted piece,
+ * apply the paid look for 0, re-equip, and the look is worn and reads "owned"
+ * forever. Lane G took a 60-dust epic chest look for 0 that way. The four steps,
+ * exactly, through the real loot.js on the real IndexedDB, and the measure is the
+ * PRICE after step 4: it must be the full price again, and paidlooks must not
+ * hold the key. The CONTROL rows pin the free rule itself, which did not change.
+ * Node twin: tests/transmog-receipt-audit.mjs runs the same steps on mem-idb.
+ * ======================================================================== */
+const w1 = await page.evaluate(async () => {
+  const loot = await import('/js/loot.js');
+  const HAT = 'g-H10-1-gravecaller', LOOK_GEAR = 'g-H10-2-ringmaster', LOOK = 'H10-2';
+  for (const g of [HAT, LOOK_GEAR]) await loot.grantGear(g, 'sop');   // level-1 hats: the second one's ART is the look
+  await loot.clearTransmog('H');
+  const full = loot.transmogCost(LOOK);
+  await loot.equipGear('H', HAT);                                     // 1. statted gear on
+  const priceGeared = await loot.transmogPrice('H', LOOK);
+  await loot.equipGear('H', null);                                    // 2. take it off
+  const priceBare = await loot.transmogPrice('H', LOOK);
+  const apply = await loot.applyTransmog('H', LOOK);                  // 3. wear the look at 0
+  await loot.equipGear('H', HAT);                                     // 4. gear back on
+  const priceAfter = await loot.transmogPrice('H', LOOK);
+  const receipts = [...await loot.paidLooks()];
+  const worn = (await loot.transmogMap()).H;
+  await loot.clearTransmog('H'); await loot.equipGear('H', null);
+  return { full, priceGeared, priceBare, apply, priceAfter, receipts, worn };
+});
+ok('CONTROL W1 the look costs dust over statted gear and 0 over an empty slot (the free rule, unchanged)',
+  w1.full > 0 && w1.priceGeared === w1.full && w1.priceBare === 0,
+  JSON.stringify({ full: w1.full, geared: w1.priceGeared, bare: w1.priceBare }));
+ok('CONTROL W1 the free apply went through at 0, so step 4 is measured on a worn look', w1.apply.ok && w1.apply.cost === 0, JSON.stringify(w1.apply));
+ok('W1 after re-equipping the gear the look costs its FULL price again', w1.priceAfter === w1.full, `price ${w1.priceAfter}, want ${w1.full}`);
+ok('W1 the free wear left no receipt in paidlooks', !w1.receipts.includes('H:H10-2'), `paidlooks ${JSON.stringify(w1.receipts)}`);
+ok('W1 the unpaid override did not survive stats entering the slot', w1.worn === undefined, `transmog.H ${JSON.stringify(w1.worn)}`);
+
 const driven = ACTIONS.filter(a => a.drive).map(a => a.drive);
 const missingDrivers = driven.filter(d => !(d in results));
 ok('CONTROL every action that claims a driver actually ran one', missingDrivers.length === 0, missingDrivers.join(', '));
@@ -819,6 +859,12 @@ if (srv) srv.close();
  * each. The clean tree runs 75 checks and exits 0. Each entry is the single edit
  * that puts the bug back, and the rows it turns red with the measured overpay:
  *
+ *  js/loot.js applyTransmog -> markPaid on every apply, as it was on 7d2b4ce5 (v472)
+ *      W1 rows red. Measured 2026-09-04 through the node twin
+ *      tests/transmog-receipt-audit.mjs on a throwaway 7d2b4ce5 tree: price 0
+ *      after re-equip (want 12), paidlooks ["H:H10-2"], transmog {H: H10-2}.
+ *      The browser rows above drive the same four calls; NOT run on this
+ *      machine this session (static-only rule), so their red is by twin.
  *  js/game.js awardOnce -> db.get then db.put, as it was
  *      10 rows red. award, awardCapped, glutton (280 coins + 40 dust for ONE
  *      appearance), denWin, miniWin, spawn (120 coins for one spawn),
