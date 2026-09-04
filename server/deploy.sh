@@ -18,6 +18,24 @@ cd "$(dirname "$0")"
 
 API="${API:-https://bonez-api.boneheadz.workers.dev}"
 
+echo "== 0. are the secrets provisioned? (names only; values never leave Cloudflare)"
+# QA round 29 S2/S6: ADD_TOKEN_SECRET and RL_SECRET were never set in production.
+# The worker fell back to the admin token for add-token HMACs and to a random
+# per-isolate salt for rate limits, and nothing said so. A deploy without them
+# now stops HERE. `wrangler secret list` prints [{"name":...,"type":...}].
+have=$(npx wrangler secret list 2>/dev/null | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).map(x=>x.name).join(" "))}catch{console.log("")}})')
+missing=0
+for s in ADMIN_TOKEN ADD_TOKEN_SECRET RL_SECRET; do
+  case " $have " in
+    *" $s "*) echo "  ok   $s";;
+    *) echo "  MISSING $s   fix: npx wrangler secret put $s"; missing=1;;
+  esac
+done
+if [ "$missing" != "0" ]; then
+  echo "REFUSING: a secret is not provisioned (or wrangler is not logged in, in which case the deploy would fail too)."
+  exit 1
+fi
+
 echo "== 1. is this tree what main says it is?"
 git fetch -q origin
 LOCAL=$(git rev-parse HEAD)
@@ -52,7 +70,7 @@ npx wrangler d1 execute bonez --local --file=schema.sql > /dev/null
 node schema-plan.test.mjs
 # --test-scheduled exposes /__scheduled, which is how retention.test.mjs drives
 # the real cron entry point rather than only the function behind it.
-npx wrangler dev --local --port 8791 --test-scheduled --var DEV:1 --var ADMIN_TOKEN:devtoken > /tmp/bonez-predeploy.log 2>&1 &
+npx wrangler dev --local --port 8791 --test-scheduled --var DEV:1 --var ADMIN_TOKEN:devtoken --var ADD_TOKEN_SECRET:devaddsecret --var RL_SECRET:devrlsecret > /tmp/bonez-predeploy.log 2>&1 &
 DEV_PID=$!
 trap 'kill $DEV_PID 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do
@@ -100,7 +118,7 @@ echo
 echo "deployed and reachable: $(git log --oneline -1 HEAD)"
 echo
 echo "== 5. IS THE PRUNER ACTUALLY RUNNING? Ask, within the next 15 minutes:"
-echo "     curl -s '$API/admin/prune?token=\$ADMIN_TOKEN' | head -c 400"
+echo "     curl -s '$API/admin/prune' -H \"authorization: Bearer \$ADMIN_TOKEN\" | head -c 400"
 echo "  Reading 'no-table' means the migration has not been applied yet:"
 echo "     npx wrangler d1 execute bonez --remote --file=migrations/2026-08-25-prune-runs.sql"
 echo "  Nothing above this line proves a cron tick ever fired. That route does."

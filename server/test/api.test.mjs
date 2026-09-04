@@ -193,7 +193,8 @@ await test('analytics: /events ingests an anonymous batch', async () => {
 });
 
 await test('analytics: /stats is admin-gated + aggregates', async () => {
-  assert.equal((await fetch(BASE + '/stats')).status, 401);
+  // QA r29 S3: a deliberate failure counts against its IP, so it brings its own
+  assert.equal((await fetch(BASE + '/stats', { headers: { 'cf-connecting-ip': rndIp() } })).status, 401);
   const ok = await fetch(BASE + '/stats', { headers: { authorization: 'Bearer devtoken' } });
   assert.equal(ok.status, 200);
   const s = await ok.json();
@@ -1572,9 +1573,10 @@ await test('r29 S2: the admin token is read from Authorization: Bearer', async (
 await test('r29 S2: a token in the query string is refused unless ADMIN_QUERY_TOKEN_OK=1', async () => {
   /* head_sampling_rate = 1 retains every request URL, so ?token= writes the
      admin secret into the log store on every dashboard load. Off by default. */
-  const r = await fetch(BASE + '/stats?token=devtoken');
+  const own = { headers: { 'cf-connecting-ip': rndIp() } }; // S3: these two failures spend this IP's bucket, not the suite's
+  const r = await fetch(BASE + '/stats?token=devtoken', own);
   assert.equal(r.status, 401, `S2: ?token= in the URL still authenticates (${r.status})`);
-  const p = await fetch(BASE + '/admin/prune?token=devtoken');
+  const p = await fetch(BASE + '/admin/prune?token=devtoken', own);
   assert.equal(p.status, 401, `S2: /admin/prune?token= still authenticates (${p.status})`);
 });
 
@@ -1598,14 +1600,21 @@ await test('r29 S3: wrong admin tokens are counted per IP; 429 after the bucket,
 const s5 = { device: 'r29-dev-' + Math.random().toString(36).slice(2, 10), ipA: rndIp(), ipB: rndIp() };
 await test('r29 S5: a refused request spends no budget (no bucket row ever exceeds its limit)', async () => {
   localOnly();
+  /* DIFFERENTIAL, because the local D1 keeps every earlier run's rows in the
+     same day-long window (including rows an OLDER worker counted past the
+     limit): what must not change is the number of over-limit rows, and what
+     must appear is one row parked exactly AT the limit. */
+  const count = (rows, f) => rows.filter(r => f(Number(r.hits))).length;
+  const before = rlRows('rl_survey_dev');
+  if (!before) unprovable(`no local D1 file under ${D1_DIR}`);
   // rl_survey_dev is 3 per day: three honest posts, then three refused ones
   for (let i = 0; i < 3; i++) assert.equal((await survey(BASE, s5.device, s5.ipA)).status, 200, `PRECONDITION: honest post ${i + 1} of 3`);
   for (let i = 0; i < 3; i++) assert.equal((await survey(BASE, s5.device, s5.ipA)).status, 429, `PRECONDITION: refused post ${i + 1}`);
-  const rows = rlRows('rl_survey_dev');
-  if (!rows) unprovable(`no local D1 file under ${D1_DIR}`);
-  assert.ok(rows.length > 0, 'CONTROL: no rl_survey_dev rows at all, so this proves nothing');
-  const over = rows.filter(r => Number(r.hits) > 3);
-  assert.equal(over.length, 0, `S5: ${over.length} rl_survey_dev row(s) counted past the limit (hits ${over.map(r => r.hits)}): refused requests are spending budget`);
+  const after = rlRows('rl_survey_dev');
+  assert.ok(after.length > before.length, 'CONTROL: the six posts created no rl_survey_dev row, so this proves nothing');
+  assert.equal(count(after, h => h > 3), count(before, h => h > 3),
+    `S5: a new rl_survey_dev row counted past the limit (${count(after, h => h > 3) - count(before, h => h > 3)} more than before): refused requests are spending budget`);
+  assert.ok(count(after, h => h === 3) >= count(before, h => h === 3) + 1, 'CONTROL: no new row sits exactly at the limit');
 });
 
 await test('r29 S5: a device budget is per SOURCE: a stranger cannot spend it', async () => {

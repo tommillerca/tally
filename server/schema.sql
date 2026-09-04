@@ -12,6 +12,14 @@ CREATE TABLE IF NOT EXISTS players (
   last_seen INTEGER NOT NULL,
   siege_last INTEGER,                -- weekly siege limiter: one per player per 7 days
   rename_of TEXT,                    -- a name we owe them a change from (dup-name repair, 2026-08-08)
+  -- RENAME HISTORY (QA round 29 S9, 2026-09-04). JSON array of the names this
+  -- player wore before the current one, newest last, capped at 10 by POST /name.
+  -- devices.label and reports.label are stamped BY VALUE from unsigned routes
+  -- and hold no player id, so the /account/delete scrub can only reach a label
+  -- by knowing the string; without this, a rename left the old name on both
+  -- tables for the 365 day retention window. NULL = never renamed.
+  -- Existing DBs: migrations/2026-09-04-prev-names.sql.
+  prev_names TEXT,
   -- SNAPSHOT BOUNDS (2026-08-16). /profile used to store whatever the client
   -- asserted, and /leaderboard ranks on it, so one signed PUT of
   -- {level:999999, badges:999999} was rank 1 forever. These four columns are the

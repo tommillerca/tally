@@ -1,7 +1,7 @@
 /* Grants-retention tests against a running Worker.
  *
  *   npx wrangler d1 execute bonez --local --file=schema.sql
- *   npm run dev            # or: npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken
+ *   npm run dev            # or: npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken --var ADD_TOKEN_SECRET:devaddsecret --var RL_SECRET:devrlsecret
  *   node grants-retention.test.mjs
  *
  * WHY THIS FILE IS NOT retention.test.mjs. Pruning telemetry and pruning grants
@@ -460,7 +460,7 @@ await test('a wall-clock bound also stops a run, and stops it cleanly', async ()
    arithmetic and still be worthless the month saves double in size. */
 await test('/admin/prune reports the save-size trend, and it MOVES with the saves', async () => {
   const status = async () => {
-    const r = await fetch(`${BASE}/admin/prune?token=${encodeURIComponent(ADMIN)}`);
+    const r = await fetch(`${BASE}/admin/prune`, { headers: { authorization: `Bearer ${ADMIN}` } }); // QA r29 S2
     assert.equal(r.status, 200, `/admin/prune answered ${r.status}; is ADMIN_TOKEN ${ADMIN}?`);
     const b = (await r.json()).tables.backups;
     assert.ok(b, 'no backups figures on /admin/prune at all: decision 3 is not implemented');

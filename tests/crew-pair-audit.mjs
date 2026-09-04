@@ -123,7 +123,7 @@ async function startWorker() {
      16,384 ephemeral ports, which fails every later Chrome audit with
      EADDRNOTAVAIL and breaks `git push` with "can't assign requested address". */
   const p = spawn(process.execPath, [bin, 'dev', '--local', '--port', String(port),
-    '--var', 'DEV:1', '--var', 'ADMIN_TOKEN:devtoken'],
+    '--var', 'DEV:1', '--var', 'ADMIN_TOKEN:devtoken', '--var', 'ADD_TOKEN_SECRET:devaddsecret', '--var', 'RL_SECRET:devrlsecret'], // QA r29 S2: no secret, no add tokens
     { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   const killTree = () => { try { process.kill(-p.pid, 'SIGKILL'); } catch { /* group already gone */ } };
   /* An interrupted run (Ctrl-C, a torn-down session) never reaches close(),

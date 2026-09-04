@@ -1,7 +1,7 @@
 /* Concurrency guards for the write paths.
  *
  *   npx wrangler d1 execute bonez --local --file=schema.sql
- *   npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken
+ *   npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken --var ADD_TOKEN_SECRET:devaddsecret --var RL_SECRET:devrlsecret
  *   node concurrency.test.mjs
  *
  * WHY THIS SUITE EXISTS. D1 is SQLite: one writer, and no interactive

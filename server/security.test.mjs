@@ -1,7 +1,7 @@
 /* Security-hardening tests against a running Worker.
  *
  *   npx wrangler d1 execute bonez --local --file=schema.sql
- *   npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken
+ *   npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken --var ADD_TOKEN_SECRET:devaddsecret --var RL_SECRET:devrlsecret
  *   node security.test.mjs
  *
  * One suite per finding from the 2026-08-16 audit. Each block states the
@@ -551,7 +551,7 @@ await test('a v2 body reaches the dashboard payload with its answers parseable',
   const device = rndDevice();
   const answers = { q1: 'pit', q2: ['streak', 'pets'], q5: 'definitely', q6: 'sec-' + device };
   assert.equal((await postSurvey({ device, form: 'v2', answers, ctx: { days: 12, level: 7 } })).status, 200);
-  const r = await fetch(`${BASE}/stats?token=${encodeURIComponent(process.env.ADMIN_TOKEN || 'devtoken')}`);
+  const r = await fetch(`${BASE}/stats`, { headers: { authorization: `Bearer ${process.env.ADMIN_TOKEN || 'devtoken'}` } }); // QA r29 S2
   assert.equal(r.status, 200, `/stats answered ${r.status}; is ADMIN_TOKEN devtoken?`);
   const leads = (await r.json()).leads || [];
   assert.ok(leads.length, 'the leads list came back empty, so this case examined nothing');

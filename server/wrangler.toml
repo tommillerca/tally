@@ -5,6 +5,20 @@
 # players.is_test=1 and never appears on any public surface.
 # tests/live-api-register-lint.mjs fails the release gate if a suite forgets.
 # See docs/BOT-CENSUS-2026-08-22.md for what forgetting did four times.
+# SECRETS (QA round 29 S2/S6). THREE, ALL REQUIRED, ALL SET BEFORE `wrangler deploy`:
+#   npx wrangler secret put ADMIN_TOKEN        # the dashboard / admin routes
+#   npx wrangler secret put ADD_TOKEN_SECRET   # HMAC key for leaderboard add tokens
+#   npx wrangler secret put RL_SECRET          # salt for rate-limit bucket hashes
+# Each is a long random string, unrelated to the others (openssl rand -hex 32).
+# ADD_TOKEN_SECRET and RL_SECRET were unset for the whole life of the worker:
+# add tokens were signed with the ADMIN token and every rate limit was salted
+# per isolate, so it was N limits for N isolates. Neither falls back any more:
+# no ADD_TOKEN_SECRET = no add tokens minted (board still served); no RL_SECRET
+# = unsalted deterministic buckets. The worker logs the MISSING NAMES on its
+# first request (checkSecrets in src/index.js) and deploy.sh refuses step 0
+# until `wrangler secret list` shows all three.
+# ADMIN_QUERY_TOKEN_OK = "1" (a [vars] entry, not a secret) re-enables ?token=
+# on admin routes for ONE release while an old dashboard is migrated. Off.
 # Local dev needs NO account:  npm run db:local && npm run dev
 # Production deploy (once Tom's Cloudflare account exists):
 #   npx wrangler d1 create bonez   -> paste database_id below

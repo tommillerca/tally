@@ -1,7 +1,7 @@
 /* Events-retention tests against a running Worker.
  *
  *   npx wrangler d1 execute bonez --local --file=schema.sql
- *   npm run dev            # or: npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken
+ *   npm run dev            # or: npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken --var ADD_TOKEN_SECRET:devaddsecret --var RL_SECRET:devrlsecret
  *   node retention.test.mjs
  *
  * These exist because a pruner is judged twice, and the second judgement is the
@@ -348,13 +348,15 @@ await (async () => {
    ADMIN_TOKEN must be devtoken, which is what npm run dev and deploy.sh both
    pass. A wrong token here shows up as the 401 case failing, not as silence. */
 const ADMIN = process.env.ADMIN_TOKEN || 'devtoken';
+/* QA r29 S3: deliberate failures count against the caller's IP (10 per 10 min), so a probe that MEANS to fail arrives from its own address and never locks a re-run out */
+const rndIp = () => `198.18.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
 const pruneStatus = async (token = ADMIN) => {
-  const r = await fetch(`${BASE}/admin/prune?token=${encodeURIComponent(token)}`);
+  const r = await fetch(`${BASE}/admin/prune`, { headers: { authorization: `Bearer ${token}`, 'cf-connecting-ip': rndIp() } }); // QA r29 S2: header, never the URL
   return { status: r.status, json: await r.json().catch(() => null) };
 };
 
 await test('/admin/prune is admin-gated, like every other admin read', async () => {
-  assert.equal((await fetch(BASE + '/admin/prune')).status, 401, 'no token got in');
+  assert.equal((await fetch(BASE + '/admin/prune', { headers: { 'cf-connecting-ip': rndIp() } })).status, 401, 'no token got in');
   assert.equal((await pruneStatus('not-the-token')).status, 401, 'a wrong token got in');
   const ok = await pruneStatus();
   assert.equal(ok.status, 200, `the right token was refused (${ok.status}); is ADMIN_TOKEN devtoken?`);
