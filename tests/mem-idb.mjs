@@ -12,6 +12,14 @@
  *   - tx.abort() discards the journal (importAll's rollback guarantee);
  *   - request callbacks fire on microtasks, before the commit macrotask, so
  *     kvUpdate's get-then-put lands inside its transaction;
+ *   - transactions on one database run ONE AT A TIME, in creation order, the
+ *     way the spec serialises overlapping readwrite scopes (QA round 26 O2/O4,
+ *     2026-09-04): until then two concurrent kvUpdate calls on one key both
+ *     read the committed row and both committed, a lost update INSIDE the
+ *     primitive the whole reward SOP is built on, so a fix that made a claim
+ *     atomic could never go green here and a bug that raced two taps could
+ *     never go red. The chain is the database's `lock` promise: a transaction's
+ *     requests and its commit all wait on the previous transaction's commit;
  *   and `add` raises ConstraintError on a taken key, which is what
  *   db.addIfAbsent (and so every awardOnce) is built on.
  * `index(name).getAll(value)` is shimmed (QA round 25 M13, tests/today-reads-lint.mjs)
@@ -26,10 +34,13 @@ function makeTx(rec) {
   const journal = [];
   const tx = { error: null, oncomplete: null, onerror: null, onabort: null, _aborted: false };
   tx.abort = () => { tx._aborted = true; };
+  // serialise: this transaction starts when the previous one on this database has committed
+  const start = rec.lock || Promise.resolve();
+  let release; rec.lock = new Promise(r => { release = r; });
   tx.objectStore = (name) => {
     const st = rec.stores.get(name);
     const req = () => ({ onsuccess: null, onerror: null, result: undefined, error: null });
-    const later = (r, fn) => { queueMicrotask(() => { if (tx._aborted) return; r.result = fn(); if (r.onsuccess) r.onsuccess({ target: r }); }); return r; };
+    const later = (r, fn) => { start.then(() => { if (tx._aborted) return; r.result = fn(); if (r.onsuccess) r.onsuccess({ target: r }); }); return r; };
     const staged = k => { // committed state + this tx's own journal
       let v = st.rows.has(k) ? st.rows.get(k) : undefined;
       for (const j of journal) {
@@ -51,7 +62,7 @@ function makeTx(rec) {
       put: v => { const k = v[st.keyPath]; if (k === undefined) throw new DOMException('no key', 'DataError'); journal.push({ st, type: 'put', k, v: clone(v) }); return later(req(), () => k); },
       add: v => {
         const k = v[st.keyPath]; const r = req();
-        queueMicrotask(() => {
+        start.then(() => {
           if (tx._aborted) return;
           if (staged(k) !== undefined) {
             r.error = new DOMException('exists', 'ConstraintError');
@@ -67,15 +78,16 @@ function makeTx(rec) {
       index: (name) => ({ getAll: (value) => later(req(), () => { READS.index++; return allStaged().filter(r => r[name] === value); }) }),
     };
   };
-  setTimeout(() => {
-    if (tx._aborted) { if (tx.onabort) tx.onabort({ target: tx }); return; }
+  start.then(() => setTimeout(() => {
+    if (tx._aborted) { release(); if (tx.onabort) tx.onabort({ target: tx }); return; }
     for (const j of journal) {
       if (j.type === 'put') j.st.rows.set(j.k, j.v);
       else if (j.type === 'del') j.st.rows.delete(j.k);
       else j.st.rows.clear();
     }
+    release();   // the next transaction may now read what this one wrote
     if (tx.oncomplete) tx.oncomplete({ target: tx });
-  }, 0);
+  }, 0));
   return tx;
 }
 globalThis.indexedDB = {

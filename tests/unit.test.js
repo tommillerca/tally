@@ -13,7 +13,7 @@ import {
   lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
   assumedActiveBurn, activeCalorieBonus, bmrMifflin, kcalFloor, gramsChipDefault, fmtG,
 } from '../js/nutrition.js';
-import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume } from '../js/cooking.js';
+import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume, foodBuffLabel } from '../js/cooking.js';
 import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
 import { GEAR_ITEMS } from '../js/gear.js';
 import {
@@ -1543,6 +1543,29 @@ test('kitchen: transmute consumes commons greedily from the most-abundant (v144)
   assert.equal(inv.ectoplasm, 2, 'rare ingredient untouched');
   // short of 6: takes what it can (caller gates on canAfford so this is defensive)
   assert.equal(transmuteConsume({ marrow: 2 }, 6).taken, 2);
+});
+
+/* QA round 26 O17: every coins dish in the Pantry read "+25% coins · NaNh NaNm
+   left". The Pantry row hands the formatter the recipe's bare buff, which has a
+   duration (hours) and no deadline (untilMs), and the formatter subtracted the
+   missing deadline from the clock. Both shapes the app feeds it are graded:
+   the Pantry shape for EVERY recipe, and the live shape with a real deadline.
+   PROVE-RED: the pre-fix formatter body (untilMs - now unconditionally) prints
+   NaN for zombie-fajita in the Pantry shape. */
+test('kitchen: foodBuffLabel formats every recipe finitely, in the Pantry and live (QA r26 O17)', () => {
+  const NOW = 1_800_000_000_000;
+  let coinsDishes = 0;
+  for (const r of RECIPES) {
+    const pantry = foodBuffLabel({ ...r.buff, ...(r.buff.kind === 'combat' ? { fightsLeft: r.buff.fights } : {}) }, NOW);
+    assert.ok(typeof pantry === 'string' && pantry.length > 0 && !/NaN|undefined|Infinity/.test(pantry), `${r.id} pantry label: ${pantry}`);
+    if (r.buff.kind === 'coins') {
+      coinsDishes++;
+      assert.match(pantry, /^\+\d+% coins for \d+h/, `${r.id} pantry label states the duration it will run: ${pantry}`);
+      const live = foodBuffLabel({ ...r.buff, untilMs: NOW + 90 * 60000 }, NOW);
+      assert.equal(live, `+${Math.round(r.buff.pct * 100)}% coins · 1h 30m left`, 'a live coins buff still counts down');
+    }
+  }
+  assert.ok(coinsDishes > 0, 'an empty sample is a failure: no coins dish in RECIPES');
 });
 
 /* ---- v231 account recovery: the rules that decide whether a lost account can
