@@ -14,8 +14,13 @@
  *     kvUpdate's get-then-put lands inside its transaction;
  *   and `add` raises ConstraintError on a taken key, which is what
  *   db.addIfAbsent (and so every awardOnce) is built on.
- * `index` is NOT shimmed: nothing here uses db.byIndex yet. */
+ * `index(name).getAll(value)` is shimmed (QA round 25 M13, tests/today-reads-lint.mjs)
+ * as an equality filter on the named field over the same staged view getAll
+ * sees; no key ranges, no cursors. Every getAll is tallied on
+ * `globalThis.__memIdbReads` ({ full, index }) so a test can assert HOW a store
+ * was read, not only what came back. */
 const DATABASES = new Map();
+const READS = globalThis.__memIdbReads = { full: 0, index: 0 };
 const clone = v => structuredClone(v);
 function makeTx(rec) {
   const journal = [];
@@ -34,13 +39,14 @@ function makeTx(rec) {
       }
       return v;
     };
+    const allStaged = () => {
+      const keys = new Set(st.rows.keys());
+      for (const j of journal) if (j.st === st) { if (j.type === 'clear') keys.clear(); else if (j.type === 'put') keys.add(j.k); else keys.delete(j.k); }
+      return [...keys].map(k => clone(staged(k)));
+    };
     return {
       get: k => later(req(), () => { const v = staged(k); return v === undefined ? undefined : clone(v); }),
-      getAll: () => later(req(), () => {
-        const keys = new Set(st.rows.keys());
-        for (const j of journal) if (j.st === st) { if (j.type === 'clear') keys.clear(); else if (j.type === 'put') keys.add(j.k); else keys.delete(j.k); }
-        return [...keys].map(k => clone(staged(k)));
-      }),
+      getAll: () => later(req(), () => { READS.full++; return allStaged(); }),
       count: () => later(req(), () => st.rows.size),
       put: v => { const k = v[st.keyPath]; if (k === undefined) throw new DOMException('no key', 'DataError'); journal.push({ st, type: 'put', k, v: clone(v) }); return later(req(), () => k); },
       add: v => {
@@ -58,7 +64,7 @@ function makeTx(rec) {
       },
       delete: k => { journal.push({ st, type: 'del', k }); return later(req(), () => undefined); },
       clear: () => { journal.push({ st, type: 'clear' }); return later(req(), () => undefined); },
-      index: () => { throw new Error('index not shimmed'); },
+      index: (name) => ({ getAll: (value) => later(req(), () => { READS.index++; return allStaged().filter(r => r[name] === value); }) }),
     };
   };
   setTimeout(() => {

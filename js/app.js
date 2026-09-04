@@ -3735,7 +3735,14 @@ async function renderToday(el) {
      identity, not a property of which date you are reading, so they no longer
      switch off when you step back a day. The toasts still only fire on today
      (see fireUnlockToasts below): a nudge is about now. */
-  const [unlockFighter, unlockGear] = await Promise.all([buildFighter(), ownedGearIds()]);
+  /* QA round 25 M13: drawing Today cost 13 full-store reads (700 to 800 ms at
+     two years of data). Five of them were buildFighter() re-reading the log, xp
+     and health stores this render had ALREADY read in full a few lines up, then
+     reading inv for ownedGearIds while this same line read inv for the same
+     set, then reading xp a second time for the level. Hand it the rows in hand.
+     Same rows, same snapshot, same fighter; only the duplicate scans go. */
+  const unlockGear = await ownedGearIds();
+  const unlockFighter = await buildFighter({ log: allLog, xpRows: allXp, health: healthRows, gOwned: unlockGear });
   const unlocks = computeHomeUnlocks({
     fighter: unlockFighter, level: lvl.level, coinBal, dustBal,
     gearOwnedCount: unlockGear.size, gearEquippedCount: Object.keys(unlockFighter.gearLo || {}).length,
@@ -20088,8 +20095,12 @@ async function habitBaseGrantTp(behavior) {
   return tp;
 }
 
-async function buildFighter() {
-  const [log, xpRows, health] = await Promise.all([db.all('log'), db.all('xp'), db.all('health')]);
+/* `pre` (QA round 25 M13): a caller that has already read the log, xp, health
+   stores or the owned-gear set in full (renderToday does, for the streak, the
+   quests and the unlock badges) passes them in so this does not scan the same
+   stores again. Every field is optional; a bare buildFighter() reads as before. */
+async function buildFighter(pre = {}) {
+  const [log, xpRows, health] = await Promise.all([pre.log || db.all('log'), pre.xpRows || db.all('xp'), pre.health || db.all('health')]);
   const behavior = {
     proteinDays: xpRows.filter(r => r.type === 'protein').length,
     closes: xpRows.filter(r => r.type === 'dayclose').length,
@@ -20104,8 +20115,10 @@ async function buildFighter() {
   // which is now the ONLY thing habits move.
   const baseStats = deriveStats();
   const alloc = await kvGet('trainalloc', {});
-  const [gearLo, gOwned, xpAll] = await Promise.all([gearLoadout(), ownedGearIds(), db.all('xp')]);
-  const level = levelFor(xpAll.reduce((a, r) => a + (r.xp || 0), 0)).level;
+  const [gearLo, gOwned] = await Promise.all([gearLoadout(), pre.gOwned || ownedGearIds()]);
+  /* xpRows was read whole a few awaits ago; a second db.all('xp') here was the
+     "xp read twice" in QA round 25 M13 and bought no fresher a snapshot. */
+  const level = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0)).level;
   const gBonus = gearStats(gearLo, gOwned, level);
   const setInfo = gearSetInfo(gearLo, gOwned, level); // 2pc/4pc tier-set bonuses
   for (const k of Object.keys(gBonus)) gBonus[k] += (setInfo.stats[k] || 0);
