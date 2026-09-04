@@ -130,6 +130,11 @@ export async function sendSurvey(data = {}) {
       feedback: data.feedback ? String(data.feedback).slice(0, 500) : null,
       mostWanted: data.mostWanted ? String(data.mostWanted).slice(0, 280) : null,
       features: Array.isArray(data.features) ? data.features.slice(0, 20).map(f => String(f).slice(0, 24)) : [],
+      /* Survey v2 S3: `form` names the survey, `answers` and `ctx` are OBJECTS
+         (server/src/index.js POST /survey caps them at 4000 / 1000 chars and
+         refuses, never truncates). Sent only when the caller passes a form, so a
+         v1 body is byte-for-byte what it was and lands with form NULL. */
+      ...(data.form ? { form: String(data.form).slice(0, 24), answers: data.answers || {}, ctx: data.ctx || {} } : {}),
     };
     const r = await apiFetch(base + '/survey', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     return { ok: !!(r && r.ok) };

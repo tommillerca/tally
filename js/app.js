@@ -7,7 +7,7 @@ import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
-  awardCapped, XP_DAILY_CAP, BADGE_XP,
+  awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats,
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
@@ -1552,6 +1552,10 @@ async function boot() {
   maybeShowRenameNotice();
   maybeNudgeRecovery();
   setTimeout(checkFriendRequests, 3000);
+  /* Survey v2 S3: a submit whose POST failed left its body in kv; one retry per
+     boot and one per return of the network. Opens nothing, shows nothing. */
+  drainSurvey2Pending().catch(() => {});
+  window.addEventListener('online', () => { drainSurvey2Pending().catch(() => {}); });
 }
 
 /* DAY ROLLOVER (v224).
@@ -12302,6 +12306,205 @@ function showDayOneReveal(granted) {
 }
 
 /* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowSurvey opened the Day One Lizard survey over the app. openSurveySheet is unchanged and the Settings row ('Day One survey') still opens it, so the lizard is still claimable; nothing already collected is affected */
+
+/* Survey v2 S3: the sheet (spec: surveyv2spec.md, section 2 for the questions,
+   section 4/S3 for the build). THIS FILE OPENS NOTHING ON ITS OWN. The trigger
+   (S4) and the pet reward (S5) are Tom's; this is the sheet, the payload, the
+   done/dismiss facts and the offline retry, nothing else. Nothing on the boot
+   path calls openSurvey2Sheet, so tests/first-session-audit.mjs stays at zero.
+
+   Wire shape (server/src/index.js POST /survey, S1): `form: 'v2'`, `answers`
+   and `ctx` as OBJECTS; the server refuses (400) an answers blob over 4000
+   chars or a ctx over 1000 rather than truncating. The keys in `answers` are
+   what server/dashboard.html Q_LABELS / FREE_LABELS tally by: q1..q5, q3text,
+   q6. Rename one here and the dashboard renders "nobody answered".
+
+   Spec section 2, verbatim copy. Q3 and Q4 share the same nine areas and each
+   adds its own tenth chip. `single` renders radios, `multi` checkboxes in the
+   v1 `.survey-feats` grid; `max` is Q2's two-pick cap. */
+const SURVEY2_AREAS = [
+  ['pit', 'The Pit'], ['stats', 'Stats and training'], ['boneyard', 'The Boneyard map'],
+  ['cooking', 'Cooking'], ['spires', 'Dark Spires'], ['quests', 'Quests'],
+  ['gear', 'Gear and the Wardrobe'], ['pets', 'Pets and the Stable'], ['crew', 'The Crew'],
+];
+const SURVEY2_QUESTIONS = [
+  { id: 'q1', type: 'single', label: 'Why did you open the app today?', opts: [
+    ['log', 'Log my food'], ['steps', 'Check my steps'], ['pit', 'Fight in the Pit'], ['boneyard', 'The Boneyard map'],
+    ['pets', 'My pets'], ['cook', 'Cook something'], ['crew', 'See what my crew did'], ['quest', 'A quest or the wheel'],
+    ['checkin', 'Just checking in'] ] },
+  { id: 'q2', type: 'multi', max: 2, label: 'What keeps you coming back?', hint: 'Pick up to 2', opts: [
+    ['streak', 'My streak'], ['stronger', 'Watching my Bonehead get stronger'], ['pets', 'The pets'], ['friends', 'Beating my friends'],
+    ['wheel', 'The daily wheel'], ['boneyard', 'Walking the Boneyard'], ['logging', 'Logging food properly'], ['fights', 'The fights'],
+    ['notmuch', 'Honestly, not much yet'] ] },
+  { id: 'q3', type: 'multi', label: 'Was there anything you did not understand?', opts: [...SURVEY2_AREAS, ['nothing', 'Nothing, it made sense']],
+    /* reveal-on-tick (spec Q3): any of the nine areas shows this optional field */
+    text: { id: 'q3text', label: 'What was confusing about it?', reveal: SURVEY2_AREAS.map(([v]) => v) } },
+  { id: 'q4', type: 'single', label: 'If we cut one thing to make this simpler, what should go?', opts: [...SURVEY2_AREAS, ['dontcut', "Don't cut anything"]] },
+  { id: 'q5', type: 'single', label: 'Will you still be playing in a month?', opts: [
+    ['definitely', 'Definitely'], ['probably', 'Probably'], ['not_sure', 'Not sure'], ['probably_not', 'Probably not'] ] },
+  { id: 'q6', type: 'text', label: 'What nearly made you stop playing?' },
+];
+/* Free text is 240 chars in the spec (Q3 text, Q6), which is also what keeps
+   the whole blob a long way under the server's 4000: nine Q3 chips plus two
+   full texts is about 700 chars. No client-side 4000 check because no input
+   can reach it; tests/unit.test.js asserts the bound at every cap instead. */
+const SURVEY2_TEXT_MAX = 240;
+const SURVEY2_FORM = 'v2';
+
+// Pure: the question markup from the list above, so a test can render and count it.
+function survey2QuestionsHtml(qs = SURVEY2_QUESTIONS) {
+  return qs.map(q => {
+    const lab = `<label class="survey-label">${esc(q.label)}${q.hint ? ` <span class="survey-opt">(${esc(q.hint)})</span>` : ''}</label>`;
+    if (q.type === 'text') return `${lab.replace('<label class="survey-label">', `<label class="survey-label" for="sv2-${q.id}">`)}
+      <textarea id="sv2-${q.id}" class="survey-in" rows="2" maxlength="${SURVEY2_TEXT_MAX}" data-q="${q.id}"></textarea>`;
+    const kind = q.type === 'single' ? 'radio' : 'checkbox';
+    const chips = q.opts.map(([v, l]) => `<label class="survey-feat"><input type="${kind}" name="sv2-${q.id}" value="${v}"> ${esc(l)}</label>`).join('');
+    const text = q.text ? `<label class="survey-label" for="sv2-${q.text.id}" id="sv2-${q.text.id}-lab" hidden>${esc(q.text.label)} <span class="survey-opt">(optional)</span></label>
+      <textarea id="sv2-${q.text.id}" class="survey-in" rows="2" maxlength="${SURVEY2_TEXT_MAX}" data-q="${q.text.id}" hidden></textarea>` : '';
+    return `${lab}<div class="survey-feats" data-q="${q.id}"${q.max ? ` data-max="${q.max}"` : ''}>${chips}</div>${text}`;
+  }).join('');
+}
+
+/* Pure: raw answers (strings, arrays of strings) to the `answers` object the
+   server stores. Drops empties so a skipped question is absent, not "" (the
+   dashboard counts an answered question by presence). Text is trimmed and cut
+   at the spec's 240, which is under the server's cap by construction. */
+function survey2Answers(raw) {
+  const out = {};
+  for (const [k, v] of Object.entries(raw || {})) {
+    if (Array.isArray(v)) { const a = v.filter(x => typeof x === 'string' && x).slice(0, 20).map(x => x.slice(0, 24)); if (a.length) out[k] = a; }
+    else if (typeof v === 'string' && v.trim()) out[k] = v.trim().slice(0, SURVEY2_TEXT_MAX);
+  }
+  return out;
+}
+
+/* Spec section 2, "silent context": days since install, level, streak, foods
+   logged, Pit wins, pets owned, crew connected, build, platform. Every field
+   best-effort (null on failure) so a broken stat can never block a submit.
+   READINGS (spec names the fields, not the sources):
+     days  = days since the earliest xp row (no `installedAt` kv exists; S4's
+             spec names the same fallback). null on a save with no xp rows.
+     crew  = a social identity exists on this device (socialMe), not a live
+             friends count: that is a network call and this must work offline. */
+async function survey2Ctx() {
+  const ctx = { build: APP_BUILD, plat: platformTag() };
+  try {
+    const st = await buildStats();
+    ctx.streak = st.streak; ctx.foods = st.logs; ctx.pitWins = st.pitWins;
+  } catch { /* stats unreadable: fields stay absent */ }
+  try { ctx.level = levelFor(await totalXp()).level; } catch { /* absent */ }
+  try {
+    const first = Math.min(...(await db.all('xp')).map(r => r.ts || Infinity));
+    ctx.days = Number.isFinite(first) ? Math.floor((Date.now() - first) / 86400000) : null;
+  } catch { /* absent */ }
+  try { ctx.pets = (await petInstances()).length; } catch { /* absent */ }
+  try { ctx.crew = !!(await social.socialMe()); } catch { /* absent */ }
+  return ctx;
+}
+
+/* The facts, in kv, for S4 to read (spec S4 names survey2Done and
+   survey2SnoozeAt; survey2Asks is S4's own counter and is not written here):
+     survey2Done      ts of the submit; the sheet is never re-offered after it
+     survey2SnoozeAt  ts of the last "Not now"; S4 decides the re-offer cadence
+     survey2Pending   the exact body a failed POST tried to send, drained by
+                      drainSurvey2Pending on boot and on the `online` event.
+   Submit marks done BEFORE the post, v1's order: completing the survey must
+   never depend on the network. The post itself is awaited only to learn
+   whether to keep the body; the sheet has already said thanks. */
+async function survey2Submit(raw, extra = {}) {
+  const body = { form: SURVEY2_FORM, answers: survey2Answers(raw), ctx: await survey2Ctx(), ...extra };
+  await kvSet('survey2Done', Date.now());
+  trackEvent('survey2_submit', { hasEmail: extra.email ? 1 : 0, optin: extra.emailOptin ? 1 : 0, n: Object.keys(body.answers).length });
+  const r = await sendSurvey(body).catch(() => ({ ok: false }));
+  if (!(r && r.ok)) await kvSet('survey2Pending', body);
+  return body;
+}
+async function survey2Dismiss() { await kvSet('survey2SnoozeAt', Date.now()); }
+/* One row, one try per call: a body that fails again simply stays for the next
+   boot or `online`. ponytail: no backoff, no queue; the row is at most one
+   survey per device. Cleared only on a real ok, so a bot/offline answer keeps it. */
+async function drainSurvey2Pending() {
+  const body = await kvGet('survey2Pending', null);
+  if (!body) return false;
+  const r = await sendSurvey(body).catch(() => ({ ok: false }));
+  if (r && r.ok) { await kvSet('survey2Pending', null); return true; }
+  return false;
+}
+
+/* The sheet. Reuses v1's .survey-* CSS wholesale (spec S3): same grid, same
+   selected state, same inputs, same buttons. Copy: title is the spec's working
+   title (Tom may swap in "The Trainer's Report"); the one-line sub, the refusal
+   line and the button labels are not in the spec and are the minimum needed
+   (flagged in the S3 report). The disclosure sentence is verbatim and required. */
+function openSurvey2Sheet(source = 'auto') {
+  trackEvent('survey2_open', { src: source });
+  openSheet(`
+    <div class="survey" id="survey2Form">
+      <h2 class="survey-title">Tell us where it hurts</h2>
+      <p class="survey-sub">Six quick questions, about a minute. Skip any you like.</p>
+      ${survey2QuestionsHtml()}
+      <label class="survey-label" for="sv2Email">Email <span class="survey-opt">(optional)</span></label>
+      <input id="sv2Email" class="survey-in" type="email" maxlength="120" autocomplete="email" placeholder="you@example.com">
+      <label class="survey-check"><input id="sv2Optin" type="checkbox"> Email me the occasional Boneheadz update</label>
+      <p class="survey-priv">We attach your level and how long you have been playing so we can tell a day-three answer from a day-thirty one. Nothing else leaves your phone. Goes straight to the developers, never shared or shown to other players. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+      <div class="row" style="gap:8px;margin-top:6px">
+        <button class="btn ghost" id="sv2Later" style="flex:0 0 auto">Not now</button>
+        <button class="btn" id="sv2Send" style="flex:1">Send</button>
+      </div>
+      <p class="muted" id="sv2Status" style="font-size:12px;margin:10px 2px 0;text-align:center"></p>
+    </div>
+  `, { cls: 'sheet-survey', name: 'survey2' });
+  const form = $('#survey2Form');
+
+  // Q2's two-pick cap: the unchecked chips go disabled at two, back at one.
+  $$('.survey-feats[data-max]', form).forEach(grid => {
+    const max = +grid.dataset.max, inputs = $$('input', grid);
+    grid.addEventListener('change', () => {
+      const full = inputs.filter(i => i.checked).length >= max;
+      inputs.forEach(i => { if (!i.checked) i.disabled = full; });
+    });
+  });
+  // Q3's text field: hidden until one of the nine areas is ticked, hidden again when none is.
+  SURVEY2_QUESTIONS.filter(q => q.text).forEach(q => {
+    const grid = $(`.survey-feats[data-q="${q.id}"]`, form), ta = $(`#sv2-${q.text.id}`, form), lab = $(`#sv2-${q.text.id}-lab`, form);
+    grid?.addEventListener('change', () => {
+      const show = $$('input:checked', grid).some(i => q.text.reveal.includes(i.value));
+      if (ta) ta.hidden = !show;
+      if (lab) lab.hidden = !show;
+    });
+  });
+
+  $('#sv2Later', form)?.addEventListener('click', async () => {
+    trackEvent('survey2_later', { src: source });
+    await survey2Dismiss();
+    history.back();
+  });
+
+  $('#sv2Send', form)?.addEventListener('click', async () => {
+    const btn = $('#sv2Send', form), st = $('#sv2Status', form);
+    const raw = {};
+    SURVEY2_QUESTIONS.forEach(q => {
+      if (q.type === 'text') { raw[q.id] = $(`#sv2-${q.id}`, form)?.value || ''; return; }
+      const picked = $$(`input[name="sv2-${q.id}"]:checked`, form).map(i => i.value);
+      raw[q.id] = q.type === 'single' ? (picked[0] || '') : picked;
+      if (q.text) { const ta = $(`#sv2-${q.text.id}`, form); raw[q.text.id] = ta && !ta.hidden ? ta.value : ''; }
+    });
+    const email = ($('#sv2Email', form)?.value || '').trim();
+    const optin = !!$('#sv2Optin', form)?.checked;
+    // v1's rule: refuse only the all-empty case, never trap the player.
+    if (!Object.keys(survey2Answers(raw)).length) { if (st) st.textContent = 'Tap at least one answer, or leave a note, then send.'; return; }
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { if (st) st.textContent = "That email doesn't look right. Fix it, or leave it blank."; return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+    survey2Submit(raw, { email: email || null, emailOptin: optin });   // marks done first; fire-and-forget past that
+    form.innerHTML = `
+      <h2 class="survey-title">Thank you</h2>
+      <p class="survey-sub">Every answer gets read.</p>
+      <div class="row" style="margin-top:6px"><button class="btn" id="sv2Done" style="flex:1">Done</button></div>`;
+    $('#sv2Done', form)?.addEventListener('click', () => history.back());
+  });
+}
+// webdriver-only handle, the same shape as __cosmeticTeaser above: tests open the sheet through it.
+if (typeof window !== 'undefined' && navigator.webdriver) window.__survey2 = openSurvey2Sheet;
 
 // What's New: the player-facing changelog. Opening it marks everything seen so
 // the "new" dot clears. Reachable from Settings and the Crew tab.
