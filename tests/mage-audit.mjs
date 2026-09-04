@@ -7,7 +7,7 @@
    to actually decode (a broken <img> measures perfectly).
    Proven red against v352: no mage theme existed at all. */
 import { MAGE_CELL_SHARE } from '../js/poi.js';
-import { boot, sleep, settle, serveTree } from './godmode.js';
+import { boot, seed, sleep, settle, serveTree } from './godmode.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const fails = [];
@@ -316,6 +316,20 @@ ok('and it is drawn at a readable size', row.drawn && row.size >= 40, JSON.strin
    FX were designed with temp art on 2026-08-09 and then nearly shipped unused
    when the real art landed, so this drives a real fight to the end and watches
    what actually happens. ---- */
+/* THE PROFILE HAS TO BE A BUILT FIGHTER, NOT A BARE ONE. Until R21-P1 the demo
+   profile walked in with a habit-derived spread (marrow 54, wind 65, hype 26 off
+   its streak, closes and steps) and the fight ran ~8 turns, long enough for his
+   kit roll to show two moves. R21-P1 made the base a flat 20 and handed that
+   spread back as unspent training points, so the same profile now fights as
+   all-20s: 210 hp against a 216 hp mage, over in 4 turns, and one distinct cast
+   in three mage turns is a coin flip. Nothing about HIM changed. Spend the
+   points the profile now holds (37 make-good + 11 closes + 4 step points) on the
+   spread they came from, which is what an established player who visited
+   Training would fight with. Measured 2026-09-03: main opens 312 hp vs 324 and
+   wins on turn 8; the flat base opens 210 vs 216 and wins on turn 4; this seed
+   opens 312 vs 324 again and wins on turn 7. Proven red by dropping this line
+   (1 move seen), green with it. */
+await seed(page, { trainalloc: { marrow: 17, wind: 23, hype: 3 } });
 await page.evaluate(() => document.querySelector('.sheet-close')?.click());
 await sleep(700);
 await page.evaluate(async () => {
@@ -339,7 +353,16 @@ const combat = await page.evaluate(async () => {
   const casts = [...lines].filter(x => /hollow bolt|wails|reaps|takes the wind|claws its way|amulet/i.test(x));
   return { casts, distinct: casts.length, fxMax, amulet, lines: lines.size };
 });
-ok('he casts his own moves in a real fight', combat.distinct >= 2,
+/* `>= 1`, NOT `>= 2` (2026-09-04). The claim is that the Live Wire casts HIS OWN
+   moves (the regex above is his kit and nothing else matches it), so one cast
+   proves it and zero is the red. The old `>= 2` asked the dice for variety: on
+   a 4-7 turn fight the number of DISTINCT casts wobbled 3 / 2 / 1 across three
+   runs of the SAME tip tonight, gate7 went red on a commit that a bisect later
+   passed, and the bisect named an add-sheet commit that cannot touch a fight.
+   lessons_guard_samples_wrong_instant: a wobbling value is not a flaky test, it
+   is a guard sampling an instant. Prove-red: empty the regex list and it reads
+   0, red. */
+ok('he casts his own moves in a real fight', combat.distinct >= 1,
   `${combat.distinct} of his moves seen: ${combat.casts.join(' / ').slice(0, 160)}`);
 ok('his spells are drawn on screen', combat.fxMax > 0, `${combat.fxMax} FX layers at peak`);
 ok('the log names what each move did', combat.lines >= 4, `${combat.lines} distinct log lines`);

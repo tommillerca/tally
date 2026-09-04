@@ -463,9 +463,19 @@ await screen('wardrobe, hat slot', async () => {
       // the double microtask lets that handler finish before the image is released
       const done = () => queueMicrotask(() => queueMicrotask(() => live.delete(im)));
       im.addEventListener('load', () => {
-        // the DECODED url, not the attribute a renderer wrote: this is what the
-        // TIER row below grades, and a canvas has no naturalWidth to read later
-        window.__imgSrc.push((im.currentSrc || im.src).split('assets/bh/')[1] || '?');
+        /* the DECODED url, not the attribute a renderer wrote: this is what the
+           TIER row below grades, and a canvas has no naturalWidth to read later.
+           SPLIT ON assets/, NOT assets/bh/ (2026-09-03). It used to split on
+           assets/bh/ and fold every miss to '?', so the moment ANY off-DOM
+           Image on this screen came from somewhere other than the Boneheadz
+           sheets it landed in the sample as '?' and the TIER row below counted
+           it as a MASTER. R20-P3's warmCrateFrames() did exactly that: it
+           preloads assets/crates/<kind>/f0-2.png from renderCharacter, so the
+           Wardrobe tab now decodes 12 extra Images and the row read
+           "12 masters" while the Boneheadz half of the sample was still 100%
+           trim. Keeping the whole path lets the row scope itself to bh art and
+           still SAY what else decoded. */
+        window.__imgSrc.push((im.currentSrc || im.src).split('/assets/')[1] || '?');
         sample(); done();
       }, { once: true });
       im.addEventListener('error', done, { once: true });
@@ -498,19 +508,38 @@ ok('OFF-DOM  the Wardrobe\'s concurrent source bitmaps stay under 90 MB too',
    the srcs the hook collected AT LOAD, because the thing asserted is what the
    browser decoded, and a canvas has no naturalWidth to read afterwards.
 
-   Only drawTrimmedArt builds off-DOM Images, so in practice this sample is 100%
-   trim and the square-tier count is 0. The bound is 0.9 anyway: a future surface
+   Only drawTrimmedArt builds off-DOM Images OF SHEET ART (warmCrateFrames also
+   builds some, out of assets/crates/; see the scoping note below), so in
+   practice this sample is 100% trim and the square-tier count is 0. The bound
+   is 0.9 anyway: a future surface
    that legitimately hands drawTrimmedArt a square-tier source should not have to
    come back here, and the number that carries the meaning is `masters === 0` --
    the escalation ladder gone quiet is the whole point of cropping.
    METHOD 2026-08-24, this file's own hook, 430x932 DPR 2, machine busy (load
    ~13): 270 images, 100% trim, 0 masters, three consecutive runs. */
-const trimShare = wardSrc.filter(s => s.startsWith('thumb/trim/')).length / (wardSrc.length || 1);
-const masters = wardSrc.filter(s => /^(?!thumb\/)/.test(s)).length;
+/* SCOPED TO bh/ ON 2026-09-03, and the scoping is the repair, not a loosening.
+   The claim is about the BONEHEADZ SHEETS: what drawTrimmedArt hands a canvas.
+   Every off-DOM Image on this screen used to be one, so "not thumb/" was a fair
+   reading of "master". R20-P3's warmCrateFrames() ended that: renderCharacter
+   preloads three 48x48 crate frames per held kind out of assets/crates/, which
+   have no sheet, no tier and no crop, and folding them into `masters` graded 12
+   sprites that together cost 0.1 MB as if they were 640px art (the OFF-DOM row
+   above did not move: 12 MB before, 12.2 MB after).
+   The denominator moves WITH the scope -- `bhSrc.length > 100`, not
+   `wardSrc.length` -- so this cannot pass on a sample that stopped containing
+   sheet art, and everything excluded is printed by directory so a future
+   prefetch of something genuinely expensive is visible in the row rather than
+   silently dropped. Total bytes are still bounded by the OFF-DOM row. */
+const bhSrc = wardSrc.filter(s => s.startsWith('bh/'));
+const others = wardSrc.filter(s => !s.startsWith('bh/'));
+const otherDirs = [...new Set(others.map(s => s.split('/').slice(0, 2).join('/')))].join(' ') || 'none';
+const trimShare = bhSrc.filter(s => s.startsWith('bh/thumb/trim/')).length / (bhSrc.length || 1);
+const masters = bhSrc.filter(s => !s.startsWith('bh/thumb/')).length;
 ok('TIER     the Wardrobe\'s canvases decode the CROPPED sheet and never reach a master',
-  wardSrc.length > 100 && trimShare > 0.9 && masters === 0,
-  `${wardSrc.length} images: ${(trimShare * 100).toFixed(0)}% trim, ${masters} masters, `
-  + `${wardSrc.filter(s => /^thumb\/\d/.test(s)).length} square-tier`);
+  bhSrc.length > 100 && trimShare > 0.9 && masters === 0,
+  `${bhSrc.length} bh images: ${(trimShare * 100).toFixed(0)}% trim, ${masters} masters, `
+  + `${bhSrc.filter(s => /^bh\/thumb\/\d/.test(s)).length} square-tier`
+  + ` (+${others.length} non-sheet off-DOM decodes from ${otherDirs})`);
 
 /* THE SHEET REALLY IS BEING SERVED, tier by tier. avatarLayersHtml falls back to
    the 640px art when a thumbnail 404s (rule 8: degrade to ugly, never to

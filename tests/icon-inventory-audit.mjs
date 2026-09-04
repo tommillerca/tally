@@ -204,9 +204,14 @@ const EMITTERS = {
   'js/app.js:openFight':            ['scene', 'the fight stage: enemy plates, the arena and the result card.'],
   'js/app.js:openDenSheet':         ['scene', 'the den preview art.'],
   'js/app.js:openHatchReveal':      ['scene', 'the hatching egg.'],
-  'js/app.js:openPackReveal':       ['scene', 'the cosmetic pack reveal stage.'],
+  'js/app.js:warmCrateFrames':      ['scene', 'pre-decodes the crate opening frames; R20-P3 moved this off openPackReveal so the Backpack can warm them before the tap.'],
   'js/app.js:presentGrantDelivery': ['scene', 'the delivered-grant card art.'],
-  'js/app.js:revealGift':           ['scene', 'the gift reveal art.'],
+  /* revealGift UN-DECLARED 2026-09-03. It matched SIG on a raw <img> in its gear
+     branch; the reveal-on-a-mannequin change replaced that with `wear:`/`imgSrc`
+     DATA handed to packCardHtml, so the function no longer emits any markup of
+     its own. Its crate/dust/coin branches call ICONS drawers, which are icon
+     SITES and graded as such. If an <img> ever returns here, the undeclared row
+     above catches it. */
   'js/app.js:openMageIntro':        ['scene', 'the Live Wire introduction art.'],
   'js/app.js:openSpireIntro':       ['scene', 'the spire announcement art.'],
   'js/app.js:openSpireSheet':       ['scene', 'the spire sheet art.'],
@@ -229,7 +234,7 @@ const EMITTERS = {
   'js/app.js:openKitchen':          ['scene', 'the kitchen art. Its coin chips are icon SITES, listed below.'],
   'js/app.js:openWhatsNew':         ['scene', 'the release note art.'],
   'js/app.js:openFriendProfile':    ['scene', "a friend's figure."],
-  'js/app.js:restageWardrobe':      ['scene', 'the wardrobe figure.'],
+  'js/app.js:restageDoll':          ['scene', 'the wardrobe figure. Was restageWardrobe until QA r23 F1 (2026-09-03) split the drawing half out so previews share it; restageWardrobe now only moves the fit ring.'],
   'js/app.js:renderOnboarding':     ['scene', 'the onboarding art.'],
   'js/app.js:renderToday':          ['scene', 'the Today hero figure. Its currency chips are icon SITES, listed below.'],
   'js/app.js:renderCharacter':      ['scene', 'the Bonehead hub figure and cosmetic tiles. Its currency chips are icon SITES, listed below.'],

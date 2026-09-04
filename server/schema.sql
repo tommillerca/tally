@@ -292,6 +292,12 @@ CREATE TABLE IF NOT EXISTS leads (
   feedback TEXT,             -- free text (capped 500)
   most_wanted TEXT,          -- "one thing that would make you play more" (capped 280)
   features TEXT,             -- comma-joined slugs of the main features they use
+  -- Survey v2 (migrations/2026-09-03-survey-v2.sql). The five columns above are
+  -- one-per-question and cost a migration every time the survey changes; these
+  -- three end that. form is NULL on every pre-v2 row and NULL reads as v1.
+  form TEXT,                 -- which survey ('dayone' | 'v2'), NULL = v1
+  answers TEXT,              -- JSON object of answers (capped 4000 by the route)
+  ctx TEXT,                  -- JSON object of silent context (capped 1000)
   app_v TEXT,
   geo TEXT,                  -- coarse edge geo string (city, region, country)
   ts INTEGER NOT NULL

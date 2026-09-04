@@ -1538,6 +1538,13 @@ function sanitizeSnapshot(rawSnap, row, nowMs) {
 }
 /* =============== end snapshot bounds =============== */
 
+/* How many rows GET /friends returns PER BUCKET (accepted / incoming /
+   outgoing), each bounded on its own. Kept at the 100 the old shared cap used,
+   so nothing a real player sees today gets smaller; what changed is that the
+   three no longer compete for it. When a bucket hits it, the route says so in
+   `truncated` rather than pretending the cut list is the whole list. */
+const FRIEND_PAGE = 100;
+
 const SPIRE_DORMANT_MS = 7 * 86400000;
 const SPIRE_SHIELD_MS = 3600000;         // 1h after a takeover, the tower cannot flip back
 const SIEGE_WINDOW_MS = 48 * 3600000;   // time to walk there and break it
@@ -2376,16 +2383,39 @@ export default {
       if (path === '/friends' && request.method === 'GET') {
         const auth = await verifySigned(request, env, '');
         if (auth.err) return json({ error: auth.err }, 401);
-        const rows = await env.DB.prepare(
+        /* ONE BOUND PER BUCKET, not one bound for all three.
+           This was a single `WHERE f.a = ? OR f.b = ? ORDER BY f.ts DESC LIMIT
+           100` that all three buckets were sliced out of in JS, so the 100 was
+           SHARED. `ts` is the accept time on an accepted row and the request
+           time on a pending one, and one ORDER BY held both: every friendship a
+           player accepted put a row ABOVE an unanswered request, so a request
+           nobody acted on slid down and, once 100 rows were newer than it,
+           stopped being returned at all. Silent on both sides: nothing told the
+           player it had ever arrived, and nothing told the sender it had gone.
+           Past 100 accepted rows, the same ordering dropped accepted FRIENDS
+           off the bottom just as quietly.
+           Raising the shared cap only moves the number at which it happens, and
+           it cannot be moved far enough: the crowding-out is structural, and
+           the bucket being starved is the one a stranger controls.
+           Three predicates, three limits, one D1 batch (one round trip), so no
+           bucket can consume another's budget in either direction. */
+        const me = auth.playerId;
+        const q = where => env.DB.prepare(
           'SELECT f.a, f.b, f.status, f.requested_by, f.ts, ' +
           'pa.handle a_handle, pa.name a_name, pa.friend_code a_code, pa.profile a_profile, pa.app_v a_v, pa.last_seen a_seen, ' +
           'pb.handle b_handle, pb.name b_name, pb.friend_code b_code, pb.profile b_profile, pb.app_v b_v, pb.last_seen b_seen ' +
           'FROM friendships f JOIN players pa ON pa.id = f.a JOIN players pb ON pb.id = f.b ' +
-          'WHERE f.a = ? OR f.b = ? ORDER BY f.ts DESC LIMIT 100').bind(auth.playerId, auth.playerId).all();
-        const friends = [], incoming = [], outgoing = [];
-        for (const r of rows.results || []) {
-          const meIsA = r.a === auth.playerId;
-          const other = {
+          'WHERE (f.a = ? OR f.b = ?) AND ' + where + ' ORDER BY f.ts DESC LIMIT ?');
+        /* LIMIT is the page PLUS ONE: the extra row is how truncation is known
+           without a second COUNT query. It is dropped before the payload. */
+        const [acc, inc, out] = await env.DB.batch([
+          q("f.status = 'accepted'").bind(me, me, FRIEND_PAGE + 1),
+          q("f.status <> 'accepted' AND f.requested_by <> ?").bind(me, me, me, FRIEND_PAGE + 1),
+          q("f.status <> 'accepted' AND f.requested_by = ?").bind(me, me, me, FRIEND_PAGE + 1),
+        ]);
+        const shape = r => {
+          const meIsA = r.a === me;
+          return {
             playerId: meIsA ? r.b : r.a,
             name: (meIsA ? r.b_name : r.a_name) || (meIsA ? r.b_handle : r.a_handle),
             handle: meIsA ? r.b_handle : r.a_handle,
@@ -2395,11 +2425,22 @@ export default {
             since: r.ts,
             lastSeen: meIsA ? r.b_seen : r.a_seen,
           };
-          if (r.status === 'accepted') friends.push(other);
-          else if (r.requested_by === auth.playerId) outgoing.push(other);
-          else incoming.push(other);
-        }
-        return json({ friends, incoming, outgoing });
+        };
+        /* `truncated` is ADDITIVE: every existing client reads .friends /
+           .incoming / .outgoing and is unchanged by it. It exists so a client
+           can stop presenting a cut list as the whole truth. */
+        const truncated = {};
+        const take = (rs, key) => {
+          const rows = rs.results || [];
+          truncated[key] = rows.length > FRIEND_PAGE;
+          return rows.slice(0, FRIEND_PAGE).map(shape);
+        };
+        return json({
+          friends: take(acc, 'friends'),
+          incoming: take(inc, 'incoming'),
+          outgoing: take(out, 'outgoing'),
+          truncated,
+        });
       }
 
       /* ---------------- Dark Spires: shared territory ----------------
@@ -2817,8 +2858,26 @@ export default {
              raceV stays a json_extract because there is no column for it, but it
              is a RESIDUAL now, applied to the handful of rows the index hands
              over rather than to every player who exists. */
+          /* THE PROFILE FIELDS THE SHEET RENDERS FROM, on the race board too.
+             Tom: "when you are on the step challenge leader board you can click
+             the players you see and then go to their player page and add them".
+             The board used to carry name + steps + outfit only, which is not
+             enough to open openFriendProfile: it draws level, class, badges,
+             pet, gear count and the stat bars, and every one of them would have
+             read "?" or 0. Matching a race row against the /leaderboard payload
+             instead was rejected: that board is the top 100 BY LEVEL, so a
+             low-level walker leading the race is simply absent from it, and
+             matching on NAME is not an identity at all (names are not unique
+             and it would open the wrong player's profile). These are per OUTPUT
+             row: 25 at most, on rows idx_players_week already handed over. */
           `SELECT id, handle, name, json_extract(profile,'$.outfit') outfit,
                   week_steps steps,
+                  level lvl,
+                  json_extract(profile,'$.levelName') lvlName,
+                  badges,
+                  json_extract(profile,'$.pet') pet,
+                  json_extract(profile,'$.stats') stats,
+                  json_array_length(COALESCE(json_extract(profile,'$.gear'), '[]')) gearCount,
                   last_seen seenAt
              FROM players
             WHERE profile IS NOT NULL
@@ -2880,6 +2939,8 @@ export default {
 
         const rows = await board(wk);
         const meIdx = rows.findIndex(r => r.id === auth.playerId);
+        const nowRace = Date.now();
+        const jsonCol = v => { try { return v ? JSON.parse(v) : null; } catch { return null; } };
         return json({
           week: wk,
           prize: { coins: STEP_RACE_PRIZE_COINS, crate: 'golden' },
@@ -2887,14 +2948,32 @@ export default {
           champion,                       // last week's winner, for the "who to beat" line
           yourRank: meIdx >= 0 ? meIdx + 1 : null,
           racers: rows.length,
-          players: rows.slice(0, 10).map((r, i) => ({
+          players: await Promise.all(rows.slice(0, 10).map(async (r, i) => ({
             rank: i + 1,
             playerId: r.id,
             name: r.name || r.handle,
             steps: r.steps,
-            outfit: (() => { try { return r.outfit ? JSON.parse(r.outfit) : null; } catch { return null; } })(),
+            outfit: jsonCol(r.outfit),
+            level: r.lvl || 1,
+            levelName: r.lvlName || null,
+            badges: r.badges || 0,
+            pet: jsonCol(r.pet),          // {id, level, shiny}: a shiny must draw as its shiny here too
+            stats: jsonCol(r.stats),
+            gearCount: r.gearCount || 0,
+            /* SELECTED SINCE THE BOARD EXISTED, NEVER SENT. board() has always
+               had `last_seen seenAt` and raceFreshHtml() has always read
+               p.seenAt to draw the "synced 5h ago" line Tom asked for on
+               2026-08-30 — but this map never carried it, so that label has
+               rendered for nobody, ever. One key. */
+            seenAt: r.seenAt || null,
+            /* the add handle for this row, exactly as /leaderboard does it:
+               opaque, expiring, NOT a friend code (see the note above that
+               route for why publishing friend codes was a takeover vector).
+               null for yourself, which is also what stops your own lane from
+               offering to add you. */
+            addToken: r.id === auth.playerId ? null : await makeAddToken(env, r.id, nowRace),
             you: r.id === auth.playerId,
-          })),
+          }))),
         });
       }
 
@@ -3339,12 +3418,42 @@ export default {
           ? body.features.filter(f => typeof f === 'string').slice(0, 20).map(f => f.slice(0, 24)).join(',') || null
           : null;
         const appV = String(body.appV || '').slice(0, 16);
+        /* SURVEY V2 (2026-09-03). Everything above is one column per v1
+           question, which is why every change of question used to be a
+           migration. `form` says which survey produced the row and `answers` /
+           `ctx` carry the rest as JSON, so v3 needs no schema change at all.
+           A client that predates v2 sends none of the three and is unchanged in
+           every respect. */
+        /* ABSENT STAYS NULL, and NULL READS AS 'dayone'. Every row already in
+           the table has form NULL and means v1, so writing the literal
+           'dayone' for a v1 client would give v1 TWO encodings and every
+           consumer would have to know both. The default lives at the read end
+           instead: COALESCE(l.form, 'dayone') in the dashboard select below,
+           which covers the old rows and the old clients with one rule.
+           A slug, because it reaches the dashboard's filter control; anything
+           that is not one is not a form name and reads as v1. */
+        const rawForm = typeof body.form === 'string' ? body.form.trim().slice(0, 24) : '';
+        const form = /^[a-z0-9_-]+$/.test(rawForm) ? rawForm : null;
+        /* THE CAP REFUSES, IT DOES NOT TRUNCATE. Slicing a JSON string at 4000
+           chars stores something no parser will ever read back, and the row
+           lives for a year: an unparseable blob is worse than no row. Objects
+           only; an array or a string here is a client bug, not a payload. */
+        const blob = (v, max, field) => {
+          if (v === undefined || v === null) return { s: null };
+          if (typeof v !== 'object' || Array.isArray(v)) return { err: `${field} must be an object` };
+          const s = JSON.stringify(v);
+          if (s.length > max) return { err: `${field} too long (${s.length} > ${max})` };
+          return { s };
+        };
+        const answersB = blob(body.answers, 4000, 'answers');
+        const ctxB = blob(body.ctx, 1000, 'ctx');
+        if (answersB.err || ctxB.err) return json({ error: answersB.err || ctxB.err }, 400);
         const cf = request.cf || {};
         const city = [cf.city, cf.region || cf.regionCode, cf.country].filter(Boolean).join(', ') || null;
         await env.DB.prepare(
-          `INSERT INTO leads (device, player, label, name, email, email_optin, feedback, most_wanted, features, app_v, geo, ts)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
-        ).bind(device, player, label, name, email, optin, feedback, mostWanted, features, appV, city, Date.now()).run();
+          `INSERT INTO leads (device, player, label, name, email, email_optin, feedback, most_wanted, features, form, answers, ctx, app_v, geo, ts)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        ).bind(device, player, label, name, email, optin, feedback, mostWanted, features, form, answersB.s, ctxB.s, appV, city, Date.now()).run();
         return json({ ok: true });
       }
 
@@ -3566,8 +3675,15 @@ export default {
         const byCity = await all(`SELECT COALESCE(city,'?') city, COALESCE(region,'') region, COALESCE(country,'') country, COUNT(*) n FROM devices WHERE ${nin('device')} GROUP BY city, region, country ORDER BY n DESC LIMIT 30`);
         // community map feedback: newest first (den nominations + unreachable reports + general feedback)
         const reports = await all(`SELECT r.kind, r.lat, r.lng, r.target, r.note, r.geo, r.ts, COALESCE(r.label, d.label) label FROM reports r LEFT JOIN devices d ON d.device = r.device WHERE ${nin('r.device')} ORDER BY r.ts DESC LIMIT 100`);
-        // survey leads: newest first (name/email/feedback/most-wanted + opt-in flag)
-        const leads = await all(`SELECT l.name, l.email, l.email_optin optin, l.feedback, l.most_wanted mostWanted, l.features, l.geo, l.ts, COALESCE(l.label, d.label) label FROM leads l LEFT JOIN devices d ON d.device = l.device WHERE ${nin('l.device')} ORDER BY l.ts DESC LIMIT 200`);
+        /* survey leads: newest first (name/email/feedback/most-wanted + opt-in flag)
+           v2 adds form/answers/ctx. COALESCE on form is where "NULL means v1"
+           is actually implemented: every row written before 2026-09-03 and
+           every row from a client that predates v2 arrives here as 'dayone',
+           so the dashboard's form filter has one bucket for v1, not two.
+           answers/ctx go out as the raw JSON strings they are stored as; the
+           dashboard parses them, because a malformed blob must degrade one
+           card rather than take the whole payload down. */
+        const leads = await all(`SELECT l.name, l.email, l.email_optin optin, l.feedback, l.most_wanted mostWanted, l.features, COALESCE(l.form, 'dayone') form, l.answers, l.ctx, l.geo, l.ts, COALESCE(l.label, d.label) label FROM leads l LEFT JOIN devices d ON d.device = l.device WHERE ${nin('l.device')} ORDER BY l.ts DESC LIMIT 200`);
         /* CRASHES. Deliberately NOT filtered by nin(): the developer-device
            exclusion exists so one heavy tester cannot skew usage counts, but a
            crash is a crash and hiding Tom's would hide the ones we hear about

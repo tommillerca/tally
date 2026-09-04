@@ -11,7 +11,7 @@ import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, kcalConsistent,
   dateKey, addDays, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
-  assumedActiveBurn, activeCalorieBonus, bmrMifflin,
+  assumedActiveBurn, activeCalorieBonus, bmrMifflin, kcalFloor, gramsChipDefault, fmtG,
 } from '../js/nutrition.js';
 import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume } from '../js/cooking.js';
 import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
@@ -22,9 +22,9 @@ import {
   wardenTier, WARDEN_TIERS,
 } from '../js/spires.js';
 import { parseNutritionText } from '../js/labelparse.js';
-import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct } from '../js/sources.js';
+import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct, fetchOffProductEx } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins } from '../js/game.js';
+import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews } from '../js/game.js';
 import { STAT_META, STYLES } from '../js/pit.js';
 import * as pitMod from '../js/pit.js';
 const mkFighter = pitMod.makeFighter;
@@ -81,9 +81,86 @@ test('computeTargets male recomp', () => {
   assert.ok(t.f >= Math.round(0.6 * 84));
   approx(t.p * 4 + t.c * 4 + t.f * 9, t.kcal, 0.03);
 });
+test('R25-M3 no sedentary cut is targeted below its own resting rate', () => {
+  /* QA round 25, M3. Sedentary x Lose fat is 1.2 x 0.80 = 0.96 x BMR, so the
+     computed target sat BELOW the person's own resting metabolic rate for 1,816
+     of 54,600 realistic adult profiles (all in this one bucket), and the 1,200
+     floor caught none of them. The floor now includes the BMR itself. Sweep the
+     realistic grid at the pure function: the layer the bug lives at. */
+  let n = 0, below = [];
+  for (const sex of ['m', 'f'])
+    for (let age = 18; age <= 80; age += 2)
+      for (let heightCm = 145; heightCm <= 200; heightCm += 5)
+        for (let weightKg = 45; weightKg <= 150; weightKg += 5) {
+          const p = { sex, age, heightCm, weightKg, activity: 'sedentary', goal: 'cut' };
+          const t = computeTargets(p);
+          n++;
+          if (t.kcal < Math.round(bmrMifflin(p))) below.push(`${sex}/${age}/${heightCm}/${weightKg}: ${t.kcal} < ${t.bmr}`);
+          assert.ok(t.kcal >= 1200, 'the old 1200 floor still holds');
+        }
+  assert.ok(n > 10000, `grid too small to mean anything: ${n}`);
+  assert.equal(below.length, 0, `${below.length}/${n} below BMR, e.g. ${below.slice(0, 3).join('; ')}`);
+});
 test('computeTargets female floor', () => {
   const t = computeTargets({ sex: 'f', age: 45, heightCm: 158, weightKg: 52, activity: 'sedentary', goal: 'cut' });
   assert.ok(t.kcal >= 1200);
+});
+test('R25-M2 a manual target write keeps the macros on the calorie figure and above the floor', async () => {
+  /* QA round 25, M2. Settings > Daily targets wrote the four fields
+     INDEPENDENTLY: type 800 into kcal and Save, and the app stored 800 kcal with
+     the 2,571 kcal of protein/carbs/fat computed for the old figure still on top,
+     and 800 sailed under the 1,200 floor the computed path applies (for anyone,
+     a child included). The write now routes through nutrition.manualTargets:
+     protein and fat may be typed, carbs is the remainder, the floor is
+     kcalFloor(profile), and anything that cannot agree is refused, not stored. */
+  const nut = await import('../js/nutrition.js');
+  assert.equal(typeof nut.manualTargets, 'function', 'manualTargets is missing: the editor still writes fields independently');
+  const { manualTargets } = nut;
+  const prof = { sex: 'f', age: 10, heightCm: 138, weightKg: 32, activity: 'sedentary', goal: 'cut' };
+  const floor = kcalFloor(prof);
+  assert.ok(floor >= 1200);
+  // below the floor: refused, nothing to store
+  const low = manualTargets(prof, { kcal: 800, p: null, f: null });
+  assert.equal(low.ok, false); assert.match(low.problem, /at least/);
+  // protein + fat alone over the figure: refused
+  const over = manualTargets({ ...prof, weightKg: 70 }, { kcal: 1400, p: 200, f: 100 }); // floor 1352, 800+900 > 1400
+  assert.equal(over.ok, false); assert.match(over.problem, /more than/);
+  // every accepted write: p*4 + c*4 + f*9 lands on kcal within carb rounding (4 kcal)
+  for (const prof2 of [prof, { sex: 'm', age: 32, heightCm: 180, weightKg: 84, activity: 'moderate', goal: 'recomp' }])
+    for (const kcal of [kcalFloor(prof2), 2000, 2571, 3200])
+      for (const [p, f] of [[null, null], [150, null], [null, 60], [120, 50]]) {
+        const r = manualTargets(prof2, { kcal, p, f });
+        assert.equal(r.ok, true, `${kcal}/${p}/${f}: ${r.problem}`);
+        const t = r.targets;
+        assert.equal(t.kcal, kcal);
+        assert.ok(t.kcal >= kcalFloor(prof2));
+        assert.ok(t.p >= 0 && t.c >= 0 && t.f >= 0);
+        assert.ok(Math.abs(t.p * 4 + t.c * 4 + t.f * 9 - kcal) <= 4, `${kcal}: macros sum to ${t.p * 4 + t.c * 4 + t.f * 9}`);
+        if (p != null) assert.equal(t.p, p);
+        if (f != null) assert.equal(t.f, f);
+      }
+  // and the Settings handler is glue over it: no independent four-field write left
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const i = app.indexOf("$('#saveTargets').addEventListener");
+  assert.ok(i > 0, 'saveTargets handler not found: this check has drifted');
+  const block = app.slice(i, app.indexOf('await saveSettings();', i));
+  assert.ok(block.includes('manualTargets('), 'saveTargets does not route through manualTargets');
+  assert.ok(!/c:\s*Math\.round\(c\.value/.test(block), 'saveTargets still stores a typed carb figure independently of kcal');
+});
+test('R25-M1 the minimum plan age is one named constant and every target display carries the disclosure', () => {
+  /* QA round 25, M1 (child safety). The age floor was a bare 10 inside LIMITS
+     and the app said nothing about who its estimates are for. The number is
+     still 10 (owner's call), but it must stay in ONE named place, and the two
+     surfaces that show a computed target (plan preview, Settings targets card)
+     must both render the disclosure. Structural, not copy-pinned: it checks the
+     constant is referenced, not what it says. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /^const MIN_AGE = \d+;/m, 'MIN_AGE constant missing');
+  assert.ok(app.includes('age: { min: MIN_AGE,'), 'LIMITS.age.min is not MIN_AGE');
+  const preview = app.slice(app.indexOf("$('#pfPreview', wrap).innerHTML"), app.indexOf('onChange?.(p, t);'));
+  assert.ok(preview.includes('${TARGET_DISCLOSURE}'), 'plan preview shows a target without the disclosure');
+  const card = app.slice(app.indexOf('DAILY TARGETS'), app.indexOf("$('#saveTargets')"));
+  assert.ok(card.includes('${TARGET_DISCLOSURE}'), 'Settings targets card shows a target without the disclosure');
 });
 test('active calorie-back: only burn ABOVE the activity baseline credits, at 50%', () => {
   const p = { sex: 'm', age: 32, heightCm: 180, weightKg: 84, activity: 'moderate', goal: 'recomp' };
@@ -102,6 +179,37 @@ test('active calorie-back: only burn ABOVE the activity baseline credits, at 50%
 
 // ---- portion math ----
 const rice = GENERIC_FOODS.find(f => f.id === 'g-white-rice-cooked');
+
+/* QA round 25 M12. (a) three 'canned' bean rows carried boiled-without-salt
+   sodium; (b) Diet soda + grams chip read NaN (kcal / per100.kcal with kcal 0);
+   (c) the same line rounded 1 tsp olive oil 4.5 g to 5 g. */
+test('QA round 25 M12(a): canned bean rows carry canned sodium', () => {
+  for (const name of ['Black beans, cooked', 'Chickpeas, cooked', 'Kidney beans, cooked']) {
+    const f = GENERIC_FOODS.find(x => x.name === name);
+    assert.ok(f, name + ' missing');
+    assert.ok(f.per100.sodium >= 200 && f.per100.sodium <= 400,
+      `${name} sodium ${f.per100.sodium} mg/100 g is not the canned figure (200 to 400)`);
+  }
+});
+test('QA round 25 M12(b)(c): grams chip preselects the serving grams', () => {
+  const soda = GENERIC_FOODS.find(x => x.name === 'Diet soda');
+  const g = gramsChipDefault(soda, { mode: 'serving', idx: 0, qty: 1 });
+  assert.ok(Number.isFinite(g) && g > 0, `Diet soda grams chip gave ${g}`);
+  assert.equal(g, 355);
+  const oil = GENERIC_FOODS.find(x => x.name === 'Olive oil');
+  const sel = { mode: 'grams', grams: gramsChipDefault(oil, { mode: 'serving', idx: 0, qty: 1 }) };
+  assert.equal(sel.grams, 4.5);
+  assert.equal(portionLabel(oil, sel), '4.5 g');
+  assert.equal(Math.round(nutrientsFor(oil, sel).kcal), 40);
+  // perServing-only food (no grams known): still a finite fallback, never NaN
+  const ps = { perServing: { kcal: 0, p: 0, c: 0, f: 0 }, servings: [{ label: 'serving', g: null }] };
+  assert.equal(gramsChipDefault(ps, { mode: 'serving', idx: 0, qty: 1 }), 100);
+  // wiring: the chip handler in app.js must route through the helper
+  const appSrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const handler = appSrc.slice(appSrc.indexOf("if (c.hasAttribute('data-grams')) {"), appSrc.indexOf("sel.mode = 'grams';"));
+  assert.ok(handler.includes('gramsChipDefault(food, sel)'), 'grams chip no longer uses gramsChipDefault');
+  assert.ok(!handler.includes('per100.kcal'), 'grams chip divides by per100.kcal again');
+});
 test('rice exists with cup serving', () => {
   assert.ok(rice, 'rice food present');
   assert.ok(rice.servings.some(s => s.g === 158));
@@ -195,6 +303,36 @@ test('search: multi-term and keyword', () => {
   assert.ok(searchFoods(GENERIC_FOODS, 'oj')[0].name.includes('Orange juice'));
   assert.equal(searchFoods(GENERIC_FOODS, 'zzzz').length, 0);
 });
+// QA round 24 L5: 21 of 48 real queries found nothing (20 an empty screen). These are
+// the probes QA typed into the real input; every one asserts a non-empty list AND the
+// obvious food in the top 3. On the pre-fix tip all eight failed (five empty, three
+// ranked wrong). The nonsense control keeps the ANY-match fallback from turning
+// silence into noise.
+test('search: QA r24 L5 probes land the obvious food in the top 3', () => {
+  const top3 = q => searchFoods(GENERIC_FOODS, q, 3).map(f => f.name);
+  const expect = {
+    'eggs': 'Egg, large',                 // plural vs "Egg, large"
+    'yoghurt': 'Yogurt, plain whole milk',   // UK spelling vs five yogurts
+    'oatmilk': 'Oat milk',                // missing space
+    'chicken tikka masala': 'Chicken curry', // hard AND killed every dish
+    'fish and chips': 'Potato chips',     // "and" was a required term
+    'chicken': 'Chicken breast, cooked',  // was 4th behind curry/nuggets/thigh
+    'tomatoes': 'Tomato', 'bananas': 'Banana', 'carrots': 'Carrot',
+  };
+  for (const [q, want] of Object.entries(expect)) {
+    const got = top3(q);
+    assert.ok(got.length > 0, `"${q}" returned an empty list`);
+    assert.ok(got.includes(want), `"${q}" top 3 lacks "${want}": ${got.join(' | ')}`);
+  }
+  assert.notEqual(top3('rice')[0], 'Rice cake', 'rice -> Rice cake first');
+  assert.notEqual(top3('potato')[0], 'Potato chips', 'potato -> Potato chips first');
+  assert.equal(top3('oats')[0], 'Oats, dry rolled', 'stem hit must not outrank a literal hit');
+  assert.equal(searchFoods(GENERIC_FOODS, 'zzqx').length, 0, 'fallback must not invent rows for nonsense');
+  // a food the player has logged before outranks one they never have
+  const used = GENERIC_FOODS.map(f => ({ ...f }));
+  used.find(f => f.name === 'Chicken curry').useCount = 5;
+  assert.equal(searchFoods(used, 'chicken')[0].name, 'Chicken curry');
+});
 
 // ---- label parser ----
 const US_LABEL = `Nutrition Facts
@@ -282,6 +420,70 @@ test('macro mismatch warning fires', () => {
   assert.ok(r.warnings.some(w => w.includes('Double-check')));
 });
 
+/* QA round 25 M7 (HIGH): the +20 XP Label route minted a 2.22x wrong food with no
+   warning. On a two-column European panel the parser took the FIRST number on
+   every line, which is the per-100 g column. A 45 g serving that should read
+   203 kcal reached the log as 451 kcal, 189 g fat, 76 g fibre, servingGrams null,
+   warnings []. The 4/4/9 check cannot catch it: per-100 g figures are internally
+   consistent. The >250 clearing rule cannot either: any macro under 25 g survives
+   a lost decimal point. Four cases below; (a) and (d) proved red on the tip. */
+const EU_TWO_COL = `Nutrition Information
+Typical values Per 100 g Per 45 g serving
+Energy 1892 kJ / 451 kcal 851 kJ / 203 kcal
+Fat 18.9 g 8.5 g
+of which saturates 2.1 g 0.9 g
+Carbohydrate 58 g 26 g
+of which sugars 15 g 6.8 g
+Fibre 7.6 g 3.4 g
+Protein 12 g 5.4 g
+Salt 0.5 g 0.2 g`;
+test('label M7 (a): two-column EU panel reads the per-serving column, not per-100 g', () => {
+  const r = parseNutritionText(EU_TWO_COL);
+  assert.equal(r.kcal, 203, `kcal ${r.kcal}: 451 is the per-100 g column`);
+  assert.equal(r.fat, 8.5); assert.equal(r.satFat, 0.9);
+  assert.equal(r.carbs, 26); assert.equal(r.sugar, 6.8);
+  assert.equal(r.fiber, 3.4); assert.equal(r.protein, 5.4);
+  assert.equal(r.servingGrams, 45, 'serving mass sits in the header, not on a "Serving size" line');
+  assert.ok(r.warnings.some(w => /per serving column/i.test(w)), `no column-choice warning: ${JSON.stringify(r.warnings)}`);
+  assert.ok(!r.warnings.some(w => /per-100 g, not per serving/.test(w)), 'mass check must not fire on the correct column');
+});
+test('label M7 (a2): serving column FIRST is honoured too', () => {
+  const r = parseNutritionText('Per serving (30 g) Per 100 g\nEnergy 120 kcal 400 kcal\nFat 3 g 10 g\nCarbohydrate 15 g 50 g\nProtein 6 g 20 g');
+  assert.equal(r.kcal, 120); assert.equal(r.fat, 3); assert.equal(r.carbs, 15); assert.equal(r.protein, 6);
+  assert.equal(r.servingGrams, 30);
+});
+test('label M7 (b2): "Serving size 100 g" on a one-column US panel is NOT a two-column header', async () => {
+  // Review catch 2026-09-04: the word "serving" plus "100 g" on one line matched
+  // detectColumns, pushing a bogus two-column warning and skipping the serving parse.
+  const { parseNutritionText } = await import('../js/labelparse.js');
+  const r = parseNutritionText('Nutrition Facts\nServing size 100 g\nCalories 250\nTotal Fat 10 g\nTotal Carbohydrate 30 g\nProtein 8 g');
+  assert.equal(r.servingGrams, 100, 'serving grams read from the serving line');
+  assert.equal(r.kcal, 250);
+  assert.deepEqual(r.warnings, [], 'no two-column warning on a one-column panel');
+});
+
+test('label M7 (b): one-column per-serving panel is unchanged, no spurious warning', () => {
+  const r = parseNutritionText(US_LABEL);
+  assert.equal(r.kcal, 230); assert.equal(r.fat, 8); assert.equal(r.fiber, 4); assert.equal(r.protein, 3);
+  assert.deepEqual(r.warnings, []);
+});
+test('label M7 (c): per-100 g only panel with no serving still parses, servingGrams null', () => {
+  const r = parseNutritionText('Nutrition per 100 g\nEnergy 1892 kJ / 451 kcal\nFat 18.9 g\nCarbohydrate 58 g\nFibre 7.6 g\nProtein 12 g');
+  assert.equal(r.kcal, 451); assert.equal(r.fat, 18.9); assert.equal(r.fiber, 7.6); assert.equal(r.protein, 12);
+  assert.equal(r.servingGrams, null);
+  assert.ok(!r.warnings.some(w => /column/i.test(w)), `no column warning on a one-column panel: ${JSON.stringify(r.warnings)}`);
+});
+test('label M7 (d): macro grams above the stated serving mass carry the per-100 g warning', () => {
+  // the QA panel with its decimal points lost by OCR: 18.9 -> 189 style, all
+  // under 250 so the clearing rule keeps every one of them.
+  const r = parseNutritionText('Serving size 45 g\nCalories 451\nTotal Fat 19 g\nTotal Carbohydrate 58 g\nDietary Fiber 76 g\nProtein 12 g');
+  assert.equal(r.servingGrams, 45);
+  assert.ok(r.warnings.some(w => /per-100 g, not per serving/.test(w)), `no mass warning: ${JSON.stringify(r.warnings)}`);
+  // a serving whose macros fit inside it stays quiet (55 g serving, 48 g macros)
+  const ok = parseNutritionText(US_LABEL);
+  assert.ok(!ok.warnings.some(w => /per-100 g/.test(w)));
+});
+
 // ---- OFF mapper ----
 test('mapOffProduct coca-cola fixture', () => {
   const f = mapOffProduct(fx('off_cocacola.json'));
@@ -310,6 +512,19 @@ test('fetchOffProduct retries UPC-A with leading zero', async () => {
   assert.ok(f);
   assert.equal(calls.length, 2);
   assert.ok(calls[1].includes('/0038000138416.json'));
+});
+/* `reached` decides which of two sheets the player sees, and the wrong one has
+   no Try again and offers to create a duplicate custom food. A response object
+   is not an answer: only a 404 or a parsed body is. Both halves matter, so the
+   404 control is asserted alongside the two failures. */
+test('fetchOffProductEx: only a 404 or a parsed body counts as reached', async () => {
+  const off = (fetchFn) => fetchOffProductEx('5000112637922', fetchFn);
+  const notFound = await off(async () => ({ status: 404, ok: false }));
+  assert.equal(notFound.reached, true, '404 is the book saying no such code');
+  const boom = await off(async () => ({ status: 500, ok: false }));
+  assert.equal(boom.reached, false, 'a 500 says nothing about the product');
+  const portal = await off(async () => ({ status: 200, ok: true, json: async () => { throw new SyntaxError('Unexpected token <'); } }));
+  assert.equal(portal.reached, false, 'a captive portal page says nothing either');
 });
 
 // ---- FDC mapper ----
@@ -374,6 +589,16 @@ test('parseHkPayload rejects junk', () => {
 test('parseHkPayload weight sanity bounds', () => {
   const p = parseHkPayload('tally-hk steps=100 weightlb=9999');
   assert.equal(p.weightKg, null);
+});
+test('QA round 25 M10: activeKcal is bounded like weightKg', () => {
+  /* A 6,000 typo added +2,504 kcal to an 800 kcal day. Out of range reads as
+     null (the weightKg pattern), in range passes through unchanged. */
+  assert.equal(parseHkPayload('tally-hk steps=100 active=6000').activeKcal, null);
+  assert.equal(parseHkPayload('tally-hk steps=100 active=60000').activeKcal, null);
+  assert.equal(parseHkPayload('tally-hk steps=100 active=612').activeKcal, 612);
+  assert.equal(parseHkPayload('tally-hk steps=100 active=4000').activeKcal, 4000);
+  // active alone, out of range: the payload has nothing left to say
+  assert.equal(parseHkPayload('tally-hk active=6000'), null);
 });
 
 // ---- quests ----
@@ -1417,6 +1642,75 @@ test('css: the scroll container still reserves the safe area', () => {
     '.screen must pad the safe area, or every screen starts under the notch');
 });
 
+/* ---- QA round 25 M20: the 44px floor on the logging path, resolved through
+   the CASCADE, not read off one rule. `.sheet-close` (app.css ~445) declares
+   min-height: 44px and the a11y audit was green, yet the button measured 44x41:
+   `<button class="sheet-close t1-icon-btn">` also matches `.t1-icon-btn`
+   (min-height: 40px, app.css ~6763), same specificity (one class), written
+   6,283 lines later, so the later rule wins. A grep for "min-height: 44px" on
+   .sheet-close is exactly the guard that stays green over this bug. This
+   resolves min-height for the real element (its classes plus its ancestors'
+   classes) by specificity then source order, the way the browser does, for the
+   three controls QA measured under the floor. The pixel proof is
+   tests/a11y-audit.mjs (M24 rows); this is the static half. ---- */
+test('R25-M20 sheet-head icon buttons and the amount input resolve to >= 44px', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  /* Simple selectors only: `.a`, `.a.b`, `.a .b`, `tag`, `.a input`. Anything
+     with an id, pseudo, attribute or combinator other than descendant is
+     skipped, which is safe here because a skipped rule can only make this
+     resolver report a SMALLER winner than the browser if that rule raised the
+     value, and every rule in these three chains is plain classes. */
+  const compound = tok => { const m = tok.match(/^([a-z]+)?((?:\.[\w-]+)*)$/i); return m ? { tag: m[1] || null, classes: (m[2].match(/[\w-]+/g) || []) } : null; };
+  const matchesCompound = (c, el) => (!c.tag || c.tag === el.tag) && c.classes.every(k => el.classes.includes(k));
+  // el = { tag, classes, ancestors: [{tag, classes}, ...] nearest first }
+  const matches = (selector, el) => {
+    const parts = selector.trim().split(/\s+/).map(compound);
+    if (parts.some(p => !p) || /[#:>+~\[]/.test(selector)) return null;
+    if (!matchesCompound(parts[parts.length - 1], el)) return false;
+    let anc = 0;
+    for (let i = parts.length - 2; i >= 0; i--) {
+      while (anc < el.ancestors.length && !matchesCompound(parts[i], el.ancestors[anc])) anc++;
+      if (anc++ >= el.ancestors.length) return false;
+    }
+    return true;
+  };
+  const specificity = sel => (sel.match(/\.[\w-]+/g) || []).length * 10 + (sel.match(/(^|\s)[a-z]+/gi) || []).length;
+  const resolve = (el, prop, sheet = css) => {
+    let win = null, order = 0;
+    for (const m of sheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      order++;
+      const decl = m[2].match(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`));
+      if (!decl) continue;
+      for (const sel of m[1].split(',')) {
+        if (!matches(sel, el)) continue;
+        const sp = specificity(sel);
+        if (!win || sp > win.sp || (sp === win.sp && order >= win.order)) win = { sp, order, sel: sel.trim(), value: decl[1].trim() };
+      }
+    }
+    return win;
+  };
+  const px = v => { assert.match(v, /^\d+(\.\d+)?px$/, `expected a px value, got "${v}"`); return parseFloat(v); };
+  const sheetHead = [{ tag: 'div', classes: ['t1-tools'] }, { tag: 'div', classes: ['sheet-head'] }, { tag: 'div', classes: ['sheet', 't1'] }];
+  const close = { tag: 'button', classes: ['sheet-close', 't1-icon-btn'], ancestors: sheetHead };
+  const fav = { tag: 'button', classes: ['t1-icon-btn'], ancestors: sheetHead };
+  const qty = { tag: 'input', classes: [], ancestors: [{ tag: 'div', classes: ['val'] }, { tag: 'div', classes: ['t1-step'] }, { tag: 'div', classes: ['sheet-body'] }] };
+  for (const [name, el] of [['.sheet-close.t1-icon-btn', close], ['#favBtn (.t1-icon-btn)', fav], ['#qtyIn (.t1-step .val input)', qty]]) {
+    const w = resolve(el, 'min-height');
+    assert.ok(w, `${name}: no rule sets min-height at all`);
+    assert.ok(px(w.value) >= 44, `${name}: the winning min-height is "${w.sel} { min-height: ${w.value} }", under the 44px floor (QA round 25 M20)`);
+  }
+  /* THE INSTRUMENT MUST SEE THE SHADOWING IT EXISTS FOR (control). With the
+     two-class fix stripped out, the resolver has to land on the one-class
+     .t1-icon-btn at 40px by source order, exactly the cascade that shipped
+     44x41. If it reports .sheet-close here, it is reading the first rule and
+     not the winning one, and every green above is worthless. */
+  const stripped = css.replace(/\.t1-tools \.t1-icon-btn\s*\{[^}]*\}/, '');
+  assert.notEqual(stripped, css, 'the .t1-tools .t1-icon-btn rule is gone from app.css');
+  const shadow = resolve(close, 'min-height', stripped);
+  assert.equal(shadow.sel, '.t1-icon-btn', `CONTROL: without the fix the resolver picked "${shadow.sel}", not the later same-specificity .t1-icon-btn`);
+  assert.equal(px(shadow.value), 40, `CONTROL: the shadowing rule should read 40px, got ${shadow.value}`);
+});
+
 // ---- the Puffer Pack drop: manifest and shop must agree ----
 test('drop items exist in the manifest, legendary, with drop names', () => {
   const data = readFileSync(join(here, '..', 'data', 'boneheadz.js'), 'utf8');
@@ -2121,7 +2415,14 @@ test('NO-OP the spire claim treats an already-yours answer as no takeover', () =
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   const i = app.indexOf('claimSpireRemote');
   assert.ok(i > 0, 'the spire claim call is gone: this check has nothing to guard');
-  const block = app.slice(i, i + 1800);
+  /* WINDOW 1800 -> 4000, 2026-09-03. This slices a FIXED number of characters
+     after the call and string-matches inside it, so any comment added to the
+     claim path silently pushes `if (already)` out of the window and three
+     assertions go red on code that satisfies all of them. That is exactly what
+     the R20-P2 refund fix did. Measured at the time: the properties held at
+     2600 and the branch sat at offset 2376. 4000 buys headroom; if this drifts
+     again the answer is to anchor on the branch, not to widen it a third time. */
+  const block = app.slice(i, i + 4000);
   assert.ok(/already\s*=\s*!!\(remote/.test(block), 'the already flag is not read off the server answer');
   assert.ok(/refused \|\| already/.test(block), 'the local claim still runs when the server says already');
   // and it must not pay the takeover price for a no-op
@@ -3473,7 +3774,982 @@ test('every cosmetic any tier can be asked for is on disk', async () => {
   assert.deepEqual(missing, [], `${missing.length} tier files are absent; run scripts/build-bh-thumbs.py`);
 });
 
+/* ---- R17-P2: the hot paths do not GAIN a full-store read -----------------
+ *
+ * WHAT THIS IS AND WHAT IT IS NOT. `db.all(store)` reads every row a player has
+ * ever written. On a hot path that is unbounded linear growth: measured at 51
+ * vs 5001 log rows on one rig, boot-to-first-paint went 404ms -> 908ms, heap
+ * after boot 5.1MB -> 23.2MB, and a day-back tap 140ms -> 355ms. Nothing
+ * crashed. It just gets worse for a player forever, which is why a number-based
+ * check would be useless here and this is a SOURCE check instead.
+ *
+ * IT IS A RATCHET, NOT A ZERO. renderToday still has three full-store reads and
+ * they are not removable today: `allLog` feeds `priorFoodIds` (every food ever
+ * logged before this date, for the Explorer quest) and questCtx's logDays;
+ * `allXp` feeds the whole quest ledger across day/week/month periods plus
+ * all-time pitTried/fightWins; `healthRows` feeds period step and active totals.
+ * So this pins the CURRENT set and fails on a fourth. It also fails when the set
+ * SHRINKS, on purpose: that is the moment to come back here and lower the bar
+ * rather than leave a guard that has quietly stopped measuring anything.
+ *
+ * WHAT IT CANNOT SEE: a full-store read reached indirectly through a helper
+ * renderToday awaits (totalXp, cookState, unopenedCrates, getWellness...). Only
+ * literal db.all() calls in this function body are in scope. Statically finding
+ * the rest would mean walking the call graph of a 22k-line module; the four
+ * named callers below are the ones the finding measured. */
+test('R17-P2 renderToday keeps exactly its three known full-store reads', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const m = app.match(/\nasync function renderToday\(el\) \{\n([\s\S]*?)\n\}\n/);
+  assert.ok(m, 'renderToday not found; the guard is reading the wrong shape and is measuring nothing');
+  const body = m[1];
+  // SETUP: prove the extraction reached the real body, not an empty match.
+  assert.ok(body.length > 4000 && body.includes('questTiers'),
+    `extracted body looks wrong (${body.length} chars); an empty sample passes every check below for free`);
+  const found = [...body.matchAll(/db\.all\(\s*'([a-z]+)'\s*\)/g)].map(x => x[1]).sort();
+  assert.deepEqual(found, ['health', 'log', 'xp'],
+    `renderToday's full-store reads changed to [${found}]. A NEW one is unbounded growth on the tap that runs on every #prevDay / #nextDay and after every log: use db.byIndex('log','date',d) or a point db.get. FEWER is progress: update this list.`);
+});
+
+test('R17-P2 backupNudge counts the log, it does not read it', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const body = app.match(/async function backupNudge\(\) \{([\s\S]*?)\n\}\n/)[1];
+  assert.ok(!/db\.all\(/.test(body), 'backupNudge is reading the whole log again; it only ever asks whether there are 20 rows');
+  assert.ok(/db\.count\(\s*'log'\s*\)/.test(body), 'backupNudge lost its db.count check');
+});
+
+/* ---- R18-P5: js/changelog.js stays off the boot path -------------------- */
+test('R18-P5 js/app.js does not statically import the changelog', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(!/^import .*from '\.\/changelog\.js';/m.test(app),
+    "js/changelog.js is 155KB and nothing on the boot path reads it; import() it at the use site instead");
+  assert.ok(/await import\('\.\/changelog\.js'\)/.test(app), 'no dynamic changelog import left; the What\'s New sheet has lost its data');
+  // and it must stay precached, or What's New breaks offline
+  const sw = readFileSync(join(here, '..', 'sw.js'), 'utf8');
+  assert.ok(sw.includes("'./js/changelog.js'"), 'changelog.js dropped out of the service-worker precache: a lazy import offline is a blank sheet');
+});
+
+/* ---- R25-M4: a committed meal is never reported as a failed one ---------- */
+test('R25-M4 every UI log write routes through commitLogEntry, and its two outcomes are honest', () => {
+  /* QA round 25 M4, 2026-09-03: abort the xp store AFTER the log row committed and
+     the sheet stayed open, the button live, the toast read "That did not save",
+     and a second tap wrote a second row (167 -> 168, unbounded in taps). The
+     follow-on (recordMealUsed, onFoodLogged) sat OUTSIDE the try/catch around
+     db.put('log'), and Quick add had no try/catch at all. The browser-level
+     guard is tests/log-write-failure-audit.mjs (FAIL=xp); this row is the
+     shape it cannot check statically: ONE owner of the write sequence, and
+     all four log writers (portion sheet, Quick add, relog, copy yesterday)
+     going through it. SETUP asserts the extraction is real. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const m = app.match(/\nasync function commitLogEntry\(e, btn, via = null\) \{([\s\S]*?)\n\}\n/);
+  assert.ok(m, 'commitLogEntry(e, btn, via) is gone from js/app.js: the log write and its follow-on have lost their one owner');
+  const body = m[1];
+  assert.ok(body.length > 300 && body.includes("db.put('log', e)"), `commitLogEntry body looks wrong (${body.length} chars)`);
+  // outcome 1: NOT committed -> the button is re-armed and the caller gets null
+  const notCommitted = body.match(/try \{\s*await db\.put\('log', e\);\s*\} catch \(err\) \{([\s\S]*?)return null;/);
+  assert.ok(notCommitted, "db.put('log', e) is no longer in a try whose catch returns null (the not-committed outcome)");
+  assert.ok(/btn\.disabled = false/.test(notCommitted[1]), 'the not-committed catch no longer re-arms the button');
+  // outcome 2: committed, receipt failed -> a stub game object, the button stays as it was
+  const committed = body.match(/try \{[\s\S]*?onFoodLogged\(e,[\s\S]*?\} catch \(err\) \{([\s\S]*?)\}\s*$/);
+  assert.ok(committed, 'onFoodLogged is no longer inside a try/catch: a failed XP receipt escapes and re-arms Add on a committed row');
+  assert.ok(/receiptFailed: true/.test(committed[1]), 'the committed-but-receipt-failed catch no longer returns receiptFailed: true');
+  assert.ok(!/btn\.disabled/.test(committed[1]), 'the committed catch touches btn.disabled: a committed row must never re-arm Add');
+  // every UI writer goes through it; only the helper and the ?demo seed write the log store directly
+  const puts = app.match(/db\.put\('log'/g) || [];
+  assert.equal(puts.length, 2, `js/app.js has ${puts.length} db.put('log' sites; expected 2 (commitLogEntry + the demo seed). A new bare one has the M4 hole.`);
+  const calls = (app.match(/await commitLogEntry\(/g) || []).length;
+  assert.ok(calls >= 4, `only ${calls} callers of commitLogEntry; the portion sheet, Quick add, relog and copy-yesterday make 4`);
+  assert.ok(!/await onFoodLogged\(/.test(app.replace(m[0], '')), 'a caller still awaits onFoodLogged directly, outside commitLogEntry');
+});
+
+/* ---- QA round 24, L3: built-in foods remember their portion across a relaunch ----
+   persistFoodUse returned on its first line for generics, so the lastPortion the
+   Add button wrote onto the GENERIC_FOODS singleton never reached storage: 60 days
+   of chicken at "1 breast" (284 kcal) came back after a relaunch as "1 small
+   breast" (198 kcal), 30.3% low. This runs the REAL persistFoodUse and
+   hydrateGenericUse out of js/app.js against an in-memory kv, then throws the
+   in-memory food objects away (the relaunch) and hydrates fresh ones. */
+test('L3 generic food use (portion, count, star) survives a cold relaunch via kv', async () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('const GEN_USE_KEY'), b = app.indexOf('\nasync function entriesFor');
+  assert.ok(a > 0 && b > a, 'persistFoodUse/hydrateGenericUse block not found in js/app.js');
+  const kv = new Map();                         // the fake kv store, k -> v
+  const kvUpdate = async (k, fn, fallback) => { kv.set(k, fn(kv.has(k) ? kv.get(k) : fallback)); };
+  const db = {
+    all: async (store) => { assert.equal(store, 'kv'); return [...kv].map(([k, v]) => ({ k, v })); },
+    put: async (store, row) => { assert.equal(store, 'kv', 'a generic must never become a foods row'); kv.set(row.k, row.v); },
+  };
+  const mk = () => [{ id: 'g-chicken-breast', source: 'generic', name: 'Chicken breast' }, { id: 'g-rice', source: 'generic', name: 'Rice' }];
+  const load = (foods) => new Function('kvUpdate', 'db', 'GENERIC_FOODS', 'S',
+    `${app.slice(a, b)}; return { persistFoodUse, hydrateGenericUse };`)(kvUpdate, db, foods, { userFoods: [] });
+
+  // session 1: log chicken at "1 breast" twice, star it (what #favBtn does: kvSet('fav-'+id))
+  const s1 = mk(); const fx1 = load(s1);
+  s1[0].lastPortion = { mode: 'serving', idx: 1, qty: 1 };
+  await fx1.persistFoodUse(s1[0]);
+  await fx1.persistFoodUse(s1[0]);
+  await db.put('kv', { k: 'fav-g-chicken-breast', v: true });
+
+  // session 2: fresh module objects, hydrate from kv
+  const s2 = mk(); const fx2 = load(s2);
+  await fx2.hydrateGenericUse();
+  assert.deepEqual(s2[0].lastPortion, { mode: 'serving', idx: 1, qty: 1 }, 'lastPortion did not survive the relaunch: the recents row will offer the wrong portion');
+  assert.equal(s2[0].useCount, 2, 'useCount did not survive the relaunch');
+  assert.ok(s2[0].lastUsedAt > 0, 'lastUsedAt did not survive the relaunch');
+  assert.equal(s2[0].favorite, true, 'the star did not survive the relaunch');
+  assert.equal(s2[1].favorite, false); assert.equal(s2[1].lastPortion, undefined);
+
+  // the bound: 200 ids kept, least recently used pruned first
+  const now = Date.now(); let t = 0;
+  const realNow = Date.now; Date.now = () => now + (t++);
+  try {
+    for (let i = 0; i < 205; i++) await fx2.persistFoodUse({ id: 'g-x' + i, source: 'generic' });
+  } finally { Date.now = realNow; }
+  const rec = kv.get('genUse');
+  assert.equal(Object.keys(rec).length, 200, 'genUse record is unbounded');
+  assert.ok(!rec['g-chicken-breast'] && !rec['g-x0'] && !rec['g-x4'], 'pruning did not drop the least recently used');
+  assert.ok(rec['g-x5'] && rec['g-x204'], 'pruning dropped a recent id');
+});
+
+/* ---- QA round 25, M5: a logged meal survives the deletion of its food ----------
+   Delete asks nothing; the orphaned entry then routes (openEntryEdit: findFood is
+   null) into the quick-add editor, whose save rebuilt it from four boxes. Measured
+   on one save: fibre 5, sugar, sodium 800, portionLabel, brand and sel all gone.
+   Runs the REAL findFood (the routing decision) and the REAL quickAddEntry (the
+   rebuild) out of js/app.js. */
+test('M5 editing an entry whose custom food was deleted keeps every nutrient and label', async () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const ff = app.match(/function findFood\(id\) \{[\s\S]*?\n\}\n/);
+  const qa = app.match(/function quickAddEntry\([\s\S]*?\n\}\n/);
+  assert.ok(ff, 'findFood not found in js/app.js');
+  assert.ok(qa, 'quickAddEntry not found in js/app.js: the quick-add save is rebuilding entries from the boxes again');
+  const S = { userFoods: [{ id: 'c-abc', source: 'custom', name: 'Oat bar', brand: 'Bobs' }], date: '2026-09-03' };
+  const { findFood, quickAddEntry } = new Function('S', 'GENERIC_FOODS', 'newId',
+    `${ff[0]}${qa[0]}; return { findFood, quickAddEntry };`)(S, [], () => 'new-id');
+
+  // what the portion sheet's Add wrote for this custom food (the `e` literal in openPortion)
+  const logged = {
+    id: 'e1', date: '2026-09-03', meal: 1, ts: 1700000000000, foodId: 'c-abc',
+    name: 'Oat bar', brand: 'Bobs', portionLabel: '1 bar (45 g)', sel: { mode: 'serving', idx: 0, qty: 1 },
+    kcal: 190, p: 4, c: 30, f: 6, fiber: 5, sugar: 12, sodium: 800,
+  };
+  assert.ok(findFood('c-abc'), 'precondition: the food resolves before the delete');
+
+  // Foods > Edit > Delete: db.del('foods') and the S.userFoods filter, no prompt
+  S.userFoods = S.userFoods.filter(x => x.id !== 'c-abc');
+  assert.equal(findFood(logged.foodId), null, 'precondition: the entry is now orphaned and openEntryEdit routes it to quick add');
+
+  // Save in the quick-add editor with the boxes untouched (prefilled from the entry)
+  const saved = quickAddEntry(logged, { meal: logged.meal, name: logged.name, kcal: 190, p: 4, c: 30, f: 6 });
+  assert.deepEqual(saved, logged, 'an untouched save changed the entry: the deleted food took nutrients out of a meal already logged');
+
+  // Save with a corrected kcal: only the edited fields move
+  const edited = quickAddEntry(logged, { meal: 2, name: 'Oat bar', kcal: 200, p: 4, c: 30, f: 6 });
+  assert.deepEqual(edited, { ...logged, meal: 2, kcal: 200 });
+
+  // A fresh quick add is built exactly as before
+  const { ts, ...fresh } = quickAddEntry(null, { meal: 0, name: 'Quick add', kcal: 300, p: 0, c: 0, f: 0 });
+  assert.ok(Math.abs(ts - Date.now()) < 5000);
+  assert.deepEqual(fresh, { id: 'new-id', date: '2026-09-03', meal: 0, foodId: null, name: 'Quick add', portionLabel: '', kcal: 300, p: 0, c: 0, f: 0 });
+});
+
+/* ---- QA round 24, L4: recents are ranked per meal, not by recency alone ----
+   The eight "Log it again" rows were byte-identical under all four meal chips
+   (recency only): measured hit rate for the wanted food 23.6 / 5.2 / 4.9%
+   (breakfast / lunch / dinner) on a 60-day diary, 63.2% of opens showing none
+   of that meal's foods. Runs the REAL recentFoods out of js/app.js over a
+   seeded diary whose most recent rows are NOT the staple of the chip being
+   asked about, so recency-only order is red. */
+test('L4 recentFoods ranks the staple of the selected meal first, ties by recency', async () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('async function recentFoods'), b = app.indexOf('\nfunction defaultSel');
+  assert.ok(a > 0 && b > a, 'recentFoods not found in js/app.js');
+  const rows = []; let ts = 0;
+  const log = (foodId, meal) => rows.push({ id: 'e' + (++ts), ts, foodId, name: foodId, meal, kcal: 100 });
+  for (let i = 0; i < 10; i++) log('g-oats', 0);        // the breakfast staple, oldest
+  log('g-eggs', 0);                                       // one breakfast, older than toast
+  log('g-oats', 3);                                       // an oats snack: the newest oats row is NOT at breakfast
+  for (let i = 0; i < 10; i++) log('g-chicken', 2);     // the dinner staple
+  log('g-toast', 0);                                      // one breakfast, the newest row of all
+  // recency-only order (the tip): toast, chicken, oats, eggs under every chip
+  const recentFoods = new Function('db', 'findFood',
+    `${app.slice(a, b)}; return recentFoods;`)({ all: async () => rows.slice() }, id => ({ id }));
+
+  const bf = await recentFoods(8, 0);
+  assert.deepEqual(bf.map(r => r.food.id), ['g-oats', 'g-toast', 'g-eggs', 'g-chicken'],
+    `breakfast chip order is ${bf.map(r => r.food.id)}: expected the 10x breakfast staple first, then the two one-offs newest first, then the dinner-only food`);
+  assert.equal(bf[0].entry.meal, 0, 'the oats row offered at breakfast must be the last BREAKFAST log (its portion), not the newer snack');
+  const dn = await recentFoods(8, 2);
+  assert.equal(dn[0].food.id, 'g-chicken', `dinner chip ranks ${dn[0].food.id} first; recency-only order would put the newest row first`);
+  assert.deepEqual(dn.slice(1).map(r => r.food.id), ['g-toast', 'g-oats', 'g-eggs'], 'zero-count filler must fall back to recency');
+  assert.equal((await recentFoods(2, 0)).length, 2, 'limit is not honoured');
+});
+
+/* ---- QA round 24, L9: a recent is one tap, a different portion is still reachable ----
+   showDefault branched: a recent whose foodId resolved got foodRowHtml (a
+   [data-food] row into the portion sheet, 3 taps) and only a quick-add recent
+   got the one-tap [data-relog]. Runs the REAL recentRowHtml: the main tap is
+   [data-relog] for both kinds of recent, the resolvable one also carries a
+   separate [data-food] control, and no <button> nests inside another. */
+test('L9 recentRowHtml relogs on the main tap and keeps a change-portion control', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('function recentRowHtml'), b = app.indexOf('\n/* ================= portion sheet');
+  assert.ok(a > 0 && b > a, 'recentRowHtml is not in js/app.js: recents are back to the 3-tap foodRowHtml');
+  const recentRowHtml = new Function('esc', 'fmtG', 'ICONS',
+    `${app.slice(a, b)}; return recentRowHtml;`)(String, String, { chev: () => '<svg/>' });
+  const entry = { id: 'e9', name: 'Oats', portionLabel: '80 g', kcal: 300, p: 10 };
+  const rich = recentRowHtml({ entry, food: { id: 'g-oats' } });
+  const quick = recentRowHtml({ entry: { ...entry, portionLabel: '' }, food: null });
+  for (const html of [rich, quick]) {
+    assert.match(html, /<button[^>]*data-relog="e9"/, 'the main tap is not a one-tap relog');
+    assert.ok(!/<button[^>]*>(?:(?!<\/button>)[\s\S])*<button/.test(html), 'a <button> is nested inside a <button>');
+    assert.ok(html.includes('t1-med') && html.includes('300'), 'the kcal medallion is gone from the recents row');
+  }
+  assert.match(rich, /<button[^>]*data-food="g-oats"[^>]*aria-label=/, 'a resolvable recent lost its change-portion control into openPortion');
+  assert.ok(!/data-food/.test(quick), 'a quick-add recent has no food to open a portion sheet for');
+  // and the sheet actually uses it, per meal
+  assert.ok(/recentFoods\(8, curMeal\)/.test(app), 'showDefault no longer asks recentFoods for the selected meal (L4)');
+  assert.ok(/recents\.map\(recentRowHtml\)/.test(app), 'showDefault no longer renders recents through recentRowHtml');
+  assert.ok(!/if \(r\.food\) return foodRowHtml\(r\.food\)/.test(app), 'the 3-tap foodRowHtml branch for resolvable recents is back');
+});
+
+/* THE COUNT STATED A FALSE NUMBER AS FACT. The server bounds GET /friends per
+   bucket (100 each) and returns `truncated: { friends, incoming, outgoing }`;
+   that flag was added server-side on 2026-09-03 and nothing on the client read
+   it, so a crew of 140 read `YOUR CREW · 100`. Runs the REAL crewCount /
+   crewTruncText / requestRowsHtml: a truncated bucket reads `N+` and carries one
+   line saying what is shown; an exactly-full untruncated bucket reads a bare N
+   and carries no line. The fan count is a DOM write inside renderFriends, so its
+   two statements are pinned by source. */
+test('Crew count reads N+ with a note when the server truncated the bucket', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('function crewCount('), b = app.indexOf('\n// The Crew tab (full screen)');
+  assert.ok(a > 0 && b > a, 'crewCount is not in js/app.js: the count is back to a bare length');
+  const { crewCount, requestRowsHtml } = new Function('esc', 'friendRowAvatar', 'nameWithAlias',
+    `${app.slice(a, b)}; return { crewCount, requestRowsHtml };`)(String, () => '', f => f.playerId);
+  const rows = Array.from({ length: 100 }, (_, i) => ({ playerId: 'p' + i }));
+  assert.equal(crewCount(rows, true), '100+');
+  assert.equal(crewCount(rows, false), '100');
+  const cut = requestRowsHtml({ incoming: rows, outgoing: rows, truncated: { friends: true, incoming: true, outgoing: true } });
+  assert.ok(cut.includes('Wants to be friends · 100+') && cut.includes('Pending · 100+'), 'a truncated request bucket did not read 100+');
+  assert.equal((cut.match(/Showing your 100 most recent requests\./g) || []).length, 2, 'each truncated request bucket needs its one line');
+  const full = requestRowsHtml({ incoming: rows, outgoing: rows, truncated: { friends: false, incoming: false, outgoing: false } });
+  assert.ok(full.includes('Wants to be friends · 100') && full.includes('Pending · 100') && !full.includes('100+'), 'an exactly-full bucket grew a +');
+  assert.ok(!full.includes('Showing your'), 'an untruncated bucket carries the truncation note');
+  assert.ok(!requestRowsHtml({ incoming: rows, outgoing: [] }).includes('+'), 'a payload with no truncated object (older server) grew a +');
+  // the fan: count and note both keyed off truncated.friends, note hidden otherwise
+  assert.match(app, /const truncated = !!data\.truncated\?\.friends;/, 'paintFan no longer reads truncated.friends');
+  assert.match(app, /` · \$\{crewCount\(data\.friends, truncated\)\}`/, 'the fan count is not built through crewCount');
+  assert.match(app, /truncBox\.hidden = unreached \|\| !truncated;/, 'the fan note is not hidden when the list is complete');
+  assert.match(app, /id="cfanTrunc" hidden/, 'the fan note has no mount in the Crew markup');
+});
+
+/* A BLOWN DAY LOOKED LIKE A PERFECT ONE. QA round 24 L8: macroRow had no over
+   branch and the bar clamps at 100%, so 299 g of fat against 71 rendered byte-
+   identical to 71 against 71, and 419 g of protein against 185 still wore the
+   green hit dot. Runs the REAL macroRow (sliced with calorieRingCard and
+   shownTotals, the three live together). Prove-red on the integ tip: the
+   over-class assertion; 299/71 and 71/71 differed only in the printed number. */
+test('L8 macroRow shows an over state and drops the hit dot past the protein band', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('function calorieRingCard('), b = app.indexOf('\nconst bubbleSideCache');
+  assert.ok(a > 0 && b > a, 'calorieRingCard/macroRow are not where the slice expects');
+  const { macroRow } = new Function('fmtG', 'ICONS', 'dayTotals',
+    `${app.slice(a, b)}; return { macroRow };`)(fmtG, { check: () => '<svg/>' }, dayTotals);
+  const fatOver = macroRow('Fat', 299, 71, 'fat', 100, false);
+  const fatHit = macroRow('Fat', 71, 71, 'fat', 100, false);
+  const fatUnder = macroRow('Fat', 70, 71, 'fat', 98.6, false);
+  assert.match(fatOver, /class="macro over"/, '299/71 fat does not carry the over class');
+  assert.ok(fatOver.includes('228 over'), `299/71 fat does not read its overage ("228 over"): ${fatOver}`);
+  assert.ok(fatOver.includes('299 / 71 g'), 'the reading itself must stay "299 / 71 g"');
+  assert.ok(!/-\d/.test(fatOver), 'an overage is never printed negative');
+  for (const [html, name] of [[fatHit, '71/71'], [fatUnder, '70/71']]) {
+    assert.ok(!html.includes('over'), `${name} fat carries an over marker it has not earned`);
+    assert.ok(!html.includes('hit-dot'), `${name} fat grew a hit dot (only protein has one)`);
+  }
+  assert.ok(fatUnder.includes('70 / 71 g') && fatUnder.includes('width:98.6%'), '70/71 no longer renders as before');
+  // protein: over is fine up to 1.5x the target, past that the dot goes and the row reads over
+  const pWay = macroRow('Protein', 419, 185, 'protein', 100, true);
+  const pHit = macroRow('Protein', 200, 185, 'protein', 100, true);
+  assert.ok(!pWay.includes('hit-dot') && !pWay.includes('glow'), '419/185 protein still wears the "target hit" dot');
+  assert.ok(pWay.includes('macro over') && pWay.includes('234 over'), '419/185 protein does not read as over');
+  assert.ok(pHit.includes('hit-dot') && pHit.includes('glow') && !pHit.includes('over'), '200/185 protein lost its hit dot: the band is too tight');
+  assert.ok(app.indexOf('function shownTotals(') > a && app.indexOf('function shownTotals(') < b, 'shownTotals is not in js/app.js: the ring rounds the raw sum again');
+  assert.match(app, /const tot = shownTotals\(entries\);/, 'renderToday no longer builds its ring total through shownTotals');
+  assert.match(app, /const tToday = shownTotals\(byDate\[dateKey\(\)\] \|\| \[\]\);/, 'the Trends ring no longer rounds the way Today does');
+});
+
+/* THE RING SAID 1,023, THE ROWS ADDED TO 1,022. Same ticket: the ring rounded
+   the raw sum, each meal row rounds its own entry, and a .5 boundary splits
+   them. Runs the REAL calorieRingCard and the REAL mealBlock on one seeded day
+   whose raw total lands on exactly .5 and asserts the ring's number equals the
+   sum of the row numbers. Prove-red on the integ tip: the shownTotals presence
+   assertion (the helper did not exist); with the helper mutated back to the raw
+   dayTotals the equality assertion is the one that fires (1023 vs 1022). */
+test('L8 the ring headline and the meal rows agree on a .5-boundary day', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('function calorieRingCard('), b = app.indexOf('\nconst bubbleSideCache');
+  const c = app.indexOf('function mealBlock('), d = app.indexOf('\n\n/* ================= meal defaults');
+  assert.ok(a > 0 && b > a && c > 0 && d > c, 'calorieRingCard or mealBlock moved');
+  assert.ok(app.indexOf('function shownTotals(') > a && app.indexOf('function shownTotals(') < b, 'shownTotals is not in js/app.js: the ring rounds the raw sum, the rows round each entry');
+  const { calorieRingCard, shownTotals } = new Function('fmtG', 'ICONS', 'dayTotals',
+    `${app.slice(a, b)}; return { calorieRingCard, shownTotals };`)(fmtG, { check: () => '<svg/>' }, dayTotals);
+  const mealBlock = new Function('esc', 'emptyMealLine', 'shownTotals', 'dayTotals',
+    `${app.slice(c, d)}; return mealBlock;`)(String, () => '', shownTotals, dayTotals);
+  const mk = (id, kcal) => ({ id, name: id, meal: 0, kcal, p: 10, c: 10, f: 10, fiber: 0, sugar: 0, sodium: 0 });
+  const entries = [mk('a', 340.4), mk('b', 340.4), mk('c', 341.7)];   // raw 1022.5: round-of-sum 1023, sum-of-rounded 1022
+  assert.equal(dayTotals(entries).kcal, 1022.5, 'the seed must sit on the .5 boundary or this test proves nothing');
+  const tot = shownTotals(entries);
+  const t = { kcal: 2570, p: 185, c: 298, f: 71 };
+  const ring = calorieRingCard({ tot, t, over: false, remaining: t.kcal - tot.kcal, protHit: false, startBig: tot.kcal, live: false });
+  const rows = mealBlock('Breakfast', 0, entries, []);
+  const rowSum = [...rows.matchAll(/<span class="kc">(\d+)<\/span>/g)].map(m => Number(m[1])).reduce((x, y) => x + y, 0);
+  assert.equal(rowSum, 1022, 'the seeded rows should add to 1022');
+  const big = Number(ring.match(/<div class="big"[^>]*>([\d,]+)</)[1].replace(',', ''));
+  const eaten = Number(ring.match(/<span>Eaten<\/span><b>([\d,]+)</)[1].replace(',', ''));
+  assert.equal(big, rowSum, `ring headline ${big} disagrees with the meal rows ${rowSum}`);
+  assert.equal(eaten, rowSum, `ring "Eaten" ${eaten} disagrees with the meal rows ${rowSum}`);
+  assert.ok(rows.includes('>1,022 kcal<'), 'the meal heading rounds differently from its own rows');
+});
+
+/* THE PROTEIN AVERAGE ALWAYS DIVIDED BY SEVEN. QA round 25 M8: a blank week
+   read "0 g protein avg / day", one missed day understated 148 g as 127, a
+   day-one install read 23 g. The calorie stat one line above divided by days
+   logged and said so. Runs the REAL loggedAvg both stats now share, and pins
+   the protein line to it. Prove-red on the integ tip: the `/ 7` assertion. */
+test('M8 the protein average divides by logged days and is labelled that way', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(!/const pAvg = [^\n]*\/ 7;/.test(app), 'the protein average still divides by a literal 7');
+  const a = app.indexOf('function loggedAvg('), b = app.indexOf('\nasync function renderTrends(');
+  assert.ok(a > 0 && b > a, 'loggedAvg is not in js/app.js');
+  const loggedAvg = new Function(`${app.slice(a, b)}; return loggedAvg;`)();
+  const day = (p, logged) => ({ p, kcal: logged ? 1800 : 0, logged });
+  const week = [day(148, true), day(0, false), day(148, true), day(0, false), day(0, false), day(148, true), day(0, false)];
+  assert.equal(loggedAvg(week, 'p'), 148, '3 logged days at 148 g must average 148, not 63');
+  assert.equal(loggedAvg(week.map(() => day(0, false)), 'p'), null, 'a blank week must be the empty state, not 0');
+  assert.equal(loggedAvg(week, 'kcal'), 1800, 'the calorie stat runs through the same helper');
+  assert.match(app, /loggedAvg\(days7, 'p'\) != null \? `\$\{loggedAvg\(days7, 'p'\)\} g` : '·'/, 'the protein stat does not render loggedAvg with the calorie stat\'s "·" empty state');
+  assert.ok(app.includes('protein avg / logged day · target'), 'the protein stat is not labelled "/ logged day" like the calorie stat');
+  assert.match(app, /loggedAvg\(days14, 'kcal'\)\?\.toLocaleString\(\) \?\? '·'/, 'the calorie stat left the shared helper');
+});
+
+/* ---- QA round 25 M9 / M23: the wipe says nothing, and persist() is asked and ignored ----
+   Measured: 3,780 rows to zero in 72 ms, the reloaded tab booted with #toast
+   EMPTY (nothing was ever queued: both wipe paths call eraseAll() then
+   location.reload(), and toast() state dies with the document), and
+   `persisted()` read false with a year of data because db.js discarded the
+   answer. The wipe half runs the REAL js/db.js eraseAll under mem-idb; the
+   boot half is a static read of app.js because app.js cannot load in node. */
+test('QA round 25 M9(a): eraseAll leaves the erased flag for the reloaded tab, and boot toasts erasure from it', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-m9-wipe');
+  /* node has a real BroadcastChannel and an open one keeps the process alive
+     forever (this runner has no process.exit on success), so the wipe protocol
+     runs its single-tab degrade path here. */
+  globalThis.BroadcastChannel = undefined;
+  const store = new Map();
+  globalThis.sessionStorage = { getItem: k => store.has(k) ? store.get(k) : null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) };
+  await dbm.kvSet('probe', 1);
+  await dbm.eraseAll();
+  assert.equal(typeof dbm.ERASED_FLAG, 'string', 'db.js exports ERASED_FLAG');
+  assert.equal(store.get(dbm.ERASED_FLAG), '1', 'eraseAll did not leave the erased flag for the reload to read');
+  assert.equal(await dbm.kvGet('probe', null), null, 'the flag must ride sessionStorage, not a kv row the wipe just cleared');
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const m = app.match(/sessionStorage\.getItem\(ERASED_FLAG\)[\s\S]{0,240}?toast\('([^']+)'/);
+  assert.ok(m, 'boot does not read ERASED_FLAG and toast a literal');
+  assert.match(m[1], /erased/i, 'the post-wipe toast does not mention erasure');
+});
+test('QA round 25 M9(b): the erase confirm carries the no-recovery-code sentence only when no code exists', async () => {
+  const s = await import('../js/social.js');
+  assert.equal(typeof s.recoveryWarning, 'function', 'social.js exports recoveryWarning');
+  assert.match(s.NO_RECOVERY_CODE_MSG, /^No recovery code yet\. Delete the app and this account is gone/, 'the existing sentence, not a new one');
+  assert.equal(s.recoveryWarning(true, 'ABC123'), '', 'with a phrase AND an id the confirm stays as it was');
+  assert.equal(s.recoveryWarning(false, 'ABC123'), s.NO_RECOVERY_CODE_MSG, 'no phrase');
+  assert.equal(s.recoveryWarning(true, null), s.NO_RECOVERY_CODE_MSG, 'phrase but no recovery id (the v230 gap)');
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf("$('#eraseBtn')"), b = app.indexOf("name: 'Erase' }"), c = app.indexOf("name: 'DeleteAccount'");
+  assert.ok(a > 0 && b > a && c > b, 'erase sheet anchors moved');
+  assert.ok(!app.slice(a, b).includes('No recovery code yet'), 'the sentence is baked into the template for the with-code state too');
+  assert.match(app.slice(b, c), /recoveryWarning\(/, 'the Erase confirm never asks recoveryWarning');
+  assert.equal((app.match(/No recovery code yet\. Delete the app/g) || []).length, 0, 'app.js still carries its own copy of the sentence; reuse social.NO_RECOVERY_CODE_MSG');
+});
+test('QA round 25 M23: the persist() answer is kept, not thrown away', async () => {
+  const dbm = await import('../js/db.js');
+  assert.equal(typeof dbm.persistenceGranted, 'function', 'db.js exports persistenceGranted');
+  for (const v of [true, false]) {
+    navigator.storage = { persist: async () => v };
+    assert.equal(await dbm.requestPersistence(), v, `requestPersistence() resolves the browser's answer (${v})`);
+    assert.equal(dbm.persistenceGranted(), v, `persistenceGranted() reads ${v} after the browser said so`);
+  }
+  delete navigator.storage;
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /requestPersistence\(\)\.then\([\s\S]{0,160}?trackEvent\('persist'/, 'boot does not log the persist outcome');
+});
+
+/* ---- QA round 25, M16 / M21 / M18: the add sheet's helpers, run for real ----
+   The block between ADD_DRAFT_TTL and openAdd holds every pure helper of the
+   add flow; slice it once and run the shipped functions with a kv stub. */
+function addSheetHelpers() {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('const ADD_DRAFT_TTL'), b = app.indexOf('\nfunction openAdd(');
+  assert.ok(a > 0 && b > a, 'the add-sheet helpers (ADD_DRAFT_TTL .. openAdd) are not in js/app.js');
+  const kv = new Map();
+  const mod = new Function('kvSet', 'kvGet', 'esc', 'ICONS', 'foodRowHtml', 'currentTab', 'sheetStack', 'openAdd', 'openPortion', 'findFood', 'MEALS',
+    `${app.slice(a, b)}; return { addDraftUsable, stampAddDraft, clearAddDraft, onlineRowHtml, restoreOnlineRow, localResultsHtml, ADD_DRAFT_TTL,
+      resultsCountText, mealChipsHtml, setChipOn };`)(
+    (k, v) => { kv.set(k, JSON.parse(JSON.stringify(v))); return Promise.resolve(); },   // IndexedDB round-trips a structured clone; JSON is the stricter stand-in
+    k => Promise.resolve(kv.has(k) ? kv.get(k) : null),
+    String, { searchIco: () => '<svg/>' }, f => `<row ${f.id}>`, () => 'today', [], () => {}, () => {}, () => null,
+    ['Breakfast', 'Lunch', 'Dinner', 'Snacks']);
+  return { ...mod, kv, app };
+}
+
+test('M16 the add-sheet draft round-trips, expires after 24 h and is cleared on commit', () => {
+  const { addDraftUsable, stampAddDraft, clearAddDraft, ADD_DRAFT_TTL, kv, app } = addSheetHelpers();
+  const sel = { mode: 'serving', idx: 1, qty: 1.5 };
+  stampAddDraft({ sheet: 'add', q: 'chicken', meal: 2 });
+  stampAddDraft({ sheet: 'portion', foodId: 'g-chicken', sel, meal: 1 });
+  const d = kv.get('addDraft');
+  assert.deepEqual({ sheet: d.sheet, q: d.q, foodId: d.foodId, sel: d.sel, meal: d.meal },
+    { sheet: 'portion', q: 'chicken', foodId: 'g-chicken', sel, meal: 1 }, 'query, food, sel and meal did not survive the kv row');
+  assert.ok(addDraftUsable(d, d.ts + 1000), 'a fresh draft is not usable');
+  assert.ok(!addDraftUsable(d, d.ts + ADD_DRAFT_TTL + 1), 'a draft older than 24 h must be ignored');
+  assert.ok(!addDraftUsable({ sheet: 'add', q: '', meal: 0, ts: d.ts }, d.ts), 'an empty sheet (nothing typed, nothing picked) is not a draft');
+  clearAddDraft();
+  assert.equal(kv.get('addDraft'), null, 'clearAddDraft left the row behind');
+  assert.ok(!addDraftUsable(kv.get('addDraft')), 'a cleared draft reads as usable');
+  // and the two commit paths clear it before the sheets close
+  const add = app.slice(app.indexOf("$('#addBtn', wrap).addEventListener"), app.indexOf('if (editing) $(\'#delBtn\''));
+  assert.ok(/clearAddDraft\(\);[\s\S]{0,80}closeAllSheetsViaHistory\(\);/.test(add), 'the portion sheet Add commit does not clear the draft before closing');
+  const relog = app.slice(app.indexOf("$$('[data-relog]', results)"), app.indexOf('function bindOnline('));
+  assert.ok(/clearAddDraft\(\);[\s\S]{0,80}history\.back\(\);/.test(relog), 'the one-tap relog commit does not clear the draft');
+  assert.match(app, /\n  route\(\);\n  restoreAddDraft\(\)/, 'boot no longer restores the draft right after route()');
+});
+
+test('M21 the online row carries the offline hint, a retry on failure, and resets on the online event', () => {
+  const { onlineRowHtml, restoreOnlineRow } = addSheetHelpers();
+  const idle = onlineRowHtml('chicken');
+  assert.match(idle, /<button[^>]*data-online/, 'the idle row is not tappable through [data-online]');
+  assert.ok(idle.includes('Search online for "chicken"') && !/Offline/.test(idle), 'the idle row reads offline while online');
+  const off = onlineRowHtml('chicken', { offline: true });
+  assert.ok(off.includes('Offline right now') && /<button[^>]*data-online/.test(off), 'offline: the row must say so in its label AND stay tappable');
+  const failed = onlineRowHtml('chicken', { error: 'No signal, so the food databases could not be searched.' });
+  assert.ok(failed.includes('No signal, so the food databases could not be searched.'), 'the failure message was dropped');
+  assert.match(failed, /<button[^>]*data-online[^>]*>Try again<\/button>/, 'a failed row has no Try again on the shared [data-online] hook');
+  // the online-event handler: a failed (or hinted) row goes back to idle; a results list is left alone
+  const sect = { innerHTML: failed, querySelector: s => (sect.innerHTML.includes(s.replace(/[[\]]/g, '')) ? {} : null) };
+  assert.equal(restoreOnlineRow(sect, 'chicken'), true, 'restoreOnlineRow did not act on a failed row');
+  assert.equal(sect.innerHTML, idle, 'the restored row is not the plain idle row');
+  const list = { innerHTML: '<row a><row b>', querySelector: () => null };
+  assert.equal(restoreOnlineRow(list, 'chicken'), false, 'a list of real online results was wiped by the online event');
+  assert.equal(list.innerHTML, '<row a><row b>');
+});
+
+test('M18 the empty local result offers Create a food with the query; a hit list does not', () => {
+  const { localResultsHtml, app } = addSheetHelpers();
+  const empty = localResultsHtml([], 'kombucha');
+  assert.ok(empty.includes('Nothing local matches.'), 'the empty-state line is gone');
+  assert.match(empty, /<button[^>]*data-create="kombucha"/, 'the empty result has no create control carrying the query');
+  assert.ok(empty.includes('Create a food'), 'the create control is not labelled as the create-food entry point');
+  const hits = localResultsHtml([{ id: 'g-1' }, { id: 'g-2' }], 'oats');
+  assert.equal(hits, '<row g-1><row g-2>', 'a non-empty result must be the plain rows');
+  assert.ok(!/data-create/.test(hits), 'the create control leaked into a non-empty result');
+  // the offer is consumed: the create form seeds its name from the prefill (M18 follow-up, 2026-09-04)
+  assert.match(app, /id="ffName"[^>]*value="\$\{esc\(f\?\.name \|\| pv\.name \|\| ''\)\}"/, 'openFoodForm ignores prefill.name, so the empty-search offer opens a blank form');
+});
+
+/* QA round 25 M17: a screen reader is told almost nothing on the logging path.
+   Measured with a real AT tree: #results had no role and no live region (8
+   recents becoming 11 matches announced to nobody, no count anywhere), typing
+   threw activeElement to BODY, the stepper moved 1 to 1.25 and 282 to 353 kcal
+   with no spinbutton role, no aria-valuenow and no live change, and the meal
+   chips carried no aria-pressed. The helpers run for real; the markup and the
+   render target are asserted over the shipped source. */
+test('M17 the add and portion sheets carry the roles, live regions and pressed states a screen reader needs', () => {
+  const { resultsCountText, mealChipsHtml, setChipOn, app } = addSheetHelpers();
+  // the live count line, for 0 / 8 / 11
+  assert.equal(resultsCountText(0, 'banana'), '0 matches for banana', 'an empty search has no announced count');
+  assert.equal(resultsCountText(11, 'banana'), '11 matches for banana', 'the search count is wrong');
+  assert.equal(resultsCountText(1, 'banana'), '1 match for banana');
+  assert.equal(resultsCountText(8, ''), '8 recent foods', 'the default list has no announced count');
+  // the count line is a STATIC sibling of #results (a live region rebuilt with its
+  // message announces nothing) and both renders write it
+  assert.match(app, /<div id="resultsCount" class="sr-only" aria-live="polite"><\/div>\s*<div id="results" role="region" aria-label="Results"><\/div>/,
+    '#results has no role/label, or the live count line is missing or inside #results');
+  const openAdd = app.slice(app.indexOf('\nfunction openAdd('), app.indexOf('\nconst t1Sect ='));
+  assert.equal((openAdd.match(/count\.textContent = resultsCountText\(/g) || []).length, 2, 'the count line is not written by both showDefault and the search render');
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
+  assert.equal((css.match(/^\.sr-only \{/gm) || []).length, 1, 'app.css needs exactly ONE visually-hidden utility (.sr-only) for the count line');
+  // meal chips: aria-pressed follows the selected state, in the markup and in the toggle
+  const chips = mealChipsHtml(2);
+  assert.equal((chips.match(/aria-pressed="true"/g) || []).length, 1, 'exactly one chip is pressed');
+  assert.match(chips, /class="on" aria-pressed="true" data-meal="2">Dinner</, 'the selected chip is not the pressed one');
+  assert.match(chips, /class="" aria-pressed="false" data-meal="0">Breakfast</, 'an unselected chip is not aria-pressed="false"');
+  const mk = () => { const a = {}; return { a, classList: { toggle: (c, on) => { a.cls = on; } }, setAttribute: (k, v) => { a[k] = v; } }; };
+  const c0 = mk(), c1 = mk();
+  setChipOn([c0, c1], c1);
+  assert.deepEqual([c0.a, c1.a], [{ cls: false, 'aria-pressed': 'false' }, { cls: true, 'aria-pressed': 'true' }], 'setChipOn does not move .on and aria-pressed together');
+  assert.equal((app.match(/id="mealChips" role="group" aria-label="Meal">\s*\$\{mealChipsHtml\(meal\)\}/g) || []).length, 1, '#mealChips is not drawn by mealChipsHtml');
+  assert.equal((app.match(/id="pMealChips" role="group" aria-label="Meal">\s*\$\{mealChipsHtml\(curMeal\)\}/g) || []).length, 1, '#pMealChips is not drawn by mealChipsHtml');
+  assert.match(app, /setChipOn\(\$\$\('#mealChips button', wrap\), c\)/, 'the add sheet chip handler toggles .on without aria-pressed');
+  assert.match(app, /setChipOn\(\$\$\('#pMealChips button', wrap\), c\)/, 'the portion sheet chip handler toggles .on without aria-pressed');
+  // the stepper: a text input is not a native spinbutton, so it gets the role and values; the kcal preview is live
+  assert.match(app, /<div class="t1-step" role="group" aria-label="Servings">/, 'the servings stepper is not a labelled group');
+  assert.match(app, /<div class="t1-step" role="group" aria-label="Grams">/, 'the grams stepper is not a labelled group');
+  assert.match(app, /id="qtyIn" type="text"[^>]*role="spinbutton" aria-valuenow="\$\{sel\.qty\}" aria-valuemin="\$\{LIMITS\.servings\.min\}" aria-valuemax="\$\{LIMITS\.servings\.max\}"/, '#qtyIn is not a spinbutton with now/min/max');
+  assert.match(app, /id="gramsIn" type="text"[^>]*role="spinbutton" aria-valuenow="\$\{sel\.grams\}" aria-valuemin="\$\{LIMITS\.servingG\.min\}" aria-valuemax="\$\{LIMITS\.servingG\.max\}"/, '#gramsIn is not a spinbutton with now/min/max');
+  const preview = app.slice(app.indexOf('\n  function preview() {'), app.indexOf('\n  function preview() {') + 700);
+  assert.match(preview, /amtEl\.setAttribute\('aria-valuenow', sel\.mode === 'grams' \? sel\.grams : sel\.qty\)/, 'preview() does not keep aria-valuenow in step with the amount');
+  assert.match(app, /<b id="pvKcal" aria-live="polite">/, 'the kcal preview is not a live region, so 282 to 353 is silent');
+  // focus: the search handler's render target is #results, a sibling of #q, never the sheet body
+  const handler = openAdd.slice(openAdd.indexOf("input.addEventListener('input'"), openAdd.indexOf("input.addEventListener('keydown'"));
+  assert.match(handler, /results\.innerHTML =/, 'the search handler no longer renders into #results');
+  assert.ok(!/wrap\.innerHTML|sheet-body|sBody|openSheet\(/.test(handler), 'the search handler re-renders the node #q lives in, which throws focus to BODY');
+  const tpl = openAdd.slice(0, openAdd.indexOf('`, { cls:'));
+  assert.ok(tpl.indexOf('id="q"') < tpl.indexOf('id="results"') && /id="results"[^>]*><\/div>/.test(tpl), '#q must be a sibling of an empty #results, not inside it');
+});
+
+/* QA round 25 M19 + M18 (data half): the create-food Save mapping. Sliced out of
+   js/app.js as customFoodDraft so it runs at node level with no DOM.
+   M19: calories-only input keeps null macros (it used to write p:0,c:0,f:0 via
+   `mp.value || 0`, asserting zero protein into a template that is re-logged for
+   ever); 0 kcal with 60 g of macros yields a warning BEFORE the write; a
+   consistent food yields none. M18: a name matching a built-in or a custom food,
+   case/whitespace/accent-insensitive, yields the "You already have" warning. */
+test('Create food: null macros stay null, kcal-vs-macros and duplicate names warn before save', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('const normFoodName ='), b = app.indexOf('\nfunction openFoodForm(');
+  assert.ok(a > 0 && b > a, 'customFoodDraft is not in js/app.js: the Save mapping is inline again and untestable (QA round 25 M19)');
+  const { customFoodDraft } = new Function('newId', 'scaleToPer100', 'kcalConsistent',
+    `${app.slice(a, b)}; return { customFoodDraft };`)(() => 'x', (n) => n, kcalConsistent);
+  const foods = [
+    { id: 'g-apple', source: 'generic', name: 'Apple', per100: { kcal: 52, p: 0.3, c: 14, f: 0.2 }, servings: [['1 medium', 182]] },
+    { id: 'c-1', source: 'custom', name: 'Crème brûlée', perServing: { kcal: 300 }, servings: [{ label: '1 ramekin', g: null }] },
+  ];
+  const base = { name: 'Protein granola', brand: '', serving: '1 bowl', grams: null, fiber: null, sugar: null, sodium: null };
+  // calories-only: macros unknown, not zero
+  const only = customFoodDraft({ ...base, kcal: 200, p: null, c: null, f: null }, { foods });
+  assert.deepEqual([only.food.perServing.p, only.food.perServing.c, only.food.perServing.f], [null, null, null],
+    'calories-only input recorded 0 macros instead of null (QA round 25 M19)');
+  assert.deepEqual(only.warnings, [], 'a calories-only food must not be nagged about macros it never claimed');
+  // 0 kcal + 60 g macros (20/20/20 = 340 kcal) of real food
+  const zero = customFoodDraft({ ...base, kcal: 0, p: 20, c: 20, f: 20 }, { foods });
+  assert.ok(zero.warnings.length > 0 && /340 kcal, not 0/.test(zero.warnings[0]), '0 kcal with 60 g of macros saved without a warning (QA round 25 M19)');
+  // consistent food: nothing to say
+  assert.deepEqual(customFoodDraft({ ...base, kcal: 200, p: 10, c: 20, f: 8.9 }, { foods }).warnings, []);
+  // duplicates, folded (M18)
+  for (const name of ['apple', ' APPLE  ', 'Apple']) {
+    const d = customFoodDraft({ ...base, name, kcal: 999, p: null, c: null, f: null }, { foods });
+    assert.deepEqual(d.warnings, ["You already have 'Apple' (52 kcal per 100 g). Save anyway?"], `duplicate "${name}" not caught (QA round 25 M18)`);
+  }
+  assert.deepEqual(customFoodDraft({ ...base, name: 'creme brulee', kcal: 300, p: null, c: null, f: null }, { foods }).warnings,
+    ["You already have 'Crème brûlée' (300 kcal per 1 ramekin). Save anyway?"], 'accent-folded duplicate not caught');
+  // editing a food is not a duplicate of itself
+  assert.deepEqual(customFoodDraft({ ...base, name: 'Crème brûlée', kcal: 300, p: null, c: null, f: null }, { foods, existing: foods[1] }).warnings, []);
+  // per100 derives from the same nulls, never NaN
+  const g = customFoodDraft({ ...base, kcal: 100, p: null, c: 25, f: null, grams: 50 }, { foods });
+  assert.deepEqual(g.food.perServing, { kcal: 100, p: null, c: 25, f: null, fiber: null, sugar: null, sodium: null });
+});
+
+/* QA round 25 M18 (list half): My foods sorted by lastUsedAt only, so never-used
+   foods compared equal and came back in database key order. The comparator is
+   module-level in js/app.js so it can be sliced here. */
+test('My foods: most recent first, then name A to Z when lastUsedAt ties', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('const byLastUsedThenName ='), b = app.indexOf('\nconst MY_FOODS_FILTER_AT');
+  assert.ok(a > 0 && b > a, 'byLastUsedThenName is not in js/app.js: the My foods sort is back to lastUsedAt only (QA round 25 M18)');
+  const { byLastUsedThenName, MY_FOODS_FILTER_AT } = new Function(`${app.slice(a, b)}; ${app.slice(b, app.indexOf('\n', b + 1))}; return { byLastUsedThenName, MY_FOODS_FILTER_AT };`)();
+  const rows = [
+    { id: 'c-3', name: 'Zucchini bread' }, { id: 'c-1', name: 'Protein granola', lastUsedAt: 5 },
+    { id: 'c-2', name: 'apple crumble' }, { id: 'c-4', name: 'Banana bread', lastUsedAt: 9 },
+  ];
+  assert.deepEqual([...rows].sort(byLastUsedThenName).map(r => r.name),
+    ['Banana bread', 'Protein granola', 'apple crumble', 'Zucchini bread'],
+    'never-used foods did not fall back to name order (QA round 25 M18)');
+  assert.equal(MY_FOODS_FILTER_AT, 15, 'the filter threshold moved off the measured bound (unusable at N = 15)');
+  // the filter is wired: renders over the bound, filters by the same folded name
+  const rf = app.slice(app.indexOf('async function renderFoods('), app.indexOf('/* ================= settings'));
+  assert.match(rf, /customs\.length > MY_FOODS_FILTER_AT\) html \+= `<div class="t1-search"/, 'the My foods filter input is not rendered over the bound');
+  assert.match(rf, /customs\.filter\(f => normFoodName\(f\.name\)\.includes\(q\)\)/, 'the filter does not narrow the customs list');
+});
+
+/* ===== Survey v2 S3 (spec: surveyv2spec.md section 2 and S3). The sheet is
+   dark until S4 flips a trigger, so these are the only thing that says the
+   questions, the wire shape and the kv facts are what the spec and the server
+   expect. Slices the REAL block out of js/app.js and runs it with stubbed
+   plumbing; the DOM half (the sheet itself) is S3's browser audit, not this. */
+const survey2Load = (stubs = {}) => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('/* Survey v2 S3: the sheet'), b = app.indexOf("\n// What's New: the player-facing changelog");
+  assert.ok(a > 0 && b > a, 'the Survey v2 S3 block is not in js/app.js (openSurvey2Sheet does not exist here)');
+  const kv = {};
+  const env = {
+    esc: String, kvGet: async (k, d = null) => (k in kv ? kv[k] : d), kvSet: async (k, v) => { kv[k] = v; },
+    trackEvent: () => {}, sendSurvey: async () => ({ ok: true }),
+    buildStats: async () => ({ streak: 3, logs: 41, pitWins: 7 }), levelFor: () => ({ level: 12 }), totalXp: async () => 0,
+    db: { all: async () => [{ ts: Date.now() - 9 * 86400000 }, { ts: Date.now() }] }, petInstances: async () => [1, 2, 3],
+    social: { socialMe: async () => ({ id: 'x' }) }, APP_BUILD: 'v471', platformTag: () => 'ios',
+    openSheet: () => {}, $: () => null, $$: () => [], ...stubs,
+  };
+  const names = Object.keys(env);
+  const out = new Function(...names, `${app.slice(a, b)}; return { SURVEY2_QUESTIONS, SURVEY2_TEXT_MAX, survey2QuestionsHtml, survey2Answers, survey2Ctx, survey2Submit, survey2Dismiss, drainSurvey2Pending };`)(...names.map(n => env[n]));
+  return { ...out, kv, app };
+};
+
+test('Survey v2 S3 (a): the question list is the spec, in order, with its ids, types, option counts and copy', () => {
+  const { SURVEY2_QUESTIONS: Q, survey2QuestionsHtml, SURVEY2_TEXT_MAX } = survey2Load();
+  // spec section 2: six questions, five of them taps
+  assert.deepEqual(Q.map(q => q.id), ['q1', 'q2', 'q3', 'q4', 'q5', 'q6'], 'question ids or order drifted from the spec');
+  assert.deepEqual(Q.map(q => q.type), ['single', 'multi', 'multi', 'single', 'single', 'text']);
+  assert.deepEqual(Q.map(q => (q.opts || []).length), [9, 9, 10, 10, 4, 0], 'option counts drifted from the spec (9, 9, 10, 10, 4)');
+  assert.equal(Q[1].max, 2, 'Q2 lost its two-pick cap');
+  assert.equal(Q[2].text && Q[2].text.id, 'q3text', 'Q3 lost its reveal-on-tick text field (dashboard key q3text)');
+  assert.equal(Q[2].text.reveal.length, 9, 'Q3 reveals on the nine areas only, never on "Nothing, it made sense"');
+  assert.ok(!Q[2].text.reveal.includes('nothing'));
+  assert.deepEqual(Q[4].opts.map(o => o[0]), ['definitely', 'probably', 'not_sure', 'probably_not'], 'Q5 slugs: the dashboard counts definitely/probably as the yes');
+  // verbatim copy, spec section 2
+  assert.deepEqual(Q.map(q => q.label), [
+    'Why did you open the app today?', 'What keeps you coming back?', 'Was there anything you did not understand?',
+    'If we cut one thing to make this simpler, what should go?', 'Will you still be playing in a month?', 'What nearly made you stop playing?']);
+  assert.deepEqual(Q[0].opts.map(o => o[1]), ['Log my food', 'Check my steps', 'Fight in the Pit', 'The Boneyard map', 'My pets', 'Cook something', 'See what my crew did', 'A quest or the wheel', 'Just checking in']);
+  assert.deepEqual(Q[1].opts.map(o => o[1]), ['My streak', 'Watching my Bonehead get stronger', 'The pets', 'Beating my friends', 'The daily wheel', 'Walking the Boneyard', 'Logging food properly', 'The fights', 'Honestly, not much yet']);
+  assert.deepEqual(Q[2].opts.map(o => o[1]), ['The Pit', 'Stats and training', 'The Boneyard map', 'Cooking', 'Dark Spires', 'Quests', 'Gear and the Wardrobe', 'Pets and the Stable', 'The Crew', 'Nothing, it made sense']);
+  assert.equal(Q[3].opts[9][1], "Don't cut anything");
+  assert.equal(Q[2].text.label, 'What was confusing about it?');
+  assert.equal(SURVEY2_TEXT_MAX, 240, 'free text is 240 chars in the spec');
+  // the renderer emits every question, in order, with the right control kind
+  const html = survey2QuestionsHtml();
+  const grids = [...html.matchAll(/<div class="survey-feats" data-q="(q\d)"/g)].map(m => m[1]);
+  assert.deepEqual(grids, ['q1', 'q2', 'q3', 'q4', 'q5'], 'the rendered chip grids are not the five tap questions in order');
+  for (const q of Q.filter(x => x.opts)) {
+    const n = (html.match(new RegExp(`<input type="${q.type === 'single' ? 'radio' : 'checkbox'}" name="sv2-${q.id}"`, 'g')) || []).length;
+    assert.equal(n, q.opts.length, `${q.id} rendered ${n} ${q.type} inputs, spec has ${q.opts.length}`);
+  }
+  assert.match(html, /data-q="q2" data-max="2"/, 'Q2 grid does not carry its cap for the two-pick handler');
+  assert.match(html, /<textarea id="sv2-q3text"[^>]*maxlength="240"[^>]*hidden>/, 'Q3 text field is not hidden until a chip is ticked');
+  assert.match(html, /<textarea id="sv2-q6"[^>]*maxlength="240"/, 'Q6 free text lost its 240 cap');
+  assert.ok(html.indexOf('data-q="q5"') < html.indexOf('id="sv2-q6"'), 'Q6 renders before Q5');
+});
+
+test('Survey v2 S3 (b): the body is form/answers/ctx in the S2 wire shape and stays under the caps with every text at its cap', async () => {
+  const { survey2Answers, survey2Ctx, survey2Submit, app } = survey2Load();
+  const full = { q1: 'log', q2: ['streak', 'stronger'], q3: ['pit', 'stats', 'boneyard', 'cooking', 'spires', 'quests', 'gear', 'pets', 'crew'],
+    q3text: 'x'.repeat(240), q4: 'dontcut', q5: 'probably_not', q6: 'y'.repeat(240) };
+  const body = await survey2Submit(full, { email: 'a@b.co', emailOptin: true });
+  assert.equal(body.form, 'v2', 'form slug is not v2 (the dashboard filter key)');
+  assert.deepEqual(Object.keys(body.answers), ['q1', 'q2', 'q3', 'q3text', 'q4', 'q5', 'q6'], 'answers keys are not the dashboard Q_LABELS/FREE_LABELS keys');
+  assert.deepEqual(body.answers.q2, ['streak', 'stronger']);
+  assert.equal(typeof body.ctx, 'object');
+  assert.ok(JSON.stringify(body.answers).length <= 4000, `answers blob ${JSON.stringify(body.answers).length} > server cap 4000`);
+  assert.ok(JSON.stringify(body.ctx).length <= 1000, `ctx blob ${JSON.stringify(body.ctx).length} > server cap 1000`);
+  // the silent context, spec section 2: every named field present with the stubbed sources
+  const ctx = await survey2Ctx();
+  assert.deepEqual(ctx, { build: 'v471', plat: 'ios', streak: 3, foods: 41, pitWins: 7, level: 12, days: 9, pets: 3, crew: true });
+  // skipped questions are ABSENT, not empty (the dashboard counts n by presence)
+  assert.deepEqual(survey2Answers({ q1: '', q2: [], q3text: '   ', q5: 'definitely' }), { q5: 'definitely' });
+  // and the transport forwards the three fields (js/analytics.js sendSurvey)
+  const an = readFileSync(join(here, '..', 'js', 'analytics.js'), 'utf8');
+  assert.match(an, /\.\.\.\(data\.form \? \{ form: String\(data\.form\)\.slice\(0, 24\), answers: data\.answers \|\| \{\}, ctx: data\.ctx \|\| \{\} \} : \{\}\)/, 'sendSurvey no longer forwards form/answers/ctx to POST /survey');
+  // nothing on the launch path opens it (spec section 0): definition + webdriver handle only
+  assert.deepEqual(app.match(/\w* ?openSurvey2Sheet\(/g), ['function openSurvey2Sheet('], 'openSurvey2Sheet is CALLED somewhere in js/app.js; S4 (the trigger) is not this ticket');
+});
+
+test('Survey v2 S3 (c): free text over the cap is cut, never sent long', () => {
+  const { survey2Answers, SURVEY2_TEXT_MAX } = survey2Load();
+  const out = survey2Answers({ q6: 'z'.repeat(1500), q3text: ' ' + 'w'.repeat(1200) });
+  assert.equal(out.q6.length, SURVEY2_TEXT_MAX, `q6 went out at ${out.q6.length} chars`);
+  assert.equal(out.q3text.length, SURVEY2_TEXT_MAX, `q3text went out at ${out.q3text.length} chars`);
+  assert.ok(out.q6.length <= 1000 && out.q3text.length <= 1000);
+});
+
+test('Survey v2 S3 (d): submit writes survey2Done, Not now writes survey2SnoozeAt, both as timestamps', async () => {
+  const { survey2Submit, survey2Dismiss, kv } = survey2Load();
+  const t0 = Date.now();
+  await survey2Submit({ q1: 'pit' });
+  assert.ok(typeof kv.survey2Done === 'number' && kv.survey2Done >= t0, 'survey2Done is not a submit timestamp');
+  assert.equal(kv.survey2SnoozeAt, undefined);
+  await survey2Dismiss();
+  assert.ok(typeof kv.survey2SnoozeAt === 'number' && kv.survey2SnoozeAt >= t0, 'survey2SnoozeAt is not a dismiss timestamp');
+  assert.equal(kv.survey2Pending, undefined, 'a successful post left a pending row');
+});
+
+test('Survey v2 S3 (e): a failed post keeps the exact body pending and a retry drains it once it lands', async () => {
+  let online = false, posted = [];
+  const { survey2Submit, drainSurvey2Pending, kv } = survey2Load({ sendSurvey: async b => { posted.push(b); return { ok: online }; } });
+  const body = await survey2Submit({ q1: 'pit', q6: 'late nights' });
+  assert.deepEqual(kv.survey2Pending, body, 'the failed body was not kept in survey2Pending');
+  assert.equal(kv.survey2Done > 0, true, 'done was not marked before the network answered');
+  assert.equal(await drainSurvey2Pending(), false, 'a retry that failed reported success');
+  assert.deepEqual(kv.survey2Pending, body, 'a failed retry dropped the row');
+  online = true;
+  assert.equal(await drainSurvey2Pending(), true);
+  assert.equal(kv.survey2Pending, null, 'a successful retry left the row behind');
+  assert.deepEqual(posted[posted.length - 1], body, 'the retry did not send the original body');
+  assert.equal(await drainSurvey2Pending(), false, 'an empty queue reported a send');
+  // boot and the online event both call the drain (js/app.js boot())
+  const { app } = survey2Load();
+  const bootBody = app.slice(app.indexOf('async function boot()'), app.indexOf('/* DAY ROLLOVER (v224).'));
+  assert.match(bootBody, /drainSurvey2Pending\(\)/, 'boot() no longer retries a pending survey');
+  assert.match(bootBody, /addEventListener\('online', \(\) => \{ drainSurvey2Pending\(\)/, "the 'online' event no longer retries a pending survey");
+});
+
+/* ---- QA round 24, L10: the meal you picked is remembered, and My foods reads it ----
+   Measured: open the sheet on Snacks, tap Dinner, close, reopen: Snacks. curMeal
+   was closure state and recordMealUsed fired only on a committed row. And
+   renderFoods (the "My foods" route) picked the meal BY THE CLOCK, a fifth commit
+   path around the memory the other four share. Runs the REAL mealPrecedence out
+   of js/app.js (with the real addDraftUsable and mealForHour) and pins, statically,
+   that every reopen reads it: renderFoods no longer calls mealForHour, mealDefault
+   is the only caller, and both chip handlers write the memory on a tap.
+   Prove-red on the pre-fix tip: the first assert (mealPrecedence absent). */
+test('R24-L10 mealPrecedence is draft > remembered meal > clock, and every reopen reads it', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const ttl = app.match(/const ADD_DRAFT_TTL = [^\n]+\n/);
+  const usable = app.match(/function addDraftUsable\([\s\S]*?\n\}\n/);
+  const prec = app.match(/function mealPrecedence\([\s\S]*?\n\}\n/);
+  assert.ok(ttl && usable, 'ADD_DRAFT_TTL / addDraftUsable not found in js/app.js');
+  assert.ok(prec, 'mealPrecedence not found in js/app.js: the reopen meal has no single owner (L10)');
+  const mealPrecedence = new Function('mealForHour', `${ttl[0]}${usable[0]}${prec[0]}; return mealPrecedence;`)(mealForHour);
+  const now = 1_700_000_000_000, date = '2026-09-04', hour = 8;   // 08:00 is breakfast (0) by the clock
+  assert.equal(mealForHour(hour), 0, 'precondition: the clock says breakfast');
+  // 1. a usable draft wins over the memory and the clock
+  assert.equal(mealPrecedence({ draft: { meal: 2, q: 'ban', ts: now - 1000 }, last: { date, meal: 1 }, date, hour, now }), 2);
+  // 2. no draft: the meal remembered today wins over the clock
+  assert.equal(mealPrecedence({ draft: null, last: { date, meal: 1 }, date, hour, now }), 1, 'the remembered meal lost to the clock');
+  // 3. a chip-tap-only draft (nothing typed or picked) is not usable: the memory carries the tap
+  assert.equal(mealPrecedence({ draft: { meal: 2, q: '', ts: now - 1000 }, last: { date, meal: 3 }, date, hour, now }), 3);
+  // 4. a stale draft and yesterday's memory both fall through to the clock
+  assert.equal(mealPrecedence({ draft: { meal: 2, q: 'ban', ts: now - 25 * 3600e3 }, last: { date: '2026-09-03', meal: 1 }, date, hour, now }), 0);
+  assert.equal(mealPrecedence({ draft: null, last: null, date, hour, now }), 0);
+  // the one place: mealDefault feeds mealPrecedence, and nothing else asks the clock
+  const md = app.match(/async function mealDefault\(\) \{([\s\S]*?)\n\}\n/);
+  assert.ok(md && /mealPrecedence\(/.test(md[1]), 'mealDefault no longer routes through mealPrecedence');
+  const clockCalls = app.match(/\bmealForHour\([^)]/g) || [];
+  assert.equal(clockCalls.length, 1, `js/app.js asks mealForHour in ${clockCalls.length} places; only mealPrecedence may (a second one is a path around the meal memory)`);
+  // renderFoods (My foods) reads the precedence, not the clock
+  const rfStart = app.indexOf('async function renderFoods(el)');
+  assert.ok(rfStart > 0, 'renderFoods not found');
+  const rf = app.slice(rfStart, app.indexOf('\nasync function ', rfStart + 10));
+  assert.ok(!/mealForHour\(/.test(rf), 'renderFoods picks the meal by the clock again (the fifth commit path, L10)');
+  assert.ok(/openPortion\(f, \{ meal: await mealDefault\(\) \}\)/.test(rf), 'renderFoods does not open the portion sheet on mealDefault()');
+  // a chip tap writes the memory, on both chip sets
+  for (const id of ['#mealChips', '#pMealChips']) {
+    const i = app.indexOf(`$$('${id} button', wrap).forEach(c => c.addEventListener('click', () => {`);
+    assert.ok(i > 0, `${id} click handler not found`);
+    const handler = app.slice(i, app.indexOf('\n  }));', i));
+    assert.ok(/recordMealUsed\(curMeal\)/.test(handler), `${id} tap no longer records the meal: closing and reopening forgets the chip (L10)`);
+  }
+});
+
+/* ---- QA round 24, L17: midnight is a decision, not a timer ----
+   With the app open on Today, a log at 00:00 landed on YESTERDAY while dateKey()
+   already said today: rollDayIfNeeded ran only on resume and on a 60 s interval
+   (measured catch-up 45,038 ms), and the callers stamp `date: S.date` when they
+   build the row. Pins the source order (the roll precedes the write) and runs the
+   REAL rollDayIfNeeded + commitLogEntry out of js/app.js with a clock that has
+   crossed midnight: a fresh row follows the day, an edit keeps its day.
+   Prove-red on the pre-fix tip: the source-order assert (no rollDayIfNeeded in
+   commitLogEntry). */
+test('R24-L17 commitLogEntry rolls the day before the row is written, and a fresh row follows it', async () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const cle = app.match(/\nasync function commitLogEntry\(e, btn, via = null\) \{([\s\S]*?)\n\}\n/);
+  assert.ok(cle, 'commitLogEntry not found');
+  const roll = cle[1].indexOf('await rollDayIfNeeded()'), put = cle[1].indexOf("db.put('log', e)");
+  assert.ok(roll >= 0 && roll < put, 'commitLogEntry does not roll the day before db.put: a log at 00:00 lands on yesterday until the 60 s timer fires (L17)');
+  const rdn = app.match(/let _dayAnchor = dateKey\(\);\nlet _rolling = false;\nasync function rollDayIfNeeded\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(rdn, 'rollDayIfNeeded (with its _dayAnchor / _rolling) not found in js/app.js');
+
+  let clock = '2026-09-03';                       // the anchor is taken at 23:59
+  const S = { settings: { targets: {} }, date: '2026-09-03' };
+  const store = new Map([['old', { id: 'old', date: '2026-09-03', meal: 2, kcal: 300 }]]);
+  const db = {
+    put: async (st, v) => { store.set(v.id, { ...v }); },
+    get: async (st, id) => store.get(id) || undefined,
+  };
+  const routed = [];
+  const load = () => new Function('S', 'db', 'dateKey', 'awardDayCloseIfDue', 'route', 'toast', 'maybeShowDailyWheel',
+    'refreshNotifSchedules', 'recordMealUsed', 'onFoodLogged', 'entriesFor', 'trackEvent',
+    `${rdn[0]}${cle[0]}; return { commitLogEntry, rollDayIfNeeded };`)(
+    S, db, () => clock, async () => null, () => routed.push(S.date), () => {}, () => Promise.resolve(false),
+    () => {}, async () => {}, async () => ({ xp: 10 }), async () => [], () => {});
+  const { commitLogEntry } = load();
+
+  clock = '2026-09-04';                           // midnight passed; the 60 s timer has not fired
+  assert.equal(S.date, '2026-09-03', 'precondition: the app still sits on yesterday');
+  const fresh = { id: 'new', date: S.date, meal: 3, kcal: 120 };   // what quickAddEntry / openPortion build
+  const game = await commitLogEntry(fresh, null);
+  assert.equal(S.date, '2026-09-04', 'the commit did not roll the day');
+  assert.equal(store.get('new').date, '2026-09-04', 'a log at 00:00 was written to the day that had ended (L17)');
+  assert.deepEqual(routed, ['2026-09-04'], 'rollDayIfNeeded did not behave as it does on the timer (route on the new day)');
+  assert.ok(game && game.xp === 10, 'the commit lost its receipt');
+
+  // an EDIT of a row eaten yesterday keeps yesterday, even across the same roll
+  const S2 = { settings: { targets: {} }, date: '2026-09-03' };
+  clock = '2026-09-03';
+  const again = new Function('S', 'db', 'dateKey', 'awardDayCloseIfDue', 'route', 'toast', 'maybeShowDailyWheel',
+    'refreshNotifSchedules', 'recordMealUsed', 'onFoodLogged', 'entriesFor', 'trackEvent',
+    `${rdn[0]}${cle[0]}; return { commitLogEntry };`)(
+    S2, db, () => clock, async () => null, () => {}, () => {}, () => Promise.resolve(false),
+    () => {}, async () => {}, async () => ({ xp: 0 }), async () => [], () => {});
+  clock = '2026-09-04';
+  await again.commitLogEntry({ ...store.get('old'), kcal: 350 }, null);
+  assert.equal(S2.date, '2026-09-04');
+  assert.equal(store.get('old').date, '2026-09-03', 'editing a row eaten yesterday moved it to today');
+  assert.equal(store.get('old').kcal, 350);
+});
+
+/* QA ROUND 24 L16: THE DAY-CLOSE IS DELIVERED ONLY AS A DROPPABLE TOAST.
+   On budget the player got "Yesterday closed on budget: Bone Crate earned" for
+   3.4s inside a 4-deep toast queue that drops the oldest, and nothing on Today
+   ever recorded that the day closed. The fix DERIVES a news row from the xp
+   ledger (no new store) and renders it in the Today news pill. These rows pin:
+   (a) the derivation yields exactly the toast's copy, dated to the closed day,
+       for both outcomes and both gap states, newest close wins, none without rows;
+   (b) renderToday hands that row to the pill from the xp read it already has;
+   (c) the hero rule is untouched by it: newsHero()'s output is identical on a
+       NEWS fixture with and without a day-close-shaped row in it. */
+test('R24-L16 (a) dayCloseNews derives the toast copy and the closed date from the ledger, newest close only', () => {
+  const at = d => new Date(`${d}T09:00:00`).getTime(); // the settle ran on the morning of d
+  assert.equal(dayCloseNews([]), null, 'no ledger rows must yield no row');
+  assert.equal(dayCloseNews([{ type: 'protein', date: '2026-09-02', ts: at('2026-09-03') }]), null,
+    'a protein row is not a day-close');
+  assert.deepEqual(
+    dayCloseNews([{ key: 'dayclose-2026-09-02', type: 'dayclose', xp: 50, date: '2026-09-02', ts: at('2026-09-03') }]),
+    { id: 'dayclose-2026-09-02', type: 'dayclose', title: 'Yesterday closed on budget: Bone Crate earned', date: '2026-09-02' });
+  assert.deepEqual(
+    dayCloseNews([{ key: 'dayeffort-2026-09-02', type: 'dayeffort', xp: 25, date: '2026-09-02', ts: at('2026-09-03') }]),
+    { id: 'dayclose-2026-09-02', type: 'dayeffort', title: 'You logged yesterday. That counts: Common Crate earned', date: '2026-09-02' });
+  // the gap case: settled two days after the closed day, the toast said "your last logged day"
+  assert.equal(dayCloseNews([{ type: 'dayclose', date: '2026-08-30', ts: at('2026-09-03') }]).title,
+    'Your last logged day closed on budget: Bone Crate earned');
+  assert.equal(dayCloseNews([{ type: 'dayeffort', date: '2026-08-30', ts: at('2026-09-03') }]).title,
+    'You logged your last day here. That counts: Common Crate earned');
+  // newest CLOSED DAY wins, whatever order the store hands rows back in
+  const r = dayCloseNews([
+    { type: 'dayclose', date: '2026-09-02', ts: at('2026-09-03') },
+    { type: 'dayeffort', date: '2026-08-31', ts: at('2026-09-01') },
+    { type: 'dayclose', date: '2026-09-01', ts: at('2026-09-02') },
+  ]);
+  assert.equal(r.date, '2026-09-02');
+  assert.equal(r.type, 'dayclose');
+});
+
+test('R24-L16 (b) renderToday feeds the derived day-close row to the news pill from the xp rows it already read', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /newsBannerHtml\(newsUnseen, eq, dayCloseNews\(allXp\)\)/,
+    'renderToday no longer passes dayCloseNews(allXp) into newsBannerHtml: the day-close is a droppable toast again (QA r24 L16)');
+  const m = app.match(/\nfunction newsBannerHtml\(unseen, eq, dayClose\) \{\n([\s\S]*?)\n\}\n/);
+  assert.ok(m, 'newsBannerHtml(unseen, eq, dayClose) not found');
+  assert.ok(/\$\{esc\(dayClose\.title\)\}/.test(m[1]) && /\$\{esc\(dayClose\.date\)\}/.test(m[1]),
+    'the pill no longer renders the day-close row\'s title and date');
+  // the toast strings ARE the row strings: the toast copy at both call sites must still be what game.js derives
+  const game = readFileSync(join(here, '..', 'js', 'game.js'), 'utf8');
+  for (const copy of ['Yesterday closed on budget: Bone Crate earned', 'You logged yesterday. That counts: Common Crate earned',
+    'Your last logged day closed on budget: Bone Crate earned', 'You logged your last day here. That counts: Common Crate earned']) {
+    assert.ok(app.includes(copy), `toast copy changed: "${copy}" is no longer in app.js`);
+    assert.ok(game.includes(copy), `row copy drifted from the toast: "${copy}" is no longer in game.js`);
+  }
+});
+
+test('R24-L16 (c) the hero choice is unchanged by a day-close row: newsHero() reads NEWS only', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const fb = app.match(/\nconst NEWS_HERO_FALLBACK = \{[\s\S]*?\n\};\n/)?.[0];
+  const fn = app.match(/\nfunction newsHero\(\) \{\n[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(fb && fn, 'NEWS_HERO_FALLBACK / newsHero() not found; this pin is reading the wrong shape');
+  assert.ok(!/dayClose/i.test(fn), 'newsHero() now reads the day-close: the hero rule must not change (QA r24 L16)');
+  const pick = (NEWS) => new Function('NEWS', 'HYPE_PLATES', `${fb}${fn}; return newsHero();`)(NEWS, { 'a.png': {} });
+  const plain = [{ id: 'x', title: 'x' }, { id: 'w', title: 'w', hero: 'a.png' }];
+  const dayclose = { id: 'dayclose-2026-09-02', type: 'dayclose', title: 'Yesterday closed on budget: Bone Crate earned', date: '2026-09-02' };
+  // with a hero-bearing entry present, the same entry wins whether or not the day-close row is in the list
+  assert.equal(pick([dayclose, ...plain]), pick(plain));
+  assert.equal(pick(plain).id, 'w', 'setup: the fixture hero was not chosen; the pin below compares nothing');
+  // with no hero-bearing entry, the fallback wins, and the day-close row never stands in for it
+  assert.equal(pick([dayclose, plain[0]]).title, pick([plain[0]]).title);
+  assert.equal(pick([dayclose]).title, 'Two want to eat you');
+});
+
+/* QA ROUND 23 F6. Measured on a heavy account: 57 collected looks made a 1420px
+   Dressing Room grid in BH_ITEMS declaration order with no organisation, and 56
+   of 56 look tiles carried no rarity class while the fit grid twelve lines above
+   carries r-<rarity> plus the tag. Runs the REAL `cell` + `lookTilesHtml` slice
+   on a fixture in SHUFFLED declaration order: tiles come out in the Looks tab's
+   order (rarity descending, declaration order kept inside a band), every look
+   tile carries r-<rarity> and the ward-rar tag, and the two fixed cells (own look
+   and Hide) stay first and untiered. */
+test('R23 F6: Dressing Room look tiles are sorted by rarity and carry r-<rarity> like the fit grid', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('const cell = (val, inner, title');
+  const b = app.indexOf('/* ---------------------------------------------------------------- v2', a);
+  assert.ok(a > 0 && b > a, 'the transmog `cell` helper moved: re-anchor this slice');
+  const slice = app.slice(a, b);
+  assert.ok(slice.includes('const lookTilesHtml ='), 'lookTilesHtml is gone: the look grid is back to an unsorted, untiered arts.map');
+  const rarOrder = app.match(/^const RAR_ORDER = .*$/m)[0];
+  const tagFn = app.match(/function rarityTagHtml\(rarity\) \{[\s\S]*?\n\}/)[0];
+  const lookTilesHtml = new Function('cur', 'sel', 'esc', 'ownArt', 'wornGear', 'bhTrim', 'bhAsset', 'ICONS', 'TRANSMOG_HIDE', 'costTag',
+    `${rarOrder}; ${tagFn}; ${slice}; return lookTilesHtml;`)(
+    '', '', String, { id: 'own' }, null, x => x, i => i.id + '.png', { hidden: () => '<svg/>' }, '__hide__', () => '<span class="look-cost paid">owned</span>');
+  // declaration order deliberately interleaves tiers, the way BH_ITEMS does
+  const arts = [
+    { id: 'c1', name: 'C one', rarity: 'common' }, { id: 'l1', name: 'L one', rarity: 'legendary' },
+    { id: 'r1', name: 'R one', rarity: 'rare' }, { id: 'c2', name: 'C two', rarity: 'common' },
+    { id: 'e1', name: 'E one', rarity: 'epic' }, { id: 'u1', name: 'U one', rarity: 'uncommon' },
+    { id: 'r2', name: 'R two', rarity: 'rare' },
+  ];
+  const html = lookTilesHtml(arts);
+  const tiles = [...html.matchAll(/<button class="ward-cell look ([^"]*)" data-look="([^"]*)"/g)].map(m => ({ cls: m[1], id: m[2] }));
+  assert.deepEqual(tiles.slice(0, 2).map(t => t.id), ['', '__hide__'], 'the As equipped / Hide cells must stay first');
+  assert.ok(tiles.slice(0, 2).every(t => !/\br-/.test(t.cls)), 'the two fixed cells carry no tier');
+  assert.deepEqual(tiles.slice(2).map(t => t.id), ['l1', 'e1', 'r1', 'r2', 'u1', 'c1', 'c2'],
+    'look tiles are not in the Looks tab order (rarity desc, declaration order inside a band)');
+  for (const t of tiles.slice(2)) {
+    const rar = arts.find(x => x.id === t.id).rarity;
+    assert.ok(t.cls.split(/\s+/).includes(`r-${rar}`), `tile ${t.id} lacks r-${rar}: ${t.cls}`);
+  }
+  assert.equal((html.match(/class="ward-rar"/g) || []).length, arts.length, 'every look tile must carry the rarity tag the fit grid carries');
+  // and the input is not mutated: lookPriceMap and the panel read slotArts in place
+  assert.equal(arts[0].id, 'c1', 'lookTilesHtml must sort a copy, not the caller\'s array');
+});
+
+/* QA ROUND 23 F8. At 6 fits [data-fit-save] used to vanish, so the only storage
+   cap in the app printed no total, and "You can keep 6 fits. Bin one first." was
+   dead code (captureFit can only return `full` from a control that only rendered
+   while not full). Runs the REAL fitRail slice at 5 and 6 fits, the REAL
+   ward-head at both counts, and pins that the string has more than one user. */
+test('R23 F8: the fits cap is printed and the save chip stays, ghosted, with its rule reachable', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const MAX = 6;
+  const a = app.indexOf('const fitRail = `');
+  const b = app.indexOf('\n    content.innerHTML = `', a);
+  assert.ok(a > 0 && b > a, 'the fitRail template moved: re-anchor this slice');
+  const rail = n => new Function('fitList', 'fitPrices', 'S', 'fitThumbArt', 'esc', 'ICONS', 'MAX_FITS', 'stripPlan',
+    `${app.slice(a, b)}; return fitRail;`)(
+    Array.from({ length: n }, (_, i) => ({ id: 'f' + i, name: 'Fit ' + i, gear: {} })), Array(n).fill(0),
+    { fitEdit: null }, () => null, String, { dust: () => '', close: () => '' }, MAX, { slots: [], mogs: [] });
+  const five = rail(5), six = rail(6);
+  const save = /<button class="fit-chip add" data-fit-save="1"([^>]*)>/;
+  assert.match(five, save, 'at 5 fits the save chip is missing');
+  assert.ok(!/aria-disabled/.test(five.match(save)[1]), 'at 5 fits the save chip must be enabled');
+  assert.match(six, save, 'at 6 fits the save chip vanished again: the cap is silent');
+  assert.match(six.match(save)[1], /aria-disabled="true"/, 'at the cap the save chip must be ghosted (aria-disabled), not live');
+  assert.ok(!/ disabled/.test(six.match(save)[1]), 'a `disabled` button swallows the tap that toasts the rule');
+
+  const h = app.indexOf('<div class="ward-head">');
+  const hEnd = app.indexOf("</div>` : tab === 'shop'", h);
+  assert.ok(h > 0 && hEnd > h, 'the ward-head template moved: re-anchor this slice');
+  const head = n => new Function('lvl', 'coinBal', 'dustBal', 'ownedCount', 'boost', 'ICONS', 'sparkIco', 'looksAll', 'looksHave', 'esc', 'fitCount', 'MAX_FITS',
+    'return `' + app.slice(h, hEnd) + '</div>`;')(
+    { level: 1, name: 'x' }, 0, 0, 0, 0, { coin: () => '', dust: () => '', bone: () => '', boltIco: () => '' }, () => '', [], new Set(), String, n, MAX);
+  assert.match(head(5), /<span class="bh-pill ward-fits">5\/6 fits<\/span>/, 'the header does not print 5/6 fits');
+  assert.match(head(6), /<span class="bh-pill ward-fits">6\/6 fits<\/span>/, 'the header does not print 6/6 fits');
+
+  // the explaining string: defined once, used by the ghosted chip AND by captureFit's `full`
+  assert.equal((app.match(/You can keep \$\{MAX_FITS\} fits\. Bin one first\./g) || []).length, 1, 'the cap string must be defined once, as fitsFullMsg');
+  const uses = (app.match(/\bfitsFullMsg\b/g) || []).length;
+  assert.ok(uses > 2, `fitsFullMsg is dead code again: ${uses} occurrence(s), need the definition plus two users`);
+  const handler = app.slice(app.indexOf("$('[data-fit-save]', content)"), app.indexOf('openTextSheet', app.indexOf("$('[data-fit-save]', content)")));
+  assert.match(handler, /fitList\.length >= MAX_FITS[\s\S]*toast\(fitsFullMsg/, 'a tap on the ghosted save chip must toast the rule before any sheet opens');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
-

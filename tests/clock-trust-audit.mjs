@@ -377,7 +377,7 @@ try {
          would score the guard's own no as a payout. */
       if (r && !r.capped && !r.dayGuard) { claimedQ++; questCoins += r.coins; questXp += r.xp; }
     }
-    const bonus = await quests.claimAllBonusIfDue(day, qs, await db.db.all('xp'));
+    const bonus = await quests.claimAllBonusIfDue(day, qs);
 
     const xp1 = await game.totalXp(), coin1 = await loot.coins();
     const inv1 = (await db.db.all('inv')).length;

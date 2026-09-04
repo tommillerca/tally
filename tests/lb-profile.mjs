@@ -42,16 +42,28 @@ await page.setViewport({ width: 393, height: 852, deviceScaleFactor: 2, isMobile
 await seed(page, { level: 12 });
 
 // exactly the shape the leaderboard hands over
+/* addToken ADDED 2026-09-03. This fixture carried only a friendCode, which is a
+   payload shape the app stopped sending: the leaderboard mints an opaque
+   expiring addToken instead (js/app.js:11194 passes `addToken: p.addToken`, and
+   the route comment records that publishing friend codes was a takeover vector).
+   So the fixture was modelling a row the server has not produced in a long time.
+   Nothing noticed until the profile sheet learned to withhold Add when there is
+   no token — a guard that is right, and that this fixture then failed. */
 const STRANGER = {
-  name: 'Vile Nightmare #8', playerId: 'pl-stranger', friendCode: 'BONE-AAAA-BBBB', lastSeen: Date.now(),
+  name: 'Vile Nightmare #8', playerId: 'pl-stranger', friendCode: 'BONE-AAAA-BBBB',
+  addToken: 'tok-audit-stranger', lastSeen: Date.now(),
   profile: { outfit: { B: 'B0-1', SK: 'SK0-1' }, pet: null, level: 31, levelName: 'Macro Wizard', badges: 7 },
 };
+/* ...and the other half of that guard, which nothing covered: a row WITHOUT a
+   token must offer no button at all, rather than one that can only ever say
+   "Could not send that request". */
+const TOKENLESS = { ...STRANGER, addToken: undefined, name: 'No Token #9', playerId: 'pl-notoken' };
 
-const open = async opts => {
+const open = async (opts, who = STRANGER) => {
   await page.evaluate((f, o) => {
     document.querySelectorAll('.sheet-fp').forEach(s => s.remove());
     window.__openFriendProfile(f, o);
-  }, STRANGER, opts);
+  }, who, opts);
   await sleep(700);
   return page.evaluate(() => {
     const w = document.querySelector('.sheet-fp');
@@ -73,6 +85,7 @@ const open = async opts => {
 };
 
 const s = await open({ stranger: true });
+const noTok = await open({ stranger: true }, TOKENLESS);
 ok('STRANGER the profile opens at all', s.open, JSON.stringify({ title: s.title }));
 ok('STRANGER you can see more about them', s.level === 'Lv 31' && /Macro Wizard/.test(s.cls || '') && s.badges === '7',
   JSON.stringify({ level: s.level, cls: s.cls, badges: s.badges }));
@@ -80,6 +93,11 @@ ok('STRANGER their bonehead is drawn', s.hasArt, `art layers: ${s.hasArt}`);
 ok('STRANGER no friends-only actions are offered', !s.gift && !s.cheer && !s.remove && !s.alias,
   JSON.stringify({ gift: s.gift, cheer: s.cheer, remove: s.remove, alias: s.alias }));
 ok('STRANGER the one action you DO have is Add', s.add, `add button: ${s.add}`);
+/* The guard's other half. A row with no addToken must offer NO button, not one
+   that can only ever answer "Could not send that request". Without this row the
+   fixture fix above would hide the guard rather than cover it. */
+ok('STRANGER a row with no addToken offers no Add button at all',
+  noTok.open && !noTok.add, `opened: ${noTok.open}, add button: ${noTok.add}`);
 
 const crew = await open({ stranger: true, isCrew: true });
 ok('STRANGER someone already in your Crew is not offered again', !crew.add && /Already in your Crew/.test(crew.body), JSON.stringify({ add: crew.add }));

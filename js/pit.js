@@ -10,11 +10,28 @@ import { bossLook, ladderLook } from './bosses.js';
 //   - effort dominates gear (PowerMult spread 1.0-2.5 > any WeaponMult)
 //   - heavies are committal and UNANNOUNCED; guard on reads, not banners
 
-/* ================= stats from real behavior ================= */
-// Base stats only (V1): permanent, cumulative, never lost. 0-100.
-// Fresh fighter ~20-30; consistent one ~70-90.
+/* ================= the base every fighter starts from ================= */
+/* FLAT. THE PLAYER CHOOSES WHERE THEIR POWER GOES (R21-P1, Tom's call).
+   Until this change the base came out of the habit log: protein days set Power,
+   the streak set Marrow, lifetime steps set Stamina, and so on
+   (legacyHabitStats below is that function, kept verbatim for the migration).
+   The training points added on top were the only part the player chose, so a
+   60-day account walked into the Pit, a friend battle or a spire defence
+   carrying a spread nobody picked, and two accounts that had spent the same
+   points still fought with different stats.
+   Points are now the ONLY source of stat spread. The base is the same number
+   for everyone, so what a fighter is good at is a decision rather than a side
+   effect of how its owner happened to eat and walk. */
+export const BASE_STAT = 20;
+export function deriveStats() {
+  return { power: BASE_STAT, marrow: BASE_STAT, wind: BASE_STAT, reflex: BASE_STAT, hype: BASE_STAT };
+}
 
-export function deriveStats(b) {
+/* The pre-R21-P1 habit base, byte for byte. NOT a live stat source any more:
+   its only job is to tell the one-time migration how much base a player had
+   before the change, so that base can be handed back as unspent training
+   points. Do not wire this into a fighter. */
+export function legacyHabitStats(b) {
   const clamp = v => Math.max(0, Math.min(100, Math.round(v)));
   return {
     power: clamp(20 + (b.proteinDays || 0) * 2),                          // protein = muscle
@@ -25,33 +42,53 @@ export function deriveStats(b) {
   };
 }
 
-// Each stat carries three plain-English lines so players know WHAT it does in a
-// fight and WHICH build it powers (not just where it comes from). `combat` = the
-// mechanical effect; `spec` = the playstyle it leans into.
+// Each stat carries two plain-English lines so players know WHAT it does in a
+// fight and WHICH build it powers. `combat` = the mechanical effect; `spec` =
+// the playstyle it leans into.
+// `fedBy` (which habit raised this stat) went with the habit base in R21-P1:
+// no habit feeds a stat any more, they feed training points, and the FAQ said
+// so on the same screen the player was spending those points on.
 export const STAT_META = [
-  { key: 'power', label: 'Power', role: 'attack damage', fedBy: 'hitting your protein target',
+  { key: 'power', label: 'Power', role: 'attack damage',
     combat: 'Multiplies every physical hit (Jab, Swing, Haymaker) and your Signature.',
     spec: 'Bruisers who win with raw melee.' },
-  { key: 'marrow', label: 'Marrow', role: 'max HP + armor', fedBy: 'streaks + closing days on budget',
+  { key: 'marrow', label: 'Marrow', role: 'max HP + armor',
     combat: 'Your HP pool, and your physical Armor (cuts incoming melee damage).',
     spec: 'Tanks and clerics who outlast the fight.' },
-  { key: 'wind', label: 'Stamina', role: 'move fuel per turn', fedBy: 'steps + active burn',
+  { key: 'wind', label: 'Stamina', role: 'move fuel per turn',
     combat: 'Move fuel. Every action spends Stamina; run dry and you can only Jab or catch your breath.',
     spec: 'Fast fighters who chain lots of moves.' },
-  { key: 'reflex', label: 'Reflex', role: 'crits + spell armor', fedBy: 'Boneyard collecting + step eggs',
+  { key: 'reflex', label: 'Reflex', role: 'crits + spell armor',
     combat: 'More crits on your hits, hits glance off you for half, and your Spell Armor (cuts incoming magic).',
     spec: 'Duelists who win on finesse.' },
-  { key: 'hype', label: 'Hype', role: 'spell power + signature', fedBy: 'quests + logging variety',
+  { key: 'hype', label: 'Hype', role: 'spell power + signature',
     combat: 'Powers your spells (bolts, heals) and fills your Signature meter faster.',
     spec: 'Casters and showstoppers.' },
 ];
 
-// Hybrid customization: your habits set the BASE (deriveStats); training points
-// earned from wellbeing-safe behavior (protein-target hits + closing days on
-// budget) are spent to nudge stats up. Foes scale off your effective stats, so
-// this specializes a build rather than just inflating it.
+// Customization: everyone starts from the same flat base (deriveStats), and
+// training points earned from wellbeing-safe behavior (protein-target hits +
+// closing days on budget + lifetime steps) are spent to raise stats. Foes scale
+// off your effective stats, so this specializes a build rather than just
+// inflating it.
 export const TRAIN_STEP = 2;       // stat points per allocated training point
 export const TRAIN_CAP = 100;      // most you can add to one stat via training
+
+/* WHAT THE HABIT BASE WAS WORTH, IN TRAINING POINTS.
+   The make-good half of R21-P1: a player who had 84 Power off protein days must
+   not open the app after the update and find 20. Every stat point the old base
+   gave above the flat base is converted back into unspent points at the same
+   TRAIN_STEP rate the training screen spends them, so the power is still there
+   and the player now decides where it goes.
+   ROUNDED UP, per stat, on purpose: a 1-point remainder is worth less than the
+   risk of telling someone they got weaker. The most this can hand back is 5
+   stats x ceil(80/2) = 200 points, and re-spending them cannot exceed TRAIN_CAP
+   (50 points into one stat), which is the same ceiling as before: base 20 +
+   cap 100 = 120, against an old maximum of habit 100 + cap 100. */
+export function habitGrantPoints(habit, base = BASE_STAT, step = TRAIN_STEP) {
+  return ['power', 'marrow', 'wind', 'reflex', 'hype']
+    .reduce((a, k) => a + Math.ceil(Math.max(0, (habit[k] || 0) - base) / step), 0);
+}
 export function allocatedStats(base, alloc = {}, step = TRAIN_STEP) {
   const out = {};
   for (const k of ['power', 'marrow', 'wind', 'reflex', 'hype']) {

@@ -456,15 +456,20 @@ export async function claimQuest(periodKey, q, period = 'day') {
 }
 
 // Bonus daily crate when all three dailies are claimed.
-export async function claimAllBonusIfDue(date, quests, allXp) {
+/* THE CALLER USED TO HAND THIS THE WHOLE XP STORE (R17-P2). Every row of it,
+   read fresh on every quest claim, so that this function could test three
+   exact keys. The xp store has no date index and never needed one: a claim row
+   IS keyed `quest-<date>-<id>`, so the question is a point lookup per quest,
+   three reads instead of a scan that grows for the life of the account. */
+export async function claimAllBonusIfDue(date, quests) {
   // The closed-period rule too: this is the SECOND of the two places in js/ that
   // mints a quest claim row, so it takes the same guard.
   if (periodClosed('day', date)) return null;
   // MONOTONIC DAY GUARD (js/db.js claimDay): the all-three bonus crate rides on
   // the same daily rollover as the claims above, so it takes the same gate.
   if (!(await claimDay(dateKey())).fresh) return null;
-  const allClaimed = quests.every(q => allXp.some(r => r.key === `quest-${date}-${q.id}`));
-  if (!allClaimed) return null;
+  const claimRows = await Promise.all(quests.map(q => db.get('xp', `quest-${date}-${q.id}`)));
+  if (!claimRows.every(Boolean)) return null;
   const xp = await award(`questsall-${date}`, 'questsall', 30, 'All daily quests done', date);
   if (!xp) return null;
   await grantCrate('daily', 'quests');

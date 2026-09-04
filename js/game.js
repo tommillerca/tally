@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet, claimDay } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
-import { grantCrate, grantConsumable, coinsAdd, boneDustAdd, grantEgg } from './loot.js';
+import { grantCrate, grantConsumable, coinsAdd, boneDustAdd, grantEgg, equipped } from './loot.js';
 import { gardenState, clearGarden, PLOT_PRICES, PLOTS_FREE, HARVEST_BASE, HARVEST_BASE_RARE } from './garden.js';
 import { grantIngredient } from './cooking.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
@@ -127,8 +127,23 @@ let quietLevelups = false; // backfills replay history; they must not celebrate 
      cook    8 x  8 =  64
      siege   5 x 12 =  60     sieges are rare anyway, this is a backstop
    Levels are NOT capped and are not meant to be (Tom, 2026-08-16). The ladder
-   just has to be climbed rather than farmed. */
-export const XP_DAILY_CAP = { fight: 12, garden: 10, cook: 8, siege: 5 };
+   just has to be climbed rather than farmed.
+     log    20 x 10 = 200     QA round A, 2026-09-03 (L1): the log key was
+                             `log-${entry.id}` and entry.id is newId(), which is
+                             Date.now() plus randomness, so it was the SAME bug
+                             one variable hop away and the static lint missed it.
+                             5 re-logs from the recents row = 15 taps for +50 XP,
+                             uncapped, level 20 in ~53 minutes of tapping. The
+                             ledger row also outlived its log row, so log-then-
+                             delete kept every XP. Twenty is above any honest
+                             day (three meals of five items each is fifteen);
+                             past it a log still counts for streak, variety,
+                             marrow and badges, which are recomputed from the log
+                             store and so fall honestly when rows are deleted.
+                             The minted XP is now bounded per DAY by construction,
+                             like every other repeatable, which is the invariant
+                             that lets a permanent mint stand after a delete. */
+export const XP_DAILY_CAP = { fight: 12, garden: 10, cook: 8, siege: 5, log: 20 };
 
 /* Award a repeatable action against its daily ceiling.
    The key is `${prefix}-${date}-${n}`, so it is bounded by construction: dedupe
@@ -137,18 +152,34 @@ export const XP_DAILY_CAP = { fight: 12, garden: 10, cook: 8, siege: 5 };
    once the day's ceiling for that source is spent, which is the same thing
    award() already returns for a duplicate, so every caller's `if (g)` still
    means "something was actually granted". */
-export async function awardCapped(prefix, type, xp, label, cap, date) {
+export async function awardCapped(prefix, type, xp, label, cap, date, ref = null) {
   const d = date || dateKey();
   for (let n = 1; n <= cap; n++) {
     const key = `${prefix}-${d}-${n}`;
+    /* `ref` is the thing being paid for (the log entry's id). Keying by ordinal
+       made the ceiling hold but dropped the per-entry dedupe the old
+       `log-<entry.id>` key gave for free: reward-sop-audit's streak driver
+       (gate7, 2026-09-04) ran onFoodLogged twice on ONE entry and the second
+       call took slot n+1 for 10 XP. So: a slot that already names this ref
+       means this entry was paid, return 0; a slot naming another ref is simply
+       taken, move on. The row carries `ref` (awardOnce's extra) so the check is
+       one keyed get per slot, no store scan. */
+    if (ref != null) {
+      const have = await db.get('xp', key);
+      if (have) { if (have.ref === ref) return 0; continue; }
+    }
     /* `claimed`, not the xp number, decides whether this slot was ours. A
        second tab racing for the same n loses the addIfAbsent inside awardOnce
        and must move on to n+1 rather than being paid for a row it did not
        write. Measured before this: two tabs each pushing 12 awards against a
        12/day ceiling wrote the correct 12 rows and PAID 190 XP against a cap
        of 120, because both were told they had granted the same key. */
-    const r = await awardOnce(key, type, xp, label, d);
+    const r = await awardOnce(key, type, xp, label, d, ref != null ? { ref } : null);
     if (r.claimed) return r.xp;
+    /* Lost the claim. If the winner was our own twin (two overlapping calls
+       for one entry: reward-sop's "twoAtOnce" line paid 320 against 310), the
+       entry is paid and we stop here instead of taking the next slot. */
+    if (ref != null && (await db.get('xp', key))?.ref === ref) return 0;
   }
   return 0;
 }
@@ -413,9 +444,17 @@ export function badgeCheck(id, st) {
   }
 }
 
-async function buildStats() {
+/* Exported for tests/drip-badge-audit.mjs only; the app reaches it through
+   evaluateBadges. */
+export async function buildStats() {
+  /* THE LOOK, NOT THE RAW KV (QA round 23 F4). `drip-6` read kv `equipped`, while
+     transmog writes kv `transmog`, so a slot hidden in the Dressing Room still
+     counted as drip and the badge could not see what the player actually wears.
+     equipped() is the one resolution every renderer draws from; the badge reads
+     the same picture. (collector-10 counts inventory rows and lands on day 2-3
+     without the Wardrobe ever being opened: noted, not redesigned here.) */
   const [log, weights, xp, health, inv, eq] = await Promise.all([
-    db.all('log'), db.all('weights'), db.all('xp'), db.all('health'), db.all('inv'), kvGet('equipped', {}),
+    db.all('log'), db.all('weights'), db.all('xp'), db.all('health'), db.all('inv'), equipped(),
   ]);
   const defaults = new Set(BH_SLOTS.filter(s => s.default).map(s => s.code));
   return {
@@ -453,7 +492,13 @@ async function buildStats() {
   };
 }
 
-// Awards any newly earned badges (+25 xp each). Returns the badge objects.
+/* What one badge pays. Exported because the screen that TRIGGERS a badge has to
+   be able to say what it just minted: a fight that unlocks one mints this on top
+   of its own reward, and the victory card used to report only the fight's half
+   (QA round 20, R20-P6: the Wanderer card said +160 XP against a ledger of 185). */
+export const BADGE_XP = 25;
+
+// Awards any newly earned badges (+BADGE_XP each). Returns the badge objects.
 export async function evaluateBadges() {
   const st = await buildStats();
   const out = [];
@@ -466,7 +511,7 @@ export async function evaluateBadges() {
        its answer that is unambiguous: `xp` is 25 for a fresh badge and 0 for a
        duplicate, but it is also 0 for any payload that legitimately pays no XP,
        which is the v390 ambiguity this pair exists to end. */
-    if (badgeCheck(b.id, st) && (await awardOnce('badge-' + b.id, 'badge', 25, b.name)).claimed) out.push(b);
+    if (badgeCheck(b.id, st) && (await awardOnce('badge-' + b.id, 'badge', BADGE_XP, b.name)).claimed) out.push(b);
   }
   return out;
 }
@@ -495,11 +540,17 @@ async function streakAwards(streak) {
 // A level crossed by this log is announced by awardOnce's `bh-levelup` event, not here.
 export async function onFoodLogged(entry, { via = null, targets = null, entriesForDate = [] } = {}) {
   let gained = 0;
-  const logXp = await award(`log-${entry.id}`, 'log', 10, 'Logged a food', entry.date);
+  /* Capped and keyed by DATE, never by entry.id: see XP_DAILY_CAP.log. The
+     date is the entry's own, so a backdated log spends that day's ceiling. */
+  const logXp = await awardCapped('log', 'log', 10, 'Logged a food', XP_DAILY_CAP.log, entry.date, entry.id);
   gained += logXp;
   gained += await award(`firstlog-${entry.date}`, 'firstlog', 15, 'First log of the day', entry.date);
-  if (via === 'scan') gained += await award(`scan-${entry.date}-${entry.foodId || entry.id}`, 'scan', 15, 'Barcode scan', entry.date);
-  if (via === 'label') gained += await award(`label-${entry.foodId || entry.id}`, 'label', 20, 'Label scan', entry.date);
+  /* The fallback used to be `|| entry.id`, which is newId() and so a fresh key
+     per scan: tests/xp-key-provenance-lint.mjs (QA round A, 2026-09-03) traced
+     both to the clock. Every food-backed log carries food.id, so the fallback
+     only ever names an id-less scan, and one such award per key is the bound. */
+  if (via === 'scan') gained += await award(`scan-${entry.date}-${entry.foodId || 'nofood'}`, 'scan', 15, 'Barcode scan', entry.date);
+  if (via === 'label') gained += await award(`label-${entry.foodId || 'nofood'}`, 'label', 20, 'Label scan', entry.date);
 
   const tot = dayTotals(entriesForDate);
   if (targets && targets.p && tot.p >= targets.p) {
@@ -749,6 +800,34 @@ export async function awardDayCloseIfDue(targets) {
   return closed ? { date: y, closed: true, gap } : consoled ? { date: y, consoled: true, gap } : null;
 }
 
+/* THE DAY-CLOSE AS A ROW THE PLAYER CAN READ LATER. QA round 24 L16: the two
+   toasts above are the ONLY delivery of the day-close, at 3.4s/3.6s inside a
+   queue that caps at 4 and drops the oldest, so a boot that also pays a welcome
+   kit, a merchant refund and a den ceiling can drop the golden crate's notice on
+   the floor, and nothing persistent on Today ever says the day closed.
+   DERIVED, NOT STORED. The `dayclose-<date>` / `dayeffort-<date>` ledger rows
+   ARE the receipt (that is what the ledger is for), so this reads the newest one
+   and hands renderToday a news-shaped row with the toast's exact copy, dated to
+   the closed day. No second store to drift, no producer change: the policy at
+   the award() calls above is untouched.
+   `gap` is recovered from the row itself: ts is the day the settle ran, date is
+   the day settled, and the toast said "your last logged day" exactly when those
+   are not adjacent. Only the NEWEST row is surfaced; older closes age out with
+   the list. */
+export function dayCloseNews(xpRows) {
+  let r = null;
+  for (const x of xpRows) {
+    if (x.type !== 'dayclose' && x.type !== 'dayeffort') continue;
+    if (!r || x.date > r.date) r = x;
+  }
+  if (!r) return null;
+  const gap = addDays(dateKey(new Date(r.ts)), -1) !== r.date;
+  const title = r.type === 'dayclose'
+    ? (gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned')
+    : (gap ? 'You logged your last day here. That counts: Common Crate earned' : 'You logged yesterday. That counts: Common Crate earned');
+  return { id: `dayclose-${r.date}`, type: r.type, title, date: r.date };
+}
+
 /* THE RETROACTIVE BACKFILL, AND THE BOOT LOOP IT USED TO CAUSE.
  *
  * This is the one-shot replay that honours a pre-RPG install's history: about
@@ -875,10 +954,17 @@ async function runInitBackfill(targets, onProgress) {
      list is derived deterministically (IndexedDB key order for log and weights,
      a sorted date set), which is what makes an index into one of them a
      resumable position at all. */
+  /* The replay keys log XP the way onFoodLogged does now, `log-<date>-<n>`,
+     with n the row's ordinal within its day (byDate is in IndexedDB key order,
+     so it is deterministic), and stops paying at XP_DAILY_CAP.log. Computed
+     here rather than probed through awardCapped: probing costs n adds per row
+     and this is the boot path the 12s dead-shell timer watches. */
+  const ord = new Map();
+  for (const es of byDate.values()) es.forEach((e, i) => ord.set(e.id, i + 1));
   const phases = [
     { id: 'log', items: log.slice(-400),
-      key: e => `log-${e.id}`,
-      run: e => award(`log-${e.id}`, 'log', 10, 'Logged a food', e.date) },
+      key: e => `log-${e.id}`,   // checkpoint label only, not an award key
+      run: e => { const n = ord.get(e.id); return n > XP_DAILY_CAP.log ? 0 : awardOnce(`log-${e.date}-${n}`, 'log', 10, 'Logged a food', e.date, { ref: e.id }).then(r => r.xp); } },
     { id: 'firstlog', items: dates,
       key: d => `firstlog-${d}`,
       run: d => award(`firstlog-${d}`, 'firstlog', 15, 'First log of the day', d) },
@@ -1138,6 +1224,14 @@ export function parseHkPayload(input) {
   const date = dm ? dm[0] : dateKey();
   const steps = num(params.steps) != null ? Math.round(num(params.steps)) : null;
   const active = num(params.active ?? params.activekcal) != null ? Math.round(num(params.active ?? params.activekcal)) : null;
+  /* QA round 25 M10: activeKcal was the one unbounded number in this parser.
+     A 6,000 typo (for 600) flowed through activeCalorieBonus and added +2,504
+     kcal to an 800 kcal day. Same treatment as weightKg below: out of range is
+     unreadable, so null, never clamped to the edge. Range 0..4000 kcal/day: a
+     marathon is roughly 2,600 to 3,000 active kcal, so 4,000 keeps every real
+     day and drops the added-digit typos (5000, 60000). `num` already rejects
+     negatives. */
+  const activeKcal = active != null && active <= 4000 ? active : null;
   let weightKg = num(params.weightkg);
   const wlb = num(params.weightlb);
   if (weightKg == null && wlb != null) weightKg = wlb * 0.45359237;
@@ -1147,7 +1241,7 @@ export function parseHkPayload(input) {
   const cycleKm = num(params.cyclekm);
   const workouts = num(params.workouts) != null ? Math.round(num(params.workouts)) : null;
 
-  if (steps == null && active == null && weightKg == null &&
+  if (steps == null && activeKcal == null && weightKg == null &&
       exerciseMin == null && cycleKm == null && workouts == null && !wtypes) return null;
-  return { date, steps, activeKcal: active, weightKg, exerciseMin, cycleKm, workouts, wtypes };
+  return { date, steps, activeKcal, weightKg, exerciseMin, cycleKm, workouts, wtypes };
 }

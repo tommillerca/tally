@@ -144,6 +144,24 @@ ok('PARSES every audit is something Node will actually execute',
    FIXED ONE? Delete its line. The row fails on a stale entry too, so the
    inventory cannot quietly rot into a list nobody maintains. */
 const SEAM_ONLY_KNOWN = [
+  /* dead-shell-audit's exposeFunction binding is an INSTRUMENT, not a stand-in
+     for the feature. It kills a real shell and drives a real reload; the binding
+     only COUNTS document loads from outside the page, which is the whole point
+     — reading a flag the page sets would trust the thing under test. It replaced
+     a framenavigated listener on 2026-09-03 because that event also fires for
+     same-document navigation and was calling a healthy app a reloading one.
+     The distinction this list cares about — an audit that passes while the
+     player-facing path is broken — does not apply: the player-facing path IS
+     what it drives. */
+  'dead-shell-audit.mjs',
+  /* reveal-mannequin-audit builds its cards through the webdriver-only __gearCard
+     and __crateCard seams. Reaching a real reveal needs a crate in hand or a den
+     win inside a GPS radius, neither of which a harness can arrange without
+     faking the very grant under test. The compensating control is its COVERAGE
+     row, which is STATIC and derived from js/app.js: a new reveal that ships a
+     bare `imgSrc: bhAsset(...)` card fails there even though this audit never
+     taps it. Added 2026-09-03. */
+  'reveal-mannequin-audit.mjs',
   /* The two levelpaid tools (#265) are skip-tiered INVESTIGATION instruments,
      not guards: the tracer asserts nothing and the repro deliberately exits 1
      on machines too fast to mint the race it reproduces. Neither is evidence
@@ -167,7 +185,6 @@ const SEAM_ONLY_KNOWN = [
   'fight-tray-audit.mjs',
   'freeze-reveal-audit.mjs',
   'lb-profile.mjs',
-  'motion-truth-audit.mjs',
   'nav-perf-audit.mjs',
   'newcomers-audit.mjs',
   /* pack-sink-audit drives window.__packReveal because the pack reveal is the

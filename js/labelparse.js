@@ -44,6 +44,47 @@ export function parseServingGrams(text) {
   return parseFloat(m[1]); // treat ml as g (close enough for label entry, user can edit)
 }
 
+// QA round 25 M7 (HIGH): two-column European panels ("Per 100 g | Per 45 g")
+// put the per-100 g figure FIRST on every line, and firstNum() took it. A 45 g
+// serving that should read 203 kcal reached the log as 451 kcal, 189 g fat,
+// 76 g fibre with servingGrams null and warnings []: a 2.22x food, no warning.
+// The 4/4/9 check cannot see it (per-100 g figures are internally perfect).
+// Header line: contains "100 g"/"per 100" AND a serving marker (the word
+// serving/portion, or a second gram figure). Returns which column is the
+// serving one and the serving grams if the header carries them.
+// ponytail: header and values must each sit on one OCR line; a header split
+// across two lines is not detected and falls back to the old single-column read.
+function detectColumns(line) {
+  const hundred = line.match(/per\s*100|100\s*(g|ml)\b/i);
+  if (!hundred) return null;
+  const rest = line.slice(0, hundred.index) + ' '.repeat(hundred[0].length) + line.slice(hundred.index + hundred[0].length);
+  // The serving marker is "per serving"/"per portion" or a SECOND gram figure.
+  // A bare "serving" is not enough: a plain US "Serving size 100 g" line has
+  // the word and the 100 g and is one column (review catch, 2026-09-04).
+  const serving = rest.match(/\bper\s*(serving|portion)|(\d+(?:\.\d+)?)\s*(g|ml)\b/i);
+  if (!serving) return null;
+  const grams = rest.match(/(\d+(?:\.\d+)?)\s*(g|ml)\b/i); // "Per serving (30 g)": word first, grams later
+  return {
+    col: serving.index < hundred.index ? 0 : 1,
+    grams: grams ? parseFloat(grams[1]) : null,
+  };
+}
+
+// Reduce a two-column value line to its serving column: "Fat 18.9 g 8.5 g" ->
+// "Fat 8.5 g", "Energy 1892 kJ / 451 kcal 851 kJ / 203 kcal" -> "Energy 203 kcal".
+// Tokens are grouped by unit so the kJ pair never shifts the kcal pair; a line
+// with no unit group of two or more (a single value, or a stray digit in a
+// name) is left alone and read exactly as before.
+function pickColumn(line, col) {
+  const toks = [...line.matchAll(/(\d+(?:\.\d+)?)\s*(kcal|kj|mg|g)?(?![a-z])/gi)];
+  const groups = {};
+  for (const t of toks) (groups[(t[2] || '').toLowerCase()] ||= []).push(t);
+  const unit = ['kcal', 'g', 'mg', ''].find(u => (groups[u] || []).length >= 2);
+  if (unit == null) return line;
+  const first = Math.min(...toks.map(t => t.index));
+  return line.slice(0, first) + groups[unit][Math.min(col, groups[unit].length - 1)][0];
+}
+
 export function parseNutritionText(raw) {
   const text = normalize(raw || '');
   // strip old-label "calories from fat 70" so it can't shadow calories
@@ -58,8 +99,22 @@ export function parseNutritionText(raw) {
     warnings: [],
   };
 
+  let cols = null; // set once the "Per 100 g | Per serving" header is seen (M7)
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    let line = lines[i];
+    if (!cols) {
+      cols = detectColumns(line);
+      if (cols) {
+        // the header is the serving line on these panels; must run BEFORE the
+        // serving-size branch below, whose regex would read the 100 g as the serving.
+        out.servingText = out.servingText ?? line;
+        if (cols.grams != null && cols.grams !== 100) out.servingGrams = out.servingGrams ?? cols.grams;
+        out.warnings.push(`Two columns on this label; read the ${cols.col === 0 ? 'first' : 'second'} (per serving column).`);
+        continue;
+      }
+    } else {
+      line = pickColumn(line, cols.col);
+    }
     const low = line.toLowerCase();
 
     if (out.servingText == null && /(serving\s*size|portion\b|^per\s+\d|^per\s+[a-z0-9/ ]*\()/i.test(low)) {
@@ -120,6 +175,19 @@ export function parseNutritionText(raw) {
   out.fiber = fixNine(out.fiber, out.carbs);
   out.sugar = fixNine(out.sugar, out.carbs);
   out.addedSugar = fixNine(out.addedSugar, out.sugar);
+
+  // QA round 25 M7: the primary guard. Fat + carbs + protein cannot weigh more
+  // than the serving they sit in. Runs BEFORE the >250 clearing rule because
+  // that rule cannot see this failure: on the 45 g panel every misread macro
+  // (19, 58, 76 g with the decimal point lost) was under 250 and survived.
+  // 15% slack for rounding and label tolerances. The confirm sheet renders
+  // warnings[] above the fields, so this is what the player sees before Save.
+  if (out.servingGrams != null && out.fat != null && out.carbs != null && out.protein != null) {
+    const mass = out.fat + out.carbs + out.protein;
+    if (mass > out.servingGrams * 1.15) {
+      out.warnings.push(`Fat, carbs and protein add up to ${Math.round(mass)} g, more than the ${out.servingGrams} g serving. These numbers look like per-100 g, not per serving. Check each value before saving.`);
+    }
+  }
 
   // Plausibility guards against stray OCR junk
   for (const k of ['fat', 'satFat', 'transFat', 'carbs', 'fiber', 'sugar', 'addedSugar', 'protein']) {

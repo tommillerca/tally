@@ -71,7 +71,14 @@ const order = await page.evaluate(async () => {
   // "mode === 'spire'" now lands on the wrong one. Anchor on the claim branch's own
   // first line instead, which cannot be confused with the siege one.
   const i = src.indexOf('// REMOTE FIRST.');
-  const block = src.slice(i, i + 2400);
+  /* THE WINDOW IS A BUDGET FOR COMMENTS, WHICH IS NOT A PROPERTY OF THE CODE.
+     2400 left 71 characters of slack before the last thing this block looks for
+     ('walls hold'), so the R20-P2 refund comment turned three checks red on code
+     that satisfies every one of them. A window that goes red when someone
+     EXPLAINS the branch is measuring prose, not order (see "Audit drift = false
+     RED"). Raised to 3600, which is the same branch plus room to document it;
+     every assertion below still pins the order, not the length. */
+  const block = src.slice(i, i + 3600);
   const iRemote = block.indexOf('claimSpireRemote');
   const iLocal = block.indexOf('await claimSpire(');
   /* PIN THE PROPERTY, NOT ONE BUILD'S PUNCTUATION. This was

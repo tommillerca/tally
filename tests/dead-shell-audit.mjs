@@ -34,14 +34,26 @@ const ok = (n, p, d = '') => { console.log(`${p ? 'PASS' : 'FAIL'}  ${n}${d ? ' 
 
 const puppeteer = await loadPuppeteer();
 
-/* Count real navigations, which is the only way to tell "reloaded once" from
-   "reloaded forever". A framenavigated listener on the top frame is the honest
-   counter; reading a flag the page sets would trust the thing under test. */
+/* Count real DOCUMENT LOADS, which is the only way to tell "reloaded once" from
+   "reloaded forever". Reading a flag the page sets would trust the thing under
+   test, so the count comes from outside the page.
+   NOT framenavigated, as of 2026-09-03. That event also fires for SAME-DOCUMENT
+   navigation, and boot now does `history.replaceState(null,'','#/today')` when
+   the hash is absent (js/app.js:1353) to stop the first tab tap being classified
+   as a cross-tab nav. A replaceState reloads nothing and a player sees nothing,
+   but it made this audit report "2 navigation(s)" and call a healthy app a
+   reloading one. Measured: unmodified origin/main reports 1, this tree reported
+   2, and deleting only that replaceState took it back to 1 -- so the app was
+   fine and the counter was wrong.
+   evaluateOnNewDocument runs ONCE PER REAL DOCUMENT and never on a same-document
+   navigation, and an exposeFunction binding survives navigations, so the page
+   telling us "a new document started" is the honest signal. */
 const session = async (blockRe, waitMs) => {
   const browser = await puppeteer.launch({ headless: 'new', defaultViewport: { width: 430, height: 932 }, executablePath: chromePath(), args: sandboxArgs() });
   const page = await browser.newPage();
   let navs = 0;
-  page.on('framenavigated', f => { if (f === page.mainFrame()) navs++; });
+  await page.exposeFunction('__docStarted', () => { navs++; });
+  await page.evaluateOnNewDocument(() => { try { window.__docStarted(); } catch { /* binding not up yet on the very first doc */ } });
   if (blockRe) {
     await page.setRequestInterception(true);
     page.on('request', r => { blockRe.test(r.url()) ? r.abort('failed').catch(() => {}) : r.continue().catch(() => {}); });

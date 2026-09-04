@@ -74,6 +74,19 @@ await dismissOverlays(page);
    EMPTY moved with them: it is asserted on the banner, which is where an empty
    podium can now render an empty frame. */
 
+/* THE CARD LIVES INSIDE THE COLLAPSED NEWS PILL SINCE 2026-09-03. Tom: "today
+   still has the step challenge winner and monster banner at the bottom these
+   should be gone now things will live in the collapsed news pill." The card is
+   the same element with the same id and hydrateRaceResult still finds it, but a
+   closed <details> renders its contents display:none, so every tap below has to
+   go through the pill first. Two taps, both real, in the order a player makes
+   them: without this the rows here would measure a card nobody can reach, which
+   is the exact SEAM failure the comment under this one is about. */
+const openNewsPill = async () => {
+  await page.click('#newsBanner > summary').catch(() => {});
+  await new Promise(r => setTimeout(r, 400));
+};
+
 /* Give the art a bounded moment to decode. Bounded, not unconditional: if it
    never decodes the REAL row below still goes red, which is the point. */
 await page.evaluate(() => { location.hash = '#/'; });
@@ -83,6 +96,7 @@ await new Promise(r => setTimeout(r, 1500));
    with this surface, so driving it any other way would grade a card nobody can
    necessarily reach: exactly the failure guard-hygiene-lint's SEAM row was
    written for after fifteen green rows on an unreachable Paddock viewer. */
+await openNewsPill();
 await page.waitForSelector('#raceResultCard:not([hidden]) summary', { timeout: 8000 }).catch(() => {});
 await page.click('#raceResultCard summary').catch(() => {});
 await page.waitForFunction(() => {
@@ -178,6 +192,7 @@ await page.evaluate(() => { location.hash = '#/boneyard'; });
 await new Promise(r => setTimeout(r, 1200));
 await page.evaluate(() => { location.hash = '#/'; });
 await new Promise(r => setTimeout(r, 2000));
+await openNewsPill();
 await page.click('#raceResultCard summary').catch(() => {});
 const banner = await page.evaluate(() => {
   const b = document.querySelector('#raceResultCard');
@@ -190,10 +205,18 @@ const banner = await page.evaluate(() => {
     lanes: b.querySelectorAll('.race-lane').length,
     purses: b.querySelectorAll('.rr-prize').length,
     lastPurse: (b.querySelector('.race-lane.r5 .rr-prize') || {}).textContent,
+    /* WHERE it lives, asserted rather than assumed. `eff` above walks the opacity
+       chain and a closed <details> is display:none, not opacity 0, so without
+       this row a card stranded outside the pill (or inside a pill that never
+       opens) would read green on every number it reports. */
+    inPill: !!b.closest('#newsBanner'),
+    pillOpen: !!document.querySelector('#newsBanner')?.open,
   };
 });
 ok('BANNER the settled result has a permanent home on Today',
   !banner.none && !banner.hidden && banner.eff > 0.9, JSON.stringify(banner));
+ok('BANNER and that home is the collapsed news pill, opened by a real tap',
+  !banner.none && banner.inPill && banner.pillOpen, JSON.stringify(banner));
 ok('BANNER it names the winner in the summary, so it reads collapsed',
   !banner.none && /BONY WRECKER/i.test(banner.head || ''), banner.head);
 /* Tom, 2026-08-14: "that's fine 4th and 5th can find out from the banner." So

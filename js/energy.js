@@ -34,9 +34,12 @@ function view(st) {
 // today's healthy-behaviour signal: steps walked. Meals deliberately excluded.
 async function todaySignals() {
   const today = dateKey();
-  const health = await db.all('health');
-  const steps = health.filter(h => h.date === today).reduce((a, h) => a + (h.steps || 0), 0);
-  return { steps };
+  /* QA round 25 M13 follow-up: this was a full 'health' scan filtered to one
+     date, on every Today, Pit and wallet-pill refresh. The store's keyPath IS
+     the date (js/db.js createObjectStore('health', { keyPath: 'date' })), so
+     one row per day and one keyed get answers it. */
+  const row = await db.get('health', today);
+  return { steps: (row && row.steps) || 0 };
 }
 
 // Recompute today's energy, awarding Vigor from STEPS IDEMPOTENTLY
@@ -131,4 +134,29 @@ export async function spendPitFight() {
     return undefined;   // tapped out: nothing owed, so nothing is written
   }, {});
   return used ? { ok: true, used } : { ok: false };
+}
+
+/* Hand a spent Pit fight back. Takes the `used` half of spendPitFight's answer,
+ * so a refund puts the charge back where it came from and can never launder a
+ * free fight into banked Vigor.
+ *
+ * QA round 20 (R20-P2): a rival spire takeover debits a fight at the tap, and a
+ * server 409 (the tower's 1h shield, or the attacker already at SPIRE_CAP) means
+ * NO ownership changed. The charge was gone anyway: measured, a refused takeover
+ * cost one fight and paid 40 consolation coins for a state transition that never
+ * happened. The caller carries `used` through the fight in foeCfg.charge and
+ * hands it back here on a refusal.
+ *
+ * One kvUpdate transaction for the same reason spendPitFight is one: a Pit
+ * render overlapping a read-then-write pair here would drop the refund.
+ * ponytail: a refund landing after a day rollover credits Vigor rather than the
+ * (already reset) free floor. Bounded to one charge, and only reachable by a
+ * refusal that straddles midnight; not worth a dated receipt. */
+export async function refundPitFight(used) {
+  if (used !== 'free' && used !== 'vigor') return;
+  await kvUpdate('pitEnergy', cur => {
+    const s = cur || {};
+    if (used === 'free') return { ...s, freeUsed: Math.max(0, (s.freeUsed || 0) - 1) };
+    return { ...s, vigor: clampVigor((s.vigor || 0) + 1) };
+  }, {});
 }

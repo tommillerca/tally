@@ -1001,7 +1001,11 @@ try {
      else entirely (module scope, a notification handler, a service-worker
      message) in an 18,000-line file, not a line snuck into the gap. */
   const iMap = src.indexOf('async function renderBoneyard(');
-  const iAfterMap = src.indexOf('async function buildFighter()', iMap);
+  /* `buildFighter(` not `buildFighter()`: QA r25 M13 (2026-09-04) gave it a
+     `pre = {}` parameter and the literal match read -1, so the span ran to the end
+     of the file and every reference outside it counted as "outside". Guard drift. */
+  const iAfterMap = src.indexOf('async function buildFighter(', iMap);
+  if (iAfterMap < 0) throw new Error('wanderer-boneyard-audit: buildFighter declaration not found after renderBoneyard; the span end marker moved');
   const outside = [...src.matchAll(/refreshWanderer|startWandererEncounter/g)]
     .map(m => m.index).filter(i => i < iMap || i > iAfterMap);
   ok('FOREGROUND the trigger exists only inside the Boneyard screen, so a pocketed phone is safe',

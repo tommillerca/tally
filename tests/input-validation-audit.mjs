@@ -200,6 +200,13 @@ async function reset(units = 'kg') {
   await evalPage(async u => {
     const { db, kvGet, kvSet } = await import('./js/db.js');
     await db.clear('weights'); await db.clear('log'); await db.clear('foods');
+    /* The add-sheet DRAFT lives in kv and survives this reset (QA r25 M16,
+       2026-09-04): the previous ACCEPT case's Save opened the portion sheet,
+       which stamped a draft, and the reload below RESTORED that sheet over the
+       food form, so the next case's Save tap never reached #ffSave and gate8
+       read rows:0 on four healthy cases. The feature is right; the fixture
+       predates it. A fresh case starts with no draft, like a fresh install. */
+    await db.del('kv', 'addDraft');
     const s = (await kvGet('settings', null)) || {};
     s.units = u;
     s.profile = { sex: 'm', age: 30, heightCm: 178, weightKg: 82, activity: 'moderate', goal: 'recomp' };
@@ -326,8 +333,17 @@ async function openFoodForm() {
   await page.waitForSelector('#newFood', { timeout: 12000 });
   await evalPage(() => document.querySelector('#newFood').click());
   await page.waitForSelector('#ffSave', { timeout: 6000 });
-  await typeInto('#ffName', 'Audit food');
+  /* A UNIQUE NAME PER CASE (2026-09-04). The FOOD surfaces reset with
+     db.clear('foods') and NO reload, so the page's in-memory food list still
+     holds the previous case's 'Audit food' while the store is empty. Since QA
+     r25 M18 the form warns "You already have 'Audit food'. Save anyway?" and
+     the first Save tap shows the box instead of writing (the designed
+     tap-through), so every ACCEPT case after the first successful save read
+     rows:0 on gate8 with healthy code. A player cannot reach that desync; the
+     fixture could. Distinct names keep each case a first save. */
+  await typeInto('#ffName', `Audit food ${++auditFoodN}`);
 }
+let auditFoodN = 0;
 const foodsRead = () => evalPage(async () => {
   const all = await (await import('./js/db.js')).db.all('foods');
   const f = all[0];

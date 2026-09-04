@@ -214,17 +214,20 @@ const SITES = [
       + 'STATIC rule below, and tests/hollow-audit.mjs drives the surface for real: it '
       + 'asserts the pet is absent on a first visit and present afterwards.',
   },
-  {
-    key: 'today-hype-banner', claim: "petAsideHtml(petFrom(null, 'C6')", paired: false, undriven:
-      'the Today hype banner draws Bumbleseal as a MARKETING PLATE of a species, not as '
-      + "anybody's pet: there is no Bonehead beside her, so paired alignment has nothing to "
-      + 'measure, and there is no instance to be shiny (C6 ships no shiny art, and the player '
-      + 'being teased does not own her). It still goes through petFrom + petAsideHtml rather '
-      + 'than a hand-placed img, which is what this contract is for: she is mass-normalised '
-      + 'against every other species instead of being sized off her 2048 canvas. The one '
-      + 'failure mode here that IS real, a layer that never decodes, is asserted on pixels in '
-      + "tests/hype-banner-audit.mjs (ART, naturalWidth after an awaited decode, both viewports).",
-  },
+  /* NO ROW FOR THE NEWS PILL'S HERO BANNER, AND THAT IS A DECISION, 2026-09-03.
+     A 'today-hype-banner' row sat here until that morning, registering the Today
+     hype banner's `petAsideHtml(petFrom(null, 'C6')` call: Bumbleseal drawn as a
+     marketing plate beside two creatures. The banner was deleted that morning and
+     rebuilt the same day as ONE featured banner inside the news pill, one subject
+     rather than two halves, and the subject it lost is the seal: the hero draws
+     raw creature plates through hypePlateHtml, which is a measured alpha box and
+     a transform, not the pet contract and not the avatar stack. There is no pet
+     call site there to register, so a row here would be a claim string COVERAGE
+     never matches and an `undriven` reason describing something the app does not
+     do. The failure that IS real on that surface, a plate that never decodes, is
+     asserted on pixels in tests/hype-banner-audit.mjs (ART, naturalWidth after an
+     awaited decode, both viewports). If the hero ever draws a pet again, it needs
+     a row here on the same day. */
   {
     key: 'emporium-pet-hero', claim: 'pet-hero-art', paired: false, undriven:
       'the SHOP SHELF, not the player\'s own figure: Bumbleseal is drawn at 176 in Gwart\'s '

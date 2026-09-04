@@ -42,18 +42,47 @@ const cards = await page.evaluate(() => {
   const over = document.querySelector('.fight-over');
   if (!over) return { none: true };
   const cvs = [...over.querySelectorAll('canvas.pc-canvas')];
-  const read = cv => {
-    const ctx = cv.getContext('2d');
-    const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+  /* THE MANNEQUIN IS ART TOO (2026-09-03). packCardHtml stopped emitting a
+     .pc-canvas for anything the crop table can place: a gear reveal now draws
+     the piece WORN, as a stack of <img> layers inside .pc-worn. The canvas
+     sample went to zero, so the positive control below correctly refused to
+     grade an empty set -- and that is the whole reason it exists. Widening it
+     to the mannequin keeps the row a real control rather than deleting it:
+     both art paths are read as PIXELS, so a card that renders its layers and
+     paints nothing is still caught. An <img> has no getImageData, so each
+     layer is drawn into a scratch canvas at its own natural size; the page is
+     served same-origin, so nothing taints. EVERY layer is asserted, not the
+     stack as a whole: if the base mannequin loads and the piece being revealed
+     does not, that is the empty reward card this file was written for. */
+  const countOpaque = (ctx, w, h) => {
+    const d = ctx.getImageData(0, 0, w, h).data;
     let opaque = 0;
     for (let i = 3; i < d.length; i += 4) if (d[i] > 8) opaque++;
-    return { w: cv.width, h: cv.height, opaquePx: opaque, art: cv.getAttribute('data-art') };
+    return opaque;
   };
+  const read = cv => ({
+    w: cv.width, h: cv.height, art: cv.getAttribute('data-art'),
+    opaquePx: countOpaque(cv.getContext('2d'), cv.width, cv.height),
+  });
+  const readImg = im => {
+    const w = im.naturalWidth, h = im.naturalHeight;
+    const art = im.getAttribute('src');
+    // an image that never decoded has no pixels at all: report 0 and let the
+    // painted check below go red, rather than skipping it out of the sample
+    if (!w || !h) return { w, h, opaquePx: 0, art };
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(im, 0, 0);
+    return { w, h, art, opaquePx: countOpaque(ctx, w, h) };
+  };
+  const worn = [...over.querySelectorAll('.pc-worn img')];
   return {
     cardCount: over.querySelectorAll('.pack-card').length,
     names: [...over.querySelectorAll('.pc-name')].map(n => n.textContent.trim()),
     canvases: cvs.length,
-    pixels: cvs.map(read),
+    wornLayers: worn.length,
+    pixels: [...cvs.map(read), ...worn.map(readImg)],
     iconCards: over.querySelectorAll('.pc-icon').length,
   };
 });
@@ -62,9 +91,11 @@ console.log('victory screen says:', dump);
 console.log('victory cards:', JSON.stringify(cards));
 check('the victory screen rendered', !cards.none);
 check('it shows at least one reward card', cards.cardCount > 0, `${cards.cardCount} cards`);
-// an empty sample set is a FAILURE: if there is no canvas we have not tested the bug
-check('at least one card uses canvas art (else this proves nothing)', cards.canvases > 0, `${cards.canvases} canvases`);
-if (cards.canvases > 0) {
+// an empty sample set is a FAILURE: with neither a canvas nor a worn layer to
+// read, nothing below has tested the bug (see the note in the evaluate above)
+check('at least one card uses readable art, canvas or mannequin (else this proves nothing)',
+  cards.pixels.length > 0, `${cards.canvases} canvases, ${cards.wornLayers} worn layers`);
+if (cards.pixels.length > 0) {
   for (const px of cards.pixels) {
     check(`the art is actually PAINTED (${(px.art || '').split('/').pop()})`, px.opaquePx > 200, `${px.opaquePx} opaque px of ${px.w}x${px.h}`);
   }

@@ -60,7 +60,11 @@ export const MIMIC_ART = {
   loop: 'assets/bh/mimic/mimic-loop.gif',
 };
 
-// one in every MIMIC_SHARE buried crates is not a crate
+/* one in every MIMIC_SHARE buried crates is not a crate.
+   WENT 3 -> 5 ON 2026-09-03 AND STRAIGHT BACK. The theory was that nobody had
+   ever reported meeting a Mimic, so it must be too rare. A player told Tom the
+   shipped rate is good, and the shipped rate is this one: nothing had been
+   deployed, so every opinion in the world was formed on 3. Leave it. */
 export const MIMIC_SHARE = 3;
 
 /* IS THIS CHEST A MIMIC? DERIVED, NEVER ROLLED.

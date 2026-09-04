@@ -20,17 +20,46 @@ export function bmrMifflin({ sex, age, heightCm, weightKg }) {
   return 10 * weightKg + 6.25 * heightCm - 5 * age + (sex === 'm' ? 5 : -161);
 }
 
+/* The lowest calorie target this app will hand anyone: the person's own resting
+   metabolic rate, and never under 1,200. QA round 25, M3: Sedentary x Lose fat
+   is 1.2 x 0.80 = 0.96 x BMR, so 1,816 of 54,600 realistic adult profiles were
+   targeted BELOW what their body burns lying still, and the bare 1,200 floor
+   (which has no sex term, unlike every other line here) caught none of them.
+   Shared by computeTargets and the manual editor so the two paths cannot drift. */
+export function kcalFloor(profile) {
+  return Math.max(1200, Math.round(bmrMifflin(profile)));
+}
+
 // profile: {sex, age, heightCm, weightKg, activity (id), goal (id)}
 export function computeTargets(profile) {
   const act = ACTIVITY_LEVELS.find(a => a.id === profile.activity) || ACTIVITY_LEVELS[1];
   const goal = GOALS.find(g => g.id === profile.goal) || GOALS[2];
   const bmr = bmrMifflin(profile);
   const tdee = bmr * act.factor;
-  const kcal = Math.max(1200, Math.round(tdee * (1 + goal.adj) / 10) * 10);
+  const kcal = Math.max(kcalFloor(profile), Math.round(tdee * (1 + goal.adj) / 10) * 10);
   const p = Math.round(goal.protein * profile.weightKg);
   const f = Math.max(Math.round(kcal * 0.25 / 9), Math.round(0.6 * profile.weightKg));
   const c = Math.max(0, Math.round((kcal - p * 4 - f * 9) / 4));
   return { kcal, p, c, f, bmr: Math.round(bmr), tdee: Math.round(tdee) };
+}
+
+/* A hand-typed target (Settings > Daily targets). QA round 25, M2: the editor
+   wrote kcal, protein, carbs and fat as four INDEPENDENT fields, so 800 kcal was
+   stored with the 2,571 kcal of macros computed for the old figure still on top,
+   and 800 went under the floor the computed path applies, for anyone. Here the
+   calorie figure is the truth: protein and fat may be typed (null = the plan's
+   own numbers), carbs is always the remainder, and a figure the floor or the
+   arithmetic cannot honour is refused rather than stored.
+   Returns {ok:true, targets:{kcal,p,c,f}} or {ok:false, problem}. */
+export function manualTargets(profile, { kcal, p = null, f = null }) {
+  const floor = kcalFloor(profile);
+  if (kcal < floor) return { ok: false, problem: `Calorie target must be at least ${floor} kcal, your resting rate` };
+  const goal = GOALS.find(g => g.id === profile.goal) || GOALS[2];
+  const pp = p == null ? Math.round(goal.protein * profile.weightKg) : Math.round(p);
+  const ff = f == null ? Math.max(Math.round(kcal * 0.25 / 9), Math.round(0.6 * profile.weightKg)) : Math.round(f);
+  const c = Math.round((kcal - pp * 4 - ff * 9) / 4);
+  if (c < 0) return { ok: false, problem: 'Protein and fat alone add up to more than the calorie target' };
+  return { ok: true, targets: { kcal: Math.round(kcal), p: pp, c, f: ff } };
 }
 
 // Your activity level IS an assumed daily active burn: BMR x (factor - 1). That
@@ -73,6 +102,21 @@ export function selGrams(food, sel) {
   const s = food.servings && food.servings[sel.idx];
   if (s && s.g != null) return s.g * sel.qty;
   return null;
+}
+
+/* Grams to preselect when the player taps the grams chip: the portion they were
+   already looking at. QA round 25 M12(b)(c): app.js used to derive this as
+   round(kcal / per100.kcal * 100), which is 0/0 = NaN for Diet soda (the corpus's
+   one 0 kcal food, so every field read NaN and Add refused) and rounds a 1 tsp
+   olive oil portion from 4.5 g to 5 g (40 to 44 kcal). The serving's own grams
+   are known, so use them; divide by kcal only for perServing-only foods, and
+   never by zero. */
+export function gramsChipDefault(food, sel) {
+  const g = selGrams(food, sel);
+  if (g != null && isFinite(g)) return g;
+  const cur = nutrientsFor(food, sel);
+  if (cur && food.per100 && food.per100.kcal > 0) return Math.round((cur.kcal / food.per100.kcal) * 100);
+  return 100;
 }
 
 export function nutrientsFor(food, sel) {

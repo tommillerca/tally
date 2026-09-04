@@ -90,6 +90,18 @@ export function bearingDeg(lat1, lng1, lat2, lng2) {
 export const SPAWN_TYPES = {
   bones: { label: 'Bone cache', xp: 16, weight: 5 },
   coins: { label: 'Coin pile', coins: 12, xp: 6, weight: 5 },
+  /* WEIGHT STAYS 1, and there is now a measurement saying it has to.
+     Raised to 4 on 2026-09-03 to make Mimics findable, then reverted: a player
+     reported the shipped rate is good (and the shipped rate is 1, since none of
+     this was deployed). tests/boneyard-supply-audit.mjs then proved the change
+     was unshippable anyway. Coins per cell against a v400 faucet ceiling of
+     46.54, measured at each weight:
+         weight 1 -> 41.46  PASS      weight 3 -> 71.24  FAIL
+         weight 2 -> 57.35  FAIL      weight 4 -> 83.59  FAIL (and herbs fall
+                                        to 2.59, under the 2.6 Kitchen floor)
+     A crate CARRIES coins, so there is no weight above 1 that keeps the faucet
+     inside its cap. Making chests commoner requires cutting what a chest pays,
+     which is a separate decision nobody has taken. */
   crate: { label: 'Buried crate', crate: 'daily', xp: 6, weight: 1 },
   rare:  { label: 'RARE spawn', crate: 'egg', xp: 80, weight: 0 }, // placed explicitly on lucky days
   /* THE FOOD SPAWN. It used to be the garden's presence on the map and its whole

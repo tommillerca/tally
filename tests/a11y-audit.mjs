@@ -192,6 +192,34 @@ const TARGETS = [
   { surface: 'build', sel: '#gearBtn',      why: 'the floating Settings gear (route() hides it on Today/Settings/Boneyard)' },
   { surface: 'shop',  sel: '#gwGear',       why: "the Emporium's own Settings gear" },
   { surface: 'shop',  sel: 'button.t3-price', why: 'buy', all: true },
+  /* THE LOGGING PATH, QA round 25 M24 (the a11y half), 2026-09-04. Until this
+     block the registry held not one control from the Add or Portion sheets:
+     the thing a player touches most, every day, and the surface this audit was
+     never pointed at. So `.sheet-close` shipped at 44x41 (its own min-height: 44px
+     at app.css ~445 is shadowed by `.t1-icon-btn`'s min-height: 40px 6,283 lines
+     later at the SAME specificity), `#favBtn` at 40x41 and `#qtyIn` at 181x31,
+     all with this file green. Third guard of the round found testing above the
+     layer its bug lives at (after the xp-cap lint and the log-write injection).
+     PROVE-RED: with the three M20 CSS fixes reverted (`.t1-tools .t1-icon-btn`
+     and the `.t1-step .val input` min-height), exactly these three rows go red
+     on both viewports: #favBtn, the portion sheet's .sheet-close, #qtyIn. Every
+     other row here already sits on a 44px+ recipe (.t1-seg button 44, .t1-step
+     button 56, .t1-search input 48, .t1-frow 64, .btn ~54) and stays green.
+     .sheet-close is scoped to the TOP sheet (#sheets > div:last-child): on the
+     portion surface the Add sheet is still mounted underneath with its own
+     .sheet-close, which querySelectorAll would return first and the hit-test
+     would then report as blocked by the backdrop above it, a false red. */
+  { surface: 'add', sel: '#sheets > div:last-child .sheet-close',   why: 'Add sheet: Done (the shadowed .sheet-close)' },
+  { surface: 'add', sel: '#mealChips button',      why: 'Add sheet: meal chips', all: true },
+  { surface: 'add', sel: '#q',                     why: 'Add sheet: the search input' },
+  { surface: 'add', sel: '#results button[data-food]', why: 'Add sheet: the first result row (opens the portion sheet)' },
+  { surface: 'portion', sel: '#favBtn',            why: 'Portion sheet: favourite (a bare .t1-icon-btn, 40x40 until M20)' },
+  { surface: 'portion', sel: '#sheets > div:last-child .sheet-close', why: 'Portion sheet: Cancel (the shadowed .sheet-close)' },
+  { surface: 'portion', sel: '#servChips button',  why: 'Portion sheet: serving chips', all: true },
+  { surface: 'portion', sel: '.t1-step button',    why: 'Portion sheet: the +/- stepper', all: true },
+  { surface: 'portion', sel: '#qtyIn',             why: 'Portion sheet: the amount input (181x31 until M20)' },
+  { surface: 'portion', sel: '#pMealChips button', why: 'Portion sheet: meal chips', all: true },
+  { surface: 'portion', sel: '#addBtn',            why: 'Portion sheet: commit' },
 ];
 
 /* CONTRAST PAIRS THIS PASS IS RESPONSIBLE FOR, and where the thresholds come
@@ -202,8 +230,19 @@ const TARGETS = [
    background is the modal pixel off the render, which is the only honest read
    of a grain-blended card or a coral radial wash. */
 const CONTRAST = [
-  { surface: 'today', sel: '.hype-eye',        why: 'coral eyebrow over the coral wash', optional: true },
-  { surface: 'today', sel: '.hype-half.seal .hype-cap', why: 'coral caption over the coral wash', optional: true },
+  /* NO ROW FOR THE NEWS PILL'S HERO BANNER, 2026-09-03, and it is the driver that
+     stops it rather than the subject. Two .hype rows lived here until the Today
+     hype banner was deleted that morning; the banner came back the same day as the
+     hero slot inside the news pill, which is a <details> that is SHUT at rest. The
+     element finder below requires `offsetParent !== null`, and everything behind a
+     shut disclosure is display:none, so a row here would find nothing on every
+     run: `optional: true` would make it a check that cannot fail, and without it
+     the file goes red on healthy code. Teaching this pass to open a disclosure is
+     the honest fix and it is a change to the driver, not a row.
+     UNTIL THEN THE ARITHMETIC IS PINNED IN app.css, over the worst pixel that
+     coral wash can paint (rgb(130,62,60), both coral layers at full strength):
+     both lines of the hero's copy are --text at 6.44:1, and the comment there
+     records why the blurb cannot take --text-2 (3.48:1) or an opacity. */
   { surface: 'today', sel: '.tsec-h',          why: '--text-3 over a grain-blended card' },
   { surface: 'today', sel: '.day-title .sub',  why: '--text-3 subtitle' },
   { surface: 'today', sel: '.q-coins',         why: '--text-3 note', optional: true },
@@ -260,7 +299,30 @@ async function goTo(page, surface) {
     if (at) await page.mouse.click(at.x, at.y);
     await sleep(2800);
   }
-  if (surface !== 'pit' && surface !== 'fight') await clean();
+  /* THE LOGGING PATH (QA round 25 M24). Two sheets, reached the way a player
+     reaches them: the FAB, then a search, then the first result. A fresh audit
+     profile has no recents, so the default list is an empty note and the
+     "first result row" only exists after a query; "banana" is a built-in with
+     two servings, so the portion sheet opens in serving mode and renders #qtyIn
+     (grams mode renders #gramsIn instead, which is the same rule and the same
+     fix). #fab's handler is a plain addEventListener('click'), so .click() is
+     enough here. */
+  if (surface === 'add' || surface === 'portion') {
+    await page.evaluate(() => { location.hash = '#/today'; }); await sleep(1800);
+    await clean();
+    await page.evaluate(() => document.getElementById('fab')?.click()); await sleep(1500);
+    await page.evaluate(() => {
+      const q = document.getElementById('q');
+      if (!q) return;
+      q.value = 'banana'; q.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await sleep(900);   // the search debounce is 120ms
+    if (surface === 'portion') {
+      await page.evaluate(() => document.querySelector('#results button[data-food]')?.click());
+      await sleep(1500);
+    }
+  }
+  if (!['pit', 'fight', 'add', 'portion'].includes(surface)) await clean();
   await settle(page);
   await page.evaluate(HARNESS);
 }
@@ -631,20 +693,34 @@ async function rarityNotColourOnly(page, w, h) {
   /* INTO THE SHOT FIRST. The grid sits well below the fold on a 667px screen,
      the screenshot is the viewport, and the first version of this row reported
      "no background pixel sampled" four times rather than a ratio. */
-  await page.evaluate(() => document.querySelector('.ward-grid')?.scrollIntoView({ block: 'center', behavior: 'instant' }));
-  await sleep(400);
-  await samplePage(page, await shotOf(page));
-  const tags = await page.evaluate(() => {
+  /* ONE GRID PER SHOT (2026-09-04). QA round 23 F6 put the tier tag on the
+     look tiles too, in a second .ward-grid below the fit grid. The first version
+     of this loop scrolled the FIRST grid into view, shot the viewport once and
+     sampled EVERY .ward-rar on the page, so the look grid's tags were off-screen
+     and read "no background pixel sampled" (four reds on gate7's successor run,
+     healthy CSS). Each grid is now scrolled, shot and sampled on its own, and a
+     tag whose box is outside the viewport is skipped rather than failed. */
+  const gridCount = await page.evaluate(() => document.querySelectorAll('.ward-grid').length);
+  const tags = [];
+  for (let gi = 0; gi < gridCount; gi++) {
+    await page.evaluate(i => document.querySelectorAll('.ward-grid')[i]?.scrollIntoView({ block: 'center', behavior: 'instant' }), gi);
+    await sleep(400);
+    await samplePage(page, await shotOf(page));
+    tags.push(...await page.evaluate(i => {
     const out = [];
-    for (const t of document.querySelectorAll('.ward-rar')) {
+    const grid = document.querySelectorAll('.ward-grid')[i];
+    for (const t of grid.querySelectorAll('.ward-rar')) {
       if (!t.offsetParent) continue;
+      const r = t.getBoundingClientRect();
+      if (r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth) continue;   // not in this shot
       const fg = (getComputedStyle(t).color.match(/[\d.]+/g) || []).map(Number);
       const bg = window.__bgAt(t, fg);
       out.push({ rar: (String(t.parentElement.className).match(/\br-([a-z]+)/) || [])[1],
         v: bg ? +window.__ratio(fg, bg).toFixed(2) : null, fg: fg.slice(0, 3), bg });
     }
     return out;
-  });
+  }, gi));
+  }
   if (!tags.length) info(`${w}x${h} wardrobe: no tier tag was on screen to measure`);
   for (const t of tags) {
     const line = `${w}x${h} .ward-rar (${t.rar}): ${t.v}:1 rgb(${t.fg}) on rgb(${t.bg})`;

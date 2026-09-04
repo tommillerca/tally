@@ -1,13 +1,13 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
 import {
-  levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
+  levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
-  awardCapped, XP_DAILY_CAP,
+  awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats,
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
@@ -16,7 +16,7 @@ import {
   migrateLegacyEggs, eggProgress, repairEggAnchors, hatchEgg, lifetimeStepsSum,
   battleCharmCharges, consumeBattleCharmCharge, consumableCount, consumeConsumable, VIGOR_DRAUGHT_AMOUNT, redeemCode,
   retireMerchantIfNeeded,
-  boneDust, disenchantGear, salvagePet, gearDustValue, petDustValue, slimedGearIds,
+  boneDust, boneDustAdd, disenchantGear, salvagePet, gearDustValue, petDustValue, slimedGearIds,
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
@@ -32,11 +32,15 @@ import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQu
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP, manualWalksToday, logManualWalk, MANUAL_WALKS_PER_DAY } from './wellness.js';
 import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
-import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, showWandererEncounter, WANDERER_FIGHT, CONE_RANGE_M } from './wanderer.js';
+import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, showWandererEncounter, WANDERER_FIGHT, CONE_RANGE_M, WANDERER_ART } from './wanderer.js';
 import { isWater } from './water.js';
 import { notifPrefs, setNotifPrefs, notifPlatform, requestNotifPermission, notifPermissionState, notifyNow, syncNotifications, scheduleRares, scheduleSiegeReminder, cancelSiegeReminder } from './notify.js';
 import { snapToWalkable } from './geo.js';
-import { CHANGES, changelogUnseen, changelogLatest } from './changelog.js';
+/* js/changelog.js is 155KB of prose: 234 player-facing entries, the largest
+   single module in js/, and NOTHING on the boot path or on Today needs it. It
+   is imported on demand at its four use sites (What's New, the two unseen
+   badges, the onboarding catch-up mark) instead of being parsed at boot.
+   sw.js still precaches it, so opening What's New offline works as before. */
 import { bhIcon, hasBhIcon, BH_ICON_TINTS } from './icons-pack.js';
 import { pixCur } from './icons-pix.js';
 import * as social from './social.js';
@@ -54,7 +58,7 @@ import { BED_BOX, hlwBedArt, hlwChipHtml, hlwPriceSignHtml, hlwGhostBedHtml } fr
 import { hollowBackdropHtml } from './hollow-scene.js';
 import { spiresNear, readSpire, spireState, claimSpire, tendSpire, collectTribute, wardenFor,
   setSpireLevel, boonBonusFor, syncSieges, breakSiege, besiegedSpires, wardenTier, WARDEN_TIERS, spireKey,
-  SPIRE_RADIUS_M, SPIRE_CAP, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
+  SPIRE_RADIUS_M, SPIRE_CAP, SPIRE_SHIELD_MS, TRIBUTE_CAP_DAYS, RESOLVE_DAYS,
   BOON_PER_SPIRE, BOON_SPIRE_CAP, TRIBUTE_PER_DAY, TRIBUTE_DUST_PER_DAY } from './spires.js';
 import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
@@ -66,7 +70,7 @@ import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
 import { installPaddockSeam } from './paddock-cards.js';
 import { attachWalk } from './walk.js';
-import { refreshPitEnergy, spendPitFight, addVigor, FREE_FIGHTS } from './energy.js';
+import { refreshPitEnergy, spendPitFight, refundPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
   spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
@@ -83,7 +87,7 @@ import {
 } from './garden.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume, platformTag } from './native.js';
 import {
-  deriveStats, derived, STAT_META, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
+  deriveStats, legacyHabitStats, habitGrantPoints, derived, STAT_META, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
   applyAction, endTurn, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks,
@@ -96,7 +100,7 @@ import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, ACTIVITY_LEVELS, GOALS, kcalConsistent,
-  activeCalorieBonus, assumedActiveBurn,
+  activeCalorieBonus, assumedActiveBurn, manualTargets, gramsChipDefault,
 } from './nutrition.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
 import { lookupBarcode, searchOnline } from './sources.js';
@@ -177,6 +181,18 @@ function readNum(input, { name, min = null, max = null, optional = false, blank 
 /* The domain bounds, in one place so a new surface cannot invent its own.
    Deliberately generous: they exist to stop nonsense reaching permanent
    history, not to argue with an outlier. */
+/* The youngest age the plan form accepts. QA round 25, M1 (child safety): age 9
+   was refused, age 10 was accepted, and a 10-year-old (female, 138 cm, 32 kg,
+   sedentary, Lose fat) was handed a 1,200 kcal/day fat-loss plan with no
+   disclosure anywhere. This is the ONE place the number lives. It is UNCHANGED
+   at 10 pending the owner's call (options in the R25 report: 18 for any
+   deficit goal, 13+ maintenance only, etc.). Any goal gating by age belongs
+   in profileProblem, next to the check that reads this. */
+const MIN_AGE = 10;
+/* Shown wherever a computed target is displayed (plan preview, Settings targets).
+   Same motivating failure as MIN_AGE: zero occurrences of doctor/medical in
+   shipped js before R25. */
+const TARGET_DISCLOSURE = 'An estimate for healthy adults, not medical advice. Talk to a doctor before changing what a child eats.';
 const LIMITS = {
   kcalEntry: { min: 0, max: 20000 },      // one log row or one serving of one food
   macroG: { min: 0, max: 2000 },          // grams of protein / carbs / fat / fibre / sugar
@@ -186,7 +202,7 @@ const LIMITS = {
   weightKg: { min: 20, max: 500 },
   weightLb: { min: 44, max: 1100 },
   targetKcal: { min: 800, max: 20000 },
-  age: { min: 10, max: 120 },
+  age: { min: MIN_AGE, max: 120 },
   heightCm: { min: 90, max: 250 },
 };
 // Online/last-seen label for Crew + leaderboard. last_seen updates on the ~5-min
@@ -972,6 +988,15 @@ function mapLegendHtml(head = '<div class="leg-h">MAP KEY</div>') {
     [den(), 'Boss den', 'A landmark boss: rare gear'],
     [den(' roaming'), 'Roaming den', 'A daily den: here today, gone tomorrow'],
     [den(' secret'), 'Secret den', 'A hidden boss, only where one is buried'],
+    /* THE TWO THE KEY NEVER NAMED. Tom, 2026-09-03: "out there today doesnt even
+       have everything that is available on the boneyard". Both draw on the map
+       and neither had a row, so a player met them with no idea what they were.
+       Deliberately NOT adding the Mimic: a chest that turns out to have teeth
+       only works if the key has not already spoiled it. */
+    [`<span class="leg-wnd"><img src="${WANDERER_ART}" alt=""></span>`, 'The Wanderer',
+      'He walks a route. Step into his path'],
+    [`<span class="leg-spire"><img src="assets/brand/tomb.png" alt=""></span>`, 'Dark Spire',
+      'Take a tower and it pays you tribute'],
   ];
   return `${head}${rows.map(([m, n, d]) =>
     `<div class="leg-row"><span class="leg-ico">${m}</span><span class="leg-txt"><b>${n}</b><small>${d}</small></span></div>`).join('')}`;
@@ -1122,6 +1147,7 @@ async function boot() {
   if (S.demo && !S.settings) { await seedDemo(); S.settings = await kvGet('settings'); }
   snapSettings();
   S.userFoods = await db.all('foods');
+  await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
 
   // One-off: players who claimed the Day One Lizard before v241 got it filed in
   // the Stable and never put on their shoulder, so the celebration was followed by
@@ -1154,8 +1180,21 @@ async function boot() {
       else { updatePending = true; toast('Update ready. Leave this screen to apply', 3600); }
     });
   }
-  requestPersistence();
+  /* QA round 25 M23: the persist() answer used to be discarded. Logged once as
+     a boot fact, the way cloud_restore_failed is, so telemetry can say how many
+     devices are actually protected from eviction. No UI row yet (Tom's call). */
+  requestPersistence().then(granted => { try { trackEvent('persist', { granted }); } catch { /* analytics never breaks the app */ } });
   watchForWipe();   // listen for another tab wiping this save before it happens
+  /* QA round 25 M9: the tab that just wiped (or was wiped by another tab)
+     reloaded onto a fresh start with an EMPTY toast. db.js eraseAll() and its
+     `erased` handler leave ERASED_FLAG in sessionStorage because nothing else
+     survives the reload (kv was just cleared). Read once, then say what happened. */
+  try {
+    if (sessionStorage.getItem(ERASED_FLAG)) {
+      sessionStorage.removeItem(ERASED_FLAG);
+      toast('Everything on this device was erased.', 4600);
+    }
+  } catch { /* private mode */ }
   /* THE OTHER HALF OF THE WRITE-FAILURE SEAM. js/db.js routes every rejected
      write through one reporter and then RE-THROWS, so callers keep their control
      flow, but the reporter only calls a sink and nothing registered one: the
@@ -1247,6 +1286,7 @@ async function boot() {
     S.settings = await kvGet('settings');
     snapSettings();
     S.userFoods = await db.all('foods');
+    await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
     setTimeout(() => toast('Welcome back. Your progress was restored from your cloud backup.', 4600), 900);
   } else if (cloudRestore && cloudRestore.reason === 'decrypt') {
     /* HONEST DECRYPT FAILURE. A backup EXISTS but this device's key cannot
@@ -1319,9 +1359,29 @@ async function boot() {
   // AWAITED, before the first route(): renderToday reads 'wbReturnDay' at paint
   // time, so the pending mark must be down before the first paint reads for it.
   await maybeWelcomeBack();
+  /* THE HASH IS NORMALISED BEFORE ANYTHING BINDS TO IT. Tom, 2026-09-03: "when i
+     double tapped home it took me to the top like i asked but not in a smooth
+     way where the phone scrolled back up it just refreshed me there, very
+     jarring."
+     currentTab() reads an ABSENT hash as 'today', so the app boots onto Today
+     holding location.hash === '' and nothing ever wrote it back. bindTabs then
+     compares the tapped tab against the hash: '' !== '#/today', so the FIRST tap
+     of his double-tap was classified as a cross-tab navigation and assigned the
+     hash, which is a hashchange -> route() -> full re-render landing at the top
+     instantly. His second tap was then the first SAME-tab tap, which starts the
+     DBL_MS timer and falls through to route() 300ms later: a second full
+     re-render, also landing at the top instantly. Two rebuilds and not one
+     scrolled pixel. That is the "refreshed me there", and toTop's smooth scroll
+     never ran at all.
+     replaceState, NOT an assignment: assigning fires a hashchange, and route()
+     runs on the next line anyway, so an assignment would route the boot twice.
+     Only when there is no hash: a deep link (#/boneyard, a share target) must be
+     honoured exactly as it arrives. */
+  if (!location.hash) history.replaceState(null, '', '#/today');
   window.addEventListener('hashchange', routeFromHash);
   bindTabs();
   route();
+  restoreAddDraft().catch(() => {});   // QA round 25 M16: reopen a half-finished entry a reload would have lost
   /* Paddock cards: a webdriver-only mount seam so the audit drives the REAL builders
      and handlers before the scene shell exists, and after it lands too. A no-op in
      every real session (navigator.webdriver !== true). */
@@ -1492,6 +1552,10 @@ async function boot() {
   maybeShowRenameNotice();
   maybeNudgeRecovery();
   setTimeout(checkFriendRequests, 3000);
+  /* Survey v2 S3: a submit whose POST failed left its body in kv; one retry per
+     boot and one per return of the network. Opens nothing, shows nothing. */
+  drainSurvey2Pending().catch(() => {});
+  window.addEventListener('online', () => { drainSurvey2Pending().catch(() => {}); });
 }
 
 /* DAY ROLLOVER (v224).
@@ -1873,6 +1937,9 @@ function openRaceIntro() {
  * in some weeks, which is the worst version of wrong.
  */
 const raceResultKey = wk => 'raceResult:' + wk;
+/* The pill's unseen bookkeeping is a list of ids and the settled race is not a
+   NEWS row, so it carries its own, keyed by week: see hydrateRaceResult. */
+const raceSeenKey = wk => 'race:' + wk;
 /* RACE_RESULT_SEEN, raceOpensKey and RACE_RESULT_OPENS went with the poster on
    2026-08-25. All three counted SHOWINGS of a full-screen veil, and nothing
    shows itself any more. The cache key above stays: it is what stops the
@@ -1956,6 +2023,24 @@ async function hydrateRaceResult(el) {
     </div>`;
   card.hidden = false;
   composeAvatars(card);
+  /* AND THE PILL HAS TO SAY IT IS IN THERE. Tom's model for the pill, 2026-08-27:
+     "when there is new news there can be an icon letting them know otherwise it
+     stays collapsed and avoids being annoying." A result sealed inside a
+     collapsed pill with no dot is barely different from the deleted banner, and
+     this is the ONE announcement the player did not choose to miss.
+     Done here rather than in newsBannerHtml because the podium is fetched: the
+     markup is already on screen by the time settledPodium answers, so the count
+     renderToday computed could never have included it. Seen-ness is keyed by
+     WEEK, so next week's result lights the dot again on the same save. */
+  const seen = new Set(await kvGet('newsSeen', []));
+  if (seen.has(raceSeenKey(wk))) return;
+  const sum = card.closest('.nb')?.querySelector('summary');
+  if (!sum || sum.parentElement.open) return;
+  const dot = sum.querySelector('.nb-dot');
+  if (dot) dot.textContent = String((+dot.textContent || 0) + 1);
+  else sum.querySelector('.nb-t')?.insertAdjacentHTML('afterend', '<span class="nb-dot">1</span>');
+  const sub = sum.querySelector('.nb-sub');
+  if (sub && sub.textContent === 'Nothing new') sub.textContent = `${w.name} took the step race`;
 }
 
 /* Test hook (webdriver only), same pattern as __openFriendProfile. The poster is
@@ -2661,7 +2746,7 @@ function revealGift(g) {
   if (p.crate) cards.push({ iconHtml: crateIcon(p.crate, 130), name: p.crate === 'golden' ? 'Bone Crate' : 'Common Crate', rarity: p.crate === 'golden' ? 'rare' : 'uncommon', kind: 'CRATE', stats: 'Open it in your Backpack' });
   if (p.gearId && GEAR_BY_ID[p.gearId]) {
     const gear = GEAR_BY_ID[p.gearId];
-    cards.push({ iconHtml: `<img src="${bhAsset(BH_BY_ID[gear.artId])}" alt="" style="width:130px;height:130px;object-fit:contain">`, name: gear.name, rarity: gear.rarity, kind: 'GEAR', stats: 'Equip it in the Wardrobe' });
+    cards.push({ wear: gear.artId, imgSrc: bhAsset(BH_BY_ID[gear.artId]), name: gear.name, rarity: gear.rarity, kind: 'GEAR', stats: 'Equip it in the Wardrobe' });
   }
   if (p.dust) cards.push({ iconHtml: ICONS.dust(120), name: `${p.dust} Bone Dust`, rarity: 'uncommon', kind: 'DUST', stats: 'Spend it on how your gear looks' });
   if (!cards.length && p.coins) cards.push({ iconHtml: ICONS.coin(120), name: `${p.coins.toLocaleString()} coins`, rarity: 'common', kind: 'COINS', stats: 'Spend it in the Shop' });
@@ -2761,8 +2846,9 @@ async function cloudTroubleNotice() {
 
 async function backupNudge() {
   try {
-    const log = await db.all('log');
-    if (log.length < 20) return;
+    // count(), not all(): this only ever asked "are there 20 rows yet", and
+    // reading the whole log to answer it grows with every meal ever logged.
+    if (await db.count('log') < 20) return;
     const last = await kvGet('lastExportAt', 0);
     const nudged = await kvGet('lastNudgeAt', 0);
     const twoWeeks = 14 * 86400e3;
@@ -2850,7 +2936,13 @@ async function backupNudge() {
  * there is no #mapRecenter yet), because a tray tap that does nothing at all is
  * the complaint the block above this one exists to answer. */
 function bindTabs() {
-  const toTop = () => { $('#screen')?.scrollTo({ top: 0, behavior: 'smooth' }); return true; };
+  /* REDUCED MOTION GETS THE JUMP. Everywhere else in the app that scrolls on
+     purpose reads this flag; this one did not, so a player who asked the OS for
+     no animation still got a 900px glide. */
+  const toTop = () => {
+    $('#screen')?.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
+    return true;
+  };
   const TAB_DBL = {
     today: toTop,
     friends: toTop,   // the Crew tab (index.html data-tab="friends")
@@ -3060,6 +3152,22 @@ function route({ keepScroll = false } = {}) {
   if (!keepScroll) el.scrollTop = 0;
   maybeCelebrate();
   return Promise.resolve(done).catch(() => {}).then(() => {
+    /* AND AGAIN, NOW THAT THERE IS SOMETHING TO SCROLL. Tom, 2026-09-03: "when
+       the app opened it shot me to the middle of the today screen not where my
+       bonehead was."
+       `el.scrollTop = 0` three lines up is the ONLY reset, and it runs
+       synchronously, before any screen renderer has written a byte: every one of
+       them is async and awaits its first IndexedDB read long before it touches
+       innerHTML. On a tab-to-tab navigation that is harmless, because #screen
+       still holds the OUTGOING screen and therefore has a real scroll range to be
+       reset. On a BOOT #screen is the empty <main> from index.html, the write is
+       a no-op against a zero scroll range, and nothing re-asserted it once Today
+       landed, so whatever offset the engine restored for the scroller after
+       layout was left standing. That is why the symptom is boot-only.
+       `!== 0` rather than an unconditional write, and NAV-ONLY: refresh() passes
+       keepScroll and must still preserve the reading position (see its own
+       comment, and today-container-audit's SCROLL rows). */
+    if (isNav && el.scrollTop !== 0) el.scrollTop = 0;
     composeAvatars(el);
     /* A route lands as ONE picture.
      *
@@ -3076,7 +3184,10 @@ function route({ keepScroll = false } = {}) {
      * changing the day, closing a sheet) and hiding the screen for that would
      * flash the whole tab on every small edit. */
     const child = el.firstElementChild;
-    if (!isNav) { el.classList.add('screen-in'); markBooted(); child?.classList.add('route-in'); return; }
+    // startTalkBoxes: an in-place refresh rebuilds the screen's markup, so it
+    // rebuilds its talk boxes too, and the reveal path below is the only thing
+    // that ever typed into them. See startTalkBoxes' own note (2026-09-03).
+    if (!isNav) { el.classList.add('screen-in'); markBooted(); child?.classList.add('route-in'); startTalkBoxes(el); return; }
     return revealWhenReady(el, { cls: 'screen-in', cap: 700 }).then(() => {
       markBooted();
       /* NO FADE AT ALL ON A SWAP, AND THE CLASS STAYS EITHER WAY.
@@ -3366,13 +3477,55 @@ function findFood(id) {
   return S.userFoods.find(f => f.id === id) || GENERIC_FOODS.find(f => f.id === id) || null;
 }
 
+/* GENERIC FOOD USE LIVES IN KV, NOT IN THE FOODS STORE (QA round 24, L3).
+   This function used to return on its first line for generics ("they ship with
+   the app"), so the lastPortion the Add button had just written onto the
+   in-memory GENERIC_FOODS object died with the tab. Measured: 60 days of chicken
+   logged at "1 breast" (284 kcal), and after a relaunch the recents row offered
+   "1 small breast" at 198 kcal, a 30.3% undercount waiting for one careless tap;
+   588 meals through the real UI left 0 use counts and 0 remembered portions.
+   Generic favourites already round-trip through kv (fav-<id>, see openPortion),
+   so use does the same: ONE kv record, GEN_USE_KEY, mapping food id to
+   { useCount, lastUsedAt, lastPortion }. Never a row in 'foods' (that store is
+   customs and scans; renderFoods counts them). Bounded to GEN_USE_CAP ids, the
+   least recently used pruned first, so a player who tries every built-in food
+   over years still holds one small record. kvUpdate keeps the read-modify-write
+   in one transaction, so two tabs logging at once cannot lose a count. */
+const GEN_USE_KEY = 'genUse';
+const GEN_USE_CAP = 200;
 async function persistFoodUse(food) {
-  if (food.source === 'generic') return; // generics ship with the app
   food.useCount = (food.useCount || 0) + 1;
   food.lastUsedAt = Date.now();
+  if (food.source === 'generic') {
+    const mine = { useCount: food.useCount, lastUsedAt: food.lastUsedAt, lastPortion: food.lastPortion || null };
+    await kvUpdate(GEN_USE_KEY, cur => {
+      const m = { ...(cur || {}), [food.id]: mine };
+      const keep = Object.entries(m).sort((a, b) => (b[1].lastUsedAt || 0) - (a[1].lastUsedAt || 0)).slice(0, GEN_USE_CAP);
+      return Object.fromEntries(keep);
+    }, {});
+    return;
+  }
   await db.put('foods', food);
   const i = S.userFoods.findIndex(f => f.id === food.id);
   if (i >= 0) S.userFoods[i] = food; else S.userFoods.push(food);
+}
+
+/* The read side of the above, run wherever S.userFoods is (re)loaded: boot,
+   cloud restore, file import. GENERIC_FOODS are module singletons that every
+   consumer (defaultSel, recents, the home favourites strip at renderHome) reads
+   directly, so the persisted use AND the fav-<id> star are copied back onto the
+   objects once and nothing downstream changes. The star was persisted before
+   this but only re-read inside openPortion and renderFoods, so a cold relaunch
+   showed the home favourites strip without it (round 24). */
+async function hydrateGenericUse() {
+  const rows = await db.all('kv');
+  const use = rows.find(r => r.k === GEN_USE_KEY)?.v || {};
+  const favs = new Set(rows.filter(r => r.k.startsWith('fav-') && r.v).map(r => r.k.slice(4)));
+  for (const g of GENERIC_FOODS) {
+    const u = use[g.id];
+    if (u) { g.useCount = u.useCount || 0; g.lastUsedAt = u.lastUsedAt || 0; g.lastPortion = u.lastPortion || undefined; }
+    g.favorite = favs.has(g.id);
+  }
 }
 
 async function entriesFor(date) {
@@ -3380,19 +3533,39 @@ async function entriesFor(date) {
   return rows.sort((a, b) => a.ts - b.ts);
 }
 
-async function recentFoods(limit = 8) {
+/* RECENTS ARE RANKED BY HOW OFTEN THE PLAYER EATS THE FOOD AT THIS MEAL
+   (QA round 24, L4). This used to be recency only, so the eight rows were
+   byte-identical under all four meal chips: on a realistic 60-day diary the
+   food the player actually wanted was in the list 23.6% of the time at
+   breakfast, 5.2% at lunch, 4.9% at dinner, and 63.2% of sheet opens showed
+   none of that meal's foods, so the player typed instead (~14,946 taps and
+   keystrokes a year). Counting the same log rows per meal lifts that to
+   93.6 / 74.0 / 45.9% with the same eight slots and no new control.
+   Rule: count of log rows for this food at `meal`, descending; ties (and the
+   zero-count filler) fall back to the most recent log. The `entry` returned is
+   the latest row AT this meal when there is one (oats at breakfast, not the
+   oats snack), else the latest overall, so the one-tap relog (L9) repeats the
+   portion the player uses at this meal. The counts come from the log itself,
+   which this function already reads in full; nothing new is stored.
+   ponytail: all-time counts, so a staple abandoned a year ago keeps its slot;
+   window the count (e.g. last 90 days) if that ever shows up in playtests. */
+async function recentFoods(limit = 8, meal = null) {
   const rows = await db.all('log');
   rows.sort((a, b) => b.ts - a.ts);
-  const seen = new Set(); const out = [];
+  const by = new Map(); // key -> { entry, n: rows at this meal, last: newest ts }
   for (const r of rows) {
     const key = r.foodId || r.name;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const food = r.foodId ? findFood(r.foodId) : null;
-    out.push({ entry: r, food });
-    if (out.length >= limit) break;
+    let g = by.get(key);
+    if (!g) { g = { entry: r, n: 0, last: r.ts, atMeal: false }; by.set(key, g); }
+    if (meal == null || r.meal === meal) {
+      g.n++;
+      if (!g.atMeal) { g.entry = r; g.atMeal = true; }
+    }
   }
-  return out;
+  return [...by.values()]
+    .sort((a, b) => b.n - a.n || b.last - a.last)
+    .slice(0, limit)
+    .map(g => ({ entry: g.entry, food: g.entry.foodId ? findFood(g.entry.foodId) : null }));
 }
 
 function defaultSel(food) {
@@ -3529,7 +3702,7 @@ async function renderToday(el) {
     { period: 'week', label: 'THIS WEEK', quests: weeklyQuests(S.date, qopts), ctx: questCtx('week', qbase) },
     { period: 'month', label: 'THIS MONTH', quests: monthlyQuests(S.date, qopts), ctx: questCtx('month', qbase) },
   ];
-  const tot = dayTotals(entries);
+  const tot = shownTotals(entries);   // sum of the rounded rows, so the ring agrees with them (L8)
   const remaining = Math.round(t.kcal - tot.kcal);
   /* The zero guard its sibling at hudPct already has. NOT reachable today:
      computeTargets floors kcal at 1200 and the manual editor's own minimum is
@@ -3580,7 +3753,14 @@ async function renderToday(el) {
      identity, not a property of which date you are reading, so they no longer
      switch off when you step back a day. The toasts still only fire on today
      (see fireUnlockToasts below): a nudge is about now. */
-  const [unlockFighter, unlockGear] = await Promise.all([buildFighter(), ownedGearIds()]);
+  /* QA round 25 M13: drawing Today cost 13 full-store reads (700 to 800 ms at
+     two years of data). Five of them were buildFighter() re-reading the log, xp
+     and health stores this render had ALREADY read in full a few lines up, then
+     reading inv for ownedGearIds while this same line read inv for the same
+     set, then reading xp a second time for the level. Hand it the rows in hand.
+     Same rows, same snapshot, same fighter; only the duplicate scans go. */
+  const unlockGear = await ownedGearIds();
+  const unlockFighter = await buildFighter({ log: allLog, xpRows: allXp, health: healthRows, gOwned: unlockGear });
   const unlocks = computeHomeUnlocks({
     fighter: unlockFighter, level: lvl.level, coinBal, dustBal,
     gearOwnedCount: unlockGear.size, gearEquippedCount: Object.keys(unlockFighter.gearLo || {}).length,
@@ -3810,7 +3990,7 @@ async function renderToday(el) {
     <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(24)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
 
-  ${newsBannerHtml(newsUnseen, eq)}
+  ${newsBannerHtml(newsUnseen, eq, dayCloseNews(allXp))}
 
   ${/* QUESTS SIT DIRECTLY UNDER THE FOUR DOORS, ALWAYS. Tom, 2026-08-22: "have
        quests be always under the initial 4 buttons (backpack stable kitchen
@@ -3954,13 +4134,28 @@ async function renderToday(el) {
   </div>
   </section>
 
-  ${/* EVICTED FROM THE DAY. An announcement is not something that happened on
-       Aug 21, so it stops interrupting the line between the day header and the
-       day's own numbers and queues below the whole thing instead. */''}
-  <div class="promo-slot">
-    ${hypeBannerHtml()}
-    <details class="rr-banner" id="raceResultCard" hidden></details>
-  </div>
+  ${/* THE PROMO SLOT IS GONE. Tom, 2026-09-03: "today still has the step
+       challenge winner and monster banner at the bottom these should be gone now
+       things will live in the collapsed news pill."
+       It held two things and they are NOT the same case:
+       - the hype banner ("New Creatures") MOVED. It was deleted outright first,
+         on a reading of the note above as DELETE, and Tom's next sentence the
+         same day settled it: "just make sure there is always one banner that
+         looks good and the others below can be the list as is but we need to
+         have one stand out banner that is showing more than a list of homework
+         in the new section that gets people excited." So it is rebuilt as the
+         hero slot at the top of the pill's list, one subject rather than two
+         halves, on the recovered hypePlateHtml maths (see newsHeroHtml);
+       - the settled step race had NO other surface. js/app.js already said so
+         where openRaceResults was deleted: "no News row, no banner, no button
+         anywhere". Deleting it would have taken away a player's only notice that
+         a race they were entered in had paid out, so #raceResultCard MOVED into
+         the news pill's list rather than dying here (see newsBannerHtml). It
+         sits directly under the hero, which is where it already sat relative to
+         this banner when both were on Today.
+       WHAT IS GONE IS THE SLOT, not its contents: nothing promo-shaped renders
+       on Today itself any more, which is what today-container-audit's NESTED
+       rows and hype-banner-audit's IN-PILL rows hold from either side. */''}
   ${LOG_ONLY_LINE}
   `;
 
@@ -4069,10 +4264,6 @@ async function renderToday(el) {
   if (isToday && unlocks.length) fireUnlockToasts(unlocks);
   $('#kitchenActBtn')?.addEventListener('click', openKitchen);
   $('#kitchenCard')?.addEventListener('click', openKitchen);
-  /* THE HYPE BANNER'S TWO HALVES, each going where its own subject lives. The
-     handlers that used to sit here belonged to the "Out there today" rows and
-     came off with them (the spire CTA, the bestiary row's delegate and its
-     compose, the teaser strip's deferred wall, and the garden row's two). */
   /* OPENING IT IS READING IT. The dot is about "is there something", not "did
      you tap every row", so one open clears it. Written on toggle rather than on
      each row so a player who opens, reads the summaries and closes is not shown
@@ -4087,7 +4278,11 @@ async function renderToday(el) {
 
   $('#newsBanner', el)?.addEventListener('toggle', async e => {
     if (!e.target.open) return;
-    await kvSet('newsSeen', NEWS.map(n => n.id));
+    /* The settled race is in this list too, so opening the pill clears its dot
+       the same way it clears the rows'. lastSettledWeek() can be null before the
+       first race ever settles; filtered out rather than stored as 'race:null'. */
+    const wk = lastSettledWeek();
+    await kvSet('newsSeen', [...NEWS.map(n => n.id), wk && raceSeenKey(wk)].filter(Boolean));
     $('.nb-dot', el)?.remove();
   });
   /* EVERY NEWS TILE READS AT THE SAME SIZE, measured rather than hand-tuned.
@@ -4139,8 +4334,11 @@ async function renderToday(el) {
   $$('.nb-row', el).forEach(b => b.addEventListener('click', () => {
     NEWS.find(n => n.id === b.dataset.news)?.open();
   }));
-  $('#hypeYard', el)?.addEventListener('click', () => { location.hash = '#/boneyard'; });
-  $('#hypeShop', el)?.addEventListener('click', () => openCharacter('shop'));
+  /* The hero opens whatever it drew. newsHero() rather than a data-id, because
+     the fallback banner is not a NEWS entry and has no id to look up: one
+     function decides what the hero IS and both the markup and this binding ask
+     it, so the picture and the destination can never disagree. */
+  $('.nb-hero', el)?.addEventListener('click', () => newsHero().open());
   // daily wellness (pure-positive self-care: only ever adds a reward). refresh()
   // now preserves scroll for in-place re-renders, so logging these below-the-fold
   // controls no longer yanks the player to the top.
@@ -4251,8 +4449,7 @@ async function renderToday(el) {
     if (res.crate) crates2.push(res.crate);
     // daily all-clear bonus crate
     if (period === 'day') {
-      const dateXp2 = (await db.all('xp')).filter(r => r.date === S.date);
-      const bonus = await claimAllBonusIfDue(S.date, tier.quests, dateXp2);
+      const bonus = await claimAllBonusIfDue(S.date, tier.quests);
       if (bonus) { bonusXp = bonus.xp; crates2.push('daily'); }
     }
     if (crates2.length) {
@@ -4271,9 +4468,8 @@ async function renderToday(el) {
     let gained = 0, last = null;
     for (const e of src) {
       const copy = { ...e, id: newId(), date: S.date, ts: Date.now() };
-      await db.put('log', copy);
-      await recordMealUsed(copy.meal);
-      last = await onFoodLogged(copy, { targets: S.settings.targets, entriesForDate: await entriesFor(S.date) });
+      last = await commitLogEntry(copy, null);
+      if (!last) return;           // not committed: commitLogEntry has told the player
       gained += last.xp;
     }
     confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 300, 14);
@@ -4350,11 +4546,41 @@ function calorieRingCard({ tot, t, over, remaining, protHit, startPct = 0, start
   </div>`;
 }
 
+/* OVER IS A STATE, NOT A FULL BAR. QA round 24 L8: the bars clamp at 100% and
+   this row had no over branch, so 299 g of fat against a 71 g target rendered
+   pixel-identical to 71 against 71, and 419 g of protein against 185 still wore
+   the green "target hit" dot. A blown day read as a perfect one.
+   Now: the bar still fills to 100% (the width is clamped upstream and stays
+   so), the row gains `over`, the bar gets an end-cap marker (app.css), and a
+   quiet line underneath reads the overage the way the ring does ("228 over":
+   absolute, never negative, never a scolding). Protein is different: over on
+   protein is fine up to a point, so the hit dot and glow hold until 1.5x the
+   target and only past that does the row flip to over. Carbs and fat flip on
+   any excess that rounds to a gram. `glow` is only ever true for protein-at-
+   target (calorieRingCard passes false for the other two), which is why it
+   doubles as the "this is protein" flag here. */
 function macroRow(label, val, target, cls, prevPct = 0, glow = false) {
-  return `<div class="macro">
-    <div class="row"><span>${label}${glow ? ` <span class="hit-dot">${ICONS.check(11)}</span>` : ''}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
-    <div class="bar ${cls} ${glow ? 'glow' : ''}"><i style="width:${prevPct}%"></i></div>
+  const overBy = Math.round(val - target);
+  const over = glow ? val > target * 1.5 : overBy > 0;
+  const hit = glow && !over;
+  return `<div class="macro${over ? ' over' : ''}">
+    <div class="row"><span>${label}${hit ? ` <span class="hit-dot">${ICONS.check(11)}</span>` : ''}</span><span class="val">${fmtG(val)} / ${target} g</span></div>
+    <div class="bar ${cls} ${hit ? 'glow' : ''}"><i style="width:${prevPct}%"></i></div>
+    ${over ? `<div class="over-by">${overBy.toLocaleString()} over</div>` : ''}
   </div>`;
+}
+
+/* ONE ROUNDING FOR THE WHOLE SCREEN. QA round 24 L8: the ring headline read
+   1,023 while the meal rows under it summed to 1,022. The ring rounded the raw
+   sum; each row rounds its own entry; 340.4 + 340.4 + 341.7 lands on a .5 and
+   the two disagree by one. The rows are the atoms a person adds up, so the
+   day's shown kcal is defined as the sum of the shown rows. Macros are left as
+   dayTotals returns them (fmtG rounds those once, at display). Display only:
+   budget and crate logic keep the raw dayTotals in js/db.js. */
+function shownTotals(entries) {
+  const tot = dayTotals(entries);
+  tot.kcal = entries.reduce((a, e) => a + Math.round(e.kcal || 0), 0);
+  return tot;
 }
 
 const bubbleSideCache = {};
@@ -5234,6 +5460,77 @@ function avatarLayersHtml(eq, opts = {}) {
 }
 
 // A leaderboard/podium row's Bonehead. The ONE renderer that keeps the pet
+/* ---------- A PIECE SHOWN WORN, NOT LOOSE ----------
+   Tom, 2026-09-03: "all gear in the app should now be shown like in the shop on
+   a base skeleton with context ... it no longer just shows the random PNG ...
+   this will fix the grillz scaling issue and it will allow the player to not see
+   how the sausage is made as far as certain items having strange cut outs."
+
+   Three failures, one cause. Every reveal drew the item's own PNG trimmed to its
+   alpha box and blown up to fill a 600px card, so:
+     - a grill (60px of ink on a 640 canvas) arrived the same size as a coat, and
+       nothing on the card said which end of a skeleton it belonged to;
+     - pieces authored to sit BEHIND or AROUND the skull (a hood's neck hole, a
+       mask's eye slots, a top's arm gaps) read as damaged art;
+     - the player had no idea what they had won until they went and equipped it.
+
+   The shop rack solved exactly this a release ago and nothing else reused it:
+   neutral base + the one piece + the pet skipped + a crop framing the body part
+   it goes on. These two tables WERE local to the Shop renderer; they are up here
+   now so the reveals share the one definition rather than growing a second,
+   drifting copy of the same idea. */
+/* THE NEUTRAL BASE. Taken from the data file's own slot defaults rather than
+   invented, which is the same pair randomOutfit() starts every splash figure
+   from: body B0-1, skull SK0-1, and nothing else. The only non-default thing in
+   a mannequin is the piece being shown. */
+const RACK_BASE = Object.fromEntries(BH_SLOTS.filter(x => x.default).map(x => [x.code, x.default]));
+/* WHICH BODY PART TO FRAME, per slot. The crop classes live in app.css and each
+   one's transform-origin is that slot's MEASURED alpha-bbox centre (see the
+   .fit-* block). M and IR were never needed by the rack (the rack does not sell
+   a mouth, and its weapon tile is the aura mannequin) but a crate rolls both, so
+   they are mapped here or a mouthpiece would reveal as a whole skeleton with a
+   speck on it. BG and C are deliberately absent: a backdrop is not worn by
+   anything, and a pet is a creature that stands beside you rather than a piece
+   of gear that goes on you. Both keep their loose art. */
+const RACK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', M: 'fit-head', SK: 'fit-head',
+  T: 'fit-torso', P: 'fit-hips', U: 'fit-waist', FW: 'fit-feet', S: 'fit-shin',
+  IL: 'fit-hand-l', IR: 'fit-hand', B: 'fit-body' };
+/* Can this id be shown worn at all? Anything the crop table has an answer for.
+   Callers use this rather than testing slots by hand so "what is wearable" has
+   one definition; a new slot that gets a .fit-* crop becomes wearable everywhere
+   the moment it is added above. */
+const canWear = id => !!(BH_BY_ID[id] && RACK_FIT[BH_BY_ID[id].slot]);
+/* `css` is the width the WHOLE 640 square ends up occupying AFTER the crop's
+   scale, not the width of the window it peeps through: a 222px card panel under
+   fit-waist's scale(2.8) is a 622px canvas behind a 222px hole. bhTierFor turns
+   that into a real tier (192/384) or the master, so the mannequin costs the
+   memory it actually draws. NEVER call this without a measured `css`: the census
+   caught a surface decoding ~100MB because one caller left the thumb off. */
+/* MEASURED OFF THE RENDERED CARD AT 390x844, never estimated. `.pc-worn` is a
+   1/0.86 box the full width of the art panel, and the crop scales the 640 square
+   on top of that, so the number that decides the tier is panelWidth x cropScale.
+   Measured: a reveal card's .pc-worn is 212px wide, a boss-loot card's is 150px,
+   and the steepest crop in the table is fit-waist's scale(2.8). Worst case
+   212 x 2.8 = 594 CSS px.
+   ONE NUMBER, THE WORST CASE, AND IT RESOLVES TO THE MASTER. Being straight
+   about this rather than dressing it up: bhTierFor doubles for device pixels, so
+   594 asks for 1188 and no tier can serve it -- the mannequin on a reveal card
+   draws the 640 master whatever is passed here, and even that is a 0.66x
+   UPSCALE. `thumb` is still passed, and passed honestly, because the tiers are
+   what a smaller consumer of this helper would get and a caller that omits it
+   is how a QA round measured ~100MB of bitmaps on one surface. A per-slot
+   number would be three lines of arithmetic that produce 640 every time, so
+   there is one. Re-measure if the card, the panel or the .fit-* scales move. */
+const PC_WEAR_CSS = 594;
+function wornArtHtml(id, css) {
+  const it = BH_BY_ID[id];
+  // wpnAura: null -- the player's bought aura must not leak onto a piece they
+  // are being SHOWN. skip C for the same reason the rack does: their pet turning
+  // up in a reveal card would read as part of the prize.
+  return `<div class="pc-worn ${RACK_FIT[it.slot]}">${avatarLayersHtml(
+    { ...RACK_BASE, [it.slot]: id }, { wpnAura: null, skip: ['C'], thumb: bhTierFor(css) })}</div>`;
+}
+
 // inside the stack, so it must pass the row's own shiny flag through: reading
 // S.shinyPets here would paint every friend's pet from the VIEWER's collection
 // (how Brock's shiny lizard rendered base-purple on the board).
@@ -5312,6 +5609,46 @@ if (typeof window !== 'undefined' && navigator.webdriver) window.__lbAvatar = lb
    old picture rather than to a permanently hidden shell. */
 const markBooted = () => document.documentElement.classList.add('booted');
 
+/* DIALOGUE STARTS WHEN THE SCREEN ARRIVES, and this sweep is the one place that
+   knows when that is. A talk box types at 26ms a character, so starting it at
+   render time would spend up to revealWhenReady's whole 700ms cap typing behind
+   an invisible screen: on a cold load the player would arrive 27 characters into
+   the sentence. Sweeping centrally means no screen and no sheet has to remember,
+   which is the same reason the reveal itself lives in one place.
+   THE LATCH IS ON THE BOX, NOT ON root. apply() runs on both the frame and the
+   300ms timer, so something has to stop the line restarting a third of a second
+   in. It cannot be root: #screen is the SAME element on every route, so a flag
+   there is set by the first navigation of the session and silences every talk
+   box for the rest of it (measured: the line never typed at all after the first
+   route). A box is rebuilt by its screen's innerHTML, so the flag on the box is
+   fresh exactly as often as the line is.
+
+   HOISTED OUT OF revealWhenReady ON 2026-09-03, BECAUSE ONLY HALF THE RENDERS
+   WENT THROUGH IT. route() calls revealWhenReady on a NAVIGATION only; an
+   in-place refresh() (logging water or sleep, stepping the day, closing a sheet)
+   takes the `!isNav` branch, which adds `screen-in` by hand and returns. Today
+   is rebuilt from innerHTML either way, so a refresh handed the player a brand
+   new .gw-box carrying its line in `data-tb` and NOTHING in .tb-txt, and no
+   later code ever typed it: Gwart sat there in a fully painted speech bubble
+   saying nothing at all, until the next real navigation.
+   It has been that way on main too. It stayed invisible because the guard
+   (tests/talkbox-audit.mjs) reached Today with `location.hash = '#/today'` from
+   an EMPTY hash, which is a navigation and re-typed the line on the way in. Boot
+   now writes '#/today' when the hash is absent, so that assignment became a
+   no-op, the audit finally read the screen a refresh had left behind, and the
+   row went red: "typed 0 of 46 chars". The guard was right and always had been
+   pointing at this.
+   Calling it from the !isNav branch is safe on both of the counts the paragraph
+   above cares about: that branch runs after the render has resolved, and nothing
+   is hidden during a refresh, so there is no invisible screen to type behind. */
+function startTalkBoxes(root) {
+  root?.querySelectorAll('.talkbox').forEach(b => {
+    if (b._tbStarted) return;
+    b._tbStarted = true;
+    runTalkBox(b);
+  });
+}
+
 async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
   if (!root) return;
   let shown = false;
@@ -5337,24 +5674,7 @@ async function revealWhenReady(root, { cls = 'ready', cap = 700 } = {}) {
   const apply = () => {
     if (!root.isConnected) return;
     root.classList.add(cls);
-    /* DIALOGUE STARTS WHEN THE SCREEN ARRIVES, and this is the one place that
-       knows when that is. A talk box types at 26ms a character, so starting it at
-       render time would spend up to this function's whole 700ms cap typing behind
-       an invisible screen: on a cold load the player would arrive 27 characters
-       into the sentence. Sweeping here means no screen and no sheet has to
-       remember, which is the same reason the reveal itself lives in one place.
-       THE LATCH IS ON THE BOX, NOT ON root. apply() runs on both the frame and
-       the 300ms timer, so something has to stop the line restarting a third of a
-       second in. It cannot be root: #screen is the SAME element on every route,
-       so a flag there is set by the first navigation of the session and silences
-       every talk box for the rest of it (measured: the line never typed at all
-       after the first route). A box is rebuilt by its screen's innerHTML, so the
-       flag on the box is fresh exactly as often as the line is. */
-    root.querySelectorAll('.talkbox').forEach(b => {
-      if (b._tbStarted) return;
-      b._tbStarted = true;
-      runTalkBox(b);
-    });
+    startTalkBoxes(root);
   };
   const show = () => {
     if (shown || !root.isConnected) return;
@@ -5632,92 +5952,12 @@ function bestiaryBannerHtml(den = remoteDen(dateKey())) {
   </button>`;
 }
 
-/* THE HYPE BANNER. Tom, 2026-08-21: "remove all banners on the today page except
-   the step winner but above it we need to create a new hypebanner that is bold
-   and stands out and shows the 2 new creatures that are out in the boneyard and
-   simultaneously teases bumbleseal being sold in the shop. this all needs to be
-   in the same banner and feel cohesive not like a verbose list it should just be
-   minimal wording, clean easy marketing that excites."
-   BOLD ART, ELEVEN WORDS. That is the only way both halves of the brief hold at
-   once: his standing taste rules forbid ad-speak, urgency and verbosity, so the
-   loud part has to be the picture. A banner that needs a sentence to explain its
-   own picture is a press release.
-   REVISION, from Tom's markup on the first render (2026-08-21, "something like
-   this is better for the banner, clean it up"). Three things changed and each is
-   the same idea executed better, not a new element:
-     - the tiny NEW chip became "New Creatures", a coral label that reads as the
-       banner's heading rather than a decoration;
-     - the one spanning sentence became TWO CAPTIONS, one under each half. He
-       struck "one wants your coins" out and wrote "Likes to shop" under the seal.
-       Each half now says what it is, which is honest about what they already
-       were: two different tap targets going to two different places;
-     - the creatures got BIGGER. The wide undivided strip was what made three
-       large plates read as thumbnails.
-   SECOND REVISION (2026-08-21, same day): "there shouldnt be any button thing
-   around the bee remove that. and it is meant to say ONE likes to shop not just
-   likes to shop." So:
-     - the seal's sunken plate is GONE. It was meant to set her apart and it read
-       as a button instead, which is worse than the problem it solved: her half
-       IS a button and so is the other one, and the other one has no box. She
-       stands on the banner's own ground now, told apart by the hairline and the
-       gap. See .hype-half.seal in app.css;
-     - the caption carries its COUNT. "Two want to eat you." / "One likes to
-       shop" is a pair of tallies, and dropping the number off one of them left
-       the joke doing half its work.
-   It is still ONE banner: one frame, one heading across the top, one grid. The
-   halves are columns in it, never two cards pushed together.
-   NO PRICE ON THE SEAL. Bumbleseal has no rack listing on any branch here, so a
-   number would be a promise the shop cannot keep today, and Tom has not settled
-   it. "One likes to shop" is true the day she lands and funny before it. */
-/* MEASURED ALPHA BOXES, as fractions of each file. Cam's two plates carry very
-   different amounts of empty margin (the Mimic's ink fills its file edge to edge,
-   the Wanderer leaves 21% of his file empty below his feet), so dropping both into
-   the same object-fit box drew one of them standing fifteen pixels in the air.
-   Measured off the PNGs, not guessed. Same mechanism as croppedPetImg: one box,
-   one transform per plate, and no per-art nudges anywhere else. */
-const HYPE_PLATES = {
-  'assets/bh/mimic/mimic.png':       { w: 640, h: 518, x0: 0, y0: 0, x1: 1, y1: 1 },
-  'assets/bh/wanderer/wanderer.png': { w: 640, h: 640, x0: 0.0938, y0: 0.1375, x1: 0.9719, y1: 0.7891 },
-};
-/* EVERYTHING IN PERCENT, so the BOX size belongs to the stylesheet. The first
-   version took a px argument and emitted px, which pinned the art to one size in
-   markup: Tom asked for bigger creatures and there was no way to give a 393 phone
-   more than a 320 one without rendering the banner twice. The maths is linear in
-   the box, so the ratios are the same at every size, and a CSS transform's
-   percentages are relative to the element itself, which is exactly what the
-   offsets need. */
-function hypePlateHtml(src) {
-  const p = HYPE_PLATES[src];
-  const cw = (p.x1 - p.x0) * p.w, ch = (p.y1 - p.y0) * p.h;   // the ink, in file pixels
-  const s = 0.94 / Math.max(cw, ch);                          // ink fills 94% of the box's long edge
-  const iw = p.w * s, ih = p.h * s;                           // the plate, as a fraction of the box
-  const tx = (1 - cw * s) / 2 - p.x0 * iw;                    // ink centred across the box
-  const ty = 1 - p.y1 * ih;                                   // ink SEATED on the box floor
-  const pc = n => (n * 100).toFixed(2) + '%';
-  return `<span class="hype-fig"><img src="${src}" alt=""
-    style="width:${pc(iw)};height:${pc(ih)};transform:translate(${pc(tx / iw)},${pc(ty / ih)})"></span>`;
-}
-function hypeBannerHtml() {
-  return `<div class="card hype">
-    <span class="hype-eye">New Creatures</span>
-    <button class="hype-half" id="hypeYard" type="button" aria-label="Two new creatures in the Boneyard">
-      <span class="hype-figs">
-        ${hypePlateHtml('assets/bh/mimic/mimic.png')}
-        ${hypePlateHtml('assets/bh/wanderer/wanderer.png')}
-      </span>
-      <b class="hype-cap">Two want to eat you.</b>
-    </button>
-    <button class="hype-half seal" id="hypeShop" type="button" aria-label="A new pet, in the shop">
-      <span class="hype-figs">${petAsideHtml(petFrom(null, 'C6'), 92, { thumb: true })}</span>
-      <b class="hype-cap">One likes to shop</b>
-    </button>
-  </div>`;
-}
-
-/* RETIRED FROM TODAY (2026-08-21), NOT DELETED. The hype banner above replaced
-   the whole "Out there today" card, which is the banner stack Tom asked to be
-   gone. This builder and the four row builders it calls are left intact and
-   unreachable, the same way the garden was closed in cropsRipe: reviving the card
+/* RETIRED FROM TODAY (2026-08-21), NOT DELETED. The hype banner replaced the
+   whole "Out there today" card, which is the banner stack Tom asked to be gone,
+   and the hype banner itself came off Today on 2026-09-03 and now lives as the
+   news pill's hero slot. This card has no surface either way. This builder and the four
+   row builders it calls are left intact and unreachable, the same way the garden
+   was closed in cropsRipe: reviving the card
    is putting the call back in renderToday, and restoring the held-spires read to
    that function's Promise.all along with its import from js/spires.js (dropped
    here because it was the only caller, and unit.test.js lints app.js for spires
@@ -6043,6 +6283,19 @@ function openDenSheet(den, { cleared = false, inRange = false, onFight = null } 
 
 function openSpireSheet(s, view, rival = null) {
   const holder = rival ? (rival.ownerName || 'A rival') : s.warden;
+  /* NEVER OFFER A FIGHT THE SERVER WILL REFUSE (QA round 20, R20-P2). A rival
+     takeover debits a Pit fight at the tap and the claim is only asked for after
+     the win, so a tower still inside its 1h shield sold a full fight, took the
+     charge and the day's attempt, and settled into a 409 with no state
+     transition at all. The client already has everything it needs to know: the
+     poll carries the holder's claimedAt, and the shield is a fixed hour from it.
+     So the button goes, and the sheet says when to come back.
+     Residual race, closed on the other side: the poll is 60s old at worst, so a
+     shield that starts between the poll and the tap still gets through to the
+     server refusal, and settle() hands the charge back there (foeCfg.charge). */
+  const shieldUntil = rival && rival.claimedAt ? rival.claimedAt + SPIRE_SHIELD_MS : 0;
+  const shieldMins = Math.max(1, Math.ceil((shieldUntil - Date.now()) / 60000));
+  const shielded = shieldUntil > Date.now();
   const wrap = openSheet(`
     <div class="sheet-head"><h2>${esc(s.name)}</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
@@ -6060,7 +6313,10 @@ function openSpireSheet(s, view, rival = null) {
         <li>You can hold <b>${SPIRE_CAP}</b> at once, so pick towers you actually walk past.</li>
         ${rival ? '<li>Taking one off another player costs <b>one Pit fight</b>, and a tower just taken holds its walls for an hour.</li>' : ''}
       </ul>
-      <button class="btn" id="spireFight" style="width:100%">Face ${esc(holder)}</button>
+      ${shielded
+        ? `<button class="btn" disabled style="width:100%">Walls hold for ${shieldMins} min</button>
+           <div class="why">${esc(holder)} only just took it. Come back in ${shieldMins} min and it can change hands again: fighting now costs you a Pit fight and wins you nothing.</div>`
+        : `<button class="btn" id="spireFight" style="width:100%">Face ${esc(holder)}</button>`}
     </div>`, { cls: '', name: 'Dark Spire' });
   $('#spireFight', wrap)?.addEventListener('click', async () => {
     const fighter = await buildFighter();
@@ -6082,6 +6338,9 @@ function openSpireSheet(s, view, rival = null) {
       openFight(wrap, fighter, {
         mode: 'spire', name: rival.ownerName || 'Rival Warden', mult: 1,
         aiLevel: 3, venue: s.name, spire: s, rival: true,
+        // which charge paid for this fight, so settle() can hand it back if the
+        // server refuses the claim (R20-P2). 'free' | 'vigor'.
+        charge: spent.used,
         // the exact fields the friend-battle clone builder already reads, so a
         // rival's tower is defended by their real build, not an invented one
         foeStats: d.stats || null, foeOutfit: d.outfit || null,
@@ -7400,7 +7659,7 @@ function signOffLine(count, tot, targets) {
 }
 
 function mealBlock(name, i, entries, yEntries, budget = 0) {
-  const kcal = Math.round(dayTotals(entries).kcal);
+  const kcal = shownTotals(entries).kcal;   // already the sum of the rounded rows (L8)
   const over = budget > 0 && kcal > budget;
   return `<section class="meal">
     <div class="meal-head">
@@ -7429,13 +7688,27 @@ function mealBlock(name, i, entries, yEntries, budget = 0) {
 // where mealForHour() would flip to dinner and force a re-selection.
 // Reads lastMealToday kv; on day boundary, falls back to mealForHour().
 // P0 ORIGIN: playtest found players flipped away from their meal by the clock.
+/* THE MEAL YOU PICKED IS REMEMBERED (QA round 24 L10). Measured: open the sheet
+   on Snacks, tap Dinner, close, reopen: Snacks. curMeal was closure state in
+   openAdd and recordMealUsed fired only on a committed row, so a tap alone left
+   no mark. Worse, "My foods" closed every sheet, left Today, and renderFoods
+   picked the meal BY THE CLOCK: a fifth commit path around the memory the other
+   four share (tests/meal-memory-audit.mjs, row MYFOODS). ONE precedence, in ONE
+   place, read by every reopen (the fab, restoreAddDraft, renderFoods):
+     a usable draft's meal  >  the meal remembered today  >  the clock.
+   The draft wins because it is the flow that was live at the reload; the
+   memory is lastMealToday, now written on every chip tap as well as on commit.
+   mealPrecedence is pure so tests/unit.test.js can run it; mealDefault only
+   fetches its two rows. */
+function mealPrecedence({ draft, last, date, hour, now = Date.now() }) {
+  if (addDraftUsable(draft, now) && Number.isInteger(draft.meal)) return draft.meal;
+  if (last !== null && typeof last === 'object' && last.date === date) return last.meal;
+  return mealForHour(hour);
+}
 async function mealDefault() {
-  const last = await kvGet('lastMealToday', null);
-  if (last !== null && typeof last === 'object' && last.date === S.date) {
-    return last.meal;
-  }
+  const [draft, last] = await Promise.all([kvGet('addDraft', null), kvGet('lastMealToday', null)]);
   const now = new Date();
-  return mealForHour(now.getHours() + now.getMinutes() / 60);
+  return mealPrecedence({ draft, last, date: S.date, hour: now.getHours() + now.getMinutes() / 60 });
 }
 
 // Record the meal a player just used, so the next log defaults to it.
@@ -7445,7 +7718,96 @@ async function recordMealUsed(meal) {
 
 /* ================= add flow ================= */
 
-function openAdd(meal = 0) {
+/* THE HALF-FINISHED ENTRY SURVIVES A RELOAD (QA round 25, M16).
+   Measured: backgrounding for 30 s and 600 s kept the sheet, the query, the
+   1.5 servings, the 423 kcal preview and the meal chip. A reload lost all of
+   it, because every piece was closure state inside openAdd and openPortion.
+   Onboarding already solves this with one kv row ('onbProgress', stamped on
+   every change, cleared when the flow ends, read once at boot); this is the
+   same shape. One row, one blob, no schema: { sheet, q, meal, foodId, sel, ts }.
+   Stamped on every change while the add sheet is up, cleared on commit and on
+   the add sheet's own close, ignored after 24 h (a stale draft on a new day is
+   worse than none) and when nothing was actually typed or picked. Restored by
+   restoreAddDraft() once at boot, after the hash is settled and route() ran. */
+const ADD_DRAFT_TTL = 24 * 3600e3;
+let addDraft = null;              // in-memory mirror; null means no add flow is live
+function addDraftUsable(d, now = Date.now()) {
+  return !!(d && typeof d === 'object' && typeof d.ts === 'number'
+    && now - d.ts < ADD_DRAFT_TTL && (d.q || d.foodId));
+}
+function stampAddDraft(patch) {
+  addDraft = { ...(addDraft || {}), ...patch, ts: Date.now() };
+  kvSet('addDraft', addDraft).catch(() => {});
+}
+function clearAddDraft() {
+  addDraft = null;
+  kvSet('addDraft', null).catch(() => {});
+}
+async function restoreAddDraft() {
+  const d = await kvGet('addDraft', null);
+  if (!addDraftUsable(d) || currentTab() !== 'today' || sheetStack.length) return;
+  const meal = await mealDefault();   // L10: the one precedence; a usable draft's meal wins here
+  openAdd(meal, d.q || '');
+  /* Only a food findFood still resolves (built-in or custom): an online result
+     lived in S.onlineCache, which the reload emptied. The query is kept either
+     way, so the search is one Enter from being back. */
+  const food = d.sheet === 'portion' && d.foodId ? findFood(d.foodId) : null;
+  if (food) openPortion(food, { meal, sel: d.sel || null });
+}
+
+/* THE ONLINE ROW IN ITS THREE STATES (QA round 25, M21). Measured offline:
+   the row was offered live with no hint, became a dead paragraph after the
+   tap, and never came back when signal did. Idle carries the offline hint in
+   its own label when navigator.onLine is false and stays tappable; failed keeps
+   the message and adds the barcode miss sheet's "Try again", on the same
+   [data-online] hook the idle row uses so the existing handler is the retry.
+   restoreOnlineRow puts a failed (or offline-hinted) row back to idle when the
+   'online' event fires; results rows carry no [data-online], so it never
+   touches a list that actually came back. */
+function onlineRowHtml(q, { offline = false, error = null } = {}) {
+  if (error) {
+    return `<p class="note" style="padding:8px 2px">${error}</p>
+      <button class="btn ghost" data-online>Try again</button>`;
+  }
+  return `<button class="t1-frow" data-online><span class="t1-med">${ICONS.searchIco(19)}</span><span class="nm"><b style="color:var(--accent)">Search online for "${esc(q)}"</b><small>${offline ? 'Offline right now' : 'USDA + Open Food Facts'}</small></span></button>`;
+}
+function restoreOnlineRow(sect, q) {
+  if (!sect || !sect.querySelector('[data-online]')) return false;
+  sect.innerHTML = onlineRowHtml(q);
+  return true;
+}
+
+/* THE EMPTY RESULT OFFERS THE FORM (QA round 25, M18, third bullet). Round 24
+   measured "Nothing local matches." 21 times in 48 searches, and the one
+   screen where a person needs "Create a food" did not offer it. The control
+   carries the query; the handler is the existing openFoodForm. */
+function localResultsHtml(local, q) {
+  if (local.length) return local.map(foodRowHtml).join('');
+  return `<p class="note" style="padding:14px 2px 6px;text-align:center">Nothing local matches.</p>
+    <button class="t1-frow" data-create="${esc(q)}"><span class="t1-med">+</span><span class="nm"><b>Create a food</b><small>"${esc(q)}"</small></span></button>`;
+}
+
+/* A SCREEN READER HEARS THE LOGGING PATH (QA round 25, M17). Measured with a
+   real AT tree: #results had no role and no live region, so 8 recents becoming
+   11 matches was announced to nobody and no count existed anywhere; the meal
+   chips carried no aria-pressed. The count is ONE visually-hidden aria-live line
+   (#resultsCount) that sits OUTSIDE #results and is only ever textContent-
+   updated: a live region recreated by innerHTML in the same tick as its message
+   announces nothing (nextToast learned this the hard way). mealChipsHtml is the
+   one place both chip sets (#mealChips, #pMealChips) are drawn and setChipOn
+   keeps aria-pressed in step with the .on class the two handlers already
+   toggled. No visual change: .on still does the painting. */
+function resultsCountText(n, q) {
+  return q ? `${n} ${n === 1 ? 'match' : 'matches'} for ${q}` : `${n} recent ${n === 1 ? 'food' : 'foods'}`;
+}
+function mealChipsHtml(on) {
+  return MEALS.map((m, i) => `<button class="${i === on ? 'on' : ''}" aria-pressed="${i === on}" data-meal="${i}">${m}</button>`).join('');
+}
+function setChipOn(chips, c) {
+  chips.forEach(x => { const on = x === c; x.classList.toggle('on', on); x.setAttribute('aria-pressed', String(on)); });
+}
+
+function openAdd(meal = 0, q0 = '') {
   const wrap = openSheet(`
     <div class="sheet-head">
       <div class="hd"><h2>Add food</h2></div>
@@ -7453,8 +7815,8 @@ function openAdd(meal = 0) {
     </div>
     <div class="t1-budget" id="addBudget" hidden></div>
     <div class="sheet-body">
-      <div class="t1-seg" id="mealChips">
-        ${MEALS.map((m, i) => `<button class="${i === meal ? 'on' : ''}" data-meal="${i}">${m}</button>`).join('')}
+      <div class="t1-seg" id="mealChips" role="group" aria-label="Meal">
+        ${mealChipsHtml(meal)}
       </div>
       <div class="t1-routes" style="margin:12px 0 4px">
         <button class="t1-route" id="actScan">${ICONS.barcodeIco()}<b>Barcode</b><span class="xp">+15 XP</span></button>
@@ -7464,8 +7826,10 @@ function openAdd(meal = 0) {
       </div>
       <div style="height:12px"></div>
       <div class="t1-search">${ICONS.searchIco()}<input id="q" type="search" placeholder="Search ${GENERIC_FOODS.length}+ foods" autocomplete="off" enterkeyhint="search"></div>
-      <div id="results"></div>
-    </div>`, { cls: 'full t1' });
+      <div id="resultsCount" class="sr-only" aria-live="polite"></div>
+      <div id="results" role="region" aria-label="Results"></div>
+    </div>`, { cls: 'full t1', onClose: () => { clearAddDraft(); window.removeEventListener('online', onOnline); } });
+  addDraft = { sheet: 'add', q: '', meal };   // M16: the flow is live; stamps write from here
 
   // the number you are deciding against. Async so the sheet opens instantly.
   dayBudget().then(b => {
@@ -7484,7 +7848,12 @@ function openAdd(meal = 0) {
   let curMeal = meal;
   $$('#mealChips button', wrap).forEach(c => c.addEventListener('click', () => {
     curMeal = Number(c.dataset.meal);
-    $$('#mealChips button', wrap).forEach(x => x.classList.toggle('on', x === c));
+    setChipOn($$('#mealChips button', wrap), c);   // M17: .on and aria-pressed together
+    stampAddDraft({ meal: curMeal });   // M16
+    recordMealUsed(curMeal).catch(() => {});   // L10: a tap is a decision; the reopen reads it
+    // L4: the recents are ranked per meal, so a chip change re-ranks them
+    // (only while the default list is showing; a live search is left alone).
+    if (!input.value.trim()) showDefault();
   }));
   $('#actScan', wrap).addEventListener('click', () => openScanner(() => curMeal));
   $('#actLabel', wrap).addEventListener('click', () => openLabelFlow(() => curMeal));
@@ -7492,23 +7861,21 @@ function openAdd(meal = 0) {
 
   const results = $('#results', wrap);
   const input = $('#q', wrap);
+  const count = $('#resultsCount', wrap);   // M17: the live count line, never re-rendered
 
   async function showDefault() {
-    const recents = await recentFoods(8);
+    const recents = await recentFoods(8, curMeal);   // L4: ranked for the chip that is on
     const favs = allSearchableFoods().filter(f => f.favorite).slice(0, 6);
     let html = '';
     if (recents.length) {
-      html += t1Sect('Log it again') + recents.map(r => {
-        if (r.food) return foodRowHtml(r.food);
-        return `<button class="t1-frow" data-relog="${r.entry.id}">
-          <span class="t1-med"><b>${Math.round(r.entry.kcal)}</b><small>KCAL</small></span>
-          <span class="nm"><b>${esc(r.entry.name)}</b><small>${esc(r.entry.portionLabel || 'quick add')}</small></span>
-          ${r.entry.p ? `<span class="pg"><b>${fmtG(r.entry.p)}g</b><small>PROTEIN</small></span>` : ''}</button>`;
-      }).join('');
+      /* L9: every recent is a one-tap relog now (recentRowHtml), not only the
+         quick-add ones; a resolvable food used to route to openPortion (3 taps). */
+      html += t1Sect('Log it again') + recents.map(recentRowHtml).join('');
     }
     if (favs.length) html += t1Sect('Favorites') + favs.map(foodRowHtml).join('');
     if (!html) html = `<p class="note" style="text-align:center;padding:26px 20px">Search ${GENERIC_FOODS.length}+ built-in foods, or scan a barcode to add packaged food in seconds.</p>`;
     results.innerHTML = html;
+    count.textContent = resultsCountText(recents.length, '');   // M17: "8 recent foods"
     bindRows();
   }
 
@@ -7522,19 +7889,30 @@ function openAdd(meal = 0) {
       const src = rows.find(r => r.id === b.dataset.relog);
       if (!src) return;
       const copy = { ...src, id: newId(), date: S.date, meal: curMeal, ts: Date.now() };
-      await db.put('log', copy);
-      await recordMealUsed(curMeal);
-      const game = await onFoodLogged(copy, { targets: S.settings.targets, entriesForDate: await entriesFor(S.date) });
+      const game = await commitLogEntry(copy, null);
+      if (!game) return;           // not committed: commitLogEntry has told the player
       confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 300, 12);
       popSound(S.sounds);
       toast(`Added ${src.name}${game.xp ? ` · +${game.xp} XP` : ''}`);
       S.justLogged = true;
       queueCelebration(game);
+      clearAddDraft();   // M16: committed, nothing left to resume
       history.back();
       setTimeout(refresh, 60);
     }));
-    $$('[data-online]', results).forEach(b => b.addEventListener('click', () => runOnlineSearch(input.value.trim())));
+    bindOnline(results);
+    // M18: the empty result's create control; prefill is passed for the form to
+    // pick up the name (it reads only nutrient keys from prefill today).
+    $$('[data-create]', results).forEach(b => b.addEventListener('click', () => openFoodForm({ meal: curMeal, prefill: { name: b.dataset.create } })));
   }
+  /* Scoped, not results-wide: bindRows rebinds every [data-food] in #results,
+     so re-running it for one row would double-bind the local list. */
+  function bindOnline(scope) {
+    $$('[data-online]', scope).forEach(b => b.addEventListener('click', () => runOnlineSearch(input.value.trim())));
+  }
+  // M21 (3): signal is back, so a failed or offline-hinted row is tappable again
+  const onOnline = () => { if (restoreOnlineRow($('#onlineSect', results), input.value.trim())) bindOnline(results); };
+  window.addEventListener('online', onOnline);
 
   function onlineById(id) {
     for (const list of S.onlineCache.values()) {
@@ -7565,11 +7943,14 @@ function openAdd(meal = 0) {
       /* 'unreachable' is thrown only when NEITHER database answered, so this is
          the no-signal case and it gets the no-signal words. Everything else
          reached a server and got a real refusal. */
-      if (sect) sect.innerHTML = `<p class="note" style="padding:8px 2px">${e.message === 'rate_limit'
+      if (!sect) return;
+      // M21 (2): the same words as before, plus the miss sheet's "Try again"
+      sect.innerHTML = onlineRowHtml(q, { error: e.message === 'rate_limit'
         ? 'Online search limit reached for now. Add a free USDA key in Settings for 1,000 searches/hour.'
         : e.message === 'unreachable'
         ? 'No signal, so the food databases could not be searched. Your own foods are all still here, and this will work again when you are back online.'
-        : 'Online search unavailable right now.'}</p>`;
+        : 'Online search unavailable right now.' });
+      bindOnline(sect);
     }
   }
 
@@ -7577,18 +7958,24 @@ function openAdd(meal = 0) {
   input.addEventListener('input', () => {
     clearTimeout(debounce);
     const q = input.value.trim();
+    stampAddDraft({ sheet: 'add', q });   // M16
     if (!q) { showDefault(); return; }
     debounce = setTimeout(() => {
       const local = searchFoods(allSearchableFoods(), q, 25);
-      results.innerHTML =
-        (local.length ? local.map(foodRowHtml).join('') : '<p class="note" style="padding:14px 2px 6px;text-align:center">Nothing local matches.</p>') +
-        `<div id="onlineSect">${q.length >= 3 ? `<button class="t1-frow" data-online><span class="t1-med">${ICONS.searchIco(19)}</span><span class="nm"><b style="color:var(--accent)">Search online for "${esc(q)}"</b><small>USDA + Open Food Facts</small></span></button>` : ''}</div>`;
+      /* M17: the render target is #results and ONLY #results. #q is its sibling
+         in the sheet, so a keystroke never replaces the node focus sits in;
+         re-rendering the sheet body here would throw activeElement to BODY. */
+      results.innerHTML = localResultsHtml(local, q) +
+        `<div id="onlineSect">${q.length >= 3 ? onlineRowHtml(q, { offline: navigator.onLine === false }) : ''}</div>`;
+      count.textContent = resultsCountText(local.length, q);   // M17: "11 matches for banana"
       bindRows();
     }, 120);
   });
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runOnlineSearch(input.value.trim()); } });
 
-  showDefault();
+  // M16: a restored draft re-types its query; the default list is for a fresh open
+  if (q0) { input.value = q0; input.dispatchEvent(new Event('input')); }
+  else showDefault();
 }
 
 const t1Sect = (label, extra = '') => `<div class="t1-sect"><b>${label}</b><i></i>${extra}</div>`;
@@ -7603,10 +7990,33 @@ function foodRowHtml(f) {
   </button>`;
 }
 
+/* ONE TAP RELOGS A RECENT AT THE PORTION LAST USED, A SECOND CONTROL CHANGES IT
+   (QA round 24, L9). showDefault used to branch: a recent whose foodId still
+   resolves rendered foodRowHtml (a data-food row into openPortion, then Add:
+   3 taps), and only a quick-add recent got the one-tap [data-relog]. Both
+   mechanisms shipped; the common case just got the slow one. Now the row's
+   main tap is [data-relog] for every recent (the entry carries the exact
+   portion, kcal and macros of the last log at this meal, which is the
+   remembered portion), and a resolvable food adds a small [data-food] chevron
+   that opens the portion sheet for a different amount. Both handlers already
+   exist in bindRows. Not a <button> around a <button>: the row is a div. */
+function recentRowHtml(r) {
+  const e = r.entry;
+  return `<div class="t1-frow t1-frow-split">
+    <button class="t1-frow-main" data-relog="${esc(e.id)}">
+      <span class="t1-med"><b>${Math.round(e.kcal)}</b><small>KCAL</small></span>
+      <span class="nm"><b>${esc(e.name)}</b><small>${esc(e.portionLabel || 'quick add')}</small></span>
+      ${e.p ? `<span class="pg"><b>${fmtG(e.p)}g</b><small>PROTEIN</small></span>` : ''}
+    </button>
+    ${r.food ? `<button class="t1-icon-btn" data-food="${esc(r.food.id)}" aria-label="Change portion">${ICONS.chev(16)}</button>` : ''}
+  </div>`;
+}
+
 /* ================= portion sheet ================= */
 
-function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
-  const sel = entry ? (entry.sel ? { ...entry.sel } : { mode: 'serving', idx: 0, qty: entry.qty || 1 }) : defaultSel(food);
+function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = null } = {}) {
+  // sel0: a restored draft's portion (QA round 25 M16), else the food's default
+  const sel = entry ? (entry.sel ? { ...entry.sel } : { mode: 'serving', idx: 0, qty: entry.qty || 1 }) : (sel0 ? { ...sel0 } : defaultSel(food));
   if (sel.mode === 'serving' && (!food.servings || !food.servings[sel.idx])) { sel.idx = 0; }
   let curMeal = entry ? entry.meal : meal;
   const editing = !!entry;
@@ -7625,7 +8035,7 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
     </div>
     <div class="sheet-body">
       <div class="t1-hero">
-        <div class="k"><b id="pvKcal">0</b><small>KCAL</small><span class="of" id="pvServ"></span></div>
+        <div class="k"><b id="pvKcal" aria-live="polite">0</b><small>KCAL</small><span class="of" id="pvServ"></span></div>
         <div class="t1-macros">
           <div class="mp"><small>PROTEIN</small><b id="pvP">0g</b><div class="tr"><i id="pvPBar"></i></div></div>
           <div class="mc"><small>CARBS</small><b id="pvC">0g</b><div class="tr"><i id="pvCBar"></i></div></div>
@@ -7639,15 +8049,21 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       <div style="height:12px"></div>
       <div id="qtyArea"></div>
       <div style="height:14px"></div>
-      <div class="t1-seg" id="pMealChips">
-        ${MEALS.map((m, i) => `<button class="${i === curMeal ? 'on' : ''}" data-meal="${i}">${m}</button>`).join('')}
+      <div class="t1-seg" id="pMealChips" role="group" aria-label="Meal">
+        ${mealChipsHtml(curMeal)}
       </div>
       <div class="t1-payoff" id="payoff" hidden></div>
       <div style="height:16px"></div>
       ${editing ? '<button class="btn danger" id="delBtn">Delete entry</button>' : ''}
       ${food.source === 'custom' ? '<div style="height:8px"></div><button class="btn ghost" id="editFoodBtn">Edit food details</button>' : ''}
     </div>
-    <div class="t1-foot"><button class="btn" id="addBtn">${editing ? 'Save changes' : 'Add'}</button></div>`, { cls: 't1' });
+    <div class="t1-foot"><button class="btn" id="addBtn">${editing ? 'Save changes' : 'Add'}</button></div>`, {
+    cls: 't1',
+    /* M16: Cancel drops back to the add sheet, so the draft drops back with it.
+       No-op when the flow is not live (edit from Today, My foods) or already
+       committed (commit clears before the sheets close). */
+    onClose: () => { if (addDraft && !editing) stampAddDraft({ sheet: 'add', foodId: null, sel: null }); },
+  });
 
   /* THE PAYOFF. Every row is an award onFoodLogged already pays; none of it was
      visible before the tap, which is why the XP economy read as invisible.
@@ -7692,9 +8108,9 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
     amtRaw = null;
     if (sel.mode === 'grams') {
       qtyArea.innerHTML = `
-        <div class="t1-step">
+        <div class="t1-step" role="group" aria-label="Grams">
           <button data-d="-10" aria-label="less"></button>
-          <div class="val"><input id="gramsIn" type="text" inputmode="decimal" value="${fmtQty(sel.grams)}" aria-label="grams"><small>GRAMS</small></div>
+          <div class="val"><input id="gramsIn" type="text" inputmode="decimal" value="${fmtQty(sel.grams)}" aria-label="grams" role="spinbutton" aria-valuenow="${sel.grams}" aria-valuemin="${LIMITS.servingG.min}" aria-valuemax="${LIMITS.servingG.max}"><small>GRAMS</small></div>
           <button class="plus" data-d="10" aria-label="more"></button>
         </div>`;
       $('#gramsIn', wrap).addEventListener('input', e => { amtRaw = e.target.value; sel.grams = num(e.target.value) || 0; preview(); });
@@ -7706,16 +8122,16 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       }));
     } else {
       qtyArea.innerHTML = `
-        <div class="t1-step">
+        <div class="t1-step" role="group" aria-label="Servings">
           <button data-d="-0.25" aria-label="fewer"></button>
-          <div class="val"><input id="qtyIn" type="text" inputmode="decimal" value="${fmtQty(sel.qty)}" aria-label="servings"><small>SERVINGS</small></div>
+          <div class="val"><input id="qtyIn" type="text" inputmode="decimal" value="${fmtQty(sel.qty)}" aria-label="servings" role="spinbutton" aria-valuenow="${sel.qty}" aria-valuemin="${LIMITS.servings.min}" aria-valuemax="${LIMITS.servings.max}"><small>SERVINGS</small></div>
           <button class="plus" data-d="0.25" aria-label="more"></button>
         </div>
         <div class="note" style="text-align:center;margin-top:8px">Tap the number to type any amount, e.g. 1.33</div>`;
       const qin = $('#qtyIn', wrap);
       qin.addEventListener('input', e => { amtRaw = e.target.value; sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
       qin.addEventListener('focus', () => qin.select());
-      qin.addEventListener('blur', () => { if (!(sel.qty > 0)) { sel.qty = 0.25; } qin.value = fmtQty(sel.qty); });
+      qin.addEventListener('blur', () => { if (!(sel.qty > 0)) { sel.qty = 0.25; } qin.value = fmtQty(sel.qty); qin.setAttribute('aria-valuenow', sel.qty); });
       $$('.t1-step button', qtyArea).forEach(b => b.addEventListener('click', () => {
         amtRaw = null;
         sel.qty = Math.max(0.25, Math.round(((sel.qty || 1) + Number(b.dataset.d)) * 100) / 100);
@@ -7735,10 +8151,18 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
 
   function preview() {
     const n = nutrientsFor(food, sel) || { kcal: 0, p: 0, c: 0, f: 0 };
+    /* M17: the stepper moved 1 to 1.25 with no aria-valuenow change. Every
+       amount change (typed, stepped, chip) reaches preview(), so the spinbutton
+       is kept in step here; #pvKcal is aria-live, so 282 to 353 is announced. */
+    const amtEl = $(sel.mode === 'grams' ? '#gramsIn' : '#qtyIn', wrap);
+    if (amtEl) amtEl.setAttribute('aria-valuenow', sel.mode === 'grams' ? sel.grams : sel.qty);
     $('#pvKcal', wrap).textContent = Math.round(n.kcal).toLocaleString();
-    $('#pvP', wrap).textContent = fmtG(n.p) + 'g';
-    $('#pvC', wrap).textContent = fmtG(n.c) + 'g';
-    $('#pvF', wrap).textContent = fmtG(n.f) + 'g';
+    // QA r25 M19 follow-up: custom foods now keep untyped macros as null, and
+    // fmtG(null) is '-', which read '-g'. Unknown stays a bare dash.
+    const gOr = v => v == null ? '-' : fmtG(v) + 'g';
+    $('#pvP', wrap).textContent = gOr(n.p);
+    $('#pvC', wrap).textContent = gOr(n.c);
+    $('#pvF', wrap).textContent = gOr(n.f);
     $('#pvServ', wrap).textContent = portionLabel(food, sel) || '';
     /* The bars show THIS food's own macro split, not its share of the day. A
        single apple against a daily protein target is 1% and every bar reads as
@@ -7751,13 +8175,18 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
     };
     bar('#pvPBar', kp); bar('#pvCBar', kc); bar('#pvFBar', kf);
     renderPayoff(n);
+    // M16: preview() runs on open and on every portion or meal change, so it is
+    // the one place the draft learns about this sheet
+    if (addDraft && !editing) stampAddDraft({ sheet: 'portion', foodId: food.id, sel: { ...sel }, meal: curMeal });
   }
 
   $$('#servChips button', wrap).forEach(c => c.addEventListener('click', () => {
     if (c.hasAttribute('data-grams')) {
-      const cur = nutrientsFor(food, sel);
+      // QA round 25 M12(b)(c): the serving's own grams, not the kcal ratio that
+      // read NaN for Diet soda and rounded 4.5 g olive oil to 5. See gramsChipDefault.
+      const g = gramsChipDefault(food, sel);
       sel.mode = 'grams';
-      sel.grams = sel.grams || (cur && food.per100 ? Math.round((cur.kcal / food.per100.kcal) * 100) : 100);
+      sel.grams = sel.grams || g;
     } else {
       sel.mode = 'serving'; sel.idx = Number(c.dataset.serv); sel.qty = sel.qty && sel.mode === 'serving' ? sel.qty : 1;
     }
@@ -7766,7 +8195,8 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
 
   $$('#pMealChips button', wrap).forEach(c => c.addEventListener('click', () => {
     curMeal = Number(c.dataset.meal);
-    $$('#pMealChips button', wrap).forEach(x => x.classList.toggle('on', x === c));
+    setChipOn($$('#pMealChips button', wrap), c);   // M17: .on and aria-pressed together
+    recordMealUsed(curMeal).catch(() => {});   // L10: same memory as the add sheet's chips
     preview(); // the all-meals bonus depends on which meal this lands in
   }));
 
@@ -7834,44 +8264,35 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
       kcal: n.kcal, p: n.p || 0, c: n.c || 0, f: n.f || 0,
       fiber: n.fiber || 0, sugar: n.sugar || 0, sodium: n.sodium || 0,
     };
-    /* A FAILED WRITE MUST NOT LOOK LIKE A SAVED MEAL.
-       Measured 2026-08-13: reject this put the way a full quota does and the
-       meal vanishes with NO error, while an unrelated toast ("New talent points
-       ready") stays on screen reading like success. 166 log rows before, 166
-       after. Everything below this line is skipped, so the sheet closes and the
-       player believes the meal is in.
-       Storage really does fill: measured growth is ~2.4MB a year, and a phone
-       with 500MB free hits its origin quota in about four years of daily use.
-       Tom, 2026-08-13, chose the behaviour: "tell you and leave the entry on
-       screen so the user knows whats happening and that they have to make room
-       on the storage of their device". So the sheet STAYS OPEN with the portion
-       still selected and the button live, because a player who has just been
-       told to free up space needs somewhere to land when they come back. */
-    try {
-      await db.put('log', e);
-    } catch (err) {
-      btn.disabled = false;
-      const full = err && /quota/i.test(err.name + ' ' + err.message);
-      toast(full
-        ? 'Could not save: this device is out of storage. Free up some space and tap Add again.'
-        : 'Could not save that meal. Tap Add to try again.', 5200);
-      trackEvent('log_write_failed', { quota: !!full });
-      return;                       // the sheet stays open, the entry stays put
-    }
-    await recordMealUsed(e.meal);
+    /* ONE TAP, ONE ROW. Disabled here, before the first await, because the
+       not-committed path re-enables a button nothing had disabled: two fast taps
+       on Add each ran this handler to the put and logged the meal twice, +20 XP
+       from one food (QA round A, 2026-09-03, L2). Only the fast double tap
+       escapes: the CONCURRENT case is already correct, awardOnce's addIfAbsent
+       checks and writes in one request. A disabled button drops the second
+       click at the browser, the same shape as #wbOk's "one tap, one write" and
+       armToConfirm's `busy`. Not re-enabled on success: the sheet closes.
+       Guard: tests/add-double-tap-audit.mjs. */
+    btn.disabled = true;
+    /* The write and its follow-ons live in commitLogEntry (QA round 25 M4).
+       null means the row did not commit: Add is re-armed and the sheet stays open. */
+    const game = await commitLogEntry(e, btn, via);
+    if (!game) return;
     food.lastPortion = { ...sel };
-    await persistFoodUse(food);
-    const game = await onFoodLogged(e, { via, targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
+    /* Bookkeeping on a committed row: a failure here is reported by db.js's
+       sink and must not re-open the sheet or re-arm Add. */
+    await persistFoodUse(food).catch(() => {});
     if (!editing) trackEvent('food_log', { via: via || 'search' });
     if (!editing && btn && btn.isConnected) {
       const r = btn.getBoundingClientRect();
       confettiBurst(r.left + r.width / 2, r.top, 18);
       popSound(S.sounds);
     }
-    toast(editing ? 'Saved' : `Added · ${Math.round(n.kcal)} kcal${game.xp ? ` · +${game.xp} XP` : ''}`);
+    toast(editing ? 'Saved' : `Added · ${Math.round(n.kcal)} kcal${game.receiptFailed ? ' · XP did not record' : game.xp ? ` · +${game.xp} XP` : ''}`);
     S.justLogged = !editing;
     if (!editing) game.note = `${food.name} logged · ${Math.round(n.kcal)} kcal`;
     queueCelebration(game);
+    clearAddDraft();   // M16: committed, nothing left to resume
     closeAllSheetsViaHistory();
     setTimeout(refresh, 80);
   });
@@ -7939,6 +8360,23 @@ async function openEntryEdit(entryId) {
 
 /* ================= quick add ================= */
 
+/* THE ENTRY'S OWN SNAPSHOT IS AUTHORITATIVE ON EDIT (QA round 25, M5).
+   A logged meal carries every number it will ever need (kcal, p, c, f, fiber,
+   sugar, sodium, brand, portionLabel, sel, foodId); it must never depend on
+   the food it came from still existing. Deleting a custom food asks nothing,
+   and the orphaned entry then reaches this editor through openEntryEdit, which
+   used to rebuild it from the four boxes on screen with foodId: null and
+   portionLabel: ''. Measured on one save: fibre 5 gone, sugar gone, sodium 800
+   gone, portion label, brand and serving gone, and the day's micronutrient
+   line read permanently lighter. Now an edit spreads the stored entry first and
+   overrides ONLY what this sheet can actually change; a fresh quick add is
+   built exactly as before. The relog path (data-relog) already copies
+   `{ ...src }` for the same reason. */
+function quickAddEntry(entry, { meal, name, kcal, p, c, f }) {
+  if (entry) return { ...entry, meal, name, kcal, p, c, f };
+  return { id: newId(), date: S.date, meal, ts: Date.now(), foodId: null, name, portionLabel: '', kcal, p, c, f };
+}
+
 function openQuickAdd(getMeal, entry = null) {
   const wrap = openSheet(`
     <div class="sheet-head">
@@ -7973,29 +8411,24 @@ function openQuickAdd(getMeal, entry = null) {
     if (!c.ok) return;
     const f = readNum($('#qaF', wrap), { name: 'Fat', ...LIMITS.macroG, optional: true, unit: ' g' });
     if (!f.ok) return;
-    const kcal = k.value;
-    const e = {
-      id: entry ? entry.id : newId(),
-      date: entry ? entry.date : S.date,
-      meal: getMeal(),
-      ts: entry ? entry.ts : Date.now(),
-      foodId: null,
-      name: $('#qaName', wrap).value.trim() || 'Quick add',
-      portionLabel: '',
-      kcal, p: p.value, c: c.value, f: f.value,
-    };
-    await db.put('log', e);
-    // the fourth commit path, and the one that was skipping this: a Quick add to
-    // Dinner reopened the add sheet on Lunch. Quick add is how most people log
-    // their first meal, so it is where "meals remember" most needs to work.
-    await recordMealUsed(e.meal);
-    const game = await onFoodLogged(e, { targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
+    /* TWO FIXES MEET HERE, and they compose. quickAddEntry (QA round 25 M5)
+       BUILDS the row: on an edit it spreads the stored entry so fibre, sugar,
+       sodium, brand, portionLabel and foodId survive when the food it came from
+       has been deleted; a fresh quick add is built exactly as before.
+       commitLogEntry (QA round 25 M4) OWNS THE WRITE, recordMealUsed (the
+       fourth commit path, the one that used to skip it) and the XP receipt,
+       inside the try/catch this path never had, so a failed write cannot
+       escape to the page with the sheet open. */
+    const e = quickAddEntry(entry, { meal: getMeal(), name: $('#qaName', wrap).value.trim() || 'Quick add', kcal: k.value, p: p.value, c: c.value, f: f.value });
+    const kcal = e.kcal;
+    const game = await commitLogEntry(e, btn);
+    if (!game) return;
     if (!entry && btn && btn.isConnected) {
       const r = btn.getBoundingClientRect();
       confettiBurst(r.left + r.width / 2, r.top, 16);
       popSound(S.sounds);
     }
-    toast(entry ? 'Saved' : `Added · ${Math.round(kcal)} kcal${game.xp ? ` · +${game.xp} XP` : ''}`);
+    toast(entry ? 'Saved' : `Added · ${Math.round(kcal)} kcal${game.receiptFailed ? ' · XP did not record' : game.xp ? ` · +${game.xp} XP` : ''}`);
     S.justLogged = !entry;
     queueCelebration(game);
     closeAllSheetsViaHistory();
@@ -8071,7 +8504,22 @@ async function openScanner(getMeal) {
     else toast('Enter at least 8 digits');
   });
 
+  /* ONE LOOKUP AT A TIME, WHATEVER FIRES IT.
+     The camera path is safe by construction (scanner.js stops the read loop
+     before it calls onCode), but "Look up" and the miss sheet's Try again are
+     plain buttons: two taps 121ms apart ran two lookups and stacked two
+     identical portion sheets, each with its own working Add. Same eventual cost
+     as the misdirection below, by a different road. The flag is held only for
+     the await window, so Try again still works the moment a sheet is up. */
+  let lookingUp = false;
   async function handleBarcode(code, getMeal) {
+    if (lookingUp) return;
+    lookingUp = true;
+    try { await runBarcodeLookup(code, getMeal); }
+    finally { lookingUp = false; }
+  }
+
+  async function runBarcodeLookup(code, getMeal) {
     scanner.stop();
     $('.scan-hint', wrap)?.setAttribute('hidden', '');
     status.innerHTML = `<span class="plate"><span class="spin" style="display:inline-block;vertical-align:-3px"></span> Looking up ${esc(code)}</span>`;
@@ -8219,6 +8667,55 @@ function openLabelConfirm(parsed, { getMeal, barcode, photoUrl }) {
 
 /* ================= food form (create/edit custom) ================= */
 
+/* QA round 25 M18/M19: everything the Save tap decides BEFORE the food is
+   written, in one pure function so tests/unit.test.js can slice it.
+   - M19: a calories-only food used to save p:0, c:0, f:0 (`mp.value || 0`), so
+     "unknown" became "zero" in a template that is re-logged forever. Untouched
+     fields now stay null (readNum's `blank: null`), and the 4/4/9 check is only
+     run when at least one macro was typed. 0 kcal with 60 g of macros is 290 kcal
+     of real food and used to save without a word; it is a warning now.
+   - M18: no duplicate check meant a typo'd "Apple" at 999 kcal sat beside the
+     built-in and, with the +1 custom bonus in searchFoods, outranked it forever.
+     Same normalised name as any built-in or custom food (case, whitespace and
+     accents folded) is a warning.
+   The warnings render in the same pre-save box the label route already uses
+   (the old post-save toast could be dropped by the four-deep toast queue).
+   Save stays the explicit tap-through: nothing here blocks. */
+const normFoodName = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+function foodKcalDesc(f) {
+  if (f.per100 && f.per100.kcal != null) return `${Math.round(f.per100.kcal)} kcal per 100 g`;
+  const ps = f.perServing || {};
+  return `${Math.round(ps.kcal || 0)} kcal per ${(f.servings && f.servings[0] && f.servings[0].label) || 'serving'}`;
+}
+function customFoodDraft({ name, brand, serving, grams, kcal, p, c, f, fiber, sugar, sodium }, { existing = null, barcode = null, foods = [] } = {}) {
+  const perServing = { kcal, p, c, f, fiber, sugar, sodium };
+  const food = {
+    id: existing ? existing.id : 'c-' + newId(),
+    source: 'custom',
+    barcode: (existing && existing.barcode) || barcode || undefined,
+    name,
+    brand: brand || null,
+    perServing,
+    per100: grams ? scaleToPer100(perServing, grams) : undefined,
+    servings: [
+      { label: serving || '1 serving', g: grams || null },
+      ...(grams ? [{ label: '100 g', g: 100 }] : []),
+    ],
+    favorite: existing?.favorite || false,
+    useCount: existing?.useCount || 0,
+    createdAt: existing?.createdAt || Date.now(),
+  };
+  const warnings = [];
+  if ((p != null || c != null || f != null) && !kcalConsistent(perServing)) {
+    const est = Math.round(4 * (p || 0) + 4 * (c || 0) + 9 * (f || 0));
+    warnings.push(`Calories and macros disagree: ${p || 0} g protein, ${c || 0} g carbs and ${f || 0} g fat come to about ${est} kcal, not ${kcal}. Save anyway?`);
+  }
+  const key = normFoodName(name);
+  const dup = foods.find(x => x.id !== food.id && normFoodName(x.name) === key);
+  if (dup) warnings.push(`You already have '${dup.name}' (${foodKcalDesc(dup)}). Save anyway?`);
+  return { food, warnings };
+}
+
 function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = null, warnings = [], photoUrl = null, fromLabel = false } = {}) {
   const f = existing;
   const pv = prefill || {};
@@ -8260,9 +8757,9 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
         <span class="tx"><b>Read ${readCount} of 8 fields</b><small>${8 - readCount > 0 ? `${8 - readCount} need a look, flagged below` : 'Everything came through'}</small></span>
         <button class="again" id="ffRetake">RETAKE</button>
       </div>` : ''}
-      ${warnings.length ? `<div class="warn">${warnings.map(esc).join('<br>')}</div>` : ''}
+      <div class="warn" id="ffWarn"${warnings.length ? '' : ' hidden'}>${warnings.map(esc).join('<br>')}</div>
       ${t1Sect('What is it')}
-      <div class="t1-field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || '')}"></div>
+      <div class="t1-field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || pv.name || '')}"></div>
       <div class="t1-field"><label>Brand</label><input id="ffBrand" placeholder="Optional" value="${esc(f?.brand || '')}"></div>
       ${t1Sect('One serving')}
       <div class="t1-g2">
@@ -8286,6 +8783,7 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
 
   $('#ffRetake', wrap)?.addEventListener('click', () => history.back());
 
+  let seenWarn = null;
   $('#ffSave', wrap).addEventListener('click', async () => {
     const name = $('#ffName', wrap).value.trim();
     if (!name) { toast('Name required'); return; }
@@ -8307,33 +8805,25 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
     const mfib = macro('#ffFib', 'Fiber'); if (!mfib.ok) return;
     const msug = macro('#ffSug', 'Sugars'); if (!msug.ok) return;
     const mna = macro('#ffNa', 'Sodium', LIMITS.sodiumMg, ' mg'); if (!mna.ok) return;
-    const kcal = kc.value;
-    const grams = g.value;
-    const perServing = {
-      kcal, p: mp.value || 0, c: mc.value || 0, f: mf.value || 0,
-      fiber: mfib.value, sugar: msug.value, sodium: mna.value,
-    };
-    const food = {
-      id: f ? f.id : 'c-' + newId(),
-      source: 'custom',
-      barcode: (f && f.barcode) || barcode || undefined,
-      name,
-      brand: $('#ffBrand', wrap).value.trim() || null,
-      perServing,
-      per100: grams ? scaleToPer100(perServing, grams) : undefined,
-      servings: [
-        { label: $('#ffServ', wrap).value.trim() || '1 serving', g: grams || null },
-        ...(grams ? [{ label: '100 g', g: 100 }] : []),
-      ],
-      favorite: f?.favorite || false,
-      useCount: f?.useCount || 0,
-      createdAt: f?.createdAt || Date.now(),
-    };
+    const { food, warnings: pre } = customFoodDraft({
+      name, brand: $('#ffBrand', wrap).value.trim(), serving: $('#ffServ', wrap).value.trim(), grams: g.value,
+      kcal: kc.value, p: mp.value, c: mc.value, f: mf.value, fiber: mfib.value, sugar: msug.value, sodium: mna.value,
+    }, { existing: f, barcode, foods: allSearchableFoods() });
+    /* First tap with warnings shows them (QA round 25 M18/M19); the same input
+       tapped again saves. Any edit that changes the warnings shows them afresh. */
+    const key = pre.join('\n');
+    if (pre.length && seenWarn !== key) {
+      seenWarn = key;
+      const box = $('#ffWarn', wrap);
+      box.innerHTML = pre.map(esc).join('<br>');
+      box.hidden = false;
+      box.scrollIntoView({ block: 'nearest' });
+      return;
+    }
     await db.put('foods', food);
     const i = S.userFoods.findIndex(x => x.id === food.id);
     if (i >= 0) S.userFoods[i] = food; else S.userFoods.push(food);
     toast('Food saved');
-    if (!kcalConsistent(perServing)) toast('Heads up: calories and macros disagree, double-check the label', 3400);
     if (f) { closeAllSheetsViaHistory(); setTimeout(refresh, 80); }
     else openPortion(food, { meal, via: fromLabel ? 'label' : null });
   });
@@ -8512,12 +9002,9 @@ async function renderShop(el) {
      timezones and reads as nonsense when you open the app on a Monday). */
   const rackNo = Math.min(4, Math.ceil(new Date().getDate() / 7));
   const rackDaysLeft = (8 - (new Date().getDay() || 7)) % 7 || 7;
-  /* THE NEUTRAL BASE. Tom: "items should just be styled on a base skeleton so
-     that the item doesnt clash with the not for sale items". Taken from the data
-     file's own slot defaults rather than invented, which is the same pair
-     randomOutfit() starts every splash figure from: body B0-1, skull SK0-1, and
-     nothing else. The only non-default thing in a tile is the piece for sale. */
-  const RACK_BASE = Object.fromEntries(BH_SLOTS.filter(x => x.default).map(x => [x.code, x.default]));
+  /* RACK_BASE and RACK_FIT are module-level now (see wornArtHtml): the reveal
+     cards draw the same mannequin, and two copies of the neutral base would
+     drift apart the first time a slot default changed. */
   const rackIds = rk.ids;
   /* OWNERSHIP IS READ, NEVER FAKED. An owned piece stays on the rack for the
      rest of the week and shows as owned; the picker deliberately does not filter
@@ -8529,8 +9016,6 @@ async function renderShop(el) {
      2.22x on an earring, against 0.44x on a hat. They get motion instead, which
      adds no pixels. */
   const TINY_SLOTS = new Set(['G', 'E']);
-  const RACK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', SK: 'fit-head', T: 'fit-torso',
-    P: 'fit-hips', U: 'fit-waist', FW: 'fit-feet', S: 'fit-shin', IL: 'fit-hand-l', B: 'fit-body' };
   /* THE BUY ROW. Two prices for one piece are ALTERNATIVES, and two identical
      full-width pills stacked on top of each other do not say so: they read as
      "3,000 AND 200", a bill in two parts. The word between them is the fix.
@@ -8942,9 +9427,17 @@ async function renderShop(el) {
       S.wpnAura = await wornAura();
       levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
       trackEvent('buy_rack', { id: b.dataset.buyrack, cur: currency, cost: r.cost });
-      toast(r.currency === 'dust'
-        ? `${r.label} is yours. −${r.cost} dust, ${r.dust.toLocaleString()} left. Free to wear in your Wardrobe.`
-        : `${r.label} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. Free to wear in your Wardrobe.`, 3400);
+      /* AN AURA IS NOT IN THE WARDROBE, and saying it is sent Tom hunting for a
+         thing that was already on his weapon. It auto-wears at buy (loot.js
+         writes kv `wpnaura` inside the spend) and its ONLY control is the rack
+         tile that just flipped to Worn. Say both, or the player concludes the
+         1,200 coins bought nothing. */
+      const spent = r.currency === 'dust'
+        ? `−${r.cost} dust, ${r.dust.toLocaleString()} left.`
+        : `−${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left.`;
+      toast(r.isAura
+        ? `${r.label} is on already, and every weapon you carry wears it. ${spent} Take it off on this tile any time.`
+        : `${r.label} is yours. ${spent} Free to wear in your Wardrobe.`, 3400);
       // bought from inside the try-on sheet: close it, so the rack behind it is
       // the thing the player lands on and the new Owned state is what they see
       if (inSheet && sheetStack.length) history.back();
@@ -9087,6 +9580,17 @@ function stepAvgWithToday(days) {
   return { avg: Math.round(sum / n), weight: w, partial: today.steps > 0 };
 }
 
+/* AVERAGE OVER THE DAYS THAT EXIST. QA round 25 M8: the protein stat divided by
+   a literal 7 while the calorie stat one line above divided by days logged. A
+   blank week read "0 g protein avg / day"; one missed day understated a real
+   148 g as 127; a day-one install read 23 g. Both stats now come through here,
+   so the denominator cannot drift apart again. null when nothing is logged,
+   which the callers render as the same '·' the calorie stat always has. */
+function loggedAvg(days, key) {
+  const logged = days.filter(d => d.logged);
+  return logged.length ? Math.round(logged.reduce((a, d) => a + d[key], 0) / logged.length) : null;
+}
+
 async function renderTrends(el) {
   const t = S.settings.targets;
   const weights = (await db.all('weights')).sort((a, b) => a.date.localeCompare(b.date));
@@ -9148,9 +9652,7 @@ async function renderTrends(el) {
   const xp = await totalXp();
   const lvl = levelFor(xp);
   const earned = await earnedBadgeIds();
-  const pAvg = days7.reduce((a, d) => a + d.p, 0) / 7;
   const loggedDays7 = days7.filter(d => d.logged).length;
-  const kcalLogged14 = days14.filter(d => d.logged);
 
   /* Today COUNTS now, at the share of a normal day's steps that has actually
      happened (see stepAvgWithToday). It used to be excluded outright. */
@@ -9170,7 +9672,7 @@ async function renderTrends(el) {
      window of days, and an unlabelled daily ring on a weekly page reads as a
      period summary. `live: false` drops the ids, so Today's tween keeps hunting
      exactly one element and this copy is simply static. */
-  const tToday = dayTotals(byDate[dateKey()] || []);
+  const tToday = shownTotals(byDate[dateKey()] || []);   // same rounding as Today's ring (L8)
   const remToday = t.kcal - tToday.kcal;
 
   el.innerHTML = `
@@ -9234,9 +9736,9 @@ async function renderTrends(el) {
 
   <div class="card">
     <div class="card-title">INTAKE · CALORIES 14D · PROTEIN 7D</div>
-    <div class="big-stat"><span class="v">${kcalLogged14.length ? Math.round(kcalLogged14.reduce((a, d) => a + d.kcal, 0) / kcalLogged14.length).toLocaleString() : '·'}</span><span class="d">avg kcal / logged day · target ${t.kcal.toLocaleString()}</span></div>
+    <div class="big-stat"><span class="v">${loggedAvg(days14, 'kcal')?.toLocaleString() ?? '·'}</span><span class="d">avg kcal / logged day · target ${t.kcal.toLocaleString()}</span></div>
     <div class="chart">${kcalChart(days14.map(d => ({ date: d.date, tot: { kcal: d.kcal } })), t.kcal)}</div>
-    <div class="big-stat" style="margin-top:12px"><span class="v">${Math.round(pAvg)} g</span><span class="d">protein avg / day · target ${t.p} g</span></div>
+    <div class="big-stat" style="margin-top:12px"><span class="v">${loggedAvg(days7, 'p') != null ? `${loggedAvg(days7, 'p')} g` : '·'}</span><span class="d">protein avg / logged day · target ${t.p} g</span></div>
     <div class="chart">${proteinChart(days7.map(d => ({ date: d.date, tot: { p: d.p } })), t.p)}</div>
     ${loggedDays7 < 5 ? '<p class="note" style="margin-top:8px">Log most days for a meaningful average.</p>' : ''}
   </div>
@@ -9937,9 +10439,16 @@ function openWeightSheet() {
 
 /* ================= foods tab ================= */
 
+/* QA round 25 M18: My foods sorted by lastUsedAt ONLY, so never-used foods all
+   compared equal and 40 seeded customs came back in database key order (a
+   5,367 px list). Most recent first, then name A to Z as the stable tiebreak. */
+const byLastUsedThenName = (a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0) || String(a.name || '').localeCompare(String(b.name || ''));
+// Past this many custom rows the list is a scroll, not a browse: a name filter appears above it.
+const MY_FOODS_FILTER_AT = 15;
+
 async function renderFoods(el) {
-  const customs = S.userFoods.filter(f => f.source === 'custom').sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0));
-  const scanned = S.userFoods.filter(f => f.source !== 'custom').sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0)).slice(0, 12);
+  const customs = S.userFoods.filter(f => f.source === 'custom').sort(byLastUsedThenName);
+  const scanned = S.userFoods.filter(f => f.source !== 'custom').sort(byLastUsedThenName).slice(0, 12);
   const favIds = S.userFoods.filter(f => f.favorite).map(f => f.id);
   const kvRows = await db.all('kv');
   const genFavs = kvRows.filter(r => r.k.startsWith('fav-') && r.v).map(r => GENERIC_FOODS.find(g => g.id === r.k.slice(4))).filter(Boolean);
@@ -9954,7 +10463,12 @@ async function renderFoods(el) {
   function base() {
     let html = '<button class="btn ghost" id="newFood" style="margin:4px 0 6px">+ Create a food</button>';
     if (favs.length) html += '<div class="sect-h">Favorites</div>' + favs.map(foodRowHtml).join('');
-    if (customs.length) html += '<div class="sect-h">My foods</div>' + customs.map(foodRowHtml).join('');
+    if (customs.length) {
+      html += '<div class="sect-h">My foods</div>';
+      // QA round 25 M18: over 15 rows, a filter (same .t1-search recipe as the Add sheet). No pagination.
+      if (customs.length > MY_FOODS_FILTER_AT) html += `<div class="t1-search" style="margin-bottom:8px">${ICONS.searchIco()}<input id="myFoodsQ" type="search" placeholder="Filter my ${customs.length} foods" autocomplete="off"></div>`;
+      html += `<div id="myFoodsList">${customs.map(foodRowHtml).join('')}</div>`;
+    }
     if (scanned.length) html += '<div class="sect-h">Recently scanned</div>' + scanned.map(foodRowHtml).join('');
     if (!favs.length && !customs.length && !scanned.length) html += '<p class="note" style="text-align:center;padding:14px 20px 6px">Foods you scan, create, or favorite collect here.</p>';
     const sample = [...GENERIC_FOODS].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 40);
@@ -9963,12 +10477,23 @@ async function renderFoods(el) {
     list.innerHTML = html;
     bind();
   }
-  function bind() {
-    $$('[data-food]', list).forEach(b => b.addEventListener('click', () => {
+  function bindRows(root) {
+    $$('[data-food]', root).forEach(b => b.addEventListener('click', async () => {
       const f = findFood(b.dataset.food);
-      if (f) openPortion(f, { meal: mealForHour(new Date().getHours()) });
+      // L10: the meal you picked on the add sheet, not the clock (mealDefault owns the precedence)
+      if (f) openPortion(f, { meal: await mealDefault() });
     }));
+  }
+  function bind() {
+    bindRows(list);
     $('#newFood', list)?.addEventListener('click', () => openFoodForm({}));
+    $('#myFoodsQ', list)?.addEventListener('input', e => {
+      const q = normFoodName(e.target.value);
+      const hit = q ? customs.filter(f => normFoodName(f.name).includes(q)) : customs;
+      const mine = $('#myFoodsList', list);
+      mine.innerHTML = hit.length ? hit.map(foodRowHtml).join('') : '<p class="note" style="text-align:center;padding:12px">None of your foods match.</p>';
+      bindRows(mine);
+    });
   }
   $('#fq', el).addEventListener('input', e => {
     const q = e.target.value.trim();
@@ -10171,23 +10696,32 @@ function crewCardHtml(f) {
   </button>`;
 }
 
+/* THE SERVER BOUNDS EVERY BUCKET AND SAYS SO. GET /friends caps friends,
+   incoming and outgoing at 100 rows each and returns `truncated: { friends,
+   incoming, outgoing }`. That flag was added server-side on 2026-09-03 and
+   nothing read it; at 100+ friends the count stated a false number as fact.
+   A capped list reads `100+` (the bucket length, never a hardcoded cap) and
+   carries one line saying what is shown. */
+function crewCount(list, truncated) { return `${list.length}${truncated ? '+' : ''}`; }
+function crewTruncText(list, what) { return `Showing your ${list.length} most recent ${what}.`; }
+
 // Requests only: the Crew itself lives in the fan now. Incoming first (it has
 // the action on it), pending after.
 function requestRowsHtml(data) {
-  const { incoming, outgoing } = data;
+  const { incoming, outgoing, truncated = {} } = data;
   let h = '';
-  if (incoming.length) h += `<div class="fl-sect"><div class="fl-h">Wants to be friends</div>${incoming.map(f => `
+  if (incoming.length) h += `<div class="fl-sect"><div class="fl-h">Wants to be friends · ${crewCount(incoming, truncated.incoming)}</div>${incoming.map(f => `
     <div class="fl-row">
       ${friendRowAvatar(f)}
       <div class="fl-main"><b>${nameWithAlias(f)}</b><span>${f.profile ? 'Lv ' + f.profile.level : 'New Bonehead'}</span></div>
       <div class="fl-actions"><button class="btn small" data-accept="${esc(f.playerId)}">Accept</button><button class="btn small ghost" data-remove="${esc(f.playerId)}">Ignore</button></div>
-    </div>`).join('')}</div>`;
-  if (outgoing.length) h += `<div class="fl-sect"><div class="fl-h">Pending</div>${outgoing.map(f => `
+    </div>`).join('')}${truncated.incoming ? `<p class="note">${crewTruncText(incoming, 'requests')}</p>` : ''}</div>`;
+  if (outgoing.length) h += `<div class="fl-sect"><div class="fl-h">Pending · ${crewCount(outgoing, truncated.outgoing)}</div>${outgoing.map(f => `
     <div class="fl-row">
       ${friendRowAvatar(f)}
       <div class="fl-main"><b>${nameWithAlias(f)}</b><span>Waiting for them to add you back</span></div>
       <button class="btn small ghost" data-remove="${esc(f.playerId)}">Cancel</button>
-    </div>`).join('')}</div>`;
+    </div>`).join('')}${truncated.outgoing ? `<p class="note">${crewTruncText(outgoing, 'requests')}</p>` : ''}</div>`;
   return h;
 }
 
@@ -10200,7 +10734,7 @@ async function renderFriends(el) {
   // audits seed these instead of a live account.
   const me = (apiConfigured ? await social.socialMe() : null)
     || (navigator.webdriver && window.__testMe) || null;
-  const clUnseen = changelogUnseen(await kvGet('changelogSeen', 0));
+  const clUnseen = (await import('./changelog.js')).changelogUnseen(await kvGet('changelogSeen', 0));
   const whatsNewCard = `
     <button class="card crew-friends" id="crewWhatsNew" style="margin-bottom:12px">
       <span>What's New${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</span>
@@ -10269,6 +10803,7 @@ async function renderFriends(el) {
         <button class="cfan-arrow" id="cfanNext" aria-label="Next friend">${ICONS.chev(16)}</button>
       </div>
       <div class="cfan-sel" id="cfanSel" hidden></div>
+      <p class="cfan-nohit note" id="cfanTrunc" hidden></p>
       <div class="friends-empty" id="cfanEmpty" hidden>
         <p class="fe-title">No Crew yet</p>
         <p class="note">Send a friend your code, or type theirs in below. Once you've added each other their Bonehead joins your fan right here, and you can send gifts and cheers.</p>
@@ -10698,7 +11233,11 @@ async function renderFriends(el) {
     const unreached = data.reached === false;
     const unrBox = $('#cfanUnreached', el);
     if (unrBox) unrBox.hidden = !unreached;
-    $('#cfanCount', el).textContent = unreached ? '' : ` · ${data.friends.length}`;
+    const truncated = !!data.truncated?.friends; // see crewCount
+    $('#cfanCount', el).textContent = unreached ? '' : ` · ${crewCount(data.friends, truncated)}`;
+    const truncBox = $('#cfanTrunc', el);
+    truncBox.hidden = unreached || !truncated;
+    truncBox.textContent = truncated ? crewTruncText(data.friends, 'friends') : '';
     if (unreached) {
       wrap.hidden = pager.hidden = true;
       $('#cfanSel', el).hidden = $('#cfanFaves', el).hidden = true;
@@ -11208,7 +11747,25 @@ async function renderFriends(el) {
         ${rows.length ? `<div class="race-lanes">
           ${rows.map(p => {
             const pct = lead > 0 ? Math.max(6, Math.round(p.steps / lead * 100)) : 6;
-            return `<div class="race-lane r${p.rank}${p.you ? ' you' : ''}">
+            /* A LANE IS A DOOR. Tom: "we should make it so when you are on the
+               step challenge leader board you can click the players you see and
+               then go to their player page and add them if you want."
+               A real <button>, not a div with a listener: keyboard and
+               screen-reader users get a native control (a11y-audit), and the
+               .tap rule in app.css strips the UA button chrome so the lane looks
+               identical to the one beside it.
+               NOT YOUR OWN LANE. Your row stays a plain div: the sheet this
+               opens is the STRANGER profile, whose only action is "add to my
+               Crew", and offering to add yourself is nonsense. Your own hub tab
+               is where you look at yourself.
+               NOT A LANE WITHOUT AN ID either: the client splices your own row
+               in from local truth (see above) and an old server sends no
+               playerId at all, and a lane with no identity has nothing to open.
+               Never match on name to recover one; names are not unique and the
+               wrong player's profile would open. */
+            const open = p.playerId && !p.you;
+            const tag = open ? 'button' : 'div';
+            return `<${tag} class="race-lane r${p.rank}${p.you ? ' you' : ''}${open ? ' tap' : ''}"${open ? ` type="button" data-raceview="${esc(p.playerId)}"` : ''}>
               <span class="rk">${p.rank}</span>
               <div class="bd">
                 <div class="nm"><b>${esc(p.name)}</b>${raceFreshHtml(p)}<span class="st">${p.steps.toLocaleString()}</span></div>
@@ -11216,7 +11773,7 @@ async function renderFriends(el) {
                   <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
                 </div>
               </div>
-            </div>`;
+            </${tag}>`;
           }).join('')}
         </div>` : '<p class="note" style="margin:0">Nobody has walked a step yet this race. The top of this board is going spare.</p>'}
         ${behind ? `<div class="race-gap">You are <b>${behind.toLocaleString()} steps</b> off first. About <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking.</div>` : ''}
@@ -11235,6 +11792,30 @@ async function renderFriends(el) {
       </div>`;
     card.hidden = false;
     composeAvatars(card);
+
+    /* Tapping a lane opens the SAME stranger profile the leaderboard opens (see
+       openFriendProfile's `stranger` mode) off the SAME payload: the /steps/week
+       row now carries everything that sheet renders, so this is a reader and not
+       a second request. Opening is free; adding is the deliberate second tap
+       inside the sheet, and nothing here sends a request.
+       CREW STATE IS READ AT TAP TIME, NOT AT RENDER TIME. hydrateRace runs
+       before paint() has filled `data`, so a set built up here would call every
+       existing friend a stranger and offer to add them again; read at tap, it is
+       also correct after an add without re-rendering the board. */
+    card.addEventListener('click', e => {
+      const lane = e.target.closest('[data-raceview]');
+      if (!lane) return;
+      const p = rows.find(x => x.playerId === lane.dataset.raceview);
+      if (!p) return;
+      openFriendProfile(
+        { name: p.name, playerId: p.playerId, addToken: p.addToken,
+          profile: { outfit: p.outfit, pet: p.pet, level: p.level, levelName: p.levelName,
+            badges: p.badges, stats: p.stats, gearCount: p.gearCount } },
+        null,
+        { stranger: true,
+          isCrew: (data.friends || []).some(f => f.playerId === p.playerId),
+          sent: (data.outgoing || []).some(f => f.playerId === p.playerId) });
+    });
   };
   hydrateRace();
 
@@ -11412,7 +11993,15 @@ function openFriendProfile(f, onChange, opts = {}) {
         ? `<p class="note" style="text-align:center;margin:6px 0 0">Already in your Crew.</p>`
         : opts.sent
           ? `<p class="note" style="text-align:center;margin:6px 0 0">Request sent. They accept by adding you back.</p>`
-          : `<button class="btn" id="fpAdd">+ Add to my Crew</button>`)
+          /* NO TOKEN, NO BUTTON. friendAdd(undefined) is a guaranteed failure
+             and all the player sees is "Could not send that request. Try
+             again.", forever. A row can legitimately arrive without one: a
+             server older than the release that started sending addToken on the
+             step-race board. Offer nothing rather than a button that cannot
+             work. */
+          : f.addToken
+            ? `<button class="btn" id="fpAdd">+ Add to my Crew</button>`
+            : '')
       : `<div class="fp-actions">
         <button class="btn ghost fp-gift" id="fpGift">${ICONS.coin(18)} Send a gift</button>
         <button class="btn ghost fp-cheer" id="fpCheer">📣 Cheer</button>
@@ -11736,6 +12325,205 @@ function showDayOneReveal(granted) {
 
 /* REMOVED 2026-08-25 with the rest of the launch takeovers. maybeShowSurvey opened the Day One Lizard survey over the app. openSurveySheet is unchanged and the Settings row ('Day One survey') still opens it, so the lizard is still claimable; nothing already collected is affected */
 
+/* Survey v2 S3: the sheet (spec: surveyv2spec.md, section 2 for the questions,
+   section 4/S3 for the build). THIS FILE OPENS NOTHING ON ITS OWN. The trigger
+   (S4) and the pet reward (S5) are Tom's; this is the sheet, the payload, the
+   done/dismiss facts and the offline retry, nothing else. Nothing on the boot
+   path calls openSurvey2Sheet, so tests/first-session-audit.mjs stays at zero.
+
+   Wire shape (server/src/index.js POST /survey, S1): `form: 'v2'`, `answers`
+   and `ctx` as OBJECTS; the server refuses (400) an answers blob over 4000
+   chars or a ctx over 1000 rather than truncating. The keys in `answers` are
+   what server/dashboard.html Q_LABELS / FREE_LABELS tally by: q1..q5, q3text,
+   q6. Rename one here and the dashboard renders "nobody answered".
+
+   Spec section 2, verbatim copy. Q3 and Q4 share the same nine areas and each
+   adds its own tenth chip. `single` renders radios, `multi` checkboxes in the
+   v1 `.survey-feats` grid; `max` is Q2's two-pick cap. */
+const SURVEY2_AREAS = [
+  ['pit', 'The Pit'], ['stats', 'Stats and training'], ['boneyard', 'The Boneyard map'],
+  ['cooking', 'Cooking'], ['spires', 'Dark Spires'], ['quests', 'Quests'],
+  ['gear', 'Gear and the Wardrobe'], ['pets', 'Pets and the Stable'], ['crew', 'The Crew'],
+];
+const SURVEY2_QUESTIONS = [
+  { id: 'q1', type: 'single', label: 'Why did you open the app today?', opts: [
+    ['log', 'Log my food'], ['steps', 'Check my steps'], ['pit', 'Fight in the Pit'], ['boneyard', 'The Boneyard map'],
+    ['pets', 'My pets'], ['cook', 'Cook something'], ['crew', 'See what my crew did'], ['quest', 'A quest or the wheel'],
+    ['checkin', 'Just checking in'] ] },
+  { id: 'q2', type: 'multi', max: 2, label: 'What keeps you coming back?', hint: 'Pick up to 2', opts: [
+    ['streak', 'My streak'], ['stronger', 'Watching my Bonehead get stronger'], ['pets', 'The pets'], ['friends', 'Beating my friends'],
+    ['wheel', 'The daily wheel'], ['boneyard', 'Walking the Boneyard'], ['logging', 'Logging food properly'], ['fights', 'The fights'],
+    ['notmuch', 'Honestly, not much yet'] ] },
+  { id: 'q3', type: 'multi', label: 'Was there anything you did not understand?', opts: [...SURVEY2_AREAS, ['nothing', 'Nothing, it made sense']],
+    /* reveal-on-tick (spec Q3): any of the nine areas shows this optional field */
+    text: { id: 'q3text', label: 'What was confusing about it?', reveal: SURVEY2_AREAS.map(([v]) => v) } },
+  { id: 'q4', type: 'single', label: 'If we cut one thing to make this simpler, what should go?', opts: [...SURVEY2_AREAS, ['dontcut', "Don't cut anything"]] },
+  { id: 'q5', type: 'single', label: 'Will you still be playing in a month?', opts: [
+    ['definitely', 'Definitely'], ['probably', 'Probably'], ['not_sure', 'Not sure'], ['probably_not', 'Probably not'] ] },
+  { id: 'q6', type: 'text', label: 'What nearly made you stop playing?' },
+];
+/* Free text is 240 chars in the spec (Q3 text, Q6), which is also what keeps
+   the whole blob a long way under the server's 4000: nine Q3 chips plus two
+   full texts is about 700 chars. No client-side 4000 check because no input
+   can reach it; tests/unit.test.js asserts the bound at every cap instead. */
+const SURVEY2_TEXT_MAX = 240;
+const SURVEY2_FORM = 'v2';
+
+// Pure: the question markup from the list above, so a test can render and count it.
+function survey2QuestionsHtml(qs = SURVEY2_QUESTIONS) {
+  return qs.map(q => {
+    const lab = `<label class="survey-label">${esc(q.label)}${q.hint ? ` <span class="survey-opt">(${esc(q.hint)})</span>` : ''}</label>`;
+    if (q.type === 'text') return `${lab.replace('<label class="survey-label">', `<label class="survey-label" for="sv2-${q.id}">`)}
+      <textarea id="sv2-${q.id}" class="survey-in" rows="2" maxlength="${SURVEY2_TEXT_MAX}" data-q="${q.id}"></textarea>`;
+    const kind = q.type === 'single' ? 'radio' : 'checkbox';
+    const chips = q.opts.map(([v, l]) => `<label class="survey-feat"><input type="${kind}" name="sv2-${q.id}" value="${v}"> ${esc(l)}</label>`).join('');
+    const text = q.text ? `<label class="survey-label" for="sv2-${q.text.id}" id="sv2-${q.text.id}-lab" hidden>${esc(q.text.label)} <span class="survey-opt">(optional)</span></label>
+      <textarea id="sv2-${q.text.id}" class="survey-in" rows="2" maxlength="${SURVEY2_TEXT_MAX}" data-q="${q.text.id}" hidden></textarea>` : '';
+    return `${lab}<div class="survey-feats" data-q="${q.id}"${q.max ? ` data-max="${q.max}"` : ''}>${chips}</div>${text}`;
+  }).join('');
+}
+
+/* Pure: raw answers (strings, arrays of strings) to the `answers` object the
+   server stores. Drops empties so a skipped question is absent, not "" (the
+   dashboard counts an answered question by presence). Text is trimmed and cut
+   at the spec's 240, which is under the server's cap by construction. */
+function survey2Answers(raw) {
+  const out = {};
+  for (const [k, v] of Object.entries(raw || {})) {
+    if (Array.isArray(v)) { const a = v.filter(x => typeof x === 'string' && x).slice(0, 20).map(x => x.slice(0, 24)); if (a.length) out[k] = a; }
+    else if (typeof v === 'string' && v.trim()) out[k] = v.trim().slice(0, SURVEY2_TEXT_MAX);
+  }
+  return out;
+}
+
+/* Spec section 2, "silent context": days since install, level, streak, foods
+   logged, Pit wins, pets owned, crew connected, build, platform. Every field
+   best-effort (null on failure) so a broken stat can never block a submit.
+   READINGS (spec names the fields, not the sources):
+     days  = days since the earliest xp row (no `installedAt` kv exists; S4's
+             spec names the same fallback). null on a save with no xp rows.
+     crew  = a social identity exists on this device (socialMe), not a live
+             friends count: that is a network call and this must work offline. */
+async function survey2Ctx() {
+  const ctx = { build: APP_BUILD, plat: platformTag() };
+  try {
+    const st = await buildStats();
+    ctx.streak = st.streak; ctx.foods = st.logs; ctx.pitWins = st.pitWins;
+  } catch { /* stats unreadable: fields stay absent */ }
+  try { ctx.level = levelFor(await totalXp()).level; } catch { /* absent */ }
+  try {
+    const first = Math.min(...(await db.all('xp')).map(r => r.ts || Infinity));
+    ctx.days = Number.isFinite(first) ? Math.floor((Date.now() - first) / 86400000) : null;
+  } catch { /* absent */ }
+  try { ctx.pets = (await petInstances()).length; } catch { /* absent */ }
+  try { ctx.crew = !!(await social.socialMe()); } catch { /* absent */ }
+  return ctx;
+}
+
+/* The facts, in kv, for S4 to read (spec S4 names survey2Done and
+   survey2SnoozeAt; survey2Asks is S4's own counter and is not written here):
+     survey2Done      ts of the submit; the sheet is never re-offered after it
+     survey2SnoozeAt  ts of the last "Not now"; S4 decides the re-offer cadence
+     survey2Pending   the exact body a failed POST tried to send, drained by
+                      drainSurvey2Pending on boot and on the `online` event.
+   Submit marks done BEFORE the post, v1's order: completing the survey must
+   never depend on the network. The post itself is awaited only to learn
+   whether to keep the body; the sheet has already said thanks. */
+async function survey2Submit(raw, extra = {}) {
+  const body = { form: SURVEY2_FORM, answers: survey2Answers(raw), ctx: await survey2Ctx(), ...extra };
+  await kvSet('survey2Done', Date.now());
+  trackEvent('survey2_submit', { hasEmail: extra.email ? 1 : 0, optin: extra.emailOptin ? 1 : 0, n: Object.keys(body.answers).length });
+  const r = await sendSurvey(body).catch(() => ({ ok: false }));
+  if (!(r && r.ok)) await kvSet('survey2Pending', body);
+  return body;
+}
+async function survey2Dismiss() { await kvSet('survey2SnoozeAt', Date.now()); }
+/* One row, one try per call: a body that fails again simply stays for the next
+   boot or `online`. ponytail: no backoff, no queue; the row is at most one
+   survey per device. Cleared only on a real ok, so a bot/offline answer keeps it. */
+async function drainSurvey2Pending() {
+  const body = await kvGet('survey2Pending', null);
+  if (!body) return false;
+  const r = await sendSurvey(body).catch(() => ({ ok: false }));
+  if (r && r.ok) { await kvSet('survey2Pending', null); return true; }
+  return false;
+}
+
+/* The sheet. Reuses v1's .survey-* CSS wholesale (spec S3): same grid, same
+   selected state, same inputs, same buttons. Copy: title is the spec's working
+   title (Tom may swap in "The Trainer's Report"); the one-line sub, the refusal
+   line and the button labels are not in the spec and are the minimum needed
+   (flagged in the S3 report). The disclosure sentence is verbatim and required. */
+function openSurvey2Sheet(source = 'auto') {
+  trackEvent('survey2_open', { src: source });
+  openSheet(`
+    <div class="survey" id="survey2Form">
+      <h2 class="survey-title">Tell us where it hurts</h2>
+      <p class="survey-sub">Six quick questions, about a minute. Skip any you like.</p>
+      ${survey2QuestionsHtml()}
+      <label class="survey-label" for="sv2Email">Email <span class="survey-opt">(optional)</span></label>
+      <input id="sv2Email" class="survey-in" type="email" maxlength="120" autocomplete="email" placeholder="you@example.com">
+      <label class="survey-check"><input id="sv2Optin" type="checkbox"> Email me the occasional Boneheadz update</label>
+      <p class="survey-priv">We attach your level and how long you have been playing so we can tell a day-three answer from a day-thirty one. Nothing else leaves your phone. Goes straight to the developers, never shared or shown to other players. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+      <div class="row" style="gap:8px;margin-top:6px">
+        <button class="btn ghost" id="sv2Later" style="flex:0 0 auto">Not now</button>
+        <button class="btn" id="sv2Send" style="flex:1">Send</button>
+      </div>
+      <p class="muted" id="sv2Status" style="font-size:12px;margin:10px 2px 0;text-align:center"></p>
+    </div>
+  `, { cls: 'sheet-survey', name: 'survey2' });
+  const form = $('#survey2Form');
+
+  // Q2's two-pick cap: the unchecked chips go disabled at two, back at one.
+  $$('.survey-feats[data-max]', form).forEach(grid => {
+    const max = +grid.dataset.max, inputs = $$('input', grid);
+    grid.addEventListener('change', () => {
+      const full = inputs.filter(i => i.checked).length >= max;
+      inputs.forEach(i => { if (!i.checked) i.disabled = full; });
+    });
+  });
+  // Q3's text field: hidden until one of the nine areas is ticked, hidden again when none is.
+  SURVEY2_QUESTIONS.filter(q => q.text).forEach(q => {
+    const grid = $(`.survey-feats[data-q="${q.id}"]`, form), ta = $(`#sv2-${q.text.id}`, form), lab = $(`#sv2-${q.text.id}-lab`, form);
+    grid?.addEventListener('change', () => {
+      const show = $$('input:checked', grid).some(i => q.text.reveal.includes(i.value));
+      if (ta) ta.hidden = !show;
+      if (lab) lab.hidden = !show;
+    });
+  });
+
+  $('#sv2Later', form)?.addEventListener('click', async () => {
+    trackEvent('survey2_later', { src: source });
+    await survey2Dismiss();
+    history.back();
+  });
+
+  $('#sv2Send', form)?.addEventListener('click', async () => {
+    const btn = $('#sv2Send', form), st = $('#sv2Status', form);
+    const raw = {};
+    SURVEY2_QUESTIONS.forEach(q => {
+      if (q.type === 'text') { raw[q.id] = $(`#sv2-${q.id}`, form)?.value || ''; return; }
+      const picked = $$(`input[name="sv2-${q.id}"]:checked`, form).map(i => i.value);
+      raw[q.id] = q.type === 'single' ? (picked[0] || '') : picked;
+      if (q.text) { const ta = $(`#sv2-${q.text.id}`, form); raw[q.text.id] = ta && !ta.hidden ? ta.value : ''; }
+    });
+    const email = ($('#sv2Email', form)?.value || '').trim();
+    const optin = !!$('#sv2Optin', form)?.checked;
+    // v1's rule: refuse only the all-empty case, never trap the player.
+    if (!Object.keys(survey2Answers(raw)).length) { if (st) st.textContent = 'Tap at least one answer, or leave a note, then send.'; return; }
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { if (st) st.textContent = "That email doesn't look right. Fix it, or leave it blank."; return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+    survey2Submit(raw, { email: email || null, emailOptin: optin });   // marks done first; fire-and-forget past that
+    form.innerHTML = `
+      <h2 class="survey-title">Thank you</h2>
+      <p class="survey-sub">Every answer gets read.</p>
+      <div class="row" style="margin-top:6px"><button class="btn" id="sv2Done" style="flex:1">Done</button></div>`;
+    $('#sv2Done', form)?.addEventListener('click', () => history.back());
+  });
+}
+// webdriver-only handle, the same shape as __cosmeticTeaser above: tests open the sheet through it.
+if (typeof window !== 'undefined' && navigator.webdriver) window.__survey2 = openSurvey2Sheet;
+
 // What's New: the player-facing changelog. Opening it marks everything seen so
 // the "new" dot clears. Reachable from Settings and the Crew tab.
 // Changelog copy is written with a little emphasis markup. esc() was escaping it,
@@ -11801,7 +12589,88 @@ function newsThumb(n, eq) {
   try { return n.thumb(eq) || ''; } catch { return ''; }
 }
 
-function newsBannerHtml(unseen, eq) {
+/* MEASURED ALPHA BOXES, as fractions of each file. Cam's plates carry very
+   different amounts of empty margin (the Mimic's ink fills its file edge to edge,
+   the Wanderer leaves 21% of his file empty below his feet), so dropping both into
+   the same object-fit box drew one of them standing fifteen pixels in the air.
+   Measured off the PNGs (alpha > 0 bounding box), not guessed. Same mechanism as
+   croppedPetImg: one box, one transform per plate, and no per-art nudges anywhere
+   else.
+   RECOVERED 2026-09-03. This and hypePlateHtml below were deleted with the Today
+   hype banner that morning, on a reading of Tom's note ("things will live in the
+   collapsed news pill") as DELETE. He meant RELOCATE, and the maths is the whole
+   reason the hero slot can seat art at any box size. Registration is also the
+   GATE: newsHero() only promotes an entry whose plate is listed here, so a NEWS
+   row pointing at an unmeasured file is skipped rather than rendered floating. */
+const HYPE_PLATES = {
+  'assets/bh/mimic/mimic.png':       { w: 640, h: 518, x0: 0, y0: 0, x1: 1, y1: 1 },
+  'assets/bh/wanderer/wanderer.png': { w: 640, h: 640, x0: 0.0938, y0: 0.1375, x1: 0.9719, y1: 0.7891 },
+  // The Live Wire, measured the same way on 2026-09-03: his ink fills his file.
+  'assets/bh/mage/mage.png':         { w: 1024, h: 905, x0: 0, y0: 0, x1: 1, y1: 1 },
+};
+/* EVERYTHING IN PERCENT, so the BOX size belongs to the stylesheet. The first
+   version took a px argument and emitted px, which pinned the art to one size in
+   markup: Tom asked for bigger creatures and there was no way to give a 393 phone
+   more than a 320 one without rendering the banner twice. The maths is linear in
+   the box, so the ratios are the same at every size, and a CSS transform's
+   percentages are relative to the element itself, which is exactly what the
+   offsets need. */
+function hypePlateHtml(src) {
+  const p = HYPE_PLATES[src];
+  const cw = (p.x1 - p.x0) * p.w, ch = (p.y1 - p.y0) * p.h;   // the ink, in file pixels
+  const s = 0.94 / Math.max(cw, ch);                          // ink fills 94% of the box's long edge
+  const iw = p.w * s, ih = p.h * s;                           // the plate, as a fraction of the box
+  const tx = (1 - cw * s) / 2 - p.x0 * iw;                    // ink centred across the box
+  const ty = 1 - p.y1 * ih;                                   // ink SEATED on the box floor
+  const pc = n => (n * 100).toFixed(2) + '%';
+  return `<span class="hype-fig"><img src="${src}" alt=""
+    style="width:${pc(iw)};height:${pc(ih)};transform:translate(${pc(tx / iw)},${pc(ty / ih)})"></span>`;
+}
+
+/* THE HERO SLOT: ONE BANNER AT THE TOP OF THE PILL, AND NEVER ZERO.
+   Tom, 2026-09-03: "just make sure there is always one banner that looks good and
+   the others below can be the list as is but we need to have one stand out banner
+   that is showing more than a list of homework in the new section that gets people
+   excited."
+   So the pill is a hero plus the list it already was. The list is untouched: the
+   thing that was missing is one surface where the art is the message, which is
+   what the deleted Today hype banner was for and why its plate maths is recovered
+   above rather than re-invented.
+
+   THE RULE, AND WHY IT CANNOT PRODUCE AN EMPTY HERO. Take the newest NEWS entry
+   that declares `hero` art measured in HYPE_PLATES; if none qualifies, the
+   creatures pair stands in. NEWS is an ordinary editable array and HYPE_PLATES is
+   an ordinary editable object, so "the newest entry with art" is a claim that can
+   go empty on somebody else's afternoon: reorder the array, drop the Wanderer row,
+   rename a file. The fallback is a literal in this file that depends on neither,
+   which is what turns "usually one" into "always one". It is not a placeholder or
+   an empty state: it is the same banner with the two Boneyard creatures in it.
+   ONE SUBJECT, NOT TWO HALVES. The old banner split into a Boneyard column and a
+   shop column and it needed a hairline, two captions and a count in each to stop
+   reading as a list. A hero that has to justify its own layout is the "list of
+   homework" problem in a different shape, so this is one target, one line of copy
+   and the art at full size. */
+const NEWS_HERO_FALLBACK = {
+  hero: ['assets/bh/mimic/mimic.png', 'assets/bh/wanderer/wanderer.png'],
+  title: 'Two want to eat you',
+  blurb: 'New creatures are out in the Boneyard.',
+  open: () => { location.hash = '#/boneyard'; },
+};
+function newsHero() {
+  return NEWS.find(n => n.hero && [].concat(n.hero).every(src => HYPE_PLATES[src])) || NEWS_HERO_FALLBACK;
+}
+function newsHeroHtml() {
+  const h = newsHero();
+  /* NOT .nb-thumb. The tile normaliser in bindToday scales every .nb-thumb child
+     to a 24px pixel-art step, which is right for a 40px row tile and would shrink
+     the hero's art to a badge. Its own class, so the two never meet. */
+  return `<button class="nb-hero" type="button">
+    <span class="nb-hero-figs">${[].concat(h.hero).map(hypePlateHtml).join('')}</span>
+    <span class="nb-hero-txt"><b>${esc(h.title)}</b><i>${esc(h.blurb)}</i></span>
+  </button>`;
+}
+
+function newsBannerHtml(unseen, eq, dayClose) {
   const newest = NEWS[0];
   if (!newest) return '';
   return `<details class="nb" id="newsBanner">
@@ -11813,6 +12682,40 @@ function newsBannerHtml(unseen, eq) {
       <span class="nb-chev">${ICONS.chev(16)}</span>
     </summary>
     <div class="nb-list">
+      ${/* THE HERO IS THE FIRST THING BEHIND THE TAP, above the settled race and
+           above the rows. Tom asked for "one stand out banner" in this section
+           that shows "more than a list of homework": a hero underneath a gold
+           result card and nine rows is not a hero, it is row ten. The race card
+           keeps its place directly under it, which is where it already was
+           relative to the old Today hype banner, so a player who opens the pill
+           for a race result still meets it before any announcement. */''}
+      ${newsHeroHtml()}
+      ${/* THE SETTLED STEP RACE LIVES HERE NOW. Tom, 2026-09-03: "today still has
+           the step challenge winner and monster banner at the bottom these should
+           be gone now things will live in the collapsed news pill."
+           It is the one thing that came off Today with no other home: the poster
+           was deleted on 2026-08-25 and the comment left behind said the result
+           had "no News row, no banner, no button anywhere" apart from the Today
+           card. So the card itself moved, element and all, and hydrateRaceResult
+           still finds it by id anywhere inside the rendered screen.
+           It is NOT a NEWS row: the podium is fetched per week and hydrated after
+           render, so it cannot be a static entry in the array below, and it stays
+           `hidden` until there is a settled race to show. That is also why it
+           lights this pill's dot from hydrateRaceResult rather than from the
+           `unseen` count above: by then the summary is already on screen. */''}
+      <details class="rr-banner" id="raceResultCard" hidden></details>
+      ${/* THE DAY-CLOSE ROW. QA round 24 L16: the day-close was delivered only as
+           a toast that the 4-deep queue can drop, and nothing on Today recorded
+           that the day closed. This is that record: derived from the xp ledger
+           by dayCloseNews (js/game.js), the toast's exact copy, dated to the
+           closed day, first among the rows because it is the newest thing here.
+           It is NOT a NEWS entry, so newsHero() never sees it and the hero rule
+           is untouched; the click binding finds no NEWS id and does nothing. */''}
+      ${dayClose ? `<button class="nb-row" data-news="${esc(dayClose.id)}">
+        <span class="nb-thumb">${crateIcon(dayClose.type === 'dayclose' ? 'golden' : 'daily', 24)}</span>
+        <span class="nb-txt"><b>${esc(dayClose.title)}</b></span>
+        <span class="nb-date">${esc(dayClose.date)}</span>
+      </button>` : ''}
       ${/* A ROW THAT NAVIGATES SAYS WHERE IT GOES. Tom, 2026-08-27: "i clicked
            another and it took me to the boneyard with no explanation in between
            on what i just clicked."
@@ -11846,6 +12749,13 @@ const NEWS = [
   { id: 'wanderer', date: 'Aug 25', title: 'You hear him first',
     blurb: 'Heavy footsteps, and a light sweeping the ground ahead of him. Do not stand in it.',
     thumb: () => `<img class="nw-img" src="assets/bh/wanderer/wanderer-192.png" alt="">`,
+    /* `hero` is the FULL PLATE for the pill's hero slot, and it is a separate
+       field from `thumb` on purpose: a thumb is a 40px tile that may be a
+       headshot, an app icon or a badge, and none of those survive being blown up
+       to 100px. The 192 above is the tile; this is the master. Only a file
+       measured in HYPE_PLATES qualifies, so adding this field alone is not enough
+       to promote a row. */
+    hero: 'assets/bh/wanderer/wanderer.png',
     goes: 'Boneyard',
     open: () => { location.hash = '#/boneyard'; } },
   { id: 'thanks', date: 'Aug 15', title: 'Thanks for being early',
@@ -11870,6 +12780,7 @@ const NEWS = [
   { id: 'mage', date: 'Aug 9', title: 'The Live Wire',
     blurb: 'Some of the dens out there are his, and nothing marks them.',
     thumb: () => `<img class="nw-img" src="assets/bh/mage/mage-192.png" alt="">`,
+    hero: 'assets/bh/mage/mage.png',
     open: () => openMageIntro() },
   /* The Bestiary is a TEASER and this is the only place it lives on after the
      one-time showing. It shows a sample of the cast and names nothing: meeting a
@@ -11919,6 +12830,7 @@ function newsHtml(eq) {
 }
 
 async function openWhatsNew() {
+  const { CHANGES, changelogLatest } = await import('./changelog.js');
   const cards = CHANGES.map(c => `
     <div class="wn-entry">
       <div class="wn-head"><b>${esc(c.title)}</b><span class="wn-date">${esc(c.date)}</span></div>
@@ -12125,7 +13037,7 @@ async function renderSettings(el) {
   const np = await notifPrefs();
   const notifPlat = notifPlatform();
   const notifPerm = await notifPermissionState();
-  const clUnseen = changelogUnseen(await kvGet('changelogSeen', 0));
+  const clUnseen = (await import('./changelog.js')).changelogUnseen(await kvGet('changelogSeen', 0));
   const surveyDone = await kvGet('surveyDone', false);
   const notifRow = (key, label, sub) => `
     <div class="settings-row">
@@ -12216,11 +13128,14 @@ async function renderSettings(el) {
     <div class="grid4">
       <div class="field"><label>kcal</label><input id="tKcal" type="text" inputmode="numeric" value="${t.kcal}"></div>
       <div class="field"><label>Protein</label><input id="tP" type="text" inputmode="numeric" value="${t.p}"></div>
-      <div class="field"><label>Carbs</label><input id="tC" type="text" inputmode="numeric" value="${t.c}"></div>
+      <!-- Carbs is the remainder of kcal after protein and fat (R25-M2), so it
+           is shown, not typed: a typed figure was stored beside a kcal it did
+           not add up to. -->
+      <div class="field"><label>Carbs</label><input id="tC" type="text" inputmode="numeric" value="${t.c}" readonly></div>
       <div class="field"><label>Fat</label><input id="tF" type="text" inputmode="numeric" value="${t.f}"></div>
     </div>
     <button class="btn small ghost" id="saveTargets">Save targets</button>
-    <p class="note" style="margin-top:10px">Based on: ${p.sex === 'm' ? 'male' : 'female'}, ${p.age}, ${S.settings.units === 'kg' ? Math.round(p.heightCm) + ' cm' : cmToFtIn(p.heightCm).ft + "'" + cmToFtIn(p.heightCm).inch + '"'}, ${units === 'kg' ? p.weightKg.toFixed(1) + ' kg' : kgToLb(p.weightKg).toFixed(0) + ' lb'}, ${esc((ACTIVITY_LEVELS.find(a => a.id === p.activity) || {}).label || '')}, goal: ${esc((GOALS.find(g => g.id === p.goal) || {}).label || '')}.</p>
+    <p class="note" style="margin-top:10px">Based on: ${p.sex === 'm' ? 'male' : 'female'}, ${p.age}, ${S.settings.units === 'kg' ? Math.round(p.heightCm) + ' cm' : cmToFtIn(p.heightCm).ft + "'" + cmToFtIn(p.heightCm).inch + '"'}, ${units === 'kg' ? p.weightKg.toFixed(1) + ' kg' : kgToLb(p.weightKg).toFixed(0) + ' lb'}, ${esc((ACTIVITY_LEVELS.find(a => a.id === p.activity) || {}).label || '')}, goal: ${esc((GOALS.find(g => g.id === p.goal) || {}).label || '')}. ${TARGET_DISCLOSURE}</p>
   </div>
 
   <div class="card">
@@ -12291,13 +13206,18 @@ async function renderSettings(el) {
        1e9 sailed through and every day read as 100% left. */
     const k = readNum($('#tKcal'), { name: 'Calorie target', ...LIMITS.targetKcal, unit: ' kcal' });
     if (!k.ok) return;
-    const p2 = readNum($('#tP'), { name: 'Protein target', ...LIMITS.macroG, optional: true, unit: ' g' });
+    const p2 = readNum($('#tP'), { name: 'Protein target', ...LIMITS.macroG, optional: true, blank: null, unit: ' g' });
     if (!p2.ok) return;
-    const c = readNum($('#tC'), { name: 'Carb target', ...LIMITS.macroG, optional: true, unit: ' g' });
-    if (!c.ok) return;
-    const f = readNum($('#tF'), { name: 'Fat target', ...LIMITS.macroG, optional: true, unit: ' g' });
+    const f = readNum($('#tF'), { name: 'Fat target', ...LIMITS.macroG, optional: true, blank: null, unit: ' g' });
     if (!f.ok) return;
-    S.settings.targets = { ...S.settings.targets, kcal: Math.round(k.value), p: Math.round(p2.value || 0), c: Math.round(c.value || 0), f: Math.round(f.value || 0) };
+    /* QA round 25, M2: these four used to be written INDEPENDENTLY, so 800 kcal
+       was saved with the 2,571 kcal of macros computed for the old figure still
+       on top, and 800 slipped under the floor the computed path applies (for
+       anyone, a child included). One pure function now owns the arithmetic and
+       the floor; carbs is its remainder; a figure it cannot honour is refused. */
+    const mt = manualTargets(S.settings.profile, { kcal: k.value, p: p2.value, f: f.value });
+    if (!mt.ok) { toast(mt.problem, 3600); $('#tKcal').focus(); return; }
+    S.settings.targets = { ...S.settings.targets, ...mt.targets };
     /* saveSettings(), not a whole-snapshot write of S.settings: the snapshot
        write is what let an older tab's copy undo another tab's change. The
        validation above is unchanged; only the write is. */
@@ -12342,10 +13262,31 @@ async function renderSettings(el) {
        nudge on 2026-08-25: nothing reads it now that nothing prompts at boot. */
     if (!(await social.socialMe())?.name) setTimeout(() => openNameBuilder(() => renderSettings(el)), 500);
   });
+  /* THIS TOGGLE USED TO PROMISE SAFETY IT HAD NOT CHECKED. It awaited
+     pushBackup with a `.catch(() => {})` and then toasted "Your progress is
+     safe" unconditionally. pushBackup does not throw (its header says so): it
+     RETURNS FALSE and writes kv `backupFail`, so the catch never fired and the
+     boolean was dropped on the floor. Measured against a dead API: the PUT
+     aborted at the 12s deadline, `backupFail` was written with reason
+     'network', and the toast still said the progress was safe. Fix #367 made
+     this worse in one sense: a 200 that is not a real acknowledgement now lands
+     as reason 'bad-body', so detection is good and only this line was lying.
+     The failure copy is cloudFailLine's, not a second wording, because Settings
+     and the boot notice already speak through it and a third voice would
+     eventually disagree with them about what is wrong.
+     `disabled` before the first await is the whole re-entry guard: two taps
+     120ms apart sent two PUT /backup, and the browser does not dispatch a click
+     on a disabled button. renderSettings() below rebuilds the segment anyway. */
   $('#cbOn', el)?.addEventListener('click', async () => {
+    const btn = $('#cbOn', el);
+    btn.disabled = true;
     await social.setCloudBackup(true);
-    await social.pushBackup(APP_SOCIAL_V).catch(() => {});
-    toast('Cloud backup on. Your progress is safe.');
+    const pushed = await social.pushBackup(APP_SOCIAL_V).catch(() => false);
+    if (pushed) toast('Cloud backup on. Your progress is safe.');
+    else {
+      const fail = await kvGet('backupFail', null);
+      toast(`Cloud backup on. ${cloudFailLine(fail && fail.reason, Number(await kvGet('clockSkewMs', 0)) || 0)}`, 5600);
+    }
     renderSettings(el);
   });
   $('#cbOff', el)?.addEventListener('click', async () => {
@@ -12470,7 +13411,7 @@ async function renderSettings(el) {
         <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
       </div>
       <div class="sheet-body">
-        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. <span id="erVault">Checking whether a cloud copy exists...</span></p>
+        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. <span id="erVault">Checking whether a cloud copy exists...</span><span id="erRecov"></span></p>
         <div class="t1-field"><label>Type ERASE to confirm</label><input id="erIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ERASE"></div>
       </div>
       <div class="t1-foot"><button class="btn danger-ish" id="erGo" disabled>Erase it all</button></div>`, { cls: 't1', name: 'Erase' });
@@ -12492,6 +13433,15 @@ async function renderSettings(el) {
           ? 'There is <b>no</b> cloud backup for this account, so this is the only copy.'
           : 'The cloud could not be reached, so no vault copy can be confirmed. Treat this as the only copy.';
     });
+    /* QA round 25 M9: on the web there is no keychain, so a wipe with no
+       recovery code set makes the cloud ciphertext unreadable forever. The app
+       already owns the sentence (the weekly nudge); it now appears HERE, before
+       the irreversible tap, and only when no code exists. Same async fill
+       pattern as #erVault, same predicate as the nudge (social.recoveryWarning). */
+    Promise.all([social.hasRecoveryPhrase(), social.myRecoveryId()]).then(([phrase, id]) => {
+      const warn = social.recoveryWarning(phrase, id), el = $('#erRecov', wrap);
+      if (warn && el) el.innerHTML = ` <b>${warn}</b>`;
+    }).catch(() => {});
     const input = $('#erIn', wrap), go = $('#erGo', wrap);
     input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'ERASE'; });
     go.addEventListener('click', async () => {
@@ -12660,7 +13610,8 @@ function bindProfileForm(wrap, initial, onChange) {
     const t = computeTargets(p);
     $('#pfPreview', wrap).innerHTML = `<div class="big-stat" style="margin:0"><span class="v" style="font-size:26px">${t.kcal.toLocaleString()} kcal</span><span class="d">/ day</span></div>
       <div style="margin-top:6px;font-weight:600;color:var(--text)">Protein ${t.p} g · Carbs ${t.c} g · Fat ${t.f} g</div>
-      <div style="margin-top:4px">Maintenance ~${t.tdee.toLocaleString()} kcal</div>`;
+      <div style="margin-top:4px">Maintenance ~${t.tdee.toLocaleString()} kcal</div>
+      <div style="margin-top:6px">${TARGET_DISCLOSURE}</div>`;
     onChange?.(p, t);
   };
   const setSeg = (sel, on) => { $$(sel, wrap).forEach(x => x.classList.remove('on')); on.classList.add('on'); };
@@ -12928,7 +13879,7 @@ async function saveInitialSettings(np) {
   settingsBase = {};
   await saveSettings();
   await kvSet('game-init', true); // fresh install: nothing to backfill
-  await kvSet('changelogSeen', changelogLatest()); // new player starts caught-up; What's New only pops for real updates
+  await kvSet('changelogSeen', (await import('./changelog.js')).changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
   if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer
@@ -12964,6 +13915,70 @@ function enterAppFromOnboarding() {
 }
 
 /* ================= game: celebrations + progress ================= */
+
+/* ONE OWNER OF "THE MEAL IS IN". QA round 25 M4, 2026-09-03.
+   Writes the log row, then runs its follow-ons (meal memory, XP receipts), and
+   returns ONE honest outcome:
+     null    the row did NOT commit. The player is told, the button is re-armed,
+             the sheet stays open with the entry on it (Tom, 2026-08-13).
+     game    the row DID commit. Always, even if the XP follow-on failed, in
+             which case `receiptFailed` is set and the numbers are zero.
+   THE BUG. The put sat in a try/catch but onFoodLogged did not (and Quick add
+   had no try/catch at all). QA aborted the xp store AFTER the log row committed:
+   the rejection escaped the click handler, the sheet stayed open with Add live,
+   db.js's write sink toasted "That did not save", and a second tap wrote a
+   second row (167 -> 168, +189 kcal, unbounded in taps). The meal is the truth
+   and the XP row is a receipt for it: a lost receipt must never re-arm the
+   button on a committed row. A null-message rejection (an explicit abort) no
+   longer escapes to the page either.
+   Every UI log writer routes through here; tests/unit.test.js R25-M4 fails on
+   a new bare put to the log store. The browser guard is
+   tests/log-write-failure-audit.mjs (FAIL=log and FAIL=xp). */
+async function commitLogEntry(e, btn, via = null) {
+  /* MIDNIGHT IS A DECISION, NOT A TIMER (QA round 24 L17). With the app open on
+     Today, a log at 00:00 landed on YESTERDAY while dateKey() already said today:
+     rollDayIfNeeded ran only on resume and on a 60 s interval (measured catch-up
+     45,038 ms), and every caller stamps `date: S.date` when it builds the row.
+     So the commit asks the clock first. If the roll moved the day, a FRESH row
+     built for the day that just ended follows it; an edit (a row already in the
+     store) keeps the day it was eaten on. The timer stays for the idle case. */
+  const dayBefore = S.date;
+  await rollDayIfNeeded();
+  if (S.date !== dayBefore && e.date === dayBefore && !(await db.get('log', e.id))) e.date = S.date;
+  try {
+    await db.put('log', e);
+  } catch (err) {
+    /* A FAILED WRITE MUST NOT LOOK LIKE A SAVED MEAL.
+       Measured 2026-08-13: reject this put the way a full quota does and the
+       meal vanished with NO error, while an unrelated toast ("New talent points
+       ready") stayed on screen reading like success. 166 log rows before, 166
+       after. Storage really does fill: measured growth is 3.6MB in the first
+       year and 6.7MB by the second (QA round 25 M23, 2026-09-03; the earlier
+       ~2.4MB/year figure was 50% low), so a phone with 500MB free hits its
+       origin quota in well under the four years that figure implied.
+       Tom, 2026-08-13, chose the behaviour: "tell you and leave the entry
+       on screen so the user knows whats happening and that they have to make
+       room on the storage of their device". */
+    if (btn) btn.disabled = false;
+    const full = err && /quota/i.test(err.name + ' ' + err.message);
+    toast(full
+      ? 'Could not save: this device is out of storage. Free up some space and tap Add again.'
+      : 'Could not save that meal. Tap Add to try again.', 5200);
+    trackEvent('log_write_failed', { quota: !!full });
+    return null;                       // the sheet stays open, the entry stays put
+  }
+  try {
+    await recordMealUsed(e.meal);
+    return await onFoodLogged(e, { via, targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
+  } catch (err) {
+    /* COMMITTED, RECEIPT LOST. db.js's guard has already reported the failed
+       write (telemetry + its own throttled toast); this only keeps the caller
+       on the success path so the sheet closes and Add cannot write the meal
+       twice. The XP is the one thing that did not land, and the toast says so. */
+    trackEvent('log_receipt_failed', { store: (err && err.tallyWrite && err.tallyWrite.store) || null });
+    return { xp: 0, total: 0, newBadges: [], streakMilestone: null, streak: 0, boosted: false, crates: 0, receiptFailed: true };
+  }
+}
 
 function queueCelebration(game) {
   if (!game) return;
@@ -13317,8 +14332,31 @@ function openHatchReveal(res, charWrap) {
   const revealEl = $('.hatch-reveal', wrap2);
   // draw the pet big + centered (the source PNG parks it in a corner)
   if (item) { const cv = $('.hatch-art', wrap2); if (cv) drawTrimmedArt(cv, res.shiny ? `assets/bh/C/shiny/${item.id}.png` : bhAsset(item)); }
+  const okBtn = $('#hatchOk', wrap2);
+  /* ADOPT USED TO CLOSE THE SHEET, and the cinematic is 5.75s long, so any
+     player who tapped it early dismissed a pet they never saw. Tom hit exactly
+     that. The button is now two states: while the egg is still cracking it
+     SKIPS to the reveal, and only once the pet is on screen does it leave.
+     The relabel plus the short input lock stop a fast double tap racing
+     through both states straight back out the door. */
+  const timers = [];
+  let revealed = false;
   // once the pet is revealed, retire the egg cinematic so the pet is centred
-  const finish = () => { if (stage) stage.style.display = 'none'; revealEl.classList.add('show'); confettiRain(80); levelSound(S.sounds); };
+  const finish = () => {
+    if (revealed) return;                       // the 5750 timer and a skip tap both land here
+    revealed = true;
+    for (const id of timers) clearTimeout(id);  // else burst frames and a second confetti fire after a skip
+    timers.length = 0;
+    if (stage) stage.style.display = 'none';
+    revealEl.classList.add('show');
+    /* confettiBurst, NOT confettiRain. confettiRain has been a bare `return;`
+       since v322 (f22df77b, "retire confetti") where it was cut for drag lag,
+       and its 17 call sites were left calling it. So the hatch reveal has been
+       asking for confetti and getting nothing. Burst still works and is what
+       the shop already spends on a cosmetic purchase. */
+    confettiBurst(innerWidth / 2, innerHeight * 0.38, 22); levelSound(S.sounds);
+    if (item && okBtn) { okBtn.textContent = 'Take them home'; okBtn.disabled = true; setTimeout(() => { okBtn.disabled = false; }, 320); }
+  };
   if (reduced || !item) {
     finish();
   } else {
@@ -13364,12 +14402,12 @@ function openHatchReveal(res, charWrap) {
       [5130, 14, false, null],
     ];
     for (const [t, n, shake, snd] of BEATS) {
-      setTimeout(() => { show(n); if (shake) wob(); if (snd) hitSound(S.sounds, snd); }, t);
+      timers.push(setTimeout(() => { show(n); if (shake) wob(); if (snd) hitSound(S.sounds, snd); }, t));
     }
-    setTimeout(() => { if (stage.isConnected) { show(15); stage.classList.add('egg-burst'); hitSound(S.sounds, 'zap'); } }, 5200);
-    setTimeout(() => { if (revealEl.isConnected) finish(); }, 5750);
+    timers.push(setTimeout(() => { if (stage.isConnected) { show(15); stage.classList.add('egg-burst'); hitSound(S.sounds, 'zap'); } }, 5200));
+    timers.push(setTimeout(() => { if (revealEl.isConnected) finish(); }, 5750));
   }
-  $('#hatchOk', wrap2).addEventListener('click', () => history.back());
+  okBtn.addEventListener('click', () => { if (revealed) history.back(); else finish(); });
   if (charWrap) setTimeout(() => renderCharacter(charWrap, 'crates'), 400);
 }
 
@@ -13438,6 +14476,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
   // Opening a crate re-renders this screen in place (no route()), so the tab
   // badge is synced here too, off the same rows the tab is about to render.
   setCrateBadge(crates.length);
+  // Held crates are about to be tapped, so fetch and decode their reveal frames
+  // NOW rather than when the 2.6s choreography has already started (R20-P3).
+  // Memoised per kind, so re-rendering this screen (every equip does) is free.
+  for (const k of new Set(crates.map(c => c.crate))) warmCrateFrames(k);
   const boosts = inv.filter(r => r.kind === 'xp2').length;
   const vigors = inv.filter(r => r.kind === 'vigor').length;
   const ownedCount = inv.filter(r => r.kind === 'cos').length;
@@ -13445,6 +14487,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const unspentTal = Math.max(0, talentPoints(levelFor(xp).level) - takenTal.length);
   const looksAll = BH_ITEMS.filter(i => !i.default);
   const looksHave = await collectedLooks();
+  // the fits cap, printed like every other cap in the app (QA round 23 F8)
+  const fitCount = tab === 'wardrobe' ? (await fits()).length : 0;
 
   const curtains = false; // dressing-room curtains retired (Tom's call)
   body.innerHTML = `
@@ -13453,7 +14497,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <span class="ward-lv">Lv ${lvl.level}</span>
       <span class="ward-rank">${esc(lvl.name)}</span>
       <span class="bh-pill">${ICONS.coin(16)} ${coinBal.toLocaleString()}</span>
-      <span class="bh-pill">${ICONS.dust(16)} ${dustBal.toLocaleString()}</span>
+      <span class="bh-pill ward-dust">${ICONS.dust(16)} ${dustBal.toLocaleString()}</span>
       <span class="bh-pill">${ICONS.bone(14)} ${ownedCount} found</span>
       ${boost ? `<span class="bh-pill">${ICONS.boltIco(14)} x${boost}</span>` : ''}
       ${/* THE DOOR TO THE LOOKS COLLECTION. v395 removed the hub's LOOKS card,
@@ -13465,6 +14509,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
             layout; it is a <button> with an accent edge so it reads as tappable
             rather than as one more read-only tally. */''}
       <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${looksAll.filter(i => looksHave.has(i.id)).length}/${looksAll.length} looks</button>
+      ${/* THE FITS CAP, STATED (QA round 23 F8). At 6 fits the save chip used to
+            vanish with no copy and no total, the only storage cap in the app
+            with none (the yard prints 24, favourites 6, recents 8, and the looks
+            pill beside this one prints N/M). Same .bh-pill as the looks count. */''}
+      <span class="bh-pill ward-fits">${fitCount}/${MAX_FITS} fits</span>
     </div>` : tab === 'shop' ? gwartHeroHtml() : `
     <div class="bh-hero mini">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny })}</div>
@@ -13567,7 +14616,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
   if (tab === 'wardrobe') {
     const owned = await ownedCosmeticIds();
-    const [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal, fitList] = await Promise.all([
+    // tm and dustBal are reassigned by restageLook after a paid commit (QA round 23 F1)
+    let [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal, fitList] = await Promise.all([
       ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(),
     ]);
     const fitPrices = await Promise.all(fitList.map(f => fitPrice(f)));
@@ -13578,7 +14628,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
     // `eq` is the RAW equipment (what the grids tick as equipped); `look` is what
     // you actually appear as once transmog resolves, so the doll and the stage
     // agree with the rest of the app.
-    const look = await equipped();
+    let look = await equipped();   // let: refreshed in place after a look commit (QA round 23 F1)
     const rawEq = await equipped({ raw: true });   // pre-transmog: what is actually ON
     const wLevel = levelFor(await totalXp()).level;
     const slot = S.wardrobeSlot || 'H';
@@ -13628,7 +14678,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
        to key off wornGear alone, so a slot holding a cosmetic showed no transmog
        panel at all, which is what Tom hit. */
     const baseArtId = wornGear ? wornGear.artId : (rawEq[slot] || null);
-    const stageEq = (() => {
+    // a function, not a value: restageLook re-reads it after every look tap
+    const previewEq = () => {
       const p = S.lookPreview;
       if (p == null || !baseArtId) return look;
       const e = { ...look };
@@ -13636,13 +14687,66 @@ async function renderCharacter(wrap, tab, opts = {}) {
       else if (p === '') e[slot] = baseArtId;
       else if (BH_BY_ID[p]) e[slot] = p;
       return e;
-    })();
+    };
+    const stageEq = previewEq();
     // Prices are paid-aware: a look you have already bought for this slot reads
     // free forever, which is what lets fits swap without a tax.
     const slotArts = baseArtId
       ? BH_ITEMS.filter(i => i.slot === slot && looks.has(i.id) && i.id !== baseArtId) : [];
     const lookPriceMap = {};
     for (const i of slotArts) lookPriceMap[i.id] = await transmogPrice(slot, i.id);
+
+    /* THE LOOK PANEL'S MOVING PARTS, as functions of S.lookPreview and the `let`
+       tm / dustBal / look above, so ONE piece of markup serves the first render
+       and the in-place refresh in restageLook below (QA round 23 F1). Only what
+       a look tap can change lives here: the Now/After pair, a tile's price tag
+       and the bar. The tiles themselves never move. */
+    const mogOn = S.mogv2 && GEAR_SLOTS.includes(slot) && !!baseArtId;
+    const mogState = () => {
+      const cur = tm[slot] ?? '';                        // '' = the gear's own look
+      const sel = S.lookPreview == null ? cur : S.lookPreview;
+      const cost = (sel === '' || sel === TRANSMOG_HIDE) ? 0 : (lookPriceMap[sel] || 0);
+      return { cur, sel, cost, afford: dustBal >= cost, changed: sel !== cur };
+    };
+    const ownArt = BH_BY_ID[baseArtId];
+    const nameOf = v => v === ''
+      ? (wornGear ? `${wornGear.name}, its own look` : `${ownArt?.name || 'What you are wearing'}, as equipped`)
+      : v === TRANSMOG_HIDE ? 'Nothing, slot hidden' : (BH_BY_ID[v]?.name || '');
+    const dustIco = ICONS.dust(16);
+    const figure = eqMap => `<div class="bh-stage mog-fig">${avatarLayersHtml(eqMap, { noYard: true, skip: ['C', 'BG'] })}</div>`;
+    const mogFigsHtml = () => {
+      const { changed } = mogState();
+      return `<figure><span class="mog-cap">Now</span>${figure(look)}</figure>
+            <span class="mog-arrow" aria-hidden="true">${ICONS.chev(18)}</span>
+            <figure class="${changed ? 'after' : 'same'}"><span class="mog-cap">${changed ? 'After' : 'Pick one below'}</span>${figure(previewEq())}</figure>`;
+    };
+    const costTag = id => lookPriceMap[id] ? `<span class="look-cost dust">${lookPriceMap[id]}${dustIco}</span>` : '<span class="look-cost paid">owned</span>';
+    /* THE BAR IS A CHILD OF .mog-dock, NOT OF .mog-panel (QA round 23 F3). It is
+       `position: sticky; bottom: 0`, and sticky is clamped by its containing
+       block: inside the panel it could only float while the panel was on screen,
+       which at 375x667 is a document offset of ~1810, 78% of the scroll range.
+       23 commits in the app spend a currency and this was the only one you had
+       to scroll to. The dock opens at the paper doll, so the bar sits at the
+       bottom of the viewport from scrollTop 0 and settles into place under the
+       panel once you get there. Same construction as .breed-dock in openStable.
+       The figures and the You keep / You get / You pay lines stay: the inline
+       bar answered a measured grill on 2026-08-23, only the TRAVEL was wrong. */
+    const mogBarHtml = () => {
+      if (!mogOn) return '';
+      const { sel, cost, afford, changed } = mogState();
+      return `<div class="look-bar mog-bar${changed ? ' armed' : ''}">
+            <div class="mog-lines">
+              <span><i>You keep</i><b>${wornGear ? gearLabel(wornGear) : 'every piece you own'}</b></span>
+              <span><i>You get</i><b>${esc(nameOf(sel))}</b></span>
+              <span class="pay"><i>You pay</i><b>${cost ? `${cost} Bone Dust` : 'nothing'}</b>${cost ? `<em>${dustIco} you have ${dustBal}</em>` : ''}</span>
+            </div>
+            ${changed
+              ? (afford
+                  ? `<button class="btn mog-go" data-look-apply="${esc(sel)}" data-look-price="${cost || 0}">Wear it</button>`
+                  : `<button class="btn ghost mog-go" disabled>Need ${cost - dustBal} more dust</button>`)
+              : '<button class="btn ghost mog-go" disabled>Wear it</button>'}
+          </div>`;
+    };
 
     // SAVED FITS: a look you can put back on in one tap. Stats never move.
     const fitRail = `
@@ -13659,7 +14763,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ${S.fitEdit === f.id ? '<i class="fc-x" data-fit-del="' + f.id + '">' + ICONS.close(12) + '</i>' : ''}
           </button>`;
         }).join('')}
-        ${fitList.length < MAX_FITS ? '<button class="fit-chip add" data-fit-save="1">+ Save this fit</button>' : ''}
+        ${/* AT THE CAP THE CHIP STAYS, GHOSTED, AND A TAP EXPLAINS (QA round 23 F8).
+              It used to be removed outright, so "You can keep 6 fits. Bin one
+              first." (the handler below) was unreachable: captureFit can only
+              return `full` from a control that only rendered while not full.
+              aria-disabled, not disabled: a disabled button swallows the tap that
+              is supposed to toast the rule. "Replace which one" is design, not
+              built here. */''}
+        <button class="fit-chip add" data-fit-save="1"${fitList.length >= MAX_FITS ? ' aria-disabled="true"' : ''}>+ Save this fit</button>
         ${/* A player asked for one tap that clears the doll so a new outfit starts
               from nothing, and Tom's call on 2026-08-22 is that it takes the
               STATTED GEAR too. It UNEQUIPS and nothing else: every piece and every
@@ -13678,6 +14789,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
 
     content.innerHTML = `
       ${fitRail}
+      <div class="mog-dock">
       <div class="paperdoll">
         <div class="pd-col">${LEFT.map(pdSlot).join('')}</div>
         <div class="pd-center">
@@ -13748,17 +14860,24 @@ async function renderCharacter(wrap, tab, opts = {}) {
           ? `<div class="sect-h mog-h" style="margin-top:14px"><span>The Dressing Room · ${esc(GEAR_SLOT_LABELS[slot])}</span></div>
              <p class="note mog-empty">This slot is empty, so there is nothing to disguise yet. Put something on above and the look picker appears here.</p>`
           : '';
-        const cur = tm[slot] ?? '';                        // '' = the gear's own look
-        const sel = S.lookPreview == null ? cur : S.lookPreview;
+        const { cur, sel, cost, afford, changed } = mogState();
         const arts = slotArts;
-        const cell = (val, inner, title) => `<button class="ward-cell look ${cur === val ? 'equipped' : ''} ${sel === val ? 'selected' : ''}" data-look="${esc(val)}" title="${esc(title)}">${inner}</button>`;
-        const ownArt = BH_BY_ID[baseArtId];
-        const nameOf = v => v === ''
-          ? (wornGear ? `${wornGear.name}, its own look` : `${ownArt?.name || 'What you are wearing'}, as equipped`)
-          : v === TRANSMOG_HIDE ? 'Nothing, slot hidden' : (BH_BY_ID[v]?.name || '');
-        const cost = (sel === '' || sel === TRANSMOG_HIDE) ? 0 : (lookPriceMap[sel] || 0);
-        const afford = dustBal >= cost;
-        const changed = sel !== cur;
+        const cell = (val, inner, title, extra = '') => `<button class="ward-cell look ${extra} ${cur === val ? 'equipped' : ''} ${sel === val ? 'selected' : ''}" data-look="${esc(val)}" title="${esc(title)}">${inner}</button>`;
+        /* THE LOOK TILES, ONE RENDERER (QA round 23 F6). Measured on a heavy
+           account: 57 collected looks made a 1420px grid in BH_ITEMS declaration
+           order with NO organisation, and 56 of 56 tiles carried no rarity class
+           while the "pick your fit" grid above carries r-<rarity> plus the tag.
+           The precedent is the Looks tab (grep `RAR_ORDER.indexOf(a.rarity)`
+           below): rarity descending, stable, so declaration order survives inside
+           a band. Same r-<rarity> class and rarityTagHtml as the fit grid, so the
+           tier reads in the half of the screen where it is bought. The two fixed
+           cells (own look / Hide) stay first and carry no tier. The module-level
+           RAR_ORDER runs common -> legendary, hence b - a for legendary first.
+           No search, favourites or sort controls: that is design, Tom's call. */
+        const lookTilesHtml = arts => `${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+            ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
+            ${[...arts].sort((a, b) => RAR_ORDER.indexOf(b.rarity) - RAR_ORDER.indexOf(a.rarity))
+              .map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>${costTag(i.id)}${rarityTagHtml(i.rarity)}`, `${i.name} · ${i.rarity}`, `r-${i.rarity}`)).join('')}`;
         /* ---------------------------------------------------------------- v2
            THE NEW-PLAYER GRILL, 2026-08-23, measured at 430x932 on a seeded
            mid-game account. Four findings, and this branch answers them in order:
@@ -13798,8 +14917,6 @@ async function renderCharacter(wrap, tab, opts = {}) {
            looks are offered. This is presentation. */
         if (S.mogv2) {
           const slotLc = esc(GEAR_SLOT_LABELS[slot].toLowerCase());
-          const dustIco = ICONS.dust(16);
-          const figure = eqMap => `<div class="bh-stage mog-fig">${avatarLayersHtml(eqMap, { noYard: true, skip: ['C', 'BG'] })}</div>`;
           return `
         <div class="mog-panel">
           <div class="sect-h mog-h"><span>The Dressing Room · ${esc(GEAR_SLOT_LABELS[slot])}</span>
@@ -13819,26 +14936,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ? `Your ${slotLc} keeps <b>${gearLabel(wornGear)}</b>. Only the picture changes.`
             : `Nothing with stats is in this ${slotLc}, so changing the picture here is free.`}</p>
           <div class="mog-figs">
-            <figure><span class="mog-cap">Now</span>${figure(look)}</figure>
-            <span class="mog-arrow" aria-hidden="true">${ICONS.chev(18)}</span>
-            <figure class="${changed ? 'after' : 'same'}"><span class="mog-cap">${changed ? 'After' : 'Pick one below'}</span>${figure(stageEq)}</figure>
+            ${mogFigsHtml()}
           </div>
           <div class="ward-grid look-grid">
-            ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
-            ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
-            ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost dust">${lookPriceMap[i.id]}${dustIco}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
-          </div>
-          <div class="look-bar mog-bar${changed ? ' armed' : ''}">
-            <div class="mog-lines">
-              <span><i>You keep</i><b>${wornGear ? gearLabel(wornGear) : 'every piece you own'}</b></span>
-              <span><i>You get</i><b>${esc(nameOf(sel))}</b></span>
-              <span class="pay"><i>You pay</i><b>${cost ? `${cost} Bone Dust` : 'nothing'}</b>${cost ? `<em>${dustIco} you have ${dustBal}</em>` : ''}</span>
-            </div>
-            ${changed
-              ? (afford
-                  ? `<button class="btn mog-go" data-look-apply="${esc(sel)}" data-look-price="${cost || 0}">Wear it</button>`
-                  : `<button class="btn ghost mog-go" disabled>Need ${cost - dustBal} more dust</button>`)
-              : '<button class="btn ghost mog-go" disabled>Wear it</button>'}
+            ${lookTilesHtml(arts)}
           </div>
           <p class="note mog-safe">Nothing is destroyed. The piece stays on, keeps its stats and stays in your Backpack.${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>
         </div>`;
@@ -13862,6 +14963,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
           ? `Your ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} keeps <b>${gearLabel(wornGear)}</b> whatever it looks like. Trying one on is free, you only spend Bone Dust when you wear it. You have <b><span class="dust-ico">${ICONS.dust(12)}</span> ${dustBal}</b>.`
           : `Nothing with stats in this ${esc(GEAR_SLOT_LABELS[slot].toLowerCase())} slot, so a look here is only a look: <b>switching is free</b>.`}${arts.length ? '' : ' No other looks collected for this slot yet, keep hunting.'}</p>`;
       })()}
+      ${mogBarHtml()}
+      </div>
       ${GEAR_SLOTS.includes(slot) ? '<p class="note" style="text-align:center;margin-top:10px">Statted gear boosts your Pit fighter. Same look can roll different stats; pieces marked with a bolt grant a talent. Rarer rolls hit harder. Melting a piece keeps its look forever.</p>' : ''}
       ${lockedCount ? `<p class="note" style="text-align:center;margin-top:10px">More ${slotMeta.label.toLowerCase()} pieces are out there. Keep hunting.</p>` : ''}`;
     // --- saved fits: tap to wear, long-press for rename / bin ---
@@ -13902,11 +15005,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
       S.fitEdit = null; popSound(S.sounds);
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
+    // one string, said from both the ghosted chip and captureFit's own `full` (QA round 23 F8)
+    const fitsFullMsg = `You can keep ${MAX_FITS} fits. Bin one first.`;
     $('[data-fit-save]', content)?.addEventListener('click', async () => {
+      if (fitList.length >= MAX_FITS) { toast(fitsFullMsg, 2800); return; }
       openTextSheet({ title: 'Name this fit', value: `Fit ${fitList.length + 1}`, cta: 'Save fit' }, async name => {
         if (!name) return;
         const res = await captureFit(name);
-        if (!res.ok) { toast(res.reason === 'full' ? `You can keep ${res.max} fits. Bin one first.` : 'Could not save that fit.', 2800); return; }
+        if (!res.ok) { toast(res.reason === 'full' ? fitsFullMsg : 'Could not save that fit.', 2800); return; }
         levelSound(S.sounds);
         toast(`Saved "${res.fit.name}". Tap it any time to put it back on.`, 2600);
         renderCharacter(wrap, 'wardrobe', { instant: true });
@@ -13938,7 +15044,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
        (Tom, 2026-08-11: "they should be a larger size so you can see what you
        are transmogging"). Same trim as the doll slots. */
     hydratePackArt(content, '.pd-art[data-art], .ward-art[data-art]');
-    $$('[data-pd]', content).forEach(b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); }));
+    const wirePd = b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); });
+    $$('[data-pd]', content).forEach(wirePd);
     $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
       await equip(slot, cell.dataset.equip || null);
       S.lookPreview = null;
@@ -13950,20 +15057,69 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const done = await restageWardrobe(content, slot);
       if (!done) renderCharacter(wrap, 'wardrobe', { instant: true });   // fall back rather than leave it stale
     }));
+    /* A LOOK TAP MOVES FOUR THINGS AND REBUILDS NOTHING (QA round 23 F1).
+       Preview and commit used to call renderCharacter(wrap, 'wardrobe',
+       { instant: true }). That rebuilds #chBody, so #chContent held ZERO elements
+       for 2 frames on a paid commit (3 on a preview, with all eight doll layers
+       naturalWidth 0 while visible for 86ms), and re-hydrated every canvas on the
+       screen: 65.2 MB discarded and 645ms to settle per tap at collection scale.
+       `instant: true` never suppressed a transition; opts is read in exactly one
+       place, to keep the scroll position. There was no transition to kill.
+       The equip path had the fix already (restageWardrobe, decode then swap).
+       Both taps go through it now. What a look tap changes: the big doll, the
+       Now/After pair, the rings on the look tiles, the bar. A COMMIT also moves
+       dust, the slot's tile on the paper doll (its art and its "look changed"
+       mark), the paid tile's price tag and the fit grid's ring, so those are
+       re-read and re-drawn too, still without touching the rest of the screen.
+       Anything unexpected in the DOM falls back to the full render rather than
+       leaving a stale character up. */
+    async function restageLook({ committed = false } = {}) {
+      if (committed) {
+        [tm, dustBal, look] = await Promise.all([transmogMap(), boneDust(), equipped()]);
+        for (const i of slotArts) lookPriceMap[i.id] = await transmogPrice(slot, i.id);
+      }
+      const done = committed ? await restageWardrobe(content, slot) : await restageDoll(content, previewEq());
+      const panel = $('.mog-panel', content), figs = $('.mog-figs', content), bar = $('.mog-bar', content);
+      if (!done || !panel || !figs || !bar) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
+      const { cur, sel } = mogState();
+      figs.innerHTML = mogFigsHtml();
+      for (const c of $$('[data-look]', panel)) {
+        c.classList.toggle('equipped', c.dataset.look === cur);
+        c.classList.toggle('selected', c.dataset.look === sel);
+        const tag = $('.look-cost', c);
+        if (tag && lookPriceMap[c.dataset.look] !== undefined) tag.outerHTML = costTag(c.dataset.look);
+      }
+      bar.outerHTML = mogBarHtml();
+      wireMogBar();
+      if (committed) {
+        const pill = $('.ward-dust', wrap);
+        if (pill) pill.innerHTML = `${ICONS.dust(16)} ${dustBal.toLocaleString()}`;
+        const tile = $(`.pd-slot[data-pd="${slot}"]`, content);
+        if (tile) {
+          tile.outerHTML = pdSlot(slot);
+          const fresh = $(`.pd-slot[data-pd="${slot}"]`, content);
+          wirePd(fresh);
+          hydratePackArt(fresh, '.pd-art[data-art]');
+        }
+      }
+    }
     // Tap a look to try it on: free, instant, no commitment. Dust is only spent
     // by the Apply button in the bar.
     $$('[data-look]', content).forEach(cell => cell.addEventListener('click', () => {
       S.lookPreview = cell.dataset.look;
       popSound(S.sounds);
-      renderCharacter(wrap, 'wardrobe', { instant: true });
+      restageLook();
     }));
-    $$('[data-look-apply]', content).forEach(btn => {
-      // free actions (revert to the gear's own look, or hide the slot) stay one tap:
-      // a confirm on something that costs nothing is just friction
-      const price = Number(btn.dataset.lookPrice || 0);
-      if (price > 0) { armToConfirm(btn, `Spend ${price} dust?`, () => applyLook(btn)); return; }
-      btn.addEventListener('click', () => applyLook(btn));
-    });
+    function wireMogBar() {
+      $$('[data-look-apply]', content).forEach(btn => {
+        // free actions (revert to the gear's own look, or hide the slot) stay one tap:
+        // a confirm on something that costs nothing is just friction
+        const price = Number(btn.dataset.lookPrice || 0);
+        if (price > 0) { armToConfirm(btn, `Spend ${price} dust?`, () => applyLook(btn)); return; }
+        btn.addEventListener('click', () => applyLook(btn));
+      });
+    }
+    wireMogBar();
     async function applyLook(btn) {
       const val = btn.dataset.lookApply;
       const res = val === '' ? await clearTransmog(slot) : await applyTransmog(slot, val);
@@ -13974,7 +15130,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       S.lookPreview = null;
       levelSound(S.sounds); pushProfileSoon();
       toast(res.cost ? `Look changed. −${res.cost} dust.` : 'Look changed.', 2000);
-      renderCharacter(wrap, 'wardrobe', { instant: true });
+      restageLook({ committed: true });
     }
     // tapping a gear cell INSPECTS it (preview): the panel below shows its stats +
     // special ability. Tapping the already-selected piece, or the panel button, equips.
@@ -14500,7 +15656,10 @@ function gearToCard(g) {
     .filter(([, v]) => Number.isFinite(v) && v > 0)
     .map(([k, v]) => [STAT_CODE[k] || k.toUpperCase(), v]);
   return {
-    id: g.id, imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity,
+    /* WORN, NOT LOOSE. `wear` is the art id, and packCardHtml draws it on the
+       neutral mannequin; imgSrc stays as the fallback for an art id whose slot
+       the crop table cannot place. */
+    id: g.id, wear: g.artId, imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity,
     kind: `GEAR · ${GEAR_SLOT_LABELS[g.slot] || g.slot}`,
     lvl: g.minLevel > 1 ? `Lv ${g.minLevel}` : '',
     statList: st, talent: g.talent ? g.talentName : '', plain: !st.length,
@@ -14750,7 +15909,15 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
 function packCardHtml(c, { selectable = false } = {}) {
   const rar = RARITIES[c.rarity] || RARITIES.common;
   const holo = RAR_ORDER.indexOf(c.rarity) >= 2 ? ' holo' : '';
-  const art = c.imgSrc ? `<canvas class="pc-canvas" width="600" height="600" data-art="${esc(c.imgSrc)}"></canvas>` : `<div class="pc-icon">${c.iconHtml || ''}</div>`;
+  /* `wear` (a Boneheadz art id) DRAWS THE PIECE ON A MANNEQUIN and beats the
+     loose PNG. It is set at the card-building sites rather than derived here
+     because only they know whether the thing being revealed is worn at all: a
+     crate, a pet, a pile of coins and an ingredient all reach this function too.
+     Nothing else about the card moves: same rarity frame, same plate, same
+     band. */
+  const art = c.wear && canWear(c.wear) ? wornArtHtml(c.wear, PC_WEAR_CSS)
+    : c.imgSrc ? `<canvas class="pc-canvas" width="600" height="600" data-art="${esc(c.imgSrc)}"></canvas>`
+    : `<div class="pc-icon">${c.iconHtml || ''}</div>`;
   const sparks = RAR_ORDER.indexOf(c.rarity) >= 3
     ? `<span class="pc-spark k1">${sparkIco(16)}</span><span class="pc-spark k2">${sparkIco(11)}</span><span class="pc-spark k3">${sparkIco(12)}</span><span class="pc-spark k4">${sparkIco(15)}</span>`
     : '';
@@ -14835,10 +16002,48 @@ const CRATE_SEQ = {
   golden: { dir: 'golden', frames: 3, ms: [200, 120] },
 };
 const CRATE_SEQ_FRAMES = CRATE_SEQ.daily.frames;
+/* WARM THE CRATE FRAMES BEFORE THE TAP, NOT ON IT (R20-P3).
+   openPackReveal used to be the only thing that fetched these, which means the
+   fetch started at the same instant the 2.6s choreography did. Measured under a
+   3G profile that is not enough: f0-f2 of the golden crate were still in flight
+   a second into the reveal. Called when the Backpack renders, the frames are in
+   the cache and decoded long before a player picks a crate and taps OPEN.
+   The promise AND the Image objects are memoised per kind: a resolved promise
+   alone would let the decoded bitmap be collected again, and holding the
+   elements is what keeps the decode, not just the bytes. Two kinds, ~2KB a
+   frame; this is not a cache that needs eviction.
+   decode() rejections are swallowed per image so one broken frame degrades the
+   sequence to a skipped step instead of hanging the reveal for ever
+   (anti-regression rule 8). */
+const crateWarm = new Map();
+function warmCrateFrames(kind) {
+  const cfg = CRATE_SEQ[kind];
+  if (!cfg) return Promise.resolve();
+  let w = crateWarm.get(kind);
+  if (!w) {
+    const imgs = Array.from({ length: cfg.frames }, (_, i) => {
+      const im = new Image();
+      im.src = `assets/crates/${cfg.dir}/f${i}.png`;
+      return im;
+    });
+    w = { imgs, p: Promise.all(imgs.map(im => im.decode().catch(() => {}))) };
+    crateWarm.set(kind, w);
+  }
+  return w.p;
+}
 const EGG_SEQ_FRAMES = 15;
 function crateSeqHtml(kind = 'daily') {
   const cfg = CRATE_SEQ[kind];
-  const f = i => `<img src="assets/crates/${cfg.dir}/f${i}.png" alt="" class="cq-f${i === 0 ? ' on' : ''}" decoding="sync">`;
+  /* NO `on` IN THE MARKUP, NOT EVEN ON f0 (R20-P3).
+     Every frame after the first was gated behind the decode promise, and the
+     first one was gated behind nothing at all: it carried `.on` from the moment
+     this string was parsed. Measured under a 3G profile, the golden crate's
+     f0.png was on screen at opacity 1 with naturalWidth 0 for ~1s while f0-f2
+     were still being fetched, i.e. the sequence started on an undecoded first
+     frame, which is the one thing tally/CLAUDE.md says never to do. f0 now gets
+     `.on` from the SAME `ready` promise that drives every later step (see
+     playCrateSeq), so there is one gate, not two mechanisms. */
+  const f = i => `<img src="assets/crates/${cfg.dir}/f${i}.png" alt="" class="cq-f" decoding="sync">`;
   /* `pix` ON THE WRAPPERS. The drop and settle animations were written for the
      VECTOR crates, which are one static icon and therefore need faking: crDrop
      squashes with scale(1.06,.9) and crSettle wobbles up to scale(1.08). Both
@@ -14945,6 +16150,13 @@ function playCrateSeq(reveal, scope, ready, at, kind = 'daily', tOpen = performa
     if (Math.abs(fy) > 0.001) seq.style.top = `${(-fy / dpr).toFixed(4)}px`;
   };
   ready.then(() => {
+    // THE FIRST FRAME IS A STEP LIKE THE OTHERS (R20-P3). It used to be painted
+    // by the markup, before decode; it is painted here, after it, by the same
+    // promise the loop below waits on. `shown` is still 0, so when decode is
+    // already done (the ordinary case now that the Backpack pre-warms the
+    // frames) this runs in the same task the sequence would have started in and
+    // the shipped timing is unchanged.
+    frames[0].classList.add('on');
     /* Whatever decode cost, spend it on the pre-roll (a closed crate mid-drop,
        where nobody can tell) instead of on the tail. If decode overran the whole
        pre-roll, compress the frame table into what is left rather than running
@@ -15072,8 +16284,20 @@ const BURST = {
   legendary: { light: '#ffc961', amp: .55, haze: .07 },
 };
 function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
-  return Promise.all($$(sel, scope)
-    .map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined)));
+  /* A MANNEQUIN CARD HAS NO CANVAS, AND SILENCE HERE WOULD MEAN AN UNDECODED
+     ENTRANCE. Every caller uses this promise as "the art is ready": renderCard
+     races it before letting the card fly in, and wireLootChoice awaits it before
+     the boss-loot grid is touchable. A wear card's layers are plain <img>s, so
+     without this branch the promise resolved instantly and the card rose with an
+     empty panel -- the same failure the canvas path was built to avoid, and the
+     one tally/CLAUDE.md bans outright ("never start a sequence on an undecoded
+     first frame"). decode() rejections are swallowed per image so one missing
+     layer degrades the card to a missing garment, never to a hung reveal
+     (anti-regression rule 8). */
+  return Promise.all([
+    ...$$(sel, scope).map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined)),
+    ...$$('.pc-worn img', scope).map(im => im.decode().catch(() => {})),
+  ]);
 }
 
 /* Canvas art (imgSrc) already paints a plain plate when its load fails (see
@@ -15109,6 +16333,13 @@ function wirePackArtFallback(scope) {
    see those states, and it never exists for a player. */
 if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__packReveal = (cards, opts) => openPackReveal(cards, opts || {});
+  /* THE APP'S OWN CARD BUILDERS, so the mannequin audit grades what a player
+     gets rather than a card object typed into the test. A hand-built
+     `{ wear: 'G3' }` would agree with the renderer by construction and stay
+     green through a builder that stopped setting `wear` at all -- which is the
+     regression worth catching, since that is how the loose PNG comes back. */
+  window.__gearCard = id => GEAR_BY_ID[id] ? gearToCard(GEAR_BY_ID[id]) : null;
+  window.__crateCard = row => crateResultToCard(row);
   /* A den fight with TWO targets, the case Tom has reported three times ("fighting
      a boss den with two enemy targets doesn't have a clear health bar for the
      second target at all"). It needs 5 den wins AND standing inside a den's
@@ -15174,6 +16405,14 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
   // Warm every card's art up front so flicking through a multi-card pack never
   // waits: by the time you tap to advance, the next one is already decoded.
   for (const c of cards) {
+    /* A wear card's art is three layers at a tier only wornArtHtml knows, so it
+       warms itself by building the same markup into a node nobody attaches:
+       assigning innerHTML starts the loads, and re-deriving the URLs here would
+       be a second copy of the tier maths that could silently warm a size the
+       card never draws. Its `imgSrc` is deliberately NOT warmed: that master is
+       the fallback for an id the crop table cannot place, and warming both would
+       decode a 640 square the card never paints. */
+    if (c.wear && canWear(c.wear)) { document.createElement('div').innerHTML = wornArtHtml(c.wear, PC_WEAR_CSS); continue; }
     const src = c.imgSrc || c.art;
     if (src) { const im = new Image(); im.src = src; }
   }
@@ -15182,16 +16421,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
      are only ~2KB each, but "small" is not "decoded", and the whole sequence
      runs inside a 260ms window between --b-lid and --b-card. A frame that has
      not decoded when its turn comes paints nothing, and a blank frame mid-open
-     is the exact v245 invisible-punch failure. decode() rejections are swallowed
-     per image so one broken frame degrades the sequence to a skipped step
-     instead of hanging the whole reveal (anti-regression rule 8). */
-  const crateSeqReady = CRATE_SEQ[crate]
-    ? Promise.all(Array.from({ length: CRATE_SEQ[crate].frames }, (_, i) => {
-        const im = new Image();
-        im.src = `assets/crates/${CRATE_SEQ[crate].dir}/f${i}.png`;
-        return im.decode().catch(() => {});
-      }))
-    : Promise.resolve();
+     is the exact v245 invisible-punch failure.
+     Starting the fetch HERE was always too late on a slow link, so the work
+     moved into warmCrateFrames, which the Backpack calls on render; this call
+     is now the memoised join, and only pays for the fetch if the reveal was
+     reached without the Backpack (a quest payout, a level-up). */
+  const crateSeqReady = warmCrateFrames(crate);
   return new Promise(resolve => {
     /* THE SEAM THAT MAKES THIS TESTABLE.
      *
@@ -15473,14 +16708,14 @@ function crateResultToCard(r) {
   if (r.type === 'ingredient') { const ing = INGREDIENTS[r.ingredient]; return { iconHtml: ingIconHtml(ing.id, 130), name: ing.name, rarity: 'common', kind: 'INGREDIENT', stats: 'Cooking ingredient' }; }
   if (r.type === 'gear' || r.type === 'geardupe') {
     const g = r.gear, dup = r.type === 'geardupe';
-    if (dup) return { imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity, kind: 'GEAR · DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
+    if (dup) return { wear: g.artId, imgSrc: bhAsset(BH_BY_ID[g.artId]), name: g.name, rarity: g.rarity, kind: 'GEAR · DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
     // the slot, the level gate, the stat line and the talent affix as separate
     // fields: the card lays them out itself instead of reading one packed string
     return gearToCard(g);
   }
   const isPet = r.item && r.item.slot === 'C';
-  if (r.type === 'dupe') return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
-  return { imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: '' };
+  if (r.type === 'dupe') return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
+  return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: '' };
 }
 
 async function openCrateReveal(result) {
@@ -17291,15 +18526,25 @@ async function openRecoverySheet() {
 /* One toast for everything a file restore brought back. Only nonzero categories
    speak: "0 foods" reads as data loss to a player whose custom-foods store was
    simply empty (confirmed playtest ticket, 2026-08). */
+/* QA round 25 M6: importAll returns `skipped`, the stores the file did not carry
+   (a v1 backup has no health or inv), and this function threw that list away, so
+   the player was told "Restored 12 log entries" while two stores sat untouched.
+   A skipped store is now the headline, in the player's words for each store.
+   tests/backup-version-audit.mjs pins the wording. */
+const STORE_WORDS = { foods: 'custom foods', log: 'the food log', weights: 'weigh-ins', kv: 'settings', xp: 'XP', health: 'health', inv: 'inventory' };
+const andJoin = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a[0];
 function importSummary(counts) {
+  const skipped = counts.skipped || [];
+  if (skipped.length) {
+    const list = andJoin(skipped.map(s => STORE_WORDS[s] || s));
+    return `Restored ${STORES.length - skipped.length} of ${STORES.length} stores. ${list[0].toUpperCase() + list.slice(1)} were not in this backup.`;
+  }
   const parts = [];
   if (counts.log) parts.push(`${counts.log} log entr${counts.log === 1 ? 'y' : 'ies'}`);
   if (counts.foods) parts.push(`${counts.foods} custom food${counts.foods === 1 ? '' : 's'}`);
   if (counts.weights) parts.push(`${counts.weights} weigh-in${counts.weights === 1 ? '' : 's'}`);
   if (!parts.length) return 'Backup restored';
-  return 'Restored ' + (parts.length > 1
-    ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1]
-    : parts[0]);
+  return 'Restored ' + andJoin(parts);
 }
 
 /* THE one file-import path, shared by Settings > Import and the restore sheet
@@ -17325,6 +18570,7 @@ async function importBackupFromFile(file) {
   S.settings = await kvGet('settings') || S.settings;
   snapSettings();
   S.userFoods = await db.all('foods');
+  await hydrateGenericUse(); // L3: generic use + stars back onto GENERIC_FOODS
   closeAllSheetsViaHistory();   // no-op when no sheet is open (Settings > Import)
   toast(importSummary(counts), 4200);
   if (wasOnb) {
@@ -17431,11 +18677,12 @@ async function maybeNudgeRecovery() {
     // A v230 phrase with no recovery ID still needs the friend code to restore,
     // which is the gap v231 exists to close. Checking only for a phrase left every
     // early player silently uninvited to the fix, so both count as "not covered".
-    if (await social.hasRecoveryPhrase() && await social.myRecoveryId()) return;
+    const warn = social.recoveryWarning(await social.hasRecoveryPhrase(), await social.myRecoveryId());
+    if (!warn) return;
     const last = await kvGet('recoveryNudgeAt', 0);
     if (Date.now() - last < 7 * 86400e3) return;
     await kvSet('recoveryNudgeAt', Date.now());
-    setTimeout(() => toast('No recovery code yet. Delete the app and this account is gone: set one in Settings.', 5200), 6000);
+    setTimeout(() => toast(warn, 5200), 6000);
   } catch { /* never block boot */ }
 }
 
@@ -17556,13 +18803,13 @@ async function renderBoneyard(el) {
           <p class="note" style="margin-bottom:6px">The Boneyard is your real neighborhood, skinned for skeletons. Fresh spawns appear around you every day: walk within ${COLLECT_RADIUS_M} m of one and collect it.</p>
           <p class="note" style="margin-bottom:14px">Your location is used on this phone only, never stored, never uploaded. Spawns are computed on-device; the map itself loads over the network.</p>
           <button class="btn" id="mapStart">Open the map</button>
-          <div class="card" style="margin-top:16px">
-            <div class="card-title">OUT THERE TODAY</div>
-            <div class="legend-row"><span class="legend-pix">${spawnIcon('bones', 24)}</span><div><b>Bone cache</b><span class="note"> · XP for your bonehead</span></div></div>
-            <div class="legend-row"><span class="legend-pix">${spawnIcon('coins', 24)}</span><div><b>Coin pile</b><span class="note"> · coins to spend in the shop</span></div></div>
-            <div class="legend-row"><span class="legend-pix">${spawnIcon('crate', 24)}</span><div><b>Buried crate</b><span class="note"> · a wearable inside</span></div></div>
-            <div class="legend-row"><span class="legend-pix rare">${spawnIcon('rare', 24)}</span><div><b>${MYSTERY_EGG.name}</b><span class="note"> · ${MYSTERY_EGG.desc}</span></div></div>
-          </div>
+          <!-- WAS A HAND-ROLLED COPY OF THE KEY, and it had drifted: four rows
+               against the key's nine, no Herb patch, no mini-boss, no dens, and
+               a crate described as "a wearable inside" where the key says "a
+               common crate of loot". mapLegendHtml exists precisely so the key
+               and the markers cannot drift, and the location-denied screen below
+               already reuses it. This one did not, so it rotted. -->
+          <div class="card" style="margin-top:16px">${mapLegendHtml('<div class="card-title">OUT THERE TODAY</div>')}</div>
         </div>
       </div>
     </div>`;
@@ -17683,7 +18930,7 @@ async function renderBoneyard(el) {
         <div class="map-topbar">
           <div class="mt-tx"><h1>Boneyard</h1><small id="mapCount">Reading the bones</small></div>
           <button class="map-ctl" id="mapRecenter" hidden aria-label="Recentre">${ICONS.crosshair(18)}</button>
-          <button class="map-ctl" id="mapKeyBtn" aria-label="Map key">${bhIcon('badge-map', 19)}</button>
+          <button class="map-ctl map-key" id="mapKeyBtn" aria-label="Map key" aria-expanded="false" aria-controls="mapLegend">${bhIcon('badge-map', 19)}<span class="mk-lbl">Key</span></button>
         </div>
         <div class="map-legend" id="mapLegend" hidden>${mapLegendHtml()}</div>
         <button class="btn map-den" id="mapDen" hidden>Enter the den</button>
@@ -17703,8 +18950,11 @@ async function renderBoneyard(el) {
 
     // Map key: toggle the legend; tapping the map closes it.
     const legendEl = $('#mapLegend', body);
-    $('#mapKeyBtn', body)?.addEventListener('click', e => { e.stopPropagation(); legendEl.hidden = !legendEl.hidden; });
-    $('#mapCanvas', body)?.addEventListener('pointerdown', () => { if (!legendEl.hidden) legendEl.hidden = true; });
+    const keyBtn = $('#mapKeyBtn', body);
+    // one setter, so the button's state can never disagree with the panel's
+    const showLegend = on => { legendEl.hidden = !on; keyBtn?.setAttribute('aria-expanded', String(on)); };
+    keyBtn?.addEventListener('click', e => { e.stopPropagation(); showLegend(legendEl.hidden); });
+    $('#mapCanvas', body)?.addEventListener('pointerdown', () => { if (!legendEl.hidden) showLegend(false); });
 
     let follow = true;
 
@@ -18636,6 +19886,20 @@ async function renderBoneyard(el) {
             // pennant and the tribute multiplier agree with every other phone.
             for (const r of rows) if (r.mine && r.level) await setSpireLevel(r.id, r.level);
           }
+          /* A SIEGE THAT STARTS MID-SESSION HAS TO SAY SO (QA round 20, R20-P5).
+             checkSieges only ran on boot and on resume, so a siege that rolled
+             while the app was open announced itself as a pennant change on this
+             poll and nothing else: no toast, no push, no reminder scheduled, on a
+             48h clock. It rides the once-a-minute throttle above rather than the
+             5s world tick, and it asks /spires/mine because this poll only sees
+             the towers NEARBY, and a siege lands wherever your towers are.
+             It cannot toast twice for one siege: syncSieges returns only sieges
+             whose until is new to the local record, and checkSieges then filters
+             those against the 'siegeSeen' ledger (id:until), which it persists
+             before announcing. Both existed already; only the call site is new.
+             Not awaited: this is a notification, and the marker refresh below
+             must not wait on the network for it. */
+          if (!S.demo) checkSieges();
         } finally { spireFetching = false; }
       }
       const live = new Set(near.map(s => s.id));
@@ -19289,8 +20553,50 @@ async function renderBoneyard(el) {
 }
 
 
-async function buildFighter() {
-  const [log, xpRows, health] = await Promise.all([db.all('log'), db.all('xp'), db.all('health')]);
+/* ONE-TIME MAKE-GOOD FOR R21-P1, and the reason it can only ever pay once.
+ *
+ * The habit base is gone (js/pit.js deriveStats), so an established player would
+ * otherwise open the app after this update and find their fighter stripped back
+ * to 20s. This converts whatever base their history had earned into unspent
+ * training points, once, and never again.
+ *
+ * IDEMPOTENCY, which is the whole risk here: the STORED VALUE IS THE FLAG. There
+ * is no separate boolean that can be written while the grant is not, and no
+ * accumulator that a second run could add to. A run either finds a value and
+ * returns it verbatim, or computes and writes one. Two concurrent buildFighter()
+ * calls both racing a cold key compute the same number from the same behavior
+ * snapshot and write the same number, so even the race is a no-op rather than a
+ * double-pay. The same is true of a cloud restore onto a fresh device: the key
+ * comes back with the vault, and if it somehow did not, the recomputation is a
+ * pure function of history rather than of the previous grant.
+ *
+ * Same shape as wheelResetOnce_v61 in js/wheel.js (the codebase's existing
+ * one-shot make-good), with the version in the key for the same reason: a future
+ * make-good gets its own key rather than reopening this one.
+ *
+ * KNOWN CEILING, deliberately accepted: the grant is snapshotted the first time
+ * a player builds a fighter AFTER the update, not at the moment the update
+ * lands. Someone who does not open the Pit for a month keeps logging habits in
+ * the meantime and gets a slightly larger grant than they would have on day one.
+ * That errs toward the player, and the alternative (snapshotting at boot for
+ * everyone, Pit player or not) puts a migration write on a path that has nothing
+ * to do with fighting.
+ */
+const HABIT_GRANT_KEY = 'habitBaseGrant_v471';
+async function habitBaseGrantTp(behavior) {
+  const prev = await kvGet(HABIT_GRANT_KEY, null);
+  if (prev && typeof prev.tp === 'number') return prev.tp;
+  const tp = habitGrantPoints(legacyHabitStats(behavior));
+  await kvSet(HABIT_GRANT_KEY, { tp, at: Date.now() });
+  return tp;
+}
+
+/* `pre` (QA round 25 M13): a caller that has already read the log, xp, health
+   stores or the owned-gear set in full (renderToday does, for the streak, the
+   quests and the unlock badges) passes them in so this does not scan the same
+   stores again. Every field is optional; a bare buildFighter() reads as before. */
+async function buildFighter(pre = {}) {
+  const [log, xpRows, health] = await Promise.all([pre.log || db.all('log'), pre.xpRows || db.all('xp'), pre.health || db.all('health')]);
   const behavior = {
     proteinDays: xpRows.filter(r => r.type === 'protein').length,
     closes: xpRows.filter(r => r.type === 'dayclose').length,
@@ -19301,10 +20607,14 @@ async function buildFighter() {
     questsDone: xpRows.filter(r => r.type === 'quest').length,
     variety: new Set(log.filter(e => e.foodId).map(e => e.foodId)).size,
   };
-  const baseStats = deriveStats(behavior);
+  // Flat for everyone (R21-P1). `behavior` still feeds training points below,
+  // which is now the ONLY thing habits move.
+  const baseStats = deriveStats();
   const alloc = await kvGet('trainalloc', {});
-  const [gearLo, gOwned, xpAll] = await Promise.all([gearLoadout(), ownedGearIds(), db.all('xp')]);
-  const level = levelFor(xpAll.reduce((a, r) => a + (r.xp || 0), 0)).level;
+  const [gearLo, gOwned] = await Promise.all([gearLoadout(), pre.gOwned || ownedGearIds()]);
+  /* xpRows was read whole a few awaits ago; a second db.all('xp') here was the
+     "xp read twice" in QA round 25 M13 and bought no fresher a snapshot. */
+  const level = levelFor(xpRows.reduce((a, r) => a + (r.xp || 0), 0)).level;
   const gBonus = gearStats(gearLo, gOwned, level);
   const setInfo = gearSetInfo(gearLo, gOwned, level); // 2pc/4pc tier-set bonuses
   for (const k of Object.keys(gBonus)) gBonus[k] += (setInfo.stats[k] || 0);
@@ -19315,7 +20625,10 @@ async function buildFighter() {
   // training points: one per wellbeing-safe positive day (protein hit / day closed on
   // budget) PLUS one per 25,000 lifetime steps - walking earns build power too.
   // Derived from history, so it's retroactive and idempotent by construction.
-  const tpTotal = (behavior.proteinDays || 0) + (behavior.closes || 0) + Math.floor((behavior.lifetimeSteps || 0) / 25000);
+  // + the one-time R21-P1 conversion of the old habit base into unspent points,
+  // so nobody is weaker after the update than they were before it.
+  const tpTotal = (behavior.proteinDays || 0) + (behavior.closes || 0) + Math.floor((behavior.lifetimeSteps || 0) / 25000)
+    + await habitBaseGrantTp(behavior);
   const tpSpent = STAT_META.reduce((a, m) => a + (alloc[m.key] || 0), 0);
   const tpAvail = Math.max(0, tpTotal - tpSpent);
   const talents = await kvGet('talents', []);
@@ -19343,7 +20656,8 @@ async function buildFighter() {
     battlePet = buildBattlePet(petInst.sp, pl, picks, { shiny: !!petInst.shiny, lineage: petInst.lineage || 0 });
     petMeta = { id: petInst.sp, iid: petInst.iid, level: pl, picks, steps, lineage: petInst.lineage || 0, shiny: !!petInst.shiny };
   }
-  return { stats, baseStats: gearedBase, habitStats: baseStats, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, talents, fightTalents, battlePet, petMeta, setInfo };
+  // habitStats is gone with the habit base (R21-P1). Nothing read it.
+  return { stats, baseStats: gearedBase, gearBonus: gBonus, gearArmor: gArmor, gearLo, alloc, tpTotal, tpAvail, behavior, talents, fightTalents, battlePet, petMeta, setInfo };
 }
 
 /* Talents that change ACTION ECONOMY rather than raw numbers. Gear and set
@@ -19428,7 +20742,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v470'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v471'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -20111,6 +21425,21 @@ const PIT_STAKED_MODES = ['rung', 'champ', 'endless'];
    re-renders the Pit, and a flag living in the closure would be a fresh false on
    every re-render, which is a guard that is not there. See startPit. */
 let pitOpening = false;
+
+/* THE LEDGER ROW SAYS WHAT YOU ACTUALLY FOUGHT (QA round 20, R20-P6).
+   Every win except a friend battle mints one capped `fight` row through the
+   shared path in settle(), and that row was hard-labelled 'Pit win' for all of
+   them: beating the Boneyard Wanderer filed a "Pit win" in the XP ledger next to
+   its own "Boneyard: the Wanderer" row. The label is display-only (the xp-row
+   list and the delivery sheet read r.label); the TYPE stays 'fight' for every
+   mode, because that is what buildStats counts for pitWins and the Blooded
+   badge, and re-typing rows would silently move a badge nobody asked to move.
+   Anything not listed keeps 'Pit win', which is the ladder itself: rung, champ
+   and endless are Pit fights and should read as such. */
+const FIGHT_ROW_LABEL = {
+  spar: 'Sparring win', boss: 'Den win', mini: 'Mini-boss win', secret: 'Secret boss win',
+  glutton: 'Glutton win', spire: 'Spire fight', mimic: 'Boneyard win', wanderer: 'Boneyard win',
+};
 
 async function openFight(pitWrap, fighter, foeCfg) {
   const eq = await equipped();
@@ -21420,10 +22749,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (won) {
         confettiRain(90); levelSound(S.sounds);
         const badges = await evaluateBadges();
+        xp += badges.length * BADGE_XP;   // same under-report as the main win path (R20-P6)
         if (badges.length) queueCelebration({ newBadges: badges });
       }
     } else if (won) {
-      await awardCapped('fight', 'fight', 10, 'Pit win', XP_DAILY_CAP.fight);
+      await awardCapped('fight', 'fight', 10, FIGHT_ROW_LABEL[foeCfg.mode] || 'Pit win', XP_DAILY_CAP.fight);
       trackEvent(foeCfg.mode === 'boss' ? 'boss_win' : foeCfg.mode === 'mini' ? 'mini_win' : 'pit_win', { mode: foeCfg.mode });
       xp += 10;
       if (foeCfg.mode === 'spar') { coins = 15; }
@@ -21481,7 +22811,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
             // nothing like the gear it had just given you.
             const gArt = GEAR_BY_ID[r.gear.id] && BH_BY_ID[GEAR_BY_ID[r.gear.id].artId];
             extraCards.push({
-              ...(gArt ? { imgSrc: bhAsset(gArt) } : { iconHtml: badgePixHtml('tombstone', 96) }),
+              ...(gArt ? { wear: gArt.id, imgSrc: bhAsset(gArt) } : { iconHtml: badgePixHtml('tombstone', 96) }),
               slimed: !!r.gear.slimed,
               name: r.gear.name, rarity: r.gear.rarity, kind: r.gear.slimed ? 'SLIMED GEAR' : 'GEAR',
               stats: r.gear.slimed ? 'Dripping with Glutton slime. Equip it in your Wardrobe.' : 'Equip it in your Wardrobe.',
@@ -21536,6 +22866,17 @@ async function openFight(pitWrap, fighter, foeCfg) {
         // rule the whole social layer is built on.
         const remote = await social.claimSpireRemote(foeCfg.spire).catch(() => ({ ok: false, reason: 'offline' }));
         const refused = remote && remote.ok === false && remote.reason !== 'offline';
+        /* A REFUSED TAKEOVER HANDS THE CHARGE BACK (QA round 20, R20-P2).
+           A 409 (shielded, or the attacker at SPIRE_CAP) changes nothing on the
+           server, so the Pit fight this player spent at the tap bought a state
+           transition that never happened: measured, one charge and the day's
+           spiretry gone for a 40-coin consolation. openSpireSheet now refuses to
+           open the fight at all while a shield it can see is up; this is the
+           other half, for the refusals it cannot see from here (a shield that
+           starts inside the 60s poll gap, and the cap, which the server counts).
+           Only the charge is returned. The consolation coins and the spiretry row
+           are deliberate and stay: a fight was still fought. */
+        if (refused && foeCfg.charge) await refundPitFight(foeCfg.charge);
         /* A NO-OP IS NOT A WIN. Tom, 2026-08-07: "You can still exploit the spire
            system just like the glutton was. After beating you can take the same
            spire again when it's already yours."
@@ -21605,7 +22946,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
                `pit-champ` badge this same win already mints (championTitle). */
             const skull = await grantCosmetic(CHAMP_PRIZE_ID, 'pit-champion');
             extraCards.push(
-              { iconHtml: `<img src="${bhAsset(BH_BY_ID[CHAMP_PRIZE_ID])}" style="width:118px;height:118px;object-fit:contain">`,
+              { wear: CHAMP_PRIZE_ID, imgSrc: bhAsset(BH_BY_ID[CHAMP_PRIZE_ID]),
                 name: BH_BY_ID[CHAMP_PRIZE_ID].name, rarity: 'legendary', kind: 'CHAMPION COSMETIC',
                 stats: skull ? `No crate can roll it. Wear it in your Wardrobe, and carry the ${CHAMP_TITLE} title.`
                              : `You already had it. The ${CHAMP_TITLE} title is yours from here.` },
@@ -21702,6 +23043,13 @@ async function openFight(pitWrap, fighter, foeCfg) {
       if (coins) await coinsAdd(coins);
       window.__refreshWalletPill?.();   // the hub behind this sheet shows the balance this just changed
       const badges = await evaluateBadges();
+      /* THE CARD REPORTS WHAT WAS MINTED, BADGES INCLUDED (QA round 20, R20-P6).
+         A win that unlocks a badge mints BADGE_XP on top of the fight's own XP,
+         and the victory card counted only the fight's half: measured, a Wanderer
+         win that also earned Blooded showed +160 XP against a ledger of 185
+         (150 wanderer + 10 fight + 25 badge). Counted from the badges
+         evaluateBadges actually claimed, so a duplicate can never inflate it. */
+      xp += badges.length * BADGE_XP;
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
     } else if (fight.over.winner === 'f') {
@@ -21928,7 +23276,7 @@ function buildFaqHtml(fighter, openAttr = '') {
   return `<details class="bsect faq-card" data-bsect="faq" ${openAttr}>
     <summary class="t3-faq">How do I build my fighter?<b>Start here ›</b></summary>
     <div class="bsect-body">
-      <p class="note" style="margin:2px 2px 12px">Your stats grow on their own from your real habits. <b>Training points are extra</b>, on top of that, and they are yours to place. There is no wrong answer and <b>nothing is permanent</b>: Reset training below refunds every point, any time.</p>
+      <p class="note" style="margin:2px 2px 12px">Every fighter starts from the same base. <b>Your habits pay training points</b>, and where they go is yours to place: that is the whole of what makes one fighter different from another. There is no wrong answer and <b>nothing is permanent</b>: Reset training below refunds every point, any time.</p>
 
       <div class="sect-h">Pick how you want to fight</div>
       ${BUILD_PLAYSTYLES.map(p => `<div class="faq-style">
@@ -21945,7 +23293,7 @@ function buildFaqHtml(fighter, openAttr = '') {
         ${STAT_META.map(m => `<div class="faq-stat">
           <b>${esc(m.label)}</b>
           <small>${esc(m.combat)}</small>
-          <small class="faq-put">Suits: ${esc(m.spec)} · grows from ${esc(m.fedBy)}</small>
+          <small class="faq-put">Suits: ${esc(m.spec)}</small>
         </div>`).join('')}
         <p class="note" style="margin:8px 2px 2px">Each training point adds <b>+${TRAIN_STEP}</b> to a stat, up to <b>+${TRAIN_CAP}</b> in any one of them. Points come from hitting your protein target, closing a day on budget, and every 25,000 steps you walk, so the build grows out of the habits, not out of grinding.</p>
       </details>
@@ -21953,7 +23301,7 @@ function buildFaqHtml(fighter, openAttr = '') {
       <details class="faq-deep">
         <summary>Common questions</summary>
         <div class="faq-qa"><b>Can I change my mind?</b><small>Yes, always. <b>Reset training</b> below hands back every point you have spent so you can place them again. It asks before it does it.</small></div>
-        <div class="faq-qa"><b>Do I need to do any of this?</b><small><b>No.</b> Leave every point unspent and the game plays perfectly well. Your habits already raise your stats, and Pit foes scale to you, so you are never locked out of anything. This is here for people who enjoy tinkering.</small></div>
+        <div class="faq-qa"><b>Do I need to do any of this?</b><small><b>No.</b> Leave every point unspent and the game plays perfectly well. Every fighter starts from the same base and Pit foes scale to you, so you are never locked out of anything. This is here for people who enjoy tinkering.</small></div>
         <div class="faq-qa"><b>Should I spread points around or stack one?</b><small>Stacking one or two is stronger than spreading five thin, because each stat only helps the things it is attached to. Two is the sweet spot.</small></div>
         <div class="faq-qa"><b>Do stats matter more than gear?</b><small>Neither wins on its own. Gear adds the same kinds of points, so a good piece can cover a stat you skipped. Check what you are wearing before you respec.</small></div>
         <div class="faq-qa"><b>What is Armor?</b><small>Damage reduction. <b>${nm('marrow')}</b> gives armor against melee, <b>${nm('reflex')}</b> against magic, and worn gear adds to both. You can see both percentages just below.</small></div>
@@ -21972,9 +23320,29 @@ function buildFaqHtml(fighter, openAttr = '') {
  * empty for a frame, which is the same class of bug as the invisible punch: a
  * layer stack is only ever meaningful complete. */
 async function restageWardrobe(content, slot) {
+  const eqNow = await equipped();
+  if (!(await restageDoll(content, eqNow))) return false;
+  // move the ring inside THIS slot's grid only: every slot renders its own grid, so
+  // a global toggle would light up the wrong cells in every other section
+  const grid = $(`.ward-grid[data-wslot="${slot}"]`, content);
+  if (!grid) return false;
+  const wanted = eqNow[slot] || '';
+  for (const c of $$('[data-equip]', grid)) {
+    c.classList.toggle('equipped', (c.dataset.equip || '') === wanted);
+  }
+  return true;
+}
+
+/* The doll half of restageWardrobe on its own, taking the look to draw, so a
+ * PREVIEW (a look tried on, nothing equipped, nothing paid) can use the same
+ * decode-then-swap without moving the fit grid's ring onto a cosmetic the player
+ * never picked. QA round 23 F1: the preview and commit taps in the Dressing Room
+ * went through renderCharacter() instead of this, which is why they were the two
+ * places in the Wardrobe that still flashed (see restageLook in the wardrobe
+ * render). Returns false if the stage is not there. */
+async function restageDoll(content, eqNow) {
   const stage = $('.bh-stage.lg', content);
   if (!stage) return false;
-  const eqNow = await equipped();
   const html = (eqNow.BG && BH_BY_ID[eqNow.BG] ? `<img class="bh-backdrop" src="${bhAsset(BH_BY_ID[eqNow.BG])}" alt="">` : '')
     + avatarLayersHtml(eqNow, { noYard: true, skip: ['C', 'BG'] });
   // preload every layer, capped, so the swap lands on decoded art
@@ -21991,14 +23359,6 @@ async function restageWardrobe(content, slot) {
   stage.innerHTML = html + curtains;
   // NOT composeAvatars(): that hides the stack until it decodes, and we just
   // decoded it. Calling it here would reintroduce the very flash this removes.
-  // move the ring inside THIS slot's grid only: every slot renders its own grid, so
-  // a global toggle would light up the wrong cells in every other section
-  const grid = $(`.ward-grid[data-wslot="${slot}"]`, content);
-  if (!grid) return false;
-  const wanted = eqNow[slot] || '';
-  for (const c of $$('[data-equip]', grid)) {
-    c.classList.toggle('equipped', (c.dataset.equip || '') === wanted);
-  }
   return true;
 }
 
@@ -22104,7 +23464,7 @@ async function renderTalents(wrap) {
   // meaning and real drawn +/- steppers.
   const statBlock = `
     <div class="t3-fighter">
-      <div class="n"><b>YOUR FIGHTER</b><small>${d.maxHp} HP · ${d.maxWind} Stamina · grows from your real habits</small></div>
+      <div class="n"><b>YOUR FIGHTER</b><small>${d.maxHp} HP · ${d.maxWind} Stamina · grows from the points you spend</small></div>
       ${fighter.tpAvail ? `<div class="tp"><b>${fighter.tpAvail}</b><small>TO SPEND</small></div>` : ''}
     </div>
     ` + buildFaqHtml(fighter, sectOpen('faq', false)) + `

@@ -21,6 +21,11 @@ import { dateKey } from './nutrition.js';
 export const SPIRE_CELL_DEG = 0.02;      // ~2.2 km cells: a couple within a good walk
 export const SPIRE_RADIUS_M = 80;        // enter range, same reach as a den
 export const SPIRE_CAP = 3;              // hold at most three: forces a real choice
+/* MIRRORS SPIRE_SHIELD_MS in server/src/index.js. The server is still the only
+   authority on the shield (it refuses a claim inside it with a 409); this copy
+   exists so the tower sheet can tell the player the walls are up BEFORE they
+   spend a Pit fight on a takeover that cannot land (QA round 20, R20-P2). */
+export const SPIRE_SHIELD_MS = 3600000;  // 1h after a takeover, the tower cannot flip back
 export const TRIBUTE_PER_DAY = 60;       // coins accrued per held spire per day
 export const TRIBUTE_DUST_PER_DAY = 8;
 export const TRIBUTE_CAP_DAYS = 3;       // stops idle hoarding; collect in person

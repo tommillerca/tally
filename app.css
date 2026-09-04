@@ -127,6 +127,9 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 input, select, textarea { font: inherit; color: inherit; }
 svg { display: block; }
 [hidden] { display: none !important; }
+/* Visually hidden, still read by a screen reader. The only such utility in the
+   file (QA round 25 M17: the add sheet's live result count). */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* Flex column: the SCREEN scrolls, the tab bar is an in-flow child pinned at the
    bottom. This avoids the iOS quirk where a position:fixed bottom bar (with
@@ -730,6 +733,13 @@ a { color: var(--accent); text-decoration: none; }
 .xp-row.dim { color: var(--text-3); border-bottom-style: dashed; }
 
 .macro .hit-dot { color: var(--protein); font-weight: 800; font-size: 11px; }
+/* The over state (QA r24 L8, see macroRow). The bar is still full; the end cap
+   is what says "and then some", because carbs' own colour IS --amber, so no
+   fill colour could carry it. --text is the one token that reads against all
+   three macro fills. The line under it is the ring's "N over" at row scale. */
+.macro.over .bar { position: relative; }
+.macro.over .bar::after { content: ''; position: absolute; right: 0; top: 0; height: 100%; width: 3px; background: var(--text); }
+.macro .over-by { font-size: 11px; color: var(--text-3); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; margin-top: -2px; }
 .bar.glow i { box-shadow: 0 0 10px rgba(111, 208, 255, 0.65); }
 .bar.steps i { background: var(--accent); }
 
@@ -936,6 +946,17 @@ a { color: var(--accent); text-decoration: none; }
 .pot-serve { width: auto; padding: 5px 12px; font-size: 12px; }
 .crate-row.transmute { border: 1px solid rgba(180,140,255,.4); background: rgba(180,140,255,.07); border-radius: 12px; }
 .crate-row.transmute.lack { opacity: .72; }
+/* THE LABEL WAS SPILLING OUT OF ITS OWN STICKER (Tom, device pass). Nothing on
+   this row can shrink except the button: the copy column is floored by the tmx
+   strip (seven 30px sockets plus gaps, none of them shrinkable), so at 390px the
+   button is handed less width than the word "Transmute", which is one unbreakable
+   word and paints straight over its own border. The strip and the label are both
+   incompressible, so the row gets a second line instead of squeezing one of them.
+   flex-wrap only spends that line when the two genuinely do not fit, so a wider
+   screen or a short label ("20h 4m") still reads as one row, and a longer label
+   or larger Dynamic Type drops the button below rather than overflowing it. */
+.crate-row.transmute { flex-wrap: wrap; }
+.crate-row.transmute > .btn { flex: 0 0 auto; margin-left: auto; }
 .cook-bar { height: 7px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin: 6px 0 4px; }
 .cook-bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #ff9628, #8bd450); transition: width 0.8s linear; }
 .cauldron-serve { grid-column: 1 / -1; width: 100%; }
@@ -3269,6 +3290,17 @@ body::before {
   background: var(--surface-3); border: 2px solid var(--ink); border-radius: 8px;
   box-shadow: var(--sh-sm);
 }
+/* A TAPPABLE LANE IS A REAL <button>, so it needs the UA chrome stripped rather
+   than a different layout: same grid, same colours, so the board does not
+   visibly split into two kinds of row. min-height is the touch target: the lane
+   measures about 43px of content (26px chip, or a 17px name row + 12px gap +
+   14px track), which rounds under the 44px minimum on the shortest lanes. */
+.race-lane.tap {
+  appearance: none; -webkit-appearance: none;
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: left; width: 100%;
+  min-height: 44px; cursor: pointer;
+}
 .race-lane.r1 .rk { background: var(--gold); }
 .race-lane.r2 .rk { background: #cdd3da; }
 .race-lane.r3 .rk { background: #d69a6a; }
@@ -3339,69 +3371,21 @@ body::before {
   white-space: nowrap; }
 .pz svg { flex: none; }
 
-/* THE HYPE BANNER, directly above the step-race result. It has to out-shout the
-   gold banner underneath it WITHOUT shouting in words (ten of them, all told), so
-   every bit of the weight is art and colour: a coral wash over the card grain, a
-   coral keyline, and figures at 78px, which is bigger than any row the "Out there
-   today" card it replaced ever drew.
-   ONE FRAME, TWO TARGETS. The halves are a grid, not two cards: the eyebrow and
-   the sentence both span the full width, and a single hairline is the only thing
-   between the Boneyard column and the shop column. That is what stops it reading
-   as a list of announcements. */
-.hype { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end; column-gap: 8px; padding: 9px 10px 10px;
-  /* THE ONE KNOB FOR THE ART. hypePlateHtml emits percentages, so the creature
-     boxes are sized here and nowhere else. 320 is the narrowest phone this app
-     supports and it is what caps the small value: two plates, the seal's cell and
-     both captions have to sit on 268px of content. */
-  --hf: 78px; }
-@media (min-width: 380px) { .hype { --hf: 100px; } }
-/* THE SEAL SCALES WITH THEM. petAsideHtml takes its size in px and writes it into
-   the markup, so unlike the two plates she cannot be sized from a custom property:
-   rendered at one number she was 92 against 100px monsters on a 393 phone and 92
-   against 78 on a 320 one, where she dwarfed them. zoom scales the cell's LAYOUT
-   box as well as its pixels, which is the whole requirement here, and one
-   declaration is cheaper than teaching the pet contract a second sizing path. */
-.hype-half.seal .hype-figs { zoom: .85; }
-@media (min-width: 380px) { .hype-half.seal .hype-figs { zoom: 1; } }
-/* THE WASH IS THREE LAYERS AND EACH NEEDS ITS OWN SIZE. .card sets
-   background-size: 150px 150px for the grain, and background-size applies to
-   EVERY layer: the first render tiled both gradients at 150px and painted the
-   banner in vertical bands. Caught in the screenshot, not in the source. */
-.hype { background-image: radial-gradient(115% 95% at 18% 0%, rgba(253, 104, 87, .34), rgba(253, 104, 87, 0) 64%),
-  linear-gradient(158deg, rgba(253, 104, 87, .16), rgba(253, 104, 87, 0) 58%), var(--grain);
-  background-size: cover, cover, 150px 150px;
-  background-repeat: no-repeat, no-repeat, repeat;
-  background-blend-mode: normal, normal, soft-light;
-  border-color: var(--ink); box-shadow: var(--sh), inset 0 0 0 1.5px rgba(253, 104, 87, .38); }
-/* The heading, not a chip. It spans both columns, which is a large part of what
-   keeps the two halves reading as one banner. */
-.hype-eye { grid-column: 1 / -1; justify-self: start; font-family: var(--display); font-weight: 400;
-  /* CREAM, NOT CORAL. The wash's radial starts at 18% 0%, which is exactly
-     where this heading sits, so coral-on-coral measured 2.59:1. Cream on the
-     same pixels is 8.55:1 and the banner still reads as the coral surface it
-     is: the accent is the wash, not the word. */
-  font-size: var(--fs-4); line-height: 1; letter-spacing: .04em; color: var(--text);
-  margin-bottom: 6px; }
-.hype-half { grid-row: 2; display: flex; flex-direction: column; align-items: center; gap: 5px;
-  background: none; border: 0; padding: 0; cursor: pointer; min-width: 0; }
-/* THE HAIRLINE, BACK. She stood on a sunken plate for one revision and Tom read
-   it as a button ("there shouldnt be any button thing around the bee"). Both
-   halves are tap targets and the left one has never carried a box, so neither
-   does she now: the columns are told apart by a line and the gap, and nothing in
-   either half looks pressable. */
-.hype-half.seal { grid-column: 2; padding-left: 9px; border-left: 1px solid var(--line-strong); }
-.hype-half:active { transform: translateY(1px); }
-.hype-figs { display: flex; align-items: flex-end; justify-content: center; gap: 0; min-width: 0; }
-/* The box is fixed and the plate inside it is absolutely placed by
-   hypePlateHtml's measured percentages, so both creatures stand on one floor. */
+/* THE HYPE BANNER'S SHELL IS GONE, ITS FIGURE BOX IS NOT, 2026-09-03. The banner
+   that stood on Today from 2026-08-21 was two halves in one frame: a coral wash,
+   an eyebrow spanning both columns, a caption under each and a hairline between
+   them. It moved into the news pill that day as ONE featured banner with one
+   subject (Tom: "we need to have one stand out banner that is showing more than a
+   list of homework in the new section"), so the two-column furniture had nothing
+   left to hold and is deleted rather than left as rules no selector can reach.
+   The wash and the --hf knob were not deleted, they were RE-HOMED on .nb-hero
+   further down this file, comments and measured background-size fix and all.
+   .hype-fig stays exactly where it was, because it is not banner furniture: it is
+   the box hypePlateHtml's measured percentages are computed against, and the hero
+   is its caller now. Its size comes from --hf on whatever contains it. */
 .hype-fig { position: relative; display: block; flex: 0 0 auto; width: var(--hf); height: var(--hf);
   overflow: visible; filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
 .hype-fig img { position: absolute; left: 0; top: 0; max-width: none; }
-.hype-half .petcrop { filter: drop-shadow(2px 3px 0 rgba(0, 0, 0, .45)); }
-.hype-cap { font-family: var(--display); font-weight: 400; font-size: var(--fs-3); line-height: 1.1;
-  letter-spacing: .02em; color: var(--text); text-align: center; }
-.hype-half.seal .hype-cap { color: var(--coral); }
 
 /* THE TODAY BANNER: the permanent home for the result, and the surface that
    carries EVERY place's purse (the poster drops them to keep 4th and 5th above
@@ -3433,6 +3417,15 @@ body::before {
 .rr-banner .gbn-body { padding: 2px 13px 13px; }
 .rr-banner .race-lanes { margin-bottom: 10px; }
 .rr-banner .note { margin: 0; font-size: var(--fs-1); line-height: 1.4; color: var(--text-3); }
+
+/* AND IT SITS INSIDE THE NEWS PILL SINCE 2026-09-03 (Tom: "things will live in
+   the collapsed news pill"), where it is a ROW of a list rather than a card on a
+   page. The gold gradient stays, because that is what makes a settled result read
+   as a result; the card furniture goes, or a rounded, shadowed, outlined box
+   floats inside a flush list of .nb-row siblings. Same border-bottom the rows
+   carry, so the seam between it and the first announcement is one hairline. */
+#newsBanner .rr-banner { border: none; border-bottom: 1px solid var(--line);
+  border-radius: 0; box-shadow: none; margin-bottom: 0; }
 
 .race-gap { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); font-size: var(--fs-1); color: var(--text-2); }
 .race-gap b { color: var(--accent); font-weight: 800; }
@@ -4387,6 +4380,12 @@ body::before {
    their 0.66 because .map-den-mark is 46x52 and genuinely does not fit, and
    Cam's tombstone is a smooth drawing that scales without stepping. */
 .leg-ico .map-den-mark { transform: scale(0.66); }
+/* THE WANDERER AND THE SPIRE IN THE KEY. Both are plain art rather than the
+   composed markers (the Wanderer's own marker carries a cone, which is a map
+   affordance and means nothing in a list). Sized to the same 44px cell as every
+   other row so the column stays flush. */
+.leg-wnd, .leg-spire { width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center; }
+.leg-wnd img, .leg-spire img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .leg-ico .map-den-mark .den-fx { animation: none; }
 .leg-txt { display: flex; flex-direction: column; line-height: 1.2; }
 .leg-txt b { font-weight: 800; font-size: 13px; }
@@ -5286,6 +5285,26 @@ body::before {
 .pack-card.r-legendary .pc-name { color: var(--ink); }
 .pack-card.r-legendary .pc-rar { background: var(--ink); color: var(--gold); }
 .pc-canvas { width: 86%; height: auto; max-height: 86%; filter: drop-shadow(0 6px 8px rgba(0,0,0,.45)); }
+/* THE PIECE, WORN. Tom, 2026-09-03: a reveal used to show the loose PNG, which
+   made a grill the size of a coat and put every "how the sausage is made" cut-out
+   on display. This is the shop rack's mannequin, unchanged.
+   THE 1/0.86 BOX IS LOAD-BEARING. Every .fit-* transform-origin is a measured
+   alpha-bbox centre taken against the rack's stage: a 1/0.86 window with the 640
+   square laid in under object-fit: cover. .pc-art is a different shape, so the
+   crop is given its own box of the rack's proportions and centred in the panel
+   rather than re-deriving thirteen origins for a second aspect ratio.
+   No drop-shadow: a figure standing on a stage does not float, and the halo on
+   the tiny slots was measured at 6.6x the art's own area (see TINY_SLOTS).
+   IT FILLS THE PANEL ON HEIGHT, NOT ON WIDTH. Measured on the rendered card at
+   390x844: the art panel is 211x282, so a width-fitted 1/0.86 box left 100px of
+   empty plate under the figure with a hard horizontal seam across it where the
+   crop ended. Fitting the height overflows the box sideways instead, and
+   .pc-art already clips it. Every .fit-* crop is centred on its target ink, so
+   what leaves the frame is empty canvas at the edges. */
+.pc-worn { position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%);
+  aspect-ratio: 1 / 0.86; overflow: hidden; }
+.pc-worn .bh-anim { position: absolute; inset: 0; }
+.pc-worn .bh-anim img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .pc-icon { font-size: 96px; display: grid; place-items: center; width: 100%; height: 100%; }
 .pc-icon .bhi-wrap svg, .pc-icon svg { width: 62%; height: 62%; max-width: 168px; max-height: 168px; }
 .pc-name { font-family: var(--display); font-weight: 400; letter-spacing: .02em; font-size: var(--fs-5); text-align: center; line-height: 1.08; }
@@ -5875,6 +5894,21 @@ body::before {
    shipped v1 bar has the button lying across its own status text. */
 .look-bar.mog-bar .btn.mog-go { width: auto; flex: none; padding: 10px 15px; font-size: 13.5px; }
 .mog-safe { text-align: center; margin-top: 8px; }
+/* THE COMMIT COMES TO THE THUMB (QA round 23 F3). 23 commits in the app spend a
+   currency; 21 arm the control under the thumb, and this one, the cheapest of
+   them at 6 dust, sat on its own bar at document offset 1810, 78% of the scroll
+   range at 375x667. Same fix as .breed-bar.sticky: the bar is a direct child of
+   .mog-dock (which opens at the paper doll, js/app.js renderCharacter), so its
+   containing block runs from the doll to the panel and the bar rides the bottom
+   of the viewport from scrollTop 0 until the panel scrolls up to meet it. It is
+   NOT inside .mog-panel on purpose: sticky is clamped by its containing block,
+   and inside the panel it could only float while the panel was already on
+   screen, which is the bug. Opaque surface and a top shadow because it is drawn
+   over the grids while it floats. */
+.mog-dock > .look-bar.mog-bar {
+  position: sticky; bottom: 0; z-index: 4;
+  background: var(--surface); box-shadow: 0 -6px 18px rgba(0, 0, 0, .45);
+}
 /* a disguised slot on the paper doll: the doll shows the LOOK, this says so.
    Sits bottom-left, clear of the .pd-gear stat strip pinned to the slot's top
    (they collided there and the badge clipped the stat text). */
@@ -5928,6 +5962,8 @@ body::before {
    button carries. Nothing is spent and nothing is lost. The armed state borrows
    the gold every other arm-then-confirm control in the app uses. */
 .fit-chip.add, .fit-chip.reset { color: var(--text-3); border-style: dashed; padding: 7px 13px; }
+/* at the fits cap the save chip stays as a ghost and its tap toasts the rule (QA round 23 F8) */
+.fit-chip.add[aria-disabled="true"] { opacity: .45; }
 .fit-chip.arming { border-color: var(--gold); border-style: solid; color: var(--gold); }
 .fit-note { text-align: center; margin: 2px 0 10px; }
 
@@ -6287,6 +6323,17 @@ body::before {
    someone who does not think of themselves as a gamer; the mechanics are folded so
    they are available without being homework. */
 .faq-card { border-color: rgba(124, 196, 255, .35); }
+/* CLOSED, THE CARD WAS A FRAME AROUND A CONTAINER (Tom, device pass: "not centred
+   right within a larger pill that it likely doesnt need the border of"). .bsect
+   has no padding, so the pill sat flush against the frame's top and sides with
+   the card's only spacing underneath it, and .bsect's overflow:hidden clipped the
+   pill's round ends against the card's 16px corners: two borders, 1px apart,
+   drawing the same box badly. Shut, the pill IS the control and needs nothing
+   around it. Open, there is a body to group, so the card comes back. The border
+   is made transparent rather than removed, and no margin is touched, so every
+   box on the tab keeps the position it has today and opening the card does not
+   shift by the 1px the frame occupies. */
+.faq-card:not([open]) { border-color: transparent; background: none; overflow: visible; }
 .faq-card > summary .note { color: var(--protein); }
 .faq-style { display: flex; gap: 11px; align-items: flex-start; padding: 10px 2px; border-bottom: 1px solid var(--line); }
 .faq-style:last-of-type { border-bottom: none; }
@@ -6730,6 +6777,18 @@ body::before {
   background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   display: grid; place-items: center; color: var(--text-3);
 }
+/* THE SHEET-HEAD ICON BUTTONS ARE THE 44px ONES (QA round 25 M20). `.sheet-close`
+   declares min-height: 44px at line ~445 and `.t1-icon-btn` above declares
+   min-height: 40px: same specificity (one class each), so the rule written
+   6,283 lines later wins and `<button class="sheet-close t1-icon-btn">` shipped
+   at 44x41 with the a11y audit green (its registry never held a sheet control,
+   see M24 in tests/a11y-audit.mjs). `#favBtn` beside it is a bare .t1-icon-btn
+   and measured 40x41. Two classes beat one regardless of order, so this cannot
+   be re-shadowed by a later one-class rule; scoped to .t1-tools so the 40px
+   "Change portion" chevron inside a result row keeps its size. The glyph stays
+   17px; only the box grows to Apple's floor. Guarded statically by
+   tests/unit.test.js "R25-M20 sheet-head icon buttons resolve to >= 44px". */
+.t1-tools .t1-icon-btn { width: 44px; height: 44px; min-height: 44px; }
 .t1-icon-btn.gold { color: var(--gold); }
 .t1-icon-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 /* the body has to be the shrinking child or a pinned foot pushes off-screen */
@@ -6813,6 +6872,10 @@ body::before {
 }
 .t1-frow:first-of-type { border-top: 0; }
 .t1-frow:active { background: var(--surface-2); }
+/* L9: a recents row is a div holding the relog button and a change-portion chevron */
+.t1-sect + .t1-frow { border-top: 0; }
+.t1-frow-main { display: flex; align-items: center; gap: 11px; flex: 1; min-width: 0; text-align: left; }
+.t1-frow-split { padding-right: 2px; }
 .t1-med {
   flex: none; width: 46px; height: 46px; border-radius: 13px;
   background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
@@ -6887,9 +6950,14 @@ body::before {
   transform: translate(-50%, -50%);
 }
 .t1-step button.plus::after { transform: translate(-50%, -50%) rotate(90deg); }
-.t1-step .val { text-align: center; padding: 9px 2px 8px; }
+/* THE AMOUNT INPUT IS ITS OWN TAP TARGET (QA round 25 M20): #qtyIn measured
+   181x31, because the 28px display face at line-height 1 is all the height an
+   <input> gets and the 56px .val box around it is a div, not the control. The
+   input takes the 44px floor itself; the .val padding gives back 10 of the 13px
+   so the stepper row grows by ~3px instead of 13. Same for #gramsIn. */
+.t1-step .val { text-align: center; padding: 3px 2px 4px; }
 .t1-step .val input {
-  width: 100%; background: none; border: none; text-align: center; outline: none;
+  width: 100%; min-height: 44px; background: none; border: none; text-align: center; outline: none;
   font-family: var(--display); font-size: var(--fs-6); letter-spacing: .02em; line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -7035,15 +7103,25 @@ body::before {
 }
 .map-topbar small { display: block; font-size: var(--fs-1); color: var(--text-3); margin-top: 3px; }
 .map-topbar small b { color: var(--accent); font-weight: 800; }
+/* 44px, not 38: these are the only two controls on the Boneyard and both were
+   under the comfortable touch target. */
 .map-ctl {
-  flex: none; width: 38px; height: 38px; border-radius: 11px;
+  flex: none; width: 44px; height: 44px; border-radius: 11px;
   background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   display: grid; place-items: center; color: var(--text);
 }
 .map-ctl svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .map-ctl .bhi svg, .map-ctl svg.bhi { stroke: none; }
-/* the legend hangs off the top bar now, not off a floating bubble */
-.map-legend { top: calc(var(--sat, 0px) + 66px); left: auto; right: 12px; border: 2px solid var(--ink); box-shadow: var(--sh); }
+/* THE MAP KEY WORE ITS PURPOSE AS AN 18px PICTURE (Tom, device pass: "too small
+   and not intuitive for a player to click and see what it is"). A map badge on a
+   map screen says nothing about opening anything, so the control says the word.
+   Same plate, same ink, same 44px height as its neighbour: only wider, and the
+   word takes the type the other small buttons on the app use. */
+.map-ctl.map-key { width: auto; padding: 0 12px; display: flex; gap: 7px; }
+.map-key .mk-lbl { font-family: var(--display); font-weight: 400; font-size: var(--fs-2); letter-spacing: .06em; text-transform: uppercase; }
+/* the legend hangs off the top bar now, not off a floating bubble. The offset
+   tracks the bar's height, which the 44px controls raised by 3px. */
+.map-legend { top: calc(var(--sat, 0px) + 69px); left: auto; right: 12px; border: 2px solid var(--ink); box-shadow: var(--sh); }
 
 /* one action card: what is nearest, how far, and the verb. Replaces the pill
    readout AND the separately floating Collect button. */
@@ -10918,6 +10996,61 @@ details:not([open]) > :not(summary) *::after { animation: none !important; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nb-date { font-size: 10.5px; color: var(--text-3); flex: none; }
 
+/* THE HERO SLOT, first thing behind the tap. Tom, 2026-09-03: "we need to have
+   one stand out banner that is showing more than a list of homework in the new
+   section that gets people excited." A list of forty-pixel tiles is the homework;
+   this is the one place in the pill where the art is the message and the words
+   are the caption.
+   IT IS THE OLD TODAY HYPE BANNER'S TREATMENT, not a new one: the same coral
+   radial over the card grain, the same measured plate boxes, the same figure
+   drop-shadow. The banner moved, its design language did not, and inventing a
+   second loud surface for the same job is how an app ends up with two of
+   everything.
+   WHY THE WASH IS THREE LAYERS WITH THREE SIZES. background-size applies to EVERY
+   layer, so tiling the grain at 150px tiled both gradients at 150px too and
+   painted the first render of the original banner in vertical bands. Caught in a
+   screenshot, not in the source; carried over here intact. */
+.nb-hero { display: block; width: 100%; padding: 12px 12px 11px; border: none;
+  border-bottom: 1px solid var(--line); text-align: center; cursor: pointer;
+  /* THE ONE KNOB FOR THE ART. hypePlateHtml emits percentages, so the creature
+     boxes are sized here and nowhere else. 320 is the narrowest phone this app
+     supports and it is what caps the small value: two plates and both lines of
+     copy have to sit on the pill's content width there. */
+  --hf: 88px;
+  /* AND THE COLOUR LAYER IS EXPLICIT. The global `button { background: none }`
+     leaves this element's background-COLOUR transparent, and background-blend-mode
+     blends only within one element's own layers: soft-light against nothing is
+     nothing, so the grain would simply not paint here even though the pill behind
+     it is the very --surface the blend is written for. .card carries this
+     declaration for exactly the same reason. */
+  background-color: var(--surface);
+  background-image: radial-gradient(115% 95% at 18% 0%, rgba(253, 104, 87, .34), rgba(253, 104, 87, 0) 64%),
+    linear-gradient(158deg, rgba(253, 104, 87, .16), rgba(253, 104, 87, 0) 58%), var(--grain);
+  background-size: cover, cover, 150px 150px;
+  background-repeat: no-repeat, no-repeat, repeat;
+  background-blend-mode: normal, normal, soft-light; }
+@media (min-width: 380px) { .nb-hero { --hf: 104px; } }
+.nb-hero:active { transform: translateY(1px); }
+/* The figure boxes themselves are .hype-fig, defined once further up: fixed
+   squares of --hf with the plate inside absolutely placed by hypePlateHtml's
+   measured percentages, so two creatures stand on one floor. */
+.nb-hero-figs { display: flex; align-items: flex-end; justify-content: center; gap: 0; min-width: 0; }
+.nb-hero-txt { display: grid; gap: 2px; margin-top: 6px; }
+/* CREAM ON BOTH LINES, AND THE SECOND ONE IS NOT A JUDGEMENT CALL. The accent is
+   the wash, not the word: coral-on-coral measured 2.59:1 on the original banner.
+   The blurb wanted --text-2 for hierarchy and cannot have it. Computed over the
+   worst pixel this wash can paint (both coral layers at full strength stacked on
+   --surface, rgb(130,62,60)): --text-2 is 3.48:1 against the 4.5 that 11.5px body
+   text needs, --text is 6.44:1. So the two lines are separated by SIZE and FACE,
+   which cost nothing, rather than by a tint that fails AA.
+   AND NOT BY OPACITY EITHER. a11y-audit reads the COMPUTED colour and samples the
+   background off the render, so an element faded with `opacity` reports the full
+   cream it is not painting: the measurement would come back 6.44 while the player
+   reads something dimmer. A colour that has to lie to a guard is the wrong fix. */
+.nb-hero-txt b { font-family: var(--display); font-weight: 400; font-size: var(--fs-3);
+  line-height: 1.1; letter-spacing: .02em; color: var(--text); }
+.nb-hero-txt i { font-style: normal; font-size: 11.5px; color: var(--text); }
+
 /* THE DAY, COLLAPSED. The wheel and the macros are the summary; meals, wellness,
    the Kitchen and activity live behind the tap. Tom, 2026-08-27: "below the fold
    should be fully collapsed and only showing a banner with the wheel and macros". */
@@ -11019,7 +11152,8 @@ button.t3-price::before {
    audit said so. The tier goes to the top-left corner instead, which is a
    corner and not an offset, and the only thing that ever uses it is the SLIMED
    tag. Cosmetic tiles have no stat line and keep the bottom-left.
-   .ward-cell.look never gets here: transmog tiles carry no r-* class. */
+   .ward-cell.look tiles carry r-* and the tag too since QA round 23 F6; they
+   have no stat line, so they keep the bottom-left like cosmetic tiles. */
 .ward-cell.gear .ward-rar { bottom: auto; top: 3px; }
 /* and under the SLIMED tag on the pieces that carry both */
 .ward-cell.gear.slimed .ward-rar { top: 18px; }

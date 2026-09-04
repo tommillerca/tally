@@ -3,7 +3,10 @@
 // Existing user data must survive every version bump.
 import { dayOrdinal } from './nutrition.js';
 
-const DB_VERSION = 3;
+/* Exported because it is also the backup file's `version` stamp (exportAll),
+   so a file and the schema that wrote it can never disagree again (QA round
+   25 M6: the export carried a literal 3 that nothing tied to this). */
+export const DB_VERSION = 3;
 let dbPromise = null;
 let dbName = 'tally';
 
@@ -708,7 +711,7 @@ export async function exportAll() {
   const [foods, log, weights, kv, xp, health, inv] = await Promise.all([
     db.all('foods'), db.all('log'), db.all('weights'), db.all('kv'), db.all('xp'), db.all('health'), db.all('inv'),
   ]);
-  return { app: 'tally', version: 3, exportedAt: new Date().toISOString(), foods, log, weights, kv, xp, health, inv };
+  return { app: 'tally', version: DB_VERSION, exportedAt: new Date().toISOString(), foods, log, weights, kv, xp, health, inv };
 }
 
 /* kv rows that belong to the DEVICE, not to the save.
@@ -825,6 +828,17 @@ export async function importAll(data, { replace = true } = {}) {
      different answers: this one refuses, an absent key is skipped below. */
   const damaged = STORES.filter(s => data[s] != null && !Array.isArray(data[s]));
   if (damaged.length) throw new Error(`that backup file is damaged (${damaged.join(', ')}). Your old data is unchanged.`);
+  /* THE VERSION IS READ, AND A NEWER FILE IS REFUSED. QA round 25 M6: nothing
+     anywhere read data.version, so a file stamped by a newer app carrying an
+     eighth store imported "clean" and the unknown store was silently dropped.
+     That is what a launch update does to every existing player's backup the
+     day a store is added. An OLDER file is fine: the store loop below leaves
+     any store it omits alone and reports it in `skipped`. There is no
+     migration framework here on purpose; the schema only ever grows
+     (additive-only, see the header), so "older imports, newer refuses" is the
+     whole rule. A file with no version at all is treated as old. */
+  const fileVersion = Number(data.version) || 0;
+  if (fileVersion > DB_VERSION) throw new Error(`that backup was made by a newer version of the app (v${fileVersion}; this app reads v${DB_VERSION}). Update the app, then import it again. Your old data is unchanged.`);
   const idb = await open();
   const declared = new Set(STORES.filter(s => Array.isArray(data[s])));
   const skipped = STORES.filter(s => !declared.has(s));
@@ -948,6 +962,7 @@ function chan() {
         try { wipeChannel.postMessage({ t: 'frozen', id: m.id }); } catch { /* channel gone */ }
       } else if (m.t === 'erased') {
         frozen = true;
+        markErased();
         try { if (typeof location !== 'undefined') location.reload(); } catch { /* not a document */ }
       }
     };
@@ -956,6 +971,19 @@ function chan() {
 }
 // Called once at boot so a tab is listening before any OTHER tab erases.
 export function watchForWipe() { chan(); }
+
+/* THE WIPE HAS TO SAY WHAT IT DID, AND IT CANNOT SAY IT HERE. QA round 25 M9
+   measured 3,780 rows to zero in 72 ms and the reloaded tab booting with an
+   EMPTY toast: both wipe paths (Erase, Delete account) run eraseAll() and then
+   location.reload(), the watching tabs reload from the `erased` message, and
+   toast() is in-memory state that dies with the document. A kv row cannot
+   carry the message either, because kv is one of the stores this wipe just
+   cleared (and multitab-audit asserts zero rows afterwards). sessionStorage is
+   per-tab and survives a reload, and app.js already uses it for exactly this
+   shape (the per-tab 'bhg-splash' flag), so the wiping tab and every frozen
+   tab drop this flag and app.js boot reads it once and toasts. */
+export const ERASED_FLAG = 'tally-erased';
+function markErased() { try { sessionStorage.setItem(ERASED_FLAG, '1'); } catch { /* not a document, or private mode */ } }
 
 export async function eraseAll() {
   const ch = chan();
@@ -990,11 +1018,23 @@ export async function eraseAll() {
     t.onabort = () => reject(t.error || new Error('erase aborted'));
   });
   if (ch) try { ch.postMessage({ t: 'erased' }); } catch { /* channel gone */ }
+  markErased();
 }
 
-// Ask the browser to protect this origin's storage from automatic eviction.
+/* Ask the browser to protect this origin's storage from automatic eviction,
+   AND KEEP THE ANSWER. QA round 25 M23: this used to `.catch(() => {})` the
+   promise and drop the boolean, so `navigator.storage.persisted()` read FALSE
+   with a full year of data on board and nothing in the app could have known.
+   Module state, like `frozen` and `writeFailureSink` beside it: null until the
+   browser answers (or when the API is missing), then the persist() boolean.
+   No UI reads it yet (Tom's call); app.js logs it once at boot. */
+let persistGranted = null;
+export function persistenceGranted() { return persistGranted; }
 export function requestPersistence() {
   try {
-    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+    if (navigator.storage && navigator.storage.persist) {
+      return navigator.storage.persist().then(v => { persistGranted = !!v; return persistGranted; }, () => null);
+    }
   } catch { /* unsupported */ }
+  return Promise.resolve(null);
 }

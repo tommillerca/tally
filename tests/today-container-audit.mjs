@@ -23,8 +23,8 @@
  *            answers something other than that control (rule 6: the gear once
  *            covered the next-day arrow and nobody noticed for a release).
  *   NESTED   a day-scoped section is a SIBLING of `.dayblk` rather than a
- *            descendant, or the promo banner is inside the day, or it comes
- *            before the day in document order.
+ *            descendant, or the evicted promo slot is back on Today at all,
+ *            or the settled step race is no longer inside the news pill.
  *   PASTDAY  a past day is missing a section today has. The bound is a DECLARED
  *            exception list, not a trend: TODAY_ONLY below has exactly one
  *            entry with a reason, so a NEW today-only section goes red here
@@ -53,7 +53,7 @@
  * and shipped two pre-fix commits while the audits kept passing):
  *   R1  js/app.js, app.css and js/quests.js from the pre-fix base d8819940
  *       29 red: SETUP, all of ORPHAN, all of NESTED, all of NUDGE, PASTDAY
- *       (3 markers on a past day against 11 on today; quests, promo, meals and
+ *       (3 markers on a past day against 11 on today; quests, news, meals and
  *       the sign-off all gone) and READONLY. SCROLL and ESCAPE stay GREEN,
  *       correctly: the pre-fix screen already refreshed in place and its arrows
  *       still worked.
@@ -132,6 +132,37 @@ async function tapDay(page, id, want) {
 const shotPath = name => join(repo, '_feedback_shots', 'today-d2', name);
 
 const { browser, page, errors } = await boot(base);
+
+/* THE LEDGER CONTROL'S SAMPLE MOVED ROUTES, 2026-09-03. It used to be read off
+   Today itself: every `#screen .card` that was not inside `.dayblk`, which in
+   practice was the banner stack at the bottom of the screen. That stack was
+   deleted the same day the promo slot went (Tom: "today still has the step
+   challenge winner and monster banner at the bottom these should be gone now
+   things will live in the collapsed news pill"), so Today's top level is now
+   today-plate / hero-card / hero-actions / details.nb / details.q-collapse /
+   section.dayblk / p.log-only and NOTHING on it carries `.card`. The row read
+   `outside: []` and went red on healthy code: the change took away its sample,
+   it did not flatten the skin. Measured 2026-09-03 on this tree: a `.card` on
+   #/boneyard reports borderTopWidth 2 with a box-shadow, while `.card` and
+   `.card.wellness-card` INSIDE the day report bw 0 and no shadow. So the claim
+   still holds and only the sample had to move.
+   `.hero-card` was the other candidate and is the wrong one: since the 2026-08-21
+   "no frame" rework it is only the negative margin that cancels .screen's
+   padding, so it carries no keyline and no shadow to lose, and a control that
+   cannot tell the two states apart is not a control.
+   READ BEFORE THE RUN NAVIGATES TO TODAY, so no row below is grading a screen
+   this detour left behind. */
+await page.evaluate(() => { location.hash = '#/boneyard'; });
+await sleep(2400);
+const skin = c => {
+  const st = getComputedStyle(c);
+  return {
+    el: (c.className || c.tagName).toString().split(' ').filter(Boolean).slice(0, 3).join('.'),
+    bw: parseFloat(st.borderTopWidth) || 0, shadow: st.boxShadow !== 'none',
+  };
+};
+const offDay = await page.evaluate(`[...document.querySelectorAll('#screen .card')].map(${skin})`);
+
 try {
   await page.evaluate(() => { location.hash = '#/today'; });
   await sleep(2600);
@@ -152,7 +183,10 @@ try {
     if (sc.querySelector('.hero-scene')) m.add('hero');
     if (sc.querySelector('.hero-actions')) m.add('doors');
     if (sc.querySelector('.q-collapse')) m.add('quests');
-    if (sc.querySelector('.hype')) m.add('promo');
+    /* WAS 'promo' (the .hype banner) until 2026-09-03, when the promo slot came
+       off Today. The pill is what stands in that part of the screen now, and it
+       is what has to survive a day change. */
+    if (sc.querySelector('#newsBanner')) m.add('news');
     if (sc.querySelector('.ring-card')) m.add('calories');
     if (sc.querySelector('.tsec-meals')) m.add('meals');
     if (sc.querySelector('.day-signoff')) m.add('signoff');
@@ -205,12 +239,23 @@ try {
       // day-scoped things: inside the day block, never a sibling of it
       nested: ['.ring-card', '.tsec-meals', '.day-signoff', '.tsec']
         .map(s => [s, sc.querySelectorAll(s).length, blk ? blk.querySelectorAll(s).length : 0]),
-      // the promo is the opposite claim: outside the day, and after it
-      promoInDay: !!(blk && blk.querySelector('.hype')),
-      promoAfterDay: (() => {
-        const p = sc.querySelector('.promo-slot');
-        return !!(p && blk && (blk.compareDocumentPosition(p) & Node.DOCUMENT_POSITION_FOLLOWING));
-      })(),
+      /* THE PROMO SLOT IS GONE ENTIRELY, 2026-09-03. Tom: "today still has the
+         step challenge winner and monster banner at the bottom these should be
+         gone now things will live in the collapsed news pill." This used to be
+         two rows asserting the slot sat OUTSIDE the day and AFTER it; both are
+         vacuous now that it does not exist, and a vacuous row is the failure
+         mode this file's own header is about. So it flips to an ABSENCE, with
+         the news pill as its positive control: without that control, a Today
+         that failed to render its news pill at all would read green here. */
+      promoSlot: !!sc.querySelector('.promo-slot, .hype'),
+      newsPill: !!sc.querySelector('#newsBanner'),
+      /* AND THE STEP RACE SURVIVED THE EVICTION, in the pill rather than on
+         Today. It is the one thing in that slot that had no other surface, so
+         deleting it would have taken away a player's only notice that a race
+         they were entered in had paid out. Presence of the ELEMENT, not of a
+         podium: it renders hidden until hydrateRaceResult finds a settled week,
+         and tests/race-results-audit.mjs is what drives the populated card. */
+      raceInPill: !!sc.querySelector('#newsBanner #raceResultCard'),
       nudge: !!sc.querySelector('.unlock-nudge, #ulSkip'),
       afterDoors: doors?.nextElementSibling?.className || null,
       sections: sc.querySelectorAll('.tsec').length,
@@ -243,8 +288,9 @@ try {
     ok(`NESTED every ${sel} is inside the day container, none beside it`,
       inScreen > 0 && inScreen === inDay, `${inDay} of ${inScreen}`);
   }
-  ok('NESTED the promo banner is NOT inside the day', !todayShape.promoInDay);
-  ok('NESTED and it comes after the whole day, not before it', todayShape.promoAfterDay);
+  ok('NESTED the news pill is on the screen (the control for the two rows below)', todayShape.newsPill);
+  ok('NESTED the promo slot and its banners are gone from Today', !todayShape.promoSlot);
+  ok('NESTED the settled step race moved INTO the news pill, it was not deleted', todayShape.raceInPill);
 
   // --------------------------------------------------------------- LEDGER
   /* THE DAY IS A LEDGER, NOT A BOX OF BOXES. Tom's sentence is that the screen
@@ -317,15 +363,19 @@ try {
       el: label(el), w: parseFloat(getComputedStyle(el).borderTopWidth) || 0,
       style: getComputedStyle(el).borderTopStyle,
     }));
-    const outside = [...sc.querySelectorAll('.card')].filter(c => !day.contains(c)).map(c => {
+    /* THE OTHER HALF OF THE CONTROL, added 2026-09-03: the same skin, read on
+       the cards INSIDE the day. The claim was never "a card somewhere has a
+       keyline", it is "an outside card differs from an inside one", and that
+       needs both readings from one run. */
+    const inDay = [...day.querySelectorAll('.card')].map(c => {
       const st = getComputedStyle(c);
-      return { hasBanner, el: label(c), bw: parseFloat(st.borderTopWidth) || 0, shadow: st.boxShadow !== 'none' };
+      return { el: label(c), bw: parseFloat(st.borderTopWidth) || 0, shadow: st.boxShadow !== 'none' };
     });
     return {
       sections: secs.length,
       cardsInDay: day.querySelectorAll('.card, .meal').length,
       panels: outermost.map(el => ({ el: label(el), h: Math.round(el.getBoundingClientRect().height) })),
-      seams, outside,
+      seams, inDay, hasBanner,
     };
   });
   console.log('LEDGER', JSON.stringify(ledger));
@@ -357,9 +407,21 @@ try {
   ok('LEDGER SEAMS every section after the first is still separated by a real rule',
     Array.isArray(ledger.seams) && ledger.seams.length >= 2 && ledger.seams.every(s => s.w >= 1 && s.style !== 'none'),
     JSON.stringify(ledger.seams));
+  /* SAMPLE MOVED TO #/boneyard, 2026-09-03; the drift and the measurement are
+     written up where `offDay` is read, at the top of the run. The row is the
+     same claim it always made and still takes two readings to pass: the cards
+     off the day KEEP the keyline and the shadow, the cards in the day do NOT.
+     Delete `.card`'s skin app-wide and the first half goes red; give the day's
+     cards their panels back and the second half does. The ring-card is excluded
+     for the same reason the panel row excludes it: Tom approved that one surface
+     on 2026-08-27 as the collapsed day's own banner. */
+  const flatInDay = (ledger.inDay || []).filter(c => !/ring-card/.test(c.el || ''));
   ok('LEDGER CONTROL a card OUTSIDE the day keeps the hand-inked skin, so this was not bought by flattening every card in the app',
-    Array.isArray(ledger.outside) && ledger.outside.length >= 1 && ledger.outside.every(c => c.bw >= 2 && c.shadow),
-    JSON.stringify(ledger.outside));
+    Array.isArray(offDay) && offDay.length >= 1 && offDay.every(c => c.bw >= 2 && c.shadow),
+    `#/boneyard: ${JSON.stringify(offDay)}`);
+  ok('LEDGER CONTROL and the cards INSIDE the day are flat, so the two states really do differ',
+    flatInDay.length >= 1 && flatInDay.every(c => c.bw === 0 && !c.shadow),
+    `in day: ${JSON.stringify(flatInDay)}`);
 
   // ---------------------------------------------------------------- NUDGE
   /* COMMENTS ARE NOT EVIDENCE OF LIFE, the same call tests/selector-audit.mjs
@@ -430,7 +492,7 @@ try {
   const missing = todayMarks.filter(m => !pastMarks.includes(m));
   ok('PASTDAY a past day keeps every section today has, bar the declared exception',
     missing.every(m => TODAY_ONLY.includes(m)), `missing: ${missing.join(', ') || 'nothing'}`);
-  for (const m of ['hero', 'doors', 'quests', 'promo', 'calories', 'meals', 'signoff']) {
+  for (const m of ['hero', 'doors', 'quests', 'news', 'calories', 'meals', 'signoff']) {
     ok(`PASTDAY the news above survives the day change: ${m}`, pastMarks.includes(m));
   }
   ok('PASTDAY the day is still one container with its header on it',

@@ -488,7 +488,7 @@ const results = await page.evaluate(async () => {
       const rows = qs.map(q => ({ key: `quest-${d}-${q.id}` }));
       return {
         setup: async () => { for (const r of rows) await db.db.put('xp', { ...r, type: 'quest', xp: 25, label: 'x', date: d, ts: Date.now() }); },
-        act: () => quests.claimAllBonusIfDue(d, qs, rows),
+        act: () => quests.claimAllBonusIfDue(d, qs),
         won: r => !!r,
       };
     },
