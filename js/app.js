@@ -4,7 +4,7 @@ import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
 import {
-  levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue,
+  levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
   awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats,
@@ -3990,7 +3990,7 @@ async function renderToday(el) {
     <button class="hero-act${pitAttn ? ' attn' : ''}" id="pitBtn">${ICONS.pit(24)}<span>The Pit${pitAttn ? ' <i class="hero-badge">!</i>' : ''}</span></button>
   </div>
 
-  ${newsBannerHtml(newsUnseen, eq)}
+  ${newsBannerHtml(newsUnseen, eq, dayCloseNews(allXp))}
 
   ${/* QUESTS SIT DIRECTLY UNDER THE FOUR DOORS, ALWAYS. Tom, 2026-08-22: "have
        quests be always under the initial 4 buttons (backpack stable kitchen
@@ -12670,7 +12670,7 @@ function newsHeroHtml() {
   </button>`;
 }
 
-function newsBannerHtml(unseen, eq) {
+function newsBannerHtml(unseen, eq, dayClose) {
   const newest = NEWS[0];
   if (!newest) return '';
   return `<details class="nb" id="newsBanner">
@@ -12704,6 +12704,18 @@ function newsBannerHtml(unseen, eq) {
            lights this pill's dot from hydrateRaceResult rather than from the
            `unseen` count above: by then the summary is already on screen. */''}
       <details class="rr-banner" id="raceResultCard" hidden></details>
+      ${/* THE DAY-CLOSE ROW. QA round 24 L16: the day-close was delivered only as
+           a toast that the 4-deep queue can drop, and nothing on Today recorded
+           that the day closed. This is that record: derived from the xp ledger
+           by dayCloseNews (js/game.js), the toast's exact copy, dated to the
+           closed day, first among the rows because it is the newest thing here.
+           It is NOT a NEWS entry, so newsHero() never sees it and the hero rule
+           is untouched; the click binding finds no NEWS id and does nothing. */''}
+      ${dayClose ? `<button class="nb-row" data-news="${esc(dayClose.id)}">
+        <span class="nb-thumb">${crateIcon(dayClose.type === 'dayclose' ? 'golden' : 'daily', 24)}</span>
+        <span class="nb-txt"><b>${esc(dayClose.title)}</b></span>
+        <span class="nb-date">${esc(dayClose.date)}</span>
+      </button>` : ''}
       ${/* A ROW THAT NAVIGATES SAYS WHERE IT GOES. Tom, 2026-08-27: "i clicked
            another and it took me to the boneyard with no explanation in between
            on what i just clicked."

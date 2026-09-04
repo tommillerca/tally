@@ -24,7 +24,7 @@ import {
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct, fetchOffProductEx } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins } from '../js/game.js';
+import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews } from '../js/game.js';
 import { STAT_META, STYLES } from '../js/pit.js';
 import * as pitMod from '../js/pit.js';
 const mkFighter = pitMod.makeFighter;
@@ -4596,6 +4596,76 @@ test('R24-L17 commitLogEntry rolls the day before the row is written, and a fres
   assert.equal(S2.date, '2026-09-04');
   assert.equal(store.get('old').date, '2026-09-03', 'editing a row eaten yesterday moved it to today');
   assert.equal(store.get('old').kcal, 350);
+});
+
+/* QA ROUND 24 L16: THE DAY-CLOSE IS DELIVERED ONLY AS A DROPPABLE TOAST.
+   On budget the player got "Yesterday closed on budget: Bone Crate earned" for
+   3.4s inside a 4-deep toast queue that drops the oldest, and nothing on Today
+   ever recorded that the day closed. The fix DERIVES a news row from the xp
+   ledger (no new store) and renders it in the Today news pill. These rows pin:
+   (a) the derivation yields exactly the toast's copy, dated to the closed day,
+       for both outcomes and both gap states, newest close wins, none without rows;
+   (b) renderToday hands that row to the pill from the xp read it already has;
+   (c) the hero rule is untouched by it: newsHero()'s output is identical on a
+       NEWS fixture with and without a day-close-shaped row in it. */
+test('R24-L16 (a) dayCloseNews derives the toast copy and the closed date from the ledger, newest close only', () => {
+  const at = d => new Date(`${d}T09:00:00`).getTime(); // the settle ran on the morning of d
+  assert.equal(dayCloseNews([]), null, 'no ledger rows must yield no row');
+  assert.equal(dayCloseNews([{ type: 'protein', date: '2026-09-02', ts: at('2026-09-03') }]), null,
+    'a protein row is not a day-close');
+  assert.deepEqual(
+    dayCloseNews([{ key: 'dayclose-2026-09-02', type: 'dayclose', xp: 50, date: '2026-09-02', ts: at('2026-09-03') }]),
+    { id: 'dayclose-2026-09-02', type: 'dayclose', title: 'Yesterday closed on budget: Bone Crate earned', date: '2026-09-02' });
+  assert.deepEqual(
+    dayCloseNews([{ key: 'dayeffort-2026-09-02', type: 'dayeffort', xp: 25, date: '2026-09-02', ts: at('2026-09-03') }]),
+    { id: 'dayclose-2026-09-02', type: 'dayeffort', title: 'You logged yesterday. That counts: Common Crate earned', date: '2026-09-02' });
+  // the gap case: settled two days after the closed day, the toast said "your last logged day"
+  assert.equal(dayCloseNews([{ type: 'dayclose', date: '2026-08-30', ts: at('2026-09-03') }]).title,
+    'Your last logged day closed on budget: Bone Crate earned');
+  assert.equal(dayCloseNews([{ type: 'dayeffort', date: '2026-08-30', ts: at('2026-09-03') }]).title,
+    'You logged your last day here. That counts: Common Crate earned');
+  // newest CLOSED DAY wins, whatever order the store hands rows back in
+  const r = dayCloseNews([
+    { type: 'dayclose', date: '2026-09-02', ts: at('2026-09-03') },
+    { type: 'dayeffort', date: '2026-08-31', ts: at('2026-09-01') },
+    { type: 'dayclose', date: '2026-09-01', ts: at('2026-09-02') },
+  ]);
+  assert.equal(r.date, '2026-09-02');
+  assert.equal(r.type, 'dayclose');
+});
+
+test('R24-L16 (b) renderToday feeds the derived day-close row to the news pill from the xp rows it already read', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /newsBannerHtml\(newsUnseen, eq, dayCloseNews\(allXp\)\)/,
+    'renderToday no longer passes dayCloseNews(allXp) into newsBannerHtml: the day-close is a droppable toast again (QA r24 L16)');
+  const m = app.match(/\nfunction newsBannerHtml\(unseen, eq, dayClose\) \{\n([\s\S]*?)\n\}\n/);
+  assert.ok(m, 'newsBannerHtml(unseen, eq, dayClose) not found');
+  assert.ok(/\$\{esc\(dayClose\.title\)\}/.test(m[1]) && /\$\{esc\(dayClose\.date\)\}/.test(m[1]),
+    'the pill no longer renders the day-close row\'s title and date');
+  // the toast strings ARE the row strings: the toast copy at both call sites must still be what game.js derives
+  const game = readFileSync(join(here, '..', 'js', 'game.js'), 'utf8');
+  for (const copy of ['Yesterday closed on budget: Bone Crate earned', 'You logged yesterday. That counts: Common Crate earned',
+    'Your last logged day closed on budget: Bone Crate earned', 'You logged your last day here. That counts: Common Crate earned']) {
+    assert.ok(app.includes(copy), `toast copy changed: "${copy}" is no longer in app.js`);
+    assert.ok(game.includes(copy), `row copy drifted from the toast: "${copy}" is no longer in game.js`);
+  }
+});
+
+test('R24-L16 (c) the hero choice is unchanged by a day-close row: newsHero() reads NEWS only', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const fb = app.match(/\nconst NEWS_HERO_FALLBACK = \{[\s\S]*?\n\};\n/)?.[0];
+  const fn = app.match(/\nfunction newsHero\(\) \{\n[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(fb && fn, 'NEWS_HERO_FALLBACK / newsHero() not found; this pin is reading the wrong shape');
+  assert.ok(!/dayClose/i.test(fn), 'newsHero() now reads the day-close: the hero rule must not change (QA r24 L16)');
+  const pick = (NEWS) => new Function('NEWS', 'HYPE_PLATES', `${fb}${fn}; return newsHero();`)(NEWS, { 'a.png': {} });
+  const plain = [{ id: 'x', title: 'x' }, { id: 'w', title: 'w', hero: 'a.png' }];
+  const dayclose = { id: 'dayclose-2026-09-02', type: 'dayclose', title: 'Yesterday closed on budget: Bone Crate earned', date: '2026-09-02' };
+  // with a hero-bearing entry present, the same entry wins whether or not the day-close row is in the list
+  assert.equal(pick([dayclose, ...plain]), pick(plain));
+  assert.equal(pick(plain).id, 'w', 'setup: the fixture hero was not chosen; the pin below compares nothing');
+  // with no hero-bearing entry, the fallback wins, and the day-close row never stands in for it
+  assert.equal(pick([dayclose, plain[0]]).title, pick([plain[0]]).title);
+  assert.equal(pick([dayclose]).title, 'Two want to eat you');
 });
 
 await runAll();

@@ -800,6 +800,34 @@ export async function awardDayCloseIfDue(targets) {
   return closed ? { date: y, closed: true, gap } : consoled ? { date: y, consoled: true, gap } : null;
 }
 
+/* THE DAY-CLOSE AS A ROW THE PLAYER CAN READ LATER. QA round 24 L16: the two
+   toasts above are the ONLY delivery of the day-close, at 3.4s/3.6s inside a
+   queue that caps at 4 and drops the oldest, so a boot that also pays a welcome
+   kit, a merchant refund and a den ceiling can drop the golden crate's notice on
+   the floor, and nothing persistent on Today ever says the day closed.
+   DERIVED, NOT STORED. The `dayclose-<date>` / `dayeffort-<date>` ledger rows
+   ARE the receipt (that is what the ledger is for), so this reads the newest one
+   and hands renderToday a news-shaped row with the toast's exact copy, dated to
+   the closed day. No second store to drift, no producer change: the policy at
+   the award() calls above is untouched.
+   `gap` is recovered from the row itself: ts is the day the settle ran, date is
+   the day settled, and the toast said "your last logged day" exactly when those
+   are not adjacent. Only the NEWEST row is surfaced; older closes age out with
+   the list. */
+export function dayCloseNews(xpRows) {
+  let r = null;
+  for (const x of xpRows) {
+    if (x.type !== 'dayclose' && x.type !== 'dayeffort') continue;
+    if (!r || x.date > r.date) r = x;
+  }
+  if (!r) return null;
+  const gap = addDays(dateKey(new Date(r.ts)), -1) !== r.date;
+  const title = r.type === 'dayclose'
+    ? (gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned')
+    : (gap ? 'You logged your last day here. That counts: Common Crate earned' : 'You logged yesterday. That counts: Common Crate earned');
+  return { id: `dayclose-${r.date}`, type: r.type, title, date: r.date };
+}
+
 /* THE RETROACTIVE BACKFILL, AND THE BOOT LOOP IT USED TO CAUSE.
  *
  * This is the one-shot replay that honours a pre-RPG install's history: about
