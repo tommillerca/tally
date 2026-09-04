@@ -30,14 +30,14 @@
  * with no price, and buyFootballItem refuses a non-finite one, the same way
  * buyRackItem does. */
 export const FOOTBALL_KIT_LIVE = false;                 // Tom flips this to sell the kit
-export const FOOTBALL_KIT_PRICE_PLACEHOLDER = null;     // coins per garment tile; Tom decides the number
+export const FOOTBALL_KIT_PRICE_PLACEHOLDER = 4200;     // Tom, 2026-09-04: 3x the epic rung (1,400). Beta wallets are deep; re-price at launch.
 /* THE BUNDLE. Tom, 2026-09-04: "per garment only with a bundle of everything for
  * a slightly cheaper but expensive price." One tile per team that hands over
  * every SOLD garment of that team at once (the helmet still drags its three
  * visors along, so the bundle is 8 ids for 5 tiles). The number is null for the
  * same reason the per-garment one is: footballBundleSellable refuses a live
  * bundle without it, and buyFootballBundle refuses it again at the till. */
-export const FOOTBALL_BUNDLE_PRICE_PLACEHOLDER = null;  // coins for a whole team's kit; Tom decides the number
+export const FOOTBALL_BUNDLE_PRICE_PLACEHOLDER = 16800;  // Tom, 2026-09-04: 3x. 20% off the 21,000 sum, so the saving is exactly one garment.
 
 /* THE VISOR AND THE EYES. The visor helmets keep the E slot drawn and pickable:
  * measured over all 36 eye items composited under the darkest visor, 33 sit
