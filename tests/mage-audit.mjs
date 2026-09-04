@@ -353,7 +353,16 @@ const combat = await page.evaluate(async () => {
   const casts = [...lines].filter(x => /hollow bolt|wails|reaps|takes the wind|claws its way|amulet/i.test(x));
   return { casts, distinct: casts.length, fxMax, amulet, lines: lines.size };
 });
-ok('he casts his own moves in a real fight', combat.distinct >= 2,
+/* `>= 1`, NOT `>= 2` (2026-09-04). The claim is that the Live Wire casts HIS OWN
+   moves (the regex above is his kit and nothing else matches it), so one cast
+   proves it and zero is the red. The old `>= 2` asked the dice for variety: on
+   a 4-7 turn fight the number of DISTINCT casts wobbled 3 / 2 / 1 across three
+   runs of the SAME tip tonight, gate7 went red on a commit that a bisect later
+   passed, and the bisect named an add-sheet commit that cannot touch a fight.
+   lessons_guard_samples_wrong_instant: a wobbling value is not a flaky test, it
+   is a guard sampling an instant. Prove-red: empty the regex list and it reads
+   0, red. */
+ok('he casts his own moves in a real fight', combat.distinct >= 1,
   `${combat.distinct} of his moves seen: ${combat.casts.join(' / ').slice(0, 160)}`);
 ok('his spells are drawn on screen', combat.fxMax > 0, `${combat.fxMax} FX layers at peak`);
 ok('the log names what each move did', combat.lines >= 4, `${combat.lines} distinct log lines`);
