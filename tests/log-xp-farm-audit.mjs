@@ -92,6 +92,22 @@ await g.onFoodLogged(rep, { entriesForDate: [rep] });
 ok('REPEAT the same entry through onFoodLogged twice pays its log XP once', (await logXp()) === before + 10,
   `${before} -> ${await logXp()} XP after two calls for one entry (one slot is 10)`);
 
+/* CONCURRENT REPEAT: reward-sop's second line, two overlapping attempts paid
+   320 against 310. Both calls read slot 1 empty, one wins the addIfAbsent, the
+   LOSER moved on to slot 2 and was paid. After a lost claim the winner's row is
+   re-read: if it names our ref, the entry is paid and we stop.
+   HONESTY: this case did NOT go red before the fix under mem-idb (220 -> 230
+   both ways): the in-memory journal commits on a macrotask and serialises the
+   two gets, so the loser already sees the winner's row. It pins the seam and
+   documents the intent; the race itself is proven only in the browser, by
+   reward-sop-audit's "TWO OVERLAPPING attempts hand over ONE lot" line. */
+const con = { id: newId(), date: '2031-05-08', meal: 0, ts: Date.now(), foodId: null, name: 'audit food', kcal: 100, p: 5, c: 5, f: 5 };
+await db.put('log', con);
+const b2 = await logXp();
+await Promise.all([g.onFoodLogged(con, { entriesForDate: [con] }), g.onFoodLogged(con, { entriesForDate: [con] })]);
+ok('CONCURRENT two overlapping onFoodLogged calls for one entry pay its log XP once', (await logXp()) === b2 + 10,
+  `${b2} -> ${await logXp()} XP after two simultaneous calls for one entry`);
+
 console.log(out.join('\n'));
 console.log(fails ? `\nFAIL (${fails})` : `\nall green, ${out.length} checks`);
 process.exit(fails ? 1 : 0);

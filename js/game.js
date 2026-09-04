@@ -176,6 +176,10 @@ export async function awardCapped(prefix, type, xp, label, cap, date, ref = null
        of 120, because both were told they had granted the same key. */
     const r = await awardOnce(key, type, xp, label, d, ref != null ? { ref } : null);
     if (r.claimed) return r.xp;
+    /* Lost the claim. If the winner was our own twin (two overlapping calls
+       for one entry: reward-sop's "twoAtOnce" line paid 320 against 310), the
+       entry is paid and we stop here instead of taking the next slot. */
+    if (ref != null && (await db.get('xp', key))?.ref === ref) return 0;
   }
   return 0;
 }
