@@ -96,7 +96,7 @@ import { HERO_EDGE } from '../data/hero-edge.js';
 import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petCanWear,
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
 // Football kit, 2026-09-04
-import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_SOLD, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
+import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal,
@@ -268,6 +268,7 @@ const S = {
      first paint and after every equip. */
   petWear: {},
   fbTeam: null,    // Football kit, 2026-09-04: the team the kit room is showing
+  fbJump: false,   // one-shot: the wardrobe's colourway rail sent the player to the Kit room, so open it
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
   wpnAura: null,   // the weapon aura bought off the rack, worn on every surface
 };
@@ -5454,8 +5455,17 @@ const fbTintAttr = item => {
   const t = footballTints(item);
   return t ? ` data-tints='${JSON.stringify(t)}'` : '';
 };
+/* `data-fbslot` IS WHAT MAKES A COLOURWAY CHANGEABLE IN PLACE. A stack can wear
+   four football pieces at once (helmet, jersey, cleats, and the lizard's two),
+   so `.fb-tint` on its own addresses all of them and recolouring "the helmet"
+   would repaint the jersey too. The slot is on the item already; emitting it
+   costs nothing and it is the only handle the wardrobe's colourway rail needs:
+   every team shares ONE master PNG and ONE pair of masks per garment, so
+   sliding from one team to the next is two `style.background` writes on spans
+   that are already on screen, with no image to decode and no stage to rebuild.
+   See fbRail in renderCharacter. */
 const footballTintHtml = (item, geo = '') => (footballTints(item) || [])
-  .map(t => `<span class="fb-tint" style="${geo}--fbm:url('${t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
+  .map(t => `<span class="fb-tint" data-fbslot="${item.slot}" style="${geo}--fbm:url('${t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
 
 function avatarLayersHtml(eq, opts = {}) {
   const skip = new Set(opts.skip || []);
@@ -9391,7 +9401,10 @@ async function renderShop(el) {
   const wasOpen = {
     rest: !!$('#shopRestBody', el) && !$('#shopRestBody', el).hidden,
     drop: !!$('#dropSect', el)?.open,
-    fb: !!$('#fbSect', el)?.open,
+    /* S.fbJump: the wardrobe's colourway rail sent them here for a colourway
+       they do not own, so the shelf it named is the shelf that opens. One-shot,
+       cleared below, so a later visit is a normal visit. */
+    fb: !!$('#fbSect', el)?.open || S.fbJump,
   };
 
   el.innerHTML = `
@@ -9529,6 +9542,13 @@ async function renderShop(el) {
   // are the most expensive single taps in the game.
   // Football kit, 2026-09-04: the kit room's team picker re-renders the shelf on its own team
   $('#fbTeam', el)?.addEventListener('change', e => { S.fbTeam = e.target.value; rerender(); });
+  /* The rail's "Kit room" button lands here. Consume the flag BEFORE the scroll
+     so a rerender() from any buy on this screen is a normal render again, and
+     bring the shelf to them rather than leaving it open below the fold. */
+  if (S.fbJump) {
+    S.fbJump = false;
+    requestAnimationFrame(() => $('#fbSect', el)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }
   el.querySelectorAll('[data-buydrop], [data-buyfb], [data-buyfbkit]').forEach((b => {
     let t = null;
     let busy = false;
@@ -14916,6 +14936,113 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </div>`;
     };
 
+    /* ================= THE COLOURWAY RAIL (Tom, 2026-09-04) ==================
+       "the dressing room/wardrobe where you can slide from east to west on the
+       different tints".
+
+       WHAT IT IS. Football garments are the one family in the game where the
+       SAME piece exists in 32 versions that differ only in colour, so the grid
+       above is the wrong shape for them: 32 helmets in a 4-wide grid is eight
+       rows of near-identical tiles and no sense of "these are the same thing".
+       One horizontal rail, one tile per team, and the tile under the rail's
+       centre is the one being tried on. Sliding recolours the player's OWN
+       Bonehead, live, so the comparison happens on the character rather than on
+       a product shot.
+
+       WHY IT COSTS ALMOST NOTHING TO MOVE. All 32 teams of a garment share ONE
+       master PNG and ONE pair of alpha masks -- that is the whole point of the
+       mask pipeline (docs/FOOTBALL-KIT.md section 1). So a team change is not a
+       different image, it is two hex values on two spans that are already in the
+       document. fbPaint below writes exactly those two and touches nothing else:
+       no restageDoll, no innerHTML, no decode, no layout. restageDoll IS still
+       the commit path (through the existing equip -> restageWardrobe), because a
+       commit really does change what is worn.
+
+       THE PRECEDENT IS .pw-row, the Stable's pet-accessory row (app.css, "A ROW
+       OF TILES, NOT A GRID"): flex + overflow-x + scroll-snap-type: x mandatory,
+       flex:none tiles with scroll-snap-align, a hard `on` state that changes
+       fill AND border AND label. Same markup shape, same snap, same momentum
+       (the platform's own -- no JS scrolling library anywhere in this app).
+       .fit-rail was the other candidate and is the wrong one: it is a chip rail
+       with no snap and no art, built for six items, not thirty-two.
+
+       AN UNOWNED COLOURWAY IS SHOWN, LOCKED, WITH ITS PRICE. Not hidden, and
+       the reason is what the rail is FOR. A player who owns one helmet would
+       get a one-tile rail, which is not a rail; and seeing their own Bonehead
+       in the other 31 sets IS the argument for buying a second one. So every
+       tile previews on the doll and the lock lives on the BAR, which is the
+       only thing that can commit. It does not sell here: the button routes to
+       the Kit room with that team already picked, so buyFootballItem stays the
+       one and only till.
+
+       NOT OFFERED ON A DISGUISED SLOT. If a transmog is making a gear piece
+       LOOK like a football helmet then `eq[slot]` is football while `rawEq[slot]`
+       is not, and "wear this colourway" would mean re-buying a transmog rather
+       than swapping a cosmetic. The rail wants both to be the same football
+       item; anything else falls through to the look panel that already owns
+       that decision. */
+    const fbWornItem = eq[slot] && eq[slot] === rawEq[slot] ? BH_BY_ID[eq[slot]] : null;
+    const fbGarment = fbWornItem && fbWornItem.football ? fbWornItem.football.garment : null;
+    let railTeam = fbGarment ? fbWornItem.football.team : null;
+    const fbId = t => footballItemId(t, fbGarment);
+    const fbPrice = FOOTBALL_KIT_PRICE_PLACEHOLDER;
+    /* THE TILE IS THE PIECE AS WORN, not the loose PNG: same wornArtHtml
+       mannequin as the Kit room's own tiles and the rack's, so a helmet reads
+       as a helmet on a head at 64px instead of as a speck on a 640 canvas.
+       32 tiles share one base skeleton, one master and two masks, so the whole
+       rail is a handful of distinct image sources (measured: see
+       tests/football-rail-audit.mjs row RAIL-COST). */
+    const fbTile = t => {
+      const id = fbId(t.id), own = owned.has(id);
+      return `<button class="pw-item fbr${t.id === railTeam ? ' on' : ''}${own ? '' : ' locked'}" type="button"
+        data-fbteam="${t.id}" role="option" aria-selected="${t.id === railTeam}" title="${esc(t.name)}">
+        <span class="fb-worn sm">${wornArtHtml(id, 64 * 2.3)}</span>
+        <b>${esc(t.name)}</b>
+        <small>${fbTag(t.id)}</small>
+      </button>`;
+    };
+    /* ONE writer for the tile's state word, because the rail re-labels tiles in
+       place as it moves and a second copy of this ternary is how "Trying" ends
+       up on two tiles at once. */
+    const fbTag = teamId => {
+      const id = fbId(teamId);
+      if (!owned.has(id)) return `${ICONS.lock(9)} ${Number.isFinite(fbPrice) ? fbPrice.toLocaleString() : 'Soon'}`;
+      if (teamId !== railTeam) return 'Yours';
+      return eq[slot] === id ? 'Worn' : 'Trying';
+    };
+    const fbBarHtml = () => {
+      const t = FOOTBALL_TEAM_BY_ID[railTeam];
+      const id = fbId(railTeam), own = owned.has(id), worn = eq[slot] === id;
+      return `<div class="look-bar mog-bar fb-bar${!worn && own ? ' armed' : ''}">
+        <div class="mog-lines">
+          <span><i>Trying</i><b class="fbr-team">${esc(t.name)}</b></span>
+          <span><i>Colours</i><b><em class="fb-swatch sm" style="background:${t.a};border-color:${t.b}"></em>${esc(t.a)} · ${esc(t.b)}</b></span>
+        </div>
+        ${worn ? '<button class="btn ghost mog-go" disabled>You are wearing it</button>'
+          : own ? `<button class="btn mog-go" data-fbwear="${id}">Wear it</button>`
+          : `<button class="btn ghost mog-go" data-fbshop="${t.id}"${FOOTBALL_KIT_LIVE && Number.isFinite(fbPrice) ? '' : ' disabled'}>${
+              FOOTBALL_KIT_LIVE && Number.isFinite(fbPrice) ? `${ICONS.coin(12)} ${fbPrice.toLocaleString()} · Kit room` : 'Not for sale yet'}</button>`}
+      </div>`;
+    };
+    /* THE FIGURE SITS WITH THE RAIL, and it is the SAME lesson the Dressing
+       Room's Now/After pair answered on 2026-08-23: measured here at 430x932
+       with a helmet on, the rail's own top edge is at document y 1151 while the
+       paper doll's stage ends around y 400, so a player sliding the rail is
+       recolouring a Bonehead nine hundred pixels above the thumb doing the
+       sliding. The big doll still recolours (it is the same two spans and it
+       costs nothing to keep in step, so scrolling back up shows what you left);
+       this is the copy you can actually SEE while you slide. Same `figure`
+       helper and the same .mog-fig box the look panel uses, so it is the same
+       picture at a smaller size and not a second crop. */
+    const fbRailHtml = () => !fbGarment ? '' : `
+      <div class="fb-rail-wrap">
+        <div class="sect-h fbr-h"><span>${esc(FOOTBALL_GARMENT_BY_KEY[fbGarment].label)} · ${FOOTBALL_TEAMS.length} colourways</span></div>
+        <p class="note fbr-lead">Slide sideways. Your Bonehead changes colours as you go, and nothing is worn until you say so.</p>
+        <div class="fbr-fig">${figure({ ...look, [slot]: fbId(railTeam) })}</div>
+        <div class="pw-row fb-rail" role="listbox" aria-label="Team colourways" tabindex="0">${FOOTBALL_TEAMS.map(fbTile).join('')}</div>
+        ${fbBarHtml()}
+      </div>`;
+
     // SAVED FITS: a look you can put back on in one tap. Stats never move.
     const fitRail = `
       <div class="fit-rail">
@@ -14987,6 +15114,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </button>`;
         }).join('')}
       </div>
+      ${fbRailHtml()}
       ${(() => {
         // Inspect panel: tap a gear cell to preview its full stats + special ability
         // (⚡ talent + what it does), then Equip. Falls back to the equipped piece.
@@ -15225,6 +15353,95 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const done = await restageWardrobe(content, slot);
       if (!done) renderCharacter(wrap, 'wardrobe', { instant: true });   // fall back rather than leave it stale
     }));
+    /* THE RAIL MOVES TWO COLOURS AND NOTHING ELSE.
+       Every team of a garment is the same master PNG behind the same two masks,
+       so "recolour the doll" is literally two `style.background` writes on spans
+       that are already on screen: no restageDoll, no innerHTML, no decode, no
+       reflow. That is what makes it safe to drive off a scroll handler at one
+       write per animation frame.
+       `slot` scopes the selector, because a stack can wear four football pieces
+       and `.fb-tint` alone would repaint all of them (see footballTintHtml).
+       PAINT RETURNS THE SPAN COUNT and the caller checks it: a stage that grew
+       zero tint spans means the doll is NOT showing this garment, and silently
+       painting nothing is how a rail looks like it works while doing nothing at
+       all (tests/football-rail-audit.mjs row RAIL-DOLL).
+       SCROLLING IS THE PLATFORM'S. scroll-snap-type on .fb-rail does the
+       momentum and the landing; this only reads which tile ended up under the
+       centre. rail.scrollTo, never scrollIntoView: scrollIntoView walks up and
+       scrolls the PAGE too, and this app does not move a player's scroll
+       position for them. */
+    (() => {
+      const rail = $('.fb-rail', content);
+      if (!rail) return;
+      const cells = $$('[data-fbteam]', rail);
+      const centreOn = (cell, behavior) =>
+        rail.scrollTo({ left: cell.offsetLeft - (rail.clientWidth - cell.offsetWidth) / 2, behavior });
+      const paint = teamId => {
+        const tints = footballTints(BH_BY_ID[fbId(teamId)]) || [];
+        /* BOTH copies of the character, and NOT the look panel's "Now" figure:
+           that one states what is currently worn and a rail preview repainting
+           it would erase the only before-picture on the screen. */
+        const spans = $$(`.bh-stage.lg .fb-tint[data-fbslot="${slot}"], .fbr-fig .fb-tint[data-fbslot="${slot}"]`, content);
+        spans.forEach((s, i) => { if (tints[i]) s.style.background = tints[i].hex; });
+        return spans.length;
+      };
+      const wireBar = () => {
+        $('[data-fbwear]', content)?.addEventListener('click', async e => {
+          const id = e.currentTarget.dataset.fbwear;
+          await equip(slot, id);
+          S.lookPreview = null;
+          popSound(S.sounds); pushProfileSoon();
+          // same in-place swap the grid's own equip uses, and the same fallback
+          if (!(await restageWardrobe(content, slot))) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
+          eq[slot] = rawEq[slot] = id;
+          relabel(); refreshBar();
+        });
+        $('[data-fbshop]', content)?.addEventListener('click', e => {
+          /* The rail never sells. It hands the decision to the one till there is
+             (buyFootballItem, behind the Kit room), with the team already picked
+             and the shelf already open, so the button goes where it says. */
+          S.fbTeam = e.currentTarget.dataset.fbshop;
+          S.fbJump = true;
+          openCharacter('shop');
+        });
+      };
+      const refreshBar = () => { const b = $('.fb-bar', content); if (b) { b.outerHTML = fbBarHtml(); wireBar(); } };
+      const relabel = () => cells.forEach(c => {
+        const on = c.dataset.fbteam === railTeam;
+        c.classList.toggle('on', on);
+        c.setAttribute('aria-selected', String(on));
+        const tag = $('small', c);
+        if (tag) tag.innerHTML = fbTag(c.dataset.fbteam);
+      });
+      const select = teamId => {
+        if (!teamId || teamId === railTeam) return;
+        railTeam = teamId;
+        paint(teamId);
+        relabel(); refreshBar();
+      };
+      let raf = 0;
+      rail.addEventListener('scroll', () => {
+        if (raf) return;
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          const mid = rail.getBoundingClientRect().left + rail.clientWidth / 2;
+          let best = null, bd = Infinity;
+          for (const c of cells) {
+            const r = c.getBoundingClientRect(), d = Math.abs(r.left + r.width / 2 - mid);
+            if (d < bd) { bd = d; best = c; }
+          }
+          if (best) select(best.dataset.fbteam);
+        });
+      }, { passive: true });
+      cells.forEach(c => c.addEventListener('click', () => { select(c.dataset.fbteam); centreOn(c, 'smooth'); }));
+      // open ON the colourway being worn rather than on team #1
+      const worn = cells.find(c => c.dataset.fbteam === railTeam);
+      if (worn) requestAnimationFrame(() => centreOn(worn, 'auto'));
+      wireBar();
+      // test hook (webdriver only): the rail is driven by a real scroll in the
+      // audit, and this is how it reads back what the page thinks is selected
+      if (navigator.webdriver) window.__fbRail = () => ({ team: railTeam, garment: fbGarment, spans: paint(railTeam) });
+    })();
     /* A LOOK TAP MOVES FOUR THINGS AND REBUILDS NOTHING (QA round 23 F1).
        Preview and commit used to call renderCharacter(wrap, 'wardrobe',
        { instant: true }). That rebuilds #chBody, so #chContent held ZERO elements

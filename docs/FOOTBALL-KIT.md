@@ -17,7 +17,9 @@ game can see it. Section 7 is the list of things only Tom can answer.
 | The pet renderer | `js/app.js` `croppedPetImg` + `data/boneheadz.js` `petWornTints` | the tint spans take the layer's own geometry string, so registration is inherited |
 | The shop | `js/app.js` `footballShelfHtml` | the kit room, gated on `FOOTBALL_KIT_LIVE` at the call site |
 | The buy path | `js/loot.js` `buyFootballItem` | refuses unless live AND the price is a finite number above zero |
-| The guard | `tests/football-kit-audit.mjs` | PURE, 0.2s, registered in `tests/release-gate.mjs` |
+| The guard (arithmetic) | `tests/football-kit-audit.mjs` | PURE, 0.3s, 34 rows, FAST tier |
+| The guard (pixels) | `tests/football-render-audit.mjs` | a real browser, ~150s, 12 rows, FULL tier until the kit goes live |
+| The bundle | `data/football-teams.js` `footballBundleMath` + `js/loot.js` `buyFootballBundle` | one tile per team, every sold garment, priced as a discount |
 
 **The model.** One master PNG per garment plus two alpha masks; a team is two hex
 colours; an item is team x garment with a stable id `fb-<team>-<garment>`. So 32
@@ -187,7 +189,7 @@ minimum, and the fix is to update the two numbers in the data file's header.
 
 ## 6. What the guard checks
 
-`node tests/football-kit-audit.mjs`, PURE, 0.2s, on every gate run. 24 rows.
+`node tests/football-kit-audit.mjs`, PURE, on every gate run. 34 rows.
 Its header carries the eight prove-red mutations and the FAIL line each one
 produced, all confirmed 2026-09-04 on a throwaway tree.
 
@@ -215,43 +217,101 @@ produced, all confirmed 2026-09-04 on a throwaway tree.
 - **PRICE / PRICE-CONTROL / PRICE-BUYPATH** a live kit with a null price is
   refused, the predicate is proved to refuse it, and the shape of the real guard
   in `buyFootballItem` is pinned.
+- **CLEATS / PET-TINT / PET-SPECIES** the cleats take the team primary on all 32
+  teams (5,430 core px each, worst 1.51/255) and are one colour BY THE ART; both
+  lizard garments carry BOTH colours on all 32 teams (128 samples, worst
+  2.64/255); and both garments fit both lizard species, with a shiny proven to
+  be the same species id rather than a catalogue entry of its own.
+- **BUNDLE / BUNDLE-MATH / BUNDLE-PRICE / BUNDLE-PRICE-CONTROL / BUNDLE-BUYPATH**
+  the team bundle covers every sold garment (5 tiles -> 8 ids, derived from the
+  tiles' own grants, so the helmet still drags its visors), the saving is the
+  sum minus the bundle, and a live bundle needs a number that is actually a
+  discount.
+
+## 6b. What the PIXEL guard checks
+
+`node tests/football-render-audit.mjs`, a real browser, ~150s, 12 rows, FULL
+tier. Every measurement is a **difference between two screenshots of the same
+rectangle of the same frame**, never a `getBoundingClientRect`.
+
+- **PET-CONTROL / PET-WEARS** owned-but-unworn draws the animated stage and zero
+  tint spans; after a real tap on the Stable's wardrobe tile all three lizards
+  (Beardie, its shiny, Day One) draw base + 2 garments + 4 tint spans on the
+  static canvas, on the Stable AND on Today.
+- **PET-SIZE** the animal keeps its visual mass when the kit forces the static
+  canvas. Measured at 124px with the garments hidden and the clock pinned:
+  animated ink 264x179 = 30,941 px, static 260x194 = 30,257 px, linear ratio
+  0.9889. The 4x15 box delta is the two DRAWINGS (aspect 1.475 animated against
+  1.340 static), not the scale.
+- **PET-TINT** each lizard rendered under a navy team and a yellow one; the
+  pixels that differ between those two renders are exactly the tinted ones, and
+  each render's mean over that mask must be nearer its OWN team's primary.
+  Measured dE: navy 100 vs 208, yellow 84 vs 217, on all three.
+- **PET-REGISTER-SHINY / -CX** the kit lands on IDENTICAL pixels on C4 and its
+  shiny (zero tolerance). On CX it is 1.4% larger and 1-2 device px up-left, and
+  that number is PREDICTED from `PET_CROP` (1.0181) before it is measured
+  (1.0142), so the drift is Cam's crop and not the renderer.
+- **VISOR-SEEN / VISOR-CLIP / VISOR-CONTROL** the lasers are still drawn (2,559
+  px of the composited hero change when the eye layer is hidden), **0 of 4,968
+  eye-alpha pixels land outside the helmet silhouette**, and turning the mask off
+  in the live DOM on the same frame reports 3,804 escapes, so the row can fail.
+  The silhouette is read as ALPHA (each layer shot alone over black and again
+  over white) after a first version diffed against the page background and
+  reported 904 false escapes: the dark glass over the skull's dark eye sockets
+  changes nothing, so "where the helmet paints" is not "where the helmet is".
 
 ## 7. Open decisions, all of them, for Tom
 
-Nothing below is a blocker for the code. Every one of them is a number or a word
-somebody has to choose before this ships.
+**Tom ruled on four of these on 2026-09-04 (7.2, 7.3, 7.6, 7.7): they are built
+and measured, and are kept here as the record of what was decided and why.**
+What is still OPEN is 7.1 (the two numbers), 7.4 (the live date) and 7.5 (which
+pools).
 
-**7.1 The price.** `FOOTBALL_KIT_PRICE_PLACEHOLDER` is `null` in
-`data/football-teams.js`. The buy path refuses a non-finite price and the guard
-refuses a live kit without one, so nothing can ship broken, but nothing can ship
-at all until there is a number. For scale, the rack's own tiles and the drop sit
-in the hundreds of coins. **No default: this one has to be answered.**
+**7.1 The two prices.** `FOOTBALL_KIT_PRICE_PLACEHOLDER` and
+`FOOTBALL_BUNDLE_PRICE_PLACEHOLDER` are both `null` in `data/football-teams.js`.
+Both buy paths refuse a non-finite price and the guard refuses a live kit
+without one, so nothing can ship broken, but nothing can ship at all until there
+are numbers. For scale, the rack's own tiles and the drop sit in the hundreds of
+coins. The bundle also has to be BELOW the five tiles added up, or
+`footballBundleSellable` refuses it. **No default: these have to be answered.**
 
-**7.2 Per-garment or a team bundle.** Today it is per garment: five tiles
-(helmet+visors, jersey, cleats, lizard helmet, lizard jersey) at one flat price
-each, and 32 colourways of each. The alternative is one price for a whole team's
-kit. Per-garment is what is built and what `buyFootballItem` grants; a bundle is
-a second grant path and a second tile. Related: the price is currently flat
-across garments, so a helmet costs what a pair of cleats costs.
+**7.2 Per-garment AND a team bundle. DECIDED 2026-09-04, built.** Tom: "per
+garment only with a bundle of everything for a slightly cheaper but expensive
+price." Five per-garment tiles as before, plus ONE bundle tile per team that
+grants every sold garment of that team in one purchase (8 ids for 5 tiles: the
+helmet still drags its three visors). `FOOTBALL_BUNDLE_PRICE_PLACEHOLDER` is
+`null` beside the per-garment one and **both numbers are still 7.1**. The maths,
+the tile, the buy path and the "you save N" line are wired:
 
-**7.3 `VISOR_EYES_POLICY`: `'hide'` or `'refuse'`.** Currently `'hide'`. Of all
-36 eye items composited under the darkest visor, 33 sit inside the helmet-plus-
-glass silhouette and read through the tint. Three poke through the glass:
+```
+full  = FOOTBALL_KIT_PRICE_PLACEHOLDER x 5        the five tiles added up
+save  = full - FOOTBALL_BUNDLE_PRICE_PLACEHOLDER  what the tile prints
+```
 
-| Item | Name | Escapes the silhouette by |
-|---|---|---|
-| `E11-1` | Red Lasers | 2068 px at 640 |
-| `E11-2` | Blue Lasers | 2089 px |
-| `ES22` | Rainbow Band | 479 px |
+`footballBundleSellable` refuses a live bundle with no number AND one priced at
+or above `full`, because a non-positive saving would print a lie on a price tag.
+Partial ownership pays the full bundle price and is granted the rest; owning all
+of it is refused outright. Guarded by BUNDLE, BUNDLE-MATH, BUNDLE-PRICE,
+BUNDLE-PRICE-CONTROL and BUNDLE-BUYPATH.
 
-- `'hide'` draws the helmet and silently skips the eye layer for those three.
-  The player keeps both items and loses the eyes while a visor is on.
-- `'refuse'` makes `equip()` say no to the eyes while a visor is worn and to the
-  visor while those eyes are worn, with reason `'visor'`. Honest, but it is a
-  refusal the player has to work out for themselves.
+**7.3 `VISOR_EYES_POLICY`: DECIDED 2026-09-04, it is `'clip'`.** Tom: "hide the
+eyes on any eye cosmetics that dont fit in the bound of the helmet OR if it is
+easy keep them on and have the lazers bound within the helmet itself that could
+be cool." It was easy: the eye layer keeps its place in the stack and takes a
+`mask-image` of the worn visor helmet's OWN master, whose alpha is the
+helmet-plus-glass silhouette. The mask needs no registration of its own -- it is
+a 640 square on the same canvas as every E-slot master, so `app.css .eye-clip`
+hands it the surface's `--av-fit`/`--av-pos` exactly as `.fb-tint` does.
 
-One word in `data/football-teams.js`. Both branches are guarded, so either is
-shippable today.
+MEASURED, on Today's hero at 393x852 with the darkest visor and E11-1 Red Lasers:
+**0 of 4,968 eye-alpha pixels outside the silhouette**, with 2,559 px of the
+composited hero still changing when the eye layer is hidden (the lasers read
+through the glass, they are not simply gone). Turning the mask off in the live
+DOM on the same frame gives **3,804 escapes**, which is what makes the zero mean
+something.
+
+`'hide'` and `'refuse'` are intact, still exported, still guarded, and still one
+word away.
 
 **7.4 The live date.** `FOOTBALL_KIT_LIVE = false`. Flipping it to `true` puts
 256 items into `BH_ITEMS`, which is the rack's rotating pool, the crate pool,
@@ -265,27 +325,65 @@ reward, that is a filter at the crate pool rather than a flag here, and it does
 not exist yet. `js/gear.js` already skips `football` for gear derivation, so
 these never become statted pieces.
 
-**7.6 Are the cleats meant to be one colour?** Measured: `cleats.mask-b.png`
-comes out of the pipeline with **zero** pixels in it. Cam drew the shoe in the
-primary alone. The kit now declares that (`oneColour: true` on the cleats row in
-`FOOTBALL_GARMENTS`) and `footballTints` stops emitting a second multiply layer
-that painted nothing and still cost a decode on every render. The empty mask is
-still written and the guard asserts it stays empty, so if Cam adds a trim stripe
-to the shoe the REGIONS row goes red and the flag comes off in one edit. **If
-the cleats were always meant to carry the secondary, this is an art fix, not a
-code one.**
+**7.6 The cleats DO tint, and they are one colour BY THE ART. ANSWERED
+2026-09-04.** Tom: "make sure you can tint the cleats too you were wrong about
+skipping that". They were never skipped: the shoe takes the team **primary**
+through `cleats.mask-a.png` and comes out navy, red or purple correctly. What a
+previous pass dropped was the empty SECOND layer, and it is empty because
+`cleats.mask-b.png` has **zero** pixels above the core threshold: Cam drew the
+shoe in the primary alone. The audit now says both halves out loud:
 
-**7.7 Not a decision, a gap Tom should know about.** The lizard's helmet and
-jersey are drawn for `C4` (Beardie) and `CX` (Day One Lizard), and **both of
-those species are in `ANIMATED_PETS`**. `petSpriteHtml` returns
-`animatedPetHtml(...)` before it ever reaches `croppedPetImg`, which is the only
-function that paints a pet's worn layers. So the two lizard pieces render
-correctly in the kit room, the shop tile and the roster portraits
-(`petPortraitHtml`, which calls `croppedPetImg` directly) and **do not render on
-the Today hero, the Stable, the Paddock or the Pit**, where the animated lizard
-is drawn instead. This is not a typo: the animated lizard is a separate layered
-sprite stage with its own coordinate system, and the football art is registered
-to the static `C4.png` canvas, so it cannot simply be stacked on. Either the
-animated stage grows a garment layer (real work, needs its own art registration)
-or the pet pieces are sold knowing where they show. Nothing in the tests can
-catch this for you, because both renderers are behaving exactly as written.
+- row **CLEATS** measures the primary on all 32 teams (5,430 core px each, worst
+  1.51/255) and asserts the garment emits exactly one tint layer;
+- row **REGIONS** asserts, in both directions, that a garment is declared
+  `oneColour` exactly when its `mask-b` is empty.
+
+**What Cam must draw for two-tone cleats.** Add a **coral** (hue ~8, the same
+secondary he already uses for the helmet stripe and the jersey trim) trim to
+`BH_NFL_CLEATS.png` -- a stripe, a swoosh, a sole edge, anything with real
+coverage -- and re-run `python3 scripts/football-masks.py`. REGIONS goes red the
+moment `mask-b` stops being empty, and the fix is deleting `oneColour: true`
+from the cleats row in `FOOTBALL_GARMENTS`. One edit, no code design. Nothing
+else is needed: the second multiply layer already exists for every other
+garment.
+
+**7.7 ANSWERED 2026-09-04: the lizard wears the kit, and holds still while it
+does.** Tom: "just put the pet pieces on a version of the lizard that isnt
+animated for this." Football wear now forces `petSpriteHtml` down the static
+canvas (`croppedPetImg`), which is the only function that paints worn layers.
+The trade is explicit and it is his: **while the kit is on, the lizard stops
+animating**; with no football wear it animates exactly as it always did.
+
+And "make sure the cosmetics go on the shiny and the founders purple lizard
+because at the end of the day theyre all the same base frame" -- they do, and it
+needed no data change. A shiny is an INSTANCE flag over the same species id, so
+`C4` being in `FOOTBALL_PETS` already covers its shiny; CX is C4 recoloured on
+the same `PET_CROP` bbox. Measured on the Stable card and on Today's hero:
+
+| | garment lands at | vs C4 |
+|---|---|---|
+| C4 Beardie | 140,93 211x202 device px | - |
+| C4 shiny | 140,93 211x202 | **identical pixels** |
+| CX Day One | 139,91 214x205 | 1.4% larger, 1-2px up-left |
+
+CX's 1.4% is Cam's crop, not the renderer: `PET_CROP` has C4 at
+0.5344..0.8891 and CX at 0.5375..0.8859, which PREDICTS a 1.0181 size ratio
+before anything is rendered, against 1.0142 measured. `croppedPetImg` fits the
+INK to 82% of the box, so a marginally smaller ink means a marginally larger
+canvas behind it.
+
+**The scale does NOT change when the kit goes on**, and that is measured rather
+than assumed. At 124px with the garments hidden and the clock pinned:
+
+```
+animated lizard                      264 x 179 device px, 30,941 px of ink
+static under petMassScale (shipped)  260 x 194,           30,257
+static under staticMassScale         257 x 191,           29,655
+```
+
+`petMassScale` is nearer on width (4px vs 7) and on area (684 vs 1,286),
+`staticMassScale` on height (12px vs 15). So the scale FUNCTION is not what
+makes the animal change size: the two DRAWINGS do, at aspect 1.475 animated
+against 1.340 static. `petScale` is therefore left exactly as it was, and
+PET-SIZE bounds the linear ratio (0.9889 today) at 5%, which still catches a
+lost `mass: true` at 24%.

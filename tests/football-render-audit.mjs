@@ -120,6 +120,10 @@ if (SHOTS) mkdirSync(SHOTS, { recursive: true });
    question the mean colour can actually answer: a very dark navy and a bright
    yellow. Same two the pure audit's TINT row uses for the same reason. */
 const NAVY = 'boneyard-bruisers', GOLD = 'windrow-wasps';
+/* The two garments Cam drew for the lizard, 2026-09-04, named in
+   data/football-teams.js FOOTBALL_GARMENTS as the two rows carrying `pets`
+   (docs/FOOTBALL-KIT.md section 1). Both are driven, because Tom's ruling was
+   about the pet PIECES and not about one of them. */
 const PET_GARMENTS = ['pet-helmet', 'pet-jersey'];
 const EYE = 'E11-1';                                  // Red Lasers, the worst escape at 2068px
 const VISOR = 'visor90';                              // the darkest glass
@@ -317,6 +321,10 @@ try {
      same base frame." A shiny is an INSTANCE flag over the same species id, so
      the third one is found by that flag and not by a species that does not
      exist. */
+  /* Tom, 2026-09-04: "make sure the cosmetics go on the shiny and the founders
+     purple lizard because at the end of the day theyre all the same base
+     frame." Three instances, exactly those three, and the shiny is found by its
+     INSTANCE flag because there is no shiny species id to look up. */
   const LIZARDS = [
     { key: 'C4', inst: insts.find(x => x.sp === 'C4' && !x.shiny) },
     { key: 'C4-shiny', inst: insts.find(x => x.sp === 'C4' && x.shiny) },

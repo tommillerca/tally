@@ -28,10 +28,22 @@
  *      hole. Both directions are asserted; one of them passing is not the
  *      feature working.
  *
- *   4. A PRICE THAT IS STILL null. FOOTBALL_KIT_PRICE_PLACEHOLDER is null on
- *      purpose until Tom names a number. The failure mode is flipping LIVE and
- *      forgetting the price, which ships a shelf whose every button is dead.
- *      The header claims this file refuses that combination. It does.
+ *   4. A PRICE THAT IS STILL null. FOOTBALL_KIT_PRICE_PLACEHOLDER and
+ *      FOOTBALL_BUNDLE_PRICE_PLACEHOLDER are both null on purpose until Tom
+ *      names the numbers. The failure mode is flipping LIVE and forgetting one,
+ *      which ships a shelf whose every button is dead. The header claims this
+ *      file refuses that combination. It does, for both, and it also refuses a
+ *      bundle priced at or above the sum of the pieces it replaces, because the
+ *      tile prints "you save N" and a non-positive N is a lie on a price tag.
+ *
+ *   5. WHAT THIS FILE CANNOT SEE AT ALL. It is pure, so it grades arithmetic and
+ *      never a screen. Every claim about a rendered pixel -- the lizard actually
+ *      WEARING the kit, the kit being the team's colour on all three lizards,
+ *      the lasers being bounded inside the helmet under VISOR_EYES_POLICY
+ *      'clip' -- lives in tests/football-render-audit.mjs, which drives a real
+ *      browser and measures screenshot differences. The two are deliberately
+ *      split: the pet garments were invisible on four screens for a whole day
+ *      while every row in this file was green.
  *
  * HOW THE PIXELS ARE READ, since the question always comes up: IN NODE, with a
  * 60-line PNG decoder in this file (node:zlib plus the five filter types). No
@@ -68,6 +80,19 @@
  *   VISOR-EYES     E11-1 -> E11-9 in VISOR_BLOCKED_EYES. "NOT IN CATALOGUE"
  *   PRICE          FOOTBALL_KIT_LIVE = true with the price still null.
  *                  "FOOTBALL_KIT_LIVE=true, price=null"
+ * Six rows landed 2026-09-04 with Tom's four rulings and carry their own
+ * mutations, to run the same way before they are believed:
+ *   VISOR-CLIP     visorClipMask returning null -> the mask is not the visor's
+ *                  master and the two "only under a visor" branches go with it
+ *   VISOR-CLIP-WIRED  drop the .eye-clip class from avatarLayersHtml, or pin
+ *                  app.css's mask-size at 100% 100% instead of var(--av-fit)
+ *   BUNDLE         a garment loses `sold`, or the helmet stops granting visors:
+ *                  the expected id set is derived from the tiles' own grants
+ *   BUNDLE-MATH / -PRICE-CONTROL  any sign error in footballBundleMath, and a
+ *                  bundle priced at or above the pieces
+ *   CLEATS         re-export cleats.png without the luminance normalisation
+ *   PET-TINT / PET-SPECIES  drop a species from FOOTBALL_PETS, or invent a
+ *                  `C4-shiny` catalogue id (a shiny is an instance flag)
  * NOTE that flipping LIVE alone does NOT redden GATE, and correctly so: with
  * the flag true the items are supposed to be in the pool, and the row grades
  * the branch that is live. PRICE is what catches that mutation.

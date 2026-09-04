@@ -6534,6 +6534,53 @@ body::before {
 .fb-kitline { display: block; font-size: 11px; color: var(--text-2); margin: -4px 0 8px; }
 .fb-save { display: block; font-size: 11px; color: var(--text-2); margin-top: 6px; }
 
+/* ===== THE COLOURWAY RAIL (Wardrobe, Tom 2026-09-04) =====================
+   "slide from east to west on the different tints". 32 teams of one garment,
+   one horizontal snap rail, the tile under the centre is the one being tried.
+
+   THE PRECEDENT IS .pw-row ABOVE, the Stable's pet-accessory row, and this
+   REUSES it rather than copying it: .fb-rail carries .pw-row and each tile
+   carries .pw-item, so the flex, the gap, the mandatory x-snap, the 96px tile
+   and the `on` state (fill AND border AND label, never colour alone) are that
+   row's, already shipped and already read by a returning player. Only what is
+   genuinely different is written here: a centre snap instead of a start snap,
+   because the selected tile is the one in the MIDDLE of a 32-long rail rather
+   than the one you scrolled to the edge; the padding that lets the first and
+   last tiles reach that centre; and the locked state.
+   NO MOMENTUM CODE. scroll-snap-type does the landing and the browser does the
+   fling; there is no scrolling library in this app and this does not add one. */
+.fb-rail-wrap { margin-top: 14px; }
+.fbr-h { margin-bottom: 4px; }
+.fbr-lead { text-align: center; margin: 0 2px 8px; }
+.fbr-fig { display: flex; justify-content: center; margin-bottom: 8px; }
+.fb-rail {
+  scroll-snap-type: x mandatory; scroll-behavior: smooth;
+  scrollbar-width: none; margin: 0 calc(var(--pad) * -1); padding: 2px var(--pad) 6px;
+  /* the first and last tiles have to be able to REACH the centre, or the rail
+     can never select them: half the rail minus half a tile, at both ends */
+  scroll-padding-inline: 50%;
+}
+.fb-rail::-webkit-scrollbar { display: none; }
+.pw-item.fbr { width: 88px; scroll-snap-align: center; padding: 7px 5px 8px; }
+.pw-item.fbr:first-child { margin-left: calc(50% - 44px - var(--pad)); }
+.pw-item.fbr:last-child { margin-right: calc(50% - 44px - var(--pad)); }
+.pw-item.fbr b { font-size: 10px; line-height: 1.15; }
+.pw-item.fbr small { display: flex; align-items: center; justify-content: center; gap: 3px; }
+/* LOCKED IS SHOWN, NOT HIDDEN. A player owning one kit would otherwise get a
+   one-tile rail, and seeing their OWN Bonehead in the other 31 is the argument
+   for a second one. The tile still previews on the doll; only the bar can
+   commit, and on a locked colourway the bar routes to the Kit room. Same
+   grayscale+dim as .ward-cell.gear.locked, which is this screen's own idiom for
+   "real, yours later". */
+.pw-item.fbr.locked .fb-worn { filter: grayscale(0.85) brightness(0.6); }
+.pw-item.fbr.locked b { color: var(--text-3); }
+.pw-item.fbr.locked small { color: var(--text-3); }
+.pw-item.fbr.on.locked { border-color: var(--text-3); background: rgba(159, 172, 159, .1); }
+.fb-worn.sm { width: 64px; height: 64px; border-radius: 9px; }
+.fb-bar .mog-lines em { font-style: normal; }
+.fb-swatch.sm { width: 13px; height: 13px; border-width: 3px; display: inline-block; vertical-align: -2px; margin-right: 4px; }
+@media (prefers-reduced-motion: reduce) { .fb-rail { scroll-behavior: auto; } }
+
 /* ===== A spire under siege (v266) =====
    The one state on the map with a deadline attached, so it gets the loudest
    treatment: coral, a pulse, and the countdown where the tribute number usually
