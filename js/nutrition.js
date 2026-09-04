@@ -104,6 +104,21 @@ export function selGrams(food, sel) {
   return null;
 }
 
+/* Grams to preselect when the player taps the grams chip: the portion they were
+   already looking at. QA round 25 M12(b)(c): app.js used to derive this as
+   round(kcal / per100.kcal * 100), which is 0/0 = NaN for Diet soda (the corpus's
+   one 0 kcal food, so every field read NaN and Add refused) and rounds a 1 tsp
+   olive oil portion from 4.5 g to 5 g (40 to 44 kcal). The serving's own grams
+   are known, so use them; divide by kcal only for perServing-only foods, and
+   never by zero. */
+export function gramsChipDefault(food, sel) {
+  const g = selGrams(food, sel);
+  if (g != null && isFinite(g)) return g;
+  const cur = nutrientsFor(food, sel);
+  if (cur && food.per100 && food.per100.kcal > 0) return Math.round((cur.kcal / food.per100.kcal) * 100);
+  return 100;
+}
+
 export function nutrientsFor(food, sel) {
   if (sel.mode === 'grams') {
     if (!food.per100) return null;

@@ -100,7 +100,7 @@ import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, ACTIVITY_LEVELS, GOALS, kcalConsistent,
-  activeCalorieBonus, assumedActiveBurn, manualTargets,
+  activeCalorieBonus, assumedActiveBurn, manualTargets, gramsChipDefault,
 } from './nutrition.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
 import { lookupBarcode, searchOnline } from './sources.js';
@@ -7979,9 +7979,11 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
 
   $$('#servChips button', wrap).forEach(c => c.addEventListener('click', () => {
     if (c.hasAttribute('data-grams')) {
-      const cur = nutrientsFor(food, sel);
+      // QA round 25 M12(b)(c): the serving's own grams, not the kcal ratio that
+      // read NaN for Diet soda and rounded 4.5 g olive oil to 5. See gramsChipDefault.
+      const g = gramsChipDefault(food, sel);
       sel.mode = 'grams';
-      sel.grams = sel.grams || (cur && food.per100 ? Math.round((cur.kcal / food.per100.kcal) * 100) : 100);
+      sel.grams = sel.grams || g;
     } else {
       sel.mode = 'serving'; sel.idx = Number(c.dataset.serv); sel.qty = sel.qty && sel.mode === 'serving' ? sel.qty : 1;
     }

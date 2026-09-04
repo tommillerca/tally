@@ -1180,6 +1180,14 @@ export function parseHkPayload(input) {
   const date = dm ? dm[0] : dateKey();
   const steps = num(params.steps) != null ? Math.round(num(params.steps)) : null;
   const active = num(params.active ?? params.activekcal) != null ? Math.round(num(params.active ?? params.activekcal)) : null;
+  /* QA round 25 M10: activeKcal was the one unbounded number in this parser.
+     A 6,000 typo (for 600) flowed through activeCalorieBonus and added +2,504
+     kcal to an 800 kcal day. Same treatment as weightKg below: out of range is
+     unreadable, so null, never clamped to the edge. Range 0..4000 kcal/day: a
+     marathon is roughly 2,600 to 3,000 active kcal, so 4,000 keeps every real
+     day and drops the added-digit typos (5000, 60000). `num` already rejects
+     negatives. */
+  const activeKcal = active != null && active <= 4000 ? active : null;
   let weightKg = num(params.weightkg);
   const wlb = num(params.weightlb);
   if (weightKg == null && wlb != null) weightKg = wlb * 0.45359237;
@@ -1189,7 +1197,7 @@ export function parseHkPayload(input) {
   const cycleKm = num(params.cyclekm);
   const workouts = num(params.workouts) != null ? Math.round(num(params.workouts)) : null;
 
-  if (steps == null && active == null && weightKg == null &&
+  if (steps == null && activeKcal == null && weightKg == null &&
       exerciseMin == null && cycleKm == null && workouts == null && !wtypes) return null;
-  return { date, steps, activeKcal: active, weightKg, exerciseMin, cycleKm, workouts, wtypes };
+  return { date, steps, activeKcal, weightKg, exerciseMin, cycleKm, workouts, wtypes };
 }

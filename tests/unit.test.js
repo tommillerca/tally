@@ -11,7 +11,7 @@ import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, kcalConsistent,
   dateKey, addDays, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
-  assumedActiveBurn, activeCalorieBonus, bmrMifflin, kcalFloor,
+  assumedActiveBurn, activeCalorieBonus, bmrMifflin, kcalFloor, gramsChipDefault,
 } from '../js/nutrition.js';
 import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume } from '../js/cooking.js';
 import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
@@ -179,6 +179,37 @@ test('active calorie-back: only burn ABOVE the activity baseline credits, at 50%
 
 // ---- portion math ----
 const rice = GENERIC_FOODS.find(f => f.id === 'g-white-rice-cooked');
+
+/* QA round 25 M12. (a) three 'canned' bean rows carried boiled-without-salt
+   sodium; (b) Diet soda + grams chip read NaN (kcal / per100.kcal with kcal 0);
+   (c) the same line rounded 1 tsp olive oil 4.5 g to 5 g. */
+test('QA round 25 M12(a): canned bean rows carry canned sodium', () => {
+  for (const name of ['Black beans, cooked', 'Chickpeas, cooked', 'Kidney beans, cooked']) {
+    const f = GENERIC_FOODS.find(x => x.name === name);
+    assert.ok(f, name + ' missing');
+    assert.ok(f.per100.sodium >= 200 && f.per100.sodium <= 400,
+      `${name} sodium ${f.per100.sodium} mg/100 g is not the canned figure (200 to 400)`);
+  }
+});
+test('QA round 25 M12(b)(c): grams chip preselects the serving grams', () => {
+  const soda = GENERIC_FOODS.find(x => x.name === 'Diet soda');
+  const g = gramsChipDefault(soda, { mode: 'serving', idx: 0, qty: 1 });
+  assert.ok(Number.isFinite(g) && g > 0, `Diet soda grams chip gave ${g}`);
+  assert.equal(g, 355);
+  const oil = GENERIC_FOODS.find(x => x.name === 'Olive oil');
+  const sel = { mode: 'grams', grams: gramsChipDefault(oil, { mode: 'serving', idx: 0, qty: 1 }) };
+  assert.equal(sel.grams, 4.5);
+  assert.equal(portionLabel(oil, sel), '4.5 g');
+  assert.equal(Math.round(nutrientsFor(oil, sel).kcal), 40);
+  // perServing-only food (no grams known): still a finite fallback, never NaN
+  const ps = { perServing: { kcal: 0, p: 0, c: 0, f: 0 }, servings: [{ label: 'serving', g: null }] };
+  assert.equal(gramsChipDefault(ps, { mode: 'serving', idx: 0, qty: 1 }), 100);
+  // wiring: the chip handler in app.js must route through the helper
+  const appSrc = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const handler = appSrc.slice(appSrc.indexOf("if (c.hasAttribute('data-grams')) {"), appSrc.indexOf("sel.mode = 'grams';"));
+  assert.ok(handler.includes('gramsChipDefault(food, sel)'), 'grams chip no longer uses gramsChipDefault');
+  assert.ok(!handler.includes('per100.kcal'), 'grams chip divides by per100.kcal again');
+});
 test('rice exists with cup serving', () => {
   assert.ok(rice, 'rice food present');
   assert.ok(rice.servings.some(s => s.g === 158));
@@ -558,6 +589,16 @@ test('parseHkPayload rejects junk', () => {
 test('parseHkPayload weight sanity bounds', () => {
   const p = parseHkPayload('tally-hk steps=100 weightlb=9999');
   assert.equal(p.weightKg, null);
+});
+test('QA round 25 M10: activeKcal is bounded like weightKg', () => {
+  /* A 6,000 typo added +2,504 kcal to an 800 kcal day. Out of range reads as
+     null (the weightKg pattern), in range passes through unchanged. */
+  assert.equal(parseHkPayload('tally-hk steps=100 active=6000').activeKcal, null);
+  assert.equal(parseHkPayload('tally-hk steps=100 active=60000').activeKcal, null);
+  assert.equal(parseHkPayload('tally-hk steps=100 active=612').activeKcal, 612);
+  assert.equal(parseHkPayload('tally-hk steps=100 active=4000').activeKcal, 4000);
+  // active alone, out of range: the payload has nothing left to say
+  assert.equal(parseHkPayload('tally-hk active=6000'), null);
 });
 
 // ---- quests ----

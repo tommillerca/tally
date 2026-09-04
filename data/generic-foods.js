@@ -150,9 +150,14 @@ const R = [
   ['Pumpkin seeds', 559, 30.2, 10.7, 49.1, 6, 1.4, 7, [['1 oz', 28]], 'pepitas'],
   ['Sunflower seeds', 584, 20.8, 20, 51.5, 8.6, 2.6, 9, [['1 oz', 28]], ''],
   ['Hummus', 230, 7.5, 14, 16, 6, 0.3, 430, [['2 tbsp', 28], ['1/4 cup', 60]], 'chickpea dip'],
-  ['Black beans, cooked', 132, 8.9, 23.7, 0.5, 8.7, 0.3, 1, [['1/2 cup', 86], ['1 cup', 172]], 'canned'],
-  ['Chickpeas, cooked', 164, 8.9, 27.4, 2.6, 7.6, 4.8, 7, [['1/2 cup', 82], ['1 cup', 164]], 'garbanzo canned'],
-  ['Kidney beans, cooked', 127, 8.7, 22.8, 0.5, 6.4, 0.3, 2, [['1/2 cup', 89], ['1 cup', 177]], 'canned'],
+  // QA round 25 M12(a): these three rows are keyworded 'canned' and were logged as
+  // canned, but carried the boiled-without-salt sodium (1 / 7 / 2 mg), about 400 mg
+  // per cup under. Now the USDA SR Legacy canned figures, matching the refried and
+  // baked rows below: black FDC 175188 (384), chickpeas FDC 175206 (278), kidney
+  // FDC 173741 (296). Sodium only; the other columns were already the cooked values.
+  ['Black beans, cooked', 132, 8.9, 23.7, 0.5, 8.7, 0.3, 384, [['1/2 cup', 86], ['1 cup', 172]], 'canned'],
+  ['Chickpeas, cooked', 164, 8.9, 27.4, 2.6, 7.6, 4.8, 278, [['1/2 cup', 82], ['1 cup', 164]], 'garbanzo canned'],
+  ['Kidney beans, cooked', 127, 8.7, 22.8, 0.5, 6.4, 0.3, 296, [['1/2 cup', 89], ['1 cup', 177]], 'canned'],
   ['Lentils, cooked', 116, 9, 20.1, 0.4, 7.9, 1.8, 2, [['1/2 cup', 99], ['1 cup', 198]], ''],
   ['Refried beans', 89, 5.4, 14.6, 1.1, 5, 0.5, 440, [['1/2 cup', 120]], 'canned'],
   ['Baked beans', 112, 5, 21, 0.9, 5.5, 8, 420, [['1/2 cup', 127]], 'canned'],
