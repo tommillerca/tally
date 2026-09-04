@@ -127,6 +127,9 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 input, select, textarea { font: inherit; color: inherit; }
 svg { display: block; }
 [hidden] { display: none !important; }
+/* Visually hidden, still read by a screen reader. The only such utility in the
+   file (QA round 25 M17: the add sheet's live result count). */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* Flex column: the SCREEN scrolls, the tab bar is an in-flow child pinned at the
    bottom. This avoids the iOS quirk where a position:fixed bottom bar (with

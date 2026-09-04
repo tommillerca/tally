@@ -4194,11 +4194,13 @@ function addSheetHelpers() {
   const a = app.indexOf('const ADD_DRAFT_TTL'), b = app.indexOf('\nfunction openAdd(');
   assert.ok(a > 0 && b > a, 'the add-sheet helpers (ADD_DRAFT_TTL .. openAdd) are not in js/app.js');
   const kv = new Map();
-  const mod = new Function('kvSet', 'kvGet', 'esc', 'ICONS', 'foodRowHtml', 'currentTab', 'sheetStack', 'openAdd', 'openPortion', 'findFood',
-    `${app.slice(a, b)}; return { addDraftUsable, stampAddDraft, clearAddDraft, onlineRowHtml, restoreOnlineRow, localResultsHtml, ADD_DRAFT_TTL };`)(
+  const mod = new Function('kvSet', 'kvGet', 'esc', 'ICONS', 'foodRowHtml', 'currentTab', 'sheetStack', 'openAdd', 'openPortion', 'findFood', 'MEALS',
+    `${app.slice(a, b)}; return { addDraftUsable, stampAddDraft, clearAddDraft, onlineRowHtml, restoreOnlineRow, localResultsHtml, ADD_DRAFT_TTL,
+      resultsCountText, mealChipsHtml, setChipOn };`)(
     (k, v) => { kv.set(k, JSON.parse(JSON.stringify(v))); return Promise.resolve(); },   // IndexedDB round-trips a structured clone; JSON is the stricter stand-in
     k => Promise.resolve(kv.has(k) ? kv.get(k) : null),
-    String, { searchIco: () => '<svg/>' }, f => `<row ${f.id}>`, () => 'today', [], () => {}, () => {}, () => null);
+    String, { searchIco: () => '<svg/>' }, f => `<row ${f.id}>`, () => 'today', [], () => {}, () => {}, () => null,
+    ['Breakfast', 'Lunch', 'Dinner', 'Snacks']);
   return { ...mod, kv, app };
 }
 
@@ -4254,6 +4256,57 @@ test('M18 the empty local result offers Create a food with the query; a hit list
   assert.ok(!/data-create/.test(hits), 'the create control leaked into a non-empty result');
   // the offer is consumed: the create form seeds its name from the prefill (M18 follow-up, 2026-09-04)
   assert.match(app, /id="ffName"[^>]*value="\$\{esc\(f\?\.name \|\| pv\.name \|\| ''\)\}"/, 'openFoodForm ignores prefill.name, so the empty-search offer opens a blank form');
+});
+
+/* QA round 25 M17: a screen reader is told almost nothing on the logging path.
+   Measured with a real AT tree: #results had no role and no live region (8
+   recents becoming 11 matches announced to nobody, no count anywhere), typing
+   threw activeElement to BODY, the stepper moved 1 to 1.25 and 282 to 353 kcal
+   with no spinbutton role, no aria-valuenow and no live change, and the meal
+   chips carried no aria-pressed. The helpers run for real; the markup and the
+   render target are asserted over the shipped source. */
+test('M17 the add and portion sheets carry the roles, live regions and pressed states a screen reader needs', () => {
+  const { resultsCountText, mealChipsHtml, setChipOn, app } = addSheetHelpers();
+  // the live count line, for 0 / 8 / 11
+  assert.equal(resultsCountText(0, 'banana'), '0 matches for banana', 'an empty search has no announced count');
+  assert.equal(resultsCountText(11, 'banana'), '11 matches for banana', 'the search count is wrong');
+  assert.equal(resultsCountText(1, 'banana'), '1 match for banana');
+  assert.equal(resultsCountText(8, ''), '8 recent foods', 'the default list has no announced count');
+  // the count line is a STATIC sibling of #results (a live region rebuilt with its
+  // message announces nothing) and both renders write it
+  assert.match(app, /<div id="resultsCount" class="sr-only" aria-live="polite"><\/div>\s*<div id="results" role="region" aria-label="Results"><\/div>/,
+    '#results has no role/label, or the live count line is missing or inside #results');
+  const openAdd = app.slice(app.indexOf('\nfunction openAdd('), app.indexOf('\nconst t1Sect ='));
+  assert.equal((openAdd.match(/count\.textContent = resultsCountText\(/g) || []).length, 2, 'the count line is not written by both showDefault and the search render');
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
+  assert.equal((css.match(/^\.sr-only \{/gm) || []).length, 1, 'app.css needs exactly ONE visually-hidden utility (.sr-only) for the count line');
+  // meal chips: aria-pressed follows the selected state, in the markup and in the toggle
+  const chips = mealChipsHtml(2);
+  assert.equal((chips.match(/aria-pressed="true"/g) || []).length, 1, 'exactly one chip is pressed');
+  assert.match(chips, /class="on" aria-pressed="true" data-meal="2">Dinner</, 'the selected chip is not the pressed one');
+  assert.match(chips, /class="" aria-pressed="false" data-meal="0">Breakfast</, 'an unselected chip is not aria-pressed="false"');
+  const mk = () => { const a = {}; return { a, classList: { toggle: (c, on) => { a.cls = on; } }, setAttribute: (k, v) => { a[k] = v; } }; };
+  const c0 = mk(), c1 = mk();
+  setChipOn([c0, c1], c1);
+  assert.deepEqual([c0.a, c1.a], [{ cls: false, 'aria-pressed': 'false' }, { cls: true, 'aria-pressed': 'true' }], 'setChipOn does not move .on and aria-pressed together');
+  assert.equal((app.match(/id="mealChips" role="group" aria-label="Meal">\s*\$\{mealChipsHtml\(meal\)\}/g) || []).length, 1, '#mealChips is not drawn by mealChipsHtml');
+  assert.equal((app.match(/id="pMealChips" role="group" aria-label="Meal">\s*\$\{mealChipsHtml\(curMeal\)\}/g) || []).length, 1, '#pMealChips is not drawn by mealChipsHtml');
+  assert.match(app, /setChipOn\(\$\$\('#mealChips button', wrap\), c\)/, 'the add sheet chip handler toggles .on without aria-pressed');
+  assert.match(app, /setChipOn\(\$\$\('#pMealChips button', wrap\), c\)/, 'the portion sheet chip handler toggles .on without aria-pressed');
+  // the stepper: a text input is not a native spinbutton, so it gets the role and values; the kcal preview is live
+  assert.match(app, /<div class="t1-step" role="group" aria-label="Servings">/, 'the servings stepper is not a labelled group');
+  assert.match(app, /<div class="t1-step" role="group" aria-label="Grams">/, 'the grams stepper is not a labelled group');
+  assert.match(app, /id="qtyIn" type="text"[^>]*role="spinbutton" aria-valuenow="\$\{sel\.qty\}" aria-valuemin="\$\{LIMITS\.servings\.min\}" aria-valuemax="\$\{LIMITS\.servings\.max\}"/, '#qtyIn is not a spinbutton with now/min/max');
+  assert.match(app, /id="gramsIn" type="text"[^>]*role="spinbutton" aria-valuenow="\$\{sel\.grams\}" aria-valuemin="\$\{LIMITS\.servingG\.min\}" aria-valuemax="\$\{LIMITS\.servingG\.max\}"/, '#gramsIn is not a spinbutton with now/min/max');
+  const preview = app.slice(app.indexOf('\n  function preview() {'), app.indexOf('\n  function preview() {') + 700);
+  assert.match(preview, /amtEl\.setAttribute\('aria-valuenow', sel\.mode === 'grams' \? sel\.grams : sel\.qty\)/, 'preview() does not keep aria-valuenow in step with the amount');
+  assert.match(app, /<b id="pvKcal" aria-live="polite">/, 'the kcal preview is not a live region, so 282 to 353 is silent');
+  // focus: the search handler's render target is #results, a sibling of #q, never the sheet body
+  const handler = openAdd.slice(openAdd.indexOf("input.addEventListener('input'"), openAdd.indexOf("input.addEventListener('keydown'"));
+  assert.match(handler, /results\.innerHTML =/, 'the search handler no longer renders into #results');
+  assert.ok(!/wrap\.innerHTML|sheet-body|sBody|openSheet\(/.test(handler), 'the search handler re-renders the node #q lives in, which throws focus to BODY');
+  const tpl = openAdd.slice(0, openAdd.indexOf('`, { cls:'));
+  assert.ok(tpl.indexOf('id="q"') < tpl.indexOf('id="results"') && /id="results"[^>]*><\/div>/.test(tpl), '#q must be a sibling of an empty #results, not inside it');
 });
 
 /* QA round 25 M19 + M18 (data half): the create-food Save mapping. Sliced out of

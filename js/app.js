@@ -7768,6 +7768,26 @@ function localResultsHtml(local, q) {
     <button class="t1-frow" data-create="${esc(q)}"><span class="t1-med">+</span><span class="nm"><b>Create a food</b><small>"${esc(q)}"</small></span></button>`;
 }
 
+/* A SCREEN READER HEARS THE LOGGING PATH (QA round 25, M17). Measured with a
+   real AT tree: #results had no role and no live region, so 8 recents becoming
+   11 matches was announced to nobody and no count existed anywhere; the meal
+   chips carried no aria-pressed. The count is ONE visually-hidden aria-live line
+   (#resultsCount) that sits OUTSIDE #results and is only ever textContent-
+   updated: a live region recreated by innerHTML in the same tick as its message
+   announces nothing (nextToast learned this the hard way). mealChipsHtml is the
+   one place both chip sets (#mealChips, #pMealChips) are drawn and setChipOn
+   keeps aria-pressed in step with the .on class the two handlers already
+   toggled. No visual change: .on still does the painting. */
+function resultsCountText(n, q) {
+  return q ? `${n} ${n === 1 ? 'match' : 'matches'} for ${q}` : `${n} recent ${n === 1 ? 'food' : 'foods'}`;
+}
+function mealChipsHtml(on) {
+  return MEALS.map((m, i) => `<button class="${i === on ? 'on' : ''}" aria-pressed="${i === on}" data-meal="${i}">${m}</button>`).join('');
+}
+function setChipOn(chips, c) {
+  chips.forEach(x => { const on = x === c; x.classList.toggle('on', on); x.setAttribute('aria-pressed', String(on)); });
+}
+
 function openAdd(meal = 0, q0 = '') {
   const wrap = openSheet(`
     <div class="sheet-head">
@@ -7776,8 +7796,8 @@ function openAdd(meal = 0, q0 = '') {
     </div>
     <div class="t1-budget" id="addBudget" hidden></div>
     <div class="sheet-body">
-      <div class="t1-seg" id="mealChips">
-        ${MEALS.map((m, i) => `<button class="${i === meal ? 'on' : ''}" data-meal="${i}">${m}</button>`).join('')}
+      <div class="t1-seg" id="mealChips" role="group" aria-label="Meal">
+        ${mealChipsHtml(meal)}
       </div>
       <div class="t1-routes" style="margin:12px 0 4px">
         <button class="t1-route" id="actScan">${ICONS.barcodeIco()}<b>Barcode</b><span class="xp">+15 XP</span></button>
@@ -7787,7 +7807,8 @@ function openAdd(meal = 0, q0 = '') {
       </div>
       <div style="height:12px"></div>
       <div class="t1-search">${ICONS.searchIco()}<input id="q" type="search" placeholder="Search ${GENERIC_FOODS.length}+ foods" autocomplete="off" enterkeyhint="search"></div>
-      <div id="results"></div>
+      <div id="resultsCount" class="sr-only" aria-live="polite"></div>
+      <div id="results" role="region" aria-label="Results"></div>
     </div>`, { cls: 'full t1', onClose: () => { clearAddDraft(); window.removeEventListener('online', onOnline); } });
   addDraft = { sheet: 'add', q: '', meal };   // M16: the flow is live; stamps write from here
 
@@ -7808,7 +7829,7 @@ function openAdd(meal = 0, q0 = '') {
   let curMeal = meal;
   $$('#mealChips button', wrap).forEach(c => c.addEventListener('click', () => {
     curMeal = Number(c.dataset.meal);
-    $$('#mealChips button', wrap).forEach(x => x.classList.toggle('on', x === c));
+    setChipOn($$('#mealChips button', wrap), c);   // M17: .on and aria-pressed together
     stampAddDraft({ meal: curMeal });   // M16
     // L4: the recents are ranked per meal, so a chip change re-ranks them
     // (only while the default list is showing; a live search is left alone).
@@ -7820,6 +7841,7 @@ function openAdd(meal = 0, q0 = '') {
 
   const results = $('#results', wrap);
   const input = $('#q', wrap);
+  const count = $('#resultsCount', wrap);   // M17: the live count line, never re-rendered
 
   async function showDefault() {
     const recents = await recentFoods(8, curMeal);   // L4: ranked for the chip that is on
@@ -7833,6 +7855,7 @@ function openAdd(meal = 0, q0 = '') {
     if (favs.length) html += t1Sect('Favorites') + favs.map(foodRowHtml).join('');
     if (!html) html = `<p class="note" style="text-align:center;padding:26px 20px">Search ${GENERIC_FOODS.length}+ built-in foods, or scan a barcode to add packaged food in seconds.</p>`;
     results.innerHTML = html;
+    count.textContent = resultsCountText(recents.length, '');   // M17: "8 recent foods"
     bindRows();
   }
 
@@ -7919,8 +7942,12 @@ function openAdd(meal = 0, q0 = '') {
     if (!q) { showDefault(); return; }
     debounce = setTimeout(() => {
       const local = searchFoods(allSearchableFoods(), q, 25);
+      /* M17: the render target is #results and ONLY #results. #q is its sibling
+         in the sheet, so a keystroke never replaces the node focus sits in;
+         re-rendering the sheet body here would throw activeElement to BODY. */
       results.innerHTML = localResultsHtml(local, q) +
         `<div id="onlineSect">${q.length >= 3 ? onlineRowHtml(q, { offline: navigator.onLine === false }) : ''}</div>`;
+      count.textContent = resultsCountText(local.length, q);   // M17: "11 matches for banana"
       bindRows();
     }, 120);
   });
@@ -7988,7 +8015,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     </div>
     <div class="sheet-body">
       <div class="t1-hero">
-        <div class="k"><b id="pvKcal">0</b><small>KCAL</small><span class="of" id="pvServ"></span></div>
+        <div class="k"><b id="pvKcal" aria-live="polite">0</b><small>KCAL</small><span class="of" id="pvServ"></span></div>
         <div class="t1-macros">
           <div class="mp"><small>PROTEIN</small><b id="pvP">0g</b><div class="tr"><i id="pvPBar"></i></div></div>
           <div class="mc"><small>CARBS</small><b id="pvC">0g</b><div class="tr"><i id="pvCBar"></i></div></div>
@@ -8002,8 +8029,8 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
       <div style="height:12px"></div>
       <div id="qtyArea"></div>
       <div style="height:14px"></div>
-      <div class="t1-seg" id="pMealChips">
-        ${MEALS.map((m, i) => `<button class="${i === curMeal ? 'on' : ''}" data-meal="${i}">${m}</button>`).join('')}
+      <div class="t1-seg" id="pMealChips" role="group" aria-label="Meal">
+        ${mealChipsHtml(curMeal)}
       </div>
       <div class="t1-payoff" id="payoff" hidden></div>
       <div style="height:16px"></div>
@@ -8061,9 +8088,9 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     amtRaw = null;
     if (sel.mode === 'grams') {
       qtyArea.innerHTML = `
-        <div class="t1-step">
+        <div class="t1-step" role="group" aria-label="Grams">
           <button data-d="-10" aria-label="less"></button>
-          <div class="val"><input id="gramsIn" type="text" inputmode="decimal" value="${fmtQty(sel.grams)}" aria-label="grams"><small>GRAMS</small></div>
+          <div class="val"><input id="gramsIn" type="text" inputmode="decimal" value="${fmtQty(sel.grams)}" aria-label="grams" role="spinbutton" aria-valuenow="${sel.grams}" aria-valuemin="${LIMITS.servingG.min}" aria-valuemax="${LIMITS.servingG.max}"><small>GRAMS</small></div>
           <button class="plus" data-d="10" aria-label="more"></button>
         </div>`;
       $('#gramsIn', wrap).addEventListener('input', e => { amtRaw = e.target.value; sel.grams = num(e.target.value) || 0; preview(); });
@@ -8075,16 +8102,16 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
       }));
     } else {
       qtyArea.innerHTML = `
-        <div class="t1-step">
+        <div class="t1-step" role="group" aria-label="Servings">
           <button data-d="-0.25" aria-label="fewer"></button>
-          <div class="val"><input id="qtyIn" type="text" inputmode="decimal" value="${fmtQty(sel.qty)}" aria-label="servings"><small>SERVINGS</small></div>
+          <div class="val"><input id="qtyIn" type="text" inputmode="decimal" value="${fmtQty(sel.qty)}" aria-label="servings" role="spinbutton" aria-valuenow="${sel.qty}" aria-valuemin="${LIMITS.servings.min}" aria-valuemax="${LIMITS.servings.max}"><small>SERVINGS</small></div>
           <button class="plus" data-d="0.25" aria-label="more"></button>
         </div>
         <div class="note" style="text-align:center;margin-top:8px">Tap the number to type any amount, e.g. 1.33</div>`;
       const qin = $('#qtyIn', wrap);
       qin.addEventListener('input', e => { amtRaw = e.target.value; sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
       qin.addEventListener('focus', () => qin.select());
-      qin.addEventListener('blur', () => { if (!(sel.qty > 0)) { sel.qty = 0.25; } qin.value = fmtQty(sel.qty); });
+      qin.addEventListener('blur', () => { if (!(sel.qty > 0)) { sel.qty = 0.25; } qin.value = fmtQty(sel.qty); qin.setAttribute('aria-valuenow', sel.qty); });
       $$('.t1-step button', qtyArea).forEach(b => b.addEventListener('click', () => {
         amtRaw = null;
         sel.qty = Math.max(0.25, Math.round(((sel.qty || 1) + Number(b.dataset.d)) * 100) / 100);
@@ -8104,6 +8131,11 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
 
   function preview() {
     const n = nutrientsFor(food, sel) || { kcal: 0, p: 0, c: 0, f: 0 };
+    /* M17: the stepper moved 1 to 1.25 with no aria-valuenow change. Every
+       amount change (typed, stepped, chip) reaches preview(), so the spinbutton
+       is kept in step here; #pvKcal is aria-live, so 282 to 353 is announced. */
+    const amtEl = $(sel.mode === 'grams' ? '#gramsIn' : '#qtyIn', wrap);
+    if (amtEl) amtEl.setAttribute('aria-valuenow', sel.mode === 'grams' ? sel.grams : sel.qty);
     $('#pvKcal', wrap).textContent = Math.round(n.kcal).toLocaleString();
     // QA r25 M19 follow-up: custom foods now keep untyped macros as null, and
     // fmtG(null) is '-', which read '-g'. Unknown stays a bare dash.
@@ -8143,7 +8175,7 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
 
   $$('#pMealChips button', wrap).forEach(c => c.addEventListener('click', () => {
     curMeal = Number(c.dataset.meal);
-    $$('#pMealChips button', wrap).forEach(x => x.classList.toggle('on', x === c));
+    setChipOn($$('#pMealChips button', wrap), c);   // M17: .on and aria-pressed together
     preview(); // the all-meals bonus depends on which meal this lands in
   }));
 
