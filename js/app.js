@@ -8611,6 +8611,55 @@ function openLabelConfirm(parsed, { getMeal, barcode, photoUrl }) {
 
 /* ================= food form (create/edit custom) ================= */
 
+/* QA round 25 M18/M19: everything the Save tap decides BEFORE the food is
+   written, in one pure function so tests/unit.test.js can slice it.
+   - M19: a calories-only food used to save p:0, c:0, f:0 (`mp.value || 0`), so
+     "unknown" became "zero" in a template that is re-logged forever. Untouched
+     fields now stay null (readNum's `blank: null`), and the 4/4/9 check is only
+     run when at least one macro was typed. 0 kcal with 60 g of macros is 290 kcal
+     of real food and used to save without a word; it is a warning now.
+   - M18: no duplicate check meant a typo'd "Apple" at 999 kcal sat beside the
+     built-in and, with the +1 custom bonus in searchFoods, outranked it forever.
+     Same normalised name as any built-in or custom food (case, whitespace and
+     accents folded) is a warning.
+   The warnings render in the same pre-save box the label route already uses
+   (the old post-save toast could be dropped by the four-deep toast queue).
+   Save stays the explicit tap-through: nothing here blocks. */
+const normFoodName = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+function foodKcalDesc(f) {
+  if (f.per100 && f.per100.kcal != null) return `${Math.round(f.per100.kcal)} kcal per 100 g`;
+  const ps = f.perServing || {};
+  return `${Math.round(ps.kcal || 0)} kcal per ${(f.servings && f.servings[0] && f.servings[0].label) || 'serving'}`;
+}
+function customFoodDraft({ name, brand, serving, grams, kcal, p, c, f, fiber, sugar, sodium }, { existing = null, barcode = null, foods = [] } = {}) {
+  const perServing = { kcal, p, c, f, fiber, sugar, sodium };
+  const food = {
+    id: existing ? existing.id : 'c-' + newId(),
+    source: 'custom',
+    barcode: (existing && existing.barcode) || barcode || undefined,
+    name,
+    brand: brand || null,
+    perServing,
+    per100: grams ? scaleToPer100(perServing, grams) : undefined,
+    servings: [
+      { label: serving || '1 serving', g: grams || null },
+      ...(grams ? [{ label: '100 g', g: 100 }] : []),
+    ],
+    favorite: existing?.favorite || false,
+    useCount: existing?.useCount || 0,
+    createdAt: existing?.createdAt || Date.now(),
+  };
+  const warnings = [];
+  if ((p != null || c != null || f != null) && !kcalConsistent(perServing)) {
+    const est = Math.round(4 * (p || 0) + 4 * (c || 0) + 9 * (f || 0));
+    warnings.push(`Calories and macros disagree: ${p || 0} g protein, ${c || 0} g carbs and ${f || 0} g fat come to about ${est} kcal, not ${kcal}. Save anyway?`);
+  }
+  const key = normFoodName(name);
+  const dup = foods.find(x => x.id !== food.id && normFoodName(x.name) === key);
+  if (dup) warnings.push(`You already have '${dup.name}' (${foodKcalDesc(dup)}). Save anyway?`);
+  return { food, warnings };
+}
+
 function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = null, warnings = [], photoUrl = null, fromLabel = false } = {}) {
   const f = existing;
   const pv = prefill || {};
@@ -8652,7 +8701,7 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
         <span class="tx"><b>Read ${readCount} of 8 fields</b><small>${8 - readCount > 0 ? `${8 - readCount} need a look, flagged below` : 'Everything came through'}</small></span>
         <button class="again" id="ffRetake">RETAKE</button>
       </div>` : ''}
-      ${warnings.length ? `<div class="warn">${warnings.map(esc).join('<br>')}</div>` : ''}
+      <div class="warn" id="ffWarn"${warnings.length ? '' : ' hidden'}>${warnings.map(esc).join('<br>')}</div>
       ${t1Sect('What is it')}
       <div class="t1-field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || '')}"></div>
       <div class="t1-field"><label>Brand</label><input id="ffBrand" placeholder="Optional" value="${esc(f?.brand || '')}"></div>
@@ -8678,6 +8727,7 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
 
   $('#ffRetake', wrap)?.addEventListener('click', () => history.back());
 
+  let seenWarn = null;
   $('#ffSave', wrap).addEventListener('click', async () => {
     const name = $('#ffName', wrap).value.trim();
     if (!name) { toast('Name required'); return; }
@@ -8699,33 +8749,25 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
     const mfib = macro('#ffFib', 'Fiber'); if (!mfib.ok) return;
     const msug = macro('#ffSug', 'Sugars'); if (!msug.ok) return;
     const mna = macro('#ffNa', 'Sodium', LIMITS.sodiumMg, ' mg'); if (!mna.ok) return;
-    const kcal = kc.value;
-    const grams = g.value;
-    const perServing = {
-      kcal, p: mp.value || 0, c: mc.value || 0, f: mf.value || 0,
-      fiber: mfib.value, sugar: msug.value, sodium: mna.value,
-    };
-    const food = {
-      id: f ? f.id : 'c-' + newId(),
-      source: 'custom',
-      barcode: (f && f.barcode) || barcode || undefined,
-      name,
-      brand: $('#ffBrand', wrap).value.trim() || null,
-      perServing,
-      per100: grams ? scaleToPer100(perServing, grams) : undefined,
-      servings: [
-        { label: $('#ffServ', wrap).value.trim() || '1 serving', g: grams || null },
-        ...(grams ? [{ label: '100 g', g: 100 }] : []),
-      ],
-      favorite: f?.favorite || false,
-      useCount: f?.useCount || 0,
-      createdAt: f?.createdAt || Date.now(),
-    };
+    const { food, warnings: pre } = customFoodDraft({
+      name, brand: $('#ffBrand', wrap).value.trim(), serving: $('#ffServ', wrap).value.trim(), grams: g.value,
+      kcal: kc.value, p: mp.value, c: mc.value, f: mf.value, fiber: mfib.value, sugar: msug.value, sodium: mna.value,
+    }, { existing: f, barcode, foods: allSearchableFoods() });
+    /* First tap with warnings shows them (QA round 25 M18/M19); the same input
+       tapped again saves. Any edit that changes the warnings shows them afresh. */
+    const key = pre.join('\n');
+    if (pre.length && seenWarn !== key) {
+      seenWarn = key;
+      const box = $('#ffWarn', wrap);
+      box.innerHTML = pre.map(esc).join('<br>');
+      box.hidden = false;
+      box.scrollIntoView({ block: 'nearest' });
+      return;
+    }
     await db.put('foods', food);
     const i = S.userFoods.findIndex(x => x.id === food.id);
     if (i >= 0) S.userFoods[i] = food; else S.userFoods.push(food);
     toast('Food saved');
-    if (!kcalConsistent(perServing)) toast('Heads up: calories and macros disagree, double-check the label', 3400);
     if (f) { closeAllSheetsViaHistory(); setTimeout(refresh, 80); }
     else openPortion(food, { meal, via: fromLabel ? 'label' : null });
   });
@@ -10341,9 +10383,16 @@ function openWeightSheet() {
 
 /* ================= foods tab ================= */
 
+/* QA round 25 M18: My foods sorted by lastUsedAt ONLY, so never-used foods all
+   compared equal and 40 seeded customs came back in database key order (a
+   5,367 px list). Most recent first, then name A to Z as the stable tiebreak. */
+const byLastUsedThenName = (a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0) || String(a.name || '').localeCompare(String(b.name || ''));
+// Past this many custom rows the list is a scroll, not a browse: a name filter appears above it.
+const MY_FOODS_FILTER_AT = 15;
+
 async function renderFoods(el) {
-  const customs = S.userFoods.filter(f => f.source === 'custom').sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0));
-  const scanned = S.userFoods.filter(f => f.source !== 'custom').sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0)).slice(0, 12);
+  const customs = S.userFoods.filter(f => f.source === 'custom').sort(byLastUsedThenName);
+  const scanned = S.userFoods.filter(f => f.source !== 'custom').sort(byLastUsedThenName).slice(0, 12);
   const favIds = S.userFoods.filter(f => f.favorite).map(f => f.id);
   const kvRows = await db.all('kv');
   const genFavs = kvRows.filter(r => r.k.startsWith('fav-') && r.v).map(r => GENERIC_FOODS.find(g => g.id === r.k.slice(4))).filter(Boolean);
@@ -10358,7 +10407,12 @@ async function renderFoods(el) {
   function base() {
     let html = '<button class="btn ghost" id="newFood" style="margin:4px 0 6px">+ Create a food</button>';
     if (favs.length) html += '<div class="sect-h">Favorites</div>' + favs.map(foodRowHtml).join('');
-    if (customs.length) html += '<div class="sect-h">My foods</div>' + customs.map(foodRowHtml).join('');
+    if (customs.length) {
+      html += '<div class="sect-h">My foods</div>';
+      // QA round 25 M18: over 15 rows, a filter (same .t1-search recipe as the Add sheet). No pagination.
+      if (customs.length > MY_FOODS_FILTER_AT) html += `<div class="t1-search" style="margin-bottom:8px">${ICONS.searchIco()}<input id="myFoodsQ" type="search" placeholder="Filter my ${customs.length} foods" autocomplete="off"></div>`;
+      html += `<div id="myFoodsList">${customs.map(foodRowHtml).join('')}</div>`;
+    }
     if (scanned.length) html += '<div class="sect-h">Recently scanned</div>' + scanned.map(foodRowHtml).join('');
     if (!favs.length && !customs.length && !scanned.length) html += '<p class="note" style="text-align:center;padding:14px 20px 6px">Foods you scan, create, or favorite collect here.</p>';
     const sample = [...GENERIC_FOODS].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 40);
@@ -10367,12 +10421,22 @@ async function renderFoods(el) {
     list.innerHTML = html;
     bind();
   }
-  function bind() {
-    $$('[data-food]', list).forEach(b => b.addEventListener('click', () => {
+  function bindRows(root) {
+    $$('[data-food]', root).forEach(b => b.addEventListener('click', () => {
       const f = findFood(b.dataset.food);
       if (f) openPortion(f, { meal: mealForHour(new Date().getHours()) });
     }));
+  }
+  function bind() {
+    bindRows(list);
     $('#newFood', list)?.addEventListener('click', () => openFoodForm({}));
+    $('#myFoodsQ', list)?.addEventListener('input', e => {
+      const q = normFoodName(e.target.value);
+      const hit = q ? customs.filter(f => normFoodName(f.name).includes(q)) : customs;
+      const mine = $('#myFoodsList', list);
+      mine.innerHTML = hit.length ? hit.map(foodRowHtml).join('') : '<p class="note" style="text-align:center;padding:12px">None of your foods match.</p>';
+      bindRows(mine);
+    });
   }
   $('#fq', el).addEventListener('input', e => {
     const q = e.target.value.trim();
