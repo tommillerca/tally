@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet, claimDay } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
-import { grantCrate, grantConsumable, coinsAdd, boneDustAdd, grantEgg } from './loot.js';
+import { grantCrate, grantConsumable, coinsAdd, boneDustAdd, grantEgg, equipped } from './loot.js';
 import { gardenState, clearGarden, PLOT_PRICES, PLOTS_FREE, HARVEST_BASE, HARVEST_BASE_RARE } from './garden.js';
 import { grantIngredient } from './cooking.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
@@ -428,9 +428,17 @@ export function badgeCheck(id, st) {
   }
 }
 
-async function buildStats() {
+/* Exported for tests/drip-badge-audit.mjs only; the app reaches it through
+   evaluateBadges. */
+export async function buildStats() {
+  /* THE LOOK, NOT THE RAW KV (QA round 23 F4). `drip-6` read kv `equipped`, while
+     transmog writes kv `transmog`, so a slot hidden in the Dressing Room still
+     counted as drip and the badge could not see what the player actually wears.
+     equipped() is the one resolution every renderer draws from; the badge reads
+     the same picture. (collector-10 counts inventory rows and lands on day 2-3
+     without the Wardrobe ever being opened: noted, not redesigned here.) */
   const [log, weights, xp, health, inv, eq] = await Promise.all([
-    db.all('log'), db.all('weights'), db.all('xp'), db.all('health'), db.all('inv'), kvGet('equipped', {}),
+    db.all('log'), db.all('weights'), db.all('xp'), db.all('health'), db.all('inv'), equipped(),
   ]);
   const defaults = new Set(BH_SLOTS.filter(s => s.default).map(s => s.code));
   return {
