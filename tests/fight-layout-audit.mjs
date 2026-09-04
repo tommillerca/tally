@@ -355,37 +355,64 @@ ok('the arena holds its height across turns', jitter.arenaDrift <= 2, `${jitter.
    builds the card, so a fixed delay from the call could sample before the fade
    and read a false red. Fade starts at +1150, removal at +1420 from appearance;
    the sample at +1300 is 150ms into the fade with 120ms to spare, still in the
-   DOM at ~0 opacity. PROVE-RED: on main elementFromPoint over End Turn returns
-   .vs-card and the click never reaches the button. Written 2026-09-04 on a
-   static-only machine; not yet run. */
+   DOM at ~0 opacity.
+
+   FIRST RUN (2026-09-04, integ/day2): pe none, opacity 0, hitTag NULL, received
+   false. elementFromPoint returns null only for a point OUTSIDE the viewport, and
+   the reason is the one settle()'s header in godmode.js documents: this harness
+   never advances CSS animations, so the fight sheet paints at slideup's FROM
+   keyframe, translate(-50%, 60%), and End Turn (the last row of the sheet) sits
+   below the fold. Section 4 above settles for exactly this reason; this section
+   did not. The card and the sheet open in the SAME tick (openFight appends the
+   card, then openSheet, then refreshAll renders End Turn synchronously), so the
+   animations are finished in-page the moment End Turn exists, long before the
+   fade, and the sample stays at +1300 from appearance. The card's own vsIn/quake
+   are entrance keyframes; finishing them changes nothing these rows read (its
+   pointer-events and opacity are inline styles set by timers).
+
+   CONTROL BEFORE VERDICT. A tap that "was not received" by a button that is not
+   on screen proves nothing, so the first row asserts the target: End Turn is in
+   the DOM, has a non-empty rect fully inside the viewport, and elementFromPoint
+   at its centre returns SOMETHING. Only then do the two O12 rows mean what they
+   say. PROVE-RED: on main elementFromPoint over End Turn returns .vs-card and the
+   click never reaches the button (CONTROL stays green there: the card is on
+   screen and hit-testable, which is the bug). */
 await page.evaluate(() => document.querySelector('.sheet-close')?.click());
 await sleep(600);
 const vsTap = await page.evaluate(async () => {
+  const tick = () => new Promise(r => setTimeout(r, 20));
   window.__giForce = true;
   /* mode:'spar' overrides the seam's default mode:'boss', which takes the GATE
      INTRO branch and never builds a versus card. Spar is the Pit's own fight,
      the surface O12 was measured on. */
   window.__denFight(1.6, 0, { mode: 'spar' });     // fire-and-forget: we sample DURING the card
   const t0 = performance.now();
-  while (!document.querySelector('.vs-card') && performance.now() - t0 < 4000) await new Promise(r => setTimeout(r, 20));
+  while (!document.querySelector('.vs-card') && performance.now() - t0 < 4000) await tick();
   const shown = performance.now();
   if (!document.querySelector('.vs-card')) { window.__giForce = false; return { why: 'no versus card appeared within 4s of the seam call (empty sample = failure)' }; }
-  await new Promise(r => setTimeout(r, 1300));     // fade started at +1150; card removed at +1420
+  /* End Turn renders in the card's own tick; the poll is a bound, not a wait */
+  while (!document.getElementById('endTurn') && performance.now() - shown < 600) await tick();
+  if (!document.getElementById('endTurn')) { window.__giForce = false; return { why: `no End Turn rendered within 600ms of the card (empty sample = failure)` }; }
+  document.getAnimations().forEach(a => { try { a.finish(); } catch { /* already done */ } });   // settle(): the frozen slideup, see header
+  await new Promise(r => setTimeout(r, Math.max(0, 1300 - (performance.now() - shown))));   // fade started at +1150; card removed at +1420
   window.__giForce = false;
   const card = document.querySelector('.vs-card');
   const btn = document.getElementById('endTurn');
   if (!card) return { why: `the versus card was already gone at +${Math.round(performance.now() - shown)}ms (empty sample = failure)` };
-  if (!btn) return { why: 'no End Turn under the card to tap' };
+  if (!btn) return { why: 'End Turn left the DOM before the sample' };
   const pe = getComputedStyle(card).pointerEvents;
   const r = btn.getBoundingClientRect();
+  const onScreen = r.width > 0 && r.height > 0 && r.top >= 0 && r.left >= 0 && r.bottom <= innerHeight && r.right <= innerWidth;
   const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
   let received = false;
   btn.addEventListener('click', () => { received = true; }, { once: true, capture: true });
   hit?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
-  return { pe, hitIsCard: !!hit?.closest('.vs-card'), hitTag: hit ? (hit.id || hit.className) : null, received, opacity: getComputedStyle(card).opacity };
+  return { pe, onScreen, rect: [Math.round(r.top), Math.round(r.bottom)], vh: innerHeight, disabled: btn.disabled,
+    hitIsCard: !!hit?.closest('.vs-card'), hitTag: hit ? (hit.id || hit.className || hit.tagName) : null, received, opacity: getComputedStyle(card).opacity };
 });
+ok('O12 CONTROL End Turn is rendered, on screen and under the hit-test at +1300ms', !vsTap.why && vsTap.onScreen && vsTap.hitTag !== null, vsTap.why || JSON.stringify(vsTap));
 ok('O12 the fading versus card is pointer-events none', !vsTap.why && vsTap.pe === 'none', vsTap.why || JSON.stringify(vsTap));
-ok('O12 a tap at +200ms into the fade reaches the control under the card', !vsTap.why && !vsTap.hitIsCard && vsTap.received, vsTap.why || JSON.stringify(vsTap));
+ok('O12 a tap at +150ms into the fade reaches the control under the card', !vsTap.why && vsTap.onScreen && !vsTap.hitIsCard && vsTap.received, vsTap.why || JSON.stringify(vsTap));
 await sleep(1200);
 
 /* ---- 5. the smallest phone: the primary action is on screen WITHOUT scrolling
