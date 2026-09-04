@@ -4755,6 +4755,32 @@ test('SW update checks bypass the HTTP cache (GitHub Pages max-age=600 held a de
   const calls = [...app.matchAll(/serviceWorker\.register\(([^)]*)\)/g)].map(m => m[1]);
   assert.equal(calls.length, 1, `expected exactly one register() call, found ${calls.length}`);
   assert.match(calls[0], /updateViaCache:\s*'none'/, 'register() does not pass updateViaCache: none, so a deploy can hide behind the HTTP cache');
+
+});
+
+/* ---- QA round 26 O5: one logged food left Today at 60 style recalcs/s and 15 to
+   22% of a core, forever. renderToday adds ONE class after a log, `bounce` on
+   .hero-scene (S.justLogged), and its rule read `bhbounce 0.7s ..., bh-idle 4s
+   ... infinite`: two animations on one `transform`, which Chrome never composites
+   and never re-decides, so the infinite half ran on the main thread until the next
+   innerHTML rebuild. This is the static half (the browser half is
+   tests/today-idle-cpu-audit.mjs): the rule carries exactly one animation and no
+   `infinite`, and app.js has the exit that hands the element back its own idle.
+   Proven red on origin/main 96c1104a: app.css:1681 carries `infinite`. ---- */
+test('R26-O5 the post-log bounce is one finite animation, and renderToday ends it', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = [...css.matchAll(/\.hero-scene\.bounce[^{]*\{([^}]*)\}/g)].map(m => m[1]);
+  assert.ok(rules.length >= 1, 'no .hero-scene.bounce rule in app.css: the celebration is gone, or moved (re-anchor)');
+  for (const body of rules) {
+    const anim = body.match(/animation\s*:\s*([^;]+)/);
+    if (!anim) continue;
+    assert.ok(!/infinite/.test(anim[1]), `.hero-scene.bounce animates forever: ${anim[1].trim()}`);
+    // a top-level comma separates animations; the ones inside cubic-bezier(...) do not
+    assert.ok(!anim[1].replace(/\([^)]*\)/g, '').includes(','), `.hero-scene.bounce lists two animations on one element, which Chrome never composites: ${anim[1].trim()}`);
+  }
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /addEventListener\('animationend',[\s\S]{0,200}animationName === 'bhbounce'[\s\S]{0,80}classList\.remove\('bounce'\)/,
+    'renderToday no longer removes .bounce on bhbounce animationend, so the idle never restarts alone');
 });
 
 await runAll();

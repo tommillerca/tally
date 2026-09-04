@@ -1678,7 +1678,23 @@ body::before {
   background: rgba(42, 45, 40, .82); border-radius: 999px;
   padding: 3px 10px; display: inline-block; margin-top: 6px;
 }
-.hero-scene.bounce .bh-anim { animation: bhbounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1), bh-idle 4s ease-in-out 0.7s infinite; }
+/* THE BOUNCE RUNS ALONE, AND THE IDLE COMES BACK AFTER IT (QA round 26 O5).
+   This rule used to read `bhbounce 0.7s ..., bh-idle 4s ease-in-out 0.7s
+   infinite`: two animations claiming `transform` on ONE element. Chrome will not
+   composite a property two animations claim, and it decides that when the
+   animation STARTS and never again, so the infinite bh-idle ran on the main
+   thread for as long as the element existed: 60 style recalcs a second and 15 to
+   22% of a core after one logged food, still 59.6/s five minutes later, until the
+   player left the tab (the innerHTML rebuild is the only thing that replaced the
+   element). Pausing animations dropped it to 0.1/s. Same trap the Emporium's
+   .wz-glow shipped (tests/idle-perf-audit.mjs, item 3).
+   Now the bounce is the ONLY animation here, and renderToday removes .bounce on
+   its animationend, so .bh-anim falls back to its own `bh-idle` (4s under
+   .hero-scene, above), which starts as a NEW animation, alone, and is composited.
+   Same picture: the idle began at 0.7s from phase 0 before, and it does now. The
+   failure mode is also safe: if the class were never removed, the element would
+   simply carry no animation, not a hot one. */
+.hero-scene.bounce .bh-anim { animation: bhbounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
 /* 22px, not 14: the four doors used to be followed by whatever nudge or banner
    happened to be live, and the quests came after that stack. With the nudge gone

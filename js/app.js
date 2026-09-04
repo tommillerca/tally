@@ -4245,6 +4245,16 @@ async function renderToday(el) {
     if (e.target.closest('button')) return;
     openCharacter('crates');
   });
+  /* THE BOUNCE ENDS AND THE IDLE TAKES OVER ALONE (QA round 26 O5). .bounce used
+     to keep `bh-idle ... infinite` in the same animation list as bhbounce, which
+     Chrome never composites (two animations on one `transform`), so Today ran 60
+     style recalcs a second until the next innerHTML rebuild. The rule now carries
+     only the 0.7s bounce; dropping the class when it ends hands .bh-anim back its
+     own single idle animation, started fresh, which the compositor takes. Only
+     bhbounce: .hero-companion's petPop and other children bubble through here too. */
+  $('#bhStage').addEventListener('animationend', e => {
+    if (e.animationName === 'bhbounce') e.currentTarget.classList.remove('bounce');
+  });
   $('#charBtn')?.addEventListener('click', () => openCharacter('crates')); // Bonehead hub, landing on the Backpack the tile is named for
   $('#stableBtn')?.addEventListener('click', openStable);
   $('#pitBtn')?.addEventListener('click', openPit);
