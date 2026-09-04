@@ -122,14 +122,95 @@ const openStable = async () => {
   await page.evaluate(() => document.getElementById('stableBtn')?.click());
   await sleep(1800);
 };
+/* A FLOOR UNDER THE HISTORY TRAVERSALS BELOW, 2026-09-03.
+   closeSheets is a history TRAVERSAL, not a "close every open sheet" loop, and
+   the rest of this file leans on exactly that: a go(-3) over three .sheet nodes
+   deliberately lands with the Stable still up, which is the screen HOSTILE and
+   REFUSE then type into. (Replacing it with a close-until-no-sheets loop was
+   tried: nine rows go red. The traversal semantics are load-bearing.)
+   What sits UNDER the app's entries is this file's own two documents: godmode
+   boot goes to ?demo, then this file goes to ?demo&api=..., which pushes. So a
+   traversal one step deeper than the app's stack does not close a sheet, it
+   LOADS ?demo -- a different document, with no api parameter and no seeded pets
+   -- and the next page.evaluate dies with "Execution context was destroyed,
+   most likely because of a navigation". That is how this suite stopped
+   reporting at all: it threw instead of failing a row.
+   THE STEP THAT WENT MISSING. app.js now does
+   `if (!location.hash) history.replaceState(null,'','#/today')` at the end of
+   boot, to kill a double-render on the first tab tap. replaceState pushes
+   NOTHING, so the '' -> '#/today' entry that openStable's
+   `location.hash = '#/today'` used to push is gone, and the app's stack is
+   exactly ONE entry shorter than every traversal here was written against.
+   Measured at the four closes, origin/main vs this tree: history.length
+   8/7, 6/5, 6/4, 8/7. Main's deepest go(-4) lands ON its spare entry; this
+   tree's lands one past it, in the other document.
+   SO THE TRAVERSAL NEEDS A FLOOR OF ITS OWN, which armDepth below supplies by
+   counting the entries the app owns. Three cheaper things were tried first and
+   all three still crossed, which is why the counter is worth its lines:
+   history.length (counts forward entries the app has not pruned, and the
+   current index is unreadable), the app's own history.state.sheet depth (not in
+   step with the .sheet nodes: on main a go(-3) over three sheets closes ONE),
+   and pushing spare entries to stand on (a traversal deeper than the app's
+   stack stands on the spare, and the next one crosses anyway).
+   The SHEETS row at the bottom is the control on all of it: it counts real
+   document loads inside every close window, and goes red if a traversal ever
+   reaches the bottom and keeps going. */
+/* COUNT THE APP'S OWN PUSHES; THAT COUNT IS THE FLOOR.
+   Nothing readable in the page answers "how deep am I": history.length counts
+   forward entries the app has not pruned and there is no API for the current
+   index, and the app's `history.state.sheet` depth is not in step with the
+   .sheet nodes (on main a go(-3) over three sheets closes ONE, because a single
+   traversal fires ONE popstate however many entries it spans -- which is also
+   why this has to stay a single jump and cannot become a loop of back()s).
+   Spare floor ENTRIES do not work either: a traversal deeper than the app's
+   stack stands on the spare and the next one crosses anyway (measured, twice).
+   So count. js/app.js pushes exactly one entry per sheet, through
+   history.pushState, and this audit writes location.hash only in openStable,
+   where the hash is already '#/today' and the assignment is a no-op. Wrapping
+   pushState therefore counts every entry the app owns. A hash push this file
+   does not do yet would be MISSED, and that is the safe direction: an
+   under-count traverses less, never past the bottom.
+   Installed after the last page.goto, so it survives to the end of the run --
+   except across the deliberate page.reload() below, which re-arms it. */
+const armDepth = () => page.evaluate(() => {
+  window.__appDepth = 0;
+  window.__ourJump = 0;
+  const push = history.pushState.bind(history);
+  history.pushState = (...a) => { window.__appDepth++; return push(...a); };
+  /* AND THE APP POPS ENTRIES ITSELF, so counting only pushes over-counts and
+     the traversal crosses anyway. Every sheet close button, the backdrop tap,
+     Escape and openTextSheet's own Save all call history.back(), and the
+     nickname Save is on that path, so this file spends app-owned entries
+     constantly without going through closeSheets. An app back() is always ONE
+     entry; the only multi-entry traversal is closeSheets' own jump, and that
+     one is already subtracted when it is issued, so it announces itself here
+     rather than being counted twice. */
+  addEventListener('popstate', () => {
+    if (window.__ourJump > 0) { window.__ourJump--; return; }
+    window.__appDepth = Math.max(0, window.__appDepth - 1);
+  });
+});
+await armDepth();
+/* A DOCUMENT LOAD IS THE THING TO COUNT, not framenavigated: sheets and routes
+   are same-document navigations and fire that event constantly, so only `load`
+   tells "went back a sheet" from "went back a document". Same instrument the
+   sibling dead-shell audit moved to on 2026-09-03. */
+let docLoads = 0, sheetCloses = 0, sheetReloads = 0;
+page.on('load', () => { docLoads++; });
 /* BOUNDED. n comes from counting .sheet nodes, and a mutation that corrupts the
    caption's markup can corrupt that count too; an unbounded history.go(-n) then
    navigates out of the app entirely and every later row dies on a destroyed
    execution context instead of reporting. Four is deeper than this audit ever
    stacks sheets. */
 const closeSheets = async () => {
-  await page.evaluate(() => { const n = Math.min(4, document.querySelectorAll('.sheet').length); if (n) history.go(-n); });
+  const at = docLoads;
+  sheetCloses++;
+  await page.evaluate(() => {
+    const n = Math.min(4, document.querySelectorAll('.sheet').length, window.__appDepth || 0);
+    if (n > 0) { window.__appDepth -= n; window.__ourJump++; history.go(-n); }
+  });
   await sleep(700);
+  if (docLoads !== at) sheetReloads++;
 };
 /* Drive the REAL control: tap NICKNAME, type into the real field, tap Save.
    Never call setPetNick directly, or this proves nothing about the screen. */
@@ -244,6 +325,9 @@ ok('SPIN and its nickname is there again',
 console.log('\n--- RELOAD ---');
 await page.reload({ waitUntil: 'networkidle2' });
 await sleep(2400);
+// a reload is a fresh window: the pushState wrapper and its counter are gone,
+// and the app's stack starts again from this entry. See armDepth.
+await armDepth();
 await openStable();
 ok('RELOAD the Stable came back with the named pet reachable', await focusPet(namedIid));
 const afterReload = await capState();
@@ -611,6 +695,15 @@ ok('COVERAGE the Paddock card still takes its name from the roster row, so the n
 const pdkRosterSrc = readFileSync(path.join(ROOT, 'js/paddock.js'), 'utf8');
 ok('COVERAGE and paddockRoster prefers the private nickname over the derived pool',
   /name:\s*nicks\[x\.iid\]\s*\|\|\s*names\[x\.iid\]/.test(pdkRosterSrc), 'paddockRoster no longer prefers the nickname');
+
+/* THE SHEET STACK NEVER TOOK THE DOCUMENT WITH IT. See the floor above: this is
+   the row that would have NAMED the failure this file died on instead of
+   throwing it, and it is what keeps the floor honest. `sheetCloses > 0` is the
+   positive control -- a run that never reached a close would report "0 reloads"
+   for the boring reason and grade nothing. The audit's own deliberate
+   page.reload() is not counted: it is not inside a closeSheets window. */
+ok('SHEETS every sheet close stayed inside this document (one traversal too deep reloads the app out from under the run)',
+  sheetCloses > 0 && sheetReloads === 0, `${sheetReloads} unintended document loads across ${sheetCloses} closes`);
 
 ok('NO PAGE ERRORS during the whole run', errors.length === 0, errors.slice(0, 3).join(' | '));
 

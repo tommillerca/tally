@@ -33,17 +33,40 @@ const audit = async label => page.evaluate(l => {
     names: [...new Set(imgs.map(i=>getComputedStyle(i).animationName))],
   };
 }, label);
+/* GO THERE EVEN WHEN WE ARE ALREADY THERE (2026-09-03).
+   Every navigation in this file used to be a bare `location.hash = '#/x'`, which
+   only re-renders when the hash actually CHANGES. That was fine while boot left
+   the hash empty. It stopped being fine when boot started writing one: app.js
+   now does `if (!location.hash) history.replaceState(null,'','#/today')` at the
+   end of boot(), to kill a double-render on the first tab tap. So by the time
+   this file equips E4 the hash is ALREADY '#/today', the assignment fires no
+   hashchange, Today is never rebuilt, and the audit graded the hero that had
+   been painted at boot -- before the cosmetic existed. It read "0 E4 layers on
+   Today", i.e. it accused the app of dropping the player's eyes off the hero.
+   Measured both ways on this tree, same fixture: bare assignment -> 0 E4 layers
+   on Today, this helper -> 2 (one hero + one news headshot), which is exactly
+   what origin/main reports. The other three surfaces were never affected
+   because they arrive from a DIFFERENT hash and so changed it for real.
+   Dispatching hashchange is what the assignment used to do, not a shortcut
+   round it: app.js binds routeFromHash to that event and nothing else. */
+const go = async (hash, ms) => {
+  await page.evaluate(h => {
+    if (location.hash === h) window.dispatchEvent(new HashChangeEvent('hashchange'));
+    else location.hash = h;
+  }, hash);
+  await sleep(ms);
+};
 const results=[];
 // 1. Today hero
-await page.evaluate(()=>{location.hash='#/today';}); await sleep(2200);
+await go('#/today', 2200);
 await page.evaluate(()=>document.querySelector('.dw')?.remove());
 results.push(await audit('Today hero'));
 // 2. Wardrobe
-await page.evaluate(()=>{location.hash='#/bonehead';}); await sleep(1900);
+await go('#/bonehead', 1900);
 await page.evaluate(()=>document.querySelector('#chTabs .ch-tab[data-tab="wardrobe"]')?.click()); await sleep(1900);
 results.push(await audit('Wardrobe stage'));
 // 3. Combat
-await page.evaluate(()=>{location.hash='#/today';}); await sleep(1600);
+await go('#/today', 1600);
 const pit=await page.$('#pitBtn'); if(pit){ await pit.click(); await sleep(1700);
   await page.evaluate(()=>{const b=[...document.querySelectorAll('button')].find(x=>/^fight$/i.test(x.textContent.trim())); if(b)b.click();});
   await sleep(2600); }
@@ -55,7 +78,7 @@ for (let i=0;i<6;i++){
   await page.evaluate(()=>history.back()); await sleep(500);
 }
 // 4. Crew / leaderboard rows
-await page.evaluate(()=>{location.hash='#/friends';}); await sleep(2600);
+await go('#/friends', 2600);
 results.push(await audit('Crew tab'));
 for (const r of results) {
   console.log(JSON.stringify(r));
@@ -78,9 +101,13 @@ check('the cosmetic appears on more than one surface', lit.length >= 3, `${lit.l
    in no js/ file and no CSS rule, so it fell through to the generic .eye-ember rule
    and "uses the full halo" asserted the DEFAULT on a surface the app does not have.
    Removed. Pointing the probe at a really-rendered .lb-av/.fl-av/.map-you-av is the
-   right fix and is NOT done here: in this tree the demo boot renders zero .bh-anim
-   on every screen (which is also why the surface half above is red), so a real-node
-   probe would examine nothing. */
+   right fix and is NOT done here, but the reason given for that has to be struck:
+   "in this tree the demo boot renders zero .bh-anim on every screen (which is also
+   why the surface half above is red)". Measured 2026-09-03: the demo boot renders
+   FIVE .bh-anim stacks on Today alone. The surface half was red because this file
+   never re-rendered Today after equipping (see `go` above), not because the app
+   draws nothing. A real-node probe would have plenty to examine; it is simply
+   still unwritten. */
 const CLASSES = ['lb-av', 'fl-av', 'map-you-av'];
 const small = await page.evaluate(classes => classes.map(cls => {
   const d = document.createElement('div');
