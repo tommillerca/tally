@@ -147,6 +147,21 @@ test('R25-M2 a manual target write keeps the macros on the calorie figure and ab
   assert.ok(block.includes('manualTargets('), 'saveTargets does not route through manualTargets');
   assert.ok(!/c:\s*Math\.round\(c\.value/.test(block), 'saveTargets still stores a typed carb figure independently of kcal');
 });
+test('R25-M1 the minimum plan age is one named constant and every target display carries the disclosure', () => {
+  /* QA round 25, M1 (child safety). The age floor was a bare 10 inside LIMITS
+     and the app said nothing about who its estimates are for. The number is
+     still 10 (owner's call), but it must stay in ONE named place, and the two
+     surfaces that show a computed target (plan preview, Settings targets card)
+     must both render the disclosure. Structural, not copy-pinned: it checks the
+     constant is referenced, not what it says. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /^const MIN_AGE = \d+;/m, 'MIN_AGE constant missing');
+  assert.ok(app.includes('age: { min: MIN_AGE,'), 'LIMITS.age.min is not MIN_AGE');
+  const preview = app.slice(app.indexOf("$('#pfPreview', wrap).innerHTML"), app.indexOf('onChange?.(p, t);'));
+  assert.ok(preview.includes('${TARGET_DISCLOSURE}'), 'plan preview shows a target without the disclosure');
+  const card = app.slice(app.indexOf('DAILY TARGETS'), app.indexOf("$('#saveTargets')"));
+  assert.ok(card.includes('${TARGET_DISCLOSURE}'), 'Settings targets card shows a target without the disclosure');
+});
 test('active calorie-back: only burn ABOVE the activity baseline credits, at 50%', () => {
   const p = { sex: 'm', age: 32, heightCm: 180, weightKg: 84, activity: 'moderate', goal: 'recomp' };
   const bmr = bmrMifflin(p);

@@ -181,6 +181,18 @@ function readNum(input, { name, min = null, max = null, optional = false, blank 
 /* The domain bounds, in one place so a new surface cannot invent its own.
    Deliberately generous: they exist to stop nonsense reaching permanent
    history, not to argue with an outlier. */
+/* The youngest age the plan form accepts. QA round 25, M1 (child safety): age 9
+   was refused, age 10 was accepted, and a 10-year-old (female, 138 cm, 32 kg,
+   sedentary, Lose fat) was handed a 1,200 kcal/day fat-loss plan with no
+   disclosure anywhere. This is the ONE place the number lives. It is UNCHANGED
+   at 10 pending the owner's call (options in the R25 report: 18 for any
+   deficit goal, 13+ maintenance only, etc.). Any goal gating by age belongs
+   in profileProblem, next to the check that reads this. */
+const MIN_AGE = 10;
+/* Shown wherever a computed target is displayed (plan preview, Settings targets).
+   Same motivating failure as MIN_AGE: zero occurrences of doctor/medical in
+   shipped js before R25. */
+const TARGET_DISCLOSURE = 'An estimate for healthy adults, not medical advice. Talk to a doctor before changing what a child eats.';
 const LIMITS = {
   kcalEntry: { min: 0, max: 20000 },      // one log row or one serving of one food
   macroG: { min: 0, max: 2000 },          // grams of protein / carbs / fat / fibre / sugar
@@ -190,7 +202,7 @@ const LIMITS = {
   weightKg: { min: 20, max: 500 },
   weightLb: { min: 44, max: 1100 },
   targetKcal: { min: 800, max: 20000 },
-  age: { min: 10, max: 120 },
+  age: { min: MIN_AGE, max: 120 },
   heightCm: { min: 90, max: 250 },
 };
 // Online/last-seen label for Crew + leaderboard. last_seen updates on the ~5-min
@@ -12532,7 +12544,7 @@ async function renderSettings(el) {
       <div class="field"><label>Fat</label><input id="tF" type="text" inputmode="numeric" value="${t.f}"></div>
     </div>
     <button class="btn small ghost" id="saveTargets">Save targets</button>
-    <p class="note" style="margin-top:10px">Based on: ${p.sex === 'm' ? 'male' : 'female'}, ${p.age}, ${S.settings.units === 'kg' ? Math.round(p.heightCm) + ' cm' : cmToFtIn(p.heightCm).ft + "'" + cmToFtIn(p.heightCm).inch + '"'}, ${units === 'kg' ? p.weightKg.toFixed(1) + ' kg' : kgToLb(p.weightKg).toFixed(0) + ' lb'}, ${esc((ACTIVITY_LEVELS.find(a => a.id === p.activity) || {}).label || '')}, goal: ${esc((GOALS.find(g => g.id === p.goal) || {}).label || '')}.</p>
+    <p class="note" style="margin-top:10px">Based on: ${p.sex === 'm' ? 'male' : 'female'}, ${p.age}, ${S.settings.units === 'kg' ? Math.round(p.heightCm) + ' cm' : cmToFtIn(p.heightCm).ft + "'" + cmToFtIn(p.heightCm).inch + '"'}, ${units === 'kg' ? p.weightKg.toFixed(1) + ' kg' : kgToLb(p.weightKg).toFixed(0) + ' lb'}, ${esc((ACTIVITY_LEVELS.find(a => a.id === p.activity) || {}).label || '')}, goal: ${esc((GOALS.find(g => g.id === p.goal) || {}).label || '')}. ${TARGET_DISCLOSURE}</p>
   </div>
 
   <div class="card">
@@ -12998,7 +13010,8 @@ function bindProfileForm(wrap, initial, onChange) {
     const t = computeTargets(p);
     $('#pfPreview', wrap).innerHTML = `<div class="big-stat" style="margin:0"><span class="v" style="font-size:26px">${t.kcal.toLocaleString()} kcal</span><span class="d">/ day</span></div>
       <div style="margin-top:6px;font-weight:600;color:var(--text)">Protein ${t.p} g · Carbs ${t.c} g · Fat ${t.f} g</div>
-      <div style="margin-top:4px">Maintenance ~${t.tdee.toLocaleString()} kcal</div>`;
+      <div style="margin-top:4px">Maintenance ~${t.tdee.toLocaleString()} kcal</div>
+      <div style="margin-top:6px">${TARGET_DISCLOSURE}</div>`;
     onChange?.(p, t);
   };
   const setSeg = (sel, on) => { $$(sel, wrap).forEach(x => x.classList.remove('on')); on.classList.add('on'); };
