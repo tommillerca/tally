@@ -2824,8 +2824,7 @@ test('every Gauntlet rank resolves a real monster look', () => {
 });
 
 
-/* ================= BhVault backfill: additive-only, all four gates ==});
-
+/* ================= BhVault backfill: additive-only, all four gates =========
  * The iOS registration fix (2026-08-10) makes every existing player's device a
  * "readable empty vault + real local identity" case, which nothing wrote
  * before. backfillVaultMirror closes that; these pin its safety envelope, the

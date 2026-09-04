@@ -12929,11 +12929,17 @@ async function openWhatsNew() {
     closeAllSheetsViaHistory();
     setTimeout(() => {
       n.open();
-      let waited = 0;
+      let waited = 0, gone = false;
       const back = setInterval(() => {
         waited += 300;
         const stillOpen = document.querySelector('.drop-veil') || document.querySelector('.tz-pop');
         if (stillOpen) return;
+        /* QA round 26 O1: a poster now closes through history.back() and its CTA
+           navigates 220ms AFTER that (hash, Hollow, shop), so the first tick that
+           sees no veil can land before the hash or the stack has moved and this
+           would re-open What's New only for route() to tear it down, or under the
+           Hollow. One more tick (300 > 220) and the CTA's destination is in place. */
+        if (!gone) { gone = true; return; }
         clearInterval(back);
         if (location.hash !== cameFrom) return;   // it took them somewhere deliberately
         /* AND A SHEET COUNTS AS "SOMEWHERE" TOO. This watched for a VEIL closing
