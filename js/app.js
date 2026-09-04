@@ -7988,6 +7988,16 @@ function openPortion(food, { meal = 0, entry = null, via = null } = {}) {
        on the storage of their device". So the sheet STAYS OPEN with the portion
        still selected and the button live, because a player who has just been
        told to free up space needs somewhere to land when they come back. */
+    /* ONE TAP, ONE ROW. Disabled here, before the first await, because the
+       catch below re-enables a button nothing had disabled: two fast taps on
+       Add each ran this handler to the put and logged the meal twice, +20 XP
+       from one food (QA round A, 2026-09-03, L2). Only the fast double tap
+       escapes: the CONCURRENT case is already correct, awardOnce's addIfAbsent
+       checks and writes in one request. A disabled button drops the second
+       click at the browser, the same shape as #wbOk's "one tap, one write" and
+       armToConfirm's `busy`. Not re-enabled on success: the sheet closes.
+       Guard: tests/add-double-tap-audit.mjs. */
+    btn.disabled = true;
     try {
       await db.put('log', e);
     } catch (err) {
