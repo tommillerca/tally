@@ -39,20 +39,44 @@ The gold facemask (hue ~40, saturation ~0.78) is 30+ degrees from the coral
 peak, outside its window, and is left alone; the script prints how many gold
 pixels each file carries so a coral window drifting onto it would be visible.
 
-SIZES. Player garments ship at 640x640 full-frame, which is what every other
-H/T/FW cosmetic in assets/bh is (measured: H1.png, T1.png, FW1.png are all
-640x640 RGBA). Pet garments ship at 2048x2048 full-frame like the existing pet
-accessories (CE1.png is 2048), because the pet renderer registers layers by
-sharing the pet's own canvas and tests/pet-accessory-lint.mjs asserts that
-square. The repo keeps no 2048 masters for body cosmetics (build-cosmetics.py
-reads Cam's library from outside the repo), so none are kept here either: the
-source folder is the master. File the eight PNGs into the library.
+SIZES. Every garment, pet pieces included, ships at 640x640 full-frame, which
+is what every other H/T/FW cosmetic in assets/bh is (measured: H1.png, T1.png,
+FW1.png are all 640x640 RGBA).
+
+The pet pieces are the one that needed a measurement rather than a convention.
+Cam's existing pet accessories (CE1.png and friends) are 2048 squares, but they
+are SERVED at 192 or 384, because their paths match BH_THUMB_RE and
+croppedPetImg tiers them. Football art does not match that regex and is never
+tiered, so a 2048 master here would be decoded at 2048 on every surface.
+Registration is not what the square buys: croppedPetImg lays every layer out as
+PERCENTAGES of the pet's box, so any square registers identically and a uniform
+downscale of the same square is exact.
+
+What the square has to buy is resolution at the largest surface that draws it.
+The lizard's crop (PET_CROP.C4) is 0.3547 of the square on its long edge and
+croppedPetImg fills 0.82 of its box, so the whole square lands at box x 2.312
+CSS px. The biggest box a football pet piece is drawn in today is 104 (the
+Paddock/roster portrait), i.e. 240 CSS px, i.e. 721 device px at DPR 3. 640
+covers that at 1.13x on a DPR-3 phone and 1.00x at DPR 2, the same compromise
+the 384 pet tier already ships (1.50x at DPR 3). It also takes a dressed
+lizard's football layers from 100 MB of decoded bitmap (six 2048 planes) to
+9.8 MB, against the memory census's 90 MB ceiling.
+
+UPGRADE PATH if a pet piece ever has to be drawn big: 1024 covers a full hero
+figure at DPR 3 (a 155.6 CSS box, 360 CSS px of square, 1080 device px). Change
+the two rows below and re-run; nothing else moves. Note that the hero cannot
+wear these today at all, because C4 and CX are in ANIMATED_PETS and
+petSpriteHtml returns animatedPetHtml before it ever reaches croppedPetImg.
+
+The repo keeps no 2048 masters for body cosmetics (build-cosmetics.py reads
+Cam's library from outside the repo), so none are kept here either: the source
+folder is the master. File the eight PNGs into the library.
 
 VERIFIES ITSELF: composites master x tint through both masks for two test
 colours and asserts the mean colour inside each region (mask > 0.9) lands
-within TOL of the tint. tests/football-tint-audit.mjs repeats the same
-composite in node over the shipped PNGs for two REAL teams, so the gate does
-not depend on python.
+within TOL of the tint. tests/football-kit-audit.mjs repeats the same composite
+in node over the shipped PNGs for three REAL teams, so the gate does not depend
+on python.
 """
 import os
 import sys
@@ -74,8 +98,8 @@ GARMENTS = {
     'BH_NFL_HELM_VISOR90': ('visor90', 640),
     'BH_NFL_JERSEY': ('jersey', 640),
     'BH_NFL_CLEATS': ('cleats', 640),
-    'BH_NFL_LIZARD_HELMET': ('pet-helmet', 2048),
-    'BH_NFL_LIZARD_JERSEY': ('pet-jersey', 2048),
+    'BH_NFL_LIZARD_HELMET': ('pet-helmet', 640),
+    'BH_NFL_LIZARD_JERSEY': ('pet-jersey', 640),
 }
 REFERENCE = 'BH_NFL_JERSEY'      # the one layer with no gold: hue peaks are unambiguous
 SAT_LO, SAT_HI = 0.50, 0.80      # satRamp, as fractions of the cluster's own median saturation

@@ -102,10 +102,20 @@ export const FOOTBALL_GARMENTS = [
   { key: 'visor60',    slot: 'H',  label: 'Smoke Visor' },
   { key: 'visor90',    slot: 'H',  label: 'Dark Visor' },
   { key: 'jersey',     slot: 'T',  label: 'Jersey',        sold: true },
-  { key: 'cleats',     slot: 'FW', label: 'Cleats',        sold: true },
+  /* ONE COLOUR, MEASURED, NOT ASSUMED. Cam drew the cleats in the primary
+     alone: cleats.mask-b.png comes out of the pipeline with ZERO pixels above
+     the 0.9 core threshold. A second multiply layer over an empty mask paints
+     nothing and still costs a decode and a compositing layer on every cleats
+     render, so the garment declares its truth and footballTints stops emitting
+     it. The empty mask is still WRITTEN and still checked: football-kit-audit
+     asserts that exactly the garments flagged here have an empty mask-b and
+     that every other garment's is non-empty, so a revision that gives the shoe
+     a trim stripe goes red instead of silently losing it. */
+  { key: 'cleats',     slot: 'FW', label: 'Cleats',        sold: true, oneColour: true },
   { key: 'pet-helmet', slot: 'CH', label: 'Lizard Helmet', sold: true, pets: FOOTBALL_PETS },
   { key: 'pet-jersey', slot: 'CT', label: 'Lizard Jersey', sold: true, pets: FOOTBALL_PETS },
 ];
+export const FOOTBALL_GARMENT_BY_KEY = Object.fromEntries(FOOTBALL_GARMENTS.map(g => [g.key, g]));
 export const FOOTBALL_ART = 'assets/bh/football/';
 export const footballItemId = (teamId, key) => `fb-${teamId}-${key}`;
 
@@ -124,12 +134,15 @@ export const FOOTBALL_ITEMS = FOOTBALL_TEAMS.flatMap(t => FOOTBALL_GARMENTS.map(
 })));
 
 /* The two multiply layers a football item needs on top of its master, or null
- * for anything else. Order matters only in that both sit above the master. */
+ * for anything else. Order matters only in that they sit above the master. A
+ * one-colour garment (the cleats) gets ONE, see FOOTBALL_GARMENTS. */
 export function footballTints(item) {
   if (!item || !item.football) return null;
   const t = FOOTBALL_TEAM_BY_ID[item.football.team];
   const stem = `${FOOTBALL_ART}${item.football.garment}`;
-  return [{ mask: `${stem}.mask-a.png`, hex: t.a }, { mask: `${stem}.mask-b.png`, hex: t.b }];
+  const layers = [{ mask: `${stem}.mask-a.png`, hex: t.a }];
+  if (!FOOTBALL_GARMENT_BY_KEY[item.football.garment].oneColour) layers.push({ mask: `${stem}.mask-b.png`, hex: t.b });
+  return layers;
 }
 
 /* What a shop tile hands over: the helmet tile grants its three visors too. */
