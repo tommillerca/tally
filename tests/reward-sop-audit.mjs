@@ -78,9 +78,23 @@ const ACTIONS = [
   { id: 'js/game.js:award', sites: 1, drive: 'award',
     transition: 'a ledger key goes from unminted to minted; there is no other transition in the game',
     authority: 'db.addIfAbsent on the xp store: the check and the write are one transaction' },
-  { id: 'js/game.js:awardCapped', sites: 1, drive: 'awardCapped',
+  /* sites went 1 to 0 on 2026-09-04 (QA round 28 P4): the loop moved into
+     claimCapped so a caller can read `claimed` on a 0-XP slot; awardCapped is
+     now the `.xp` wrapper over it and holds no paying site of its own. */
+  { id: 'js/game.js:awardCapped', sites: 0, drive: 'awardCapped',
     transition: "the nth award of the day for a repeatable source, n <= that source's daily ceiling",
     authority: 'the ledger, one fixed key per (source, date, n)' },
+  { id: 'js/game.js:claimCapped', sites: 1, drive: 'awardCapped',
+    transition: 'the same as awardCapped: it IS that loop, returning { claimed, xp } instead of the number',
+    authority: 'the ledger, one fixed key per (source, date, n), the fight/entry id carried as ref' },
+  /* QA round 28 P4. Sparring bypassed spendPitFight (on purpose, Tom's call:
+     practice is free) and settle() paid 15 coins per win and 5 per loss with no
+     ledger key, no cooldown, no cap: driven-confirmed, two spars left freeUsed 0
+     / vigor 3 and the wallet 30 richer. DRIVEN, not exempt. The coins are still
+     paid by openFight's shared coinsAdd (registered below), off `.coins` here. */
+  { id: 'js/game.js:claimSpar', sites: 0, drive: 'spar',
+    transition: 'the nth spar of the day, n <= SPAR_DAILY_CAP (= XP_DAILY_CAP.fight, FLAGGED, not decided), for a fight id not yet paid',
+    authority: 'the ledger key spar-<date>-<n> via claimCapped, the arena\'s fightId as ref so one fight can take one slot however many times settle() is reached' },
 
   // ---- world actions: repeatable, ledger-keyed --------------------------
   { id: 'js/poi.js:claimGluttonWin', sites: 5, drive: 'glutton',
@@ -484,6 +498,17 @@ const results = await page.evaluate(async () => {
       };
     },
     friendBattle: () => { const f = uniq(); return { act: () => game.claimFriendBattle(f, true, '2099-01-02'), won: r => !!r.firstToday }; },
+    /* 0 XP by design (the win's XP is the 'fight' cap in settle), so the wallet
+       cannot move here and `count` is the spar ledger rows: CONTROL needs +1,
+       the repeat on the same fight id needs 0, two at once need exactly one. */
+    spar: () => {
+      const f = uniq();
+      return {
+        act: () => game.claimSpar(f, true, '2099-01-02'),
+        won: r => !!r.claimed,
+        count: async () => (await db.db.all('xp')).filter(r => r.type === 'spar').length,
+      };
+    },
     quest: () => {
       const q = { id: uniq(), name: 'SOP quest', coins: 100, dust: 15, crate: 'daily' };
       /* NOT `!!r`. claimQuest gained a THIRD return shape with the claim cap:
