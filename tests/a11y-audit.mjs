@@ -693,20 +693,34 @@ async function rarityNotColourOnly(page, w, h) {
   /* INTO THE SHOT FIRST. The grid sits well below the fold on a 667px screen,
      the screenshot is the viewport, and the first version of this row reported
      "no background pixel sampled" four times rather than a ratio. */
-  await page.evaluate(() => document.querySelector('.ward-grid')?.scrollIntoView({ block: 'center', behavior: 'instant' }));
-  await sleep(400);
-  await samplePage(page, await shotOf(page));
-  const tags = await page.evaluate(() => {
+  /* ONE GRID PER SHOT (2026-09-04). QA round 23 F6 put the tier tag on the
+     look tiles too, in a second .ward-grid below the fit grid. The first version
+     of this loop scrolled the FIRST grid into view, shot the viewport once and
+     sampled EVERY .ward-rar on the page, so the look grid's tags were off-screen
+     and read "no background pixel sampled" (four reds on gate7's successor run,
+     healthy CSS). Each grid is now scrolled, shot and sampled on its own, and a
+     tag whose box is outside the viewport is skipped rather than failed. */
+  const gridCount = await page.evaluate(() => document.querySelectorAll('.ward-grid').length);
+  const tags = [];
+  for (let gi = 0; gi < gridCount; gi++) {
+    await page.evaluate(i => document.querySelectorAll('.ward-grid')[i]?.scrollIntoView({ block: 'center', behavior: 'instant' }), gi);
+    await sleep(400);
+    await samplePage(page, await shotOf(page));
+    tags.push(...await page.evaluate(i => {
     const out = [];
-    for (const t of document.querySelectorAll('.ward-rar')) {
+    const grid = document.querySelectorAll('.ward-grid')[i];
+    for (const t of grid.querySelectorAll('.ward-rar')) {
       if (!t.offsetParent) continue;
+      const r = t.getBoundingClientRect();
+      if (r.bottom <= 0 || r.top >= innerHeight || r.right <= 0 || r.left >= innerWidth) continue;   // not in this shot
       const fg = (getComputedStyle(t).color.match(/[\d.]+/g) || []).map(Number);
       const bg = window.__bgAt(t, fg);
       out.push({ rar: (String(t.parentElement.className).match(/\br-([a-z]+)/) || [])[1],
         v: bg ? +window.__ratio(fg, bg).toFixed(2) : null, fg: fg.slice(0, 3), bg });
     }
     return out;
-  });
+  }, gi));
+  }
   if (!tags.length) info(`${w}x${h} wardrobe: no tier tag was on screen to measure`);
   for (const t of tags) {
     const line = `${w}x${h} .ward-rar (${t.rar}): ${t.v}:1 rgb(${t.fg}) on rgb(${t.bg})`;
