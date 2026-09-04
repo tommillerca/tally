@@ -3748,6 +3748,66 @@ test('M5 editing an entry whose custom food was deleted keeps every nutrient and
   assert.deepEqual(fresh, { id: 'new-id', date: '2026-09-03', meal: 0, foodId: null, name: 'Quick add', portionLabel: '', kcal: 300, p: 0, c: 0, f: 0 });
 });
 
+/* ---- QA round 24, L4: recents are ranked per meal, not by recency alone ----
+   The eight "Log it again" rows were byte-identical under all four meal chips
+   (recency only): measured hit rate for the wanted food 23.6 / 5.2 / 4.9%
+   (breakfast / lunch / dinner) on a 60-day diary, 63.2% of opens showing none
+   of that meal's foods. Runs the REAL recentFoods out of js/app.js over a
+   seeded diary whose most recent rows are NOT the staple of the chip being
+   asked about, so recency-only order is red. */
+test('L4 recentFoods ranks the staple of the selected meal first, ties by recency', async () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('async function recentFoods'), b = app.indexOf('\nfunction defaultSel');
+  assert.ok(a > 0 && b > a, 'recentFoods not found in js/app.js');
+  const rows = []; let ts = 0;
+  const log = (foodId, meal) => rows.push({ id: 'e' + (++ts), ts, foodId, name: foodId, meal, kcal: 100 });
+  for (let i = 0; i < 10; i++) log('g-oats', 0);        // the breakfast staple, oldest
+  log('g-eggs', 0);                                       // one breakfast, older than toast
+  log('g-oats', 3);                                       // an oats snack: the newest oats row is NOT at breakfast
+  for (let i = 0; i < 10; i++) log('g-chicken', 2);     // the dinner staple
+  log('g-toast', 0);                                      // one breakfast, the newest row of all
+  // recency-only order (the tip): toast, chicken, oats, eggs under every chip
+  const recentFoods = new Function('db', 'findFood',
+    `${app.slice(a, b)}; return recentFoods;`)({ all: async () => rows.slice() }, id => ({ id }));
+
+  const bf = await recentFoods(8, 0);
+  assert.deepEqual(bf.map(r => r.food.id), ['g-oats', 'g-toast', 'g-eggs', 'g-chicken'],
+    `breakfast chip order is ${bf.map(r => r.food.id)}: expected the 10x breakfast staple first, then the two one-offs newest first, then the dinner-only food`);
+  assert.equal(bf[0].entry.meal, 0, 'the oats row offered at breakfast must be the last BREAKFAST log (its portion), not the newer snack');
+  const dn = await recentFoods(8, 2);
+  assert.equal(dn[0].food.id, 'g-chicken', `dinner chip ranks ${dn[0].food.id} first; recency-only order would put the newest row first`);
+  assert.deepEqual(dn.slice(1).map(r => r.food.id), ['g-toast', 'g-oats', 'g-eggs'], 'zero-count filler must fall back to recency');
+  assert.equal((await recentFoods(2, 0)).length, 2, 'limit is not honoured');
+});
+
+/* ---- QA round 24, L9: a recent is one tap, a different portion is still reachable ----
+   showDefault branched: a recent whose foodId resolved got foodRowHtml (a
+   [data-food] row into the portion sheet, 3 taps) and only a quick-add recent
+   got the one-tap [data-relog]. Runs the REAL recentRowHtml: the main tap is
+   [data-relog] for both kinds of recent, the resolvable one also carries a
+   separate [data-food] control, and no <button> nests inside another. */
+test('L9 recentRowHtml relogs on the main tap and keeps a change-portion control', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('function recentRowHtml'), b = app.indexOf('\n/* ================= portion sheet');
+  assert.ok(a > 0 && b > a, 'recentRowHtml is not in js/app.js: recents are back to the 3-tap foodRowHtml');
+  const recentRowHtml = new Function('esc', 'fmtG', 'ICONS',
+    `${app.slice(a, b)}; return recentRowHtml;`)(String, String, { chev: () => '<svg/>' });
+  const entry = { id: 'e9', name: 'Oats', portionLabel: '80 g', kcal: 300, p: 10 };
+  const rich = recentRowHtml({ entry, food: { id: 'g-oats' } });
+  const quick = recentRowHtml({ entry: { ...entry, portionLabel: '' }, food: null });
+  for (const html of [rich, quick]) {
+    assert.match(html, /<button[^>]*data-relog="e9"/, 'the main tap is not a one-tap relog');
+    assert.ok(!/<button[^>]*>(?:(?!<\/button>)[\s\S])*<button/.test(html), 'a <button> is nested inside a <button>');
+    assert.ok(html.includes('t1-med') && html.includes('300'), 'the kcal medallion is gone from the recents row');
+  }
+  assert.match(rich, /<button[^>]*data-food="g-oats"[^>]*aria-label=/, 'a resolvable recent lost its change-portion control into openPortion');
+  assert.ok(!/data-food/.test(quick), 'a quick-add recent has no food to open a portion sheet for');
+  // and the sheet actually uses it, per meal
+  assert.ok(/recentFoods\(8, curMeal\)/.test(app), 'showDefault no longer asks recentFoods for the selected meal (L4)');
+  assert.ok(/recents\.map\(recentRowHtml\)/.test(app), 'showDefault no longer renders recents through recentRowHtml');
+  assert.ok(!/if \(r\.food\) return foodRowHtml\(r\.food\)/.test(app), 'the 3-tap foodRowHtml branch for resolvable recents is back');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

@@ -141,7 +141,7 @@ ok('PICKER budget strip is filled', !!budget && /\d/.test(budget), budget || 'hi
 await shot('picker');
 
 /* ---------- 2. the portion sheet ---------- */
-await tap('.t1-frow', 'first food row');
+await tap('[data-food]', 'first food row');   // L9: the first .t1-frow is a one-tap relog row now
 await sleep(1300);
 ok('PORTION opens', await count('.t1-hero') > 0);
 const payoff = await page.evaluate(() => {

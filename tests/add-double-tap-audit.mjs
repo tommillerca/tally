@@ -51,7 +51,7 @@ await page.evaluate(() => {
 });
 await sleep(1600);
 const picked = await page.evaluate(() => {
-  const row = document.querySelector('.t1-frow, [data-food], .food-row');
+  const row = document.querySelector('[data-food], .t1-frow, .food-row');
   if (!row) return 'no-food-row';
   row.click(); return 'picked';
 });

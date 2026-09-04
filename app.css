@@ -6833,6 +6833,10 @@ body::before {
 }
 .t1-frow:first-of-type { border-top: 0; }
 .t1-frow:active { background: var(--surface-2); }
+/* L9: a recents row is a div holding the relog button and a change-portion chevron */
+.t1-sect + .t1-frow { border-top: 0; }
+.t1-frow-main { display: flex; align-items: center; gap: 11px; flex: 1; min-width: 0; text-align: left; }
+.t1-frow-split { padding-right: 2px; }
 .t1-med {
   flex: none; width: 46px; height: 46px; border-radius: 13px;
   background: var(--surface-2); border: 2px solid var(--ink); box-shadow: var(--sh-sm);

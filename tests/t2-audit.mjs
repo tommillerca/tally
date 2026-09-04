@@ -160,7 +160,7 @@ await page.evaluate(() => { location.hash = '#/today'; });
 await sleep(1700);
 await page.evaluate(() => document.getElementById('fab')?.click());
 await sleep(1400);
-await page.evaluate(() => { document.querySelector('.t1-frow')?.click(); });
+await page.evaluate(() => { document.querySelector('[data-food]')?.click(); });
 await sleep(1300);
 await page.evaluate(() => document.getElementById('addBtn')?.click());
 await sleep(4200);

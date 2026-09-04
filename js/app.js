@@ -3515,19 +3515,39 @@ async function entriesFor(date) {
   return rows.sort((a, b) => a.ts - b.ts);
 }
 
-async function recentFoods(limit = 8) {
+/* RECENTS ARE RANKED BY HOW OFTEN THE PLAYER EATS THE FOOD AT THIS MEAL
+   (QA round 24, L4). This used to be recency only, so the eight rows were
+   byte-identical under all four meal chips: on a realistic 60-day diary the
+   food the player actually wanted was in the list 23.6% of the time at
+   breakfast, 5.2% at lunch, 4.9% at dinner, and 63.2% of sheet opens showed
+   none of that meal's foods, so the player typed instead (~14,946 taps and
+   keystrokes a year). Counting the same log rows per meal lifts that to
+   93.6 / 74.0 / 45.9% with the same eight slots and no new control.
+   Rule: count of log rows for this food at `meal`, descending; ties (and the
+   zero-count filler) fall back to the most recent log. The `entry` returned is
+   the latest row AT this meal when there is one (oats at breakfast, not the
+   oats snack), else the latest overall, so the one-tap relog (L9) repeats the
+   portion the player uses at this meal. The counts come from the log itself,
+   which this function already reads in full; nothing new is stored.
+   ponytail: all-time counts, so a staple abandoned a year ago keeps its slot;
+   window the count (e.g. last 90 days) if that ever shows up in playtests. */
+async function recentFoods(limit = 8, meal = null) {
   const rows = await db.all('log');
   rows.sort((a, b) => b.ts - a.ts);
-  const seen = new Set(); const out = [];
+  const by = new Map(); // key -> { entry, n: rows at this meal, last: newest ts }
   for (const r of rows) {
     const key = r.foodId || r.name;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const food = r.foodId ? findFood(r.foodId) : null;
-    out.push({ entry: r, food });
-    if (out.length >= limit) break;
+    let g = by.get(key);
+    if (!g) { g = { entry: r, n: 0, last: r.ts, atMeal: false }; by.set(key, g); }
+    if (meal == null || r.meal === meal) {
+      g.n++;
+      if (!g.atMeal) { g.entry = r; g.atMeal = true; }
+    }
   }
-  return out;
+  return [...by.values()]
+    .sort((a, b) => b.n - a.n || b.last - a.last)
+    .slice(0, limit)
+    .map(g => ({ entry: g.entry, food: g.entry.foodId ? findFood(g.entry.foodId) : null }));
 }
 
 function defaultSel(food) {
@@ -7669,6 +7689,9 @@ function openAdd(meal = 0) {
   $$('#mealChips button', wrap).forEach(c => c.addEventListener('click', () => {
     curMeal = Number(c.dataset.meal);
     $$('#mealChips button', wrap).forEach(x => x.classList.toggle('on', x === c));
+    // L4: the recents are ranked per meal, so a chip change re-ranks them
+    // (only while the default list is showing; a live search is left alone).
+    if (!input.value.trim()) showDefault();
   }));
   $('#actScan', wrap).addEventListener('click', () => openScanner(() => curMeal));
   $('#actLabel', wrap).addEventListener('click', () => openLabelFlow(() => curMeal));
@@ -7678,17 +7701,13 @@ function openAdd(meal = 0) {
   const input = $('#q', wrap);
 
   async function showDefault() {
-    const recents = await recentFoods(8);
+    const recents = await recentFoods(8, curMeal);   // L4: ranked for the chip that is on
     const favs = allSearchableFoods().filter(f => f.favorite).slice(0, 6);
     let html = '';
     if (recents.length) {
-      html += t1Sect('Log it again') + recents.map(r => {
-        if (r.food) return foodRowHtml(r.food);
-        return `<button class="t1-frow" data-relog="${r.entry.id}">
-          <span class="t1-med"><b>${Math.round(r.entry.kcal)}</b><small>KCAL</small></span>
-          <span class="nm"><b>${esc(r.entry.name)}</b><small>${esc(r.entry.portionLabel || 'quick add')}</small></span>
-          ${r.entry.p ? `<span class="pg"><b>${fmtG(r.entry.p)}g</b><small>PROTEIN</small></span>` : ''}</button>`;
-      }).join('');
+      /* L9: every recent is a one-tap relog now (recentRowHtml), not only the
+         quick-add ones; a resolvable food used to route to openPortion (3 taps). */
+      html += t1Sect('Log it again') + recents.map(recentRowHtml).join('');
     }
     if (favs.length) html += t1Sect('Favorites') + favs.map(foodRowHtml).join('');
     if (!html) html = `<p class="note" style="text-align:center;padding:26px 20px">Search ${GENERIC_FOODS.length}+ built-in foods, or scan a barcode to add packaged food in seconds.</p>`;
@@ -7784,6 +7803,28 @@ function foodRowHtml(f) {
     <span class="nm"><b>${esc(f.name)}</b><small>${esc(foodSubtitle(f))}</small></span>
     ${n && n.p ? `<span class="pg"><b>${fmtG(n.p)}g</b><small>PROTEIN</small></span>` : ''}
   </button>`;
+}
+
+/* ONE TAP RELOGS A RECENT AT THE PORTION LAST USED, A SECOND CONTROL CHANGES IT
+   (QA round 24, L9). showDefault used to branch: a recent whose foodId still
+   resolves rendered foodRowHtml (a data-food row into openPortion, then Add:
+   3 taps), and only a quick-add recent got the one-tap [data-relog]. Both
+   mechanisms shipped; the common case just got the slow one. Now the row's
+   main tap is [data-relog] for every recent (the entry carries the exact
+   portion, kcal and macros of the last log at this meal, which is the
+   remembered portion), and a resolvable food adds a small [data-food] chevron
+   that opens the portion sheet for a different amount. Both handlers already
+   exist in bindRows. Not a <button> around a <button>: the row is a div. */
+function recentRowHtml(r) {
+  const e = r.entry;
+  return `<div class="t1-frow t1-frow-split">
+    <button class="t1-frow-main" data-relog="${esc(e.id)}">
+      <span class="t1-med"><b>${Math.round(e.kcal)}</b><small>KCAL</small></span>
+      <span class="nm"><b>${esc(e.name)}</b><small>${esc(e.portionLabel || 'quick add')}</small></span>
+      ${e.p ? `<span class="pg"><b>${fmtG(e.p)}g</b><small>PROTEIN</small></span>` : ''}
+    </button>
+    ${r.food ? `<button class="t1-icon-btn" data-food="${esc(r.food.id)}" aria-label="Change portion">${ICONS.chev(16)}</button>` : ''}
+  </div>`;
 }
 
 /* ================= portion sheet ================= */
