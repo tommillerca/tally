@@ -3129,7 +3129,9 @@ function route({ keepScroll = false } = {}) {
   // than leaving the bar with nothing selected.
   const navTab = tab === 'shop' ? 'bonehead' : tab;
   $$('#tabbar .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === navTab));
-  refreshCrateBadge(); // fire-and-forget: every nav/refresh re-reads the crate count
+  // fire-and-forget: every nav/refresh re-reads the crate count, except Today,
+  // where renderToday sets it from the inv rows it already holds (QA round 28 G3)
+  if (tab !== 'today') refreshCrateBadge();
   // Redundant on Settings itself, and the Boneyard is full-bleed map.
   const gear = $('#gearBtn');
   // Today carries its own gear in the day strip, so the floating one stays out
@@ -3646,7 +3648,18 @@ async function renderToday(el) {
   const yEntries = await entriesFor(addDays(S.date, -1));
   const allLog = await db.all('log');
   const streak = streakFrom([...new Set(allLog.map(e => e.date))], dateKey());
-  const xp = await totalXp();
+  /* ONE READ PER STORE PER DRAW (QA round 28 G3). M13 stopped renderToday's own
+     body re-reading log/xp/health, and tests/today-reads-lint.mjs graded that
+     body; the screen a player opens still paid three whole-inv scans from
+     OUTSIDE it (unopenedCrates here, ownedGearIds below, and route()'s
+     refreshCrateBadge in the same tick), a second xp scan in routinesDone and
+     totalXp's rebuild, and a health scan in hkStaleInfo. The xp and inv rows are
+     read here, once, and handed to every reader below; the lint now grades the
+     whole draw (every function this one calls in the tick) at exactly one scan
+     per store. Same rows, same snapshot, same screen. */
+  const allXp = await db.all('xp');
+  const inv = await db.all('inv');
+  const xp = allXp.reduce((a, r) => a + (r.xp || 0), 0);   // the same sum totalXp keeps, off the rows in hand
   const lvl = levelFor(xp);
   const hk = await db.get('health', S.date);
   // extra-active days earn calories back: measured active energy ABOVE what your
@@ -3667,12 +3680,12 @@ async function renderToday(el) {
   const newsSeen = new Set(await kvGet('newsSeen', []));
   const newsUnseen = NEWS.filter(n => !newsSeen.has(n.id)).length;
   const [coinBal, dustBal, pitEnergy] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
-  const crates = await unopenedCrates();
-  const allXp = await db.all('xp');
+  const crates = await unopenedCrates(inv);
+  setCrateBadge(crates.length);   // route() skips refreshCrateBadge on Today: this is the same count off the same rows (G3)
   const huntEnabled = !!(await kvGet('hunt-enabled'));
   const wellness = S.date === dateKey() ? await getWellness(S.date) : null;
   const routines = wellness ? await getRoutines() : [];
-  const routinesDoneToday = wellness ? await routinesDone(S.date) : new Set();
+  const routinesDoneToday = wellness ? await routinesDone(S.date, allXp) : new Set();
   // Manual "Add a walk" is only for players whose phone is NOT counting for
   // them; with Health connected the walk row would double-ask for data the
   // sync already has. null = hide the row entirely.
@@ -3766,7 +3779,7 @@ async function renderToday(el) {
      reading inv for ownedGearIds while this same line read inv for the same
      set, then reading xp a second time for the level. Hand it the rows in hand.
      Same rows, same snapshot, same fighter; only the duplicate scans go. */
-  const unlockGear = await ownedGearIds();
+  const unlockGear = await ownedGearIds(inv);
   const unlockFighter = await buildFighter({ log: allLog, xpRows: allXp, health: healthRows, gOwned: unlockGear });
   const unlocks = computeHomeUnlocks({
     fighter: unlockFighter, level: lvl.level, coinBal, dustBal,
@@ -3774,7 +3787,7 @@ async function renderToday(el) {
     fightWins: allXp.filter(r => r.type === 'fight').length,
   });
   const pitAttn = unlocks.some(u => u.hero === 'pit');
-  const hkStale = await hkStaleInfo();
+  const hkStale = await hkStaleInfo(healthRows);
   if (hkStale && !(await kvGet('hkStaleNotified', false))) {
     await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
     notifyNow('Steps stopped syncing', 'Apple Health has gone quiet. Your walking is not counting. Open Boneheadz and tap the banner to fix it.', 'any').catch(() => {});
@@ -16736,12 +16749,12 @@ async function openCrateReveal(result) {
 // burned). Every successful steps ingest stamps hkLastSync; the home screen shows a
 // fix-it banner + fires one notification when the stamp goes stale while connected.
 const HK_STALE_MS = 36 * 3600e3;
-async function hkStaleInfo() {
+async function hkStaleInfo(healthRows = null) {   // `healthRows`: pre-read rows, QA round 28 G3
   if (!S.settings.hkConnected) return null;
   let last = await kvGet('hkLastSync', null);
   if (!last) {
     // pre-watchdog installs: seed from the newest day that has steps
-    const latest = (await db.all('health')).filter(r => r.steps != null).map(r => r.date).sort().pop();
+    const latest = (healthRows || await db.all('health')).filter(r => r.steps != null).map(r => r.date).sort().pop();
     if (!latest) return null;
     last = Date.parse(latest) + 24 * 3600e3;
     await kvSet('hkLastSync', last);

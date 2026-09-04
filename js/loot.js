@@ -793,8 +793,10 @@ export async function grantCosmetic(itemId, source) {
   return row;
 }
 
-export async function ownedGearIds() {
-  const inv = await db.all('inv');
+/* `inv` (QA round 28 G3): a caller holding the inv rows already (renderToday
+   reads them once per draw) hands them in; a bare call scans as before. */
+export async function ownedGearIds(inv) {
+  inv = inv || await db.all('inv');
   return new Set(inv.filter(r => r.kind === 'gear').map(r => r.gearId));
 }
 
@@ -1684,8 +1686,8 @@ export async function consumeConsumable(type) {
   return true;
 }
 
-export async function unopenedCrates() {
-  return (await inventory()).filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
+export async function unopenedCrates(inv) {   // `inv`: pre-read rows, QA round 28 G3 (see ownedGearIds)
+  return (inv || await inventory()).filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
 }
 
 /* ---------- crate rolling ---------- */
