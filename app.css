@@ -4413,6 +4413,14 @@ body::before {
 .ward-cell.gear.locked img, .ward-cell.gear.locked canvas { filter: grayscale(0.85) brightness(0.55); }
 /* previewing a piece for inspect: blue highlight, distinct from green "equipped" */
 .ward-cell.selected { outline: 2px solid var(--protein); outline-offset: 1px; box-shadow: 0 0 12px rgba(124, 196, 255, 0.5); }
+/* KEYBOARD FOCUS MUST SURVIVE SELECTION (QA round 22 W12). .ward-cell.selected
+   (0,2,0) beat the global :focus-visible (0,1,0), so a focused selected tile
+   computed the identical 2px blue ring as an unfocused one. Three simple
+   selectors, honestly, rather than !important. */
+.ward-cell.selected:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* the armed state of a fit tile that would take statted gear off (QA round 22
+   W5): armToConfirm swaps the art for the consequence, in the app's arm gold */
+.ward-cell.arming { color: var(--gold); border-color: var(--gold); text-align: center; padding: 4px; }
 /* the inspect panel: full stats + what the ⚡ ability actually does */
 .gear-inspect {
   display: grid; grid-template-columns: 62px 1fr; gap: 10px 12px; margin: 12px 2px 4px;
@@ -5863,6 +5871,9 @@ body::before {
   display: flex; align-items: center; gap: 3px; padding: 2px 5px; font-size: 10px; line-height: 16px;
 }
 .ward-cell.look .look-cost.dust::after { content: none; }
+/* "owned" is a receipt, not a price: same chip, a different ground (QA round 22
+   W12 measured the two backgrounds at 1.00:1). Mint is the app's paid/done tint. */
+.ward-cell.look .look-cost.paid { background: var(--mint); color: var(--accent-ink); }
 .ward-cell.look .look-cost.dust img, .ward-cell.look .look-cost.dust svg {
   position: static; inset: auto; flex: none; object-fit: contain;
 }
@@ -5892,7 +5903,7 @@ body::before {
 .mog-lines em img, .mog-lines em svg { flex: none; }
 /* .btn is width:100%, and .look-bar's flex:none does NOT undo that: the
    shipped v1 bar has the button lying across its own status text. */
-.look-bar.mog-bar .btn.mog-go { width: auto; flex: none; padding: 10px 15px; font-size: 13.5px; }
+.look-bar.mog-bar .btn.mog-go { width: auto; flex: none; padding: 10px 15px; font-size: 13.5px; min-height: 44px; }
 .mog-safe { text-align: center; margin-top: 8px; }
 /* THE COMMIT COMES TO THE THUMB (QA round 23 F3). 23 commits in the app spend a
    currency; 21 arm the control under the thumb, and this one, the cheapest of
@@ -5942,7 +5953,7 @@ body::before {
 .fit-rail::-webkit-scrollbar { display: none; }
 .fit-chip {
   position: relative; flex: none; display: flex; align-items: center; gap: 7px;
-  padding: 8px 12px; border-radius: 12px;
+  padding: 8px 12px; border-radius: 12px; min-height: 44px;
   background: var(--surface-2); border: 1.5px solid var(--line);
   font-size: 12.5px; font-weight: 700; color: var(--text-2); white-space: nowrap;
 }
@@ -10851,7 +10862,7 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    of the section it is labelling, which is exactly what this must not be. It is
    a link with a hit area. margin-left:auto matches .sect-h .spin above. */
 .gd-what {
-  margin-left: auto; flex: none;
+  margin-left: auto; flex: none; min-height: 44px;
   padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: none;
   font: inherit; font-size: 11px; letter-spacing: 0.04em; text-transform: none;
   color: var(--text-3); cursor: pointer;

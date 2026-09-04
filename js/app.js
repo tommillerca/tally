@@ -3114,6 +3114,16 @@ function routeFromHash() {
 function route({ keepScroll = false } = {}) {
   // refresh() passes keepScroll: an in-place re-render, not a navigation
   const isNav = !keepScroll;
+  /* AN UNCOMMITTED PREVIEW MUST NOT FOLLOW THE PLAYER OUT AND BACK IN (QA round
+     22 W4). S.lookPreview is set by a look tap, drawn by the Wardrobe's stage and
+     cleared only on the commit and cancel paths, so a hub tab switch (Backpack,
+     then Wardrobe) or a hash change reopened the same slot with the preview art
+     still on the doll, captioned "After", bar armed: the screen said the player
+     owned a look they had not paid for. Every navigation funnels through here
+     (openCharacter either calls route() or sets the hash, which routes), so this
+     is the one clear point. Gated on isNav: refresh() is an in-place re-render,
+     not the player leaving. */
+  if (isNav) S.lookPreview = null;
   closeAllSheets();
   /* BEFORE the teardown, not after: screenCleanup is what rips the live map out
      of the DOM, so the paint has to be taken out of its reach first. When a hold
@@ -14956,7 +14966,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
         <div class="ward-grid look-grid">
           ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
           ${cell(TRANSMOG_HIDE, '<span class="look-hide">🚫</span><span class="look-tag">Hide</span>', 'Show nothing in this slot')}
-          ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost">${lookPriceMap[i.id]}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
+          ${/* costTag, not a bare number: the price carries the dust unit the same
+                way as the v2 panel's tiles (QA round 22 W13b) */''}
+          ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${costTag(i.id)}`, i.name)).join('')}
         </div>
         <div class="look-bar${changed ? ' armed' : ''}">
           <span class="lb-txt">${changed ? 'Trying' : 'Wearing'}: <b>${esc(nameOf(sel))}</b></span>
@@ -15051,19 +15063,56 @@ async function renderCharacter(wrap, tab, opts = {}) {
        (Tom, 2026-08-11: "they should be a larger size so you can see what you
        are transmogging"). Same trim as the doll slots. */
     hydratePackArt(content, '.pd-art[data-art], .ward-art[data-art]');
-    const wirePd = b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); });
+    const wirePd = b => b.addEventListener('click', async () => {
+      S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null;
+      await renderCharacter(wrap, 'wardrobe', { instant: true });
+      /* ARRIVE AT THE DRESSING ROOM (QA round 22 W13c). Measured on arrival at
+         375x667: scrollTop 0, .mog-panel top at 1147px, 0.000 of it visible, and
+         the only scrollIntoView on this screen went to the GEAR card. The F3 dock
+         keeps the bar reachable; this is about the panel the tap just opened.
+         'nearest' scrolls nothing when it is already in frame. Empty slot: no
+         panel, nothing moves. */
+      $('.mog-panel', wrap)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' });
+    });
     $$('[data-pd]', content).forEach(wirePd);
-    $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
+    /* A PICTURE THAT TAKES STATTED GEAR OFF ARMS FIRST (QA round 22 W5). Measured
+       blind: one click on a .ward-cell in this grid dropped loadout.H, said nothing
+       (#toast empty at 120/300/600ms) and left the stat chips reading the OLD
+       numbers (MARROW 58 +4 over a fighter at 54) until a forced re-render: -4
+       MAR, -2 HYP, -1 talent for a tap on a picture. equip() drops the statted
+       piece by design (loot.js), so the gating belongs here, and it ran
+       backwards: melt and a 12-dust look both arm-then-confirm, this did not.
+       The arm label names the consequence, gear and stats, the way the strip chip
+       names the gear. wornGear is this render's read of the slot and every path
+       that changes gear re-renders, so it is current. A tap that displaces
+       nothing stays one tap: a confirm on a free swap is friction. */
+    const doEquip = async cell => {
       await equip(slot, cell.dataset.equip || null);
       S.lookPreview = null;
       popSound(S.sounds); pushProfileSoon();
+      /* GEAR CAME OFF, so this is a gear change and takes the gear path, the
+         full render equipGear and the melt button use: the stat chips, the
+         inspect card, the Dressing Room's lead and every quoted price
+         (transmogPrice reads the slot's gear) all moved. restageWardrobe repaints
+         the doll and the rings only, which is what left the stale chips up. */
+      if (wornGear) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
       // Update IN PLACE. This used to call renderCharacter(), which rebuilt the
       // whole screen for one garment: every image element in every cell was
       // destroyed and re-created, so each tap flashed the entire page. Only two
       // things actually change when you equip something, so only those two move.
       const done = await restageWardrobe(content, slot);
       if (!done) renderCharacter(wrap, 'wardrobe', { instant: true });   // fall back rather than leave it stale
-    }));
+    };
+    $$('[data-equip]', content).forEach(cell => {
+      if (!wornGear) { cell.addEventListener('click', () => doEquip(cell)); return; }
+      /* armToConfirm relabels the tile with innerHTML, and its cool-off restores
+         the markup but not the pixels: a <canvas> comes back blank. Listener
+         order is registration order, so this runs on the same tap and redraws
+         the art once the cool-off has put the canvas back. A confirmed tap
+         re-renders the screen and the cell is gone, so it is a no-op there. */
+      cell.addEventListener('click', () => setTimeout(() => { if (cell.isConnected) hydratePackArt(cell, '.ward-art[data-art]'); }, ARM_COOLOFF_MS + 20));
+      armToConfirm(cell, `Tap again: takes off ${wornGear.name}, ${gearLabel(wornGear).replace(/\+/g, '-')}`, () => doEquip(cell));
+    });
     /* A LOOK TAP MOVES FOUR THINGS AND REBUILDS NOTHING (QA round 23 F1).
        Preview and commit used to call renderCharacter(wrap, 'wardrobe',
        { instant: true }). That rebuilds #chBody, so #chContent held ZERO elements
@@ -15135,6 +15184,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
         return;
       }
       S.lookPreview = null;
+      /* THE BAR DISARMS IN THE SAME TICK AS THE RECEIPT (QA round 22 W13a).
+         restageLook re-reads the map and decodes the doll (up to 450ms) before it
+         rebuilds the bar, and armToConfirm restores the button's label the moment
+         onConfirm resolves, so after a successful commit the bar sat .armed with
+         a live "Wear it" until the restage landed. Nothing to buy in that window
+         (paid-once), but the player could not tell the purchase went through. */
+      $('.mog-bar', content)?.classList.remove('armed');
+      btn.disabled = true;
       levelSound(S.sounds); pushProfileSoon();
       toast(res.cost ? `Look changed. −${res.cost} dust.` : 'Look changed.', 2000);
       restageLook({ committed: true });
