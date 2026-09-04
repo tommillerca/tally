@@ -431,6 +431,7 @@ const HELPERS = new Set([
   'godmode.js',        // the harness: boot, seed, serveTree
   'fight-sim.mjs',     // a sim library balance.mjs drives; no assertions of its own
   'badge-centre-lib.mjs', // the badge measurement badge-centre-audit.mjs drives; no assertions of its own
+  'mem-idb.mjs',       // the in-memory IndexedDB four PURE audits import; installs a global, asserts nothing (gate7 coverage red, 2026-09-04)
 ]);
 const onDisk = (await readdir(here))
   .filter(f => /\.(mjs|js)$/.test(f) && !HELPERS.has(f))
