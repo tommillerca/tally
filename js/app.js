@@ -1786,11 +1786,9 @@ function openSpireIntro() {
       <button class="drop-cta" id="spireIntroGo">FIND A SPIRE</button>
       <button class="drop-later" id="spireIntroLater">Maybe later</button>
     </div>`;
-  document.body.appendChild(veil);
-  const close = () => veil.remove();
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   $('#spireIntroLater', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
-  $('#spireIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/boneyard'; });
+  $('#spireIntroGo', veil).addEventListener('click', () => { close(); setTimeout(() => { location.hash = '#/boneyard'; }, 220); });   // after the popstate has popped the veil, same 220 as spireAct
 }
 
 /* THE BESTIARY ANNOUNCEMENT (2026-08-09).
@@ -1827,11 +1825,9 @@ function openMageIntro() {
       <button class="drop-cta" id="mageGo">FIND HIS VAULT</button>
       <button class="drop-later" id="mageLater">Not now</button>
     </div>`;
-  document.body.appendChild(veil);
-  const close = () => veil.remove();
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   $('#mageLater', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
-  $('#mageGo', veil).addEventListener('click', () => { close(); location.hash = '#/boneyard'; });
+  $('#mageGo', veil).addEventListener('click', () => { close(); setTimeout(() => { location.hash = '#/boneyard'; }, 220); });   // after the popstate has popped the veil, same 220 as spireAct
 }
 if (typeof window !== 'undefined' && navigator.webdriver) window.__mageIntro = openMageIntro;
 if (typeof window !== 'undefined' && navigator.webdriver) window.__todayRow = day => bestiaryBannerHtml(remoteDen(day));
@@ -1880,12 +1876,10 @@ function openBossIntro() {
       <button class="drop-cta" id="bossIntroGo">GO HUNTING</button>
       <button class="drop-later" id="bossIntroLater">Not now</button>
     </div>`;
-  document.body.appendChild(veil);
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   composeAvatars(veil);
-  const close = () => veil.remove();
   $('#bossIntroLater', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
-  $('#bossIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/boneyard'; });
+  $('#bossIntroGo', veil).addEventListener('click', () => { close(); setTimeout(() => { location.hash = '#/boneyard'; }, 220); });   // after the popstate has popped the veil, same 220 as spireAct
 }
 if (typeof window !== 'undefined' && navigator.webdriver) window.__bossIntro = openBossIntro;
 
@@ -1928,12 +1922,10 @@ function openRaceIntro() {
       <button class="drop-cta" id="raceIntroGo">SEE THE BOARD</button>
       <button class="drop-later" id="raceIntroLater">Not now</button>
     </div>`;
-  document.body.appendChild(veil);
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   composeAvatars(veil);
-  const close = () => veil.remove();
   $('#raceIntroLater', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
-  $('#raceIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/friends'; });
+  $('#raceIntroGo', veil).addEventListener('click', () => { close(); setTimeout(() => { location.hash = '#/friends'; }, 220); });   // after the popstate has popped the veil, same 220 as spireAct
 }
 
 /* ======================= THE RESULTS, AFTER IT SETTLES =======================
@@ -2161,10 +2153,8 @@ async function openCommunityCard() {
       <button class="drop-later dc-close" id="communityLater">Not right now</button>
       <p class="note" style="text-align:center;margin:10px 0 0">The invite also lives in <b>News</b> and <b>Settings</b>, whenever you are ready.</p>
     </div>`;
-  document.body.appendChild(veil);
-  const close = () => veil.remove();
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   $('#communityLater', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
   // the join is an <a> so the OS handles it (app or browser); the card closes
   // behind it so returning players are not stuck under a stale veil
   $('#communityGo', veil).addEventListener('click', () => {
@@ -2247,10 +2237,8 @@ async function openThanksCard() {
       <p class="note bt-url" style="text-align:center;margin:10px 0 0">or copy it yourself: <a href="${TESTFLIGHT_URL}" target="_blank" rel="noopener" id="thanksLink">testflight.apple.com/join/rtZ6Uyxc</a></p>
       <button class="drop-later dc-close" id="thanksClose">Close</button>
     </div>`;
-  document.body.appendChild(veil);
-  const close = () => veil.remove();
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   $('#thanksClose', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
   /* The same share path the friend code already uses: the OS sheet when there
      is one, clipboard when there is not, the raw string when even that is
      refused. Nothing new invented for a link. */
@@ -2390,20 +2378,19 @@ function openGardenPopup() {
       <button class="drop-cta" id="gardenSeeBtn">SEE THE GARDEN</button>
       <button class="drop-later" id="gardenLaterBtn">Maybe later</button>
     </div>`;
-  document.body.appendChild(veil);
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   /* WHY THESE FOUR ROWS. Only a fraction of players have ever reached the garden
      and nothing recorded which half of the funnel loses them: never shown the card,
      or shown it and said no. shown / suppressed / cta / later answer exactly that,
      on the same anonymous pipe as every other event. */
   trackEvent('garden_intro_shown');
-  const close = () => veil.remove();
   $('#gardenLaterBtn', veil).addEventListener('click', () => { trackEvent('garden_intro_later'); close(); });
-  veil.addEventListener('click', e => { if (e.target === veil) { trackEvent('garden_intro_later', { tap: 'veil' }); close(); } });
+  veil.addEventListener('click', e => { if (e.target === veil) trackEvent('garden_intro_later', { tap: 'veil' }); });   // the close itself is openVeil's
   $('#gardenSeeBtn', veil).addEventListener('click', async () => {
     trackEvent('garden_intro_cta');
     await kvSet(GARDEN_SEEN_KEY, 99);   // they took the tour: the popup's job is done
     close();
-    openHollow(() => refresh());
+    setTimeout(() => openHollow(() => refresh()), 220);   // after the popstate has popped the veil
   });
 }
 
@@ -2455,14 +2442,12 @@ function openDropPopup() {
       <button class="drop-cta" id="dropSeeBtn">SEE THE DROP</button>
       <button class="drop-later" id="dropLaterBtn">Maybe later</button>
     </div>`;
-  document.body.appendChild(veil);
-  const close = () => veil.remove();
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   $('#dropLaterBtn', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
   $('#dropSeeBtn', veil).addEventListener('click', async () => {
     await kvSet(DROP_SEEN_KEY, 99);   // they took the tour: the popup's job is done
     close();
-    openCharacter('shop');
+    setTimeout(() => openCharacter('shop'), 220);   // after the popstate has popped the veil
   });
   composeAvatars(veil);
 }
@@ -3419,6 +3404,30 @@ function closeAllSheets() {
   while (sheetStack.length) closeTopSheet();
 }
 window.addEventListener('popstate', () => { if (sheetStack.length) closeTopSheet(); });
+
+/* A VEIL POSTER IS A MODAL, SO IT RIDES THE SHEET STACK. QA round 26 O1:
+   Today -> News -> "Dark Spires" opened a full-screen .drop-veil OUTSIDE the
+   stack. Escape did nothing, history.back() did nothing, it survived two route
+   changes and still covered the tab bar over a different screen; only its own
+   buttons removed it. The same shape repeated in all eight posters (spire, mage,
+   boss, race, discord, thanks, garden, drop). The three "is a modal open" checks
+   already treat .drop-veil as equal to the stack; it just never lived in the
+   stack that back pops. So every poster opens through here: the record rides
+   sheetStack exactly like a sheet (pushState here; Escape, popstate and
+   route() -> closeAllSheets all pop it through closeTopSheet, which removes a
+   wrap with no .sheet inside at once). The bare-veil tap closes it, same as a
+   sheet backdrop. Returns the close, which goes through history like a sheet's
+   Done button so the history stack stays in step, and only while this poster
+   is still on top: a CTA that already closed it must not pop what came next. */
+function openVeil(veil) {
+  document.body.appendChild(veil);
+  const rec = { wrap: veil };
+  sheetStack.push(rec);
+  history.pushState({ sheet: sheetStack.length }, '');
+  const close = () => { if (sheetStack[sheetStack.length - 1] === rec) history.back(); };
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  return close;
+}
 
 /* PRESS AND HOLD A DRESSED PET TO SEE WHAT SHE IS WEARING.
  *
@@ -6082,12 +6091,24 @@ async function openGluttonSheet() {
   const onBeaten = () => healCleansed();
   addEventListener('bh-glutton-beaten', onBeaten);
   // the sheet outlives the listener otherwise: stop leaking one per open
-  const mo = new MutationObserver(() => { if (!wrap.isConnected) { removeEventListener('bh-glutton-beaten', onBeaten); mo.disconnect(); } });
-  mo.observe(document.getElementById('sheets'), { childList: true });
   // coming back to a backgrounded app, or back from any pushed sheet, re-checks
-  document.addEventListener('visibilitychange', async () => {
+  const onVisible = async () => {
     if (!document.hidden && wrap.isConnected && await gluttonBeaten(slot)) healCleansed();
+  };
+  document.addEventListener('visibilitychange', onVisible);
+  /* QA round 26 O6: the visibilitychange listener above was an anonymous closure
+     over `wrap`, added per open and never removed, so every Glutton sheet ever
+     opened stayed pinned by document (+4.47 listeners, +73 nodes per open, linear
+     over 30 opens). The observer below was written for exactly this leak and
+     already reaped onBeaten; it reaps both now. */
+  const mo = new MutationObserver(() => {
+    if (!wrap.isConnected) {
+      removeEventListener('bh-glutton-beaten', onBeaten);
+      document.removeEventListener('visibilitychange', onVisible);
+      mo.disconnect();
+    }
   });
+  mo.observe(document.getElementById('sheets'), { childList: true });
 
   $('#gluttonFight', wrap)?.addEventListener('click', async () => {
     // last line of defence: the ledger, read at the moment of the tap
@@ -12924,11 +12945,17 @@ async function openWhatsNew() {
     closeAllSheetsViaHistory();
     setTimeout(() => {
       n.open();
-      let waited = 0;
+      let waited = 0, gone = false;
       const back = setInterval(() => {
         waited += 300;
         const stillOpen = document.querySelector('.drop-veil') || document.querySelector('.tz-pop');
         if (stillOpen) return;
+        /* QA round 26 O1: a poster now closes through history.back() and its CTA
+           navigates 220ms AFTER that (hash, Hollow, shop), so the first tick that
+           sees no veil can land before the hash or the stack has moved and this
+           would re-open What's New only for route() to tear it down, or under the
+           Hollow. One more tick (300 > 220) and the CTA's destination is in place. */
+        if (!gone) { gone = true; return; }
         clearInterval(back);
         if (location.hash !== cameFrom) return;   // it took them somewhere deliberately
         /* AND A SHEET COUNTS AS "SOMEWHERE" TOO. This watched for a VEIL closing
@@ -21573,7 +21600,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
         </div>`;
       document.body.appendChild(vs);
       setTimeout(() => hitSound(S.sounds, 'thud'), 430);
-      setTimeout(() => { vs.style.opacity = '0'; vs.style.transition = 'opacity .25s'; }, 1150);
+      /* QA round 26 O12: the card kept pointer-events auto through its fade and
+         swallowed every tap for 1,391 ms after FIGHT, still at opacity 0.010 and
+         at 0 (29/29 samples). Taps go through to the fight controls from the
+         moment the fade starts; the card is only paint from here on. */
+      setTimeout(() => { vs.style.pointerEvents = 'none'; vs.style.opacity = '0'; vs.style.transition = 'opacity .25s'; }, 1150);
       setTimeout(() => vs.remove(), 1420);
     }
   }

@@ -93,6 +93,38 @@ const exit = await state();
 ok('EXIT closing it leaves no stale sheet behind', exit.sheets === 0, JSON.stringify(exit));
 ok('EXIT and the player is back on the tab they started from', exit.hash === opened.hash, `${exit.hash} vs ${opened.hash}`);
 
+/* QA ROUND 26 O1: THE POSTER IS A TRAP. Today -> News -> "Dark Spires" opened a
+   .drop-veil OUTSIDE the sheet stack: Escape did nothing, history.back() did
+   nothing, two route changes left it covering the tab bar. openVeil now puts
+   every poster on sheetStack, so the same back that closes a sheet closes it.
+   PROVE-RED: on main (bare document.body.appendChild(veil), no stack record)
+   BACK-VEIL fails with veil=true and BACK-TABBAR fails because elementFromPoint
+   over the Today tab returns the veil. Written 2026-09-04 on a static-only
+   machine; not yet run. */
+await page.evaluate(() => document.getElementById('crewWhatsNew')?.click());
+await sleep(1400);
+await page.evaluate(() => document.querySelector('[data-wntab="news"]')?.click());
+await sleep(600);
+const spireRow = await page.evaluate(() => { const r = document.querySelector('[data-news="spire"]'); if (!r) return false; r.click(); return true; });
+ok('SETUP the Dark Spires story is listed and tappable', spireRow, '');
+await sleep(1600);
+const spireOpen = await state();
+ok('SETUP the Dark Spires poster opened', spireOpen.veil, JSON.stringify(spireOpen));
+await page.evaluate(() => history.back());
+await sleep(700);
+const afterBack = await page.evaluate(() => {
+  const tab = document.querySelector('#tabbar .tab');
+  const r = tab?.getBoundingClientRect();
+  const hit = r ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+  return { veil: !!document.querySelector('.drop-veil'), hitInTabbar: !!(hit && hit.closest('#tabbar')), hit: hit ? (hit.className || hit.tagName) : null, hash: location.hash };
+});
+ok('BACK-VEIL history.back() closes the poster: no .drop-veil left in the DOM', !afterBack.veil, JSON.stringify(afterBack));
+ok('BACK-TABBAR and the tab bar under it is hit-testable again', afterBack.hitInTabbar, `elementFromPoint over the first tab = ${afterBack.hit}`);
+// the "put them back on News" poll re-opens What's New once the poster goes; close it so the run ends clean
+await sleep(1200);
+await page.evaluate(() => document.querySelector('#sheets > div:last-child .sheet-close')?.click());
+await sleep(800);
+
 console.log(`\n${fails.length ? `${fails.length} FAILED` : 'ALL PASS'}`);
 await browser.close();
 srv?.close();
