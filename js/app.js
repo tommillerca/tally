@@ -10415,23 +10415,32 @@ function crewCardHtml(f) {
   </button>`;
 }
 
+/* THE SERVER BOUNDS EVERY BUCKET AND SAYS SO. GET /friends caps friends,
+   incoming and outgoing at 100 rows each and returns `truncated: { friends,
+   incoming, outgoing }`. That flag was added server-side on 2026-09-03 and
+   nothing read it; at 100+ friends the count stated a false number as fact.
+   A capped list reads `100+` (the bucket length, never a hardcoded cap) and
+   carries one line saying what is shown. */
+function crewCount(list, truncated) { return `${list.length}${truncated ? '+' : ''}`; }
+function crewTruncText(list, what) { return `Showing your ${list.length} most recent ${what}.`; }
+
 // Requests only: the Crew itself lives in the fan now. Incoming first (it has
 // the action on it), pending after.
 function requestRowsHtml(data) {
-  const { incoming, outgoing } = data;
+  const { incoming, outgoing, truncated = {} } = data;
   let h = '';
-  if (incoming.length) h += `<div class="fl-sect"><div class="fl-h">Wants to be friends</div>${incoming.map(f => `
+  if (incoming.length) h += `<div class="fl-sect"><div class="fl-h">Wants to be friends · ${crewCount(incoming, truncated.incoming)}</div>${incoming.map(f => `
     <div class="fl-row">
       ${friendRowAvatar(f)}
       <div class="fl-main"><b>${nameWithAlias(f)}</b><span>${f.profile ? 'Lv ' + f.profile.level : 'New Bonehead'}</span></div>
       <div class="fl-actions"><button class="btn small" data-accept="${esc(f.playerId)}">Accept</button><button class="btn small ghost" data-remove="${esc(f.playerId)}">Ignore</button></div>
-    </div>`).join('')}</div>`;
-  if (outgoing.length) h += `<div class="fl-sect"><div class="fl-h">Pending</div>${outgoing.map(f => `
+    </div>`).join('')}${truncated.incoming ? `<p class="note">${crewTruncText(incoming, 'requests')}</p>` : ''}</div>`;
+  if (outgoing.length) h += `<div class="fl-sect"><div class="fl-h">Pending · ${crewCount(outgoing, truncated.outgoing)}</div>${outgoing.map(f => `
     <div class="fl-row">
       ${friendRowAvatar(f)}
       <div class="fl-main"><b>${nameWithAlias(f)}</b><span>Waiting for them to add you back</span></div>
       <button class="btn small ghost" data-remove="${esc(f.playerId)}">Cancel</button>
-    </div>`).join('')}</div>`;
+    </div>`).join('')}${truncated.outgoing ? `<p class="note">${crewTruncText(outgoing, 'requests')}</p>` : ''}</div>`;
   return h;
 }
 
@@ -10513,6 +10522,7 @@ async function renderFriends(el) {
         <button class="cfan-arrow" id="cfanNext" aria-label="Next friend">${ICONS.chev(16)}</button>
       </div>
       <div class="cfan-sel" id="cfanSel" hidden></div>
+      <p class="cfan-nohit note" id="cfanTrunc" hidden></p>
       <div class="friends-empty" id="cfanEmpty" hidden>
         <p class="fe-title">No Crew yet</p>
         <p class="note">Send a friend your code, or type theirs in below. Once you've added each other their Bonehead joins your fan right here, and you can send gifts and cheers.</p>
@@ -10942,7 +10952,11 @@ async function renderFriends(el) {
     const unreached = data.reached === false;
     const unrBox = $('#cfanUnreached', el);
     if (unrBox) unrBox.hidden = !unreached;
-    $('#cfanCount', el).textContent = unreached ? '' : ` · ${data.friends.length}`;
+    const truncated = !!data.truncated?.friends; // see crewCount
+    $('#cfanCount', el).textContent = unreached ? '' : ` · ${crewCount(data.friends, truncated)}`;
+    const truncBox = $('#cfanTrunc', el);
+    truncBox.hidden = unreached || !truncated;
+    truncBox.textContent = truncated ? crewTruncText(data.friends, 'friends') : '';
     if (unreached) {
       wrap.hidden = pager.hidden = true;
       $('#cfanSel', el).hidden = $('#cfanFaves', el).hidden = true;

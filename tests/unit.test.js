@@ -3808,7 +3808,37 @@ test('L9 recentRowHtml relogs on the main tap and keeps a change-portion control
   assert.ok(!/if \(r\.food\) return foodRowHtml\(r\.food\)/.test(app), 'the 3-tap foodRowHtml branch for resolvable recents is back');
 });
 
+/* THE COUNT STATED A FALSE NUMBER AS FACT. The server bounds GET /friends per
+   bucket (100 each) and returns `truncated: { friends, incoming, outgoing }`;
+   that flag was added server-side on 2026-09-03 and nothing on the client read
+   it, so a crew of 140 read `YOUR CREW · 100`. Runs the REAL crewCount /
+   crewTruncText / requestRowsHtml: a truncated bucket reads `N+` and carries one
+   line saying what is shown; an exactly-full untruncated bucket reads a bare N
+   and carries no line. The fan count is a DOM write inside renderFriends, so its
+   two statements are pinned by source. */
+test('Crew count reads N+ with a note when the server truncated the bucket', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('function crewCount('), b = app.indexOf('\n// The Crew tab (full screen)');
+  assert.ok(a > 0 && b > a, 'crewCount is not in js/app.js: the count is back to a bare length');
+  const { crewCount, requestRowsHtml } = new Function('esc', 'friendRowAvatar', 'nameWithAlias',
+    `${app.slice(a, b)}; return { crewCount, requestRowsHtml };`)(String, () => '', f => f.playerId);
+  const rows = Array.from({ length: 100 }, (_, i) => ({ playerId: 'p' + i }));
+  assert.equal(crewCount(rows, true), '100+');
+  assert.equal(crewCount(rows, false), '100');
+  const cut = requestRowsHtml({ incoming: rows, outgoing: rows, truncated: { friends: true, incoming: true, outgoing: true } });
+  assert.ok(cut.includes('Wants to be friends · 100+') && cut.includes('Pending · 100+'), 'a truncated request bucket did not read 100+');
+  assert.equal((cut.match(/Showing your 100 most recent requests\./g) || []).length, 2, 'each truncated request bucket needs its one line');
+  const full = requestRowsHtml({ incoming: rows, outgoing: rows, truncated: { friends: false, incoming: false, outgoing: false } });
+  assert.ok(full.includes('Wants to be friends · 100') && full.includes('Pending · 100') && !full.includes('100+'), 'an exactly-full bucket grew a +');
+  assert.ok(!full.includes('Showing your'), 'an untruncated bucket carries the truncation note');
+  assert.ok(!requestRowsHtml({ incoming: rows, outgoing: [] }).includes('+'), 'a payload with no truncated object (older server) grew a +');
+  // the fan: count and note both keyed off truncated.friends, note hidden otherwise
+  assert.match(app, /const truncated = !!data\.truncated\?\.friends;/, 'paintFan no longer reads truncated.friends');
+  assert.match(app, /` · \$\{crewCount\(data\.friends, truncated\)\}`/, 'the fan count is not built through crewCount');
+  assert.match(app, /truncBox\.hidden = unreached \|\| !truncated;/, 'the fan note is not hidden when the list is complete');
+  assert.match(app, /id="cfanTrunc" hidden/, 'the fan note has no mount in the Crew markup');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
-
