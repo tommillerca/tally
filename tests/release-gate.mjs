@@ -273,6 +273,7 @@ const BROWSER = [
   'mage-audit.mjs',          // the Live Wire on every surface he belongs on
   'art-resolution-audit.mjs',  // no gear art drawn above the resolution Cam's masters actually carry, and no nearest-neighbour on continuous-tone art
   'fight-layout-audit.mjs',  // the fight screen holds still
+  'newsrow-return-audit.mjs', // a news story puts you back where you were: a story that opens a SHEET (the cosmetics teaser) is left alone and What's New returns on the News tab when it closes; a POSTER (Dark Spires) closes on history.back() and the tab bar is hit-testable again (QA r26 O1). BACK IN FAST 2026-09-04: skipped since 2026-08-18 for want of a sheet-opening row, re-premised on the teaser row, which exists
   'batch-audit.mjs',         // Cam's FX, the two-enemy read, the result screen
   'error-telemetry-audit.mjs', // crashes queue, and never leave a test device
   'contrast-audit.mjs',      // Walt gave it an exit code; it could not fail before
@@ -482,17 +483,6 @@ const DECLARED = {
   'fight-hint-audit.mjs': ['full', "the move tray's hint labels fit ONE line, measured on real buttons at 375 and 393 wide: a hint two words too long silently costs a whole row off the bottom of a three-row tray. Proven red by its own header against v399 (33a2dc0). Boots and drives a loaded tray, so it is not FAST-shaped; self-serves through serveTree."],
   'version-stamp-audit.mjs': ['full', 'the three version stamps (sw.js VERSION, js/app.js APP_BUILD, js/changelog.js n) agree. Pure source reading, no browser, and it is a RELEASE check rather than a per-push one: it is meaningless until a renumber has happened, and it goes red on every branch that has not renumbered on purpose. Belongs in the pre-release --all run, next to the release ritual it guards.'],
   'version-align-lint.mjs': ['fast', 'web versions (app.js APP_BUILD, sw.js VERSION, version.json) are consistent, and each native shell (iOS, Android) is marked with which web build it last wrapped via WRAPPED_WEB_BUILD comment. Node-only, sub-second. Pins version alignment so release notes and support can correlate tickets with the web version each native shell bundled.'],
-  /* PULLED OUT OF FAST 2026-08-18, NOT BECAUSE IT BROKE. Its whole subject is
-     an announcement whose CTA opens a SHEET instead of navigating, and the Bone
-     Garden's row was the only one in NEWS that did that. With the row gone the
-     suite has nothing to drive, and it says so honestly: its SETUP rows go red
-     rather than passing on an empty sample. The guard it pins (the
-     `if (sheetStack.length) return;` early exit in the news-return poll,
-     js/app.js) is UNTOUCHED, and this goes back in FAST the moment another
-     sheet-opening announcement ships. Leaving it in FAST red would teach people
-     to ignore the gate, which is the failure this file's header is written
-     against. */
-  'newsrow-return-audit.mjs': ['skip', "a news story puts you back where you were, not on a sheet you never opened. Needs an announcement whose CTA opens a sheet; the Bone Garden's row was the only one and it left NEWS on 2026-08-18. Restore to FAST when another one lands."],
   'garden-sim.mjs': ['skip', 'a balance MODEL, not a guard: 30 days x 60 seeded runs of the garden against the kitchen. It reports numbers for a decision and asserts nothing about the app. tests/garden-appetite-guard.mjs is the guard that pins the outcome.'],
   'hollow-backdrop-audit.mjs': ['full', 'renders all three time bands and hit-tests an 800-point grid to prove the backdrop takes no taps. Slow by construction.'],
   'hollow-beds-audit.mjs': ['full', 'renders every plot state and measures them apart by pixels. Slow by construction.'],
