@@ -5884,6 +5884,21 @@ body::before {
    shipped v1 bar has the button lying across its own status text. */
 .look-bar.mog-bar .btn.mog-go { width: auto; flex: none; padding: 10px 15px; font-size: 13.5px; }
 .mog-safe { text-align: center; margin-top: 8px; }
+/* THE COMMIT COMES TO THE THUMB (QA round 23 F3). 23 commits in the app spend a
+   currency; 21 arm the control under the thumb, and this one, the cheapest of
+   them at 6 dust, sat on its own bar at document offset 1810, 78% of the scroll
+   range at 375x667. Same fix as .breed-bar.sticky: the bar is a direct child of
+   .mog-dock (which opens at the paper doll, js/app.js renderCharacter), so its
+   containing block runs from the doll to the panel and the bar rides the bottom
+   of the viewport from scrollTop 0 until the panel scrolls up to meet it. It is
+   NOT inside .mog-panel on purpose: sticky is clamped by its containing block,
+   and inside the panel it could only float while the panel was already on
+   screen, which is the bug. Opaque surface and a top shadow because it is drawn
+   over the grids while it floats. */
+.mog-dock > .look-bar.mog-bar {
+  position: sticky; bottom: 0; z-index: 4;
+  background: var(--surface); box-shadow: 0 -6px 18px rgba(0, 0, 0, .45);
+}
 /* a disguised slot on the paper doll: the doll shows the LOOK, this says so.
    Sits bottom-left, clear of the .pd-gear stat strip pinned to the slot's top
    (they collided there and the badge clipped the stat text). */
