@@ -12695,7 +12695,7 @@ function newsBannerHtml(unseen, eq, dayClose) {
            is untouched; the click binding finds no NEWS id and does nothing. */''}
       ${dayClose ? `<button class="nb-row" data-news="${esc(dayClose.id)}">
         <span class="nb-thumb">${crateIcon(dayClose.type === 'dayclose' ? 'golden' : 'daily', 24)}</span>
-        <span class="nb-txt"><b>${esc(dayClose.title)}</b><i>Day closed</i></span>
+        <span class="nb-txt"><b>${esc(dayClose.title)}</b></span>
         <span class="nb-date">${esc(dayClose.date)}</span>
       </button>` : ''}
       ${/* A ROW THAT NAVIGATES SAYS WHERE IT GOES. Tom, 2026-08-27: "i clicked
