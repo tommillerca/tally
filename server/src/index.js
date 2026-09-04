@@ -2413,15 +2413,34 @@ export default {
           q("f.status <> 'accepted' AND f.requested_by <> ?").bind(me, me, me, FRIEND_PAGE + 1),
           q("f.status <> 'accepted' AND f.requested_by = ?").bind(me, me, me, FRIEND_PAGE + 1),
         ]);
+        /* QA round 27 R3: THE PROFILE BLOB IS FOR ACCEPTED FRIENDS ONLY.
+           Every row used to be shaped identically, so a pending outgoing row
+           carried the target's complete plaintext profile (yard, steps, gear,
+           everything PUT /profile stores). Minting an addToken off the public
+           leaderboard and POSTing /friends/add was enough to read anybody's
+           profile with no acceptance from the other side. A pending row now
+           carries exactly what the client's pending renderer reads
+           (js/app.js requestRowsHtml + friendRowAvatar: playerId, name,
+           profile.outfit / profile.pet for the avatar, profile.level for the
+           "Lv N" line) plus the handle. All of those are already public on
+           GET /leaderboard, so a pending row reveals nothing the board does
+           not. Same SELECT, two shapes. */
         const shape = r => {
           const meIsA = r.a === me;
-          return {
+          const prof = (() => { try { return JSON.parse(meIsA ? r.b_profile : r.a_profile); } catch { return null; } })();
+          const base = {
             playerId: meIsA ? r.b : r.a,
             name: (meIsA ? r.b_name : r.a_name) || (meIsA ? r.b_handle : r.a_handle),
             handle: meIsA ? r.b_handle : r.a_handle,
+          };
+          if (r.status !== 'accepted') {
+            return { ...base, profile: prof ? { outfit: prof.outfit ?? null, pet: prof.pet ?? null, level: prof.level ?? null } : null };
+          }
+          return {
+            ...base,
             friendCode: meIsA ? r.b_code : r.a_code,
             appV: meIsA ? r.b_v : r.a_v,
-            profile: (() => { try { return JSON.parse(meIsA ? r.b_profile : r.a_profile); } catch { return null; } })(),
+            profile: prof,
             since: r.ts,
             lastSeen: meIsA ? r.b_seen : r.a_seen,
           };
@@ -3283,7 +3302,16 @@ export default {
           env.DB.prepare('DELETE FROM grants WHERE player_id = ?').bind(id),
           env.DB.prepare('DELETE FROM backups WHERE player_id = ?').bind(id),
           env.DB.prepare('DELETE FROM recovery WHERE player_id = ?').bind(id),
-          env.DB.prepare('DELETE FROM leads WHERE player = ?').bind(id),
+          /* QA round 27 R2: BY ID AND BY HANDLE. Until v472 the client wrote
+             `me.id || me.handle` into leads.player and `me.id` never existed,
+             so every survey row in production is keyed by the HANDLE and this
+             statement, binding the id, had never matched one: name, email and
+             opt-in outlived the account for 365 days. The client now sends the
+             real playerId; the second binding is a ONE-TIME WIDENING for the
+             rows already written under a handle. A handle is not unique (see
+             devices/reports above), so this can also clear a survey row of a
+             live player who shares the handle: a lost lead, never lost PII. */
+          env.DB.prepare('DELETE FROM leads WHERE player = ? OR player = ?').bind(id, handle),
           env.DB.prepare('DELETE FROM players WHERE id = ?').bind(id),
         ]);
         return json({ ok: true });
