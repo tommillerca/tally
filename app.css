@@ -6500,6 +6500,20 @@ body::before {
   mix-blend-mode: multiply;
 }
 .petcrop .fb-tint, .pdk-thumb .fb-tint, .pdk-tile .fb-tint { -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
+/* THE LASERS STAY INSIDE THE HELMET (VISOR_EYES_POLICY 'clip'). The eye LAYER is
+   kept and masked by the worn visor helmet's own art alpha, so the three items
+   that used to poke through the glass are bounded by the silhouette instead.
+   Same registration as .fb-tint and for the same reason: this mask is a 640
+   square on the same canvas as the eye master, and .bh-anim img is object-fit
+   cover or contain per surface, so the mask must take the surface's own
+   --av-fit/--av-pos or the clip slides off the art. It goes ON the <img>, which
+   already IS the layer, so there is no second box to keep in register. */
+.eye-clip {
+  -webkit-mask-image: var(--fbm); mask-image: var(--fbm);
+  -webkit-mask-size: var(--av-fit, cover); mask-size: var(--av-fit, cover);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: var(--av-pos, center); mask-position: var(--av-pos, center);
+}
 /* the kit room */
 .fb-pick { display: flex; align-items: center; gap: 10px; margin: 0 2px 12px; font-size: 13px; color: var(--text-2); }
 .fb-pick select { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--surface-2);
@@ -6508,7 +6522,17 @@ body::before {
 .drop-item.fb::before { content: 'KIT'; }
 .fb-worn { position: relative; width: 88px; height: 88px; margin: 0 auto; overflow: hidden; border-radius: 10px; }
 .drop-item.fb .petcrop { display: block; margin: 0 auto; }
-.drop-buy[data-buyfb]:disabled { background: var(--surface-3); color: var(--text-3); opacity: 1; }
+.drop-buy[data-buyfb]:disabled, .drop-buy[data-buyfbkit]:disabled { background: var(--surface-3); color: var(--text-3); opacity: 1; }
+/* The bundle cell: the same tile, spanning the grid, with the team's two colours
+   standing in for the product shot (five pieces in one 88px square would be a
+   contact sheet). */
+.drop-item.fb-bundle { grid-column: 1 / -1; }
+.drop-item.fb-bundle::before { content: 'FULL KIT'; }
+.fb-kitmark { width: 52px; height: 52px; border-radius: 50%; border: 6px solid; margin: 4px auto 0;
+  display: grid; place-items: center; }
+.fb-kitmark span { font-size: 17px; font-weight: 900; color: #fff; mix-blend-mode: difference; }
+.fb-kitline { display: block; font-size: 11px; color: var(--text-2); margin: -4px 0 8px; }
+.fb-save { display: block; font-size: 11px; color: var(--text-2); margin-top: 6px; }
 
 /* ===== A spire under siege (v266) =====
    The one state on the map with a deadline attached, so it gets the loudest

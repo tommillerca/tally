@@ -320,6 +320,69 @@ ok('REGIONS a garment is declared one-colour exactly when its secondary mask is 
     ? regionWrong.map(r => `${r.key}: ${r.n} core px in mask-b, oneColour=${r.declared}, ${r.tints} tint layers`).join('; ')
     : regionRows.map(r => `${r.key}${r.declared ? ' 1-colour' : ''}:${r.n}`).join(' '));
 
+/* ---- 6b. THE CLEATS AND THE PET CLOTHES REALLY TINT ----------------------- */
+/* Tom, 2026-09-04: "make sure you can tint the cleats too you were wrong about
+   skipping that and the pet clothes should be tintable."
+   THE CLEATS DO TINT AND ALWAYS DID: they take the team PRIMARY through
+   cleats.mask-a.png. What a previous pass dropped is the SECOND layer, and it
+   dropped it because cleats.mask-b.png has zero core pixels in Cam's art (the
+   REGIONS row above, and it is asserted in both directions there, so a trim
+   stripe added later switches the second layer back on by itself). The two are
+   easy to confuse from a diff, so the primary gets its own row and it is
+   measured over ALL 32 TEAMS rather than the three TINT samples, because "the
+   shoe is navy on one team" is not "the shoe is the team's colour".
+   IF TOM WANTS TWO-TONE CLEATS, this is an ART fix, not a code one: Cam adds a
+   coral (region b) trim to BH_NFL_CLEATS.png, re-runs scripts/football-masks.py
+   and REGIONS goes red until `oneColour` comes off the row. */
+const gTint = (key, teamId) => {
+  const item = ITEMS.find(i => i.football.team === teamId && i.football.garment === key);
+  return FB.footballTints(item).map(t => {
+    const { mean, n, tint } = regionMean(item.file, t.mask, t.hex);
+    return { mask: t.mask.slice(-10, -4), hex: t.hex, worst: Math.max(...mean.map((v, c) => Math.abs(v - tint[c]))), n };
+  });
+};
+const cleatRows = TEAMS.map(t => ({ team: t.id, ...gTint('cleats', t.id)[0] }));
+const cleatOff = cleatRows.filter(r => r.n === 0 || r.worst > TOL);
+ok(`CLEATS the cleats take the team PRIMARY on all ${TEAMS.length} teams, within ${TOL}/255, and are one colour BY THE ART (mask-b is empty, see REGIONS)`,
+  cleatRows.length === TEAMS.length && cleatRows[0].n > 0 && cleatOff.length === 0 &&
+  FB.footballTints(ITEMS.find(i => i.football.garment === 'cleats')).length === 1,
+  cleatOff.length
+    ? cleatOff.map(r => `${r.team}: ${r.worst.toFixed(1)}/255 over ${r.n}px`).join('; ')
+    : `${cleatRows.length} teams x ${cleatRows[0].n} core px, worst ${Math.max(...cleatRows.map(r => r.worst)).toFixed(2)}/255, one tint layer (mask-a only)`);
+
+/* THE PET CLOTHES CARRY BOTH COLOURS, and that is the difference from the shoe:
+   pet-helmet and pet-jersey have a non-empty mask-b, so each gets two multiply
+   layers. Measured over all 32 teams x 2 garments x 2 regions. Whether they are
+   VISIBLE on the three lizards is a pixel question and lives in
+   tests/football-render-audit.mjs; this row is the arithmetic behind it. */
+const petRows = [];
+for (const key of ['pet-helmet', 'pet-jersey']) for (const t of TEAMS) for (const r of gTint(key, t.id)) petRows.push({ what: `${key}/${r.mask} x ${t.id}`, ...r });
+const petOff = petRows.filter(r => r.n === 0 || r.worst > TOL);
+ok(`PET-TINT both lizard garments carry BOTH team colours on all ${TEAMS.length} teams, within ${TOL}/255`,
+  petRows.length === TEAMS.length * 4 && petOff.length === 0,
+  petOff.length
+    ? petOff.map(r => `${r.what} ${r.worst.toFixed(1)}/255 (${r.n}px)`).join('; ')
+    : `${petRows.length} samples, worst ${Math.max(...petRows.map(r => r.worst)).toFixed(2)}/255, smallest region ${Math.min(...petRows.map(r => r.n))}px`);
+
+/* WHICH LIZARDS. Tom, 2026-09-04: "make sure the cosmetics go on the shiny and
+   the founders purple lizard because at the end of the day theyre all the same
+   base frame." A SHINY IS NOT A SPECIES: it is an instance flag over the same
+   species id, and petCanWear keys on the species, so C4's shiny is already
+   covered by C4 being in FOOTBALL_PETS -- there is no `C4-shiny` id anywhere in
+   the catalogue to add. This row states that so a future pass cannot "fix" it
+   by inventing one. CX is C4 recoloured on the same PET_CROP bbox, which is
+   what makes one piece of art register on all three. */
+const petGarments = GARMENTS.filter(g => g.pets);
+const wearBad = petGarments.flatMap(g => (FB.FOOTBALL_PETS || []).filter(sp => !BH.petCanWear(ITEMS.find(i => i.football.garment === g.key), sp)).map(sp => `${g.key} refused by ${sp}`));
+const strayShiny = Object.keys(BH.BH_BY_ID).filter(id => /shiny/i.test(id));
+const cropSpread = (FB.FOOTBALL_PETS || []).map(sp => BH.PET_CROP[sp]).filter(Boolean);
+const cropDrift = cropSpread.length === 2
+  ? Math.max(...['x0', 'y0', 'x1', 'y1'].map(k => Math.abs(cropSpread[0][k] - cropSpread[1][k]))) : Infinity;
+ok('PET-SPECIES both lizard garments fit both lizard species, a shiny is the same species id (so it inherits), and the two crops sit on the same frame',
+  petGarments.length === 2 && wearBad.length === 0 && strayShiny.length === 0 && cropDrift < 0.02,
+  wearBad.length ? wearBad.join('; ')
+    : `${petGarments.map(g => g.key).join(' + ')} x ${(FB.FOOTBALL_PETS || []).join(', ')}; no shiny species id in the catalogue (${strayShiny.length}); C4 vs CX crop boxes differ by at most ${cropDrift.toFixed(4)} of the square`);
+
 /* ---- 7. THE UNRELEASED GATE, BOTH DIRECTIONS ------------------------------ */
 const fbIds = new Set(ITEMS.map(i => i.id));
 const unflagged = ITEMS.filter(i => !i.unreleased);
@@ -377,10 +440,35 @@ ok("VISOR-REFUSE under 'refuse' equip() is told no for exactly the same pair, an
   FB.visorHidesEyes(clash, 'refuse') === false,
   `${blocked[0]} + ${visorId} refused; the two legal pairs allowed; nothing hidden under this policy`);
 
-ok('VISOR-LIVE VISOR_EYES_POLICY is one of the two branches graded above',
-  FB.VISOR_EYES_POLICY === 'hide' || FB.VISOR_EYES_POLICY === 'refuse',
+/* 'clip' KEEPS THE LAYER AND BOUNDS IT. Tom, 2026-09-04: "if it is easy keep
+   them on and have the lazers bound within the helmet itself". The mask is the
+   worn visor's OWN master, so it exists on disk by the ASSETS row above and no
+   new art was invented for it; the pixels it produces are measured in
+   tests/football-render-audit.mjs, because a mask URL is not a clipped laser. */
+const clipMask = FB.visorClipMask(clash, 'clip');
+ok("VISOR-CLIP under 'clip' the clashing eye layer is masked by the worn visor's own master, and only under a visor",
+  clipMask === `${FB.FOOTBALL_ART}visor90.png` && onDisk(clipMask) &&
+  FB.visorClipMask(fine, 'clip') === null &&
+  FB.visorClipMask(noVisor, 'clip') === null &&
+  FB.visorHidesEyes(clash, 'clip') === false &&
+  FB.visorRefusesEquip(clash, 'clip') === false,
+  `${blocked[0]} under ${visorId} clipped to ${clipMask} (on disk); E1 and the open helmet unmasked; nothing hidden and nothing refused under this policy`);
+
+/* THE RENDERER'S HALF OF 'clip', pinned as source for the same reason SHELF is:
+   it is markup and a stylesheet rule, not a value this file can call. What the
+   pixels do with it is tests/football-render-audit.mjs row VISOR-CLIP. */
+const cssSrc = readFileSync(path.join(ROOT, 'app.css'), 'utf8');
+const eyeClipWired = /visorClipMask\(eq\)/.test(appSrc) && /eye-clip/.test(appSrc) && /--fbm:url\('\$\{clipMask\}'\)/.test(appSrc);
+const eyeClipStyled = /\.eye-clip\s*\{[^}]*mask-image:\s*var\(--fbm\)[^}]*mask-size:\s*var\(--av-fit/s.test(cssSrc);
+ok("VISOR-CLIP-WIRED the E layer really carries the mask, and app.css registers it off the surface's own --av-fit",
+  eyeClipWired && eyeClipStyled,
+  `js/app.js avatarLayersHtml -> ${eyeClipWired ? 'visorClipMask + .eye-clip + --fbm' : 'the E-layer clip is gone or was renamed'}; ` +
+  `app.css .eye-clip -> ${eyeClipStyled ? 'mask-image: var(--fbm) at var(--av-fit)' : 'missing, or its mask no longer follows --av-fit (the clip would slide off the art)'}`);
+
+ok('VISOR-LIVE VISOR_EYES_POLICY is one of the three branches graded above',
+  ['clip', 'hide', 'refuse'].includes(FB.VISOR_EYES_POLICY),
   `live policy is '${FB.VISOR_EYES_POLICY}'` +
-  (FB.VISOR_EYES_POLICY === 'hide' || FB.VISOR_EYES_POLICY === 'refuse' ? '' : ": neither branch fires, so a clashing pair renders through the glass"));
+  (['clip', 'hide', 'refuse'].includes(FB.VISOR_EYES_POLICY) ? '' : ": no branch fires, so a clashing pair renders through the glass"));
 
 /* The helmet tile hands over its three visors, so nobody pays four times. */
 const granted = FB.footballGrantIds(helmetId);
@@ -405,7 +493,61 @@ ok('PRICE the kit is never live with a price that is not a number: name the numb
 ok('PRICE-CONTROL the same predicate refuses a live kit priced null, and accepts one priced 600',
   sellable(true, null) === false && sellable(true, 0) === false && sellable(true, 600) === true && sellable(false, 600) === false,
   'live+null refused, live+0 refused, live+600 sold, not-live+600 refused');
+/* ---- 9b. THE TEAM BUNDLE ------------------------------------------------- */
+/* Tom, 2026-09-04: "per garment only with a bundle of everything for a slightly
+   cheaper but expensive price." Three things can go wrong and each is its own
+   row: the bundle can miss a piece it promised, the arithmetic behind "you save
+   N" can be wrong, and it can go live without a number (or with a number that
+   is not actually a discount, which would print a lie on the tile). */
+const SOLD = FB.FOOTBALL_SOLD || [];
+const bundleIds = FB.footballBundleIds(TEAMS[0].id);
+const bundleSet = new Set(bundleIds);
+const soldCovered = SOLD.every(g => bundleSet.has(FB.footballItemId(TEAMS[0].id, g.key)));
+const bundleReal = bundleIds.every(id => fbIds.has(id) && BH.BH_BY_ID[id]);
+/* The count is DERIVED, not typed: every sold tile's own grant list flattened,
+   which is how the helmet's three visors get in. Typing "8" here would go green
+   on a helmet that stopped granting them. */
+const bundleExpect = new Set(SOLD.flatMap(g => FB.footballGrantIds(FB.footballItemId(TEAMS[0].id, g.key))));
+ok('BUNDLE the team bundle hands over every SOLD garment of that team, the helmet still dragging its three visors',
+  SOLD.length > 0 && soldCovered && bundleReal &&
+  bundleSet.size === bundleIds.length && bundleSet.size === bundleExpect.size &&
+  [...bundleExpect].every(id => bundleSet.has(id)),
+  `${SOLD.length} tiles -> ${bundleIds.length} ids (${bundleSet.size} unique, ${bundleExpect.size} expected from the tiles' own grants): ${bundleIds.map(i => i.replace(`fb-${TEAMS[0].id}-`, '')).join(' ')}`);
+
+/* THE ARITHMETIC, on numbers this file supplies, because the live ones are null
+   on purpose. `full` is the tiles added up and `save` the difference, and both
+   have to be null while either price is or the tile prints "you save null". */
+const mathLive = FB.footballBundleMath();
+const mathPriced = FB.footballBundleMath(600, 2400);
+ok('BUNDLE-MATH the saving is the sum of the tiles minus the bundle, and both are null until both prices are numbers',
+  mathPriced.pieces === SOLD.length && mathPriced.full === 600 * SOLD.length &&
+  mathPriced.save === 600 * SOLD.length - 2400 &&
+  FB.footballBundleMath(600, null).save === null && FB.footballBundleMath(null, 2400).full === null,
+  `${SOLD.length} pieces at 600 = ${mathPriced.full}, bundle 2400, save ${mathPriced.save}; live today full=${JSON.stringify(mathLive.full)} bundle=${JSON.stringify(mathLive.bundle)} save=${JSON.stringify(mathLive.save)}`);
+
+ok('BUNDLE-PRICE the bundle is never live without a number, and never live at a price that is not actually a discount',
+  !FB.FOOTBALL_KIT_LIVE || FB.footballBundleSellable(),
+  `FOOTBALL_KIT_LIVE=${FB.FOOTBALL_KIT_LIVE}, piece=${JSON.stringify(FB.FOOTBALL_KIT_PRICE_PLACEHOLDER)}, bundle=${JSON.stringify(FB.FOOTBALL_BUNDLE_PRICE_PLACEHOLDER)}` +
+  (!FB.FOOTBALL_KIT_LIVE || FB.footballBundleSellable() ? '' : ': the bundle tile is on the shelf with a dead button, or it quotes a price that is not below the sum of the pieces'));
+/* POSITIVE CONTROL, same shape as PRICE-CONTROL: today the row above passes on
+   `!LIVE` alone, so the predicate itself has to be shown refusing. */
+ok('BUNDLE-PRICE-CONTROL the same predicate refuses null, refuses a bundle dearer than the pieces, and accepts a real discount',
+  FB.footballBundleSellable(true, 600, null) === false &&
+  FB.footballBundleSellable(true, 600, 0) === false &&
+  FB.footballBundleSellable(true, 600, 600 * SOLD.length) === false &&
+  FB.footballBundleSellable(true, null, 2400) === false &&
+  FB.footballBundleSellable(true, 600, 2400) === true &&
+  FB.footballBundleSellable(false, 600, 2400) === false,
+  `live+null refused, live+0 refused, live+${600 * SOLD.length} (no discount) refused, no piece price refused, live+2400 sold, not-live+2400 refused`);
+
 const lootSrc = readFileSync(path.join(ROOT, 'js/loot.js'), 'utf8');
+const bundleGuarded = /!footballBundleSellable\(\)/.test(lootSrc) && /buyFootballBundle/.test(lootSrc);
+const bundleWired = /data-buyfbkit/.test(appSrc) && /buyFootballBundle\(b\.dataset\.buyfbkit\)/.test(appSrc);
+ok('BUNDLE-BUYPATH buyFootballBundle refuses on the same predicate, and the shelf tile really routes to it',
+  bundleGuarded && bundleWired,
+  `js/loot.js -> ${bundleGuarded ? 'buyFootballBundle guarded by footballBundleSellable()' : 'the bundle buy path is gone or its guard changed shape'}; ` +
+  `js/app.js -> ${bundleWired ? '[data-buyfbkit] -> buyFootballBundle' : 'the bundle tile is not wired to the buy path'}`);
+
 const buyGuarded = /!FOOTBALL_KIT_LIVE\s*\|\|[^\n]*!Number\.isFinite\(cost\)/.test(lootSrc);
 ok('PRICE-BUYPATH buyFootballItem still refuses on the same two conditions this file graded',
   buyGuarded,

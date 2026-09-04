@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
-import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, footballGrantIds, visorRefusesEquip } from '../data/football-teams.js';
+import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAM_BY_ID, footballGrantIds, footballBundleIds, footballBundleMath, footballBundleSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
 
@@ -82,6 +82,36 @@ export async function buyFootballItem(itemId) {
   }
   for (const id of ids) if (id !== itemId) await grantCosmetic(id, 'football');
   return { ok: true, label: BH_BY_ID[itemId].name, cost, coins: left };
+}
+
+/* THE TEAM BUNDLE. Tom, 2026-09-04: "per garment only with a bundle of
+   everything for a slightly cheaper but expensive price." One purchase, every
+   sold garment of one team (8 ids: the helmet still drags its three visors).
+   Same receipt-decides shape as above, with one deliberate simplification:
+   a player who already owns SOME of the team pays the full bundle price and is
+   granted the rest. Pro-rating would need a second price table and a second
+   refusal to explain in the tile; the tile prints what is already owned, so the
+   choice is in front of them. Owning ALL of it is refused outright.
+   ponytail: flat bundle price regardless of what is already owned; pro-rate if
+   players start buying a piece and then the bundle. */
+export async function buyFootballBundle(teamId) {
+  const ids = footballBundleIds(teamId);
+  const cost = FOOTBALL_BUNDLE_PRICE_PLACEHOLDER;
+  if (!FOOTBALL_TEAM_BY_ID[teamId] || !ids.length || !footballBundleSellable()) return { ok: false, reason: 'not-stocked' };
+  const owned = await ownedCosmeticIds();
+  const want = ids.filter(id => !owned.has(id));
+  if (!want.length) return { ok: false, reason: 'owned' };
+  const left = await spendCoins(cost);
+  if (left === null) return { ok: false, reason: 'coins', need: cost, have: await coins() };
+  /* The FIRST missing piece is the receipt, exactly as the single tile uses its
+     own item: two overlapping taps both spend, and the one that loses the grant
+     is refunded, so a bundle is never charged twice. */
+  if (!await grantCosmetic(want[0], 'football')) {
+    await coinsAdd(cost);
+    return { ok: false, reason: 'owned' };
+  }
+  for (const id of want.slice(1)) await grantCosmetic(id, 'football');
+  return { ok: true, label: `${FOOTBALL_TEAM_BY_ID[teamId].name} kit`, granted: want.length, cost, coins: left, save: footballBundleMath().save };
 }
 
 export async function buyDropItem(itemId) {

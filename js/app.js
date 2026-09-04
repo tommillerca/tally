@@ -21,7 +21,7 @@ import {
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   stripAll, stripAllPlan,
-  DROP, buyDropItem, buyFootballItem, refundStreakFreezes,
+  DROP, buyDropItem, buyFootballItem, buyFootballBundle, refundStreakFreezes,
   RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_RARITY_PRICE,
   setWornAura, ownsAura,
   rack, rerollRack, rackRerollCost, buyRackItem, wornAura,
@@ -96,7 +96,7 @@ import { HERO_EDGE } from '../data/hero-edge.js';
 import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petCanWear,
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
 // Football kit, 2026-09-04
-import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_PETS, footballItemId, footballTints, visorHidesEyes } from '../data/football-teams.js';
+import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_SOLD, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal,
@@ -398,8 +398,18 @@ function staticMassScale(petId) {
 }
 // A pet's display scale, whichever way it is drawn. Flat species (lizards) would
 // otherwise render a third shorter than round ones (the cloud) in the same box.
-function petScale(petId) {
-  return ANIMATED_PETS.has(petId) ? petMassScale(petId) : staticMassScale(petId);
+/* THE SCALE FOLLOWS THE RENDERER, NOT THE SPECIES. The two functions are two
+   normalisations of the same rule ("bring every species to the same ART
+   HEIGHT") over two different stages, so asking petMassScale about a lizard
+   that is being drawn STATICALLY hands the static renderer the animated stage's
+   number. That was free while ANIMATED_PETS and "drawn animated" were the same
+   set; the football kit breaks that (see petSpriteHtml), so the caller says
+   which stage it is on. staticMassScale and petMassScale disagree by 1.28% on
+   C4 and 0.69% on CX, which is a visible jump the moment the kit goes on and a
+   number nobody would look for. tests/football-render-audit.mjs row PET-SIZE
+   measures the drawn INK on both sides rather than trusting either. */
+function petScale(petId, animated = ANIMATED_PETS.has(petId)) {
+  return animated ? petMassScale(petId) : staticMassScale(petId);
 }
 // Render a static pet image cropped to its content and scaled to ~fill a px box.
 // ground=true seats the art on the box floor; else it's vertically centered (hover).
@@ -420,6 +430,14 @@ function petScale(petId) {
  *                       be dressed out of the viewer's wardrobe.
  */
 const wearOf = wear => (wear === undefined ? S.petWear : wear);
+/* Is this pet wearing a football garment? A non-null tint list IS the answer:
+   petWornTints returns footballTints per worn layer, which is null for anything
+   else. Used by petSpriteHtml to force the static canvas (see there) and by
+   Today's hero to size the CSS box the same way. */
+const petWearsFootball = (petId, wear) => petWornTints(petId, wearOf(wear)).some(Boolean);
+/* The scale petSpriteHtml WILL use for this pet and this wardrobe, so a caller
+   that has to reproduce the box (Today's --pet-rel) cannot drift from it. */
+const petDrawScale = (petId, wear) => petScale(petId, ANIMATED_PETS.has(petId) && !petWearsFootball(petId, wear));
 /* WHICH SHEET THESE LAYERS COME OFF, AND WHY THE CALLER DECIDES.
  *
  * This function was untiered everywhere, which was fine while every pet was a
@@ -659,7 +677,21 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
   // special look, so always render its animated self even if the instance is shiny.
   // Every path scales by the species' visual mass, so a colourway is never a
   // different size from its base pet.
-  const S2 = mass ? Math.round(px * petScale(petId)) : px;
+  /* FOOTBALL WEAR FORCES THE STATIC CANVAS. Tom, 2026-09-04: "just put the pet
+     pieces on a version of the lizard that isnt animated for this."
+     croppedPetImg is the ONLY function that paints a pet's worn layers, and both
+     lizards (C4, CX) are in ANIMATED_PETS, so every animated branch below
+     returned before the kit could be drawn: the pet garments rendered in the kit
+     room and the roster portraits and were invisible on Today, the Stable, the
+     Paddock and the Pit. The trade is Tom's and it is explicit: while the kit is
+     ON the lizard stops moving; with no football wear it animates exactly as it
+     always did. `.some(Boolean)` over petWornTints rather than a new predicate,
+     because a non-null tint list IS "this worn layer is a football garment".
+     The shiny lizard comes along for free: C4's shiny is a recolour of the same
+     canvas, so the static branch below draws the kit on it with no per-variant
+     art, and CX (Day One, amethyst) is that same canvas again. */
+  const wearsFootball = petWearsFootball(petId, wear);
+  const S2 = mass ? Math.round(px * petDrawScale(petId, wear)) : px;
   const isShiny = shiny !== undefined ? !!shiny : S.shinyPets.has(petId);
   /* SHINIES ANIMATE TOO. Tom, 2026-08-08: "make all animations apply for shinies
      of the same variety too."
@@ -676,7 +708,7 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
        C4 lizard    26 -> 183  +157deg,  saturation x1.34
      CX is exempt as ever: its amethyst art IS its special look. */
   const SHINY_TINT = { C1: 'hue-rotate(54deg) saturate(1.03)', C3: 'hue-rotate(-169deg) saturate(1.43)', C4: 'hue-rotate(157deg) saturate(1.34)' };
-  if (isShiny && ANIMATED_PETS.has(petId) && SHINY_TINT[petId]) {
+  if (isShiny && !wearsFootball && ANIMATED_PETS.has(petId) && SHINY_TINT[petId]) {
     const anim = animatedPetHtml(petId, S2);
     if (anim) {
       return `<div class="pet-shiny-wrap"><div class="pa-shiny" style="filter:${SHINY_TINT[petId]}">${anim}</div>`
@@ -689,7 +721,7 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
     // canvas: a shiny lizard came out a fraction of the normal one.
     return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear, thumb)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
-  return animatedPetHtml(petId, S2) || croppedPetImg(petId, S2, ground, null, wear, thumb);
+  return (wearsFootball ? null : animatedPetHtml(petId, S2)) || croppedPetImg(petId, S2, ground, null, wear, thumb);
 }
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
@@ -3808,7 +3840,7 @@ async function renderToday(el) {
   const heroPetRel = heroPet ? (PET_HERO_REL[heroPet.id] || PET_HERO_HOUSE) : 0;
   const heroPetBig = heroPetRel > PET_HERO_HOUSE;
   const heroPetPx = Math.round(heroPetRel * PET_HERO_REF);
-  const heroPetBoxRel = heroPet ? Math.round(heroPetPx * petScale(heroPet.id)) / PET_HERO_REF : 0;
+  const heroPetBoxRel = heroPet ? Math.round(heroPetPx * petDrawScale(heroPet.id, heroPet.wear)) / PET_HERO_REF : 0;
   /* THE ONE PET SURFACE WHERE THE SHEET'S STRICT RULE IS A PIXEL SHORT, named
      here rather than tuned into bhTierFor for the whole app.
      Measured 430x932 DPR 2: a solo-canvas pet's whole square lands in a 192.4px
@@ -5428,6 +5460,13 @@ function avatarLayersHtml(eq, opts = {}) {
     if (s.code === 'E' && visorHidesEyes(eq)) return '';
     const itemId = eq[s.code];
     if (!itemId || !BH_BY_ID[itemId]) return '';
+    /* Football kit, 2026-09-04: under VISOR_EYES_POLICY 'clip' the three eye
+       items that project past the glass keep their layer and are MASKED by the
+       worn visor helmet's own art alpha, so the lasers are bounded inside the
+       helmet instead of escaping it. Nothing is computed here: the mask is a
+       640 square on the same canvas as the eye master, so app.css .eye-clip
+       hands it the surface's own --av-fit/--av-pos, exactly as .fb-tint does. */
+    const clipMask = s.code === 'E' ? visorClipMask(eq) : null;
     /* A pet that is not registered to the body canvas cannot be a body layer.
        One guard here rather than one per caller, because all eleven stacks that
        keep the C slot broke the same way: see petStacksOnBody above. */
@@ -5463,7 +5502,8 @@ function avatarLayersHtml(eq, opts = {}) {
       // draws more lit eyes.
       S.glow && s.code === 'E' && EMBER_EYES.has(itemId) ? 'eye-ember' : '',
     ].filter(Boolean).join(' ');
-    const glow = cls ? ` class="${cls}"` : '';
+    const clsAll = clipMask ? `${cls}${cls ? ' ' : ''}eye-clip` : cls;
+    const glow = clsAll ? ` class="${clsAll}"` : '';
     // NOT lazy, NOT async-decoded: these layers only mean anything stacked
     // together. Loading them independently is what made the character visibly
     // assemble itself, piece by piece, every single render.
@@ -5471,7 +5511,8 @@ function avatarLayersHtml(eq, opts = {}) {
     // must degrade to a missing garment, never iOS's blue "?" box over the body.
     // On a THUMBNAILED layer it first retries the full-size art, so a missing
     // thumbnail costs memory rather than the garment.
-    return `<img${glow} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(item)}`;
+    const clipStyle = clipMask ? ` style="--fbm:url('${clipMask}')"` : '';
+    return `<img${glow}${clipStyle} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(item)}`;
   }).join('');
   // Visible by DEFAULT. v233 shipped this with bh-composing baked into the
   // markup, which meant any stack injected somewhere composeAvatars() never
@@ -9006,15 +9047,22 @@ function petShelfHtml(ownedCos, coinBal) {
 function footballShelfHtml(ownedCos, coinBal) {
   const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];
   const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
-  const sold = FOOTBALL_GARMENTS.filter(g => g.sold);
+  const sold = FOOTBALL_SOLD;
   const ownedHere = sold.filter(g => ownedCos.has(footballItemId(team.id, g.key))).length;
+  /* THE BUNDLE TILE. One extra cell at the end of the same grid, because it is
+     the same decision at a different size and a separate poster would compete
+     with the pieces it contains. The saving is computed, never typed: `full` is
+     the five tiles added up and `save` the difference, both null while either
+     price is, which is what prints "not for sale yet". */
+  const kit = footballBundleMath();
+  const bundleOwned = ownedHere === sold.length;
   return `
   <details class="t3-dropsect" id="fbSect">
     <summary class="t3-drop">
       <span class="eyebrow">Kit room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
       <h2>PICK A SIDE</h2>
       <div class="row"><div class="tx"><small>One kit, ${FOOTBALL_TEAMS.length} colourways. Helmet, jersey, cleats, and a matching set for the lizard.</small>
-        <span class="t3-price">${Number.isFinite(price) ? `${ICONS.coin(13)} ${price.toLocaleString()} a piece` : 'Not for sale yet'}</span></div></div>
+        <span class="t3-price">${Number.isFinite(price) ? `${ICONS.coin(13)} ${price.toLocaleString()} a piece${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} the lot` : ''}` : 'Not for sale yet'}</span></div></div>
     </summary>
     <div class="t3-dropbody">
       <label class="fb-pick"><span>Team</span>
@@ -9037,6 +9085,18 @@ function footballShelfHtml(ownedCos, coinBal) {
               : `<button class="drop-buy" data-buyfb="${id}" ${canBuy ? '' : 'disabled'}>${Number.isFinite(price) ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
           </div>`;
         }).join('')}
+        <div class="drop-item fb fb-bundle ${bundleOwned ? 'owned' : ''}">
+          <div class="fb-kitmark" style="background:${team.a};border-color:${team.b}"><span>${sold.length}</span></div>
+          <b>${esc(team.name)} full kit</b>
+          <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')}</small>
+          ${bundleOwned
+            ? `<button class="drop-buy" disabled>The whole kit is yours</button>`
+            : `<button class="drop-buy" data-buyfbkit="${team.id}" ${footballBundleSellable() && coinBal >= FOOTBALL_BUNDLE_PRICE_PLACEHOLDER ? '' : 'disabled'}>${
+                footballBundleSellable() ? `${ICONS.coin(12)} ${kit.bundle.toLocaleString()}` : 'Soon'}</button>`}
+          ${Number.isFinite(kit.save) && kit.save > 0
+            ? `<small class="fb-save">Was ${kit.full.toLocaleString()} · you save ${kit.save.toLocaleString()}</small>`
+            : `<small class="fb-save">Cheaper than the ${sold.length} pieces</small>`}
+        </div>
       </div>
     </div>
   </details>`;
@@ -9449,7 +9509,7 @@ async function renderShop(el) {
   // are the most expensive single taps in the game.
   // Football kit, 2026-09-04: the kit room's team picker re-renders the shelf on its own team
   $('#fbTeam', el)?.addEventListener('change', e => { S.fbTeam = e.target.value; rerender(); });
-  el.querySelectorAll('[data-buydrop], [data-buyfb]').forEach((b => {
+  el.querySelectorAll('[data-buydrop], [data-buyfb], [data-buyfbkit]').forEach((b => {
     let t = null;
     let busy = false;
     const reset = () => { b.dataset.armed = '0'; b.innerHTML = b.dataset.label || b.innerHTML; };
@@ -9465,13 +9525,17 @@ async function renderShop(el) {
       // first re-armed the button in the same frame and let a burst buy twice.
       clearTimeout(t); busy = true;
       // Football kit, 2026-09-04: same arm-then-buy ritual, a second buy path behind it
-      const r = await (b.dataset.buyfb ? buyFootballItem(b.dataset.buyfb) : buyDropItem(b.dataset.buydrop)).finally(() => { busy = false; reset(); });
+      const r = await (b.dataset.buyfbkit ? buyFootballBundle(b.dataset.buyfbkit)
+        : b.dataset.buyfb ? buyFootballItem(b.dataset.buyfb)
+        : buyDropItem(b.dataset.buydrop)).finally(() => { busy = false; reset(); });
       if (!r.ok) {
         toast(r.reason === 'owned' ? 'Already in your Wardrobe.' : r.reason === 'not-stocked' ? 'Not for sale yet.' : `Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600);
         return;
       }
       levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
-      toast(`${r.label} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. Equip it in your Wardrobe.`, 3200);
+      toast(`${r.label} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left.`
+        + (r.granted ? ` ${r.granted} pieces${Number.isFinite(r.save) ? `, ${r.save.toLocaleString()} saved` : ''}.` : '')
+        + ' Equip it in your Wardrobe.', 3200);
       rerender();
     });
   }));

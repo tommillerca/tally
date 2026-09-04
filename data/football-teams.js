@@ -31,6 +31,13 @@
  * buyRackItem does. */
 export const FOOTBALL_KIT_LIVE = false;                 // Tom flips this to sell the kit
 export const FOOTBALL_KIT_PRICE_PLACEHOLDER = null;     // coins per garment tile; Tom decides the number
+/* THE BUNDLE. Tom, 2026-09-04: "per garment only with a bundle of everything for
+ * a slightly cheaper but expensive price." One tile per team that hands over
+ * every SOLD garment of that team at once (the helmet still drags its three
+ * visors along, so the bundle is 8 ids for 5 tiles). The number is null for the
+ * same reason the per-garment one is: footballBundleSellable refuses a live
+ * bundle without it, and buyFootballBundle refuses it again at the till. */
+export const FOOTBALL_BUNDLE_PRICE_PLACEHOLDER = null;  // coins for a whole team's kit; Tom decides the number
 
 /* THE VISOR AND THE EYES. The visor helmets keep the E slot drawn and pickable:
  * measured over all 36 eye items composited under the darkest visor, 33 sit
@@ -38,11 +45,21 @@ export const FOOTBALL_KIT_PRICE_PLACEHOLDER = null;     // coins per garment til
  * Three project past it and would poke through the glass:
  *   E11-1 Red Lasers   2068 px escape at 640    E11-2 Blue Lasers  2089 px
  *   ES22  Rainbow Band  479 px escape
- * 'hide'   (default) draw the helmet, skip the E layer for those three
+ * 'clip'   (default) KEEP the eye layer and mask it with the worn visor's own
+ *          art alpha, so the lasers are bounded by the helmet instead of
+ *          escaping it. Tom, 2026-09-04: "if it is easy keep them on and have
+ *          the lazers bound within the helmet itself that could be cool."
+ *          The mask is the helmet master itself: it is a 640 square registered
+ *          to the same canvas as every E-slot master, so mask-size/-position
+ *          take the surface's own --av-fit/--av-pos and the registration is
+ *          inherited rather than computed (app.css .eye-clip).
+ * 'hide'   draw the helmet, skip the E layer for those three
  * 'refuse' equip() refuses the eyes while a visor helmet is worn, and the
  *          visor while those eyes are worn, with reason 'visor'
- * Tom flips the one word. Both branches are guarded in tests/football-kit-audit.mjs. */
-export const VISOR_EYES_POLICY = 'hide';
+ * Tom flips the one word. All three branches are guarded in
+ * tests/football-kit-audit.mjs, and the pixels behind 'clip' are measured in
+ * tests/football-render-audit.mjs (row VISOR-CLIP, with its unclipped control). */
+export const VISOR_EYES_POLICY = 'clip';
 export const VISOR_BLOCKED_EYES = new Set(['E11-1', 'E11-2', 'ES22']);
 
 /* THIRTY-TWO TEAMS. Invented places and mascots in the Boneheadz register, no
@@ -161,3 +178,32 @@ export function visorEyeConflict(eq) {
 }
 export const visorHidesEyes = (eq, policy = VISOR_EYES_POLICY) => policy === 'hide' && !!visorEyeConflict(eq);
 export const visorRefusesEquip = (eq, policy = VISOR_EYES_POLICY) => policy === 'refuse' && !!visorEyeConflict(eq);
+/* The mask an escaping eye layer is clipped to under 'clip', or null: the worn
+   visor helmet's OWN master, whose alpha is the helmet-plus-glass silhouette. */
+export function visorClipMask(eq, policy = VISOR_EYES_POLICY) {
+  if (policy !== 'clip' || !visorEyeConflict(eq)) return null;
+  const g = (String(eq.H).match(/-(visor\d+)$/) || [])[1];
+  return g ? `${FOOTBALL_ART}${g}.png` : null;
+}
+
+/* ---- THE TEAM BUNDLE ------------------------------------------------------
+   Every sold garment of one team in one purchase, at a discount off the sum of
+   the tiles. The maths is here rather than in the shelf so the tile, the buy
+   path and the guard all read the same three numbers. `full` and `save` are
+   null until both prices are numbers, which is exactly what the tile prints as
+   "not for sale yet" and what footballBundleSellable refuses. */
+export const FOOTBALL_SOLD = FOOTBALL_GARMENTS.filter(g => g.sold);
+export const footballBundleIds = teamId =>
+  FOOTBALL_SOLD.flatMap(g => footballGrantIds(footballItemId(teamId, g.key)));
+export function footballBundleMath(piece = FOOTBALL_KIT_PRICE_PLACEHOLDER, bundle = FOOTBALL_BUNDLE_PRICE_PLACEHOLDER) {
+  const pieces = FOOTBALL_SOLD.length;
+  const full = Number.isFinite(piece) ? piece * pieces : null;
+  return { pieces, full, bundle, save: full !== null && Number.isFinite(bundle) ? full - bundle : null };
+}
+/* A BUNDLE THAT IS NOT CHEAPER IS A BUG, not a pricing choice, so `bundle <
+   full` is part of the predicate and not a comment: the whole tile says "you
+   save N", and a non-positive N would print a lie. */
+export function footballBundleSellable(live = FOOTBALL_KIT_LIVE, piece = FOOTBALL_KIT_PRICE_PLACEHOLDER, bundle = FOOTBALL_BUNDLE_PRICE_PLACEHOLDER) {
+  const { full } = footballBundleMath(piece, bundle);
+  return !!live && Number.isFinite(bundle) && bundle > 0 && Number.isFinite(full) && bundle < full;
+}
