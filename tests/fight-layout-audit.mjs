@@ -344,6 +344,40 @@ const jitter = await page.evaluate(async () => {
 ok('the buttons hold still across turns', jitter.trayDrift <= 2, `moved ${jitter.trayDrift}px  ${JSON.stringify(jitter.seen)}`);
 ok('the arena holds its height across turns', jitter.arenaDrift <= 2, `${jitter.arenaDrift}px`);
 
+/* ---- 5. QA round 26 O12: the versus card must not eat taps once it fades ----
+   pointer-events auto in 29/29 samples, still swallowing at opacity 0.010 and 0:
+   the fade at 1150ms and the removal at 1420ms never turned hit-testing off, so
+   every tap for 1,391ms after FIGHT died on the card. The fix sets
+   pointer-events none in the same tick the fade starts. Under webdriver the
+   card is skipped (fast path), so __giForce puts it back the way batch-audit
+   does for the gate intro, and the sample is taken at +200ms after the fade
+   begins (1350ms after FIGHT): the card is still in the DOM at ~0 opacity.
+   PROVE-RED: on main elementFromPoint over End Turn returns .vs-card and the
+   click never reaches the button. Written 2026-09-04 on a static-only machine;
+   not yet run. */
+await page.evaluate(() => document.querySelector('.sheet-close')?.click());
+await sleep(600);
+const vsTap = await page.evaluate(async () => {
+  window.__giForce = true;
+  window.__denFight(1.6, 0);                       // fire-and-forget: we sample DURING the card
+  await new Promise(r => setTimeout(r, 1350));     // fade started at 1150; card removed at 1420
+  window.__giForce = false;
+  const card = document.querySelector('.vs-card');
+  const btn = document.getElementById('endTurn');
+  if (!card) return { why: 'the versus card was not on screen at +1350ms (empty sample = failure)' };
+  if (!btn) return { why: 'no End Turn under the card to tap' };
+  const pe = getComputedStyle(card).pointerEvents;
+  const r = btn.getBoundingClientRect();
+  const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  let received = false;
+  btn.addEventListener('click', () => { received = true; }, { once: true, capture: true });
+  hit?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+  return { pe, hitIsCard: !!hit?.closest('.vs-card'), hitTag: hit ? (hit.id || hit.className) : null, received, opacity: getComputedStyle(card).opacity };
+});
+ok('O12 the fading versus card is pointer-events none', !vsTap.why && vsTap.pe === 'none', vsTap.why || JSON.stringify(vsTap));
+ok('O12 a tap at +200ms into the fade reaches the control under the card', !vsTap.why && !vsTap.hitIsCard && vsTap.received, vsTap.why || JSON.stringify(vsTap));
+await sleep(1200);
+
 /* ---- 5. the smallest phone: the primary action is on screen WITHOUT scrolling
    and the fighters are not shrunk to buy it ----
 

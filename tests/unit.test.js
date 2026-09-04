@@ -2824,7 +2824,8 @@ test('every Gauntlet rank resolves a real monster look', () => {
 });
 
 
-/* ================= BhVault backfill: additive-only, all four gates =========
+/* ================= BhVault backfill: additive-only, all four gates ==});
+
  * The iOS registration fix (2026-08-10) makes every existing player's device a
  * "readable empty vault + real local identity" case, which nothing wrote
  * before. backfillVaultMirror closes that; these pin its safety envelope, the
@@ -4755,6 +4756,123 @@ test('SW update checks bypass the HTTP cache (GitHub Pages max-age=600 held a de
   const calls = [...app.matchAll(/serviceWorker\.register\(([^)]*)\)/g)].map(m => m[1]);
   assert.equal(calls.length, 1, `expected exactly one register() call, found ${calls.length}`);
   assert.match(calls[0], /updateViaCache:\s*'none'/, 'register() does not pass updateViaCache: none, so a deploy can hide behind the HTTP cache');
+});
+
+/* ---------- QA round 26 O1: a veil poster rides the sheet stack ---------- *
+ * Today -> News -> "Dark Spires" opened a .drop-veil OUTSIDE the stack: Escape
+ * did nothing, history.back() did nothing, two route changes left it covering
+ * the tab bar. Eight posters shared the shape. openVeil is the one door. */
+const veilSlices = () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const fn = name => {
+    const a = app.indexOf(`\nfunction ${name}(`);
+    assert.ok(a > 0, `app.js must define ${name}`);
+    return app.slice(a, app.indexOf('\n}\n', a) + 3);
+  };
+  return { app, src: fn('openVeil') + fn('closeTopSheet') + fn('closeAllSheets') };
+};
+test('R26 O1 (a) openVeil pushes the stack; a popped history entry and a route change both remove the veil', () => {
+  const { app, src } = veilSlices();
+  // the popstate line every sheet relies on: openVeil borrows it, so pin it
+  assert.match(app, /addEventListener\('popstate', \(\) => \{ if \(sheetStack\.length\) closeTopSheet\(\); \}\)/, 'popstate must pop the top sheet');
+  assert.match(app, /if \(e\.key !== 'Escape' \|\| !sheetStack\.length\) return;\s*e\.preventDefault\(\);\s*history\.back\(\);/, 'Escape must go through history');
+  const sheetStack = [], pushes = [], backs = [];
+  let api;
+  // back() runs the shipped popstate handler, verbatim (asserted above)
+  const history = { pushState: st => pushes.push(st), back: () => { backs.push(1); if (sheetStack.length) api.closeTopSheet(); } };
+  api = new Function('sheetStack', 'history', 'document', '$', 'reducedMotion', 'updatePending', 'location',
+    `${src}; return { openVeil, closeTopSheet, closeAllSheets };`)(
+    sheetStack, history, { body: { appendChild: v => { v.appended = true; } } }, () => null, true, false, { reload() {} });
+  const { openVeil, closeAllSheets } = api;
+  const mkVeil = () => ({ appended: false, removed: false, remove() { this.removed = true; }, addEventListener(t, f) { this.tap = f; } });
+
+  // open: on the stack, one history entry, in the DOM
+  const v1 = mkVeil();
+  const close = openVeil(v1);
+  assert.equal(sheetStack.length, 1, 'opening a poster must push onto sheetStack');
+  assert.equal(sheetStack[0].wrap, v1, 'the stack record must point at the veil so closeTopSheet removes IT');
+  assert.deepEqual(pushes, [{ sheet: 1 }], 'opening a poster must push one history entry, like a sheet');
+  assert.ok(v1.appended, 'the veil must still be appended to document.body');
+  // back: the entry pops, the veil goes
+  close();
+  assert.equal(backs.length, 1, 'close must go through history.back(), not veil.remove()');
+  assert.equal(sheetStack.length, 0, 'a popped history entry must pop the poster');
+  assert.ok(v1.removed, 'and remove the veil from the DOM (no .sheet inside, so at once)');
+  // a second close after it is gone must not pop whatever is above
+  close();
+  assert.equal(backs.length, 1, 'close on an already-closed poster must not call history.back() again');
+  // route change: route() calls closeAllSheets(); the poster must not survive it
+  const v2 = mkVeil();
+  openVeil(v2);
+  closeAllSheets();
+  assert.equal(sheetStack.length, 0, 'a route change must clear the poster');
+  assert.ok(v2.removed, 'a route change must remove the veil');
+  // the bare-veil tap closes it, like a sheet backdrop
+  const v3 = mkVeil();
+  openVeil(v3);
+  v3.tap({ target: v3 });
+  assert.ok(v3.removed, 'a tap on the veil itself must close the poster');
+  v3.tap({ target: {} });   // a tap on the card must not throw or double-pop
+});
+test('R26 O1 (b) every .drop-veil poster opens through openVeil; none appends itself to body', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const src = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const openers = [...src.matchAll(/className = 'drop-veil/g)].map(m => m.index);
+  assert.ok(openers.length >= 8, `expected the eight posters, found ${openers.length} .drop-veil openers`);
+  const bypass = openers.filter(i => {
+    const rest = src.slice(i);
+    const m = rest.match(/openVeil\(veil\)|document\.body\.appendChild\(veil\)/);
+    return !m || m[0] !== 'openVeil(veil)';
+  }).map(i => src.slice(src.lastIndexOf('function ', i) + 9, src.indexOf('(', src.lastIndexOf('function ', i))));
+  assert.deepEqual(bypass, [], `${bypass.length} poster(s) bypass openVeil: ${bypass.join(', ')}`);
+  // the one bare append is the helper's own
+  assert.equal((src.match(/document\.body\.appendChild\(veil\)/g) || []).length, 1, 'only openVeil may append a veil to body');
+});
+
+/* ---------- QA round 26 O12: the versus card stops eating taps when it fades ---------- *
+ * pointer-events auto in 29/29 samples, still swallowing at opacity 0.010 and 0:
+ * the fade at 1150ms and the removal at 1420ms never turned hit-testing off. */
+test('R26 O12 the versus card is pointer-events none from the moment its fade starts', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf("vs.className = 'vs-card quake'");
+  assert.ok(a > 0, 'the versus card moved: re-anchor this slice');
+  const b = app.indexOf('vs.remove()', a);
+  assert.ok(b > a, 'the versus card must still be removed');
+  const slice = app.slice(a, b);
+  const fade = slice.match(/setTimeout\(\(\) => \{([^\n]*)opacity = '0'[^\n]*\}, (\d+)\);/);
+  assert.ok(fade, 'the fade timeout (opacity 0) must exist before the removal');
+  assert.match(fade[1], /pointerEvents = 'none'/, `the fade at ${fade[2]}ms must set pointer-events none in the same tick it starts fading`);
+});
+
+/* ---------- QA round 26 O6: the Glutton sheet reaps its visibilitychange listener ---------- *
+ * +4.47 listeners and +73 nodes per open over 30 opens: the visibilitychange
+ * closure over `wrap` was added per open and never removed, while the
+ * bh-glutton-beaten listener one line up was reaped by a MutationObserver
+ * written for exactly this bug. */
+test('R26 O6 after the Glutton sheet leaves the DOM its visibilitychange listener is removed', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('  const onBeaten = () => healCleansed();');
+  assert.ok(a > 0, 'the Glutton onBeaten line moved: re-anchor this slice');
+  const b = app.indexOf("$('#gluttonFight', wrap)?.addEventListener", a);
+  assert.ok(b > a, 'the Glutton fight handler moved: re-anchor this slice');
+  const added = [], removed = []; let moCb = null;
+  const wrap = { isConnected: true };
+  const doc = {
+    hidden: true,
+    addEventListener: (t, f) => added.push([t, f]),
+    removeEventListener: (t, f) => removed.push([t, f]),
+    getElementById: () => ({}),
+  };
+  const MO = function (cb) { moCb = cb; this.observe = () => {}; this.disconnect = () => {}; };
+  new Function('wrap', 'document', 'MutationObserver', 'addEventListener', 'removeEventListener', 'healCleansed', 'gluttonBeaten', 'slot', app.slice(a, b))(
+    wrap, doc, MO, () => {}, () => {}, () => {}, async () => false, 0);
+  const vis = added.filter(([t]) => t === 'visibilitychange');
+  assert.equal(vis.length, 1, 'the sheet must add exactly one visibilitychange listener');
+  assert.ok(moCb, 'the reaping MutationObserver must exist');
+  wrap.isConnected = false;
+  moCb();
+  const gone = removed.filter(([t, f]) => t === 'visibilitychange' && f === vis[0][1]);
+  assert.equal(gone.length, 1, 'once the sheet is gone the SAME visibilitychange handler must be removed from document');
 });
 
 await runAll();
