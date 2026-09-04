@@ -56,10 +56,12 @@
  * coupling. The maths is the same composite scripts/football-masks.py verifies
  * itself with, so the two agree by construction rather than by luck.
  *
- * PURE: imports data/, js/loot.js is NOT imported (it reaches for IndexedDB);
- * the buy path's price rule is re-stated as the predicate and its source line
- * is pinned by a static read, which is the honest way to grade a branch you
- * cannot execute. 0.2s, no browser.
+ * PURE: imports data/, and (section 9c, 2026-09-04) js/loot.js over the
+ * in-memory IndexedDB in tests/mem-idb.mjs, so the till is DRIVEN rather than
+ * described: the ids, the wallet, the ownership check and the refund path are
+ * the shipped code. The price rule is ALSO re-stated as a predicate and its
+ * source line pinned by a static read, because a pin catches a rewrite the
+ * driven rows would sail through. 1.8s, no browser.
  *
  * PROVE-RED, each row against a real defect, every mutation on a throwaway tree
  * and every one asserted to have LANDED before its result was believed. All
@@ -96,6 +98,34 @@
  * NOTE that flipping LIVE alone does NOT redden GATE, and correctly so: with
  * the flag true the items are supposed to be in the pool, and the row grades
  * the branch that is live. PRICE is what catches that mutation.
+ *
+ * OWNERSHIP, 2026-09-04. Tom: "buy the garment get all 32 colours." GRANT and
+ * BUNDLE were rewritten and seven rows added; every one was RUN red on a `cp -R`
+ * throwaway, with the FAIL line it produced:
+ *   GRANT / BUNDLE / BUY-ONE / REPEAT / BUY-BUNDLE / REPEAT-BUNDLE  all six on
+ *                  ONE mutation, footballGrantIds back to a single team:
+ *                  "helmet -> 4 ids over 1 teams x 4 keys ... expected 128"
+ *                  and "SOLD ... coins 95800 -> 91600 (delta -4200, expected 0)"
+ *   SHELF-DATA     FOOTBALL_SHELF back to teams x garments. "160 tiles"
+ *   SAVE           bundle re-priced 16,800 -> 20,000, still a discount but no
+ *                  longer a garment. "save 1000 (one garment is 4200)"
+ *   BUY-ONE        buyFootballItem grants the tapped id alone (drop the loop).
+ *                  "1 football rows over 1 teams ... expected ... 32 rows"
+ *   REPEAT         the refund after a lost grant race deleted, so an owned
+ *                  garment is refused AND charged. "refused 'owned', rows
+ *                  32 -> 32, coins 95800 -> 91600 (delta -4200, expected 0)".
+ *                  NOTE the pre-check alone is NOT enough to redden this row:
+ *                  deleting `owned.has(itemId)` leaves grantCosmetic's receipt
+ *                  refusing and refunding, which is the outcome the row grades.
+ *   BUY-BUNDLE     the bundle grants only its receipt piece. "1 rows over 1
+ *                  teams x 1 keys, every sold garment in every team: false"
+ *   REPEAT-BUNDLE  the `!want.length` refusal replaced by a charge.
+ *                  "bundle: SOLD; coins 83200 -> 66400 (delta -16800)"
+ *   SHUT           `stocked` defaulting to true on either path, which is the
+ *                  mutation that would ship the kit early. "garment sold,
+ *                  bundle refused" / "garment refused, bundle sold"
+ *   NOT-SOLD       drop `!garment?.sold`. "visor60 at the till: SOLD, coins
+ *                  100000 -> 95800, 32 football rows granted"
  *
  *   node tests/football-kit-audit.mjs
  */
@@ -524,7 +554,7 @@ ok('SHELF-DATA the shop shelf is exactly the five sold garments, each with a lab
   SHELF.length === 5 && shelfKeys.join() === shelfSold.join() &&
   SHELF.every(r => r.label && r.slot && Number.isFinite(r.price) && r.price > 0) &&
   SHELF.every(r => FB.FOOTBALL_GARMENT_BY_KEY[r.key]),
-  `${SHELF.length} tiles: ${SHELF.map(r => `${r.label} (${r.slot}) ${r.price}`).join(' · ')}; FOOTBALL_SOLD is ${shelfSold.length} deep`);
+  `${SHELF.length} tiles${SHELF.length > 8 ? ' (first 8)' : ''}: ${SHELF.slice(0, 8).map(r => `${r.label} (${r.slot}) ${r.price}`).join(' · ')}; FOOTBALL_SOLD is ${shelfSold.length} deep`);
 
 /* ---- 9. A LIVE KIT WITH NO PRICE ----------------------------------------- */
 /* The rule, as the buy path states it (js/loot.js buyFootballItem): a piece is
