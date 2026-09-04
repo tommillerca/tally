@@ -263,7 +263,10 @@ const ACTIONS = [
      tests/wanderer-boneyard-audit.mjs (ONE-SHOT / ATOMIC). */
   { id: 'js/app.js:openFight', sites: 18, undriven: 'the fight settlement: thirteen modes, every one of them delegating to a claim function registered above (claimFriendBattle, claimDenWin, claimMiniWin, claimGluttonWin) or gated on an award() key it reads before paying. The two remote branches are pinned by name by the NO-OP guards in tests/unit.test.js; tests/glutton-audit.mjs and tests/spire-phase3-audit.mjs drive the two that shipped exploits; and the two Boneyard ambushes (mimic, wanderer) are driven by tests/mimic-audit.mjs and tests/wanderer-boneyard-audit.mjs' },
   { id: 'js/app.js:renderBoneyard', sites: 4, undriven: 'the map: the tribute button and the spawn button, both delegating to collectTribute and collectSpawn, which are driven above. Was 5 until 2026-08-18: a collect also paid a garden seed, and with the Bone Garden off the player\'s path a seed cannot be planted, so that grant came out' },
-  { id: 'js/app.js:openKitchen', sites: 3, undriven: 'awardCapped on a served dish (driven above), plus a coin-priced forage' },
+  { id: 'js/app.js:openKitchen', sites: 2, undriven: 'awardCapped on a served dish (driven above), plus a coin-priced forage' },
+  /* QA r26 O15 (2026-09-04): drainCookQueue took the per-dish cook XP payout out of openKitchen so the queue
+     drains on boot/resume/Today, not only while the Kitchen sheet is open. Same transition, same authority. */
+  { id: 'js/app.js:drainCookQueue', sites: 1, undriven: 'awardCapped per finished dish, once, when advanceQueue removes the queue entry (the authority); the served-dish payout is driven above' },
   { id: 'js/app.js:openHollow', sites: 1, undriven: 'awardCapped on a harvested bed; harvestPlot is the authority and is driven above' },
   { id: 'js/app.js:openGardenSheet', sites: 1, undriven: 'DEAD CODE: openGardenSheet has no caller anywhere in js/ (the GROW door opens openHollow). Registered so that if it is ever wired back up, the count moves and somebody has to look at it' },
   /* THE RACK. A SPEND rather than a payout, and it is registered here because
