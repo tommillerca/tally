@@ -1678,16 +1678,16 @@ test('css: the scroll container still reserves the safe area', () => {
    classes) by specificity then source order, the way the browser does, for the
    three controls QA measured under the floor. The pixel proof is
    tests/a11y-audit.mjs (M24 rows); this is the static half. ---- */
-test('R25-M20 sheet-head icon buttons and the amount input resolve to >= 44px', () => {
-  const css = readFileSync(join(here, '..', 'app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-  /* Simple selectors only: `.a`, `.a.b`, `.a .b`, `tag`, `.a input`. Anything
-     with an id, pseudo, attribute or combinator other than descendant is
-     skipped, which is safe here because a skipped rule can only make this
-     resolver report a SMALLER winner than the browser if that rule raised the
-     value, and every rule in these three chains is plain classes. */
+/* THE CASCADE RESOLVER, shared by R25-M20 and R22-W12 below. Simple selectors
+   only: `.a`, `.a.b`, `.a .b`, `tag`, `.a input`. Anything with an id, pseudo,
+   attribute or combinator other than descendant is skipped, which is safe here
+   because a skipped rule can only make this resolver report a SMALLER winner
+   than the browser if that rule raised the value, and every rule in the chains
+   it is asked about is plain classes.
+   el = { tag, classes, ancestors: [{tag, classes}, ...] nearest first } */
+function cssResolve(sheet, el, prop) {
   const compound = tok => { const m = tok.match(/^([a-z]+)?((?:\.[\w-]+)*)$/i); return m ? { tag: m[1] || null, classes: (m[2].match(/[\w-]+/g) || []) } : null; };
   const matchesCompound = (c, el) => (!c.tag || c.tag === el.tag) && c.classes.every(k => el.classes.includes(k));
-  // el = { tag, classes, ancestors: [{tag, classes}, ...] nearest first }
   const matches = (selector, el) => {
     const parts = selector.trim().split(/\s+/).map(compound);
     if (parts.some(p => !p) || /[#:>+~\[]/.test(selector)) return null;
@@ -1700,21 +1700,25 @@ test('R25-M20 sheet-head icon buttons and the amount input resolve to >= 44px', 
     return true;
   };
   const specificity = sel => (sel.match(/\.[\w-]+/g) || []).length * 10 + (sel.match(/(^|\s)[a-z]+/gi) || []).length;
-  const resolve = (el, prop, sheet = css) => {
-    let win = null, order = 0;
-    for (const m of sheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      order++;
-      const decl = m[2].match(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`));
-      if (!decl) continue;
-      for (const sel of m[1].split(',')) {
-        if (!matches(sel, el)) continue;
-        const sp = specificity(sel);
-        if (!win || sp > win.sp || (sp === win.sp && order >= win.order)) win = { sp, order, sel: sel.trim(), value: decl[1].trim() };
-      }
+  let win = null, order = 0;
+  for (const m of sheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    order++;
+    const decl = m[2].match(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`));
+    if (!decl) continue;
+    for (const sel of m[1].split(',')) {
+      if (!matches(sel, el)) continue;
+      const sp = specificity(sel);
+      if (!win || sp > win.sp || (sp === win.sp && order >= win.order)) win = { sp, order, sel: sel.trim(), value: decl[1].trim() };
     }
-    return win;
-  };
-  const px = v => { assert.match(v, /^\d+(\.\d+)?px$/, `expected a px value, got "${v}"`); return parseFloat(v); };
+  }
+  return win;
+}
+const cssPx = v => { assert.match(v, /^\d+(\.\d+)?px$/, `expected a px value, got "${v}"`); return parseFloat(v); };
+
+test('R25-M20 sheet-head icon buttons and the amount input resolve to >= 44px', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const resolve = (el, prop, sheet = css) => cssResolve(sheet, el, prop);
+  const px = cssPx;
   const sheetHead = [{ tag: 'div', classes: ['t1-tools'] }, { tag: 'div', classes: ['sheet-head'] }, { tag: 'div', classes: ['sheet', 't1'] }];
   const close = { tag: 'button', classes: ['sheet-close', 't1-icon-btn'], ancestors: sheetHead };
   const fav = { tag: 'button', classes: ['t1-icon-btn'], ancestors: sheetHead };
@@ -5140,6 +5144,105 @@ test('melt: the worn piece is named as coming off, the arm is armToConfirm, a bu
   const u = await run(false);
   assert.equal(u.label, 'Tap again to melt', `unworn piece: plain melt label, got "${u.label}"`);
   assert.ok(!u.label.includes('takes it off'), 'an unworn piece is not "taken off"');
+});
+
+/* ---- QA round 22 W5: a tap in the "pick your fit" grid that takes statted gear
+   off arms first. Measured on main: one click on .ward-cell.r-common dropped
+   loadout.H with no toast and the stat chips kept the OLD numbers (MARROW 58 +4
+   over a fighter at 54) until a forced re-render, because restageWardrobe
+   repaints the doll and the rings only. The pixel proof is the W5 rows in
+   tests/transmog-clarity-audit.mjs; this is the static half over the handler. */
+test('R22-W5 a displacing equip goes through armToConfirm and the gear path; a free swap stays one tap', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const start = app.indexOf('const doEquip = async cell =>');
+  assert.ok(start > 0, 'the [data-equip] handler is no longer doEquip (main wired the tap straight to equip())');
+  const slice = app.slice(start, app.indexOf('async function restageLook', start));
+  // the wiring: displacing tiles arm, naming the gear and its stats; free swaps do not
+  assert.match(slice, /if \(!wornGear\) \{ cell\.addEventListener\('click', \(\) => doEquip\(cell\)\); return; \}/,
+    'a tap that displaces nothing must stay one tap');
+  assert.match(slice, /armToConfirm\(cell, `Tap again: takes off \$\{wornGear\.name\}, \$\{gearLabel\(wornGear\)/,
+    'a tap that takes statted gear off must arm first and name the gear and its stats');
+  // the restage: gear came off, so the whole screen re-reads (stats, lead, prices)
+  const eq = slice.indexOf('await equip(slot, cell.dataset.equip || null)');
+  const full = slice.indexOf("if (wornGear) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }");
+  const inPlace = slice.indexOf('await restageWardrobe(content, slot)');
+  assert.ok(eq > 0 && full > eq && inPlace > full,
+    'after a displacing equip the handler must take the full render BEFORE the in-place restage (which never repaints .pd-stats or .mog-panel)');
+  // and the full render is where the stat chips and the panel come from
+  assert.match(app, /<div class="pd-stats">\$\{STAT_META\.map\(statChip\)\.join\(''\)\}<\/div>/, 'the stat chips are rendered by statChip inside renderCharacter');
+  assert.ok(app.includes('lookPriceMap[i.id] = await transmogPrice(slot, i.id)'), 'the panel prices come from transmogPrice inside renderCharacter');
+  // armToConfirm rewrites innerHTML, so the art must be redrawn after the cool-off
+  assert.match(slice, /hydratePackArt\(cell, '\.ward-art\[data-art\]'\); \}, ARM_COOLOFF_MS \+ 20\)/, 'the tile art must be redrawn once the cool-off restores the markup');
+});
+
+/* ---- QA round 22 W4: an uncommitted preview must not follow the player out and
+   back in. S.lookPreview was cleared only on commit/cancel; a hub tab switch or a
+   hash change reopened the slot with the preview on the doll, captioned "After",
+   bar armed. The clear lives in route() because every navigation lands there. */
+test('R22-W4 route() clears S.lookPreview on navigation, and both hub paths reach route()', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const route = app.slice(app.indexOf('function route({ keepScroll = false } = {})'), app.indexOf('const tab = currentTab();', app.indexOf('function route({ keepScroll = false } = {})')));
+  assert.match(route, /const isNav = !keepScroll;[\s\S]*if \(isNav\) S\.lookPreview = null;/, 'route() must null S.lookPreview on a navigation (QA round 22 W4)');
+  assert.doesNotMatch(route, /^\s*S\.lookPreview = null;/m, 'the clear must be gated on isNav: refresh() is not the player leaving');
+  const oc = app.slice(app.indexOf("function openCharacter(tab = 'wardrobe')"), app.indexOf('let pendingHubTab'));
+  assert.match(oc, /return route\(\);/, 'openCharacter on the hub must route()');
+  assert.match(oc, /location\.hash = '#\/bonehead';/, 'openCharacter off the hub must set the hash, which routes');
+  assert.match(app, /function routeFromHash\(\) \{[\s\S]{0,200}?route\(\);/, 'a hashchange must reach route()');
+});
+
+/* ---- QA round 22 W13, three bullets. (a) after a successful commit the bar sat
+   .armed with a live "Wear it" until restageLook decoded the doll; (b) the v1
+   tile printed a bare number; (c) the only scrollIntoView on the screen went to
+   the gear card, not the Dressing Room. */
+test('R22-W13 the bar disarms on commit, every price tag carries the unit, a doll-slot tap arrives at the panel', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  // (a) same tick as the receipt, before the async restage
+  const apply = app.slice(app.indexOf('async function applyLook(btn)'), app.indexOf("$$('[data-equipgear]', content)"));
+  const ok = apply.indexOf('S.lookPreview = null;'), disarm = apply.indexOf("classList.remove('armed')"), dis = apply.indexOf('btn.disabled = true;'), restage = apply.indexOf('restageLook({ committed: true })');
+  assert.ok(ok > 0 && disarm > ok && dis > ok && restage > dis, 'applyLook must drop .armed and disable the button before restageLook({ committed: true }) (QA round 22 W13a)');
+  // the resting bar: not armed, button disabled
+  assert.match(app, /class="look-bar mog-bar\$\{changed \? ' armed' : ''\}"/, 'the bar is armed only while a change is selected');
+  assert.match(app, /: '<button class="btn ghost mog-go" disabled>Wear it<\/button>'/, 'nothing selected renders a disabled Wear it');
+  // (b) no bare price span is left: every priced look tag goes through costTag (dust unit)
+  assert.doesNotMatch(app, /<span class="look-cost">\$\{/, 'a bare `12` price tag survives; use costTag (QA round 22 W13b)');
+  assert.equal((app.match(/\$\{costTag\(i\.id\)\}/g) || []).length, 2, 'both look grids (v2 and the ?mogv2=0 fallback) price through costTag');
+  // (c) the doll-slot tap scrolls the Dressing Room into view after the render lands
+  const pd = app.slice(app.indexOf('const wirePd = b =>'), app.indexOf("$$('[data-pd]', content).forEach(wirePd)"));
+  assert.match(pd, /await renderCharacter\(wrap, 'wardrobe', \{ instant: true \}\);[\s\S]*\$\('\.mog-panel', wrap\)\?\.scrollIntoView\(/, 'after a doll-slot tap the .mog-panel must be scrolled into view, after the render (QA round 22 W13c)');
+});
+
+/* ---- QA round 22 W12: four tap targets under Apple's 44px floor ("Wear it"
+   79x43, "What is this?" 105x24, "+ Save this fit" 128x34, "Take it all off"
+   120x34), focus invisible on a selected tile, and the price chip and the
+   "owned" chip on the same ground. Resolved through the CASCADE like R25-M20:
+   .mog-go is a .btn override, so a grep on one rule proves nothing. The pixel
+   half is the wardrobe rows in tests/a11y-audit.mjs. */
+test('R22-W12 the Dressing Room controls resolve to >= 44px, focus survives selection, owned is not a price', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const dock = [{ tag: 'div', classes: ['mog-dock'] }, { tag: 'div', classes: ['screen'] }];
+  const controls = [
+    ['Wear it (.look-bar.mog-bar .btn.mog-go)', { tag: 'button', classes: ['btn', 'mog-go'], ancestors: [{ tag: 'div', classes: ['look-bar', 'mog-bar'] }, ...dock] }],
+    ['What is this? (.gd-what)', { tag: 'button', classes: ['gd-what'], ancestors: [{ tag: 'div', classes: ['sect-h', 'mog-h'] }, { tag: 'div', classes: ['mog-panel'] }, ...dock] }],
+    ['+ Save this fit (.fit-chip.add)', { tag: 'button', classes: ['fit-chip', 'add'], ancestors: [{ tag: 'div', classes: ['fit-rail'] }] }],
+    ['Take it all off (.fit-chip.reset)', { tag: 'button', classes: ['fit-chip', 'reset'], ancestors: [{ tag: 'div', classes: ['fit-rail'] }] }],
+  ];
+  for (const [name, el] of controls) {
+    const w = cssResolve(css, el, 'min-height');
+    assert.ok(w, `${name}: no rule sets min-height at all (QA round 22 W12)`);
+    assert.ok(cssPx(w.value) >= 44, `${name}: the winning min-height is "${w.sel} { min-height: ${w.value} }", under the 44px floor`);
+  }
+  /* focus on a selected tile: a rule with MORE simple selectors than
+     .ward-cell.selected (2), and a different outline than the selection ring */
+  const sel = css.match(/\.ward-cell\.selected\s*\{([^}]*)\}/), foc = css.match(/\.ward-cell\.selected:focus-visible\s*\{([^}]*)\}/);
+  assert.ok(sel && foc, '.ward-cell.selected and .ward-cell.selected:focus-visible must both exist');
+  const outline = block => (block.match(/(?:^|;)\s*outline\s*:\s*([^;]+)/) || [])[1]?.trim();
+  assert.ok(outline(foc[1]) && outline(foc[1]) !== outline(sel[1]), `a focused selected tile must compute a different outline (selected: ${outline(sel[1])}, focused: ${outline(foc[1])})`);
+  // owned vs price: same chip class, different ground
+  const tile = [{ tag: 'button', classes: ['ward-cell', 'look'] }];
+  const paid = cssResolve(css, { tag: 'span', classes: ['look-cost', 'paid'], ancestors: tile }, 'background');
+  const price = cssResolve(css, { tag: 'span', classes: ['look-cost', 'dust'], ancestors: tile }, 'background');
+  assert.ok(paid && price, 'both chips must resolve a background');
+  assert.notEqual(paid.value, price.value, `"owned" and a price share a background (${paid.value}); the receipt needs its own ground`);
 });
 
 await runAll();

@@ -220,6 +220,16 @@ const TARGETS = [
   { surface: 'portion', sel: '#qtyIn',             why: 'Portion sheet: the amount input (181x31 until M20)' },
   { surface: 'portion', sel: '#pMealChips button', why: 'Portion sheet: meal chips', all: true },
   { surface: 'portion', sel: '#addBtn',            why: 'Portion sheet: commit' },
+  /* THE DRESSING ROOM (QA round 22 W12). Lane F measured, across 850 hit tests:
+     "Wear it" 79x43 (.mog-go overrides the .btn padding), "What is this?" 105x24,
+     "+ Save this fit" 128x34, "Take it all off" 120x34. The panel and the strip
+     chip only render while slot H holds something, and a fresh profile holds
+     nothing, so the surface is dressed through the app's own grants first
+     (inject 'mog-panel', idempotent). `inject` also measures every match. */
+  { surface: 'wardrobe', sel: '.mog-panel .gd-what', why: 'Dressing Room: What is this? (105x24 until W12)', inject: 'mog-panel' },
+  { surface: 'wardrobe', sel: '.mog-bar .mog-go',    why: 'Dressing Room: Wear it (79x43 until W12)', inject: 'mog-panel' },
+  { surface: 'wardrobe', sel: '.fit-chip.add',       why: 'fit rail: + Save this fit (128x34 until W12)', inject: 'mog-panel' },
+  { surface: 'wardrobe', sel: '.fit-chip.reset',     why: 'fit rail: Take it all off (120x34 until W12)', inject: 'mog-panel' },
 ];
 
 /* CONTRAST PAIRS THIS PASS IS RESPONSIBLE FOR, and where the thresholds come
@@ -333,6 +343,25 @@ async function goTo(page, surface) {
    the real grid, at the real width. Labelled INJECTED in the report so nobody
    reads it as a driven control. */
 async function inject(page, kind) {
+  if (kind === 'mog-panel') {
+    /* DRESS SLOT H THROUGH THE APP'S OWN GRANTS (QA round 22 W12), then reopen the
+       slot so the Wardrobe re-renders with a panel to measure. Not a probe: the
+       controls measured are the app's own, on an account that owns a statted hat
+       and two hat looks, which is the state every player who can reach these
+       controls is in. Idempotent so the four rows share one dressing. */
+    if (await page.evaluate(() => !!document.querySelector('.mog-panel .mog-go'))) return;
+    await page.evaluate(async () => {
+      const loot = await import('./js/loot.js');
+      const { GEAR_ITEMS } = await import('./js/gear.js');
+      const { BH_ITEMS } = await import('./data/boneheadz.js');
+      const g = GEAR_ITEMS.find(x => x.slot === 'H' && (x.minLevel || 1) <= 1);
+      if (g) { await loot.grantGear(g.id, 'test'); await loot.equipGear('H', g.id); }
+      for (const i of BH_ITEMS.filter(i => i.slot === 'H').slice(0, 2)) await loot.grantCosmetic(i.id, 'test');
+      document.querySelector('.pd-slot[data-pd="H"]')?.click();
+    });
+    await sleep(1800);
+    return;
+  }
   if (kind !== 'q-claim') return;
   /* TWO, in ADJACENT rows. One probe cannot see the failure that matters here:
      a 44px hit area on a 28px button in a 7px-gapped list is only 44px if the

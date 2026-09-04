@@ -418,6 +418,98 @@ check('ECONOMY the confirm charges exactly that and nothing else',
 check('ECONOMY and the player is actually wearing what they paid for',
   !econ.why && econ.wearing === econ.target, `${econ.wearing} vs ${econ.target}`);
 
+/* ---------------------------------------------------------- QA round 22 W5 ----
+   THE DESTRUCTIVE TAP ON THIS SCREEN IS THE ONE THAT LOOKS COSMETIC. Lane A,
+   blind: one click on a .ward-cell in the "pick your fit" grid dropped loadout.H,
+   #toast stayed empty at 120/300/600ms and the stat chips kept reading MARROW 58
+   +4 over a fighter at 54, because restageWardrobe repaints the doll and the
+   rings only. Lane G, from the other side: the Dressing Room still priced 4 of 4
+   tiles at 6/25/6/60 against a live transmogPrice of 0.
+   Fix: a tap that would take statted gear off arms first (armToConfirm, the bar's
+   own idiom, label naming the gear and its stats) and a confirmed one takes the
+   gear path, the full render, so chips and prices are re-read.
+   Runs on the ECONOMY state above: statted hat on, a paid look worn.
+   PROVE-RED on 7d2b4ce5: the first click empties loadout.H (row 2 red), and the
+   chips still carry the old bonus after it (row 4 red). */
+const w5 = await page.evaluate(async () => {
+  const loot = await import('./js/loot.js');
+  const { GEAR_BY_ID } = await import('./js/gear.js');
+  const chips = () => Object.fromEntries([...document.querySelectorAll('.pd-stat')].map(c => [
+    c.querySelector('small').textContent.trim().toLowerCase(),
+    { val: Number(c.querySelector('b').textContent), bonus: Number((c.querySelector('i')?.textContent || '0').replace('+', '')) },
+  ]));
+  const gearBefore = (await loot.gearLoadout()).H;
+  const g = GEAR_BY_ID[gearBefore];
+  const tile = document.querySelector('.ward-grid[data-wslot="H"] .ward-cell[data-equip]:not(.none):not(.equipped)');
+  if (!g || !tile) return { why: `no statted hat (${gearBefore}) or no cosmetic tile to tap` };
+  const before = chips();
+  tile.click();
+  await new Promise(r => setTimeout(r, 400));
+  const oneTap = { gear: (await loot.gearLoadout()).H, label: tile.textContent.trim(), arming: tile.classList.contains('arming') };
+  tile.click();
+  await new Promise(r => setTimeout(r, 1800));
+  const gearAfter = (await loot.gearLoadout()).H;
+  const after = chips();
+  const prices = [];
+  for (const c of document.querySelectorAll('.mog-panel .ward-cell.look[data-look]')) {
+    const tag = c.querySelector('.look-cost'); if (!tag) continue;
+    const quoted = /owned/i.test(tag.textContent) ? 0 : parseInt(tag.textContent, 10);
+    prices.push({ id: c.dataset.look, quoted, authority: await loot.transmogPrice('H', c.dataset.look) });
+  }
+  return { gearBefore, stats: g.stats, oneTap, gearAfter, before, after, prices };
+});
+console.log('W5:', JSON.stringify(w5));
+/* the chip label for each gear stat key: STAT_META labels, lower-cased (wind reads Stamina) */
+const CHIP = { power: 'power', marrow: 'marrow', wind: 'stamina', reflex: 'reflex', hype: 'hype' };
+check('W5 SAMPLE the row found a statted hat and a cosmetic tile to tap (empty is a FAILURE)', !w5.why, w5.why || `${w5.gearBefore} ${JSON.stringify(w5.stats)}`);
+check('W5 one tap on a picture that would take gear off ARMS, names the gear, and takes nothing off',
+  !w5.why && w5.oneTap.gear === w5.gearBefore && w5.oneTap.arming && /^Tap again: takes off /.test(w5.oneTap.label), JSON.stringify(w5.oneTap));
+check('W5 the second tap takes the gear off (the player asked twice)', !w5.why && !w5.gearAfter, `loadout.H after: ${w5.gearAfter}`);
+check('W5 the rendered stat chips equal a fresh fighter read: every stat the piece carried dropped by exactly its bonus, mark included',
+  !w5.why && Object.keys(w5.stats).length > 0 && Object.entries(w5.stats).every(([k, v]) => {
+    const b = w5.before[CHIP[k]], a = w5.after[CHIP[k]];
+    return b && a && a.val === b.val - v && a.bonus === b.bonus - v;
+  }), JSON.stringify({ stats: w5.stats, before: w5.before, after: w5.after }));
+check('W5 every quoted price on the Dressing Room equals a fresh transmogPrice (zero tiles is a FAILURE)',
+  !w5.why && w5.prices.length > 0 && w5.prices.every(p => p.quoted === p.authority), JSON.stringify(w5.prices));
+
+/* ---------------------------------------------------------- QA round 22 W4 ----
+   AN UNCOMMITTED PREVIEW MUST NOT FOLLOW THE PLAYER OUT AND BACK IN. Lane E: a
+   look tried on and NOT committed, then a full route change (#/today, then
+   #/bonehead): the stage still carried the preview art, captioned "After", bar
+   .armed. Fix: route() nulls S.lookPreview on every navigation.
+   The stage is compared as a SET of layer sources: S0 before the preview, S1
+   with it (control: must differ, or the tap did nothing and the row proves
+   nothing), S2 after the round trip, which must equal S0 exactly: a bound of
+   zero preview-only layers, not a trend.
+   PROVE-RED on 7d2b4ce5: S2 carries the preview layer, caption After, bar armed. */
+const w4a = await page.evaluate(async () => {
+  const srcs = () => [...document.querySelectorAll('.bh-stage.lg img')].map(i => i.getAttribute('src')).sort().join('|');
+  const caps = () => [...document.querySelectorAll('.mog-cap')].map(c => c.textContent.trim());
+  const tile = [...document.querySelectorAll('.mog-panel .ward-cell.look[data-look]')]
+    .find(c => c.dataset.look && !c.querySelector('.look-hide') && !c.classList.contains('equipped'));
+  if (!tile) return { why: 'no look tile to try on' };
+  const s0 = srcs();
+  tile.click();
+  await new Promise(r => setTimeout(r, 900));
+  return { look: tile.dataset.look, s0, s1: srcs(), caps1: caps(), armed1: !!document.querySelector('.mog-bar.armed') };
+});
+await page.evaluate(() => { location.hash = '#/today'; }); await sleep(1800);
+await page.evaluate(() => { location.hash = '#/bonehead'; }); await sleep(2200);
+await settle(page);
+const w4b = await page.evaluate(() => ({
+  s2: [...document.querySelectorAll('.bh-stage.lg img')].map(i => i.getAttribute('src')).sort().join('|'),
+  caps2: [...document.querySelectorAll('.mog-cap')].map(c => c.textContent.trim()),
+  armed2: !!document.querySelector('.mog-bar.armed'),
+}));
+console.log('W4:', JSON.stringify({ ...w4a, ...w4b }));
+check('W4 CONTROL the preview took: the stage changed, the caption read After, the bar armed',
+  !w4a.why && w4a.s1 !== w4a.s0 && w4a.caps1[1] === 'After' && w4a.armed1, JSON.stringify(w4a));
+check('W4 after leaving and coming back the stage carries ZERO preview-only layers (equals the pre-preview set)',
+  !w4a.why && w4b.s2 === w4a.s0, `before ${w4a.s0} | after ${w4b.s2}`);
+check('W4 and the panel is at rest: caption "Pick one below", bar not armed',
+  !w4a.why && w4b.caps2[1] === 'Pick one below' && !w4b.armed2, JSON.stringify(w4b));
+
 /* SOURCE ROW, not a render: the interface pass must not have touched a number.
    Cheap, and it goes red the day somebody hides a balance change in a UI diff. */
 const loot = readFileSync(path.join(ROOT, 'js/loot.js'), 'utf8');
