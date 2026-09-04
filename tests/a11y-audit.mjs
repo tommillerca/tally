@@ -192,6 +192,34 @@ const TARGETS = [
   { surface: 'build', sel: '#gearBtn',      why: 'the floating Settings gear (route() hides it on Today/Settings/Boneyard)' },
   { surface: 'shop',  sel: '#gwGear',       why: "the Emporium's own Settings gear" },
   { surface: 'shop',  sel: 'button.t3-price', why: 'buy', all: true },
+  /* THE LOGGING PATH, QA round 25 M24 (the a11y half), 2026-09-04. Until this
+     block the registry held not one control from the Add or Portion sheets:
+     the thing a player touches most, every day, and the surface this audit was
+     never pointed at. So `.sheet-close` shipped at 44x41 (its own min-height: 44px
+     at app.css ~445 is shadowed by `.t1-icon-btn`'s min-height: 40px 6,283 lines
+     later at the SAME specificity), `#favBtn` at 40x41 and `#qtyIn` at 181x31,
+     all with this file green. Third guard of the round found testing above the
+     layer its bug lives at (after the xp-cap lint and the log-write injection).
+     PROVE-RED: with the three M20 CSS fixes reverted (`.t1-tools .t1-icon-btn`
+     and the `.t1-step .val input` min-height), exactly these three rows go red
+     on both viewports: #favBtn, the portion sheet's .sheet-close, #qtyIn. Every
+     other row here already sits on a 44px+ recipe (.t1-seg button 44, .t1-step
+     button 56, .t1-search input 48, .t1-frow 64, .btn ~54) and stays green.
+     .sheet-close is scoped to the TOP sheet (#sheets > div:last-child): on the
+     portion surface the Add sheet is still mounted underneath with its own
+     .sheet-close, which querySelectorAll would return first and the hit-test
+     would then report as blocked by the backdrop above it, a false red. */
+  { surface: 'add', sel: '#sheets > div:last-child .sheet-close',   why: 'Add sheet: Done (the shadowed .sheet-close)' },
+  { surface: 'add', sel: '#mealChips button',      why: 'Add sheet: meal chips', all: true },
+  { surface: 'add', sel: '#q',                     why: 'Add sheet: the search input' },
+  { surface: 'add', sel: '#results button[data-food]', why: 'Add sheet: the first result row (opens the portion sheet)' },
+  { surface: 'portion', sel: '#favBtn',            why: 'Portion sheet: favourite (a bare .t1-icon-btn, 40x40 until M20)' },
+  { surface: 'portion', sel: '#sheets > div:last-child .sheet-close', why: 'Portion sheet: Cancel (the shadowed .sheet-close)' },
+  { surface: 'portion', sel: '#servChips button',  why: 'Portion sheet: serving chips', all: true },
+  { surface: 'portion', sel: '.t1-step button',    why: 'Portion sheet: the +/- stepper', all: true },
+  { surface: 'portion', sel: '#qtyIn',             why: 'Portion sheet: the amount input (181x31 until M20)' },
+  { surface: 'portion', sel: '#pMealChips button', why: 'Portion sheet: meal chips', all: true },
+  { surface: 'portion', sel: '#addBtn',            why: 'Portion sheet: commit' },
 ];
 
 /* CONTRAST PAIRS THIS PASS IS RESPONSIBLE FOR, and where the thresholds come
@@ -271,7 +299,30 @@ async function goTo(page, surface) {
     if (at) await page.mouse.click(at.x, at.y);
     await sleep(2800);
   }
-  if (surface !== 'pit' && surface !== 'fight') await clean();
+  /* THE LOGGING PATH (QA round 25 M24). Two sheets, reached the way a player
+     reaches them: the FAB, then a search, then the first result. A fresh audit
+     profile has no recents, so the default list is an empty note and the
+     "first result row" only exists after a query; "banana" is a built-in with
+     two servings, so the portion sheet opens in serving mode and renders #qtyIn
+     (grams mode renders #gramsIn instead, which is the same rule and the same
+     fix). #fab's handler is a plain addEventListener('click'), so .click() is
+     enough here. */
+  if (surface === 'add' || surface === 'portion') {
+    await page.evaluate(() => { location.hash = '#/today'; }); await sleep(1800);
+    await clean();
+    await page.evaluate(() => document.getElementById('fab')?.click()); await sleep(1500);
+    await page.evaluate(() => {
+      const q = document.getElementById('q');
+      if (!q) return;
+      q.value = 'banana'; q.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await sleep(900);   // the search debounce is 120ms
+    if (surface === 'portion') {
+      await page.evaluate(() => document.querySelector('#results button[data-food]')?.click());
+      await sleep(1500);
+    }
+  }
+  if (!['pit', 'fight', 'add', 'portion'].includes(surface)) await clean();
   await settle(page);
   await page.evaluate(HARNESS);
 }
