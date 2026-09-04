@@ -153,6 +153,13 @@ export const XP_DAILY_CAP = { fight: 12, garden: 10, cook: 8, siege: 5, log: 20 
    award() already returns for a duplicate, so every caller's `if (g)` still
    means "something was actually granted". */
 export async function awardCapped(prefix, type, xp, label, cap, date, ref = null) {
+  return (await claimCapped(prefix, type, xp, label, cap, date, ref)).xp;
+}
+/* The loop behind awardCapped, returning `claimed` as well as xp. awardCapped's
+   number cannot say whether a 0-XP slot was taken (0 is both "capped" and "a
+   payload with no XP"), and the spar ledger below pays COINS off a 0-XP row, so
+   anything gating money on the slot must read `claimed` (QA round 28 P4). */
+async function claimCapped(prefix, type, xp, label, cap, date, ref = null) {
   const d = date || dateKey();
   for (let n = 1; n <= cap; n++) {
     const key = `${prefix}-${d}-${n}`;
@@ -166,7 +173,7 @@ export async function awardCapped(prefix, type, xp, label, cap, date, ref = null
        one keyed get per slot, no store scan. */
     if (ref != null) {
       const have = await db.get('xp', key);
-      if (have) { if (have.ref === ref) return 0; continue; }
+      if (have) { if (have.ref === ref) return { claimed: false, xp: 0 }; continue; }
     }
     /* `claimed`, not the xp number, decides whether this slot was ours. A
        second tab racing for the same n loses the addIfAbsent inside awardOnce
@@ -175,13 +182,32 @@ export async function awardCapped(prefix, type, xp, label, cap, date, ref = null
        12/day ceiling wrote the correct 12 rows and PAID 190 XP against a cap
        of 120, because both were told they had granted the same key. */
     const r = await awardOnce(key, type, xp, label, d, ref != null ? { ref } : null);
-    if (r.claimed) return r.xp;
+    if (r.claimed) return r;
     /* Lost the claim. If the winner was our own twin (two overlapping calls
        for one entry: reward-sop's "twoAtOnce" line paid 320 against 310), the
        entry is paid and we stop here instead of taking the next slot. */
-    if (ref != null && (await db.get('xp', key))?.ref === ref) return 0;
+    if (ref != null && (await db.get('xp', key))?.ref === ref) return { claimed: false, xp: 0 };
   }
-  return 0;
+  return { claimed: false, xp: 0 };
+}
+
+/* QA round 28 P4: SPARRING PAID WITH NO STATE TRANSITION. start() in the Pit
+   skips spendPitFight on purpose (sparring is free practice, Tom's call), and
+   settle() then paid 15 coins per win and 5 per loss with no ledger key, no
+   cooldown and no cap: the Glutton class, in the Pit itself. This is the
+   transition: "the nth spar of the day, n <= SPAR_DAILY_CAP, for a fight not yet
+   paid". Authority: the ledger key spar-<date>-<n>, with the fight's own id as
+   `ref` so a repeated settle of ONE fight (or two overlapping ones) takes one
+   slot. 0 XP on purpose: the win's XP is still the 'fight' cap in settle(); this
+   row exists to bound the coins, and coins are read off `claimed`.
+   FLAGGED, NOT DECIDED: SPAR_DAILY_CAP reuses XP_DAILY_CAP.fight (12/day) so no
+   new economy number is invented here; the 15/5 amounts are the shipped ones.
+   Whether a spar should also spend a Pit charge is Tom's call and unchanged. */
+export const SPAR_DAILY_CAP = XP_DAILY_CAP.fight;
+export const SPAR_COINS = { win: 15, loss: 5 };
+export async function claimSpar(fightId, won, date) {
+  const r = await claimCapped('spar', 'spar', 0, won ? 'Sparring win' : 'Sparring loss', SPAR_DAILY_CAP, date, fightId);
+  return { claimed: r.claimed, coins: r.claimed ? (won ? SPAR_COINS.win : SPAR_COINS.loss) : 0 };
 }
 
 export async function award(key, type, xp, label, date) {

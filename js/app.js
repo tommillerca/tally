@@ -7,7 +7,7 @@ import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
-  awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats,
+  awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar,
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
@@ -90,7 +90,7 @@ import {
   deriveStats, legacyHabitStats, habitGrantPoints, derived, STAT_META, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
   applyAction, endTurn, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
-  petActionsFor, applyPetAction, talentRanks, nodeRanks,
+  petActionsFor, applyPetAction, talentRanks, nodeRanks, GUARD_STAMINA,
 } from './pit.js';
 import { HERO_EDGE } from '../data/hero-edge.js';
 import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers,
@@ -21183,7 +21183,7 @@ async function renderPit(wrap) {
       <p class="pg-why">${downed.phase === 'lost' && !downed.forfeit
         ? `<b>${esc(downed.foe || 'The Pit')}</b> put you down.`
         : `You left your fight with <b>${esc(downed.foe || 'The Pit')}</b> before it was decided, so it goes down as a loss.`}
-        Your bones keep every stat: eat well, walk far, run it back.</p>
+        ${DEFEAT_STATS_NOTE}</p>
       <button class="btn" id="pitDefeatAck" style="width:100%">Back on your feet</button>
     </div>` : '';
 
@@ -21443,6 +21443,10 @@ let pitOpening = false;
    badge, and re-typing rows would silently move a badge nobody asked to move.
    Anything not listed keeps 'Pit win', which is the ladder itself: rung, champ
    and endless are Pit fights and should read as such. */
+/* QA round 28 P5: the defeat copy said "eat well, walk far", which since R21-P1's
+   flat base feeds no stat at all. The truthful sentence is the Build tab's own
+   (see the Training points note in openCharacter), reused here verbatim. */
+const DEFEAT_STATS_NOTE = 'Your bones keep every stat. Points come from hitting your protein target, closing a day on budget, and every 25,000 steps you walk: run it back.';
 const FIGHT_ROW_LABEL = {
   spar: 'Sparring win', boss: 'Den win', mini: 'Mini-boss win', secret: 'Secret boss win',
   glutton: 'Glutton win', spire: 'Spire fight', mimic: 'Boneyard win', wanderer: 'Boneyard win',
@@ -21480,6 +21484,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
      OPEN until settle() or onClose resolves it; see the lifecycle comment
      above openFight. Awaited so the record exists before the player can act. */
   const staked = PIT_STAKED_MODES.includes(foeCfg.mode);
+  // QA round 28 P4: the spar ledger's `ref`. One id per arena, so settle() can
+  // only ever take one spar-<date>-<n> slot for this fight (see claimSpar).
+  const fightId = newId();
   if (staked) await kvSet('pitFight', { phase: 'open', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() });
   /* THE FIRST FIGHT IS UNLOSABLE, and it is derived HERE because openFight is the
      one door every fight in the app walks through: the Pit ladder, the Champion,
@@ -21682,14 +21689,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
          PAINTED INK against the HUD's real rect at every viewport. -->
       <div class="fight-hud">
         <div class="hud-side you">
-          <div class="fname">You</div>
+          <div class="fname">You <span id="youHpN">${Math.round(player.hp)}/${player.d.maxHp}</span></div>
           <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
           <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
           <div class="fstate" id="youState" hidden></div>
           ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(petBody.d.maxHp / Math.max(1, player.d.maxHp) * 100))}%"><i id="petHp" style="width:100%"></i></div></div>` : ''}
         </div>
         <div class="hud-side foe">
-          <div class="fname">${esc(foe.name)}</div>
+          <div class="fname">${esc(foe.name)} <span id="foeHpN">${Math.round(foe.hp)}/${foe.d.maxHp}</span></div>
           <div class="bar fhp"><i id="foeHp" style="width:100%"></i></div>
           <div class="microbars"><div class="bar fwind"><i id="foeWind" style="width:100%"></i></div><div class="bar fhype"><i id="foeHype" style="width:0%"></i></div></div>
           <div class="fstate" id="foeState" hidden></div>
@@ -21913,6 +21920,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
      half the boss's pool is half as long as the boss's. It reads at a glance
      without a single digit on screen, which is the version he wanted. */
   function updateBars() {
+    // QA round 28 P2: HP was a bar with no number on 0 of 111 turns. The same
+    // value that drives the width is printed in the name plate over the bar.
+    el('youHpN').textContent = `${Math.max(0, Math.round(player.hp))}/${player.d.maxHp}`;
+    el('foeHpN').textContent = `${Math.max(0, Math.round(foe.hp))}/${foe.d.maxHp}`;
     el('youHp').style.width = (player.hp / player.d.maxHp * 100) + '%';
     el('youHp').style.background = player.hp / player.d.maxHp < 0.3 ? 'var(--danger)' : '';
     el('foeHp').style.width = (foe.hp / foe.d.maxHp * 100) + '%';
@@ -22452,9 +22463,23 @@ async function openFight(pitWrap, fighter, foeCfg) {
        hover. It is the same title= pattern the wardrobe, gear and Crew tiles
        already use. The third route needs no code: the Talents sheet renders the
        very same sentence at full width, which is where it comes from. */
+    /* QA round 28 P2: WHAT A MOVE COSTS WAS ONLY IN title=, which is hover or
+       long-press and does not exist on a phone. Haymaker sat disabled on 71 of
+       111 driven turns still advertising "~45 dmg · 88% hit" with no reason.
+       One extra <small> under the hint, same values actionsFor already decided
+       on: the cost when the move is legal, the reason when it is not (AP first,
+       then Stamina; flurry's floor is the 30 actionsFor tests, not its windCost,
+       which is "all of it"). No new copy beyond the value strings. */
+    const costLine = a => {
+      if (!a.enabled && !fight.over) {
+        if (fight.ap < a.ap) return `Needs ${a.ap} AP`;
+        return `Stamina ${Math.floor(player.wind)}/${a.id === 'flurry' ? 30 : a.windCost}`;
+      }
+      return `${a.ap} AP${a.windCost ? ` · ${a.windCost} Stamina` : ''}${a.id === 'guard' ? ` · +${GUARD_STAMINA} Stamina` : ''}${a.id === 'signature' ? ` · ${player.hype} Hype` : ''}`;
+    };
     const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
       <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" title="${esc(moveDetail(a.id))}" ${a.enabled ? '' : 'disabled'}>
-        <b>${a.label}</b><small>${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>${a.windCost ? ' ' + a.windCost + 'w' : ''}`}</small>
+        <b>${a.label}</b><small>${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>${a.windCost ? ' ' + a.windCost + 'w' : ''}`}</small><small class="cost">${costLine(a)}</small>
       </button>` : '';
     const dmgHint = id => {
       const est = expectedDamage(id, player, null, foe);
@@ -22472,7 +22497,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
     let html = '';
     const sig = get('signature');
-    if (sig) html += `<button class="fight-act sig" data-act="signature" title="${esc(moveDetail('signature'))}" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · full power${player.sigsUsed ? ' · encore' : ''}</small></button>`;
+    if (sig) html += `<button class="fight-act sig" data-act="signature" title="${esc(moveDetail('signature'))}" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · full power${player.sigsUsed ? ' · encore' : ''}</small><small class="cost">${costLine(sig)}</small></button>`;
 
     const casterRow = () => {
       let h = '';
@@ -22763,7 +22788,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
       await awardCapped('fight', 'fight', 10, FIGHT_ROW_LABEL[foeCfg.mode] || 'Pit win', XP_DAILY_CAP.fight);
       trackEvent(foeCfg.mode === 'boss' ? 'boss_win' : foeCfg.mode === 'mini' ? 'mini_win' : 'pit_win', { mode: foeCfg.mode });
       xp += 10;
-      if (foeCfg.mode === 'spar') { coins = 15; }
+      /* QA round 28 P4: 15 coins per spar win used to be assigned here with no
+         ledger key and no cap (start() skips spendPitFight on purpose). The
+         coins now come off claimSpar's daily slot; past SPAR_DAILY_CAP, or on a
+         repeated settle of this fight, it pays 0. */
+      if (foeCfg.mode === 'spar') { coins = (await claimSpar(fightId, true)).coins; }
       else if (foeCfg.mode === 'boss') {
         const r = await claimDenWin(foeCfg.den);
         if (r) {
@@ -23060,8 +23089,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
     } else if (fight.over.winner === 'f') {
-      coins = 5;
-      await coinsAdd(coins);
+      /* QA round 28 P4: a spar LOSS paid 5 coins unconditionally, with no charge
+         spent and no cap, so losing on purpose was a coin tap. Spars now take the
+         same daily slot as a spar win. Staked modes are unchanged: their 5 is
+         already bounded by the Pit charge spendPitFight took. */
+      coins = foeCfg.mode === 'spar' ? (await claimSpar(fightId, false)).coins : 5;
+      if (coins) await coinsAdd(coins);
       window.__refreshWalletPill?.();
     }
     /* Spend the day's attempt on this tower, whatever the outcome. Outside the
@@ -23094,7 +23127,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
                  return `<div class="got-row"><span class="got-ic">${c.iconHtml || ''}</span><b>${esc(c.name)}</b><span class="got-rar r-${c.rarity}">${r.label}</span></div>`;
                }).join('')}</div>`
             : `<div class="loot-cards settle-cards${extraCards.length === 1 ? ' one' : ''}">${extraCards.map(c => packCardHtml(c)).join('')}</div>`) : ''}`
-      : `<p class="note" style="margin:8px 0 16px">${esc(fight.over.winner === 'draw' ? 'Both of you collapse. Call it cardio.' : `+${coins} consolation coins. Your bones keep every stat: eat well, walk far, run it back.`)}</p>`;
+      : `<p class="note" style="margin:8px 0 16px">${esc(fight.over.winner === 'draw' ? 'Both of you collapse. Call it cardio.' : `${coins ? `+${coins} consolation coins. ` : ''}${DEFEAT_STATS_NOTE}`)}</p>`;
     setTimeout(() => {
       body.insertAdjacentHTML('beforeend', `
         <div class="fight-over">
