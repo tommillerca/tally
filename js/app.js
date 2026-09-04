@@ -5448,6 +5448,12 @@ const bhTrim = src => {
    master's own pixels; the visor glass, facemask and outlines are outside both
    masks and keep Cam's colour. `geo` carries per-layer inline geometry for the
    pet renderer, whose layers are sized by style rather than by class. */
+/* The same two layers as footballTintHtml, for the surfaces that are a CANVAS
+   rather than a stack of spans. drawTrimmedArt reads it back off the element. */
+const fbTintAttr = item => {
+  const t = footballTints(item);
+  return t ? ` data-tints='${JSON.stringify(t)}'` : '';
+};
 const footballTintHtml = (item, geo = '') => (footballTints(item) || [])
   .map(t => `<span class="fb-tint" style="${geo}--fbm:url('${t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
 
@@ -9044,7 +9050,7 @@ function petShelfHtml(ownedCos, coinBal) {
    S.petWear never leaks onto a product shot. Gated by FOOTBALL_KIT_LIVE at the
    call site; the price is FOOTBALL_KIT_PRICE_PLACEHOLDER and the buy path
    refuses while it is not a number, so a live shelf with no price sells nothing. */
-function footballShelfHtml(ownedCos, coinBal) {
+function footballShelfHtml(ownedCos, coinBal, open = false) {
   const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];
   const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
   const sold = FOOTBALL_SOLD;
@@ -9057,7 +9063,7 @@ function footballShelfHtml(ownedCos, coinBal) {
   const kit = footballBundleMath();
   const bundleOwned = ownedHere === sold.length;
   return `
-  <details class="t3-dropsect" id="fbSect">
+  <details class="t3-dropsect" id="fbSect"${open ? ' open' : ''}>
     <summary class="t3-drop">
       <span class="eyebrow">Kit room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
       <h2>PICK A SIDE</h2>
@@ -9374,6 +9380,20 @@ async function renderShop(el) {
   const cheapestRack = Math.min(...allRackCoins);
   const afford = { coins: allRackCoins.filter(c => c <= coinBal).length, dust: allRackDust.filter(d => d <= dustBal).length };
 
+  /* THE SUPPLIES PANEL AND ITS TWO SHELVES SURVIVE A RE-RENDER. Every buy and
+     the kit room's team picker call rerender(), which rebuilds el.innerHTML, so
+     the reveal state lived only in the markup being thrown away: picking a
+     second team slammed the kit room shut AND re-hid #shopRestBody, leaving the
+     player back at "Potions and charms" after every single tap, and a drop
+     purchase did the same to the drop shelf. Read it off the outgoing markup and
+     put it back. Anti-regression rule 8: the control that hides them owns
+     un-hiding them, and a re-render is not the player asking to close. */
+  const wasOpen = {
+    rest: !!$('#shopRestBody', el) && !$('#shopRestBody', el).hidden,
+    drop: !!$('#dropSect', el)?.open,
+    fb: !!$('#fbSect', el)?.open,
+  };
+
   el.innerHTML = `
   ${petShelfHtml(ownedCos, coinBal)}
   <div class="rk-theme"><b>${esc(RACK_THEME)} · RACK ${rackNo} OF 4</b><i></i><span>New rack in ${rackDaysLeft}d</span></div>
@@ -9411,9 +9431,9 @@ async function renderShop(el) {
   <button class="rk-reroll" id="rackReroll"${coinBal < rerollCost ? ' disabled' : ''}><span class="rk-rr"><b>Reroll this shelf</b><small>A fresh ${rotIds.length}, drawn from the whole catalogue. The ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())} nine above stay put.</small></span>
     <span class="t3-price">${rerollCost === 0 ? 'FREE' : `${ICONS.coin(13)} ${rerollCost.toLocaleString()}`}</span></button>` : ''}
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Potions and charms</b><small>Supplies ›</small></button>
-  <div id="shopRestBody" hidden>
+  <div id="shopRestBody"${wasOpen.rest ? '' : ' hidden'}>
 
-  <details class="t3-dropsect" id="dropSect">
+  <details class="t3-dropsect" id="dropSect"${wasOpen.drop ? ' open' : ''}>
     <summary class="t3-drop">
       ${dropOwned < DROP.items.length ? '<span class="new">NEW</span>' : ''}
       <span class="eyebrow">Fresh drop · ${DROP.items.length} pieces${dropOwned ? ` · ${dropOwned} yours` : ''}</span>
@@ -9444,7 +9464,7 @@ async function renderShop(el) {
     </div>
   </details>
 
-  ${FOOTBALL_KIT_LIVE ? footballShelfHtml(ownedCos, coinBal) : ''}
+  ${FOOTBALL_KIT_LIVE ? footballShelfHtml(ownedCos, coinBal, wasOpen.fb) : ''}
 
   <div class="t3-sect"><b>Coin shop</b><i></i></div>
   <div class="t3-cells">
@@ -14804,7 +14824,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
               ? `<span class="pd-swatch" style="background-image:url('${esc(bhThumb(bhAsset(art)))}')"></span>`
               // trim-normalize makes a compact skull render as big as a whole
               // body; extra pad keeps the skull tile from shouting (Tom, Aug 6)
-              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}"${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
+              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}"${fbTintAttr(art)}${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
           : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? ICONS.hidden(18) : '+'}</span>`}
         ${mog ? `<span class="pd-mog" title="Look changed">${sparkIco(11)}</span>` : ''}
         <span class="pd-tag">${esc(label)}</span>
@@ -14952,7 +14972,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
         ${items.map(i => `
           <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)} · ${esc(i.rarity)}">
-            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>
+            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}"${fbTintAttr(i)} role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>
             ${rarityTagHtml(i.rarity)}
           </button>`).join('')}
         ${gearItems.map(g => {
@@ -15965,7 +15985,38 @@ const nextArtTier = src => {
    ponytail: unbounded Map, but the keys are asset paths from a closed set of a
    few hundred art files at four ints each; evict if that ever stops being true. */
 const TRIM_BOX = new Map();
-function drawTrimmedArt(canvas, src, pad = 0.08) {
+/* Football kit, 2026-09-04: THE CANVAS TILES HAD NO TEAM COLOUR.
+   Every football garment is one grey master plus two masked multiply layers, and
+   that mechanism is CSS (.fb-tint, a span masked by an alpha PNG). A <canvas>
+   cannot carry a CSS mask, so every canvas tile in the app painted the bare
+   master: measured on the Wardrobe's Hat grid, four Boneyard Bruisers helmets
+   rendered as four identical white helmets with 0 pixels of #14213D in any of
+   them, and a player owning two teams could not tell their kits apart.
+   The same two layers, drawn instead of styled: mask cropped and scaled by the
+   master's own trim box (the masks share its 640 canvas, so one transform serves
+   both), filled through source-in, composited multiply. A tile with no tints is
+   byte-identical to before. ONE painter serves .ward-art, .pd-art, .t3-art, the
+   crew chips and the pack cards, so this is the only place it belongs. */
+const loadArt = src => new Promise((res, rej) => {
+  const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src;
+});
+async function paintFootballTints(ctx, tints, box, dest) {
+  const [x0, y0, bw, bh] = box, [dx, dy, dw, dh] = dest;
+  const lay = document.createElement('canvas'); lay.width = ctx.canvas.width; lay.height = ctx.canvas.height;
+  const lc = lay.getContext('2d');
+  for (const t of tints) {
+    let m; try { m = await loadArt(t.mask); } catch { continue; }   // a missing mask loses a colour, never the tile
+    lc.globalCompositeOperation = 'source-over';
+    lc.clearRect(0, 0, lay.width, lay.height);
+    lc.drawImage(m, x0, y0, bw, bh, dx, dy, dw, dh);
+    lc.globalCompositeOperation = 'source-in';
+    lc.fillStyle = t.hex; lc.fillRect(0, 0, lay.width, lay.height);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.drawImage(lay, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+}
+function drawTrimmedArt(canvas, src, pad = 0.08, tints = null) {
   return new Promise(res => {
     const img = new Image();
     img.onload = () => {
@@ -15990,7 +16041,7 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
          stepping only while the ink is still too small. */
       if (Math.max(bw, bh) < SMALL_INK) {
         const up = nextArtTier(src);
-        if (up) return void drawTrimmedArt(canvas, up, pad).then(res);
+        if (up) return void drawTrimmedArt(canvas, up, pad, tints).then(res);
       }
       const cw = canvas.width, ch = canvas.height, p = 1 - pad * 2;
       // Upscale cap + two-step scaling keep small source art (e.g. a 43px
@@ -16011,6 +16062,10 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
       }
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(from, sx, sy, sw, sh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+      if (tints && tints.length) {
+        paintFootballTints(ctx, tints, [x0, y0, bw, bh], [(cw - dw) / 2, (ch - dh) / 2, dw, dh]).then(res, res);
+        return;
+      }
       res();
     };
     /* A MISSING IMAGE MUST NOT LEAVE AN EMPTY CANVAS.
@@ -16443,7 +16498,8 @@ function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
      layer degrades the card to a missing garment, never to a hung reveal
      (anti-regression rule 8). */
   return Promise.all([
-    ...$$(sel, scope).map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined)),
+    ...$$(sel, scope).map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined,
+      cv.dataset.tints ? JSON.parse(cv.dataset.tints) : null)),
     ...$$('.pc-worn img', scope).map(im => im.decode().catch(() => {})),
   ]);
 }
