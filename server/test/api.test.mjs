@@ -193,8 +193,9 @@ await test('analytics: /events ingests an anonymous batch', async () => {
 });
 
 await test('analytics: /stats is admin-gated + aggregates', async () => {
-  assert.equal((await fetch(BASE + '/stats')).status, 401);
-  const ok = await fetch(BASE + '/stats?token=devtoken');
+  // QA r29 S3: a deliberate failure counts against its IP, so it brings its own
+  assert.equal((await fetch(BASE + '/stats', { headers: { 'cf-connecting-ip': rndIp() } })).status, 401);
+  const ok = await fetch(BASE + '/stats', { headers: { authorization: 'Bearer devtoken' } });
   assert.equal(ok.status, 200);
   const s = await ok.json();
   assert.ok(s.totalDevices >= 1 && s.totalEvents >= 3, JSON.stringify(s));
@@ -222,7 +223,7 @@ await test('/stats keeps the rate limiter out of byName and the tester board', a
   const planted = await (await fetch(`${BASE}/dev/ratelimit-count?name=rl_ridcheck`)).json();
   assert.ok(planted.n > 0, 'the limiter wrote no row, so this test proves nothing');
 
-  const s = await (await fetch(BASE + '/stats?token=devtoken')).json();
+  const s = await (await fetch(BASE + '/stats', { headers: { authorization: 'Bearer devtoken' } })).json();
   // DIRECTION: absent. Not "fewer than before": a single one is a wrong row on
   // a dashboard somebody makes decisions from.
   for (const rl of ['rl_recovery', 'rl_ridcheck']) {
@@ -1442,7 +1443,7 @@ await test('R2: account delete removes the survey row, id-keyed AND legacy handl
   });
   assert.equal((await post(`dev-${tag}-a`, p.playerId, `${tag}-id@example.test`)).status, 200, 'PRECONDITION: id-keyed survey POST');
   assert.equal((await post(`dev-${tag}-b`, p.handle, `${tag}-handle@example.test`)).status, 200, 'PRECONDITION: handle-keyed survey POST');
-  const leadsOf = async () => ((await (await fetch(BASE + '/stats?token=devtoken')).json()).leads || []).filter(l => l.feedback === tag);
+  const leadsOf = async () => ((await (await fetch(BASE + '/stats', { headers: { authorization: 'Bearer devtoken' } })).json()).leads || []).filter(l => l.feedback === tag);
   assert.equal((await leadsOf()).length, 2, 'PRECONDITION: both survey rows must be visible in /stats before the delete');
   assert.equal((await signedFetch(k.kp, p.playerId, 'POST', '/account/delete')).status, 200);
   const left = await leadsOf();
@@ -1495,6 +1496,212 @@ await test('R3: pending outgoing carries no profile blob; accepted carries it', 
   assert.equal(fr.profile && fr.profile.yard && fr.profile.yard.n, 1, 'an ACCEPTED friend lost the full profile (yard)');
   assert.deepEqual(fr.profile && fr.profile.gear, ['g1'], 'an ACCEPTED friend lost the full profile (gear)');
   assert.ok(fr.friendCode && fr.since, 'an ACCEPTED friend lost friendCode/since');
+});
+
+/* ======================= QA round 29: server hardening =======================
+   S2 admin token out of the URL, add tokens on their own secret (fail closed).
+   S3 admin auth throttled per IP, constant-time compare.
+   S5 device buckets are per SOURCE (ip|device) and a refused request spends
+      nothing.
+   S6 no RL_SECRET means DETERMINISTIC unsalted buckets, not one budget per
+      isolate.
+   S9 rename history rides the player row and the delete cascade scrubs it.
+   Prove-red on 1609e8c6 (v472 + r27): every guard below went FAIL before the
+   fix; the lines are quoted in the PR report. */
+
+const ADMIN = { authorization: 'Bearer devtoken' };
+/* wrangler dev spawned with a chosen set of --var, on its own port and its own
+   --persist-to directory, so a worker WITHOUT a secret can be graded beside the
+   one npm run dev started WITH them. Same process-group kill as
+   tests/crew-pair-audit.mjs: SIGKILL on wrangler alone orphans workerd. */
+import { spawn } from 'node:child_process';
+import net from 'node:net';
+import os from 'node:os';
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const WRANGLER = path.join(SERVER_DIR, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
+const freePort = () => new Promise((res, rej) => {
+  const s = net.createServer(); s.once('error', rej);
+  s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => res(port)); });
+});
+async function spawnWorker(vars, persist) {
+  const env = { ...process.env, CI: '1', WRANGLER_SEND_METRICS: 'false' };
+  if (!fsMod.existsSync(path.join(persist, 'seeded'))) {
+    execFileSync(process.execPath, [WRANGLER, 'd1', 'execute', 'bonez', '--local', '--persist-to', persist, '--file=schema.sql'],
+      { cwd: SERVER_DIR, env, stdio: 'ignore' });
+    fsMod.writeFileSync(path.join(persist, 'seeded'), '1');
+  }
+  const port = await freePort();
+  const args = [WRANGLER, 'dev', '--local', '--port', String(port), '--persist-to', persist];
+  for (const [k, v] of Object.entries(vars)) args.push('--var', `${k}:${v}`);
+  const p = spawn(process.execPath, args, { cwd: SERVER_DIR, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+  let log = '';
+  p.stdout.on('data', d => { log += d; }); p.stderr.on('data', d => { log += d; });
+  const kill = () => { try { process.kill(-p.pid, 'SIGKILL'); } catch { /* gone */ } };
+  process.once('exit', kill);
+  const url = `http://127.0.0.1:${port}`;
+  const t0 = Date.now();
+  for (;;) {
+    try { if ((await fetch(url + '/health')).ok) break; } catch { /* not up */ }
+    if (Date.now() - t0 > 60000) { kill(); throw new Error(`spawned worker never answered on ${url}: ${log.slice(-400)}`); }
+    await sleep(300);
+  }
+  return { url, kill, log: () => log };
+}
+/* Only a LOCAL run can spawn workers and read the local D1 file. */
+const localOnly = () => { if (!/127\.0\.0\.1|localhost/.test(BASE)) unprovable('spawning workers and reading the local D1 file needs a local BASE'); };
+
+const survey = (base, device, ip, extra = {}) => fetch(base + '/survey', {
+  method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
+  body: JSON.stringify({ device, name: 'rl probe', ...extra }),
+});
+const rlRows = (name) => {
+  const { readdirSync } = fsMod;
+  let names = []; try { names = readdirSync(D1_DIR); } catch { return null; }
+  const file = names.filter(n => n.endsWith('.sqlite'))[0];
+  if (!file) return null;
+  const db = new DatabaseSync(path.join(D1_DIR, file), { readOnly: true });
+  try { return db.prepare('SELECT hits FROM rate_limits WHERE name = ?').all(name); } finally { db.close(); }
+};
+
+await test('r29 S2: the admin token is read from Authorization: Bearer', async () => {
+  const r = await fetch(BASE + '/stats', { headers: ADMIN });
+  assert.equal(r.status, 200, `S2: Authorization: Bearer <token> was refused (${r.status})`);
+  const p = await fetch(BASE + '/admin/prune', { headers: ADMIN });
+  assert.equal(p.status, 200, `S2: /admin/prune refused the Bearer header (${p.status})`);
+});
+
+await test('r29 S2: a token in the query string is refused unless ADMIN_QUERY_TOKEN_OK=1', async () => {
+  /* head_sampling_rate = 1 retains every request URL, so ?token= writes the
+     admin secret into the log store on every dashboard load. Off by default. */
+  const own = { headers: { 'cf-connecting-ip': rndIp() } }; // S3: these two failures spend this IP's bucket, not the suite's
+  const r = await fetch(BASE + '/stats?token=devtoken', own);
+  assert.equal(r.status, 401, `S2: ?token= in the URL still authenticates (${r.status})`);
+  const p = await fetch(BASE + '/admin/prune?token=devtoken', own);
+  assert.equal(p.status, 401, `S2: /admin/prune?token= still authenticates (${p.status})`);
+});
+
+await test('r29 S3: wrong admin tokens are counted per IP; 429 after the bucket, even for the right one', async () => {
+  const ip = rndIp();
+  const wrong = { authorization: 'Bearer not-the-token', 'cf-connecting-ip': ip };
+  const codes = [];
+  for (let i = 0; i < 12; i++) codes.push((await fetch(BASE + '/stats', { headers: wrong })).status);
+  // RL_ADMIN_IP_FAILS = 10 per 10 minutes (src/index.js). Ten 401s, then 429.
+  assert.deepEqual(codes.slice(0, 10), Array(10).fill(401), `S3: the first ten guesses should each be 401, got ${codes}`);
+  assert.deepEqual(codes.slice(10), [429, 429], `S3: guesses past the bucket are not refused with 429, got ${codes}`);
+  // the lockout holds for the right token from that IP too: a guesser who lands
+  // on it inside the window still has to wait
+  const right = await fetch(BASE + '/stats', { headers: { ...ADMIN, 'cf-connecting-ip': ip } });
+  assert.equal(right.status, 429, `S3: the locked-out IP got ${right.status} with the right token`);
+  // and another IP is unaffected (the bucket is per IP, not global)
+  const other = await fetch(BASE + '/stats', { headers: { ...ADMIN, 'cf-connecting-ip': rndIp() } });
+  assert.equal(other.status, 200, `S3: an unrelated IP is locked out too (${other.status})`);
+});
+
+const s5 = { device: 'r29-dev-' + Math.random().toString(36).slice(2, 10), ipA: rndIp(), ipB: rndIp() };
+await test('r29 S5: a refused request spends no budget (no bucket row ever exceeds its limit)', async () => {
+  localOnly();
+  /* DIFFERENTIAL, because the local D1 keeps every earlier run's rows in the
+     same day-long window (including rows an OLDER worker counted past the
+     limit): what must not change is the number of over-limit rows, and what
+     must appear is one row parked exactly AT the limit. */
+  const count = (rows, f) => rows.filter(r => f(Number(r.hits))).length;
+  const before = rlRows('rl_survey_dev');
+  if (!before) unprovable(`no local D1 file under ${D1_DIR}`);
+  // rl_survey_dev is 3 per day: three honest posts, then three refused ones
+  for (let i = 0; i < 3; i++) assert.equal((await survey(BASE, s5.device, s5.ipA)).status, 200, `PRECONDITION: honest post ${i + 1} of 3`);
+  for (let i = 0; i < 3; i++) assert.equal((await survey(BASE, s5.device, s5.ipA)).status, 429, `PRECONDITION: refused post ${i + 1}`);
+  const after = rlRows('rl_survey_dev');
+  assert.ok(after.length > before.length, 'CONTROL: the six posts created no rl_survey_dev row, so this proves nothing');
+  assert.equal(count(after, h => h > 3), count(before, h => h > 3),
+    `S5: a new rl_survey_dev row counted past the limit (${count(after, h => h > 3) - count(before, h => h > 3)} more than before): refused requests are spending budget`);
+  assert.ok(count(after, h => h === 3) >= count(before, h => h === 3) + 1, 'CONTROL: no new row sits exactly at the limit');
+});
+
+await test('r29 S5: a device budget is per SOURCE: a stranger cannot spend it', async () => {
+  // the SAME device string from another address is not locked out by the spend above
+  const b = await survey(BASE, s5.device, s5.ipB);
+  assert.equal(b.status, 200, `S5: device id spent from one IP locks the same id out from another (${b.status}); the bucket must be ip|device`);
+});
+
+await test('r29 S5: rotating device ids under one IP is bounded by the IP bucket', async () => {
+  /* Nothing keyed on a caller-chosen string can stop rotation; the IP bucket
+     is what does. rl_survey_ip is 10 per day. This one was already green on
+     1609e8c6 and is here so the bound cannot be lost. */
+  const ip = rndIp();
+  const codes = [];
+  for (let i = 0; i < 11; i++) codes.push((await survey(BASE, 'rot-' + Math.random().toString(36).slice(2, 10), ip)).status);
+  assert.deepEqual(codes.slice(0, 10), Array(10).fill(200), `first ten rotated posts should pass, got ${codes}`);
+  assert.equal(codes[10], 429, `the 11th rotated post from one IP was not refused (${codes[10]})`);
+});
+
+await test('r29 S9: rename then delete scrubs the OLD name from devices and reports', async () => {
+  localOnly();
+  const k = await makeKeys(); const p = await (await regFetch(k.pubJwk)).json();
+  const num = 700 + Math.floor(Math.random() * 250);
+  const first = await (await signedFetch(k.kp, p.playerId, 'POST', '/name', JSON.stringify({ adj: 7, noun: 21, num }))).json();
+  assert.ok(first.ok && first.name.includes('#'), `PRECONDITION: first name, got ${JSON.stringify(first)}`);
+  const device = 'r29-ren-' + Math.random().toString(36).slice(2, 10);
+  const hdr = { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() };
+  assert.equal((await fetch(BASE + '/events', { method: 'POST', headers: hdr,
+    body: JSON.stringify({ device, label: first.name, appV: 'r29', events: [{ name: 'app_open' }] }) })).status, 200);
+  assert.equal((await fetch(BASE + '/report', { method: 'POST', headers: hdr,
+    body: JSON.stringify({ device, label: first.name, kind: 'den-nominate', lat: 1, lng: 2, note: 'n' }) })).status, 200);
+  const second = await (await signedFetch(k.kp, p.playerId, 'POST', '/name', JSON.stringify({ adj: 8, noun: 22, num }))).json();
+  assert.ok(second.ok && second.name !== first.name, `PRECONDITION: rename, got ${JSON.stringify(second)}`);
+  const before = scanDb(first.name);
+  assert.ok(before.hits.length >= 2, `CONTROL: the old name must be findable before the delete, found [${before.hits}]`);
+  assert.equal((await signedFetch(k.kp, p.playerId, 'POST', '/account/delete')).status, 200);
+  const after = scanDb(first.name);
+  assert.ok(after.scanned > 0, 'CONTROL: empty scan');
+  assert.deepEqual(after.hits, [], `S9: the deleted player's OLD name survives: ${after.hits.join(', ')}`);
+  assert.deepEqual(scanDb(second.name).hits, [], 'the current name survives the delete (regression)');
+});
+
+/* One worker spawned with NEITHER optional secret (only DEV and ADMIN_TOKEN,
+   which is exactly how production was configured when round 29 ran). */
+const bare = { persist: null, w: null };
+await test('r29 S2: without ADD_TOKEN_SECRET the board is served but mints NO add tokens (fail closed)', async () => {
+  localOnly();
+  bare.persist = fsMod.mkdtempSync(path.join(os.tmpdir(), 'bonez-r29-'));
+  bare.w = await spawnWorker({ DEV: '1', ADMIN_TOKEN: 'devtoken' }, bare.persist);
+  const w = bare.w;
+  const mk = async () => {
+    const kk = await makeKeys();
+    const pp = await (await fetch(w.url + '/register', { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
+      body: JSON.stringify({ test: false, run: RUN, pubkey: kk.pubJwk }) })).json();
+    const sign = async (method, p, body = '') => {
+      const ts = Date.now();
+      const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, kk.kp.privateKey, new TextEncoder().encode(`${method}\n${p}\n${ts}\n${body}`));
+      return fetch(w.url + p, { method, headers: { 'content-type': 'application/json', 'x-bh-player': pp.playerId, 'x-bh-ts': String(ts), 'x-bh-sig': b64(sig) }, body: method === 'GET' ? undefined : body });
+    };
+    assert.equal((await sign('PUT', '/profile', JSON.stringify({ snapshot: { level: 3 }, appV: 'r29' }))).status, 200, 'PRECONDITION: profile stored');
+    return { pp, sign };
+  };
+  const a = await mk(); await mk();
+  const res = await a.sign('GET', '/leaderboard');
+  assert.equal(res.status, 200, `the board itself must still be served (${res.status})`);
+  const board = await res.json();
+  assert.ok((board.players || []).length >= 2, `PRECONDITION: the board has rows, got ${(board.players || []).length}`);
+  const minted = board.players.filter(r => r.addToken);
+  assert.equal(minted.length, 0, `S2: ${minted.length} add token(s) minted with ADD_TOKEN_SECRET unset (falling back to the admin token)`);
+  // the startup self-check names what is missing, never a value
+  const log = w.log();
+  assert.ok(/ADD_TOKEN_SECRET/.test(log) && /RL_SECRET/.test(log), `S2/S6: the worker did not log the missing secrets by name. Log tail: ${log.slice(-300)}`);
+  assert.ok(!/devtoken/.test(log), 'the self-check printed a secret VALUE');
+});
+
+await test('r29 S6: without RL_SECRET a device budget survives a worker restart (deterministic buckets, not one per isolate)', async () => {
+  localOnly();
+  if (!bare.w) unprovable('the bare worker did not start');
+  const device = 'r29-iso-' + Math.random().toString(36).slice(2, 10), ip = rndIp();
+  try {
+    for (let i = 0; i < 3; i++) assert.equal((await survey(bare.w.url, device, ip)).status, 200, `PRECONDITION: post ${i + 1}`);
+    assert.equal((await survey(bare.w.url, device, ip)).status, 429, 'PRECONDITION: over budget on this isolate');
+    bare.w.kill(); await sleep(500);
+    bare.w = await spawnWorker({ DEV: '1', ADMIN_TOKEN: 'devtoken' }, bare.persist);
+    const again = await survey(bare.w.url, device, ip);
+    assert.equal(again.status, 429, `S6: a fresh isolate handed the same device a fresh budget (${again.status}); buckets were salted per isolate`);
+  } finally { bare.w.kill(); }
 });
 
 console.log(`\n${passed} passed, ${failed} failed${unproven ? `, ${unproven} UNPROVEN here (see the note on UNPROVEN above)` : ''}`);

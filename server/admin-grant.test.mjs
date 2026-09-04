@@ -1,7 +1,7 @@
 /* GOD MODE: the admin make-good channel, against a running Worker.
  *
  *   npx wrangler d1 execute bonez --local --file=schema.sql
- *   npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken
+ *   npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken --var ADD_TOKEN_SECRET:devaddsecret --var RL_SECRET:devrlsecret
  *   node admin-grant.test.mjs
  *
  * WHY THIS EXISTS. Tom, 2026-08-21, after a player deleted her Day One Lizard by
@@ -170,13 +170,14 @@ async function newPlayer() {
   return { me, signed };
 }
 
+/* QA r29 S3: deliberate failures count against the caller's IP (10 per 10 min), so a probe that MEANS to fail arrives from its own address and never locks a re-run out */
 const grant = (body, tok = T) => fetch(`${BASE}/admin/grant`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', ...(tok ? { 'x-admin-token': tok } : {}) },
+  headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp(), ...(tok ? { 'x-admin-token': tok } : {}) },
   body: JSON.stringify(body),
 });
 const lookup = (q, tok = T) => fetch(`${BASE}/admin/players?q=${encodeURIComponent(q)}`,
-  { headers: tok ? { 'x-admin-token': tok } : {} });
+  { headers: { 'cf-connecting-ip': rndIp(), ...(tok ? { 'x-admin-token': tok } : {}) } });
 /** Everything currently waiting in a player's grants feed. */
 const feed = async P => ((await (await P.signed('GET', '/grants?since=0')).json()).grants || []);
 

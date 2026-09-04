@@ -1,0 +1,21 @@
+-- Rename history on the player row, 2026-09-04 (QA round 29 S9).
+--
+-- Apply local:  npx wrangler d1 execute bonez --local  --file=migrations/2026-09-04-prev-names.sql
+-- Apply remote: npx wrangler d1 execute bonez --remote --file=migrations/2026-09-04-prev-names.sql
+--
+-- Purely additive: one nullable column, no index, nothing dropped, nothing
+-- renamed, no backfill (a name a player wore BEFORE this column existed was
+-- never recorded anywhere, so there is nothing true to write). Re-running
+-- errors with "duplicate column name", which is harmless.
+--
+-- WHY. devices.label and reports.label are stamped by value from unsigned
+-- routes and carry no player id, so POST /account/delete can only NULL a label
+-- it knows the string of. It bound the CURRENT name and handle; a player who
+-- renamed and then deleted left the old name on both tables for 365 days
+-- (driven by round 29). POST /name now appends the replaced name here (JSON
+-- array, newest last, capped at 10) and the cascade scrubs every one of them.
+--
+-- ORDER MATTERS: apply this BEFORE deploying the worker. POST /name writes the
+-- column and POST /account/delete reads it; without it both 500 with
+-- "no such column: prev_names". Same landmine as every other ADD COLUMN here.
+ALTER TABLE players ADD COLUMN prev_names TEXT;

@@ -2,7 +2,7 @@
  * running Worker.
  *
  *   npx wrangler d1 execute bonez --local --file=schema.sql
- *   npm run dev            # or: npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken
+ *   npm run dev            # or: npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken --var ADD_TOKEN_SECRET:devaddsecret --var RL_SECRET:devrlsecret
  *   node stale-retention.test.mjs
  *
  * `grep -n "DELETE FROM" src/index.js` named rate_limits, events, grants,
@@ -175,7 +175,7 @@ await test('DEV hooks are reachable (otherwise every result below is vacuous)', 
 });
 
 await test('the pruner reports the windows it actually enforces', async () => {
-  const r = await fetch(`${BASE}/admin/prune?token=${encodeURIComponent(ADMIN)}`);
+  const r = await fetch(`${BASE}/admin/prune`, { headers: { authorization: `Bearer ${ADMIN}` } }); // QA r29 S2
   assert.equal(r.status, 200, `/admin/prune refused the token (${r.status}); is ADMIN_TOKEN devtoken?`);
   const s = await r.json();
   assert.deepEqual(s.retention.staleDays,

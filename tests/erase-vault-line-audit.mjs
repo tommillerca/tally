@@ -74,7 +74,7 @@ async function startWorker() {
     { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise(r => seed.on('exit', r));
   const p = spawn(process.execPath, [bin, 'dev', '--local', '--port', String(port),
-    '--var', 'DEV:1', '--var', 'ADMIN_TOKEN:devtoken'],
+    '--var', 'DEV:1', '--var', 'ADMIN_TOKEN:devtoken', '--var', 'ADD_TOKEN_SECRET:devaddsecret', '--var', 'RL_SECRET:devrlsecret'], // QA r29 S2: no secret, no add tokens
     { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   const killTree = () => { try { process.kill(-p.pid, 'SIGKILL'); } catch { /* group already gone */ } };
   process.once('exit', killTree);
