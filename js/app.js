@@ -1169,9 +1169,27 @@ async function boot() {
        force-quit twice while the server served v471. Bypass the cache for the
        worker script itself; the app's own network-first rule already covers
        everything the worker serves. */
+    /* AND SOMEBODY HAS TO LET THE NEW WORKER IN (2026-09-04). sw.js deliberately
+       does not call skipWaiting(), so a new build sits in `waiting` until every
+       client using the old worker is gone. In a browser tab that happens; inside
+       the native shell's WKWebView it does not, and Tom's phone sat on v470
+       through hours of force-quits while the server served v472. Nothing in the
+       app had ever posted SKIP_WAITING, so there was no path from "downloaded"
+       to "running" that a player could take.
+       ONLY AT BOOT, never mid-session: at this point the page has just loaded and
+       nothing is in flight, which is the very race the no-skipWaiting rule exists
+       to avoid. The swap then fires controllerchange, and the handler below
+       reloads. `waiting` covers a build already downloaded on a previous run;
+       `updatefound` covers one that arrives while this run is open. */
+    const letItIn = reg => { const w = reg.waiting; if (w) { try { w.postMessage('SKIP_WAITING'); } catch { /* older worker, no handler: it will swap when the clients close */ } } };
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+      letItIn(reg);
+      reg.addEventListener('updatefound', () => {
+        const w = reg.installing;
+        if (w) w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) letItIn(reg); });
+      });
       // resumed PWAs never re-navigate, so check for updates whenever we come back
-      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().then(() => letItIn(reg)).catch(() => {}); });
     }).catch(() => {});
     let hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -20749,7 +20767,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v472'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v473'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
