@@ -234,7 +234,7 @@ const EMITTERS = {
   'js/app.js:openKitchen':          ['scene', 'the kitchen art. Its coin chips are icon SITES, listed below.'],
   'js/app.js:openWhatsNew':         ['scene', 'the release note art.'],
   'js/app.js:openFriendProfile':    ['scene', "a friend's figure."],
-  'js/app.js:restageWardrobe':      ['scene', 'the wardrobe figure.'],
+  'js/app.js:restageDoll':          ['scene', 'the wardrobe figure. Was restageWardrobe until QA r23 F1 (2026-09-03) split the drawing half out so previews share it; restageWardrobe now only moves the fit ring.'],
   'js/app.js:renderOnboarding':     ['scene', 'the onboarding art.'],
   'js/app.js:renderToday':          ['scene', 'the Today hero figure. Its currency chips are icon SITES, listed below.'],
   'js/app.js:renderCharacter':      ['scene', 'the Bonehead hub figure and cosmetic tiles. Its currency chips are icon SITES, listed below.'],
