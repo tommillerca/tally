@@ -501,15 +501,23 @@ await test('/report and /survey are rate limited per device', async () => {
   assert.ok(reportBlocked, 'map feedback must be bounded');
   assert.ok(ra > 10, `but a session's worth of nominations must land, tripped at ${ra}`);
 
-  const sdevice = rndDevice();
+  /* ONE SOURCE, like the /report half above (QA round 29 S5). This used to send
+     every survey post from a FRESH random IP while holding the device id, and
+     passed because the bucket was keyed on the device alone: a budget the caller
+     mints at will, and one a stranger who learned a real device id could spend
+     on its owner's behalf. The bucket is `ip|device` now, so a rotating source
+     is a rotating bucket and this loop never tripped.
+     Asserted at the DEVICE number (rl_survey_dev = 3), not "blocked eventually":
+     rl_survey_ip is 10, so a 4th post refused from ONE address can only be the
+     device bucket. Drop the device limiter and post 4 answers 200 again. */
+  const sdevice = rndDevice(), sip = rndIp();
   const survey = () => fetch(BASE + '/survey', {
-    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
+    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': sip },
     body: JSON.stringify({ device: sdevice, name: 'T', email: 't@example.com', feedback: 'hi' }),
   });
-  assert.equal((await survey()).status, 200, 'the survey can be submitted');
-  let surveyBlocked = false;
-  for (let i = 2; i <= 12 && !surveyBlocked; i++) { if ((await survey()).status === 429) surveyBlocked = true; }
-  assert.ok(surveyBlocked, 'a one-time survey must not be an unbounded write endpoint');
+  for (let i = 1; i <= 3; i++) assert.equal((await survey()).status, 200, `survey post ${i} of 3 was refused before the budget was spent`);
+  assert.equal((await survey()).status, 429,
+    'a one-time survey must not be an unbounded write endpoint: the 4th post from one source was not refused');
 });
 
 /* =====================================================================
@@ -567,8 +575,12 @@ await test('a v2 body reaches the dashboard payload with its answers parseable',
    the first 429 and the third must NOT be: a limiter that had drifted to 2/day
    would bite a player who edited an answer and resubmitted. */
 await test('the per-device survey limit still bites on the fourth v2 post', async () => {
-  const device = rndDevice();
-  const post = () => postSurvey({ device, form: 'v2', answers: { q1: 'pit' } });
+  /* One source (QA round 29 S5): postSurvey defaults to a FRESH random IP per
+     call, and the bucket is `ip|device` now, so four calls were four different
+     buckets and the limit could not bite. rl_survey_ip is 10, so a 4th post
+     refused from one address is the device bucket and nothing else. */
+  const device = rndDevice(), ip = rndIp();
+  const post = () => postSurvey({ device, form: 'v2', answers: { q1: 'pit' } }, ip);
   for (let i = 1; i <= 3; i++) assert.equal((await post()).status, 200, `post ${i} of 3 was refused`);
   assert.equal((await post()).status, 429, 'a fourth survey post got through; the device limit is not applied to v2 bodies');
 });
