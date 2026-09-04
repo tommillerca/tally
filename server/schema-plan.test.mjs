@@ -137,19 +137,46 @@ db.prepare('INSERT INTO rate_limits (bucket, name, window_start, hits, expires_a
    must still be present in src/index.js: if somebody rewrites the route, the
    COVERAGE test below goes red and forces this file to be updated rather than
    quietly testing a query the worker no longer runs. */
+/* ---- GET /friends, LIFTED OUT OF THE ROUTE ------------------------------
+   The route builds one SELECT and runs it three times with three different
+   predicates and three separate LIMITs. Retyping those here would mean the
+   guards below could stay green against SQL the worker had stopped running, so
+   they are pulled from src/index.js instead: the base SELECT is evaluated as
+   the expression it is, and the three predicates are read off the batch. If the
+   route stops looking like this, these throw rather than quietly passing. */
+const friendsRoute = (() => {
+  const i = source.indexOf("if (path === '/friends' && request.method === 'GET')");
+  if (i < 0) throw new Error('GET /friends is gone from src/index.js; re-read the route and update this file');
+  return source.slice(i, source.indexOf('Dark Spires: shared territory', i));
+})();
+const FRIEND_PAGE = Number(/const FRIEND_PAGE = (\d+)/.exec(source)?.[1]);
+if (!FRIEND_PAGE) throw new Error('FRIEND_PAGE is gone from src/index.js');
+/* new Function, not a hand-copied string: the argument is a source expression
+   from this repo, not input. Parenthesised, because the lifted expression
+   begins on its own line and a bare `return` before a newline is `return
+   undefined` by ASI: the first build of this guard planned `undefined` and
+   reported it as a type error rather than as the wrong SQL. */
+const buildFriendSql = new Function('where',
+  'return (' + (/env\.DB\.prepare\(([\s\S]*?)\);/.exec(friendsRoute) || [])[1] + ');');
+const FRIEND_WHERES = [...friendsRoute.matchAll(/q\("([^"]+)"\)/g)].map(m => m[1]);
+if (FRIEND_WHERES.length !== 3) throw new Error(`expected 3 GET /friends buckets, found ${FRIEND_WHERES.length}`);
+const friendsSql = FRIEND_WHERES.map(buildFriendSql);
+
 const CASES = [
   {
+    /* The accepted bucket. Since 2026-09-03 this route runs THREE of these in
+       one batch, one per bucket, and they differ only in the predicate that
+       follows the OR pair (see friendsSql below, which lifts all three out of
+       the source). Splitting the query added an `AND f.status = ...` to each,
+       and an extra AND term is exactly the kind of thing that talks the planner
+       out of the multi-index OR: if it does, the route reads every friendship
+       row in the table three times per call instead of once. */
     name: 'GET /friends reaches the b side through idx_friendships_b',
-    fragment: 'WHERE f.a = ? OR f.b = ?',
+    fragment: 'WHERE (f.a = ? OR f.b = ?) AND ',
     mustIndex: 'idx_friendships_b',
     mustNotScan: 'SCAN f',
-    params: ['pb', 'pb'],
-    sql:
-      'SELECT f.a, f.b, f.status, f.requested_by, f.ts, ' +
-      'pa.handle a_handle, pa.name a_name, pa.friend_code a_code, pa.profile a_profile, pa.app_v a_v, pa.last_seen a_seen, ' +
-      'pb.handle b_handle, pb.name b_name, pb.friend_code b_code, pb.profile b_profile, pb.app_v b_v, pb.last_seen b_seen ' +
-      'FROM friendships f JOIN players pa ON pa.id = f.a JOIN players pb ON pb.id = f.b ' +
-      'WHERE f.a = ? OR f.b = ? ORDER BY f.ts DESC LIMIT 100',
+    params: ['pb', 'pb', 101],
+    get sql() { return friendsSql[0]; },
   },
   {
     name: 'GET /steps/week finds a settled week through idx_grants_key',
@@ -1027,6 +1054,158 @@ await atest('an unparseable answers blob does not take the dashboard down', asyn
   const painted = await renderLeads([{ form: 'v2', name: 'x', answers: '{not json', ctx: '{}', ts: Date.now() }]);
   assert.match(painted, /Why did you open the app today\?/, 'the page did not render at all');
   assert.match(painted, /nobody answered/, 'a garbage blob was counted as an answer');
+});
+
+/* ===========================================================================
+   GET /friends: A REQUEST CANNOT BE CROWDED OUT BY A FRIENDSHIP (2026-09-03)
+   ===========================================================================
+   THE BUG. All three buckets came out of one `WHERE f.a = ? OR f.b = ?
+   ORDER BY f.ts DESC LIMIT 100` and were split apart in JS, so the 100 was
+   SHARED. friendships.ts is the accept time for an accepted row and the request
+   time for a pending one, and the two live in one ordering: every friendship a
+   busy player accepts lands a row ABOVE an unanswered request, so a request
+   that is not acted on slides down the list and, at 100 rows newer than it,
+   stops being returned. Nothing tells the player, nothing tells the sender, and
+   the client counts what it received as the whole truth. Past 100 accepted
+   rows the same ordering silently drops accepted FRIENDS off the bottom too.
+
+   These run the route's own SQL (lifted above) with the route's own binds and
+   the route's own take/truncate arithmetic, against a fixture with the real
+   schema. What they cannot see is the HTTP layer: verifySigned, the batch
+   itself, and JSON encoding. security.test.mjs is where that would live and it
+   needs a running worker.
+   =========================================================================== */
+
+/* The three binds, read off the route rather than retyped, so the LIMIT the
+   guards below exercise is the LIMIT the worker sends. Each is `(me...,
+   limit)`; how many `me`s differ per bucket (the pending ones bind
+   requested_by too). */
+const FRIEND_BINDS = [...friendsRoute.matchAll(/q\("[^"]+"\)\.bind\(([^)]*)\)/g)].map(m => {
+  const args = m[1].split(',').map(s => s.trim());
+  return { ids: args.length - 1, limit: new Function('FRIEND_PAGE', `return (${args.at(-1)});`)(FRIEND_PAGE) };
+});
+if (FRIEND_BINDS.length !== 3) throw new Error(`expected 3 GET /friends binds, found ${FRIEND_BINDS.length}`);
+
+/* The route's read path end to end, minus HTTP: three bound statements, then
+   the +1 row dropped and turned into `truncated`. */
+function friendsPayload(fdb, me) {
+  const out = { friends: [], incoming: [], outgoing: [], truncated: {} };
+  ['friends', 'incoming', 'outgoing'].forEach((key, i) => {
+    const b = FRIEND_BINDS[i];
+    const rows = fdb.prepare(friendsSql[i]).all(...Array(b.ids).fill(me), b.limit);
+    out.truncated[key] = rows.length > FRIEND_PAGE;
+    out[key] = rows.slice(0, FRIEND_PAGE).map(r => ({ playerId: r.a === me ? r.b : r.a, since: r.ts }));
+  });
+  return out;
+}
+
+/* `accepted` friendships, all NEWER than `requestTs`, plus one pending request
+   INTO `me` from a stranger. `me` is always on the `a` side of half of them and
+   the `b` side of the other half, because the route's OR is the only reason
+   either side is reachable. */
+function seedCrew({ accepted, requestTs = 1, outgoing = 0 }) {
+  const fdb = new DatabaseSync(':memory:');
+  fdb.exec(schema);
+  const player = (id, seen = Date.now()) =>
+    fdb.prepare('INSERT INTO players (id, pubkey, handle, friend_code, profile, created_at, last_seen) VALUES (?,?,?,?,?,?,?)')
+      .run(id, 'k-' + id, 'Grim Tibia', 'BONE-' + id.toUpperCase(), '{"outfit":{},"level":4}', 1, seen);
+  const link = (x, y, status, by, ts) =>
+    fdb.prepare('INSERT INTO friendships (a, b, status, requested_by, ts) VALUES (?,?,?,?,?)')
+      .run(...(x < y ? [x, y] : [y, x]), status, by, ts);
+  player('me');
+  for (let i = 0; i < accepted; i++) { const o = `fr${String(i).padStart(4, '0')}`; player(o); link('me', o, 'accepted', 'me', 1000 + i); }
+  for (let i = 0; i < outgoing; i++) { const o = `og${String(i).padStart(4, '0')}`; player(o); link('me', o, 'pending', 'me', 1000 + i); }
+  player('stranger');
+  link('me', 'stranger', 'pending', 'stranger', requestTs);
+  return fdb;
+}
+
+/* THE DEFECT ITSELF. The request is the OLDEST row in the set, which is what an
+   unanswered request becomes after a hundred friendships are accepted over it.
+   PROVE-RED: in src/index.js, change the base SELECT's
+     'WHERE (f.a = ? OR f.b = ?) AND ' + where + ' ORDER BY f.ts DESC LIMIT ?'
+   back to
+     'WHERE f.a = ? OR f.b = ? ORDER BY f.ts DESC LIMIT ?'
+   (one line: the old shared query, with every bucket reading the same 100 rows)
+   -> "the incoming request was ordered out by 100 accepted friendships". */
+test('100 accepted friendships do not hide an older incoming request', () => {
+  const fdb = seedCrew({ accepted: 100, requestTs: 1 });
+  const p = friendsPayload(fdb, 'me');
+  assert.equal(p.incoming.length, 1, 'the incoming request was ordered out by 100 accepted friendships');
+  assert.equal(p.incoming[0].playerId, 'stranger');
+  assert.equal(p.friends.length, 100, 'the accepted bucket lost rows to the other buckets');
+  fdb.close();
+});
+
+/* A player's OWN outgoing requests must not starve their incoming ones either:
+   that is the same defect with the sender in the room, and it is reachable by
+   one player tapping Add a hundred times.
+   PROVE-RED: same one-line revert as above -> incoming comes back 0. */
+test('100 outgoing requests do not hide an older incoming request', () => {
+  const fdb = seedCrew({ accepted: 0, outgoing: 100, requestTs: 1 });
+  const p = friendsPayload(fdb, 'me');
+  assert.equal(p.incoming.length, 1, 'the incoming request was ordered out by 100 outgoing requests');
+  assert.equal(p.outgoing.length, 100, 'the outgoing bucket lost rows');
+  fdb.close();
+});
+
+/* THE HONEST SIGNAL. `truncated` is the only thing that can stop a client
+   presenting a cut list as complete, so it has to be RIGHT at the boundary in
+   both directions: a flag that is always true is as useless as one that is
+   always false.
+   PROVE-RED: in src/index.js change the accepted bucket's bind from
+     q("f.status = 'accepted'").bind(me, me, FRIEND_PAGE + 1)
+   to
+     q("f.status = 'accepted'").bind(me, me, FRIEND_PAGE)
+   (one line) -> "a full page reported itself as complete": the route can no
+   longer see the row past the page, so truncation becomes invisible again. */
+test('truncated is set when the bound bites and clear when it does not', () => {
+  const full = seedCrew({ accepted: FRIEND_PAGE });
+  const p1 = friendsPayload(full, 'me');
+  assert.equal(p1.friends.length, FRIEND_PAGE, 'an exactly-full page did not come back whole');
+  assert.equal(p1.truncated.friends, false, 'an exactly-full page claimed to be truncated');
+  full.close();
+
+  const over = seedCrew({ accepted: FRIEND_PAGE + 1 });
+  const p2 = friendsPayload(over, 'me');
+  assert.equal(p2.friends.length, FRIEND_PAGE, 'the page is not being cut to FRIEND_PAGE');
+  assert.equal(p2.truncated.friends, true, 'a full page reported itself as complete');
+  /* the +1 row must never leak into the payload: it exists to be counted */
+  assert.equal(new Set(p2.friends.map(f => f.playerId)).size, FRIEND_PAGE, 'the probe row leaked into the payload');
+  /* and truncation of one bucket says nothing about the others */
+  assert.equal(p2.truncated.incoming, false, 'a truncated friends list marked incoming truncated too');
+  assert.equal(p2.truncated.outgoing, false, 'a truncated friends list marked outgoing truncated too');
+  over.close();
+});
+
+/* THE UNCHANGED CASE. A small crew is the shape every existing client already
+   renders, and a refactor that fixes the cap by re-bucketing the rows wrongly
+   would break it silently.
+   PROVE-RED: in src/index.js change the incoming bucket's predicate from
+     f.status <> 'accepted' AND f.requested_by <> ?
+   to
+     f.status <> 'accepted' AND f.requested_by = ?
+   (one line) -> incoming and outgoing swap and both assertions go red. */
+test('a small crew still buckets exactly as before', () => {
+  const fdb = seedCrew({ accepted: 3, outgoing: 2, requestTs: 9000 });
+  const p = friendsPayload(fdb, 'me');
+  assert.equal(p.friends.length, 3, 'accepted friendships did not land in friends');
+  assert.equal(p.outgoing.length, 2, 'requests I sent did not land in outgoing');
+  assert.deepEqual(p.incoming.map(f => f.playerId), ['stranger'], 'a request sent TO me did not land in incoming');
+  assert.deepEqual(p.truncated, { friends: false, incoming: false, outgoing: false },
+    'a four-row crew reported itself truncated');
+  /* newest first within a bucket, unchanged */
+  assert.deepEqual(p.friends.map(f => f.since), [1002, 1001, 1000], 'the ORDER BY changed');
+  fdb.close();
+});
+
+/* The payload's shape is a CONTRACT with js/social.js listFriends(), which
+   spreads whatever comes back and hands it to five call sites. `truncated` was
+   added additively for exactly that reason; the day somebody renames or removes
+   a bucket instead, this is the thing that says so. */
+test('GET /friends still answers the three buckets every client destructures', () => {
+  const p = friendsPayload(seedCrew({ accepted: 1 }), 'me');
+  assert.deepEqual(Object.keys(p).sort(), ['friends', 'incoming', 'outgoing', 'truncated']);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

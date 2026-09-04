@@ -1538,6 +1538,13 @@ function sanitizeSnapshot(rawSnap, row, nowMs) {
 }
 /* =============== end snapshot bounds =============== */
 
+/* How many rows GET /friends returns PER BUCKET (accepted / incoming /
+   outgoing), each bounded on its own. Kept at the 100 the old shared cap used,
+   so nothing a real player sees today gets smaller; what changed is that the
+   three no longer compete for it. When a bucket hits it, the route says so in
+   `truncated` rather than pretending the cut list is the whole list. */
+const FRIEND_PAGE = 100;
+
 const SPIRE_DORMANT_MS = 7 * 86400000;
 const SPIRE_SHIELD_MS = 3600000;         // 1h after a takeover, the tower cannot flip back
 const SIEGE_WINDOW_MS = 48 * 3600000;   // time to walk there and break it
@@ -2376,16 +2383,36 @@ export default {
       if (path === '/friends' && request.method === 'GET') {
         const auth = await verifySigned(request, env, '');
         if (auth.err) return json({ error: auth.err }, 401);
-        const rows = await env.DB.prepare(
+        /* ONE BOUND PER BUCKET, not one bound for all three.
+           This was a single `WHERE f.a = ? OR f.b = ? ORDER BY f.ts DESC LIMIT
+           100` that all three buckets were sliced out of in JS, so the 100 was
+           SHARED. Accepted friendships are the oldest rows a player has and
+           they are also the many; a player with 100 of them pushed every
+           pending row off the end of the ORDER BY, and the failure was silent
+           in both directions: they received no friend requests at all, nothing
+           told them, and nothing told the sender their request had landed.
+           Raising the shared cap only moves the number at which it happens, and
+           it cannot be moved far enough: the crowding-out is structural, and
+           the bucket being starved is the one a stranger controls.
+           Three predicates, three limits, one D1 batch (one round trip), so no
+           bucket can consume another's budget in either direction. */
+        const me = auth.playerId;
+        const q = where => env.DB.prepare(
           'SELECT f.a, f.b, f.status, f.requested_by, f.ts, ' +
           'pa.handle a_handle, pa.name a_name, pa.friend_code a_code, pa.profile a_profile, pa.app_v a_v, pa.last_seen a_seen, ' +
           'pb.handle b_handle, pb.name b_name, pb.friend_code b_code, pb.profile b_profile, pb.app_v b_v, pb.last_seen b_seen ' +
           'FROM friendships f JOIN players pa ON pa.id = f.a JOIN players pb ON pb.id = f.b ' +
-          'WHERE f.a = ? OR f.b = ? ORDER BY f.ts DESC LIMIT 100').bind(auth.playerId, auth.playerId).all();
-        const friends = [], incoming = [], outgoing = [];
-        for (const r of rows.results || []) {
-          const meIsA = r.a === auth.playerId;
-          const other = {
+          'WHERE (f.a = ? OR f.b = ?) AND ' + where + ' ORDER BY f.ts DESC LIMIT ?');
+        /* LIMIT is the page PLUS ONE: the extra row is how truncation is known
+           without a second COUNT query. It is dropped before the payload. */
+        const [acc, inc, out] = await env.DB.batch([
+          q("f.status = 'accepted'").bind(me, me, FRIEND_PAGE + 1),
+          q("f.status <> 'accepted' AND f.requested_by <> ?").bind(me, me, me, FRIEND_PAGE + 1),
+          q("f.status <> 'accepted' AND f.requested_by = ?").bind(me, me, me, FRIEND_PAGE + 1),
+        ]);
+        const shape = r => {
+          const meIsA = r.a === me;
+          return {
             playerId: meIsA ? r.b : r.a,
             name: (meIsA ? r.b_name : r.a_name) || (meIsA ? r.b_handle : r.a_handle),
             handle: meIsA ? r.b_handle : r.a_handle,
@@ -2395,11 +2422,22 @@ export default {
             since: r.ts,
             lastSeen: meIsA ? r.b_seen : r.a_seen,
           };
-          if (r.status === 'accepted') friends.push(other);
-          else if (r.requested_by === auth.playerId) outgoing.push(other);
-          else incoming.push(other);
-        }
-        return json({ friends, incoming, outgoing });
+        };
+        /* `truncated` is ADDITIVE: every existing client reads .friends /
+           .incoming / .outgoing and is unchanged by it. It exists so a client
+           can stop presenting a cut list as the whole truth. */
+        const truncated = {};
+        const take = (rs, key) => {
+          const rows = rs.results || [];
+          truncated[key] = rows.length > FRIEND_PAGE;
+          return rows.slice(0, FRIEND_PAGE).map(shape);
+        };
+        return json({
+          friends: take(acc, 'friends'),
+          incoming: take(inc, 'incoming'),
+          outgoing: take(out, 'outgoing'),
+          truncated,
+        });
       }
 
       /* ---------------- Dark Spires: shared territory ----------------
