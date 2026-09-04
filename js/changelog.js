@@ -4,6 +4,18 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 471, date: '2026-09-04', title: 'Logging tells the truth, and the Dressing Room has an order', items: [
+    'Scanning a European label with two columns now reads the per-serving column, and if the numbers still add up to more than the serving weighs, the sheet says so before you save.',
+    'A food you make yourself now warns you before saving when the calories and the macros disagree, or when you already have one by that name. Macros you leave blank stay blank instead of pretending to be zero.',
+    'Over budget on a macro shows as over: the bar fills, a marker sits at the end, and the number reads how far over. Protein keeps its tick until you are well past target. The ring and the meal rows now agree to the calorie.',
+    'The protein average divides by the days you logged, like the calorie average always did. A blank week reads blank, not zero.',
+    'Half-finished entries survive a reload: reopen the app and the sheet, your search, your portion and your meal are where you left them. The meal you tapped is remembered on every reopen, My foods included.',
+    'Logging at midnight lands on the new day. Search online says when you are offline and gives you Try again when it fails; an empty search offers to create the food with the name you typed.',
+    'Every control on the logging path is at least a thumb wide, meal chips and the portion stepper speak to a screen reader, and the result count is announced as you type.',
+    'Erasing this phone now says so afterwards, and warns you first when no recovery code is set. Yesterday\'s close, on budget or not, stays on Today as a news row instead of only a passing toast.',
+    'The Dressing Room sorts your looks by rarity with the tier on every tile, saved fits show N/6, previews and commits no longer flash the whole screen, and the Wear it bar stays in reach while you scroll.',
+    'Fixes behind the scenes: canned beans carry canned sodium, diet soda no longer breaks the grams chip, a re-logged entry cannot be paid twice, a 6,000 kcal typo from a watch cannot inflate your day, and Today reads the database about half as often.',
+  ] },
   { n: 470, date: '2026-08-31', title: 'The Pit remembers your fight, and your account is truly yours', items: [
     'Leaving the app mid-fight no longer makes the fight vanish. Come back and the Pit knows exactly where you stood: a loss shows you the defeat screen you earned, and walking back in never charges you a second time for a fight you already started.',
     'You can now delete your account and every trace of it, from inside the app: Settings, Delete account & cloud data. It removes your cloud account, friends, race entry and encrypted backup in one stroke, then wipes this phone. The old Erase stays for wiping just the phone.',

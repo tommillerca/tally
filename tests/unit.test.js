@@ -4388,7 +4388,7 @@ const survey2Load = (stubs = {}) => {
     trackEvent: () => {}, sendSurvey: async () => ({ ok: true }),
     buildStats: async () => ({ streak: 3, logs: 41, pitWins: 7 }), levelFor: () => ({ level: 12 }), totalXp: async () => 0,
     db: { all: async () => [{ ts: Date.now() - 9 * 86400000 }, { ts: Date.now() }] }, petInstances: async () => [1, 2, 3],
-    social: { socialMe: async () => ({ id: 'x' }) }, APP_BUILD: 'v470', platformTag: () => 'ios',
+    social: { socialMe: async () => ({ id: 'x' }) }, APP_BUILD: 'v471', platformTag: () => 'ios',
     openSheet: () => {}, $: () => null, $$: () => [], ...stubs,
   };
   const names = Object.keys(env);
@@ -4444,7 +4444,7 @@ test('Survey v2 S3 (b): the body is form/answers/ctx in the S2 wire shape and st
   assert.ok(JSON.stringify(body.ctx).length <= 1000, `ctx blob ${JSON.stringify(body.ctx).length} > server cap 1000`);
   // the silent context, spec section 2: every named field present with the stubbed sources
   const ctx = await survey2Ctx();
-  assert.deepEqual(ctx, { build: 'v470', plat: 'ios', streak: 3, foods: 41, pitWins: 7, level: 12, days: 9, pets: 3, crew: true });
+  assert.deepEqual(ctx, { build: 'v471', plat: 'ios', streak: 3, foods: 41, pitWins: 7, level: 12, days: 9, pets: 3, crew: true });
   // skipped questions are ABSENT, not empty (the dashboard counts n by presence)
   assert.deepEqual(survey2Answers({ q1: '', q2: [], q3text: '   ', q5: 'definitely' }), { q5: 'definitely' });
   // and the transport forwards the three fields (js/analytics.js sendSurvey)
