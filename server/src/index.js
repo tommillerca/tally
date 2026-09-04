@@ -2386,11 +2386,14 @@ export default {
         /* ONE BOUND PER BUCKET, not one bound for all three.
            This was a single `WHERE f.a = ? OR f.b = ? ORDER BY f.ts DESC LIMIT
            100` that all three buckets were sliced out of in JS, so the 100 was
-           SHARED. Accepted friendships are the oldest rows a player has and
-           they are also the many; a player with 100 of them pushed every
-           pending row off the end of the ORDER BY, and the failure was silent
-           in both directions: they received no friend requests at all, nothing
-           told them, and nothing told the sender their request had landed.
+           SHARED. `ts` is the accept time on an accepted row and the request
+           time on a pending one, and one ORDER BY held both: every friendship a
+           player accepted put a row ABOVE an unanswered request, so a request
+           nobody acted on slid down and, once 100 rows were newer than it,
+           stopped being returned at all. Silent on both sides: nothing told the
+           player it had ever arrived, and nothing told the sender it had gone.
+           Past 100 accepted rows, the same ordering dropped accepted FRIENDS
+           off the bottom just as quietly.
            Raising the shared cap only moves the number at which it happens, and
            it cannot be moved far enough: the crowding-out is structural, and
            the bucket being starved is the one a stranger controls.
