@@ -4,7 +4,7 @@ import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
 import {
-  levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews,
+  levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
   awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats,
@@ -3787,6 +3787,10 @@ async function renderToday(el) {
     fightWins: allXp.filter(r => r.type === 'fight').length,
   });
   const pitAttn = unlocks.some(u => u.hero === 'pit');
+  /* QA round 28 B1: read AFTER buildFighter above, which is where the one-shot
+     grant is written on the first fighter build after the update, so the card
+     appears on the same draw the points do. Two kv reads, no store scan. */
+  const rebal = habitGrantCard(await kvGet(HABIT_GRANT_KEY, null), await kvGet(HABIT_GRANT_SEEN_KEY, false));
   const hkStale = await hkStaleInfo(healthRows);
   if (hkStale && !(await kvGet('hkStaleNotified', false))) {
     await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
@@ -4112,6 +4116,17 @@ async function renderToday(el) {
     <b>⚠️ Steps aren't syncing</b>
     <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
   </button>` : ''}
+  ${/* THE REBALANCE CARD (QA round 28 B1): the R21-P1 make-good explained, once.
+       Same quiet card skeleton as the return card (.wb-back: no alarm colour,
+       this is not a warning), copy from habitGrantCard (js/game.js). The button
+       is the dismissal: it records the card as seen and opens Training, where
+       the N points are waiting. */''}
+  ${rebal ? `
+  <div class="card wb-back" id="habitGrantCard">
+    <b>${esc(rebal.title)}</b>
+    <span>${esc(rebal.body)}</span>
+    <button class="btn" id="habitGrantGo">${esc(rebal.button)}</button>
+  </div>` : ''}
 
   ${/* THE DAY IS ONE COLLAPSED BANNER UNTIL YOU ASK FOR IT. Tom, 2026-08-27:
        "below the fold should be fully collapsed and only showing a banner with
@@ -4422,6 +4437,8 @@ async function renderToday(el) {
     await kvSet('wbReturnDay', null);
     $('#wbCard', el)?.remove();
   });
+  // QA round 28 B1: seen first, then Training; a second Today draw finds the flag and draws no card
+  $('#habitGrantGo', el)?.addEventListener('click', async () => { await kvSet(HABIT_GRANT_SEEN_KEY, true); openCharacter('talents'); });
   $('#hkStaleFix', el)?.addEventListener('click', async () => {
     // best case: a manual native sync brings steps right back
     if (isNative() && S.settings.hkNative) {
@@ -20603,6 +20620,9 @@ async function renderBoneyard(el) {
  * to do with fighting.
  */
 const HABIT_GRANT_KEY = 'habitBaseGrant_v471';
+// QA round 28 B1: written by the Today card's button once the player has read why
+// their fighter changed; the card never shows again. Versioned like the grant.
+const HABIT_GRANT_SEEN_KEY = 'habitBaseGrantCardSeen_v471';
 async function habitBaseGrantTp(behavior) {
   const prev = await kvGet(HABIT_GRANT_KEY, null);
   if (prev && typeof prev.tp === 'number') return prev.tp;

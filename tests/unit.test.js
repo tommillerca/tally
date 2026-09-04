@@ -24,7 +24,7 @@ import {
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct, fetchOffProductEx } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews } from '../js/game.js';
+import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard } from '../js/game.js';
 import { STAT_META, STYLES } from '../js/pit.js';
 import * as pitMod from '../js/pit.js';
 const mkFighter = pitMod.makeFighter;
@@ -1694,7 +1694,14 @@ test('R25-M20 sheet-head icon buttons and the amount input resolve to >= 44px', 
   const close = { tag: 'button', classes: ['sheet-close', 't1-icon-btn'], ancestors: sheetHead };
   const fav = { tag: 'button', classes: ['t1-icon-btn'], ancestors: sheetHead };
   const qty = { tag: 'input', classes: [], ancestors: [{ tag: 'div', classes: ['val'] }, { tag: 'div', classes: ['t1-step'] }, { tag: 'div', classes: ['sheet-body'] }] };
-  for (const [name, el] of [['.sheet-close.t1-icon-btn', close], ['#favBtn (.t1-icon-btn)', fav], ['#qtyIn (.t1-step .val input)', qty]]) {
+  /* QA round 28 B2: two more controls the same cascade left under the floor.
+     The chevron is a bare .t1-icon-btn OUTSIDE .t1-tools (a recents row), so
+     the M20 fix never reached it; "Wear it" is a .btn whose only height came
+     from padding, so no rule set min-height at all. Both red on main. */
+  const chev = { tag: 'button', classes: ['t1-icon-btn'], ancestors: [{ tag: 'div', classes: ['t1-frow', 't1-frow-split'] }, { tag: 'div', classes: ['sheet-body'] }, { tag: 'div', classes: ['sheet', 't1'] }] };
+  const wear = { tag: 'button', classes: ['btn', 'mog-go'], ancestors: [{ tag: 'div', classes: ['look-bar', 'mog-bar'] }, { tag: 'div', classes: ['mog-dock'] }] };
+  for (const [name, el] of [['.sheet-close.t1-icon-btn', close], ['#favBtn (.t1-icon-btn)', fav], ['#qtyIn (.t1-step .val input)', qty],
+    ['"Change portion" chevron (.t1-frow-split .t1-icon-btn, R28-B2)', chev], ['"Wear it" (.look-bar.mog-bar .btn.mog-go, R28-B2)', wear]]) {
     const w = resolve(el, 'min-height');
     assert.ok(w, `${name}: no rule sets min-height at all`);
     assert.ok(px(w.value) >= 44, `${name}: the winning min-height is "${w.sel} { min-height: ${w.value} }", under the 44px floor (QA round 25 M20)`);
@@ -3797,7 +3804,14 @@ test('every cosmetic any tier can be asked for is on disk', async () => {
  * literal db.all() calls in this function body are in scope. Statically finding
  * the rest would mean walking the call graph of a 22k-line module; the four
  * named callers below are the ones the finding measured. */
-test('R17-P2 renderToday keeps exactly its three known full-store reads', () => {
+/* QA round 28 G3 (2026-09-04): `inv` joined the list. Not a fourth read on the
+   draw: the same inv rows were being scanned THREE times outside this body
+   (unopenedCrates, ownedGearIds, route()'s refreshCrateBadge) and are now read
+   once here and handed down, so the draw went from three inv scans to one.
+   tests/today-reads-lint.mjs grades the whole draw (this body plus every awaited
+   callee) at exactly one scan per store, which is the guard this one could not
+   be (see WHAT IT CANNOT SEE above). */
+test('R17-P2 renderToday keeps exactly its four known full-store reads', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   const m = app.match(/\nasync function renderToday\(el\) \{\n([\s\S]*?)\n\}\n/);
   assert.ok(m, 'renderToday not found; the guard is reading the wrong shape and is measuring nothing');
@@ -3806,7 +3820,7 @@ test('R17-P2 renderToday keeps exactly its three known full-store reads', () => 
   assert.ok(body.length > 4000 && body.includes('questTiers'),
     `extracted body looks wrong (${body.length} chars); an empty sample passes every check below for free`);
   const found = [...body.matchAll(/db\.all\(\s*'([a-z]+)'\s*\)/g)].map(x => x[1]).sort();
-  assert.deepEqual(found, ['health', 'log', 'xp'],
+  assert.deepEqual(found, ['health', 'inv', 'log', 'xp'],
     `renderToday's full-store reads changed to [${found}]. A NEW one is unbounded growth on the tap that runs on every #prevDay / #nextDay and after every log: use db.byIndex('log','date',d) or a point db.get. FEWER is progress: update this list.`);
 });
 
@@ -4632,6 +4646,36 @@ test('R24-L16 (a) dayCloseNews derives the toast copy and the closed date from t
   ]);
   assert.equal(r.date, '2026-09-02');
   assert.equal(r.type, 'dayclose');
+});
+
+/* ---- QA round 28 B1: the R21-P1 make-good gets a card. The grant itself
+   (js/app.js habitBaseGrantTp) writes { tp, at } to kv once; habitGrantCard is
+   the pure half that turns that row plus the dismissal flag into a card or
+   nothing, so the once-ness is provable here without a DOM. Red on main: the
+   export does not exist. ---- */
+test('R28-B1 (a) habitGrantCard renders once with the grant N, never after dismissal, never without a grant', () => {
+  const card = habitGrantCard({ tp: 37, at: 1 }, false);
+  assert.ok(card, 'a grant row with unspent points must produce a card');
+  assert.equal(card.tp, 37);
+  assert.match(card.body, /\b37 training points\b/, `the body must carry N: ${card.body}`);
+  assert.match(card.body, /Training/, 'the body must say where the points are spent');
+  assert.equal(habitGrantCard({ tp: 1, at: 1 }, false).body.includes('1 training point.'), true, 'singular for one point');
+  assert.equal(habitGrantCard({ tp: 37, at: 1 }, true), null, 'once the button has been tapped the card never returns');
+  assert.equal(habitGrantCard({ tp: 0, at: 1 }, false), null, 'a zero grant (a new player, nothing to explain) draws no card');
+  assert.equal(habitGrantCard(null, false), null, 'no grant row yet (the fighter has not been built since the update) draws no card');
+  assert.equal(habitGrantCard({ at: 1 }, false), null, 'a malformed row draws no card rather than "undefined training points"');
+});
+test('R28-B1 (b) static: Today mounts the card after the grant is written, and its button marks it seen then opens Training', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const todayStart = app.indexOf('\nasync function renderToday(');
+  const today = app.slice(todayStart, app.indexOf('\n}\n', todayStart));
+  const grantAt = today.indexOf('habitGrantCard(await kvGet(HABIT_GRANT_KEY, null), await kvGet(HABIT_GRANT_SEEN_KEY, false))');
+  assert.ok(grantAt > 0, 'renderToday must derive the card from the grant row and the seen flag');
+  assert.ok(grantAt > today.indexOf('await buildFighter('), 'the grant row is read AFTER buildFighter writes it, so the card lands on the same draw as the points');
+  assert.match(today, /id="habitGrantCard"[\s\S]*?<button class="btn" id="habitGrantGo">/, 'the card carries its Training button');
+  assert.match(today, /\$\('#habitGrantGo', el\)\?\.addEventListener\('click', async \(\) => \{ await kvSet\(HABIT_GRANT_SEEN_KEY, true\); openCharacter\('talents'\); \}\)/,
+    'the button writes the seen flag and routes to Training (the talents tab of the hub)');
+  assert.match(app, /const HABIT_GRANT_SEEN_KEY = 'habitBaseGrantCardSeen_v471';/, 'the seen flag is versioned with the grant');
 });
 
 test('R24-L16 (b) renderToday feeds the derived day-close row to the news pill from the xp rows it already read', () => {

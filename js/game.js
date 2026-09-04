@@ -828,6 +828,26 @@ export function dayCloseNews(xpRows) {
   return { id: `dayclose-${r.date}`, type: r.type, title, date: r.date };
 }
 
+/* THE REBALANCE CARD (QA round 28 B1). R21-P1 made every stat start flat and
+   returned the habit-earned spread as unspent training points through a
+   one-shot kv (js/app.js habitBaseGrantTp), with no toast, notice or card: the
+   release's own mage audit measured a fighter dropping 312 HP to 210 on update
+   day and nothing on screen said why or that points were waiting. This is the
+   one place the explanation lives. Pure, so tests/unit.test.js can drive it:
+   the grant row in, a card (or null) out; `seen` is the dismissal flag the
+   Today button writes. COPY IS A DRAFT FOR TOM (flagged in the round-28 report):
+   edit the three strings here and nowhere else. */
+export const HABIT_GRANT_CARD = {
+  title: 'Your Bonehead was rebalanced',
+  body: n => `Every stat now starts flat, and the strength you had earned is waiting as ${n} training point${n === 1 ? '' : 's'}. Spend them in Training.`,
+  button: 'Open Training',
+};
+export function habitGrantCard(grant, seen) {
+  const tp = grant && typeof grant.tp === 'number' ? grant.tp : 0;
+  if (seen || tp <= 0) return null;   // nothing granted, or already explained: no card, ever again
+  return { tp, title: HABIT_GRANT_CARD.title, body: HABIT_GRANT_CARD.body(tp), button: HABIT_GRANT_CARD.button };
+}
+
 /* THE RETROACTIVE BACKFILL, AND THE BOOT LOOP IT USED TO CAUSE.
  *
  * This is the one-shot replay that honours a pre-RPG install's history: about
