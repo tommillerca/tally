@@ -298,7 +298,10 @@ else {
          row over "whichever note is nearest" is what produced two years of this.
          (lessons_audit_drift_false_red: fix it at the assertion.) */
       lead: (document.querySelector('.mog-lead')?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160),
-      note: (bar?.nextElementSibling?.matches('p.note') ? bar.nextElementSibling.textContent : '').replace(/\s+/g, ' ').trim().slice(0, 160) };
+      /* Read by its own class, not as "the bar's next sibling": QA r23 F3
+         (2026-09-03) moved the bar into the sticky .mog-dock, the note stayed
+         in the panel body, and gate7 went red on identical copy. */
+      note: (document.querySelector('.mog-safe')?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160) };
   });
   console.log('panel:', JSON.stringify(panel));
   check('the transmog panel is offered on a slot holding a plain cosmetic', panel.hasPanel && panel.cells >= 2, JSON.stringify(panel));
