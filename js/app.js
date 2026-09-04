@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -17758,15 +17758,25 @@ async function openRecoverySheet() {
 /* One toast for everything a file restore brought back. Only nonzero categories
    speak: "0 foods" reads as data loss to a player whose custom-foods store was
    simply empty (confirmed playtest ticket, 2026-08). */
+/* QA round 25 M6: importAll returns `skipped`, the stores the file did not carry
+   (a v1 backup has no health or inv), and this function threw that list away, so
+   the player was told "Restored 12 log entries" while two stores sat untouched.
+   A skipped store is now the headline, in the player's words for each store.
+   tests/backup-version-audit.mjs pins the wording. */
+const STORE_WORDS = { foods: 'custom foods', log: 'the food log', weights: 'weigh-ins', kv: 'settings', xp: 'XP', health: 'health', inv: 'inventory' };
+const andJoin = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a[0];
 function importSummary(counts) {
+  const skipped = counts.skipped || [];
+  if (skipped.length) {
+    const list = andJoin(skipped.map(s => STORE_WORDS[s] || s));
+    return `Restored ${STORES.length - skipped.length} of ${STORES.length} stores. ${list[0].toUpperCase() + list.slice(1)} were not in this backup.`;
+  }
   const parts = [];
   if (counts.log) parts.push(`${counts.log} log entr${counts.log === 1 ? 'y' : 'ies'}`);
   if (counts.foods) parts.push(`${counts.foods} custom food${counts.foods === 1 ? '' : 's'}`);
   if (counts.weights) parts.push(`${counts.weights} weigh-in${counts.weights === 1 ? '' : 's'}`);
   if (!parts.length) return 'Backup restored';
-  return 'Restored ' + (parts.length > 1
-    ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1]
-    : parts[0]);
+  return 'Restored ' + andJoin(parts);
 }
 
 /* THE one file-import path, shared by Settings > Import and the restore sheet

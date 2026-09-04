@@ -202,7 +202,10 @@ if (own) console.log(`serving this repo at ${base}\n`);
    and pushBackup's blanket catch turned the throw into a silent false on every
    push path. Node-only and milliseconds, so there is no reason it should not
    run on every gate rather than only the full tier. */
-const PURE = ['backup-encoder-audit.mjs', 'backup-key-audit.mjs','unit.test.js', 'log-xp-farm-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs', 'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs', 'render-sink-lint.mjs'];
+/* backup-version-audit is PURE for the same reason (mem-idb under the real
+   js/db.js, ~1s): QA round 25 M6, the export version derives from DB_VERSION, a
+   v1 file's skipped stores reach the toast, and a newer file is refused. */
+const PURE = ['backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs', 'unit.test.js', 'log-xp-farm-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs', 'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs', 'render-sink-lint.mjs'];
 const BROWSER = [
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
      repo has watched shape assertions stay green over broken state, so this one

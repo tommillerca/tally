@@ -3,7 +3,10 @@
 // Existing user data must survive every version bump.
 import { dayOrdinal } from './nutrition.js';
 
-const DB_VERSION = 3;
+/* Exported because it is also the backup file's `version` stamp (exportAll),
+   so a file and the schema that wrote it can never disagree again (QA round
+   25 M6: the export carried a literal 3 that nothing tied to this). */
+export const DB_VERSION = 3;
 let dbPromise = null;
 let dbName = 'tally';
 
@@ -708,7 +711,7 @@ export async function exportAll() {
   const [foods, log, weights, kv, xp, health, inv] = await Promise.all([
     db.all('foods'), db.all('log'), db.all('weights'), db.all('kv'), db.all('xp'), db.all('health'), db.all('inv'),
   ]);
-  return { app: 'tally', version: 3, exportedAt: new Date().toISOString(), foods, log, weights, kv, xp, health, inv };
+  return { app: 'tally', version: DB_VERSION, exportedAt: new Date().toISOString(), foods, log, weights, kv, xp, health, inv };
 }
 
 /* kv rows that belong to the DEVICE, not to the save.
@@ -825,6 +828,17 @@ export async function importAll(data, { replace = true } = {}) {
      different answers: this one refuses, an absent key is skipped below. */
   const damaged = STORES.filter(s => data[s] != null && !Array.isArray(data[s]));
   if (damaged.length) throw new Error(`that backup file is damaged (${damaged.join(', ')}). Your old data is unchanged.`);
+  /* THE VERSION IS READ, AND A NEWER FILE IS REFUSED. QA round 25 M6: nothing
+     anywhere read data.version, so a file stamped by a newer app carrying an
+     eighth store imported "clean" and the unknown store was silently dropped.
+     That is what a launch update does to every existing player's backup the
+     day a store is added. An OLDER file is fine: the store loop below leaves
+     any store it omits alone and reports it in `skipped`. There is no
+     migration framework here on purpose; the schema only ever grows
+     (additive-only, see the header), so "older imports, newer refuses" is the
+     whole rule. A file with no version at all is treated as old. */
+  const fileVersion = Number(data.version) || 0;
+  if (fileVersion > DB_VERSION) throw new Error(`that backup was made by a newer version of the app (v${fileVersion}; this app reads v${DB_VERSION}). Update the app, then import it again. Your old data is unchanged.`);
   const idb = await open();
   const declared = new Set(STORES.filter(s => Array.isArray(data[s])));
   const skipped = STORES.filter(s => !declared.has(s));
