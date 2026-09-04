@@ -359,7 +359,10 @@ await page.evaluate(() => document.querySelector('.sheet-close')?.click());
 await sleep(600);
 const vsTap = await page.evaluate(async () => {
   window.__giForce = true;
-  window.__denFight(1.6, 0);                       // fire-and-forget: we sample DURING the card
+  /* mode:'spar' overrides the seam's default mode:'boss', which takes the GATE
+     INTRO branch and never builds a versus card. Spar is the Pit's own fight,
+     the surface O12 was measured on. */
+  window.__denFight(1.6, 0, { mode: 'spar' });     // fire-and-forget: we sample DURING the card
   await new Promise(r => setTimeout(r, 1350));     // fade started at 1150; card removed at 1420
   window.__giForce = false;
   const card = document.querySelector('.vs-card');
