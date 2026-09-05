@@ -1,0 +1,219 @@
+[godmode] puppeteer 24.43.1 via repo node_modules: /Users/tommiller/Documents/Hyperframes Editor/tally/node_modules/puppeteer/lib/cjs/puppeteer/puppeteer.js
+RECT banner-closed-boneyard-bruisers {"x":16,"y":408.921875,"width":398,"height":268.921875,"onscreen":true}
+WROTE banner-closed-boneyard-bruisers -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/banner-closed-boneyard-bruisers.png (796x698)
+RECT banner-closed-windrow-wasps {"x":16,"y":408.921875,"width":398,"height":268.921875,"onscreen":true}
+WROTE banner-closed-windrow-wasps -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/banner-closed-windrow-wasps.png (796x698)
+RECT banner-open #fbSect -> {"x":16,"y":-145.078125,"width":398,"height":1156.046875,"onscreen":true}
+WROTE banner-open -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/banner-open.png (796x2312)
+fb-bar text: "TryingGlasswater Gannets 4,200 · all 32 teams"
+locked tile tags (first 6): ["Locked","Locked","Locked","Locked","Locked","Locked"]
+RECT wardrobe-rail .fb-rail-wrap -> {"x":16,"y":229.171875,"width":398,"height":407.5,"onscreen":true}
+WROTE wardrobe-rail -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/wardrobe-rail.png (796x816)
+RECT stage-full (support, dsf3) .bh-stage.lg -> {"x":91,"y":226.40625,"width":248,"height":414,"onscreen":true}
+WROTE stage-full (support, dsf3) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/stage-full.png (744x1242)
+LAYER ORDER (.bh-stage.lg, paint order = DOM order):
+  0: {"cls":"bh-backdrop","src":"assets/bh/BG/BG2-1.png","z":"0","op":"1","blend":"normal"}
+  1: {"cls":"","src":"assets/bh/B/B0-1.png","z":"auto","op":"1","blend":"normal"}
+  2: {"cls":"","src":"assets/bh/football/cleats.png","z":"auto","op":"1","blend":"normal"}
+  3: {"cls":"fb-tint","src":"url('assets/bh/football/cleats.mask-a.png')","z":"auto","op":"1","blend":"multiply"}
+  4: {"cls":"","src":"assets/bh/P/P1.png","z":"auto","op":"1","blend":"normal"}
+  5: {"cls":"","src":"assets/bh/football/jersey.png","z":"auto","op":"1","blend":"normal"}
+  6: {"cls":"fb-tint","src":"url('assets/bh/football/jersey.mask-a.png')","z":"auto","op":"1","blend":"multiply"}
+  7: {"cls":"fb-tint","src":"url('assets/bh/football/jersey.mask-b.png')","z":"auto","op":"1","blend":"multiply"}
+  8: {"cls":"","src":"assets/bh/IL/IL1-1.png","z":"auto","op":"1","blend":"normal"}
+  9: {"cls":"wpn-glow r-legendary","src":"assets/bh/IR/IR10-3.png","z":"auto","op":"1","blend":"normal"}
+  10: {"cls":"","src":"assets/bh/SK/SK0-1.png","z":"auto","op":"1","blend":"normal"}
+  11: {"cls":"","src":"assets/bh/football/helmet.png","z":"auto","op":"1","blend":"normal"}
+  12: {"cls":"fb-tint","src":"url('assets/bh/football/helmet.mask-a.png')","z":"auto","op":"1","blend":"multiply"}
+  13: {"cls":"fb-tint","src":"url('assets/bh/football/helmet.mask-b.png')","z":"auto","op":"1","blend":"multiply"}
+RECT stage-no-cleats (diagnostic, isolates the FW bbox) .bh-stage.lg -> {"x":91,"y":226.40625,"width":248,"height":414,"onscreen":true}
+WROTE stage-no-cleats (diagnostic, isolates the FW bbox) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/stage-no-cleats.png (744x1242)
+CLEATS BBOX (diff: worn vs unequipped, +6px pad): [233,895,281,221], 28647 changed px
+CLEATS MEASURE (main stage, isolated by diff): {"image":"744x1242","bbox":[233,895,281,221],"n_all":62101,"n_dark":24276,"mean_dark_rgb":[32.3,37.9,47.5],"mean_all_rgb":[86.1,97.7,74.3]}
+WROTE cleats-zoom (feet crop) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/cleats-zoom.png (1488x870), cropped from [0,807,744,1242]
+RECT rail-cleats-tile (diagnostic, dsf3) .fb-rail-wrap -> {"x":16,"y":229.171875,"width":398,"height":407.5,"onscreen":true}
+WROTE rail-cleats-tile (diagnostic, dsf3) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/rail-cleats-tile.png (1194x1224)
+CLEATS MEASURE (FW rail figure): {"image":"1194x1224","bbox":[351,200,491,384],"n_all":188544,"n_dark":164914,"mean_dark_rgb":[28.3,27.2,36.9],"mean_all_rgb":[46.7,44.2,49]}
+RECT kitroom-cleats-tile (dsf3) #proofCleatsTile -> {"x":31,"y":336.046875,"width":179,"height":194.609375,"onscreen":true}
+WROTE kitroom-cleats-tile (dsf3) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/kitroom-cleats-tile.png (537x585)
+CLEATS MEASURE (kit room tile): {"image":"537x585","bbox":[0,0,537,264],"n_all":141768,"n_dark":130379,"mean_dark_rgb":[36.7,34.1,40.7],"mean_all_rgb":[42.7,40,45.6]}
+
+=== SHOTS ===
+banner-closed-boneyard-bruisers: /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/banner-closed-boneyard-bruisers.png (796x698)
+banner-closed-windrow-wasps: /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/banner-closed-windrow-wasps.png (796x698)
+banner-open: /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/banner-open.png (796x2312)
+wardrobe-rail: /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/wardrobe-rail.png (796x816)
+stage-full (support, dsf3): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/stage-full.png (744x1242)
+stage-no-cleats (diagnostic, isolates the FW bbox): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/stage-no-cleats.png (744x1242)
+cleats-zoom (feet crop, 2x nearest): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/cleats-zoom.png (1488x870)
+rail-cleats-tile (diagnostic, dsf3): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/rail-cleats-tile.png (1194x1224)
+kitroom-cleats-tile (dsf3): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/kitroom-cleats-tile.png (537x585)
+
+=== MEASUREMENTS ===
+{
+  "layerTable": [
+    {
+      "cls": "bh-backdrop",
+      "src": "assets/bh/BG/BG2-1.png",
+      "z": "0",
+      "op": "1",
+      "blend": "normal"
+    },
+    {
+      "cls": "",
+      "src": "assets/bh/B/B0-1.png",
+      "z": "auto",
+      "op": "1",
+      "blend": "normal"
+    },
+    {
+      "cls": "",
+      "src": "assets/bh/football/cleats.png",
+      "z": "auto",
+      "op": "1",
+      "blend": "normal"
+    },
+    {
+      "cls": "fb-tint",
+      "src": "url('assets/bh/football/cleats.mask-a.png')",
+      "z": "auto",
+      "op": "1",
+      "blend": "multiply"
+    },
+    {
+      "cls": "",
+      "src": "assets/bh/P/P1.png",
+      "z": "auto",
+      "op": "1",
+      "blend": "normal"
+    },
+    {
+      "cls": "",
+      "src": "assets/bh/football/jersey.png",
+      "z": "auto",
+      "op": "1",
+      "blend": "normal"
+    },
+    {
+      "cls": "fb-tint",
+      "src": "url('assets/bh/football/jersey.mask-a.png')",
+      "z": "auto",
+      "op": "1",
+      "blend": "multiply"
+    },
+    {
+      "cls": "fb-tint",
+      "src": "url('assets/bh/football/jersey.mask-b.png')",
+      "z": "auto",
+      "op": "1",
+      "blend": "multiply"
+    },
+    {
+      "cls": "",
+      "src": "assets/bh/IL/IL1-1.png",
+      "z": "auto",
+      "op": "1",
+      "blend": "normal"
+    },
+    {
+      "cls": "wpn-glow r-legendary",
+      "src": "assets/bh/IR/IR10-3.png",
+      "z": "auto",
+      "op": "1",
+      "blend": "normal"
+    },
+    {
+      "cls": "",
+      "src": "assets/bh/SK/SK0-1.png",
+      "z": "auto",
+      "op": "1",
+      "blend": "normal"
+    },
+    {
+      "cls": "",
+      "src": "assets/bh/football/helmet.png",
+      "z": "auto",
+      "op": "1",
+      "blend": "normal"
+    },
+    {
+      "cls": "fb-tint",
+      "src": "url('assets/bh/football/helmet.mask-a.png')",
+      "z": "auto",
+      "op": "1",
+      "blend": "multiply"
+    },
+    {
+      "cls": "fb-tint",
+      "src": "url('assets/bh/football/helmet.mask-b.png')",
+      "z": "auto",
+      "op": "1",
+      "blend": "multiply"
+    }
+  ],
+  "cleatsMeasure": {
+    "image": "744x1242",
+    "bbox": [
+      233,
+      895,
+      281,
+      221
+    ],
+    "n_all": 62101,
+    "n_dark": 24276,
+    "mean_dark_rgb": [
+      32.3,
+      37.9,
+      47.5
+    ],
+    "mean_all_rgb": [
+      86.1,
+      97.7,
+      74.3
+    ]
+  },
+  "railTileMeasure": {
+    "image": "1194x1224",
+    "bbox": [
+      351,
+      200,
+      491,
+      384
+    ],
+    "n_all": 188544,
+    "n_dark": 164914,
+    "mean_dark_rgb": [
+      28.3,
+      27.2,
+      36.9
+    ],
+    "mean_all_rgb": [
+      46.7,
+      44.2,
+      49
+    ]
+  },
+  "kitroomMeasure": {
+    "image": "537x585",
+    "bbox": [
+      0,
+      0,
+      537,
+      264
+    ],
+    "n_all": 141768,
+    "n_dark": 130379,
+    "mean_dark_rgb": [
+      36.7,
+      34.1,
+      40.7
+    ],
+    "mean_all_rgb": [
+      42.7,
+      40,
+      45.6
+    ]
+  }
+}
+
+All shots captured, nothing missing.

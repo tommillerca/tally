@@ -6560,15 +6560,21 @@ body::before {
 .fb-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink); flex: 0 0 auto;
   background: linear-gradient(135deg, var(--fa) 0 50%, var(--fb) 50% 100%); box-shadow: var(--sh-sm); }
 .fb-swatch.xs { width: auto; height: auto; aspect-ratio: 1; border-width: 1px; box-shadow: none; }
-.fb-drop .row { align-items: stretch; }
-/* an explicit height: .pc-worn inside is absolutely positioned, so nothing else gives this box one */
-.fb-hero { position: relative; flex: none; width: 132px; height: 132px; align-self: center; border-radius: 12px; background: rgba(42, 45, 40, .35);
-  border: 2px solid var(--ink); overflow: hidden; }
+/* THE KIT ROOM POSTER (Tom, 2026-09-05): the art takes the whole left side and the
+   full height; the title sits over the copy; no coral, it sits on the surface like
+   the cards around it. The .t3-drop shell (border, radius, grain, open-state
+   radius) is kept so the section still behaves like the drop poster below it. */
+.t3-drop.fb-drop { display: flex; align-items: stretch; gap: 12px; padding: 0 14px 0 0;
+  background: var(--surface-2); border-color: var(--line-strong); }
+.fb-drop .tx { padding: 12px 0 13px; }
+.fb-drop h2 { margin: 2px 0 6px; }
+.fb-hero { position: relative; flex: 0 0 44%; min-width: 150px; align-self: stretch; overflow: hidden;
+  background: rgba(255, 255, 255, .04); border-right: 1px solid var(--line-strong); }
 .fb-hero .pc-worn { transform: translateX(-50%); }
-/* THE WHOLE FIGURE, helmet included: fit-body's waist-up crop took the helmet off
-   the one poster that sells helmets (measured 2026-09-05). */
-.fb-hero .pc-worn.fit-body .bh-anim { transform-origin: 50% 50%; transform: scale(1.18); }
-.fb-hero-pet { position: absolute; right: 2px; bottom: 2px; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
+.fb-hero .pc-worn.fit-body .bh-anim { transform-origin: 50% 50%; transform: translateY(2%) scale(1.02); }
+/* one line: the two prices at the poster's chip size wrapped "the / lot" in a 230px column */
+.fb-drop .t3-price { font-size: 15px; white-space: nowrap; }
+.fb-hero-pet { position: absolute; right: 4px; bottom: 4px; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
 .fb-hero-pet .petcrop { display: block; }
 .fb-teams { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; margin: 0 0 8px; }
 .drop-item.fb::before { content: 'KIT'; }

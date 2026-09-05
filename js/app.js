@@ -9376,20 +9376,18 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
   return `
   <details class="t3-dropsect" id="fbSect"${open ? ' open' : ''}>
     <summary class="t3-drop fb-drop">
-      <span class="eyebrow">Kit room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
-      <h2>FOOTBALL KIT</h2>
-      <div class="row">
-        <div class="fb-hero">
-          <div class="pc-worn fit-body">${avatarLayersHtml({ ...RACK_BASE, ...Object.fromEntries(sold.filter(g => !g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])) },
-            { wpnAura: null, skip: ['C'], thumb: bhTierFor(180) })}</div>
-          <span class="fb-hero-pet">${croppedPetImg(FOOTBALL_PETS[0], 58, false, null,
-            Object.fromEntries(sold.filter(g => g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])), 192)}</span>
-        </div>
-        <div class="tx">
-          <small>Helmet, jersey and cleats for your Bonehead. A helmet and jersey for the lizard. Buy a piece and it is yours in every team's colours.</small>
-          <div class="fb-teams" role="img" aria-label="${FOOTBALL_TEAMS.length} team colourways">${FOOTBALL_TEAMS.map(t => `<i class="fb-swatch xs" style="--fa:${t.a};--fb:${t.b}"></i>`).join('')}</div>
-          <span class="t3-price">${Number.isFinite(price) ? `${ICONS.coin(13)} ${price.toLocaleString()} a piece${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} the lot` : ''}` : 'Not for sale yet'}</span>
-        </div>
+      <div class="fb-hero">
+        <div class="pc-worn fit-body">${avatarLayersHtml({ ...RACK_BASE, ...Object.fromEntries(sold.filter(g => !g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])) },
+          { wpnAura: null, skip: ['C'], thumb: bhTierFor(260) })}</div>
+        <span class="fb-hero-pet">${croppedPetImg(FOOTBALL_PETS[0], 64, false, null,
+          Object.fromEntries(sold.filter(g => g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])), 192)}</span>
+      </div>
+      <div class="tx">
+        <span class="eyebrow">Kit room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
+        <h2>FOOTBALL KIT</h2>
+        <small>Helmet, jersey and cleats for your Bonehead. A helmet and jersey for the lizard. Buy a piece and it is yours in every team's colours.</small>
+        <div class="fb-teams" role="img" aria-label="${FOOTBALL_TEAMS.length} team colourways">${FOOTBALL_TEAMS.map(t => `<i class="fb-swatch xs" style="--fa:${t.a};--fb:${t.b}"></i>`).join('')}</div>
+        <span class="t3-price">${Number.isFinite(price) ? `${ICONS.coin(13)} ${price.toLocaleString()} a piece${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} the lot` : ''}` : 'Not for sale yet'}</span>
       </div>
     </summary>
     <div class="t3-dropbody">
