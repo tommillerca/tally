@@ -722,11 +722,24 @@ test('snapToWalkable: snaps to a nearby road, respects the max distance, sits in
 });
 
 // ---- loot data ----
+/* RE-PREMISED 2026-09-04 (round 33, FAUCET-1). This test asserted the SHAPE of
+   CRATES and nothing about the numbers, which is the lesson "a guard can assert
+   SHAPE, never STATE" in its own file: `rolls >= 1` stays green whatever a
+   crate pays. The crate coin range is the single biggest lever on income the
+   economy has. The faucet sim (scratchpad/r33/faucet/faucet.mjs) measures the
+   fifth-cut plan's proposed Common [60,100] / Bone [400,600] at 2.4x today's
+   committed coins/day, and Tom's ruling was to halve that proposal, NOT to
+   change the shipped numbers, which are the ones below. So they are pinned:
+   changing what a crate pays now has to be a deliberate edit to this line and
+   a re-run of the sim, not a one-character drift nothing notices. */
 test('rarity weights sum to 100 and crates are sane', () => {
   assert.equal(RARITY_ORDER.reduce((a, r) => a + RARITIES[r].w, 0), 100);
   for (const k of Object.keys(CRATES)) {
     assert.ok(CRATES[k].rolls >= 1 && CRATES[k].floor < RARITY_ORDER.length, k);
   }
+  assert.deepEqual(CRATES.daily.coins, [20, 40], 'Common Crate coin range (shipped economy number)');
+  assert.deepEqual(CRATES.golden.coins, [10, 25], 'Bone Crate coin range (shipped economy number)');
+  assert.deepEqual(CRATES.egg.coins, [20, 50], 'Step Egg coin range (shipped economy number)');
   assert.ok(SHOP.every(s => s.cost > 0));
 });
 
