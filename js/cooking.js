@@ -162,12 +162,20 @@ export async function grantPotion(id, n = 1) {
      transaction, same as grantIngredient below. */
   await kvUpdate('potions', inv => ({ ...(inv || {}), [id]: ((inv && inv[id]) || 0) + n }), {});
 }
+/* THE SIP HAS TO BE THE CLAIM TOO (2026-09-04, claimed-row-audit): reading the
+   satchel, decrementing in memory and writing the whole map back raced
+   grantPotion's own kvUpdate above it, the same shape O4 fixed on the granter
+   two lines up. A dish that finished cooking while a fight was open could bank
+   its potion via grantPotion between this read and this write, and the whole
+   map this call then wrote back had no idea that potion existed. */
 export async function usePotion(id) {
-  const inv = await potionsInv();
-  if (!(inv[id] > 0)) return false;
-  inv[id] -= 1; if (inv[id] <= 0) delete inv[id];
-  await kvSet('potions', inv);
-  return true;
+  const drunk = await kvUpdate('potions', cur => {
+    const next = { ...(cur || {}) };
+    if (!(next[id] > 0)) return undefined;
+    next[id] -= 1; if (next[id] <= 0) delete next[id];
+    return next;
+  }, {});
+  return !!drunk;
 }
 export function potionCount(inv) { return Object.values(inv || {}).reduce((a, n) => a + n, 0); }
 

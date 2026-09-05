@@ -161,6 +161,20 @@ const ACTIONS = [
   { id: 'js/cooking.js:advanceQueue', sites: 1, drive: 'advance',
     transition: 'a finished pot goes from full to empty, on the clock rather than on a tap',
     authority: "one kvUpdate on 'cooking': the pot is emptied and refilled in the same transaction, and the queue entry that refills it was taken from 'cookq' by a kvUpdate of its own" },
+  /* Registered 2026-09-04. Moved out of renderToday into the resume path today
+     (QA r26 O15 read the queue instead of draining it mid-render; the drain
+     itself moved to boot/resume so Today never pays inside a render tick). Not
+     a payout of its own: it is a composite of two primitives that are ALREADY
+     driven above. advanceQueue's own kvUpdate claim on 'cooking' hands a
+     finished dish to at most one caller (drive: 'advance'), so the `dishes`
+     array this loop sees was never also handed to a second caller; the XP is
+     then minted by awardCapped('cook', 'cook', 8, ..., XP_DAILY_CAP.cook)
+     (drive: 'awardCapped'), whose own ordinal ledger claim ('cook-<date>-<n>')
+     is the actual authority, not this loop. Three call sites in app.js (the
+     resume path, a fire-and-forget after suspend, and the Kitchen's own open)
+     all share this one function. */
+  { id: 'js/app.js:drainCookQueue', sites: 1,
+    undriven: "a composite of advanceQueue (drive: 'advance') and awardCapped (drive: 'awardCapped'), both already driven above; this loop mints no ledger key of its own, it only calls the two that do" },
   { id: 'js/energy.js:spendPitFight', sites: 0, drive: 'pitCharge',
     transition: 'a Pit charge goes from held to spent: the free floor first, then one banked Vigor',
     authority: "kvUpdate on 'pitEnergy': the charge is read and taken in one transaction" },
@@ -306,6 +320,34 @@ const ACTIONS = [
      tests/purchase-firewall.mjs: four concurrent taps on a 3,000-coin piece
      leave the wallet exactly 3,000 lighter, not 9,000. */
   { id: 'js/loot.js:buyDropItem', sites: 2, undriven: 'a purchase, and it refuses when already owned; the second site is its own refund on a lost grant race, not a payout' },
+  /* Registered 2026-09-04 (the football kit, RULED and built same day, see
+     docs/FOOTBALL-KIT.md 7.8). Same receipt-decides shape as buyDropItem and
+     buyRackItem, by design (the function header says so): spendCoins is the
+     atomic, clamped spend, and grantCosmetic(itemId, ...)'s own db.addIfAbsent
+     on `cos:<itemId>` is the claim that decides who gets the garment, with the
+     loser refunded on the line under it, exactly buyDropItem's shape. The
+     THIRD site (js/loot.js:99) is the loop that grants the item's other 31
+     colourways AFTER that claim already won; it runs only for the one caller
+     that won the itemId claim (the loser returned already, refunded), so it
+     cannot run twice for one purchase, and grantCosmetic is idempotent on each
+     of those ids regardless. Ownership is checked BEFORE the coins move
+     (owned.has(itemId), true for every team's copy since all 32 rows are
+     granted), so a second helmet in another team is refused, not charged;
+     tests/football-kit-audit.mjs row REPEAT drives exactly that sequential
+     case and asserts a zero coin delta. */
+  { id: 'js/loot.js:buyFootballItem', sites: 3, undriven: "a purchase, same shape as buyDropItem/buyRackItem: refuses when already owned (any colourway) and refunds the coins on a lost grant race. The third site is the other-colourways grant loop, reachable only after this call's own itemId claim already won, so it cannot double-run. Docs: docs/FOOTBALL-KIT.md 7.8; sequential repeat driven by tests/football-kit-audit.mjs row REPEAT" },
+  /* Same day, same shape, one purchase covering all five sold garments (256
+     ids). The claim is on `want[0]` (the first currently-missing id) rather
+     than a fixed key, because partial ownership is allowed (7.8: "a player who
+     already owns SOME of it pays the full price and is granted the rest"); two
+     overlapping bundle buys read the same `owned` set before either writes, so
+     both compute the same want[0] and only one wins its grantCosmetic claim,
+     the other refunded on the line under it. The remaining sites (128, 132) are
+     the coin refund and the loop granting want.slice(1), both reachable only
+     after the want[0] claim won. tests/football-kit-audit.mjs row REPEAT-BUNDLE
+     drives the sequential already-owned-everything case for both the bundle
+     and a lone garment tile. */
+  { id: 'js/loot.js:buyFootballBundle', sites: 3, undriven: "a purchase: refuses outright when everything in the bundle is already owned, and the claim (grantCosmetic on the first missing id) refunds a lost race the same way buyFootballItem does. Docs: docs/FOOTBALL-KIT.md 7.8; sequential repeat driven by tests/football-kit-audit.mjs row REPEAT-BUNDLE" },
   /* Registered 2026-08-31: both gained their single "paying" site from the spend
      reorder, and in both cases it is a REFUND of the balance the same call took
      a line or two earlier, not a payout. Neither grants anything, so neither has

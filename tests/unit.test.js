@@ -5984,6 +5984,112 @@ test('shop lead shelf: the Kit room leads when the kit is live, Bumbleseal is se
     'the Puffer Pack stays where it is, inside the supplies panel');
 });
 
+/* ================= claimed-row-audit, 2026-09-04: the five re-routed writers =================
+   tests/claimed-row-audit.mjs's COVERAGE row finds a plain kvSet of a CLAIMED
+   row (one some function claims through kvUpdate) STATICALLY, by scanning
+   js/*.js; it does not itself drive the race. These four rows are that: the
+   real functions, over a real (serialising) IndexedDB, raced against the
+   ATOMIC SIBLING that made the row a claimed one in the first place
+   (grantPotion's kvUpdate on 'potions'; salvagePet's kvUpdate on 'petInst').
+   All node-level, mem-idb is the real js/db.js the way the R26 rows above use it.
+
+   ORDERING NOTE: the petInst race below MUST run before any other live call to
+   petInstances() in this file, because reclaimOwnedPets gates itself with a
+   process-lifetime `_petsReclaimed` flag ("once per page load") that this file
+   cannot reset from outside. It is placed first among these four for that
+   reason; addPetInstance and breedPets both call petInstances() internally too,
+   but neither depends on the reclaim actually firing, so their tests are safe
+   to run after. */
+
+// usePotion vs grantPotion: the sip and the brew race on kv 'potions'.
+test('CLAIMED-ROW race: usePotion cannot lose a concurrent grantPotion on kv potions', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-claimedrow-potions');
+  const cooking = await import('../js/cooking.js');
+  await dbm.kvSet('potions', { 'revenant-draught': 1 });
+  const [drunk] = await Promise.all([
+    cooking.usePotion('revenant-draught'),
+    cooking.grantPotion('spectral-fury', 1),
+  ]);
+  assert.equal(drunk, true, 'the drink must go through');
+  const inv = await cooking.potionsInv();
+  assert.deepEqual(inv, { 'spectral-fury': 1 },
+    `both the drink (revenant-draught emptied and dropped) and the concurrent grant (spectral-fury) must land, got ${JSON.stringify(inv)}`);
+});
+
+// petInstances' heal (duplicate iids) AND its reclaim (an owned pet with zero
+// copies) both fire off ONE call here, raced against salvagePet's own kvUpdate
+// on a third, unrelated species, so all three land on kv 'petInst'.
+test('CLAIMED-ROW race: petInstances\' heal-and-reclaim cannot lose, or be lost to, a concurrent salvagePet on kv petInst', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-claimedrow-healreclaim');
+  const loot = await import('../js/loot.js');
+  await dbm.kvSet('petInst', [
+    { iid: 'dup', sp: 'C4', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'dup', sp: 'C4', lineage: 1, shiny: false, hatchedAtSteps: 0 },  // duplicate iid: triggers the heal branch
+    { iid: 'k1', sp: 'C2', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'k2', sp: 'C2', lineage: 1, shiny: false, hatchedAtSteps: 0 },  // two copies: salvagePet takes the worst, one survives
+  ]);
+  await dbm.db.put('inv', { id: 'cos:C2', kind: 'cos', itemId: 'C2', source: 'x', ts: Date.now() });
+  await dbm.db.put('inv', { id: 'cos:C3', kind: 'cos', itemId: 'C3', source: 'x', ts: Date.now() });  // owned, zero copies: the ghost reclaim fixes
+  const [, salvage] = await Promise.all([loot.petInstances(), loot.salvagePet('C2')]);
+  assert.ok(salvage.ok, 'the salvage must go through');
+  const list = await dbm.kvGet('petInst', null);
+  const c4 = list.filter(x => x.sp === 'C4');
+  assert.equal(c4.length, 2, `the heal must not drop a C4 copy, got ${JSON.stringify(list)}`);
+  assert.equal(new Set(c4.map(x => x.iid)).size, 2, `the heal must re-id the duplicate rather than lose one, got ${JSON.stringify(c4)}`);
+  assert.ok(list.some(x => x.sp === 'C3'), `the reclaimed ghost pet must survive the concurrent salvage, got ${JSON.stringify(list)}`);
+  assert.equal(list.filter(x => x.sp === 'C2').length, 1, `the salvage must survive the concurrent heal/reclaim, got ${JSON.stringify(list)}`);
+});
+
+// addPetInstance vs salvagePet: a fresh hatch and a melt on two different species.
+test('CLAIMED-ROW race: addPetInstance cannot lose, or be lost to, a concurrent salvagePet on kv petInst', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-claimedrow-addpet');
+  const loot = await import('../js/loot.js');
+  await dbm.kvSet('petInst', [
+    { iid: 'k1', sp: 'C2', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'k2', sp: 'C2', lineage: 1, shiny: false, hatchedAtSteps: 0 },
+  ]);
+  const [added, salvage] = await Promise.all([
+    loot.addPetInstance('C4', {}),
+    loot.salvagePet('C2'),
+  ]);
+  assert.equal(added.sp, 'C4', 'addPetInstance must return the minted instance');
+  assert.ok(salvage.ok, 'the salvage must go through');
+  const list = await dbm.kvGet('petInst', null);
+  assert.ok(list.some(x => x.sp === 'C4'), `the hatched pet must survive the concurrent salvage, got ${JSON.stringify(list)}`);
+  assert.equal(list.filter(x => x.sp === 'C2').length, 1, `the salvage must survive the concurrent hatch, got ${JSON.stringify(list)}`);
+});
+
+// breedPets vs salvagePet: a breed on one species races a melt on another.
+test('CLAIMED-ROW race: breedPets cannot lose, or be lost to, a concurrent salvagePet on kv petInst', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-claimedrow-breed');
+  const loot = await import('../js/loot.js');
+  await dbm.kvSet('petInst', [
+    { iid: 'keep', sp: 'C2', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'feed', sp: 'C2', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'k1', sp: 'C4', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'k2', sp: 'C4', lineage: 1, shiny: false, hatchedAtSteps: 0 },
+  ]);
+  const [breed, salvage] = await Promise.all([
+    loot.breedPets('keep', 'feed'),
+    loot.salvagePet('C4'),
+  ]);
+  assert.ok(breed.ok, `the breed must go through, got ${JSON.stringify(breed)}`);
+  assert.ok(salvage.ok, `the salvage must go through, got ${JSON.stringify(salvage)}`);
+  const list = await dbm.kvGet('petInst', null);
+  assert.ok(!list.some(x => x.iid === 'feed'), 'the fed pet must be gone');
+  const keep = list.find(x => x.iid === 'keep');
+  assert.equal(keep.lineage, 1, `the keeper must gain lineage from the concurrent breed, got ${JSON.stringify(keep)}`);
+  assert.equal(list.filter(x => x.sp === 'C4').length, 1, `the salvage must survive the concurrent breed, got ${JSON.stringify(list)}`);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
