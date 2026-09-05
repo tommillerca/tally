@@ -584,6 +584,29 @@ await test('friends: name + public profile surface in the list', async () => {
   assert.equal(b.friendCode, p2.friendCode);
 });
 
+/* CREW-13: spires had zero surface on the Crew tab or the friend profile,
+ * because GET /friends never carried a spire count for either side of the
+ * row (only /leaderboard did, via the same subquery shape). Reused here
+ * verbatim rather than reinvented.
+ * PROVE-RED: drop the two `_spires` subqueries and the `spires:` line from
+ * the /friends shape function and the first assertion below fails (0, not
+ * 1).
+ */
+await test('friends: a claimed spire shows on the OTHER side\'s friends list', async () => {
+  const id = `sp-${Math.floor(Math.random() * 1e9)}-${Math.floor(Math.random() * 1e9)}`;
+  const claim = await signedFetch(p2keys.kp, p2.playerId, 'PUT', `/spires/${id}/claim`, JSON.stringify({ name: 'Test Spire', lat: 1.23, lng: 4.56 }));
+  assert.equal(claim.status, 200, 'PRECONDITION: p2 actually holds a spire');
+
+  const aList = await (await signedFetch(kp, player.playerId, 'GET', '/friends')).json();
+  const b = aList.friends.find(x => x.playerId === p2.playerId);
+  assert.equal(b.spires, 1, 'FAIL: the friend who holds a spire must show it on my /friends row');
+
+  // Control: the OTHER direction of the same row must not borrow it.
+  const bList = await (await signedFetch(p2keys.kp, p2.playerId, 'GET', '/friends')).json();
+  const a = bList.friends.find(x => x.playerId === player.playerId);
+  assert.equal(a.spires, 0, 'a player holding no spire must read 0, not undefined and not the friend\'s count');
+});
+
 await test('gift: free daily gift delivers a grant, second same-day 409s', async () => {
   const r1 = await signedFetch(kp, player.playerId, 'POST', '/gift', JSON.stringify({ to: p2.playerId, mode: 'free' }));
   assert.equal(r1.status, 200);

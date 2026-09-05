@@ -762,6 +762,21 @@ export async function fetchStepRace(weekKey) {
    or a push that has not landed yet, race.yourRank == null) -- to give you a
    lane and a rank of your own, exactly as before this fix. Never invents a
    rank when the server already sent one. */
+/* CREW-6: "settles tonight" (js/app.js hydrateRace) was dead copy -- daysLeft
+   is a CEILING, so the whole final calendar day of the week reads 1 right up
+   to the instant it rolls, and the instant it rolls `wk` has already advanced
+   to the NEXT period (raceWeekKey is derived from today's date), so daysLeft
+   jumps straight 1 -> 7 and can never observe 0. Split out so a fake clock
+   proves it without a browser: the true fact for the whole last day is "this
+   settles at midnight tonight", replacing "1 day left" outright rather than
+   waiting for a countdown value that never arrives. */
+export function raceClockLabel(msLeft) {
+  const left = Math.max(0, msLeft);
+  if (left <= 86400000) return 'settles tonight';
+  const daysLeft = Math.ceil(left / 86400000);
+  return `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+}
+
 export function raceStanding(serverRows, race, wk, own, name, myFit, ordinal, esc) {
   const rows = serverRows.slice();
   // race.yourRank is authoritative whenever the server sent one; a local
