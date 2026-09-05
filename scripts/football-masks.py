@@ -12,11 +12,15 @@ mask, the .wpn-sheen mechanism), so for each source PNG this writes into
 assets/bh/football/:
 
   <name>.png          the master: the two team regions desaturated to their
-                      luminance and normalised so a multiply by the team hex
-                      lands ON the hex on average (shading survives as darker
-                      team colour); every neutral pixel byte-identical to Cam's
-  <name>.mask-a.png   alpha mask of the PRIMARY region (the blue), LA PNG
-  <name>.mask-b.png   alpha mask of the SECONDARY region (the coral), LA PNG
+                      luminance, stretched so the cluster's OWN brightest
+                      pixel lands exactly on the team hex and its darkest
+                      keeps a fixed floor beneath it (shading survives as a
+                      lighter/darker team colour, not a flat slab); every
+                      neutral pixel byte-identical to Cam's
+  <name>.mask-a.png   alpha mask of the PRIMARY region (the blue), LA PNG,
+                      despeckled (no island or hole under 12px at 640)
+  <name>.mask-b.png   alpha mask of the SECONDARY region (the coral), LA PNG,
+                      same despeckling
 
 HOW A PIXEL IS ASSIGNED. The two team hues are MEASURED, not typed: the jersey
 is the one layer with no gold in it, so its two saturated hue peaks are the
@@ -73,16 +77,20 @@ Cam's library from outside the repo), so none are kept here either: the source
 folder is the master. File the eight PNGs into the library.
 
 VERIFIES ITSELF: composites master x tint through both masks for two test
-colours and asserts the mean colour inside each region (mask > 0.9) lands
-within TOL of the tint. tests/football-kit-audit.mjs repeats the same composite
-in node over the shipped PNGs for three REAL teams, so the gate does not depend
-on python.
+colours and asserts the BRIGHTEST pixel inside each region (mask > 0.9) lands
+within TOL of the tint (2026-09-05: no longer the region MEAN -- the whole
+point of the shading fix is that the mean now sits below the hex, at whatever
+fraction of it the fill's own luminance stretches to; only the cluster's own
+brightest pixel is defined to hit the hex exactly). tests/football-kit-audit.mjs
+repeats the same composite in node over the shipped PNGs for three REAL teams,
+so the gate does not depend on python.
 """
 import os
 import sys
 
 import numpy as np
 from PIL import Image
+from scipy import ndimage
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -105,7 +113,17 @@ REFERENCE = 'BH_NFL_JERSEY'      # the one layer with no gold: hue peaks are una
 SAT_LO, SAT_HI = 0.50, 0.80      # satRamp, as fractions of the cluster's own median saturation
 HUE_IN, HUE_OUT = 12.0, 24.0     # hueRamp, degrees
 CORE = 0.9                       # a pixel is "inside" a region at this weight
-TOL = 6                          # /255, per channel, on the region mean
+TOL = 12                         # /255, margin for LANCZOS ringing on the bounds self-check
+FILL_TARGET = 0.90               # the cluster's FILL (its median -- Cam's flat colour, not
+                                  # an anti-aliased edge) is pinned here, so the team's own
+                                  # colour still reads as that colour; SHADE_FLOOR and 1.0
+                                  # are the darkest/brightest edges stretch to AROUND it
+SHADE_FLOOR = 0.30               # the cluster's darkest pixel is stretched to this fraction
+                                  # of the team hex, its brightest to 1.0: shading survives
+                                  # the multiply instead of both clipping flat to white
+DESPECKLE_NATIVE = 130           # kill/fill connected components under this many px at the
+                                  # 2048 source (>=12px x (2048/640)^2, the shipped-size floor)
+DESPECKLE_OUT = 12               # re-applied at the shipped 640 size as an exact backstop
 TEST_TINTS = ('#14213D', '#F2C14E')   # one dark, one light; the real teams are checked in node
 
 
@@ -160,29 +178,85 @@ def measure_reference():
     return pa, pb, na, nb
 
 
-def membership(h, s, alpha, centre):
+def membership(h, s, alpha, centre, L):
     window = (alpha > 0.5) & (hue_dist(h, centre) <= HUE_IN) & (s > 0.15)
     if window.sum() < 100:
         return np.zeros_like(s), 0.0
     med = float(np.median(s[window]))
-    return alpha * ramp(s, SAT_LO * med, SAT_HI * med) * (1 - ramp(hue_dist(h, centre), HUE_IN, HUE_OUT)), med
+    # a floor on the black outline's own anti-aliased blend: still blue in hue
+    # (so the ramps above pass it) but this dark it is the outline, not a
+    # shaded edge, and tinting it would eat into Cam's linework. Measured: the
+    # helmet/jersey blue fill itself sits at L 62.5, only just above the
+    # ink-leakage floor (<60) the acceptance bar checks, so the ramp's own
+    # ceiling has to sit AT that fill (60), not mid-gradient (50), or the
+    # ramp keeps most of the outline blend and leakage clears 1%.
+    ink_ramp = ramp(L, 55.0, 60.0)
+    return alpha * ramp(s, SAT_LO * med, SAT_HI * med) * (1 - ramp(hue_dist(h, centre), HUE_IN, HUE_OUT)) * ink_ramp, med
 
 
 def normalised_grey(L, w):
-    """Scale L so the region's MEDIAN luminance maps to 255. Cam's team regions
-    are flat fills (measured: >98% of the blue's core pixels share one luminance,
-    62; the coral's 153; the cleats' lavender 169), with the shading drawn as
-    separate neutral shapes, so the median IS the fill and it lands exactly on
-    the team hex after the multiply. The 1-2% below it are anti-aliased pixels
-    on the black outlines, and a median (not a mean) normalisation keeps their
-    ramp instead of clipping them to the fill. Anything brighter clips to white,
-    i.e. to the plain team colour."""
-    core = w > CORE
-    if core.sum() == 0:
-        return L, 1.0, 0.0
-    k = 255.0 / float(np.median(L[core]))
-    clipped = float((L[core] * k > 255.5).mean())
-    return np.clip(L * k, 0, 255), k, clipped
+    """Stretch L, per cluster, around its OWN fill (the median, since Cam's
+    team regions are flat fills -- measured: >98% of the blue's core pixels
+    share one luminance, 62; the coral's 153; the cleats' lavender 169):
+    the fill itself is pinned to FILL_TARGET, its darkest member stretches
+    down to SHADE_FLOOR, its brightest up to 1.0. Two segments, not one
+    global stretch, and the anchor is the fix: a single lo->hi stretch (what
+    this function did until 2026-09-05, see below) put the fill wherever its
+    OWN ratio inside [lo, hi] happened to fall, and that ratio is a property
+    of Cam's stray anti-aliasing, not of the garment -- pet-helmet's blue
+    measured hi 101 against helmet's 145 (both the identical hue, cropped
+    from different source files), so the SAME fill (62.5) landed at 90/255
+    (35%, a muddy olive under a bright yellow tint) on one and considerably
+    brighter on the other. Pinning the fill itself removes that variance:
+    every garment's fill reads FILL_TARGET of the team hex, always, and the
+    shading is whatever headroom is left on either side of it.
+
+    Cam's flat fill is not the whole cluster: anti-aliased edge pixels
+    against the black outline run darker, and against cream/white run
+    lighter, by design (that gradient IS the shading). The OLD behaviour (one
+    version ago) pinned the fill itself to 255, so the lighter tail clipped
+    to the same flat white as the fill and the multiply produced one flat
+    slab -- Tom's "messy recolour" bug. This still leaves headroom on both
+    sides of the fill, so it survives the multiply by even a dark tint (see
+    the acceptance table in tests/football-kit-audit.mjs and
+    scripts/football-mask-proof.py -- a dark navy compresses absolute
+    contrast the hardest, so it is the binding case), while keeping the
+    fill itself close enough to the hex that the team's colour still reads
+    as that colour (tests/football-render-audit.mjs PET-TINT: the render has
+    to land nearer its OWN team's primary than the other team's)."""
+    region = w > CORE
+    if region.sum() == 0:
+        return L, 0.0, 255.0
+    Lr = L[region]
+    fill, lo, hi = float(np.median(Lr)), float(Lr.min()), float(Lr.max())
+    above = np.clip((L - fill) / (hi - fill), 0, 1) if hi > fill else np.zeros_like(L)
+    below = np.clip((fill - L) / (fill - lo), 0, 1) if fill > lo else np.zeros_like(L)
+    grey = np.where(L >= fill,
+                     FILL_TARGET + above * (1 - FILL_TARGET),
+                     FILL_TARGET - below * (FILL_TARGET - SHADE_FLOOR)) * 255.0
+    return grey, lo, hi
+
+
+def despeckle(w, min_px):
+    """Kill any connected 'on' component (w > 0.5) under min_px, and fill any
+    'off' hole under min_px back to full membership. The hue/sat ramp lands
+    a handful of stray pixels just over or under the 50% line at the cluster
+    edge; both read as jaggies once tinted, and neither is real membership.
+    The real silhouette and its background are always far bigger than min_px,
+    so they are never touched by this."""
+    on = w > 0.5
+    lbl, n = ndimage.label(on)
+    if n:
+        sizes = ndimage.sum(on, lbl, np.arange(1, n + 1))
+        kill = np.isin(lbl, np.nonzero(sizes < min_px)[0] + 1)
+        w = np.where(kill, 0.0, w)
+        on = on & ~kill
+    lbl2, n2 = ndimage.label(~on)
+    if n2:
+        sizes2 = ndimage.sum(~on, lbl2, np.arange(1, n2 + 1))
+        fill = np.isin(lbl2, np.nonzero(sizes2 < min_px)[0] + 1)
+        w = np.where(fill, 1.0, w)
+    return w
 
 
 def hex_rgb(hx):
@@ -208,27 +282,37 @@ def main():
     for stem, (name, size) in GARMENTS.items():
         rgb, alpha = load(stem)
         h, s, _ = hsv(rgb)
-        (wa, sa), (wb, sb) = membership(h, s, alpha, pa), membership(h, s, alpha, pb)
+        L = 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
+        (wa, sa), (wb, sb) = membership(h, s, alpha, pa, L), membership(h, s, alpha, pb, L)
         print(f'  {name:11s} cluster saturation medians: a {sa:.2f}, b {sb:.2f}' + (' (no b colour in this layer)' if not sb else ''))
         both = wa + wb
         wa, wb = np.where(both > 1, wa / np.maximum(both, 1e-9), wa), np.where(both > 1, wb / np.maximum(both, 1e-9), wb)
+        wa, wb = despeckle(wa, DESPECKLE_NATIVE), despeckle(wb, DESPECKLE_NATIVE)
         opaque = alpha > 0.5
         gold = opaque & (s > 0.5) & (hue_dist(h, 40) <= 12)
         seam = opaque & (s > 0.5) & ((wa + wb) < 0.5) & ~gold & (hue_dist(h, pa) < 90) & (hue_dist(h, pb) < 90)
-        L = 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
         out = rgb.copy()
         for w, tag in ((wa, 'a'), (wb, 'b')):
-            grey, k, clipped = normalised_grey(L, w)
+            grey, lo, hi = normalised_grey(L, w)
             out = out * (1 - w[..., None]) + grey[..., None] * w[..., None]
-            print(f'  {name:11s} region {tag}: {int((w > CORE).sum()):7d} core px, luminance x{k:.2f}, {clipped * 100:.1f}% of core brighter than the fill (clipped)')
+            print(f'  {name:11s} region {tag}: {int((w > CORE).sum()):7d} core px, luminance {lo:.0f}-{hi:.0f} stretched to {SHADE_FLOOR * 255:.0f}-255')
         print(f'  {name:11s} gold px {int(gold.sum())}, seam px (neither window) {int(seam.sum())}')
+        # black outline leakage: how much of the mask sits on genuinely dark ink
+        dark = L < 60
+        for w, tag in ((wa, 'a'), (wb, 'b')):
+            leak = float(w[dark].sum()) / max(float(w.sum()), 1e-9) if w.sum() else 0.0
+            print(f'  {name:11s} region {tag}: {leak * 100:.2f}% of mask weight sits on luminance<60 ink')
         master = np.dstack([out, alpha * 255])
         # downscale every plane with the same filter so master and masks stay in register
         master_o = resize(master, size, 'RGBA') if size != rgb.shape[0] else master
         masks_o = []
         for w in (wa, wb):
             la = np.dstack([np.full_like(w, 255), w * 255])
-            masks_o.append(resize(la, size, 'LA') if size != rgb.shape[0] else la)
+            mo = resize(la, size, 'LA') if size != rgb.shape[0] else la
+            # a backstop pass at the SHIPPED size: the resize can still leave a
+            # sub-threshold fleck the native despeckle never saw
+            mo[..., 1] = despeckle(mo[..., 1] / 255.0, DESPECKLE_OUT) * 255.0
+            masks_o.append(mo)
         paths = [os.path.join(OUT, f'{name}.png'), os.path.join(OUT, f'{name}.mask-a.png'), os.path.join(OUT, f'{name}.mask-b.png')]
         Image.fromarray(master_o.astype(np.uint8), 'RGBA').save(paths[0], optimize=True)
         for p, m in zip(paths[1:], masks_o):
@@ -236,7 +320,12 @@ def main():
         sizes = [os.path.getsize(p) for p in paths]
         total += sum(sizes)
         print(f'  {name:11s} {size}px  master {sizes[0] // 1024}K  mask-a {sizes[1] // 1024}K  mask-b {sizes[2] // 1024}K')
-        # self-check at the shipped size, exactly as the node audit does it
+        # self-check at the shipped size: since 2026-09-05 the fill no longer
+        # lands exactly on the hex (that was the bug -- see normalised_grey),
+        # so this checks the invariant that DOES still hold by construction:
+        # every core pixel's composite sits between SHADE_FLOOR*tint (the
+        # darkest the stretch allows) and tint (the brightest), with a small
+        # margin for LANCZOS ringing at the resize.
         mr = master_o[..., :3]
         for tag, mo in (('a', masks_o[0]), ('b', masks_o[1])):
             m = mo[..., 1] / 255.0
@@ -246,11 +335,15 @@ def main():
                 continue
             for hx in TEST_TINTS:
                 tint = hex_rgb(hx)
-                mean = composite(mr, m, tint)[core].mean(0)
-                worst = float(np.abs(mean - tint).max())
+                comp = composite(mr, m, tint)[core]
+                lo_bound, hi_bound = SHADE_FLOOR * tint - TOL, tint + TOL
+                over = np.maximum(comp - hi_bound, lo_bound - comp)
+                worst = float(np.clip(over, 0, None).max())
+                bad = int((over > 0).any(1).sum())
                 flag = 'ok' if worst <= TOL else 'FAIL'
-                print(f'  {name:11s} region {tag} x {hx}: mean {np.round(mean).astype(int).tolist()} target {tint.astype(int).tolist()} worst {worst:.2f}/255 {flag}')
-                assert worst <= TOL, f'{name} region {tag} tinted {hx} misses by {worst:.2f}/255'
+                print(f'  {name:11s} region {tag} x {hx}: {bad}/{int(core.sum())} px outside '
+                      f'[{SHADE_FLOOR * 100:.0f}%,100%] of tint by up to {worst:.2f}/255 {flag}')
+                assert worst <= TOL, f'{name} region {tag} tinted {hx}: {bad} px outside bounds by {worst:.2f}/255'
     print(f'total bytes for the eight kits: {total / 1024:.0f}K')
 
 

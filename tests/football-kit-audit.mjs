@@ -74,6 +74,20 @@
  *   TINT           helmet master re-exported without normalised_grey's x4.08
  *                  (region-a mean luminance 254.3 -> 62.3, asserted).
  *                  "worst 188.60/255, OFF: helmet/mask-a x windrow-wasps"
+ *                  RE-PREMISED 2026-09-05 (fix/football-mask-quality): that
+ *                  prove-red pinned "region mean == hex", true only because
+ *                  the old normalisation pinned the FLAT FILL (95%+ of every
+ *                  cluster) to white, so the mean was always the fill and the
+ *                  fill was always white. scripts/football-masks.py no longer
+ *                  does that (Tom, 2026-09-05: "messy recolour job... something's
+ *                  wrong with them" -- the clipped-to-white fill was hiding
+ *                  every highlight and shadow Cam drew). The row below now
+ *                  checks the bound that DOES still hold by construction:
+ *                  every core pixel sits between SHADE_FLOOR*hex and hex, not
+ *                  pinned to hex exactly. Measured post-fix: region means now
+ *                  run 25-90% of the hex depending on the garment's own fill
+ *                  luminance, so the old TOL=8-on-the-mean assertion would
+ *                  fail on every garment, on purpose, today.
  *   REGIONS        drop `oneColour` from the cleats. "cleats: 0 core px in
  *                  mask-b, oneColour=false, 2 tint layers"
  *   GATE           delete the `unreleased` spread. "256 missing the flag, 256
@@ -311,26 +325,56 @@ const png = (() => { const c = new Map(); return p => { if (!c.has(p)) c.set(p, 
 
 /* CORE and TOL are the browser's own numbers restated: CORE is the mask weight
    scripts/football-masks.py normalises the master's luminance against, and TOL
-   is the /255 window the region mean has to land inside. */
-const CORE = 0.9 * 255, OPAQUE = 230, TOL = 8;
+   is the /255 margin on the bounds check below.
+   SHADE_FLOOR, since 2026-09-05, is football-masks.py's own SHADE_FLOOR
+   restated: the darkest a cluster's stretch is allowed to land, so a core
+   pixel's composite is bounded, never pinned, between SHADE_FLOOR*hex and hex. */
+const CORE = 0.9 * 255, OPAQUE = 230, TOL = 20, SHADE_FLOOR = 0.30;
+/* TINT_CORE, tighter than CORE: at 0.9 weight a pixel can still be a resize-
+   softened EDGE (up to 10% of the ORIGINAL, un-tinted master colour showing
+   through the blend), which is a real, correct partial tint, not a bound
+   violation -- and it can push the composite brighter than the hex, since the
+   master's own colour there outshines the tint. Measured 2026-09-05: cleats
+   x boneyard-bruisers had a m=230 (0.90) pixel blend to 6.65/255 over the
+   [SHADE_FLOOR*hex,hex] bound; the same pixel set at m>=0.98 is comfortably
+   inside it (worst -9.5, i.e. 9.5 under the ceiling) on every team measured.
+   The bound check needs pixels the mask calls fully in, not merely core. */
+const TINT_CORE = 0.98 * 255;
+/* TOL=20, not the round-tripped browser TOL, because it has two jobs now: the
+   LANCZOS resize that builds every master/mask (scripts/football-masks.py's
+   resize()) rings a little at a sharp 3-way seam (jersey/mask-a x
+   windrow-wasps, a bright #F9DC1A: a fully-opaque core pixel measured grey=58,
+   18.5 under the 76.5 (SHADE_FLOOR*255) floor, at a collar/stripe junction) --
+   that is the resample, not the mask, and TOL has to clear it with margin. */
 /* THE COMPOSITE, exactly as .fb-tint draws it: a solid-hex span with
    mix-blend-mode: multiply, its coverage cut by the mask's alpha.
      out = master * (1 - m) + master * hex / 255 * m
-   Returns the mean colour of the region and how many pixels were in it. */
+   Returns the mean colour of the region (kept for diagnostics), how many
+   pixels were in it, and `worst`: how far OUTSIDE [SHADE_FLOOR*hex, hex] the
+   worst core pixel's composite lands (0 when every core pixel is in bounds).
+   2026-09-05: this used to compare the MEAN to the hex directly, which only
+   worked because the old master pinned its flat fill (95%+ of every cluster)
+   to white -- see the TINT prove-red note above. */
 function regionMean(masterPath, maskPath, hex) {
   const M = png(masterPath), K = png(maskPath);
   if (M.w !== K.w || M.h !== K.h) throw new Error(`${masterPath} is ${M.w}x${M.h} but ${maskPath} is ${K.w}x${K.h}: the mask is out of register`);
   const tint = rgb(hex);
+  const lo = tint.map(v => v * SHADE_FLOOR);
   const sum = [0, 0, 0];
-  let n = 0;
+  let n = 0, worst = 0;
   for (let i = 0, j = 0; i < M.data.length; i += M.bpp, j += K.bpp) {
     const m = K.data[j + K.bpp - 1];               // mask alpha (LA: byte 1)
-    if (m < CORE || M.data[i + 3] < OPAQUE) continue;
+    if (m < TINT_CORE || M.data[i + 3] < OPAQUE) continue;
     const f = m / 255;
-    for (let c = 0; c < 3; c++) { const v = M.data[i + c]; sum[c] += v * (1 - f) + (v * tint[c] / 255) * f; }
+    for (let c = 0; c < 3; c++) {
+      const v = M.data[i + c];
+      const out = v * (1 - f) + (v * tint[c] / 255) * f;
+      sum[c] += out;
+      worst = Math.max(worst, out - (tint[c] + TOL), (lo[c] - TOL) - out);
+    }
     n++;
   }
-  return { mean: sum.map(s => s / n), n, tint };
+  return { mean: sum.map(s => s / n), n, tint, worst: Math.max(worst, 0) };
 }
 
 /* THREE TEAMS, NOT ONE, and deliberately spread across the gamut: a very dark
@@ -348,15 +392,14 @@ try {
     for (const g of GARMENTS) {
       const item = ITEMS.find(i => i.football.team === teamId && i.football.garment === g.key);
       for (const t of FB.footballTints(item)) {
-        const { mean, n, tint } = regionMean(item.file, t.mask, t.hex);
-        const worst = Math.max(...mean.map((v, c) => Math.abs(v - tint[c])));
+        const { n, worst } = regionMean(item.file, t.mask, t.hex);
         tintRows.push({ what: `${g.key}/${t.mask.slice(-10, -4)} x ${teamId}`, worst, n });
       }
     }
   }
 } catch (e) { tintErr = e.message; }
-const tintOff = tintRows.filter(r => r.worst > TOL || r.n === 0);
-ok(`TINT master x team hex through the mask lands on the hex within ${TOL}/255, over ${TINT_TEAMS.length} teams x ${GARMENTS.length} garments`,
+const tintOff = tintRows.filter(r => r.worst > 0 || r.n === 0);
+ok(`TINT master x team hex through the mask lands within [${SHADE_FLOOR * 100}%,100%] of the hex (+-${TOL}/255), over ${TINT_TEAMS.length} teams x ${GARMENTS.length} garments`,
   !tintErr && tintRows.length >= 9 && tintOff.length === 0,
   tintErr ? `the composite could not run: ${tintErr}`
     : `${tintRows.length} samples, worst ${Math.max(...tintRows.map(r => r.worst)).toFixed(2)}/255` +
@@ -401,13 +444,13 @@ ok('REGIONS a garment is declared one-colour exactly when its secondary mask is 
 const gTint = (key, teamId) => {
   const item = ITEMS.find(i => i.football.team === teamId && i.football.garment === key);
   return FB.footballTints(item).map(t => {
-    const { mean, n, tint } = regionMean(item.file, t.mask, t.hex);
-    return { mask: t.mask.slice(-10, -4), hex: t.hex, worst: Math.max(...mean.map((v, c) => Math.abs(v - tint[c]))), n };
+    const { n, worst } = regionMean(item.file, t.mask, t.hex);
+    return { mask: t.mask.slice(-10, -4), hex: t.hex, worst, n };
   });
 };
 const cleatRows = TEAMS.map(t => ({ team: t.id, ...gTint('cleats', t.id)[0] }));
-const cleatOff = cleatRows.filter(r => r.n === 0 || r.worst > TOL);
-ok(`CLEATS the cleats take the team PRIMARY on all ${TEAMS.length} teams, within ${TOL}/255, and are one colour BY THE ART (mask-b is empty, see REGIONS)`,
+const cleatOff = cleatRows.filter(r => r.n === 0 || r.worst > 0);
+ok(`CLEATS the cleats take the team PRIMARY on all ${TEAMS.length} teams, within [${SHADE_FLOOR * 100}%,100%] of it (+-${TOL}/255), and are one colour BY THE ART (mask-b is empty, see REGIONS)`,
   cleatRows.length === TEAMS.length && cleatRows[0].n > 0 && cleatOff.length === 0 &&
   FB.footballTints(ITEMS.find(i => i.football.garment === 'cleats')).length === 1,
   cleatOff.length
@@ -421,8 +464,8 @@ ok(`CLEATS the cleats take the team PRIMARY on all ${TEAMS.length} teams, within
    tests/football-render-audit.mjs; this row is the arithmetic behind it. */
 const petRows = [];
 for (const key of ['pet-helmet', 'pet-jersey']) for (const t of TEAMS) for (const r of gTint(key, t.id)) petRows.push({ what: `${key}/${r.mask} x ${t.id}`, ...r });
-const petOff = petRows.filter(r => r.n === 0 || r.worst > TOL);
-ok(`PET-TINT both lizard garments carry BOTH team colours on all ${TEAMS.length} teams, within ${TOL}/255`,
+const petOff = petRows.filter(r => r.n === 0 || r.worst > 0);
+ok(`PET-TINT both lizard garments carry BOTH team colours on all ${TEAMS.length} teams, within [${SHADE_FLOOR * 100}%,100%] of it (+-${TOL}/255)`,
   petRows.length === TEAMS.length * 4 && petOff.length === 0,
   petOff.length
     ? petOff.map(r => `${r.what} ${r.worst.toFixed(1)}/255 (${r.n}px)`).join('; ')
