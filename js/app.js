@@ -4561,6 +4561,7 @@ async function renderToday(el) {
      reading position") failing for a real reason. */
   $('#dayRest', el)?.addEventListener('toggle', e => { S.dayOpen = e.target.open; });
 
+  let nbNormalized = false;
   $('#newsBanner', el)?.addEventListener('toggle', async e => {
     if (!e.target.open) return;
     /* The settled race is in this list too, so opening the pill clears its dot
@@ -4569,52 +4570,64 @@ async function renderToday(el) {
     const wk = lastSettledWeek();
     await kvSet('newsSeen', [...NEWS.map(n => n.id), wk && raceSeenKey(wk)].filter(Boolean));
     $('.nb-dot', el)?.remove();
-  });
-  /* EVERY NEWS TILE READS AT THE SAME SIZE, measured rather than hand-tuned.
-     Tom, 2026-08-27: "your icons are aligned right now theyre different themes
-     with different centreing and scaling it looks sloppy". He was right and the
-     numbers were ugly: across the nine rows the art filled between 0.36 and 3.80
-     of its 40px tile, a TEN-FOLD spread, and the Discord tile sat 19px off centre
-     on a 40px box because its art is a fixed 78px square.
 
-     The News tab solves this with per-class scales (.nw-fit .42, .nw-wall .52),
-     which covers two of the shapes and leaves tz-head and dc-app overflowing. A
-     tenth row would need an eleventh rule. So this measures what each tile
-     actually rendered and scales it to one target, which is correct for art
-     nobody has drawn yet.
+    /* EVERY NEWS TILE READS AT THE SAME SIZE, measured rather than hand-tuned.
+       Tom, 2026-08-27: "your icons are aligned right now theyre different themes
+       with different centreing and scaling it looks sloppy". He was right and the
+       numbers were ugly: across the nine rows the art filled between 0.36 and 3.80
+       of its 40px tile, a TEN-FOLD spread, and the Discord tile sat 19px off centre
+       on a 40px box because its art is a fixed 78px square.
 
-     ONE READ, ONE WRITE, on render only. Nothing here runs per frame, so the
-     settled-screen budget idle-perf-audit holds is untouched. */
-  requestAnimationFrame(() => {
-    for (const t of $$('.nb-thumb', el)) {
-      const kid = t.firstElementChild;
-      if (!kid) continue;
-      const tb = t.getBoundingClientRect(), kb = kid.getBoundingClientRect();
-      if (!kb.width || !kb.height) continue;
-      /* THE TARGET IS A WHOLE PIXEL-ART STEP, 24, not a fraction of the tile.
-         It was Math.min(tile) * 0.78 = 31.2px, and that put badge-crown.png on
-         screen at 31.2 against a declared 24. pixel-art-swap-audit holds every
-         pixel <img> to a whole step at its own width, because a fractional step
-         resamples the sprite and blurs it, and it caught this.
-         Exempting pixel art from the pass instead was tried and is worse: it
-         leaves one tile at 24 among eight at 31.2, which is the ragged row this
-         normalisation exists to fix (measured spread 7.2px against a 1.5 bound).
-         24 satisfies both rules at once: pixCur already snaps to it, so pixel art
-         scales by exactly 1.0 and everything else meets it. */
-      const TARGET = 24;
-      const scale = TARGET / Math.max(kb.width, kb.height);
-      kid.style.transformOrigin = 'center';
-      /* SCALE FIRST, THEN MEASURE THE OFFSET THAT IS LEFT. Doing both in one pass
-         off the pre-scale box put the Discord tile 29px out on a 40px square: in
-         `translate() scale()` the translate is in the PARENT's units, so dividing
-         it by the scale over-corrects by exactly that factor. Two passes is the
-         honest way to do it and costs one extra read of nine elements, once. */
-      kid.style.transform = `scale(${scale})`;
-      const sb = kid.getBoundingClientRect();
-      const dx = (tb.left + tb.width / 2) - (sb.left + sb.width / 2);
-      const dy = (tb.top + tb.height / 2) - (sb.top + sb.height / 2);
-      kid.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
-    }
+       The News tab solves this with per-class scales (.nw-fit .42, .nw-wall .52),
+       which covers two of the shapes and leaves tz-head and dc-app overflowing. A
+       tenth row would need an eleventh rule. So this measures what each tile
+       actually rendered and scales it to one target, which is correct for art
+       nobody has drawn yet.
+
+       MEASURED ON FIRST OPEN, NOT ON RENDER. It used to run in a bare
+       requestAnimationFrame scheduled at render time, while `.nb-list` was still
+       inside a CLOSED <details> -- a closed <details> keeps laying out its
+       content (this is why the read never came back zero), but the box it
+       reports for that hidden content is not reliable: measured against this
+       tree, the same unchanged code read the Discord tile at a correct 24px on
+       about half of a run of 20 and at its native, unscaled 78px on the other
+       half, no code difference between the two. Reading it once the box is
+       actually the one the player sees removes the coin flip. Still ONE READ,
+       ONE WRITE, just gated to the first open instead of render, so the
+       settled-screen budget idle-perf-audit holds is still untouched. */
+    if (nbNormalized) return;
+    nbNormalized = true;
+    requestAnimationFrame(() => {
+      for (const t of $$('.nb-thumb', el)) {
+        const kid = t.firstElementChild;
+        if (!kid) continue;
+        const tb = t.getBoundingClientRect(), kb = kid.getBoundingClientRect();
+        if (!kb.width || !kb.height) continue;
+        /* THE TARGET IS A WHOLE PIXEL-ART STEP, 24, not a fraction of the tile.
+           It was Math.min(tile) * 0.78 = 31.2px, and that put badge-crown.png on
+           screen at 31.2 against a declared 24. pixel-art-swap-audit holds every
+           pixel <img> to a whole step at its own width, because a fractional step
+           resamples the sprite and blurs it, and it caught this.
+           Exempting pixel art from the pass instead was tried and is worse: it
+           leaves one tile at 24 among eight at 31.2, which is the ragged row this
+           normalisation exists to fix (measured spread 7.2px against a 1.5 bound).
+           24 satisfies both rules at once: pixCur already snaps to it, so pixel art
+           scales by exactly 1.0 and everything else meets it. */
+        const TARGET = 24;
+        const scale = TARGET / Math.max(kb.width, kb.height);
+        kid.style.transformOrigin = 'center';
+        /* SCALE FIRST, THEN MEASURE THE OFFSET THAT IS LEFT. Doing both in one pass
+           off the pre-scale box put the Discord tile 29px out on a 40px square: in
+           `translate() scale()` the translate is in the PARENT's units, so dividing
+           it by the scale over-corrects by exactly that factor. Two passes is the
+           honest way to do it and costs one extra read of nine elements, once. */
+        kid.style.transform = `scale(${scale})`;
+        const sb = kid.getBoundingClientRect();
+        const dx = (tb.left + tb.width / 2) - (sb.left + sb.width / 2);
+        const dy = (tb.top + tb.height / 2) - (sb.top + sb.height / 2);
+        kid.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+      }
+    });
   });
   $$('.nb-row', el).forEach(b => b.addEventListener('click', () => {
     NEWS.find(n => n.id === b.dataset.news)?.open();
