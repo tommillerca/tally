@@ -2185,9 +2185,29 @@ body::before {
   display: grid; gap: 2px; justify-items: center; padding: 8px 3px 7px;
   background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm);
+  position: relative;   /* containing block for small.cost below */
 }
 .fight-act b { font-family: var(--display); font-weight: 400; font-size: 15px; letter-spacing: 0.6px; }
 .fight-act small { font-size: 10px; color: var(--text-3); font-weight: 700; }
+/* QA round 28 P2, corrected 2026-09-04: a real <small class="cost"> element
+   (fight-hint-audit selects `small.cost`, fight-press-audit relies on it being
+   a SEPARATE element from the hint's own <small> so the hint's textContent
+   never carries the cost). ea987dd7 first added it as a plain grid sibling,
+   which .fight-act's `display:grid` auto-placed as a third implicit row and
+   cost ~14px of extra button height, failing fight-layout-audit's ROWS check
+   (2 of 3 rows fit a 188px tray instead of 3). 190b5eb1 "fixed" that by
+   deleting the element and concatenating its text onto the hint's <small>
+   instead, which wrapped the hint to two lines at 375/393 and made the
+   Bone Guard hint (fight-press-audit) always carry "Stamina" even when the
+   move's own facts had already dropped it to fit.
+   The actual fix is to keep it a real, separate element but take it OUT of
+   the grid's row flow: absolutely positioned in the corner, it costs the
+   button zero extra height because grid never sees it as a row. */
+.fight-act small.cost {
+  position: absolute; top: 2px; right: 3px; max-width: calc(100% - 8px);
+  font-size: 8px; line-height: 1.2; text-align: right; color: var(--text-3);
+  font-weight: 700; pointer-events: none;
+}
 .fight-act:disabled { opacity: 0.35; }
 .fight-act.endturn { background: var(--accent); border-color: var(--ink); }
 .fight-act.endturn b, .fight-act.endturn small { color: var(--accent-ink); }

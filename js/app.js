@@ -23493,10 +23493,20 @@ async function openFight(pitWrap, fighter, foeCfg) {
        on: the cost when the move is legal, the reason when it is not (AP first,
        then Stamina; flurry's floor is the 30 actionsFor tests, not its windCost,
        which is "all of it"). No new copy beyond the value strings.
-       ONE <small>, not two (2026-09-04): a second sub-line added ~14px per row
-       and fight-layout-audit ROWS went red at 393x852 (2 of 3 rows inside a
-       188px tray). The cost rides the existing hint line when the move is
-       legal and REPLACES it with the reason when it is not: zero extra height. */
+       IT IS A REAL, SEPARATE <small class="cost">, not text folded into the
+       hint (2026-09-04 correction). ea987dd7 shipped it that way first and it
+       cost ~14px of extra button height, because .fight-act is `display:grid`
+       and grid auto-places a second small sibling into its own implicit row;
+       fight-layout-audit's ROWS went red (2 of 3 rows fit a 188px tray at
+       393x852). 190b5eb1 "fixed" the height by deleting the element and
+       appending its text onto the hint's <small> instead, which then wrapped
+       the hint to two lines at 375/393 (fight-hint-audit) and made the Bone
+       Guard hint always carry "Stamina" even when it had been shortened to
+       drop it (fight-press-audit). Both were real regressions of the OTHER
+       audit's rule, not a false alarm.
+       The element stays real and separate; app.css takes it OUT of the grid's
+       row flow with `position:absolute` (.fight-act small.cost) so it costs
+       the button zero extra height without folding its text into the hint. */
     const costLine = a => {
       if (!a.enabled && !fight.over) {
         if (fight.ap < a.ap) return `Needs ${a.ap} AP`;
@@ -23506,7 +23516,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
     };
     const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
       <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" title="${esc(moveDetail(a.id))}" ${a.enabled ? '' : 'disabled'}>
-        <b>${a.label}</b><small>${a.enabled || fight.over ? `${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>`} · <span class="cost">${costLine(a)}</span>` : `<span class="cost">${costLine(a)}</span>`}</small>
+        <b>${a.label}</b><small>${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>`}</small><small class="cost">${costLine(a)}</small>
       </button>` : '';
     const dmgHint = id => {
       const est = expectedDamage(id, player, null, foe);
