@@ -509,6 +509,10 @@ const MORPH_TINT = Object.fromEntries(['C1', 'C2', 'C3', 'C4', 'C5', 'C6'].map(i
 // The one filter helper every draw path (2.4) resolves through. '' for base,
 // shiny, CX, or a species with no tint entry -- never throws, never guesses art.
 function petTint(petId, morph) { return (morph && morph !== 'base' && MORPH_TINT[petId] && MORPH_TINT[petId][morph]) || ''; }
+// The backpack egg shell (section 2.5): the species is not decided yet (rule
+// 0.4), so there is no petId to key MORPH_TINT on -- this uses the plain
+// per-morph filter every species' entry is seeded from today.
+function eggTint(morph) { return (morph && morph !== 'base' && MORPH_FILTER[morph]) || ''; }
 
 function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined, thumb = null, tint = '') {
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
@@ -15451,8 +15455,14 @@ function openHatchReveal(res, charWrap) {
         ${shards}
       </div>
     </div>` : `<div class="hatch-stage"><div class="hatch-glow"></div></div>`;
+  /* Kennel Phase A, section 2.5: the hatch line names the colour, "A Frost
+     Bulldog!" (MORPH_LABEL + species name); base morph's empty MORPH_LABEL
+     collapses that to "A Bulldog!". "ANOTHER ONE!" stays for a true (sp,
+     morph) duplicate (res.dupe, section 2.3's pair-aware dupe), not merely a
+     species repeat. */
+  const hatchName = `A ${MORPH_LABEL[res.morph] || ''} ${item ? item.name : ''}`.replace(/\s+/g, ' ').trim() + '!';
   const revealHtml = item
-    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : 'IT HATCHED!'}</div>
+    ? `<div class="lvl-stamp" style="font-size:30px${res.shiny ? ';color:var(--gold)' : ''}">${res.shiny ? `${sparkIco(24)} SHINY! ${sparkIco(24)}` : res.dupe ? 'ANOTHER ONE!' : esc(hatchName)}</div>
        <div class="hatch-prize r-${item.rarity}${res.shiny ? ' is-shiny' : ''}">
          <canvas class="hatch-art" width="512" height="512"></canvas>
          <b>${esc(item.name)}${res.shiny ? ` <span class="shiny-tag">${sparkIco(11)} SHINY</span>` : ''}</b>
@@ -15477,7 +15487,8 @@ function openHatchReveal(res, charWrap) {
   const stage = $('#hatchStage', wrap2);
   const revealEl = $('.hatch-reveal', wrap2);
   // draw the pet big + centered (the source PNG parks it in a corner)
-  if (item) { const cv = $('.hatch-art', wrap2); if (cv) drawTrimmedArt(cv, res.shiny ? `assets/bh/C/shiny/${item.id}.png` : bhAsset(item)); }
+  // No morph tint on shiny art: shiny forces base (rule 0.1/1.2).
+  if (item) { const cv = $('.hatch-art', wrap2); if (cv) drawTrimmedArt(cv, res.shiny ? `assets/bh/C/shiny/${item.id}.png` : bhAsset(item), undefined, null, petTint(item.id, res.morph)); }
   const okBtn = $('#hatchOk', wrap2);
   /* ADOPT USED TO CLOSE THE SHEET, and the cinematic is 5.75s long, so any
      player who tapped it early dismissed a pet they never saw. Tom hit exactly
@@ -16940,8 +16951,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${eggs.map(e => {
         const p = eggProgress(e, lifeSteps);
         const pct = p.goal > 0 ? Math.min(100, Math.round(p.walked / p.goal * 100)) : 100;
+        // Kennel Phase A, section 2.5: the shell carries a tint of what's inside
+        // (no colour name in the copy below -- the tint is the whole tease).
+        const eTint = eggTint(e.morph);
         return `<div class="t3-egg" style="margin-bottom:9px">
-          <span class="art">${crateIcon('egg', 48)}</span>
+          <span class="art"${eTint ? ` style="filter:${eTint}"` : ''}>${crateIcon('egg', 48)}</span>
           <div class="tx">
             <b>${p.ready ? 'READY TO HATCH' : 'STEP EGG'}</b>
             <div class="bar"><i style="width:${pct}%"></i></div>
@@ -17517,7 +17531,14 @@ function drawTrimmedArt(canvas, src, pad = 0.08, tints = null, morphTint = '') {
         from = off2; sx = 0; sy = 0; sw = bw * k; sh = bh * k;
       }
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      // Kennel Phase A, section 2.4: the hatch reveal canvas paints a morph the
+      // same way its CSS-filter siblings do, just via the 2D context instead of
+      // a style attribute -- ctx.filter takes the identical CSS filter string.
+      // Reset after so a re-tiered recursive call (SMALL_INK above) or a later
+      // draw on this same canvas never inherits a stale filter.
+      ctx.filter = morphTint || 'none';
       ctx.drawImage(from, sx, sy, sw, sh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+      ctx.filter = 'none';
       if (tints && tints.length) {
         paintFootballTints(ctx, tints, [x0, y0, bw, bh], [(cw - dw) / 2, (ch - dh) / 2, dw, dh]).then(res, res);
         return;
