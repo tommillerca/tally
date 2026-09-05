@@ -10636,7 +10636,7 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   color: var(--text-3); margin: 0 2px 8px; }
 .pw-empty { margin: 0 2px; }
 .pw-hint { margin: 2px 2px 0; }
-.pw-row { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; }
+.pw-row, .col-fam-rail { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; }
 .pw-item { flex: none; width: 96px; scroll-snap-align: start; display: flex; flex-direction: column;
   align-items: center; gap: 3px; padding: 8px 6px 9px; border-radius: 14px; cursor: pointer;
   background: var(--surface); border: 1px solid var(--line); color: var(--text); }
@@ -10646,6 +10646,10 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   color: var(--text-3); text-align: center; }
 .pw-item.on { background: rgba(255, 201, 97, .12); border-color: var(--gold); }
 .pw-item.on small { color: var(--gold); }
+/* THE FAMILY TILE'S COUNT BADGE, same corner and same plate as the wardrobe's
+   .ward-fam-n (extended selector at that rule) -- .pw-art has no positioning
+   context of its own above. */
+.pw-item.fam .pw-art { position: relative; }
 /* =====================================================================   GWART'S EMPORIUM — the Shop tab's header (option A, approved 2026-08-20)
    ============================================================================
    The Shop tab drops the hub's character header entirely (no name heading, no
@@ -11411,7 +11415,7 @@ button.t3-price::before {
    tier letter at bottom-left and only GEAR tiles use the top-left corner, so
    this corner is free here. wardrobe-family-grid-audit's BADGE row measures the
    two boxes against each other so the pair cannot drift back together. */
-.ward-cell.fam .ward-fam-n {
+.ward-cell.fam .ward-fam-n, .col-cell.fam .ward-fam-n, .pw-item.fam .ward-fam-n {
   position: absolute; left: 3px; top: 3px; z-index: 2; pointer-events: none;
   min-width: 15px; padding: 2px 4px; border-radius: 999px;
   font-size: 9px; font-weight: 900; line-height: 1; text-align: center;
@@ -11424,7 +11428,23 @@ button.t3-price::before {
    of the four above it. The badge fills rather than changing shape, so it is
    the same target and the same box: fill AND text colour, never colour alone
    (a11y-audit), and it reads at a glance beside the unfilled ones. */
-.ward-cell.fam[aria-expanded="true"] .ward-fam-n { background: var(--gold); color: #17140b; }
+.ward-cell.fam[aria-expanded="true"] .ward-fam-n,
+.col-cell.fam[aria-expanded="true"] .ward-fam-n,
+.pw-item.fam[aria-expanded="true"] .ward-fam-n { background: var(--gold); color: #17140b; }
+/* THE COLLECTION'S OWN RAIL, same collapse as the Wardrobe's (.fam-rail) but
+   its tiles are .col-cell (an <img>, not a canvas): reuse .pw-row for the
+   flex/gap/snap and give the tiles a fixed width so aspect-ratio:1 has
+   something to work from inside a flex row. */
+.col-fam-rail {
+  grid-column: 1 / -1;          /* .col-grid is a 4-column grid; the rail spans it */
+  scroll-behavior: smooth; scrollbar-width: none;
+  margin: 1px calc(var(--pad) * -1) 3px; padding: 4px var(--pad) 8px;
+}
+.col-fam-rail::-webkit-scrollbar { display: none; }
+.col-fam-rail .col-cell.famr { flex: 0 0 72px; width: 72px; scroll-snap-align: center; }
+.col-fam-rail .col-cell.famr:first-child { margin-left: calc(50% - 36px - var(--pad)); }
+.col-fam-rail .col-cell.famr:last-child { margin-right: calc(50% - 36px - var(--pad)); }
+@media (prefers-reduced-motion: reduce) { .col-fam-rail { scroll-behavior: auto; } }
 .fam-rail {
   grid-column: 1 / -1;          /* .ward-grid is a 4-column grid; the rail spans it */
   /* NO scroll-snap-type of its own: .pw-row already declares `x mandatory`,
