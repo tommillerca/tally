@@ -11464,6 +11464,7 @@ function crewCardHtml(f) {
      anybody touched anything, and 120 friends reached 1537.5 MB. applyFan fills
      the seven seated stages and clears the rest. */
   return `<button class="cfan-card" data-fan="${esc(f.playerId)}">
+    <span class="cfan-hit"></span>
     <div class="cfan-stage"></div>
     ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
     <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>
@@ -11543,6 +11544,19 @@ async function renderFriends(el) {
   const dispName = me.name || me.handle;
   el.innerHTML = `
     <h1 class="page-h1">The Crew<span class="sub">You're <b>${esc(dispName)}</b> · <button class="link" id="crewEditName">${me.name ? 'change name' : 'pick a name'}</button></span></h1>
+
+    <!-- CREW-7, 2026-09-05: a sealed gift used to sit inside DELIVERIES,
+         under the fan, cheers, the leaderboard, the race and ADD A FRIEND --
+         measured at 1301-1754px of scroll on a 390x844 phone, off the first
+         screen every time. A gift is the one thing in this tab that is
+         genuinely pending, so while one is sealed it renders here, above
+         even the fan (which is the one thing Tom's 2026-08-08 ORDER MATTERS
+         ruling below otherwise puts first). Opening it (or there being none)
+         collapses this back to nothing. -->
+    <div class="card gift-top-card" id="giftTopCard" hidden>
+      <div class="card-title">A GIFT IS WAITING</div>
+      <div id="giftTopList"></div>
+    </div>
 
     <!-- ORDER MATTERS HERE. Tom, 2026-08-08 (supersedes the same-day "greet with
          the leaderboard" call): "the fan should be at the very top when you open
@@ -11674,8 +11688,43 @@ async function renderFriends(el) {
     const rows = (await crewDeliveries()).filter(r => r.type !== 'cheer');
     const sealed = await social.giftBox();
     const card = $('#deliveriesCard', el), list = $('#deliveriesList', el);
+    const giftCard = $('#giftTopCard', el), giftList = $('#giftTopList', el);
     if (!card || !list) return;
-    if (!rows.length && !sealed.length) { card.hidden = true; return; }
+
+    /* SEALED GIFTS, at the TOP of the tab (CREW-7). Tom, 2026-08-08: "its
+       boring to just have it appear with no fanfare or credit to the sender."
+       A gift you have not opened is the only thing in this whole tab that is
+       genuinely pending, so it gets its own card above the fold rather than
+       filed under DELIVERIES history. */
+    if (giftCard && giftList) {
+      if (!sealed.length) { giftCard.hidden = true; }
+      else {
+        giftList.innerHTML = sealed.slice().reverse().map(g => `
+          <button class="gift-sealed" data-gift="${esc(g.key)}">
+            ${/* crateIcon, not bhIcon: 30 was the one golden chest in the app still
+                 drawn as a vector at a size the art covers (crateIcon serves its 24
+                 step from 24 up). .gift-sealed .wrap is a centring grid, so the 6px
+                 it loses costs the row nothing. */''}
+            <span class="wrap">${crateIcon('golden', 30)}</span>
+            <span class="tx"><b>${esc(giftSender(g))}</b><small>sent you a gift</small></span>
+            <span class="open">OPEN</span>
+          </button>`).join('');
+        $$('[data-gift]', giftList).forEach(b => b.addEventListener('click', async () => {
+          if (b.dataset.busy === '1') return;
+          b.dataset.busy = '1';
+          const g = await social.openGift(b.dataset.gift);
+          if (!g) { b.remove(); return; }
+          b.classList.add('popping');
+          await new Promise(r => setTimeout(r, 260));
+          revealGift(g);
+          await paintDeliveries();
+          await refreshCrewBadge();
+        }));
+        giftCard.hidden = false;
+      }
+    }
+
+    if (!rows.length) { card.hidden = true; return; }
     const seen = await seenAtOpen;
     const isNew = r => (r.ts || 0) > seen;
     /* Show what is actually news, not the archive. Tom, 2026-08-08: "the
@@ -11690,35 +11739,9 @@ async function renderFriends(el) {
         <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(deliveredWhen(r))}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
         ${isNew(r) ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
       </div>`;
-    /* SEALED FIRST. Tom, 2026-08-08: "its boring to just have it appear with no
-       fanfare or credit to the sender. Otherwise deliveries reads like a receipt
-       you'd get at a store." A gift you have not opened is the only thing on
-       this card that is not history, so it sits on top, closed, with the sender's
-       name on it. */
-    const sealedHtml = sealed.slice().reverse().map(g => `
-      <button class="gift-sealed" data-gift="${esc(g.key)}">
-        ${/* crateIcon, not bhIcon: 30 was the one golden chest in the app still
-             drawn as a vector at a size the art covers (crateIcon serves its 24
-             step from 24 up). .gift-sealed .wrap is a centring grid, so the 6px
-             it loses costs the row nothing. */''}
-        <span class="wrap">${crateIcon('golden', 30)}</span>
-        <span class="tx"><b>${esc(giftSender(g))}</b><small>sent you a gift</small></span>
-        <span class="open">OPEN</span>
-      </button>`).join('');
     const rest = rows.length - shown.length;
-    list.innerHTML = sealedHtml + `<div class="dlv-rows">${shown.map(rowHtml).join('')}</div>`
+    list.innerHTML = `<div class="dlv-rows">${shown.map(rowHtml).join('')}</div>`
       + (rest > 0 ? `<button class="btn small ghost" id="deliveriesMore" style="width:100%;margin-top:8px">Show all ${rows.length}</button>` : '');
-    $$('[data-gift]', list).forEach(b => b.addEventListener('click', async () => {
-      if (b.dataset.busy === '1') return;
-      b.dataset.busy = '1';
-      const g = await social.openGift(b.dataset.gift);
-      if (!g) { b.remove(); return; }
-      b.classList.add('popping');
-      await new Promise(r => setTimeout(r, 260));
-      revealGift(g);
-      await paintDeliveries();
-      await refreshCrewBadge();
-    }));
     /* THE WAY OUT HAS TO STAY IN REACH. Tom, 2026-08-07: "the deliveries section
        when expanded becomes huge... the button to close it becomes too far down
        to reach and collapse again." Expanding used to replace the list with every
@@ -11965,7 +11988,7 @@ async function renderFriends(el) {
     $('#cfanStar', box).addEventListener('click', async () => {
       favs.has(f.playerId) ? favs.delete(f.playerId) : favs.add(f.playerId);
       await kvSet('crewFaves', [...favs]);
-      toast(favs.has(f.playerId) ? `${esc(f.alias || f.name)} starred: sorted to the front of the fan.` : 'Unstarred.', 2400);
+      toast(favs.has(f.playerId) ? `${f.alias || f.name} starred: sorted to the front of the fan.` : 'Unstarred.', 2400);
       const sb = $('#cfanStar', box);
       if (sb) { sb.classList.toggle('on', favs.has(f.playerId)); sb.innerHTML = ICONS.star(!!favs.has(f.playerId)); }
       resortFan(); paintFaves(); applyFan();   // cards glide to their new seats
@@ -12631,21 +12654,39 @@ async function renderFriends(el) {
       .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0))
       .slice(0, 5);
     if (!fresh.length) { card.hidden = true; return; }
-    list.innerHTML = fresh.map(p => `
+    const rowHtml = p => `
       <div class="t3-row">
         ${lbAvatar(p, 'lb-av')}
         <div class="t3-tx"><b>${esc(p.name)}</b><small>Level ${p.level}${p.badges ? ` · ${p.badges} badges` : ''} · ${esc(onlineLabel(p.lastSeen).text || 'online now')}</small></div>
         <button class="btn ghost" data-lbadd="${esc(p.addToken)}">+ ADD</button>
-      </div>`).join('');
-    $$('[data-lbadd]', list).forEach(b => b.addEventListener('click', async () => {
-      b.disabled = true; b.textContent = '...';
-      const r = await social.friendAdd(b.dataset.lbadd);
-      if (!r.ok) { b.disabled = false; b.textContent = '+ ADD'; toast('Could not send that request. Try again.', 2600); return; }
-      if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
-      else { popSound(S.sounds); toast(REQUEST_SENT_MSG, 3200); }
-      await paint();
-      hydrateNewcomers();
-    }));
+      </div>`;
+    /* CREW-8, 2026-09-05: five rows of strangers cost 470px and were the single
+       biggest slice of the tab's 941px of dead space (measured, tests/crew-
+       layout-audit.mjs), always below the fold for the player who has one
+       friend and is the one this card is for. One row plus "see more" is the
+       same list, reachable in one tap, at a fifth of the height by default. */
+    const shown = fresh.slice(0, 1), rest = fresh.slice(1);
+    list.innerHTML = shown.map(rowHtml).join('')
+      + (rest.length ? `<button class="btn small ghost" id="newcomersMore" style="width:100%;margin-top:8px">See ${rest.length} more</button>` : '');
+    const wireAdd = () => $$('[data-lbadd]', list).forEach(b => {
+      if (b.dataset.wired) return;
+      b.dataset.wired = '1';
+      b.addEventListener('click', async () => {
+        b.disabled = true; b.textContent = '...';
+        const r = await social.friendAdd(b.dataset.lbadd);
+        if (!r.ok) { b.disabled = false; b.textContent = '+ ADD'; toast('Could not send that request. Try again.', 2600); return; }
+        if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
+        else { popSound(S.sounds); toast(REQUEST_SENT_MSG, 3200); }
+        await paint();
+        hydrateNewcomers();
+      });
+    });
+    wireAdd();
+    $('#newcomersMore', list)?.addEventListener('click', ev => {
+      ev.currentTarget.remove();
+      list.insertAdjacentHTML('beforeend', rest.map(rowHtml).join(''));
+      wireAdd();
+    });
     card.hidden = false;
   };
   $('#crewWhatsNew', el)?.addEventListener('click', openWhatsNew);
@@ -12883,12 +12924,20 @@ async function openGiftSheet(f) {
       const fm = (await kvGet('giftFreeSent', {})) || {}; fm[f.playerId] = day; await kvSet('giftFreeSent', fm);
       $('#giftFreeCard', wrap).classList.add('done'); btn.textContent = 'Sent';
       confettiBurst(innerWidth / 2, innerHeight * 0.4, 20); coinSound(S.sounds);
-      toast(`You sent ${esc(f.alias || f.name)} ${giftRewardLabel(r.reward)}!`, 3600);
+      toast(`You sent ${f.alias || f.name} ${giftRewardLabel(r.reward)}!`, 3600);
     } else if (r.status === 409) {
       const fm = (await kvGet('giftFreeSent', {})) || {}; fm[f.playerId] = day; await kvSet('giftFreeSent', fm);
       $('#giftFreeCard', wrap).classList.add('done'); btn.textContent = 'Sent';
-      toast(`You already sent ${esc(f.alias || f.name)} their free gift today.`, 3400);
-    } else { btn.disabled = false; btn.textContent = 'Send'; toast('Could not send. Try again in a bit.'); }
+      toast(`You already sent ${f.alias || f.name} their free gift today.`, 3400);
+    } else {
+      btn.disabled = false; btn.textContent = 'Send';
+      /* SOC-5, r34 SOCIAL lane, 2026-09-05: /gift answers 403 'not friends' when
+         the other side deleted their account or removed you, and "Could not
+         send. Try again in a bit." sent the player round a loop that can never
+         succeed. Say what actually happened; the Crew list confirms it the
+         moment this sheet closes. */
+      toast(r.status === 403 ? "They're not in your Crew any more." : 'Could not send. Try again in a bit.');
+    }
   });
 
   /* ONE TAP MUST NEVER SPEND, and this was the last place in the app where it
@@ -12924,13 +12973,19 @@ async function openGiftSheet(f) {
     if (r.ok) {
       giftKeys.delete(amt);
       coinSound(S.sounds);
-      toast(`You sent ${esc(f.alias || f.name)} ${amt} coins!`, 3400);
+      toast(`You sent ${f.alias || f.name} ${amt} coins!`, 3400);
       const nb = await coins(); const bl = $('#giftBal', wrap); if (bl) bl.textContent = `you have ${nb}`;
       $$('.gift-amt', wrap).forEach(x => { x.disabled = (+x.dataset.amt) > nb; });
     } else {
       await coinsAdd(amt); // refund
       b.disabled = false;
-      toast(r.status === 429 ? "That's the daily coin-gift limit for this friend." : 'Could not send. Your coins were not spent.', 3400);
+      /* SOC-5, r34 SOCIAL lane, 2026-09-05: driven live (round 34 SOCIAL run 6),
+         B sent A a gift after A deleted their account: 403 'not friends',
+         "Could not send. Your coins were not spent." with nothing telling B
+         the friend was gone, so the balance line was the only clue. */
+      toast(r.status === 429 ? "That's the daily coin-gift limit for this friend."
+        : r.status === 403 ? "They're not in your Crew any more. Your coins were not spent."
+        : 'Could not send. Your coins were not spent.', 3400);
     }
   }));
 }
@@ -12956,7 +13011,7 @@ function openCheerSheet(f) {
     $$('.cheer-chip', wrap).forEach(x => x.disabled = true);
     if (!keys.has(i)) keys.set(i, social.newSendKey());
     const r = await social.sendCheer(f.playerId, i, keys.get(i));
-    if (r.ok) { keys.delete(i); popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${esc(f.alias || f.name)}!`, 3000); history.back(); }
+    if (r.ok) { keys.delete(i); popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${f.alias || f.name}!`, 3000); history.back(); }
     /* 403 IS NOT "TRY AGAIN", AND IT IS REACHABLE FROM THE ONE BUTTON THAT DOES
        NOT COME OFF THE FRIENDS LIST. Cheer back is built from the inbox ROW on
        purpose (so it works offline), so it is still offered after the sender
@@ -22142,17 +22197,28 @@ function presentGrantDelivery(r) {
   cheers.forEach((c, i) => {
     const em = CHEERS[c.cheer] ? CHEERS[c.cheer].emo : '📣';
     const tx = CHEERS[c.cheer] ? CHEERS[c.cheer].txt : 'cheered you on';
-    setTimeout(() => toast(`${em} ${esc(c.from || 'A friend')}: ${esc(tx)}`, 4200), i * 900);
+    /* CREW-10, 2026-09-05: toast() writes textContent (js/app.js:3441), which
+       never decodes entities, so esc()'ing a phrase before handing it to toast
+       printed the literal characters: "You&#39;re crushing it!" for 2 of the
+       12 cheer phrases (any with an apostrophe). textContent is already safe
+       against injection, so esc() here bought nothing but the bug. */
+    setTimeout(() => toast(`${em} ${c.from || 'A friend'}: ${tx}`, 4200), i * 900);
   });
   // crew news: same staggered treatment, queued after the cheers so two kinds
   // of Crew toast never land on top of each other
-  crewNews.forEach((n, i) => setTimeout(() => toast(esc(n), 4200), (cheers.length + i) * 900));
+  crewNews.forEach((n, i) => setTimeout(() => toast(n, 4200), (cheers.length + i) * 900));
   if (cards.length) { openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh); return; }
   if (coinGifts.length) { toast(coinGifts[0] + (coinGifts.length > 1 ? ` (+${coinGifts.length - 1} more)` : ''), 4200); bgRefresh(); return; }
   if (coinsSum || xpSum) { toast(`Crew delivery: ${[coinsSum ? `+${coinsSum} coins` : '', xpSum ? `+${xpSum} XP` : ''].filter(Boolean).join(' · ')}.`, 3600); bgRefresh(); return; }
   if (cheers.length || crewNews.length) { bgRefresh(); return; } // already toasted, nothing else to reveal
   toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived.`, 3600); bgRefresh();
 }
+/* Test hook (webdriver only), same pattern as __toast: tests/crew-layout-audit.mjs
+   drives the CREW-10 cheer/crew-news toast through the real function that
+   builds its text, rather than calling toast() directly (which would pass
+   even with the esc()-before-textContent bug this guards, since the bug was in
+   what callers handed to toast, not in toast itself). */
+if (typeof window !== 'undefined' && navigator.webdriver) window.__presentGrantDelivery = presentGrantDelivery;
 
 // Push a local notification when a friend sends a gift or cheer. Gated on the
 // same 'friends' (Crew) notif pref as friend requests. Aggregates so a batch

@@ -19,6 +19,18 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## crew layout (2026-09-05)
+
+Branch `fix/crew-tab-layout`, not yet stamped to a release; folded into that
+release's own `## vNNN` entry when it ships. Round 35's Crew tab QA pass
+(CREW-7/8/9/10, SOC-5 from round 34's SOCIAL lane).
+
+1. PROOF: crew-layout-audit.mjs (GIFT, proved red on the pre-fix tree at 1515-1575px of scroll) | REACH: A gift you have not opened yet renders in its own card above the fan, so it is on screen the moment Crew opens instead of 1301 to 1754px down under the fan, cheers, the leaderboard, the race and Add A Friend.
+2. PROOF: crew-layout-audit.mjs (WORTH, proved red on the pre-fix tree: five rows, no more control, 424px) | REACH: The WORTH ADDING card opens on one stranger instead of five, with a "See N more" button that reveals the rest in place. Same list, a fifth of the height until you ask for it.
+3. PROOF: crew-layout-audit.mjs (HIT, proved red on the pre-fix tree: a tap at the side card's centre landed on the featured card) | REACH: Tapping a friend's card beside the featured one in the fan now brings that friend to the front instead of opening whichever friend was already featured.
+4. PROOF: crew-layout-audit.mjs (TOAST, proved red on the pre-fix tree: the test seam does not exist without the fix) | REACH: A cheer toast whose phrase has an apostrophe ("You're crushing it!") reads with a real apostrophe instead of the literal "You&#39;re crushing it!".
+5. PROOF: NONE in the browser gate; this is copy on a 403 branch of a coin-gift and free-gift send that unit.test.js and the browser audits do not drive, so the row says so rather than implying one. Measured live in round 34's SOCIAL lane (a real 403 from a real Worker after one player deleted their account). | REACH: Sending a gift to someone no longer in your Crew now says "They're not in your Crew any more" instead of the generic "Could not send. Try again" that sent the player around a loop that could never succeed.
+
 ## v474
 
 1. PROOF: unit.test.js, football-kit-audit.mjs, MANUAL measured off the rendered Shop screen (buy buttons and the team picker read 40px tall, up from 35.5px and 36px; a buy button below your balance stays enabled and pressable, and a tap answers with the coin shortfall) | REACH: The Locker Room shelf sells five football pieces, a helmet, a jersey, cleats and a matching helmet and jersey for the lizard, each 4,200 coins and yours in all 32 team colours the moment you buy it. Buying the full kit after already owning some of its five pieces charges only for what is missing, never more than the flat 16,800 kit price, and the "you save" line only appears when there really is a saving. Every buy button on the shelf is a full-size tap target, and one you cannot yet afford still responds to a tap and names the shortfall instead of going dead.
