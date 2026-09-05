@@ -64,7 +64,7 @@ import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset } from './pets.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -18981,9 +18981,16 @@ async function openStable(opts = {}) {
   // CLOSED. Both used to be null, so render() re-opened the active pet's tree
   // every time you closed it and the control looked broken.
   let openIid = focusIid || undefined;   // which pet's talent tree is expanded inline
+  /* THE KENNEL LIVES HERE (Tom's ruling, 2026-09-05): one button in the header,
+     not a sixth Today door and not the Paddock (off limits this phase, see
+     scratchpad/kennel/KENNEL-UX.md section 1). Grouped with Done in its own
+     flex wrapper so `justify-content:space-between` on .sheet-head still puts
+     exactly two things apart (the title, and the trailing controls) rather than
+     centring this button between them. */
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-head"><h2>The Stable</h2><div style="display:flex;gap:8px"><button class="btn ghost small" id="kennelBtn">Kennel</button><button class="sheet-close">Done</button></div></div>
     <div class="sheet-body" id="stableBody"></div>`, { cls: 'full', onClose: () => { if (currentTab() === 'today') refresh(); } });
+  $('#kennelBtn', wrap)?.addEventListener('click', () => openKennel());
   async function render() {
     const body = $('#stableBody', wrap);
     if (!body) return;
@@ -19982,6 +19989,87 @@ async function openStable(opts = {}) {
   }
   render();
 }
+
+/* THE SIX ORDINARY HATCH SPECIES, Kennel Phase A. Tom's ruling 2026-09-05:
+   Bumbleseal (C6) is a normal species now, so the collection grid is 6 x 5 =
+   30 cells, not the plan's original 25 -- she just never counts toward the
+   hatch-pool fresh-first bookkeeping in js/pets.js (unrelated, unchanged).
+   CX stays exempt throughout (spec 0.7 / KENNEL.md rulings): no row, no cell,
+   no swatch. Alphabetical by name, matching the plan's own wireframe order. */
+const KENNEL_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6']
+  .map(id => BH_BY_ID[id]).filter(Boolean)
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+/* THE KENNEL: a sibling sheet of the Stable (scratchpad/kennel/KENNEL-UX.md
+   section 1), reached from the button openStable's header now carries.
+   A display screen, not a shop: no dust, no stat line, no glow anywhere on a
+   pet here (KENNEL.md rulings) -- the roster and the grid below are colour and
+   opacity only, never a second image, so nothing here adds a decode beyond one
+   thumb per roster species and one per grid cell (see the pixel-budget note in
+   the plan; measured by tests/memory-census.mjs). */
+async function openKennel() {
+  const wrap = openSheet(`
+    <div class="sheet-head"><h2>The Kennel</h2><button class="sheet-close">Done</button></div>
+    <div class="sheet-body" id="kennelBody"></div>`, { cls: 'full' });
+  const body = $('#kennelBody', wrap);
+  if (!body) return;
+  const insts = await petInstances();
+  const owned = ownedPairs(insts);   // Set of "sp|morph", pure (js/pets.js)
+  const ownedSp = KENNEL_SPECIES.filter(s => insts.some(x => x.sp === s.id));
+  // The roster's tile shows the HIGHEST-TIER owned morph for that species
+  // (plan section 3), not merely "an" owned copy: MORPH_TIER orders midnight
+  // above toxic above ember/frost above base, matching Phase C's fusion order.
+  const bestMorphFor = sp => MORPHS.filter(m => owned.has(`${sp}|${m}`))
+    .sort((a, b) => MORPH_TIER[b] - MORPH_TIER[a])[0] || 'base';
+  const dotLabel = (sp, m, name) => owned.has(`${sp}|${m}`)
+    ? `${MORPH_LABEL[m] ? MORPH_LABEL[m] + ' ' : ''}${name}`
+    : 'Not hatched yet.';
+  const rosterRow = s => {
+    const morph = bestMorphFor(s.id);
+    const dots = MORPHS.map(m => `<i class="k-dot${owned.has(`${s.id}|${m}`) ? ' on' : ''}" data-dot="${s.id}|${m}" role="button" tabindex="0" aria-label="${esc(dotLabel(s.id, m, s.name))}"></i>`).join('');
+    const morphNames = MORPHS.filter(m => owned.has(`${s.id}|${m}`) && m !== 'base').map(m => MORPH_LABEL[m]);
+    return `<div class="k-row">
+      <span class="k-thumb">${croppedPetImg(s.id, 48, false, morphAsset(s.id, morph) || null, undefined, 192)}</span>
+      <div class="k-id">
+        <b>${esc(s.name)}</b>
+        <div class="k-dots" data-sp="${esc(s.id)}">${dots}</div>
+        <p class="k-cap" data-cap="${esc(s.id)}">${esc(morphNames.length ? `${morphNames.join(', ')} owned` : 'Base owned')}</p>
+      </div>
+    </div>`;
+  };
+  // Grid cell art is drawn at a fluid width (the plan's own formula: sheet
+  // width minus outer pad minus four 12px gutters, over five columns), never a
+  // hardcoded 62px that would overflow or shrink oddly at 320px.
+  const cellPx = Math.max(40, Math.floor(((window.innerWidth || 390) - 32 - 48) / 5));
+  const gridRow = s => `<div class="k-grid-row">
+      <span class="k-grid-label">${esc(s.name)}</span>
+      <div class="k-grid-cells">${MORPHS.map(m => {
+        const isOwned = owned.has(`${s.id}|${m}`);
+        const art = croppedPetImg(s.id, cellPx, false, isOwned ? (morphAsset(s.id, m) || null) : null, undefined, 192);
+        return `<div class="k-cell${isOwned ? '' : ' locked'}" data-sp="${esc(s.id)}" data-morph="${esc(m)}">${art}${isOwned ? '' : ICONS.lock(14)}</div>`;
+      }).join('')}</div>
+    </div>`;
+  /* GWART'S LINE SITS BELOW THE ROSTER, NOT ABOVE IT: the roster is the part
+     that must fit one screen at 390x844 AND 320x568 with no scroll (up to six
+     owned species, one row each), and a callout above it was budget the narrow
+     phone did not have -- measured at 320x568 with all six owned, the last
+     roster row's own bottom landed at 693px before this moved, 125px past the
+     fold. It reads fine here: still the first thing under "Your pets", it is
+     simply the first thing under the LAST row instead of the section header. */
+  body.innerHTML = `
+    <p class="sect-h">Your pets</p>
+    <div class="k-roster">${ownedSp.length ? ownedSp.map(rosterRow).join('') : '<p class="k-empty">Hatch an egg to start your collection.</p>'}</div>
+    <p class="k-gwart"><b>Gwart says:</b> It's paint, not power. Ember, Frost, Toxic, Midnight, same skeleton underneath.</p>
+    <p class="sect-h">Collection &middot; ${owned.size} / ${KENNEL_SPECIES.length * MORPHS.length}</p>
+    <div class="k-grid">${KENNEL_SPECIES.map(gridRow).join('')}</div>`;
+  $$('.k-dot', body).forEach(d => d.addEventListener('click', () => {
+    const [sp, m] = d.dataset.dot.split('|');
+    const name = (BH_BY_ID[sp] || {}).name || sp;
+    const cap = $(`.k-cap[data-cap="${CSS.escape(sp)}"]`, body);
+    if (cap) cap.textContent = dotLabel(sp, m, name);
+  }));
+}
+if (typeof window !== 'undefined' && navigator.webdriver) window.__openKennel = openKennel;
 
 // Breeding pay-off reveal, styled like the level-up: the offspring on a burst of
 // rays with its new lineage star.
