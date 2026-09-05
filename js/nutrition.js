@@ -9,11 +9,11 @@ export const ACTIVITY_LEVELS = [
 ];
 
 export const GOALS = [
-  { id: 'cut', label: 'Lose fat', hint: 'Track a 0.7% weekly deficit', adj: -0.20, protein: 2.0 },
-  { id: 'slowcut', label: 'Slow cut', hint: 'Track a 0.35% weekly deficit', adj: -0.10, protein: 2.0 },
-  { id: 'recomp', label: 'Recomp', hint: 'Track a mild deficit with high protein', adj: -0.08, protein: 2.2 },
-  { id: 'maintain', label: 'Maintain', hint: 'Track at maintenance calories', adj: 0, protein: 1.6 },
-  { id: 'bulk', label: 'Lean bulk', hint: 'Track a 0.3% weekly surplus', adj: 0.10, protein: 1.8 },
+  { id: 'cut', label: 'Lose fat', hint: 'About 0.7% of bodyweight per week', adj: -0.20, protein: 2.0 },
+  { id: 'slowcut', label: 'Slow cut', hint: 'Gentler deficit, easier to sustain', adj: -0.10, protein: 2.0 },
+  { id: 'recomp', label: 'Recomp', hint: 'Mild deficit, high protein', adj: -0.08, protein: 2.2 },
+  { id: 'maintain', label: 'Maintain', hint: 'Hold current weight', adj: 0, protein: 1.6 },
+  { id: 'bulk', label: 'Lean bulk', hint: 'Slow, mostly-muscle gain', adj: 0.10, protein: 1.8 },
 ];
 
 export function bmrMifflin({ sex, age, heightCm, weightKg }) {
