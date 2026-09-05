@@ -87,7 +87,7 @@ import {
 } from './garden.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume, platformTag } from './native.js';
 import {
-  deriveStats, legacyHabitStats, habitGrantPoints, derived, STAT_META, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
+  deriveStats, legacyHabitStats, habitGrantPoints, derived, STAT_META, hasFightableStats, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
   applyAction, endTurn, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks, GUARD_STAMINA,
@@ -12621,8 +12621,17 @@ async function renderFriends(el) {
       return;
     }
     const endsMs = Date.parse(wk + 'T00:00:00') + RACE_DAYS * 86400000;
-    const daysLeft = Math.max(0, Math.ceil((endsMs - Date.now()) / 86400000));
-    const clock = daysLeft <= 0 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+    const msLeft = Math.max(0, endsMs - Date.now());
+    const daysLeft = Math.ceil(msLeft / 86400000);
+    /* CREW-6: "settles tonight" was dead copy. daysLeft is a CEILING, so the
+       whole final calendar day of the week reads as 1 right up to the instant
+       it rolls, and the instant it rolls `wk` itself has already advanced to
+       the NEXT period (raceWeekKey is derived from today's date), so daysLeft
+       jumps straight from 1 to 7 -- it can never observe 0. The true fact for
+       that entire last day is "this settles at midnight tonight", so it
+       replaces the "1 day left" state outright rather than waiting for a
+       countdown value that never arrives. */
+    const clock = msLeft <= 86400000 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
     /* CREW-2: yourRank is the SERVER's (server/src/index.js ~3229, computed
        over up to 25 racers), rendered as-is, never recomputed here. The bug
        this replaces: splicing your own row into the 10-row `players` slice
@@ -12634,8 +12643,17 @@ async function renderFriends(el) {
        when it already sent a real rank. Absent and un-computable reads
        "unranked", never a made-up position. */
     const own = await weekStepsNow();
-    const { rows, mine, behind, standing } = social.raceStanding(race.players || [], race, wk, own, await social.displayName(), myFit, ordinal, esc);
+    const { rows, mine, behind, standing, aboveName } = social.raceStanding(race.players || [], race, wk, own, await social.displayName(), myFit, ordinal, esc);
     const lead = rows.length ? rows[0].steps : 0;
+    /* CREW-3: on a device's first-ever race week, a gap (to first OR to the
+       lane above) is a number about a stranger's whole week against a few
+       hours of this player's. kv 'raceDebutWk' is stamped once, the first time
+       this device ever opens the race, so it stays true for the rest of that
+       same week even after the player has walked and moved up. */
+    let debutWk = await kvGet('raceDebutWk', null);
+    if (!debutWk) { debutWk = wk; await kvSet('raceDebutWk', wk); }
+    const firstRace = debutWk === wk;
+    const friendCount = (data.friends || []).length;
 
     const podium = race.podium || [];
     card.innerHTML = `
@@ -12683,7 +12701,16 @@ async function renderFriends(el) {
             </${tag}>`;
           }).join('')}
         </div>` : '<p class="note" style="margin:0">Nobody has walked a step yet this race. The top of this board is going spare.</p>'}
-        ${behind ? `<div class="race-gap">You are <b>${behind.toLocaleString()} steps</b> off first. About <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking.</div>` : ''}
+        ${/* CREW-3: a brand-new player got "196,000 behind Howling Fibula. About
+             2084 minutes of walking" -- a whale's whole week measured against a
+             few hours of theirs. First week: say what is true and encouraging
+             instead (friends, not a gap). After that: the gap is to the racer
+             directly ABOVE (never first, which raceStanding already enforces),
+             and the minutes estimate is dropped once it stops being a number
+             anyone would act on. */ ''}
+        ${firstRace
+          ? `<div class="race-gap">Your first race${friendCount ? `. ${friendCount} friend${friendCount === 1 ? '' : 's'} ${friendCount === 1 ? 'is' : 'are'} in it` : ''}.</div>`
+          : behind ? `<div class="race-gap">You are <b>${behind.toLocaleString()} steps</b> behind ${esc(aboveName || 'the racer above you')}${behind / 5500 * 60 <= 60 ? ` · about <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking` : ''}.</div>` : ''}
         ${podium.length ? `<div class="race-purse">
           <span class="lab">When it settles, the top ${podium.length} take</span>
           <div class="rows">
@@ -12898,7 +12925,12 @@ function openFriendProfile(f, onChange, opts = {}) {
              their own herd in. Tom, 2026-08-24. -->
         <button class="btn ghost fp-yard-go" id="fpYardGo" type="button">Visit their paddock ›</button>
       </div>` : '';
-  const statBars = p.stats ? STAT_META.map(m => {
+  /* CREW-14: `p.stats` truthy is not "has stats" -- a never-synced account
+     sends `{}`, and that used to draw five zero-width bars ("stats will show"
+     is a lie once you have already drawn them). hasFightableStats demands a
+     real number for every stat, the same bar the Battle button below is held
+     to, so the two never disagree about whether this profile has fight data. */
+  const statBars = hasFightableStats(p.stats) ? STAT_META.map(m => {
     const v = p.stats[m.key] ?? 0;
     return `<div class="fps-row"><span class="fps-lab">${m.label}</span><div class="fps-bar"><i style="width:${Math.max(4, Math.min(100, v))}%"></i></div><span class="fps-val">${v}</span></div>`;
   }).join('') : '';
@@ -12913,7 +12945,7 @@ function openFriendProfile(f, onChange, opts = {}) {
       </div>
       <div class="fp-title"><div class="fp-class">${p.title ? `${esc(p.title)} · ` : ''}${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal" hidden></div></div>
 
-      ${p.stats && p.outfit ? `<button class="btn fp-battle" id="fpBattle">${ICONS.pit(18)} Battle their bonehead</button>` : ''}
+      ${hasFightableStats(p.stats) && p.outfit ? `<button class="btn fp-battle" id="fpBattle">${ICONS.pit(18)} Battle their bonehead</button>` : ''}
       ${stranger ? (opts.isCrew
         ? `<p class="note" style="text-align:center;margin:6px 0 0">Already in your Crew.</p>`
         : opts.sent
@@ -13763,7 +13795,7 @@ const NEWS = [
     thumb: () => headshotHtml({ B: 'B0-1', SK: 'SK0-1', H: 'HS13', E: 'ES13', G: 'GS1' }, 52),
     open: () => openCosmeticTeaser() },
   { id: 'race', date: 'Aug 7', title: 'The weekly step race',
-    blurb: 'Every Bonehead on one track. The purse pays the top three.',
+    blurb: 'Every Bonehead on one track. The purse pays the top five.',
     /* the race art IS your own Bonehead on the track, so the row shows that,
        not a generic star (Tom: "doesn't have the right art in some of the drop
        downs") */
@@ -23053,8 +23085,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const foe = makeFighter({
     name: foeCfg.name,
     // friend battles use the friend's REAL stats + outfit (a faithful AI clone);
-    // Pit/boss foes scale off the player's stats by the tier multiplier
-    stats: foeCfg.foeStats ? foeCfg.foeStats : scaleStats(fighter.stats, foeCfg.bossMult || foeCfg.mult),
+    // Pit/boss foes scale off the player's stats by the tier multiplier.
+    // CREW-14: a stranger/friend whose profile never synced real numbers
+    // carries `stats: {}` -- truthy, so the old `foeCfg.foeStats ?` check
+    // handed it straight through and every move computed off `undefined`
+    // ("Jab ~NaN dmg"). hasFightableStats demands real numbers for every
+    // stat or falls back to the same scaled-off-the-player foe every other
+    // mode already uses.
+    stats: hasFightableStats(foeCfg.foeStats) ? foeCfg.foeStats : scaleStats(fighter.stats, foeCfg.bossMult || foeCfg.mult),
     style: foeCfg.style || 'plain',
     outfit: foeCfg.foeOutfit || foeOutfitFor(foeCfg.name),
     talents: foeTalents,

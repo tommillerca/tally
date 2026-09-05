@@ -1029,6 +1029,81 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   assert.deepEqual(settled2.podium[0].name, settled1.podium[0].name, 'and still names the same player');
 });
 
+/* CREW-6: THE CLOSE WAS SILENT FOR EVERYONE OUTSIDE THE PODIUM.
+ * "6th and below get nothing anywhere" -- the podium above pays and notes the
+ * top 5, and a 6th-place racer got no grant, no toast, nothing. Settlement now
+ * also writes a reward-less 'crew' grant for every finisher past the podium,
+ * carrying their placement as its note (js/app.js already turns a 'crew'
+ * grant's note into its own boot toast).
+ * PROVE-RED: comment out the second settlement loop (the one keyed
+ * `raceplace-${prev}`) and `sixth.length` below goes to 0.
+ */
+await test('step race: a non-podium finisher still gets told where they placed', async () => {
+  const RACE_EPOCH = '2026-08-07', RACE_DAYS = 7;
+  const epoch = Date.parse(RACE_EPOCH + 'T00:00:00Z');
+  const weekStart = epoch + Math.floor((Date.now() - epoch) / (RACE_DAYS * 86400000)) * RACE_DAYS * 86400000;
+  const wk = new Date(weekStart).toISOString().slice(0, 10);
+  const prev = new Date(weekStart - RACE_DAYS * 86400000).toISOString().slice(0, 10);
+  // Same reset idiom as the test above (real week, real D1, must not race
+  // leftovers or an already-settled marker from a prior run of this suite).
+  try {
+    execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command',
+      `DELETE FROM grants WHERE key = 'stepweek-${prev}' OR key = 'raceplace-${prev}'`], { cwd: SERVER_DIR, stdio: 'ignore' });
+    execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command',
+      `DELETE FROM players WHERE json_extract(profile,'$.weekKey') IN ('${wk}','${prev}') ` +
+      `OR week_key IN ('${wk}','${prev}')`], { cwd: SERVER_DIR, stdio: 'ignore' });
+  } catch { /* a remote BASE cannot be reset; the assert below will say so */ }
+  const RACE_V = 2;
+  const mk = async (level, weekKey, steps) => {
+    const k = await makeKeys();
+    const p = await (await regFetch(k.pubJwk)).json();
+    const body = JSON.stringify({ snapshot: { level, outfit: { SK: 'SK0-1' }, gear: [], weekKey, weekSteps: steps, raceV: RACE_V }, appV: 'test' });
+    assert.equal((await signedFetch(k.kp, p.playerId, 'PUT', '/profile', body)).status, 200);
+    return { k, p };
+  };
+  // A CURRENT-week racer to be the one whose request settles last week.
+  const opener = await mk(5, wk, 1000);
+  // SIX racers staged into `prev` (week-warped, same as the podium test), so
+  // the settled board has a genuine 6th place with nobody left to pay.
+  const staged = [];
+  for (const steps of [90000, 80000, 70000, 60000, 50000, 40000]) {
+    const racer = await mk(5, wk, 1);
+    await fetch(BASE + '/dev/week-warp', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ playerId: racer.p.playerId, weekKey: prev, steps }),
+    });
+    staged.push({ ...racer, steps });
+  }
+  const sixthPlace = staged[5]; // 40,000 steps, lowest of the six
+
+  const r = await (await signedFetch(opener.k.kp, opener.p.playerId, 'GET', `/steps/week?week=${wk}`)).json();
+  assert.ok(r.champion, 'PRECONDITION: this request settled last week');
+
+  const paidGrants = await (await signedFetch(sixthPlace.k.kp, sixthPlace.p.playerId, 'GET', '/grants?since=0')).json();
+  const paid = (paidGrants.grants || []).filter(x => x.key === `stepweek-${prev}`);
+  assert.equal(paid.length, 0, '6th place is outside the 5-place podium and must not be paid coins');
+
+  const notice = (paidGrants.grants || []).filter(x => x.key === `raceplace-${prev}`);
+  assert.equal(notice.length, 1, 'FAIL: 6th place got no placement grant at all -- the close stayed silent for them');
+  assert.equal(notice[0].type, 'crew', 'a placement-only notice must not carry a reward type');
+  assert.ok(!notice[0].payload.coins && !notice[0].payload.crate && !notice[0].payload.dust,
+    'a non-podium notice pays nothing: it is news, not a prize');
+  assert.ok(/6th of 6/.test(notice[0].payload.note), `note should name the true place and field size, got: ${notice[0].payload.note}`);
+  assert.ok(/40,000 steps/.test(notice[0].payload.note), 'note should carry the steps they actually walked');
+
+  // Podium finishers (top 5) are unaffected: they still get exactly ONE grant
+  // (the paying one), never a second placement-only notice on top of it.
+  const firstGrants = await (await signedFetch(staged[0].k.kp, staged[0].p.playerId, 'GET', '/grants?since=0')).json();
+  const firstNotice = (firstGrants.grants || []).filter(x => x.key === `raceplace-${prev}`);
+  assert.equal(firstNotice.length, 0, 'a podium finisher gets their placement from the paying grant\'s own note, not a second grant');
+
+  // Asking again must not double-write the placement notice.
+  const r2 = await (await signedFetch(opener.k.kp, opener.p.playerId, 'GET', `/steps/week?week=${wk}`)).json();
+  assert.ok(r2.champion, 'settling stays idempotent on a second read');
+  const again = await (await signedFetch(sixthPlace.k.kp, sixthPlace.p.playerId, 'GET', '/grants?since=0')).json();
+  assert.equal((again.grants || []).filter(x => x.key === `raceplace-${prev}`).length, 1, 'the placement notice is written exactly once');
+});
+
 /* THE SETTLER GETS PAID TOO (QA round 34 P0).
  *
  * js/app.js opens Crew by pushing the player's OWN snapshot first -- already

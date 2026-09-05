@@ -777,13 +777,24 @@ export function raceStanding(serverRows, race, wk, own, name, myFit, ordinal, es
   const lead = rows.length ? rows[0].steps : 0;
   let mine = rows.find(p => p.you) || null;
   if (!mine && yourRank != null && own.weekKey === wk && own.steps > 0) mine = { name: name || 'You', steps: own.steps, you: true };
-  const behind = mine && lead > mine.steps ? lead - mine.steps : 0;
+  const behindLead = mine && lead > mine.steps ? lead - mine.steps : 0;
+  /* CREW-3: a new player's rank can be real (a small server can genuinely rank
+     someone 11th) while a gap to FIRST is a lie about how far away winning is
+     -- a whale in first can sit 196,000 steps out on day one. The number that
+     is true and useful is the gap to the racer directly above, and it is only
+     ever knowable when that racer is inside the rows this function already has
+     (the server's top 10, or the synthetic row just built above); a true 40th
+     has no visible neighbour and gets no gap at all, never first's, per
+     "truthful or absent" -- not a bigger, wronger number. */
+  const aboveRow = yourRank && yourRank > 1 ? rows.find(r => r.rank === yourRank - 1) : null;
+  const behind = aboveRow && aboveRow.steps > (mine ? mine.steps : 0) ? aboveRow.steps - mine.steps : 0;
   const standing = !rows.length ? 'Nobody has walked a step yet. Go take the lead.'
     : !mine ? `${esc(rows[0].name)} leads with ${rows[0].steps.toLocaleString()} steps`
-    : yourRank == null ? `You are <b>unranked</b> this week, ${behind.toLocaleString()} behind ${esc(rows[0].name)}`
-    : behind ? `You are <b>${ordinal(yourRank)}</b>, ${behind.toLocaleString()} behind ${esc(rows[0].name)}`
-    : 'You are in front. Keep it that way.';
-  return { rows, yourRank, mine, behind, standing };
+    : yourRank == null ? `You are <b>unranked</b> this week${behindLead ? `, ${behindLead.toLocaleString()} behind ${esc(rows[0].name)}` : ''}`
+    : yourRank === 1 ? 'You are in front. Keep it that way.'
+    : aboveRow ? `You are <b>${ordinal(yourRank)}</b>, ${behind.toLocaleString()} behind ${esc(aboveRow.name)}`
+    : `You are <b>${ordinal(yourRank)}</b>`;
+  return { rows, yourRank, mine, behind, aboveName: aboveRow ? aboveRow.name : null, standing };
 }
 
 /* THE PODIUM THAT WAS PAID, for a week that has already settled.
