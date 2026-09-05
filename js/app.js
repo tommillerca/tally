@@ -9437,18 +9437,19 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
   <details class="t3-dropsect" id="fbSect"${open ? ' open' : ''}>
     <summary class="t3-drop fb-drop">
       <div class="fb-hero">
-        <div class="pc-worn fit-body">${avatarLayersHtml({ ...RACK_BASE, ...Object.fromEntries(sold.filter(g => !g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])) },
-          /* MEASURED OFF THE RENDER, 440x956 DPR 2 (art-resolution-audit.mjs's own
-             viewport), tests/art-resolution-audit.mjs: this poster's mannequin draws
-             at 507 device px. Capped at 192 it was 2.64x its source -- the exact
-             defect that file exists to catch -- and Tom had already flagged this
-             poster as blurry once today. 384 clears it at 507/384 = 1.32x; the
-             master would too (507/640 = 0.79x) but costs 0.44 MB/layer more for a
-             sharpness margin nobody asked for. Sharpness wins for the hero (it is
-             the biggest art on the shop screen), paid for by the kit room's five
-             tiles no longer decoding while #fbSect is closed -- see t3-dropbody
-             below. */
-          { wpnAura: null, skip: ['C'], thumb: 384 })}</div>
+     /* skip: ['C'] sits on the call line on purpose: figure-audit STACK reads each
+        avatarLayersHtml call in a two-line window (2026-09-05). */
+     /* MEASURED OFF THE RENDER, 440x956 DPR 2 (art-resolution-audit.mjs's own
+        viewport), tests/art-resolution-audit.mjs: this poster's mannequin draws
+        at 507 device px. Capped at 192 it was 2.64x its source -- the exact
+        defect that file exists to catch -- and Tom had already flagged this
+        poster as blurry once today. 384 clears it at 507/384 = 1.32x; the
+        master would too (507/640 = 0.79x) but costs 0.44 MB/layer more for a
+        sharpness margin nobody asked for. Sharpness wins for the hero (it is
+        the biggest art on the shop screen), paid for by the kit room's five
+        tiles no longer decoding while #fbSect is closed -- see t3-dropbody
+        below. */
+        <div class="pc-worn fit-body">${avatarLayersHtml({ ...RACK_BASE, ...Object.fromEntries(sold.filter(g => !g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])) }, { wpnAura: null, skip: ['C'], thumb: 384 })}</div>
         <span class="fb-hero-pet">${croppedPetImg(FOOTBALL_PETS[0], 96, false, null,
           /* Same poster, same 1.4x rule: measured 444 device px, 444/192 = 2.31x
              (also over) -> 444/384 = 1.16x. The two portraits in this poster
