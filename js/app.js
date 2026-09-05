@@ -15260,6 +15260,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const looksHave = await collectedLooks();
   // the fits cap, printed like every other cap in the app (QA round 23 F8)
   const fitCount = tab === 'wardrobe' ? (await fits()).length : 0;
+  // TILES, NOT PIECES (2026-09-05). The Collection this door opens draws one
+  // tile per bhFamilyKey, not one per owned piece, so a piece count on the
+  // door promised more than the screen behind it showed (looks-door-audit's
+  // COUNT row). bhFamilyKey folds in slot, so grouping across all of looksAll
+  // in one call is safe -- no cross-slot collisions.
+  const looksPieces = looksAll.filter(i => looksHave.has(i.id)).length;
+  const looksFamHave = bhFamilies(looksAll.filter(i => looksHave.has(i.id))).size;
+  const looksFamAll = bhFamilies(looksAll).size;
 
   const curtains = false; // dressing-room curtains retired (Tom's call)
   body.innerHTML = `
@@ -15279,7 +15287,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             it. Same .bh-pill as the wallet chips beside it, so it costs no new
             layout; it is a <button> with an accent edge so it reads as tappable
             rather than as one more read-only tally. */''}
-      <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${looksAll.filter(i => looksHave.has(i.id)).length}/${looksAll.length} looks</button>
+      <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${looksFamHave}/${looksFamAll} looks &middot; ${looksPieces} pieces</button>
       ${/* THE FITS CAP, STATED (QA round 23 F8). At 6 fits the save chip used to
             vanish with no copy and no total, the only storage cap in the app
             with none (the yard prints 24, favourites 6, recents 8, and the looks

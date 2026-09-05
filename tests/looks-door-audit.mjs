@@ -30,6 +30,16 @@
  * it was run that way before this file was committed. Put the chip back in
  * #chTabs instead and HUB goes red on 5 chips.
  *
+ * COUNT'S RULE, RE-PREMISED 2026-09-05. fix/memory-families (merged into this
+ * branch) made the Collection draw one tile per bhFamilyKey, not one per owned
+ * piece: a 32-team kit collapses to one badge with a rail, so a piece-counting
+ * door (e.g. "26/624 looks") promised 26 while the screen behind it drew 21.
+ * The door now counts what the shelf draws (families), pieces moved to a
+ * secondary "N pieces" clause on the same button. A "tile" therefore means any
+ * drawn, unlocked .col-cell -- a lone piece's own tile (carries
+ * data-look-info) or a family's one collapsed badge (carries data-fam-toggle)
+ * -- so COUNT below sums both, not [data-look-info] alone.
+ *
  * Self-serves THIS checkout when given no URL: boot() defaults to the live site,
  * so a bare run would grade production and read as coverage of the tree.
  *   node tests/looks-door-audit.mjs            # this worktree
@@ -111,7 +121,7 @@ check('COUNT the door shows the collected tally', pillN >= 0 && /\d+\s*\/\s*\d+\
 if (door.found) {
   await page.screenshot({ path: SHOT.replace(/\.png$/, '-wardrobe.png') });
   await page.click('.ward-head [data-tab="looks"]');
-  await page.waitForFunction(() => !!document.querySelector('[data-look-info], [data-look-locked]'),
+  await page.waitForFunction(() => !!document.querySelector('[data-look-info], [data-fam-toggle], [data-look-locked]'),
     { timeout: 20000, polling: 100 }).catch(() => {});
   await sleep(700);
 }
@@ -120,6 +130,10 @@ const coll = await page.evaluate(() => {
   const heads = [...document.querySelectorAll('.col-head')].map(h => h.textContent.trim());
   return {
     info: document.querySelectorAll('[data-look-info]').length,
+    // a drawn owned tile is EITHER a lone piece (data-look-info) or a
+    // collapsed family badge (data-fam-toggle, no data-look-info of its own)
+    // -- see the 2026-09-05 note above the file header.
+    tiles: document.querySelectorAll('.col-grid .col-cell:not(.locked)').length,
     locked: document.querySelectorAll('[data-look-locked]').length,
     heads: heads.slice(0, 4),
     tallies: heads.filter(t => /\d+\s+of\s+\d+/.test(t)).length,
@@ -131,7 +145,7 @@ check('OPENS the click landed on the Looks collection, not the Wardrobe', coll.s
 check('OPENS collected pieces render', coll.info > 0, `${coll.info} [data-look-info]`);
 check('OPENS locked pieces render', coll.locked > 0, `${coll.locked} [data-look-locked]`);
 check('COUNT a per-slot "N of M" tally is on screen', coll.tallies > 0, coll.heads.join(' | '));
-check('COUNT the tiles drawn match the tally the door advertised', coll.info === pillN, `tiles ${coll.info}, door said ${pillN}`);
+check('COUNT the tiles drawn match the tally the door advertised', coll.tiles === pillN, `tiles ${coll.tiles}, door said ${pillN}`);
 
 await page.screenshot({ path: SHOT });
 console.log('shots:', SHOT.replace(/\.png$/, '-wardrobe.png'), 'and', SHOT);
