@@ -64,7 +64,11 @@ const script = fs.readFileSync(path.join(ROOT, 'scripts', 'build-cosmetics.py'),
 const LIB = (script.match(/^LIB = .*?else '([^']+)'/m) || [])[1];
 
 function parseItems(text) {
-  const start = text.indexOf('[', text.indexOf('BH_ITEMS'));
+  /* Anchor on the literal's own declaration, not the first mention of the name:
+     the football import at the top of the file (2026-09-04) put "BH_ITEMS" in
+     a comment before the array and this parsed a 15-item aside instead. */
+  const decl = text.search(/BH_ITEMS_ALL\s*=\s*\[/);
+  const start = text.indexOf('[', decl);
   let depth = 0, end = start;
   for (; end < text.length; end++) {
     if (text[end] === '[') depth++;
