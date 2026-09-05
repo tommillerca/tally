@@ -1076,6 +1076,74 @@ async function pitNames(page, w, h) {
   if (dupes.length) fail(`${w}x${h} pit: ${dupes.length} fight buttons share an accessible name with another (${[...new Set(dupes)].join(', ')}); a screen reader cannot tell them apart`);
 }
 
+/* CUSTOM-FOOD AND QUICK-ADD NUMERIC FIELDS ARE UNNAMED TEXTBOXES.
+   Measured (P2 playtest, 2026-09-04): none of these inputs had a for/id pair
+   or an aria-label, so their accessible name fell back to placeholder (or
+   nothing at all). Quick add's Protein/Carbs/Fat all shared placeholder="·",
+   so a screen reader read three IDENTICAL "·" textboxes and could not tell
+   them apart; the custom-food numeric fields (Calories, Protein, Carbs, Fat,
+   Fiber, Sugars, Sodium, Grams) had no accessible name at all. */
+async function foodFieldNames(page, w, h) {
+  const closeSheets = async () => {
+    for (let i = 0; i < 6; i++) {
+      if (!await page.evaluate(() => !!document.querySelector('#sheets > div'))) return;
+      await page.evaluate(() => history.back());
+      await sleep(400);
+    }
+  };
+  // Same accessible-name fallback order a screen reader uses: aria-label,
+  // then an associated label[for], then (only absent both) the placeholder.
+  const readNames = ids => page.evaluate(ids => {
+    const nameOf = el => {
+      if (!el) return null;
+      const al = (el.getAttribute('aria-label') || '').trim();
+      if (al) return al;
+      const lab = el.id && document.querySelector(`label[for="${el.id}"]`);
+      if (lab && lab.textContent.trim()) return lab.textContent.trim();
+      return (el.placeholder || '').trim() || null;
+    };
+    return ids.map(id => ({ id, name: nameOf(document.getElementById(id)) }));
+  }, ids);
+
+  await closeSheets();
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(1800);
+  await page.evaluate(() => document.querySelector('.dw')?.remove());
+
+  // Quick add: #fab -> Quick
+  await page.evaluate(() => document.getElementById('fab')?.click());
+  await sleep(1200);
+  await page.evaluate(() => document.getElementById('actQuick')?.click());
+  await sleep(900);
+  const qa = await readNames(['qaKcal', 'qaName', 'qaP', 'qaC', 'qaF']);
+  await closeSheets();
+
+  // Create a food: #fab -> My foods -> Create a food
+  await page.evaluate(() => document.getElementById('fab')?.click());
+  await sleep(1200);
+  await page.evaluate(() => document.getElementById('actMyFoods')?.click());
+  await sleep(1600);
+  await page.evaluate(() => document.getElementById('newFood')?.click());
+  await sleep(900);
+  const ff = await readNames(['ffName', 'ffBrand', 'ffServ', 'ffGrams', 'ffKcal', 'ffP', 'ffC', 'ffF', 'ffFib', 'ffSug', 'ffNa']);
+  await closeSheets();
+
+  if (qa.length < 5 || ff.length < 11) { fail(`${w}x${h} food fields: could not open both sheets to grade (qa=${qa.length}, ff=${ff.length})`); return; }
+  const all = [...qa, ...ff];
+  const missing = all.filter(r => !r.name || /^[·.\s]*$/.test(r.name));
+  if (missing.length) fail(`${w}x${h} food fields: ${missing.length} input(s) have no real accessible name (${missing.map(m => m.id).join(', ')})`);
+  // Duplicates only matter WITHIN one open sheet (a player is never on both at
+  // once), so Quick add and Create-a-food are checked separately: Quick add's
+  // Protein/Carbs/Fat used to share placeholder="·" here.
+  let dupes = [];
+  for (const [label, group] of [['Quick add', qa], ['Create a food', ff]]) {
+    const names = group.map(r => r.name);
+    const d = names.filter((n, i) => n && names.indexOf(n) !== i);
+    if (d.length) { dupes = dupes.concat(d); fail(`${w}x${h} food fields (${label}): these accessible names are shared by more than one field on the same sheet (${[...new Set(d)].join(', ')}); a screen reader cannot tell them apart`); }
+  }
+  if (!missing.length && !dupes.length) info(`${w}x${h} food fields: ${all.length} inputs, ${new Set(all.map(r => r.name)).size} distinct accessible names across both sheets`);
+}
+
 /* ------------------------------------------------------------------ run */
 
 /* 'shell', not 'new': on this Mac Page.captureScreenshot never returns under
@@ -1117,6 +1185,7 @@ try {
     await rarityNotColourOnly(page, w, h);
     await tokenPairs(page, w, h);
     await pitNames(page, w, h);
+    await foodFieldNames(page, w, h);
     /* LAST, because it is the only section that SPENDS: it adds coins and buys a
        piece off the rack, which changes ownership for everything after it. */
     await announcements(page, w, h);
