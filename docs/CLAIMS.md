@@ -19,6 +19,10 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## crate levers (2026-09-05)
+
+1. PROOF: unit.test.js, loot-fallback-audit.mjs | REACH: Opening a crate can now hand you a cosmetic you already own instead of always being something new, so the rack above Common has something left to sell you; a duplicate still pays the same coins it always did. Also, a day you logged but missed your calorie budget on no longer comes with a bonus crate, though it still pays the same XP for logging it.
+
 ## v473
 
 1. PROOF: unit.test.js (gate-registered PURE), "a downloaded build can actually start: boot posts SKIP_WAITING to a waiting worker". Proven red on the tree that shipped v472: "nothing in the app tells a waiting worker to take over, so a downloaded build can never start". The defect it closes was measured on a real device, not modelled: a phone sat on v470 through repeated force quits while the server served v472, because the service worker deliberately never calls skipWaiting() and nothing had ever posted the message that lets a waiting worker in. | REACH: Open the app after a release. It reloads into the new build by itself instead of staying on the old one. A device already stuck before v473 cannot be rescued by it and needs a reinstall.

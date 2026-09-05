@@ -244,7 +244,7 @@ const ACTIONS = [
   { id: 'js/game.js:onFoodLogged', sites: 7, undriven: 'a composite of award() calls, every one of them ledger-keyed and covered by the award driver; the entry has its own audit in tests/log-write-failure-audit.mjs' },
   { id: 'js/game.js:onHealthSync', sites: 16, undriven: 'sixteen ledger-keyed milestone awards over a health payload; the shape is one award per (date, milestone) and the primitive is driven above. tests/health-intake-audit.mjs owns the payload end' },
   { id: 'js/game.js:onWeighIn', sites: 1, undriven: 'one award keyed weigh-<date>; the primitive is driven above' },
-  { id: 'js/game.js:awardDayCloseIfDue', sites: 6, undriven: 'runs at boot for YESTERDAY only, all six sites ledger-keyed on that date; not a control a player can press twice' },
+  { id: 'js/game.js:awardDayCloseIfDue', sites: 5, undriven: 'runs at boot for YESTERDAY only, all five sites ledger-keyed on that date; not a control a player can press twice. Was 6 until 2026-09-05: the off-budget branch stopped granting its Common Crate (crate-frequency audit lever 2), leaving its award() call as the only payout' },
   { id: 'js/wellness.js:addWater', sites: 1, undriven: 'ledger key water-<date>, and the goal edge is guarded by wasGoal so topping up cannot re-award' },
   { id: 'js/wellness.js:markBed', sites: 1, undriven: 'ledger key bed-<date>' },
   { id: 'js/wellness.js:markSleep', sites: 1, undriven: 'ledger key sleep-<date>' },

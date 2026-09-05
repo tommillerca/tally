@@ -824,8 +824,11 @@ export async function awardDayCloseIfDue(targets) {
     // reward, never a penalty ("you'll get 'em next time"). This rewards the ACT
     // of tracking, not the calorie number, so it never favours eating less: an
     // on-budget day always pays strictly more, and over/under both land here.
+    // No crate here (2026-09-05, crate-frequency audit lever 2): this was the
+    // lowest-value crate in the game, 145/yr for a committed player yielding
+    // 0.19 cosmetics each against 0.55 for a day-close Bone. The XP still pays.
     const g = await award(`dayeffort-${y}`, 'dayeffort', 25, 'Logged the day', y);
-    if (g) { await grantCrate('daily', 'dayeffort-' + y); consoled = true; }
+    if (g) consoled = true;
   }
   if (targets.p && tot.p >= targets.p) await award(`protein-${y}`, 'protein', 40, 'Protein target hit', y);
   const meals = new Set(es.map(e => e.meal));
@@ -858,9 +861,11 @@ export function dayCloseNews(xpRows) {
   }
   if (!r) return null;
   const gap = addDays(dateKey(new Date(r.ts)), -1) !== r.date;
+  // 2026-09-05: the dayeffort branch no longer grants a crate (crate-frequency
+  // audit lever 2), so its copy no longer promises one.
   const title = r.type === 'dayclose'
     ? (gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned')
-    : (gap ? 'You logged your last day here. That counts: Common Crate earned' : 'You logged yesterday. That counts: Common Crate earned');
+    : (gap ? 'You logged your last day here. That counts.' : 'You logged yesterday. That counts.');
   return { id: `dayclose-${r.date}`, type: r.type, title, date: r.date };
 }
 

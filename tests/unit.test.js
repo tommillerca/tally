@@ -38,7 +38,8 @@ import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, gearDustValue, gearSt
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
   removeInstance, breedParents, transmogCost, TRANSMOG_HIDE,
   nickProblem, cleanNick, NICK_MAX,
-  RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_REROLL_LADDER } from '../js/loot.js';
+  RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_REROLL_LADDER,
+  rollCosmetic, crateEligible } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, PET_SLOTS } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
@@ -744,6 +745,78 @@ test('rarity weights sum to 100 and crates are sane', () => {
   assert.deepEqual(CRATES.golden.coins, [10, 25], 'Bone Crate coin range (shipped economy number)');
   assert.deepEqual(CRATES.egg.coins, [20, 50], 'Step Egg coin range (shipped economy number)');
   assert.ok(SHOP.every(s => s.cost > 0));
+});
+
+/* CRATE-FREQUENCY AUDIT LEVER 1 (2026-09-05), scratchpad/r33/faucet/out/crate-frequency.md
+   section 4c. rollCosmetic() used to prefer an unowned item and walk to a
+   neighbouring rarity when the rolled one was fully owned, so every roll was a
+   guaranteed new piece and the rack above common sold almost nothing to a
+   committed player (0.7 of 34 legendaries bought a year). It now picks
+   uniformly over crateEligible items AT THE ROLLED RARITY, owned or not. */
+test('crate levers (a) rollCosmetic: a fully-owned pool still dupes, at the rarity it rolled (seeded rng)', () => {
+  const pool = BH_ITEMS.filter(crateEligible);
+  const owned = new Set(pool.map(i => i.id));
+  // Fix the rng stream so the roll is reproducible: first draw picks the
+  // rarity (a tiny fraction always lands on RARITY_ORDER[0], 'common'),
+  // second draw picks the item (0 always lands on index 0 of the pool).
+  const origGRV = globalThis.crypto.getRandomValues;
+  const stream = [0.001, 0];
+  let n = 0;
+  globalThis.crypto.getRandomValues = a => { a[0] = Math.floor(stream[n++ % stream.length] * 0xffffffff); return a; };
+  let item, dupe;
+  try {
+    ({ item, dupe } = rollCosmetic(owned, 0, null));
+  } finally {
+    globalThis.crypto.getRandomValues = origGRV;
+  }
+  assert.equal(dupe, true, 'every item in the pool is owned, so the roll must come back a dupe');
+  assert.equal(item.rarity, 'common', 'the fixed rng stream rolls RARITY_ORDER[0] at floor 0');
+});
+
+test('crate levers (b) rollCosmetic: a half-owned pool draws uniformly (the unowned-preference prove-red)', () => {
+  const pool = BH_ITEMS.filter(crateEligible);
+  // own every other item WITHIN EACH RARITY, so the owned share is ~50% at
+  // every rarity a roll can land on, not just over the pool as a whole.
+  const byRarity = {};
+  for (const i of pool) (byRarity[i.rarity] ||= []).push(i);
+  const owned = new Set();
+  for (const r of Object.keys(byRarity)) byRarity[r].forEach((i, idx) => { if (idx % 2 === 0) owned.add(i.id); });
+  const ownedShare = owned.size / pool.length;
+  const N = 4000;
+  let dupes = 0;
+  for (let i = 0; i < N; i++) if (rollCosmetic(owned, 0, null).dupe) dupes++;
+  const got = dupes / N;
+  assert.ok(Math.abs(got - ownedShare) < 0.05,
+    `dupe share ${(got * 100).toFixed(1)}% against the pool's owned share ${(ownedShare * 100).toFixed(1)}% (tolerance 5 points): an unowned preference pulls this toward 0%`);
+});
+
+/* CRATE-FREQUENCY AUDIT LEVER 2 (2026-09-05): the off-budget "logged the day"
+   branch of awardDayCloseIfDue no longer grants a Common Crate (145/yr for a
+   committed player, yielding 0.19 cosmetics each against 0.55 for a Bone
+   crate). The XP still pays; only the crate is gone. On-budget day close is
+   unchanged. */
+test('crate levers (c) awardDayCloseIfDue: an off-budget logged day grants no crate; on-budget still grants its Bone crate', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  const TARGETS = { kcal: 2000, p: 120 };
+  const today = dateKey();
+  const yday = addDays(today, -1);
+
+  dbm.useDbName('unit-cratelev-offbudget');
+  await dbm.db.put('log', { id: 'off-1', date: yday, meal: 0, name: 'Feast', kcal: 2600, p: 90, c: 200, f: 90 });
+  const offClosed = await g.awardDayCloseIfDue(TARGETS);
+  const offCrates = (await dbm.db.all('inv')).filter(r => r.kind === 'crate');
+  assert.equal(offClosed?.consoled, true, 'an off-budget logged day must still be consoled (the XP still pays)');
+  assert.equal(offCrates.length, 0, 'an off-budget logged day must grant no crate');
+
+  dbm.useDbName('unit-cratelev-onbudget');
+  await dbm.db.put('log', { id: 'on-1', date: yday, meal: 0, name: 'Salad', kcal: 1800, p: 130, c: 150, f: 50 });
+  const onClosed = await g.awardDayCloseIfDue(TARGETS);
+  const onCrates = (await dbm.db.all('inv')).filter(r => r.kind === 'crate');
+  assert.equal(onClosed?.closed, true, 'an on-budget day must still close');
+  assert.equal(onCrates.length, 1, 'an on-budget day close must still grant exactly one crate');
+  assert.equal(onCrates[0].crate, 'golden', 'the day-close crate is still the Bone (golden) crate');
 });
 
 /* THE COSMETIC PRICE LADDER, PINNED (round 33, 2026-09-04, Tom: "Just make
@@ -4808,12 +4881,12 @@ test('R24-L16 (a) dayCloseNews derives the toast copy and the closed date from t
     { id: 'dayclose-2026-09-02', type: 'dayclose', title: 'Yesterday closed on budget: Bone Crate earned', date: '2026-09-02' });
   assert.deepEqual(
     dayCloseNews([{ key: 'dayeffort-2026-09-02', type: 'dayeffort', xp: 25, date: '2026-09-02', ts: at('2026-09-03') }]),
-    { id: 'dayclose-2026-09-02', type: 'dayeffort', title: 'You logged yesterday. That counts: Common Crate earned', date: '2026-09-02' });
+    { id: 'dayclose-2026-09-02', type: 'dayeffort', title: 'You logged yesterday. That counts.', date: '2026-09-02' });
   // the gap case: settled two days after the closed day, the toast said "your last logged day"
   assert.equal(dayCloseNews([{ type: 'dayclose', date: '2026-08-30', ts: at('2026-09-03') }]).title,
     'Your last logged day closed on budget: Bone Crate earned');
   assert.equal(dayCloseNews([{ type: 'dayeffort', date: '2026-08-30', ts: at('2026-09-03') }]).title,
-    'You logged your last day here. That counts: Common Crate earned');
+    'You logged your last day here. That counts.');
   // newest CLOSED DAY wins, whatever order the store hands rows back in
   const r = dayCloseNews([
     { type: 'dayclose', date: '2026-09-02', ts: at('2026-09-03') },
@@ -4864,8 +4937,8 @@ test('R24-L16 (b) renderToday feeds the derived day-close row to the news pill f
     'the pill no longer renders the day-close row\'s title and date');
   // the toast strings ARE the row strings: the toast copy at both call sites must still be what game.js derives
   const game = readFileSync(join(here, '..', 'js', 'game.js'), 'utf8');
-  for (const copy of ['Yesterday closed on budget: Bone Crate earned', 'You logged yesterday. That counts: Common Crate earned',
-    'Your last logged day closed on budget: Bone Crate earned', 'You logged your last day here. That counts: Common Crate earned']) {
+  for (const copy of ['Yesterday closed on budget: Bone Crate earned', 'You logged yesterday. That counts.',
+    'Your last logged day closed on budget: Bone Crate earned', 'You logged your last day here. That counts.']) {
     assert.ok(app.includes(copy), `toast copy changed: "${copy}" is no longer in app.js`);
     assert.ok(game.includes(copy), `row copy drifted from the toast: "${copy}" is no longer in game.js`);
   }
