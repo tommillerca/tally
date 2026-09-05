@@ -4331,12 +4331,6 @@ async function renderToday(el) {
   <p class="note">This day already passed on this clock. Fresh rewards return tomorrow.</p>` : ''}
   ${unwitnessed ? `
   <p class="note">${DAY_GUARD_COPY.unwitnessed}</p>` : ''}
-  ${wbShow ? `
-  <div class="card wb-back" id="wbCard">
-    <b>Everything is where you left it.</b>
-    <span>${wbFacts.join(' ')}</span>
-    <button class="btn small ghost" id="wbOk">Good to be back</button>
-  </div>` : ''}
   ${hkStale ? `
   <button class="card hk-stale" id="hkStaleFix">
     <b>⚠️ Steps aren't syncing</b>
@@ -4381,6 +4375,15 @@ async function renderToday(el) {
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
   <p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>
   </details>
+  ${/* BELOW THE DAY, like the rebalance card under it (2026-09-05): inside .dayflow the
+       return card painted a panel inside the flat day and pushed the collapsed summary
+       past a 568px screen (today-container LEDGER, today-peek WHOLE on a lapsed seed). */''}
+  ${wbShow ? `
+  <div class="card wb-back" id="wbCard">
+    <b>Everything is where you left it.</b>
+    <span>${wbFacts.join(' ')}</span>
+    <button class="btn small ghost" id="wbOk">Good to be back</button>
+  </div>` : ''}
   ${/* OUTSIDE THE DAY, on purpose (2026-09-05). Inside .dayflow this card sat above
        the collapsed banner: it pushed the ring card 18px past its ceiling
        (hype-banner FIT), made the collapsed day taller than a 568px screen
