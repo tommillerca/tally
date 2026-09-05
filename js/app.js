@@ -93,7 +93,7 @@ import {
   petActionsFor, applyPetAction, talentRanks, nodeRanks, GUARD_STAMINA,
 } from './pit.js';
 import { HERO_EDGE } from '../data/hero-edge.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints,
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petCanWear,
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK, bhFamilyKey, bhFamilies } from '../data/boneheadz.js';
 // Football kit, 2026-09-04
 import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
@@ -9369,16 +9369,27 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
   const bundleOwned = ownedHere === sold.length;
   return `
   <details class="t3-dropsect" id="fbSect"${open ? ' open' : ''}>
-    <summary class="t3-drop">
+    <summary class="t3-drop fb-drop">
       <span class="eyebrow">Kit room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
-      <h2>PICK A SIDE</h2>
-      <div class="row"><div class="tx"><small>Five pieces: helmet, jersey, cleats, and a matching set for the lizard. Buy one and it is yours in all ${FOOTBALL_TEAMS.length} colourways.</small>
-        <span class="t3-price">${Number.isFinite(price) ? `${ICONS.coin(13)} ${price.toLocaleString()} a piece${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} the lot` : ''}` : 'Not for sale yet'}</span></div></div>
+      <h2>FOOTBALL KIT</h2>
+      <div class="row">
+        <div class="fb-hero">
+          <div class="pc-worn fit-body">${avatarLayersHtml({ ...RACK_BASE, ...Object.fromEntries(sold.filter(g => !g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])) },
+            { wpnAura: null, skip: ['C'], thumb: bhTierFor(180) })}</div>
+          <span class="fb-hero-pet">${croppedPetImg(FOOTBALL_PETS[0], 58, false, null,
+            Object.fromEntries(sold.filter(g => g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])), 192)}</span>
+        </div>
+        <div class="tx">
+          <small>Helmet, jersey and cleats for your Bonehead. A helmet and jersey for the lizard. Buy a piece and it is yours in every team's colours.</small>
+          <div class="fb-teams" role="img" aria-label="${FOOTBALL_TEAMS.length} team colourways">${FOOTBALL_TEAMS.map(t => `<i class="fb-swatch xs" style="--fa:${t.a};--fb:${t.b}"></i>`).join('')}</div>
+          <span class="t3-price">${Number.isFinite(price) ? `${ICONS.coin(13)} ${price.toLocaleString()} a piece${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} the lot` : ''}` : 'Not for sale yet'}</span>
+        </div>
+      </div>
     </summary>
     <div class="t3-dropbody">
-      <label class="fb-pick"><span>Preview</span>
+      <label class="fb-pick"><span>Team</span>
         <select id="fbTeam">${FOOTBALL_TEAMS.map(t => `<option value="${t.id}"${t.id === team.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
-        <i class="fb-swatch" style="background:${team.a};border-color:${team.b}"></i></label>
+        <i class="fb-swatch" style="--fa:${team.a};--fb:${team.b}"></i></label>
       <div class="drop-grid">
         ${sold.map(g => {
           const id = footballItemId(team.id, g.key);   // the PREVIEW id: the tile sells the garment, in every team
@@ -9397,7 +9408,7 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
           </div>`;
         }).join('')}
         <div class="drop-item fb fb-bundle ${bundleOwned ? 'owned' : ''}">
-          <div class="fb-kitmark" style="background:${team.a};border-color:${team.b}"><span>${sold.length}</span></div>
+          <div class="fb-kitmark" style="--fa:${team.a};--fb:${team.b}"><span>${sold.length}</span></div>
           <b>The full kit</b>
           <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')} · all ${FOOTBALL_TEAMS.length} colourways</small>
           ${bundleOwned
@@ -15405,7 +15416,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       return `<div class="look-bar mog-bar fb-bar${!worn && own ? ' armed' : ''}">
         <div class="mog-lines">
           <span><i>Trying</i><b class="fbr-team">${esc(t.name)}</b></span>
-          <span><i>Colours</i><b><em class="fb-swatch sm" style="background:${t.a};border-color:${t.b}"></em>${esc(t.a)} · ${esc(t.b)}</b></span>
+          <span><i>Colours</i><b><em class="fb-swatch sm" style="--fa:${t.a};--fb:${t.b}" role="img" aria-label="${esc(t.name)} colours"></em></b></span>
         </div>
         ${worn ? '<button class="btn ghost mog-go" disabled>You are wearing it</button>'
           : own ? `<button class="btn mog-go" data-fbwear="${id}">Wear it</button>`
