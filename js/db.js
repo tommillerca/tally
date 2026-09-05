@@ -696,6 +696,20 @@ export async function claimDay(key) {
   return { fresh: true, reason: 'advanced' };
 }
 
+/* Would rule 3 refuse `key` right now? Read-only, like dayGuardState below, so
+   a render path and a boot path can both ask without opening a day. This is the
+   ONE refusal the player can do something about (any connection, for a moment,
+   clears it), which is why it gets a predicate of its own: js/app.js awaits a
+   bounded /health on it before the day close, and Today says so when it stands.
+   `witness` of 0 is a device that has never seen the server, which claimDay
+   SEEDS rather than refuses; false here matches that. */
+export async function dayIsUnwitnessed(key) {
+  const o = dayOrdinal(key);
+  if (!Number.isFinite(o)) return false;
+  const w = Number(await kvGet(DAY_WITNESS_KEY, 0)) || 0;
+  return w > 0 && o > w + WITNESS_GRACE;
+}
+
 /* Read-only view for UI and for tests. Never writes, so it can be called from
    a render path without opening a day as a side effect. */
 export async function dayGuardState() {
@@ -742,7 +756,14 @@ export async function exportAll() {
  * on the next push, and the two devices encrypted under different keys.
  * A device key the device does NOT hold yet still lands from the payload,
  * which keeps the pre-existing fresh-device behaviour byte-identical. */
-const DEVICE_KV = ['identity', 'social', 'recoveryId', 'recoverySetAt', 'vaultConflict', 'bootRestored', 'cloudOff', 'apiBase'];
+/* DEVICE-SCOPED means the row describes THIS PHONE, not the save: it is true of
+ * the hardware the app is running on and stays true when a different save is
+ * restored over the top, so a payload never gets to speak for it. The two day
+ * marks belong here for exactly that reason: they are the ceiling this device
+ * has climbed to (the newest day it has stood on, and the newest day it has
+ * seen the server stand on), and a restore is a statement about the save, not
+ * about where this device's clock has been. */
+const DEVICE_KV = ['identity', 'social', 'recoveryId', 'recoverySetAt', 'vaultConflict', 'bootRestored', 'cloudOff', 'apiBase', DAY_WITNESS_KEY, 'dayHighWater'];
 
 /* IMPORT IS ALL-OR-NOTHING. Tom, 2026-08-13, after Vlad's demonstration:
  * "sounds like a good fix youve suggested". Every row across every store
@@ -860,7 +881,7 @@ export async function importAll(data, { replace = true } = {}) {
       const localKeys = new Set(localKv.map(r => r && r.k));
       kvRows = data.kv.filter(r => !(r && DEVICE_KV.includes(r.k) && localKeys.has(r.k)));
     }
-    /* THE DAY WITNESS ONLY EVER GOES UP, INCLUDING THROUGH A RESTORE, and
+    /* THE DAY CEILINGS ONLY EVER GO UP, INCLUDING THROUGH A RESTORE, and
        unlike DEVICE_KV above the payload does NOT get to win. Every other mark
        in this app can be rewound by restoring an export taken before it moved
        (see the clock-trust audit's closing FINDING), which for a ceiling on
@@ -868,9 +889,18 @@ export async function importAll(data, { replace = true } = {}) {
        under it stay put. Keeping the higher of the two costs three lines and
        takes that hole away on BOTH import paths, the Settings file restore and
        the cloud pull, which is why this sits outside the `replace` branch. */
-    const localW = localKv.find(r => r.k === DAY_WITNESS_KEY);
-    const fileW = data.kv.find(r => r && r.k === DAY_WITNESS_KEY);
-    if (localW && (Number(localW.v) || 0) > (fileW ? Number(fileW.v) || 0 : 0)) keptKv.push(localW);
+    /* BOTH marks, not just the witness: rule 1's high-water mark is the other
+       half of the same ceiling, and leaving it payload-wins meant a cloud pull
+       could hand back a day the device had already climbed past. They are
+       ranked differently only because one stores an ordinal and the other
+       stores a date key. */
+    const keepHigher = (k, rank) => {
+      const local = localKv.find(r => r.k === k);
+      const file = data.kv.find(r => r && r.k === k);
+      if (local && rank(local.v) > rank(file ? file.v : null)) keptKv.push(local);
+    };
+    keepHigher(DAY_WITNESS_KEY, v => Number(v) || 0);
+    keepHigher('dayHighWater', v => dayOrdinal(v) || 0);
   }
   return new Promise((resolve, reject) => {
     let t;

@@ -21,7 +21,7 @@
 // rewards, friend badges). Each has a unique key; we ingest through the same
 // idempotent award() as local play, so replays and re-pulls are harmless.
 
-import { db, kvGet, kvSet, kvUpdate, exportAll, importAll, witnessServerDay } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, exportAll, importAll, witnessServerDay, dayIsUnwitnessed } from './db.js';
 import { awardOnce } from './game.js';
 import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd, grantEgg, grantPet } from './loot.js';
 
@@ -1338,6 +1338,36 @@ export async function touchServerDay() {
     if (Number.isFinite(sv) && sv > 0) await kvSet('clockSkewMs', Date.now() - sv);
     return await witnessServerDay(j && j.ts);
   } catch { return null; }
+}
+
+/* THE ONE CASE WHERE FIRE-AND-FORGET IS NOT GOOD ENOUGH: the returning player.
+   bootSync kicks touchServerDay off and walks on, which is right on an ordinary
+   open (nothing is waiting on it) and wrong after a gap of 8+ days, because
+   then the very next thing the boot does is awardDayCloseIfDue -> claimDay,
+   which reads a ceiling the answer has not raised yet and refuses the day close
+   the player is owed as `unwitnessed`. Measured at 14 and 120 days away: the
+   Bone Crate never paid.
+
+   THE BOUND IS THE POINT, not the wait. This costs an ordinary boot NOTHING: it
+   returns immediately unless today is ALREADY above the ceiling, which is the
+   only state the wait can change. When it does wait it waits `ms` and no
+   longer, so an offline return, a captive-portal Wi-Fi and a dead API all boot
+   in 1.5 s and land exactly where they land today, unpaid with a line on Today
+   saying why (js/app.js DAY_GUARD_COPY.unwitnessed). The request is left in
+   flight rather than aborted: if it lands a second later the ceiling still
+   rises and the next open pays.
+
+   Resolves true only when the ceiling actually cleared, so a caller can tell
+   "the witness arrived" from "the bound ran out". */
+export async function settleServerDay(key, ms = 1500) {
+  if (!(await dayIsUnwitnessed(key))) return false;
+  let t;
+  await Promise.race([
+    touchServerDay().catch(() => null),
+    new Promise(r => { t = setTimeout(r, ms); }),
+  ]);
+  clearTimeout(t);
+  return !(await dayIsUnwitnessed(key));
 }
 
 export async function bootSync() {

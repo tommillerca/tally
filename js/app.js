@@ -1,5 +1,5 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
@@ -1463,6 +1463,13 @@ async function boot() {
      and the paint-time pass could not have seen those. */
   await refreshShinyPets();
   await refreshSlimedSlots();
+  /* THE WITNESS BEFORE THE DAY CLOSE (js/social.js settleServerDay). bootSync's
+     touchServerDay is fire-and-forget and loses the race with everything above,
+     so a player returning after 8+ days reached claimDay with a stale ceiling
+     and the close they were owed was refused. Bounded and self-gating: zero
+     wait on an ordinary boot, 1.5 s at most on a gap open, and an offline
+     return still boots and still gets its line on Today. */
+  if (!NOSOCIAL) await social.settleServerDay(dateKey()).catch(() => {});
   const closed = await awardDayCloseIfDue(S.settings.targets);
   if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 2400);
   else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 2400);
@@ -1493,8 +1500,16 @@ async function boot() {
      when a new day gets opened, and the day guard's ceiling (js/db.js rule 3)
      is only as fresh as the last /health we saw. Unsigned, anonymous, fails
      soft; skipped under NOSOCIAL so audits and ?demo never phone production. */
-  onAppResume(() => {
+  onAppResume(async () => {
     if (!NOSOCIAL) social.touchServerDay();
+    /* AND THE GAP OPEN GETS THE SAME BOUNDED WAIT THE BOOT DOES. A native shell
+       resumes after days without ever booting, so a 14-day return arrives here
+       rather than through boot(), and rollDayIfNeeded below is what closes the
+       owed day. settleServerDay returns instantly unless the ceiling is already
+       stale, so an ordinary resume waits nothing; when it is stale this is a
+       second /health milliseconds after the line above, which is the price of
+       having something to wait ON, once per long absence. */
+    if (!NOSOCIAL) await social.settleServerDay(dateKey()).catch(() => {});
     /* A RESUME IS AN OPEN. iOS suspends the WebView for days without a boot, so
        the return gap has to be checked here too. The refresh below may already
        have painted by the time the kv lands, so a fresh detection repaints. */
@@ -3761,6 +3776,16 @@ async function renderToday(el) {
      ordinary day once it has been opened. Display only, read off the read-only
      mark; it decides no award. Expires on its own when the calendar catches up. */
   const preSpent = isToday && dayOrdinal(await kvGet('dayHighWater', null)) > dayOrdinal(S.date);
+  /* RULE 3'S ONE LINE, same job and same shape as preSpent above. A player back
+     after 8+ days without the app once reaching /health has every daily gate
+     refused as `unwitnessed` (js/db.js claimDay), including the day close they
+     were owed, and Today said nothing at all: the crate simply never arrived.
+     js/social.js settleServerDay has already had its bounded go at clearing
+     this by the time a boot paints, so what is left here is the case it could
+     not fix, which is the one worth a sentence. The sentence is DAY_GUARD_COPY's
+     own, so this and the quest-claim toast can never drift apart. Display only;
+     it decides no award, and it clears itself on the next answer. */
+  const unwitnessed = isToday && await dayIsUnwitnessed(S.date);
   let wbFacts = [];
   if (wbShow) {
     const wk = questTiers.find(tier => tier.period === 'week');
@@ -4106,6 +4131,8 @@ async function renderToday(el) {
   <div class="dayflow">
   ${preSpent ? `
   <p class="note">This day already passed on this clock. Fresh rewards return tomorrow.</p>` : ''}
+  ${unwitnessed ? `
+  <p class="note">${DAY_GUARD_COPY.unwitnessed}</p>` : ''}
   ${wbShow ? `
   <div class="card wb-back" id="wbCard">
     <b>Everything is where you left it.</b>
