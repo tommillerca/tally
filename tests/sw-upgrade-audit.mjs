@@ -103,6 +103,52 @@
  *   the caching, and this row proves it really does reach the network and
  *   really does pull a new worker with no help from the page.
  *
+ * WHAT CHANGED IN v473, AND WHY FOUR ROWS FLIPPED AGAIN.
+ *
+ * The atomic-shell design above held for exactly the releases between v427 and
+ * v472: a downloaded build sat in `waiting` until every client of the old
+ * worker closed. Inside the native shell's WKWebView a client never actually
+ * goes away, and Tom's phone sat on v470 through hours of force-quits while
+ * the server served v472. v473 (commit 63367157, "a downloaded build can
+ * actually start") added `letItIn` to js/app.js, quoted here so a future
+ * reader has the provenance rather than a paraphrase:
+ *
+ *   const letItIn = reg => { const w = reg.waiting; if (w) { try {
+ *   w.postMessage('SKIP_WAITING'); } catch { ... } } };
+ *
+ * called at boot, from `updatefound`'s installed statechange, and after
+ * `reg.update()` on every visibilitychange; sw.js's `message` handler
+ * (`if (e.data === 'SKIP_WAITING') self.skipWaiting();`) is the other half. A
+ * downloaded build is let in the moment it is found rather than held open
+ * forever, so three rows below now say so out loud rather than "fixing" the
+ * app back to the v427 shape a future reader would otherwise restore (memory:
+ * a guard can encode a superseded instruction, and one did, for three rounds):
+ *
+ *   SECOND OPEN. Open #1 no longer ends on the old build: the worker's own
+ *   `installed` -> letItIn can fire inside the SAME open, once the background
+ *   install finishes, skipWaiting() runs, controllerchange fires, and (no
+ *   sheet open in this scenario) the page reloads itself once, landing fully
+ *   on B before the "first open" sample is even taken. `waiting`/`installing`
+ *   reading null afterwards is the worker having been let straight through,
+ *   not a failure to download it.
+ *
+ *   KILLSWITCH. Once the stamp finds a mismatch and self.registration.update()
+ *   finds a new sw.js, the page's own `updatefound` listener (not stripped for
+ *   this scenario; only its `visibilitychange` -> reg.update() line is) is
+ *   what calls letItIn once the new worker is installed, so the same
+ *   swap-and-reload happens here too. `installing`/`waiting` reading null is
+ *   the swap having already finished, not the killswitch failing to fire; the
+ *   honest question is which worker's VERSION ends up in charge, checked
+ *   directly instead of caught mid-`waiting`.
+ *
+ *   SHEET CLOSED. closeTopSheet() now applies a pending update the moment the
+ *   last sheet goes: `if (updatePending && !sheetStack.length) { updatePending
+ *   = false; location.reload(); return; }`. One reload, whole build, is now
+ *   the correct outcome; zero reloads staying on A was the v427 contract this
+ *   ruling replaced for that one transition. What must still never happen,
+ *   and is still graded by SHEET OPEN below, is a reload while the sheet is
+ *   still up.
+ *
  * PROVE-RED (each names a different assertion, each read as an exit code):
  *   --prove-red=network-first  put the defect back: the shell branch never
  *                             consults the cache. THROTTLED BOOT goes red. This
@@ -179,7 +225,14 @@ const ok = (name, pass, detail = '') => {
    so A and B differ by the marker and by nothing else: a difference that only
    exists in B would let a transform bug read as an upgrade. */
 const swVersion = src => (src.match(/tally-v(\d+)/) || [])[1];
-const APP_UPDATE_ANCHOR = 'if (!document.hidden) reg.update().catch(() => {});';
+/* 2026-09-05: v473 (commit 63367157) wrapped this line in
+   `.then(() => letItIn(reg))`; the anchor below used to be the pre-v473 text
+   and no longer matched js/app.js at all, so NO_APP_UPDATE's replace() found
+   nothing and silently no-oped. A no-op strip still reported
+   appUpdateStripped=true (the string is absent from the served bytes either
+   way), so the KILLSWITCH row was quietly grading the page's own update path
+   instead of the worker's. */
+const APP_UPDATE_ANCHOR = 'if (!document.hidden) reg.update().then(() => letItIn(reg)).catch(() => {});';
 let NO_APP_UPDATE = false;
 
 function transform(rel, buf, mode) {
@@ -578,7 +631,7 @@ async function scenario(name, srv, act, { broken = null, offlineAfter = false, n
        context object the reporter never sees. The first version of this dropped
        them and printed "not recorded" for a banner that had actually been
        clicked, which is a check reporting on itself instead of on the app. */
-    for (const k of ['early', 'bannerSeen', 'bannerText', 'duringSheet', 'toast', 'sheetOpen', 'diag', 'firstOpen', 'bootMs', 'bootWall', 'stampHits', 'reg2', 'appUpdateStripped']) {
+    for (const k of ['early', 'bannerSeen', 'bannerText', 'duringSheet', 'toast', 'sheetOpen', 'diag', 'firstOpen', 'bootMs', 'bootWall', 'stampHits', 'reg2', 'appUpdateStripped', 'ksVersion']) {
       if (ctx[k] !== undefined) out[k] = ctx[k];
     }
     // settle long enough for a controllerchange self-reload to happen and finish
@@ -690,10 +743,14 @@ const SCENARIOS = {
   /* THE ATOMIC SWAP, WHICH IS THE WHOLE DESIGN, IN ONE SCENARIO.
      Open #1 is the visit the release lands on: the player is served the whole
      OLD build instantly out of cache while the new worker downloads its whole
-     new build in the background and then WAITS (sw.js no longer calls
-     skipWaiting). Open #2 is after every client of the old worker has gone
-     away, which is when the new one activates. The player must be fully on B
-     by then, in every layer, or they are stranded. */
+     new build in the background. Through v472 it then WAITED; since v473
+     (letItIn, commit 63367157) it is let in the moment app.js sees it reach
+     `installed`, which can happen inside THIS SAME open if the install
+     finishes before the visit ends, so open #1 can legitimately end on B
+     after one self-reload (no sheet is open in this scenario). Open #2 is
+     after every client of the OLD worker has gone away, for the case the
+     install had not finished in time. The player must be fully on B by then,
+     in every layer, or they are stranded. */
   'SECOND OPEN': async ctx => {
     await ctx.page.close();
     let p = await ctx.browser.newPage();
@@ -742,14 +799,21 @@ const SCENARIOS = {
   },
 
   /* THE ONE LEVER THAT SURVIVES A BAD WORKER.
-     No navigation and no reload, because both make the BROWSER check sw.js by
-     itself and that would grade the browser rather than this worker. js/app.js's
-     own reg.update() is stripped out of the served bytes for this scenario
-     alone (see transform), because that line would find the new build too and
-     the row would pass whether or not sw.js ever looked at version.json.
-     What is left is exactly the killswitch: the worker, on its own, fetching a
-     thirty-byte stamp that no cache is allowed to answer, and pulling a new
-     worker when it disagrees. */
+     This TEST navigates and reloads nothing itself, because either would make
+     the BROWSER check sw.js by itself and that would grade the browser rather
+     than this worker. js/app.js's own reg.update() is stripped out of the
+     served bytes for this scenario alone (see transform), because that line
+     would find the new build too and the row would pass whether or not sw.js
+     ever looked at version.json. What is left is exactly the killswitch: the
+     worker, on its own, fetching a thirty-byte stamp that no cache is allowed
+     to answer, and pulling a new worker when it disagrees.
+     2026-09-05: v473's letItIn means the APP's own controllerchange handler
+     (not stripped; only the visibilitychange -> reg.update() line is) will
+     itself reload the page once the pulled worker activates, same as every
+     other scenario in this file. That is the mechanism proving itself, not a
+     leak of it, so the row below checks which VERSION ends up in charge
+     rather than trying to catch the worker sitting in `waiting` -- letItIn's
+     whole point is that nothing sits there for long. */
   'KILLSWITCH': async ctx => {
     /* Ask the TRANSFORM, not the server. The server speaks https on a self
        signed cert at a hostname only Chrome resolves (--host-resolver-rules),
@@ -765,11 +829,16 @@ const SCENARIOS = {
          from the fetch handler. Query-stringed so it can never be a cache hit. */
       await p.evaluate(() => fetch('./icons/icon-192.png?poke=' + Math.random(), { cache: 'no-store' }).catch(() => {})).catch(() => {});
       const st = await REG_STATE(p).catch(() => ({}));
-      if (st.installing || st.waiting) break;
+      const ver = await ACTIVE_VERSION(p).catch(() => null);
+      /* break on the OLD signal (still useful if caught mid-flight) OR on the
+         new worker's version already being in charge, because letItIn can run
+         to completion between two 3s polls and leave nothing "waiting" to see. */
+      if (st.installing || st.waiting || normVer(ver) === B_VERSION) { ctx.ksVersion = ver; break; }
       await sleep(3000);
     }
     ctx.stampHits = srv.hits('version.json');
     ctx.reg2 = await REG_STATE(p).catch(() => ({}));
+    if (ctx.ksVersion === undefined) ctx.ksVersion = await ACTIVE_VERSION(p).catch(() => null);
   },
 
   /* the same tab, pulled down */
@@ -1035,11 +1104,18 @@ if (so && !so.error) {
   console.log(`FINDING  the atomic swap. Open #1 (the visit the release landed on): shell=${f.shell} module=${f.module} css=${f.css}`
     + ` build=${f.build}, registration ${JSON.stringify(f.reg)}, caches ${JSON.stringify(f.caches)}.`);
   console.log(`         Open #2: shell=${L.shell} module=${L.module} css=${L.css} build=${L.build}, worker=${so.after.version}.`);
-  ok('SECOND OPEN: open #1 is served the whole OLD build (the release does not interrupt the player)',
-    f.shell === 'A' && f.module === 'A' && f.css === 'A',
+  /* 2026-09-05, v473 (63367157): letItIn posts SKIP_WAITING the moment
+     app.js sees the worker reach `installed`, which can land inside THIS SAME
+     open if the background install finishes before the visit ends. No sheet
+     is open here, so the resulting controllerchange reloads the page once,
+     and open #1 legitimately ends up on B before this sample is taken.
+     Requiring OLD here, or requiring `waiting`/`installing` still truthy
+     afterwards, would be requiring the pre-v473 bug back. */
+  ok('SECOND OPEN: open #1 legitimately lands on the new build once letItIn lets a fully-installed worker through',
+    f.shell === 'B' && f.module === 'B' && f.css === 'B',
     `shell=${f.shell} module=${f.module} css=${f.css}`);
-  ok('SECOND OPEN: the new build really did download in the background during open #1',
-    !!(f.reg && (f.reg.waiting || f.reg.installing)),
+  ok('SECOND OPEN: the swap during open #1 was a real activation, not a worker still parked in waiting/installing',
+    !!(f.reg && f.reg.active === 'activated' && !f.reg.installing && !f.reg.waiting),
     `registration during open #1: ${JSON.stringify(f.reg)}`);
   ok('SECOND OPEN: the player is fully on the new build by the next open (NOT stranded on old)',
     L.shell === 'B' && L.module === 'B' && L.css === 'B',
@@ -1111,8 +1187,9 @@ if (ks && !ks.error) {
   console.log('');
   console.log(`FINDING  KILLSWITCH. js/app.js's own reg.update() stripped from the served bytes: ${ks.appUpdateStripped}.`);
   console.log(`         version.json requests that reached the SERVER after the flip: ${ks.stampHits}.`);
-  console.log(`         registration afterwards: ${JSON.stringify(ks.reg2)}.`);
-  console.log('         No navigation and no reload happened in this scenario, so nothing but sw.js itself could have pulled a new worker.');
+  console.log(`         registration afterwards: ${JSON.stringify(ks.reg2)}, active worker version afterwards: ${ks.ksVersion}.`);
+  console.log('         This TEST never navigates or reloads the page itself, so nothing but sw.js could have started the pull; app.js\'s');
+  console.log('         own controllerchange handler (not stripped) may itself reload once letItIn lets the pulled worker through -- that is the mechanism working.');
   /* THE SEAM FIRST. If the strip did not land, js/app.js found the update on
      its own and the two rows below are about the page, not about the worker:
      green, and evidence of nothing (memory: a seam with no consumer). */
@@ -1120,8 +1197,15 @@ if (ks && !ks.error) {
     ks.appUpdateStripped === true, `stripped=${ks.appUpdateStripped}`);
   ok('KILLSWITCH: the worker reaches the NETWORK for version.json with no navigation and no help from the page',
     ks.stampHits > 0, `${ks.stampHits} requests reached the server`);
-  ok('KILLSWITCH: a stamp naming a different build pulls a new worker all by itself',
-    !!(ks.reg2 && (ks.reg2.installing || ks.reg2.waiting)), `registration = ${JSON.stringify(ks.reg2)}`);
+  /* 2026-09-05, v473 (63367157): letItIn can carry a pulled worker straight
+     through `installed` to `activated` between two 3s polls, so `installing`/
+     `waiting` reading null afterwards is the swap having finished, not the
+     killswitch failing to fire. The honest question is which VERSION ends up
+     in charge; checked directly, with the old installing/waiting signal kept
+     as a fallback in case timing ever does catch it mid-flight. */
+  ok('KILLSWITCH: a stamp naming a different build pulls a new worker all by itself (checked by the version it installs, not by catching it mid-wait)',
+    normVer(ks.ksVersion) === B_VERSION || !!(ks.reg2 && (ks.reg2.installing || ks.reg2.waiting)),
+    `registration = ${JSON.stringify(ks.reg2)}, active worker version = ${ks.ksVersion}`);
 }
 
 /* the failed install: a 404 must not produce a mixed shell */
@@ -1198,18 +1282,22 @@ if (sheet && !sheet.error) {
     sheet.sheetOpen === true, `sheetOpen=${sheet.sheetOpen}, still open at the sample=${d.stillOpen}`);
   ok('SHEET OPEN: the running page is deliberately held on the old build while a sheet is up (that half of the comment is true)',
     d.module === 'A', `module running during the sheet = ${d.module}`);
-  /* THIS ROW USED TO REQUIRE THE OPPOSITE, AND THE OPPOSITE WAS THE BUG.
-     It used to require that closing the sheet applied the new build. That path
-     only existed because install called skipWaiting(): the new worker took over
-     underneath a running page, controllerchange fired, and app.js reloaded the
-     document. THAT RELOAD IS TOM'S COMPLAINT ("it does a full reload after I
-     have been away for a minute"), and the window it opened, a page running old
-     modules against a new cache, is the mixed graph this branch exists to shut.
-     With no skipWaiting there is no mid-session swap to apply, so the correct
-     behaviour is that NOTHING happens to the player mid-session, and the new
-     build arrives on the next open (graded by SECOND OPEN). */
-  ok('SHEET CLOSED: the player is NOT reloaded out from under a sheet, and stays on one whole build',
-    L.shell === 'A' && L.module === 'A' && L.css === 'A' && sheet.after.loads === 0,
+  /* 2026-09-05, v473 (commit 63367157) REVERSED THIS ROW BACK, ON PURPOSE, AND
+     THAT IS NOT A ROT BACK TO THE PRE-v427 BUG. The comment this replaces
+     described why a mid-session swap must never happen while the sheet is
+     still open; that half is unchanged and is graded above (module=A while
+     the sheet is up). What changed is what happens the MOMENT the sheet
+     closes. Tom's ruling ("a downloaded build can actually start") is exactly
+     what a phone stuck on v470 for hours while the server served v472 needed,
+     and closeTopSheet() now honours the pending update itself:
+       if (updatePending && !sheetStack.length) { updatePending = false;
+       location.reload(); return; }
+     So the toast's promise ("leave this screen to apply") is kept: leaving
+     really does apply it, in one reload, to the whole build at once. Zero
+     reloads staying on A was the v427 contract; it is superseded for this one
+     transition, not for the "while the sheet is open" half graded above. */
+  ok('SHEET CLOSED: closing the last sheet applies the update that queued while it was open, in one reload, to the whole build',
+    L.shell === 'B' && L.module === 'B' && L.css === 'B' && sheet.after.loads === 1,
     `shell=${L.shell} module=${L.module} css=${L.css} document loads since the flip=${sheet.after.loads}`);
 }
 
