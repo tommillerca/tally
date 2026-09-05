@@ -6608,14 +6608,15 @@ body::before {
 .fb-worn { position: relative; width: 88px; height: 88px; margin: 0 auto; overflow: hidden; border-radius: 10px; }
 .drop-item.fb .petcrop { display: block; margin: 0 auto; }
 .drop-buy[data-buyfb]:disabled, .drop-buy[data-buyfbkit]:disabled { background: var(--surface-3); color: var(--text-3); opacity: 1; }
-/* The bundle cell: the same tile, spanning the grid, with the team's two colours
-   standing in for the product shot (five pieces in one 88px square would be a
-   contact sheet). */
+/* The bundle cell: the same tile, spanning the grid. Used to stand in for the
+   product shot with one two-tone disc in the previewed team's colours; Tom,
+   2026-09-05: "the way that you presented the full kit is confusing. It looks
+   like you're just buying the blue and gold colorway." Replaced with the five
+   garments themselves, each in a different team (.fb-allteams below), which is
+   the actual product shot the tile needs. */
 .drop-item.fb-bundle { grid-column: 1 / -1; }
 .drop-item.fb-bundle::before { content: 'FULL KIT'; }
-.fb-kitmark { width: 52px; height: 52px; border-radius: 50%; border: 3px solid var(--ink); margin: 4px auto 0;
-  background: linear-gradient(135deg, var(--fa) 0 50%, var(--fb) 50% 100%);}
-.fb-kitmark span { font-size: 17px; font-weight: 900; color: #fff; mix-blend-mode: difference; }
+.fb-allteams { display: flex; justify-content: center; gap: 4px; margin: 4px 0 8px; flex-wrap: wrap; }
 .fb-kitline { display: block; font-size: 11px; color: var(--text-2); margin: -4px 0 8px; }
 .fb-save { display: block; font-size: 11px; color: var(--text-2); margin-top: 6px; }
 

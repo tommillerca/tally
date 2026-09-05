@@ -9569,24 +9569,32 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
    price/quote/bundleOwned are cheap synchronous reads and the listener
    re-derives its own copy rather than reaching into this closure. */
 function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned) {
+  /* THE 32-DISC STRIP, reused verbatim from the hero above (same class, same
+     markup): Tom's live feedback on v474, "It looks like you're just buying the
+     blue and gold colorway. I know there's text that says you get all of them,
+     but that needs some work." The grey "All 32 colourways" line was easy to
+     miss; 32 team discs under it is the same claim made visible rather than
+     stated. No new CSS, no new art: `.fb-teams`/`.fb-swatch.xs` already draw the
+     hero's strip at any container width. */
+  const teamStripHtml = () => `<div class="fb-teams" role="img" aria-label="${FOOTBALL_TEAMS.length} team colourways">${FOOTBALL_TEAMS.map(t => `<i class="fb-swatch xs" style="--fa:${t.a};--fb:${t.b}"></i>`).join('')}</div>`;
   return `
-      <label class="fb-pick"><span>Team</span>
+      <label class="fb-pick"><span>Preview colours</span>
         <select id="fbTeam">${FOOTBALL_TEAMS.map(t => `<option value="${t.id}"${t.id === team.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
         <i class="fb-swatch" style="--fa:${team.a};--fb:${team.b}"></i></label>
       <div class="drop-grid">
         ${sold.map(g => {
           const id = footballItemId(team.id, g.key);   // the PREVIEW id: the tile sells the garment, in every team
           const owned = ownedCos.has(id);
-          /* THE PET TILE (g.pets) is pinned to 192, below what bhTierFor's
-             strict rule would allow (her PET_CROP puts the real worst-case
-             css at ~203-221 here, clearing no tier at all) -- same cap as
-             fb-hero-pet above, same lizard. The human tile below is no longer
-             capped (kitTierCss now returns the honest measured width): the
-             helmet/jersey land on 384, the cleats' steeper fit-feet crop
-             (~225px) clears no tier and takes the 640 master, and none of it
-             is decoded at all unless this body is actually open. */
+          /* THE PET TILE (g.pets) IS 384 NOW, matching fb-hero-pet above (same
+             lizard, same crop). It used to be pinned to 192: Tom, 2026-09-05,
+             "in the shop itself, the lizards are all blurry". Her PET_CROP puts
+             this box's worst-case css at ~203-221, so at DPR2 that is
+             406-442 device px -- over even 384 (1.06-1.15x), which is why
+             bhTierFor's OWN strict rule (>= css*2) lands on the master; 384 is
+             the same accepted-1.4x call the hero already made and already
+             passed art-resolution-audit on, not a stricter one applied here. */
           const art = g.pets
-            ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 192)
+            ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 384)
             : `<div class="fb-worn">${wornArtHtml(id, kitTierCss(BH_BY_ID[id]))}</div>`;
           /* SELLABLE (the piece is on sale at all) is separate from AFFORDABLE
              (this wallet can cover it right now): unsellable stays disabled
@@ -9598,14 +9606,28 @@ function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundl
             ${art}
             <b>${esc(g.label)}</b>
             <small class="fb-kitline">All ${FOOTBALL_TEAMS.length} colourways</small>
+            ${teamStripHtml()}
             ${owned
               ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
               : `<button class="drop-buy${sellable && !canBuy ? ' cant' : ''}" data-buyfb="${id}" data-amt="${price}" ${sellable ? '' : 'disabled'} aria-label="Buy the ${esc(g.label)}${sellable ? `, ${price.toLocaleString()} coins` : ''}, all ${FOOTBALL_TEAMS.length} teams">${sellable ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
           </div>`;
         }).join('')}
         <div class="drop-item fb fb-bundle ${bundleOwned ? 'owned' : ''}">
-          <div class="fb-kitmark" style="--fa:${team.a};--fb:${team.b}"><span>${sold.length}</span></div>
-          <b>The full kit</b>
+          ${/* FIVE GARMENTS, FIVE DIFFERENT TEAMS, not one two-tone disc in the
+               previewed team's colours (that disc IS the confusion Tom flagged:
+               a single team's palette standing in for "every team"). Same art,
+               same tiers the grid above already pays for -- the garment master
+               and its masks do not change per team, only the tint spans' colour
+               does, so this is DOM nodes, not new bytes. */''}
+          <div class="fb-allteams">${sold.map((g, i) => {
+            const bt = FOOTBALL_TEAMS[i % FOOTBALL_TEAMS.length];
+            const bid = footballItemId(bt.id, g.key);
+            return g.pets
+              ? croppedPetImg(FOOTBALL_PETS[0], 64, false, null, { [g.slot]: bid }, 384)
+              : `<span class="fb-worn sm">${wornArtHtml(bid, 64 * 2.3)}</span>`;
+          }).join('')}</div>
+          ${teamStripHtml()}
+          <b>Every piece, every team</b>
           <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')} · all ${FOOTBALL_TEAMS.length} colourways</small>
           ${(() => {
             const bundleSellable = footballBundleSellable();
@@ -13515,6 +13537,20 @@ function newsBannerHtml(unseen, eq, dayClose) {
 const SHOW_BETA_THANKS = !STORE_BUILD; // internal invite card, Crew strip and News row; absent from store builds
 
 const NEWS = [
+  /* THE LOCKER ROOM. Tom's live feedback on v474: "There's also no news
+     announcement banner or anything on the today page that would guide people to
+     go do this." Nothing pointed a player at the kit room at all, so this is the
+     one thing that does: newest row, so it is the unread dot AND the pill's
+     summary line ("News" collapses to `newest.title` while unseen). Opens the
+     REAL till (`#/shop` routes `renderShop`, which reads `S.fbJump` to open
+     `#fbSect` -- the same one-shot the wardrobe rail's own "Kit room" button
+     uses, see `wireBar` above), so this CTA and that button share one mechanism
+     rather than two. */
+  { id: 'lockerroom', date: 'Sep 5', title: 'The Locker Room is open',
+    blurb: 'Buy one piece and every team\'s colours are yours.',
+    thumb: () => `<img class="nw-img" src="assets/bh/thumb/192/football/helmet.png" alt="">`,
+    goes: 'Locker Room',
+    open: () => { S.fbTeam = FOOTBALL_TEAMS[0].id; S.fbJump = true; location.hash = '#/shop'; } },
   /* THE WANDERER. Tom kept this row when every other launch interstitial went in
      v448: "the only news things staying are the new one with the wanderer on it
      and the ones on crew that link the discord". It had never been written.
