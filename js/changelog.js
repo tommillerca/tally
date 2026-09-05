@@ -4,6 +4,18 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 474, date: '2026-09-05', title: 'The Locker Room opens, and the rack costs more', items: [
+    'The Locker Room opened in the Shop: a football kit for your Bonehead and the lizard, five pieces Cam drew once and the game tints for 32 invented teams. A helmet, a jersey and cleats for you; a matching helmet and jersey for the lizard. Buy one piece and it is yours in every team\'s colours, 4,200 coins a piece, or take the whole kit for 16,800 - and if you already own a piece or two, the kit only charges you for what is still missing. Every buy button on the shelf is now a full-size tap target, and one you cannot afford still answers with exactly how many coins you are short instead of going dead.',
+    'The Wardrobe already showed you the football kit\'s 32 colours as a rail under one tile; your Collection and the Stable now do the same for every colourway family in the game, not just football. Owning a lot of one drawing in different tints used to mean a tile for every tint. It is one tile per drawing now, with a count badge, and a tap opens the rail to every colour you own.',
+    'Prices went up across the rack: an outright cosmetic purchase costs about double what it did yesterday, in coins and in Bone Dust alike. Your very first Common piece is the one exception, held at its old price, so a new player\'s early days play out exactly as they did before.',
+    'A crate can now hand you a piece you already own instead of only ever being something new, so the shelf above Common still has something left to sell you once you have most of what is below it; a duplicate still pays the coins a duplicate always has. A day you logged but missed your calorie budget on no longer comes with a bonus crate, though it still pays the same XP for logging it.',
+    'Come back after a few days away and the Bone Crate you earned on your last logged day is there waiting, instead of quietly never arriving because the app could not yet confirm what day it was.',
+    'Restoring your save from the cloud can no longer hand back a crate you already opened or refund coins you have already spent. A genuine restore onto a new or reinstalled device still comes back in full.',
+    'The weekly step race now pays the place you actually finished even if you opened the app right as the week rolled over. Rolling into a new week used to erase your own spot on the old week\'s board a moment before the race paid out, so the one player who had just played was the one player who got nothing.',
+    'The Pit\'s move tray shows what a move costs on its own line in the button\'s corner, instead of crowding the words into the hint underneath and pushing a row off the bottom of the tray.',
+    'On a slow connection, the app no longer reloads itself while the next build is still downloading. It only steps in once a build has genuinely stalled.',
+  ] },
+
   { n: 473, date: '2026-09-04', title: 'Updates can actually start', items: [
     'A new build used to download and then sit there: the app never told it to take over, so a phone could stay on an old version for hours through force quits. Boot now lets a waiting build in, and the app reloads into it.',
   ] },
