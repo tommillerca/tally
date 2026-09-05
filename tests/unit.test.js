@@ -5468,7 +5468,7 @@ test('R26-O15 the cook queue drains from boot, resume, Today and the Kitchen, an
   assert.ok(callers >= 4, `drainCookQueue has ${callers} callers, need boot + resume + Today + Kitchen (>= 4)`);
   const boot = app.slice(app.indexOf('const closed = await awardDayCloseIfDue(S.settings.targets);'), app.indexOf('await ingestHkPayload(hkTaken);'));
   assert.match(boot, /await drainCookQueue\(\);/, 'boot does not drain the queue');
-  const resume = app.slice(app.indexOf('onAppResume(() => {'), app.indexOf('setInterval(rollDayIfNeeded, 60e3)'));
+  const resume = app.slice(app.search(/onAppResume\((?:async )?\(\) => \{/), app.indexOf('setInterval(rollDayIfNeeded, 60e3)'));
   assert.match(resume, /drainCookQueue\(\)/, 'resume does not drain the queue');
   const today = app.slice(app.indexOf('async function renderToday(el) {'), app.indexOf("kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe, _cookBanked)"));
   assert.match(today, /await drainCookQueue\(\);\s*\/\/[^\n]*\n\s*const cook = await cookState\(\);/, 'Today must drain BEFORE it reads cookState for the card');
@@ -5514,7 +5514,7 @@ test('R26-O13 the midnight timeout fires the roll at 0 ms and re-arms for the fo
   // the app wires it beside the interval and re-aims it on resume
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   assert.match(app, /const midnight = armMidnightTimer\(rollDayIfNeeded\);/, 'app.js does not arm the midnight timeout on rollDayIfNeeded');
-  const resume = app.slice(app.indexOf('onAppResume(() => {'), app.indexOf('setInterval(rollDayIfNeeded, 60e3)'));
+  const resume = app.slice(app.search(/onAppResume\((?:async )?\(\) => \{/), app.indexOf('setInterval(rollDayIfNeeded, 60e3)'));
   assert.match(resume, /midnight\.rearm\(\);/, 'resume does not re-aim the midnight timeout');
 });
 

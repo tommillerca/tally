@@ -74,6 +74,11 @@ import { readFileSync } from 'node:fs';
 import './mem-idb.mjs';   // installs globalThis.indexedDB before js/db.js opens it
 
 /* ---- fake the WHOLE Date before anything reads it ---- */
+/* O14 (round 26, merged 2026-09-04): a refused close returns {dayGuard: reason} rather than
+   null, so that the surfaces can explain themselves. These rows grade whether anything was
+   PAID, which is the same fact under either shape. */
+const didNotPay = c => c === null || !!(c && c.dayGuard);
+
 const RealDate = Date;
 const realNow = () => RealDate.now();
 let NOW = RealDate.parse('2026-09-04T12:00:00Z');
@@ -152,7 +157,7 @@ let before = await paidRow();
 let closed = await awardDayCloseIfDue(TARGETS);
 let after = await paidRow();
 ok('NO-PAY a stale ceiling pays nothing and mints no ledger row',
-  closed === null && before === 0 && after === 0, `closed ${JSON.stringify(closed)}, ledger ${before} -> ${after}`);
+  didNotPay(closed) && before === 0 && after === 0, `closed ${JSON.stringify(closed)}, ledger ${before} -> ${after}`);
 
 const predicate = await dayIsUnwitnessed(TODAY);
 /* The line itself needs a DOM to render, which this audit does not have, so the
@@ -173,7 +178,7 @@ let settled = await settleServerDay(TODAY);
 let elapsed = realNow() - t0;
 closed = await awardDayCloseIfDue(TARGETS);
 ok('OFFLINE no network: settleServerDay gives up fast, resolves false, nothing pays',
-  settled === false && elapsed < 500 && closed === null && (await paidRow()) === 0,
+  settled === false && elapsed < 500 && didNotPay(closed) && (await paidRow()) === 0,
   `settled ${String(settled)} in ${elapsed}ms, paid ${JSON.stringify(closed)}`);
 
 await seedLapsedSave('lapse-witness-c');
@@ -183,7 +188,7 @@ settled = await settleServerDay(TODAY);
 elapsed = realNow() - t0;
 closed = await awardDayCloseIfDue(TARGETS);
 ok('BOUND a 2.5s server does not hold the boot: settled inside the 1.5s bound, having waited',
-  settled === false && elapsed >= 1000 && elapsed <= 2200 && closed === null && (await paidRow()) === 0,
+  settled === false && elapsed >= 1000 && elapsed <= 2200 && didNotPay(closed) && (await paidRow()) === 0,
   `settled ${String(settled)} in ${elapsed}ms (want 1000..2200), paid ${JSON.stringify(closed)}`);
 
 await seedLapsedSave('lapse-witness-d');
