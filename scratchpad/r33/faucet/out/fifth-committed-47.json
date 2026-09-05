@@ -1,0 +1,31 @@
+{
+  "rules": "fifth",
+  "depth": "committed",
+  "seed": 47,
+  "days": 365,
+  "coinsPerDay": 862.5,
+  "pitPerDay": 71.6,
+  "cratePerDay": 606.4,
+  "healthPerDay": 150.7,
+  "levelPerDay": 33.8,
+  "level": 66,
+  "cosmetics": 259,
+  "gear": 16,
+  "dust": 15081,
+  "wallet": 177902,
+  "spent": 141290,
+  "windowsDone": 28,
+  "dayOutOfThings": 145,
+  "firstWindowDay": 3,
+  "crateCoinRanges": {
+    "daily": [
+      60,
+      100
+    ],
+    "golden": [
+      400,
+      600
+    ]
+  },
+  "ms": 30862
+}

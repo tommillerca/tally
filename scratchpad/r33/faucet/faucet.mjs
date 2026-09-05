@@ -173,7 +173,7 @@ const OVERLAY_POOL_N = 40;   // 32 basics + 8 armoury (one plain piece per gear 
    anywhere in a crate, HANDOFFshop20260904.md:577), so the overlay pays it
    beside the shipped open rather than inside it. Coins are the decision here;
    dust is carried so the table has the column the salvaged one had. */
-const OVERLAY_DUST = { fifth: { daily: [5, 15], golden: [20, 40] }, 'fifth-half': { daily: [5, 15], golden: [20, 40] } };
+const OVERLAY_DUST = { fifth: { daily: [5, 15], golden: [20, 40] }, 'fifth-half': { daily: [5, 15], golden: [20, 40] }, 'fifth-quarter': { daily: [5, 15], golden: [20, 40] } };
 
 function applyOverlay(rules) {
   // restore first: BH_ITEMS is module state shared across runs in one process
@@ -182,9 +182,14 @@ function applyOverlay(rules) {
   loot.CRATES.golden.coins = [10, 25];
   if (rules === 'today') return { crateCoins: { daily: [20, 40], golden: [10, 25] }, pool: null };
 
+  /* The ladder. `fifth-half` is Tom's ruling; `fifth-quarter` is here only so
+     the report can show the shape of the curve rather than two points on it.
+     It is NOT a counter-proposal: the multiplier is Tom's to pick. */
   const coins = rules === 'fifth'
     ? { daily: [60, 100], golden: [400, 600] }        // E32-3 as written
-    : { daily: [30, 50], golden: [200, 300] };        // Tom's ruling: halve it
+    : rules === 'fifth-quarter'
+      ? { daily: [15, 25], golden: [100, 150] }       // reference point only
+      : { daily: [30, 50], golden: [200, 300] };      // Tom's ruling: halve it
   loot.CRATES.daily.coins = coins.daily;
   loot.CRATES.golden.coins = coins.golden;
 
