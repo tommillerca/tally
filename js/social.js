@@ -461,10 +461,33 @@ export async function goOnline() {
   const id = await ensureIdentity();
   const r = await registerKey(id);
   if (!r.ok) return r;
-  const me = r.me;
+  let me = r.me;
   await kvSet('social', { playerId: me.playerId, handle: me.handle, friendCode: me.friendCode, name: me.name || null, onlineAt: Date.now() });
-  if (await kvGet('idMinted', null)) await kvSet('bootRestored', true);
-  return { ok: true, me };
+  const minted = await kvGet('idMinted', null);
+  if (minted) await kvSet('bootRestored', true);
+  /* CREW-1: the name picked at onboarding (kv onbName, js/app.js ctx.pick at
+     the "That's me" tap) never reached the server -- registration hands out
+     its own random handle, so the Crew heading read "You're <random> . pick a
+     name" for a player who had already chosen one. Post it here, through the
+     existing /name path (setName below), the moment an account exists to post
+     it to. Gated on `minted` the same way `bootRestored` is just above: only a
+     freshly-minted identity should adopt this device's local pick -- a
+     restored/recovered identity may already carry a real name and must not
+     have it overwritten. Gated on `!me.name` so this never re-sends once a
+     name (this pick or any other) has taken: idempotent across every repeat
+     goOnline() call (boot, resume, a second "Go Online" tap). A refusal (name
+     taken) is surfaced to the caller as `namePick` rather than swallowed, so
+     the UI can toast the truth instead of silently leaving the player on the
+     random handle with no explanation. */
+  let namePick;
+  if (!me.name && minted) {
+    const pick = await kvGet('onbName', null);
+    if (pick) {
+      namePick = await setName(pick.adj, pick.noun, pick.num);
+      if (namePick.ok) me = { ...me, name: namePick.name };
+    }
+  }
+  return { ok: true, me, namePick };
 }
 
 /* Delete the server account (App Store 5.1.1(v)). Server-first, on purpose:
@@ -609,7 +632,23 @@ export async function setFriendAlias(playerId, alias) {
 export async function listFriends() {
   let data;
   const unreached = { friends: [], incoming: [], outgoing: [], reached: false };
-  try { const r = await signedFetch('GET', '/friends', null); if (!r.ok) return unreached; data = await r.json(); }
+  try {
+    const r = await signedFetch('GET', '/friends', null);
+    if (!r.ok) {
+      /* CREW-11/SOC-2: a clock more than five minutes out 401s EVERY signed
+         call ('stale timestamp', server/src/index.js verifySigned), and
+         `unreached` told the Crew tab the same "server is down" story as a
+         dead network. Tag it `reason: 'clock'` the same way pushBackup and
+         fetchStepRace already do, so the fan can show the honest clock line
+         instead. */
+      if (r.status === 401) {
+        const b = await r.json().catch(() => ({}));
+        if (/stale timestamp/i.test(String(b && b.error))) return { ...unreached, reason: 'clock' };
+      }
+      return unreached;
+    }
+    data = await r.json();
+  }
   catch { return unreached; }
   const aliases = (await kvGet('friendAliases', null)) || {};
   for (const bucket of ['friends', 'incoming', 'outgoing']) for (const f of (data[bucket] || [])) f.alias = aliases[f.playerId] || null;
@@ -686,9 +725,65 @@ export async function fetchStepRace(weekKey) {
   try {
     if (!(await isOnline())) return null;
     const r = await signedFetch('GET', `/steps/week?week=${encodeURIComponent(weekKey)}`);
-    if (!r.ok) return null;
+    if (!r.ok) {
+      /* CREW-11 / SOC-2: a clock more than five minutes out 401s EVERY signed
+         call ('stale timestamp', server/src/index.js verifySigned), and this
+         return null told the race card the same nothing a dead network does.
+         Stash the reason the same way pushBackup already does (kv
+         'backupFail'), so hydrateRace can show the honest clock line instead
+         of "could not reach the Crew server" for a player who is actually
+         fine, just wrong-clocked. */
+      if (r.status === 401) {
+        const b = await r.json().catch(() => ({}));
+        if (/stale timestamp/i.test(String(b && b.error))) { await kvSet('raceFail', { reason: 'clock' }); return null; }
+      }
+      await kvSet('raceFail', null);
+      return null;
+    }
+    await kvSet('raceFail', null);
     return await r.json();
   } catch { return null; }
+}
+
+/* CREW-2: which rank the step-race "You are Nth" line should show, split out
+   of app.js's hydrateRace so tests/unit.test.js can prove it without a
+   browser (app.js cannot be imported in plain node -- it touches `location`
+   at the top level).
+   race.yourRank (GET /steps/week, computed server-side over up to 25 racers,
+   server/src/index.js ~3229) is authoritative whenever it is not null. The
+   bug this fixes: the client used to splice its own row into the 10-row
+   `players` slice sent by the server and re-rank THAT slice alone, then
+   overwrite race.yourRank with the result -- which can only ever land inside
+   those 10, so a true 14th read "11th" and everyone from 12th to 25th read
+   the same invented "11th".
+   own = {weekKey, steps} from this device's own weekStepsNow(): the one
+   number this device knows for certain, used to size the "behind" gap, and
+   -- only when the server has genuinely never ranked you (a brand-new week,
+   or a push that has not landed yet, race.yourRank == null) -- to give you a
+   lane and a rank of your own, exactly as before this fix. Never invents a
+   rank when the server already sent one. */
+export function raceStanding(serverRows, race, wk, own, name, myFit, ordinal, esc) {
+  const rows = serverRows.slice();
+  // race.yourRank is authoritative whenever the server sent one; a local
+  // index is only ever computed for the row THIS function adds below, never
+  // used to override or second-guess a real server answer.
+  let yourRank = race.yourRank ?? null;
+  if (yourRank == null && !rows.some(p => p.you) && own.weekKey === wk && own.steps > 0) {
+    rows.push({ name: name || 'You', steps: own.steps, outfit: myFit, you: true });
+    rows.sort((a, b) => b.steps - a.steps);
+    rows.forEach((p, i) => { p.rank = i + 1; });
+    yourRank = rows.findIndex(p => p.you) + 1;
+  }
+  const lead = rows.length ? rows[0].steps : 0;
+  let mine = rows.find(p => p.you) || null;
+  if (!mine && yourRank != null && own.weekKey === wk && own.steps > 0) mine = { name: name || 'You', steps: own.steps, you: true };
+  const behind = mine && lead > mine.steps ? lead - mine.steps : 0;
+  const standing = !rows.length ? 'Nobody has walked a step yet. Go take the lead.'
+    : !mine ? `${esc(rows[0].name)} leads with ${rows[0].steps.toLocaleString()} steps`
+    : yourRank == null ? `You are <b>unranked</b> this week, ${behind.toLocaleString()} behind ${esc(rows[0].name)}`
+    : behind ? `You are <b>${ordinal(yourRank)}</b>, ${behind.toLocaleString()} behind ${esc(rows[0].name)}`
+    : 'You are in front. Keep it that way.';
+  return { rows, yourRank, mine, behind, standing };
 }
 
 /* THE PODIUM THAT WAS PAID, for a week that has already settled.
@@ -735,10 +830,22 @@ export async function tendSpireRemote(id) {
   } catch { return false; }
 }
 
+/* CREW-11/SOC-2: same clock-skew tell as listFriends/fetchStepRace/pushBackup,
+   stashed in kv rather than folded into the return (every caller here treats
+   the result as a bare array-or-null, so a sidecar is the smaller diff than
+   teaching all three about a new shape). */
 export async function leaderboard() {
   try {
     const r = await signedFetch('GET', '/leaderboard', null);
-    if (!r.ok) return null;
+    if (!r.ok) {
+      if (r.status === 401) {
+        const b = await r.json().catch(() => ({}));
+        if (/stale timestamp/i.test(String(b && b.error))) { await kvSet('lbFail', { reason: 'clock' }); return null; }
+      }
+      await kvSet('lbFail', null);
+      return null;
+    }
+    await kvSet('lbFail', null);
     return (await r.json()).players || [];
   } catch { return null; }
 }

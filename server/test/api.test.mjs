@@ -166,6 +166,14 @@ await test('stale timestamp rejected (replay protection)', async () => {
   const body = JSON.stringify({ snapshot: { level: 8 } });
   const r = await signedFetch(kp, player.playerId, 'PUT', '/profile', body, Date.now() - 10 * 60 * 1000);
   assert.equal(r.status, 401);
+  /* CREW-11/SOC-2: js/social.js (listFriends, leaderboard, fetchStepRace,
+     pushBackup) all regex-match /stale timestamp/i on this body to tell a
+     wrong-clocked player the truth ("your clock is wrong") instead of
+     "could not reach the Crew server". Lock the exact wording here so a
+     copy change on this line cannot silently break every one of those with
+     zero red test. */
+  const b = await r.json();
+  assert.match(String(b.error), /stale timestamp/i, `client clock-skew detection depends on this exact wording: ${JSON.stringify(b)}`);
 });
 
 await test('grants: welcome grant delivered, cursor advances, no redelivery', async () => {
@@ -963,6 +971,8 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   assert.ok(r.prize && r.prize.coins > 0, 'the race states its prize');
 
   // last week had a racer (`stale`), so the FIRST request above settles it
+  assert.ok(r.champion, 'the settling response names last week\'s winner');
+  assert.equal(r.champion.steps, STALE_STEPS, 'and their steps are the total that was PAID');
   const g1 = await (await signedFetch(stale.k.kp, stale.p.playerId, 'GET', '/grants?since=0')).json();
   const prizes = (g1.grants || []).filter(x => x.key === `stepweek-${prev}`);
   assert.equal(prizes.length, 1, 'last week\'s winner was paid exactly once');
@@ -976,9 +986,20 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   assert.ok(r.podium[3].coins * 2 < r.podium[2].coins, '4th is FAR less than 3rd, not a near-miss');
 
   // and asking again must not pay twice
-  await signedFetch(slower.k.kp, slower.p.playerId, 'GET', `/steps/week?week=${wk}`);
+  const r2 = await (await signedFetch(slower.k.kp, slower.p.playerId, 'GET', `/steps/week?week=${wk}`)).json();
   const g2 = await (await signedFetch(stale.k.kp, stale.p.playerId, 'GET', '/grants?since=0')).json();
   assert.equal((g2.grants || []).filter(x => x.key === `stepweek-${prev}`).length, 1, 'settling is idempotent');
+  /* SOC-3: `champion` used to populate ONLY inside the settling branch (the
+     one request above that actually paid the podium), so every OTHER player
+     who opens the Crew tab afterward -- which is nearly everyone, since
+     settlement runs once per week off whoever happens to open it first --
+     got `champion: null` and never saw the "who to beat" line. This second
+     /steps/week is deliberately NOT the settling call (g2 above proves that:
+     settling already happened and stayed idempotent), so champion has to
+     come from somewhere other than the settlement branch that just ran once. */
+  assert.ok(r2.champion, 'champion renders on a read that did NOT itself settle the week, not only the one that did');
+  assert.equal(r2.champion.steps, STALE_STEPS, 'and reports the same paid total on every read');
+  assert.deepEqual(r2.champion.name, r.champion.name, 'and names the same winner every time');
 
   /* THE SETTLED RESULT SURVIVES THE WINNER WALKING AGAIN.
      This is the whole reason /steps/settled exists, so it is asserted here

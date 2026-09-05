@@ -11337,6 +11337,15 @@ function parseDisplayName(name) {
   return { adj, noun, num: Number.isInteger(num) ? num : null };
 }
 
+// CREW-1: goOnline() posts the onboarding name pick and hands back `namePick`
+// (undefined when nothing was attempted). A refusal (someone already holds
+// that exact pick) is the one case that needs its own sentence instead of the
+// generic "You're online!" -- reused wording from openNameBuilder's own
+// taken-name toast so the app never has two voices for the same event.
+function toastNamePickRefusal(namePick) {
+  if (namePick && !namePick.ok && namePick.reason === 'taken') toast(`${namePick.name} is taken. Pick another.`, 3000);
+}
+
 /* THE RENAME NOTICE (v315, pending Tom's approval).
  *
  * Tom, 2026-08-08: "You should send a clear pop up with explanation about your
@@ -11477,8 +11486,18 @@ function friendRowAvatar(f) {
    nickname it should just show their username then nickname smaller beside not
    replace it fully." Their Bonehead name is who they are to everyone else and it
    stays the headline; your private note rides alongside it. */
+/* SOC-4: hostile names render as text everywhere (round 11, still holding),
+   but two properties of the RENDER let one through anyway. A 64-char name is
+   truncated SILENTLY by the plate/title's own CSS ellipsis (scrollWidth 462
+   vs clientWidth 168, no tooltip); a U+202E direction override in the name is
+   honoured visually and reverses whatever sits after it on the same line.
+   `title` gives the full name back on hover/long-press; unicode-bidi:isolate
+   contains the override inside this span instead of letting it leak into the
+   alias tag or the chevron beside it. One fix here covers both call sites the
+   round named (the fan plate's `<b>`, #fpTitle) and every other caller. */
 function nameWithAlias(f) {
-  return esc(f.name) + (f.alias ? ` <span class="alias-tag">${esc(f.alias)}</span>` : '');
+  return `<span class="pname-iso" title="${esc(f.name)}" style="unicode-bidi:isolate">${esc(f.name)}</span>`
+    + (f.alias ? ` <span class="alias-tag">${esc(f.alias)}</span>` : '');
 }
 /* THE CREW FAN (v323). One trading card per friend, fanned like a hand of cards.
    Approved mockup: market-quality-mockups/crew-fan.html; spec + acceptance:
@@ -11578,6 +11597,7 @@ async function renderFriends(el) {
       await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V).catch(() => {});
       await social.pushBackup(APP_SOCIAL_V).catch(() => {});
       toast("You're online! Here's your friend code.", 3600);
+      toastNamePickRefusal(r.namePick);
       renderFriends(el);
       if (!(await social.socialMe())?.name) setTimeout(() => openNameBuilder(() => renderFriends(el)), 500);
     });
@@ -12063,7 +12083,7 @@ async function renderFriends(el) {
     row.hidden = false;
   };
 
-  const paintFan = () => {
+  const paintFan = async () => {
     const wrap = $('#cfanWrap', el), pager = $('#cfanPager', el), deck = $('#cfanDeck', el);
     $('#cfanLoading', el)?.remove();
     /* THE FETCH FAILED IS NOT THE CREW IS EMPTY. `reached === false` only ever
@@ -12085,6 +12105,22 @@ async function renderFriends(el) {
       $('#cfanEmpty', el).hidden = true;
       const searchRow = $('#cfanSearchRow', el);
       if (searchRow) searchRow.hidden = true;
+      /* CREW-11/SOC-2: a device clock more than 5 minutes out 401s every
+         signed call, and this box's static markup told that player the same
+         "server is down" story a dead network gets -- while Settings and the
+         boot notice already say the true thing for the same 401 (cloudFailLine).
+         listFriends tags it `reason: 'clock'`; swap in that same wording here
+         instead of composing a second voice for one event. Reset both texts
+         on every paint (not only the clock branch) so a later retry that
+         comes back plain-unreachable does not keep yesterday's clock copy. */
+      const feTitle = $('.fe-title', unrBox), feNote = unrBox ? $('.note', unrBox) : null;
+      if (data.reason === 'clock') {
+        if (feTitle) feTitle.textContent = "Your device's clock is wrong";
+        if (feNote) feNote.textContent = cloudFailLine('clock', Number(await kvGet('clockSkewMs', 0)) || 0);
+      } else {
+        if (feTitle) feTitle.textContent = 'Could not reach the Crew server';
+        if (feNote) feNote.textContent = 'Your Crew is safe: this phone just cannot get to it right now. Everything else in the app works offline. Tap to try again.';
+      }
       /* Wired once: the box is in the static markup, so a second render must not
          stack a second listener on the same button. */
       if (unrBox && unrBox.dataset.wired !== '1') {
@@ -12311,7 +12347,14 @@ async function renderFriends(el) {
     const wait = $('#lbWait', el);
     if (!pod || !pod.isConnected) return;
     if (!players || !players.length) {
-      if (wait) wait.textContent = players ? 'No standings yet. Be the first name on the board.' : 'Could not reach the Crew server. Tap to try again.';
+      /* CREW-11/SOC-2: leaderboard() stashes kv 'lbFail' the same way pushBackup
+         and fetchStepRace do; a clock more than 5 minutes out is not "could not
+         reach the Crew server", it is the 401 every signed call gets, so say
+         the true thing (cloudFailLine, same wording as Settings/the boot notice). */
+      const lbFail = players ? null : await kvGet('lbFail', null);
+      if (wait) wait.textContent = players ? 'No standings yet. Be the first name on the board.'
+        : lbFail && lbFail.reason === 'clock' ? cloudFailLine('clock', Number(await kvGet('clockSkewMs', 0)) || 0)
+        : 'Could not reach the Crew server. Tap to try again.';
       return;
     }
     if (wait) wait.hidden = true;
@@ -12360,7 +12403,14 @@ async function renderFriends(el) {
     const body = $('#lbBody');
     const players = await fetchLb();
     if (!body || !body.isConnected) return;
-    if (!players) { body.innerHTML = '<p class="note" style="text-align:center;padding:22px 0">Could not reach the Crew server. Try again in a bit.</p>'; return; }
+    if (!players) {
+      const lbFail = await kvGet('lbFail', null);
+      const line = lbFail && lbFail.reason === 'clock'
+        ? cloudFailLine('clock', Number(await kvGet('clockSkewMs', 0)) || 0)
+        : 'Could not reach the Crew server. Try again in a bit.';
+      body.innerHTML = `<p class="note" style="text-align:center;padding:22px 0">${esc(line)}</p>`;
+      return;
+    }
     const friendIds = new Set((data.friends || []).map(f => f.playerId));
     const outIds = new Set((data.outgoing || []).map(f => f.playerId));
     const inIds = new Set((data.incoming || []).map(f => f.playerId));
@@ -12532,9 +12582,18 @@ async function renderFriends(el) {
        launches in: on day one nobody has synced a step, so the announcement said
        "SEE THE BOARD" and the board did not exist. Degrade to ugly, not gone. */
     if (!race) {
+      /* CREW-11/SOC-2: fetchStepRace stashes kv 'raceFail' the same way
+         pushBackup does; a clock more than 5 minutes out is not "could not
+         reach the Crew server" and "your steps are still counting" is false
+         in that case too (nothing signed is landing), so both the reason and
+         the line change together. */
+      const raceFail = await kvGet('raceFail', null);
+      const line = raceFail && raceFail.reason === 'clock'
+        ? cloudFailLine('clock', Number(await kvGet('clockSkewMs', 0)) || 0)
+        : 'Could not reach the Crew server. Your steps are still counting.';
       card.innerHTML = `<summary>
         <span class="gbn-ico race-ico">${badgePixHtml('badge-footprint', 24)}</span>
-        <span class="gbn-txt"><span class="race-h"><b>THE STEP RACE</b></span><small>Could not reach the Crew server. Your steps are still counting.</small></span>
+        <span class="gbn-txt"><span class="race-h"><b>THE STEP RACE</b></span><small>${esc(line)}</small></span>
         <span class="gbn-chev">›</span></summary>`;
       card.hidden = false;
       return;
@@ -12542,34 +12601,19 @@ async function renderFriends(el) {
     const endsMs = Date.parse(wk + 'T00:00:00') + RACE_DAYS * 86400000;
     const daysLeft = Math.max(0, Math.ceil((endsMs - Date.now()) / 86400000));
     const clock = daysLeft <= 0 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
-    /* YOU ARE ALWAYS ON YOUR OWN BOARD.
-       Tom, 2026-08-07: "ship the fix to the step race before you do anything else
-       right now it shows no leaders." The server can legitimately leave you off:
-       your push may not have landed yet, or your total may be gated out because it
-       was counted under older rules. Either way an empty board while you have
-       personally walked 4,000 steps reads as broken, and telling a walker "nobody
-       has walked a step yet" is simply false. Your own count is the one number
-       this device knows for certain, so it goes in regardless and the ranks are
-       recomputed around it. */
-    const rows = (race.players || []).slice();
-    if (!rows.some(p => p.you)) {
-      const own = await weekStepsNow();
-      if (own.weekKey === wk && own.steps > 0) {
-        rows.push({ name: (await social.displayName()) || 'You', steps: own.steps, outfit: myFit, you: true });
-        rows.sort((a, b) => b.steps - a.steps);
-        rows.forEach((p, i) => { p.rank = i + 1; });
-        race.yourRank = rows.findIndex(p => p.you) + 1;
-      }
-    }
+    /* CREW-2: yourRank is the SERVER's (server/src/index.js ~3229, computed
+       over up to 25 racers), rendered as-is, never recomputed here. The bug
+       this replaces: splicing your own row into the 10-row `players` slice
+       and re-ranking just that slice can only ever land inside those 10, so
+       a true 14th read "11th" and every player from 12th to 25th read the
+       same invented "11th". raceStanding (js/social.js) still adds a lane
+       for you when the server has genuinely never ranked you (a brand-new
+       week, or a push that has not landed yet, yourRank == null) -- never
+       when it already sent a real rank. Absent and un-computable reads
+       "unranked", never a made-up position. */
+    const own = await weekStepsNow();
+    const { rows, mine, behind, standing } = social.raceStanding(race.players || [], race, wk, own, await social.displayName(), myFit, ordinal, esc);
     const lead = rows.length ? rows[0].steps : 0;
-    const mine = rows.find(p => p.you) || null;
-    const behind = mine && lead > mine.steps ? lead - mine.steps : 0;
-
-    // the one line the collapsed banner exists to show
-    const standing = !rows.length ? 'Nobody has walked a step yet. Go take the lead.'
-      : !mine ? `${esc(rows[0].name)} leads with ${rows[0].steps.toLocaleString()} steps`
-      : behind ? `You are <b>${ordinal(race.yourRank)}</b>, ${behind.toLocaleString()} behind ${esc(rows[0].name)}`
-      : 'You are in front. Keep it that way.';
 
     const podium = race.podium || [];
     card.innerHTML = `
@@ -14141,6 +14185,7 @@ async function renderSettings(el) {
     await social.pushBackup(APP_SOCIAL_V).catch(() => {});
     const pulled = await social.pullGrants().catch(() => null);
     toast(`You're in the Crew! Your progress is now backed up.${pulled && pulled.applied ? ' A welcome gift is in your Backpack.' : ''}`, 4200);
+    toastNamePickRefusal(r.namePick);
     renderSettings(el);
     /* straight into picking a name (they just joined; don't leave them as the
        random fallback handle). The `namePrompted` write went with the boot
@@ -14771,7 +14816,7 @@ async function saveInitialSettings(np) {
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.
   if (!(S.demo || navigator.webdriver === true)) {
-    social.goOnline().then(r => { if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
+    social.goOnline().then(r => { toastNamePickRefusal(r.namePick); if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
   }
   enterAppFromOnboarding();
 }

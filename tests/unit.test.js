@@ -46,7 +46,7 @@ import {
   SEED_IDS, seedName, isRareSeed, growMinutes, GROW_MIN, GROW_MIN_RARE,
   HARVEST_BASE, HARVEST_BASE_RARE, COMPOSTS_PER_DAY, SPAWN_SEED_CHANCE, rollSpawnSeed,
 } from '../js/garden.js';
-import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN } from '../js/social.js';
+import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN, raceStanding } from '../js/social.js';
 import { MINI_THEMES } from '../js/poi.js';
 import { THEME_POOL, themedLook, FAMILIES } from '../js/bosses.js';
 
@@ -1855,6 +1855,55 @@ test('recovery: IDs accept what people type and reject what breaks the URL', () 
   const m = worker.match(/RECOVERY_ID_RE\s*=\s*(\/[^\n;]+\/)/);
   assert.ok(m, 'Worker declares RECOVERY_ID_RE');
   assert.equal(m[1], String(RECOVERY_ID_RE), 'client and Worker recovery-id rules must match exactly');
+});
+
+/* ---- CREW-2: the race rank is the server's, never re-derived from a 10-row
+   slice. js/app.js's `ordinal` and `esc` are tiny pure copies here: app.js
+   itself cannot be imported in plain node (it touches `location` at the top
+   level), and duplicating two one-liners is cheaper than extracting a shared
+   module for them. ---- */
+const ord = n => { if (!(n > 0)) return ''; const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+const escT = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+test('raceStanding: a true 14th reads 14th, not the old invented "11th"', () => {
+  // server sends only the top 10, but already knows you are 14th of 30
+  const top10 = Array.from({ length: 10 }, (_, i) => ({ rank: i + 1, name: `P${i + 1}`, steps: 20000 - i * 500, you: false }));
+  const race = { yourRank: 14, players: top10 };
+  const own = { weekKey: '2026-09-01', steps: 6000 };
+  const r = raceStanding(top10, race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.equal(r.rows.length, 10, 'the board itself stays the top 10, no synthetic 11th row');
+  assert.equal(r.yourRank, 14, 'the server rank is rendered as-is');
+  assert.ok(/14th/.test(r.standing), `expected "14th" in standing, got: ${r.standing}`);
+  assert.ok(!/11th/.test(r.standing), 'must never fall back to the old splice-and-renumber "11th"');
+});
+
+test('raceStanding: never ranked yet + you have walked -> a local lane, not a lie', () => {
+  const top10 = Array.from({ length: 3 }, (_, i) => ({ rank: i + 1, name: `P${i + 1}`, steps: 5000 - i * 1000, you: false }));
+  const race = { yourRank: null, players: top10 }; // your push has not landed on the server yet
+  const own = { weekKey: '2026-09-01', steps: 2000 };
+  const r = raceStanding(top10, race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.equal(r.rows.length, 4, 'your own known step count earns you a lane when the server has none for you');
+  assert.equal(r.yourRank, 4, 'ranked locally among the rows actually in view');
+  assert.ok(/4th/.test(r.standing));
+});
+
+test('raceStanding: unranked reads "unranked", never a NaN rank', () => {
+  // a row is flagged you (some future server could send this) but carries no
+  // numeric rank -- must not render ordinal(null) as "NaNth".
+  const rows = [{ rank: 1, name: 'P1', steps: 5000, you: true }, { rank: 2, name: 'P2', steps: 3000, you: false }];
+  const race = { yourRank: null, players: rows };
+  const own = { weekKey: '2026-09-01', steps: 0 };
+  const r = raceStanding(rows, race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.ok(/unranked/.test(r.standing), `expected "unranked", got: ${r.standing}`);
+  assert.ok(!/NaN/.test(r.standing));
+});
+
+test('raceStanding: nobody has walked -> the empty-board line, not a crash', () => {
+  const race = { yourRank: null, players: [] };
+  const own = { weekKey: '2026-09-01', steps: 0 };
+  const r = raceStanding([], race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.equal(r.rows.length, 0);
+  assert.match(r.standing, /Nobody has walked/);
 });
 
 /* ---- v240 safe-area guard ------------------------------------------------
