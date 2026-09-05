@@ -118,12 +118,17 @@ export async function buyDropItem(itemId) {
  *
  * WHAT THIS DOES NOT DO, and it must be said beside the numbers rather than in
  * a report nobody re-reads: IT DOES NOT MAKE THE CATALOGUE LAST A YEAR. Same
- * sim, committed player, day the shelf goes empty: 141 at today's prices, 172
- * at this ladder, 193 even at 6x. It asymptotes around 200 because 255 of the
- * 355 buyable pieces arrive FREE in crates (rollCosmetic prefers unowned, so
- * the crate faucet hands over the catalogue whatever the shop charges). Price
- * is a spend lever, not a pacing lever. The pacing lever is the crate cosmetic
- * drop, which is E32-3's fifth-cut and is NOT shipped.
+ * sim, committed player, day the shelf goes empty (mean of seeds 11/23/47):
+ * 140 at today's prices, 149 at THIS ladder, and it was 172 at the rejected
+ * flat 2x and 193 at 6x on seed 11. It asymptotes around 200 whatever the shop
+ * charges, because ~255 of the 355 buyable pieces arrive FREE in crates:
+ * rollCosmetic prefers UNOWNED, so a purchase and a crate drop are SUBSTITUTES
+ * drawing on one pool, not additions to a total. Day to day the player is
+ * income-bound, not price-bound, so raising prices does not raise spend (day 90
+ * committed spend is 26,500 before and 25,433 after); it only buys fewer pieces
+ * with the same coins (79 -> 75 by day 90). Price is a merchandise lever, not a
+ * pacing lever. The pacing lever is the crate cosmetic drop, which is E32-3's
+ * fifth-cut and is NOT shipped.
  *
  * CORROBORATION: Tom priced a single football garment at 4,200 by hand on
  * 2026-09-04. That is 2.1x the legendary this ladder replaces, and within 5% of
