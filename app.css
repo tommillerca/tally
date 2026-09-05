@@ -11180,14 +11180,27 @@ button.t3-price::before {
    margins that let the first and last tiles reach that centre, and living
    inside a CSS grid it has to span. No momentum code: scroll-snap-type lands
    it and the browser does the fling. */
+/* TOP-LEFT, NOT TOP-RIGHT, AND THAT IS MEASURED. The first version sat at
+   `right: 3px; top: 3px`, which is where .ward-cell.equipped::after paints its
+   green tick (4px/4px, 20x20): on the tile you are actually wearing -- the one
+   most worth reading -- the count sat under the tick. Cosmetic tiles keep their
+   tier letter at bottom-left and only GEAR tiles use the top-left corner, so
+   this corner is free here. wardrobe-family-grid-audit's BADGE row measures the
+   two boxes against each other so the pair cannot drift back together. */
 .ward-cell.fam .ward-fam-n {
-  position: absolute; right: 3px; top: 3px; z-index: 2; pointer-events: none;
+  position: absolute; left: 3px; top: 3px; z-index: 2; pointer-events: none;
   min-width: 15px; padding: 2px 4px; border-radius: 999px;
   font-size: 9px; font-weight: 900; line-height: 1; text-align: center;
   /* Same .88 plate as .ward-rar, and for the same measured reason: what is
      behind it is Cam's art and the worst case is a white pixel. */
   background: rgba(13, 12, 18, .88); color: var(--text);
 }
+/* THE OPEN TILE SAYS SO. Without this the rail below is the only evidence of
+   which of nine badged tiles it belongs to, and on a 4-wide grid it can be any
+   of the four above it. The badge fills rather than changing shape, so it is
+   the same target and the same box: fill AND text colour, never colour alone
+   (a11y-audit), and it reads at a glance beside the unfilled ones. */
+.ward-cell.fam[aria-expanded="true"] .ward-fam-n { background: var(--gold); color: #17140b; }
 .fam-rail {
   grid-column: 1 / -1;          /* .ward-grid is a 4-column grid; the rail spans it */
   /* NO scroll-snap-type of its own: .pw-row already declares `x mandatory`,

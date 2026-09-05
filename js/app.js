@@ -15177,6 +15177,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
       $$('[data-equip]', node).forEach(wireEquip);
       hydratePackArt(node, '.ward-art[data-art]');
       node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      /* THE ONE YOU ARE WEARING OPENS UNDER YOUR THUMB. The rail snaps to
+         centre, so without this a family whose worn colourway is 20th opens on
+         the first tile and the player has to hunt for the ring they came to
+         move. `inline` only, and block: 'nearest', so this scrolls the rail and
+         not the page out from under the tap. */
+      $('.equipped', node)?.scrollIntoView({ block: 'nearest', inline: 'center' });
     }));
     /* A LOOK TAP MOVES FOUR THINGS AND REBUILDS NOTHING (QA round 23 F1).
        Preview and commit used to call renderCharacter(wrap, 'wardrobe',
