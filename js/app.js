@@ -9379,7 +9379,7 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
       <div class="fb-hero">
         <div class="pc-worn fit-body">${avatarLayersHtml({ ...RACK_BASE, ...Object.fromEntries(sold.filter(g => !g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])) },
           { wpnAura: null, skip: ['C'], thumb: bhTierFor(260) })}</div>
-        <span class="fb-hero-pet">${croppedPetImg(FOOTBALL_PETS[0], 64, false, null,
+        <span class="fb-hero-pet">${croppedPetImg(FOOTBALL_PETS[0], 108, false, null,
           Object.fromEntries(sold.filter(g => g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])), 192)}</span>
       </div>
       <div class="tx">
