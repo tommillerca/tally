@@ -37,7 +37,8 @@ import {
 import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, gearDustValue, gearStatPoints, petDustValue,
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
   removeInstance, breedParents, transmogCost, TRANSMOG_HIDE,
-  nickProblem, cleanNick, NICK_MAX } from '../js/loot.js';
+  nickProblem, cleanNick, NICK_MAX,
+  RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_REROLL_LADDER } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, PET_SLOTS } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
@@ -743,6 +744,61 @@ test('rarity weights sum to 100 and crates are sane', () => {
   assert.deepEqual(CRATES.golden.coins, [10, 25], 'Bone Crate coin range (shipped economy number)');
   assert.deepEqual(CRATES.egg.coins, [20, 50], 'Step Egg coin range (shipped economy number)');
   assert.ok(SHOP.every(s => s.cost > 0));
+});
+
+/* THE COSMETIC PRICE LADDER, PINNED (round 33, 2026-09-04, Tom: "Just make
+   everything cost more"). Same reasoning as the crate ranges above: these are
+   shipped economy numbers and nothing in the tree noticed if one of them
+   drifted. tests/rack-rotate-audit.mjs already checks the ladder's SHAPE (dust
+   never reverses, every rung has a dust twin) and stays green at any prices at
+   all, which is the shape-not-state hole this closes.
+
+   THREE THINGS ARE PINNED, and the third is the one that matters:
+   1. every coin and dust value, so a change is a deliberate edit here;
+   2. the ANCHOR, which is a rule and not a preference: a 340-coin starting
+      wallet must be able to buy the cheapest thing on the shelf, or the screen
+      has no affordable state on it at all (js/loot.js RACK_POOLS). This is the
+      reason the doubling exempted `common`, and it is measured: at a flat 2x
+      the sim's light player's first cosmetic slips day 22 -> 35 and their year
+      falls 21 pieces -> 9;
+   3. the RELATIONSHIP. Dust is the certainty premium, so coins-per-dust must
+      never reverse AND must not silently re-rate: doubling coins alone would
+      have halved dust's real price with every ordering check still green. Both
+      shelves' ratios are pinned to the values the shipped comments state. */
+test('rack: the cosmetic price ladder, its anchor and its coins-per-dust', () => {
+  assert.deepEqual(RACK_RARITY_PRICE, {
+    common:    [300, 35],
+    uncommon:  [1400, 150],
+    rare:      [2000, 190],
+    epic:      [2800, 260],
+    legendary: [4000, 320],
+  }, 'rarity ladder (shipped economy number)');
+  assert.deepEqual(RACK_POOLS.map(([coin]) => coin),
+    [6000, 4800, 4000, 3000, 2000, 1800, 1400, 300], 'themed rung prices (shipped economy number)');
+  assert.deepEqual(RACK_DUST, [400, 350, 320, 260, 190, 180, 150, 35], 'themed rung dust (shipped economy number)');
+  assert.deepEqual([RACK_AURA.coin, RACK_AURA.dust], [2400, 220], 'aura price (shipped economy number)');
+  /* The reroll's opening rung is a quarter of a legendary BY CONSTRUCTION
+     (js/loot.js RACK_REROLL_LADDER), so it is pinned to the ladder, not just to
+     itself: leaving it behind a doubled legendary makes the stated rule false. */
+  assert.deepEqual(RACK_REROLL_LADDER, [0, 1000, 2000, 4000, 8000, 16000], 'reroll ladder (shipped economy number)');
+  assert.equal(RACK_REROLL_LADDER[1], RACK_RARITY_PRICE.legendary[0] / 4,
+    'reroll opens at a quarter of a legendary, as its own comment claims');
+
+  // 2. the anchor: a starting wallet buys the cheapest rung, and one exists
+  const STARTING_WALLET = 340;   // js/loot.js RACK_POOLS, "a starting wallet is 340 coins"
+  const cheapestRung = Math.min(...RACK_POOLS.map(([c]) => c));
+  assert.ok(cheapestRung <= STARTING_WALLET,
+    `cheapest rack rung ${cheapestRung} is out of a ${STARTING_WALLET}-coin starting wallet's reach`);
+  assert.equal(RACK_RARITY_PRICE.common[0], cheapestRung,
+    'the two shelves disagree about the anchor: a common costs more on one than the other');
+
+  // 3. the relationship, both shelves, to the ratios the shipped comments state
+  const round1 = n => Math.round(n * 10) / 10;
+  assert.deepEqual(RACK_POOLS.map(([c], i) => round1(c / RACK_DUST[i])),
+    [15, 13.7, 12.5, 11.5, 10.5, 10, 9.3, 8.6], 'themed coins-per-dust, dearest to cheapest');
+  assert.deepEqual(['common', 'uncommon', 'rare', 'epic', 'legendary']
+    .map(r => round1(RACK_RARITY_PRICE[r][0] / RACK_RARITY_PRICE[r][1])),
+    [8.6, 9.3, 10.5, 10.8, 12.5], 'rarity coins-per-dust, cheapest to dearest');
 });
 
 // ---- boneheadz manifest ----

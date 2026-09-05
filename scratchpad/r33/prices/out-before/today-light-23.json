@@ -1,0 +1,68 @@
+{
+  "rules": "today",
+  "depth": "light",
+  "seed": 23,
+  "days": 365,
+  "priceMult": 1,
+  "ladder": [
+    300,
+    700,
+    1000,
+    1400,
+    2000
+  ],
+  "catalogueCost": 277100,
+  "bought": 18,
+  "firstBuyDay": 17,
+  "snaps": {
+    "30": {
+      "wallet": 175,
+      "spent": 300,
+      "bought": 1,
+      "owned": 13
+    },
+    "90": {
+      "wallet": 227,
+      "spent": 1200,
+      "bought": 4,
+      "owned": 38
+    },
+    "180": {
+      "wallet": 197,
+      "spent": 2400,
+      "bought": 8,
+      "owned": 63
+    },
+    "365": {
+      "wallet": 280,
+      "spent": 5400,
+      "bought": 18,
+      "owned": 126
+    }
+  },
+  "coinsPerDay": 13.3,
+  "pitPerDay": 0,
+  "cratePerDay": 6.7,
+  "healthPerDay": 3,
+  "levelPerDay": 3.6,
+  "level": 19,
+  "cosmetics": 126,
+  "gear": 18,
+  "dust": 75,
+  "wallet": 280,
+  "spent": 5400,
+  "windowsDone": 0,
+  "dayOutOfThings": null,
+  "firstWindowDay": null,
+  "crateCoinRanges": {
+    "daily": [
+      20,
+      40
+    ],
+    "golden": [
+      10,
+      25
+    ]
+  },
+  "ms": 21913
+}

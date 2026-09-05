@@ -73,7 +73,7 @@ const dbm = await import('../../../js/db.js');
 const g = await import('../../../js/game.js');
 const loot = await import('../../../js/loot.js');
 const { dateKey, addDays } = await import('../../../js/nutrition.js');
-const { BH_ITEMS } = await import('../../../data/boneheadz.js');
+const { BH_ITEMS, BH_BY_ID } = await import('../../../data/boneheadz.js');
 const { GEAR_ITEMS, GEAR_SLOTS } = await import('../../../js/gear.js');
 
 const DAY_MS = 86400000;
@@ -212,12 +212,40 @@ function applyOverlay(rules) {
   return { crateCoins: coins, pool: [...keep] };
 }
 
+/* ---------------- PRICES: the cosmetic ladder, scaled in place -------------
+   Round 33 asked the faucet question; this knob asks the SINK question with the
+   SAME instrument, which is the only way the caveat at the top of this file
+   ("deltas are decision grade, absolutes are not") survives. The multiplier
+   rewrites the SHIPPED RACK_RARITY_PRICE object, so shopRack and buyRackItem
+   both read the scaled ladder rather than a second copy of it.
+   PRICE_LADDER, when given, wins over the multiplier: that is how a proposed
+   clean ladder (600/1400/2000/2800/4000) is measured rather than a raw 2.0x. */
+const RARITY_KEYS = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+const BASE_LADDER = RARITY_KEYS.map(k => loot.RACK_RARITY_PRICE[k].slice());
+const BASE_POOLS = loot.RACK_POOLS.map(([p]) => p);
+const BASE_AURA = loot.RACK_AURA.coin;
+function applyPrices(mult, ladder) {
+  RARITY_KEYS.forEach((k, i) => {
+    loot.RACK_RARITY_PRICE[k][0] = ladder ? ladder[i] : Math.round(BASE_LADDER[i][0] * mult);
+  });
+  // the themed rungs and the aura ride the same scale, or the two shelves disagree
+  loot.RACK_POOLS.forEach((rung, i) => { rung[0] = Math.round(BASE_POOLS[i] * mult); });
+  loot.RACK_AURA.coin = Math.round(BASE_AURA * mult);
+}
+
+/* WHAT THE PLAYER CAN ACTUALLY BUY, at today's ladder or a scaled one. Counted
+   here rather than read off `cosmetics`, because ownedCosmeticIds() unions
+   PURCHASES with CRATE DROPS and the two answer different questions. */
+const catalogueCost = () => loot.RACK_ROTATE_POOL
+  .reduce((s, id) => s + loot.RACK_RARITY_PRICE[BH_BY_ID[id].rarity][0], 0) + loot.RACK_AURA.coin;
+
 /* ---------------- one run ---------------- */
-async function run({ rules, depth, seed, days }) {
+async function run({ rules, depth, seed, days, priceMult, ladder }) {
   RAND = mulberry32(seed);
   const r = () => RAND();
   const prof = DEPTHS[depth];
   const overlay = applyOverlay(rules);
+  applyPrices(priceMult ?? 1, ladder);
 
   useDbName(`faucet-${rules}-${depth}-${seed}-${Date.now()}`);
   await db.clear('kv'); await db.clear('xp'); await db.clear('inv'); await db.clear('log');
@@ -229,6 +257,16 @@ async function run({ rules, depth, seed, days }) {
   let spent = 0, windowsOwned = new Set(), outOfThings = null, firstWindowDay = null;
   const ownedWindowPieces = new Set();
   let prevCoins = 0, prevLevelCoins = 0;
+  /* THE RACK PATH HAD NO out-of-things DETECTOR AT ALL: `outOfThings` was only
+     ever written in the windows branch, so every `today` row printed null and
+     the day a rack player runs dry was never measured. `bought` is counted
+     separately from `cosmetics` because ownedCosmeticIds() unions purchases
+     with CRATE DROPS, and a catalogue that arrives free in crates is not a
+     catalogue a price can pace. */
+  const boughtIds = new Set();
+  let firstBuyDay = null;
+  const snaps = {};
+  const SNAP_DAYS = [30, 90, 180, 365];
 
   for (let d = 0; d < days; d++) {
     setNow(START + d * DAY_MS);
@@ -274,7 +312,16 @@ async function run({ rules, depth, seed, days }) {
 
     // 6. spend
     if (rules === 'today') {
-      spent += await shopRack(r);
+      spent += await shopRack(r, boughtIds);
+      if (firstBuyDay === null && boughtIds.size) firstBuyDay = d + 1;   // 1-based: "day 1" is their first day
+      /* out of things = every purchasable piece is OWNED, however it arrived.
+         RACK_ROTATE_POOL is the whole coin-buyable catalogue (the themed nine
+         are drawn from the same art), so owning all of it is the shelf going
+         empty for this player. */
+      if (outOfThings === null) {
+        const owned = await loot.ownedCosmeticIds();
+        if (loot.RACK_ROTATE_POOL.every(id => owned.has(id))) outOfThings = d;
+      }
     } else {
       const week = Math.floor(d / 7) + 1;
       const res = await shopWindows(week, windowsOwned, ownedWindowPieces);
@@ -282,6 +329,13 @@ async function run({ rules, depth, seed, days }) {
       if (res.bought && firstWindowDay === null) firstWindowDay = d;
       const released = WINDOWS.filter(w => w[0] <= week).length;
       if (outOfThings === null && windowsOwned.size === released && released > 0) outOfThings = d;
+    }
+
+    if (SNAP_DAYS.includes(d + 1)) {
+      snaps[d + 1] = {
+        wallet: await loot.coins(), spent, bought: boughtIds.size,
+        owned: (await loot.ownedCosmeticIds()).size + ownedWindowPieces.size,
+      };
     }
   }
 
@@ -297,6 +351,12 @@ async function run({ rules, depth, seed, days }) {
 
   return {
     rules, depth, seed, days,
+    priceMult: priceMult ?? 1,
+    ladder: RARITY_KEYS.map(k => loot.RACK_RARITY_PRICE[k][0]),
+    catalogueCost: catalogueCost(),
+    bought: boughtIds.size,
+    firstBuyDay,
+    snaps,
     coinsPerDay: +(total / days).toFixed(1),
     pitPerDay: +(income.pit / days).toFixed(1),
     cratePerDay: +(income.crate / days).toFixed(1),
@@ -318,7 +378,7 @@ async function run({ rules, depth, seed, days }) {
    The player buys everything unowned they can afford, cheapest first, which is
    the most generous read and so the one that makes an idle wallet hardest to
    claim. */
-async function shopRack(r) {
+async function shopRack(r, boughtIds) {
   const owned = await loot.ownedCosmeticIds();
   const pool = loot.RACK_ROTATE_POOL;
   const offers = [];
@@ -334,6 +394,7 @@ async function shopRack(r) {
   for (const o of offers) {
     if ((await loot.spendCoins(o.price)) === null) break;
     await loot.grantCosmetic(o.id, 'rack');
+    boughtIds.add(o.id);
     spent += o.price;
   }
   return spent;
@@ -363,21 +424,35 @@ const seeds = arg('seeds', '11,23,47').split(',').map(Number);
 const ruleSets = arg('rules', 'today,fifth,fifth-half').split(',');
 const depths = arg('depths', 'light,committed,heavy').split(',');
 const outDir = arg('out', null);
+/* --price-mults 1,2 runs the SAME rule set at two ladders in one process, which
+   is the only comparison this file's own caveat licenses. --ladder overrides
+   the multiplier with five explicit coin prices. */
+const priceMults = arg('price-mults', '1').split(',').map(Number);
+const ladderArg = arg('ladder', null);
+const ladder = ladderArg ? ladderArg.split(',').map(Number) : null;
 
 const rows = [];
-for (const rules of ruleSets) for (const depth of depths) for (const seed of seeds) {
+for (const rules of ruleSets) for (const priceMult of priceMults) for (const depth of depths) for (const seed of seeds) {
   const t0 = RealDate.now();
-  const row = await run({ rules, depth, seed, days });
+  const row = await run({ rules, depth, seed, days, priceMult, ladder: priceMult === 1 && !ladderArg ? null : ladder });
   row.ms = RealDate.now() - t0;
   rows.push(row);
-  process.stderr.write(`${rules}/${depth}/${seed}  ${row.coinsPerDay}/day  wallet ${row.wallet}  (${row.ms}ms)\n`);
+  process.stderr.write(`${rules}/x${priceMult}/${depth}/${seed}  ${row.coinsPerDay}/day  wallet ${row.wallet}  bought ${row.bought}  out ${row.dayOutOfThings}  (${row.ms}ms)\n`);
 }
 
-const head = ['scenario', 'depth', 'seed', 'coins/day', 'of which pit', 'level', 'cosmetics', 'gear', 'dust', 'wallet d365', 'windows done', 'day out of things', 'first window day'];
-const line = r => [r.rules, r.depth, r.seed, r.coinsPerDay, r.pitPerDay, r.level, r.cosmetics, r.gear, r.dust, r.wallet, r.windowsDone, r.dayOutOfThings, r.firstWindowDay];
+const head = ['scenario', 'ladder', 'catalogue', 'depth', 'seed', 'coins/day', 'of which pit', 'level', 'bought', 'cosmetics', 'gear', 'dust', 'wallet d365', 'windows done', 'day out of things', 'first buy day', 'first window day'];
+const line = r => [r.rules, r.ladder.join('/'), r.catalogueCost, r.depth, r.seed, r.coinsPerDay, r.pitPerDay, r.level, r.bought, r.cosmetics, r.gear, r.dust, r.wallet, r.windowsDone, r.dayOutOfThings, r.firstBuyDay, r.firstWindowDay];
 console.log('| ' + head.join(' | ') + ' |');
 console.log('|' + head.map(() => '---').join('|') + '|');
 for (const r of rows) console.log('| ' + line(r).join(' | ') + ' |');
+
+console.log('\nAffordability: pieces BOUGHT / coins spent / wallet, at day 30, 90, 180, 365');
+console.log('| scenario | ladder | depth | seed | ' + [30, 90, 180, 365].map(d => `d${d} bought | d${d} spent | d${d} wallet`).join(' | ') + ' |');
+console.log('|' + Array(4 + 12).fill('---').join('|') + '|');
+for (const r of rows) {
+  console.log('| ' + [r.rules, r.ladder.join('/'), r.depth, r.seed,
+    ...[30, 90, 180, 365].flatMap(d => { const s = r.snaps[d] || {}; return [s.bought ?? '', s.spent ?? '', s.wallet ?? '']; })].join(' | ') + ' |');
+}
 
 console.log('\nIncome split (coins/day): scenario depth seed  health crate pit level');
 for (const r of rows) console.log(`  ${r.rules} ${r.depth} ${r.seed}  ${r.healthPerDay} ${r.cratePerDay} ${r.pitPerDay} ${r.levelPerDay}   crate ranges ${JSON.stringify(r.crateCoinRanges)}`);
