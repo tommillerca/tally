@@ -954,9 +954,15 @@ export async function lifetimeStepsSum() {
    `goal: 0` is a READY egg, which is how the Crew channel can hand a new player
    one they can crack straight away. eggProgress compares walked >= goal, so zero
    is ready on arrival with no special case anywhere else. */
+/* THE ROW grantEgg WRITES, without writing it. The Boneyard's collect pays its
+   crate INSIDE the ledger claim's own transaction (js/hunt.js, QA round 28 Y5),
+   so it needs the row rather than the write, and building it here is what stops
+   the two shapes drifting apart. */
+export async function eggRow(source, goal = EGG_GOAL_STEPS) {
+  return { id: newId(), kind: 'egg', stepsAtStart: await lifetimeStepsSum(), goal, source, ts: Date.now() };
+}
 export async function grantEgg(source, goal = EGG_GOAL_STEPS) {
-  const stepsAtStart = await lifetimeStepsSum();
-  const row = { id: newId(), kind: 'egg', stepsAtStart, goal, source, ts: Date.now() };
+  const row = await eggRow(source, goal);
   await db.put('inv', row);
   return row;
 }
@@ -1658,9 +1664,11 @@ export async function migrateLegacyEggs() {
   return legacy.length;
 }
 
+// eggRow's sibling, same reason: the row a crate grant writes, without the write.
+export function crateRow(kind, source) { return { id: newId(), kind: 'crate', crate: kind, source, ts: Date.now() }; }
 export async function grantCrate(kind, source) {
   if (kind === 'egg') return grantEgg(source); // eggs incubate, they don't open
-  const row = { id: newId(), kind: 'crate', crate: kind, source, ts: Date.now() };
+  const row = crateRow(kind, source);
   await db.put('inv', row);
   return row;
 }

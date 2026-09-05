@@ -96,9 +96,15 @@ const ACTIONS = [
   { id: 'js/poi.js:claimMiniWin', sites: 3, drive: 'miniWin',
     transition: "a roaming mini-boss goes from unbeaten to beaten, today",
     authority: 'the ledger key mini-<date>-<cell>' },
-  { id: 'js/hunt.js:collectSpawn', sites: 3, drive: 'spawn',
+  /* sites went 3 to 1 on 2026-09-04 (QA round 28 Y5) and the drop is the fix:
+     coinsAdd and grantCrate were two writes AFTER the claim, and js/app.js paid
+     the ingredient and the feast coin bonus in two more after those, so a
+     process death anywhere in the run spent the spawn and delivered nothing.
+     All four now ride inside the claim's own transaction (db.claimAndPay), so
+     there is one write and therefore one paying site. */
+  { id: 'js/hunt.js:collectSpawn', sites: 1, drive: 'spawn',
     transition: 'a Boneyard spawn goes from uncollected to collected, today',
-    authority: 'the ledger key spawn-<date>-<spawn id>' },
+    authority: 'the ledger key spawn-<date>-<spawn id>, minted in the same IndexedDB transaction as the coins, the crate and the ingredient it buys' },
   { id: 'js/poi.js:claimDenLoot', sites: 1, drive: 'denLoot',
     transition: 'a pending gear choice goes from open to picked',
     authority: "the kv 'denloot' entry, removed BEFORE the gear is granted" },
@@ -181,7 +187,22 @@ const ACTIONS = [
      cannot see it (the race pays real prizes). */
   { id: 'js/wellness.js:logManualWalk', sites: 1, undriven: 'ledger key mwalk-<date>-<n>, capped 2/day in the write path' },
   { id: 'js/wellness.js:markRoutine', sites: 1, undriven: 'ledger key routine-<id>-<date>, and past ROUTINE_XP_CAP the row is minted with 0 XP on purpose' },
-  { id: 'js/cooking.js:doTransmute', sites: 1, undriven: 'a once-a-day cooldown plus an ingredient spend; nothing is granted without both' },
+  /* WAS EXEMPT, on the sentence "a once-a-day cooldown plus an ingredient spend;
+     nothing is granted without both". Sequentially true, and concurrency
+     falsifies it: round 26 drove six overlapping calls and measured six
+     successes, six Ectoplasm and ONE cooldown, because the cooldown was read in
+     one transaction and stamped in another with the spend and the grant awaited
+     in between. Round 28 re-checked and found the exemption still standing while
+     the suite printed REWARD SOP VERIFIED. An exemption is a guard told not to
+     look, so this one is driven now.
+     `sites` went 1 to 0 with the fix: the Ectoplasm is no longer a
+     grantIngredient call, it rides inside the same kvUpdate that takes the six
+     commons, the way collectTribute's payout lives inside its own kvUpdate. The
+     driver's `count` grades BOTH halves the ticket named, one payout AND one
+     spend: see DRIVERS.transmute. */
+  { id: 'js/cooking.js:doTransmute', sites: 0, drive: 'transmute',
+    transition: 'the transmute goes from due to spent for the next 20 hours',
+    authority: "kvUpdate on 'transmuteAt': the cooldown is re-read and the stamp written in ONE transaction, so the loser is refused before the larder is touched; the six commons and the Ectoplasm they buy then land in one kvUpdate on 'ingredients'" },
   { id: 'js/garden.js:compostIngredient', sites: 1, undriven: 'spends an ingredient and is capped at COMPOSTS_PER_DAY; a conversion, not a payout' },
   { id: 'js/loot.js:buyShopItem', sites: 1, undriven: 'a purchase: the second attempt is MEANT to charge again. Was 3 until 2026-08-25: crates came off the coin shop (S0), so the two grantCrate branches went with them and only grantConsumable is left' },
   /* js/loot.js:buyWithDust stood here with 3 sites (grantEgg / grantCrate /
@@ -250,7 +271,7 @@ const ACTIONS = [
      against a real IndexedDB by tests/mimic-audit.mjs and
      tests/wanderer-boneyard-audit.mjs (ONE-SHOT / ATOMIC). */
   { id: 'js/app.js:openFight', sites: 18, undriven: 'the fight settlement: thirteen modes, every one of them delegating to a claim function registered above (claimFriendBattle, claimDenWin, claimMiniWin, claimGluttonWin) or gated on an award() key it reads before paying. The two remote branches are pinned by name by the NO-OP guards in tests/unit.test.js; tests/glutton-audit.mjs and tests/spire-phase3-audit.mjs drive the two that shipped exploits; and the two Boneyard ambushes (mimic, wanderer) are driven by tests/mimic-audit.mjs and tests/wanderer-boneyard-audit.mjs' },
-  { id: 'js/app.js:renderBoneyard', sites: 4, undriven: 'the map: the tribute button and the spawn button, both delegating to collectTribute and collectSpawn, which are driven above. Was 5 until 2026-08-18: a collect also paid a garden seed, and with the Bone Garden off the player\'s path a seed cannot be planted, so that grant came out' },
+  { id: 'js/app.js:renderBoneyard', sites: 2, undriven: 'the map: the tribute button and the spawn button, both delegating to collectTribute and collectSpawn, which are driven above. Was 5 until 2026-08-18: a collect also paid a garden seed, and with the Bone Garden off the player\'s path a seed cannot be planted, so that grant came out. Was 4 until 2026-09-04 (QA round 28 Y5): the two remaining sites were the collect\'s OWN ingredient and feast bonus, paid here, two writes past the ledger claim that had already spent the spawn. They moved inside the claim\'s transaction in js/hunt.js and this function now only names what was delivered' },
   { id: 'js/app.js:openKitchen', sites: 3, undriven: 'awardCapped on a served dish (driven above), plus a coin-priced forage' },
   { id: 'js/app.js:openHollow', sites: 1, undriven: 'awardCapped on a harvested bed; harvestPlot is the authority and is driven above' },
   { id: 'js/app.js:openGardenSheet', sites: 1, undriven: 'DEAD CODE: openGardenSheet has no caller anywhere in js/ (the GROW door opens openHollow). Registered so that if it is ever wired back up, the count moves and somebody has to look at it' },
@@ -547,6 +568,28 @@ const results = await page.evaluate(async () => {
       act: () => cooking.advanceQueue(),
       won: r => r.length > 0,
       count: async () => (await cooking.pantryDishes()).length,
+    }),
+    /* TWELVE commons in, so that on the pre-fix tree BOTH overlapping taps can
+       AFFORD to pay and the leak shows up as inventory rather than only as two
+       ok:true. `count` is the number of transmutes the larder shows evidence of,
+       taking the LARGER of Ectoplasm minted and six-common lots spent: one
+       honest transmute reads 1 from both sides, a double payout reads 2 on the
+       mint, and a double spend that mints once reads 2 on the commons. That is
+       the ticket's "ONE payout and ONE spend" as a single graded number.
+       The stamp is zeroed so the cooldown is due; the larder is set rather than
+       topped up so the arithmetic below has a known denominator. */
+    transmute: () => ({
+      setup: async () => {
+        await db.kvSet('ingredients', { [cooking.COMMON_INGREDIENT_IDS[0]]: 12 });
+        await db.kvSet('transmuteAt', 0);
+      },
+      act: () => cooking.doTransmute(),
+      won: r => !!r.ok,
+      count: async () => {
+        const inv = await cooking.ingredients();
+        const commons = cooking.COMMON_INGREDIENT_IDS.reduce((a, id) => a + (inv[id] || 0), 0);
+        return Math.max(inv[cooking.RARE_INGREDIENT] || 0, (12 - commons) / cooking.TRANSMUTE.commons);
+      },
     }),
     /* A GATE rather than a payout: what it hands over is the right to a staked
        fight, so `count` is the charge actually taken off the meter. Grading it

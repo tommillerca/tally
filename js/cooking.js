@@ -473,16 +473,38 @@ export async function doTransmute(now = Date.now()) {
   const st = await transmuteStatus(now);
   if (!st.ready) return { ok: false, reason: 'cooldown', msLeft: st.msLeft };
   if (!st.canAfford) return { ok: false, reason: 'ingredients', need: TRANSMUTE.commons, have: st.commonsHave };
-  /* The take is one transaction, same as payIngredients above: transmuteConsume
-     is pure precisely so it can run inside one, and reading the larder then
-     writing it whole dropped anything granted in between. */
-  const taken = await kvUpdate('ingredients', raw => {
+  /* QA round 26 O2, still open on main at round 28: the `st.ready` check above
+     and the stamp below were two transactions with the spend and the grant
+     awaited in between, so overlapping taps all read "ready" and all paid. Six
+     concurrent calls were measured taking six Ectoplasm against ONE cooldown.
+     THE STAMP IS THE CLAIM: one kvUpdate on 'transmuteAt' that re-reads the
+     cooldown and refuses INSIDE its own transaction, so the loser is turned
+     away before anything moves. `prev` is kept so a failed take hands the day
+     back rather than burning it for nothing. */
+  let prev = 0;
+  const stamped = await kvUpdate('transmuteAt', raw => {
+    prev = Number(raw) || 0;
+    return prev + TRANSMUTE.cooldownMs > now ? undefined : now;
+  }, 0);
+  // the loser lost by microseconds, so the winner's stamp is ~now: a full cooldown
+  if (stamped === undefined) return { ok: false, reason: 'cooldown', msLeft: TRANSMUTE.cooldownMs };
+  /* Spend AND grant in ONE transaction on the larder: transmuteConsume is pure
+     precisely so it can run inside one, and reading the larder then writing it
+     whole dropped anything granted in between. The Ectoplasm rides in the same
+     write as the six commons it cost, so there is no state where one exists
+     without the other. */
+  const paid = await kvUpdate('ingredients', raw => {
     const res = transmuteConsume(raw || {}, TRANSMUTE.commons);
-    return res.taken < TRANSMUTE.commons ? undefined : res.inv;
+    if (res.taken < TRANSMUTE.commons) return undefined;
+    res.inv[TRANSMUTE.yields] = (res.inv[TRANSMUTE.yields] || 0) + 1;
+    return res.inv;
   }, {});
-  if (!taken) return { ok: false, reason: 'ingredients', need: TRANSMUTE.commons, have: st.commonsHave };
-  await grantIngredient(TRANSMUTE.yields, 1);
-  await kvSet('transmuteAt', now);
+  if (!paid) {
+    // the larder was drained between the affordability check and the take (a
+    // cook queued in another tab): give the day back, nothing was spent
+    await kvUpdate('transmuteAt', cur => (cur === now ? prev : undefined), 0);
+    return { ok: false, reason: 'ingredients', need: TRANSMUTE.commons, have: st.commonsHave };
+  }
   return { ok: true, yields: TRANSMUTE.yields };
 }
 

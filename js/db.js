@@ -321,6 +321,62 @@ export function addIfAbsent(store, val) {
   })));
 }
 
+/* ATOMIC CLAIM-AND-PAY: the claim AND everything it buys, in ONE transaction.
+ *
+ * addIfAbsent makes the CLAIM indivisible and nothing else. Every caller then
+ * paid in LATER transactions, so a process death between them left a minted
+ * ledger row and no reward: the action was spent and the player got nothing.
+ * QA round 28 Y5 measured it on the Boneyard collect, where the ingredient and
+ * the feast coin bonus were two more writes downstream again, in js/app.js.
+ *
+ * `row` is added to `store` with add(), the same test-and-set addIfAbsent is
+ * built on, and the payout is dispatched from INSIDE that request's success
+ * callback, so it joins the SAME transaction. A loser writes nothing at all.
+ * Resolves true only for the caller whose row landed.
+ *
+ * `pay.kv` is {key: fn} with kvUpdate's exact contract: `fn` MUST be
+ * synchronous (an await would let the transaction finish under it) and
+ * returning `undefined` writes nothing. `pay.puts` is [{store, val}] for rows
+ * whose key this caller minted, which need no read first. */
+export function claimAndPay(store, row, { kv = {}, puts = [] } = {}) {
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
+  const kvKeys = Object.keys(kv);
+  const stores = [...new Set([store, ...(kvKeys.length ? ['kv'] : []), ...puts.map(p => p.store)])];
+  for (const s of stores) bumpStore(s);   // same stamp discipline as addIfAbsent
+  return guard(store, row, 'claimAndPay', () => open().then(db => new Promise((resolve, reject) => {
+    const t = db.transaction(stores, 'readwrite');
+    let inserted = true;
+    let threw = null;
+    const die = e => { threw = e; try { t.abort(); } catch { /* already going */ } };
+    const req = t.objectStore(store).add(row);
+    req.onerror = e => {
+      if (req.error && req.error.name === 'ConstraintError') {
+        inserted = false;
+        e.preventDefault();      // "already claimed" is an answer, not a failure
+        e.stopPropagation();
+      }
+    };
+    req.onsuccess = () => {
+      try {
+        const os = kvKeys.length ? t.objectStore('kv') : null;
+        for (const k of kvKeys) {
+          const g = os.get(k);
+          g.onsuccess = () => {
+            try {
+              const next = kv[k](g.result ? g.result.v : undefined);
+              if (next !== undefined) os.put({ k, v: next });
+            } catch (e) { die(e); }
+          };
+        }
+        for (const p of puts) t.objectStore(p.store).put(p.val);
+      } catch (e) { die(e); }
+    };
+    t.oncomplete = () => resolve(inserted);
+    t.onerror = () => reject(threw || t.error);
+    t.onabort = () => reject(threw || t.error || new Error('claimAndPay aborted'));
+  })));
+}
+
 /* ATOMIC TAKE. Hands the row over and deletes it, in ONE transaction.
  *
  * An inventory row (a crate, an egg, a piece of gear) IS the right to one
@@ -399,6 +455,7 @@ export const db = {
   /* The two atomic ones, defined above and hung here so every caller that
      already has `db` can reach them without a second import. */
   addIfAbsent: (store, val) => addIfAbsent(store, val),
+  claimAndPay: (store, row, pay) => claimAndPay(store, row, pay),
   take: (store, key) => take(store, key),
   byIndex: (store, index, value) => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(store, 'readonly');

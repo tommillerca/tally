@@ -264,14 +264,19 @@ export async function award(key, type, xp, label, date) {
    overwrite key/type/xp/ts: those five are what every reader and every dedupe in
    the app is built on, and a caller quietly shadowing `key` would break the
    claim this function exists to make. */
-export async function awardOnce(key, type, xp, label, date, extra = null) {
+/* `pay`, when given, is the REST of the reward, written in the SAME transaction
+   as the ledger row (db.claimAndPay). Without it the claim is atomic and the
+   payout that follows is not, so a process death in between spends the action
+   and hands over nothing (QA round 28 Y5, the Boneyard collect). Omitted by
+   every other caller, and omitting it is byte-for-byte the old path. */
+export async function awardOnce(key, type, xp, label, date, extra = null, pay = null) {
   const row = { ...(extra || {}), key, type, xp, label, date: date || dateKey(), ts: Date.now() };
   /* Read the stamp and the cache with no await between them, so the pair is
      consistent: `live` means base IS the xp total as of epoch e0. */
   const e0 = db.epoch('xp');
   const live = !!xpCache && xpCache.epoch === e0;
   const base = live ? xpCache.v : 0;
-  const claimed = await db.addIfAbsent('xp', row);
+  const claimed = pay ? await db.claimAndPay('xp', row, pay) : await db.addIfAbsent('xp', row);
   xpCache = live && db.epoch('xp') === e0 + 1
     ? { v: base + (claimed ? (xp || 0) : 0), epoch: e0 + 1 }
     : null;

@@ -73,7 +73,7 @@ import { attachWalk } from './walk.js';
 import { refreshPitEnergy, spendPitFight, refundPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
-  spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
+  SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
   POTIONS, POTION_BY_ID, RECIPE_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
   pantryDishes, activatePantryDish, discardPantryDish,
@@ -20416,14 +20416,15 @@ async function renderBoneyard(el) {
       const ceremony = !!SPAWN_TYPES[rec.spawn.type].crate;
       if (ceremony) confettiBurst(innerWidth / 2, innerHeight * 0.4, 20);
       coinSound(S.sounds);
-      // scavenging drops a cooking ingredient (deterministic per spawn; RAREs give
-      // Ectoplasm). ingN can now be 0: food is split across a denser field, so
-      // most finds carry none and the Herb patch carries two (cooking.js SPAWN_FOOD).
-      const { id: ingId, n: ingN } = spawnIngredient(rec.spawn);
-      if (ingN) await grantIngredient(ingId, ingN);
-      // active feast buff boosts the spawn's coins too
-      const fcm = await foodCoinMult();
-      if (res.coins && fcm > 1) { const bonus = Math.round(res.coins * (fcm - 1)); await coinsAdd(bonus); res.coins += bonus; }
+      /* THE PAYOUT IS COLLECTSPAWN'S, NOT THIS HANDLER'S (QA round 28 Y5). The
+         scavenged ingredient and the feast coin bonus used to be paid HERE, two
+         writes downstream of a ledger claim that had already spent the spawn, so
+         a process death between them handed the player nothing and the next tap
+         was correctly refused. Both now ride inside the claim's own transaction;
+         this block only reads what was delivered so it can name it.
+         ingN can be 0: food is split across a denser field, so most finds carry
+         none and the Herb patch carries two (cooking.js SPAWN_FOOD). */
+      const { id: ingId, n: ingN } = res.ing;
       /* THREE CHANGES MEET AT THIS ONE BLOCK and every part is load-bearing.
          Whoever edits it next should read all three before touching it.
 
