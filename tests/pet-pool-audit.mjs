@@ -59,8 +59,19 @@
  *            call that. This is the row that fails on the NEXT re-inlining,
  *            which is how both bugs above were born.
  *
- * PROVE-RED, every row against a real defect. See the block at the bottom of
- * this header for the exact mutations and their output.
+ * KENNEL PHASE A, 2026-09-05: pickRandomPet's dupe pool used to filter
+ * `i.rarity !== 'common'`, dropping C3 Catfish and C4 Beardie from every
+ * duplicate egg. Fixed to a uniform pick over the whole non-shop,
+ * non-exclusive pool (js/loot.js pickRandomPet). SPLIT's even share and
+ * NEVER's banned set are updated below for the new five-way pool (DRIFT: the
+ * ruling changed, so the assertion moves with it, not the code); a new
+ * DUPE-POOL row pins the fix directly (both commons reachable). Re-proved red
+ * by reverting to the old `!== 'common'` filter, see the block at the very end
+ * of this file.
+ *
+ * PROVE-RED (original pools, pre-Phase-A), every row against a real defect.
+ * See the block at the bottom of this header for the exact mutations and
+ * their output.
  *
  * PURE: imports js/loot.js and data/boneheadz.js, no browser, no db. ~7s.
  *
@@ -192,9 +203,14 @@ for (const [label, tally] of [['fresh player', fresh], ['owns every species', fu
 
 /* SPLIT — the "and not more" half, and a positive control that the pool is live.
    Everything that is neither exclusive nor a shop pet shares the remaining 99%
-   evenly, minus the commons, which the pool only falls back to when nothing
-   better is left. A gate that swallowed the rest of the roster would pass RATE. */
-const evenPool = pets.filter(i => !i.exclusive && !i.hatchChance && i.rarity !== 'common');
+   evenly, INCLUDING the commons: Kennel Phase A, section 2.1, 2026-09-05 --
+   `pickRandomPet` used to filter `i.rarity !== 'common'`, which dropped C3
+   Catfish and C4 Beardie from every duplicate egg (the comment that used to sit
+   there admitted the rarity weighting it implied never existed). The pool is
+   now a uniform pick over every non-shop, non-exclusive species, so the even
+   split is now over five, not three. A gate that swallowed the rest of the
+   roster would pass RATE. */
+const evenPool = pets.filter(i => !i.exclusive && !i.hatchChance);
 const expected = (1 - Number(shop && shop.hatchChance)) / evenPool.length;
 for (const [label, tally] of [['fresh player', fresh], ['owns every species', full]]) {
   const off = evenPool.map(i => ({ id: i.id, got: (tally[i.id] || 0) / N }))
@@ -210,13 +226,27 @@ for (const [label, tally] of [['fresh player', fresh], ['owns every species', fu
         : `${evenPool.map(i => i.id).join(' ')} all inside the band`);
 }
 
-const banned = new Set([...exclusives.map(i => i.id), ...pets.filter(i => i.rarity === 'common').map(i => i.id)]);
+/* Kennel Phase A, section 2.1, 2026-09-05: commons are no longer banned from
+   this pool -- they are exactly what the fix restores (C3 Catfish, C4 Beardie
+   were dropped from every duplicate egg before this change). Only an exclusive
+   pet (CX) must never come out of an egg. */
+const banned = new Set(exclusives.map(i => i.id));
 const seen = [...new Set([...Object.keys(fresh), ...Object.keys(full)])].filter(id => banned.has(id));
-ok(`NEVER no exclusive and no common pet in ${(N * 2).toLocaleString()} draws`,
+ok(`NEVER no exclusive pet in ${(N * 2).toLocaleString()} draws`,
   seen.length === 0,
   seen.length
     ? seen.map(id => `${id} drawn ${(fresh[id] || 0) + (full[id] || 0)} times`).join(', ')
     : `${[...banned].join(' ')} all absent (${[...banned].length} banned ids)`);
+/* The commons ARE in the pool now (the direct pin for the fix): every one of
+   the five non-shop, non-exclusive species must appear at least once across
+   both pool shapes. */
+{
+  const commons = pets.filter(i => i.rarity === 'common' && !i.exclusive && !i.hatchChance).map(i => i.id);
+  const missing = commons.filter(id => !(fresh[id] > 0) && !(full[id] > 0));
+  ok('DUPE-POOL every common species (C3, C4) is reachable from the dupe pool',
+    commons.length > 0 && missing.length === 0,
+    missing.length ? `missing: ${missing.join(', ')}` : `${commons.join(', ')} all drawn at least once`);
+}
 
 /* ---- CRATE / LEAK / REACH ------------------------------------------------ */
 /* Own literally everything a crate can legitimately give you, so the rarity walk
