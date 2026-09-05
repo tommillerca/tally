@@ -20049,6 +20049,11 @@ async function openKennel() {
         return `<div class="k-cell${isOwned ? '' : ' locked'}" data-sp="${esc(s.id)}" data-morph="${esc(m)}">${art}${isOwned ? '' : ICONS.lock(14)}</div>`;
       }).join('')}</div>
     </div>`;
+  // COLUMN HEADERS, one row above every species block, matching DESIGN.md's
+  // one section-header idiom (.sect-h) so the grid reads as a table: which
+  // colourway a column is, without repeating it 6 times per species.
+  const morphColLabel = m => m === 'base' ? 'Base' : MORPH_LABEL[m];
+  const gridHead = `<div class="k-grid-head">${MORPHS.map(m => `<span class="k-grid-head-cell">${esc(morphColLabel(m))}</span>`).join('')}</div>`;
   /* GWART'S LINE SITS BELOW THE ROSTER, NOT ABOVE IT: the roster is the part
      that must fit one screen at 390x844 AND 320x568 with no scroll (up to six
      owned species, one row each), and a callout above it was budget the narrow
@@ -20061,7 +20066,7 @@ async function openKennel() {
     <div class="k-roster">${ownedSp.length ? ownedSp.map(rosterRow).join('') : '<p class="k-empty">Hatch an egg to start your collection.</p>'}</div>
     <p class="k-gwart"><b>Gwart says:</b> It's paint, not power. Ember, Frost, Toxic, Midnight, same skeleton underneath.</p>
     <p class="sect-h">Collection &middot; ${owned.size} / ${KENNEL_SPECIES.length * MORPHS.length}</p>
-    <div class="k-grid">${KENNEL_SPECIES.map(gridRow).join('')}</div>`;
+    <div class="k-grid">${gridHead}${KENNEL_SPECIES.map(gridRow).join('')}</div>`;
   $$('.k-dot', body).forEach(d => d.addEventListener('click', () => {
     const [sp, m] = d.dataset.dot.split('|');
     const name = (BH_BY_ID[sp] || {}).name || sp;
