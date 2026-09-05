@@ -6262,6 +6262,68 @@ test('football BUNDLE-QUOTE: buyFootballBundle charges only for the missing garm
   assert.equal(r.reason, 'owned', `5 owned must refuse as already owned, got ${JSON.stringify(r)}`);
 });
 
+/* P1 (Codex, 2026-09-05): buyFootballBundle quotes its cost from an owned-set
+   snapshot taken BEFORE any coins move, then charges that snapshot's cost, then
+   grants. A single-garment buy (buyFootballItem) for a DIFFERENT garment that
+   lands after the snapshot but before the bundle's grant loop still succeeds:
+   the bundle's loop reaches that garment's ids, finds them already granted
+   (grantCosmetic no-ops on an owned id) and moves on, so both purchases are
+   charged in full while the bundle delivered one fewer garment than it was
+   quoted for. Overcharge = one garment's price per overlapping single buy.
+   Reproduced on the REAL functions with REAL interleaving: Promise.all lets
+   both run under mem-idb's serialised transactions exactly as two overlapping
+   taps would (same technique as R26-O11 above), no mocked scheduling. */
+test('football BUNDLE-CONCURRENCY: an overlapping single-garment buy no longer overcharges the bundle', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const FB = await import('../data/football-teams.js');
+  const loot = await import('../js/loot.js');
+  const WALLET = 1000000;
+  const ownGarment = async key => {
+    const ids = FB.footballGrantIds(FB.footballItemId(FB.FOOTBALL_TEAMS[0].id, key));
+    for (const id of ids) await dbm.db.put('inv', { id: `cos:${id}`, kind: 'cos', itemId: id, source: 'x', ts: Date.now() });
+  };
+
+  // 1 garment already owned (jersey): the bundle quotes for the other 4 at
+  // 16,800 (4 x 4,200 ties the flat bundle price). A tap on a DIFFERENT
+  // missing garment (cleats) races the bundle buy.
+  dbm.useDbName('unit-fbrace-1');
+  await dbm.kvSet('coins', WALLET);
+  await ownGarment('jersey');
+  const cleatsId = FB.footballItemId(FB.FOOTBALL_TEAMS[3].id, 'cleats');
+  const [bundleR, itemR] = await Promise.all([
+    loot.buyFootballBundle('ignored'),
+    loot.buyFootballItem(cleatsId, true),
+  ]);
+  assert.equal(bundleR.ok, true, `bundle must sell, got ${JSON.stringify(bundleR)}`);
+  assert.equal(itemR.ok, true, `single buy must sell, got ${JSON.stringify(itemR)}`);
+  assert.equal(bundleR.cost, 16800, `4 missing at quote time ties the flat bundle price, got ${JSON.stringify(bundleR)}`);
+  assert.equal(itemR.cost, 4200, `one garment must cost one garment's price, got ${JSON.stringify(itemR)}`);
+  const spent = WALLET - await loot.coins();
+  assert.equal(spent, 16800, `single (4,200) + what the bundle actually delivered (3 new garments, quote 12,600) must total 16,800 and never more, got ${spent}`);
+  const owned = await loot.ownedCosmeticIds();
+  const garmentsOwned = FB.FOOTBALL_SOLD.filter(g => FB.FOOTBALL_TEAMS.some(t => owned.has(FB.footballItemId(t.id, g.key))));
+  assert.equal(garmentsOwned.length, FB.FOOTBALL_SOLD.length, `all ${FB.FOOTBALL_SOLD.length} garments must be owned after both purchases land, got ${garmentsOwned.map(g => g.key)}`);
+
+  // A plain bundle buy, no race, still costs its quote.
+  dbm.useDbName('unit-fbrace-plain');
+  await dbm.kvSet('coins', WALLET);
+  const plain = await loot.buyFootballBundle('ignored');
+  assert.equal(plain.ok, true, `an uncontested bundle must sell, got ${JSON.stringify(plain)}`);
+  assert.equal(plain.cost, 16800, `an uncontested bundle buy (0 owned) must cost the flat price, got ${JSON.stringify(plain)}`);
+  assert.equal(WALLET - await loot.coins(), 16800, `an uncontested bundle must charge exactly its quote, got ${WALLET - await loot.coins()}`);
+
+  // A double-tap bundle still refunds the loser in full.
+  dbm.useDbName('unit-fbrace-dbltap');
+  await dbm.kvSet('coins', WALLET);
+  const [d1, d2] = await Promise.all([loot.buyFootballBundle('ignored'), loot.buyFootballBundle('ignored')]);
+  const winner = d1.ok ? d1 : d2, loser = d1.ok ? d2 : d1;
+  assert.equal(winner.ok, true, `one of the two overlapping bundle taps must win, got ${JSON.stringify([d1, d2])}`);
+  assert.equal(loser.ok, false, 'the other must lose');
+  assert.equal(loser.reason, 'owned', `the loser must be refused as already owned, got ${JSON.stringify(loser)}`);
+  assert.equal(WALLET - await loot.coins(), winner.cost, `a double-tap bundle must charge exactly once, got spent ${WALLET - await loot.coins()} vs winner cost ${winner.cost}`);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

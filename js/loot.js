@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
-import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
+import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
 
@@ -130,8 +130,24 @@ export async function buyFootballBundle(_teamId, stocked = footballBundleSellabl
     await coinsAdd(cost);
     return { ok: false, reason: 'owned' };
   }
-  for (const id of want.slice(1)) await grantCosmetic(id, 'football');
-  return { ok: true, label: `The full kit · ${FOOTBALL_TEAMS.length} colourways`, granted: missing, cost, coins: left, save };
+  const landed = new Set([want[0]]);
+  for (const id of want.slice(1)) if (await grantCosmetic(id, 'football')) landed.add(id);
+  /* OVERCHARGE GUARD (P1, Codex 2026-09-05). `want` and `cost` are a SNAPSHOT
+     taken before either coin moved. A single-garment buy for a DIFFERENT
+     garment that lands in the gap between that snapshot and this loop grants
+     the garment for free here (grantCosmetic just no-ops on an id already
+     owned) while `cost` was quoted as if the bundle still had to pay for it:
+     both purchases succeed, and the player is out one garment's price.
+     Re-quote against what THIS call actually delivered (a garment counts once
+     it lands one of its 32 ids, same rule footballOwnedGarmentCount uses, not
+     once per team id) and refund the gap. A clean run delivers exactly
+     `missing` garments and the requote matches `cost`, so refund is 0. */
+  const landedGarments = FOOTBALL_SOLD.filter(g =>
+    footballGrantIds(footballItemId(FOOTBALL_TEAMS[0].id, g.key)).some(id => landed.has(id))).length;
+  const fair = footballBundleQuote(FOOTBALL_SOLD.length - landedGarments).cost;
+  const refund = cost - fair;
+  const finalCoins = refund > 0 ? await coinsAdd(refund) : left;
+  return { ok: true, label: `The full kit · ${FOOTBALL_TEAMS.length} colourways`, granted: missing, cost, coins: finalCoins, save };
 }
 
 export async function buyDropItem(itemId) {
