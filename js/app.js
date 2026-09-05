@@ -15406,7 +15406,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
        up on two tiles at once. */
     const fbTag = teamId => {
       const id = fbId(teamId);
-      if (!owned.has(id)) return `${ICONS.lock(9)} ${Number.isFinite(fbPrice) ? fbPrice.toLocaleString() : 'Soon'}`;
+      /* NO PRICE ON A TILE. One garment, one price, all 32 teams; a price under every
+         locked team read as pay-per-colour (Tom, 2026-09-04, three times). */
+      if (!owned.has(id)) return `${ICONS.lock(9)} Locked`;
       if (teamId !== railTeam) return 'Yours';
       return eq[slot] === id ? 'Worn' : 'Trying';
     };
@@ -15416,12 +15418,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
       return `<div class="look-bar mog-bar fb-bar${!worn && own ? ' armed' : ''}">
         <div class="mog-lines">
           <span><i>Trying</i><b class="fbr-team">${esc(t.name)}</b></span>
-          <span><i>Colours</i><b><em class="fb-swatch sm" style="--fa:${t.a};--fb:${t.b}" role="img" aria-label="${esc(t.name)} colours"></em></b></span>
         </div>
         ${worn ? '<button class="btn ghost mog-go" disabled>You are wearing it</button>'
           : own ? `<button class="btn mog-go" data-fbwear="${id}">Wear it</button>`
           : `<button class="btn ghost mog-go" data-fbshop="${t.id}"${FOOTBALL_KIT_LIVE && Number.isFinite(fbPrice) ? '' : ' disabled'}>${
-              FOOTBALL_KIT_LIVE && Number.isFinite(fbPrice) ? `${ICONS.coin(12)} ${fbPrice.toLocaleString()} · Kit room` : 'Not for sale yet'}</button>`}
+              FOOTBALL_KIT_LIVE && Number.isFinite(fbPrice) ? `${ICONS.coin(12)} ${fbPrice.toLocaleString()} · all ${FOOTBALL_TEAMS.length} teams` : 'Not for sale yet'}</button>`}
       </div>`;
     };
     /* THE FIGURE SITS WITH THE RAIL, and it is the SAME lesson the Dressing
