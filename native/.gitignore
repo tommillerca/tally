@@ -10,3 +10,4 @@ android/local.properties
 BoneheadzGym-debug.apk
 play-assets/*.aab
 play-assets/*.apk
+capacitor.config.store.json
