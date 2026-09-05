@@ -1390,6 +1390,9 @@ const MAX_GEAR_IDS = 400;
 
 const intOrNull = v => (typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : null);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+// "2nd", not "2": CREW-6's week-close note reads as a sentence. A server-side
+// copy of js/app.js's ordinal() -- neither side imports the other.
+const ordinal = n => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 
 /** Which race week a claimed key is, relative to the server's own clock.
  *  Returns 'current' | 'previous' | 'next' | null (null = not a real week start,
@@ -3208,6 +3211,22 @@ export default {
                   place: i + 1,
                   steps: p.steps,
                   note: `${prize.place} in the step race with ${p.steps.toLocaleString()} steps!`,
+                }), Date.now()).run();
+            }
+            /* CREW-6: the close was silent for everyone outside the podium --
+               "6th and below get nothing anywhere". The podium grants above
+               already carry their own placement sentence as `note`, which
+               presentGrantDelivery (js/app.js) shows on the reward's own
+               reveal card; a non-paying finish has no card to carry it, so it
+               gets a 'crew'-type grant instead (no coins, no crate: applyGrant
+               just files the note), which that same function already turns
+               into its own toast. Same settledKey-style dedup key, one row per
+               player, so a re-run of this same settlement pays nothing twice. */
+            for (let i = STEP_RACE_PODIUM.length; i < last.length; i++) {
+              const p = last[i];
+              await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+                .bind(p.id, `raceplace-${prev}`, 'crew', JSON.stringify({
+                  note: `You finished ${ordinal(i + 1)} of ${last.length} in the step race with ${p.steps.toLocaleString()} steps.`,
                 }), Date.now()).run();
             }
           }

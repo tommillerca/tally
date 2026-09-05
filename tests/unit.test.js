@@ -27,7 +27,7 @@ import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct, fetchOffProductEx } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
 import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard } from '../js/game.js';
-import { STAT_META, STYLES } from '../js/pit.js';
+import { STAT_META, STYLES, hasFightableStats } from '../js/pit.js';
 import * as pitMod from '../js/pit.js';
 const mkFighter = pitMod.makeFighter;
 import {
@@ -1904,6 +1904,61 @@ test('raceStanding: nobody has walked -> the empty-board line, not a crash', () 
   const r = raceStanding([], race, '2026-09-01', own, 'Me', {}, ord, escT);
   assert.equal(r.rows.length, 0);
   assert.match(r.standing, /Nobody has walked/);
+});
+
+/* ---- CREW-3: the gap that matters is to the lane ABOVE you, never to first.
+   PROVE-RED: revert social.js's `behind` to `lead - mine.steps` (the pre-fix
+   form) and the first two rows below fail -- a true 11th, one past the top-10
+   the server actually sent, would read "196,000 behind" the whale in 1st
+   instead of the true, small gap to 10th. ---- */
+test('raceStanding: an 11th-place rookie is measured against 10th, never against the whale in 1st', () => {
+  // server's top 10: a 200,000-step whale in 1st, everyone else close together
+  const top10 = [{ rank: 1, name: 'Whale', steps: 200000, you: false },
+    ...Array.from({ length: 9 }, (_, i) => ({ rank: i + 2, name: `P${i + 2}`, steps: 5200 - i * 100, you: false }))];
+  const race = { yourRank: 11, players: top10 }; // the server already ranked this rookie 11th
+  const own = { weekKey: '2026-09-01', steps: 4000 };
+  const r = raceStanding(top10, race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.equal(r.yourRank, 11);
+  assert.equal(r.aboveName, 'P10', 'the neighbour above 11th is 10th, not the whale in 1st');
+  assert.equal(r.behind, top10[9].steps - 4000, 'the gap is to 10th\'s steps, not to the whale\'s 200,000');
+  assert.ok(r.behind <= 400, `a real gap to the racer just above should be small, got ${r.behind}`);
+  assert.ok(!/200,000/.test(r.standing), 'the whale\'s total must never appear in a new player\'s standing line');
+});
+
+test('raceStanding: a rank far outside the visible board gets no gap at all, never first\'s', () => {
+  const top10 = Array.from({ length: 10 }, (_, i) => ({ rank: i + 1, name: `P${i + 1}`, steps: 50000 - i * 1000, you: false }));
+  const race = { yourRank: 40, players: top10 }; // rank 39 (the true neighbour) is not in view
+  const own = { weekKey: '2026-09-01', steps: 500 };
+  const r = raceStanding(top10, race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.equal(r.behind, 0, 'an unknowable neighbour must not fall back to a gap against first');
+  assert.equal(r.aboveName, null);
+  assert.ok(/40th/.test(r.standing) && !/behind/.test(r.standing), `expected a bare "40th" with no gap clause, got: ${r.standing}`);
+});
+
+test('raceStanding: 1st place is never told it is behind anyone', () => {
+  const top10 = Array.from({ length: 3 }, (_, i) => ({ rank: i + 1, name: `P${i + 1}`, steps: 9000 - i * 1000, you: i === 0 }));
+  const race = { yourRank: 1, players: top10 };
+  const own = { weekKey: '2026-09-01', steps: 9000 };
+  const r = raceStanding(top10, race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.equal(r.behind, 0);
+  assert.match(r.standing, /in front/);
+});
+
+/* ---- CREW-14: `stats: {}` is truthy and must not read as "has stats" -- a
+   never-synced account sends exactly this, and it used to draw 5 zero bars
+   and hand the Pit a foe whose every move computed off `undefined`
+   ("Jab ~NaN dmg"). PROVE-RED: change hasFightableStats back to `!!stats`
+   and the second assertion below fails. ---- */
+test('hasFightableStats: a real snapshot passes, an empty object does not', () => {
+  const real = { power: 20, marrow: 20, wind: 20, reflex: 20, hype: 20 };
+  assert.equal(hasFightableStats(real), true);
+  assert.equal(hasFightableStats({}), false, 'FAIL: an empty stats object must not count as fightable');
+  assert.equal(hasFightableStats(null), false);
+  assert.equal(hasFightableStats(undefined), false);
+  assert.equal(hasFightableStats({ power: 20, marrow: 20, wind: 20, reflex: 20, hype: undefined }), false,
+    'one missing key is still not fightable');
+  assert.equal(hasFightableStats({ power: NaN, marrow: 20, wind: 20, reflex: 20, hype: 20 }), false,
+    'NaN is not a real stat either');
 });
 
 /* ---- v240 safe-area guard ------------------------------------------------
