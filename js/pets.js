@@ -248,10 +248,19 @@ function rng() {
   return a[0] / 0xffffffff;
 }
 
-// Species a morph can land on: every non-exclusive slot-C pet except CX (the
-// Founder's Lizard, exempt from morphs per spec section 0.7 -- its amethyst art
-// IS its look). Derived from PET_ASSIGN rather than a second hand-kept list.
-const MORPH_SPECIES = Object.keys(PET_ASSIGN).filter(id => id !== 'CX');
+// Species that COUNT toward the fresh-first pool below: the five ordinary
+// dupe-pool pets (spec section 2.2's "25 (species x morph) pairs" -- 5 species
+// x 5 morphs). NOT C6 (Bumbleseal): she is a 1% shop-exclusive hatch that most
+// players never own by any morph, so putting her in this accounting alongside
+// C1-C5 left 'base' permanently "fresh" for her sake and starved the other
+// four morphs of any weight -- found by the 200-egg sim (2026-09-05), where a
+// player owning all of C1-C5 in base still hatched nothing but base across 200
+// draws. Excludes CX too (exempt from morphs per spec section 0.7 -- its
+// amethyst art IS its look). A hand-kept list, not derived from PET_ASSIGN:
+// this module stays import-free (no data/boneheadz.js), and "hatch-pool
+// species" is exactly the distinction pickRandomPet's own `rest` (js/loot.js)
+// draws on, which this list mirrors.
+const MORPH_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5'];
 
 // The (species, morph) pairs a player already owns, as a Set of "sp|morph" keys.
 // Pure: takes the instance list (js/loot.js petInstances()), never reads it itself.
