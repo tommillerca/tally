@@ -1079,6 +1079,57 @@ test('hunt: fmtDist', () => {
   assert.equal(huntMod.fmtDist(42), '42 m');
   assert.equal(huntMod.fmtDist(1620), '1.6 km');
 });
+/* Y4, round 28. The display and the collect decision read the SAME distance, so
+   any rounding band where they disagree is a promise the intro card breaks:
+   Math.round put 75.32 m on "75 m", which is exactly the number the card names
+   as collectable. This sweeps the whole neighbourhood of the radius at 1 cm
+   resolution and asserts the ONE invariant that matters, that "printed <= R" and
+   "collectable" are the same fact, rather than pinning one lucky number. */
+test('hunt: a printed distance can never contradict the collect decision', () => {
+  const R = huntMod.COLLECT_RADIUS_M;
+  const samples = [];
+  for (let cm = (R - 2) * 100; cm <= (R + 2) * 100; cm++) samples.push(cm / 100);
+  assert.ok(samples.length > 300, `empty/thin sample: ${samples.length}`);
+  let far = 0, near = 0;
+  for (const d of samples) {
+    const label = huntMod.fmtDist(d);
+    assert.match(label, /^\d+ m$/, `${d} m did not print in metres: ${label}`);
+    const shown = parseInt(label, 10);
+    const collectable = d <= R;
+    collectable ? near++ : far++;
+    assert.equal(shown <= R, collectable,
+      `${d} m prints "${label}" but collectSpawn ${collectable ? 'accepts' : 'refuses'} it`);
+  }
+  assert.ok(far > 100 && near > 100, `one-sided sample: ${near} in range, ${far} out`);
+  assert.equal(huntMod.fmtDist(75.32), '76 m'); // the exact band QA drove
+});
+/* Y2, round 28. Dens speak, the Wanderer speaks, the speed guard speaks; a spawn
+   you could see but not reach said nothing, and reachability lived only in a CSS
+   class. Both player-facing sentences come from here so the marker tip and the
+   refused collect cannot drift apart. */
+test('hunt: an out-of-range spawn says it is out of range and how far', () => {
+  const R = huntMod.COLLECT_RADIUS_M;
+  const far = huntMod.collectReach(R + 0.32);
+  assert.match(far, /^76 m away\./, far);
+  assert.match(far, new RegExp(`Get within ${R} m to collect it\\.$`), far);
+  const atEdge = huntMod.collectReach(R);
+  assert.notEqual(atEdge, far);                       // the two states must differ
+  assert.match(atEdge, /close enough/, atEdge);
+  assert.match(huntMod.collectReach(12), /^12 m away\./);
+});
+/* The pure sentence above is inert unless the map actually says it. These are the
+   two arms round 28 found silent: the refused collect (which returned with no
+   message at all) and the marker tip (which said "walk to reach it" whether you
+   were 12 m or 1.2 km out). */
+test('boneyard: the refused collect and the marker tip both speak', () => {
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const arms = src.match(/rec\.spawn\.dist > COLLECT_RADIUS_M[^\n]*/g) || [];
+  assert.equal(arms.length, 1, `expected one out-of-range collect arm, found ${arms.length}`);
+  assert.ok(/toast\(collectReach\(/.test(arms[0]),
+    `the refused collect is silent, it should toast collectReach(): ${arms[0].trim()}`);
+  assert.ok(/foot: collectReach\(s\.dist\)/.test(src),
+    'the spawn marker tip never says whether the spawn is reachable');
+});
 
 // ---- companion shortcut ----
 test('signed Sync Boneheadz shortcut ships with the app', () => {

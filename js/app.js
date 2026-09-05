@@ -30,7 +30,7 @@ import {
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP, manualWalksToday, logManualWalk, MANUAL_WALKS_PER_DAY } from './wellness.js';
-import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
+import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, collectReach, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
 import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, showWandererEncounter, WANDERER_FIGHT, CONE_RANGE_M, WANDERER_ART } from './wanderer.js';
 import { isWater } from './water.js';
@@ -19419,13 +19419,18 @@ async function renderBoneyard(el) {
         // ingredient count is variable under the Boneyard supply change)
         const food = SPAWN_FOOD[s.type] ?? 1;
         const rw = def.crate === 'egg' ? 'Rare: walk to hatch a pet' : def.crate ? 'A crate of loot' : def.coins ? `${def.coins} coins` : food >= 2 ? `${food} cooking ingredients` : def.xp ? `${def.xp} XP` : 'A find';
-        return { name: def.label || 'Cache', reward: rw, distM: s.dist };
+        // A SPAWN SAYS WHETHER YOU CAN REACH IT, not just how far it is. The old
+        // footer said "walk to reach it" whether you were 12 m or 1.2 km out, so
+        // the ONLY thing on screen that knew the difference was the marker's
+        // `inrange` class. hunt.js:collectReach owns both sentences and is shared
+        // with the refused collect below.
+        return { name: def.label || 'Cache', reward: rw, distM: s.dist, foot: collectReach(s.dist) };
       }
       return null;
     }
     function showPoiTip(el) {
       const info = markerInfo(el); if (!info) return;
-      poiTip.innerHTML = `<b>${esc(info.name)}</b><span class="pt-b">${esc(info.reward)}</span>${info.distM != null ? `<span class="pt-f">${fmtDist(info.distM)} away · walk to reach it</span>` : ''}`;
+      poiTip.innerHTML = `<b>${esc(info.name)}</b><span class="pt-b">${esc(info.reward)}</span>${info.distM != null ? `<span class="pt-f">${info.foot || `${fmtDist(info.distM)} away · walk to reach it`}</span>` : ''}`;
       poiTip.hidden = false;
       const stage = $('#mapStage', body).getBoundingClientRect(), m = el.getBoundingClientRect();
       const tw = poiTip.offsetWidth, th = poiTip.offsetHeight;
@@ -20357,7 +20362,13 @@ async function renderBoneyard(el) {
       haptic.success();
       const id = $('#mapCollect', body).dataset.spawnId;
       const rec = [...spawnMarkers.values()].find(r => r.spawn.id === id);
-      if (!rec || rec.spawn.dist > COLLECT_RADIUS_M) return;
+      if (!rec) return;
+      /* A REFUSAL THAT SAYS NOTHING IS A BUG REPORT WAITING TO HAPPEN. This arm
+         swallowed the tap silently, so a player who drifted out of range between
+         the last refresh and the tap got a dead button and no reason. The den's
+         stale-tap arm above has said its sentence since round 3; this is the same
+         shape, with the number, through the one helper that owns the copy. */
+      if (rec.spawn.dist > COLLECT_RADIUS_M) { toast(collectReach(rec.spawn.dist), 3200); return; }
       /* ONE IN THREE BURIED CRATES BITES BACK, AND IT BRANCHES BEFORE THE
          PAYOUT, NOT AFTER IT. Tom, 2026-08-20: "1/3 chests can trigger a fight
          with this mimic. it should show the pixel art animation and then enter a

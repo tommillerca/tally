@@ -207,9 +207,36 @@ export async function collectSpawn(spawn, date = dateKey()) {
   return out;
 }
 
+/* THE PRINTED NUMBER MAY NEVER CONTRADICT THE DECISION. Round-28 QA: every
+   reach test in this app is `dist <= <integer> m` (COLLECT_RADIUS_M 75,
+   DEN_RADIUS_M, SPIRE_RADIUS_M), and Math.round put [74.5, 75.5) on "75 m". So
+   a spawn at 75.32 m printed exactly the 75 m the Boneyard intro card promises
+   and still refused to collect: the display and the decision read the SAME
+   distance and disagreed about it.
+   Ceiling on the metre branch removes the whole band for every integer
+   threshold at once, in the one direction that cannot lie: the number shown is
+   never smaller than the distance you actually have to walk, so d <= R implies
+   the print is <= R and d > R implies the print is > R. Chose this over
+   printing the threshold as a separate line because it fixes every reach copy
+   in the app (dens, spires, the tip footer) rather than one sentence.
+   The km branch keeps toFixed: no reach test lives past 1000 m, and rounding
+   1620 up to "1.7 km" would overstate a route for no gain. */
 export function fmtDist(m) {
-  if (m < 1000) return `${Math.round(m)} m`;
+  if (m < 1000) return `${Math.ceil(m)} m`;
   return `${(m / 1000).toFixed(1)} km`;
+}
+
+/* WHAT A SPAWN'S DISTANCE MEANS, IN WORDS. Round-28 QA played the Boneyard and
+   found reachability was a CSS class and nothing else: dens speak ("Get within
+   N m to start"), the Wanderer speaks, the speed guard speaks, and a spawn you
+   could see but not reach said nothing at all. Both halves below are the copy
+   shapes already in the tree (the tip's "N away", the den sheet's "Get within
+   N m to ..."), and both call sites, the marker tip and the refused collect,
+   go through THIS function so the tip and the toast cannot drift apart. */
+export function collectReach(distM) {
+  return distM <= COLLECT_RADIUS_M
+    ? `${fmtDist(distM)} away. You are close enough to collect it.`
+    : `${fmtDist(distM)} away. Get within ${COLLECT_RADIUS_M} m to collect it.`;
 }
 
 export function compassLabel(bearing) {
