@@ -124,8 +124,8 @@ const openedRow = crates1[0];
 await loot.openCrate(openedRow.id);
 await loot.coinsAdd(-40);
 const coinsBeforeBoot = await kvGet('coins', 0);
-ok('CONTROL  the fixture had something to lose before the second boot (an empty sample is a failure)', crateCountBeforeBoot > 0 && coinsBeforeBoot > 0, `crates=${crateCountBeforeBoot} coins=${coinsBeforeBoot}`);
 const crateCountBeforeBoot = (await db.all('inv')).filter(r => r.kind === 'crate').length;
+ok('CONTROL  the fixture had something to lose before the second boot (an empty sample is a failure)', crateCountBeforeBoot > 0 && coinsBeforeBoot > 0, `crates=${crateCountBeforeBoot} coins=${coinsBeforeBoot}`);
 
 // SECOND BOOT: the real bootSync, exactly the code path bootRestored guards.
 const boot2 = await social.bootSync();
