@@ -4,6 +4,9 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 473, date: '2026-09-04', title: 'Updates can actually start', items: [
+    'A new build used to download and then sit there: the app never told it to take over, so a phone could stay on an old version for hours through force quits. Boot now lets a waiting build in, and the app reloads into it.',
+  ] },
   { n: 472, date: '2026-09-04', title: 'Updates arrive when they are published', items: [
     'A new build used to hide for up to ten minutes behind your phone\'s own cache, even after a force quit. The app now asks the server directly, so Get latest means latest.',
   ] },

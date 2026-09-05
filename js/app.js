@@ -30,7 +30,7 @@ import {
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP, manualWalksToday, logManualWalk, MANUAL_WALKS_PER_DAY } from './wellness.js';
-import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
+import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, collectReach, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
 import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, showWandererEncounter, WANDERER_FIGHT, CONE_RANGE_M, WANDERER_ART } from './wanderer.js';
 import { isWater } from './water.js';
@@ -1177,9 +1177,27 @@ async function boot() {
        force-quit twice while the server served v471. Bypass the cache for the
        worker script itself; the app's own network-first rule already covers
        everything the worker serves. */
+    /* AND SOMEBODY HAS TO LET THE NEW WORKER IN (2026-09-04). sw.js deliberately
+       does not call skipWaiting(), so a new build sits in `waiting` until every
+       client using the old worker is gone. In a browser tab that happens; inside
+       the native shell's WKWebView it does not, and Tom's phone sat on v470
+       through hours of force-quits while the server served v472. Nothing in the
+       app had ever posted SKIP_WAITING, so there was no path from "downloaded"
+       to "running" that a player could take.
+       ONLY AT BOOT, never mid-session: at this point the page has just loaded and
+       nothing is in flight, which is the very race the no-skipWaiting rule exists
+       to avoid. The swap then fires controllerchange, and the handler below
+       reloads. `waiting` covers a build already downloaded on a previous run;
+       `updatefound` covers one that arrives while this run is open. */
+    const letItIn = reg => { const w = reg.waiting; if (w) { try { w.postMessage('SKIP_WAITING'); } catch { /* older worker, no handler: it will swap when the clients close */ } } };
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+      letItIn(reg);
+      reg.addEventListener('updatefound', () => {
+        const w = reg.installing;
+        if (w) w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) letItIn(reg); });
+      });
       // resumed PWAs never re-navigate, so check for updates whenever we come back
-      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().then(() => letItIn(reg)).catch(() => {}); });
     }).catch(() => {});
     let hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -19621,13 +19639,18 @@ async function renderBoneyard(el) {
         // ingredient count is variable under the Boneyard supply change)
         const food = SPAWN_FOOD[s.type] ?? 1;
         const rw = def.crate === 'egg' ? 'Rare: walk to hatch a pet' : def.crate ? 'A crate of loot' : def.coins ? `${def.coins} coins` : food >= 2 ? `${food} cooking ingredients` : def.xp ? `${def.xp} XP` : 'A find';
-        return { name: def.label || 'Cache', reward: rw, distM: s.dist };
+        // A SPAWN SAYS WHETHER YOU CAN REACH IT, not just how far it is. The old
+        // footer said "walk to reach it" whether you were 12 m or 1.2 km out, so
+        // the ONLY thing on screen that knew the difference was the marker's
+        // `inrange` class. hunt.js:collectReach owns both sentences and is shared
+        // with the refused collect below.
+        return { name: def.label || 'Cache', reward: rw, distM: s.dist, foot: collectReach(s.dist) };
       }
       return null;
     }
     function showPoiTip(el) {
       const info = markerInfo(el); if (!info) return;
-      poiTip.innerHTML = `<b>${esc(info.name)}</b><span class="pt-b">${esc(info.reward)}</span>${info.distM != null ? `<span class="pt-f">${fmtDist(info.distM)} away · walk to reach it</span>` : ''}`;
+      poiTip.innerHTML = `<b>${esc(info.name)}</b><span class="pt-b">${esc(info.reward)}</span>${info.distM != null ? `<span class="pt-f">${info.foot || `${fmtDist(info.distM)} away · walk to reach it`}</span>` : ''}`;
       poiTip.hidden = false;
       const stage = $('#mapStage', body).getBoundingClientRect(), m = el.getBoundingClientRect();
       const tw = poiTip.offsetWidth, th = poiTip.offsetHeight;
@@ -20559,7 +20582,13 @@ async function renderBoneyard(el) {
       haptic.success();
       const id = $('#mapCollect', body).dataset.spawnId;
       const rec = [...spawnMarkers.values()].find(r => r.spawn.id === id);
-      if (!rec || rec.spawn.dist > COLLECT_RADIUS_M) return;
+      if (!rec) return;
+      /* A REFUSAL THAT SAYS NOTHING IS A BUG REPORT WAITING TO HAPPEN. This arm
+         swallowed the tap silently, so a player who drifted out of range between
+         the last refresh and the tap got a dead button and no reason. The den's
+         stale-tap arm above has said its sentence since round 3; this is the same
+         shape, with the number, through the one helper that owns the copy. */
+      if (rec.spawn.dist > COLLECT_RADIUS_M) { toast(collectReach(rec.spawn.dist), 3200); return; }
       /* ONE IN THREE BURIED CRATES BITES BACK, AND IT BRANCHES BEFORE THE
          PAYOUT, NOT AFTER IT. Tom, 2026-08-20: "1/3 chests can trigger a fight
          with this mimic. it should show the pixel art animation and then enter a
@@ -20972,7 +21001,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v472'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v473'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
