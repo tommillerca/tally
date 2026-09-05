@@ -20,8 +20,7 @@ obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 ## v475
-
-Folds in the day's dated sub-sections finished since v474: kit live feedback,
+1. Folds in the day's dated sub-sections finished since v474: kit live feedback,
 rack weekly, shop front door, crew identity, crew layout and offline crash
 seams, plus claim hygiene's quest-claim row. Each row below combines one or
 more of those sections' original rows into the one changelog line it backs;
@@ -31,15 +30,13 @@ in their own dated sections further down, unpromoted. The sw-upgrade-audit
 re-premise merged the same day changed no player behaviour and is documented
 in its own section below, not folded in here.
 
-1. PROOF: news-banner-audit.mjs, news-tab-audit.mjs, shop-lead-order-audit.mjs | REACH: Today's News pill now carries "The Locker Room is open" as its newest, unread row, above the fold with the wardrobe's own unread dot. Tapping it takes you straight to the Shop with the Locker Room already open, the same one-shot the Wardrobe's colourway rail button already used.
+2. PROOF: news-banner-audit.mjs, news-tab-audit.mjs, shop-lead-order-audit.mjs | REACH: Today's News pill now carries "The Locker Room is open" as its newest, unread row, above the fold with the wardrobe's own unread dot. Tapping it takes you straight to the Shop with the Locker Room already open, the same one-shot the Wardrobe's colourway rail button already used.
 
-2. PROOF: shop-lead-order-audit.mjs (TINT-STRIP, BUNDLE-5), art-resolution-audit.mjs, memory-census.mjs | REACH: Each of the five Locker Room tiles now shows the same 32-team colour strip the poster above it does, instead of only the grey "All 32 colourways" line. The full-kit tile no longer shows one two-tone disc in whatever team you happen to be previewing; it shows all five pieces, each in a different team's colours, under "Every piece, every team", so buying the bundle reads as buying the whole kit, not one colourway.
+3. PROOF: shop-lead-order-audit.mjs (TINT-STRIP, BUNDLE-5), art-resolution-audit.mjs, memory-census.mjs | REACH: Each of the five Locker Room tiles now shows the same 32-team colour strip the poster above it does, instead of only the grey "All 32 colourways" line. The full-kit tile no longer shows one two-tone disc in whatever team you happen to be previewing; it shows all five pieces, each in a different team's colours, under "Every piece, every team", so buying the bundle reads as buying the whole kit, not one colourway.
 
-3. PROOF: shop-lead-order-audit.mjs (PET-384), art-resolution-audit.mjs, football-render-audit.mjs, memory-census.mjs | REACH: The lizard's two Locker Room tiles (Lizard Helmet, Lizard Jersey) are no longer soft. They draw from the same 384 tier the poster hero above them already uses, worst case 1.15x its source instead of the 192 tier's ~2.3x.
+4. PROOF: shop-lead-order-audit.mjs (PET-384), art-resolution-audit.mjs, football-render-audit.mjs, memory-census.mjs | REACH: The lizard's two Locker Room tiles (Lizard Helmet, Lizard Jersey) are no longer soft. They draw from the same 384 tier the poster hero above them already uses, worst case 1.15x its source instead of the 192 tier's ~2.3x.
 
-4. PROOF: unit.test.js (rack weekly rotation, rack nudge), rack-rotate-audit.mjs, purchase-firewall.mjs (REROLL rows), shop-lead-order-audit.mjs, emporium-audit.mjs, t3-audit.mjs | REACH: The rotating twelve on the rack now turn over once a week, on the same Monday boundary the themed nine and the reroll ladder already used, instead of silently re-rolling every night. The scarcity clock ("HEATWAVE · RACK N OF 4 / New rack in Nd") moved off an 11px line below the pet shelf and the football Kit room and into Gwart's own header, at heading size, and its rack number is now read off the same ISO week the shelf itself turns on rather than the day of the month. The free first reroll of the week sits beside the rotating shelf's own header now, above its 12 tiles instead of 1,770px below them. A player who has not opened the Shop since the rack last turned sees a badge on the Shop tab; it clears the moment they open the Shop.
-
-5. PROOF: shop-door-audit.mjs (HUB-HOME) | REACH: Open the Shop from the hub, then Today, then the Bonehead tab: you land on the Wardrobe, the same tab every other route into Bonehead (Backpack, Build) already lands on, instead of back on the Shop. The #/shop deep link still opens the Shop directly.
+5. PROOF: unit.test.js (rack weekly rotation, rack nudge), rack-rotate-audit.mjs, purchase-firewall.mjs (REROLL rows), shop-lead-order-audit.mjs, emporium-audit.mjs, t3-audit.mjs | REACH: The rotating twelve on the rack now turn over once a week, on the same Monday boundary the themed nine and the reroll ladder already used, instead of silently re-rolling every night. The scarcity clock ("HEATWAVE · RACK N OF 4 / New rack in Nd") moved off an 11px line below the pet shelf and the football Kit room and into Gwart's own header, at heading size, and its rack number is now read off the same ISO week the shelf itself turns on rather than the day of the month. The free first reroll of the week sits beside the rotating shelf's own header now, above its 12 tiles instead of 1,770px below them. A player who has not opened the Shop since the rack last turned sees a badge on the Shop tab; it clears the moment they open the Shop.
 
 6. PROOF: shop-door-audit.mjs (WALLET, GIFT) | REACH: On the Shop's rack, tapping the coin balance now takes you to Today, the same as the dust balance already did, since that is where coins actually come from (day close, the Pit, the step race). And a coins-only Crew gift now opens with a real "Spend it in the Shop" button, tappable straight into the Shop, instead of a line of text with nothing behind it.
 
@@ -91,38 +88,6 @@ Not stamped to a release: the quest-claim row folded into v475 above; the
 welcome-kit row below did not make this changelog and stays here unpromoted.
 
 1. PROOF: unit.test.js (R-claimhyg-2) | REACH: Opening the app on two devices (or two tabs) at the exact moment a brand-new account first boots no longer doubles the welcome kit. Only one welcome kit (2 crates, a Vigor Draught, the starter ingredients, and the starter egg) is ever granted per install, however many boots race to claim it.
-
-## stage pet wear (2026-09-05)
-
-1. PROOF: unit.test.js, football-kit-audit.mjs, MANUAL measured off the rendered Shop screen (buy buttons and the team picker read 40px tall, up from 35.5px and 36px; a buy button below your balance stays enabled and pressable, and a tap answers with the coin shortfall) | REACH: The Locker Room shelf sells five football pieces, a helmet, a jersey, cleats and a matching helmet and jersey for the lizard, each 4,200 coins and yours in all 32 team colours the moment you buy it. Buying the full kit after already owning some of its five pieces charges only for what is missing, never more than the flat 16,800 kit price, and the "you save" line only appears when there really is a saving. Every buy button on the shelf is a full-size tap target, and one you cannot yet afford still responds to a tap and names the shortfall instead of going dead.
-
-2. PROOF: wardrobe-family-audit.mjs (gate-registered PURE), wardrobe-family-grid-audit.mjs, memory-census.mjs | REACH: Your Collection and the Stable now collapse every colourway family, the football kit's 32 teams included, and any hand-drawn recolour series, into one tile per drawing with a count badge, the same rule the Wardrobe's own rail already used. A tap opens the rail to every colour you own.
-
-3. PROOF: unit.test.js | REACH: An outright cosmetic purchase on the rack costs about double what it did, in coins and in Bone Dust alike. Your very first Common piece is held at its old price, so a new player's early days play out exactly as they did before.
-
-4. PROOF: unit.test.js, loot-fallback-audit.mjs | REACH: Opening a crate can now hand you a cosmetic you already own instead of always being something new, so the rack above Common has something left to sell you; a duplicate still pays the same coins it always did. Also, a day you logged but missed your calorie budget on no longer comes with a bonus crate, though it still pays the same XP for logging it.
-
-5. PROOF: lapse-witness-audit.mjs (gate-registered PURE), unit.test.js | REACH: Coming back after a gap of more than a week used to lose a race against a day-guard check the app was still waiting on, so the Bone Crate earned on your last logged day silently never paid. Day close now waits for that check before deciding, and a restore can no longer roll your day ceiling backward either.
-
-6. PROOF: restore-latch-audit.mjs (gate-registered PURE), unit.test.js | REACH: Every fresh install used to restore its own cloud backup back over itself on its second open, undoing whatever the player had already spent: an opened crate reappeared and spent coins were quietly refunded. That is now closed two ways: the device that just created its cloud account no longer runs that pull at all (there is nothing on the server older or newer than what it just pushed), and even a forced merge of an older backup can no longer bring back a crate this device already opened or hand back a coin balance the device has since moved past. A genuine restore onto a different or reinstalled device is unaffected and still pulls its real backup in full.
-
-7. PROOF: NONE in the browser gate, and this row says so rather than implying one: the change is Worker code, so its evidence is the server test suite the deploy runs before each push, not a browser audit. Proved red on the pre-fix server (the settler, in second place last week, was paid nothing) and green after. | REACH: The weekly step race pays the place you actually finished even if you opened the app right as the week rolled over; before, that rollover could erase your own spot on the old week's board a request before it paid out. Server half switches on at the next Worker deploy.
-
-8. PROOF: unit.test.js, fight-tray-audit.mjs, fight-hint-audit.mjs | REACH: The Pit's move tray shows what a move costs as its own line in the button's corner, instead of folding it into the hint text, which used to wrap onto a second line and push the tray's third row off the bottom of the screen.
-
-9. PROOF: dead-shell-audit.mjs | REACH: On a slow connection, the dead-shell watchdog no longer reloads the app while js/app.js is still downloading. It now waits for the module script to settle (load or error) before arming its 12s check, so a genuinely dead shell still recovers on the same schedule, but a merely slow one is no longer reloaded mid-download.
-
-10. PROOF: meal-memory-audit.mjs (MYFOODS_NEW) | REACH: Add Food, pick a meal, tap My foods, tap Create a food: the portion screen you land on keeps the meal you picked instead of jumping back to Breakfast.
-
-11. PROOF: input-validation-audit.mjs (QTY-COMMA) | REACH: On the portion screen, typing a thousands-comma amount like "1,234" into Servings is still refused, and now the field and the preview agree about it: the box keeps showing what you typed and the preview goes blank, instead of the box quietly showing "0.25" next to a preview still reading "0 kcal".
-
-12. PROOF: unit.test.js | REACH: Logging a forgotten meal onto a past day (the day's Add sheet, a relog, Quick add) no longer pays XP, a streak milestone, or a badge. Past days stay fully editable (an existing entry there still saves after being edited), but only a log dated today earns a reward. Gwart's line on a past day no longer claims the day is "finished"; it now says the day is open to fix, just unpaid.
-
-13. PROOF: football-render-audit.mjs (STAGE, proved red on the unfixed code) | REACH: Open your Bonehead's Backpack or Build tab with a lizard equipped and its helmet and jersey worn: the lizard on the big portrait now wears them too, tinted to your team, instead of the bare species art. True for the base lizard, its shiny, and the Day One Lizard alike.
-
-14. PROOF: unit.test.js, football-kit-audit.mjs | REACH: Buying the full football kit at the same time as buying one of its garments separately (two overlapping taps) no longer overcharges. The kit bundle now re-checks what it actually delivered after an overlapping single-garment buy lands, and refunds the difference, so a player is never charged for a garment the bundle didn't end up needing to grant.
-
-15. PROOF: a11y-audit.mjs (foodFieldNames) | REACH: A screen reader creating a custom food, or using Quick add, now hears each number field by name (Calories, Protein, Carbs, Fat, Sodium, Grams, and so on) instead of an unlabelled textbox, or three identical fields for Protein, Carbs and Fat.
 
 ## store build (2026-09-05)
 
