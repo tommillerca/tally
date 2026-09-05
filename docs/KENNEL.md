@@ -122,10 +122,15 @@ three species) never minted the same species twice across 200 trials.
   the variants in place (Paddock 85.1 MB, under the 90 MB ceiling, unchanged
   by morphs since exactly one image decodes per pet regardless of which
   variant it resolves to).
-- **Which species should have morphs.** ~~Section 1.4 lists a tint entry for
-  all six species including C6 (Bumbleseal)...~~ RESOLVED 2026-09-05 (see
-  section 6 below): Tom ruled she is a normal species now, in the fresh-first
-  accounting and the 30-pair grid, same as C1-C5.
+- **Which species should have morphs.** RESOLVED 2026-09-05 (see section 6
+  below): Tom ruled Bumbleseal (C6) is a normal species now, in the
+  fresh-first accounting and the 30-pair grid, same as C1-C5. The Kennel
+  screen's own collection grid (section 8, `feat/kennel-ui`) counts her the
+  same way -- 6 species x 5 morphs = 30 cells -- while `rollMorph`'s
+  fresh-first bookkeeping in `js/pets.js` (section 3 above, unrelated) stays
+  scoped to hatch-weight fairness across the five species that actually cycle
+  through the egg faucet; two separate questions that land on the same
+  answer.
 - **Reveal copy wording.** Implemented literally per spec section 2.5: "A
   Frost Bulldog!" (article + `MORPH_LABEL` + species name), collapsing to "A
   Bulldog!" at base morph. Section 7's fuller copy ("Three of a kind fuse")
@@ -258,3 +263,46 @@ changes, one branch (`feat/kennel-palettes`, off `feat/kennel-phase-a`):
   pre-existing and unmoved by morphs since exactly one image decodes per pet
   regardless of which variant it resolves to), and every TIER row confirms
   pet art is still served off the 192/384 sheet, never a bare master.
+
+## 8. The Kennel screen (feat/kennel-ui, 2026-09-05)
+
+Where it lives, and why: `scratchpad/kennel/KENNEL-UX.md` (the design plan) is
+the full argument; the short version is that the Stable is already "where a
+player goes to decide things about a pet", so the Kennel is one button in its
+header (`openStable`'s sheet-head, next to Done) opening a sibling sheet
+(`openKennel`, `js/app.js`), not a sixth Today door and not the Paddock
+(off limits this phase, unchanged).
+
+What it shows, in order:
+
+- **Your pets**, one row per OWNED species (not per copy), a thumbnail tinted
+  by the highest-tier morph that species has found, five dots showing which of
+  the five colourways are owned, and a caption naming what a tapped dot is (or
+  "Not hatched yet." if it is not owned).
+- **Gwart's line**, plain language for the cosmetic-only rule, sitting BELOW
+  the roster rather than above it: an earlier draft put it first and blew the
+  roster's own screen budget at 320x568 with all six species owned (693px of
+  568, 125px past the fold) -- moving it cost nothing else, since nothing
+  requires it to be first, only present.
+- **Collection**, the 30-cell grid (6 species x 5 morphs, Tom's ruling above):
+  an owned cell draws the pet in colour at the 192px thumb tier; an unowned
+  cell draws the same species' base art, desaturated, with a lock glyph --
+  never a broken image, never a preview of the morph tint it would get.
+
+No stat line, no dust, no glow anywhere (Tom's ruling, matches the Paddock's
+own "no glow on pets" standing rule): ownership is colour and opacity only,
+which keeps the added decode count to one thumbnail per owned species in the
+roster plus one per grid cell (30), never a second image per state. Filling
+the whole grid earns nothing yet (no badge, no payout); that is an open reward
+decision, not shipped here.
+
+Guard: `tests/kennel-audit.mjs` (browser, gate-registered). BUTTON pins the
+real header button opening the real sheet; GRID pins the cell count at 30;
+OWNED and UNOWNED pin that a granted pair draws unlocked-and-decoded while an
+ungranted one draws the locked placeholder, decoded, never a 404; ROSTER pins
+one row per species actually granted (through `addPetInstance`, the same
+writer `hatchEgg` and `grantPet` both route through), not the whole catalogue;
+GWART pins the explainer line's text; FIT pins that all six roster rows sit
+above the fold with no scroll at both 390x844 and 320x568. Proven red in a
+`cp -R` copy, seven mutations, one row failing in each -- see the file's own
+header for the exact FAIL lines.
