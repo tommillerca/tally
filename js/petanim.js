@@ -16,9 +16,14 @@ const LIZ_W = 273, LIZ_H = 218;
 const CAT_W = 261, CAT_H = 206;
 const A = 'assets/bh/anim';
 
-function cloud(px) {
+// `tint` (Kennel Phase A): a CSS filter string for a morph recolour, appended to
+// the outer .petanim box's own inline style rather than an extra wrapper div --
+// .petanim already carries `flex:none;margin:auto` for the flex rows it sits in
+// (the coverflow ring, the Paddock), and a wrapper would take that flex-item role
+// away from it. Empty/omitted leaves the style attribute byte-identical to before.
+function cloud(px, tint = '') {
   const s = px / CLOUD_W;
-  return `<div class="petanim" style="width:${px}px;height:${(px * CLOUD_H / CLOUD_W).toFixed(1)}px">
+  return `<div class="petanim" style="width:${px}px;height:${(px * CLOUD_H / CLOUD_W).toFixed(1)}px${tint ? `;filter:${tint}` : ''}">
     <div class="pa-stage pa-cloud" style="transform:scale(${s.toFixed(4)})">
       <div class="pa-art">
         <img class="pa-shadow" src="${A}/cloud/shadow.png" alt="">
@@ -39,10 +44,10 @@ function cloud(px) {
 // `skin` picks the layer folder: 'lizard' (base C4 orange) or 'lizard-amethyst'
 // (the exclusive Founder's Lizard, CX). Only base + lid are recolored; the shared
 // tongue/mouthline/drool/fly layers ride the original folder either way.
-function lizard(px, skin = 'lizard') {
+function lizard(px, skin = 'lizard', tint = '') {
   const s = px / LIZ_W;
   const body = `${A}/${skin}`;
-  return `<div class="petanim" style="width:${px}px;height:${(px * LIZ_H / LIZ_W).toFixed(1)}px">
+  return `<div class="petanim" style="width:${px}px;height:${(px * LIZ_H / LIZ_W).toFixed(1)}px${tint ? `;filter:${tint}` : ''}">
     <div class="pa-stage pa-lizard" style="transform:scale(${s.toFixed(4)})">
       <div class="pa-art">
         <div class="pa-creature">
@@ -63,9 +68,9 @@ function lizard(px, skin = 'lizard') {
 // The bead is the sweat drop Cam drew still attached to the back: it sits INSIDE
 // .pa-flop so it rides the body, gets flicked off at the hop, and re-beads
 // during the dwell.
-function catfish(px) {
+function catfish(px, tint = '') {
   const s = px / CAT_W;
-  return `<div class="petanim" style="width:${px}px;height:${(px * CAT_H / CAT_W).toFixed(1)}px">
+  return `<div class="petanim" style="width:${px}px;height:${(px * CAT_H / CAT_W).toFixed(1)}px${tint ? `;filter:${tint}` : ''}">
     <div class="pa-stage pa-catfish" style="transform:scale(${s.toFixed(4)})">
       <div class="pa-art">
         <img class="pa-fshadow" src="${A}/catfish/shadow.png" alt="">
@@ -81,12 +86,14 @@ function catfish(px) {
 }
 
 // Returns animated HTML for an animated pet id, or null to fall back to a static image.
-// px = target display width in CSS pixels.
-export function animatedPetHtml(petId, px) {
-  if (petId === 'C1') return cloud(px);
-  if (petId === 'C3') return catfish(px);
-  if (petId === 'C4') return lizard(px);
-  if (petId === 'CX') return lizard(px, 'lizard-amethyst'); // Founder's Lizard (survey reward)
+// px = target display width in CSS pixels. `tint` (Kennel Phase A) is a CSS filter
+// string for a morph recolour, applied to the whole stack (see the note on cloud()
+// above). Omitted/empty leaves the markup byte-identical to before.
+export function animatedPetHtml(petId, px, tint = '') {
+  if (petId === 'C1') return cloud(px, tint);
+  if (petId === 'C3') return catfish(px, tint);
+  if (petId === 'C4') return lizard(px, 'lizard', tint);
+  if (petId === 'CX') return lizard(px, 'lizard-amethyst', tint); // Founder's Lizard (survey reward)
   return null;
 }
 
