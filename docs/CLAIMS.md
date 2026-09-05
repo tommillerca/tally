@@ -35,6 +35,10 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 3. PROOF: MANUAL, measured off the rendered Shop screen: the football buy buttons stay enabled and pressable below the price you can afford, and a tap answers with the shortfall | REACH: A football kit or full-kit buy button you cannot yet afford still responds to a tap and tells you exactly how many coins you are short, instead of going grey and ignoring you. Only a piece you already own is inert.
 
+## bundle concurrency (2026-09-05)
+
+1. PROOF: unit.test.js, football-kit-audit.mjs | REACH: Buying the full football kit at the same time as buying one of its garments separately (two overlapping taps) no longer overcharges. The kit bundle now re-checks what it actually delivered after an overlapping single-garment buy lands, and refunds the difference, so a player is never charged for a garment the bundle didn't end up needing to grant.
+
 ## crate levers (2026-09-05)
 
 1. PROOF: unit.test.js, loot-fallback-audit.mjs | REACH: Opening a crate can now hand you a cosmetic you already own instead of always being something new, so the rack above Common has something left to sell you; a duplicate still pays the same coins it always did. Also, a day you logged but missed your calorie budget on no longer comes with a bonus crate, though it still pays the same XP for logging it.
