@@ -1,0 +1,31 @@
+{
+  "rules": "today",
+  "depth": "heavy",
+  "seed": 23,
+  "days": 365,
+  "coinsPerDay": 657,
+  "pitPerDay": 192.5,
+  "cratePerDay": 152.1,
+  "healthPerDay": 261.4,
+  "levelPerDay": 51,
+  "level": 82,
+  "cosmetics": 357,
+  "gear": 150,
+  "dust": 4655,
+  "wallet": 191138,
+  "spent": 52500,
+  "windowsDone": 0,
+  "dayOutOfThings": null,
+  "firstWindowDay": null,
+  "crateCoinRanges": {
+    "daily": [
+      20,
+      40
+    ],
+    "golden": [
+      10,
+      25
+    ]
+  },
+  "ms": 40893
+}

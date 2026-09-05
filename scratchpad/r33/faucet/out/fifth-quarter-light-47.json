@@ -1,0 +1,31 @@
+{
+  "rules": "fifth-quarter",
+  "depth": "light",
+  "seed": 47,
+  "days": 365,
+  "coinsPerDay": 39.5,
+  "pitPerDay": 0,
+  "cratePerDay": 32.1,
+  "healthPerDay": 3.5,
+  "levelPerDay": 3.9,
+  "level": 20,
+  "cosmetics": 65,
+  "gear": 2,
+  "dust": 2261,
+  "wallet": 3398,
+  "spent": 12000,
+  "windowsDone": 3,
+  "dayOutOfThings": null,
+  "firstWindowDay": 97,
+  "crateCoinRanges": {
+    "daily": [
+      15,
+      25
+    ],
+    "golden": [
+      100,
+      150
+    ]
+  },
+  "ms": 16929
+}
