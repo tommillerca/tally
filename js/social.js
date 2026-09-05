@@ -1506,9 +1506,20 @@ export async function autoSync(buildSnapshot, appV = '') {
     }
     const last = (await kvGet('socialSyncAt', 0)) || 0;
     if (now - last < SYNC_THROTTLE_MS) return null;
-    await kvSet('socialSyncAt', now);
+    /* STAMP AFTER, NOT BEFORE (fixed 2026-09-05, offline crash seam OFF-3).
+       This used to `kvSet('socialSyncAt', now)` here, before buildSnapshot()
+       even ran: a crash or a thrown offline error anywhere in the attempt
+       below left the stamp moved and nothing actually synced, so the very
+       next boot/resume inside the 5-minute window found the throttle already
+       tripped and gave up silently instead of retrying. Moved to the end,
+       after pullGrants() has actually returned, so only a COMPLETED attempt
+       (whatever it found) starts the throttle window; the outer catch means a
+       failed attempt never reaches this line at all. Same fix pushBackup
+       already has for `backupAt` above (2026-08-30). */
     const snapshot = await buildSnapshot();
     if (snapshot) await syncProfile(snapshot, appV);
-    return await pullGrants();
+    const grants = await pullGrants();
+    await kvSet('socialSyncAt', now);
+    return grants;
   } catch { return null; }
 }

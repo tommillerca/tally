@@ -2548,7 +2548,13 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
   const POWER_EXCEPTIONS = { buyDustEgg: /grantEgg/ };
   const owners = [...src.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/gm)].map(m => [m.index, m[1]]);
   const ownerAt = i => { let n = '(top level)'; for (const [ix, name] of owners) { if (ix <= i) n = name; else break; } return n; };
-  const DUST_SPEND = /boneDustAdd\(\s*-|await spendDust\(/g;
+  /* WIDENED AGAIN 2026-09-05 (offline crash seam OFF-2a): buyRackItem folded
+     its spend into the SAME transaction as the receipt claim (db.claimAndPay),
+     so a crash between the two writes can no longer leave a debited wallet and
+     no receipt. The debit is a `bonedust:` kv callback inside that call rather
+     than `await spendDust(`, so the pattern needs the third shape or this
+     census goes blind on buyRackItem the same way it did on 2026-08-31. */
+  const DUST_SPEND = /boneDustAdd\(\s*-|await spendDust\(|\bbonedust:\s*\w+/g;
   const spends = [...src.matchAll(DUST_SPEND)].map(m => ownerAt(m.index));
   assert.ok(spends.length >= 2, `found ${spends.length} dust spends; the lint is reading the wrong thing`);
   assert.deepEqual([...new Set(spends)].sort(), Object.keys(DECLARED).sort(),
@@ -2580,6 +2586,8 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
      of the pattern is proven to fire rather than merely present */
   const forgery2 = "function buyWithDust2(id) {\n  await spendDust(60);\n}\n";
   assert.equal([...forgery2.matchAll(new RegExp(DUST_SPEND.source, 'g'))].length, 1, 'the spend pattern cannot find a spendDust spend');
+  const forgery3 = "function buyWithDust3(id) {\n  claimAndPay('kv', row, { kv: { bonedust: debitOrThrow } });\n}\n";
+  assert.equal([...forgery3.matchAll(new RegExp(DUST_SPEND.source, 'g'))].length, 1, 'the spend pattern cannot find a claimAndPay bonedust spend');
   assert.ok(GRANTS.test(forgery), 'the grant pattern cannot detect a violation');
 });
 
@@ -6444,6 +6452,191 @@ test('R-claimhyg-1 claimQuest: a rejected payout write burns nothing and a retry
   const afterRetry = { coins: await dbm.kvGet('coins', 0), crates: (await dbm.db.all('inv')).filter(r => r.kind === 'crate').length };
   assert.equal(afterRetry.coins, before.coins + Q.coins, 'the retry must pay coins exactly once');
   assert.equal(afterRetry.crates, 1, 'the retry must grant exactly one crate');
+});
+
+/* OFFLINE CRASH SEAM OFF-2a (2026-09-05): "rack buy spends, then claims".
+ * js/loot.js:buyRackItem used to spend the coins/dust (its own IndexedDB
+ * transaction, via spendCoins/spendDust) and only THEN write the
+ * `rackbuy:<artId>` claim receipt (a separate transaction, via
+ * db.addIfAbsent). A crash between the two -- the app killed, the tab
+ * closed, the write rejected on quota/abort/the wipe-protocol freeze flag --
+ * left a debited wallet and no receipt. Nothing on disk remembered the spend
+ * had happened, so the retry that followed ran buyRackItem from scratch and
+ * spent again: a 6,000-coin item took 12,000 for one piece.
+ * The fix folds the claim and the spend into ONE transaction via
+ * db.claimAndPay (the same primitive js/game.js:awardOnce and
+ * js/quests.js:claimQuest use), with a synchronous kv callback that throws to
+ * abort the whole thing when the wallet is short, rolling the receipt back
+ * too. A crash before that transaction commits now leaves NEITHER a spend NOR
+ * a receipt, so the retry is a normal first buy.
+ * INDUCE: db.claimAndPay is stubbed to reject once for this item's receipt
+ * key, the same style tests/purchase-write-failure-audit.mjs uses on
+ * db.addIfAbsent.
+ * PROVE-RED: reverting buyRackItem to the old spend-then-addIfAbsent shape
+ * makes the stub miss entirely (it targets db.claimAndPay, which the old code
+ * never calls), so the simulated crash never fires and the first call just
+ * succeeds. Measured on the actual reverted code:
+ *   FAIL R-offseam-2a buyRackItem: a crash between spend and claim costs
+ *   exactly one price on retry
+ *     a rejected claim-and-spend write must not be swallowed silently
+ *   false !== true
+ * which is the defect restated: the old code has no atomic seam for a
+ * simulated crash to land on, because the spend already committed in its own
+ * transaction before the claim (the thing this test intercepts) ever runs. */
+test('R-offseam-2a buyRackItem: a crash between spend and claim costs exactly one price on retry', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const loot = await import('../js/loot.js');
+  dbm.useDbName('unit-offseam-2a-rackcrash');
+
+  const st = await loot.rack();
+  const artId = st.ids[0];
+  const price = loot.RACK_POOLS[0][0];
+  const WALLET = price * 3;
+  await dbm.kvSet('coins', WALLET);
+
+  const realClaimAndPay = dbm.db.claimAndPay;
+  let crashOnce = true;
+  dbm.db.claimAndPay = (store, row, pay) =>
+    (crashOnce && store === 'kv' && row && String(row.k || '').startsWith(`rackbuy:${artId}`))
+      ? (crashOnce = false, Promise.reject(new Error('simulated crash: process died mid-transaction')))
+      : realClaimAndPay(store, row, pay);
+
+  let threw = false;
+  try { await loot.buyRackItem(artId, 'coins'); } catch { threw = true; }
+  dbm.db.claimAndPay = realClaimAndPay;   // RECOVER: the write works again
+
+  assert.equal(threw, true, 'a rejected claim-and-spend write must not be swallowed silently');
+  assert.equal(await dbm.kvGet('coins', 0), WALLET, 'a crash before the transaction commits must not move the wallet');
+  assert.equal(await dbm.kvGet(`rackbuy:${artId}`, null), null, 'a crash before the transaction commits must leave no receipt');
+
+  const retry = await loot.buyRackItem(artId, 'coins');
+  assert.equal(retry.ok, true, `the retry must be a normal purchase, got ${JSON.stringify(retry)}`);
+  assert.equal((await loot.ownedCosmeticIds()).has(artId), true, 'the retry must grant the piece');
+  assert.equal(WALLET - await loot.coins(), price,
+    `a crash between the spend and the claim must not cost more than one price on retry: expected ${WALLET - await loot.coins()} to equal ${price}`);
+});
+
+/* OFFLINE CRASH SEAM OFF-2b (2026-09-05): "day-close pays the ledger, then the
+ * crate". js/game.js:awardDayCloseIfDue used to award() the day-close XP (its
+ * own IndexedDB transaction, addIfAbsent on the `dayclose-<date>` ledger key)
+ * and only THEN call grantCrate (a separate transaction, db.put on 'inv'). A
+ * crash between the two -- quota, abort, the wipe-protocol freeze flag -- left
+ * the ledger paid and no crate, and because award() can never be re-run once
+ * its key exists, the crate was gone forever: no retry, no later boot, ever
+ * grants it, because the day-close row already reads as claimed.
+ * The fix rides the crate inside the SAME transaction as the claim via
+ * awardOnce's `pay` (js/hunt.js:collectSpawn and js/quests.js:claimQuest's
+ * shape): crateRow mints the id synchronously so it can sit in `pay.puts`, and
+ * a rejected write there takes the claim down with it instead of stranding it.
+ * INDUCE: db.claimAndPay is stubbed to reject once for this exact day's
+ * `dayclose-<date>` key, the same style tests/unit.test.js:R-claimhyg-1 uses.
+ * PROVE-RED: reverting awardDayCloseIfDue to the old award()-then-grantCrate()
+ * shape makes the stub miss (it targets db.claimAndPay, which the old code
+ * never calls for this payout), so the simulated crash never fires and the
+ * guard fails on:
+ *   AssertionError [ERR_ASSERTION]: a rejected day-close write must not be
+ *   swallowed silently: expected false to equal true
+ * which is the defect restated: the old code has no atomic seam between the
+ * ledger claim and the crate for a crash to land on. */
+test('R-offseam-2b awardDayCloseIfDue: a rejected write burns neither the ledger nor the crate, and a retry pays exactly one crate', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-offseam-2b-daycrash');
+
+  const TARGETS = { kcal: 2000, p: 120 };
+  const today = dateKey();
+  const yday = addDays(today, -1);
+  await dbm.db.put('log', { id: 'on-1', date: yday, meal: 0, name: 'Salad', kcal: 1800, p: 130, c: 150, f: 50 });
+
+  const realClaimAndPay = dbm.db.claimAndPay;
+  let crashOnce = true;
+  dbm.db.claimAndPay = (store, row, pay) =>
+    (crashOnce && store === 'xp' && row && row.key === `dayclose-${yday}`)
+      ? (crashOnce = false, Promise.reject(new Error('QuotaExceededError')))
+      : realClaimAndPay(store, row, pay);
+
+  let threw = false;
+  try { await g.awardDayCloseIfDue(TARGETS); } catch { threw = true; }
+  dbm.db.claimAndPay = realClaimAndPay;   // RECOVER: the write works again
+
+  assert.equal(threw, true, 'a rejected day-close write must not be swallowed silently');
+  assert.equal(await dbm.db.get('xp', `dayclose-${yday}`), undefined, 'a crash before the transaction commits must leave the ledger unclaimed');
+  assert.equal((await dbm.db.all('inv')).filter(r => r.kind === 'crate').length, 0, 'a crash before the transaction commits must grant no crate');
+
+  const retry = await g.awardDayCloseIfDue(TARGETS);
+  assert.equal(retry?.closed, true, `the retry must be a normal day close, got ${JSON.stringify(retry)}`);
+  const crates = (await dbm.db.all('inv')).filter(r => r.kind === 'crate');
+  assert.equal(crates.length, 1, 'the retry must grant exactly one crate');
+  assert.equal(crates[0].crate, 'golden', 'the day-close crate is still the Bone (golden) crate');
+});
+
+/* OFFLINE CRASH SEAM OFF-3 (2026-09-05): "the sync throttle stamps before the
+ * sync". js/social.js:autoSync used to write `socialSyncAt` to `now` BEFORE
+ * calling buildSnapshot/syncProfile/pullGrants, on the same line pattern
+ * pushBackup used to have for `backupAt` (fixed 2026-08-30, see the "A 200 IS
+ * NOT AN ACKNOWLEDGEMENT" comment on pushBackup above): the throttle is meant
+ * to mean "we tried in the last 5 minutes", and stamping it before the attempt
+ * makes it mean "we started an attempt in the last 5 minutes" instead, which
+ * includes attempts that crashed, threw offline, or never got a byte onto the
+ * wire. A device that dies (or throws) between the stamp and the first
+ * network call is not the once-in-a-blue-moon case here: it is the
+ * reconnect-after-a-gap case, the exact moment a lapsed player's profile and
+ * grants most need to sync, and the very next boot/resume within 5 minutes
+ * finds the throttle already tripped by a sync that never happened, and
+ * silently gives up rather than retrying.
+ * The fix moves the stamp to the end, after pullGrants() has actually
+ * returned: `now` is captured once at the top (unchanged, so the throttle
+ * window is still measured from the moment the attempt began) but only
+ * written back once the whole attempt has completed without throwing.
+ * INDUCE: pass a `buildSnapshot` that throws, standing in for a crash/offline
+ * failure partway through the attempt, with no server (this is a Node test,
+ * no wrangler dev) so a second, working call would fail on the throttle alone
+ * if the first call had wrongly stamped it.
+ * PROVE-RED: reverting the stamp to before the attempt (its 2026-08-30..
+ * 2026-09-05 position) means the FIRST (crashed) call stamps `socialSyncAt`
+ * before buildSnapshot() ever throws. Measured on the actual reverted code:
+ *   FAIL R-offseam-3 autoSync: socialSyncAt stamps only after a completed
+ *   attempt, not before it
+ *     an attempt that never completed must not stamp the throttle: the next
+ *     call has to retry, not silently wait out 5 minutes for nothing
+ * which is the defect restated: the stamp moves on an attempt that crashed
+ * before doing anything, so the very next call's throttle guard now reads
+ * "we just tried" for an attempt that never got past buildSnapshot(). */
+test('R-offseam-3 autoSync: socialSyncAt stamps only after a completed attempt, not before it', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const s = await import('../js/social.js');
+  dbm.useDbName('unit-offseam-3-syncstamp');
+  await dbm.kvSet('social', { playerId: 'offseam-3', handle: 'Audit Bones', friendCode: 'BONE-TEST-TEST', name: null, onlineAt: Date.now() });
+  await dbm.kvSet('backupAt', Date.now());   // keep pushBackup's own throttle out of this test's way
+
+  let fetchCalls = 0;
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    fetchCalls++;
+    const u = String(url);
+    if (u.includes('/profile')) return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    if (u.includes('/grants')) return { ok: true, status: 200, json: async () => ({ grants: [] }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+
+  try {
+    const crash = () => { throw new Error('simulated crash: process died mid-sync'); };
+    const r1 = await s.autoSync(crash, 'audit');
+    assert.equal(r1, null, 'a buildSnapshot crash must be swallowed, not thrown to the caller');
+    assert.equal(fetchCalls, 0, 'a crash inside buildSnapshot happens before any network call, so none should have fired');
+    assert.equal(await dbm.kvGet('socialSyncAt', 0), 0,
+      'an attempt that never completed must not stamp the throttle: the next call has to retry, not silently wait out 5 minutes for nothing');
+
+    const r2 = await s.autoSync(async () => ({ level: 1 }), 'audit');
+    assert.notEqual(r2, null, 'a crash on the previous attempt must not throttle the very next one behind SYNC_THROTTLE_MS');
+    assert.ok(fetchCalls >= 1, 'the retry must actually reach the network, not be swallowed by a stale throttle stamp');
+    assert.ok((await dbm.kvGet('socialSyncAt', 0)) > 0, 'a completed attempt must stamp the throttle');
+  } finally {
+    globalThis.fetch = origFetch;
+  }
 });
 
 /* CLAIM HYGIENE (2026-09-05), item 2: "welcome-kit cross-tab duplication".

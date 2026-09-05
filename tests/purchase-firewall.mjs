@@ -155,7 +155,7 @@ function fnSource(raw, name) {
 const lootSrc = readFileSync(path.join(ROOT, 'js', 'loot.js'), 'utf8');
 const appSrc = readFileSync(path.join(ROOT, 'js', 'app.js'), 'utf8');
 const PATH_FNS = [
-  ['js/loot.js:buyRackItem', fnSource(lootSrc, 'buyRackItem'), ['addIfAbsent', 'grantCosmetic', 'markPaid']],
+  ['js/loot.js:buyRackItem', fnSource(lootSrc, 'buyRackItem'), ['claimAndPay', 'grantCosmetic', 'markPaid']],
   ['js/loot.js:rerollRack', fnSource(lootSrc, 'rerollRack'), ['kvUpdate', 'coinsAdd']],
   ['js/app.js:wireRackBuys', fnSource(appSrc, 'wireRackBuys'), ['buyRackItem', 'armToConfirm']],
 ];

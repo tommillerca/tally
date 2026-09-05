@@ -554,30 +554,45 @@ export async function buyRackItem(artId, currency = 'coins') {
   if (!Number.isFinite(price)) return { ok: false, reason: 'not-stocked' };
   const already = aura ? (await wornAura()) === artId : (await ownedCosmeticIds()).has(artId);
   if (already) return { ok: false, reason: 'owned' };
-  /* THE MONEY MOVES FIRST, and it moves ATOMICALLY. This used to read the
-     balance, compare, claim the receipt and only then debit. The receipt made a
-     second tap on the SAME piece free, which is the case that was tested, and
-     hid the case that was not: two DIFFERENT pieces bought at once each pass
-     their own stale read, each claim their own receipt, and both debits clamp
-     at zero. Measured on origin/main 2faa73b6: a 3,000-coin wallet bought a
-     3,000 and a 2,400 piece together and kept both, so the rack handed over
-     2,400 coins of legendary for nothing. In dust, 160 bought 160 + 130.
-     Spending first cannot do that: spendCoins/spendDust refuse inside the
-     transaction and leave the balance byte-identical. The receipt still decides
-     WHO GETS THE PIECE, and the loser of that claim is refunded below, so the
-     "charged exactly once" guarantee the old ordering gave is unchanged. */
-  const left = currency === 'dust' ? await spendDust(price) : await spendCoins(price);
-  if (left === null) {
-    return { ok: false, reason: currency, need: price,
-      have: currency === 'dust' ? await boneDust() : await coins() };
+  /* THE CLAIM AND THE SPEND ARE ONE TRANSACTION (fixed 2026-09-05, offline
+     crash seam OFF-2a). This used to spend first (its own transaction) and
+     claim the receipt second (a separate one): correct against a same-instant
+     double-tap (spendCoins/spendDust refuse inside their own transaction, so
+     two DIFFERENT pieces bought at once could not both clamp their debits to
+     zero, the bug measured on origin/main 2faa73b6), but a crash between the
+     two writes left a debited wallet and NO receipt. Nothing on disk
+     remembered the spend had happened, so the retry that followed spent again:
+     reproduced by making the receipt write reject once (the same trigger
+     purchase-write-failure-audit.mjs uses for quota/abort/freeze), a
+     6,000-coin item took 12,000. db.claimAndPay folds both into one IndexedDB
+     transaction, the same primitive js/game.js:awardOnce and js/quests.js
+     :claimQuest use to keep a claim and its payout atomic: the kv fn is
+     synchronous and can throw to abort the WHOLE transaction, which rolls the
+     receipt `add()` back too, so an insufficient wallet claims nothing and
+     spends nothing, exactly like spendCoins returning null. */
+  const debitOrThrow = cur => {
+    const bal = Number(cur) || 0;
+    if (bal < price) { const e = new Error('insufficient-funds'); e.insufficientFunds = true; throw e; }
+    return bal - price;
+  };
+  let claimed;
+  try {
+    claimed = await db.claimAndPay('kv',
+      { k: `rackbuy:${artId}`, v: { ts: Date.now(), price, currency } },
+      { kv: currency === 'dust' ? { bonedust: debitOrThrow } : { coins: debitOrThrow } });
+  } catch (e) {
+    if (e && e.insufficientFunds) {
+      return { ok: false, reason: currency, need: price,
+        have: currency === 'dust' ? await boneDust() : await coins() };
+    }
+    throw e;
   }
-  if (!(await db.addIfAbsent('kv', { k: `rackbuy:${artId}`, v: { ts: Date.now(), price, currency } }))) {
+  if (!claimed) {
     /* THE RECEIPT EXISTS, WHICH IS NOT THE SAME AS OWNING THE PIECE.
-       REFUND FIRST: this caller paid a moment ago and is not getting the piece,
-       because either somebody else's tap holds the receipt or the receipt is a
-       stuck one from an earlier run. Either way the money it just spent buys it
-       nothing, and the bounded give-back directly under the debit is what keeps
-       the total charged for this piece at exactly one price.
+       NO REFUND NEEDED: the claim and the spend are now the same transaction,
+       so losing the claim (somebody else's tap holds the receipt, or it is a
+       stuck one from an earlier run) means this call never touched the
+       balance either; there is nothing to give back.
        The gap the old ordering left is still here and still needs this branch:
        if any write after the claim rejects (db.js rejects on abort, on quota,
        and on the wipe-protocol freeze flag), the player has paid and owns
@@ -585,9 +600,7 @@ export async function buyRackItem(artId, currency = 'coins') {
        `owned`, so the UI told them "Already in your Wardrobe" about a piece that
        was not in it, and js/loot.js:194 means that receipt is never removed, so
        the piece was unbuyable FOREVER, on every future rack.
-       Recovery, not refund. A refund would have to delete the receipt, and a
-       delete that lands while the refund does not reopens the double-spend the
-       receipt exists to prevent. Finishing the grant instead is idempotent by
+       Recovery, not refund. Finishing the grant instead is idempotent by
        construction: grantCosmetic returns null when the row is already there and
        markPaid will not push a duplicate key, so running this twice is a no-op.
        It also needs no new field and no migration, because "paid but ungranted"
@@ -596,7 +609,6 @@ export async function buyRackItem(artId, currency = 'coins') {
        ownership record, so an aura receipt cannot be stuck. An aura that reads
        as unowned while a receipt exists is the separate worn-versus-bought bug
        in the try-on sheet, and paying it out here would be wrong. */
-    if (currency === 'dust') await boneDustAdd(price); else await coinsAdd(price);
     if (aura) return { ok: false, reason: 'owned' };
     if ((await ownedCosmeticIds()).has(artId)) return { ok: false, reason: 'owned' };
     await grantCosmetic(artId, 'rack');
@@ -637,12 +649,20 @@ export async function buyRackItem(artId, currency = 'coins') {
 
 /* BUYING FROM GWART'S MENAGERIE.
  *
- * Deliberately the SAME SHAPE as buyRackItem, because the failure modes are the
- * same and one of them already cost a real player their coins and their piece:
+ * Deliberately the SAME SHAPE buyRackItem used to be, because the failure modes
+ * are the same and one of them already cost a real player their coins and
+ * their piece:
  *   - the claim is won BEFORE the money moves, so a double-spend is impossible
  *   - the gap that ordering leaves is closed by the recovery branch below
  *   - the grant is wrapped, so a rejected write is reported instead of vanishing
- * If this ever diverges from buyRackItem, the divergence is the bug.
+ * NO LONGER IDENTICAL, since 2026-09-05 (offline crash seam OFF-2a):
+ * buyRackItem folded its spend and its claim into ONE db.claimAndPay
+ * transaction, because a crash between the two separate writes below (this
+ * function's shape) leaves a debited wallet and no receipt, and the retry that
+ * follows spends again. That same gap is still open here, unfixed, out of
+ * scope for OFF-2a: this function needs the identical treatment. Written down
+ * rather than left implied by a comment that no longer matches the code it
+ * used to describe.
  *
  * AN ACCESSORY IS UNBUYABLE UNTIL YOU OWN HER, and that is geometry, not
  * merchandising. Measured 2026-08-21: the glasses overlap Bumbleseal's ink by
