@@ -425,7 +425,15 @@ const after = await page.evaluate(async id => {
   const eq = await db.kvGet('equipped', {});
   const layers = [...document.querySelectorAll('.bh-stage.lg img')].map(i => i.getAttribute('src') || '');
   return { ink, sum: s, tileId: tile.dataset.equip, ringed: tile.classList.contains('equipped'),
-    saved: eq.H, onDoll: layers.some(src => src.includes(`/${id}.png`)),
+    /* a football piece is one shared master plus .fb-tint spans, so "on the doll" for
+       it means every one of the team's tint hexes is painted in this slot's spans */
+    saved: eq.H, onDoll: layers.some(src => src.includes(`/${id}.png`)) || await (async () => {
+      const { footballTints } = await import('./data/football-teams.js');
+      const { BH_BY_ID } = await import('./data/boneheadz.js');
+      const t = footballTints(BH_BY_ID[id]); if (!t) return false;
+      const styles = [...document.querySelectorAll('.bh-stage.lg .fb-tint[data-fbslot="H"]')].map(s => (s.getAttribute('style') || '').toLowerCase());
+      return t.every(x => styles.some(st => st.includes(String(x.hex).toLowerCase())));
+    })(),
     railRing: [...document.querySelectorAll('.fam-rail [data-equip]')].filter(b => b.classList.contains('equipped')).map(b => b.dataset.equip) };
 }, worn.click.id);
 if (after.err) await die('WORN LOST THE TILE', after);

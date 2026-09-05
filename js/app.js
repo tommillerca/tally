@@ -24395,6 +24395,11 @@ async function restageWardrobe(content, slot) {
     if (!art || !cv) continue;
     c.dataset.equip = wanted;
     cv.setAttribute('data-art', bhTrim(bhAsset(art)));
+    /* AND ITS TINTS. Every colourway of a football garment shares ONE master PNG, so
+       moving data-art alone redraws the tile in the team you just changed out of
+       (wardrobe-family-grid-audit WORN, checksum unchanged, 2026-09-04). */
+    const tints = footballTints(art);
+    if (tints) cv.dataset.tints = JSON.stringify(tints); else delete cv.dataset.tints;
     cv.setAttribute('aria-label', `${art.name}, ${art.rarity}`);
     // the accessible name and the tooltip both name the piece on the tile, so
     // they move with it; the count and the family's best tier do not change.
