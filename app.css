@@ -6571,11 +6571,11 @@ body::before {
 .fb-hero { position: relative; flex: 0 0 44%; min-width: 150px; align-self: stretch; overflow: hidden;
   background: rgba(255, 255, 255, .04); border-right: 1px solid var(--line-strong); }
 .fb-hero .pc-worn { transform: translateX(-50%); }
-/* the Bonehead stands left of centre so the lizard (Tom: 'far too small') gets the bottom-right corner at a real size */
-.fb-hero .pc-worn.fit-body .bh-anim { transform-origin: 50% 50%; transform: translate(-12%, 2%) scale(1.02); }
+/* the whole Bonehead, centred; the lizard sits IN FRONT of his feet (Tom, 2026-09-05) */
+.fb-hero .pc-worn.fit-body .bh-anim { transform-origin: 50% 50%; transform: translate(-5%, 1%) scale(0.96); }
 /* one line: the two prices at the poster's chip size wrapped "the / lot" in a 230px column */
 .fb-drop .t3-price { font-size: 15px; white-space: nowrap; }
-.fb-hero-pet { position: absolute; right: 0; bottom: 2px; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
+.fb-hero-pet { position: absolute; right: -2px; bottom: -4px; z-index: 2; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
 .fb-hero-pet .petcrop { display: block; }
 .fb-teams { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; margin: 0 0 8px; }
 .drop-item.fb::before { content: 'KIT'; }
