@@ -1,7 +1,7 @@
 // Minimal promise wrapper over IndexedDB. Stores: foods, log, weights, kv, xp, health, inv.
 // IMPORTANT: upgrades must stay strictly ADDITIVE (create-if-missing only).
 // Existing user data must survive every version bump.
-import { dayOrdinal } from './nutrition.js';
+import { dayOrdinal, dateKey } from './nutrition.js';
 
 /* Exported because it is also the backup file's `version` stamp (exportAll),
    so a file and the schema that wrote it can never disagree again (QA round
@@ -667,7 +667,18 @@ export async function witnessServerDay(serverMs) {
   const ms = Number(serverMs);
   const cur = Number(await kvGet(DAY_WITNESS_KEY, 0)) || 0;
   if (!Number.isFinite(ms) || ms <= 0) return cur;
-  const o = Math.floor(ms / DAY_MS);   // UTC day ordinal, same scale as dayOrdinal()
+  /* 2026-09-05: this used to be Math.floor(ms / DAY_MS), the UTC calendar day.
+     claimDay's `o`/`oh` are dayOrdinal(key), the LOCAL calendar day (dateKey()
+     is getFullYear/Month/Date, not UTC). The two ordinal systems agree most of
+     the day and disagree by exactly 1 for the hours where the device's local
+     date and the UTC date of the same instant differ, which is most hours of
+     the day off UTC+0. Measured: witness recorded 21131 for an instant whose
+     LOCAL date was "2027-11-08", and dayOrdinal("2027-11-08") is 21130 -- a
+     forward claim one day past the WITNESS_GRACE ceiling landed AT the ceiling
+     instead of past it, and rule 3 let it through. Convert to the same LOCAL
+     calendar day claimDay reads, so both sides of every comparison are one
+     ordinal. */
+  const o = dayOrdinal(dateKey(new Date(ms)));
   if (o > cur) { await kvSet(DAY_WITNESS_KEY, o); return o; }
   return cur;
 }

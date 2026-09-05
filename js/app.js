@@ -3820,11 +3820,22 @@ const DAY_GUARD_COPY = {
 };
 /* The toast form. At boot the day close and the wheel are refused within the
    same second by the same rule, and two identical toasts stacked is noise, so
-   one voice within 8 s stands for all of them. */
+   one voice within 8 s stands for all of them.
+   2026-09-05: the window used to suppress ANY call within 8s regardless of
+   reason, not just a repeat of the SAME one. honest-surfaces-audit measured it:
+   its own two-scenario sweep fires a real 'backwards' Claim, then ~5s later a
+   real 'unwitnessed' Claim, and the second toast never appeared -- a player who
+   hits two different refusals in quick succession (Claim, then the wheel, then
+   Pit) would read the first line and then silence for the rest, which is worse
+   than the "two identical toasts" noise this was written to stop. Keyed on the
+   reason too, so a genuine repeat still collapses to one voice and a different
+   cause still gets its own line. */
 let _dayGuardSaidAt = 0;
+let _dayGuardSaidReason = null;
 function dayGuardToast(reason) {
-  if (Date.now() - _dayGuardSaidAt < 8000) return;
+  if (reason === _dayGuardSaidReason && Date.now() - _dayGuardSaidAt < 8000) return;
   _dayGuardSaidAt = Date.now();
+  _dayGuardSaidReason = reason;
   toast(DAY_GUARD_COPY[reason] || DAY_GUARD_COPY.other, 4200);
 }
 

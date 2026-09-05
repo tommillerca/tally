@@ -40,6 +40,14 @@ const ok = (label, pass, detail = '') => {
   console.log(`${pass ? 'PASS' : 'FAIL'}  ${label}${detail ? `  | ${detail}` : ''}`);
   if (!pass) fails = 1;
 };
+/* 2026-09-05 (28fea254, "O14 dayGuardToast on 6 surfaces"): awardDayCloseIfDue's
+   refusal shape changed from a bare null to { dayGuard: reason }, so a caller
+   can voice WHY (this file's own VOICE row two lines below already asserts
+   that). The GUARD row still only checked `!r.guardSettle`, which is false for
+   a truthy refusal object, so it went red on the intended behaviour rather than
+   a regression. The DECISION under test never changed: no crate, no ledger row.
+   tests/unit.test.js already reads a day-guard refusal this same way. */
+const didNotPay = c => c === null || !!(c && c.dayGuard);
 
 const srv = process.argv[2] ? null : await serveTree(ROOT);
 const base = process.argv[2] || srv.url;
@@ -168,7 +176,7 @@ try {
   ok('CONTROL: the plain yesterday settle still pays, not flagged as a gap', !!(r.yday && r.yday.closed && !r.yday.gap && r.ydayRow), JSON.stringify(r.yday));
 
   ok('CONTROL: the forced guard state really refuses (unwitnessed)', !!(r.guardProbe && !r.guardProbe.fresh && r.guardProbe.reason === 'unwitnessed'), JSON.stringify(r.guardProbe));
-  ok('GUARD: the settle pays nothing under a refusing guard', !r.guardSettle && !r.guardSettleRow, JSON.stringify(r.guardSettle));
+  ok('GUARD: the settle pays nothing under a refusing guard', didNotPay(r.guardSettle) && !r.guardSettleRow, JSON.stringify(r.guardSettle));
   ok('VOICE: claimQuest names the day-guard refusal', !!(r.guardClaim && r.guardClaim.dayGuard === 'unwitnessed'), JSON.stringify(r.guardClaim));
   ok('VOICE PAYS NOTHING: no ledger row, no coins', !r.guardClaimRow && r.guardCoinsDelta === 0, `row=${JSON.stringify(r.guardClaimRow)} coins=${r.guardCoinsDelta}`);
 
