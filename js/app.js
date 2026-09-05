@@ -96,7 +96,7 @@ import { HERO_EDGE } from '../data/hero-edge.js';
 import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petCanWear,
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
 // Football kit, 2026-09-04
-import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
+import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal,
@@ -9086,19 +9086,21 @@ function petShelfHtml(ownedCos, coinBal) {
     <div class="pet-row">${PET_SHOP.items.map(tile).join('')}</div>
   </div>`;
 }
-/* Football kit, 2026-09-04: THE KIT ROOM. One shelf, one team at a time (a
-   native <select> over 32 teams; 160 tiles at once is a catalogue, not a shop),
-   five tiles per team: helmet (grants its three visors), jersey, cleats, and the
-   lizard's helmet and jersey. Player pieces are shown WORN on the neutral
+/* Football kit, 2026-09-04: THE KIT ROOM. FIVE tiles, not 160: the unit of sale
+   is the GARMENT and buying one grants it in all 32 colourways (section 7.8 of
+   docs/FOOTBALL-KIT.md). The <select> over 32 teams is therefore a PREVIEW, and
+   it picks which colourway the five tiles are painted in. The five: helmet
+   (grants its three visors), jersey, cleats, and the lizard's helmet and
+   jersey. Player pieces are shown WORN on the neutral
    mannequin through wornArtHtml, the rack's own rule; pet pieces on the Beardie
    through croppedPetImg with an explicit wear object so the viewer's own
    S.petWear never leaks onto a product shot. Gated by FOOTBALL_KIT_LIVE at the
    call site; the price is FOOTBALL_KIT_PRICE_PLACEHOLDER and the buy path
    refuses while it is not a number, so a live shelf with no price sells nothing. */
 function footballShelfHtml(ownedCos, coinBal, open = false) {
-  const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];
+  const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];   // the PREVIEW colourway, not a variant on sale
   const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
-  const sold = FOOTBALL_SOLD;
+  const sold = FOOTBALL_SHELF;                                       // five garments, not 32 teams x five
   const ownedHere = sold.filter(g => ownedCos.has(footballItemId(team.id, g.key))).length;
   /* THE BUNDLE TILE. One extra cell at the end of the same grid, because it is
      the same decision at a different size and a separate poster would compete
@@ -9112,17 +9114,16 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
     <summary class="t3-drop">
       <span class="eyebrow">Kit room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
       <h2>PICK A SIDE</h2>
-      <div class="row"><div class="tx"><small>One kit, ${FOOTBALL_TEAMS.length} colourways. Helmet, jersey, cleats, and a matching set for the lizard.</small>
+      <div class="row"><div class="tx"><small>Five pieces: helmet, jersey, cleats, and a matching set for the lizard. Buy one and it is yours in all ${FOOTBALL_TEAMS.length} colourways.</small>
         <span class="t3-price">${Number.isFinite(price) ? `${ICONS.coin(13)} ${price.toLocaleString()} a piece${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} the lot` : ''}` : 'Not for sale yet'}</span></div></div>
     </summary>
     <div class="t3-dropbody">
-      <label class="fb-pick"><span>Team</span>
+      <label class="fb-pick"><span>Preview</span>
         <select id="fbTeam">${FOOTBALL_TEAMS.map(t => `<option value="${t.id}"${t.id === team.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
         <i class="fb-swatch" style="background:${team.a};border-color:${team.b}"></i></label>
       <div class="drop-grid">
         ${sold.map(g => {
-          const id = footballItemId(team.id, g.key);
-          const it = BH_BY_ID[id];
+          const id = footballItemId(team.id, g.key);   // the PREVIEW id: the tile sells the garment, in every team
           const owned = ownedCos.has(id);
           const art = g.pets
             ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 384)
@@ -9130,7 +9131,8 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
           const canBuy = Number.isFinite(price) && coinBal >= price;
           return `<div class="drop-item fb ${owned ? 'owned' : ''}">
             ${art}
-            <b>${esc(it.name)}</b>
+            <b>${esc(g.label)}</b>
+            <small class="fb-kitline">All ${FOOTBALL_TEAMS.length} colourways</small>
             ${owned
               ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
               : `<button class="drop-buy" data-buyfb="${id}" ${canBuy ? '' : 'disabled'}>${Number.isFinite(price) ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
@@ -9138,11 +9140,11 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
         }).join('')}
         <div class="drop-item fb fb-bundle ${bundleOwned ? 'owned' : ''}">
           <div class="fb-kitmark" style="background:${team.a};border-color:${team.b}"><span>${sold.length}</span></div>
-          <b>${esc(team.name)} full kit</b>
-          <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')}</small>
+          <b>The full kit</b>
+          <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')} · all ${FOOTBALL_TEAMS.length} colourways</small>
           ${bundleOwned
             ? `<button class="drop-buy" disabled>The whole kit is yours</button>`
-            : `<button class="drop-buy" data-buyfbkit="${team.id}" ${footballBundleSellable() && coinBal >= FOOTBALL_BUNDLE_PRICE_PLACEHOLDER ? '' : 'disabled'}>${
+            : `<button class="drop-buy" data-buyfbkit="all" ${footballBundleSellable() && coinBal >= FOOTBALL_BUNDLE_PRICE_PLACEHOLDER ? '' : 'disabled'}>${
                 footballBundleSellable() ? `${ICONS.coin(12)} ${kit.bundle.toLocaleString()}` : 'Soon'}</button>`}
           ${Number.isFinite(kit.save) && kit.save > 0
             ? `<small class="fb-save">Was ${kit.full.toLocaleString()} · you save ${kit.save.toLocaleString()}</small>`

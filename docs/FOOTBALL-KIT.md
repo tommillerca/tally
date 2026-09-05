@@ -4,8 +4,8 @@
 team at runtime. Built but **not live**: `FOOTBALL_KIT_LIVE = false` in
 `data/football-teams.js`, so every piece carries `unreleased` and nothing in the
 game can see it. Section 7 is the list of things only Tom can answer, and
-**section 10 is a patch to `js/app.js` that has NOT been applied**: the shop shelf
-still shows per-team tiles, which is copy that understates what a tile now sells.
+section 10 records the shop-shelf patch that brought `js/app.js` in line with the
+ownership ruling in 7.8: five tiles, each sold in all 32 colourways.
 
 ## 1. What exists
 
@@ -18,7 +18,7 @@ still shows per-team tiles, which is copy that understates what a tile now sells
 | The player renderer | `js/app.js` `footballTintHtml` | the avatar and the wardrobe tiles |
 | The pet renderer | `js/app.js` `croppedPetImg` + `data/boneheadz.js` `petWornTints` | the tint spans take the layer's own geometry string, so registration is inherited |
 | The shelf data | `data/football-teams.js` `FOOTBALL_SHELF` | the FIVE things the shop sells: garment, slot, label, price |
-| The shop | `js/app.js` `footballShelfHtml` | the kit room, gated on `FOOTBALL_KIT_LIVE` at the call site. **Still renders per-team tiles: see section 10** |
+| The shop | `js/app.js` `footballShelfHtml` | the kit room, gated on `FOOTBALL_KIT_LIVE` at the call site. FIVE garment tiles plus the bundle, see section 10 |
 | The buy path | `js/loot.js` `buyFootballItem` | one garment, all 32 colourways. Refuses unless live AND the price is a finite number above zero |
 | The guard (arithmetic) | `tests/football-kit-audit.mjs` | PURE, 0.3s, 34 rows, FAST tier |
 | The guard (pixels) | `tests/football-render-audit.mjs` | a real browser, ~150s, 12 rows, FULL tier until the kit goes live |
@@ -539,22 +539,24 @@ confident number: hiding the whole mannequin measures the base skeleton
 measures the CONTRAST (this same helmet read 61.3% in the shop and 20.7% on the
 rail, on provably identical geometry); and reading an alpha with the tile's
 corners left rounded counts the corner arcs as garment.
-## 10. app.js changes still to apply
 
-**Nothing in this section is applied.** `js/app.js` and `app.css` were being
-edited by another agent when 7.8 was built, so the shop still renders the OLD
-shelf. Everything below is a copy-paste patch for whoever owns `js/app.js` next.
+## 10. The app.js shelf, brought in line with 7.8. APPLIED 2026-09-04
 
-**What is wrong until it lands** (nothing is broken, it is all copy):
+**This section is applied.** It was written as an unapplied patch because
+`js/app.js` was being edited elsewhere when 7.8 was built; it landed with the
+merge of `feat/nfl-ownership` into `feat/nfl-kit`. It stays here as the record of
+what changed and why, and the diffs below are what is now in the file.
 
-- the five tiles are titled **"Boneyard Bruisers Helmet"**, which now understates
-  what the tile sells: it is the helmet, in all 32. The purchase is correct, the
-  label is not;
-- the bundle tile is titled **"<Team> full kit"** and carries
-  `data-buyfbkit="<team-id>"`. The purchase is correct (the team id is ignored and
-  the player gets all 256 ids), the label is not;
-- the team `<select>` reads as a variant picker when it is now only a **preview**;
-- `FOOTBALL_SHELF` is exported and **unused**.
+**What it fixed** (nothing was broken, it was all copy):
+
+- the five tiles were titled **"Boneyard Bruisers Helmet"**, which understated
+  what a tile sells: it is the helmet, in all 32. The purchase was correct, the
+  label was not;
+- the bundle tile was titled **"<Team> full kit"** and carried
+  `data-buyfbkit="<team-id>"`. The purchase was correct (the team id is ignored
+  and the player gets all 256 ids), the label was not;
+- the team `<select>` read as a variant picker when it is only a **preview**;
+- `FOOTBALL_SHELF` was exported and **unused**.
 
 Everything else already degrades correctly. `ownedHere`, the per-tile
 `ownedCos.has(id)` and `bundleOwned` all still read true, because owning any team's
