@@ -9394,22 +9394,19 @@ function petShelfHtml(ownedCos, coinBal) {
    file's usual 1/0.86 crop window -- 102.3px, matching the number every other
    .fit-* call site here derives the same way -- and .fit-fbhead/.fit-torso/
    .fit-feet (app.css) scale that panel by 1.4/1.7/2.2, not one flat 2.3 for
-   all three. The old guess sent the helmet and jersey tiles straight to their
-   640 masters (their real worst case, 143px and 174px, both fit the 384
-   tier); only the cleats' steeper crop (225px) genuinely needs the master.
-   Measured 393x852 DPR 2, 2026-09-05, tests/memory-census.mjs's own probe. */
+   all three. Measured 393x852 DPR 2, 2026-09-05, tests/memory-census.mjs's own probe. */
 const FB_TILE_W = 88 / 0.86;
 const FB_TILE_SCALE = { 'fit-fbhead': 1.4, 'fit-torso': 1.7, 'fit-feet': 2.2 };
-/* fit-feet (the cleats) is the one of the three whose real ~225px worst case
-   clears no tier at all -- capping it at 192 CSS px (-> the 384 tier) still
-   costs it a mild upscale, so it caps one rung tighter, at 96 (-> 192), same
-   move already made for the pet tile beside it. Math.min is a no-op for
-   helmet/jersey: their real numbers (~143/~174px) already clear 384 alone. */
-const kitTierCss = it => {
-  const cls = fitClass(it);
-  const raw = FB_TILE_W * (FB_TILE_SCALE[cls] || 2.3);
-  return Math.min(raw, cls === 'fit-feet' ? 96 : 192);
-};
+/* NO CAP ANY MORE (2026-09-05): the caps here used to buy back memory the
+   poster hero was spending on a tier too small to serve its own box (see the
+   thumb:384 note on the hero above). Now that the kit room's tiles do not
+   decode at all while #fbSect is closed -- t3-dropbody below renders empty
+   until the details' own 'toggle' event fires -- there is nothing left to buy
+   back, so this returns the honest measured width and lets wornArtHtml's
+   bhTierFor pick from it same as every other caller: 384 for the helmet/jersey
+   (~143/174px, both clear it) and the 640 master for the cleats (~225px,
+   clears no tier -- fit-feet's crop is the steepest of the three). */
+const kitTierCss = it => FB_TILE_W * (FB_TILE_SCALE[fitClass(it)] || 2.3);
 function footballShelfHtml(ownedCos, coinBal, open = false) {
   const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];   // the PREVIEW colourway, not a variant on sale
   const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
@@ -9434,21 +9431,22 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
     <summary class="t3-drop fb-drop">
       <div class="fb-hero">
         <div class="pc-worn fit-body">${avatarLayersHtml({ ...RACK_BASE, ...Object.fromEntries(sold.filter(g => !g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])) },
-          /* Measured 393x852 DPR 2: .fb-hero's .pc-worn is 309.6px at a 0.96
-             scale, real worst-case css ~297 -- bhTierFor(260) was already an
-             under-measure and 297 clears no tier either (needs >=594), same
-             as the master 384 would. Capped at 192 rather than left to
-             escalate, same rung the fb-hero-pet span beside it takes below:
-             the two portraits in this poster share one cap, not two. */
-          { wpnAura: null, skip: ['C'], thumb: 192 })}</div>
+          /* MEASURED OFF THE RENDER, 440x956 DPR 2 (art-resolution-audit.mjs's own
+             viewport), tests/art-resolution-audit.mjs: this poster's mannequin draws
+             at 507 device px. Capped at 192 it was 2.64x its source -- the exact
+             defect that file exists to catch -- and Tom had already flagged this
+             poster as blurry once today. 384 clears it at 507/384 = 1.32x; the
+             master would too (507/640 = 0.79x) but costs 0.44 MB/layer more for a
+             sharpness margin nobody asked for. Sharpness wins for the hero (it is
+             the biggest art on the shop screen), paid for by the kit room's five
+             tiles no longer decoding while #fbSect is closed -- see t3-dropbody
+             below. */
+          { wpnAura: null, skip: ['C'], thumb: 384 })}</div>
         <span class="fb-hero-pet">${croppedPetImg(FOOTBALL_PETS[0], 96, false, null,
-          /* C4/CX's PET_CROP puts their real worst-case css at ~204-222 here
-             (px=96 x FILL 0.82 / their ~0.35 content fraction), so even 384
-             is already a cap below what bhTierFor's strict rule would allow --
-             this was never going to be the master either way. 192 matches the
-             kit-room's own pet tile below rather than inventing a third
-             number for the same lizard. */
-          Object.fromEntries(sold.filter(g => g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])), 192)}</span>
+          /* Same poster, same 1.4x rule: measured 444 device px, 444/192 = 2.31x
+             (also over) -> 444/384 = 1.16x. The two portraits in this poster
+             shared one cap before; they share one honest tier now instead. */
+          Object.fromEntries(sold.filter(g => g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])), 384)}</span>
       </div>
       <div class="tx">
         <span class="eyebrow">Locker room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
@@ -9458,7 +9456,29 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
         <span class="t3-price">${Number.isFinite(price) ? `${ICONS.coin(13)} ${price.toLocaleString()} a piece${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} the lot` : ''}` : 'Not for sale yet'}</span>
       </div>
     </summary>
-    <div class="t3-dropbody">
+    <div class="t3-dropbody">${
+      /* THE KIT ROOM'S OWN t1 COST. Five tiles and a bundle tile, each a full
+         mannequin stack (three to five layers apiece) -- the exact shape the
+         hero above pays extra to be sharp, and this is where that gets paid
+         back. EMPTY ON PURPOSE while closed, same pattern as the Today teaser
+         wall (1C): a closed <details> still keeps every <img> its markup
+         names in the document and the browser still decodes them (measured --
+         see the census note on this screen), so writing the tiles in here
+         unconditionally cost the same memory whether or not a player ever
+         opens the kit room. Filled by the 'toggle' listener on first open,
+         below in renderShop; wasOpen.fb re-renders it open-and-filled across a
+         team change or a buy so a re-render never blanks what the player is
+         looking at. */
+      open ? footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned) : ''
+    }</div>
+  </details>`;
+}
+/* THE KIT ROOM GRID, pulled out of footballShelfHtml so the 'toggle' listener
+   in renderShop can build the exact same markup on first open. team/sold/
+   price/quote/bundleOwned are cheap synchronous reads and the listener
+   re-derives its own copy rather than reaching into this closure. */
+function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned) {
+  return `
       <label class="fb-pick"><span>Team</span>
         <select id="fbTeam">${FOOTBALL_TEAMS.map(t => `<option value="${t.id}"${t.id === team.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
         <i class="fb-swatch" style="--fa:${team.a};--fb:${team.b}"></i></label>
@@ -9469,13 +9489,11 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
           /* THE PET TILE (g.pets) is pinned to 192, below what bhTierFor's
              strict rule would allow (her PET_CROP puts the real worst-case
              css at ~203-221 here, clearing no tier at all) -- same cap as
-             fb-hero-pet above, same lizard. The human tile below gets an
-             equivalent cap for a different reason: the cleats' fit-feet crop
-             (scale 2.2) is the one garment of the three whose real ~225px
-             worst case clears no tier either, so it caps down one more rung
-             than helmet/jersey (~143/~174px, both keep the honestly-earned
-             384 -- kitTierCss only tightens the cap for the one that would
-             otherwise escalate). */
+             fb-hero-pet above, same lizard. The human tile below is no longer
+             capped (kitTierCss now returns the honest measured width): the
+             helmet/jersey land on 384, the cleats' steeper fit-feet crop
+             (~225px) clears no tier and takes the 640 master, and none of it
+             is decoded at all unless this body is actually open. */
           const art = g.pets
             ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 192)
             : `<div class="fb-worn">${wornArtHtml(id, kitTierCss(BH_BY_ID[id]))}</div>`;
@@ -9510,9 +9528,7 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
             ? `<small class="fb-save">Was ${quote.full.toLocaleString()} · you save ${quote.save.toLocaleString()}</small>`
             : ''}
         </div>
-      </div>
-    </div>
-  </details>`;
+      </div>`;
 }
 
 async function renderShop(el) {
@@ -9969,16 +9985,13 @@ async function renderShop(el) {
   }));
   // Drop pieces: same two-tap arm-then-buy ritual as the coin shop, because these
   // are the most expensive single taps in the game.
-  // Football kit, 2026-09-04: the kit room's team picker re-renders the shelf on its own team
-  $('#fbTeam', el)?.addEventListener('change', e => { S.fbTeam = e.target.value; rerender(); });
-  /* The rail's "Kit room" button lands here. Consume the flag BEFORE the scroll
-     so a rerender() from any buy on this screen is a normal render again, and
-     bring the shelf to them rather than leaving it open below the fold. */
-  if (S.fbJump) {
-    S.fbJump = false;
-    requestAnimationFrame(() => $('#fbSect', el)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
-  }
-  el.querySelectorAll('[data-buydrop], [data-buyfb], [data-buyfbkit]').forEach((b => {
+  /* PULLED INTO A NAMED FUNCTION (2026-09-05) so the kit room's 'toggle'
+     listener below can wire the SAME buttons a second time, scoped to just
+     the tiles it just inserted: the kit room's own buy buttons do not exist
+     in `el` at all until the section is opened for the first time (its body
+     is lazy, see footballShelfHtml), so the one-shot querySelectorAll below
+     never sees them unless the section started open. */
+  const wireDropBuyButtons = scope => scope.querySelectorAll('[data-buydrop], [data-buyfb], [data-buyfbkit]').forEach((b => {
     let t = null;
     let busy = false;
     const reset = () => { b.dataset.armed = '0'; b.innerHTML = b.dataset.label || b.innerHTML; };
@@ -10018,6 +10031,42 @@ async function renderShop(el) {
       rerender();
     });
   }));
+  wireDropBuyButtons(el);
+  // Football kit, 2026-09-04: the kit room's team picker re-renders the shelf on its own team
+  $('#fbTeam', el)?.addEventListener('change', e => { S.fbTeam = e.target.value; rerender(); });
+  /* THE KIT ROOM'S BODY IS LAZY (2026-09-05): it does not exist in the markup
+     at all until #fbSect is opened, so its <img> tags never decode on a
+     player who never looks (see the census note on footballShelfHtml). This
+     is what fills it in, once, on the details' native 'toggle' event -- the
+     same event teaser-banner's .gbn-body is filled on (1C). team/sold/price/
+     quote/bundleOwned are re-derived here rather than threaded out of
+     footballShelfHtml's closure: they are five cheap synchronous reads, and
+     the alternative (storing them on S) is more state for the same answer.
+     `body.childElementCount` guards against re-filling an already-open
+     section: wasOpen.fb re-renders #fbSect already open AND already filled
+     (footballShelfHtml does that eagerly), so the FIRST toggle after a
+     buy/team-change re-render fires 'toggle' with nothing to do. */
+  $('#fbSect', el)?.addEventListener('toggle', e => {
+    if (!e.target.open) return;
+    const body = $('.t3-dropbody', e.target);
+    if (!body || body.childElementCount) return;
+    const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];
+    const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
+    const sold = FOOTBALL_SHELF;
+    const ownedHere = footballOwnedGarmentCount(ownedCos);
+    const quote = footballBundleQuote(ownedHere);
+    const bundleOwned = ownedHere === sold.length;
+    body.innerHTML = footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned);
+    $('#fbTeam', body)?.addEventListener('change', ev => { S.fbTeam = ev.target.value; rerender(); });
+    wireDropBuyButtons(body);
+  });
+  /* The rail's "Kit room" button lands here. Consume the flag BEFORE the scroll
+     so a rerender() from any buy on this screen is a normal render again, and
+     bring the shelf to them rather than leaving it open below the fold. */
+  if (S.fbJump) {
+    S.fbJump = false;
+    requestAnimationFrame(() => $('#fbSect', el)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }
   // the drop art sits small inside a 640² sprite sheet, so trim it to its ink
   // the same way the reveal cards do rather than showing a stamp in a big box
   hydratePackArt(el, '.t3-art[data-art]');
