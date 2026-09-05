@@ -409,7 +409,13 @@ svg { display: block; }
 .tab-badge {
   position: absolute; top: 1px; right: 12px; min-width: 16px; height: 16px; padding: 0 4px;
   display: grid; place-items: center; border-radius: 8px; background: var(--danger, #ff5c5c);
-  color: #fff; font-size: 10px; font-weight: 900; font-style: normal; line-height: 1;
+  /* --ink, NOT #fff. Measured off the render (r33 a11y, 390x844, the modal
+     pixel inside the badge's own box): white on --danger is rgb(255,255,255) on
+     rgb(255,109,94) = 2.76:1 at 10px/900, against the 4.5 small text needs.
+     --ink on the same plate measures 5.13:1, and it is the token the active tab
+     plate two rules down already uses for dark-ink-on-a-bright-plate. The plate
+     colour is untouched: the badge still reads as the app's one alarm colour. */
+  color: var(--ink, #2a2d28); font-size: 10px; font-weight: 900; font-style: normal; line-height: 1;
   box-shadow: 0 0 0 2px var(--bg, #0d0c12); animation: crewBadgePop 0.3s ease;
 }
 @keyframes crewBadgePop { 0% { transform: scale(0); } 70% { transform: scale(1.2); } 100% { transform: scale(1); } }

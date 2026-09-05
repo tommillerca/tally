@@ -75,6 +75,14 @@
        live region that does not exist before its content changes does not
        announce: the session's first toast was silent to a screen reader. -->
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <!-- THE MONEY LINE. Measured (r33 a11y): the toast was the app's only live
+       region, and the coin balance repainting in place (a Pit payout landing
+       behind an open sheet, __refreshWalletPill) announced nothing at all.
+       Same shape as #resultsCount in the Add sheet: .sr-only, polite, STATIC in
+       the markup and only ever textContent-updated. Never re-rendered, never
+       [hidden]: a live region that is display:none when its text is written, or
+       that is created in the same tick as its message, announces to nobody. -->
+  <div id="srLive" class="sr-only" role="status" aria-live="polite"></div>
 </div>
 <noscript><p style="padding:2rem;font-family:system-ui">Boneheadz Gym needs JavaScript enabled.</p></noscript>
 <script type="module" src="js/app.js"></script>

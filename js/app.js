@@ -3322,6 +3322,18 @@ function nextToast() {
    only poke #toast by hand and never proves the shipped path. */
 if (typeof window !== 'undefined' && navigator.webdriver) window.__toast = toast;
 
+/* SAY IT OUT LOUD, POLITELY. #srLive is static in index.html and this is the
+   only thing that writes it: textContent only, so the region is never destroyed
+   and rebuilt in the same tick as its message (the bug #toast shipped once).
+   The same text twice in a row is not a change any AT will announce, so a
+   repeated message gets a trailing space to force one. Polite on purpose:
+   nothing here is an interruption. */
+function announce(msg) {
+  const el = $('#srLive');
+  if (!el || !msg) return;
+  el.textContent = el.textContent === msg ? msg + ' ' : msg;
+}
+
 const sheetStack = [];
 /* set when a new service worker took over while a sheet was open, so the
    reload the toast promised happens the moment the last sheet closes */
@@ -4280,8 +4292,16 @@ async function renderToday(el) {
     const btn = $('#coinBtn'); if (!btn || !btn.isConnected) return;
     const [c, d, pe] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
     const put = (sel, v) => { const b = $(sel + ' b'); if (b) b.textContent = v; };
+    /* AND A BALANCE THAT CHANGES IN PLACE SAYS SO. This is the one path that
+       repaints the money without re-rendering the screen, which is exactly the
+       change a screen reader is never told about: measured, coins went 340 to
+       590 through this function and no live region fired. Announced only on a
+       real difference, read off the DOM the line above is about to overwrite,
+       so a repaint that changes nothing stays silent. */
+    const was = $('#coinBtn b')?.textContent;
     put('#coinBtn', c.toLocaleString()); put('#dustBtn', d.toLocaleString());
     put('#vigorBtn', String(pe.ready));
+    if (was != null && was !== c.toLocaleString()) announce(`${c.toLocaleString()} coins`);
   };
   $('#dustBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#vigorBtn')?.addEventListener('click', openPit);
@@ -8966,7 +8986,7 @@ function petShelfHtml(ownedCos, coinBal) {
       <div class="pet-name">${esc(pet.name)}</div>
       <p>${esc(PET_SHOP.pet.blurb)}</p>
       <button class="t3-price pet-buy" data-petbuy="${PET_SHOP.pet.id}" data-amt="${PET_SHOP.pet.coin}"
-        ${coinBal < PET_SHOP.pet.coin ? 'data-short="1"' : ''}>${PET_SHOP.pet.coin.toLocaleString()}</button>
+        ${coinBal < PET_SHOP.pet.coin ? 'data-short="1"' : ''}><span class="sr-only">Buy ${esc(pet.name)} for </span>${PET_SHOP.pet.coin.toLocaleString()}<span class="sr-only"> coins</span></button>
     </div>
   </div>`;
   /* The accessories stay visible before she is owned, but they cannot be bought:
@@ -8984,7 +9004,7 @@ function petShelfHtml(ownedCos, coinBal) {
       ${owned ? `<div class="rk-owned">In your Wardrobe</div>`
         : locked ? `<div class="pet-lock">Needs ${esc(pet.name)}</div>`
         : `<button class="t3-price pet-buy" data-petbuy="${it.id}" data-amt="${it.coin}"
-             ${coinBal < it.coin ? 'data-short="1"' : ''}>${it.coin.toLocaleString()}</button>`}
+             ${coinBal < it.coin ? 'data-short="1"' : ''}><span class="sr-only">Buy ${esc(a.name)} for </span>${it.coin.toLocaleString()}<span class="sr-only"> coins</span></button>`}
     </div>`;
   };
   return `<div class="pet-shelf">${hero}
@@ -9055,9 +9075,20 @@ async function renderShop(el) {
        their own ground and a filled one 10.1:1. What it drops is the button
        affordance, not the price. It stays pressable and says what is missing,
        because a control that answers is kinder than one that ignores you. */
+  /* AND IT SAYS WHAT IT BUYS. Measured (r33 a11y): 41 of the 76 interactive
+     elements on this screen had an accessible name that was the number and
+     nothing else, so VoiceOver read "3,000" with no piece and no currency, forty
+     times down one screen. The name is carried by TWO .sr-only spans rather than
+     an aria-label on purpose: armToConfirm swaps the button's innerHTML to
+     "Buy?" on the first tap and never touches aria-label, so a label would have
+     kept announcing the resting price over the armed confirm state. Spans ride
+     innerHTML, so the armed button correctly names itself "Buy?" and restore()
+     puts the full name back. .sr-only is the app's one visually-hidden utility
+     (app.css:132), no visual change. */
+  const rackPieceName = id => id === RACK_AURA.key ? RACK_AURA.name : (BH_BY_ID[id]?.name || 'this piece');
   const rackPrice = (id, kind, amount, bal) =>
-    `<button class="t3-price${kind === 'dust' ? ' dust' : ''}${bal >= amount ? '' : ' cant'}" data-buyrack="${esc(id)}" data-cur="${kind}" data-amt="${amount}">${
-      kind === 'dust' ? ICONS.dust(13) : ICONS.coin(13)} ${amount.toLocaleString()}</button>`;
+    `<button class="t3-price${kind === 'dust' ? ' dust' : ''}${bal >= amount ? '' : ' cant'}" data-buyrack="${esc(id)}" data-cur="${kind}" data-amt="${amount}"><span class="sr-only">Buy ${esc(rackPieceName(id))} for </span>${
+      kind === 'dust' ? ICONS.dust(13) : ICONS.coin(13)} ${amount.toLocaleString()}<span class="sr-only"> ${kind === 'dust' ? 'Bone Dust' : 'coins'}</span></button>`;
   const rackBuyRow = (id, coin, dust, extra = '') => rackOwns(id)
     ? '<div class="rk-buy"><span class="rk-owned">' + ICONS.check(13) + ' Owned</span></div>'
     : `<div class="rk-buy${extra}">${rackPrice(id, 'coin', coin, coinBal)}<i class="rk-or">or</i>${rackPrice(id, 'dust', dust, dustBal)}</div>`;
@@ -9434,11 +9465,18 @@ async function renderShop(el) {
       const amt = +b.dataset.amt;
       const r = await buyRackItem(b.dataset.buyrack, currency);
       if (!r.ok) {
-        toast(r.reason === 'owned' ? 'Already in your Wardrobe.'
+        /* SPOKEN AS WELL AS SHOWN, both outcomes. The toast IS a live region,
+           but it writes its text while it is still [hidden] and unhides in the
+           same tick, and a live region that is display:none when its content
+           lands is not reliably announced. #srLive is never hidden, so the one
+           sentence the player is owed after a spend is carried by both. Same
+           string, hoisted rather than written twice. */
+        const msg = r.reason === 'owned' ? 'Already in your Wardrobe.'
           : r.reason === 'write' ? `${r.label} did not save. Your coins are safe, tap again.`
           : r.reason === 'dust' ? `Need ${amt} Bone Dust (you have ${(r.have ?? dustBal).toLocaleString()}). Melt gear at the Salvage Bench.`
           : r.reason === 'coins' ? `Not enough coins. That costs ${amt.toLocaleString()}, you have ${(r.have ?? coinBal).toLocaleString()}.`
-          : 'That piece is not on the rack any more.', 2800);
+          : 'That piece is not on the rack any more.';
+        toast(msg, 2800); announce(msg);
         /* A RECOVERED PURCHASE JUST CHANGED THE TILE UNDER THE PLAYER'S FINGER.
            The early return skips the rerender every other path gets, so without
            this the piece is theirs and the rack still shows a price. */
@@ -9460,9 +9498,10 @@ async function renderShop(el) {
       const spent = r.currency === 'dust'
         ? `−${r.cost} dust, ${r.dust.toLocaleString()} left.`
         : `−${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left.`;
-      toast(r.isAura
+      const bought = r.isAura
         ? `${r.label} is on already, and every weapon you carry wears it. ${spent} Take it off on this tile any time.`
-        : `${r.label} is yours. ${spent} Free to wear in your Wardrobe.`, 3400);
+        : `${r.label} is yours. ${spent} Free to wear in your Wardrobe.`;
+      toast(bought, 3400); announce(bought);
       // bought from inside the try-on sheet: close it, so the rack behind it is
       // the thing the player lands on and the new Owned state is what they see
       if (inSheet && sheetStack.length) history.back();
