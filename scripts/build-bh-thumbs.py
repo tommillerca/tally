@@ -153,9 +153,18 @@ def use_root(root):
 # beside the pet on every surface she appears on, four at a time on a dressed
 # pet. They were excluded for the dullest reason: the slots did not exist when
 # this list was written and nothing since had a reason to walk it again.
-SLOTS = ['B', 'BG', 'C', 'CB', 'CE', 'CG', 'CM', 'E', 'FW', 'G', 'H', 'IL', 'IR',
-         'M', 'P', 'S', 'SK', 'T', 'U']
-KEEP = re.compile(r'^(?:%s)/(?:shiny/)?[^/]+\.png$' % '|'.join(SLOTS))
+#
+# `football` TOO (2026-09-05), and the mask exclusion below is what makes it
+# safe to add: every football garment's file lives at assets/bh/football/, one
+# 640x640 master shared by all 32 teams, but that directory also carries two
+# alpha masks per garment (mask-a/mask-b) that colour the master at runtime as
+# a CSS background -- footballTints hands their path straight to a `url()` and
+# never calls bhThumb, so tiering them would just be 48 orphan files nothing
+# reads. Excluding `.mask-a.png` / `.mask-b.png` keeps this list matching
+# exactly what bhThumb's callers can ask for, same as js/app.js's BH_THUMB_RE.
+SLOTS = ['B', 'BG', 'C', 'CB', 'CE', 'CG', 'CM', 'E', 'FW', 'football', 'G', 'H',
+         'IL', 'IR', 'M', 'P', 'S', 'SK', 'T', 'U']
+KEEP = re.compile(r'^(?:%s)/(?:shiny/)?(?!.*\.mask-[ab]\.png$)[^/]+\.png$' % '|'.join(SLOTS))
 
 
 def trimmed(im):

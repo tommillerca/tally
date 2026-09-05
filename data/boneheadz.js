@@ -2112,8 +2112,20 @@ export function bhFamilies(items) {
  * The full argument for the tiers, the measurements behind them and the rule
  * that they are OPT-IN rather than automatic are in js/app.js at "THE THUMBNAIL
  * SHEET"; this is only the lookup they share.
- */
-export const BH_THUMB_RE = /^assets\/bh\/((?:B|BG|CB|CE|CG|CM|C|E|FW|G|H|IL|IR|M|P|S|SK|T|U)\/(?:shiny\/)?[^/]+\.png)$/;
+ *
+ * `football` IS IN THE ALTERNATION TOO (2026-09-05). Every football garment's
+ * `file` points at assets/bh/football/<garment>.png, one master shared by all
+ * 32 teams, and every caller that draws one already asks bhThumb/bhTrim for a
+ * tier -- the Collection's col-cell, croppedPetImg's worn layers, layeredArt's
+ * Paddock tiles all pass `thumb:` today. The regex simply did not recognise
+ * the path, so every one of those requests silently got the untiered 640
+ * master back with no fallback firing (the file exists, so THUMB_FALLBACK's
+ * onerror never sees a 404): tests/memory-census.mjs blew its ceiling on
+ * exactly the three surfaces a hoarder's 192 owned football items reach
+ * (collection 363.6 MB, stable and paddock's dressed-pet layers). One master
+ * per garment means 8 files, not 256, so the fix is regenerating the existing
+ * sheet, not a new mechanism. */
+export const BH_THUMB_RE = /^assets\/bh\/((?:B|BG|CB|CE|CG|CM|C|E|FW|football|G|H|IL|IR|M|P|S|SK|T|U)\/(?:shiny\/)?(?!.*\.mask-[ab]\.png$)[^/]+\.png)$/;
 export const BH_THUMB_TIERS = [192, 384];
 export function bhThumb(src, px = 192) {
   const m = BH_THUMB_RE.exec(src || '');
