@@ -1731,7 +1731,7 @@ await test('r29 S2: without ADD_TOKEN_SECRET the board is served but mints NO ad
   const mk = async () => {
     const kk = await makeKeys();
     const pp = await (await fetch(w.url + '/register', { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
-      body: JSON.stringify({ test: false, run: RUN, pubkey: kk.pubJwk }) })).json();
+      body: JSON.stringify({ test: IS_TEST, run: RUN, pubkey: kk.pubJwk }) })).json();
     const sign = async (method, p, body = '') => {
       const ts = Date.now();
       const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, kk.kp.privateKey, new TextEncoder().encode(`${method}\n${p}\n${ts}\n${body}`));
