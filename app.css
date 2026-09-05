@@ -3724,6 +3724,14 @@ body::before {
   flex: 0 0 auto;
 }
 .cfan-live { position: absolute; top: 8px; right: 8px; z-index: 2; width: 11px; height: 11px; border-radius: 50%; background: var(--accent); border: 2px solid var(--ink); }
+/* CREW-4: the one-line "since last time" signal, its own row under the title
+   line so it never fights the LV pill for space; accent because it is the
+   one thing on the plate that just became true. Selector beats the plain
+   `.cfan-plate small` rule above on specificity, no !important needed. */
+.cfan-plate small.cfan-since { color: var(--accent); text-transform: none; letter-spacing: 0; }
+/* CREW-13: same voice as .lb-spires (the leaderboard's own spire tag) so a
+   spire reads the same wherever it shows up. */
+.cfan-plate small.cfan-spires { color: var(--gold); text-transform: none; letter-spacing: 0; display: flex; align-items: center; gap: 4px; }
 .cfan-fstar { position: absolute; top: 5px; left: 8px; z-index: 2; display: grid; place-items: center;
   /* was a 15px ★ with an ink text-shadow faking a keyline; ICONS.star draws its own
      stroke, so the shadow becomes a drop-shadow on the svg instead of on glyph edges */

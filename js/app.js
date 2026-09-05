@@ -87,7 +87,7 @@ import {
 } from './garden.js';
 import { isNative, nativeHealthAvailable, nativeRequestAuth, nativeQueryToday, onAppResume, platformTag } from './native.js';
 import {
-  deriveStats, legacyHabitStats, habitGrantPoints, derived, STAT_META, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
+  deriveStats, legacyHabitStats, habitGrantPoints, derived, STAT_META, hasFightableStats, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
   applyAction, endTurn, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
   petActionsFor, applyPetAction, talentRanks, nodeRanks, GUARD_STAMINA,
@@ -2941,6 +2941,10 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__cheerPresets = () => CHEERS;
   window.__unseenDeliveries = () => unseenDeliveryCount();
   window.__refreshCrewBadge = () => refreshCrewBadge();
+  // CREW-5: isolates the rank-improvement half of the badge from the
+  // network-only social.listFriends() half of refreshCrewBadge, so it is
+  // checkable against the __testRace fixture with no live account.
+  window.__raceRankImproved = () => raceRankImproved();
   // S6: a coins-only gift is the rarest reveal in the game (every other payload
   // shape beats it in the `if` chain above), so an audit needs a direct way to
   // open one rather than farming a real Crew gift server-side.
@@ -2949,15 +2953,38 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
 // The badge is the sum of what is waiting for you in the tab: friend requests
 // AND unread deliveries. It used to count requests only, so a gift never
 // announced itself anywhere you could go back and find it.
-async function setCrewBadgeFrom(incomingCount) {
-  try { setCrewBadge((incomingCount || 0) + (await unseenDeliveryCount())); }
+// CREW-5: `own` adds the player's OWN new milestones the Crew tab shows (see
+// raceRankImproved below) -- everything else here is something someone else
+// did. Optional and defaulted to 0 so checkFriendRequests, which has no
+// reason to re-check the race on every poll, is unchanged.
+async function setCrewBadgeFrom(incomingCount, own = 0) {
+  try { setCrewBadge((incomingCount || 0) + (await unseenDeliveryCount()) + (own || 0)); }
   catch { setCrewBadge(incomingCount || 0); }
+}
+/* CREW-5: "the badge only counts things other people did" -- cheers, gifts and
+   requests, never a fact about the player themselves. The race settling now
+   lands its own placement grant (CREW-6), which already counts as an unread
+   delivery once pulled, so the one real gap left is a rank moving up BETWEEN
+   settlements: the summary line on the tab already says "You are 3rd" and
+   nothing ever pointed at it. kv 'raceRankSeen:<week>' is the last rank this
+   device told the player about; a strictly BETTER rank on this read is new
+   news, once per week per improvement noticed (never fires twice for the same
+   standing, never fires for standing still or falling back). */
+async function raceRankImproved() {
+  const wk = raceWeekKey(dateKey());
+  // __testRace: same webdriver-gated fixture hydrateRace reads (see there).
+  const race = (navigator.webdriver && window.__testRace) || await social.fetchStepRace(wk);
+  if (!race || race.yourRank == null) return false;
+  const seenKey = `raceRankSeen:${wk}`;
+  const seen = await kvGet(seenKey, null);
+  await kvSet(seenKey, race.yourRank);
+  return seen != null && race.yourRank < seen;
 }
 async function refreshCrewBadge() {
   try {
     if (!(await social.isOnline())) { await setCrewBadgeFrom(0); return; }
-    const d = await social.listFriends();
-    await setCrewBadgeFrom((d.incoming || []).length);
+    const [d, rankUp] = await Promise.all([social.listFriends(), raceRankImproved()]);
+    await setCrewBadgeFrom((d.incoming || []).length, rankUp ? 1 : 0);
   } catch { /* noop */ }
 }
 
@@ -11539,7 +11566,38 @@ function crewCardArtHtml(f) {
   return (eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhThumb(bhAsset(BH_BY_ID[eq.BG]))}" alt="">` : '')
     + avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 384 }) + pet;
 }
-function crewCardHtml(f) {
+/* CREW-4: a friend's ordinary play was invisible on their card -- seven faked
+   days of one friend walking and gearing up (round 35 handoff) changed not one
+   string on the tab. GET /friends already carries level, gear count, badges
+   and (CREW-13) spire count for every accepted friend; this diffs THIS open
+   against the LAST open's cached numbers (kv 'friendSnaps', one object for
+   the whole Crew rather than a row per friend) and returns at most one label
+   per friend, priority order: a spire, then a level, then new gear, then a
+   badge. A friend seen for the first time gets no label (nothing to compare
+   against yet), never a false "since yesterday". */
+async function friendSinceYesterdayMap(friends) {
+  const cache = (await kvGet('friendSnaps', null)) || {};
+  const next = {}, labels = {};
+  for (const f of friends || []) {
+    const p = f.profile || {};
+    const now = {
+      level: p.level || 1,
+      gear: p.gearCount ?? (p.gear ? p.gear.length : 0),
+      badges: p.badges || 0,
+      spires: f.spires || 0, // sibling of `profile`, not inside it -- see GET /friends
+    };
+    next[f.playerId] = now;
+    const was = cache[f.playerId];
+    if (!was) continue;
+    if (now.spires > was.spires) labels[f.playerId] = now.spires === 1 ? 'Just took a spire' : `Holds ${now.spires} spires now`;
+    else if (now.level > was.level) labels[f.playerId] = `Leveled up to ${now.level}`;
+    else if (now.gear > was.gear) labels[f.playerId] = 'New gear since last time';
+    else if (now.badges > was.badges) labels[f.playerId] = 'Earned a new badge';
+  }
+  await kvSet('friendSnaps', next);
+  return labels;
+}
+function crewCardHtml(f, since) {
   const p = f.profile || {};
   const ol = onlineLabel(f.lastSeen);
   /* THE STAGE SHIPS EMPTY. paintFan built every friend's full layered stack
@@ -11551,7 +11609,11 @@ function crewCardHtml(f) {
     <div class="cfan-stage"></div>
     ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
     <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>
-    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.title ? esc(p.title) : p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small></div>
+    <div class="cfan-plate"><b>${nameWithAlias(f)}</b><small><span class="cfan-title">${p.title ? esc(p.title) : p.level ? esc(p.levelName || 'Bonehead') : 'New Bonehead'}</span><span class="lv">LV ${p.level || 1}</span></small>${since ? `<small class="cfan-since">${esc(since)}</small>` : ''}${
+      /* CREW-13: spires had zero surface anywhere on the Crew tab. Skipped
+         when `since` already said so (e.g. "Just took a spire") -- one card
+         does not need to say the same true thing twice. */
+      f.spires && !(since && /spire/i.test(since)) ? `<small class="cfan-spires">${badgePixHtml('tombstone', 11)} Holds ${f.spires} spire${f.spires === 1 ? '' : 's'}</small>` : ''}</div>
   </button>`;
 }
 
@@ -12181,7 +12243,8 @@ async function renderFriends(el) {
     }
     // The cards ship with EMPTY stages; applyFan (below) mounts the art for the
     // seven seated ones and composes each stack as it lands.
-    deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id))).join('');
+    const sinceMap = await friendSinceYesterdayMap(data.friends);
+    deck.innerHTML = fanOrder.map(id => crewCardHtml(fanFriend(id), sinceMap[id])).join('');
 
     /* A search that matches nobody must SAY so. Hiding the deck and leaving the
        space blank would read as the crew having vanished, which is the same
@@ -12521,7 +12584,7 @@ async function renderFriends(el) {
       const p = players.find(x => x.playerId === row.dataset.lbview);
       if (!p) return;
       openFriendProfile(
-        { name: p.name, playerId: p.playerId, addToken: p.addToken, lastSeen: p.lastSeen,
+        { name: p.name, playerId: p.playerId, addToken: p.addToken, lastSeen: p.lastSeen, spires: p.spires,
           profile: { outfit: p.outfit, pet: p.pet, level: p.level, levelName: p.levelName,
             badges: p.badges, stats: p.stats, gearCount: p.gearCount } },
         null,
@@ -12590,7 +12653,10 @@ async function renderFriends(el) {
         await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V);
       } catch { /* a failed push must never cost you the board */ }
     }
-    const race = await social.fetchStepRace(wk);
+    // __testRace: webdriver-gated fixture, same idiom as __testLb / __testFriends.
+    // The race card's copy (the settlement clock, the gap line) is otherwise only
+    // checkable against a live account with a real week's board on it.
+    const race = (navigator.webdriver && window.__testRace) || await social.fetchStepRace(wk);
     const card = $('#raceCard', el);
     if (!card || !card.isConnected) return;
     /* THE STEP-RACE TILE ASKS 24 ON PURPOSE, in both banners below. The footprint
@@ -12620,8 +12686,10 @@ async function renderFriends(el) {
       return;
     }
     const endsMs = Date.parse(wk + 'T00:00:00') + RACE_DAYS * 86400000;
-    const daysLeft = Math.max(0, Math.ceil((endsMs - Date.now()) / 86400000));
-    const clock = daysLeft <= 0 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+    const msLeft = Math.max(0, endsMs - Date.now());
+    // CREW-6: split out as social.raceClockLabel so a fake clock proves the
+    // "settles tonight" fix without a browser (see its own comment there).
+    const clock = social.raceClockLabel(msLeft);
     /* CREW-2: yourRank is the SERVER's (server/src/index.js ~3229, computed
        over up to 25 racers), rendered as-is, never recomputed here. The bug
        this replaces: splicing your own row into the 10-row `players` slice
@@ -12633,8 +12701,17 @@ async function renderFriends(el) {
        when it already sent a real rank. Absent and un-computable reads
        "unranked", never a made-up position. */
     const own = await weekStepsNow();
-    const { rows, mine, behind, standing } = social.raceStanding(race.players || [], race, wk, own, await social.displayName(), myFit, ordinal, esc);
+    const { rows, mine, behind, standing, aboveName } = social.raceStanding(race.players || [], race, wk, own, await social.displayName(), myFit, ordinal, esc);
     const lead = rows.length ? rows[0].steps : 0;
+    /* CREW-3: on a device's first-ever race week, a gap (to first OR to the
+       lane above) is a number about a stranger's whole week against a few
+       hours of this player's. kv 'raceDebutWk' is stamped once, the first time
+       this device ever opens the race, so it stays true for the rest of that
+       same week even after the player has walked and moved up. */
+    let debutWk = await kvGet('raceDebutWk', null);
+    if (!debutWk) { debutWk = wk; await kvSet('raceDebutWk', wk); }
+    const firstRace = debutWk === wk;
+    const friendCount = (data.friends || []).length;
 
     const podium = race.podium || [];
     card.innerHTML = `
@@ -12682,7 +12759,16 @@ async function renderFriends(el) {
             </${tag}>`;
           }).join('')}
         </div>` : '<p class="note" style="margin:0">Nobody has walked a step yet this race. The top of this board is going spare.</p>'}
-        ${behind ? `<div class="race-gap">You are <b>${behind.toLocaleString()} steps</b> off first. About <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking.</div>` : ''}
+        ${/* CREW-3: a brand-new player got "196,000 behind Howling Fibula. About
+             2084 minutes of walking" -- a whale's whole week measured against a
+             few hours of theirs. First week: say what is true and encouraging
+             instead (friends, not a gap). After that: the gap is to the racer
+             directly ABOVE (never first, which raceStanding already enforces),
+             and the minutes estimate is dropped once it stops being a number
+             anyone would act on. */ ''}
+        ${firstRace
+          ? `<div class="race-gap">Your first race${friendCount ? `. ${friendCount} friend${friendCount === 1 ? '' : 's'} ${friendCount === 1 ? 'is' : 'are'} in it` : ''}.</div>`
+          : behind ? `<div class="race-gap">You are <b>${behind.toLocaleString()} steps</b> behind ${esc(aboveName || 'the racer above you')}${behind / 5500 * 60 <= 60 ? ` · about <b>${Math.max(1, Math.round(behind / 5500 * 60))} minutes</b> of walking` : ''}.</div>` : ''}
         ${podium.length ? `<div class="race-purse">
           <span class="lab">When it settles, the top ${podium.length} take</span>
           <div class="rows">
@@ -12897,10 +12983,22 @@ function openFriendProfile(f, onChange, opts = {}) {
              their own herd in. Tom, 2026-08-24. -->
         <button class="btn ghost fp-yard-go" id="fpYardGo" type="button">Visit their paddock ›</button>
       </div>` : '';
-  const statBars = p.stats ? STAT_META.map(m => {
+  /* CREW-14: `p.stats` truthy is not "has stats" -- a never-synced account
+     sends `{}`, and that used to draw five zero-width bars ("stats will show"
+     is a lie once you have already drawn them). hasFightableStats demands a
+     real number for every stat, the same bar the Battle button below is held
+     to, so the two never disagree about whether this profile has fight data. */
+  const statBars = hasFightableStats(p.stats) ? STAT_META.map(m => {
     const v = p.stats[m.key] ?? 0;
     return `<div class="fps-row"><span class="fps-lab">${m.label}</span><div class="fps-bar"><i style="width:${Math.max(4, Math.min(100, v))}%"></i></div><span class="fps-val">${v}</span></div>`;
   }).join('') : '';
+  /* CREW-13: spires had zero surface on the friend profile -- "the only trace
+     is a non-tappable '1 spire' span in the leaderboard sheet". A compact line
+     here, plus the how-to right on it (rather than a separate one-time popup
+     this sync function has no clean way to gate), since a stranger's profile
+     is exactly where "how do I get one of those" comes up. */
+  const spireCount = f.spires || 0;
+  const spireHtml = spireCount ? `<p class="note" style="text-align:center;margin:2px 0 0">${badgePixHtml('tombstone', 13)} Holds ${spireCount} spire${spireCount === 1 ? '' : 's'} · beat their defender to take one</p>` : '';
   const wrap = openSheet(`
     <div class="sheet-head"><h2 id="fpTitle">${nameWithAlias(f)}</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
@@ -12911,8 +13009,9 @@ function openFriendProfile(f, onChange, opts = {}) {
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
       <div class="fp-title"><div class="fp-class">${p.title ? `${esc(p.title)} · ` : ''}${esc(p.levelName || 'Bonehead')}</div><div class="fp-real" id="fpReal" hidden></div></div>
+      ${spireHtml}
 
-      ${p.stats && p.outfit ? `<button class="btn fp-battle" id="fpBattle">${ICONS.pit(18)} Battle their bonehead</button>` : ''}
+      ${hasFightableStats(p.stats) && p.outfit ? `<button class="btn fp-battle" id="fpBattle">${ICONS.pit(18)} Battle their bonehead</button>` : ''}
       ${stranger ? (opts.isCrew
         ? `<p class="note" style="text-align:center;margin:6px 0 0">Already in your Crew.</p>`
         : opts.sent
@@ -13762,7 +13861,7 @@ const NEWS = [
     thumb: () => headshotHtml({ B: 'B0-1', SK: 'SK0-1', H: 'HS13', E: 'ES13', G: 'GS1' }, 52),
     open: () => openCosmeticTeaser() },
   { id: 'race', date: 'Aug 7', title: 'The weekly step race',
-    blurb: 'Every Bonehead on one track. The purse pays the top three.',
+    blurb: 'Every Bonehead on one track. The purse pays the top five.',
     /* the race art IS your own Bonehead on the track, so the row shows that,
        not a generic star (Tom: "doesn't have the right art in some of the drop
        downs") */
@@ -23053,8 +23152,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
   const foe = makeFighter({
     name: foeCfg.name,
     // friend battles use the friend's REAL stats + outfit (a faithful AI clone);
-    // Pit/boss foes scale off the player's stats by the tier multiplier
-    stats: foeCfg.foeStats ? foeCfg.foeStats : scaleStats(fighter.stats, foeCfg.bossMult || foeCfg.mult),
+    // Pit/boss foes scale off the player's stats by the tier multiplier.
+    // CREW-14: a stranger/friend whose profile never synced real numbers
+    // carries `stats: {}` -- truthy, so the old `foeCfg.foeStats ?` check
+    // handed it straight through and every move computed off `undefined`
+    // ("Jab ~NaN dmg"). hasFightableStats demands real numbers for every
+    // stat or falls back to the same scaled-off-the-player foe every other
+    // mode already uses.
+    stats: hasFightableStats(foeCfg.foeStats) ? foeCfg.foeStats : scaleStats(fighter.stats, foeCfg.bossMult || foeCfg.mult),
     style: foeCfg.style || 'plain',
     outfit: foeCfg.foeOutfit || foeOutfitFor(foeCfg.name),
     talents: foeTalents,

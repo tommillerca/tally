@@ -1390,6 +1390,9 @@ const MAX_GEAR_IDS = 400;
 
 const intOrNull = v => (typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : null);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+// "2nd", not "2": CREW-6's week-close note reads as a sentence. A server-side
+// copy of js/app.js's ordinal() -- neither side imports the other.
+const ordinal = n => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
 
 /** Which race week a claimed key is, relative to the server's own clock.
  *  Returns 'current' | 'previous' | 'next' | null (null = not a real week start,
@@ -2626,18 +2629,27 @@ export default {
            Three predicates, three limits, one D1 batch (one round trip), so no
            bucket can consume another's budget in either direction. */
         const me = auth.playerId;
+        /* CREW-13: a friend's spire is invisible everywhere -- the tab, the
+           profile, this route -- and the count is already cheap (the same
+           correlated subquery /leaderboard runs, bounded here to at most
+           FRIEND_PAGE+1 rows per bucket rather than 100). Both sides (a and
+           b) get one, since either can be "me" once `shape` below picks the
+           OTHER player out of the row. */
         const q = where => env.DB.prepare(
           'SELECT f.a, f.b, f.status, f.requested_by, f.ts, ' +
           'pa.handle a_handle, pa.name a_name, pa.friend_code a_code, pa.profile a_profile, pa.app_v a_v, pa.last_seen a_seen, ' +
-          'pb.handle b_handle, pb.name b_name, pb.friend_code b_code, pb.profile b_profile, pb.app_v b_v, pb.last_seen b_seen ' +
+          '(SELECT COUNT(*) FROM spires sp WHERE sp.owner = pa.id AND sp.tended_at > ?) a_spires, ' +
+          'pb.handle b_handle, pb.name b_name, pb.friend_code b_code, pb.profile b_profile, pb.app_v b_v, pb.last_seen b_seen, ' +
+          '(SELECT COUNT(*) FROM spires sp WHERE sp.owner = pb.id AND sp.tended_at > ?) b_spires ' +
           'FROM friendships f JOIN players pa ON pa.id = f.a JOIN players pb ON pb.id = f.b ' +
           'WHERE (f.a = ? OR f.b = ?) AND ' + where + ' ORDER BY f.ts DESC LIMIT ?');
+        const dormantSince = Date.now() - SPIRE_DORMANT_MS;
         /* LIMIT is the page PLUS ONE: the extra row is how truncation is known
            without a second COUNT query. It is dropped before the payload. */
         const [acc, inc, out] = await env.DB.batch([
-          q("f.status = 'accepted'").bind(me, me, FRIEND_PAGE + 1),
-          q("f.status <> 'accepted' AND f.requested_by <> ?").bind(me, me, me, FRIEND_PAGE + 1),
-          q("f.status <> 'accepted' AND f.requested_by = ?").bind(me, me, me, FRIEND_PAGE + 1),
+          q("f.status = 'accepted'").bind(dormantSince, dormantSince, me, me, FRIEND_PAGE + 1),
+          q("f.status <> 'accepted' AND f.requested_by <> ?").bind(dormantSince, dormantSince, me, me, me, FRIEND_PAGE + 1),
+          q("f.status <> 'accepted' AND f.requested_by = ?").bind(dormantSince, dormantSince, me, me, me, FRIEND_PAGE + 1),
         ]);
         /* QA round 27 R3: THE PROFILE BLOB IS FOR ACCEPTED FRIENDS ONLY.
            Every row used to be shaped identically, so a pending outgoing row
@@ -2669,6 +2681,9 @@ export default {
             profile: prof,
             since: r.ts,
             lastSeen: meIsA ? r.b_seen : r.a_seen,
+            // CREW-13: sibling to `profile`, not inside it -- this is server-
+            // computed territory data, not part of the client's own snapshot.
+            spires: (meIsA ? r.b_spires : r.a_spires) || 0,
           };
         };
         /* `truncated` is ADDITIVE: every existing client reads .friends /
@@ -3208,6 +3223,22 @@ export default {
                   place: i + 1,
                   steps: p.steps,
                   note: `${prize.place} in the step race with ${p.steps.toLocaleString()} steps!`,
+                }), Date.now()).run();
+            }
+            /* CREW-6: the close was silent for everyone outside the podium --
+               "6th and below get nothing anywhere". The podium grants above
+               already carry their own placement sentence as `note`, which
+               presentGrantDelivery (js/app.js) shows on the reward's own
+               reveal card; a non-paying finish has no card to carry it, so it
+               gets a 'crew'-type grant instead (no coins, no crate: applyGrant
+               just files the note), which that same function already turns
+               into its own toast. Same settledKey-style dedup key, one row per
+               player, so a re-run of this same settlement pays nothing twice. */
+            for (let i = STEP_RACE_PODIUM.length; i < last.length; i++) {
+              const p = last[i];
+              await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+                .bind(p.id, `raceplace-${prev}`, 'crew', JSON.stringify({
+                  note: `You finished ${ordinal(i + 1)} of ${last.length} in the step race with ${p.steps.toLocaleString()} steps.`,
                 }), Date.now()).run();
             }
           }
