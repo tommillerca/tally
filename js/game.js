@@ -1100,8 +1100,16 @@ async function runInitBackfill(targets, onProgress) {
 }
 
 // One-time welcome kit when the RPG layer first arrives (or on fresh install).
+/* CLAIM HYGIENE, 2026-09-05 (welcome-kit cross-tab duplication). This used to
+   read kvGet('loot-init') and only write the flag at the very end, so two tabs
+   booting a fresh install at the same instant both read it absent and both
+   granted the whole kit: two golden crates, two daily crates, two Draughts,
+   doubled ingredients, two eggs. addIfAbsent on the SAME 'kv' key is the
+   test-and-set retireGardenIfNeeded/retireMerchantIfNeeded already use below:
+   the check and the write are one IndexedDB request, so exactly one caller
+   gets true and the loser returns null before touching a single grant. */
 export async function initLootIfNeeded() {
-  if (await kvGet('loot-init')) return null;
+  if (!(await db.addIfAbsent('kv', { k: 'loot-init', v: true }))) return null;
   await grantCrate('golden', 'welcome');
   await grantCrate('daily', 'welcome');
   /* A Draught in the kit, because logging stopped earning Vigor on 2026-08-15.
@@ -1145,7 +1153,7 @@ export async function initLootIfNeeded() {
      8,000-step default; anything in between would be a number no other egg in
      the game has ever carried. */
   await grantEgg('welcome', 0);
-  await kvSet('loot-init', true);
+  // the claim (and the flag) already landed at the top of this function
   return { crates: 2, draught: true, ingredients: 3, egg: true };
 }
 

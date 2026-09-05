@@ -125,10 +125,20 @@ const ACTIONS = [
   { id: 'js/game.js:claimFriendBattle', sites: 1, drive: 'friendBattle',
     transition: "today's first battle against THAT friend",
     authority: 'the ledger key friendbattle-<date>-<friendId>' },
-  { id: 'js/quests.js:claimQuest', sites: 6, drive: 'quest',
+  /* sites went 6 to 1 on 2026-09-05 (claim hygiene): coins, crate, dust, item
+     and ingredient used to land in five writes AFTER award() had already
+     minted the quest's ledger row, so a rejected write (quota, the
+     wipe-protocol freeze, an IndexedDB abort) left the quest permanently
+     claimed and paid nothing. All five now ride inside the claim's own
+     transaction via awardOnce's `pay` (js/hunt.js:collectSpawn's shape), so
+     there is one write and therefore one paying site. */
+  { id: 'js/quests.js:claimQuest', sites: 1, drive: 'quest',
     transition: 'a completed quest goes from unclaimed to claimed for its period',
     authority: 'the ledger key quest-<periodKey>-<quest id>' },
-  { id: 'js/quests.js:claimAllBonusIfDue', sites: 2, drive: 'questAll',
+  /* sites went 2 to 1 on 2026-09-05, same fix and same reason: grantCrate ran
+     AFTER award() succeeded, so a rejected write burned the questsall claim
+     and handed over no crate. The crate now rides inside awardOnce's `pay`. */
+  { id: 'js/quests.js:claimAllBonusIfDue', sites: 1, drive: 'questAll',
     transition: "the day's third daily quest is claimed, so the all-clear bonus falls due once",
     authority: 'the ledger key questsall-<date>' },
 
@@ -245,15 +255,15 @@ const ACTIONS = [
    *     openGiftSheet (refunds bounded by the spend directly above them),
    *     disenchantGear (db.take), the one-shot backfills, openGardenSheet (dead).
    *
-   * ONE THING THE CENSUS DID NOT FIX, recorded so nobody reads silence as a
-   * pass: the one-shot backfills (runInitBackfill, initLootIfNeeded,
-   * backfillStarterSeedsIfNeeded, backfillDenCeilingIfNeeded) all gate on
-   * kvGet-then-kvSet rather than the db.addIfAbsent claim the two retire-*
-   * functions use two rows below them. Every award inside them is ledger-keyed,
-   * so XP and coins are safe either way; initLootIfNeeded's welcome CRATES and
-   * EGG are not keyed, so two tabs opening a fresh install at the same instant
-   * is the open window. Named, not fixed: adopting the retire-* claim is a
-   * boot-path change and wants its own lane.
+   * FIXED 2026-09-05 (claim hygiene): initLootIfNeeded now claims FIRST with
+   * db.addIfAbsent('kv', {k:'loot-init', v:true}), the same test-and-set the
+   * two retire-* functions below use, so two tabs opening a fresh install at
+   * the same instant no longer both grant the welcome kit. The other one-shot
+   * backfills (runInitBackfill, backfillStarterSeedsIfNeeded,
+   * backfillDenCeilingIfNeeded) still gate on kvGet-then-kvSet, left open on
+   * purpose: every award inside them is ledger-keyed, so XP and coins are safe
+   * either way and none of them hand out an un-keyed crate or egg the way the
+   * welcome kit did.
    * ======================================================================== */
   { id: 'js/game.js:onFoodLogged', sites: 7, undriven: 'a composite of award() calls, every one of them ledger-keyed and covered by the award driver; the entry has its own audit in tests/log-write-failure-audit.mjs' },
   { id: 'js/game.js:onHealthSync', sites: 16, undriven: 'sixteen ledger-keyed milestone awards over a health payload; the shape is one award per (date, milestone) and the primitive is driven above. tests/health-intake-audit.mjs owns the payload end' },

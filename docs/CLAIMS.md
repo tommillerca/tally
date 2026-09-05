@@ -19,6 +19,11 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## claim hygiene (2026-09-05)
+
+1. PROOF: unit.test.js (R-claimhyg-1), reward-sop-audit.mjs (COVERAGE, quest/questAll live rows) | REACH: Claiming a daily, weekly or monthly quest, or the all-three bonus crate, no longer risks the quest reading as permanently claimed while paying nothing. A rejected write (a full device, a stuck save) used to land AFTER the quest's ledger row was already minted, so the coins, crate, dust, item and ingredient could be lost for good with no way to retry. The whole payout now lands in the same transaction as the claim, so a failed write takes nothing with it and a later retry pays in full.
+2. PROOF: unit.test.js (R-claimhyg-2) | REACH: Opening the app on two devices (or two tabs) at the exact moment a brand-new account first boots no longer doubles the welcome kit. Only one welcome kit (2 crates, a Vigor Draught, the starter ingredients, and the starter egg) is ever granted per install, however many boots race to claim it.
+
 ## stage pet wear (2026-09-05)
 
 1. PROOF: football-render-audit.mjs (STAGE, proved red on the unfixed code) | REACH: Open your Bonehead's Backpack or Build tab with a lizard equipped and its helmet and jersey worn: the lizard on the big portrait now wears them too, tinted to your team, instead of the bare species art. True for the base lizard, its shiny, and the Day One Lizard alike.
