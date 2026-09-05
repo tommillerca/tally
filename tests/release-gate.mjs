@@ -219,7 +219,13 @@ if (own) console.log(`serving this repo at ${base}\n`);
    close pays once the witness lands inside the bound, Today says so when it
    does not, and a restore carrying an older ceiling cannot lower it. It fakes
    the WHOLE Date and walls off fetch, so it phones nothing. */
-const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs', 'unit.test.js', 'log-xp-farm-audit.mjs', 'drip-badge-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs', 'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs', 'render-sink-lint.mjs', 'lapse-witness-audit.mjs'];
+/* spawn-claim-atomic-audit is PURE for the same reason (mem-idb under the real
+   js/db.js, under a second): QA round 28 Y5, a Boneyard claim without its payout
+   cannot exist. It wraps the store so the transaction that mints the ledger key
+   is the last one the process gets, then reads the invariant off the database
+   rather than off a return value a dead process never produces. Cheap, and it
+   guards a permanent loss: a spent spawn cannot be re-collected. */
+const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs', 'unit.test.js', 'log-xp-farm-audit.mjs', 'drip-badge-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs', 'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs', 'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs'];
 const BROWSER = [
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
      repo has watched shape assertions stay green over broken state, so this one

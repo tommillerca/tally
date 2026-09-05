@@ -12,8 +12,9 @@
 // The instance is baked into each spawn id -> ledger key, so a spot can't be
 // farmed back-to-back within its 45m life, but exploration keeps paying out.
 
-import { award } from './game.js';
-import { coinsAdd, grantCrate } from './loot.js';
+import { awardOnce } from './game.js';
+import { crateRow, eggRow } from './loot.js';
+import { spawnIngredient, foodCoinMult } from './cooking.js';
 import { dateKey } from './nutrition.js';
 
 const CELL_DEG = 0.005;           // ~550 m grid
@@ -196,15 +197,34 @@ export function raresNear(date, lat, lng, mins) {
 
 export function spawnKey(date, spawn) { return `spawn-${date}-${spawn.id}`; }
 
-// Collect a spawn (caller has verified proximity). Idempotent via the ledger.
+/* Collect a spawn (caller has verified proximity). Idempotent via the ledger.
+ *
+ * THE WHOLE PAYOUT RIDES IN THE CLAIM'S OWN TRANSACTION (QA round 28 Y5). The
+ * ledger key used to be minted on its own and everything it bought written
+ * after it: coins and the crate here, and then the INGREDIENT and the feast
+ * coin bonus two writes further downstream again, in js/app.js's #mapCollect
+ * handler. A process death anywhere in that run spent the spawn and handed the
+ * player nothing, with no way back: the key is minted, so the next tap is
+ * correctly refused. db.claimAndPay writes the ledger row and the reward in one
+ * IndexedDB transaction, so the two states are the only two that exist.
+ *
+ * Which means the payout has to be DECIDED before the write, which is why the
+ * ingredient roll and the feast multiplier moved in here. They were the
+ * handler's business only by accident, and being the handler's business is what
+ * put them outside the claim. */
 export async function collectSpawn(spawn, date = dateKey()) {
   const def = SPAWN_TYPES[spawn.type];
-  const xp = await award(spawnKey(date, spawn), 'spawn', def.xp || 15, `Boneyard: ${def.label}`, date);
-  if (xp === 0) return null; // already collected
-  const out = { xp, coins: 0, crate: null, type: spawn.type, label: def.label };
-  if (def.coins) { await coinsAdd(def.coins); out.coins = def.coins; }
-  if (def.crate) { await grantCrate(def.crate, 'boneyard'); out.crate = def.crate; }
-  return out;
+  const ing = spawnIngredient(spawn);          // pure, deterministic per spawn; n can be 0
+  // the active feast buff boosts the spawn's coins too
+  const coins = def.coins ? Math.round(def.coins * await foodCoinMult()) : 0;
+  const crate = def.crate ? (def.crate === 'egg' ? await eggRow('boneyard') : crateRow(def.crate, 'boneyard')) : null;
+  const pay = { kv: {}, puts: crate ? [{ store: 'inv', val: crate }] : [] };
+  if (coins) pay.kv.coins = cur => Math.max(0, (Number(cur) || 0) + coins);   // kvBump's clamp
+  if (ing.n) pay.kv.ingredients = inv => ({ ...(inv || {}), [ing.id]: ((inv && inv[ing.id]) || 0) + ing.n });
+  const xp = def.xp || 15;
+  const claim = await awardOnce(spawnKey(date, spawn), 'spawn', xp, `Boneyard: ${def.label}`, date, null, pay);
+  if (!claim.claimed) return null; // already collected
+  return { xp, coins, crate: def.crate || null, ing, type: spawn.type, label: def.label };
 }
 
 /* THE PRINTED NUMBER MAY NEVER CONTRADICT THE DECISION. Round-28 QA: every
