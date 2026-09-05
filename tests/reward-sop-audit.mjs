@@ -172,6 +172,61 @@ const ACTIONS = [
     authority: 'the ledger key streak-<n>' },
 
   // ---- registered, deliberately not driven ------------------------------
+  /* ============ THE EXEMPTION CENSUS, 2026-09-04 (QA round 28 G1) ============
+   * AN EXEMPTION IS A GUARD TOLD NOT TO LOOK, so every sentence below was read
+   * against its function and asked one question: does concurrency falsify it?
+   * That is the question doTransmute's exemption failed for two rounds while
+   * this suite printed REWARD SOP VERIFIED over the top of it.
+   *
+   * FALSIFIED, FIXED AND NOW DRIVEN (4)
+   *   doTransmute        the cooldown was read in one transaction and stamped in
+   *                      another: 12 commons -> 2 Ectoplasm, measured.
+   *   salvagePet         'as disenchantGear' and it was not: kv read-modify-write,
+   *                      not db.take. 30 dust for one copy, measured.
+   *   salvageInstance    same shape by instance id. 240 dust for one, measured.
+   *   migrateLegacyEggs  'conserves count', on a db.del that conserves nothing.
+   *                      One legacy row -> 2 eggs, measured.
+   *
+   * FALSIFIED, NOT FIXED, AND SAID SO IN THE ROW (2). Both are shared-ceiling
+   * races in modules this lane does not own; each row now states the overshoot
+   * instead of a sentence that reads safe.
+   *   markRoutine         a 15 XP daily ceiling can pay 20.
+   *   compostIngredient   the daily cap overshoots and the larder can go
+   *                       negative; what leaks is unplantable seeds.
+   *
+   * TRUE BUT NARROWER THAN IT SOUNDED (2), qualified in the row rather than
+   * rewritten: wheel PRIZES and openSurveySheet are both kvGet-then-kvSet gates
+   * that hold inside one tab and are not claims.
+   *
+   * HOLD AS WRITTEN (the rest). Three families, and each holds for a reason the
+   * row already names:
+   *   THE LEDGER IS THE CLAIM      onFoodLogged, onHealthSync, onWeighIn,
+   *     awardDayCloseIfDue, addWater, markBed, markSleep, logManualWalk,
+   *     refundStreakFreezes, retireMerchantIfNeeded, retireGardenIfNeeded,
+   *     openFight, openKitchen, openHollow. Every payout sits behind a fixed key
+   *     minted by addIfAbsent, which no amount of overlap can mint twice.
+   *     logManualWalk was checked hardest because its cap is a read: the key is
+   *     mwalk-<date>-<n> with n bounded by MANUAL_WALKS_PER_DAY, so overlapping
+   *     taps collide on a key rather than escaping the cap.
+   *   DRIVEN TO DESTRUCTION ELSEWHERE, and the row names the file and its legs
+   *     buyRackItem, buyPetItem, buyDustEgg, grantPetCopy, rerollRack,
+   *     applyTransmog, buyDropItem, buyShopItem (purchase-firewall, dust-egg,
+   *     pet-ownership). Verified those suites and those legs exist.
+   *   NOT A PAYOUT AT ALL          grantCrate / grantPet / addPetInstance (grant
+   *     helpers with no authority to consult), refundIngredients and
+   *     openGiftSheet (refunds bounded by the spend directly above them),
+   *     disenchantGear (db.take), the one-shot backfills, openGardenSheet (dead).
+   *
+   * ONE THING THE CENSUS DID NOT FIX, recorded so nobody reads silence as a
+   * pass: the one-shot backfills (runInitBackfill, initLootIfNeeded,
+   * backfillStarterSeedsIfNeeded, backfillDenCeilingIfNeeded) all gate on
+   * kvGet-then-kvSet rather than the db.addIfAbsent claim the two retire-*
+   * functions use two rows below them. Every award inside them is ledger-keyed,
+   * so XP and coins are safe either way; initLootIfNeeded's welcome CRATES and
+   * EGG are not keyed, so two tabs opening a fresh install at the same instant
+   * is the open window. Named, not fixed: adopting the retire-* claim is a
+   * boot-path change and wants its own lane.
+   * ======================================================================== */
   { id: 'js/game.js:onFoodLogged', sites: 7, undriven: 'a composite of award() calls, every one of them ledger-keyed and covered by the award driver; the entry has its own audit in tests/log-write-failure-audit.mjs' },
   { id: 'js/game.js:onHealthSync', sites: 16, undriven: 'sixteen ledger-keyed milestone awards over a health payload; the shape is one award per (date, milestone) and the primitive is driven above. tests/health-intake-audit.mjs owns the payload end' },
   { id: 'js/game.js:onWeighIn', sites: 1, undriven: 'one award keyed weigh-<date>; the primitive is driven above' },
@@ -186,7 +241,17 @@ const ACTIONS = [
      by construction it never writes h.steps, so the step race and step quests
      cannot see it (the race pays real prizes). */
   { id: 'js/wellness.js:logManualWalk', sites: 1, undriven: 'ledger key mwalk-<date>-<n>, capped 2/day in the write path' },
-  { id: 'js/wellness.js:markRoutine', sites: 1, undriven: 'ledger key routine-<id>-<date>, and past ROUTINE_XP_CAP the row is minted with 0 XP on purpose' },
+  /* HALF FALSIFIED, 2026-09-04 census, and left exempt on purpose with the truth
+     written down rather than the comfortable sentence. The per-routine claim is
+     the ledger key and it is atomic. The DAILY CEILING is not: routinesDone() is
+     read, then `done.size < ROUTINE_XP_CAP` decides the XP, then the row is
+     minted, so two DIFFERENT routines ticked at the same instant with the count
+     at CAP-1 both read CAP-1 and both pay. That is +ROUTINE_XP (5 XP) a day past
+     a 15 XP ceiling, the same shared-count shape the CEILING section below grades
+     for quests. Not fixed here: the fix is a taken slot rather than a counted
+     one, which is a change to how wellness stores its day and belongs with that
+     lane, not inside an exemption census. */
+  { id: 'js/wellness.js:markRoutine', sites: 1, undriven: 'ledger key routine-<id>-<date>, so a routine cannot pay twice. The ROUTINE_XP_CAP ceiling is read-then-decide across an await and two DIFFERENT routines ticked at once at CAP-1 both pay: a measured ceiling of 15 XP can pay 20. OPEN, and named here rather than dressed up' },
   /* WAS EXEMPT, on the sentence "a once-a-day cooldown plus an ingredient spend;
      nothing is granted without both". Sequentially true, and concurrency
      falsifies it: round 26 drove six overlapping calls and measured six
@@ -203,7 +268,17 @@ const ACTIONS = [
   { id: 'js/cooking.js:doTransmute', sites: 0, drive: 'transmute',
     transition: 'the transmute goes from due to spent for the next 20 hours',
     authority: "kvUpdate on 'transmuteAt': the cooldown is re-read and the stamp written in ONE transaction, so the loser is refused before the larder is touched; the six commons and the Ectoplasm they buy then land in one kvUpdate on 'ingredients'" },
-  { id: 'js/garden.js:compostIngredient', sites: 1, undriven: 'spends an ingredient and is capped at COMPOSTS_PER_DAY; a conversion, not a payout' },
+  /* FALSIFIED, 2026-09-04 census, and left exempt with the truth written down.
+     BOTH halves of that sentence are read-then-act: compostStatus() decides
+     `st.left > 0` and the used-count is written later in mutate(), so two
+     overlapping composts at left=1 both pass the cap; and the ingredient is
+     debited with grantIngredient(id, -1), which is an unconditional bump with no
+     floor, so two callers holding one ingredient both spend it and the larder
+     goes NEGATIVE. What leaks is SEEDS, and the Bone Garden left the player's
+     path on 2026-08-18 so a seed cannot be planted, which is the only reason
+     this is not a currency ticket. Not fixed here: it needs the spend and the
+     cap slot taken together, which is garden.js's lane. */
+  { id: 'js/garden.js:compostIngredient', sites: 1, undriven: 'a conversion, not a payout, and the conversion is not atomic: the COMPOSTS_PER_DAY cap is read before mutate() writes the count, and the ingredient is debited with an unclamped grantIngredient(id, -1), so overlapping composts overshoot the cap and can drive the larder negative. It pays SEEDS, which cannot be planted since the Bone Garden left the path. OPEN' },
   { id: 'js/loot.js:buyShopItem', sites: 1, undriven: 'a purchase: the second attempt is MEANT to charge again. Was 3 until 2026-08-25: crates came off the coin shop (S0), so the two grantCrate branches went with them and only grantConsumable is left' },
   /* js/loot.js:buyWithDust stood here with 3 sites (grantEgg / grantCrate /
      grantConsumable). The Bone Dust shop closed on 2026-08-25 and dust is a
@@ -278,7 +353,7 @@ const ACTIONS = [
   { id: 'js/loot.js:retireMerchantIfNeeded', sites: 2, undriven: "the Bone Merchant's closing refund, behind an addIfAbsent claim on kv merchant-retired. THE STATE TRANSITION: 'this save still holds weapons bought from a merchant that exists' becomes 'settled', and nothing about play can put it back, because buyWeapon is gone from the tree. Driven to destruction by tests/merchant-retire-audit.mjs (PAYS / ROWS / ONCE / BOOT / RACE / PARTIAL / NOTHING / PRIZE), which is where the second-attempt proof lives rather than here. It pays coins AND Bone Dust, which is why the count is 2" },
   { id: 'js/game.js:retireGardenIfNeeded', sites: 2, undriven: 'the Bone Garden refund + conversion, behind an addIfAbsent claim on kv garden-retired. Driven to destruction by tests/garden-retire-audit.mjs (PAYS / ONCE / BOOT / RACE / NOTHING), which is where the second-attempt proof lives rather than here' },
   { id: 'js/poi.js:backfillDenCeilingIfNeeded', sites: 1, undriven: "one-time backfill behind kv 'denceil-backfill'; mints 0-XP marker rows only" },
-  { id: 'js/wheel.js:PRIZES', sites: 7, undriven: "the prize table's grant thunks; the day gate is kv 'wheelLastDate', set BEFORE the grant in maybeShowDailyWheel's commit(), and tests/wheel-audit.mjs drives the wheel itself" },
+  { id: 'js/wheel.js:PRIZES', sites: 7, undriven: "the prize table's grant thunks; the day gate is kv 'wheelLastDate', set BEFORE the grant in maybeShowDailyWheel's commit(), and tests/wheel-audit.mjs drives the wheel itself. Re-audited 2026-09-04: write-before-grant is real and holds inside one tab (the wheel is one modal and commit() runs once per spin), but the gate is kvGet-then-kvSet rather than a claim, so two tabs booting at the same instant would each spin and each grant. Bounded by the splash wait and by claimDay above it; named rather than assumed safe" },
 
   // ---- app.js: the screens that pay ------------------------------------
   /* 13 -> 17, RE-GRADED, and the count was two behind before this change: the
@@ -357,7 +432,7 @@ const ACTIONS = [
      last pot fills between the two. This hands back what THIS call took, by
      recipe, and it is the only thing that can reach it. */
   { id: 'js/cooking.js:refundIngredients', sites: 1, undriven: 'a REFUND of the ingredients this call just spent, when the pot or the queue turned out to have no room; it can only ever return r.needs and only after payIngredients returned true, so it hands back exactly what was taken and nothing else' },
-  { id: 'js/app.js:openSurveySheet', sites: 1, undriven: "one-time, gated on kv 'surveyDone' read before the grant" },
+  { id: 'js/app.js:openSurveySheet', sites: 1, undriven: "one-time, gated on kv 'surveyDone' read before the grant. Re-audited 2026-09-04: read-then-grant, so it is not a claim, but the submit button is disabled SYNCHRONOUSLY before the first await, so a second tap in the same tab cannot reach it. Two tabs could each grant a CX copy; that is the whole exposure and it is written down rather than assumed away" },
 ];
 
 /* ===========================================================================
@@ -958,7 +1033,8 @@ if (srv) srv.close();
  *      js/hunt.js -> "every paying call site belongs to a registered action",
  *      naming js/hunt.js:sneakyPayout and the line it pays on.
  *    add one coinsAdd(500) inside collectSpawn -> "no registered action has
- *      grown or lost a payout", registered 3 sites, source has 4.
+ *      grown or lost a payout", registered 1 site, source has 2 (it was 3 and 4
+ *      until 2026-09-04: the whole payout moved inside the claim, see Y5 below).
  *    delete the collectSpawn row from ACTIONS -> "every paying call site
  *      belongs to a registered action", naming js/hunt.js:collectSpawn.
  *
@@ -991,6 +1067,36 @@ if (srv) srv.close();
  *      CONTROL quest that goes red, paid 1 where three virgin claims must pay
  *      3. A ceiling row alone cannot tell "held the line" from "let nobody
  *      through", and a lock that never opens is not a fixed cap.
+ */
+/* PROVE-RED for the round 28 rows, RUN 2026-09-04 in a `git archive` throwaway
+ * of this tree with only the fix reverted, one at a time. Nothing in the working
+ * tree was checked out, and the scratch tree was thrown away afterwards.
+ *
+ *  js/cooking.js doTransmute as it shipped (transmuteStatus -> kvUpdate
+ *      ingredients -> grantIngredient -> kvSet transmuteAt)
+ *      FAIL REPEAT transmute TWO OVERLAPPING attempts: exactly one takes the state  {"wins":2,"rejected":0,"pay":{"coins":0,"dust":0,"xp":0},"count":2}
+ *      FAIL REPEAT transmute TWO OVERLAPPING attempts hand over one lot, not two  {"oneAttempt":1,"twoAtOnce":2}
+ *      Twelve commons became TWO Ectoplasm against one cooldown, which is round
+ *      26's own measurement in this harness's terms. The SEQUENTIAL row was
+ *      green before and after: sequentially it always refused, and that is
+ *      exactly why the exemption sentence read as true for two rounds.
+ *
+ *  js/loot.js salvagePet / salvageInstance as they shipped (petInstances() ->
+ *      remove a copy -> savePetInstances(whole list))
+ *      FAIL REPEAT salvagePet TWO OVERLAPPING attempts: exactly one takes the state  {"wins":2,"rejected":0,"pay":{"coins":0,"dust":30,"xp":0},"count":1}
+ *      FAIL REPEAT salvageInstance TWO OVERLAPPING attempts: exactly one takes the state  {"wins":2,"rejected":0,"pay":{"coins":0,"dust":240,"xp":0},"count":1}
+ *      Note the shape: `count` is 1 in both, so ONE copy left the roster and the
+ *      wallet was paid TWICE for it. 240 dust for one instance.
+ *
+ *  js/loot.js migrateLegacyEggs as it shipped (db.del then grantEgg)
+ *      FAIL REPEAT legacyEgg TWO OVERLAPPING attempts: exactly one takes the state  {"wins":2,"rejected":0,"pay":{"coins":0,"dust":0,"xp":0},"count":2}
+ *      FAIL REPEAT legacyEgg TWO OVERLAPPING attempts hand over one lot, not two  {"oneAttempt":1,"twoAtOnce":2}
+ *      One legacy crate became TWO Step Eggs, and an egg is a pet.
+ *
+ *  Y5, the Boneyard collect, is proved in its own file: reverting collectSpawn
+ *      to claim-then-pay turns all four KILL rows of
+ *      tests/spawn-claim-atomic-audit.mjs red on a minted claim that delivered
+ *      nothing, with every CONTROL row still green.
  */
 console.log(`\n${fails ? `REWARD SOP AUDIT FAILED (${fails})` : 'REWARD SOP VERIFIED'}`);
 process.exit(fails ? 1 : 0);
