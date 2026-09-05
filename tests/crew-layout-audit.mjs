@@ -45,6 +45,9 @@ if (!base) {
   base = h.url;
 }
 
+/* FIXTURE PINNED 2026-09-05 from the round-35 Crew handoff (HANDOFFcrew20260905.md, CREW-7/8/9/10):
+   enough friends to fill the fan and the WORTH ADDING list so the measured positions
+   (gift at 1301-1754px, 941px dead space, 424px card) can be reproduced. */
 const FRIENDS = [
   ['DUSTY LULU', 12, { B: 'B0-2', SK: 'SK0-2', T: 'T3' }, 'BG1', null],
   ['MARROW MAX', 19, { B: 'B10', SK: 'SK10', T: 'T2', H: 'H4', IR: 'IR2' }, 'BG3-1', { id: 'C3', level: 4, shiny: false }],
@@ -92,7 +95,7 @@ const gift = await page.evaluate(() => {
   const r = el.getBoundingClientRect();
   return { top: Math.round(r.top), bottom: Math.round(r.bottom) };
 });
-ok('GIFT a sealed gift renders on the DOM (an empty sample is a failure)', !!gift, JSON.stringify(gift));
+ok('GIFT SAMPLE a sealed gift renders on the DOM (an empty sample is a failure)', !!gift, JSON.stringify(gift));
 ok('GIFT the sealed gift sits inside the first 390x844 screen, not 1301-1754px down',
   !!gift && gift.top >= 0 && gift.bottom <= 844, JSON.stringify(gift));
 
