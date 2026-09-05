@@ -2300,6 +2300,10 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
  * never lost. Same reasons apply, so the same shape applies.
  * The invite URL lives in ONE constant for the same reason DISCORD_URL does,
  * and the Discord link here IS DISCORD_URL: a second copy would rot. */
+/* False in the shared web source. native/build-www.sh flips this one literal in
+   its copied app.js for an App Store archive, leaving web and internal native
+   builds unchanged. Every distribution-only surface reads this flag. */
+const STORE_BUILD = false;
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/rtZ6Uyxc';
 /* Inline for the same reason as DISCORD_MARK: sw.js precaches an explicit
    list, so an asset file would need an entry there and this needs none.
@@ -13371,7 +13375,7 @@ function newsBannerHtml(unseen, eq, dayClose) {
    the bottom of the file; the NEWS filter below reads it at MODULE LOAD, so every boot threw
    "Cannot access 'SHOW_BETA_THANKS' before initialization" and the app never opened its
    database. Caught only by the browser gate: app.js never loads in node. */
-const SHOW_BETA_THANKS = true; // gate the TestFlight invite card (openThanksCard, Crew entry, News row); false hides them in store builds
+const SHOW_BETA_THANKS = !STORE_BUILD; // internal invite card, Crew strip and News row; absent from store builds
 
 const NEWS = [
   /* THE WANDERER. Tom kept this row when every other launch interstitial went in
@@ -13474,7 +13478,7 @@ async function openWhatsNew() {
   const cards = CHANGES.map(c => `
     <div class="wn-entry">
       <div class="wn-head"><b>${esc(c.title)}</b><span class="wn-date">${esc(c.date)}</span></div>
-      ${c.needsBuild ? `<div class="wn-buildflag">📲 Needs the latest app update ${isNative() ? '(TestFlight / Play Store)' : ''} to work on your phone</div>` : ''}
+      ${c.needsBuild ? `<div class="wn-buildflag">📲 Needs the latest app update ${isNative() ? '(App Store / Play Store)' : ''} to work on your phone</div>` : ''}
       ${c.hero ? `<div class="wn-hero">
         ${c.hero.tag ? `<span class="rip">${esc(c.hero.tag)}</span>` : ''}
         <img src="${esc(c.hero.img)}" alt="${esc(c.hero.alt || '')}">
@@ -13497,7 +13501,7 @@ async function openWhatsNew() {
         <p class="note" style="margin:2px 2px 14px">Boneheadz Gym changes often. Here's what's new, newest first.</p>
         ${isNative() ? `<div class="wn-update-note">
           <b>📲 Update the app to get everything</b>
-          <span>The game here refreshes on its own, but brand-new <b>device features</b> (like workout &amp; bike-ride tracking from your watch) only arrive when you update the actual app. Open <b>TestFlight</b> (iPhone) or the <b>Play Store</b> (Android) and tap <b>Update</b>, then reopen Boneheadz.</span>
+          <span>The game here refreshes on its own, but brand-new <b>device features</b> (like workout &amp; bike-ride tracking from your watch) only arrive when you update the actual app. Open the <b>App Store</b> (iPhone) or the <b>Play Store</b> (Android) and tap <b>Update</b>, then reopen Boneheadz.</span>
         </div>` : ''}
         ${cards}
       </div>
@@ -13660,7 +13664,7 @@ async function renderSettings(el) {
     const AppPlug = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
     if (AppPlug && AppPlug.getInfo) { const i = await AppPlug.getInfo(); shellV = ` · shell ${i.version} (${i.build})`; }
   } catch { /* web: no shell */ }
-  const diag = await diagnosticsLine();
+  const diag = STORE_BUILD ? '' : await diagnosticsLine();
   const apiConfigured = !!(await social.apiBase());
   const me = apiConfigured ? await social.socialMe() : null;
   const crewData = me ? await social.listFriends().catch(() => ({ friends: [], incoming: [], outgoing: [] })) : null;
@@ -13835,7 +13839,7 @@ async function renderSettings(el) {
     ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
     <div class="settings-row"><div class="lab"><b>App version</b><span>Build ${APP_BUILD}${shellV} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
-    <div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>
+    ${STORE_BUILD ? '' : `<div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>`}
   </div>
 
   <p class="note" style="text-align:center;margin-top:18px">
@@ -19586,7 +19590,7 @@ function vaultRowHtml(v) {
 
 function sleepDiagHtml(dg) {
   if (!dg) {
-    return `<p class="note">Nothing recorded yet. Tap <b>Sync now</b> above. If it still says this afterwards, the app on this phone is older than the sleep diagnostics and needs a TestFlight update.</p>`;
+    return `<p class="note">Nothing recorded yet. Tap <b>Sync now</b> above. If it still says this afterwards, the app on this phone is older than the sleep diagnostics and needs an App Store update.</p>`;
   }
   const asleep = dg.rawAsleepMin || 0, inBed = dg.inBedMin || 0, n = dg.samples ?? 0;
   const verdict =

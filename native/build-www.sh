@@ -8,6 +8,10 @@ rm -rf "$DST"
 mkdir -p "$DST"
 cp "$SRC/index.html" "$SRC/app.css" "$SRC/manifest.webmanifest" "$DST/"
 cp -R "$SRC/js" "$SRC/data" "$SRC/vendor" "$SRC/icons" "$SRC/assets" "$DST/"
+if [ "${STORE_BUILD:-0}" = "1" ]; then
+  sed -i '' 's/const STORE_BUILD = false;/const STORE_BUILD = true;/' "$DST/js/app.js"
+  grep -q 'const STORE_BUILD = true;' "$DST/js/app.js"
+fi
 # the native shell has no use for the service worker (Capacitor serves locally)
 # but keep it harmless: app.js only registers it on https.
 echo "www built: $(du -sh "$DST" | cut -f1)"

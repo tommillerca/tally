@@ -5895,9 +5895,10 @@ test('a downloaded build can actually start: boot posts SKIP_WAITING to a waitin
   assert.match(reg, /updatefound/, 'a build that arrives mid-session is never let in');
 });
 
-test('REV-2: TestFlight invite card is gated by SHOW_BETA_THANKS flag', () => {
+test('REV-2: TestFlight invite card is gated by the store build flag', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
-  assert.match(app, /const\s+SHOW_BETA_THANKS\s*=\s*true/, 'SHOW_BETA_THANKS flag not found or not set to true');
+  assert.match(app, /const\s+STORE_BUILD\s*=\s*false/, 'STORE_BUILD flag not found or web default is not false');
+  assert.match(app, /const\s+SHOW_BETA_THANKS\s*=\s*!STORE_BUILD/, 'SHOW_BETA_THANKS is not derived from STORE_BUILD');
   assert.match(app, /async\s+function\s+openThanksCard\(\)\s*{\s*if\s*\(\s*!SHOW_BETA_THANKS\s*\)\s*return/, 'openThanksCard does not guard entry with SHOW_BETA_THANKS check');
   assert.match(app, /function\s+thanksBannerHtml\(\)\s*{\s*if\s*\(\s*!SHOW_BETA_THANKS\s*\)\s*return\s+''/, 'thanksBannerHtml does not return empty string when SHOW_BETA_THANKS is false');
   const newsFilter = app.match(/const\s+NEWS\s*=\s*\[[^]*?\]\.filter\([^)]*\)/);

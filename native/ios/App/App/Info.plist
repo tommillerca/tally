@@ -29,9 +29,9 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Boneheadz Gym uses the camera to scan barcodes and read nutrition labels so you can log food fast. Images stay on this phone.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Boneheadz Gym reads your steps, active energy, exercise minutes, resting heart rate, heart rate variability, and sleep so your skeleton earns XP, eggs, and Bone Road progress from real activity.</string>
+	<string>Boneheadz Gym reads your steps, active energy, exercise minutes, resting heart rate, heart rate variability, and sleep so your skeleton earns XP, eggs, and Boneyard progress from real activity.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Boneheadz Gym does not write to Health. This permission is only requested in developer test builds.</string>
+	<string>Boneheadz Gym does not write to Health during normal use. Developer testing tools can add sample step data only when explicitly activated.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Boneheadz uses your location to draw the Boneyard map and place nearby spawns and dens. Location is used on this phone only, never stored, never uploaded.</string>
 	<key>NSMotionUsageDescription</key>
