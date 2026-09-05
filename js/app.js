@@ -4375,19 +4375,8 @@ async function renderToday(el) {
   <section class="tsec tsec-meals"><div class="tsec-h">Meals</div>
   ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
   </section>
-
-  ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
-  <p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>
-  </details>
-  ${/* BELOW THE DAY, like the rebalance card under it (2026-09-05): inside .dayflow the
-       return card painted a panel inside the flat day and pushed the collapsed summary
-       past a 568px screen (today-container LEDGER, today-peek WHOLE on a lapsed seed). */''}
-  ${wbShow ? `
-  <div class="card wb-back" id="wbCard">
-    <b>Everything is where you left it.</b>
-    <span>${wbFacts.join(' ')}</span>
-    <button class="btn small ghost" id="wbOk">Good to be back</button>
-  </div>` : ''}
+  ${/* AFTER THE DAY SECTION ENTIRELY (2026-09-05, third move): today-container LEDGER grades
+       everything inside section.dayblk, not just the collapsed <details>. */''}
   ${/* OUTSIDE THE DAY, on purpose (2026-09-05). Inside .dayflow this card sat above
        the collapsed banner: it pushed the ring card 18px past its ceiling
        (hype-banner FIT), made the collapsed day taller than a 568px screen
@@ -4405,6 +4394,20 @@ async function renderToday(el) {
     <span>${esc(rebal.body)}</span>
     <button class="btn" id="habitGrantGo">${esc(rebal.button)}</button>
   </div>` : ''}
+  ${/* BELOW THE DAY, like the rebalance card under it (2026-09-05): inside .dayflow the
+       return card painted a panel inside the flat day and pushed the collapsed summary
+       past a 568px screen (today-container LEDGER, today-peek WHOLE on a lapsed seed). */''}
+  ${wbShow ? `
+  <div class="card wb-back" id="wbCard">
+    <b>Everything is where you left it.</b>
+    <span>${wbFacts.join(' ')}</span>
+    <button class="btn small ghost" id="wbOk">Good to be back</button>
+  </div>` : ''}
+
+
+  ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
+  <p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>
+  </details>
   </div>
   </section>
 
