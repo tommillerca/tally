@@ -89,6 +89,10 @@ welcome-kit row below did not make this changelog and stays here unpromoted.
 
 1. PROOF: unit.test.js (R-claimhyg-2) | REACH: Opening the app on two devices (or two tabs) at the exact moment a brand-new account first boots no longer doubles the welcome kit. Only one welcome kit (2 crates, a Vigor Draught, the starter ingredients, and the starter egg) is ever granted per install, however many boots race to claim it.
 
+## stage pet wear (2026-09-05)
+
+1. PROOF: football-render-audit.mjs (STAGE, proved red on the unfixed code) | REACH: Open your Bonehead's Backpack or Build tab with a lizard equipped and its helmet and jersey worn: the lizard on the big portrait now wears them too, tinted to your team, instead of the bare species art. True for the base lizard, its shiny, and the Day One Lizard alike.
+
 ## store build (2026-09-05)
 
 1. PROOF: store-copy-lint.mjs, unit.test.js | REACH: The App Store archive has no internal-distribution invitation, thank-you strip, invitation News item, testing update copy, or Settings diagnostics. Web and internal builds keep those feedback routes.
