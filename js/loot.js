@@ -4,6 +4,7 @@
 
 import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
+import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, footballGrantIds, footballBundleIds, footballBundleMath, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
 
@@ -63,6 +64,74 @@ export const DROP = {
     { id: 'H13-5', cost: 1500 }, { id: 'H13-6', cost: 1500 },
   ],
 };
+
+/* Football kit, 2026-09-04: one tile per GARMENT, one flat price, and what it
+   hands over is that garment in every team's colours (footballGrantIds; the
+   helmet still drags its three visors, so 128 ids). Tom: "buy the garment get
+   all 32 colours." Same receipt-decides shape as buyDropItem: money first,
+   atomically; the grant race's loser is refunded. Refuses while the kit is not
+   live or has no price, so a flipped flag without a number sells nothing.
+
+   ALREADY OWNED MEANS ANY COLOURWAY. A second helmet in a different team is not
+   a second purchase, it is the same purchase, so the ownership check has to
+   refuse it before the coins move. It does, and not by accident: the 32 rows
+   granted above are all in ownedCosmeticIds(), so `owned.has(itemId)` is already
+   true for every team's copy. Graded by tests/football-kit-audit.mjs row REPEAT,
+   which asserts the coin delta is zero.
+
+   `stocked` is a parameter for the same reason footballBundleSellable's are: the
+   shop is shut until Tom flips FOOTBALL_KIT_LIVE, and a buy path nobody can call
+   is a buy path nobody has tested. Production callers pass nothing. */
+export async function buyFootballItem(itemId, stocked = footballPieceSellable()) {
+  const ids = footballGrantIds(itemId);
+  const cost = FOOTBALL_KIT_PRICE_PLACEHOLDER;
+  const garment = FOOTBALL_GARMENT_BY_KEY[(BH_BY_ID[itemId] || {}).football?.garment];
+  // `sold` and not merely "a football item": the three visors are granted, never
+  // sold, so a stray tile id for one must not take 4,200 for a piece of a hat.
+  if (!stocked || !ids.length || !garment?.sold || !Number.isFinite(cost) || cost <= 0) return { ok: false, reason: 'not-stocked' };
+  if ((await ownedCosmeticIds()).has(itemId)) return { ok: false, reason: 'owned' };
+  const left = await spendCoins(cost);
+  if (left === null) return { ok: false, reason: 'coins', need: cost, have: await coins() };
+  if (!await grantCosmetic(itemId, 'football')) {
+    await coinsAdd(cost);
+    return { ok: false, reason: 'owned' };
+  }
+  for (const id of ids) if (id !== itemId) await grantCosmetic(id, 'football');
+  return { ok: true, label: `${garment.label} · ${FOOTBALL_TEAMS.length} colourways`, granted: ids.length, cost, coins: left };
+}
+
+/* THE BUNDLE. Tom, 2026-09-04: "per garment only with a bundle of everything for
+   a slightly cheaper but expensive price." One purchase, all five sold garments,
+   each in all 32 colourways (256 ids: the helmet still drags its three visors).
+   There is one bundle now, not one per team; the first argument is the team tile
+   the player tapped and is IGNORED, kept only so js/app.js keeps working until
+   its shelf patch lands (docs/FOOTBALL-KIT.md).
+   Same receipt-decides shape as above, with one deliberate simplification:
+   a player who already owns SOME of it pays the full bundle price and is granted
+   the rest. Pro-rating would need a second price table and a second refusal to
+   explain in the tile; the tile prints what is already owned, so the choice is in
+   front of them. Owning ALL of it is refused outright.
+   ponytail: flat bundle price regardless of what is already owned; pro-rate if
+   players start buying a piece and then the bundle. */
+export async function buyFootballBundle(_teamId, stocked = footballBundleSellable()) {
+  const ids = footballBundleIds();
+  const cost = FOOTBALL_BUNDLE_PRICE_PLACEHOLDER;
+  if (!ids.length || !stocked) return { ok: false, reason: 'not-stocked' };
+  const owned = await ownedCosmeticIds();
+  const want = ids.filter(id => !owned.has(id));
+  if (!want.length) return { ok: false, reason: 'owned' };
+  const left = await spendCoins(cost);
+  if (left === null) return { ok: false, reason: 'coins', need: cost, have: await coins() };
+  /* The FIRST missing piece is the receipt, exactly as the single tile uses its
+     own item: two overlapping taps both spend, and the one that loses the grant
+     is refunded, so a bundle is never charged twice. */
+  if (!await grantCosmetic(want[0], 'football')) {
+    await coinsAdd(cost);
+    return { ok: false, reason: 'owned' };
+  }
+  for (const id of want.slice(1)) await grantCosmetic(id, 'football');
+  return { ok: true, label: `The full kit · ${FOOTBALL_TEAMS.length} colourways`, granted: want.length, cost, coins: left, save: footballBundleMath().save };
+}
 
 export async function buyDropItem(itemId) {
   const d = DROP.items.find(x => x.id === itemId);
@@ -192,8 +261,10 @@ export const RACK_RARITY_PRICE = {
   legendary: [2000, 160],
 };
 const RACK_PET_SLOTS = new Set(['C', 'CE', 'CB', 'CG', 'CM']);
+/* Football kit, 2026-09-04: kits have their own shelf at their own price, and
+   an id on two shelves is the indexOf collision rack-theme-lint exists for. */
 export const RACK_ROTATE_POOL = BH_ITEMS
-  .filter(i => !RACK_PET_SLOTS.has(i.slot) && !i.exclusive && !i.default && RACK_RARITY_PRICE[i.rarity])
+  .filter(i => !RACK_PET_SLOTS.has(i.slot) && !i.exclusive && !i.default && !i.football && RACK_RARITY_PRICE[i.rarity])
   .map(i => i.id)
   .sort();
 
@@ -1770,7 +1841,8 @@ export function crateOdds(kind) {
    Wire Stinger). Derived from PET_SLOTS rather than listed, so a sixth accessory
    cannot arrive without inheriting the exclusion. */
 const petSlots = new Set(PET_SLOTS.map(s => s.code));
-export const crateEligible = i => !i.default && !i.exclusive && i.slot !== 'C' && !petSlots.has(i.slot);
+// Football kit, 2026-09-04: rack-only until Tom rules on crate drops (docs/FOOTBALL-KIT.md).
+export const crateEligible = i => !i.default && !i.exclusive && i.slot !== 'C' && !petSlots.has(i.slot) && !i.football;
 
 function candidates(rarity, owned, slotBias) {
   let pool = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === rarity && !owned.has(i.id));
@@ -2382,6 +2454,9 @@ export async function equip(slot, itemId, { keepGear = false } = {}) {
     if (!item || item.slot !== slot) throw new Error('bad item');
     const owned = await ownedCosmeticIds();
     if (!owned.has(itemId)) throw new Error('not owned');
+    /* Football kit, 2026-09-04: the 'refuse' branch of VISOR_EYES_POLICY. Under
+       'hide' (the default) this is inert and the renderer skips the eyes instead. */
+    if (visorRefusesEquip({ ...eq, [slot]: itemId })) throw new Error('visor');
     eq[slot] = itemId;
   }
   await kvSet('equipped', eq);

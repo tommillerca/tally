@@ -6516,6 +6516,115 @@ body::before {
   .wpn-sheen { display: none; }
 }
 
+/* ===== Football kit, 2026-09-04: the team tint =====
+   One master per garment, coloured per team by two multiply layers, each a span
+   masked by an alpha PNG (mask-a the primary region, mask-b the secondary). The
+   same registration contract as .wpn-sheen above: mask-size and mask-position
+   read the surface's --av-fit/--av-pos so the colour cannot slide off the art.
+   Multiply against a master whose team regions are normalised to white lands the
+   team hex exactly (scripts/football-masks.py prints the numbers); the facemask,
+   glass and outlines are outside both masks and keep Cam's colour. Pet and
+   paddock layers pass their geometry inline (.pw / inkFitStyle) and their mask
+   is stretched to that box, since the <img> beside them is too. */
+.fb-tint {
+  position: absolute; inset: 0; pointer-events: none;
+  -webkit-mask-image: var(--fbm); mask-image: var(--fbm);
+  -webkit-mask-size: var(--av-fit, cover); mask-size: var(--av-fit, cover);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: var(--av-pos, center); mask-position: var(--av-pos, center);
+  mix-blend-mode: multiply;
+}
+.petcrop .fb-tint, .pdk-thumb .fb-tint, .pdk-tile .fb-tint { -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
+/* THE LASERS STAY INSIDE THE HELMET (VISOR_EYES_POLICY 'clip'). The eye LAYER is
+   kept and masked by the worn visor helmet's own art alpha, so the three items
+   that used to poke through the glass are bounded by the silhouette instead.
+   Same registration as .fb-tint and for the same reason: this mask is a 640
+   square on the same canvas as the eye master, and .bh-anim img is object-fit
+   cover or contain per surface, so the mask must take the surface's own
+   --av-fit/--av-pos or the clip slides off the art. It goes ON the <img>, which
+   already IS the layer, so there is no second box to keep in register. */
+.eye-clip {
+  -webkit-mask-image: var(--fbm); mask-image: var(--fbm);
+  -webkit-mask-size: var(--av-fit, cover); mask-size: var(--av-fit, cover);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: var(--av-pos, center); mask-position: var(--av-pos, center);
+}
+/* the kit room */
+.fb-pick { display: flex; align-items: center; gap: 10px; margin: 0 2px 12px; font-size: 13px; color: var(--text-2); }
+.fb-pick select { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--surface-2);
+  color: var(--text); border: 1px solid var(--line-strong); font: inherit; }
+.fb-swatch { width: 26px; height: 26px; border-radius: 50%; border: 4px solid; flex: 0 0 auto; }
+.drop-item.fb::before { content: 'KIT'; }
+.fb-worn { position: relative; width: 88px; height: 88px; margin: 0 auto; overflow: hidden; border-radius: 10px; }
+.drop-item.fb .petcrop { display: block; margin: 0 auto; }
+.drop-buy[data-buyfb]:disabled, .drop-buy[data-buyfbkit]:disabled { background: var(--surface-3); color: var(--text-3); opacity: 1; }
+/* The bundle cell: the same tile, spanning the grid, with the team's two colours
+   standing in for the product shot (five pieces in one 88px square would be a
+   contact sheet). */
+.drop-item.fb-bundle { grid-column: 1 / -1; }
+.drop-item.fb-bundle::before { content: 'FULL KIT'; }
+.fb-kitmark { width: 52px; height: 52px; border-radius: 50%; border: 6px solid; margin: 4px auto 0;
+  display: grid; place-items: center; }
+.fb-kitmark span { font-size: 17px; font-weight: 900; color: #fff; mix-blend-mode: difference; }
+.fb-kitline { display: block; font-size: 11px; color: var(--text-2); margin: -4px 0 8px; }
+.fb-save { display: block; font-size: 11px; color: var(--text-2); margin-top: 6px; }
+
+/* ===== THE COLOURWAY RAIL (Wardrobe, Tom 2026-09-04) =====================
+   "slide from east to west on the different tints". 32 teams of one garment,
+   one horizontal snap rail, the tile under the centre is the one being tried.
+
+   THE PRECEDENT IS .pw-row ABOVE, the Stable's pet-accessory row, and this
+   REUSES it rather than copying it: .fb-rail carries .pw-row and each tile
+   carries .pw-item, so the flex, the gap, the mandatory x-snap, the 96px tile
+   and the `on` state (fill AND border AND label, never colour alone) are that
+   row's, already shipped and already read by a returning player. Only what is
+   genuinely different is written here: a centre snap instead of a start snap,
+   because the selected tile is the one in the MIDDLE of a 32-long rail rather
+   than the one you scrolled to the edge; the padding that lets the first and
+   last tiles reach that centre; and the locked state.
+   NO MOMENTUM CODE. scroll-snap-type does the landing and the browser does the
+   fling; there is no scrolling library in this app and this does not add one. */
+.fb-rail-wrap { margin-top: 14px; }
+.fbr-h { margin-bottom: 4px; }
+.fbr-lead { text-align: center; margin: 0 2px 8px; }
+.fbr-fig { display: flex; justify-content: center; margin-bottom: 8px; }
+.fb-rail {
+  /* NO scroll-snap-type of its own: .pw-row above already declares
+     `x mandatory`, which is the point of reusing that row. A second copy here
+     was written first and is exactly the duplication that lets the two drift.
+     What IS different is the ALIGNMENT (centre, not start) and it lives on the
+     tile below. */
+  scroll-behavior: smooth;
+  scrollbar-width: none; margin: 0 calc(var(--pad) * -1); padding: 2px var(--pad) 6px;
+}
+/* No scroll-padding: the end margins below let the first and last tiles reach
+   the centre with no snapport arithmetic at all. `scroll-padding-inline: 50%`
+   is the other way to do it and it collapses the snapport to zero width, which
+   is a strange enough state that it is not worth relying on. (It was blamed for
+   a snap landing six teams away on 2026-09-04; that was mis-measured -- the real
+   cause was reading scrollLeft back in the middle of a smooth scroll -- and it
+   does NOT reproduce on its own, so this is a preference, not a fix.) */
+.fb-rail::-webkit-scrollbar { display: none; }
+.pw-item.fbr { width: 88px; scroll-snap-align: center; padding: 7px 5px 8px; }
+.pw-item.fbr:first-child { margin-left: calc(50% - 44px - var(--pad)); }
+.pw-item.fbr:last-child { margin-right: calc(50% - 44px - var(--pad)); }
+.pw-item.fbr b { font-size: 10px; line-height: 1.15; }
+.pw-item.fbr small { display: flex; align-items: center; justify-content: center; gap: 3px; }
+/* LOCKED IS SHOWN, NOT HIDDEN. A player owning one kit would otherwise get a
+   one-tile rail, and seeing their OWN Bonehead in the other 31 is the argument
+   for a second one. The tile still previews on the doll; only the bar can
+   commit, and on a locked colourway the bar routes to the Kit room. Same
+   grayscale+dim as .ward-cell.gear.locked, which is this screen's own idiom for
+   "real, yours later". */
+.pw-item.fbr.locked .fb-worn { filter: grayscale(0.85) brightness(0.6); }
+.pw-item.fbr.locked b { color: var(--text-3); }
+.pw-item.fbr.locked small { color: var(--text-3); }
+.pw-item.fbr.on.locked { border-color: var(--text-3); background: rgba(159, 172, 159, .1); }
+.fb-worn.sm { width: 64px; height: 64px; border-radius: 9px; }
+.fb-bar .mog-lines em { font-style: normal; }
+.fb-swatch.sm { width: 13px; height: 13px; border-width: 3px; display: inline-block; vertical-align: -2px; margin-right: 4px; }
+@media (prefers-reduced-motion: reduce) { .fb-rail { scroll-behavior: auto; } }
+
 /* ===== A spire under siege (v266) =====
    The one state on the map with a deadline attached, so it gets the loudest
    treatment: coral, a pulse, and the countdown where the tribute number usually
@@ -10070,8 +10179,38 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    animate `transform`, and a running animation outranks a plain declaration in
    the cascade. Without it the crop simply does not happen. */
 .fit-head .bh-anim, .fit-torso .bh-anim, .fit-hips .bh-anim, .fit-feet .bh-anim, .fit-hand .bh-anim,
-.fit-hand-l .bh-anim, .fit-body .bh-anim, .fit-shin .bh-anim, .fit-waist .bh-anim { animation: none; }
+.fit-hand-l .bh-anim, .fit-body .bh-anim, .fit-shin .bh-anim, .fit-waist .bh-anim, .fit-fbhead .bh-anim { animation: none; }
 .fit-head .bh-anim { transform-origin: 43% 21%; transform: translate(4%, 26%) scale(2.3); }
+/* A FOOTBALL HELMET IS NOT A HAT (Tom, 2026-09-04: the Kit room's helmet tile is
+   "too zoomed in"). .fit-head above frames a skull for HEADWEAR; a football
+   helmet is shell plus a facemask hanging down over the whole face, and at 2.3
+   it blew off all four edges of its square.
+
+   MEASURED on the rendered 88px tile, the garment's own silhouette read as an
+   ALPHA -- the layer alone over a black ground and again over a white one --
+   because the obvious background diff measures the CONTRAST rather than the art
+   and reported this same helmet at two different sizes on two differently
+   coloured surfaces:
+
+     garment         ink % of tile      does the art run off the tile?
+     helmet        94.2  ->  43.4     ALL FOUR (L83 R45 T88 B46)  ->  none
+     jersey        42.6      42.6     none                        (unchanged)
+     cleats        33.4      33.4     none                        (unchanged)
+     lizard helm   23.6      23.6     none                        (unchanged)
+     lizard jersey 20.7      20.7     none                        (unchanged)
+
+   1.40 was picked from a seven-scale sweep of the real tile (2.30, 2.00, 1.80,
+   1.60, 1.40, 1.20, 1.00, then three translate variants around the winner). It
+   lands the helmet level with the jersey Tom said reads correctly and inside its
+   frame on every side, which is what a discrete object wants: the jersey's
+   sleeve and the cleats' soles are allowed to leave their frames because those
+   are crops of a body, not of a thing. The translate moves with the scale so the
+   art stays centred -- measured centre 48%/49% of the tile, against 46%/45% if
+   the old translate is kept. Same 1/0.86 window as every other .fit-*, so this
+   one declaration serves the Kit-room tile, the rack stage, a reveal card and
+   the wardrobe's colourway rail. Re-measured, with its own negative control,
+   by tests/football-tile-crop-audit.mjs on every run. */
+.fit-fbhead .bh-anim { transform-origin: 43% 21%; transform: translate(7%, 31%) scale(1.4); }
 .fit-torso .bh-anim { transform-origin: 46% 51%; transform: translate(4%, -1%) scale(1.7); }
 .fit-hips .bh-anim { transform-origin: 51% 66%; transform: translate(-1%, -16%) scale(2.0); }
 .fit-feet .bh-anim { transform-origin: 49% 83%; transform: translate(1%, -33%) scale(2.2); }

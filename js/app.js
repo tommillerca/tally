@@ -21,7 +21,7 @@ import {
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   stripAll, stripAllPlan,
-  DROP, buyDropItem, refundStreakFreezes,
+  DROP, buyDropItem, buyFootballItem, buyFootballBundle, refundStreakFreezes,
   RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_RARITY_PRICE,
   setWornAura, ownsAura,
   rack, rerollRack, rackRerollCost, buyRackItem, wornAura,
@@ -95,6 +95,8 @@ import {
 import { HERO_EDGE } from '../data/hero-edge.js';
 import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers,
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK, bhFamilyKey, bhFamilies } from '../data/boneheadz.js';
+// Football kit, 2026-09-04
+import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal, armMidnightTimer,
@@ -265,6 +267,8 @@ const S = {
      render in the app, so the wardrobe cannot be an await. Refreshed before the
      first paint and after every equip. */
   petWear: {},
+  fbTeam: null,    // Football kit, 2026-09-04: the team the kit room is showing
+  fbJump: false,   // one-shot: the wardrobe's colourway rail sent the player to the Kit room, so open it
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
   wpnAura: null,   // the weapon aura bought off the rack, worn on every surface
 };
@@ -395,6 +399,20 @@ function staticMassScale(petId) {
 }
 // A pet's display scale, whichever way it is drawn. Flat species (lizards) would
 // otherwise render a third shorter than round ones (the cloud) in the same box.
+/* THE SPECIES' OWN SCALE, EVEN WHEN THE FOOTBALL KIT DRAWS IT STATICALLY, and
+   that is a measured choice rather than an oversight. When the kit forces a
+   lizard onto the static canvas (see petSpriteHtml) the two normalisations are
+   both available and they disagree by 1.28% on C4. MEASURED on the Stable card
+   at 124px, ink from a screenshot diff with the garments off and the clock
+   pinned (tests/football-render-audit.mjs row PET-SIZE):
+       animated lizard                     264 x 179 device px, 30941 px of ink
+       static under petMassScale (this)    260 x 194,           30257
+       static under staticMassScale        257 x 191,           29655
+   petMassScale is nearer on width (4px vs 7) and on area (684 vs 1286) and
+   staticMassScale is nearer on height (12px vs 15), so the scale is NOT what
+   makes the animal change size: the two DRAWINGS do, at aspect 1.475 animated
+   against 1.345 static. Switching the function would buy nothing measurable and
+   cost a fork in a function eleven surfaces call, so it does not switch. */
 function petScale(petId) {
   return ANIMATED_PETS.has(petId) ? petMassScale(petId) : staticMassScale(petId);
 }
@@ -417,6 +435,10 @@ function petScale(petId) {
  *                       be dressed out of the viewer's wardrobe.
  */
 const wearOf = wear => (wear === undefined ? S.petWear : wear);
+/* Is this pet wearing a football garment? A non-null tint list IS the answer:
+   petWornTints returns footballTints per worn layer, which is null for anything
+   else. Used by petSpriteHtml to force the static canvas (see there). */
+const petWearsFootball = (petId, wear) => petWornTints(petId, wearOf(wear)).some(Boolean);
 /* WHICH SHEET THESE LAYERS COME OFF, AND WHY THE CALLER DECIDES.
  *
  * This function was untiered everywhere, which was fine while every pet was a
@@ -469,6 +491,7 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = und
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
   const c = PET_CROP[petId];
   const worn = petWornLayers(petId, wearOf(wear));
+  const tints = petWornTints(petId, wearOf(wear));   // Football kit, 2026-09-04: per worn layer, or null
   if (!c) return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="width:${px}px;height:${px}px;object-fit:contain" alt=""></span>`;
   const FILL = 0.82;                                   // match the animated pets' ~63px fill in a 76px box
   const cw = c.x1 - c.x0, ch = c.y1 - c.y0;            // content size (fraction of the square)
@@ -504,11 +527,18 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = und
      square (9.3 art px at 2048, under one thumbnail pixel), measured across all
      six pet-era files. */
   const tier = thumb === true ? bhTierFor(imgSize) : thumb;
+  /* No trailing semicolon: this string is also the <img>'s whole style attribute,
+     and one spare `;` on every pet layer is a diff on 66KB of shipped Shop markup
+     that buys nothing. The tint spans below add their own separator. */
+  const geo = `position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)`;
   const layer = (u, cls = '') => {
     const s = tier ? bhThumb(u, tier) : u;
-    return `<img${cls ? ` class="${cls}"` : ''} src="${s}"${s === u ? '' : ` data-full="${u}" ${THUMB_FALLBACK}`} style="position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)" alt="">`;
+    return `<img${cls ? ` class="${cls}"` : ''} src="${s}"${s === u ? '' : ` data-full="${u}" ${THUMB_FALLBACK}`} style="${geo}" alt="">`;
   };
-  return `<span class="petcrop${worn.length ? ' dressed' : ''}" style="width:${px}px;height:${px}px">${layer(src)}${worn.map(u => layer(u, 'pw')).join('')}</span>`;
+  /* Football kit, 2026-09-04: a tinted garment's two multiply spans take the SAME
+     geometry string as its <img>, so they inherit the registration untouched. */
+  const tintOf = i => (tints[i] || []).map(t => `<span class="fb-tint pw" style="${geo};--fbm:url('${t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
+  return `<span class="petcrop${worn.length ? ' dressed' : ''}" style="width:${px}px;height:${px}px">${layer(src)}${worn.map((u, i) => layer(u, 'pw') + tintOf(i)).join('')}</span>`;
 }
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
 // layer stack (C1/C4) or a content-cropped base image. Shiny state is cached in
@@ -651,6 +681,20 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
   // special look, so always render its animated self even if the instance is shiny.
   // Every path scales by the species' visual mass, so a colourway is never a
   // different size from its base pet.
+  /* FOOTBALL WEAR FORCES THE STATIC CANVAS. Tom, 2026-09-04: "just put the pet
+     pieces on a version of the lizard that isnt animated for this."
+     croppedPetImg is the ONLY function that paints a pet's worn layers, and both
+     lizards (C4, CX) are in ANIMATED_PETS, so every animated branch below
+     returned before the kit could be drawn: the pet garments rendered in the kit
+     room and the roster portraits and were invisible on Today, the Stable, the
+     Paddock and the Pit. The trade is Tom's and it is explicit: while the kit is
+     ON the lizard stops moving; with no football wear it animates exactly as it
+     always did. `.some(Boolean)` over petWornTints rather than a new predicate,
+     because a non-null tint list IS "this worn layer is a football garment".
+     The shiny lizard comes along for free: C4's shiny is a recolour of the same
+     canvas, so the static branch below draws the kit on it with no per-variant
+     art, and CX (Day One, amethyst) is that same canvas again. */
+  const wearsFootball = petWearsFootball(petId, wear);
   const S2 = mass ? Math.round(px * petScale(petId)) : px;
   const isShiny = shiny !== undefined ? !!shiny : S.shinyPets.has(petId);
   /* SHINIES ANIMATE TOO. Tom, 2026-08-08: "make all animations apply for shinies
@@ -668,7 +712,7 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
        C4 lizard    26 -> 183  +157deg,  saturation x1.34
      CX is exempt as ever: its amethyst art IS its special look. */
   const SHINY_TINT = { C1: 'hue-rotate(54deg) saturate(1.03)', C3: 'hue-rotate(-169deg) saturate(1.43)', C4: 'hue-rotate(157deg) saturate(1.34)' };
-  if (isShiny && ANIMATED_PETS.has(petId) && SHINY_TINT[petId]) {
+  if (isShiny && !wearsFootball && ANIMATED_PETS.has(petId) && SHINY_TINT[petId]) {
     const anim = animatedPetHtml(petId, S2);
     if (anim) {
       return `<div class="pet-shiny-wrap"><div class="pa-shiny" style="filter:${SHINY_TINT[petId]}">${anim}</div>`
@@ -681,7 +725,7 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
     // canvas: a shiny lizard came out a fraction of the normal one.
     return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear, thumb)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
-  return animatedPetHtml(petId, S2) || croppedPetImg(petId, S2, ground, null, wear, thumb);
+  return (wearsFootball ? null : animatedPetHtml(petId, S2)) || croppedPetImg(petId, S2, ground, null, wear, thumb);
 }
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
@@ -1087,12 +1131,19 @@ function badgeIconHtml(emoji, s = 22) { const id = BADGE_ICON[(emoji || '').repl
 
 /* ================= splash montage ================= */
 
+/* NO FOOTBALL KIT ON A FIGURE NOBODY CHOSE. Measured the day FOOTBALL_KIT_LIVE
+   went true (2026-09-04): the kit is 128 of the 185 items in the H pool (69%),
+   32 of 51 in FW and 32 of 56 in T, so an unfiltered draw dresses most of the
+   splash montage in a helmet a player pays 4,200 coins for. js/loot.js
+   (RACK_ROTATE_POOL, crateEligible) and js/gear.js (GEAR_ITEMS) already carry
+   this exact `!i.football` clause; these two random-figure pools were simply
+   never on that list, because with the flag false it could not matter. */
 function randomOutfit() {
   const eq = { B: 'B0-1', SK: 'SK0-1' };
   for (const slot of BH_SLOTS) {
     if (slot.code === 'B' || slot.code === 'SK') continue;
     if (Math.random() < 0.55) {
-      const pool = BH_ITEMS.filter(i => i.slot === slot.code);
+      const pool = BH_ITEMS.filter(i => i.slot === slot.code && !i.football);
       eq[slot.code] = pool[(Math.random() * pool.length) | 0].id;
     }
   }
@@ -2576,7 +2627,10 @@ function teaserSeed(id) {
 }
 function teaserLook(item, pool) {
   const r = teaserSeed(item.id);
-  const skulls = BH_ITEMS.filter(i => i.slot === 'SK');
+  // !i.football like every other pool that dresses a figure nobody chose. The
+  // kit has no SK piece today, so this changes nothing; it is here so the rule
+  // is one rule and the day a football skull lands nobody has to remember.
+  const skulls = BH_ITEMS.filter(i => i.slot === 'SK' && !i.football);
   const eq = { B: 'B0-1', SK: skulls[r % skulls.length].id, [item.slot]: item.id };
   const others = pool.filter(i => i.slot !== item.slot);
   /* UNSIGNED shifts. `>>` is signed, and the hash is a full uint32, so `r >> 5`
@@ -5605,13 +5659,53 @@ const bhTrim = src => {
    on a 2x phone and leaves a 3x phone a mild 0.75 upscale on the big tier, which
    measured as indistinguishable. Definition in data/boneheadz.js. */
 
+/* Football kit, 2026-09-04: the two multiply layers that colour a football
+   master for its team. Same mechanism as .wpn-sheen: a span masked by an alpha
+   PNG, registered to the art by the surface's own --av-fit/--av-pos. The mask
+   is a subset of the master's alpha, so the multiply only ever meets the
+   master's own pixels; the visor glass, facemask and outlines are outside both
+   masks and keep Cam's colour. `geo` carries per-layer inline geometry for the
+   pet renderer, whose layers are sized by style rather than by class. */
+/* The same two layers as footballTintHtml, for the surfaces that are a CANVAS
+   rather than a stack of spans. drawTrimmedArt reads it back off the element. */
+const fbTintAttr = item => {
+  const t = footballTints(item);
+  return t ? ` data-tints='${JSON.stringify(t)}'` : '';
+};
+/* `data-fbslot` NAMES WHICH GARMENT A TINT SPAN BELONGS TO. A stack can wear
+   four football pieces at once (helmet, jersey, cleats, and the lizard's two),
+   and the wardrobe's colourway rail repaints exactly one of them.
+   IT IS THE SECOND OF TWO SCOPES, NOT THE ONLY ONE, and saying so honestly
+   matters: the painter also pairs each span to a tint BY MASK FILENAME, and
+   since no two garments share a mask, that pairing alone already leaves the
+   jersey untouched during a helmet slide (proved by mutation 2026-09-04:
+   dropping [data-fbslot] from the painter's selector leaves every row green).
+   The attribute stays because it makes the selector say what it means at the
+   place it is read, and because it is one string on a span that already exists.
+   The rail needs it in this form:
+   every team shares ONE master PNG and ONE pair of masks per garment, so
+   sliding from one team to the next is two `style.background` writes on spans
+   that are already on screen, with no image to decode and no stage to rebuild.
+   See fbRail in renderCharacter. */
+const footballTintHtml = (item, geo = '') => (footballTints(item) || [])
+  .map(t => `<span class="fb-tint" data-fbslot="${item.slot}" style="${geo}--fbm:url('${t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
+
 function avatarLayersHtml(eq, opts = {}) {
   const skip = new Set(opts.skip || []);
   const slots = [...BH_SLOTS].sort((a, b) => a.z - b.z);
   const layers = slots.map(s => {
     if (skip.has(s.code)) return '';
+    // Football kit, 2026-09-04: a visor helmet occludes the three eye items that project past the glass (VISOR_EYES_POLICY 'hide')
+    if (s.code === 'E' && visorHidesEyes(eq)) return '';
     const itemId = eq[s.code];
     if (!itemId || !BH_BY_ID[itemId]) return '';
+    /* Football kit, 2026-09-04: under VISOR_EYES_POLICY 'clip' the three eye
+       items that project past the glass keep their layer and are MASKED by the
+       worn visor helmet's own art alpha, so the lasers are bounded inside the
+       helmet instead of escaping it. Nothing is computed here: the mask is a
+       640 square on the same canvas as the eye master, so app.css .eye-clip
+       hands it the surface's own --av-fit/--av-pos, exactly as .fb-tint does. */
+    const clipMask = s.code === 'E' ? visorClipMask(eq) : null;
     /* A pet that is not registered to the body canvas cannot be a body layer.
        One guard here rather than one per caller, because all eleven stacks that
        keep the C slot broke the same way: see petStacksOnBody above. */
@@ -5647,7 +5741,8 @@ function avatarLayersHtml(eq, opts = {}) {
       // draws more lit eyes.
       S.glow && s.code === 'E' && EMBER_EYES.has(itemId) ? 'eye-ember' : '',
     ].filter(Boolean).join(' ');
-    const glow = cls ? ` class="${cls}"` : '';
+    const clsAll = clipMask ? `${cls}${cls ? ' ' : ''}eye-clip` : cls;
+    const glow = clsAll ? ` class="${clsAll}"` : '';
     // NOT lazy, NOT async-decoded: these layers only mean anything stacked
     // together. Loading them independently is what made the character visibly
     // assemble itself, piece by piece, every single render.
@@ -5655,7 +5750,8 @@ function avatarLayersHtml(eq, opts = {}) {
     // must degrade to a missing garment, never iOS's blue "?" box over the body.
     // On a THUMBNAILED layer it first retries the full-size art, so a missing
     // thumbnail costs memory rather than the garment.
-    return `<img${glow} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>`;
+    const clipStyle = clipMask ? ` style="--fbm:url('${clipMask}')"` : '';
+    return `<img${glow}${clipStyle} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(item)}`;
   }).join('');
   // Visible by DEFAULT. v233 shipped this with bh-composing baked into the
   // markup, which meant any stack injected somewhere composeAvatars() never
@@ -5711,6 +5807,35 @@ const RACK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', M: 'fit-head', S
    one definition; a new slot that gets a .fit-* crop becomes wearable everywhere
    the moment it is added above. */
 const canWear = id => !!(BH_BY_ID[id] && RACK_FIT[BH_BY_ID[id].slot]);
+/* A FOOTBALL HELMET IS NOT A HAT, and the crop has to know it. Tom annotated the
+   Kit room's helmet tile, 2026-09-04: "too zoomed in".
+   MEASURED on the rendered tile at 88px, before and after, the garment's own
+   silhouette read as an ALPHA (the layer alone over a black ground and again
+   over a white one) so the number is the art and not its contrast against the
+   tile:
+
+     garment         ink % of tile      does the art run off the tile?
+     helmet        94.2  ->  43.4     ALL FOUR (L83 R45 T88 B46)  ->  none
+     jersey        42.6      42.6     none                        (unchanged)
+     cleats        33.4      33.4     none                        (unchanged)
+     lizard helm   23.6      23.6     none                        (unchanged)
+     lizard jersey 20.7      20.7     none                        (unchanged)
+
+   .fit-head's origin and its 2.3 scale are a measured frame for HEADWEAR sitting
+   on a skull. A football helmet is a bigger object: shell plus facemask hanging
+   down over the whole face, so the same frame blew it off every edge of the
+   square. It is not a tile bug and not a shop bug -- the same crop draws this
+   helmet on the rack, on a reveal card and on the wardrobe's colourway rail --
+   so the fix keys off the ITEM rather than the surface, and all four of them
+   move together. Only the helmet's number moves; the other four garments are
+   untouched, which is what "surgical" looks like when it is checked.
+   Only slot H: the four head pieces (helmet plus its three visors) are one
+   drawing with different glass. The jersey and the cleats measure correctly
+   under fit-torso and fit-feet and keep them.
+   The number in app.css .fit-fbhead came from a seven-scale sweep of the real
+   tile, not from an estimate, and tests/football-tile-crop-audit.mjs
+   re-measures it (and demonstrates its own failure) on every run. */
+const fitClass = it => (it && it.football && it.slot === 'H' ? 'fit-fbhead' : RACK_FIT[it.slot]);
 /* `css` is the width the WHOLE 640 square ends up occupying AFTER the crop's
    scale, not the width of the window it peeps through: a 222px card panel under
    fit-waist's scale(2.8) is a 622px canvas behind a 222px hole. bhTierFor turns
@@ -5738,7 +5863,7 @@ function wornArtHtml(id, css) {
   // wpnAura: null -- the player's bought aura must not leak onto a piece they
   // are being SHOWN. skip C for the same reason the rack does: their pet turning
   // up in a reveal card would read as part of the prize.
-  return `<div class="pc-worn ${RACK_FIT[it.slot]}">${avatarLayersHtml(
+  return `<div class="pc-worn ${fitClass(it)}">${avatarLayersHtml(
     { ...RACK_BASE, [it.slot]: id }, { wpnAura: null, skip: ['C'], thumb: bhTierFor(css) })}</div>`;
 }
 
@@ -9219,6 +9344,75 @@ function petShelfHtml(ownedCos, coinBal) {
     <div class="pet-row">${PET_SHOP.items.map(tile).join('')}</div>
   </div>`;
 }
+/* Football kit, 2026-09-04: THE KIT ROOM. FIVE tiles, not 160: the unit of sale
+   is the GARMENT and buying one grants it in all 32 colourways (section 7.8 of
+   docs/FOOTBALL-KIT.md). The <select> over 32 teams is therefore a PREVIEW, and
+   it picks which colourway the five tiles are painted in. The five: helmet
+   (grants its three visors), jersey, cleats, and the lizard's helmet and
+   jersey. Player pieces are shown WORN on the neutral
+   mannequin through wornArtHtml, the rack's own rule; pet pieces on the Beardie
+   through croppedPetImg with an explicit wear object so the viewer's own
+   S.petWear never leaks onto a product shot. Gated by FOOTBALL_KIT_LIVE at the
+   call site; the price is FOOTBALL_KIT_PRICE_PLACEHOLDER and the buy path
+   refuses while it is not a number, so a live shelf with no price sells nothing. */
+function footballShelfHtml(ownedCos, coinBal, open = false) {
+  const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];   // the PREVIEW colourway, not a variant on sale
+  const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
+  const sold = FOOTBALL_SHELF;                                       // five garments, not 32 teams x five
+  const ownedHere = sold.filter(g => ownedCos.has(footballItemId(team.id, g.key))).length;
+  /* THE BUNDLE TILE. One extra cell at the end of the same grid, because it is
+     the same decision at a different size and a separate poster would compete
+     with the pieces it contains. The saving is computed, never typed: `full` is
+     the five tiles added up and `save` the difference, both null while either
+     price is, which is what prints "not for sale yet". */
+  const kit = footballBundleMath();
+  const bundleOwned = ownedHere === sold.length;
+  return `
+  <details class="t3-dropsect" id="fbSect"${open ? ' open' : ''}>
+    <summary class="t3-drop">
+      <span class="eyebrow">Kit room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
+      <h2>PICK A SIDE</h2>
+      <div class="row"><div class="tx"><small>Five pieces: helmet, jersey, cleats, and a matching set for the lizard. Buy one and it is yours in all ${FOOTBALL_TEAMS.length} colourways.</small>
+        <span class="t3-price">${Number.isFinite(price) ? `${ICONS.coin(13)} ${price.toLocaleString()} a piece${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} the lot` : ''}` : 'Not for sale yet'}</span></div></div>
+    </summary>
+    <div class="t3-dropbody">
+      <label class="fb-pick"><span>Preview</span>
+        <select id="fbTeam">${FOOTBALL_TEAMS.map(t => `<option value="${t.id}"${t.id === team.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
+        <i class="fb-swatch" style="background:${team.a};border-color:${team.b}"></i></label>
+      <div class="drop-grid">
+        ${sold.map(g => {
+          const id = footballItemId(team.id, g.key);   // the PREVIEW id: the tile sells the garment, in every team
+          const owned = ownedCos.has(id);
+          const art = g.pets
+            ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 384)
+            : `<div class="fb-worn">${wornArtHtml(id, 88 * 2.3)}</div>`;
+          const canBuy = Number.isFinite(price) && coinBal >= price;
+          return `<div class="drop-item fb ${owned ? 'owned' : ''}">
+            ${art}
+            <b>${esc(g.label)}</b>
+            <small class="fb-kitline">All ${FOOTBALL_TEAMS.length} colourways</small>
+            ${owned
+              ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
+              : `<button class="drop-buy" data-buyfb="${id}" ${canBuy ? '' : 'disabled'}>${Number.isFinite(price) ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
+          </div>`;
+        }).join('')}
+        <div class="drop-item fb fb-bundle ${bundleOwned ? 'owned' : ''}">
+          <div class="fb-kitmark" style="background:${team.a};border-color:${team.b}"><span>${sold.length}</span></div>
+          <b>The full kit</b>
+          <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')} · all ${FOOTBALL_TEAMS.length} colourways</small>
+          ${bundleOwned
+            ? `<button class="drop-buy" disabled>The whole kit is yours</button>`
+            : `<button class="drop-buy" data-buyfbkit="all" ${footballBundleSellable() && coinBal >= FOOTBALL_BUNDLE_PRICE_PLACEHOLDER ? '' : 'disabled'}>${
+                footballBundleSellable() ? `${ICONS.coin(12)} ${kit.bundle.toLocaleString()}` : 'Soon'}</button>`}
+          ${Number.isFinite(kit.save) && kit.save > 0
+            ? `<small class="fb-save">Was ${kit.full.toLocaleString()} · you save ${kit.save.toLocaleString()}</small>`
+            : `<small class="fb-save">Cheaper than the ${sold.length} pieces</small>`}
+        </div>
+      </div>
+    </div>
+  </details>`;
+}
+
 async function renderShop(el) {
   const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn, eggBought] =
     await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura(), dustEggBought()]);
@@ -9362,7 +9556,7 @@ async function renderShop(el) {
   const rackTile = (id, coin, dust, thumb) => {
     const it = BH_BY_ID[id];
     return `<div class="rk r-${it.rarity}${rackOwns(id) ? ' owned' : ''}">
-      <button class="rk-stage ${RACK_FIT[it.slot] || ''}" data-tryon="${id}" data-coin="${coin}" data-dust="${dust}" aria-label="Try on ${esc(it.name)}"
+      <button class="rk-stage ${fitClass(it) || ''}" data-tryon="${id}" data-coin="${coin}" data-dust="${dust}" aria-label="Try on ${esc(it.name)}"
         >${avatarLayersHtml({ ...RACK_BASE, [it.slot]: id }, { wpnAura: null, skip: ['C'], ...(thumb ? { thumb } : {}) })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
       ${rackTag(it.rarity)}<b>${esc(it.name)}</b>
       ${rackBuyRow(id, coin, dust)}
@@ -9502,8 +9696,48 @@ async function renderShop(el) {
   const cheapestRack = Math.min(...allRackCoins);
   const afford = { coins: allRackCoins.filter(c => c <= coinBal).length, dust: allRackDust.filter(d => d <= dustBal).length };
 
+  /* THE SUPPLIES PANEL AND ITS TWO SHELVES SURVIVE A RE-RENDER. Every buy and
+     the kit room's team picker call rerender(), which rebuilds el.innerHTML, so
+     the reveal state lived only in the markup being thrown away: picking a
+     second team slammed the kit room shut AND re-hid #shopRestBody, leaving the
+     player back at "Potions and charms" after every single tap, and a drop
+     purchase did the same to the drop shelf. Read it off the outgoing markup and
+     put it back. Anti-regression rule 8: the control that hides them owns
+     un-hiding them, and a re-render is not the player asking to close. */
+  const wasOpen = {
+    rest: !!$('#shopRestBody', el) && !$('#shopRestBody', el).hidden,
+    drop: !!$('#dropSect', el)?.open,
+    /* S.fbJump: the wardrobe's colourway rail sent them here for a colourway
+       they do not own, so the shelf it named is the shelf that opens. One-shot,
+       cleared below, so a later visit is a normal visit. */
+    fb: !!$('#fbSect', el)?.open || S.fbJump,
+  };
+
+  /* THE LEAD SHELF AND THE ONE BEHIND IT. Tom, 2026-09-04: "nfl shit goes to
+     the lead shelf of the shop", then, on the first attempt at the rest of it:
+     "dont put her in potion supplies find a way to have her prominent in the
+     shop but less than NFL." The first pass put her in the drop-shelf area,
+     which lives inside #shopRestBody behind the "Potions and charms · Supplies"
+     button, so a 50,000-coin legendary was invisible until somebody tapped. She
+     is SECOND now: the Kit room leads, she follows it immediately under a
+     heading of her own, both above the rack strip and neither behind a tap.
+
+     FLAG OFF, NOTHING MOVES, and that is the property that matters more than
+     the kit does: fbLead is '' and petLead is the bare pet shelf, so the
+     template below emits the byte-identical string it emitted before the kit
+     existed. Pinned by tests/shop-lead-order-audit.mjs (boxes on a screen) and
+     tests/unit.test.js (the order of the string). */
+  const petShelf = petShelfHtml(ownedCos, coinBal);
+  const fbLead = FOOTBALL_KIT_LIVE ? footballShelfHtml(ownedCos, coinBal, wasOpen.fb) : '';
+  /* Second under a heading of her own: arriving straight after the Kit room with
+     no label, she reads as part of it. .rk-theme is the strip the rack and the
+     rotating shelf already use, so this adds no CSS. */
+  const petLead = FOOTBALL_KIT_LIVE
+    ? `<div class="rk-theme"><b>GWART'S MENAGERIE</b><i></i><span>Pets and their gear</span></div>${petShelf}`
+    : petShelf;
+
   el.innerHTML = `
-  ${petShelfHtml(ownedCos, coinBal)}
+  ${fbLead}${petLead}
   <div class="rk-theme"><b>${esc(RACK_THEME)} · RACK ${rackNo} OF 4</b><i></i><span>New rack in ${rackDaysLeft}d</span></div>
   <!-- WHAT THIS WALLET REACHES, said in numbers rather than left to be inferred
        from which pills happen to be filled. A player at 340 coins could not buy
@@ -9539,9 +9773,9 @@ async function renderShop(el) {
   <button class="rk-reroll" id="rackReroll"${coinBal < rerollCost ? ' disabled' : ''}><span class="rk-rr"><b>Reroll this shelf</b><small>A fresh ${rotIds.length}, drawn from the whole catalogue. The ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())} nine above stay put.</small></span>
     <span class="t3-price">${rerollCost === 0 ? 'FREE' : `${ICONS.coin(13)} ${rerollCost.toLocaleString()}`}</span></button>` : ''}
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Potions and charms</b><small>Supplies ›</small></button>
-  <div id="shopRestBody" hidden>
+  <div id="shopRestBody"${wasOpen.rest ? '' : ' hidden'}>
 
-  <details class="t3-dropsect" id="dropSect">
+  <details class="t3-dropsect" id="dropSect"${wasOpen.drop ? ' open' : ''}>
     <summary class="t3-drop">
       ${dropOwned < DROP.items.length ? '<span class="new">NEW</span>' : ''}
       <span class="eyebrow">Fresh drop · ${DROP.items.length} pieces${dropOwned ? ` · ${dropOwned} yours` : ''}</span>
@@ -9633,7 +9867,16 @@ async function renderShop(el) {
   }));
   // Drop pieces: same two-tap arm-then-buy ritual as the coin shop, because these
   // are the most expensive single taps in the game.
-  el.querySelectorAll('[data-buydrop]').forEach((b => {
+  // Football kit, 2026-09-04: the kit room's team picker re-renders the shelf on its own team
+  $('#fbTeam', el)?.addEventListener('change', e => { S.fbTeam = e.target.value; rerender(); });
+  /* The rail's "Kit room" button lands here. Consume the flag BEFORE the scroll
+     so a rerender() from any buy on this screen is a normal render again, and
+     bring the shelf to them rather than leaving it open below the fold. */
+  if (S.fbJump) {
+    S.fbJump = false;
+    requestAnimationFrame(() => $('#fbSect', el)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }
+  el.querySelectorAll('[data-buydrop], [data-buyfb], [data-buyfbkit]').forEach((b => {
     let t = null;
     let busy = false;
     const reset = () => { b.dataset.armed = '0'; b.innerHTML = b.dataset.label || b.innerHTML; };
@@ -9648,13 +9891,18 @@ async function renderShop(el) {
       // reset() moved below the await for the armToConfirm reason: disarming
       // first re-armed the button in the same frame and let a burst buy twice.
       clearTimeout(t); busy = true;
-      const r = await buyDropItem(b.dataset.buydrop).finally(() => { busy = false; reset(); });
+      // Football kit, 2026-09-04: same arm-then-buy ritual, a second buy path behind it
+      const r = await (b.dataset.buyfbkit ? buyFootballBundle(b.dataset.buyfbkit)
+        : b.dataset.buyfb ? buyFootballItem(b.dataset.buyfb)
+        : buyDropItem(b.dataset.buydrop)).finally(() => { busy = false; reset(); });
       if (!r.ok) {
-        toast(r.reason === 'owned' ? 'Already in your Wardrobe.' : `Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600);
+        toast(r.reason === 'owned' ? 'Already in your Wardrobe.' : r.reason === 'not-stocked' ? 'Not for sale yet.' : `Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600);
         return;
       }
       levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
-      toast(`${r.label} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. Equip it in your Wardrobe.`, 3200);
+      toast(`${r.label} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left.`
+        + (r.granted ? ` ${r.granted} pieces${Number.isFinite(r.save) ? `, ${r.save.toLocaleString()} saved` : ''}.` : '')
+        + ' Equip it in your Wardrobe.', 3200);
       rerender();
     });
   }));
@@ -14914,7 +15162,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
        went missing on exactly the slots the panel was newly opened to. */
     const mogOf = code => ((gearLo[code] || rawEq[code]) ? tm[code] : null);
     const slotMeta = BH_SLOTS.find(s => s.code === slot);
-    const items = BH_ITEMS.filter(i => i.slot === slot && owned.has(i.id));
+    /* Football kit, 2026-09-04: WITH_UNRELEASED, filtered by ownership. An owned
+       piece must be wearable and previewable whether or not the kit is live yet;
+       nothing unowned leaks because `owned` is the filter. lockedCount below keeps
+       reading BH_ITEMS so an unreleased kit is not counted as "out there". */
+    const items = BH_ITEMS_WITH_UNRELEASED.filter(i => i.slot === slot && owned.has(i.id));
     const gearItems = GEAR_ITEMS.filter(g => g.slot === slot && gOwnedSet.has(g.id));
     const lockedCount = BH_ITEMS.filter(i => i.slot === slot).length - items.length;
     /* ONE TILE PER DRAWING, NOT PER ITEM (Tom, 2026-09-04: "those that have
@@ -14940,7 +15192,10 @@ async function renderCharacter(wrap, tab, opts = {}) {
        one from the members' names is exactly the name-matching this rejected. */
     const famArt = fam => fam.find(i => eq[slot] === i.id) || famBest(fam);
     const famBest = fam => [...fam].sort((a, b) => RAR_ORDER.indexOf(b.rarity) - RAR_ORDER.indexOf(a.rarity))[0];
-    const famArtHtml = i => `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>`;
+    /* fbTintAttr rides the SAME item the tile shows (famArt: the worn variant, else the
+       family's best), so a collapsed football family paints in that colourway and every
+       rail tile paints its own. Without it the family tile drew the bare grey master. */
+    const famArtHtml = i => `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}"${fbTintAttr(i)} role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>`;
     /* THE RAIL IS .pw-row, THE STABLE'S PET-ACCESSORY ROW, the same one the
        football colourway rail specialises: flex, 8px gap, mandatory x-snap and
        the 96px tile are all inherited, and only the size and the centre snap are
@@ -14972,7 +15227,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
               ? `<span class="pd-swatch" style="background-image:url('${esc(bhThumb(bhAsset(art)))}')"></span>`
               // trim-normalize makes a compact skull render as big as a whole
               // body; extra pad keeps the skull tile from shouting (Tom, Aug 6)
-              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}"${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
+              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}"${fbTintAttr(art)}${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
           : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? ICONS.hidden(18) : '+'}</span>`}
         ${mog ? `<span class="pd-mog" title="Look changed">${sparkIco(11)}</span>` : ''}
         <span class="pd-tag">${esc(label)}</span>
@@ -15064,6 +15319,113 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </div>`;
     };
 
+    /* ================= THE COLOURWAY RAIL (Tom, 2026-09-04) ==================
+       "the dressing room/wardrobe where you can slide from east to west on the
+       different tints".
+
+       WHAT IT IS. Football garments are the one family in the game where the
+       SAME piece exists in 32 versions that differ only in colour, so the grid
+       above is the wrong shape for them: 32 helmets in a 4-wide grid is eight
+       rows of near-identical tiles and no sense of "these are the same thing".
+       One horizontal rail, one tile per team, and the tile under the rail's
+       centre is the one being tried on. Sliding recolours the player's OWN
+       Bonehead, live, so the comparison happens on the character rather than on
+       a product shot.
+
+       WHY IT COSTS ALMOST NOTHING TO MOVE. All 32 teams of a garment share ONE
+       master PNG and ONE pair of alpha masks -- that is the whole point of the
+       mask pipeline (docs/FOOTBALL-KIT.md section 1). So a team change is not a
+       different image, it is two hex values on two spans that are already in the
+       document. fbPaint below writes exactly those two and touches nothing else:
+       no restageDoll, no innerHTML, no decode, no layout. restageDoll IS still
+       the commit path (through the existing equip -> restageWardrobe), because a
+       commit really does change what is worn.
+
+       THE PRECEDENT IS .pw-row, the Stable's pet-accessory row (app.css, "A ROW
+       OF TILES, NOT A GRID"): flex + overflow-x + scroll-snap-type: x mandatory,
+       flex:none tiles with scroll-snap-align, a hard `on` state that changes
+       fill AND border AND label. Same markup shape, same snap, same momentum
+       (the platform's own -- no JS scrolling library anywhere in this app).
+       .fit-rail was the other candidate and is the wrong one: it is a chip rail
+       with no snap and no art, built for six items, not thirty-two.
+
+       AN UNOWNED COLOURWAY IS SHOWN, LOCKED, WITH ITS PRICE. Not hidden, and
+       the reason is what the rail is FOR. A player who owns one helmet would
+       get a one-tile rail, which is not a rail; and seeing their own Bonehead
+       in the other 31 sets IS the argument for buying a second one. So every
+       tile previews on the doll and the lock lives on the BAR, which is the
+       only thing that can commit. It does not sell here: the button routes to
+       the Kit room with that team already picked, so buyFootballItem stays the
+       one and only till.
+
+       NOT OFFERED ON A DISGUISED SLOT. If a transmog is making a gear piece
+       LOOK like a football helmet then `eq[slot]` is football while `rawEq[slot]`
+       is not, and "wear this colourway" would mean re-buying a transmog rather
+       than swapping a cosmetic. The rail wants both to be the same football
+       item; anything else falls through to the look panel that already owns
+       that decision. */
+    const fbWornItem = eq[slot] && eq[slot] === rawEq[slot] ? BH_BY_ID[eq[slot]] : null;
+    const fbGarment = fbWornItem && fbWornItem.football ? fbWornItem.football.garment : null;
+    let railTeam = fbGarment ? fbWornItem.football.team : null;
+    const fbId = t => footballItemId(t, fbGarment);
+    const fbPrice = FOOTBALL_KIT_PRICE_PLACEHOLDER;
+    /* THE TILE IS THE PIECE AS WORN, not the loose PNG: same wornArtHtml
+       mannequin as the Kit room's own tiles and the rack's, so a helmet reads
+       as a helmet on a head at 64px instead of as a speck on a 640 canvas.
+       32 tiles share one base skeleton, one master and two masks, so the whole
+       rail is a handful of distinct image sources (measured: see
+       tests/football-rail-audit.mjs row RAIL-COST). */
+    const fbTile = t => {
+      const id = fbId(t.id), own = owned.has(id);
+      return `<button class="pw-item fbr${t.id === railTeam ? ' on' : ''}${own ? '' : ' locked'}" type="button"
+        data-fbteam="${t.id}" role="option" aria-selected="${t.id === railTeam}" title="${esc(t.name)}">
+        <span class="fb-worn sm">${wornArtHtml(id, 64 * 2.3)}</span>
+        <b>${esc(t.name)}</b>
+        <small>${fbTag(t.id)}</small>
+      </button>`;
+    };
+    /* ONE writer for the tile's state word, because the rail re-labels tiles in
+       place as it moves and a second copy of this ternary is how "Trying" ends
+       up on two tiles at once. */
+    const fbTag = teamId => {
+      const id = fbId(teamId);
+      if (!owned.has(id)) return `${ICONS.lock(9)} ${Number.isFinite(fbPrice) ? fbPrice.toLocaleString() : 'Soon'}`;
+      if (teamId !== railTeam) return 'Yours';
+      return eq[slot] === id ? 'Worn' : 'Trying';
+    };
+    const fbBarHtml = () => {
+      const t = FOOTBALL_TEAM_BY_ID[railTeam];
+      const id = fbId(railTeam), own = owned.has(id), worn = eq[slot] === id;
+      return `<div class="look-bar mog-bar fb-bar${!worn && own ? ' armed' : ''}">
+        <div class="mog-lines">
+          <span><i>Trying</i><b class="fbr-team">${esc(t.name)}</b></span>
+          <span><i>Colours</i><b><em class="fb-swatch sm" style="background:${t.a};border-color:${t.b}"></em>${esc(t.a)} · ${esc(t.b)}</b></span>
+        </div>
+        ${worn ? '<button class="btn ghost mog-go" disabled>You are wearing it</button>'
+          : own ? `<button class="btn mog-go" data-fbwear="${id}">Wear it</button>`
+          : `<button class="btn ghost mog-go" data-fbshop="${t.id}"${FOOTBALL_KIT_LIVE && Number.isFinite(fbPrice) ? '' : ' disabled'}>${
+              FOOTBALL_KIT_LIVE && Number.isFinite(fbPrice) ? `${ICONS.coin(12)} ${fbPrice.toLocaleString()} · Kit room` : 'Not for sale yet'}</button>`}
+      </div>`;
+    };
+    /* THE FIGURE SITS WITH THE RAIL, and it is the SAME lesson the Dressing
+       Room's Now/After pair answered on 2026-08-23: measured here at 430x932
+       with a helmet on, the rail's own top edge is at document y 1151 while the
+       paper doll's stage ends around y 400, so a player sliding the rail is
+       recolouring a Bonehead nine hundred pixels above the thumb doing the
+       sliding. The big doll still recolours (it is the same two spans and it
+       costs nothing to keep in step, so scrolling back up shows what you left);
+       this is the copy you can actually SEE while you slide. Same `figure`
+       helper and the same .mog-fig box the look panel uses, so it is the same
+       picture at a smaller size and not a second crop. */
+    const fbRailHtml = () => !fbGarment ? '' : `
+      <div class="fb-rail-wrap">
+        <div class="sect-h fbr-h"><span>${esc(FOOTBALL_GARMENT_BY_KEY[fbGarment].label)} · ${FOOTBALL_TEAMS.length} colourways</span></div>
+        <p class="note fbr-lead">Slide sideways. Your Bonehead changes colours as you go, and nothing is worn until you say so.</p>
+        <div class="fbr-fig">${figure({ ...look, [slot]: fbId(railTeam) })}</div>
+        <div class="pw-row fb-rail" role="listbox" aria-label="Team colourways" tabindex="0">${FOOTBALL_TEAMS.map(fbTile).join('')}</div>
+        ${fbBarHtml()}
+      </div>`;
+
     // SAVED FITS: a look you can put back on in one tap. Stats never move.
     const fitRail = `
       <div class="fit-rail">
@@ -15152,6 +15514,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </button>`;
         }).join('')}
       </div>
+      ${fbRailHtml()}
       ${(() => {
         // Inspect panel: tap a gear cell to preview its full stats + special ability
         // (⚡ talent + what it does), then Equip. Falls back to the equipped piece.
@@ -15479,6 +15842,117 @@ async function renderCharacter(wrap, tab, opts = {}) {
          not the page out from under the tap. */
       $('.equipped', node)?.scrollIntoView({ block: 'nearest', inline: 'center' });
     }));
+    /* THE RAIL MOVES TWO COLOURS AND NOTHING ELSE.
+       Every team of a garment is the same master PNG behind the same two masks,
+       so "recolour the doll" is literally two `style.background` writes on spans
+       that are already on screen: no restageDoll, no innerHTML, no decode, no
+       reflow. That is what makes it safe to drive off a scroll handler at one
+       write per animation frame.
+       `slot` scopes the selector, because a stack can wear four football pieces
+       and `.fb-tint` alone would repaint all of them (see footballTintHtml).
+       PAINT RETURNS THE SPAN COUNT and the caller checks it: a stage that grew
+       zero tint spans means the doll is NOT showing this garment, and silently
+       painting nothing is how a rail looks like it works while doing nothing at
+       all (tests/football-rail-audit.mjs row RAIL-DOLL).
+       SCROLLING IS THE PLATFORM'S. scroll-snap-type on .fb-rail does the
+       momentum and the landing; this only reads which tile ended up under the
+       centre. rail.scrollTo, never scrollIntoView: scrollIntoView walks up and
+       scrolls the PAGE too, and this app does not move a player's scroll
+       position for them. */
+    (() => {
+      const rail = $('.fb-rail', content);
+      if (!rail) return;
+      const cells = $$('[data-fbteam]', rail);
+      /* RECTS, NOT offsetLeft. offsetLeft happens to be right here (nothing
+         between the tile and the page is positioned) and it stops being right
+         the moment anything in the wardrobe grows a `position`, because it is
+         measured from the offsetParent and not from the scroller. Two rects
+         plus the scroller's own scrollLeft cannot be wrong about which box is
+         where, whatever the layout does later. */
+      const centreOn = (cell, behavior) => {
+        const cr = cell.getBoundingClientRect(), rr = rail.getBoundingClientRect();
+        rail.scrollTo({ left: rail.scrollLeft + (cr.left - rr.left) - (rail.clientWidth - cr.width) / 2, behavior });
+      };
+      const paint = teamId => {
+        const tints = footballTints(BH_BY_ID[fbId(teamId)]) || [];
+        /* BOTH copies of the character, and NOT the look panel's "Now" figure:
+           that one states what is currently worn and a rail preview repainting
+           it would erase the only before-picture on the screen. */
+        const spans = $$(`.bh-stage.lg .fb-tint[data-fbslot="${slot}"], .fbr-fig .fb-tint[data-fbslot="${slot}"]`, content);
+        /* PAIRED BY MASK, NEVER BY INDEX. There are TWO stacks on screen (the
+           paper doll and the rail's own figure), so the span list runs
+           [a, b, a, b] while `tints` is [a, b]: zipping them by position painted
+           the doll and left the figure -- the copy the player is actually
+           looking at while sliding -- on the old team, and reported a healthy
+           span count while doing it. Measured 2026-09-04: spans 4, painted 2.
+           The mask filename IS the region, so it is the key that cannot drift
+           with the number of stacks or with a one-colour garment. */
+        const byMask = new Map(tints.map(t => [t.mask.slice(t.mask.lastIndexOf('/') + 1), t.hex]));
+        let painted = 0;
+        for (const s of spans) {
+          const m = (s.style.getPropertyValue('--fbm').match(/([^/'"]+\.png)/) || [])[1];
+          const hex = byMask.get(m);
+          if (hex) { s.style.background = hex; painted++; }
+        }
+        return painted;
+      };
+      const wireBar = () => {
+        $('[data-fbwear]', content)?.addEventListener('click', async e => {
+          const id = e.currentTarget.dataset.fbwear;
+          await equip(slot, id);
+          S.lookPreview = null;
+          popSound(S.sounds); pushProfileSoon();
+          // same in-place swap the grid's own equip uses, and the same fallback
+          if (!(await restageWardrobe(content, slot))) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
+          eq[slot] = rawEq[slot] = id;
+          relabel(); refreshBar();
+        });
+        $('[data-fbshop]', content)?.addEventListener('click', e => {
+          /* The rail never sells. It hands the decision to the one till there is
+             (buyFootballItem, behind the Kit room), with the team already picked
+             and the shelf already open, so the button goes where it says. */
+          S.fbTeam = e.currentTarget.dataset.fbshop;
+          S.fbJump = true;
+          openCharacter('shop');
+        });
+      };
+      const refreshBar = () => { const b = $('.fb-bar', content); if (b) { b.outerHTML = fbBarHtml(); wireBar(); } };
+      const relabel = () => cells.forEach(c => {
+        const on = c.dataset.fbteam === railTeam;
+        c.classList.toggle('on', on);
+        c.setAttribute('aria-selected', String(on));
+        const tag = $('small', c);
+        if (tag) tag.innerHTML = fbTag(c.dataset.fbteam);
+      });
+      const select = teamId => {
+        if (!teamId || teamId === railTeam) return;
+        railTeam = teamId;
+        paint(teamId);
+        relabel(); refreshBar();
+      };
+      let raf = 0;
+      rail.addEventListener('scroll', () => {
+        if (raf) return;
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          const mid = rail.getBoundingClientRect().left + rail.clientWidth / 2;
+          let best = null, bd = Infinity;
+          for (const c of cells) {
+            const r = c.getBoundingClientRect(), d = Math.abs(r.left + r.width / 2 - mid);
+            if (d < bd) { bd = d; best = c; }
+          }
+          if (best) select(best.dataset.fbteam);
+        });
+      }, { passive: true });
+      cells.forEach(c => c.addEventListener('click', () => { select(c.dataset.fbteam); centreOn(c, 'smooth'); }));
+      // open ON the colourway being worn rather than on team #1
+      const worn = cells.find(c => c.dataset.fbteam === railTeam);
+      if (worn) requestAnimationFrame(() => centreOn(worn, 'auto'));
+      wireBar();
+      // test hook (webdriver only): the rail is driven by a real scroll in the
+      // audit, and this is how it reads back what the page thinks is selected
+      if (navigator.webdriver) window.__fbRail = () => ({ team: railTeam, garment: fbGarment, spans: paint(railTeam) });
+    })();
     /* A LOOK TAP MOVES FOUR THINGS AND REBUILDS NOTHING (QA round 23 F1).
        Preview and commit used to call renderCharacter(wrap, 'wardrobe',
        { instant: true }). That rebuilds #chBody, so #chContent held ZERO elements
@@ -16259,7 +16733,38 @@ const nextArtTier = src => {
    ponytail: unbounded Map, but the keys are asset paths from a closed set of a
    few hundred art files at four ints each; evict if that ever stops being true. */
 const TRIM_BOX = new Map();
-function drawTrimmedArt(canvas, src, pad = 0.08) {
+/* Football kit, 2026-09-04: THE CANVAS TILES HAD NO TEAM COLOUR.
+   Every football garment is one grey master plus two masked multiply layers, and
+   that mechanism is CSS (.fb-tint, a span masked by an alpha PNG). A <canvas>
+   cannot carry a CSS mask, so every canvas tile in the app painted the bare
+   master: measured on the Wardrobe's Hat grid, four Boneyard Bruisers helmets
+   rendered as four identical white helmets with 0 pixels of #14213D in any of
+   them, and a player owning two teams could not tell their kits apart.
+   The same two layers, drawn instead of styled: mask cropped and scaled by the
+   master's own trim box (the masks share its 640 canvas, so one transform serves
+   both), filled through source-in, composited multiply. A tile with no tints is
+   byte-identical to before. ONE painter serves .ward-art, .pd-art, .t3-art, the
+   crew chips and the pack cards, so this is the only place it belongs. */
+const loadArt = src => new Promise((res, rej) => {
+  const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src;
+});
+async function paintFootballTints(ctx, tints, box, dest) {
+  const [x0, y0, bw, bh] = box, [dx, dy, dw, dh] = dest;
+  const lay = document.createElement('canvas'); lay.width = ctx.canvas.width; lay.height = ctx.canvas.height;
+  const lc = lay.getContext('2d');
+  for (const t of tints) {
+    let m; try { m = await loadArt(t.mask); } catch { continue; }   // a missing mask loses a colour, never the tile
+    lc.globalCompositeOperation = 'source-over';
+    lc.clearRect(0, 0, lay.width, lay.height);
+    lc.drawImage(m, x0, y0, bw, bh, dx, dy, dw, dh);
+    lc.globalCompositeOperation = 'source-in';
+    lc.fillStyle = t.hex; lc.fillRect(0, 0, lay.width, lay.height);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.drawImage(lay, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+}
+function drawTrimmedArt(canvas, src, pad = 0.08, tints = null) {
   return new Promise(res => {
     const img = new Image();
     img.onload = () => {
@@ -16284,7 +16789,7 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
          stepping only while the ink is still too small. */
       if (Math.max(bw, bh) < SMALL_INK) {
         const up = nextArtTier(src);
-        if (up) return void drawTrimmedArt(canvas, up, pad).then(res);
+        if (up) return void drawTrimmedArt(canvas, up, pad, tints).then(res);
       }
       const cw = canvas.width, ch = canvas.height, p = 1 - pad * 2;
       // Upscale cap + two-step scaling keep small source art (e.g. a 43px
@@ -16305,6 +16810,10 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
       }
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(from, sx, sy, sw, sh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+      if (tints && tints.length) {
+        paintFootballTints(ctx, tints, [x0, y0, bw, bh], [(cw - dw) / 2, (ch - dh) / 2, dw, dh]).then(res, res);
+        return;
+      }
       res();
     };
     /* A MISSING IMAGE MUST NOT LEAVE AN EMPTY CANVAS.
@@ -16737,7 +17246,8 @@ function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
      layer degrades the card to a missing garment, never to a hung reveal
      (anti-regression rule 8). */
   return Promise.all([
-    ...$$(sel, scope).map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined)),
+    ...$$(sel, scope).map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined,
+      cv.dataset.tints ? JSON.parse(cv.dataset.tints) : null)),
     ...$$('.pc-worn img', scope).map(im => im.decode().catch(() => {})),
   ]);
 }
@@ -17851,8 +18361,15 @@ async function openStable(opts = {}) {
        to forget.
        The tile art is petShotHtml, the shop's own product shot, so a piece
        looks the same in the wardrobe as it did on the tile you bought it from. */
-    const cfWear = (() => {
-      if (!roster.some(x => x.sp === PET_SHOP.pet.id)) return '';
+    /* Football kit, 2026-09-04: ONE PANEL PER SPECIES THAT HAS A WARDROBE, each
+       tagged data-pwsp and hidden unless its species is in front; the spin
+       handler flips `hidden` by that tag. Bumbleseal's panel is unchanged in
+       content; the Beardie (and the Day One Lizard) gets one the moment a
+       football piece drawn for it is owned, and no panel otherwise. */
+    const petSlotCodes = new Set(PET_SLOTS.map(sl => sl.code));
+    const cfWear = [...new Set(roster.map(x => x.sp))].map(sp => {
+      const petItems = BH_ITEMS_WITH_UNRELEASED.filter(i => petSlotCodes.has(i.slot) && petCanWear(i, sp));
+      if (sp !== PET_SHOP.pet.id && !petItems.some(i => ownedCos.has(i.id))) return '';
       /* BUILT WHENEVER SHE IS IN THE ROSTER, HIDDEN WHEN SHE IS NOT IN FRONT.
          Spinning the ring never re-runs render() (a full rebuild would fight the
          drag), so the four action buttons are repainted in place instead, and a
@@ -17861,26 +18378,28 @@ async function openStable(opts = {}) {
          The content does not depend on WHICH instance is focused: there is one
          Bumbleseal and one wardrobe. So only visibility moves, and the spin
          handler owns it. */
-      const shown = !!focused && focused.sp === PET_SHOP.pet.id;
-      const her = (BH_BY_ID[PET_SHOP.pet.id] || {}).name || 'your pet';
-      const mine = PET_SHOP.items.filter(i => ownedCos.has(i.id) && BH_BY_ID[i.id]);
+      const shown = !!focused && focused.sp === sp;
+      const her = (BH_BY_ID[sp] || {}).name || 'your pet';
+      const mine = petItems.filter(i => ownedCos.has(i.id));
       if (!mine.length) {
-        return `<div class="pet-wear"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+        return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
           <p class="note pw-empty">Nothing to wear yet. Gwart's Menagerie stocks ${PET_SHOP.items.length} pieces, all drawn for her.</p></div>`;
       }
-      return `<div class="pet-wear"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+      return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
         <div class="pw-row">${mine.map(i => {
           const a = BH_BY_ID[i.id];
           const on = S.petWear[a.slot] === i.id;
           const slotLbl = (PET_SLOTS.find(sl => sl.code === a.slot) || {}).label || a.slot;
+          // a football piece has no product-shot sheet, so its tile is the pet wearing it
+          const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, 192) : petShotHtml(i.id, 62);
           return `<button class="pw-item r-${a.rarity}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}">
-            <span class="pw-art">${petShotHtml(i.id, 62)}</span>
+            <span class="pw-art">${tile}</span>
             <b>${esc(a.name)}</b>
             <small>${on ? 'WORN' : esc(slotLbl)}</small>
           </button>`;
         }).join('')}</div>
         <p class="note pw-hint">Tap to put a piece on. Tap it again to take it off. One per spot.</p></div>`;
-    })();
+    }).join('');
 
 
 
@@ -18080,8 +18599,8 @@ async function openStable(opts = {}) {
        phone the overflow is negative and this is a no-op, which is why the
        Paddock door still greets you there. Idempotent, so the re-render after a
        tap lands you back looking at her rather than at the top of the sheet. */
-    const pwPanel = $('.pet-wear', body);
-    const pwTile = pwPanel && !pwPanel.hidden && $('.pw-item', pwPanel);
+    const pwPanel = $$('.pet-wear', body).find(p => !p.hidden);   // Football kit, 2026-09-04: several panels, one shown
+    const pwTile = pwPanel && $('.pw-item', pwPanel);
     const pwFrame = $('#cfFrame', body);
     if (pwTile && pwFrame) {
       const view = body.getBoundingClientRect();
@@ -18439,8 +18958,7 @@ async function openStable(opts = {}) {
       if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'BREEDING' : 'BREED'; brB.classList.toggle('on', inSel); }
       if (dsB) { dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `DESTROY ${dustVal}`; }
       // her wardrobe follows the ring: shown only while she is the pet in front
-      const pwB = $('.pet-wear', body);
-      if (pwB) pwB.hidden = inst.sp !== PET_SHOP.pet.id;
+      $$('.pet-wear', body).forEach(pwB => { pwB.hidden = pwB.dataset.pwsp !== inst.sp; });   // Football kit, 2026-09-04
     }
 
     // No card-click-to-open-talents any more: on a carousel a tap means "bring
@@ -21819,7 +22337,9 @@ function foeOutfitFor(name) {
   for (const slot of BH_SLOTS) {
     if (slot.code === 'B' || slot.code === 'SK' || slot.code === 'YD' || slot.code === 'BG') continue;
     if (seedRand() < 0.5) {
-      const pool = BH_ITEMS.filter(i => i.slot === slot.code && !i.file);
+      // !i.football for the same reason randomOutfit carries it: a Pit opponent
+      // is a figure nobody chose, and it must not wear the shop's paid kit free.
+      const pool = BH_ITEMS.filter(i => i.slot === slot.code && !i.file && !i.football);
       if (pool.length) eq[slot.code] = pool[Math.floor(seedRand() * pool.length)].id;
     }
   }
