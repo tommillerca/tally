@@ -4,6 +4,20 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 475, date: '2026-09-05', title: 'The rack holds still, and the Crew gets honest', items: [
+    'The Today page finally mentions the Locker Room. A News row announces it the moment it opens, above the fold, and tapping the row drops you straight into the Shop with the room already open.',
+    'The full-kit tile in the Locker Room shows all five pieces in five different teams now, not one two-tone disc, so it actually looks like you\'re getting all 32 colours instead of just the one you were previewing.',
+    'The lizard\'s two Locker Room tiles were blurry (upscaled from a smaller source than everything around them). They\'re sharp now.',
+    'The Rack\'s rotating twelve now actually rotate once a week, on the same clock as everything else on the shelf, instead of quietly reshuffling every night. The scarcity clock moved up into Gwart\'s own header, and the week\'s first free reroll now sits right beside the rotating shelf instead of far below it.',
+    'The Bonehead tab in the hub goes back to landing on the Wardrobe, the way it always has from every other tab. It had briefly started remembering the Shop instead, which wasn\'t the rule.',
+    'The coin balance on the Shop\'s rack now taps through to Today, same as the dust balance already did. And a coins-only gift from your Crew opens with a real "Spend it in the Shop" button instead of a line of text that went nowhere.',
+    'The rack\'s "can afford X of Y" counter stops counting pieces you already own. Buy something and the numbers actually move.',
+    'Crew got more honest: your onboarding name is the one that reaches the Crew now, instead of a random handle; your race rank shows the real number below 10th instead of a guess; a clock that\'s actually wrong gets called out as clock trouble instead of blamed on the server; last week\'s champion stays named on the board all week, not just for one lucky request; and long names stop truncating (or reversing) silently.',
+    'The Crew tab: a gift you haven\'t opened sits in its own card right at the top instead of buried far down the page. The WORTH ADDING card opens small with a See more button instead of always showing five strangers. Tapping a friend\'s card beside the featured one in the fan now actually brings that friend forward. And cheers with an apostrophe read like English again.',
+    'Three ways a crash used to cost you money got fixed at once: a rack buy, yesterday\'s day-close crate, and any quest claim now pay in one indivisible step. A crash or a bad save between paying and receiving no longer leaves you charged for nothing, or reading as claimed while paying nothing.',
+    'A friends/profile sync that failed used to still mark itself as attempted, so the next few minutes of app opens silently gave up instead of retrying. A failed sync no longer starts that cooldown; the very next open tries again for real.',
+  ] },
+
   { n: 474, date: '2026-09-05', title: 'The Locker Room opens, and the rack costs more', items: [
     'The Locker Room opened in the Shop: a football kit for your Bonehead and the lizard, five pieces Cam drew once and the game tints for 32 invented teams. A helmet, a jersey and cleats for you; a matching helmet and jersey for the lizard. Buy one piece and it is yours in every team\'s colours, 4,200 coins a piece, or take the whole kit for 16,800 - and if you already own a piece or two, the kit only charges you for what is still missing. Every buy button on the shelf is now a full-size tap target, and one you cannot afford still answers with exactly how many coins you are short instead of going dead.',
     'The Wardrobe already showed you the football kit\'s 32 colours as a rail under one tile; your Collection and the Stable now do the same for every colourway family in the game, not just football. Owning a lot of one drawing in different tints used to mean a tile for every tint. It is one tile per drawing now, with a count badge, and a tap opens the rail to every colour you own.',
