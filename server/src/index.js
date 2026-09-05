@@ -1644,10 +1644,17 @@ async function notifyFriendship(env, aId, bId, now = Date.now()) {
       const r = (rows.results || []).find(x => x.id === id);
       return (r && (r.name || r.handle)) || 'A Bonehead';
     };
-    const key = `crew-${a}-${b}`;
+    /* THE KEY NAMES THE OTHER PLAYER, NOT THE PAIR, and that is a delete rule
+       rather than a style. UNIQUE is (player_id, key), so `crew-<them>-pair` is
+       already unique on my row and still deterministic, which is all the
+       idempotence needs. What it buys is that every crew row mentioning a
+       player starts with that player's id, so POST /account/delete removes them
+       all with one range and no name or id of a deleted account survives on
+       anybody else's feed. A pair key would have left both. Unlike a gift, a
+       crew row carries no value, so deleting it cannot cost anyone anything. */
     const row = (to, other) => env.DB.prepare(
       'INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
-      .bind(to, key, 'crew', JSON.stringify({ note: `You and ${nameOf(other)} are Crew now.` }), now);
+      .bind(to, `crew-${other}-pair`, 'crew', JSON.stringify({ note: `You and ${nameOf(other)} are Crew now.` }), now);
     await env.DB.batch([row(a, b), row(b, a)]);
   } catch (e) { console.log('notifyFriendship failed', String(e)); }
 }
@@ -3189,7 +3196,7 @@ export default {
            cheers inbox as though somebody had cheered THEM. */
         const toName = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(to).first();
         await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
-          .bind(auth.playerId, `crew-cheerack-${to}-${day}-${ck || Date.now()}`, 'crew',
+          .bind(auth.playerId, `crew-${to}-cheerack-${day}-${ck || Date.now()}`, 'crew',
             JSON.stringify({ note: `${(toName && (toName.name || toName.handle)) || 'Your friend'} got your cheer.` }), Date.now())
           .run().catch(e => console.log('cheer receipt failed', String(e)));
         return json({ ok: true });
@@ -3331,6 +3338,15 @@ export default {
           env.DB.prepare('DELETE FROM friendships WHERE a = ? OR b = ?').bind(id, id),
           env.DB.prepare('DELETE FROM trades WHERE from_p = ? OR to_p = ?').bind(id, id),
           env.DB.prepare('DELETE FROM pvp_fights WHERE challenger = ? OR defender = ?').bind(id, id),
+          /* CREW NEWS ABOUT A DELETED PLAYER IS DELETED, not scrubbed. Every
+             crew row naming somebody is keyed `crew-<their id>-...` precisely so
+             this one range reaches all of them on everybody else's feed: the
+             "you two are Crew now" line and the receipt for a cheer they
+             received. The gift and cheer rows above are scrubbed instead of
+             deleted because rewriting THEIR key rewrites the client's ledger key
+             and a rolled-back cursor would re-pay a real gift. A crew row pays
+             nothing, so it has no such claim on the id. */
+          env.DB.prepare('DELETE FROM grants WHERE key >= ? AND key < ?').bind(`crew-${id}-`, `crew-${id}-￿`),
           env.DB.prepare('DELETE FROM grants WHERE player_id = ?').bind(id),
           env.DB.prepare('DELETE FROM backups WHERE player_id = ?').bind(id),
           env.DB.prepare('DELETE FROM recovery WHERE player_id = ?').bind(id),

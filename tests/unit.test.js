@@ -4773,6 +4773,123 @@ test('a downloaded build can actually start: boot posts SKIP_WAITING to a waitin
   assert.match(reg, /updatefound/, 'a build that arrives mid-session is never let in');
 });
 
+/* ---- QA round 29, S12: the Crew surface says several things that are not true ----
+   Every one of these was DRIVEN on two real accounts against a local worker, so
+   each assertion below is pinned to a measured symptom rather than to a reading
+   of the code. */
+
+test('S12: the friending toast names the two buttons B actually gets', () => {
+  /* Measured: A sent a request and was told "They just enter your code back to
+     seal it." B's screen has an Accept and an Ignore on the request row and no
+     text field anywhere near it. */
+  /* FIVE call sites said this and no two agreed. Graded across the whole file,
+     not at the one the ticket named: the add-a-code box, the leaderboard row,
+     the leaderboard sheet and both arms of the stranger profile all send the
+     same request and all owe the same sentence. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const lies = app.split('\n')
+    .map((l, i) => [i + 1, l])
+    .filter(([, l]) => /Request sent\./.test(l) && !/REQUEST_SENT_MSG/.test(l))
+    .filter(([, l]) => /enter your code back|adding you back/i.test(l));
+  assert.deepEqual(lies, [], `these still describe a flow B is not shown: ${lies.map(([n, l]) => n + ': ' + l.trim()).join(' | ')}`);
+  const m = app.match(/^const REQUEST_SENT_MSG = '([^']+)';$/m);
+  assert.ok(m, 'there is no one string for what happens after a friend request is sent');
+  assert.ok(/Accept/.test(m[1]) && /Ignore/.test(m[1]),
+    `the request message does not name the Accept and Ignore B actually gets: ${m[1]}`);
+  const uses = (app.match(/REQUEST_SENT_MSG/g) || []).length - 1;
+  assert.ok(uses >= 5, `only ${uses} of the five request-sent surfaces use the shared message`);
+});
+
+/* THE LEDGER STAMPED THE PULL, NOT THE SEND. Three cheers sent minutes apart,
+   one app open, three rows reading "just now". Both halves are driven here
+   because neither is the bug on its own: js/social.js has to KEEP the server's
+   ts, and js/app.js has to READ it.
+   Runs the real applyPayload with a spy awardOnce (it is the one line that turns
+   a grant into a ledger row) and the real deliveredWhen + onlineLabel. */
+test('S12: a cheer sent nine minutes ago does not render "just now"', async () => {
+  const social = readFileSync(join(here, '..', 'js', 'social.js'), 'utf8');
+  const sa = social.indexOf('async function applyPayload(');
+  const sb = social.indexOf('\n// Test hook: a grant normally arrives', sa);
+  assert.ok(sa > 0 && sb > sa, 'applyPayload is not where the slice expects in js/social.js');
+  const rows = [];
+  const noop = async () => {};
+  const applyPayload = new Function('awardOnce', 'coinsAdd', 'boneDustAdd', 'grantCrate',
+    'grantConsumable', 'grantEgg', 'grantPet', 'grantGear', 'kvSet',
+    `${social.slice(sa, sb)}; return applyPayload;`)(
+    async (key, type, xp, label, date, extra) => { rows.push({ ...(extra || {}), key, type, xp, label, ts: Date.now() }); return { claimed: true, xp }; },
+    noop, noop, noop, noop, noop, noop, noop, noop);
+
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const oa = app.indexOf('function onlineLabel(');
+  const ob = app.indexOf('\nconst S = {', oa);
+  const da = app.indexOf('const deliveredWhen = ');
+  const db_ = app.indexOf('\nasync function crewCheers(', da);
+  assert.ok(oa > 0 && ob > oa && da > 0 && db_ > da, 'onlineLabel/deliveredWhen are not where the slice expects in js/app.js');
+  const deliveredWhen = new Function(`${app.slice(oa, ob)}\n${app.slice(da, db_)}; return deliveredWhen;`)();
+
+  const SENT = Date.now() - 9 * 60000;
+  await applyPayload('cheer-k1', 'cheer', { cheer: 3, cheerFrom: 'p2', from: 'Dusty Lulu', note: 'Dusty Lulu cheered you' }, SENT);
+  assert.equal(rows.length, 1, 'setup: the spy ledger took no row, so nothing below is being graded');
+  assert.equal(rows[0].sentAt, SENT,
+    'the ledger row carries no send time: the grant ts is dropped at applyPayload and every reader downstream sees the ingest stamp');
+  assert.equal(deliveredWhen(rows[0]), '9m ago',
+    `a cheer sent nine minutes ago rendered "${deliveredWhen(rows[0])}"`);
+  // and the ingest stamp is a different number, so the assertion above could have failed
+  assert.notEqual(rows[0].ts, SENT, 'setup: ingest and send time are the same instant here, so this proves nothing');
+});
+
+test('S12: a row with no send time falls back to ingest and says so', () => {
+  /* Every cheer and gift already in a player's ledger predates the fix and has
+     no sentAt to recover. Reprinting the ingest stamp as though it were the send
+     time is the bug; saying which one it is, is not. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const oa = app.indexOf('function onlineLabel(');
+  const ob = app.indexOf('\nconst S = {', oa);
+  const da = app.indexOf('const deliveredWhen = ');
+  const db_ = app.indexOf('\nasync function crewCheers(', da);
+  assert.ok(oa > 0 && ob > oa && da > 0 && db_ > da, 'onlineLabel/deliveredWhen are not where the slice expects in js/app.js');
+  const deliveredWhen = new Function(`${app.slice(oa, ob)}\n${app.slice(da, db_)}; return deliveredWhen;`)();
+  const old = { key: 'k', type: 'cheer', label: 'Someone cheered you', ts: Date.now() - 9 * 60000 };
+  assert.equal(deliveredWhen(old), 'arrived 9m ago',
+    `a pre-fix row rendered "${deliveredWhen(old)}" instead of naming the time as an arrival`);
+  assert.equal(deliveredWhen({ ts: Date.now() }), 'arrived just now', 'a fresh pre-fix row lost its label');
+  assert.equal(deliveredWhen({ sentAt: Date.now() }), 'just now', 'a row WITH a send time must not be labelled as an arrival');
+});
+
+test('S12: both sides are told a friendship completed, and a cheer is receipted to its sender', () => {
+  /* A waited 45 seconds after B accepted with nothing but analytics on the wire.
+     There is exactly one delivery channel for "a friend did something" in this
+     app -- the grants feed -- so this asserts the news goes onto THAT rather
+     than onto a new one, and that the client has somewhere to show it. */
+  const srv = readFileSync(join(here, '..', 'server', 'src', 'index.js'), 'utf8');
+  assert.match(srv, /async function notifyFriendship\(/, 'nothing on the server tells either side a friendship completed');
+  const na = srv.indexOf('async function notifyFriendship(');
+  const body = srv.slice(na, srv.indexOf('\n/* ---------------- daily-capped grants', na));
+  assert.ok(body.length > 200, 'setup: notifyFriendship body not found, so the assertions below prove nothing');
+  assert.equal((body.match(/INSERT OR IGNORE INTO grants/g) || []).length, 1, 'the pair of rows is not built from one statement');
+  assert.match(body, /row\(a, b\), row\(b, a\)/, 'only one side of the pair is told');
+  /* Keyed by the player it NAMES, which is what lets POST /account/delete reach
+     every crew row about a deleted account with one range. */
+  assert.match(body, /`crew-\$\{other\}-pair`/, 'a crew row is not keyed by the player it names');
+  const del = srv.slice(srv.indexOf("path === '/account/delete'"), srv.indexOf("path === '/events'"));
+  assert.match(del, /DELETE FROM grants WHERE key >= \? AND key < \?[\s\S]{0,80}crew-\$\{id\}-/,
+    'a deleted account keeps its name and its id on its friends\' crew news for a year');
+  // both completion paths: the explicit accept AND the reciprocated request
+  const accept = srv.slice(srv.indexOf("path === '/friends/accept'"), srv.indexOf("path === '/friends/remove'"));
+  assert.match(accept, /notifyFriendship\(/, '/friends/accept completes a friendship and tells nobody');
+  const req = srv.slice(srv.indexOf('async function requestFriendship('), na);
+  assert.match(req, /status === 'accepted'[\s\S]*notifyFriendship\(/, 'a reciprocated request auto-accepts and tells nobody');
+  // the cheer receipt, on the landed path only
+  const cheer = srv.slice(srv.indexOf("path === '/cheer' && request.method === 'POST'"), srv.indexOf("path === '/me' && request.method === 'GET'"));
+  assert.match(cheer, /crew-\$\{to\}-cheerack-/, 'a cheer still leaves no trace on the side that sent it');
+  assert.ok(cheer.indexOf('-cheerack-') > cheer.indexOf("code: 'limit' }, 429"),
+    'the cheer receipt is written before the cap refusal, so a refused cheer would be receipted');
+  // and the client can show a crew-typed grant at all
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /DELIVERY_TYPES = new Set\(\[[^\]]*'crew'/, "Deliveries does not list 'crew' rows, so the news lands in the ledger and is never shown");
+  assert.match(app, /g\.type === 'crew'[\s\S]{0,120}crewNews\.push/, 'a crew-typed grant falls through every reveal branch and arrives silently');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

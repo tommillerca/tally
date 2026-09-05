@@ -2684,6 +2684,15 @@ async function refreshCrateBadge() {
  * So this is a reader, not a new store: no schema change, and every gift ever
  * received is already in the list the first time you open it.
  */
+/* WHAT B ACTUALLY SEES, IN ONE PLACE. Five call sites told the sender what
+   happens next and no two of them agreed, and none of them was true: "They just
+   enter your code back to seal it" and "They accept by adding you back" both
+   describe the long way round (reciprocating DOES auto-accept, see
+   requestFriendship on the server) rather than the request row with an Accept
+   and an Ignore on it that B is actually shown, and which needs no typing at
+   all. Driven in round 29 (S12) on two real accounts. */
+const REQUEST_SENT_MSG = 'Request sent. They get Accept or Ignore in their Crew tab.';
+
 /* 'crew' is the news a friendship completed and the receipt for a cheer you
    sent (S12): both are things that happened in the Crew, and Deliveries is the
    only durable place in the app that lists those. */
@@ -11485,13 +11494,7 @@ async function renderFriends(el) {
     }
     inp.value = '';
     if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
-    /* WHAT B ACTUALLY SEES. This said "They just enter your code back to seal
-       it", which describes a flow that does not exist: B gets a request row in
-       their Crew tab with Accept and Ignore on it and types nothing. Driven in
-       round 29 (S12). Entering your code back DOES also accept (see
-       requestFriendship on the server), but it is the long way round and it is
-       not what the app shows them. */
-    else toast('Request sent. They get Accept or Ignore in their Crew tab.', 3600);
+    else toast(REQUEST_SENT_MSG, 3600);
     await paint();
   };
 
@@ -11668,7 +11671,7 @@ async function renderFriends(el) {
       const r = await social.friendAdd(b.dataset.lbadd);
       if (!r.ok) { b.disabled = false; b.textContent = '+ Add'; toast('Could not send that request. Try again.', 2600); return; }
       if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); b.outerHTML = `<span class="lb-tag crew">${ICONS.check(11)} Crew</span>`; }
-      else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); b.outerHTML = '<span class="lb-tag sent">Sent</span>'; }
+      else { popSound(S.sounds); toast(REQUEST_SENT_MSG, 3200); b.outerHTML = '<span class="lb-tag sent">Sent</span>'; }
       await paint();
     }));
   };
@@ -11915,7 +11918,7 @@ async function renderFriends(el) {
       const r = await social.friendAdd(b.dataset.lbadd);
       if (!r.ok) { b.disabled = false; b.textContent = '+ ADD'; toast('Could not send that request. Try again.', 2600); return; }
       if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
-      else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); }
+      else { popSound(S.sounds); toast(REQUEST_SENT_MSG, 3200); }
       await paint();
       hydrateNewcomers();
     }));
@@ -12040,7 +12043,7 @@ function openFriendProfile(f, onChange, opts = {}) {
       ${stranger ? (opts.isCrew
         ? `<p class="note" style="text-align:center;margin:6px 0 0">Already in your Crew.</p>`
         : opts.sent
-          ? `<p class="note" style="text-align:center;margin:6px 0 0">Request sent. They accept by adding you back.</p>`
+          ? `<p class="note" style="text-align:center;margin:6px 0 0">${REQUEST_SENT_MSG}</p>`
           /* NO TOKEN, NO BUTTON. friendAdd(undefined) is a guaranteed failure
              and all the player sees is "Could not send that request. Try
              again.", forever. A row can legitimately arrive without one: a
@@ -12084,7 +12087,7 @@ function openFriendProfile(f, onChange, opts = {}) {
     const r = await social.friendAdd(f.addToken);
     if (!r.ok) { b.disabled = false; b.textContent = '+ Add to my Crew'; toast(r.reached === false ? 'Could not reach the Crew server. Try again when you have signal.' : 'Could not send that request. Try again.', 3000); return; }
     if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
-    else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); }
+    else { popSound(S.sounds); toast(REQUEST_SENT_MSG, 3200); }
     b.outerHTML = `<p class="note" style="text-align:center;margin:6px 0 0">${r.status === 'accepted' ? 'Already in your Crew.' : 'Request sent.'}</p>`;
     onChange && onChange();
   });
