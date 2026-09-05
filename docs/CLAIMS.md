@@ -27,6 +27,12 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 1. PROOF: unit.test.js | REACH: Logging a forgotten meal onto a past day (the day's Add sheet, a relog, Quick add) no longer pays XP, a streak milestone, or a badge. Past days stay fully editable — an existing entry there still saves after being edited — but only a log dated today earns a reward. Gwart's line on a past day no longer claims the day is "finished"; it now says the day is open to fix, just unpaid.
 
+## food form (2026-09-05)
+
+1. PROOF: meal-memory-audit.mjs (MYFOODS_NEW) | REACH: Add Food, pick a meal, tap My foods, tap Create a food: the portion screen you land on keeps the meal you picked instead of jumping back to Breakfast.
+2. PROOF: input-validation-audit.mjs (QTY-COMMA) | REACH: On the portion screen, typing a thousands-comma amount like "1,234" into Servings is still refused, and now the field and the preview agree about it: the box keeps showing what you typed and the preview goes blank, instead of the box quietly showing "0.25" next to a preview still reading "0 kcal".
+3. PROOF: a11y-audit.mjs (foodFieldNames) | REACH: A screen reader creating a custom food, or using Quick add, now hears each number field by name (Calories, Protein, Carbs, Fat, Sodium, Grams, and so on) instead of an unlabelled textbox, or three identical fields for Protein, Carbs and Fat.
+
 ## r34 backup version (2026-09-05)
 
 1. PROOF: backup-conflict-audit.mjs (gate-registered PURE), api.test.mjs (local Worker) | REACH: Two devices that edit from the same cloud backup no longer overwrite each other. The stale device pulls the winner, merges both saves, and retries once.

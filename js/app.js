@@ -8568,7 +8568,17 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
       const qin = $('#qtyIn', wrap);
       qin.addEventListener('input', e => { amtRaw = e.target.value; sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
       qin.addEventListener('focus', () => qin.select());
-      qin.addEventListener('blur', () => { if (!(sel.qty > 0)) { sel.qty = 0.25; } qin.value = fmtQty(sel.qty); qin.setAttribute('aria-valuenow', sel.qty); });
+      qin.addEventListener('blur', () => {
+        // P2 playtest: "1,234" is refused by numParse (grouped, ambiguous with a
+        // decimal comma) but blur used to clamp the FIELD to 0.25 regardless,
+        // so it looked valid while amtRaw (what Add actually checks) still held
+        // the refused text. Leave invalid text on screen; only a genuinely
+        // blank field gets the 0.25 default.
+        if (amtRaw != null && !numParse(amtRaw).ok && numParse(amtRaw).why !== 'empty') return;
+        if (!(sel.qty > 0)) { sel.qty = 0.25; }
+        qin.value = fmtQty(sel.qty);
+        qin.setAttribute('aria-valuenow', sel.qty);
+      });
       $$('.t1-step button', qtyArea).forEach(b => b.addEventListener('click', () => {
         amtRaw = null;
         sel.qty = Math.max(0.25, Math.round(((sel.qty || 1) + Number(b.dataset.d)) * 100) / 100);
@@ -8586,32 +8596,40 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     });
   }
 
+  /* P2 playtest: while amtRaw holds text numParse refuses (e.g. "1,234",
+     grouped/ambiguous with a decimal comma), sel.qty/grams already sit at
+     whatever the live-typing coercion left them (usually 0), so the old
+     preview showed "0 kcal" and "0 x 1 large": a valid-looking answer the
+     draft does not actually hold. Blank it instead, same signal the Add
+     toast gives; a genuinely blank field (why: 'empty') still previews
+     normally off the last valid amount. */
   function preview() {
-    const n = nutrientsFor(food, sel) || { kcal: 0, p: 0, c: 0, f: 0 };
+    const badRaw = amtRaw != null && !numParse(amtRaw).ok && numParse(amtRaw).why !== 'empty';
+    const n = badRaw ? null : (nutrientsFor(food, sel) || { kcal: 0, p: 0, c: 0, f: 0 });
     /* M17: the stepper moved 1 to 1.25 with no aria-valuenow change. Every
        amount change (typed, stepped, chip) reaches preview(), so the spinbutton
        is kept in step here; #pvKcal is aria-live, so 282 to 353 is announced. */
     const amtEl = $(sel.mode === 'grams' ? '#gramsIn' : '#qtyIn', wrap);
     if (amtEl) amtEl.setAttribute('aria-valuenow', sel.mode === 'grams' ? sel.grams : sel.qty);
-    $('#pvKcal', wrap).textContent = Math.round(n.kcal).toLocaleString();
+    $('#pvKcal', wrap).textContent = n ? Math.round(n.kcal).toLocaleString() : '-';
     // QA r25 M19 follow-up: custom foods now keep untyped macros as null, and
     // fmtG(null) is '-', which read '-g'. Unknown stays a bare dash.
     const gOr = v => v == null ? '-' : fmtG(v) + 'g';
-    $('#pvP', wrap).textContent = gOr(n.p);
-    $('#pvC', wrap).textContent = gOr(n.c);
-    $('#pvF', wrap).textContent = gOr(n.f);
-    $('#pvServ', wrap).textContent = portionLabel(food, sel) || '';
+    $('#pvP', wrap).textContent = n ? gOr(n.p) : '-';
+    $('#pvC', wrap).textContent = n ? gOr(n.c) : '-';
+    $('#pvF', wrap).textContent = n ? gOr(n.f) : '-';
+    $('#pvServ', wrap).textContent = n ? (portionLabel(food, sel) || '') : '';
     /* The bars show THIS food's own macro split, not its share of the day. A
        single apple against a daily protein target is 1% and every bar reads as
        broken; its share of its own calories is always meaningful. */
-    const kp = (n.p || 0) * 4, kc = (n.c || 0) * 4, kf = (n.f || 0) * 9;
+    const kp = n ? (n.p || 0) * 4 : 0, kc = n ? (n.c || 0) * 4 : 0, kf = n ? (n.f || 0) * 9 : 0;
     const sum = kp + kc + kf;
     const bar = (id, part) => {
       const el = $(id, wrap);
       if (el) el.style.width = sum > 0 ? Math.round((part / sum) * 100) + '%' : '0%';
     };
     bar('#pvPBar', kp); bar('#pvCBar', kc); bar('#pvFBar', kf);
-    renderPayoff(n);
+    renderPayoff(n || { kcal: 0, p: 0, c: 0, f: 0 });
     // M16: preview() runs on open and on every portion or meal change, so it is
     // the one place the draft learns about this sheet
     if (addDraft && !editing) stampAddDraft({ sheet: 'portion', foodId: food.id, sel: { ...sel }, meal: curMeal });
@@ -8821,13 +8839,15 @@ function openQuickAdd(getMeal, entry = null) {
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
     </div>
     <div class="sheet-body">
-      <div class="t1-field hot"><label>Calories</label><input id="qaKcal" type="text" inputmode="numeric" placeholder="0" value="${entry ? Math.round(entry.kcal) : ''}"></div>
-      <div class="t1-field"><label>What was it</label><input id="qaName" placeholder="Dinner out (optional)" value="${esc(entry?.name === 'Quick add' ? '' : entry?.name || '')}"></div>
+      <div class="t1-field hot"><label>Calories</label><input id="qaKcal" type="text" inputmode="numeric" placeholder="0" value="${entry ? Math.round(entry.kcal) : ''}" aria-label="Calories"></div>
+      <div class="t1-field"><label>What was it</label><input id="qaName" placeholder="Dinner out (optional)" value="${esc(entry?.name === 'Quick add' ? '' : entry?.name || '')}" aria-label="What was it"></div>
       ${t1Sect('Macros, if you know them')}
       <div class="t1-g3">
-        <div class="t1-field"><label>Protein<span class="u">g</span></label><input id="qaP" type="text" inputmode="decimal" placeholder="·" value="${entry?.p ? fmtG(entry.p) : ''}"></div>
-        <div class="t1-field"><label>Carbs<span class="u">g</span></label><input id="qaC" type="text" inputmode="decimal" placeholder="·" value="${entry?.c ? fmtG(entry.c) : ''}"></div>
-        <div class="t1-field"><label>Fat<span class="u">g</span></label><input id="qaF" type="text" inputmode="decimal" placeholder="·" value="${entry?.f ? fmtG(entry.f) : ''}"></div>
+        <!-- P2 playtest, a11y: all three shared placeholder="." and no label
+             association, so a screen reader read three identical "textbox"es. -->
+        <div class="t1-field"><label>Protein<span class="u">g</span></label><input id="qaP" type="text" inputmode="decimal" placeholder="·" value="${entry?.p ? fmtG(entry.p) : ''}" aria-label="Protein, grams"></div>
+        <div class="t1-field"><label>Carbs<span class="u">g</span></label><input id="qaC" type="text" inputmode="decimal" placeholder="·" value="${entry?.c ? fmtG(entry.c) : ''}" aria-label="Carbs, grams"></div>
+        <div class="t1-field"><label>Fat<span class="u">g</span></label><input id="qaF" type="text" inputmode="decimal" placeholder="·" value="${entry?.f ? fmtG(entry.f) : ''}" aria-label="Fat, grams"></div>
       </div>
       ${entry ? '' : '<p class="note" style="margin-top:2px">Worth +10 XP, same as any other log.</p>'}
       ${entry ? '<div style="height:12px"></div><button class="btn danger" id="qaDel">Delete entry</button>' : ''}
@@ -9174,10 +9194,15 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
     : 0;
   const missing = k => (fromLabel && (v(k) === '' || v(k) == null) ? ' check' : '');
   const flag = k => (missing(k) ? '<span class="t1-tag warn">Check</span>' : '');
+  // P2 playtest, a11y: these numeric fields carried a visual <label> with no
+  // for/id and no aria-label, so a screen reader read every one of them as a
+  // bare "textbox". aria-label spells the unit out (UNIT_WORD) rather than
+  // reading "g" or "mg" as its own word.
+  const UNIT_WORD = { g: 'grams', mg: 'milligrams' };
   const fld = (id, label, key, unit = '', extra = '') => `
     <div class="t1-field${missing(key)}">
       <div class="lbl"><label>${label}${unit ? `<span class="u">${unit}</span>` : ''}</label>${flag(key)}</div>
-      <input id="${id}" type="text" inputmode="${extra || 'decimal'}" value="${v(key)}">
+      <input id="${id}" type="text" inputmode="${extra || 'decimal'}" value="${v(key)}" aria-label="${label}${unit ? ', ' + (UNIT_WORD[unit] || unit) : ''}">
     </div>`;
 
   const wrap = openSheet(`
@@ -9196,12 +9221,12 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
       </div>` : ''}
       <div class="warn" id="ffWarn"${warnings.length ? '' : ' hidden'}>${warnings.map(esc).join('<br>')}</div>
       ${t1Sect('What is it')}
-      <div class="t1-field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || pv.name || '')}"></div>
-      <div class="t1-field"><label>Brand</label><input id="ffBrand" placeholder="Optional" value="${esc(f?.brand || '')}"></div>
+      <div class="t1-field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || pv.name || '')}" aria-label="Name"></div>
+      <div class="t1-field"><label>Brand</label><input id="ffBrand" placeholder="Optional" value="${esc(f?.brand || '')}" aria-label="Brand"></div>
       ${t1Sect('One serving')}
       <div class="t1-g2">
-        <div class="t1-field"><label>Serving</label><input id="ffServ" value="${esc(servingLabel)}"></div>
-        <div class="t1-field"><label>Grams<span class="u">(optional)</span></label><input id="ffGrams" type="text" inputmode="decimal" value="${servingGrams ?? ''}" placeholder="e.g. 55"></div>
+        <div class="t1-field"><label>Serving</label><input id="ffServ" value="${esc(servingLabel)}" aria-label="Serving"></div>
+        <div class="t1-field"><label>Grams<span class="u">(optional)</span></label><input id="ffGrams" type="text" inputmode="decimal" value="${servingGrams ?? ''}" placeholder="e.g. 55" aria-label="Grams, optional"></div>
       </div>
       ${t1Sect('Per serving')}
       <div class="t1-g2">
@@ -11193,7 +11218,9 @@ async function renderFoods(el) {
   }
   function bind() {
     bindRows(list);
-    $('#newFood', list)?.addEventListener('click', () => openFoodForm({}));
+    // P1 playtest: bare {} lost the selected meal (defaulted to Breakfast); every
+    // other opener here carries mealDefault()'s precedence, this one now does too.
+    $('#newFood', list)?.addEventListener('click', async () => openFoodForm({ meal: await mealDefault() }));
     $('#myFoodsQ', list)?.addEventListener('input', e => {
       const q = normFoodName(e.target.value);
       const hit = q ? customs.filter(f => normFoodName(f.name).includes(q)) : customs;
