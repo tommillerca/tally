@@ -54,6 +54,11 @@
  *             tile canvas's PIXELS before and after, never on its data-art
  *             attribute, and with a same-size control so "the canvas changed"
  *             cannot pass on a blank redraw.
+ *   SECOND    ONE FAMILY IS AN ANECDOTE. A second, unrelated family is opened
+ *             (the H13 Blowfish hoods after the H10 headbands, both hand-drawn
+ *             and neither football) and the first rail must have closed: a rail
+ *             per open family would stack nine of them into this grid and undo
+ *             the change, and no row above can see it.
  *   SCROLL    how far the thumb travels to reach the slot's LAST tile, measured
  *             at real scroll positions on the app's real scroller, once with
  *             the flat control in the document and once with the collapsed
@@ -443,6 +448,54 @@ check('WORN exactly the tapped variant is ringed in the rail',
 
 await quiet();
 await page.screenshot({ path: `${DIR}/fam-grid-worn.png` });
+
+/* ---- SECOND: a different family, and only ever one rail -----------------
+   ONE FAMILY IS AN ANECDOTE. The rows above all ran on the H10 headbands; this
+   opens a SECOND, unrelated family (the H13 Blowfish hoods) and asserts the
+   first rail closed when it did. A rail per open family would stack nine rails
+   into this grid and undo the whole change, and nothing above could see it. */
+const second = await page.evaluate(() => {
+  const grid = document.querySelector('.ward-grid[data-wslot]');
+  const open = document.querySelector('.ward-cell.fam[aria-expanded="true"]');
+  const other = [...grid.querySelectorAll('.ward-cell.fam')]
+    .filter(c => c !== open)
+    .sort((a, b) => b.dataset.famIds.split(' ').length - a.dataset.famIds.split(' ').length)[0];
+  if (!other) return null;
+  document.querySelectorAll('[data-probe]').forEach(n => n.removeAttribute('data-probe'));
+  other.scrollIntoView({ block: 'center' });
+  other.dataset.probe = '1';
+  return { first: open && open.dataset.family, family: other.dataset.family,
+    size: other.dataset.famIds.split(' ').length, ids: other.dataset.famIds };
+});
+if (!second) await die('NO SECOND FAMILY TO OPEN', { note: 'the run needs two families to prove one is not a special case' });
+await sleep(400);
+const sBox = await page.evaluate(() => {
+  const r = document.querySelector('[data-probe="1"]').getBoundingClientRect();
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+});
+await page.mouse.click(sBox.x, sBox.y);
+await sleep(1500);
+const sOut = await page.evaluate(() => {
+  const grid = document.querySelector('.ward-grid[data-wslot]');
+  const rails = [...grid.querySelectorAll('.fam-rail')];
+  const r = rails[0];
+  return { rails: rails.length,
+    family: r && r.dataset.family,
+    n: r ? r.querySelectorAll('[data-equip]').length : 0,
+    h: r ? Math.round(r.getBoundingClientRect().height) : 0,
+    y: r ? Math.round(r.getBoundingClientRect().y) : -1,
+    expanded: [...grid.querySelectorAll('.ward-cell.fam[aria-expanded="true"]')].map(c => c.dataset.family) };
+});
+console.log('second family:', JSON.stringify({ picked: second, got: sOut }));
+check('SECOND a different family opens its own rail, the right size, on screen',
+  sOut.family === second.family && sOut.n === second.size && sOut.h > 40 && sOut.y >= 0 && sOut.y < 844,
+  `${second.family} (${second.size} variants, ids ${second.ids}) -> ${sOut.n} tiles, ${sOut.h}px at y=${sOut.y}`);
+check('SECOND exactly one rail is open, and it belongs to exactly one tile',
+  sOut.rails === 1 && sOut.expanded.length === 1 && sOut.expanded[0] === second.family,
+  `${sOut.rails} rails, tiles marked open: ${JSON.stringify(sOut.expanded)} (the first was ${second.first})`);
+
+await quiet();
+await page.screenshot({ path: `${DIR}/fam-grid-second.png` });
 console.log(`shots in ${DIR}`);
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : '\nWARDROBE FAMILIES: ONE TILE PER DRAWING, THE RAIL HOLDS THE REST, THE TILE SHOWS WHAT IS ON');
