@@ -956,7 +956,16 @@ const GIFTBOX = 'giftbox';
  * awardOnce collapses the check and the act into one IndexedDB request
  * (db.addIfAbsent), so exactly one caller anywhere on the device is ever told
  * `claimed: true` for a key, and only that one runs the side effects below. */
-async function applyPayload(key, type, p) {
+/* `sentAt` IS THE SERVER'S ts ON THE GRANT ROW, and it has always been on the
+   wire (GET /grants selects it) and always been thrown away here. Every reader
+   downstream had only the LEDGER row's ts, which awardOnce stamps at the moment
+   of ingest, so the whole feed took the timestamp of the pull that fetched it:
+   round 29 (S12) sent three cheers minutes apart, opened the app once, and all
+   three rendered "just now". Nothing on the device can reconstruct it after
+   this hop, so it is carried onto the row as an extra column. Rows written
+   before this have none, and js/app.js deliveredWhen falls back to the ingest
+   stamp and SAYS it is an arrival time rather than pretending. */
+async function applyPayload(key, type, p, sentAt) {
   /* THE TWO FIELDS A CHEER IS ACTUALLY MADE OF. /cheer sends
      { from, cheer, cheerFrom, note }, and until now only `note` survived the
      trip into the ledger: the INDEX (which of the twelve phrases) and the
@@ -967,7 +976,8 @@ async function applyPayload(key, type, p) {
      it is the wire format and 0 is a legitimate value that `||` would eat. */
   const extra = type === 'cheer'
     ? { cheer: Number.isFinite(+p.cheer) ? +p.cheer : null, cheerFrom: p.cheerFrom || null, from: p.from || null }
-    : null;
+    : {};
+  if (+sentAt > 0) extra.sentAt = +sentAt;
   const claim = await awardOnce(key, type || 'social', p.xp || 0, p.note || 'From the Crew', undefined, extra);
   if (!claim.claimed) return false;            // already ingested: skip side effects too
   if (p.coins) await coinsAdd(p.coins);
@@ -1026,7 +1036,7 @@ export async function openGift(key) {
   /* If applyPayload says no, this key was already ingested somewhere else and
      nothing was paid, so there is nothing to reveal and the caller must not
      play an unwrap for a present that paid nobody. */
-  if (!await applyPayload(g.key, g.type, g.payload || {})) return null;
+  if (!await applyPayload(g.key, g.type, g.payload || {}, g.ts)) return null;
   return g;
 }
 
@@ -1053,7 +1063,7 @@ async function applyGrant(g) {
     }, []);
     return true;    // it landed: it is in your box, sealed
   }
-  return applyPayload(g.key, g.type, p);
+  return applyPayload(g.key, g.type, p, g.ts);
 }
 
 export async function pullGrants() {

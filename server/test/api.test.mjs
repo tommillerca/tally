@@ -697,6 +697,69 @@ await test('friends: accept endpoint seals a one-way request', async () => {
   assert.ok(aList.friends.some(x => x.playerId === p3.playerId));
 });
 
+/* NEITHER SIDE WAS EVER TOLD THE FRIENDSHIP COMPLETED (round 29, S12). Driven
+   on two real accounts: B accepted, A sat for 45 seconds, and nothing but
+   analytics went over the wire. There is one delivery channel for "a friend did
+   something" in this app and it is the grants feed, so both sides get a grant
+   on it. Both COMPLETION paths are graded: the explicit accept, and the
+   reciprocated request that also flips the row to accepted. */
+const crewGrants = async (id, keys) => {
+  const g = await (await signedFetch(keys.kp, id, 'GET', '/grants?since=0')).json();
+  return (g.grants || []).filter(x => x.type === 'crew');
+};
+
+await test('S12 friends: BOTH sides are told when an accept completes the friendship', async () => {
+  const bk = await makeKeys();
+  const b = await (await regFetch(bk.pubJwk)).json();
+  assert.equal((await crewGrants(b.playerId, bk)).length, 0, 'PRECONDITION: a fresh account has no crew news');
+  await signedFetch(bk.kp, b.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
+  assert.equal((await crewGrants(b.playerId, bk)).length, 0, 'a PENDING request is not a completed friendship');
+  const acc = await signedFetch(kp, player.playerId, 'POST', '/friends/accept', JSON.stringify({ id: b.playerId }));
+  assert.equal(acc.status, 200);
+  const mine = await crewGrants(player.playerId, { kp });
+  const theirs = await crewGrants(b.playerId, bk);
+  assert.ok(mine.some(g => g.key === `crew-${b.playerId}-pair`), 'the accepter was not told');
+  assert.ok(theirs.some(g => g.key === `crew-${player.playerId}-pair`),
+    'a crew row is not keyed by the player it names, so account delete cannot reach it');
+  assert.equal(theirs.length, 1, 'the requester was not told exactly once');
+  assert.ok(/are Crew now/.test(theirs[0].payload.note), `the news does not say what happened: ${theirs[0].payload.note}`);
+  // idempotent: a retried accept must not deliver a second time to either side
+  await signedFetch(kp, player.playerId, 'POST', '/friends/accept', JSON.stringify({ id: b.playerId }));
+  assert.equal((await crewGrants(b.playerId, bk)).length, 1, 'a retried accept delivered the news twice');
+});
+
+await test('S12 friends: a reciprocated request completes it too, and tells both sides', async () => {
+  const ck2 = await makeKeys();
+  const c = await (await regFetch(ck2.pubJwk)).json();
+  await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: c.friendCode }));
+  assert.equal((await crewGrants(c.playerId, ck2)).length, 0, 'PRECONDITION: nothing delivered while it is pending');
+  const r = await (await signedFetch(ck2.kp, c.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }))).json();
+  assert.equal(r.status, 'accepted', 'PRECONDITION: reciprocating is what auto-accepts');
+  assert.equal((await crewGrants(c.playerId, ck2)).length, 1, 'the reciprocating side was not told');
+  const mine = await crewGrants(player.playerId, { kp });
+  assert.ok(mine.some(g => g.payload.note.includes('Crew now')), 'the original requester was not told');
+});
+
+await test('S12 cheer: the sender gets a receipt, and a refused cheer does not', async () => {
+  const dk = await makeKeys();
+  const d = await (await regFetch(dk.pubJwk)).json();
+  await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: d.friendCode }));
+  await signedFetch(dk.kp, d.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
+  const before = (await crewGrants(player.playerId, { kp })).length;
+  const ck2 = 'cheertap-' + RUNSUF;
+  const send = () => signedFetch(kp, player.playerId, 'POST', '/cheer', JSON.stringify({ to: d.playerId, cheer: 4, ck: ck2 }));
+  assert.equal((await send()).status, 200);
+  const after = await crewGrants(player.playerId, { kp });
+  const receipts = after.filter(g => g.key.startsWith(`crew-${d.playerId}-cheerack-`));
+  assert.ok(receipts.length >= 1, 'the sender got no receipt for a cheer that landed');
+  assert.equal(after.length, before + 1, 'a cheer wrote more than one row to the sender');
+  assert.ok(/got your cheer/.test(receipts[receipts.length - 1].payload.note),
+    `the receipt does not say the cheer arrived: ${receipts[receipts.length - 1].payload.note}`);
+  // a duplicate returns before the receipt, so a retried tap is not receipted twice
+  assert.equal((await send()).status, 200);
+  assert.equal((await crewGrants(player.playerId, { kp })).length, before + 1, 'a retried cheer wrote a second receipt');
+});
+
 await test('friends: cannot friend your own code', async () => {
   const r = await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
   assert.equal(r.status, 400);
