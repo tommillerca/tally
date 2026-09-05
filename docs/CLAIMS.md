@@ -50,6 +50,70 @@ in its own section below, not folded in here.
 
 11. PROOF: unit.test.js (R-offseam-3) | REACH: Reconnecting (or reopening the app) right as a friends/profile sync attempt failed used to mark that sync as "just tried" even though it never got anywhere, so the next open inside five minutes silently gave up instead of retrying. A failed attempt no longer starts that five-minute wait; the very next open tries again for real.
 
+## crew activity (2026-09-05)
+
+Branch `feat/crew-activity-signal`, not yet stamped to a release. Round 35's
+remaining Crew tickets: CREW-3 (a new player's first race), CREW-4 (a friend's
+play is invisible), CREW-5 (the badge only counts other people), CREW-6 (the
+week close is silent), CREW-13 (spires have no surface on the tab), CREW-14
+(a stranger's empty stats produce "Jab ~NaN dmg").
+
+1. PROOF: unit.test.js (raceStanding: an 11th-place rookie / a rank far outside the visible board / 1st place is never behind anyone, each proven red by reverting the gap back to "against first") | REACH: A new player's race summary now measures the gap to the racer directly above them, never to whoever is first; if that racer is not even visible (a true 40th, say), no gap is shown at all rather than a huge one against a stranger. The minutes estimate on the card is dropped once it passes an hour, and on your first-ever week the card says "Your first race. N friends are in it." instead of any gap.
+2. PROOF: crew-activity-audit.mjs (CREW-4 rows, proved red by dropping the sinceMap wiring in paintFan) | REACH: A friend's card now says the one thing that changed since you last looked -- leveled up, new gear, took a spire -- and stays silent when nothing did. Nothing is invented on the first time you ever see a friend: there is nothing to compare against yet.
+3. PROOF: crew-activity-audit.mjs (CREW-5 rows) | REACH: The Crew badge now also lights up when YOUR OWN race rank improves overnight, not only for cheers, gifts and requests other people sent you.
+4. PROOF: unit.test.js (raceClockLabel, proved red at the `msLeft <= 0` threshold), server/test/api.test.mjs ("a non-podium finisher still gets told where they placed", proved red by disabling the settlement loop) | REACH: The step race card says "settles tonight" for the whole final day instead of never saying it at all; the News row about the race says the purse pays five, not three; and everyone who raced last week, not only the top 5, gets a boot notice naming where they finished, once the week settles.
+5. PROOF: crew-activity-audit.mjs (CREW-13 rows) | REACH: A friend's card and profile show a compact "Holds N spires" line, with a one-line "beat their defender to take one" on the profile, where nothing about spires showed up anywhere on the Crew tab before.
+6. PROOF: unit.test.js (hasFightableStats, proved red by relaxing it to `!!stats`), crew-activity-audit.mjs (CREW-14 rows) | REACH: A friend or stranger whose stats never synced now shows "Their stats will show once they next open the app" instead of five zero-width bars, and offers no Battle button that would otherwise start a fight with no real numbers behind it.
+
+## perf grid and map (2026-09-05)
+
+Branch `perf/grid-and-map`, off `integ/day3`. Round 34 perf lane, two items,
+both measured with `scratchpad/r34/perf/perf-drive.mjs` at CPU 4x, 3 runs,
+medians (a driver row, not a browser-gate audit, per this round's brief).
+
+1. PROOF: wardrobe-family-grid-audit.mjs, football-tile-crop-audit.mjs,
+   memory-census.mjs (wardrobe row, all green), MANUAL medians from
+   perf-drive.mjs `wardrobe` mode, hoarder account (185 owned hats), CPU 4x,
+   opening the Wardrobe's hat slot: main-thread script time 166ms -> 73ms
+   (Performance.getMetrics ScriptDuration), longtask count 3 -> 2, longtask
+   total duration 250ms -> 186ms. memory-census's own OFF-DOM concurrent
+   bitmap row (a stricter, unthrottled instrument) fell from ~12.2 MB to
+   9.3 MB with the fix, TIER stayed 100% trim / 0 masters (292 bh images
+   sampled). | REACH: Wardrobe, any slot with enough colourways to fill more
+   than a couple of screens (Hat on a collector account is the extreme
+   case). Opening the slot no longer decodes and paints every collected
+   tile at once; a canvas paints once it is on screen or about to be
+   (one `.screen`-height of scroll margin on both sides), and a tile
+   scrolled straight past without lingering never pays for a decode it
+   would never show. The family rail, the equipped ring, and the football
+   tint painting are unaffected (all three guards above exercise them
+   directly and stay green).
+2. PROOF: NONE, stopped before writing code; MANUAL cost measured with
+   perf-drive.mjs `boneyard` mode, CPU 4x, 3 runs: a single Boneyard
+   revisit (Today -> Boneyard, map destroyed and rebuilt) costs a median
+   1,089ms of longtask time across 5 tasks, the longest at 462ms
+   (medians of runs at 823/1,267/1,089ms total). | REACH: not shipped.
+   `js/app.js`'s own comments on `holdOutgoing`/`screenCleanup` (the code
+   the task pointed at) say the map's teardown on every navigation away
+   from the Boneyard is deliberate, not an oversight: the "held outgoing
+   copy" mechanism already exists to hide the visual cut and explicitly
+   still runs the real `map.remove()` a moment later, because leaving one
+   map instance's destructor pointed at a DIFFERENT live map after a fast
+   Boneyard -> Today -> Boneyard is the exact bug that comment names.
+   All six marker sets (spawn, den, mini, secret, wanderer, spire) and
+   their poll timers and DOM listeners live inside `renderBoneyard`'s
+   single per-mount closure (~1,500 lines), by design; keeping the map
+   alive across visits means lifting that state to module scope and
+   turning `route()`'s wholesale `#screen` rebuild into a targeted
+   reattach for one screen only, which is a rewrite of the Boneyard's
+   lifecycle, not a surgical fix. None of the three named guards
+   (boneyard-audit.mjs, marker-anchor-audit.mjs, spawn-quiet-audit.mjs)
+   drive a repeated leave-and-return cycle, so a persistence bug (a
+   doubled listener, a marker left in the wrong place after a long time
+   away, a stale follow-cam lock) would ship undetected. Stopping here
+   rather than rearchitecting the screen on a guess; the 1-2s cost is
+   real and measured above but unaddressed.
+
 ## v474
 
 1. PROOF: unit.test.js, football-kit-audit.mjs, MANUAL measured off the rendered Shop screen (buy buttons and the team picker read 40px tall, up from 35.5px and 36px; a buy button below your balance stays enabled and pressable, and a tap answers with the coin shortfall) | REACH: The Locker Room shelf sells five football pieces, a helmet, a jersey, cleats and a matching helmet and jersey for the lizard, each 4,200 coins and yours in all 32 team colours the moment you buy it. Buying the full kit after already owning some of its five pieces charges only for what is missing, never more than the flat 16,800 kit price, and the "you save" line only appears when there really is a saving. Every buy button on the shelf is a full-size tap target, and one you cannot yet afford still responds to a tap and names the shortfall instead of going dead.
