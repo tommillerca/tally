@@ -417,7 +417,7 @@ try {
   const witnessed = await guard.witnessAt(0);
   const ceiling = witnessed + W_GRACE;
   check('witnessing the server sets a ceiling', Number.isFinite(witnessed) && witnessed > 20000,
-    `witness=${witnessed} ceiling=${ceiling} (UTC day ordinals)`);
+    `witness=${witnessed} ceiling=${ceiling} (local calendar day ordinals, 2026-09-05: not UTC any more)`);
   const day0 = await runCycle();
   const rows = [];
   const t0 = Date.now();

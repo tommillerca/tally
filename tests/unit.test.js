@@ -5565,6 +5565,38 @@ test('R26-O10 rule 2 is gone from claimDay and from the header, and rule 3 refus
   assert.ok(!('paceKey' in st) && !('grace' in st), 'dayGuardState still reports rule-2 state');
 });
 
+/* 2026-09-05: clock-trust-audit's idle-month row went red because
+   witnessServerDay() ordinalized the server's ms as a UTC calendar day
+   (Math.floor(ms / DAY_MS)) while claimDay's o/oh are dayOrdinal(dateKey(...)),
+   the DEVICE's LOCAL calendar day. Off UTC+0 the two disagree for several hours
+   a day, so a probe built to land one day past ceiling (witness + WITNESS_GRACE)
+   landed exactly ON it and was let through. Pin that both sides now read the
+   SAME ordinal: witnessServerDay(ms) must equal dayOrdinal(dateKey(new
+   Date(ms))), not Math.floor(ms / 86400000). Prove-red on the old line: this
+   test TZ (America/Toronto, UTC-4/-5) disagrees with UTC for hours after every
+   UTC midnight, so both instants below are chosen where the two ordinals differ. */
+test('witnessServerDay ordinalizes the server ms as the LOCAL calendar day, not the UTC one', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const { dateKey, dayOrdinal } = await import('../js/nutrition.js');
+  dbm.useDbName('unit-witness-ordinal');
+
+  // near midnight UTC: 2026-11-08 02:00 UTC is 2026-11-07 21:00 EST locally.
+  const nearMidnightUtc = Date.UTC(2026, 10, 8, 2, 0, 0);
+  await dbm.kvSet(dbm.DAY_WITNESS_KEY, 0);
+  const w1 = await dbm.witnessServerDay(nearMidnightUtc);
+  assert.equal(w1, dayOrdinal(dateKey(new Date(nearMidnightUtc))),
+    `witness ordinal must be the LOCAL calendar day for this instant, got ${w1} (UTC-day math would give ${Math.floor(nearMidnightUtc / 86400000)})`);
+
+  // near a DST boundary: 2026-11-01 02:30 UTC is 2026-10-31 22:30 EDT, a few
+  // hours before America/Toronto folds back from EDT to EST that same night.
+  const nearDstFold = Date.UTC(2026, 10, 1, 2, 30, 0);
+  await dbm.kvSet(dbm.DAY_WITNESS_KEY, 0);
+  const w2 = await dbm.witnessServerDay(nearDstFold);
+  assert.equal(w2, dayOrdinal(dateKey(new Date(nearDstFold))),
+    `witness ordinal must track the LOCAL calendar day across a DST fold too, got ${w2} (UTC-day math would give ${Math.floor(nearDstFold / 86400000)})`);
+});
+
 /* O14. DAY_GUARD_COPY had one call site (the quest-claim toast), so five of the
    six day-keyed rewards refused in silence. Every surface now reports through it.
    Prove-red on main: dayGuardToast does not exist and the site count is 1. */

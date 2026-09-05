@@ -131,7 +131,11 @@ ok('overlays never stack', after.veilsStacked <= 1, `${after.veilsStacked} veils
 /* Dismissing a NON-navigating announcement must land you back on the News tab
    without doing anything. Tom: "it makes no sense for people catching up". */
 const auto = await page.evaluate(async () => {
-  document.querySelectorAll('.drop-veil').forEach(v => v.remove());
+  // 2026-09-05 (467da6cc): cleanup from the PRIOR block's still-open second
+  // veil must go through the same backdrop tap a player would use, not a bare
+  // .remove() -- that leaves its sheetStack entry behind and blocks every
+  // later return-to-News poll in this block too.
+  document.querySelectorAll('.drop-veil').forEach(v => v.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   await new Promise(r => setTimeout(r, 400));
   if (!document.querySelector('.nw-row')) { location.hash = '#/friends'; await new Promise(r=>setTimeout(r,1600));
     document.getElementById('crewWhatsNew')?.click(); await new Promise(r=>setTimeout(r,1200));
@@ -149,9 +153,15 @@ const auto = await page.evaluate(async () => {
      it. The sheet journey is now owned by newsrow-return-audit.mjs.
      What survives, and what nothing else covers, is the OTHER half: a player who
      reads an announcement and backs out without going anywhere should land back
-     on News rather than nowhere. So dismiss the veil and assert exactly that. */
+     on News rather than nowhere. So dismiss the veil and assert exactly that.
+     2026-09-05 (467da6cc, "veil posters ride the sheet stack"): a veil now
+     pushes onto sheetStack via openVeil() and only close()/history.back() pops
+     it; a bare .remove() leaves a stale sheetStack entry that blocks the
+     return-to-News poll (`if (sheetStack.length) return;`) forever. A player
+     cannot dismiss a veil that way either, so dismiss the way they do: tap the
+     backdrop, which openVeil's own listener treats as `e.target === veil`. */
   const veil = document.querySelector('.drop-veil');
-  veil?.remove();
+  veil?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   await new Promise(r => setTimeout(r, 2200));   // the app should bring us back
   return {
     backOnNews: !!document.querySelector('.nw-row') && !document.getElementById('wnNews')?.hidden,

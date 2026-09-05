@@ -248,7 +248,12 @@ const TARGETS = [
          which is the same box; a disabled control still has to be reachable.
      PROVE-RED (expected, to be confirmed by the first run): revert the two B2
      rules in app.css and exactly these two rows go red at both widths. */
-  { surface: 'add', sel: '#results .t1-frow-split .t1-icon-btn', why: 'Add sheet: the "Change portion" chevron on a recents row (40x40 until R28-B2)' },
+  /* 2026-09-05: goTo('add') types "banana" into #q before this row was ever
+     measured, which replaces the recents list (.t1-frow-split) with #results
+     and left this selector permanently unreachable ("NOT FOUND"). `recents:
+     true` tells tapTargets to measure this one BEFORE the shared driver's
+     search step; see goTo's skipSearch. */
+  { surface: 'add', sel: '#results .t1-frow-split .t1-icon-btn', why: 'Add sheet: the "Change portion" chevron on a recents row (40x40 until R28-B2)', recents: true },
 ];
 
 /* CONTRAST PAIRS THIS PASS IS RESPONSIBLE FOR, and where the thresholds come
@@ -282,7 +287,7 @@ const CONTRAST = [
 
 /* ------------------------------------------------------------ navigation */
 
-async function goTo(page, surface) {
+async function goTo(page, surface, { skipSearch = false } = {}) {
   /* history.back() is ASYNC. The first version of this looped on
      querySelector('#sheets > div') without awaiting, so it fired back() hundreds
      of times, navigated off the app and killed the execution context at 390x844.
@@ -340,15 +345,22 @@ async function goTo(page, surface) {
     await page.evaluate(() => { location.hash = '#/today'; }); await sleep(1800);
     await clean();
     await page.evaluate(() => document.getElementById('fab')?.click()); await sleep(1500);
-    await page.evaluate(() => {
-      const q = document.getElementById('q');
-      if (!q) return;
-      q.value = 'banana'; q.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await sleep(900);   // the search debounce is 120ms
-    if (surface === 'portion') {
-      await page.evaluate(() => document.querySelector('#results button[data-food]')?.click());
-      await sleep(1500);
+    /* 2026-09-05: skipSearch stops right here, on the Add sheet's RECENTS list
+       (recentRowHtml, .t1-frow-split), for the rows that live only in that
+       state. Typing "banana" below replaces that list with #results, which is
+       why the recents chevron row (`#results .t1-frow-split .t1-icon-btn`,
+       QA round 28 B2) could never be found when measured after it. */
+    if (!skipSearch) {
+      await page.evaluate(() => {
+        const q = document.getElementById('q');
+        if (!q) return;
+        q.value = 'banana'; q.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await sleep(900);   // the search debounce is 120ms
+      if (surface === 'portion') {
+        await page.evaluate(() => document.querySelector('#results button[data-food]')?.click());
+        await sleep(1500);
+      }
     }
   }
   if (!['pit', 'fight', 'add', 'portion'].includes(surface)) await clean();
@@ -415,8 +427,7 @@ async function tapTargets(page, w, h) {
   const bySurface = new Map();
   for (const t of TARGETS) { if (!bySurface.has(t.surface)) bySurface.set(t.surface, []); bySurface.get(t.surface).push(t); }
   let measured = 0;
-  for (const [surface, list] of bySurface) {
-    await goTo(page, surface);
+  const measureList = async (surface, list) => {
     for (const t of list) {
       if (t.inject) await inject(page, t.inject);
       const got = await page.evaluate((sel, all) => {
@@ -451,6 +462,21 @@ async function tapTargets(page, w, h) {
         if (g.top !== 'self') fail(`${w}x${h} ${name}: a tap at its centre lands on ${g.top}, not on it`);
       }
     }
+  };
+  for (const [surface, list] of bySurface) {
+    /* 2026-09-05: any 'add' row marked `recents: true` lives only in the Add
+       sheet's RECENTS list, which goTo('add') replaces with #results the
+       moment it types "banana" for the rest of this surface's rows. Measure
+       those first, on their own skipSearch pass, before the normal pass below
+       ever touches search. */
+    const recentsOnly = surface === 'add' ? list.filter(t => t.recents) : [];
+    const rest = surface === 'add' ? list.filter(t => !t.recents) : list;
+    if (recentsOnly.length) {
+      await goTo(page, surface, { skipSearch: true });
+      await measureList(surface, recentsOnly);
+    }
+    await goTo(page, surface);
+    await measureList(surface, rest);
   }
   /* AND THEY MUST NOT HAVE STOLEN ANYONE ELSE'S TAPS. Anti-regression rule 6,
      and the reason it is here by name: the Settings gear sitting on top of the
