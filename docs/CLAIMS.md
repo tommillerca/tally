@@ -19,6 +19,14 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## kit critique (2026-09-05)
+
+1. PROOF: unit.test.js, football-kit-audit.mjs | REACH: Buying the full football kit after already owning some of its five pieces now charges only for what is missing, never more than the flat full-kit price. A player who owned three of the five used to pay the full price for the other two; those two now cost exactly what two pieces are worth, and the "you save" line only appears when there really is a saving.
+
+2. PROOF: MANUAL, measured off the rendered Shop screen: the football kit's buy buttons and the team picker beneath them read 40px tall, up from 35.5px and 36px | REACH: The buy buttons on the football kit shelf (shared with the weekly drop poster) and the team picker under them are now full-size tap targets instead of sitting a hair under the platform's own minimum.
+
+3. PROOF: MANUAL, measured off the rendered Shop screen: the football buy buttons stay enabled and pressable below the price you can afford, and a tap answers with the shortfall | REACH: A football kit or full-kit buy button you cannot yet afford still responds to a tap and tells you exactly how many coins you are short, instead of going grey and ignoring you. Only a piece you already own is inert.
+
 ## crate levers (2026-09-05)
 
 1. PROOF: unit.test.js, loot-fallback-audit.mjs | REACH: Opening a crate can now hand you a cosmetic you already own instead of always being something new, so the rack above Common has something left to sell you; a duplicate still pays the same coins it always did. Also, a day you logged but missed your calorie budget on no longer comes with a bonus crate, though it still pays the same XP for logging it.

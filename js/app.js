@@ -96,7 +96,7 @@ import { HERO_EDGE } from '../data/hero-edge.js';
 import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petCanWear,
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK, bhFamilyKey, bhFamilies } from '../data/boneheadz.js';
 // Football kit, 2026-09-04
-import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
+import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal, armMidnightTimer,
@@ -9376,13 +9376,20 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
   const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];   // the PREVIEW colourway, not a variant on sale
   const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
   const sold = FOOTBALL_SHELF;                                       // five garments, not 32 teams x five
-  const ownedHere = sold.filter(g => ownedCos.has(footballItemId(team.id, g.key))).length;
+  /* OWNED, NOT "owned in the previewed team": a garment bought in any team
+     hands over all 32 (footballGrantIds), so counting by the preview team and
+     counting by ANY team agree, and footballOwnedGarmentCount is the one place
+     that rule lives (also used by buyFootballBundle's pricing below). */
+  const ownedHere = footballOwnedGarmentCount(ownedCos);
   /* THE BUNDLE TILE. One extra cell at the end of the same grid, because it is
      the same decision at a different size and a separate poster would compete
-     with the pieces it contains. The saving is computed, never typed: `full` is
-     the five tiles added up and `save` the difference, both null while either
-     price is, which is what prints "not for sale yet". */
+     with the pieces it contains. `kit` is the flat listed price (the summary
+     line above the fold, unaffected by ownership); `quote` is what THIS
+     player actually pays right now: min(bundle, price x missing garments),
+     never the flat price for pieces already owned (Tom, 2026-09-05,
+     Impeccable's football-kit critique). */
   const kit = footballBundleMath();
+  const quote = footballBundleQuote(ownedHere);
   const bundleOwned = ownedHere === sold.length;
   return `
   <details class="t3-dropsect" id="fbSect"${open ? ' open' : ''}>
@@ -9412,27 +9419,36 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
           const art = g.pets
             ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 384)
             : `<div class="fb-worn">${wornArtHtml(id, 88 * 2.3)}</div>`;
-          const canBuy = Number.isFinite(price) && coinBal >= price;
+          /* SELLABLE (the piece is on sale at all) is separate from AFFORDABLE
+             (this wallet can cover it right now): unsellable stays disabled
+             ("Soon"), unaffordable is enabled with `cant` and toasts the exact
+             shortfall on tap instead of ignoring it, the rack's own rule. */
+          const sellable = Number.isFinite(price);
+          const canBuy = sellable && coinBal >= price;
           return `<div class="drop-item fb ${owned ? 'owned' : ''}">
             ${art}
             <b>${esc(g.label)}</b>
             <small class="fb-kitline">All ${FOOTBALL_TEAMS.length} colourways</small>
             ${owned
               ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
-              : `<button class="drop-buy" data-buyfb="${id}" ${canBuy ? '' : 'disabled'} aria-label="Buy the ${esc(g.label)}${Number.isFinite(price) ? `, ${price.toLocaleString()} coins` : ''}, all ${FOOTBALL_TEAMS.length} teams">${Number.isFinite(price) ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
+              : `<button class="drop-buy${sellable && !canBuy ? ' cant' : ''}" data-buyfb="${id}" data-amt="${price}" ${sellable ? '' : 'disabled'} aria-label="Buy the ${esc(g.label)}${sellable ? `, ${price.toLocaleString()} coins` : ''}, all ${FOOTBALL_TEAMS.length} teams">${sellable ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
           </div>`;
         }).join('')}
         <div class="drop-item fb fb-bundle ${bundleOwned ? 'owned' : ''}">
           <div class="fb-kitmark" style="--fa:${team.a};--fb:${team.b}"><span>${sold.length}</span></div>
           <b>The full kit</b>
           <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')} · all ${FOOTBALL_TEAMS.length} colourways</small>
-          ${bundleOwned
-            ? `<button class="drop-buy" disabled>The whole kit is yours</button>`
-            : `<button class="drop-buy" data-buyfbkit="all" ${footballBundleSellable() && coinBal >= FOOTBALL_BUNDLE_PRICE_PLACEHOLDER ? '' : 'disabled'} aria-label="Buy the full kit${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} coins` : ''}, all ${FOOTBALL_TEAMS.length} teams">${
-                footballBundleSellable() ? `${ICONS.coin(12)} ${kit.bundle.toLocaleString()}` : 'Soon'}</button>`}
-          ${Number.isFinite(kit.save) && kit.save > 0
-            ? `<small class="fb-save">Was ${kit.full.toLocaleString()} · you save ${kit.save.toLocaleString()}</small>`
-            : `<small class="fb-save">Cheaper than the ${sold.length} pieces</small>`}
+          ${(() => {
+            const bundleSellable = footballBundleSellable();
+            const canBuyBundle = bundleSellable && Number.isFinite(quote.cost) && coinBal >= quote.cost;
+            return bundleOwned
+              ? `<button class="drop-buy" disabled>The whole kit is yours</button>`
+              : `<button class="drop-buy${bundleSellable && !canBuyBundle ? ' cant' : ''}" data-buyfbkit="all" data-amt="${quote.cost}" ${bundleSellable ? '' : 'disabled'} aria-label="Buy the full kit${bundleSellable ? `, ${quote.cost.toLocaleString()} coins` : ''}, all ${FOOTBALL_TEAMS.length} teams">${
+                  bundleSellable ? `${ICONS.coin(12)} ${quote.cost.toLocaleString()}` : 'Soon'}</button>`;
+          })()}
+          ${Number.isFinite(quote.save) && quote.save > 0
+            ? `<small class="fb-save">Was ${quote.full.toLocaleString()} · you save ${quote.save.toLocaleString()}</small>`
+            : ''}
         </div>
       </div>
     </div>
@@ -9908,6 +9924,16 @@ async function renderShop(el) {
     const reset = () => { b.dataset.armed = '0'; b.innerHTML = b.dataset.label || b.innerHTML; };
     b.addEventListener('click', async () => {
       if (busy) return;   // same latch as armToConfirm: a queued tap is not a new decision
+      /* CANT: this wallet cannot cover it, so there is nothing an arm-then-
+         confirm dance protects against. One tap answers with the shortfall,
+         the rack's own rule ("a control that answers is kinder than one that
+         ignores you"), instead of making an unaffordable price play the same
+         two-tap ritual as a real spend. */
+      if (b.classList.contains('cant')) {
+        const amt = +b.dataset.amt;
+        toast(`That costs ${amt.toLocaleString()}. You have ${coinBal.toLocaleString()}.`, 2600);
+        return;
+      }
       if (b.dataset.armed !== '1') {
         b.dataset.label = b.dataset.label || b.innerHTML;
         b.dataset.armed = '1'; b.textContent = 'Tap again to buy';

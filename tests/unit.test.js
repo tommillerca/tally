@@ -6216,6 +6216,52 @@ test('CLAIMED-ROW race: breedPets cannot lose, or be lost to, a concurrent salva
   assert.equal(list.filter(x => x.sp === 'C4').length, 1, `the salvage must survive the concurrent breed, got ${JSON.stringify(list)}`);
 });
 
+// Football kit critique (2026-09-05), rule 1: the bundle charges only for the
+// garments a player does not already own, min(bundle, 4,200 x missing), never
+// the flat 16,800 for whatever is left. One db per owned-count so each row
+// starts from a clean wallet and a known set of owned garments.
+test('football BUNDLE-QUOTE: buyFootballBundle charges only for the missing garments', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const FB = await import('../data/football-teams.js');
+  const loot = await import('../js/loot.js');
+  const WALLET = 100000;
+  // Grants a garment fully owned (all 32 team ids, the helmet dragging its
+  // three visors), the same shape footballGrantIds hands a real buyer.
+  const ownGarment = async key => {
+    const ids = FB.footballGrantIds(FB.footballItemId(FB.FOOTBALL_TEAMS[0].id, key));
+    for (const id of ids) await dbm.db.put('inv', { id: `cos:${id}`, kind: 'cos', itemId: id, source: 'x', ts: Date.now() });
+  };
+
+  dbm.useDbName('unit-fbbundle-0');
+  await dbm.kvSet('coins', WALLET);
+  let r = await loot.buyFootballBundle('ignored');
+  assert.equal(r.ok, true, `0 owned must sell, got ${JSON.stringify(r)}`);
+  assert.equal(r.cost, 16800, `0 owned (5 missing) must cost the full bundle price, got ${JSON.stringify(r)}`);
+
+  dbm.useDbName('unit-fbbundle-3');
+  await dbm.kvSet('coins', WALLET);
+  for (const key of ['helmet', 'jersey', 'cleats']) await ownGarment(key);
+  r = await loot.buyFootballBundle('ignored');
+  assert.equal(r.ok, true, `3 owned must still sell the other two, got ${JSON.stringify(r)}`);
+  assert.equal(r.cost, 8400, `3 owned (2 missing) must cost 4,200 x 2, got ${JSON.stringify(r)}`);
+  assert.equal(r.granted, 2, `3 owned must report 2 garments granted, got ${JSON.stringify(r)}`);
+
+  dbm.useDbName('unit-fbbundle-4');
+  await dbm.kvSet('coins', WALLET);
+  for (const key of ['helmet', 'jersey', 'cleats', 'pet-helmet']) await ownGarment(key);
+  r = await loot.buyFootballBundle('ignored');
+  assert.equal(r.ok, true, `4 owned must still sell the last one, got ${JSON.stringify(r)}`);
+  assert.equal(r.cost, 4200, `4 owned (1 missing) must cost one garment's price, got ${JSON.stringify(r)}`);
+
+  dbm.useDbName('unit-fbbundle-5');
+  await dbm.kvSet('coins', WALLET);
+  for (const key of ['helmet', 'jersey', 'cleats', 'pet-helmet', 'pet-jersey']) await ownGarment(key);
+  r = await loot.buyFootballBundle('ignored');
+  assert.equal(r.ok, false, `5 owned must refuse, got ${JSON.stringify(r)}`);
+  assert.equal(r.reason, 'owned', `5 owned must refuse as already owned, got ${JSON.stringify(r)}`);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
