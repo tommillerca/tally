@@ -1,35 +1,44 @@
-/* tests/loot-fallback-audit.mjs — THE TERMINAL FALLBACK PAYS THE RARITY IT ROLLED.
+/* tests/loot-fallback-audit.mjs — A DUPE PAYS THE RARITY IT ROLLED, NOT THE CATALOGUE.
  *
- * WHY THIS EXISTS. rollCosmetic() walks every rarity looking for something you
- * do not own. When you own everything, it falls off the end and has to hand
- * back a duplicate to convert to coins. That last line used to pick UNIFORMLY
- * over the whole catalogue and throw away the rarity it had just rolled. The
- * catalogue is 10.2% legendary against a 3% drop weight, so a finished
- * collection paid the 400-coin legendary dupe 3.41x more often than the drop
- * table says, and the terminal fallback became the largest coin faucet in the
- * game (measured: 90.8 coins per Common Crate at full collection, against 65.5
- * once weighted).
+ * WHY THIS EXISTS. rollCosmetic() picks uniformly over crateEligible items AT
+ * THE ROLLED RARITY, owned or not (2026-09-05, crate-frequency audit lever 1:
+ * scratchpad/r33/faucet/out/crate-frequency.md section 4c; before that date it
+ * preferred an unowned item and walked to a neighbouring rarity, falling back
+ * to a duplicate only once the whole catalogue was owned). Either way, the
+ * question this file guards is the same one: does a duplicate pay the rarity
+ * the crate actually rolled, or does it pay off a uniform pick over the whole
+ * catalogue? The catalogue is 10.2% legendary against a 3% drop weight, so a
+ * uniform-over-catalogue pick paid the 400-coin legendary dupe 3.41x more
+ * often than the drop table says, and used to be the game's largest coin
+ * faucet (measured: 90.8 coins per Common Crate at full collection, against
+ * 65.5 once weighted). A fully-owned pool now dupes through the SAME uniform
+ * pick every roll uses, rather than through a separate terminal-fallback
+ * branch, so the promise this file grades is "the dupe mix matches the drop
+ * weights", regardless of which line in rollCosmetic produced it.
  *
  * It is the least interesting line in the file, which is exactly why a refactor
  * would restore `BH_ITEMS.filter(i => !i.default)` without anybody noticing:
  * nothing about a uniform pick over a catalogue LOOKS wrong.
  *
  * WHAT IT ASSERTS
- *   REACH    every sampled roll really is a terminal-fallback dupe. Without
- *            this the whole file could pass by never reaching the code at all.
+ *   REACH    every sampled roll on a fully-owned pool really does come back a
+ *            dupe. Without this the whole file could pass by never reaching a
+ *            dupe at all.
  *   PREMISE  the catalogue is genuinely NOT weight-shaped, so WEIGHT below is
  *            measuring the fix and not a coincidence in the data.
  *   WEIGHT   floor 0: the rarity mix of the returned dupes matches RARITIES[].w.
  *   FLOOR    floor 2 (Golden Crate): the mix matches the weights renormalised
  *            over rare/epic/legendary, and NO common or uncommon comes back.
- *            A uniform pick fails this on sight, 64% of its picks being junk
- *            rarities a Golden Crate cannot roll.
+ *            A uniform-over-catalogue pick fails this on sight, 64% of its
+ *            picks being junk rarities a Golden Crate cannot roll.
  *   POOL     pets (slot C) never come back. They cannot drop from a crate, so
  *            revealing one as your dupe is a lie about where loot comes from.
  *
- * PROVE-RED: restore the uniform pick in js/loot.js rollCosmetic() and WEIGHT
- * goes red on legendary (0.102 measured against 0.030 expected) and FLOOR goes
- * red on commons appearing in a Golden Crate.
+ * PROVE-RED: make rollCosmetic's item pick uniform over the WHOLE catalogue
+ * instead of the rolled rarity (e.g. `BH_ITEMS.filter(crateEligible)` in place
+ * of the rarity-filtered pool) and WEIGHT goes red on legendary (0.102
+ * measured against 0.030 expected) and FLOOR goes red on commons appearing in
+ * a Golden Crate.
  *
  * Node-only, no browser, no db. Measured 1.5s.
  */
@@ -46,9 +55,11 @@ const ok = (name, cond, detail) => {
   else console.log(`ok    ${name}${detail ? ': ' + detail : ''}`);
 };
 
-/* Own literally everything a crate can give you, so the rarity walk in
-   rollCosmetic() exhausts and the terminal fallback is the ONLY path left. */
-/* THE SAME POOL THE FALLBACK DRAWS FROM, not a re-derivation of it (2026-09-04).
+/* Own literally everything a crate can give you, so every roll is a dupe: with
+   the unowned preference gone (2026-09-05) this no longer forces the terminal
+   fallback specifically, it forces EVERY roll's normal-path pick to land on an
+   owned item, which is exactly the state this file needs to grade the mix. */
+/* THE SAME POOL THE PICK DRAWS FROM, not a re-derivation of it (2026-09-04).
    The football kit added 256 epic, rack-only garments that crateEligible excludes;
    this line's own filter kept them, diluted legendary to 5.8% and PREMISE went red
    on a fallback that had not changed. */
@@ -68,8 +79,8 @@ function sample(floor) {
 
 const f0 = sample(0);
 
-/* REACH — a guard that never entered the branch is not a guard. */
-ok('REACH', f0.dupes === N, `${f0.dupes}/${N} rolls came back as terminal-fallback dupes`);
+/* REACH — a guard that never sees a dupe is not a guard. */
+ok('REACH', f0.dupes === N, `${f0.dupes}/${N} rolls on a fully-owned pool came back dupes`);
 
 /* PREMISE — if the catalogue ever became weight-shaped on its own, WEIGHT would
    pass against a uniform pick and this file would silently stop protecting

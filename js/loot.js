@@ -1894,8 +1894,8 @@ const petSlots = new Set(PET_SLOTS.map(s => s.code));
 // Football kit, 2026-09-04: rack-only until Tom rules on crate drops (docs/FOOTBALL-KIT.md).
 export const crateEligible = i => !i.default && !i.exclusive && i.slot !== 'C' && !petSlots.has(i.slot) && !i.football;
 
-function candidates(rarity, owned, slotBias) {
-  let pool = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === rarity && !owned.has(i.id));
+function candidates(rarity, slotBias) {
+  let pool = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === rarity);
   if (slotBias && rng() < 0.5) {
     const biased = pool.filter(i => slotBias.includes(i.slot));
     if (biased.length) pool = biased;
@@ -1903,25 +1903,28 @@ function candidates(rarity, owned, slotBias) {
   return pool;
 }
 
-// One cosmetic roll. Prefers unowned at the rolled rarity, walks down then up,
-// and falls back to a duplicate (converted to coins) when the collection is fat.
+// One cosmetic roll: uniform over crateEligible items AT THE ROLLED RARITY,
+// owned or not. 2026-09-05, Tom's ruling on the crate-frequency audit
+// (scratchpad/r33/faucet/out/crate-frequency.md section 4c): the old code
+// preferred an unowned item and walked to neighbouring rarities when the
+// rolled one was fully owned, so every roll was a guaranteed new piece and
+// the rack above common sold almost nothing to a committed player (0.7 of 34
+// legendaries bought a year). An owned pick now returns dupe:true and pays
+// the same dupe table the terminal fallback below always paid.
 export function rollCosmetic(owned, floor, slotBias) {
   const rolled = RARITY_ORDER.indexOf(rollRarity(floor));
-  const order = [...RARITY_ORDER.slice(0, rolled + 1).reverse(), ...RARITY_ORDER.slice(rolled + 1)];
-  for (const r of order) {
-    const pool = candidates(r, owned, slotBias);
-    if (pool.length) return { item: pool[Math.floor(rng() * pool.length)], dupe: false };
+  const pool = candidates(RARITY_ORDER[rolled], slotBias);
+  if (pool.length) {
+    const item = pool[Math.floor(rng() * pool.length)];
+    return { item, dupe: owned.has(item.id) };
   }
-  // Terminal fallback: everything is owned, so this roll is a coin conversion.
-  // Pick the dupe AT THE RARITY WE JUST ROLLED, not uniformly over the whole
-  // catalogue. The catalogue is 10.2% legendary against a 3% drop weight, so a
-  // uniform pick paid the 400-coin legendary dupe 3.41x too often and turned a
-  // finished collection into the game's biggest coin faucet.
+  // Terminal fallback: this rarity has no crateEligible items at all (a data
+  // gap; "everything at this rarity is owned" is already handled above).
   // SAME predicate as candidates() above, not a second copy of it: this line
   // carrying its own `slot !== 'C'` is exactly how the pet accessories stayed
   // droppable here after they were shut out one function up.
-  const pool = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === RARITY_ORDER[rolled]);
-  const item = pool[Math.floor(rng() * pool.length)];
+  const pool2 = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === RARITY_ORDER[rolled]);
+  const item = pool2[Math.floor(rng() * pool2.length)];
   return { item, dupe: true };
 }
 

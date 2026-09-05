@@ -1531,7 +1531,7 @@ async function boot() {
   if (!NOSOCIAL) await social.settleServerDay(dateKey()).catch(() => {});
   const closed = await awardDayCloseIfDue(S.settings.targets);
   if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 2400);
-  else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 2400);
+  else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts.' : "You logged yesterday. That counts.", 3600), 2400);
   else if (closed?.dayGuard) setTimeout(() => dayGuardToast(closed.dayGuard), 2400);   // QA round 26 O14: the refusal used to be silent here
   /* COOKING ADVANCES WHETHER OR NOT YOU ARE WATCHING (QA round 26 O15). The
      queue only drained from the Kitchen sheet's own render, so three cooks sat
@@ -1699,7 +1699,7 @@ async function rollDayIfNeeded() {
     const closed = await awardDayCloseIfDue(S.settings.targets);
     if (wasOnToday) route(); // a new day starts at the top, like a fresh open
     if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 1400);
-    else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 1400);
+    else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts.' : "You logged yesterday. That counts.", 3600), 1400);
     else if (closed?.dayGuard) setTimeout(() => dayGuardToast(closed.dayGuard), 1400);   // QA round 26 O14
     // pays on COLLECT, so it repaints on COLLECT: see the boot call site
     maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
