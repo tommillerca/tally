@@ -9,11 +9,10 @@
 // eating less. Longer periods pay bigger (coins + crates) for tougher targets.
 
 import { dayTotals, addDays, dateKey } from './nutrition.js';
-import { claimDay, db } from './db.js';
+import { claimDay, db, newId } from './db.js';
 import { keepersBoon } from './spires.js';
-import { award } from './game.js';
-import { coinsAdd, grantCrate, boneDustAdd, grantConsumable } from './loot.js';
-import { grantIngredient } from './cooking.js';
+import { awardOnce } from './game.js';
+import { crateRow, eggRow } from './loot.js';
 
 function hashStr(s) {
   let h = 2166136261;
@@ -435,24 +434,40 @@ export async function claimQuest(periodKey, q, period = 'day') {
       return { capped: true, cap, period };
     }
   }
-  const xp = await award(`quest-${periodKey}-${q.id}`, 'quest', REWARD_XP[period] || 25, `Quest: ${q.name}`);
-  /* Nothing was minted, so give the slot back rather than burning it. Only the
-     caller that created this row is here to delete it, and it deletes only on
-     the path where it paid for nothing. */
-  if (!xp) { if (slotKey) await db.del('xp', slotKey); return null; }
   // Keeper's Boon: holding any Dark Spire pays a little extra on every quest.
   // This is the always-on perk that makes losing your last tower sting even when
   // nobody else is competing for it.
   const boon = await keepersBoon();
   const coins = boon ? Math.round(q.coins * (1 + boon.questCoinBonus)) : q.coins;
-  await coinsAdd(coins);
-  if (q.crate) await grantCrate(q.crate, 'quests');
-  // v153: richer, more enticing rewards beyond coins — Bone Dust, ingredients,
-  // and consumables so the reward table isn't all coins.
-  if (q.dust) await boneDustAdd(q.dust);
-  if (q.item) await grantConsumable(q.item, 'quests');            // e.g. 'vigor'
-  if (q.ingredient) await grantIngredient(q.ingredient, q.ingredientN || 1);
-  return { xp, coins, boon: boon ? Math.round(coins - q.coins) : 0, crate: q.crate || null, dust: q.dust || 0, item: q.item || null, ingredient: q.ingredient || null };
+  /* CLAIM HYGIENE, 2026-09-05. Coins, crate, dust, item and ingredient used to
+     land in five writes AFTER award() had already minted the quest's ledger
+     row, so a throw anywhere in that chain (quota, the wipe-protocol freeze
+     flag, an IndexedDB abort) left the quest permanently claimed and paid
+     nothing: award() cannot be re-run once the row exists, and the
+     slot-release branch above only covers the reservation, not this. Same
+     shape js/hunt.js:collectSpawn already uses for the Boneyard collect (QA
+     round 28 Y5): every payout rides inside the claim's own transaction via
+     awardOnce's `pay`, so a losing write takes the whole reward with it and a
+     winning claim always leaves with everything it bought. */
+  const crate = q.crate ? (q.crate === 'egg' ? await eggRow('quests') : crateRow(q.crate, 'quests')) : null;
+  const item = q.item ? { id: newId(), kind: q.item, source: 'quests', ts: Date.now() } : null;   // e.g. 'vigor'
+  const pay = {
+    kv: {
+      coins: cur => Math.max(0, (Number(cur) || 0) + coins),
+      coinsRev: cur => Math.max(0, (Number(cur) || 0) + 1),
+      // v153: richer, more enticing rewards beyond coins — Bone Dust and
+      // ingredients so the reward table isn't all coins.
+      ...(q.dust ? { bonedust: cur => Math.max(0, (Number(cur) || 0) + q.dust) } : {}),
+      ...(q.ingredient ? { ingredients: inv => ({ ...(inv || {}), [q.ingredient]: ((inv && inv[q.ingredient]) || 0) + (q.ingredientN || 1) }) } : {}),
+    },
+    puts: [...(crate ? [{ store: 'inv', val: crate }] : []), ...(item ? [{ store: 'inv', val: item }] : [])],
+  };
+  const claim = await awardOnce(`quest-${periodKey}-${q.id}`, 'quest', REWARD_XP[period] || 25, `Quest: ${q.name}`, undefined, null, pay);
+  /* Nothing was minted, so give the slot back rather than burning it. Only the
+     caller that created this row is here to delete it, and it deletes only on
+     the path where it paid for nothing. */
+  if (!claim.claimed) { if (slotKey) await db.del('xp', slotKey); return null; }
+  return { xp: claim.xp, coins, boon: boon ? Math.round(coins - q.coins) : 0, crate: q.crate || null, dust: q.dust || 0, item: q.item || null, ingredient: q.ingredient || null };
 }
 
 // Bonus daily crate when all three dailies are claimed.
@@ -470,8 +485,11 @@ export async function claimAllBonusIfDue(date, quests) {
   if (!(await claimDay(dateKey())).fresh) return null;
   const claimRows = await Promise.all(quests.map(q => db.get('xp', `quest-${date}-${q.id}`)));
   if (!claimRows.every(Boolean)) return null;
-  const xp = await award(`questsall-${date}`, 'questsall', 30, 'All daily quests done', date);
-  if (!xp) return null;
-  await grantCrate('daily', 'quests');
-  return { xp, crate: 'daily' };
+  /* CLAIM HYGIENE, 2026-09-05: same fix as claimQuest above, and the same
+     collectSpawn shape. grantCrate ran AFTER award() succeeded, so a throw
+     there burned the questsall claim and handed over no crate. */
+  const claim = await awardOnce(`questsall-${date}`, 'questsall', 30, 'All daily quests done', date, null,
+    { kv: {}, puts: [{ store: 'inv', val: crateRow('daily', 'quests') }] });
+  if (!claim.claimed) return null;
+  return { xp: claim.xp, crate: 'daily' };
 }

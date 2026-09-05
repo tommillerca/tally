@@ -6389,6 +6389,102 @@ test('football BUNDLE-CONCURRENCY: an overlapping single-garment buy no longer o
   assert.equal(WALLET - await loot.coins(), winner.cost, `a double-tap bundle must charge exactly once, got spent ${WALLET - await loot.coins()} vs winner cost ${winner.cost}`);
 });
 
+/* CLAIM HYGIENE (2026-09-05), item 1: "reward claim burned on grant failure".
+ * js/quests.js:claimQuest used to mint the quest's ledger row with a plain
+ * award() and THEN pay coins / crate / dust / item / ingredient in five
+ * separate writes. A rejection in any of those (quota, the wipe-protocol
+ * freeze flag, an IndexedDB abort) landed AFTER the claim had already
+ * committed, and award() can never be re-run once its key exists: the quest
+ * read as claimed forever and the player got nothing. The fix bundles the
+ * whole payout into the SAME transaction as the claim via awardOnce's `pay`
+ * (js/hunt.js:collectSpawn's shape, QA round 28 Y5), so a rejected write now
+ * takes the claim down with it instead of leaving it stranded.
+ *
+ * INDUCE: db.claimAndPay is stubbed to reject for this one quest's key, the
+ * same style tests/purchase-write-failure-audit.mjs uses on db.addIfAbsent.
+ * PROVE-RED: reverting claimQuest to the old award()-then-separate-grants
+ * shape makes `threw` false (the stub's target, db.claimAndPay, is never
+ * called by that code) and the guard fails on its first assertion:
+ *   AssertionError [ERR_ASSERTION]: a rejected payout write must not be
+ *   swallowed silently: expected false to equal true
+ * which is itself the defect restated: the old code has no atomic seam a
+ * rejected write can be caught at, so nothing here would have stopped it. */
+test('R-claimhyg-1 claimQuest: a rejected payout write burns nothing and a retry pays exactly once', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const quests = await import('../js/quests.js');
+  dbm.useDbName('unit-claimhyg-questgrantfail');
+
+  const PK = dateKey();
+  const Q = { id: 'claimhyg-1', name: 'Grant-fail probe', coins: 40, crate: 'daily' };
+
+  const before = { coins: await dbm.kvGet('coins', 0), crates: (await dbm.db.all('inv')).length };
+
+  const realClaimAndPay = dbm.db.claimAndPay;
+  dbm.db.claimAndPay = (store, row, pay) =>
+    (store === 'xp' && row && row.key === `quest-${PK}-${Q.id}`)
+      ? Promise.reject(new Error('QuotaExceededError'))
+      : realClaimAndPay(store, row, pay);
+
+  let threw = false;
+  try { await quests.claimQuest(PK, Q, 'day'); } catch { threw = true; }
+  dbm.db.claimAndPay = realClaimAndPay;   // RECOVER: the write works again
+
+  assert.equal(threw, true, 'a rejected payout write must not be swallowed silently');
+  const ledgerRow = await dbm.db.get('xp', `quest-${PK}-${Q.id}`);
+  assert.equal(ledgerRow, undefined, 'the quest must not read as claimed when its own payout transaction rejected (claim burned, nothing paid)');
+  const afterFail = { coins: await dbm.kvGet('coins', 0), crates: (await dbm.db.all('inv')).length };
+  assert.equal(afterFail.coins, before.coins, 'a rejected quest claim must not move the wallet');
+  assert.equal(afterFail.crates, before.crates, 'a rejected quest claim must not grant a crate');
+
+  // RETRY: same quest, the write works again -- must pay exactly once.
+  const retry = await quests.claimQuest(PK, Q, 'day');
+  assert.ok(retry && retry.xp > 0 && retry.crate === 'daily', `the quest must be claimable again once the transient failure clears, got ${JSON.stringify(retry)}`);
+  const afterRetry = { coins: await dbm.kvGet('coins', 0), crates: (await dbm.db.all('inv')).filter(r => r.kind === 'crate').length };
+  assert.equal(afterRetry.coins, before.coins + Q.coins, 'the retry must pay coins exactly once');
+  assert.equal(afterRetry.crates, 1, 'the retry must grant exactly one crate');
+});
+
+/* CLAIM HYGIENE (2026-09-05), item 2: "welcome-kit cross-tab duplication".
+ * js/game.js:initLootIfNeeded used to gate on a plain kvGet('loot-init') read
+ * and only write the flag at the very end, so two tabs booting a fresh
+ * install at the same instant both read it absent and both ran the whole
+ * function: two golden crates, two daily crates, two Draughts, doubled
+ * ingredients, two eggs. The fix moves the claim to the top as a single
+ * db.addIfAbsent('kv', {k:'loot-init', v:true}) -- the same test-and-set
+ * retireGardenIfNeeded / retireMerchantIfNeeded already use a few hundred
+ * lines below it -- so the check and the write are one IndexedDB request and
+ * exactly one caller's grants run.
+ * PROVE-RED: reverting to the old kvGet-then-kvSet-at-the-end shape and
+ * rerunning this guard on two interleaved calls fails with:
+ *   AssertionError [ERR_ASSERTION]: exactly one welcome kit must land under
+ *   two interleaved boots, got 4 crates: expected 2 to equal 4 */
+test('R-claimhyg-2 initLootIfNeeded: two interleaved boots grant exactly one welcome kit', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-claimhyg-welcomerace');
+
+  const [r1, r2] = await Promise.all([g.initLootIfNeeded(), g.initLootIfNeeded()]);
+  const winner = r1 || r2, loser = r1 ? r2 : r1;
+  assert.ok(winner, `one of the two interleaved boots must win the kit, got ${JSON.stringify([r1, r2])}`);
+  assert.equal(loser, null, 'the loser of the race must be paid nothing, not a second kit');
+
+  const inv = await dbm.db.all('inv');
+  const crates = inv.filter(r => r.kind === 'crate').length;
+  const eggs = inv.filter(r => r.kind === 'egg').length;
+  const draughts = inv.filter(r => r.kind === 'vigor').length;
+  const ing = await dbm.kvGet('ingredients', {});
+  assert.equal(crates, 2, `exactly one welcome kit must land under two interleaved boots, got ${crates} crates`);
+  assert.equal(eggs, 1, `exactly one welcome egg must land, got ${eggs}`);
+  assert.equal(draughts, 1, `exactly one welcome Draught must land, got ${draughts}`);
+  assert.deepEqual(ing, { marrow: 2, salt: 1 }, `the starter pouch must not be doubled, got ${JSON.stringify(ing)}`);
+
+  // a THIRD, later boot must still pay nothing: the claim is not a one-race fluke
+  const r3 = await g.initLootIfNeeded();
+  assert.equal(r3, null, 'a later boot after the race must still find the kit already claimed');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

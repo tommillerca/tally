@@ -21,6 +21,13 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 ## v474
 
+## claim hygiene (2026-09-05)
+
+1. PROOF: unit.test.js (R-claimhyg-1), reward-sop-audit.mjs (COVERAGE, quest/questAll live rows) | REACH: Claiming a daily, weekly or monthly quest, or the all-three bonus crate, no longer risks the quest reading as permanently claimed while paying nothing. A rejected write (a full device, a stuck save) used to land AFTER the quest's ledger row was already minted, so the coins, crate, dust, item and ingredient could be lost for good with no way to retry. The whole payout now lands in the same transaction as the claim, so a failed write takes nothing with it and a later retry pays in full.
+2. PROOF: unit.test.js (R-claimhyg-2) | REACH: Opening the app on two devices (or two tabs) at the exact moment a brand-new account first boots no longer doubles the welcome kit. Only one welcome kit (2 crates, a Vigor Draught, the starter ingredients, and the starter egg) is ever granted per install, however many boots race to claim it.
+
+## stage pet wear (2026-09-05)
+
 1. PROOF: unit.test.js, football-kit-audit.mjs, MANUAL measured off the rendered Shop screen (buy buttons and the team picker read 40px tall, up from 35.5px and 36px; a buy button below your balance stays enabled and pressable, and a tap answers with the coin shortfall) | REACH: The Locker Room shelf sells five football pieces, a helmet, a jersey, cleats and a matching helmet and jersey for the lizard, each 4,200 coins and yours in all 32 team colours the moment you buy it. Buying the full kit after already owning some of its five pieces charges only for what is missing, never more than the flat 16,800 kit price, and the "you save" line only appears when there really is a saving. Every buy button on the shelf is a full-size tap target, and one you cannot yet afford still responds to a tap and names the shortfall instead of going dead.
 
 2. PROOF: wardrobe-family-audit.mjs (gate-registered PURE), wardrobe-family-grid-audit.mjs, memory-census.mjs | REACH: Your Collection and the Stable now collapse every colourway family, the football kit's 32 teams included, and any hand-drawn recolour series, into one tile per drawing with a count badge, the same rule the Wardrobe's own rail already used. A tap opens the rail to every colour you own.
