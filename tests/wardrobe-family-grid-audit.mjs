@@ -66,7 +66,41 @@
  *             it. The line says so with the measurement beside it instead of
  *             picking a threshold today's number happens to clear.
  *
- * PROVE-RED is recorded at the bottom of this header.
+ * PROVE-RED, 2026-09-04, one mutation at a time in an rsync copy of the tree
+ * OUTSIDE the worktree (no .git, no node_modules; the suite serves the tree
+ * itself). Every mutation asserted `source.count(old) == 1` BEFORE the replace,
+ * so "it stayed green" could never mean "the replace matched nothing", and the
+ * restored copy was re-run green at the end: 24 ok, 0 FAIL, exit 0.
+ *
+ *   1. the grid goes back to one tile per ITEM (`const fams = items.map(i => [i])`)
+ *      FAIL COUNT one tile per family, checked against the catalogue rule  57
+ *           tiles for 57 owned items; the rule says 36 (9 of them families)
+ *      FAIL HEIGHT the collapsed grid is shorter than the flat one it replaces
+ *           1367px -> 1367px (0px, 0% off) for 57 owned pieces
+ *      FAIL SCROLL the last tile is closer to the top of the slot than it was
+ *           1456px of thumb travel over 58 flat tiles -> 1456px over 58
+ *           collapsed tiles (0px saved)
+ *      (SAMPLE and both BADGE rows go red with them: 6 of 24.)
+ *   2. the count badge moved back to `right: 3px`, the tick's corner
+ *      FAIL BADGE the count never lands under the equipped tick  9 of 9 family
+ *           tiles overlap
+ *   3. a family of ONE gets a count badge too
+ *      FAIL SOLO a family of one carries no count badge  36 badges on 9 family
+ *           tiles, 27 on plain tiles
+ *   4. restageWardrobe stops re-drawing the family tile's art
+ *      FAIL WORN the collapsed tile now points at the variant you put on  tile
+ *           data-equip H10-6 -> H10-6, ringed=true
+ *      FAIL WORN and its PIXELS changed: the tile is drawing a different
+ *           picture  canvas checksum 3425528777 -> 3425528777
+ *      (and the run shows why the pixel row is the one that matters: saved
+ *      H10-1 and onDoll true, so every attribute-level row was still green.)
+ *   5. .fam-rail rendered at `height: 0; overflow: hidden`
+ *      FAIL RAIL a rail opens, in the document, with a real box  390x12 at
+ *           y=440
+ *      (NOTE: the per-tile rows stayed green there -- 8/8 reachable, 0 zero
+ *      boxes -- because overflow:hidden clips the paint and leaves the tiles'
+ *      rects alone. The rail's OWN box is what caught it, which is the argument
+ *      for measuring the container as well as its children.)
  *
  * Toasts are dismissed before every screenshot (Tom rejected an earlier sheet
  * for popups over the art) and every animation is paused before a pixel is
