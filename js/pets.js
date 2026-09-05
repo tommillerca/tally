@@ -228,6 +228,54 @@ export function petSignature(petId) { return PET_SIGNATURE[petId] || null; }
 // passive magnitude scales gently with level (level 1 -> ~6%, level 6 -> ~11%)
 export function passivePct(level) { return 0.04 + (level - 1) * 0.008; }
 
+/* ---- Kennel Phase A: morphs (cosmetic recolours, no stat touch, no glow) ----
+ * A morph is a CSS filter applied over a pet's existing art (no new PNGs, spec
+ * section 0.7). Rolled at egg-grant time (js/loot.js eggRow), read at hatch. Order
+ * here IS tier order for fusion (Phase C), not shipped yet. */
+export const MORPHS = ['base', 'ember', 'frost', 'toxic', 'midnight'];
+export const MORPH_WEIGHT = { base: 40, ember: 22, frost: 22, toxic: 10, midnight: 4 };
+export const MORPH_TIER = { base: 0, ember: 1, frost: 1, toxic: 2, midnight: 3 };
+export const MORPH_LABEL = { base: '', ember: 'Ember', frost: 'Frost', toxic: 'Toxic', midnight: 'Midnight' };
+export function isMorph(m) { return MORPHS.includes(m); }
+
+// Same crypto source loot.js's rng() uses, duplicated rather than imported: pets.js
+// stays a pure module with no DOM/db dependency (loot.js imports FROM here, not the
+// reverse), and tests seed it the same way (monkeypatch crypto.getRandomValues), see
+// "crate levers (a)" in tests/unit.test.js.
+function rng() {
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return a[0] / 0xffffffff;
+}
+
+// Species a morph can land on: every non-exclusive slot-C pet except CX (the
+// Founder's Lizard, exempt from morphs per spec section 0.7 -- its amethyst art
+// IS its look). Derived from PET_ASSIGN rather than a second hand-kept list.
+const MORPH_SPECIES = Object.keys(PET_ASSIGN).filter(id => id !== 'CX');
+
+// The (species, morph) pairs a player already owns, as a Set of "sp|morph" keys.
+// Pure: takes the instance list (js/loot.js petInstances()), never reads it itself.
+export function ownedPairs(instances) {
+  return new Set((instances || []).map(x => `${x.sp}|${x.morph || 'base'}`));
+}
+
+function weightedMorph(candidates) {
+  const total = candidates.reduce((a, m) => a + MORPH_WEIGHT[m], 0);
+  let r = rng() * total;
+  for (const m of candidates) { r -= MORPH_WEIGHT[m]; if (r < 0) return m; }
+  return candidates[candidates.length - 1];
+}
+
+/* Fresh-first: prefer a morph for which SOME species is still an unowned (sp,
+ * morph) pair, weighted among those candidates; once every pair is owned, fall
+ * through to the plain weighted draw over all five. The species itself is not
+ * decided here (grantEgg rolls the morph before the species is picked at hatch,
+ * spec section 2.2) -- this only asks "is any species still fresh at this morph". */
+export function rollMorph(owned) {
+  const fresh = MORPHS.filter(m => MORPH_SPECIES.some(s => !owned.has(`${s}|${m}`)));
+  return weightedMorph(fresh.length ? fresh : MORPHS);
+}
+
 // Assemble the battle-pet object makeFighter() takes. picks = array of node ids.
 // opts.shiny flags the ultra-rare variant (a stat bump). The intrinsic stat line
 // (rarity + per-pet tilt + shiny) rides on `.stats` so pit.js's makePetBody stays
