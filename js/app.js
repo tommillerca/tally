@@ -9444,8 +9444,31 @@ async function renderShop(el) {
     fb: !!$('#fbSect', el)?.open || S.fbJump,
   };
 
+  /* THE LEAD SHELF. Tom, 2026-09-04: "bumbleseal moves to the shelf ... nfl shit
+     goes to the lead shelf of the shop". So when the kit is live the Kit room
+     takes the top of the Shop and Bumbleseal drops to the drop shelf, into the
+     slot the Kit room used to hold, beside the Puffer Pack rather than instead
+     of it.
+
+     FLAG OFF, NOTHING MOVES, and that is the property that matters more than the
+     kit does: fbLead and petDrop are both '' and petLead is the pet shelf, so
+     the template below emits the byte-identical string it emitted before this
+     change. Pinned by tests/shop-lead-order-audit.mjs, which renders the Shop
+     off the committed app.js and off this one and requires the two to match
+     character for character while the flag is false. */
+  const petShelf = petShelfHtml(ownedCos, coinBal);
+  const fbLead = FOOTBALL_KIT_LIVE ? footballShelfHtml(ownedCos, coinBal, wasOpen.fb) : '';
+  const petLead = FOOTBALL_KIT_LIVE ? '' : petShelf;
+  /* She is a 50,000-coin legendary arriving under a shop heading rather than as
+     the page's own headline, so she gets a heading of her own: an unlabelled
+     hero halfway down a shelf reads as a leftover. .rk-theme is the strip the
+     rack and the rotating shelf already use, so this adds no CSS. */
+  const petDrop = FOOTBALL_KIT_LIVE
+    ? `<div class="rk-theme"><b>GWART'S MENAGERIE</b><i></i><span>Pets and their gear</span></div>${petShelf}`
+    : '';
+
   el.innerHTML = `
-  ${petShelfHtml(ownedCos, coinBal)}
+  ${fbLead}${petLead}
   <div class="rk-theme"><b>${esc(RACK_THEME)} · RACK ${rackNo} OF 4</b><i></i><span>New rack in ${rackDaysLeft}d</span></div>
   <!-- WHAT THIS WALLET REACHES, said in numbers rather than left to be inferred
        from which pills happen to be filled. A player at 340 coins could not buy
@@ -9514,7 +9537,7 @@ async function renderShop(el) {
     </div>
   </details>
 
-  ${FOOTBALL_KIT_LIVE ? footballShelfHtml(ownedCos, coinBal, wasOpen.fb) : ''}
+  ${petDrop}
 
   <div class="t3-sect"><b>Coin shop</b><i></i></div>
   <div class="t3-cells">

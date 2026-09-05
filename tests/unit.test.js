@@ -4757,6 +4757,65 @@ test('SW update checks bypass the HTTP cache (GitHub Pages max-age=600 held a de
   assert.match(calls[0], /updateViaCache:\s*'none'/, 'register() does not pass updateViaCache: none, so a deploy can hide behind the HTTP cache');
 });
 
+/* WHICH SHELF LEADS THE SHOP. Tom, 2026-09-04: "bumbleseal moves to the shelf
+   ... nfl shit goes to the lead shelf of the shop". Two orders, one flag, and
+   the one that matters is the OFF one: FOOTBALL_KIT_LIVE is false in the shipped
+   tree, so every player alive sees the flag-off Shop and a mistake here breaks
+   it for all of them to ship a kit nobody can buy yet.
+
+   This does not regex the ternaries. It EVALUATES the three real lines out of
+   js/app.js with stub shelves, both ways, and substitutes the results into the
+   real template, so what is asserted is the order of the string the Shop
+   actually builds. tests/shop-lead-order-audit.mjs then measures the same two
+   orders as boxes on a screen. */
+test('shop lead shelf: the Kit room leads when the kit is live, Bumbleseal drops to the drop shelf, and with the flag off nothing moves at all', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const fn = app.indexOf('async function renderShop(el)');
+  const d0 = app.indexOf('const petShelf = petShelfHtml(', fn);
+  const s = app.indexOf('el.innerHTML = `', d0);
+  const e = app.indexOf('<div class="rk-tail"></div>`;', s);
+  assert.ok(fn > 0 && d0 > fn && s > d0 && e > s, 'the Shop template or its shelf constants moved: re-anchor this test');
+  const tpl = app.slice(s, e);
+  /* The three constants, run for real. Stub shelves are unmistakable markers so
+     a hit cannot be some other word in 12KB of template. */
+  const shelves = live => new Function(
+    'FOOTBALL_KIT_LIVE', 'petShelfHtml', 'footballShelfHtml', 'ownedCos', 'coinBal', 'wasOpen',
+    app.slice(d0, s) + 'return { fbLead, petLead, petDrop };',
+  )(live, () => '<<PET>>', () => '<<FB>>', new Set(), 0, { fb: false });
+  const render = live => {
+    const v = shelves(live);
+    for (const k of ['fbLead', 'petLead', 'petDrop']) {
+      assert.equal(tpl.split('${' + k + '}').length - 1, 1, `the template must place \${${k}} exactly once`);
+    }
+    return tpl.replace('${fbLead}', v.fbLead).replace('${petLead}', v.petLead).replace('${petDrop}', v.petDrop);
+  };
+  const at = (h, t) => h.indexOf(t);
+
+  // ---- flag OFF: the shop every player has today ----
+  const off = render(false);
+  assert.equal(at(off, '<<FB>>'), -1, 'with FOOTBALL_KIT_LIVE false the Kit room must not be in the Shop at all');
+  assert.ok(at(off, '<<PET>>') > 0, 'with the flag off Bumbleseal must still be in the Shop');
+  assert.ok(at(off, '<<PET>>') < at(off, 'class="rk-theme"'),
+    'with the flag off Bumbleseal must lead the Shop, above the rack, exactly as she does today');
+  assert.equal(off.split('<<PET>>').length - 1, 1, 'Bumbleseal must be rendered once, not in two slots');
+
+  // ---- flag ON: the kit takes the lead and she moves down beside the Puffer Pack ----
+  const on = render(true);
+  assert.ok(at(on, '<<FB>>') > 0 && at(on, '<<PET>>') > 0, 'with the flag on both shelves must be in the Shop');
+  assert.equal(on.split('<<PET>>').length - 1, 1, 'Bumbleseal must be rendered once, not in two slots');
+  assert.ok(at(on, '<<FB>>') < at(on, 'class="rk-theme"'),
+    'the Kit room must lead the Shop, above the rack');
+  assert.ok(at(on, '<<FB>>') < at(on, '<<PET>>'),
+    'the Kit room must lead and Bumbleseal must sit below it, not the other way round');
+  assert.ok(at(on, 'id="dropSect"') > 0, 'the Puffer Pack must survive the move: Tom has not ruled on it');
+  assert.ok(at(on, '<<PET>>') > at(on, 'id="dropSect"'),
+    'Bumbleseal belongs in the drop-shelf area, after the Puffer Pack');
+  assert.ok(at(on, '<<PET>>') < at(on, 'Coin shop'),
+    'Bumbleseal must stay above the Coin shop, on the drop shelf rather than adrift at the foot of the page');
+  assert.ok(at(on, '<<PET>>') > at(on, 'id="shopRestBody"'),
+    'Bumbleseal must land inside the supplies panel with the drop shelf, not between the rack and the panel');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
