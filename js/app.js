@@ -268,7 +268,6 @@ const S = {
      first paint and after every equip. */
   petWear: {},
   fbTeam: null,    // Football kit, 2026-09-04: the team the kit room is showing
-  hubTab: null,    // S11, 2026-09-05: last hub sub-tab opened, session only (see renderBonehead)
   fbJump: false,   // one-shot: the wardrobe's colourway rail sent the player to the Kit room, so open it
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
   wpnAura: null,   // the weapon aura bought off the rack, worn on every surface
@@ -15229,12 +15228,13 @@ function openCharacter(tab = 'wardrobe') {
 let pendingHubTab = null;
 
 async function renderBonehead(el) {
-  // S11: the hub used to forget which sub-tab you were last on, so Shop then
-  // Today then Bonehead always landed back on Wardrobe. S.hubTab remembers it
-  // for the session (same in-memory pattern as S.fbTeam), never persisted.
-  const tab = pendingHubTab || S.hubTab || 'wardrobe';
+  /* The Bonehead tab LANDS ON THE WARDROBE, by ruling. QA round 36 S11 proposed
+     remembering the last hub sub-tab; it was built on 2026-09-05 and reverted the
+     same day because Tom ruled on v421 that tapping the bottom Bonehead icon from
+     Backpack, Shop or Build takes you home to the Wardrobe (tray-destination-audit
+     BONEHEAD pins it). Deep links (#/shop) and pendingHubTab still pick a tab. */
+  const tab = pendingHubTab || 'wardrobe';
   pendingHubTab = null;
-  S.hubTab = tab;
   /* THE HEADING IS THE PLAYER'S OWN NAME, not "Your Bonehead" (Tom, 2026-08-15,
      relaying his friends: whose bonehead it is was never in doubt). Both sources
      are LOCAL reads, so this costs no network and has no empty state on a fresh

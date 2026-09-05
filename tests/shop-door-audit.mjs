@@ -109,14 +109,18 @@ try {
     await page.evaluate(() => document.getElementById('doorProbe')?.remove());
   }
 
-  /* ================= HUB REMEMBERS THE LAST TAB (S11) ================= */
+  /* ================= HUB LANDS HOME (v421 ruling over S11) ================= */
   await go('#/shop');
   ok('HUB-SHOP landing on #/shop lights the Shop chip', await chipOn('shop'));
   await go('#/today');
   await page.evaluate(() => { location.hash = '#/bonehead'; });
   await sleep(1200);
-  ok('HUB-MEMORY Shop, then Today, then Bonehead returns to Shop (not Wardrobe)',
-    await chipOn('shop'), `wardrobe on: ${await chipOn('wardrobe')}`);
+  /* RE-PREMISED 2026-09-05, same day it was written: S11's "remember the last
+     hub tab" collided with Tom's v421 ruling that the bottom Bonehead icon lands
+     on the Wardrobe from Backpack, Shop or Build (tray-destination-audit
+     BONEHEAD). The ruling wins; this row now pins it from the shop side. */
+  ok('HUB-HOME Shop, then Today, then Bonehead lands on the Wardrobe (v421 ruling), and #/shop still deep-links',
+    await chipOn('wardrobe'), `shop on: ${await chipOn('shop')}`);
 
   /* ================= WALLET COIN ROUTE (S7) ================= */
   await go('#/shop');
