@@ -231,7 +231,7 @@ const QUIET_KV = new Set([
   'lastOpenDay', 'wbReturnDay',
   // "when did I last do X" throttles: a lost timestamp costs one extra attempt
   'lastNudgeAt', 'racePushAt', 'socialSyncAt', 'crewSeenTs', 'hkLastSync',
-  'hkStaleNotified', 'hkSleepDiag', 'lastExportAt', 'backupAt', 'transmuteAt',
+  'hkStaleNotified', 'hkSleepDiag', 'lastExportAt', 'backupAt', 'backupVersion', 'transmuteAt',
   // cloud-health diagnostics + their once-a-day nudge throttle: all three are
   // re-derived by the next push / the next /health, same class as backupAt
   'backupFail', 'clockSkewMs', 'cloudNudgeAt',
@@ -790,7 +790,7 @@ export async function exportAll() {
  * has climbed to (the newest day it has stood on, and the newest day it has
  * seen the server stand on), and a restore is a statement about the save, not
  * about where this device's clock has been. */
-const DEVICE_KV = ['identity', 'social', 'recoveryId', 'recoverySetAt', 'vaultConflict', 'bootRestored', 'cloudOff', 'apiBase', DAY_WITNESS_KEY, 'dayHighWater'];
+const DEVICE_KV = ['identity', 'social', 'recoveryId', 'recoverySetAt', 'vaultConflict', 'bootRestored', 'cloudOff', 'apiBase', 'backupVersion', DAY_WITNESS_KEY, 'dayHighWater'];
 
 /* IMPORT IS ALL-OR-NOTHING. Tom, 2026-08-13, after Vlad's demonstration:
  * "sounds like a good fix youve suggested". Every row across every store

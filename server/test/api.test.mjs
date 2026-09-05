@@ -249,6 +249,47 @@ await test('backup: PUT overwrites the previous row (one per player)', async () 
   assert.equal(got.blob, blob2);
 });
 
+/* PROVEN RED on integ/day2 at ee52f249:
+     FAIL backup: stale device re-pulls, merges, and retries without losing either device
+       stale client B overwrote client A (200)
+   Both clients hold the same base token. The first update wins, the second must
+   receive 409, pull the winner, merge locally, then retry from that version. */
+await test('backup: stale device re-pulls, merges, and retries without losing either device', async () => {
+  const fresh = await makeKeys();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
+  const put = async (blob, baseVersion) => signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup',
+    JSON.stringify({ blob: JSON.stringify(blob), baseVersion }));
+  const get = async () => {
+    const r = await signedFetch(fresh.kp, reg.playerId, 'GET', '/backup');
+    assert.equal(r.status, 200, 'PRECONDITION: the current backup could not be pulled');
+    const d = await r.json();
+    return { ...d, blob: JSON.parse(d.blob) };
+  };
+
+  const first = await put({ common: true }, null);
+  assert.equal(first.status, 200, 'PRECONDITION: the first client could not create the backup');
+  const base = await get();
+  const baseVersion = base.version ?? base.updatedAt;
+  assert.ok(Number.isInteger(baseVersion), `PRECONDITION: GET returned no integer version (${JSON.stringify(base)})`);
+
+  const winner = await put({ common: true, fromA: true }, baseVersion);
+  assert.equal(winner.status, 200, 'PRECONDITION: client A did not win its push');
+
+  const loser = await put({ common: true, fromB: true }, baseVersion);
+  assert.equal(loser.status, 409, `stale client B overwrote client A (${loser.status})`);
+  const conflict = await loser.json();
+  assert.ok(Number.isInteger(conflict.version) && conflict.version !== baseVersion,
+    `409 did not carry the current version (${JSON.stringify(conflict)})`);
+
+  const current = await get();
+  assert.deepEqual(current.blob, { common: true, fromA: true }, 'the losing push changed the stored blob');
+  const merged = { ...current.blob, fromB: true };
+  const retry = await put(merged, current.version);
+  assert.equal(retry.status, 200, `the merged retry was refused (${retry.status})`);
+  assert.deepEqual((await get()).blob, { common: true, fromA: true, fromB: true },
+    'the retry did not land one merged blob containing both clients');
+});
+
 await test('backup: GET 404 when a player has none', async () => {
   const fresh = await makeKeys();
   const reg = await (await regFetch(fresh.pubJwk)).json();

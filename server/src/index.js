@@ -143,6 +143,11 @@ const MAX_BACKUP_BYTES = 4 * 1024 * 1024; // encrypted full save (food log grows
    question a restore screen has to answer. */
 const BACKUP_DAILY_MS = 24 * 60 * 60 * 1000;
 const PROMOTE_DAILY = `backups.daily_at IS NULL OR excluded.updated_at - backups.daily_at >= ${BACKUP_DAILY_MS}`;
+/* `updated_at` is also the optimistic-lock version. Keep it monotonic even when
+   two pushes arrive inside one millisecond, otherwise both would receive the
+   same token and the second stale write would still be admitted. */
+const NEXT_BACKUP_VERSION =
+  'CASE WHEN excluded.updated_at > backups.updated_at THEN excluded.updated_at ELSE backups.updated_at + 1 END';
 /* THE PLAYER MUST STILL EXIST AT WRITE TIME, and that is a rule in the
    statement rather than an `if` in front of it, for the same reason the spire
    claim's cap and shield are (see the long note there). verifySigned reads the
@@ -160,7 +165,10 @@ const UPSERT_BACKUP =
      daily_blob = CASE WHEN ${PROMOTE_DAILY} THEN backups.blob       ELSE backups.daily_blob END,
      daily_size = CASE WHEN ${PROMOTE_DAILY} THEN backups.size       ELSE backups.daily_size END,
      daily_at   = CASE WHEN ${PROMOTE_DAILY} THEN excluded.updated_at ELSE backups.daily_at  END,
-     blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at`;
+     blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=${NEXT_BACKUP_VERSION}
+   RETURNING updated_at AS version`;
+const UPSERT_BACKUP_CAS = UPSERT_BACKUP.replace(
+  'RETURNING updated_at AS version', 'WHERE backups.updated_at = ? RETURNING updated_at AS version');
 /* The pre-migration statement: the same one, minus the daily slot. Only
    reachable from the "no such column" fallback in PUT /backup; see the note
    there. It carries the EXISTS clause too, because production is the tree most
@@ -168,7 +176,10 @@ const UPSERT_BACKUP =
 const UPSERT_BACKUP_NO_DAILY =
   'INSERT INTO backups (player_id, blob, app_v, size, updated_at) ' +
   'SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM players WHERE id = ?) ' +
-  'ON CONFLICT(player_id) DO UPDATE SET blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at';
+  `ON CONFLICT(player_id) DO UPDATE SET blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=${NEXT_BACKUP_VERSION} ` +
+  'RETURNING updated_at AS version';
+const UPSERT_BACKUP_NO_DAILY_CAS = UPSERT_BACKUP_NO_DAILY.replace(
+  'RETURNING updated_at AS version', 'WHERE backups.updated_at = ? RETURNING updated_at AS version');
 
 /* ---------------- names + friend codes ----------------
    NAME_ADJ / NAME_NOUN power the curated name builder: the client sends INDICES,
@@ -2185,15 +2196,41 @@ export default {
         if (auth.err) return json({ error: auth.err }, 401);
         const body = JSON.parse(bodyText || '{}');
         if (typeof body.blob !== 'string' || !body.blob) return json({ error: 'missing blob' }, 400);
+        /* New clients always send baseVersion, including explicit null for the
+           first push. Missing stays as a rolling-deploy compatibility path for
+           older clients, which cannot participate in optimistic locking until
+           they update. An explicit stale token never gets that bypass. */
+        const hasBaseVersion = Object.prototype.hasOwnProperty.call(body, 'baseVersion');
+        const baseVersion = body.baseVersion;
+        if (hasBaseVersion && baseVersion !== null &&
+            (!Number.isSafeInteger(baseVersion) || baseVersion < 1)) {
+          return json({ error: 'invalid base version' }, 400);
+        }
         const now = Date.now();
+        const writeBackup = async (withDaily) => {
+          const sql = withDaily
+            ? (hasBaseVersion ? UPSERT_BACKUP_CAS : UPSERT_BACKUP)
+            : (hasBaseVersion ? UPSERT_BACKUP_NO_DAILY_CAS : UPSERT_BACKUP_NO_DAILY);
+          const args = [auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now, auth.playerId];
+          if (hasBaseVersion) args.push(baseVersion);
+          const stored = await env.DB.prepare(sql).bind(...args).first();
+          if (stored) return { stored };
+          const current = await env.DB.prepare('SELECT updated_at FROM backups WHERE player_id = ?')
+            .bind(auth.playerId).first();
+          return current ? { conflict: current.updated_at } : {};
+        };
         try {
-          const r = await env.DB.prepare(UPSERT_BACKUP)
-            .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now, auth.playerId).run();
+          const result = await writeBackup(true);
           /* Nothing landed means the EXISTS refused it, which has exactly one
-             cause: the account was deleted between verifySigned and here. Say
-             the same thing every other route says about an id that is not
-             there, rather than answering ok about a save nobody stored. */
-          if (!(r.meta && r.meta.changes)) return json({ error: 'unknown player' }, 401);
+             cause without a current backup: the account was deleted between
+             verifySigned and here. A current backup means the compare-and-swap
+             refused a stale base, and its version tells the client what it must
+             pull before retrying. */
+          if (result.conflict != null) {
+            return json({ error: 'stale backup', code: 'stale-backup', version: result.conflict }, 409);
+          }
+          if (!result.stored) return json({ error: 'unknown player' }, 401);
+          return json({ ok: true, updatedAt: result.stored.version, version: result.stored.version });
         } catch (e) {
           /* THE MIGRATION IS NOT APPLIED YET, AND THIS IS THE ONE ROUTE WHERE
              THAT MUST NOT MATTER. Two migrations in server/migrations/ are
@@ -2206,10 +2243,12 @@ export default {
           if (/no such column/i.test(String(e))) {
             console.error('backups.daily_* missing; storing without the archive. ' +
               'Apply migrations/2026-08-25-backup-daily-slot.sql', (e && e.message) || e);
-            const nd = await env.DB.prepare(UPSERT_BACKUP_NO_DAILY)
-              .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now, auth.playerId).run();
-            if (!(nd.meta && nd.meta.changes)) return json({ error: 'unknown player' }, 401);
-            return json({ ok: true, updatedAt: now });
+            const result = await writeBackup(false);
+            if (result.conflict != null) {
+              return json({ error: 'stale backup', code: 'stale-backup', version: result.conflict }, 409);
+            }
+            if (!result.stored) return json({ error: 'unknown player' }, 401);
+            return json({ ok: true, updatedAt: result.stored.version, version: result.stored.version });
           }
           /* D1 HAS ITS OWN VALUE LIMIT, AND IT IS LOWER THAN MAX_BACKUP_BYTES.
              Measured 2026-08-17 by bisection against local D1: the largest blob
@@ -2237,7 +2276,8 @@ export default {
           }
           throw e;
         }
-        return json({ ok: true, updatedAt: now });
+        /* Successful writes return from the try block with the exact version
+           produced by the atomic INSERT ... RETURNING statement. */
       }
 
       /* Signed: pull the encrypted backup back down (fresh install / new phone).
@@ -2262,7 +2302,8 @@ export default {
           throw e;
         }
         if (!row || !row.blob) return json({ error: 'no backup' }, 404);
-        return json({ blob: row.blob, appV: row.app_v, updatedAt: row.updated_at });
+        return json({ blob: row.blob, appV: row.app_v, updatedAt: row.updated_at,
+          ...(!daily ? { version: row.updated_at } : {}) });
       }
 
       /* ---------------- account recovery ----------------
