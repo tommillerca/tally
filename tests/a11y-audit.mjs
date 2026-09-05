@@ -794,6 +794,199 @@ async function liveRegion(page, w, h) {
   await page.evaluate(() => { const t = document.getElementById('toast'); t.hidden = true; t.textContent = ''; });
 }
 
+/* THE TAB BAR, SAMPLED OFF THE RENDER ON BOTH SCREENS.
+ *
+ * WHY THIS ROW EXISTS AT ALL, and it is a lesson about instruments rather than
+ * about the app. The round-33 accessibility lane reported the ACTIVE tab label
+ * at 1.4:1, rgb(42,45,40) on rgb(13,12,17), on Today and on the Rack, i.e. the
+ * tab you are standing on is unreadable. It is not. `#tabbar .tab.active::before`
+ * is a filled plate in the tab's own hue, and a sampler that walks the DOM for a
+ * backgroundColor cannot see a pseudo-element, so it reported the page ground
+ * and produced 1.4. Measured HERE, off the screenshot, the same label is 4.85:1
+ * on Today and 9.16:1 on the Rack. app.css:7773 recorded 4.85 when the plate was
+ * authored; this agrees to the hundredth.
+ * So the row is pinned so that number can never again be re-litigated by a DOM
+ * walk, in either direction: if the plate is ever removed, or z-index:-1 ever
+ * stops painting it, the label really does fall to 1.4 and this goes red.
+ *
+ * THE BADGE IS REAL, and it is the thing that was actually broken: #fff on
+ * --danger measured 2.76:1 at 10px/900. #crewBadge is STATIC in index.html and
+ * ships [hidden], so it is unhidden with a count and re-hidden rather than
+ * planted: it is the app's own element, in the app's own tab, under the app's
+ * own CSS. */
+async function tabBarContrast(page, w, h) {
+  let measured = 0;
+  for (const surface of ['today', 'shop']) {
+    await goTo(page, surface);
+    await page.evaluate(() => {
+      const t = document.getElementById('toast'); if (t) { t.hidden = true; t.textContent = ''; }
+      const b = document.getElementById('crewBadge'); if (b) { b.hidden = false; b.textContent = '4'; }
+    });
+    await sleep(350);
+    await samplePage(page, await shotOf(page));
+    const got = await page.evaluate(() => {
+      /* IN THE LIVE DOCUMENT, WITH A BOX, INSIDE THE SHOT. A detached node hands
+         back all-zero rects that read as a clean measurement, so every element
+         here is asked those three questions before its colour is believed. */
+      const usable = el => {
+        if (!el || !el.isConnected) return null;
+        const r = el.getBoundingClientRect();
+        if (!(r.width > 1 && r.height > 1)) return null;
+        if (r.top < 0 || r.bottom > innerHeight || r.left < 0 || r.right > innerWidth) return null;
+        return r;
+      };
+      const read = (el, why) => {
+        const r = usable(el); if (!r) return { why, unusable: true };
+        const fg = (getComputedStyle(el).color.match(/[\d.]+/g) || []).map(Number);
+        const bg = window.__bgAt(el, fg);
+        if (!bg) return { why, noBg: true };
+        return { why, fg: fg.slice(0, 3), bg, ratio: +window.__ratio(fg, bg).toFixed(2),
+          size: parseFloat(getComputedStyle(el).fontSize), weight: parseInt(getComputedStyle(el).fontWeight) || 400,
+          box: [+r.width.toFixed(1), +r.height.toFixed(1)] };
+      };
+      const out = [];
+      for (const tab of document.querySelectorAll('#tabbar .tab'))
+        out.push(read(tab.querySelector('span'), `${tab.dataset.tab} label${tab.classList.contains('active') ? ' (ACTIVE)' : ''}`));
+      out.push(read(document.getElementById('crewBadge'), 'crew badge count'));
+      const active = document.querySelectorAll('#tabbar .tab.active').length;
+      return { out, active };
+    });
+    await page.evaluate(() => { const b = document.getElementById('crewBadge'); if (b) { b.hidden = true; b.textContent = ''; } });
+    /* AN EMPTY SAMPLE IS A FAILURE, ASSERTED BEFORE ANYTHING IS CLAIMED ABOUT IT,
+       and "exactly one tab is active" is the half that makes the ACTIVE row mean
+       something: zero active tabs would leave four green inactive labels and no
+       finding at all. */
+    if (got.active !== 1) { fail(`${w}x${h} ${surface} tab bar: ${got.active} tabs carry .active; the active label is the pair this row is about`); continue; }
+    if (!got.out.length) { fail(`${w}x${h} ${surface} tab bar: zero labels were sampled, so nothing was graded`); continue; }
+    for (const g of got.out) {
+      if (g.unusable) { fail(`${w}x${h} ${surface} ${g.why}: not in the live document with a non-zero box inside the viewport, so no pixel was sampled`); continue; }
+      if (g.noBg) { fail(`${w}x${h} ${surface} ${g.why}: no background pixel was sampled, so the pair was never graded`); continue; }
+      measured++;
+      const need = g.size >= 24 || (g.size >= 18.66 && g.weight >= 700) ? 3 : 4.5;
+      const line = `${w}x${h} ${surface} ${g.why}: ${g.ratio}:1 (need ${need}) ${g.size}px/${g.weight} rgb(${g.fg}) on rgb(${g.bg})`;
+      rows.push({ w, h, name: `${surface} ${g.why}`, ratio: g.ratio, need, why: 'tab bar' });
+      if (g.ratio < need) fail(line); else info(line);
+    }
+  }
+  if (!measured) fail(`${w}x${h} tab bar: zero pairs were measured; an empty sample set is a failure, not a pass`);
+}
+
+/* A PRICE WITH NO PIECE IS NOT A NAME.
+ * Measured on the Rack at 390x844: 41 of 76 interactive elements had an
+ * accessible name matching /^[\d,.\s]+$/, so VoiceOver read "3,000" forty-one
+ * times down one screen with nothing to say what any of them bought. Graded two
+ * ways on purpose: every buy control by hand, and then the whole screen swept,
+ * because the finding was a SCREEN count and a row scoped to two selectors
+ * would go green the day a price control appears under a third one. */
+async function rackNames(page, w, h) {
+  await goTo(page, 'shop');
+  const got = await page.evaluate(() => {
+    const nameOf = e => (e.getAttribute('aria-label') || e.textContent || '').replace(/\s+/g, ' ').trim();
+    const shown = e => e.isConnected && e.offsetParent !== null && e.getBoundingClientRect().height > 1;
+    const buys = [...document.querySelectorAll('[data-buyrack], [data-petbuy]')].filter(shown);
+    const all = [...document.querySelectorAll('button, [role="button"], a[href], input, select, textarea')].filter(shown);
+    const numeric = e => /^[\d,.\s]+$/.test(nameOf(e));
+    return { total: all.length, buys: buys.length,
+      bare: buys.filter(numeric).map(e => ({ id: e.dataset.buyrack || e.dataset.petbuy, name: nameOf(e) })),
+      sweep: all.filter(numeric).map(e => ({ cls: String(e.className).slice(0, 30), name: nameOf(e) })),
+      sample: buys.slice(0, 3).map(nameOf) };
+  });
+  if (!got.buys) { fail(`${w}x${h} rack: zero buy controls were found, so not one accessible name was graded`); return; }
+  info(`${w}x${h} rack: ${got.buys} buy controls of ${got.total} interactive elements; first three named ${JSON.stringify(got.sample)}`);
+  if (got.bare.length)
+    fail(`${w}x${h} rack: ${got.bare.length} of ${got.buys} buy controls are named by their number alone (${JSON.stringify(got.bare.slice(0, 3))}); a screen reader reads a price with no item`);
+  if (got.sweep.length)
+    fail(`${w}x${h} rack: ${got.sweep.length} of ${got.total} interactive elements on this screen have a purely numeric accessible name (${JSON.stringify(got.sweep.slice(0, 3))})`);
+}
+
+/* MONEY THAT MOVES HAS TO SAY SO.
+ * Measured before the fix: the toast was the app's only live region, a balance
+ * repainted in place through __refreshWalletPill fired none, and the purchase
+ * sentence reached only #toast, which writes its text while it is still
+ * [hidden]. Both events are driven the way the app drives them (the real
+ * coinsAdd, then a REAL two-tap mouse purchase), and the observer that watches
+ * for them CARRIES ITS OWN CONTROL: a toast is fired first, and if the observer
+ * cannot see that it is broken and every "announced nothing" below would be a
+ * lie rather than a finding. */
+async function announcements(page, w, h) {
+  const arm = () => page.evaluate(() => {
+    window.__obs?.disconnect();
+    window.__spoken = [];
+    window.__obs = new MutationObserver(ms => {
+      for (const m of ms) {
+        const n = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+        const host = n?.closest('[aria-live]');
+        if (host && host.textContent.trim()) window.__spoken.push({ where: host.id || String(host.className), text: host.textContent.trim().slice(0, 70) });
+      }
+    });
+    window.__obs.observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  const spoken = () => page.evaluate(() => window.__spoken || []);
+
+  await goTo(page, 'today');
+  await arm();
+  await page.evaluate(() => window.__toast && window.__toast('live-region observer control', 500));
+  await sleep(400);
+  const ctrl = await spoken();
+  if (!ctrl.length) { fail(`${w}x${h} announcements: the observer did not see a real toast reach a live region, so it cannot report on anything else`); return; }
+  info(`${w}x${h} announcements: observer control saw ${ctrl.length} live-region write(s) from one toast`);
+  await page.evaluate(() => { const t = document.getElementById('toast'); t.hidden = true; t.textContent = ''; });
+
+  /* A COIN CHANGE. Driven through the app's own store and its own repaint, on
+     Today, which is the only surface that carries the wallet pill. */
+  await arm();
+  const coin = await page.evaluate(async () => {
+    if (!navigator.webdriver) return { error: 'not webdriver' };
+    if (!document.getElementById('coinBtn')) return { error: 'no wallet pill on this screen' };
+    const loot = await import(new URL('js/loot.js', location.href).href);
+    const before = await loot.coins();
+    await loot.coinsAdd(250);
+    await window.__refreshWalletPill?.();
+    return { before, after: await loot.coins(), shown: document.querySelector('#coinBtn b')?.textContent };
+  });
+  await sleep(500);
+  if (coin.error) { fail(`${w}x${h} coin change: could not drive one (${coin.error}), so nothing about announcing it was graded`); return; }
+  /* THE NUMBER HAD TO BE ABLE TO MOVE. A balance that did not change cannot
+     prove anything about announcing a change. */
+  if (coin.after !== coin.before + 250 || coin.shown !== coin.after.toLocaleString())
+    fail(`${w}x${h} coin change: the balance went ${coin.before} -> ${coin.after} and the pill shows "${coin.shown}"; the driven change did not land, so the announcement was never testable`);
+  else {
+    const said = (await spoken()).filter(s => s.where !== 'toast');
+    if (!said.length) fail(`${w}x${h} coin change: ${coin.before} -> ${coin.after} announced nothing; no live region other than the transient toast fired`);
+    else info(`${w}x${h} coin change: ${coin.before} -> ${coin.after} announced by #${said[0].where} as "${said[0].text}"`);
+  }
+
+  /* A PURCHASE. A REAL two-tap mouse buy on the Rack, with the money put there
+     first so the path under test is the one that succeeds. */
+  await page.evaluate(async () => {
+    const loot = await import(new URL('js/loot.js', location.href).href);
+    await loot.coinsAdd(90000);
+  });
+  await goTo(page, 'shop');
+  await page.evaluate(() => { const t = document.getElementById('toast'); t.hidden = true; t.textContent = ''; });
+  await arm();
+  const at = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('[data-buyrack][data-cur="coin"]')].find(e => e.offsetParent !== null);
+    if (!b) return null;
+    b.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const r = b.getBoundingClientRect();
+    if (!(r.height > 1 && r.top >= 0 && r.bottom <= innerHeight)) return null;
+    return { id: b.dataset.buyrack, amt: b.dataset.amt, x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  if (!at) { fail(`${w}x${h} purchase: no coin price control was on screen to buy through, so nothing about announcing a purchase was graded`); return; }
+  await page.mouse.click(at.x, at.y); await sleep(600);      // arms
+  await page.mouse.click(at.x, at.y); await sleep(1800);     // commits
+  const owned = await page.evaluate(async id => {
+    const loot = await import(new URL('js/loot.js', location.href).href);
+    return [...(await loot.ownedCosmeticIds())].includes(id);
+  }, at.id).catch(() => null);
+  const said = (await spoken()).filter(s => s.where !== 'toast');
+  if (owned === false) fail(`${w}x${h} purchase: the two-tap buy on ${at.id} (${at.amt}) never landed, so the announcement was never testable`);
+  else if (!said.length) fail(`${w}x${h} purchase: buying ${at.id} for ${at.amt} announced nothing; no live region other than the transient toast fired`);
+  else info(`${w}x${h} purchase: ${at.id} for ${at.amt} announced by #${said[0].where} as "${said[0].text}"`);
+  await page.evaluate(() => { window.__obs?.disconnect(); const t = document.getElementById('toast'); t.hidden = true; t.textContent = ''; });
+}
+
 /* FIVE BUTTONS CALLED "FIGHT" ARE ONE BUTTON TO A SCREEN READER. */
 async function pitNames(page, w, h) {
   await goTo(page, 'pit');
@@ -845,9 +1038,14 @@ try {
     await tapTargets(page, w, h);
     await toastEatsTaps(page, w, h);
     await contrast(page, w, h);
+    await tabBarContrast(page, w, h);
+    await rackNames(page, w, h);
     await rarityNotColourOnly(page, w, h);
     await tokenPairs(page, w, h);
     await pitNames(page, w, h);
+    /* LAST, because it is the only section that SPENDS: it adds coins and buys a
+       piece off the rack, which changes ownership for everything after it. */
+    await announcements(page, w, h);
   }
 } finally {
   await browser.close();
