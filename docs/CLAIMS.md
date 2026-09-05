@@ -19,6 +19,10 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## r34 watchdog (2026-09-05)
+
+1. PROOF: dead-shell-audit.mjs | REACH: On a slow connection, the dead-shell watchdog no longer reloads the app while js/app.js is still downloading. It now waits for the module script to settle (load or error) before arming its 12s check, so a genuinely dead shell still recovers on the same schedule, but a merely slow one is no longer reloaded mid-download.
+
 ## kit critique (2026-09-05)
 
 1. PROOF: unit.test.js, football-kit-audit.mjs | REACH: Buying the full football kit after already owning some of its five pieces now charges only for what is missing, never more than the flat full-kit price. A player who owned three of the five used to pay the full price for the other two; those two now cost exactly what two pieces are worth, and the "you save" line only appears when there really is a saving.
