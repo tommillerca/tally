@@ -347,7 +347,7 @@ const ACTIONS = [
      after the want[0] claim won. tests/football-kit-audit.mjs row REPEAT-BUNDLE
      drives the sequential already-owned-everything case for both the bundle
      and a lone garment tile. */
-  { id: 'js/loot.js:buyFootballBundle', sites: 3, undriven: "a purchase: refuses outright when everything in the bundle is already owned, and the claim (grantCosmetic on the first missing id) refunds a lost race the same way buyFootballItem does. Docs: docs/FOOTBALL-KIT.md 7.8; sequential repeat driven by tests/football-kit-audit.mjs row REPEAT-BUNDLE" },
+  { id: 'js/loot.js:buyFootballBundle', sites: 4, /* 4th site 2026-09-05: the fair-price refund (coinsAdd) when an overlapping single buy delivered a garment the bundle had quoted */ undriven: "a purchase: refuses outright when everything in the bundle is already owned, and the claim (grantCosmetic on the first missing id) refunds a lost race the same way buyFootballItem does. Docs: docs/FOOTBALL-KIT.md 7.8; sequential repeat driven by tests/football-kit-audit.mjs row REPEAT-BUNDLE" },
   /* Registered 2026-08-31: both gained their single "paying" site from the spend
      reorder, and in both cases it is a REFUND of the balance the same call took
      a line or two earlier, not a payout. Neither grants anything, so neither has

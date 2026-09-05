@@ -1,0 +1,50 @@
+[godmode] puppeteer 24.43.1 via repo node_modules: /Users/tommiller/Documents/Hyperframes Editor/tally/node_modules/puppeteer/lib/cjs/puppeteer/puppeteer.js
+RECT shop-poster-boneyard-bruisers {"x":16,"y":408.921875,"width":398,"height":248.671875}
+WROTE shop-poster-boneyard-bruisers -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/shop-poster-boneyard-bruisers.png (796x658)
+RECT shop-poster-windrow-wasps {"x":16,"y":408.921875,"width":398,"height":248.671875}
+WROTE shop-poster-windrow-wasps -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/shop-poster-windrow-wasps.png (796x658)
+RECT shop-kitroom-open (0 owned) .drop-grid -> {"x":31,"y":17.59375,"width":368,"height":829.9375}
+WROTE shop-kitroom-open (0 owned) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/shop-kitroom-open.png (736x1660)
+KIT ROOM 3-OWNED: bundle data-amt=8400, bundle text="8,400"
+  tiles: [{"label":"Helmet","owned":true,"btn":"In your Wardrobe"},{"label":"Jersey","owned":true,"btn":"In your Wardrobe"},{"label":"Cleats","owned":true,"btn":"In your Wardrobe"},{"label":"Lizard Helmet","owned":false,"btn":"4,200"},{"label":"Lizard Jersey","owned":false,"btn":"4,200"}]
+RECT shop-kitroom-3owned (3 owned) .drop-grid -> {"x":31,"y":28.1875,"width":368,"height":809.09375}
+WROTE shop-kitroom-3owned (3 owned) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/shop-kitroom-3owned.png (736x1618)
+RECT shop-broke .drop-buy.cant -> {"x":231,"y":1100.3125,"width":157,"height":40}
+PAGEERROR Cannot read properties of null (reading 'classList')
+PAGEERROR Cannot read properties of null (reading 'classList')
+RECT shop-broke #toast -> null
+TOAST TEXT: "null"
+MISSING/FAIL: shop-broke: #toast has no visible rect after tapping a cant button
+WROTE shop-broke (cant pills + shortfall toast) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/shop-broke.png (860x1864)
+fb-bar text: "TryingGlasswater Gannets 4,200 · all 32 teams"
+locked tile tags (first 6): ["Locked","Locked","Locked","Locked","Locked","Locked"]
+RECT wardrobe-rail (locked team centred) .fb-rail-wrap -> {"x":16,"y":229.171875,"width":398,"height":407.5}
+WROTE wardrobe-rail (locked team centred) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/wardrobe-rail.png (796x816)
+GRANTED helmet: 128 ids across all teams (footballGrantIds)
+GRANTED jersey: 32 ids across all teams (footballGrantIds)
+GRANTED cleats: 32 ids across all teams (footballGrantIds)
+GRANTED pet-helmet: 32 ids across all teams (footballGrantIds)
+GRANTED pet-jersey: 32 ids across all teams (footballGrantIds)
+hat family badge reads: "32"
+RECT wardrobe-hat-families (helmet family, 32 badge) #proofHelmetFam -> {"x":219.5,"y":386.421875,"width":92.75,"height":92.75}
+WROTE wardrobe-hat-families (helmet family, 32 badge) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/wardrobe-hat-families.png (184x186)
+RECT doll-fullkit-teamA (H/T/FW + lizard CH/CT) .bh-stage.lg -> {"x":16,"y":59.09375,"width":76,"height":118}
+WROTE doll-fullkit-teamA (H/T/FW + lizard CH/CT) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/doll-fullkit-boneyard-bruisers.png (152x236)
+RECT doll-fullkit-teamB (H/T/FW + lizard CH/CT) .bh-stage.lg -> {"x":16,"y":59.09375,"width":76,"height":118}
+WROTE doll-fullkit-teamB (H/T/FW + lizard CH/CT) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/doll-fullkit-windrow-wasps.png (152x236)
+RECT stable-petwear (collapsed lizard family tiles) .pet-wear:not([hidden]) -> {"x":16,"y":423.1875,"width":398,"height":188.296875}
+WROTE stable-petwear (collapsed lizard family tiles) -> /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/stable-petwear.png (796x376)
+
+=== SHOTS ===
+shop-poster-boneyard-bruisers: /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/shop-poster-boneyard-bruisers.png (796x658)
+shop-poster-windrow-wasps: /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/shop-poster-windrow-wasps.png (796x658)
+shop-kitroom-open (0 owned): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/shop-kitroom-open.png (736x1660)
+shop-kitroom-3owned (3 owned): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/shop-kitroom-3owned.png (736x1618)
+shop-broke (cant pills + shortfall toast): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/shop-broke.png (860x1864)
+wardrobe-rail (locked team centred): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/wardrobe-rail.png (796x816)
+wardrobe-hat-families (helmet family, 32 badge): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/wardrobe-hat-families.png (184x186)
+doll-fullkit-teamA (H/T/FW + lizard CH/CT): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/doll-fullkit-boneyard-bruisers.png (152x236)
+doll-fullkit-teamB (H/T/FW + lizard CH/CT): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/doll-fullkit-windrow-wasps.png (152x236)
+stable-petwear (collapsed lizard family tiles): /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/proof/final/stable-petwear.png (796x376)
+
+1 step(s) missing, see MISSING/FAIL above.

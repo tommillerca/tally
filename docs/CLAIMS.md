@@ -23,6 +23,10 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 1. PROOF: store-copy-lint.mjs, unit.test.js | REACH: The App Store archive has no internal-distribution invitation, thank-you strip, invitation News item, testing update copy, or Settings diagnostics. Web and internal builds keep those feedback routes.
 
+## backdated logs (2026-09-05)
+
+1. PROOF: unit.test.js | REACH: Logging a forgotten meal onto a past day (the day's Add sheet, a relog, Quick add) no longer pays XP, a streak milestone, or a badge. Past days stay fully editable — an existing entry there still saves after being edited — but only a log dated today earns a reward. Gwart's line on a past day no longer claims the day is "finished"; it now says the day is open to fix, just unpaid.
+
 ## r34 backup version (2026-09-05)
 
 1. PROOF: backup-conflict-audit.mjs (gate-registered PURE), api.test.mjs (local Worker) | REACH: Two devices that edit from the same cloud backup no longer overwrite each other. The stale device pulls the winner, merges both saves, and retries once.

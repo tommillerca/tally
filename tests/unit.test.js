@@ -819,6 +819,70 @@ test('crate levers (c) awardDayCloseIfDue: an off-budget logged day grants no cr
   assert.equal(onCrates[0].crate, 'golden', 'the day-close crate is still the Bone (golden) crate');
 });
 
+/* BACKDATED LOGS PAY NOTHING (2026-09-05). Tom: past days stay editable (people
+   forget to log), but a food log dated before dateKey() must earn no XP, streak
+   or badge -- it is a diary correction, not a today action. Playtest repro:
+   open yesterday, Gwart says the day is finished, tap Add to Snacks, log an
+   apple: the diary changed and XP rose by 10 anyway, because onFoodLogged never
+   looked at entry.date against dateKey() before running its award() calls. The
+   fix is one guard at the top of onFoodLogged (js/game.js), so it holds for
+   every caller (relog, quick add, portion add) without touching commitLogEntry,
+   which must still let the db.put land either way (past days stay editable). */
+test('backdated log (2026-09-05): logging into yesterday awards 0 XP and leaves the ledger untouched', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-backdate-yesterday');
+  const yday = addDays(dateKey(), -1);
+  const e = { id: 'bd-1', date: yday, meal: 0, name: 'Apple', kcal: 95, p: 0, c: 25, f: 0 };
+  await dbm.db.put('log', e);
+  const game = await g.onFoodLogged(e, { targets: { kcal: 2000, p: 120 }, entriesForDate: [e] });
+  assert.equal(game.xp, 0, 'a backdated log must earn 0 XP');
+  assert.equal(game.streakMilestone, null, 'a backdated log must not fire a streak milestone');
+  assert.equal(game.newBadges.length, 0, 'a backdated log must not evaluate/award badges');
+  assert.equal(game.crates, 0, 'a backdated log must grant no crate');
+  const xpRows = await dbm.db.all('xp');
+  assert.equal(xpRows.length, 0, 'the XP ledger must be untouched by a backdated log');
+});
+
+test('backdated log (2026-09-05): logging into today still awards its base 10 XP', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-backdate-today');
+  const today = dateKey();
+  // control: the first log of a real today still pays (first-log bonus included)
+  const e1 = { id: 'bd-t1', date: today, meal: 0, name: 'Egg', kcal: 70, p: 6, c: 1, f: 5 };
+  await dbm.db.put('log', e1);
+  const first = await g.onFoodLogged(e1, { targets: { kcal: 4000, p: 500 }, entriesForDate: [e1] });
+  assert.ok(first.xp > 0, 'the first log of today must still pay (control)');
+  // a second log the same day, past first-log/protein/all-meals, must be the bare 10
+  const e2 = { id: 'bd-t2', date: today, meal: 1, name: 'Toast', kcal: 90, p: 3, c: 15, f: 2 };
+  await dbm.db.put('log', e2);
+  const second = await g.onFoodLogged(e2, { targets: { kcal: 4000, p: 500 }, entriesForDate: [e1, e2] });
+  assert.equal(second.xp, 10, 'a same-day log past the first-log bonus must pay exactly the base 10');
+});
+
+test("backdated log (2026-09-05): editing yesterday's entry still saves, and still pays 0", async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-backdate-edit');
+  const yday = addDays(dateKey(), -1);
+  const e = { id: 'bd-edit-1', date: yday, meal: 0, name: 'Apple', kcal: 95, p: 0, c: 25, f: 0 };
+  await dbm.db.put('log', e);
+  await g.onFoodLogged(e, { targets: {}, entriesForDate: [e] });
+  const edited = { ...e, name: 'Apple (large)', kcal: 130 };
+  await dbm.db.put('log', edited);   // the edit: same id, new fields, no different date
+  const stored = await dbm.db.get('log', 'bd-edit-1');
+  assert.equal(stored.name, 'Apple (large)', 'editing a past-day entry must still persist its name');
+  assert.equal(stored.kcal, 130, 'editing a past-day entry must still persist its new kcal');
+  const again = await g.onFoodLogged(edited, { targets: {}, entriesForDate: [edited] });
+  assert.equal(again.xp, 0, 're-running the reward path on an edited backdated entry still pays 0');
+  const xpRows = await dbm.db.all('xp');
+  assert.equal(xpRows.length, 0, 'the XP ledger stays untouched after editing a backdated entry');
+});
+
 /* THE COSMETIC PRICE LADDER, PINNED (round 33, 2026-09-04, Tom: "Just make
    everything cost more"). Same reasoning as the crate ranges above: these are
    shipped economy numbers and nothing in the tree noticed if one of them

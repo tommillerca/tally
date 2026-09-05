@@ -5224,13 +5224,19 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
     'You took the numbers off him. The Wardrobe gives them back.',
     'He is carrying no stats. I would fix that before a fight.',
   ];
+  /* PAST DAYS ARE EDITABLE, NOT FINISHED (Tom, 2026-09-05): people forget to log
+     a meal, so the day stays open to fix. What changed is the reward, not the
+     door: a backdated log earns no XP, streak or badge (js/game.js onFoodLogged),
+     so Gwart says so instead of claiming the day is carved shut, which is no
+     longer true and was the bug report (tap Add on yesterday, log an apple, XP
+     still rose). */
   if (!isToday) return [
-    'Yesterday is set. You cannot re-cut a finished thing.',
-    'Nothing to log back here. Have a browse if you like.',
-    'That day is carved. Admire it, but you cannot sand it.',
-    'Back here it is all finished. Today is where the work is.',
+    'Log the meal you forgot. Just do not expect XP for it.',
+    'Fix it if you missed it. Nobody pays you for old news.',
+    'Edit away. The reward already clocked out for the day.',
+    'Add the food, skip the applause. That is how it works back here.',
     'You have wandered off behind him. He is up ahead.',
-    'I keep the old days for reading, not for fixing.',
+    'I will take the correction. XP stopped listening yesterday.',
     'History is a decent read. He is a better one.',
   ];
   if (cropsRipe) return [
