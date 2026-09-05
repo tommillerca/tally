@@ -121,9 +121,17 @@
  *                  teams x 1 keys, every sold garment in every team: false"
  *   REPEAT-BUNDLE  the `!want.length` refusal replaced by a charge.
  *                  "bundle: SOLD; coins 83200 -> 66400 (delta -16800)"
- *   SHUT           `stocked` defaulting to true on either path, which is the
- *                  mutation that would ship the kit early. "garment sold,
- *                  bundle refused" / "garment refused, bundle sold"
+ *   FLAG-TILL      (was SHUT, renamed 2026-09-04 when the flag went true: the
+ *                  row grades whichever side of the flag the tree is on, and a
+ *                  label reading "so a shut shop sells nothing" over a live shop
+ *                  that sold two things is a guard lying about its own subject.)
+ *                  While the flag was false: `stocked` defaulting to true on
+ *                  either path, the mutation that would have shipped the kit
+ *                  early. "garment sold, bundle refused" / "garment refused,
+ *                  bundle sold". Now that it is true the row also holds the
+ *                  till to its own arithmetic, so a charge of 0 or a double
+ *                  charge is red: "the till says it took 21000, so 79000 is
+ *                  owed" against a measured 79000.
  *   NOT-SOLD       drop `!garment?.sold`. "visor60 at the till: SOLD, coins
  *                  100000 -> 95800, 32 football rows granted"
  *
@@ -726,19 +734,30 @@ ok('REPEAT-BUNDLE after the bundle, neither a garment tile nor the bundle tile c
   `garment: ${buy4.ok ? 'SOLD' : `refused '${buy4.reason}'`}; bundle: ${buy5.ok ? 'SOLD' : `refused '${buy5.reason}'`}; ` +
   `coins ${beforeRebuy} -> ${await loot.coins()} (delta ${await loot.coins() - beforeRebuy}, expected 0)`);
 
-/* THE SHUT SHOP, still shut. The parameter above exists so the till is testable,
-   not so the kit ships early: with nothing passed, both paths take the live flag
-   and refuse while FOOTBALL_KIT_LIVE is false. */
+/* THE TILL WITH NOTHING PASSED, which is how the app calls it. The `true` in
+   every row above is a test-only override so the till stays testable while the
+   shop is shut; this row is the one that reads the REAL FOOTBALL_KIT_LIVE, and
+   it grades whichever side of the flag the tree is on. Flag false: both paths
+   refuse 'not-stocked' and the wallet does not move. Flag true (2026-09-04):
+   both paths SELL, and the wallet moves by exactly what the till said it took,
+   because "the flag is on" with no arithmetic behind it is a row that would pass
+   on a till that charged nothing or charged twice. */
 useDbName('football-kit-audit-shut');
 await kvSet('coins', WALLET);
 const shutItem = await loot.buyFootballItem(jerseyA);
 const shutBundle = await loot.buyFootballBundle('ignored');
-ok('SHUT with nothing passed both buy paths still read the live flag, so a shut shop sells nothing and charges nothing',
-  (FB.FOOTBALL_KIT_LIVE ? shutItem.ok === true : shutItem.ok === false && shutItem.reason === 'not-stocked') &&
-  (FB.FOOTBALL_KIT_LIVE ? shutBundle.ok === true : shutBundle.ok === false && shutBundle.reason === 'not-stocked') &&
-  (FB.FOOTBALL_KIT_LIVE || (await loot.coins()) === WALLET),
-  `FOOTBALL_KIT_LIVE=${FB.FOOTBALL_KIT_LIVE}: garment ${shutItem.ok ? 'sold' : `refused '${shutItem.reason}'`}, ` +
-  `bundle ${shutBundle.ok ? 'sold' : `refused '${shutBundle.reason}'`}, coins ${WALLET} -> ${await loot.coins()}`);
+const shutCoins = await loot.coins();
+const shutSpend = (shutItem.cost || 0) + (shutBundle.cost || 0);
+ok(`FLAG-TILL with nothing passed both buy paths read the live flag, and FOOTBALL_KIT_LIVE=${FB.FOOTBALL_KIT_LIVE}`,
+  FB.FOOTBALL_KIT_LIVE
+    ? shutItem.ok === true && shutBundle.ok === true
+      && shutSpend > 0 && shutCoins === WALLET - shutSpend
+    : shutItem.ok === false && shutItem.reason === 'not-stocked'
+      && shutBundle.ok === false && shutBundle.reason === 'not-stocked'
+      && shutCoins === WALLET,
+  `FOOTBALL_KIT_LIVE=${FB.FOOTBALL_KIT_LIVE}: garment ${shutItem.ok ? `sold for ${shutItem.cost}` : `refused '${shutItem.reason}'`}, ` +
+  `bundle ${shutBundle.ok ? `sold for ${shutBundle.cost}` : `refused '${shutBundle.reason}'`}, ` +
+  `coins ${WALLET} -> ${shutCoins} (the till says it took ${shutSpend}, so ${WALLET - shutSpend} is owed)`);
 
 /* A VISOR IS GRANTED, NEVER SOLD: it has no tile, and if a stale id for one ever
    reached the till it must not take a garment's price for a piece of a hat. */

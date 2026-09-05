@@ -527,14 +527,17 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = und
      square (9.3 art px at 2048, under one thumbnail pixel), measured across all
      six pet-era files. */
   const tier = thumb === true ? bhTierFor(imgSize) : thumb;
-  const geo = `position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%);`;
+  /* No trailing semicolon: this string is also the <img>'s whole style attribute,
+     and one spare `;` on every pet layer is a diff on 66KB of shipped Shop markup
+     that buys nothing. The tint spans below add their own separator. */
+  const geo = `position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)`;
   const layer = (u, cls = '') => {
     const s = tier ? bhThumb(u, tier) : u;
     return `<img${cls ? ` class="${cls}"` : ''} src="${s}"${s === u ? '' : ` data-full="${u}" ${THUMB_FALLBACK}`} style="${geo}" alt="">`;
   };
   /* Football kit, 2026-09-04: a tinted garment's two multiply spans take the SAME
      geometry string as its <img>, so they inherit the registration untouched. */
-  const tintOf = i => (tints[i] || []).map(t => `<span class="fb-tint pw" style="${geo}--fbm:url('${t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
+  const tintOf = i => (tints[i] || []).map(t => `<span class="fb-tint pw" style="${geo};--fbm:url('${t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
   return `<span class="petcrop${worn.length ? ' dressed' : ''}" style="width:${px}px;height:${px}px">${layer(src)}${worn.map((u, i) => layer(u, 'pw') + tintOf(i)).join('')}</span>`;
 }
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated

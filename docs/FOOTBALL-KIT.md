@@ -252,7 +252,7 @@ all confirmed 2026-09-04 on a throwaway `cp -R` tree.
   other garments, wallet down exactly 4,200. **REPEAT** the same garment in
   another team is refused `owned` and charges nothing. **BUY-BUNDLE** the bundle
   leaves 256 rows over 32 teams x 8 keys, wallet down exactly 16,800.
-  **REPEAT-BUNDLE** after it, neither tile can charge again. **SHUT** with nothing
+  **REPEAT-BUNDLE** after it, neither tile can charge again. **FLAG-TILL** (was SHUT) with nothing
   passed both paths still read `FOOTBALL_KIT_LIVE`, so a shut shop sells nothing.
   **NOT-SOLD** the till refuses a garment with no tile (a visor) and takes nothing.
 
@@ -460,7 +460,7 @@ deleting the **refund** does.
 **Both buy paths now take a defaulted `stocked` parameter**, the same idiom
 `footballBundleSellable(live, piece, bundle)` already used. Production callers pass
 nothing and get `footballPieceSellable()` / `footballBundleSellable()`, so a shut
-shop still sells nothing (audit row SHUT, red the moment either default becomes
+shop still sells nothing (audit row FLAG-TILL, was SHUT, red the moment either default becomes
 `true`). The audit passes `true` so the till can be driven while
 `FOOTBALL_KIT_LIVE` is false, which is the only reason it exists: a buy path
 nobody can call is a buy path nobody has tested.
