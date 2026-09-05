@@ -19,6 +19,14 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v473
+
+1. PROOF: tests/unit.test.js (gate-registered PURE), "a downloaded build can actually start: boot posts SKIP_WAITING to a waiting worker". Proven red on the tree that shipped v472: "nothing in the app tells a waiting worker to take over, so a downloaded build can never start". The defect it closes was measured on a real device, not modelled: a phone sat on v470 through repeated force quits while the server served v472, because sw.js deliberately never calls skipWaiting() and nothing had ever posted the message that lets a waiting worker in. | REACH: Open the app after a release. It reloads into the new build by itself instead of staying on the old one. A device already stuck before v473 cannot be rescued by it and needs a reinstall.
+
+## v472
+
+1. PROOF: tests/unit.test.js (gate-registered PURE), "SW update checks bypass the HTTP cache", asserting register() passes updateViaCache: 'none'. Proven red on v471. GitHub Pages serves sw.js with max-age=600, so for ten minutes after a deploy the update check was answered from the device's own stale copy. NOTE: this shipped believing it was the whole fix; it was not, and v473 is the rest of it. | REACH: Nothing to see directly. It is why a new build is noticed promptly instead of up to ten minutes late.
+
 ## v470
 
 1. PROOF: MANUAL, browser-verified through the real Pit door on all three exits: quit mid-fight and reopen shows the open fight, lose and reopen shows the defeat panel, finish and reopen shows a clean Pit. The stake ledger sites are registered in reward-sop-audit.mjs (gate-registered), proven red on an unregistered paying site. | REACH: Any staked Pit mode. Kill the app mid-fight and reopen: the fight is where you left it and your charge is spent exactly once.
