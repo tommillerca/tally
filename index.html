@@ -117,13 +117,36 @@
      at 10s: a wasted reload, and worse than useless because the reload is slow
      too. 12s covers past 40x with the same behaviour everywhere else. The cost
      of the extra four seconds falls only on a genuinely dead shell, which is
-     already broken and waiting either way. -->
+     already broken and waiting either way.
+
+     QA r34 P1#3, 2026-09-05: that 12,000ms was counted from PAGE LOAD, which
+     only ever measured CPU-bound slowness (script already on the machine,
+     parsing/executing slow). On Slow 3G + 6x CPU the module is still being
+     DOWNLOADED at 12s -- first content did not land until 99.5s -- so the
+     watchdog fired mid-download and reloaded a shell that was never dead,
+     making the outcome later, not earlier. The 12s clock now starts only once
+     the module script itself has SETTLED (loaded, or errored -- a 404, a
+     syntax error, and a thrown top-level exception all end in one of those
+     two events), so a script still in flight can never trip it. A script that
+     really is dead settles (via error, or via a thrown exception surfacing as
+     a window error) just as fast as before and reloads on the same schedule. -->
 <script>
 (function () {
   var KEY = 'bhg-shell-retry';
-  // a module error is the specific symptom, but do not depend on catching it:
-  // the check below is about the OUTCOME (nothing rendered), which is true no
-  // matter which module died or why.
+  var mods = document.querySelectorAll('script[type="module"]');
+  var pending = mods.length, armed = false;
+  var settle = function () { if (--pending <= 0) arm(); };
+  for (var i = 0; i < mods.length; i++) {
+    mods[i].addEventListener('load', settle);
+    mods[i].addEventListener('error', settle);
+  }
+  // a thrown top-level exception doesn't necessarily fire the script element's
+  // own error event, but it does reach here -- treat it the same as a settled,
+  // dead module.
+  window.addEventListener('error', function () { arm(); });
+  function arm() {
+    if (armed) return;
+    armed = true;
   /* EMPTY HAS TO BE SUSTAINED, NOT SAMPLED. This read `children.length > 0` at
      ONE instant, and #screen has a legitimate transient zero: route() clears it
      and rebuilds, measured at ~11ms wide. Land the 12,000ms timer inside that
@@ -141,24 +164,26 @@
      case where app.js died, and a flag it never got to set would be no evidence
      of anything. The DOM is the only witness that does not depend on the thing
      being tested. */
-  setTimeout(function () {
-    var CHECKS = 10, GAP = 100, seen = 0;
-    var tick = function () {
-      try {
-        var screenEl = document.getElementById('screen');
-        if (screenEl && screenEl.children.length > 0) {   // any sign of life, ever
-          sessionStorage.removeItem(KEY);
-          return;
-        }
-        if (++seen < CHECKS) { setTimeout(tick, GAP); return; }
-        if (sessionStorage.getItem(KEY)) return;    // already tried once this session
-        sessionStorage.setItem(KEY, '1');
-        var u = location.href.split('#')[0];
-        location.replace(u + (u.indexOf('?') < 0 ? '?' : '&') + 'bhgr=' + Date.now() + location.hash);
-      } catch (e) { /* private mode, storage denied: better to do nothing than to loop */ }
-    };
-    tick();
-  }, 12000);
+    setTimeout(function () {
+      var CHECKS = 10, GAP = 100, seen = 0;
+      var tick = function () {
+        try {
+          var screenEl = document.getElementById('screen');
+          if (screenEl && screenEl.children.length > 0) {   // any sign of life, ever
+            sessionStorage.removeItem(KEY);
+            return;
+          }
+          if (++seen < CHECKS) { setTimeout(tick, GAP); return; }
+          if (sessionStorage.getItem(KEY)) return;    // already tried once this session
+          sessionStorage.setItem(KEY, '1');
+          var u = location.href.split('#')[0];
+          location.replace(u + (u.indexOf('?') < 0 ? '?' : '&') + 'bhgr=' + Date.now() + location.hash);
+        } catch (e) { /* private mode, storage denied: better to do nothing than to loop */ }
+      };
+      tick();
+    }, 12000);
+  }
+  if (mods.length === 0) arm();   // no module script on the page at all: fall back to the old behaviour
 })();
 </script>
 </body>

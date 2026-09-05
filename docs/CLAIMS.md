@@ -23,6 +23,10 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 1. PROOF: restore-latch-audit.mjs (gate-registered PURE), unit.test.js | REACH: Every fresh install used to restore its own cloud backup back over itself on its second open, undoing whatever the player had already spent: an opened crate reappeared and spent coins were quietly refunded. That is now closed two ways — the device that just created its cloud account no longer runs that pull at all (there is nothing on the server older or newer than what it just pushed), and even a forced merge of an older backup can no longer bring back a crate this device already opened or hand back a coin balance the device has since moved past. A genuine restore onto a different or reinstalled device is unaffected and still pulls its real backup in full.
 
+## r34 watchdog (2026-09-05)
+
+1. PROOF: dead-shell-audit.mjs | REACH: On a slow connection, the dead-shell watchdog no longer reloads the app while js/app.js is still downloading. It now waits for the module script to settle (load or error) before arming its 12s check, so a genuinely dead shell still recovers on the same schedule, but a merely slow one is no longer reloaded mid-download.
+
 ## kit critique (2026-09-05)
 
 1. PROOF: unit.test.js, football-kit-audit.mjs | REACH: Buying the full football kit after already owning some of its five pieces now charges only for what is missing, never more than the flat full-kit price. A player who owned three of the five used to pay the full price for the other two; those two now cost exactly what two pieces are worth, and the "you save" line only appears when there really is a saving.
