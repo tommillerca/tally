@@ -9,6 +9,56 @@ whenever notes arrive or items ship. Statuses: `BUG` confirmed defect ·
 
 ---
 
+## 📝 QA round 34 P0, restore latch — PARTIAL, (a)+(b) SHIPPED, (c) FEATURE (not built)
+
+The bug: every fresh install restored its own cloud backup back over itself on
+its second open, undoing whatever the player had already spent (an opened crate
+came back, spent coins were refunded). Traced to `js/social.js` never latching
+kv `bootRestored` on the onboarding register path, so bootSync's one-shot pull
+ran on the second boot and merged the blob the device had itself just pushed —
+older than the crate-open and the spend — back in via `importAll(replace:false)`,
+which `os.put`s every row unconditionally and is payload-wins on any kv key
+outside `DEVICE_KV`.
+
+Shipped (fix/r34-restore-latch, tests/restore-latch-audit.mjs):
+- **(a) LATCH.** `goOnline()` (js/social.js) now latches `bootRestored = true`
+  right after a successful register when kv `idMinted` is set — this device
+  minted a brand-new keypair that has never been registered anywhere, so the
+  blob it is about to push IS its whole state; there is nothing to pull back.
+  Does not fire for a recovered identity (bootSync's own reinstall branch),
+  which still needs a real pull.
+- **(b) RECEIPT + coinsRev.** `loot.js openCrate` records every opened crate's id
+  in a bounded kv list (`crateTaken`); `db.js importAll`'s merge path
+  (`replace:false`) never re-adds an `inv` row on that list. `coinsAdd` bumps a
+  parallel monotonic `coinsRev` counter; the same merge path keeps the LOCAL
+  `coins` value whenever the local `coinsRev` is ahead of the blob's, so a blob
+  older than the local ledger can no longer refund (or debit) coins. Both are
+  scoped to the merge path only — `replace:true` (Settings file import, the
+  daily-backup restore) is deliberately unconditional payload-wins and is left
+  untouched.
+
+**NOT built — (c), a real server-side version, still needed.** The client-side
+`coinsRev` guard is a local proxy ("has my own ledger moved since this blob was
+written") and only ever protects THIS device's own coins field against ITS OWN
+stale blob. It is not a substitute for real version tracking and does not cover:
+  - any OTHER kv field a stale merge could still clobber (dust, xp doesn't live
+    in kv, but any future kv-stored counter has the same exposure `coins` had
+    until this fix, one field at a time, unless it grows its own `*Rev` key);
+  - two DEVICES racing a genuine push/pull against each other (the receipt and
+    coinsRev guards are local-only and never talk to the server);
+  - the general case: nothing stops the WORKER from serving a stale blob to
+    begin with.
+  The actual fix is server-side: `PUT /backup` carries a base version the
+  client last saw, the Worker rejects with 409 on a stale base (read-modify-
+  write, same shape as an optimistic-lock update), and the client re-pulls and
+  merges before it retries the push. That is a `server/src/index.js` +
+  `server/schema` change (a version column, or reusing `updatedAt` as the
+  compare-and-swap token) plus a client retry loop in `pushBackup`, and needs
+  its own audit against a real Worker (wrangler), not the in-memory fetch stub
+  restore-latch-audit.mjs uses. Not started.
+
+---
+
 ## 📝 Tom's notes on v438, 2026-08-25 — BOTH SHIPPED in v441
 
 Both land on the same feature (the overscroll wordmark). Both are BUILT and
