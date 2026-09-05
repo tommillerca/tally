@@ -1131,12 +1131,19 @@ function badgeIconHtml(emoji, s = 22) { const id = BADGE_ICON[(emoji || '').repl
 
 /* ================= splash montage ================= */
 
+/* NO FOOTBALL KIT ON A FIGURE NOBODY CHOSE. Measured the day FOOTBALL_KIT_LIVE
+   went true (2026-09-04): the kit is 128 of the 185 items in the H pool (69%),
+   32 of 51 in FW and 32 of 56 in T, so an unfiltered draw dresses most of the
+   splash montage in a helmet a player pays 4,200 coins for. js/loot.js
+   (RACK_ROTATE_POOL, crateEligible) and js/gear.js (GEAR_ITEMS) already carry
+   this exact `!i.football` clause; these two random-figure pools were simply
+   never on that list, because with the flag false it could not matter. */
 function randomOutfit() {
   const eq = { B: 'B0-1', SK: 'SK0-1' };
   for (const slot of BH_SLOTS) {
     if (slot.code === 'B' || slot.code === 'SK') continue;
     if (Math.random() < 0.55) {
-      const pool = BH_ITEMS.filter(i => i.slot === slot.code);
+      const pool = BH_ITEMS.filter(i => i.slot === slot.code && !i.football);
       eq[slot.code] = pool[(Math.random() * pool.length) | 0].id;
     }
   }
@@ -2572,7 +2579,10 @@ function teaserSeed(id) {
 }
 function teaserLook(item, pool) {
   const r = teaserSeed(item.id);
-  const skulls = BH_ITEMS.filter(i => i.slot === 'SK');
+  // !i.football like every other pool that dresses a figure nobody chose. The
+  // kit has no SK piece today, so this changes nothing; it is here so the rule
+  // is one rule and the day a football skull lands nobody has to remember.
+  const skulls = BH_ITEMS.filter(i => i.slot === 'SK' && !i.football);
   const eq = { B: 'B0-1', SK: skulls[r % skulls.length].id, [item.slot]: item.id };
   const others = pool.filter(i => i.slot !== item.slot);
   /* UNSIGNED shifts. `>>` is signed, and the hash is a full uint32, so `r >> 5`
@@ -21848,7 +21858,9 @@ function foeOutfitFor(name) {
   for (const slot of BH_SLOTS) {
     if (slot.code === 'B' || slot.code === 'SK' || slot.code === 'YD' || slot.code === 'BG') continue;
     if (seedRand() < 0.5) {
-      const pool = BH_ITEMS.filter(i => i.slot === slot.code && !i.file);
+      // !i.football for the same reason randomOutfit carries it: a Pit opponent
+      // is a figure nobody chose, and it must not wear the shop's paid kit free.
+      const pool = BH_ITEMS.filter(i => i.slot === slot.code && !i.file && !i.football);
       if (pool.length) eq[slot.code] = pool[Math.floor(seedRand() * pool.length)].id;
     }
   }

@@ -810,6 +810,72 @@ ok('RAIL-SLOT-TAG a football tint span declares its slot, and the wardrobe\'s pa
   `${tagEmitted ? 'footballTintHtml emits data-fbslot' : 'the tint span no longer carries its slot'}; ` +
   `${paintScoped ? 'the rail painter selects .fb-tint[data-fbslot="${slot}"]' : 'the rail painter is no longer scoped by slot: a helmet slide would repaint the jersey'}`);
 
+/* ---- 11. NO PAID KIT ON A FIGURE NOBODY CHOSE ---------------------------- */
+/* The day FOOTBALL_KIT_LIVE went true the 256 items entered BH_ITEMS, and BH_ITEMS
+   is what every "draw an item for this slot" pool reads. Measured on that tree:
+   the kit is 128 of the 185 items in the H pool (69%), 32 of 51 in FW and 32 of
+   56 in T, so an unfiltered draw dresses most of the splash montage and most Pit
+   opponents in a helmet a player pays 4,200 coins for. js/loot.js
+   (RACK_ROTATE_POOL, crateEligible) and js/gear.js (GEAR_ITEMS) already carried
+   `!i.football`; the two random-FIGURE pools in js/app.js did not, because with
+   the flag false it could not matter.
+
+   Every slot-keyed BH_ITEMS pool in js/app.js is declared below as RANDOM (a
+   figure the player did not dress: it must exclude the kit) or CHOSEN (the
+   player's own wardrobe, where a purchasable item belongs). A site that is not
+   on the list is red, so a new pool has to be argued for in writing rather than
+   inheriting whichever default its author happened to type. */
+const POOL_SITES = [
+  ['randomOutfit', 'RANDOM', 'the splash montage: figures nobody dressed'],
+  ['foeOutfitFor', 'RANDOM', 'an unnamed Pit opponent or sparring partner, dressed from its own name hash'],
+  ['teaserLook', 'RANDOM', "the Today teaser's companion skull: nobody dressed that figure either. It draws slot SK, which the kit does not touch today, so the clause is free; it is declared RANDOM so the rule stays ONE rule"],
+  ['renderCharacter', 'CHOSEN', "the Wardrobe's own locked count and Looks grid: a bought garment SHOULD appear there"],
+];
+/* Find every site by its line, then attribute each to the nearest preceding
+   `function NAME(` above it, so the list is keyed to code and not to line
+   numbers that move under it. */
+const appLines = appSrc.split('\n');
+const fnAt = n => {
+  for (let i = n; i >= 0; i--) {
+    const m = /^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/.exec(appLines[i]);
+    if (m) return m[1];
+  }
+  return '(top level)';
+};
+const sites = [];
+appLines.forEach((ln, i) => {
+  if (ln.includes('BH_ITEMS.filter(i => i.slot')) sites.push({ line: i + 1, fn: fnAt(i), src: ln.trim() });
+});
+const declaredBy = Object.fromEntries(POOL_SITES.map(([fn, kind]) => [fn, kind]));
+const undeclared = sites.filter(s => !declaredBy[s.fn]);
+const stale = POOL_SITES.filter(([fn]) => !sites.some(s => s.fn === fn)).map(([fn]) => fn);
+ok('POOL-COVERAGE every slot-keyed BH_ITEMS pool in js/app.js is declared RANDOM or CHOSEN, and every declaration still has a site',
+  sites.length > 0 && undeclared.length === 0 && stale.length === 0,
+  `${sites.length} sites: ${sites.map(s => `${s.fn}:${s.line}`).join(', ')}` +
+  (undeclared.length ? `; UNDECLARED: ${undeclared.map(s => `${s.fn}:${s.line}`).join(', ')}` : '') +
+  (stale.length ? `; declared but gone: ${stale.join(', ')}` : ''));
+
+const randomSites = sites.filter(s => declaredBy[s.fn] === 'RANDOM');
+const naked = randomSites.filter(s => !/!i\.football/.test(s.src));
+ok('POOL-RANDOM no figure the player did not dress can draw the paid kit: every RANDOM pool excludes it',
+  randomSites.length >= 2 && naked.length === 0,
+  `${randomSites.length} random pools: ${randomSites.map(s => `${s.fn}:${s.line} ${/!i\.football/.test(s.src) ? 'excludes' : 'DRAWS'} the kit`).join('; ')}`);
+
+/* THE NUMBER THAT MAKES THE TWO ROWS ABOVE WORTH HAVING, and the control that
+   stops them passing on a catalogue with no football in it at all: what share of
+   each dressable slot the kit is right now. */
+const slotShare = {};
+for (const i of (BH.BH_ITEMS || [])) {
+  const r = (slotShare[i.slot] ||= { all: 0, fb: 0 });
+  r.all++; if (i.football) r.fb++;
+}
+const loaded = Object.entries(slotShare).filter(([, r]) => r.fb > 0);
+ok('POOL-CONTROL the kit really is a large share of the pools those rows protect, so they are not guarding an empty set',
+  FB.FOOTBALL_KIT_LIVE ? loaded.length >= 3 && loaded.some(([, r]) => r.fb / r.all > 0.5) : loaded.length === 0,
+  FB.FOOTBALL_KIT_LIVE
+    ? loaded.map(([k, r]) => `${k}: ${r.fb}/${r.all} = ${(100 * r.fb / r.all).toFixed(1)}%`).join(', ')
+    : `the kit is shut, so BH_ITEMS carries none of it (${loaded.length} loaded slots)`);
+
 console.log(fails
   ? '\nFOOTBALL KIT AUDIT: FAILED'
   : `\nFOOTBALL KIT AUDIT: ${TEAMS.length} teams read apart, ${ITEMS.length} items on eight triplets, the tint lands on the hex, and an unpriced kit is not for sale`);

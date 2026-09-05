@@ -234,9 +234,18 @@ try {
   await settle(page);
   const onPet = await read();
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'shop-flag-on.png') });
-  setup('SAMPLE Bumbleseal is on screen in the ON order, with NO tap anywhere: she was scrolled to, never revealed',
-    live(onPet.hero) && onPet.hero.inView && onPet.restHidden === true,
-    `hero ${fmt(onPet.hero)}; #shopRestBody still hidden: ${onPet.restHidden} (nothing on this screen was clicked)`);
+  /* THE SAMPLE ROW ASSERTS THE RUN HAPPENED, NEVER THE VERDICT. Its first draft
+     required her hero to be live and in view, so the rejected first pass (her
+     inside the collapsed supplies panel, hero 0x0) aborted the audit at SETUP
+     with exit 2 and SECOND-ON was never graded at all: a guard that stops
+     grading on exactly the defect it exists for. What belongs here is that the
+     Shop rendered, that there is a pet shelf somewhere in it, and that nothing
+     on this screen was tapped. Where she is and whether she paints is the
+     verdict, and it is SECOND-ON's. */
+  setup('SAMPLE the ON order rendered a Shop with a pet shelf in it and NOTHING on the screen was tapped',
+    onPet.found && onPet.len > 5000 && onPet.petCount === 1 && onPet.restHidden === true,
+    `#chContent ${onPet.len} chars, ${onPet.petCount} pet shelf/shelves, hero ${fmt(onPet.hero)}; ` +
+    `#shopRestBody still hidden: ${onPet.restHidden} (nothing on this screen was clicked)`);
 
   /* THE ROW TOM'S SECOND NOTE EXISTS FOR. "dont put her in potion supplies find
      a way to have her prominent in the shop but less than NFL." Second, above
