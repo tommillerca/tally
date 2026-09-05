@@ -6137,11 +6137,17 @@ body::before {
 .drop-item img { width: 88px; height: 88px; object-fit: contain;
   filter: drop-shadow(0 0 12px rgba(255, 201, 97, 0.25)); }
 .drop-item b { display: block; font-size: 13.5px; color: var(--text); margin: 4px 0 8px; }
-.drop-buy { width: 100%; border: 0; border-radius: 10px; padding: 9px; font-weight: 800;
+.drop-buy { width: 100%; min-height: 40px; border: 0; border-radius: 10px; padding: 9px; font-weight: 800;
   font-size: 13px; background: var(--accent); color: var(--accent-ink); }
 .drop-buy:disabled { opacity: 0.9; }
 .drop-item.owned .drop-buy, .drop-buy[disabled]:not([data-buydrop]) { background: var(--surface-3); color: var(--text-2); }
 .drop-buy[data-buydrop]:disabled { background: var(--surface-3); color: var(--text-3); opacity: 1; }
+/* OUT OF REACH IS STILL A PRICE, the rack's own rule (10178 .rk-buy .t3-price.cant):
+   pressable, same size, digits still there, only the FILL drops. The football
+   buy and bundle buttons use it instead of [disabled] when the price is real
+   but this wallet is short. */
+.drop-buy.cant { background: transparent; box-shadow: none; color: var(--accent);
+  border: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
 
 /* ================= Dark Spires (territory) ================= */
 /* Marker root carries position ONLY: MapLibre owns its transform, so every
@@ -6551,7 +6557,7 @@ body::before {
 }
 /* the kit room */
 .fb-pick { display: flex; align-items: center; gap: 10px; margin: 0 2px 12px; font-size: 13px; color: var(--text-2); }
-.fb-pick select { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; background: var(--surface-2);
+.fb-pick select { flex: 1; min-width: 0; min-height: 40px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2);
   color: var(--text); border: 1px solid var(--line-strong); font: inherit; }
 /* A TEAM IS TWO COLOURS ON A DIAGONAL, NOT A HEX CODE (Tom, 2026-09-04: "theyre not
    robots"). One disc, split top-left to bottom-right, primary above. --fa/--fb are

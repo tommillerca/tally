@@ -264,3 +264,25 @@ export function footballBundleSellable(live = FOOTBALL_KIT_LIVE, piece = FOOTBAL
   const { full } = footballBundleMath(piece, bundle);
   return !!live && Number.isFinite(bundle) && bundle > 0 && Number.isFinite(full) && bundle < full;
 }
+
+/* A garment is owned when ANY of its 32 team ids is owned: footballGrantIds
+   hands over all 32 in one purchase, so one owned id means the garment is. */
+export function footballOwnedGarmentCount(ownedIds) {
+  return FOOTBALL_SOLD.filter(g => FOOTBALL_TEAMS.some(t => ownedIds.has(footballItemId(t.id, g.key)))).length;
+}
+
+/* THE QUOTE: what the bundle costs GIVEN what a player already owns. Tom,
+   2026-09-05, after Impeccable's football-kit critique: buying 3 of 5 garments
+   (12,600 spent) then paying the flat 16,800 for the other two (worth 8,400)
+   was the bug. Charges only for the missing garments, capped at the flat
+   bundle price so nobody who owns nothing pays more than footballBundleMath's
+   `bundle`. Takes the COUNT, not a Set, so both callers (buyFootballBundle,
+   the tile) resolve "how many owned" their own way. */
+export function footballBundleQuote(ownedGarmentCount, piece = FOOTBALL_KIT_PRICE_PLACEHOLDER, bundle = FOOTBALL_BUNDLE_PRICE_PLACEHOLDER) {
+  const missing = Math.max(0, FOOTBALL_SOLD.length - ownedGarmentCount);
+  if (!missing) return { cost: null, missing: 0, full: null, save: null };
+  const full = Number.isFinite(piece) ? piece * missing : null;
+  const cost = full !== null && Number.isFinite(bundle) ? Math.min(bundle, full) : full;
+  const save = full !== null && cost !== null ? full - cost : null;
+  return { cost, missing, full, save };
+}

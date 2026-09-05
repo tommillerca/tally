@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
-import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, footballGrantIds, footballBundleIds, footballBundleMath, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
+import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
 
@@ -106,20 +106,21 @@ export async function buyFootballItem(itemId, stocked = footballPieceSellable())
    There is one bundle now, not one per team; the first argument is the team tile
    the player tapped and is IGNORED, kept only so js/app.js keeps working until
    its shelf patch lands (docs/FOOTBALL-KIT.md).
-   Same receipt-decides shape as above, with one deliberate simplification:
-   a player who already owns SOME of it pays the full bundle price and is granted
-   the rest. Pro-rating would need a second price table and a second refusal to
-   explain in the tile; the tile prints what is already owned, so the choice is in
-   front of them. Owning ALL of it is refused outright.
-   ponytail: flat bundle price regardless of what is already owned; pro-rate if
-   players start buying a piece and then the bundle. */
+   Same receipt-decides shape as above. PRICED FOR WHAT IS MISSING (Tom,
+   2026-09-05, Impeccable's football-kit critique): a player who owns 3 of 5
+   garments used to pay the full 16,800 for the other two, worth 8,400.
+   footballBundleQuote charges min(bundle, piece x missing garments) instead;
+   footballOwnedGarmentCount counts a garment as owned the moment any one of
+   its 32 team ids is, matching how footballGrantIds hands them over. Owning
+   ALL of it is refused outright. */
 export async function buyFootballBundle(_teamId, stocked = footballBundleSellable()) {
   const ids = footballBundleIds();
-  const cost = FOOTBALL_BUNDLE_PRICE_PLACEHOLDER;
   if (!ids.length || !stocked) return { ok: false, reason: 'not-stocked' };
   const owned = await ownedCosmeticIds();
   const want = ids.filter(id => !owned.has(id));
   if (!want.length) return { ok: false, reason: 'owned' };
+  const { cost, missing, save } = footballBundleQuote(footballOwnedGarmentCount(owned));
+  if (!Number.isFinite(cost) || cost <= 0) return { ok: false, reason: 'not-stocked' };
   const left = await spendCoins(cost);
   if (left === null) return { ok: false, reason: 'coins', need: cost, have: await coins() };
   /* The FIRST missing piece is the receipt, exactly as the single tile uses its
@@ -130,7 +131,7 @@ export async function buyFootballBundle(_teamId, stocked = footballBundleSellabl
     return { ok: false, reason: 'owned' };
   }
   for (const id of want.slice(1)) await grantCosmetic(id, 'football');
-  return { ok: true, label: `The full kit · ${FOOTBALL_TEAMS.length} colourways`, granted: want.length, cost, coins: left, save: footballBundleMath().save };
+  return { ok: true, label: `The full kit · ${FOOTBALL_TEAMS.length} colourways`, granted: missing, cost, coins: left, save };
 }
 
 export async function buyDropItem(itemId) {
