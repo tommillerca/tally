@@ -34,7 +34,7 @@
  * Node-only, no browser, no db. Measured 1.5s.
  */
 import assert from 'node:assert/strict';
-import { rollCosmetic, RARITIES, RARITY_ORDER } from '../js/loot.js';
+import { rollCosmetic, RARITIES, RARITY_ORDER, crateEligible } from '../js/loot.js';
 import { BH_ITEMS } from '../data/boneheadz.js';
 
 const N = 200_000;
@@ -48,7 +48,11 @@ const ok = (name, cond, detail) => {
 
 /* Own literally everything a crate can give you, so the rarity walk in
    rollCosmetic() exhausts and the terminal fallback is the ONLY path left. */
-const POOL = BH_ITEMS.filter(i => !i.default && i.slot !== 'C');
+/* THE SAME POOL THE FALLBACK DRAWS FROM, not a re-derivation of it (2026-09-04).
+   The football kit added 256 epic, rack-only garments that crateEligible excludes;
+   this line's own filter kept them, diluted legendary to 5.8% and PREMISE went red
+   on a fallback that had not changed. */
+const POOL = BH_ITEMS.filter(crateEligible);
 const owned = new Set(POOL.map(i => i.id));
 
 function sample(floor) {
