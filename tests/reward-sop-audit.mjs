@@ -223,9 +223,22 @@ const ACTIONS = [
      a state transition to earn; what they have is a bounded give-back. */
   { id: 'js/loot.js:rerollRack', sites: 1, undriven: "the one site is a coinsAdd refunding a caller that paid for a reroll and then lost the rack kvUpdate on `used !== st.rr`. That claim was always atomic, so two rerolls could never double-charge each other; the reorder closes a reroll landing beside an ordinary BUY, each on its own stale read (measured on origin/main 2faa73b6: a 3,000-coin wallet paid a 500 reroll AND a 3,000 piece). It also covers the stale-PRICE case for free, since a caller quoting a cheap rung's price after somebody else advanced the counter is refused and refunded rather than underpaying. Graded by CROSS-REROLL in tests/purchase-firewall.mjs, alongside the REROLL-LADDER / REROLL-FLOOR / REROLL-WEEKLY rows that own the curve" },
   { id: 'js/loot.js:applyTransmog', sites: 1, undriven: "the one site is a boneDustAdd refunding a caller whose look was banked by a concurrent tap. markPaid IS this function's receipt (a banked look is free to wear forever after) and it now reports whether IT added the key, so applyTransmog is the buyDropItem shape with the paid-look ledger playing grantCosmetic's part. Not a payout: bounded by the spendDust directly above it. Before the reorder both halves were broken, measured on 2faa73b6: two concurrent applies of one 12-dust look took 24 and applied one, and the read-then-debit overdrew against any other dust spend. Graded by CROSS-TRANSMOG in tests/purchase-firewall.mjs, with the WEAR-FREE rows owning the free-to-wear half" },
-  { id: 'js/loot.js:disenchantGear', sites: 1, undriven: 'melts a piece the player owns: the gear row is the input, so a second run finds nothing' },
-  { id: 'js/loot.js:salvagePet', sites: 1, undriven: 'as disenchantGear, on a pet instance' },
-  { id: 'js/loot.js:salvageInstance', sites: 1, undriven: 'as salvagePet, by instance id' },
+  { id: 'js/loot.js:disenchantGear', sites: 1, undriven: 'melts a piece the player owns, and the input is an INV ROW taken with db.take, so the take is what decides the payout and a second run finds nothing. Re-audited 2026-09-04 (round 28 G1): this one holds, and it is the only one of the three that did' },
+  /* THE EXEMPTION READ "as disenchantGear, on a pet instance" AND IT WAS NOT.
+     disenchantGear takes an inv row with db.take, one transaction; these two
+     read kv 'petInst', dropped a copy from the array and wrote the whole list
+     back, with the dust paid after. Two overlapping salvages therefore held the
+     same pre-read: ONE copy left the roster and BOTH were paid full dust. The
+     sentence was true of the neighbour it pointed at and false of itself, which
+     is exactly the shape round 28 sent this file back to look for. Both are the
+     take now (one kvUpdate whose pure updater removes the copy and refuses
+     inside the transaction when it is already gone), and both are DRIVEN. */
+  { id: 'js/loot.js:salvagePet', sites: 1, drive: 'salvagePet',
+    transition: 'one copy of a species goes from held to melted',
+    authority: "kvUpdate on 'petInst': removeWorstInstance runs inside the transaction and returns undefined when there is no copy to take, so exactly one caller is paid" },
+  { id: 'js/loot.js:salvageInstance', sites: 1, drive: 'salvageInstance',
+    transition: 'one NAMED pet instance goes from held to destroyed',
+    authority: "kvUpdate on 'petInst': the iid is looked for and dropped in one transaction" },
   /* Re-graded v441. It was registered here as "gated on kv 'freeze-refunded' AND
      on the rows it pays for", and BOTH halves of that were false under
      concurrency: the flag was a kvGet/kvSet pair with the payout between them,
@@ -236,7 +249,14 @@ const ACTIONS = [
   { id: 'js/loot.js:grantCrate', sites: 1, undriven: 'a grant helper: it has no authority to consult, it is what the authorities call' },
   { id: 'js/loot.js:grantPet', sites: 1, undriven: 'a grant helper' },
   { id: 'js/loot.js:addPetInstance', sites: 1, undriven: 'a grant helper' },
-  { id: 'js/loot.js:migrateLegacyEggs', sites: 1, undriven: 'a migration that converts each legacy row and deletes it; conserves count' },
+  /* "conserves count" was the claim, and db.del conserves nothing: it succeeds
+     whether or not the row is still there, so two boots running this at the same
+     instant both read the same legacy crate, both "deleted" it and both granted
+     an egg. Same shape disenchantGear was fixed for on 2026-08-31 and this one
+     was never revisited. It takes the row now, and it is DRIVEN. */
+  { id: 'js/loot.js:migrateLegacyEggs', sites: 1, drive: 'legacyEgg',
+    transition: 'a legacy egg-crate row goes from unconverted to converted',
+    authority: 'db.take on the inv row: the row is handed over and deleted in one transaction, and only the caller that found it grants' },
   /* runInitBackfill, not initGameIfNeeded: the backfill body was extracted into
      its own function when the replay was chunked and checkpointed, and
      initGameIfNeeded is now the one-at-a-time wrapper around it and holds no
@@ -568,6 +588,45 @@ const results = await page.evaluate(async () => {
       act: () => cooking.advanceQueue(),
       won: r => r.length > 0,
       count: async () => (await cooking.pantryDishes()).length,
+    }),
+    /* THE THREE THE ROUND 28 EXEMPTION CENSUS FOUND. All graded on `count`
+       rather than the wallet: dust is randomised per copy (shiny + lineage) and
+       an egg pays no currency at all, so a wallet delta would be comparing dice
+       in one case and nothing in the other. What a second attempt must not do is
+       hand over a second LOT. */
+    /* EXACTLY ONE copy, so the sequential second attempt legitimately has
+       nothing to take (a second copy would be a real second salvage and the
+       REPEAT row would be asking the wrong question). Counted NEGATED, because
+       what this action hands over is a melted copy: the roster goes DOWN by one
+       and `count` has to go up by one for the harness to read it. Species-scoped
+       so the other drivers' pets cannot move the number. C5 and C6 are plain
+       catalogue pets; CX is the exclusive and must never be minted by a test. */
+    salvagePet: () => ({
+      setup: async () => {
+        await db.kvSet('petInst', (await loot.petInstances()).filter(x => x.sp !== 'C5'));
+        await loot.addPetInstance('C5');
+      },
+      act: () => loot.salvagePet('C5'),
+      won: r => !!r.ok,
+      count: async () => -(await loot.petInstances()).filter(x => x.sp === 'C5').length,
+    }),
+    salvageInstance: () => ({
+      setup: async () => {
+        await db.kvSet('petInst', (await loot.petInstances()).filter(x => x.sp !== 'C6'));
+        return (await loot.addPetInstance('C6')).iid;
+      },
+      act: iid => loot.salvageInstance(iid),
+      won: r => !!r.ok,
+      count: async () => -(await loot.petInstances()).filter(x => x.sp === 'C6').length,
+    }),
+    /* A legacy egg-crate row is the input, so `setup` mints one the way the old
+       tree wrote it and `count` is eggs held: converting one row must add one
+       egg, and converting it twice must still add one. */
+    legacyEgg: () => ({
+      setup: async () => { await db.db.put('inv', { id: db.newId(), kind: 'crate', crate: 'egg', source: 'sop-legacy', ts: Date.now() }); },
+      act: () => loot.migrateLegacyEggs(),
+      won: r => r > 0,
+      count: async () => (await db.db.all('inv')).filter(r => r.kind === 'egg').length,
     }),
     /* TWELVE commons in, so that on the pre-fix tree BOTH overlapping taps can
        AFFORD to pay and the leak shows up as inventory rather than only as two

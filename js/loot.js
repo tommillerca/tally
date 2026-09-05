@@ -872,12 +872,23 @@ export async function disenchantGear(gearId) {
 export async function salvagePet(petId) {
   const item = BH_BY_ID[petId];
   if (!item || item.slot !== 'C') return { ok: false, reason: 'not-a-pet' };
-  const list = await petInstances();
+  const list = await petInstances();     // migrates / heals a legacy save first
   if (!speciesCount(list, petId)) return { ok: false, reason: 'not-owned' };
-  // sacrifice the WORST copy first (keeps your best / shinies); a better copy
-  // pays out more dust so salvaging a shiny or bred pet still feels fair.
-  const { instances, removed } = removeWorstInstance(list, petId);
-  await savePetInstances(instances);
+  /* THE COPY IS THE RIGHT TO ONE DUST PAYOUT, so taking it has to be what
+     decides whether there is one. Reading the roster, removing a copy and
+     writing the whole list back left both of two overlapping salvages holding
+     the same pre-read: one removal survived, and BOTH were paid full dust.
+     removeWorstInstance is pure precisely so it can run inside the transaction.
+     Sacrifices the WORST copy first (keeps your best / shinies); a better copy
+     pays out more dust so salvaging a shiny or bred pet still feels fair. */
+  let removed = null;
+  const instances = await kvUpdate('petInst', raw => {
+    const r = removeWorstInstance(Array.isArray(raw) ? raw : list, petId);
+    if (!r.removed) return undefined;
+    removed = r.removed;
+    return r.instances;
+  }, list);
+  if (!instances) return { ok: false, reason: 'not-owned' };
   const remaining = speciesCount(instances, petId);
   if (remaining === 0) {
     // last copy gone: drop ownership, unequip, clear the legacy anchor
@@ -1436,12 +1447,16 @@ async function clearNick(iid) {
 // ownership + clears the legacy anchor when its species' last copy is gone, and
 // re-points the equipped pet if you just scrapped the one you had out.
 export async function salvageInstance(iid) {
-  const list = await petInstances();
+  const list = await petInstances();     // migrates / heals a legacy save first
   const inst = list.find(x => x.iid === iid);
   if (!inst) return { ok: false, reason: 'gone' };
   const item = BH_BY_ID[inst.sp] || {};
-  const next = list.filter(x => x.iid !== iid);
-  await savePetInstances(next);
+  // salvagePet's fix, by instance id: the take decides the payout, not a stale read
+  const next = await kvUpdate('petInst', raw => {
+    const arr = Array.isArray(raw) ? raw : list;
+    return arr.some(x => x.iid === iid) ? arr.filter(x => x.iid !== iid) : undefined;
+  }, list);
+  if (!next) return { ok: false, reason: 'gone' };
   const bank = await petLevelBank(); delete bank[iid]; await kvSet('petLvlSteps', bank);
   await clearBond(iid);              // a destroyed pet takes its affection with it
   await clearNick(iid);              // and its nickname
@@ -1657,11 +1672,17 @@ export async function setPetPick(petId, nodeId, picks) {
 export async function migrateLegacyEggs() {
   const inv = await inventory();
   const legacy = inv.filter(r => r.kind === 'crate' && r.crate === 'egg');
+  let converted = 0;
   for (const r of legacy) {
-    await db.del('inv', r.id);
+    /* TAKE, NOT DEL: db.del succeeds whether or not the row was still there, so
+       two boots running this at the same instant both read the same legacy row,
+       both "deleted" it and both granted an egg. `take` reports which call
+       actually found it, which is the same fix disenchantGear carries above. */
+    if (!await db.take('inv', r.id)) continue;
     await grantEgg(r.source || 'legacy');
+    converted++;
   }
-  return legacy.length;
+  return converted;
 }
 
 // eggRow's sibling, same reason: the row a crate grant writes, without the write.
