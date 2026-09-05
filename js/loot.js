@@ -101,20 +101,50 @@ export async function buyDropItem(itemId) {
    tiles in a row sell the same kind of thing (measured alpha bounding boxes
    say the art supplies seven genuinely distinct crops, not nine, so the two
    lookalike pairs are seated non-adjacent by the order below). */
+/* ============ THE 2026-09-04 DOUBLING: THE ANCHOR HOLDS, THE REST DOUBLES ===
+ * Tom's ruling: "Just make everything cost more". Every coin and dust price on
+ * this shelf and the rarity shelf below is exactly 2x what it was, with ONE
+ * exception: the 300-coin / 35-dust common anchor, which is unchanged.
+ *
+ * WHY THE ANCHOR IS EXEMPT, measured rather than assumed
+ * (scratchpad/r33/prices/, same instrument as the round-33 faucet sim). At a
+ * flat 2x the light player's first cosmetic slips from day 22 to day 35 and
+ * their year's haul falls from 21 pieces to 9, because a light player buys
+ * commons and almost nothing else. Hold the anchor and the light player's whole
+ * year is byte-identical to today's, while the committed player's spend per
+ * piece doubles. So the doubling lands entirely on the players it was aimed at.
+ * This is also the invariant the rung below already carried, and 600 would have
+ * broken it: a 340-coin starting wallet must be able to buy something.
+ *
+ * WHAT THIS DOES NOT DO, and it must be said beside the numbers rather than in
+ * a report nobody re-reads: IT DOES NOT MAKE THE CATALOGUE LAST A YEAR. Same
+ * sim, committed player, day the shelf goes empty: 141 at today's prices, 172
+ * at this ladder, 193 even at 6x. It asymptotes around 200 because 255 of the
+ * 355 buyable pieces arrive FREE in crates (rollCosmetic prefers unowned, so
+ * the crate faucet hands over the catalogue whatever the shop charges). Price
+ * is a spend lever, not a pacing lever. The pacing lever is the crate cosmetic
+ * drop, which is E32-3's fifth-cut and is NOT shipped.
+ *
+ * CORROBORATION: Tom priced a single football garment at 4,200 by hand on
+ * 2026-09-04. That is 2.1x the legendary this ladder replaces, and within 5% of
+ * the 4,000 legendary it installs. The hand-set price and the ladder now agree.
+ */
 export const RACK_THEME = 'HEATWAVE';
 export const RACK_POOLS = [
-  [3000, ['H13-4', 'H13-2', 'H13-5']],    // legendary blowfish hats  head
-  [2400, ['B0-4', 'B20', 'B2']],          // rare bodies              whole figure
-  [2000, ['IL8-1', 'IL12-2', 'IL14']],    // legendary left hand      left hand
-  [1500, ['T10-1', 'T10-2', 'T6-1']],     // uncommon tees            torso
-  [1000, ['FW6-3', 'FW7-6', 'FW8-3']],    // rare kicks               feet
-  [900, ['P5-1', 'P5-2', 'P6-3']],        // epic swim trunks         hips
-  [700, ['S4-1', 'S5', 'S8']],            // uncommon socks           ankle
+  [6000, ['H13-4', 'H13-2', 'H13-5']],    // legendary blowfish hats  head
+  [4800, ['B0-4', 'B20', 'B2']],          // rare bodies              whole figure
+  [4000, ['IL8-1', 'IL12-2', 'IL14']],    // legendary left hand      left hand
+  [3000, ['T10-1', 'T10-2', 'T6-1']],     // uncommon tees            torso
+  [2000, ['FW6-3', 'FW7-6', 'FW8-3']],    // rare kicks               feet
+  [1800, ['P5-1', 'P5-2', 'P6-3']],       // epic swim trunks         hips
+  [1400, ['S4-1', 'S5', 'S8']],           // uncommon socks           ankle
   /* THE ANCHOR, and it is the point of this rung. A starting wallet is 340
      coins; with a 500-coin floor every one of the eighteen prices rendered out
      of reach and the screen had no affordable state on it at all, which reads
      as broken rather than expensive. Every rack carries one piece a starting
-     wallet can actually buy. */
+     wallet can actually buy. UNCHANGED BY THE 2026-09-04 DOUBLING: 600 would
+     have put this rung out of a starting wallet's reach, which is the exact
+     state this rung exists to prevent. */
   [300, ['U2', 'U4', 'U7']],              // common briefs            waist
 ];
 /* DUST IS THE CERTAINTY PREMIUM: coins buy whatever the rack happens to offer,
@@ -123,21 +153,30 @@ export const RACK_POOLS = [
    per-rung ladder rather than a formula, because a formula over eight rungs is
    what produced an inversion where plain white briefs cost 25% more dust than
    the aura. Implied coins-per-dust, dearest to cheapest: 15.0, 13.7, 12.5,
-   11.5, 10.5, 10.0, 9.3, 8.6, strictly single-directional. */
-export const RACK_DUST = [200, 175, 160, 130, 95, 90, 75, 35];
+   11.5, 10.5, 10.0, 9.3, 8.6, strictly single-directional.
+   DUST DOUBLED IN LOCKSTEP with the coins above (anchor rung excepted, as
+   there), so every one of those eight ratios is UNCHANGED to the decimal. Had
+   only the coins doubled, dust would silently have become half price relative
+   to them and the certainty premium would have collapsed. */
+export const RACK_DUST = [400, 350, 320, 260, 190, 180, 150, 35];
 /* AURAS GO ON WEAPONS, and the weapon in the tile is a MANNEQUIN, not the
    product: a plain common katana nobody is selling carries it so "you are
    buying the effect, not the sword" survives. Cell 4 is the centre of the
    three-wide grid. */
-export const RACK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 1200, dust: 110 };
+export const RACK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 2400, dust: 220 };
 export const RACK_AURA_CELL = 4;
 /* THE REROLL IS A PRICE CURVE, NOT A COUNT CAP. Tom, 2026-08-31: "players
    should be able to pay an increasing amount to reroll the rack thats fine".
    This is deliberately a coin sink: post-Bumbleseal players sit on ~30,000
    inert coins with the crate shop closed. So the count is unlimited within the
    week and the PRICE is the ceiling: it starts at a quarter of a legendary
-   (RACK_RARITY_PRICE tops at 2,000), doubles per reroll, and holds at the cap.
-   Five rerolls cost 15,500; a 30,000 hoard funds about seven. The counter (and
+   (RACK_RARITY_PRICE tops at 4,000 since the 2026-09-04 doubling), doubles per
+   reroll, and holds at the cap. THE DERIVATION IS THE REASON THIS LADDER MOVED
+   TOO: the opening rung is a quarter of a legendary by construction, so leaving
+   it at 500 against a 4,000 legendary would have made the stated rule false and
+   quietly halved the endgame sink relative to the shelf it drains.
+   Five rerolls cost 31,000; the ~86,000 wallet the r33 price sim measures at
+   day 365 funds about six. The free first rung is untouched. The counter (and
    with it the curve) resets weekly with the rack record (rr: 0 in rack()).
    The old count-capped weekly ladder (one free + six paid, 2,000 total,
    approved 2026-08-20) is superseded by the 2026-08-31 ruling, with ONE thing
@@ -146,7 +185,7 @@ export const RACK_AURA_CELL = 4;
    already had, so the ladder opens at 0 and the sink starts at rung two.
    Reviewer-set from the shelf economy: five paid rerolls run 15,500 against
    the ~30,000 endgame hoard the ticket measured. */
-export const RACK_REROLL_LADDER = [0, 500, 1000, 2000, 4000, 8000];
+export const RACK_REROLL_LADDER = [0, 1000, 2000, 4000, 8000, 16000];
 
 // Same FNV-1a the dens turn over on, so the rack changes every Monday with no
 // server. The salt is the reroll counter, and since 2026-08-31 it moves ONLY
@@ -182,14 +221,20 @@ export const RACK_REROLL_LADDER = [0, 500, 1000, 2000, 4000, 8000];
  * (the same invariant RACK_DUST carries above). Implied here, cheapest to
  * dearest: 8.6, 9.3, 10.5, 10.8, 12.5. Strictly single-directional, and every
  * value is one already on the themed ladder so the two shelves cannot disagree
- * about what a piece of a given rarity is worth. */
+ * about what a piece of a given rarity is worth.
+ *
+ * DOUBLED 2026-09-04 with the themed shelf above, coin and dust together and
+ * the common anchor held, so all five of those ratios are unchanged and the
+ * two shelves still cannot disagree. The reasoning, the measurement and what
+ * this deliberately does NOT fix are all recorded at RACK_POOLS above; the
+ * numbers are pinned by tests/rack-price-ladder-audit.mjs. */
 export const RACK_ROTATE_N = 12;
 export const RACK_RARITY_PRICE = {
   common:    [300, 35],
-  uncommon:  [700, 75],
-  rare:      [1000, 95],
-  epic:      [1400, 130],
-  legendary: [2000, 160],
+  uncommon:  [1400, 150],
+  rare:      [2000, 190],
+  epic:      [2800, 260],
+  legendary: [4000, 320],
 };
 const RACK_PET_SLOTS = new Set(['C', 'CE', 'CB', 'CG', 'CM']);
 export const RACK_ROTATE_POOL = BH_ITEMS
