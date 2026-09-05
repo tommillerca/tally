@@ -5093,9 +5093,9 @@ test('R23 F8: the fits cap is printed and the save chip stays, ghosted, with its
   const h = app.indexOf('<div class="ward-head">');
   const hEnd = app.indexOf("</div>` : tab === 'shop'", h);
   assert.ok(h > 0 && hEnd > h, 'the ward-head template moved: re-anchor this slice');
-  const head = n => new Function('lvl', 'coinBal', 'dustBal', 'ownedCount', 'boost', 'ICONS', 'sparkIco', 'looksAll', 'looksHave', 'esc', 'fitCount', 'MAX_FITS',
+  const head = n => new Function('lvl', 'coinBal', 'dustBal', 'ownedCount', 'boost', 'ICONS', 'sparkIco', 'looksFamHave', 'looksFamAll', 'looksPieces', 'esc', 'fitCount', 'MAX_FITS',
     'return `' + app.slice(h, hEnd) + '</div>`;')(
-    { level: 1, name: 'x' }, 0, 0, 0, 0, { coin: () => '', dust: () => '', bone: () => '', boltIco: () => '' }, () => '', [], new Set(), String, n, MAX);
+    { level: 1, name: 'x' }, 0, 0, 0, 0, { coin: () => '', dust: () => '', bone: () => '', boltIco: () => '' }, () => '', 0, 0, 0, String, n, MAX);
   assert.match(head(5), /<span class="bh-pill ward-fits">5\/6 fits<\/span>/, 'the header does not print 5/6 fits');
   assert.match(head(6), /<span class="bh-pill ward-fits">6\/6 fits<\/span>/, 'the header does not print 6/6 fits');
 
