@@ -2684,11 +2684,14 @@ async function refreshCrateBadge() {
  * So this is a reader, not a new store: no schema change, and every gift ever
  * received is already in the list the first time you open it.
  */
-const DELIVERY_TYPES = new Set(['gift', 'cheer', 'social', 'welcome', 'spire']);
+/* 'crew' is the news a friendship completed and the receipt for a cheer you
+   sent (S12): both are things that happened in the Crew, and Deliveries is the
+   only durable place in the app that lists those. */
+const DELIVERY_TYPES = new Set(['gift', 'cheer', 'social', 'welcome', 'spire', 'crew']);
 async function crewDeliveries(limit = 40) {
   const rows = await db.all('xp');
   return rows.filter(r => DELIVERY_TYPES.has(r.type) && r.label)
-    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+    .sort((a, b) => sentOrIngestTs(b) - sentOrIngestTs(a))
     .slice(0, limit);
 }
 /* CHEERS ARE THEIR OWN INBOX NOW.
@@ -2723,14 +2726,28 @@ const cheerAt = i => CHEERS[i] || null;
    message goes. onlineLabel itself is right for what it is for, so the fix is
    here at the two call sites that are not asking about presence: keep its
    buckets, swap the one that is not a time. */
-const deliveredWhen = ts => {
-  const l = onlineLabel(ts);
-  return l.on || !l.text ? 'just now' : l.text;
+/* AND IT IS THE TIME IT WAS SENT, NOT THE TIME WE FETCHED IT. Round 29 (S12):
+   three cheers sent minutes apart, one app open, and all three read "just now",
+   because a ledger row is stamped by awardOnce at ingest and this read that
+   stamp. The server has always sent the real one on the grant; js/social.js now
+   keeps it as `sentAt`, and this takes it.
+   A ROW WRITTEN BEFORE THAT SAYS SO. There is no send time to recover for it,
+   and the ingest stamp is a true fact about something else, so it is labelled
+   as what it is (an arrival) rather than reprinted as if it were the other. */
+const deliveredWhen = row => {
+  const sent = +(row && row.sentAt) || 0;
+  const l = onlineLabel(sent || (row && row.ts));
+  const text = l.on || !l.text ? 'just now' : l.text;
+  return sent ? text : `arrived ${text}`;
 };
+const sentOrIngestTs = r => +(r && r.sentAt) || (r && r.ts) || 0;
 async function crewCheers(limit = 60) {
   const rows = await db.all('xp');
+  /* Ordered by SEND time now that there is one: a batch pulled in one go has
+     one ingest stamp for all of it, so sorting on that put minutes-apart cheers
+     in whatever order the feed happened to hand them over. */
   return rows.filter(r => r.type === 'cheer' && r.label)
-    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+    .sort((a, b) => sentOrIngestTs(b) - sentOrIngestTs(a))
     .slice(0, limit);
 }
 /* The read watermark. It used to default to 0, which meant that the first time
@@ -10936,8 +10953,8 @@ async function renderFriends(el) {
     const shown = fresh.length ? fresh : rows.slice(0, 3);
     const rowHtml = r => `
       <div class="t3-row${isNew(r) ? ' unread' : ''}">
-        <span class="t3-med">${r.type === 'spire' ? badgePixHtml('tombstone', 20) : r.type === 'cheer' ? ICONS.bone(20) : ICONS.coin(20)}</span>
-        <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(deliveredWhen(r.ts))}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
+        <span class="t3-med">${r.type === 'spire' ? badgePixHtml('tombstone', 20) : (r.type === 'cheer' || r.type === 'crew') ? ICONS.bone(20) : ICONS.coin(20)}</span>
+        <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(deliveredWhen(r))}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
         ${isNew(r) ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
       </div>`;
     /* SEALED FIRST. Tom, 2026-08-08: "its boring to just have it appear with no
@@ -11037,7 +11054,7 @@ async function renderFriends(el) {
         <div class="cheer-tx">
           <b>${esc(who)}</b>
           <span class="cheer-said">${c ? esc(c.txt) : esc(r.label)}</span>
-          <small>${esc(deliveredWhen(r.ts))}</small>
+          <small>${esc(deliveredWhen(r))}</small>
         </div>
         ${r.cheerFrom ? `<button class="btn small ghost cheer-back" data-cheerback="${esc(r.cheerFrom)}" data-cheername="${esc(who)}">Cheer back</button>` : ''}
       </div>`;
@@ -11468,7 +11485,13 @@ async function renderFriends(el) {
     }
     inp.value = '';
     if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
-    else toast('Request sent. They just enter your code back to seal it.', 3600);
+    /* WHAT B ACTUALLY SEES. This said "They just enter your code back to seal
+       it", which describes a flow that does not exist: B gets a request row in
+       their Crew tab with Accept and Ignore on it and types nothing. Driven in
+       round 29 (S12). Entering your code back DOES also accept (see
+       requestFriendship on the server), but it is the long way round and it is
+       not what the app shows them. */
+    else toast('Request sent. They get Accept or Ignore in their Crew tab.', 3600);
     await paint();
   };
 
@@ -20778,9 +20801,15 @@ function presentGrantDelivery(r) {
   const coinGifts = [];   // coins-only gifts (shown as a line, not a card)
   const giftInfos = [];   // every gift (for the OS notification)
   const spireNews = [];    // towers lost or left dormant while I was away
+  const crewNews = [];    // "you two are Crew now", "she got your cheer": sentences, not rewards
   for (const g of r.appliedGrants || []) {
     const p = g.payload || {};
     if (g.type === 'cheer') { cheers.push(p); continue; }
+    /* CREW NEWS: a friendship completed, or a cheer you sent reached them. No
+       reward, so every branch below falls through it and it would land in the
+       ledger silently, exactly as the spire notice used to. It is a sentence,
+       so it gets a toast rather than a card. */
+    if (g.type === 'crew') { if (p.note) crewNews.push(p.note); continue; }
     // A LOST TOWER. The server has always sent this grant and the client has
     // always applied it to the ledger, but nothing here displayed it, so having
     // your spire taken was completely silent. It is the revenge-walk hook: it
@@ -20820,10 +20849,13 @@ function presentGrantDelivery(r) {
     const tx = CHEERS[c.cheer] ? CHEERS[c.cheer].txt : 'cheered you on';
     setTimeout(() => toast(`${em} ${esc(c.from || 'A friend')}: ${esc(tx)}`, 4200), i * 900);
   });
+  // crew news: same staggered treatment, queued after the cheers so two kinds
+  // of Crew toast never land on top of each other
+  crewNews.forEach((n, i) => setTimeout(() => toast(esc(n), 4200), (cheers.length + i) * 900));
   if (cards.length) { openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh); return; }
   if (coinGifts.length) { toast(coinGifts[0] + (coinGifts.length > 1 ? ` (+${coinGifts.length - 1} more)` : ''), 4200); bgRefresh(); return; }
   if (coinsSum || xpSum) { toast(`Crew delivery: ${[coinsSum ? `+${coinsSum} coins` : '', xpSum ? `+${xpSum} XP` : ''].filter(Boolean).join(' · ')}.`, 3600); bgRefresh(); return; }
-  if (cheers.length) { bgRefresh(); return; } // cheers already toasted, nothing else to reveal
+  if (cheers.length || crewNews.length) { bgRefresh(); return; } // already toasted, nothing else to reveal
   toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived.`, 3600); bgRefresh();
 }
 

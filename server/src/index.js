@@ -1613,7 +1613,43 @@ async function requestFriendship(env, meId, otherId) {
        ts     = CASE WHEN friendships.requested_by <> excluded.requested_by THEN excluded.ts   ELSE friendships.ts     END
      RETURNING status`).bind(a, b, meId, now, meId, otherId).first();
   if (!row) return { ok: true, status: 'pending', ignored: true };
-  return { ok: true, status: row.status === 'accepted' ? 'accepted' : 'pending' };
+  const status = row.status === 'accepted' ? 'accepted' : 'pending';
+  // reciprocating a request COMPLETES the friendship, same as /friends/accept,
+  // so it owes both sides the same news
+  if (status === 'accepted') await notifyFriendship(env, a, b, now);
+  return { ok: true, status };
+}
+
+/* BOTH SIDES ARE TOLD, AND IT RIDES THE GRANTS FEED, because that is the only
+   delivery this app has for "something in your Crew happened". Round 29 (S12)
+   drove an accept on two real accounts and watched 45 seconds of silence: the
+   friendship was in the database and neither player was ever told, on either
+   device. A grant is what a gift, a cheer and a lost spire all already use, so
+   there is no new channel here, only news on the existing one.
+   ONE KEY FOR THE PAIR, and the same string on both rows (UNIQUE is
+   (player_id, key), so the two do not collide). An accept that runs twice -- a
+   retried POST /friends/accept, or a reciprocated request re-sent -- delivers
+   exactly once to each side, and the client's own ledger claim would stop a
+   second payout even if it did not.
+   THE SENTENCE IS TRUE ON BOTH SIDES on purpose: "you two are Crew now" is a
+   fact about the pair, so neither row has to know who did the accepting.
+   Swallowed on failure: the friendship is already committed by the time we get
+   here, and a 500 on the accept would tell the player the opposite of what the
+   database now says. */
+async function notifyFriendship(env, aId, bId, now = Date.now()) {
+  try {
+    const [a, b] = pairKey(aId, bId);
+    const rows = await env.DB.prepare('SELECT id, handle, name FROM players WHERE id IN (?, ?)').bind(a, b).all();
+    const nameOf = id => {
+      const r = (rows.results || []).find(x => x.id === id);
+      return (r && (r.name || r.handle)) || 'A Bonehead';
+    };
+    const key = `crew-${a}-${b}`;
+    const row = (to, other) => env.DB.prepare(
+      'INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+      .bind(to, key, 'crew', JSON.stringify({ note: `You and ${nameOf(other)} are Crew now.` }), now);
+    await env.DB.batch([row(a, b), row(b, a)]);
+  } catch (e) { console.log('notifyFriendship failed', String(e)); }
 }
 
 /* ---------------- daily-capped grants ----------------
@@ -2365,7 +2401,9 @@ export default {
         const ex = await env.DB.prepare('SELECT requested_by FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
         if (!ex) return json({ error: 'no such request' }, 404);
         if (ex.requested_by === auth.playerId) return json({ error: 'cannot accept your own request' }, 400);
-        await env.DB.prepare('UPDATE friendships SET status = ?, ts = ? WHERE a = ? AND b = ?').bind('accepted', Date.now(), a, b).run();
+        const acceptedAt = Date.now();
+        await env.DB.prepare('UPDATE friendships SET status = ?, ts = ? WHERE a = ? AND b = ?').bind('accepted', acceptedAt, a, b).run();
+        await notifyFriendship(env, a, b, acceptedAt);
         return json({ ok: true });
       }
 
@@ -3141,6 +3179,19 @@ export default {
           if (dupe) return json({ ok: true, duplicate: true });
         }
         if (!landed) return json({ error: 'daily cheer limit', code: 'limit' }, 429);
+        /* THE SENDER GETS A RECEIPT TOO (S12). A cheer was the one thing in the
+           Crew that left no trace on the side that sent it: the send toast is
+           gone in three seconds and nothing anywhere afterwards says it ever
+           happened. Same channel as the cheer itself, so there is nothing new
+           to deliver it. Only on the LANDED path: a duplicate returned above
+           already has its receipt, and a cap refusal has nothing to receipt.
+           `crew`, not `cheer`: a cheer-typed row would list in the sender's own
+           cheers inbox as though somebody had cheered THEM. */
+        const toName = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(to).first();
+        await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+          .bind(auth.playerId, `crew-cheerack-${to}-${day}-${ck || Date.now()}`, 'crew',
+            JSON.stringify({ note: `${(toName && (toName.name || toName.handle)) || 'Your friend'} got your cheer.` }), Date.now())
+          .run().catch(e => console.log('cheer receipt failed', String(e)));
         return json({ ok: true });
       }
 
