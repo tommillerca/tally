@@ -2124,8 +2124,20 @@ export function bhFamilies(items) {
  * exactly the three surfaces a hoarder's 192 owned football items reach
  * (collection 363.6 MB, stable and paddock's dressed-pet layers). One master
  * per garment means 8 files, not 256, so the fix is regenerating the existing
- * sheet, not a new mechanism. */
-export const BH_THUMB_RE = /^assets\/bh\/((?:B|BG|CB|CE|CG|CM|C|E|FW|football|G|H|IL|IR|M|P|S|SK|T|U)\/(?:shiny\/)?(?!.*\.mask-[ab]\.png$)[^/]+\.png)$/;
+ * sheet, not a new mechanism.
+ *
+ * THE MASK FILES ARE IN THE ALTERNATION TOO NOW (2026-09-05). They used to be
+ * excluded (`(?!.*\.mask-[ab]\.png$)`) on the theory that footballTints handed
+ * their path straight to a CSS `url()` and never called bhThumb/bhTrim, so a
+ * tier would be an orphan file. That stopped being true the moment the
+ * Wardrobe's canvas painter (paintFootballTints in js/app.js) started decoding
+ * them off-DOM at their 640x640 master size on every tinted tile -- the memory
+ * census's TIER row caught 16 of them alive at once. bhThumb/bhTrim now serve
+ * a mask exactly like any other cosmetic; scripts/build-bh-thumbs.py's mask
+ * trim tier crops from the MASTER's own box (masterBox), never its own alpha,
+ * so a mask and its master always share one rectangle and the tint cannot
+ * drift off the garment. */
+export const BH_THUMB_RE = /^assets\/bh\/((?:B|BG|CB|CE|CG|CM|C|E|FW|football|G|H|IL|IR|M|P|S|SK|T|U)\/(?:shiny\/)?[^/]+\.png)$/;
 export const BH_THUMB_TIERS = [192, 384];
 export function bhThumb(src, px = 192) {
   const m = BH_THUMB_RE.exec(src || '');

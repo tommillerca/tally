@@ -154,26 +154,47 @@ def use_root(root):
 # pet. They were excluded for the dullest reason: the slots did not exist when
 # this list was written and nothing since had a reason to walk it again.
 #
-# `football` TOO (2026-09-05), and the mask exclusion below is what makes it
-# safe to add: every football garment's file lives at assets/bh/football/, one
-# 640x640 master shared by all 32 teams, but that directory also carries two
-# alpha masks per garment (mask-a/mask-b) that colour the master at runtime as
-# a CSS background -- footballTints hands their path straight to a `url()` and
-# never calls bhThumb, so tiering them would just be 48 orphan files nothing
-# reads. Excluding `.mask-a.png` / `.mask-b.png` keeps this list matching
-# exactly what bhThumb's callers can ask for, same as js/app.js's BH_THUMB_RE.
+# `football` TOO (2026-09-05). Its directory also carries two alpha masks per
+# garment (mask-a/mask-b) that colour the master at runtime as a CSS
+# background or a canvas multiply layer -- footballTints hands their path to
+# `url()`/`loadArt`. They USED to be excluded here on the theory that neither
+# consumer called bhThumb, so tiering them would be orphan files; that stopped
+# being true the day the memory census caught the Wardrobe decoding all 16 at
+# their 640x640 master size off the canvas painter (paintFootballTints). Now
+# tiered like everything else -- see MASK_RE below for the one thing that has
+# to stay special about them: a mask's OWN alpha is not the garment's ink (a
+# mask-b can be a fraction of the silhouette, or empty), so trimming it to ITS
+# bbox would crop a different box than its master's and slide the tint off the
+# garment the moment either layer scales. The trim tier shares the MASTER's
+# box instead, which is also why the two 640x640 files still crop to the exact
+# same rectangle: it is one number, not two independently-measured ones.
 SLOTS = ['B', 'BG', 'C', 'CB', 'CE', 'CG', 'CM', 'E', 'FW', 'football', 'G', 'H',
          'IL', 'IR', 'M', 'P', 'S', 'SK', 'T', 'U']
-KEEP = re.compile(r'^(?:%s)/(?:shiny/)?(?!.*\.mask-[ab]\.png$)[^/]+\.png$' % '|'.join(SLOTS))
+KEEP = re.compile(r'^(?:%s)/(?:shiny/)?[^/]+\.png$' % '|'.join(SLOTS))
+MASK_RE = re.compile(r'^football/([^/]+)\.mask-[ab]\.png$')
 
 
-def trimmed(im):
+def masterBox(rel):
+    """The trim box of the football garment master a mask belongs to, or None
+    if `rel` is not a mask. Read straight off the master file rather than
+    re-measured, so a mask can never carry a different crop than its garment."""
+    m = MASK_RE.match(rel)
+    if not m:
+        return None
+    master = Image.open(os.path.join(SRC, 'football', m.group(1) + '.png')).convert('RGBA')
+    return master.getchannel('A').point(lambda p: 255 if p > 14 else 0).getbbox()
+
+
+def trimmed(im, box=None):
     """The master cropped to its alpha box, longest side capped at TRIM.
 
     Threshold 14 and no upscale: both mirror drawTrimmedArt. A fully
     transparent file (there are none today) keeps its whole canvas rather than
-    becoming a zero-sized PNG."""
-    box = im.getchannel('A').point(lambda p: 255 if p > 14 else 0).getbbox()
+    becoming a zero-sized PNG. `box`, when given (a football mask, see
+    masterBox above), OVERRIDES the self-measured bbox so the mask crops to
+    its master's rectangle rather than its own."""
+    if box is None:
+        box = im.getchannel('A').point(lambda p: 255 if p > 14 else 0).getbbox()
     cut = im.crop(box) if box else im
     k = TRIM / max(cut.size)
     return cut.resize((max(1, round(cut.width * k)), max(1, round(cut.height * k))),
@@ -194,18 +215,23 @@ def sources():
                 yield src, rel
 
 
-def wanted(im):
+def wanted(im, rel):
     """Every (tier directory, expected image) this master should produce.
 
     ONE definition of the whole sheet, so build() and check() cannot disagree
     about what belongs on it. That mattered the first time this file grew a
     check: the two walked the tree separately and a slot dropped from SLOTS
     would have gone unbuilt AND unchecked, in lockstep, reporting clean.
+
+    The square tiers (192/384) are a uniform resize of the whole 640 canvas,
+    so a mask and its master agree on those with no help: same input square,
+    same scale, same output square. Only `trim` crops, so only it needs
+    `rel`, to find a football mask and share its master's box (masterBox).
     """
     for px in SIZES:
         if max(im.size) > px:             # already smaller than this tier
             yield str(px), im.resize((px, px), Image.LANCZOS)
-    yield 'trim', trimmed(im)
+    yield 'trim', trimmed(im, masterBox(rel))
 
 
 def pet_shop():
@@ -284,7 +310,7 @@ def build():
         im = Image.open(src).convert('RGBA')
         total_src += os.path.getsize(src)
         skipped += sum(1 for px in SIZES if max(im.size) <= px)
-        for tier, out in wanted(im):
+        for tier, out in wanted(im, rel):
             dst = os.path.join(OUT, tier, rel)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             out.save(dst, optimize=True)
@@ -365,7 +391,7 @@ def check():
     checked = 0
     for src, rel in sources():
         im = Image.open(src).convert('RGBA')
-        for tier, want in wanted(im):
+        for tier, want in wanted(im, rel):
             checked += grade(os.path.join(tier, rel), want)
     # THE CUT TIER IS GRADED TOO, from the same shots() build() writes from.
     cut = 0
