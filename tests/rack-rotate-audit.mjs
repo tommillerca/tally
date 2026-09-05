@@ -114,19 +114,26 @@ ok('SIZE   every shelf is full, so the picker never returns short',
 ok('MOVES  a reroll actually changes the rotating shelf',
   movePairs > 0 && moved === movePairs, `${moved} of ${movePairs} rerolls moved it`);
 
-/* DAILY, which is the reason the shelf is seeded on the day rather than the
-   week. Tom, 2026-08-27: "i think the rack should change up everyday to keep
-   things fresh and have people checking in". A shelf that repeated across days
-   would look identical to the weekly one it replaced and nothing else in the app
-   would say otherwise. */
+/* SUPERSEDED 2026-09-05: the shelf was DAILY (Tom, 2026-08-27: "i think the
+   rack should change up everyday to keep things fresh and have people
+   checking in"), seeded here by passing a day string as `rackRotatePick`'s
+   first argument. Tom reversed that on 2026-09-05: "the rotating twelve
+   rotate WEEKLY". Production now passes the ISO week (js/loot.js's `rack()`),
+   never a day, so a row asserting 30 different day-strings give 30 different
+   shelves was asserting a fact about the picker nobody in the app relies on
+   any more. WEEKLY below is that same row, re-keyed on what production
+   actually seeds it with: the picker is still generically sensitive to
+   whatever string it is given (that sensitivity is what DISJOINT, STABLE and
+   N0 above depend on too), so a new ISO week must still give a different
+   shelf, and the same week must not. */
 {
   const themedW = themedFor('2026-W35', 0);
   const shelves = [];
-  for (let d = 1; d <= 30; d++) shelves.push(pick(`2026-09-${String(d).padStart(2, '0')}`, 0, themedW).join());
+  for (let w = 1; w <= 30; w++) shelves.push(pick(`2026-W${String(w).padStart(2, '0')}`, 0, themedW).join());
   const distinct = new Set(shelves).size;
-  ok('DAILY  a new day gives a different shelf, which is the point of seeding on the day',
+  ok('WEEKLY a new ISO week gives a different shelf, which is the point of seeding on the week',
     distinct === shelves.length && shelves.length === 30,
-    `${distinct} distinct shelves across ${shelves.length} consecutive days`);
+    `${distinct} distinct shelves across ${shelves.length} consecutive weeks`);
 }
 
 const a = pick('2026-W07', 2, themedFor('2026-W07', 2));

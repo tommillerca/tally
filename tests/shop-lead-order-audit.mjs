@@ -145,13 +145,18 @@ const read = () => page.evaluate(() => {
       inView: r.width > 0 && r.height > 0 && r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight,
     };
   };
-  /* THE RACK STRIP BY ITS OWN TEXT. `.rk-theme` is on three strips now (the
-     rack, the rotating shelf, and Bumbleseal's heading), so selecting the first
-     one returns HER heading in the ON order and "above the rack" would compare
-     her to herself. Tag the real one and hand back a selector for it. */
-  const rackEl = [...document.querySelectorAll('.rk-theme')].find(n => /RACK\s+\d+\s+OF\s+\d+/.test(n.textContent));
-  if (rackEl) rackEl.setAttribute('data-rackstrip', '1');
-  const rackSel = '[data-rackstrip]';
+  /* THE RACK STRIP, RE-ANCHORED 2026-09-05. It used to be found by its own
+     text (the "RACK N OF 4" `.rk-theme` strip), which is why this scan
+     excluded the other two strips carrying that class (the rotating shelf's
+     header and Bumbleseal's own heading) by matching the words instead of the
+     class. That text banner moved into Gwart's header that same day (Tom:
+     "put it in the header Gwart currently occupies"), off the shelf and out
+     of #chContent entirely, so a scan for its words now finds nothing and
+     `rack` would read null forever. What this row actually protects - the kit
+     and the pet shelf sit ABOVE the rack's real merchandise - never depended
+     on the label; `.rk-grid:not(.rot)` (the themed-nine grid, always present,
+     unique) is the truer anchor and needs no tagging. */
+  const rackSel = '.rk-grid:not(.rot)';
   const c = document.querySelector('#chContent');
   const name = n => n ? n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') + (n.className ? '.' + String(n.className).trim().split(/\s+/).join('.') : '') : null;
   const drop = document.querySelector('#dropSect'), pet = document.querySelector('.pet-shelf');

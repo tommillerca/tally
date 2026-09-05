@@ -10363,7 +10363,11 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    note. */
 .rk-tail { height: 16px; }
 
-.rk-reroll { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px;
+/* 2026-09-05: moved from after the rotating grid to beside its own header, so
+   the free first reroll is visible before the 12 tiles rather than after them
+   (margin-bottom added for the same gap it used to get from margin-top alone,
+   now that the grid follows it instead of the other way round). */
+.rk-reroll { display: flex; align-items: center; gap: 10px; width: 100%; margin: 10px 0;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm); padding: 9px 12px; color: var(--text); }
 .rk-reroll b { text-align: left; font-size: var(--fs-3); }
@@ -10790,6 +10794,17 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   transform: translateX(-3px); text-shadow: 3px 4px 0 var(--ink);
 }
 .gw-gear { top: auto; bottom: 14px; right: 16px; }
+
+/* THE SCARCITY CLOCK, 2026-09-05 (see gwartHeroHtml in js/app.js). Moved off
+   an 11px `.rk-theme` strip below the pet shelf and the football Kit room and
+   into a sibling of `.gw-panel`: same header block, but outside the panel so
+   it cannot disturb the pixel-measured geometry tests/emporium-audit.mjs pins
+   (.gw-panel/.gw-art/.gw-wm/.gw-gear are all unchanged). Heading size reuses
+   the display-font idiom `.rr-banner .race-h b` already carries at --fs-5,
+   not a new scale. */
+.rk-clock { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin: 10px 2px 14px; text-align: center; }
+.rk-clock b { font-family: var(--display); font-weight: 400; font-size: var(--fs-5); letter-spacing: .02em; color: var(--text); }
+.rk-clock span { font-size: var(--fs-1); color: var(--text-3); }
 
 /* ---- Cam's spell-cast animation, inlined VERBATIM from tally-refs/wizard/
    animation/wizard-cast.css. Not one keyframe, duration, easing or percentage is

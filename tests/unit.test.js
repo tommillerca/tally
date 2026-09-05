@@ -6149,11 +6149,19 @@ test('shop lead shelf: the Kit room leads when the kit is live, Bumbleseal is se
     return tpl.replace('${fbLead}', v.fbLead).replace('${petLead}', v.petLead);
   };
   const at = (h, t) => h.indexOf(t);
-  /* THE RACK STRIP BY ITS OWN TEXT, not by `class="rk-theme"`. That class is on
-     three strips (the rack, the rotating shelf, and now her heading), so the
-     first draft of this row matched HER heading and reported her below the rack
-     while she sat above it. */
-  const RACK = 'RACK ${rackNo} OF 4';
+  /* RE-ANCHORED 2026-09-05: the RACK marker used to be the "RACK ${rackNo} OF
+     4" banner text, chosen over `class="rk-theme"` because that class sits on
+     three strips (the rack, the rotating shelf, and her heading) and the first
+     draft of this row matched HER heading and reported her below the rack
+     while she sat above it. That banner text moved out of this template
+     entirely that same day (Tom: "put it in the header Gwart currently
+     occupies"; gwartHeroHtml's `.rk-clock` now renders it), so a search for
+     those words would find nothing here forever. The themed-nine grid's own
+     opening tag is the truer anchor for "where the rack starts": it is
+     unique in this slice (the rotating shelf's is `rk-grid rot`, a different
+     substring) and it is the actual merchandise, not a label that can move
+     again independently of it. */
+  const RACK = '<div class="rk-grid">';
 
   // ---- flag OFF: the shop every build before this one shipped ----
   const off = render(false);
@@ -6182,6 +6190,82 @@ test('shop lead shelf: the Kit room leads when the kit is live, Bumbleseal is se
   assert.ok(at(on, 'id="dropSect"') > 0, 'the Puffer Pack must survive the move: Tom has not ruled on it');
   assert.ok(at(on, 'id="dropSect"') > at(on, 'id="shopRestBody"'),
     'the Puffer Pack stays where it is, inside the supplies panel');
+});
+
+/* THE ROTATING TWELVE ROTATE WEEKLY, 2026-09-05. Tom: "the rotating twelve
+   rotate WEEKLY". `rackRotatePick`'s own first parameter is named `week`, but
+   every call site inside js/loot.js's `rack()` was quietly passing `day`
+   (dateKey()), so the rotating shelf silently re-rolled every midnight while
+   the scarcity banner and the reroll ladder both counted in ISO weeks.
+   Real IndexedDB (mem-idb), real `rack()`, four rows each isolating its own
+   failure mode: the seed key production actually uses, that a stale per-day
+   stamp inside the SAME week does not move the shelf (the additive
+   migration: a day-keyed rotation a player already has rides out its week
+   unchanged), that crossing an ISO week boundary rebuilds the record whole,
+   and that a save from before the rotating shelf existed (no `rot` at all)
+   is filled in without disturbing its themed nine or its spent rerolls. */
+test('rack weekly rotation: keyed on the ISO week, holds within a week, rebuilds at the boundary, migrates a rot-less save in place', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const loot = await import('../js/loot.js');
+  const { isoWeekKey } = await import('../js/poi.js');
+  const week = isoWeekKey(new Date());
+
+  // ---- WEEK KEY: a fresh record seeds the rotating shelf on the ISO week ----
+  dbm.useDbName('unit-rackweek-fresh');
+  const fresh = await loot.rack();
+  const expectRot = loot.rackRotatePick(week, 0, fresh.ids);
+  assert.equal(fresh.week, week, 'a fresh record is keyed on the current ISO week');
+  assert.deepEqual(fresh.rot, expectRot,
+    'a fresh record seeds the rotating shelf on the ISO week, not the day (regression: seed with dateKey() instead)');
+
+  // ---- NO RE-ROLL INSIDE A WEEK: a stale day-keyed stamp must not move `rot` ----
+  dbm.useDbName('unit-rackweek-hold');
+  const st0 = await loot.rack();
+  await dbm.kvSet('rack', { ...st0, rotDay: '2000-01-01' });   // a day-keyed stamp from long ago, same week
+  const held = await loot.rack();
+  assert.deepEqual(held.rot, st0.rot, 'a stale rotDay inside the same week must not re-roll the rotating shelf');
+  assert.equal(held.week, st0.week, 'the record is still this week\'s');
+
+  // ---- RE-ROLL AT THE BOUNDARY: a record from a DIFFERENT week rebuilds whole ----
+  dbm.useDbName('unit-rackweek-boundary');
+  const st1 = await loot.rack();
+  await dbm.kvSet('rack', { ...st1, week: 'stale-week', rr: 3 });
+  const rebuilt = await loot.rack();
+  assert.equal(rebuilt.week, week, 'crossing the week boundary rebuilds the record for the current ISO week');
+  assert.equal(rebuilt.rr, 0, 'a new week resets the reroll counter');
+
+  // ---- MIGRATION: a pre-rotating-shelf save (ids but no `rot` at all) is filled in place ----
+  dbm.useDbName('unit-rackweek-migrate');
+  const st2 = await loot.rack();
+  await dbm.kvSet('rack', { week: st2.week, salt: st2.salt, ids: st2.ids, rr: 2 });   // no `rot` key at all
+  const migrated = await loot.rack();
+  assert.ok(Array.isArray(migrated.rot) && migrated.rot.length === loot.RACK_ROTATE_N,
+    'a save missing `rot` entirely gets one filled in');
+  assert.deepEqual(migrated.ids, st2.ids, 'migration must not disturb the themed nine');
+  assert.equal(migrated.rr, 2, 'migration must not disturb the spent reroll count');
+});
+
+/* THE NUDGE, 2026-09-05. Tom: "a Shop chip badge when the rack turned since
+   last seen, keyed rackSeenWeek, cleared on shop open." renderCharacter
+   (js/app.js) computes this off `rack()`'s own `week` against the stored
+   `rackSeenWeek`, and it is suppressed while the Shop tab itself is the one
+   rendering (a badge announcing "new" on the screen already showing it would
+   be the tab telling you about itself). Evaluated for real off the exact
+   source line rather than reimplemented, so a change to the guard's logic
+   moves this test with it. */
+test('rack nudge: the Shop chip badge fires once per week and clears when the Shop tab opens', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const m = app.match(/const rackTurned = (rk\.week !== rackSeenWeek && tab !== 'shop');/);
+  assert.ok(m, 'renderCharacter must compute rackTurned off rk.week vs rackSeenWeek, suppressed on the Shop tab itself: re-anchor this test if the line moved');
+  const rackTurned = (rk, rackSeenWeek, tab) => new Function('rk', 'rackSeenWeek', 'tab', `return ${m[1]};`)(rk, rackSeenWeek, tab);
+  assert.equal(rackTurned({ week: '2026-W36' }, '2026-W35', 'wardrobe'), true, 'a rack that turned since last seen must badge on another tab');
+  assert.equal(rackTurned({ week: '2026-W36' }, '2026-W36', 'wardrobe'), false, 'a rack already seen this week must not badge');
+  assert.equal(rackTurned({ week: '2026-W36' }, null, 'wardrobe'), true, 'a player who has never opened the Shop must see the badge (null seen-week)');
+  assert.equal(rackTurned({ week: '2026-W36' }, '2026-W35', 'shop'), false, 'the badge must not show while the Shop tab itself is open');
+
+  assert.match(app, /if \(tab === 'shop'\) await kvSet\('rackSeenWeek', rk\.week\);/,
+    'opening the Shop tab must clear the nudge by writing the CURRENT rack week to rackSeenWeek');
 });
 
 /* ================= claimed-row-audit, 2026-09-04: the five re-routed writers =================

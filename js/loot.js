@@ -376,30 +376,34 @@ export async function rack() {
      themed rung under a player mid-week and quietly hand back their spent
      rerolls, so the record is kept and only the missing half is filled, on the
      salt it already carries. */
-  /* THE ROTATING SHELF IS DAILY, THE THEMED NINE AND THE REROLLS STAY WEEKLY.
-     Tom, 2026-08-27: "i think the rack should change up everyday to keep things
-     fresh and have people checking in".
+  /* THE ROTATING SHELF IS WEEKLY NOW, ON THE SAME KEY THE THEMED NINE USE.
+     Tom, 2026-09-05, reversing the 2026-08-27 daily ruling below: "the
+     rotating twelve rotate WEEKLY". `rackRotatePick`'s own first parameter is
+     named `week`, but every call site here was quietly passing `day`
+     (dateKey()), so the shelf silently re-rolled at midnight every night while
+     the banner and the reroll ladder both counted in weeks. Fixed by seeding
+     on `week`, the same key `cur.week` already gates this whole record on.
 
-     ONLY `rot` MOVES, AND THAT SEPARATION IS THE WHOLE CARE HERE. The comment
-     below records that `rr` used to reset on the day and that this handed out a
-     free full-rack draw EVERY DAY, surfacing any specific themed piece 94% of
-     weeks for nothing, which is precisely what a reroll must not do. Tom
-     approved weekly rerolls on 2026-08-20 and that is untouched: the day is
-     read for the shelf's seed and for nothing else. The themed rungs keep their
-     week too, so the theme still reads as a week-long thing to save up for.
-
-     Also covers the migration from the shelf's first shape: a save with no
-     `rot`, or one written on an earlier day, is filled in place rather than
-     rebuilt, so a player's spent rerolls and their themed nine survive. */
+     ADDITIVE MIGRATION: `rotDay` is no longer read as a freshness gate at all.
+     A record that already holds a `rot` array - drawn under the old per-day
+     code, its `rotDay` a date string rather than a week - is NOT force-redrawn
+     here. Once a record has SOME `rot`, it stands for the rest of that
+     `week`, which is exactly the boundary the old daily code was meant to
+     respect and did not; the day-keyed shelf a player already has simply
+     rides out its week unchanged. The only thing this migration branch still
+     does is fill in `rot` for a record that predates the rotating shelf
+     entirely (no `rot` at all): the record is kept and only the missing half
+     is filled, on the salt it already carries. The next NEW week (`cur.week
+     !== week`, below) rebuilds the record from scratch regardless. */
   const staleRot = cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length
-    && (!Array.isArray(cur.rot) || cur.rotDay !== day);
+    && !Array.isArray(cur.rot);
   if (staleRot) {
-    const rot = rackRotatePick(day, cur.salt || 0, cur.ids);
+    const rot = rackRotatePick(week, cur.salt || 0, cur.ids);
     /* Spread the record the TRANSACTION reads, not the one read above it:
        rerollRack claims `rr` on this same row, and writing `cur` whole handed a
        spent reroll back, which is a rung of the price ladder for free. It
-       refuses outright once somebody else has already rotated today. */
-    await kvUpdate('rack', prev => (prev && prev.rotDay !== day) ? { ...prev, rot, rotDay: day } : undefined, null);
+       refuses outright once somebody else has already filled `rot` in. */
+    await kvUpdate('rack', prev => (prev && !Array.isArray(prev.rot)) ? { ...prev, rot, rotDay: day } : undefined, null);
     cur.rot = rot; cur.rotDay = day;
   }
   if (cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length) {
@@ -416,7 +420,7 @@ export async function rack() {
     return { ...cur, rr: cur.rr || 0 };
   }
   const ids = rackPick(week, 0);
-  const st = { week, salt: 0, ids, rot: rackRotatePick(day, 0, ids), rotDay: day, rr: 0 };
+  const st = { week, salt: 0, ids, rot: rackRotatePick(week, 0, ids), rotDay: day, rr: 0 };
   await kvSet('rack', st);
   return st;
 }
@@ -467,7 +471,7 @@ export async function rerollRack() {
        never fish a specific themed piece out of its rung. The new salt seeds
        the rotating draw alone, against the SAME themed ids, so the two shelves
        stay disjoint and buyRackItem's indexOf pricing cannot cross. */
-    return { week: cur.week, salt, ids: cur.ids, rot: rackRotatePick(day, salt, cur.ids), rotDay: day, rr: used + 1 };
+    return { week: cur.week, salt, ids: cur.ids, rot: rackRotatePick(cur.week, salt, cur.ids), rotDay: day, rr: used + 1 };
   });
   if (!next) { await coinsAdd(cost); return { ok: false, reason: 'race' }; }
   return { ok: true, cost, rr: next.rr, coins: left };

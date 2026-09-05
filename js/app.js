@@ -9680,14 +9680,9 @@ async function renderShop(el) {
      that has to share the screen with five other departments is not a rack.
      No paragraph explains any of it: a rule a control cannot carry on its own
      is a broken control, not an under-explained one. */
-  /* THE BANNER AND THE RACK AGREE, and the banner says ONE thing. A month-long
-     theme, four racks inside it, this is rack N, and the right-hand side is a
-     COUNTDOWN rather than a weekday ("New rack Monday" is ambiguous across
-     timezones and reads as nonsense when you open the app on a Monday). */
-  const weekKey = isoWeekKey(new Date());
-  const weekNum = parseInt(weekKey.split('-W')[1]);
-  const rackNo = ((weekNum - 1) % 4) + 1;
-  const rackDaysLeft = (8 - (new Date().getDay() || 7)) % 7 || 7;
+  /* THE BANNER MOVED, 2026-09-05: it is Gwart's header now (gwartHeroHtml,
+     `.rk-clock`), at heading size instead of an 11px strip below the pet
+     shelf and the football Kit room. rackNo/rackDaysLeft are computed there. */
   /* RACK_BASE and RACK_FIT are module-level now (see wornArtHtml): the reveal
      cards draw the same mannequin, and two copies of the neutral base would
      drift apart the first time a slot default changed. */
@@ -9987,7 +9982,6 @@ async function renderShop(el) {
 
   el.innerHTML = `
   ${fbLead}${petLead}
-  <div class="rk-theme"><b>${esc(RACK_THEME)} · RACK ${rackNo} OF 4</b><i></i><span>New rack in ${rackDaysLeft}d</span></div>
   <!-- WHAT THIS WALLET REACHES, said in numbers rather than left to be inferred
        from which pills happen to be filled. A player at 340 coins could not buy
        one of the nine and the screen never said so; the out-of-reach pills were
@@ -10015,16 +10009,22 @@ async function renderShop(el) {
        must never be sold (pets, Bumbleseal's own pieces, exclusive art awarded
        by name, and the body and skull every player starts with). Same tile, same
        try-on, same buy row: a player should not have to learn a second shop. -->
-  <div class="rk-theme"><b>ALSO ON THE RACK</b><i></i><span>${rotIds.length} pieces &middot; new every day</span></div>
-  <div class="rk-grid rot">
-    ${rotIds.map(id => rackTile(id, rotPrice(id)[0], rotPrice(id)[1], 384)).join('')}
-  </div>
-  <!-- The reroll sits ON the shelf it moves. Its copy names the boundary out
+  <div class="rk-theme"><b>ALSO ON THE RACK</b><i></i><span>${rotIds.length} pieces &middot; new every week</span></div>
+  <!-- THE REROLL MOVED UP BESIDE ITS HEADER, 2026-09-05. Tom: "the free reroll
+       is 93.6% of the way down the page ... a free restock of twelve items is
+       the strongest reason to keep scrolling and it is placed where only a
+       player who has already scrolled everything will find it." It used to sit
+       under the 12-tile grid; it now sits ON the shelf it moves, right where
+       that shelf's own header names it, so the free first reroll is visible
+       before the grid rather than after it. Its copy names the boundary out
        loud (the themed nine above never reroll), the price is on the button
        before the tap, and a wallet that cannot cover it sees a disabled button
        rather than a taunt. -->
   <button class="rk-reroll" id="rackReroll"${coinBal < rerollCost ? ' disabled' : ''}><span class="rk-rr"><b>Reroll this shelf</b><small>A fresh ${rotIds.length}, drawn from the whole catalogue. The ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())} nine above stay put.</small></span>
-    <span class="t3-price">${rerollCost === 0 ? 'FREE' : `${ICONS.coin(13)} ${rerollCost.toLocaleString()}`}</span></button>` : ''}
+    <span class="t3-price">${rerollCost === 0 ? 'FREE' : `${ICONS.coin(13)} ${rerollCost.toLocaleString()}`}</span></button>
+  <div class="rk-grid rot">
+    ${rotIds.map(id => rackTile(id, rotPrice(id)[0], rotPrice(id)[1], 384)).join('')}
+  </div>` : ''}
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Potions and charms</b><small>Supplies ›</small></button>
   <div id="shopRestBody"${wasOpen.rest ? '' : ' hidden'}>
 
@@ -15315,8 +15315,34 @@ function openHatchReveal(res, charWrap) {
 
    The wordmark is the <h1>. The hub's name heading is hidden for this tab, so
    the page still has exactly one, and it is the shop's name rather than the
-   player's. */
-const gwartHeroHtml = () => `
+   player's.
+
+   THE SCARCITY CLOCK, 2026-09-05. Tom: "the scarcity clock is the smallest,
+   faintest thing on the page, and it is below the fold... put it in the
+   header Gwart currently occupies, at heading size." It used to be a
+   `.rk-theme` strip inside #chContent, below the pet shelf and the football
+   Kit room, at 11px. It is a SIBLING of `.gw-panel` here, not a child: the
+   panel's own geometry (BAND/CENTRED/GEAR, tests/emporium-audit.mjs) is
+   pixel-measured off Cam's art and must not move for a label, and Gwart's
+   hero and the shelf order below are Tom's ruling to leave alone. `.rk-clock`
+   reuses the display-font heading pattern `.race-banner .gbn-txt b` already
+   uses at --fs-5 rather than inventing a new scale. tests/shop-lead-order-
+   audit.mjs no longer finds "the rack" by this text (it moved off the shelf
+   entirely); it anchors on `.rk-grid` instead, dated the same day. */
+const gwartHeroHtml = rk => {
+  /* RACK N OF 4, DERIVED FROM THE SAME ISO WEEK THE SHELF USES. It used to be
+     Math.ceil(new Date().getDate() / 7), day-of-month over seven, which agreed
+     with the shelf's ISO week on only 15.4% of days across a year (measured,
+     scratchpad/r36). `rk.week` is already "YYYY-Wnn" (js/poi.js isoWeekKey);
+     reading the week number straight off it is what "reconcile with the real
+     theme cycle" means here, matching the formula already shipped on main. */
+  const rackNo = ((parseInt(rk.week.slice(-2), 10) - 1) % 4) + 1;
+  /* THE BANNER AND THE RACK AGREE, and the banner says ONE thing. A month-long
+     theme, four racks inside it, this is rack N, and the right-hand side is a
+     COUNTDOWN rather than a weekday ("New rack Monday" is ambiguous across
+     timezones and reads as nonsense when you open the app on a Monday). */
+  const rackDaysLeft = (8 - (new Date().getDay() || 7)) % 7 || 7;
+  return `
   <div class="gw-hero">
     <div class="gw-panel">
       ${/* HE IS TAPPABLE IN HIS OWN SHOP TOO. "Tapping Gwart, anywhere he
@@ -15342,7 +15368,9 @@ const gwartHeroHtml = () => `
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke-width="2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg>
       </button>
     </div>
-  </div>`;
+  </div>
+  <div class="rk-clock"><b>${esc(RACK_THEME)} &middot; RACK ${rackNo} OF 4</b><span>New rack in ${rackDaysLeft}d</span></div>`;
+};
 
 async function renderCharacter(wrap, tab, opts = {}) {
   const body = $('#chBody', wrap);
@@ -15358,8 +15386,19 @@ async function renderCharacter(wrap, tab, opts = {}) {
   // content and the browser clamps the real scroller's offset.
   const scroller = body.closest('.screen') || body;
   const keepScroll = opts.instant ? scroller.scrollTop : null;
-  const [xp, eq, coinBal, inv, boost, dustBal, myTitle] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges(), boneDust(), championTitle()]);
+  const [xp, eq, coinBal, inv, boost, dustBal, myTitle, rk, rackSeenWeek] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges(), boneDust(), championTitle(), rack(), kvGet('rackSeenWeek', null)]);
   const lvl = levelFor(xp);
+  /* THE NUDGE, 2026-09-05. Tom: "a Shop chip badge when the rack turned since
+     last seen, keyed rackSeenWeek, cleared on shop open." Read regardless of
+     which tab is open (the badge sits on the Shop CHIP, visible from every
+     tab), suppressed while actually looking at the Shop tab (the record is
+     about to be marked seen below, and a badge announcing "new" on the screen
+     that is currently showing it would be the tab telling you about itself).
+     Cleared unconditionally on every Shop-tab render, same idiom as
+     setCrateBadge just below: read off the same state the tab is about to
+     show, not a separate write path that could drift from it. */
+  const rackTurned = rk.week !== rackSeenWeek && tab !== 'shop';
+  if (tab === 'shop') await kvSet('rackSeenWeek', rk.week);
   const chShiny = await ownShinyPetId(eq);   // your own stack, so your own collection answers
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
   // Opening a crate re-renders this screen in place (no route()), so the tab
@@ -15411,7 +15450,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             with none (the yard prints 24, favourites 6, recents 8, and the looks
             pill beside this one prints N/M). Same .bh-pill as the looks count. */''}
       <span class="bh-pill ward-fits">${fitCount}/${MAX_FITS} fits</span>
-    </div>` : tab === 'shop' ? gwartHeroHtml() : `
+    </div>` : tab === 'shop' ? gwartHeroHtml(rk) : `
     <div class="bh-hero mini">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny, petWear: S.petWear })}</div>
       <div class="bh-hero-meta">
@@ -15433,7 +15472,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             that CSS cannot carry. */''}
       <button role="tab" aria-selected="${tab === 'wardrobe'}" class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${pixCur('wardrobe', 24) || ICONS.bone(21)}<span>Wardrobe</span></button>
       <button role="tab" aria-selected="${tab === 'crates'}" class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${pixCur('crate', 24)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
-      <button role="tab" aria-selected="${tab === 'shop'}" class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${pixCur('shop', 24) || ICONS.coin(24)}<span>Shop</span></button>
+      <button role="tab" aria-selected="${tab === 'shop'}" class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${pixCur('shop', 24) || ICONS.coin(24)}<span>Shop</span>${rackTurned ? '<i class="ch-badge">!</i>' : ''}</button>
       <button role="tab" aria-selected="${tab === 'talents'}" class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${pixCur('build', 24) || ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
       ${/* LEVEL and LOOKS both came off this hub 2026-08-17 on Tom's call. Level's
             screen is NOT deleted, only its chip: tab === 'progress' still renders
