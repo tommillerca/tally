@@ -11162,3 +11162,58 @@ button.t3-price::before {
 .ward-cell.r-epic .ward-rar { color: var(--violet); }
 .ward-cell.r-legendary .ward-rar { color: var(--gold); }
 
+/* =====================================================================
+   COLOURWAY FAMILIES — one tile per drawing, the variants on a rail
+   =====================================================================
+   Tom, 2026-09-04: "collapse similar items into a different interface ...
+   those that have collected like 1000 head slots over the years will have a
+   messy af wardrobe." The family RULE is data/boneheadz.js; this is the
+   interface it earns.
+
+   THE RAIL REUSES .pw-row RATHER THAN COPYING IT, which is the same call
+   .fb-rail (the football colourway rail) made and for the same reason: the
+   flex, the 8px gap, the mandatory x-snap, the 96px tile and the `on`/ring
+   idiom are already shipped and already read by a returning player. Only what
+   is genuinely different is written here -- the tile SIZE (the art has to be
+   readable, so 78px of picture over a name), the centre snap so the selected
+   colourway sits in the middle of a long rail rather than at an edge, the end
+   margins that let the first and last tiles reach that centre, and living
+   inside a CSS grid it has to span. No momentum code: scroll-snap-type lands
+   it and the browser does the fling. */
+.ward-cell.fam .ward-fam-n {
+  position: absolute; right: 3px; top: 3px; z-index: 2; pointer-events: none;
+  min-width: 15px; padding: 2px 4px; border-radius: 999px;
+  font-size: 9px; font-weight: 900; line-height: 1; text-align: center;
+  /* Same .88 plate as .ward-rar, and for the same measured reason: what is
+     behind it is Cam's art and the worst case is a white pixel. */
+  background: rgba(13, 12, 18, .88); color: var(--text);
+}
+.fam-rail {
+  grid-column: 1 / -1;          /* .ward-grid is a 4-column grid; the rail spans it */
+  /* NO scroll-snap-type of its own: .pw-row already declares `x mandatory`,
+     which is the point of reusing that row. */
+  scroll-behavior: smooth; scrollbar-width: none;
+  margin: 1px calc(var(--pad) * -1) 3px; padding: 4px var(--pad) 8px;
+}
+.fam-rail::-webkit-scrollbar { display: none; }
+.pw-item.famr {
+  position: relative;           /* .ward-rar is absolute and lands on the art */
+  width: 92px; scroll-snap-align: center; padding: 7px 5px 8px; gap: 5px;
+}
+.pw-item.famr:first-child { margin-left: calc(50% - 46px - var(--pad)); }
+.pw-item.famr:last-child { margin-right: calc(50% - 46px - var(--pad)); }
+.pw-item.famr .famr-art { position: relative; display: block; width: 78px; height: 78px; }
+.pw-item.famr .famr-art canvas.ward-art { display: block; width: 100%; height: 100%; }
+.pw-item.famr b { font-size: 10px; line-height: 1.15; }
+/* The ring is the grid's own `equipped`, not .pw-item's `on`: the rail's tiles
+   carry data-equip like every other tile and restageWardrobe rings them by that
+   attribute, so giving them a second selected-state class would be one more
+   thing to keep in sync for no visual gain. Fill AND border, never colour
+   alone (a11y-audit). */
+.pw-item.famr.equipped { background: rgba(255, 201, 97, .12); border-color: var(--gold); }
+.pw-item.famr.r-uncommon .ward-rar { color: var(--mint); }
+.pw-item.famr.r-rare .ward-rar { color: var(--protein); }
+.pw-item.famr.r-epic .ward-rar { color: var(--violet); }
+.pw-item.famr.r-legendary .ward-rar { color: var(--gold); }
+@media (prefers-reduced-motion: reduce) { .fam-rail { scroll-behavior: auto; } }
+
