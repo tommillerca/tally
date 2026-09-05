@@ -4326,17 +4326,6 @@ async function renderToday(el) {
     <b>⚠️ Steps aren't syncing</b>
     <span>Apple Health hasn't sent steps in ${hkStale.days >= 2 ? `${hkStale.days} days` : `${hkStale.hours} hours`}. Your walking isn't counting. Tap to fix.</span>
   </button>` : ''}
-  ${/* THE REBALANCE CARD (QA round 28 B1): the R21-P1 make-good explained, once.
-       Same quiet card skeleton as the return card (.wb-back: no alarm colour,
-       this is not a warning), copy from habitGrantCard (js/game.js). The button
-       is the dismissal: it records the card as seen and opens Training, where
-       the N points are waiting. */''}
-  ${rebal ? `
-  <div class="card wb-back" id="habitGrantCard">
-    <b>${esc(rebal.title)}</b>
-    <span>${esc(rebal.body)}</span>
-    <button class="btn" id="habitGrantGo">${esc(rebal.button)}</button>
-  </div>` : ''}
 
   ${/* THE DAY IS ONE COLLAPSED BANNER UNTIL YOU ASK FOR IT. Tom, 2026-08-27:
        "below the fold should be fully collapsed and only showing a banner with
@@ -4376,6 +4365,23 @@ async function renderToday(el) {
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
   <p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>
   </details>
+  ${/* OUTSIDE THE DAY, on purpose (2026-09-05). Inside .dayflow this card sat above
+       the collapsed banner: it pushed the ring card 18px past its ceiling
+       (hype-banner FIT), made the collapsed day taller than a 568px screen
+       (today-peek WHOLE) and was the one panel painting inside the flat day
+       (today-container LEDGER). Below the day it explains the points without
+       moving the summary the day is. */''}
+  ${/* THE REBALANCE CARD (QA round 28 B1): the R21-P1 make-good explained, once.
+       Same quiet card skeleton as the return card (.wb-back: no alarm colour,
+       this is not a warning), copy from habitGrantCard (js/game.js). The button
+       is the dismissal: it records the card as seen and opens Training, where
+       the N points are waiting. */''}
+  ${rebal ? `
+  <div class="card wb-back" id="habitGrantCard">
+    <b>${esc(rebal.title)}</b>
+    <span>${esc(rebal.body)}</span>
+    <button class="btn" id="habitGrantGo">${esc(rebal.button)}</button>
+  </div>` : ''}
   </div>
   </section>
 
