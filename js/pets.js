@@ -228,15 +228,43 @@ export function petSignature(petId) { return PET_SIGNATURE[petId] || null; }
 // passive magnitude scales gently with level (level 1 -> ~6%, level 6 -> ~11%)
 export function passivePct(level) { return 0.04 + (level - 1) * 0.008; }
 
-/* ---- Kennel Phase A: morphs (cosmetic recolours, no stat touch, no glow) ----
- * A morph is a CSS filter applied over a pet's existing art (no new PNGs, spec
- * section 0.7). Rolled at egg-grant time (js/loot.js eggRow), read at hatch. Order
- * here IS tier order for fusion (Phase C), not shipped yet. */
+/* ---- Kennel Phase A / palettes: morphs (cosmetic recolours, no stat touch, no glow) ----
+ * Rolled at egg-grant time (js/loot.js eggRow), read at hatch. Order here IS
+ * tier order for fusion (Phase C), not shipped yet.
+ *
+ * KENNEL PALETTES, 2026-09-05. Tom: "morphs are PER-SPECIES Cam-faithful
+ * palettes shipped as PNG variants, the CSS filter table is replaced." Phase
+ * A's MORPH_TINT/petTint (js/app.js, one CSS filter shared by every species)
+ * is gone; scripts/build-pet-morphs.py recolors each species' own master into
+ * assets/bh/C/morph/<species>__<morph>.png, and MORPH_ART/morphAsset below are
+ * the gate every render path resolves through -- mirrors SHINY_ART (js/loot.js):
+ * file exists (species is in MORPH_ART) -> use the variant PNG; else base. */
 export const MORPHS = ['base', 'ember', 'frost', 'toxic', 'midnight'];
 export const MORPH_WEIGHT = { base: 40, ember: 22, frost: 22, toxic: 10, midnight: 4 };
 export const MORPH_TIER = { base: 0, ember: 1, frost: 1, toxic: 2, midnight: 3 };
 export const MORPH_LABEL = { base: '', ember: 'Ember', frost: 'Frost', toxic: 'Toxic', midnight: 'Midnight' };
 export function isMorph(m) { return MORPHS.includes(m); }
+
+/* Which species carry per-morph PNG variants (mirrors SHINY_ART's shape: a
+ * plain membership list, not a filesystem check -- a browser cannot read a
+ * folder). CX is absent on purpose: its amethyst art IS its look (section 0.7).
+ * Bumbleseal (C6) IS in here now (Kennel palettes, 2026-09-05: she is a normal
+ * species for the morph grid, see MORPH_SPECIES below and js/loot.js). */
+export const MORPH_ART = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+/* Midnight ships three luminance tiers (scripts/build-pet-morphs.py builds all
+ * three: assets/bh/C/morph/<sp>__midnight-{dark,medium,dusk}.png) because Tom's
+ * ruling, 2026-09-05: "the midnight luminance tier is NOT decided yet." This is
+ * the one-line switch that ships his pick once he makes it. */
+export const MIDNIGHT_TIER = 'medium'; // 'dark' | 'medium' | 'dusk'
+/* The one path helper every draw path resolves through (mirrors bhAsset,
+ * data/boneheadz.js). '' for base, CX, an unknown morph, or a species with no
+ * morph art -- never guesses, never throws; the caller falls back to the base
+ * asset exactly the way a missing shiny id would. */
+export function morphAsset(petId, morph) {
+  if (!morph || morph === 'base' || !isMorph(morph) || petId === 'CX' || !MORPH_ART.includes(petId)) return '';
+  const stem = morph === 'midnight' ? `midnight-${MIDNIGHT_TIER}` : morph;
+  return `assets/bh/C/morph/${petId}__${stem}.png`;
+}
 
 // Same crypto source loot.js's rng() uses, duplicated rather than imported: pets.js
 // stays a pure module with no DOM/db dependency (loot.js imports FROM here, not the
@@ -248,19 +276,29 @@ function rng() {
   return a[0] / 0xffffffff;
 }
 
-// Species that COUNT toward the fresh-first pool below: the five ordinary
-// dupe-pool pets (spec section 2.2's "25 (species x morph) pairs" -- 5 species
-// x 5 morphs). NOT C6 (Bumbleseal): she is a 1% shop-exclusive hatch that most
-// players never own by any morph, so putting her in this accounting alongside
-// C1-C5 left 'base' permanently "fresh" for her sake and starved the other
-// four morphs of any weight -- found by the 200-egg sim (2026-09-05), where a
-// player owning all of C1-C5 in base still hatched nothing but base across 200
-// draws. Excludes CX too (exempt from morphs per spec section 0.7 -- its
-// amethyst art IS its look). A hand-kept list, not derived from PET_ASSIGN:
-// this module stays import-free (no data/boneheadz.js), and "hatch-pool
-// species" is exactly the distinction pickRandomPet's own `rest` (js/loot.js)
-// draws on, which this list mirrors.
-const MORPH_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5'];
+// Species that COUNT toward the fresh-first pool below: the ordinary
+// dupe-pool pets (spec section 2.2's "(species x morph) pairs"). Excludes CX
+// (exempt from morphs per spec section 0.7 -- its amethyst art IS its look).
+// A hand-kept list, not derived from PET_ASSIGN: this module stays import-free
+// (no data/boneheadz.js), and "hatch-pool species" is exactly the distinction
+// pickRandomPet's own `rest` (js/loot.js) draws on, which this list mirrors.
+//
+// C6 (Bumbleseal) WAS excluded here (2026-09-05 morning): she was a 1%
+// shop-exclusive hatch that most players never owned by any morph, so putting
+// her in this accounting alongside C1-C5 left 'base' permanently "fresh" for
+// her sake and starved the other four morphs of any weight -- found by the
+// 200-egg sim, where a player owning all of C1-C5 in base still hatched
+// nothing but base across 200 draws (see git history / KENNEL.md section 3).
+//
+// KENNEL PALETTES, 2026-09-05 afternoon, Tom: "roll Bumbleseal into things,
+// her time as shop-exclusive has passed ... part of the morph grid = 6
+// species x 5 morphs = 30 pairs, fresh-first accounting includes her." The
+// exclusion above is gone: js/loot.js pickRandomPet no longer special-cases
+// her (hatchChance removed from her catalogue entry), so she is now an
+// ordinary member of the same hatch pool as C1-C5 and belongs in this
+// accounting for the same reason they do -- the 200-egg bug this list used to
+// guard against cannot recur, because nothing here treats her as rare anymore.
+const MORPH_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
 
 // The (species, morph) pairs a player already owns, as a Set of "sp|morph" keys.
 // Pure: takes the instance list (js/loot.js petInstances()), never reads it itself.

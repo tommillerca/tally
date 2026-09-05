@@ -9,6 +9,15 @@
  * is a claim about scarcity, and scarcity in this app is four `filter` calls in
  * js/loot.js that nothing was measuring.
  *
+ * KENNEL PALETTES, 2026-09-05: that scarcity ruling reversed. Tom: "roll
+ * Bumbleseal into things, her time as shop-exclusive has passed." Her
+ * `hatchChance` is gone (data/boneheadz.js, scripts/build-cosmetics.py
+ * SPECIALS); she still sells in Gwart's Menagerie for 50,000 coins and her
+ * accessories are still cash-shop-only (both untouched, PET_SHOP/buyPetItem),
+ * but the egg pool no longer gates her at 1% -- the SAMPLE/RATE pair that
+ * pinned that 1% is gone from WHAT IT ASSERTS below; SPLIT now grades her the
+ * same even share as C1-C5.
+ *
  * THE TWO FAILURES THIS FILE IS WRITTEN AGAINST, both of which have happened:
  *
  * 1. TWO COPIES OF ONE POOL, DRIFTED. hatchEgg and grantPet each built the pet
@@ -35,15 +44,17 @@
  *
  * WHAT IT ASSERTS
  *   SAMPLE   the roster really carries what every row below assumes: a C6 that
- *            is legendary, hatchable and carries hatchChance, at least one
- *            exclusive pet to protect, and at least one pet accessory to keep
- *            out of crates. An empty sample is a failure, never a pass.
- *   RATE     C6 comes out of pickRandomPet at 1%, in BOTH pool shapes (a fresh
- *            player, and a player who owns every species so the dupe branch is
- *            the one running). N and tolerance stated on the row.
- *   SPLIT    and the rest of the roster still splits the remaining 99% evenly,
- *            which is the "and not more" half: a rate row alone passes on a pool
- *            that has quietly lost everything else.
+ *            is legendary, hatchable and carries NO hatchChance gate (Kennel
+ *            palettes, 2026-09-05), at least one exclusive pet to protect, and
+ *            at least one pet accessory to keep out of crates. An empty
+ *            sample is a failure, never a pass.
+ *   SPLIT    every non-exclusive, non-hatch-chance species -- C1-C6 today --
+ *            splits the pool evenly, in BOTH pool shapes (a fresh player, and
+ *            a player who owns every species so the dupe branch is the one
+ *            running). `reserved`/`expected` are computed off the catalogue,
+ *            not hardcoded to "nobody has hatchChance today", so a future shop
+ *            pet declaring the field is graded correctly without editing this
+ *            file. N and tolerance stated on the row.
  *   NEVER    zero exclusive picks and zero common picks across 400,000 draws.
  *   CRATE    zero pets and zero pet accessories out of rollCosmetic, at floor 0
  *            and at the Golden Crate's floor 2.
@@ -159,8 +170,16 @@ const exclusives = pets.filter(i => i.exclusive);
 const petSlot = new Set(PET_SLOTS.map(s => s.code));
 const accessories = BH_ITEMS.filter(i => !i.default && i.slot !== 'C' && petSlot.has(i.slot));
 
-ok(`SAMPLE ${SHOP_PET} is a legendary, hatchable, 1% shop pet`,
-  !!shop && shop.rarity === 'legendary' && !shop.exclusive && shop.hatchChance === 0.01,
+/* KENNEL PALETTES, 2026-09-05. Tom: "roll Bumbleseal into things, her time as
+ * shop-exclusive has passed." She no longer carries `hatchChance` (removed
+ * from data/boneheadz.js / scripts/build-cosmetics.py SPECIALS), so the old
+ * "1% shop pet" SAMPLE/RATE pair below is gone: she is graded by SPLIT now,
+ * the same even-split row every ordinary species already goes through. She
+ * still SELLS in Gwart's Menagerie for 50,000 coins (PET_SHOP.pet, js/loot.js
+ * buyPetItem) -- that acquisition path is untouched and orthogonal to the
+ * egg pool this file audits. */
+ok(`SAMPLE ${SHOP_PET} is a legendary, hatchable species with no hatch-chance gate`,
+  !!shop && shop.rarity === 'legendary' && !shop.exclusive && shop.hatchChance === undefined,
   shop ? `${shop.id} ${shop.name}: ${shop.rarity}, exclusive=${!!shop.exclusive}, hatchChance=${shop.hatchChance}`
     : `${SHOP_PET} is not in the catalogue at all, so every row below grades nothing`);
 ok('SAMPLE there is an exclusive pet to protect and an accessory to keep out of crates',
@@ -168,15 +187,8 @@ ok('SAMPLE there is an exclusive pet to protect and an accessory to keep out of 
   `${exclusives.length} exclusive pets (${exclusives.map(i => i.id).join(' ') || 'NONE'}), `
   + `${accessories.length} pet accessories (${accessories.map(i => `${i.id}:${i.rarity}`).join(' ') || 'NONE'})`);
 
-/* ---- RATE / SPLIT / NEVER ------------------------------------------------ */
-/* N AND THE TOLERANCE, STATED. p = 0.01 at N = 200,000 has a standard error of
-   0.000222, so +/- 0.0015 is 6.7 sigma: a false red is a 1-in-60-billion event,
-   and the band [0.0085, 0.0115] is red on every wrong answer this can produce.
-   The two that matter: the flag left off entirely puts C6 on an even share of
-   the four-deep non-common pool, 0.2500, which is 1,122 sigma out; `exclusive`
-   left on puts her at 0.0000, 45 sigma out. */
+/* ---- SPLIT / NEVER -------------------------------------------------------- */
 const N = 200_000;
-const RATE_TOL = 0.0015;
 const SPLIT_TOL = 0.01;
 
 function draw(owned) {
@@ -194,24 +206,24 @@ const shares = t => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, v /
 const fmt = t => Object.entries(shares(t)).sort((a, b) => b[1] - a[1])
   .map(([k, v]) => `${k} ${(v * 100).toFixed(3)}%`).join('  ');
 
-for (const [label, tally] of [['fresh player', fresh], ['owns every species', full]]) {
-  const got = (tally[SHOP_PET] || 0) / N;
-  ok(`RATE ${SHOP_PET} hatches at 0.0100 +/- ${RATE_TOL} over ${N.toLocaleString()} draws (${label})`,
-    Math.abs(got - 0.01) <= RATE_TOL,
-    `${got.toFixed(4)} measured  |  ${fmt(tally)}`);
-}
-
 /* SPLIT — the "and not more" half, and a positive control that the pool is live.
-   Everything that is neither exclusive nor a shop pet shares the remaining 99%
-   evenly, INCLUDING the commons: Kennel Phase A, section 2.1, 2026-09-05 --
-   `pickRandomPet` used to filter `i.rarity !== 'common'`, which dropped C3
-   Catfish and C4 Beardie from every duplicate egg (the comment that used to sit
-   there admitted the rarity weighting it implied never existed). The pool is
-   now a uniform pick over every non-shop, non-exclusive species, so the even
-   split is now over five, not three. A gate that swallowed the rest of the
-   roster would pass RATE. */
+   Everything that is neither exclusive nor a hatch-chance shop pet shares the
+   remaining share evenly, INCLUDING the commons: Kennel Phase A, section 2.1,
+   2026-09-05 -- `pickRandomPet` used to filter `i.rarity !== 'common'`, which
+   dropped C3 Catfish and C4 Beardie from every duplicate egg (the comment that
+   used to sit there admitted the rarity weighting it implied never existed).
+   The pool is a uniform pick over every non-shop, non-exclusive species.
+
+   KENNEL PALETTES, 2026-09-05: C6 (Bumbleseal) used to be the one species with
+   `hatchChance` (reserving a fixed 1% and excluding her from this even split,
+   which is what the removed RATE rows pinned); that field is gone from her
+   catalogue entry, so she is now IN evenPool same as C1-C5 -- the split is six-
+   way, not five-way, and `reserved` below is computed off the catalogue (not
+   hardcoded to "no pet has hatchChance today") so a future shop pet declaring
+   the field is still handled correctly, the way pickRandomPet itself reads it. */
 const evenPool = pets.filter(i => !i.exclusive && !i.hatchChance);
-const expected = (1 - Number(shop && shop.hatchChance)) / evenPool.length;
+const reserved = pets.filter(i => i.hatchChance).reduce((a, i) => a + i.hatchChance, 0);
+const expected = (1 - reserved) / evenPool.length;
 for (const [label, tally] of [['fresh player', fresh], ['owns every species', full]]) {
   const off = evenPool.map(i => ({ id: i.id, got: (tally[i.id] || 0) / N }))
     .filter(x => Math.abs(x.got - expected) > SPLIT_TOL);
@@ -337,5 +349,5 @@ import { readdirSync } from 'node:fs';
 
 console.log(fails
   ? '\nPET POOL AUDIT: FAILED'
-  : `\nPET POOL AUDIT: ${SHOP_PET} hatches at 1%, exclusives never do, no pet or pet accessory can come out of a crate, and both pools have exactly one home`);
+  : `\nPET POOL AUDIT: ${SHOP_PET} hatches at the same even share as every other species, exclusives never do, no pet or pet accessory can come out of a crate, and both pools have exactly one home`);
 process.exit(fails);

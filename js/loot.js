@@ -1194,8 +1194,9 @@ export const SHINY_CHANCE = 0.03;
 /* WHICH SPECIES HAVE SHINY ART. The shiny render path builds
    assets/bh/C/shiny/<id>.png, and minting a shiny instance for a species with
    no file there hands the player a broken image on what may be the most
-   premium item in the game (Bumbleseal is 50,000 coins and 1% of eggs; her
-   shiny would be 1 in 3,333). A browser cannot read the folder, so this list
+   premium item in the game (Bumbleseal is sold for 50,000 coins and, since
+   Kennel palettes 2026-09-05, hatches at the same even share as C1-C5). A
+   browser cannot read the folder, so this list
    is the folder's contents by hand, and pet-pool-audit pins the two to each
    other in both directions: an id here without art fails, and NEW SHINY ART
    SHIPPED WITHOUT EXTENDING THIS LIST FAILS TOO, which is what lets a future
@@ -1216,11 +1217,19 @@ export const SHINY_ART = ['C1', 'C2', 'C3', 'C4', 'C5'];
  * Two kinds of pet never take an even share:
  *   `exclusive`   never appears at all (awarded by name only).
  *   `hatchChance` appears at exactly that rate and is excluded from the even
- *                 split below. Bumbleseal (C6) is 1%: she is sold for 50,000
- *                 coins, and an even share of today's non-common pool would be
- *                 25%, which would make the price meaningless.
+ *                 split below.
  * Both are read off the catalogue rather than listed here, so the next pet
  * inherits the rule by declaring a field.
+ *
+ * KENNEL PALETTES, 2026-09-05. Tom: "roll Bumbleseal into things, her time as
+ * shop-exclusive has passed." Bumbleseal (C6) used to carry `hatchChance: 0.01`
+ * here -- sold for 50,000 coins, and an even share of the non-common pool
+ * would have been 25%, which would have made the price meaningless. That field
+ * is gone from her catalogue entry (data/boneheadz.js, scripts/build-cosmetics.py
+ * SPECIALS): she is now an ordinary member of `rest` below, same even split as
+ * C1-C5, still hatchable AND still separately purchasable in Gwart's Menagerie
+ * (js/loot.js buyPetItem / PET_SHOP.pet, untouched -- two independent
+ * acquisition paths, same as before). See tests/pet-pool-audit.mjs.
  *
  * `owned` is a Set of owned cosmetic ids: unowned species are preferred, and the
  * common pets are the consolation the pool falls back to when nothing better is

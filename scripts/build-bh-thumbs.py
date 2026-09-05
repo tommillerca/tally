@@ -170,7 +170,10 @@ def use_root(root):
 # same rectangle: it is one number, not two independently-measured ones.
 SLOTS = ['B', 'BG', 'C', 'CB', 'CE', 'CG', 'CM', 'E', 'FW', 'football', 'G', 'H',
          'IL', 'IR', 'M', 'P', 'S', 'SK', 'T', 'U']
-KEEP = re.compile(r'^(?:%s)/(?:shiny/)?[^/]+\.png$' % '|'.join(SLOTS))
+# `morph/` TOO (Kennel palettes, 2026-09-05): assets/bh/C/morph/<species>__<morph>.png,
+# built by scripts/build-pet-morphs.py, same shape as the shiny/ subfolder it sits
+# beside -- one more per-species recolour set, tiered the same way.
+KEEP = re.compile(r'^(?:%s)/(?:shiny/|morph/)?[^/]+\.png$' % '|'.join(SLOTS))
 MASK_RE = re.compile(r'^football/([^/]+)\.mask-[ab]\.png$')
 
 
