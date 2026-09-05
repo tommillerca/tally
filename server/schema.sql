@@ -29,6 +29,17 @@ CREATE TABLE IF NOT EXISTS players (
   max_level_at INTEGER,              -- when max_level was last raised (the jump anchor)
   week_key TEXT,                     -- the race week the accepted week_steps belong to
   week_steps INTEGER,                -- highest weekSteps accepted for week_key (monotone)
+  -- THE FROZEN PAIR (2026-09-05, QA round 34 P0). PUT /profile keeps one
+  -- (week_key, week_steps) per row, so the settler's own snapshot push (its
+  -- weekKey already the new week, sent one request before /steps/week
+  -- settles) advanced week_key away from last week BEFORE the payout query
+  -- could find them there: the settler was paid nothing, an untouched rival
+  -- with no fresher row was. Whenever PUT /profile is about to replace a
+  -- different stored week_key, it copies the departing (week_key, week_steps)
+  -- here first, so settlement can still find last week's total under last
+  -- week's own key. Existing DBs: migrations/2026-09-05-week-freeze.sql.
+  last_week_key TEXT,                 -- the week_key this row had just BEFORE its current one
+  last_week_steps INTEGER,            -- what week_steps held for last_week_key when it rolled
   /* HOW FAR THIS PLAYER'S CLIENT HAS READ THE GRANTS FEED (2026-08-17).
      GET /grants is a cursor read: the client sends `since` and js/social.js
      pullGrants only advances its local grantCursor AFTER applying everything in

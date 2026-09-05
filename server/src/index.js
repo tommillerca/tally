@@ -1617,6 +1617,26 @@ function sanitizeSnapshot(rawSnap, row, nowMs) {
     snap.weekSteps = acceptedSteps;
   }
 
+  /* ---- THE FREEZE (QA round 34 P0) ----
+     PUSH BEFORE YOU PULL: js/app.js pushes this snapshot with the NEW week's
+     key one request before /steps/week settles last week from this same
+     table, and this row only ever kept one (week_key, week_steps) pair. So the
+     UPDATE below that advances week_key to the new week was also the moment
+     last week's total left the table -- the settler's own row stopped
+     matching `WHERE week_key = <last week>` a request before it asked to be
+     paid for exactly that week.
+     Whenever the accepted key is about to replace a DIFFERENT stored key, the
+     departing (key, steps) pair is copied into last_week_key/last_week_steps
+     before it is overwritten, so settlement can still find it under the key
+     it actually belongs to. A row that has never raced (storedKey null) or
+     isn't changing weeks this PUT leaves the frozen pair exactly as it was. */
+  let lastWeekKey = typeof row.last_week_key === 'string' ? row.last_week_key : null;
+  let lastWeekSteps = intOrNull(row.last_week_steps) || 0;
+  if (storedKey !== null && acceptedKey !== null && acceptedKey !== storedKey) {
+    lastWeekKey = storedKey;
+    lastWeekSteps = storedSteps;
+  }
+
   const level = intOrNull(snap.level) || 0;
   const raisesMax = level > prevMax;
   return {
@@ -1626,6 +1646,8 @@ function sanitizeSnapshot(rawSnap, row, nowMs) {
     maxLevelAt: raisesMax ? nowMs : (row.max_level_at || null),
     weekKey: acceptedKey,
     weekSteps: acceptedSteps,
+    lastWeekKey,
+    lastWeekSteps,
     /* THE BOARD'S RANK KEY, so it can be a column instead of a json_extract the
        ORDER BY has to compute for every player in the table. Current, not the
        max_level ratchet above: the leaderboard has always shown where a player
@@ -2120,7 +2142,7 @@ export default {
            forget, and the copy into spires.defender below would still carry the
            raw claim. */
         const prior = await env.DB.prepare(
-          'SELECT created_at, max_level, max_level_at, week_key, week_steps FROM players WHERE id = ?')
+          'SELECT created_at, max_level, max_level_at, week_key, week_steps, last_week_key, last_week_steps FROM players WHERE id = ?')
           .bind(auth.playerId).first();
         const checked = sanitizeSnapshot(body.snapshot, prior || {}, nowP);
         const snap = JSON.stringify(checked.snap);
@@ -2138,9 +2160,11 @@ export default {
           env.DB.prepare(
             `UPDATE players SET profile = ?, app_v = ?, last_seen = ?,
                max_level = ?, max_level_at = ?, week_key = ?, week_steps = ?,
+               last_week_key = ?, last_week_steps = ?,
                level = ?, badges = ? WHERE id = ?`)
             .bind(snap, String(body.appV || ''), nowP,
                   checked.maxLevel || null, checked.maxLevelAt, checked.weekKey, checked.weekSteps,
+                  checked.lastWeekKey, checked.lastWeekSteps,
                   checked.boardLevel, checked.boardBadges,
                   auth.playerId),
           env.DB.prepare('UPDATE spires SET defender = ?, updated_at = ? WHERE owner = ?')
@@ -3067,6 +3091,41 @@ export default {
               AND week_steps > 0
             ORDER BY week_steps DESC LIMIT 25`).bind(weekKey).all()).results || [];
 
+        /* SETTLEMENT ONLY (QA round 34 P0): board(weekKey) above finds a racer
+           through their CURRENT week_key, which is exactly what stops working
+           the moment that racer's own next PUT /profile has already advanced
+           it to the week after `weekKey` -- "push before you pull" (js/app.js
+           opens Crew by pushing the new week's snapshot, then calls this
+           route). That PUT is also what freezes the departing pair into
+           last_week_key/last_week_steps (see sanitizeSnapshot), so the settled
+           board adds back anyone found there instead: two small queries
+           (this one has no matching index, but it runs once per real week
+           rollover, gated by the settled-marker check below, never per
+           request) rather than reshaping the hot live-board query above and
+           its pinned plan. No overlap is possible -- a row's last_week_key is
+           always the key BEFORE its current week_key, never equal to it -- so
+           the merge below needs no de-dup. */
+        const settledBoard = async weekKey => {
+          const current = await board(weekKey);
+          const frozen = (await env.DB.prepare(
+            `SELECT id, handle, name, json_extract(profile,'$.outfit') outfit,
+                    last_week_steps steps,
+                    level lvl,
+                    json_extract(profile,'$.levelName') lvlName,
+                    badges,
+                    json_extract(profile,'$.pet') pet,
+                    json_extract(profile,'$.stats') stats,
+                    json_array_length(COALESCE(json_extract(profile,'$.gear'), '[]')) gearCount,
+                    last_seen seenAt
+               FROM players
+              WHERE profile IS NOT NULL
+                AND COALESCE(is_test, 0) = 0
+                AND last_week_key = ?
+                AND CAST(COALESCE(json_extract(profile,'$.raceV'),0) AS INTEGER) >= ${RACE_RULES}
+                AND last_week_steps > 0`).bind(weekKey).all()).results || [];
+          return [...current, ...frozen].sort((a, b) => b.steps - a.steps).slice(0, 25);
+        };
+
         /* Settle the week just gone, once, before answering for this one.
            ONLY WHEN `wk` REALLY IS THIS WEEK. `wk` arrives in the query string,
            and settlement pays the podium for wk minus seven days and then marks
@@ -3085,7 +3144,7 @@ export default {
           : true;
         let champion = null;
         if (!already) {
-          const last = await board(prev);
+          const last = await settledBoard(prev);
           if (last.length) {
             const w = last[0];
             champion = { name: w.name || w.handle, steps: w.steps, week: prev };

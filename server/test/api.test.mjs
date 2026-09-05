@@ -967,6 +967,89 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   assert.deepEqual(settled2.podium[0].name, settled1.podium[0].name, 'and still names the same player');
 });
 
+/* THE SETTLER GETS PAID TOO (QA round 34 P0).
+ *
+ * js/app.js opens Crew by pushing the player's OWN snapshot first -- already
+ * stamped with the new week's key, since the client computes it off local
+ * wall-clock time -- and only then calls /steps/week to settle. Before this
+ * fix that PUT overwrote the settler's own week_key/week_steps to the NEW
+ * week one request before the settlement query asked
+ * `WHERE week_key = <last week>` for exactly that player: the settler had
+ * already left the board they were about to be paid from.
+ *
+ * Two players alone on an otherwise empty previous board, 1st and 2nd: B
+ * (2nd place) is the one who opens the app and settles. Their own PUT
+ * /profile carries the new week before /steps/week is ever called, exactly
+ * as js/app.js sequences it. B must still be paid 2nd place.
+ *
+ * PROVE-RED: comment out the `last_week_key = ?, last_week_steps = ?` freeze
+ * in PUT /profile's UPDATE (src/index.js) and this fails -- B's own row no
+ * longer carries last week's total under any key the settlement board reads,
+ * so B is missing from the podium the same way the QA report describes. */
+await test('step race: the settler who just rolled into a new week is still paid their place', async () => {
+  const RACE_EPOCH = '2026-08-07', RACE_DAYS = 7, RACE_V = 2;
+  const epoch = Date.parse(RACE_EPOCH + 'T00:00:00Z');
+  const weekStart = epoch + Math.floor((Date.now() - epoch) / (RACE_DAYS * 86400000)) * RACE_DAYS * 86400000;
+  const wk = new Date(weekStart).toISOString().slice(0, 10);
+  const prev = new Date(weekStart - RACE_DAYS * 86400000).toISOString().slice(0, 10);
+  // Same reset idiom as the race test above: a real week key persists in the
+  // local D1 between runs, so clear the settlement receipt and any residue
+  // racers for both weeks first, or this is not a test.
+  try {
+    execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command',
+      `DELETE FROM grants WHERE key = 'stepweek-${prev}'`], { cwd: SERVER_DIR, stdio: 'ignore' });
+    execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command',
+      `DELETE FROM players WHERE json_extract(profile,'$.weekKey') IN ('${wk}','${prev}') ` +
+      `OR week_key IN ('${wk}','${prev}') OR last_week_key IN ('${wk}','${prev}')`],
+      { cwd: SERVER_DIR, stdio: 'ignore' });
+  } catch { /* a remote BASE cannot be reset; the pay-once assert below will say so */ }
+
+  const mk = async (level, weekKey, steps) => {
+    const k = await makeKeys();
+    const p = await (await regFetch(k.pubJwk)).json();
+    const body = JSON.stringify({ snapshot: { level, outfit: { SK: 'SK0-1' }, gear: [], weekKey, weekSteps: steps, raceV: RACE_V }, appV: 'test' });
+    assert.equal((await signedFetch(k.kp, p.playerId, 'PUT', '/profile', body)).status, 200);
+    return { k, p };
+  };
+  // Both players sync THIS week like everyone else, then /dev/week-warp moves
+  // their row back to where a player who really raced last week would have
+  // left it -- the same staging the existing race test uses for `stale`.
+  const first = await mk(5, wk, 1000);
+  const second = await mk(5, wk, 1000);
+  const FIRST_STEPS = 50000, SECOND_STEPS = 30000;
+  await fetch(BASE + '/dev/week-warp', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ playerId: first.p.playerId, weekKey: prev, steps: FIRST_STEPS }),
+  });
+  await fetch(BASE + '/dev/week-warp', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ playerId: second.p.playerId, weekKey: prev, steps: SECOND_STEPS }),
+  });
+
+  // THE SETTLER (`second`, currently in 2nd) opens Crew: their own client
+  // pushes the NEW week's snapshot first, exactly like js/app.js, BEFORE
+  // calling /steps/week at all.
+  const rolled = JSON.stringify({ snapshot: { level: 5, outfit: { SK: 'SK0-1' }, gear: [], weekKey: wk, weekSteps: 12, raceV: RACE_V }, appV: 'test' });
+  assert.equal((await signedFetch(second.k.kp, second.p.playerId, 'PUT', '/profile', rolled)).status, 200);
+
+  // PRECONDITION: the push above really did roll `second` off last week's
+  // live board, the same symptom the QA report names.
+  const liveBoard = await (await signedFetch(second.k.kp, second.p.playerId, 'GET', `/steps/week?week=${wk}`)).json();
+  // (this call also performs the settlement, exactly as B's own client would)
+  assert.ok(!liveBoard.players.some(x => x.playerId === second.p.playerId && x.steps === SECOND_STEPS),
+    'PRECONDITION: the settler\'s own push already left last week\'s live totals');
+
+  const grants = await (await signedFetch(second.k.kp, second.p.playerId, 'GET', '/grants?since=0')).json();
+  const prize = (grants.grants || []).find(x => x.key === `stepweek-${prev}`);
+  assert.ok(prize, 'FAIL: the settler (2nd place, last week) was paid nothing for the week they raced and settled');
+  assert.equal(prize.payload.place, 2, 'the settler is paid the place their frozen total actually earned');
+  assert.equal(prize.payload.steps, SECOND_STEPS, 'paid on the frozen total, not the 12 steps of the new week');
+
+  const winnerGrants = await (await signedFetch(first.k.kp, first.p.playerId, 'GET', '/grants?since=0')).json();
+  assert.ok((winnerGrants.grants || []).some(x => x.key === `stepweek-${prev}` && x.payload.place === 1),
+    'the untouched 1st place is still paid too');
+});
+
 await test('settled result: an unsettled week is empty, and empty is not an error', async () => {
   const k = await makeKeys();
   const p = await (await regFetch(k.pubJwk)).json();

@@ -1,0 +1,33 @@
+-- The frozen step-race pair, 2026-09-05 (QA round 34 P0).
+--
+-- Apply local:  npx wrangler d1 execute bonez --local  --file=migrations/2026-09-05-week-freeze.sql
+-- Apply remote: npx wrangler d1 execute bonez --remote --file=migrations/2026-09-05-week-freeze.sql
+--
+-- Purely additive: two nullable columns, no index, nothing dropped, nothing
+-- renamed, no backfill (a row that has never rolled a race week over since
+-- this column existed has nothing true to freeze; NULL correctly means "no
+-- frozen week"). Re-running errors with "duplicate column name", which is
+-- harmless.
+--
+-- WHY. PUT /profile has always kept one (week_key, week_steps) pair per
+-- player row. js/app.js opens Crew by pushing the player's own snapshot
+-- FIRST (already stamped with the new week's key, since the client computes
+-- it off local wall-clock time) and only THEN calls /steps/week to settle. So
+-- the settler's own PUT moved their row's week_key to the new week one
+-- request before the settlement query asked `WHERE week_key = <last week>`
+-- for exactly that player -- they left the board they were about to be paid
+-- from. Evidence (round 34): two players alone on an otherwise empty
+-- previous board, 1st and 2nd; the 2nd-place player opens Crew and is paid
+-- nothing, the 1st-place player (who never opened the app) is paid the full
+-- podium prize.
+-- PUT /profile now copies the departing (week_key, week_steps) into these two
+-- columns before overwriting them with the new week, and /steps/week's
+-- settlement board also matches on last_week_key for anyone whose current
+-- week_key has already rolled past the week being settled.
+--
+-- ORDER MATTERS: apply this BEFORE deploying the worker. PUT /profile writes
+-- the columns and /steps/week reads them; without it both 500 with
+-- "no such column: last_week_key". Same landmine as every other ADD COLUMN
+-- here.
+ALTER TABLE players ADD COLUMN last_week_key TEXT;
+ALTER TABLE players ADD COLUMN last_week_steps INTEGER;
