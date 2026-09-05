@@ -21,6 +21,13 @@
  * nothing to maintain. Buying the helmet grants all four (footballGrantIds), so
  * the player never pays four times for one hat.
  *
+ * WHAT IS SOLD IS A GARMENT, AND IT ARRIVES IN 32 COLOURS. Tom, 2026-09-04:
+ * "buy the garment get all 32 colours." So the catalogue is still 256 items and
+ * the ITEM is still team x garment (the renderer needs one id per colourway),
+ * but the SHOP is five tiles: FOOTBALL_SHELF. Buying any team's helmet grants
+ * the helmet in all 32, and a second helmet in another team is refused as
+ * already-owned rather than charged (js/loot.js buyFootballItem).
+ *
  * THE FLAGS. FOOTBALL_KIT_LIVE=false marks every item `unreleased`, which is the
  * catalogue's existing gate: BH_ITEMS (the rack's rotating pool, the crate pool,
  * gear derivation, the Looks tab, random splash outfits) never sees them, while
@@ -32,9 +39,11 @@
 export const FOOTBALL_KIT_LIVE = false;                 // Tom flips this to sell the kit
 export const FOOTBALL_KIT_PRICE_PLACEHOLDER = 4200;     // Tom, 2026-09-04: 3x the epic rung (1,400). Beta wallets are deep; re-price at launch.
 /* THE BUNDLE. Tom, 2026-09-04: "per garment only with a bundle of everything for
- * a slightly cheaper but expensive price." One tile per team that hands over
- * every SOLD garment of that team at once (the helmet still drags its three
- * visors along, so the bundle is 8 ids for 5 tiles). The number is null for the
+ * a slightly cheaper but expensive price." ONE tile, not one per team: it hands
+ * over all five sold garments, each in all 32 colourways (the helmet still drags
+ * its three visors along, so that is 8 garment keys x 32 = 256 ids for 5 tiles'
+ * worth of goods). 16,800 against 5 x 4,200 = 21,000, so the saving printed on
+ * the tile is exactly one garment. The number is null for the
  * same reason the per-garment one is: footballBundleSellable refuses a live
  * bundle without it, and buyFootballBundle refuses it again at the till. */
 export const FOOTBALL_BUNDLE_PRICE_PLACEHOLDER = 16800;  // Tom, 2026-09-04: 3x. 20% off the 21,000 sum, so the saving is exactly one garment.
@@ -162,12 +171,29 @@ export function footballTints(item) {
   return layers;
 }
 
-/* What a shop tile hands over: the helmet tile grants its three visors too. */
+/* WHAT A SHOP TILE HANDS OVER: THE GARMENT, IN EVERY TEAM'S COLOURS.
+   Tom, 2026-09-04: "if someone buys the football stuff they get access to every
+   nfl tint... buy the garment get all 32 colours." So the unit of sale is the
+   GARMENT, not the team: one helmet purchase is 32 helmets (times its three
+   visors, which still ride along, so 128 ids), and the team a player happened to
+   tap is only which tile they were looking at.
+
+   STORED AS ROWS, ONE PER ID, not as one row plus a derived check. Ownership in
+   this game is `inv` rows keyed `cos:<itemId>` and every consumer reads
+   ownedCosmeticIds() or counts those rows directly (js/game.js's cosmetics stat,
+   the wardrobe's owned count, the pet panels). Granting the 32 keeps all of them
+   honest with no edit; deriving in ownedCosmeticIds() would make the Set and the
+   rows disagree and quietly wrong every count that reads the rows. grantCosmetic
+   is already idempotent on `cos:<id>`, so re-granting costs nothing, and
+   collectedLooks() is a union over the same Set, so the Looks tab follows for
+   free.
+   ponytail: 128 rows on a helmet tap (256 on the bundle), each doing its own
+   collectLook kv write. If that lands slowly on device, batch collectLook. */
 export function footballGrantIds(itemId) {
   const it = FOOTBALL_ITEMS.find(i => i.id === itemId);
   if (!it) return [];
-  if (it.football.garment !== 'helmet') return [itemId];
-  return ['helmet', 'visor25', 'visor60', 'visor90'].map(k => footballItemId(it.football.team, k));
+  const keys = it.football.garment === 'helmet' ? ['helmet', 'visor25', 'visor60', 'visor90'] : [it.football.garment];
+  return FOOTBALL_TEAMS.flatMap(t => keys.map(k => footballItemId(t.id, k)));
 }
 
 const isVisor = id => typeof id === 'string' && /^fb-.+-visor\d+$/.test(id);
@@ -193,8 +219,29 @@ export function visorClipMask(eq, policy = VISOR_EYES_POLICY) {
    null until both prices are numbers, which is exactly what the tile prints as
    "not for sale yet" and what footballBundleSellable refuses. */
 export const FOOTBALL_SOLD = FOOTBALL_GARMENTS.filter(g => g.sold);
-export const footballBundleIds = teamId =>
-  FOOTBALL_SOLD.flatMap(g => footballGrantIds(footballItemId(teamId, g.key)));
+
+/* THE SHELF IS FIVE THINGS. Since a garment comes in every team's colours, the
+   shop has five tiles (plus the bundle), not 32 teams x 5. This is the list the
+   Kit room renders: the tile still needs a team's item id for its picture, but
+   that is a PREVIEW, not a variant on sale, so the team lives in the view's
+   state and never here. `price` is on the row so a per-garment price later is a
+   number in this table rather than a new constant and a new branch. */
+export const FOOTBALL_SHELF = FOOTBALL_SOLD.map(g => ({
+  key: g.key, slot: g.slot, label: g.label, price: FOOTBALL_KIT_PRICE_PLACEHOLDER,
+  ...(g.pets ? { pets: g.pets } : {}),   // the tile draws a pet garment ON the pet
+}));
+
+/* A piece is for sale only when the kit is live AND the price is a real number
+   above zero. Parameterised like footballBundleSellable below and for the same
+   reason: the predicate has to be showable refusing, and the buy path has to be
+   drivable while the shop is shut. */
+export const footballPieceSellable = (live = FOOTBALL_KIT_LIVE, piece = FOOTBALL_KIT_PRICE_PLACEHOLDER) =>
+  !!live && Number.isFinite(piece) && piece > 0;
+
+/* Every sold garment, in every team. Team-agnostic now that a garment is: the
+   old signature took a teamId and callers still pass one, which is ignored. */
+export const footballBundleIds = () =>
+  [...new Set(FOOTBALL_SOLD.flatMap(g => footballGrantIds(footballItemId(FOOTBALL_TEAMS[0].id, g.key))))];
 export function footballBundleMath(piece = FOOTBALL_KIT_PRICE_PLACEHOLDER, bundle = FOOTBALL_BUNDLE_PRICE_PLACEHOLDER) {
   const pieces = FOOTBALL_SOLD.length;
   const full = Number.isFinite(piece) ? piece * pieces : null;

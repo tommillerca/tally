@@ -3,7 +3,9 @@
 2026-09-04. Thirty-two invented teams, five garments Cam drew once, tinted per
 team at runtime. Built but **not live**: `FOOTBALL_KIT_LIVE = false` in
 `data/football-teams.js`, so every piece carries `unreleased` and nothing in the
-game can see it. Section 7 is the list of things only Tom can answer.
+game can see it. Section 7 is the list of things only Tom can answer, and
+**section 10 is a patch to `js/app.js` that has NOT been applied**: the shop shelf
+still shows per-team tiles, which is copy that understates what a tile now sells.
 
 ## 1. What exists
 
@@ -15,11 +17,12 @@ game can see it. Section 7 is the list of things only Tom can answer.
 | The multiply layer | `app.css` `.fb-tint` | one span per tint, `mask-image` from the mask PNG, `mix-blend-mode: multiply` |
 | The player renderer | `js/app.js` `footballTintHtml` | the avatar and the wardrobe tiles |
 | The pet renderer | `js/app.js` `croppedPetImg` + `data/boneheadz.js` `petWornTints` | the tint spans take the layer's own geometry string, so registration is inherited |
-| The shop | `js/app.js` `footballShelfHtml` | the kit room, gated on `FOOTBALL_KIT_LIVE` at the call site |
-| The buy path | `js/loot.js` `buyFootballItem` | refuses unless live AND the price is a finite number above zero |
+| The shelf data | `data/football-teams.js` `FOOTBALL_SHELF` | the FIVE things the shop sells: garment, slot, label, price |
+| The shop | `js/app.js` `footballShelfHtml` | the kit room, gated on `FOOTBALL_KIT_LIVE` at the call site. **Still renders per-team tiles: see section 10** |
+| The buy path | `js/loot.js` `buyFootballItem` | one garment, all 32 colourways. Refuses unless live AND the price is a finite number above zero |
 | The guard (arithmetic) | `tests/football-kit-audit.mjs` | PURE, 0.3s, 34 rows, FAST tier |
 | The guard (pixels) | `tests/football-render-audit.mjs` | a real browser, ~150s, 12 rows, FULL tier until the kit goes live |
-| The bundle | `data/football-teams.js` `footballBundleMath` + `js/loot.js` `buyFootballBundle` | one tile per team, every sold garment, priced as a discount |
+| The bundle | `data/football-teams.js` `footballBundleMath` + `js/loot.js` `buyFootballBundle` | ONE tile, all five garments in all 32 colourways, priced as a discount |
 | The colourway rail | `js/app.js` `fbRailHtml` + `app.css` `.fb-rail` | the Wardrobe's east-west slide through the 32 tints, see section 8 |
 | The garment frame | `js/app.js` `fitClass` + `app.css` `.fit-fbhead` | a football helmet is not a hat: its own tile crop, see section 9 |
 | The guard (the rail) | `tests/football-rail-audit.mjs` | a real browser, ~35s, 19 rows, FULL tier until the kit goes live |
@@ -33,6 +36,12 @@ teams cost eight PNG triplets, not 256 PNGs, and a 33rd team is one row of data.
 lizard helmet, lizard jersey. The three visors are separate items rather than a
 sub-option on the helmet, because picking among items in a slot is what the
 wardrobe already does; buying the helmet grants all four (`footballGrantIds`).
+
+**But the SHOP sells five things, not 256.** Tom, 2026-09-04: "buy the garment
+get all 32 colours." An item is still team x garment, because the renderer needs
+one id per colourway, but the unit of SALE is the garment: one helmet purchase
+grants the helmet in all 32 teams (and its three visors in all 32, so 128 ids),
+and a second helmet in another team is refused as already-owned. See section 7.8.
 
 ## 2. Re-running the pipeline when Cam sends a revision
 
@@ -193,9 +202,9 @@ minimum, and the fix is to update the two numbers in the data file's header.
 
 ## 6. What the guard checks
 
-`node tests/football-kit-audit.mjs`, PURE, on every gate run. 34 rows.
-Its header carries the eight prove-red mutations and the FAIL line each one
-produced, all confirmed 2026-09-04 on a throwaway tree.
+`node tests/football-kit-audit.mjs`, PURE, on every gate run. 42 rows, 1.8s.
+Its header carries every prove-red mutation and the FAIL line each one produced,
+all confirmed 2026-09-04 on a throwaway `cp -R` tree.
 
 - **SAMPLE** the modules loaded with something to grade.
 - **TEAMS / HEX / ITEMS / ITEM-IDS** 32 unique ids and names, 64 valid hexes,
@@ -216,8 +225,12 @@ produced, all confirmed 2026-09-04 on a throwaway tree.
   `BH_ITEMS` while `BH_BY_ID` still resolves them, and the shelf is gated.
 - **VISOR-EYES / VISOR-HIDE / VISOR-REFUSE / VISOR-LIVE** the three blocked eye
   ids are real E-slot items, and **both** policy branches are exercised.
-- **GRANT** the helmet tile hands over its three visors; every other tile only
-  itself.
+- **GRANT** one helmet is that helmet and its three visors in all 32 teams (128
+  ids, derived from `TEAMS.length` so a 33rd team moves the expectation); one
+  jersey is that jersey in all 32 and nothing else.
+- **SHELF-DATA** `FOOTBALL_SHELF` is exactly the five sold garments, in
+  `FOOTBALL_SOLD` order, each with a label, a slot, a finite price and (for the
+  two lizard pieces) its species list.
 - **PRICE / PRICE-CONTROL / PRICE-BUYPATH** a live kit with a null price is
   refused, the predicate is proved to refuse it, and the shape of the real guard
   in `buyFootballItem` is pinned.
@@ -227,10 +240,21 @@ produced, all confirmed 2026-09-04 on a throwaway tree.
   2.64/255); and both garments fit both lizard species, with a shiny proven to
   be the same species id rather than a catalogue entry of its own.
 - **BUNDLE / BUNDLE-MATH / BUNDLE-PRICE / BUNDLE-PRICE-CONTROL / BUNDLE-BUYPATH**
-  the team bundle covers every sold garment (5 tiles -> 8 ids, derived from the
-  tiles' own grants, so the helmet still drags its visors), the saving is the
-  sum minus the bundle, and a live bundle needs a number that is actually a
-  discount.
+  the bundle covers every sold garment in every team (5 tiles -> 256 ids, derived
+  from the tiles' own grants, so the helmet still drags its visors), the saving is
+  the sum minus the bundle, and a live bundle needs a number that is actually a
+  discount. **SAVE** pins the live numbers: 21,000 - 16,800 = 4,200, positive and
+  exactly one garment.
+- **THE TILL, DRIVEN** (section 9c of the audit, added 2026-09-04). These run the
+  real `js/loot.js` over the in-memory IndexedDB in `tests/mem-idb.mjs` with a
+  real coin balance and assert the COIN DELTA, not just the rows:
+  **BUY-ONE** one garment bought leaves it owned in all 32 teams, nothing of the
+  other garments, wallet down exactly 4,200. **REPEAT** the same garment in
+  another team is refused `owned` and charges nothing. **BUY-BUNDLE** the bundle
+  leaves 256 rows over 32 teams x 8 keys, wallet down exactly 16,800.
+  **REPEAT-BUNDLE** after it, neither tile can charge again. **SHUT** with nothing
+  passed both paths still read `FOOTBALL_KIT_LIVE`, so a shut shop sells nothing.
+  **NOT-SOLD** the till refuses a garment with no tile (a visor) and takes nothing.
 
 ## 6b. What the PIXEL guard checks
 
@@ -277,17 +301,18 @@ live date) and 7.5 (which pools).
 | | coins | how it was set |
 |---|---|---|
 | `FOOTBALL_KIT_PRICE_PLACEHOLDER` | **4,200** a garment | 3x the epic rung (1,400) |
-| `FOOTBALL_BUNDLE_PRICE_PLACEHOLDER` | **16,800** a team | 20% off the 21,000 sum, so the saving is exactly one garment |
+| `FOOTBALL_BUNDLE_PRICE_PLACEHOLDER` | **16,800** the lot | 20% off the 21,000 sum, so the saving is exactly one garment |
 
 Beta wallets are deep, so both are marked to be re-priced at launch. Both buy
 paths still refuse a non-finite price and `footballBundleSellable` still refuses
 a bundle at or above the sum, so the guards do not go quiet now that the numbers
 are real. **What is still open is 7.4 and 7.5: the date, and which pools.**
 
-**7.2 Per-garment AND a team bundle. DECIDED 2026-09-04, built.** Tom: "per
-garment only with a bundle of everything for a slightly cheaper but expensive
-price." Five per-garment tiles as before, plus ONE bundle tile per team that
-grants every sold garment of that team in one purchase (8 ids for 5 tiles: the
+**7.2 Per-garment AND a bundle. DECIDED 2026-09-04, built. AMENDED the same day
+by 7.8: a garment is sold in all 32 colourways, so there is ONE bundle, not one
+per team.** Tom: "per garment only with a bundle of everything for a slightly
+cheaper but expensive price." Five per-garment tiles, plus one bundle tile that
+grants every sold garment in every team in one purchase (256 ids for 5 tiles: the
 helmet still drags its three visors). `FOOTBALL_BUNDLE_PRICE_PLACEHOLDER` is
 **16,800** against **21,000** for the five tiles (7.1). The maths, the tile, the
 buy path and the "you save N" line are wired:
@@ -397,6 +422,52 @@ against 1.340 static. `petScale` is therefore left exactly as it was, and
 PET-SIZE bounds the linear ratio (0.9889 today) at 5%, which still catches a
 lost `mass: true` at 24%.
 
+**7.8 The unit of sale is the GARMENT, in every colour. RULED 2026-09-04,
+built.** Tom: "if someone buys the football stuff they get access to every nfl
+tint", and confirming: "buy the garment get all 32 colours."
+
+So the shop sells **five things**, not 256 and not 160:
+
+| You buy | You get | Coins |
+|---|---|---|
+| Helmet | the helmet AND its three visors, in all 32 teams (128 ids) | 4,200 |
+| Jersey | the jersey in all 32 (32 ids) | 4,200 |
+| Cleats | the cleats in all 32 | 4,200 |
+| Lizard Helmet | in all 32 | 4,200 |
+| Lizard Jersey | in all 32 | 4,200 |
+| **The full kit** | **all five of the above, so 256 ids** | **16,800** (saves 4,200) |
+
+**Stored as rows, one per granted id, NOT as one row plus a derived check.**
+Ownership in this game IS the `inv` rows keyed `cos:<itemId>`: `ownedCosmeticIds()`
+reads them, and three other places count those rows directly (`js/game.js`'s
+cosmetics stat, the wardrobe's owned count, the pet panels). Granting all 32 keeps
+every one of them honest with no edit anywhere; deriving inside
+`ownedCosmeticIds()` would make the Set and the rows disagree and quietly wrong
+every count that reads the rows. `grantCosmetic` is already idempotent on
+`cos:<id>` and `collectedLooks()` is a union over the same Set, so the Looks tab
+follows for free. The cost is 128 rows on a helmet tap and 256 on the bundle, each
+doing its own `collectLook` kv write; that is noted in the data file as the thing
+to batch if it lands slowly on device.
+
+**Buying a colourway you already own is refused, not charged.** With 32 rows in
+the inventory, `owned.has(itemId)` is already true for every team's copy, so
+`buyFootballItem` refuses it before the coins move, exactly as the second bundle
+tap already did. Graded by audit row REPEAT, which asserts the coin delta is
+**zero**, and by REPEAT-BUNDLE. Worth knowing: deleting the owned pre-check does
+NOT redden REPEAT, because `grantCosmetic`'s receipt still refuses and refunds;
+deleting the **refund** does.
+
+**Both buy paths now take a defaulted `stocked` parameter**, the same idiom
+`footballBundleSellable(live, piece, bundle)` already used. Production callers pass
+nothing and get `footballPieceSellable()` / `footballBundleSellable()`, so a shut
+shop still sells nothing (audit row SHUT, red the moment either default becomes
+`true`). The audit passes `true` so the till can be driven while
+`FOOTBALL_KIT_LIVE` is false, which is the only reason it exists: a buy path
+nobody can call is a buy path nobody has tested.
+
+**`buyFootballBundle`'s first argument is now ignored.** There is one bundle, not
+32. The parameter is kept only so `js/app.js` keeps working until section 8 lands.
+
 ## 8. The colourway rail (the Wardrobe)
 
 Tom, 2026-09-04: *"you still have yet to show me the dressing room/wardrobe
@@ -468,3 +539,115 @@ confident number: hiding the whole mannequin measures the base skeleton
 measures the CONTRAST (this same helmet read 61.3% in the shop and 20.7% on the
 rail, on provably identical geometry); and reading an alpha with the tile's
 corners left rounded counts the corner arcs as garment.
+## 10. app.js changes still to apply
+
+**Nothing in this section is applied.** `js/app.js` and `app.css` were being
+edited by another agent when 7.8 was built, so the shop still renders the OLD
+shelf. Everything below is a copy-paste patch for whoever owns `js/app.js` next.
+
+**What is wrong until it lands** (nothing is broken, it is all copy):
+
+- the five tiles are titled **"Boneyard Bruisers Helmet"**, which now understates
+  what the tile sells: it is the helmet, in all 32. The purchase is correct, the
+  label is not;
+- the bundle tile is titled **"<Team> full kit"** and carries
+  `data-buyfbkit="<team-id>"`. The purchase is correct (the team id is ignored and
+  the player gets all 256 ids), the label is not;
+- the team `<select>` reads as a variant picker when it is now only a **preview**;
+- `FOOTBALL_SHELF` is exported and **unused**.
+
+Everything else already degrades correctly. `ownedHere`, the per-tile
+`ownedCos.has(id)` and `bundleOwned` all still read true, because owning any team's
+copy means owning that team's copy. The wardrobe colourway rail (`fbTile` /
+`fbTag` / `fbBarHtml`) is fine too, and its locked branch simply becomes
+unreachable: you cannot be WEARING a football garment you do not own, and if you
+own it you own all 32, so no tile is ever locked. That dead branch is cleanup, not
+a bug, and it is deliberately left alone here.
+
+### The patch
+
+**1. The import (line ~99): `FOOTBALL_SOLD` -> `FOOTBALL_SHELF`.** `FOOTBALL_SOLD`
+has exactly one other use in the file (`const sold = FOOTBALL_SOLD;` below), so
+the swap orphans nothing else.
+
+```diff
+-import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
++import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
+```
+
+**2. `footballShelfHtml` (line ~9063).** Five substitutions, all copy plus the
+`sold` source and the bundle's dead `data-buyfbkit` value.
+
+```diff
+ function footballShelfHtml(ownedCos, coinBal, open = false) {
+-  const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];
++  const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];   // the PREVIEW colourway, not a variant on sale
+   const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
+-  const sold = FOOTBALL_SOLD;
++  const sold = FOOTBALL_SHELF;                                       // five garments, not 32 teams x five
+   const ownedHere = sold.filter(g => ownedCos.has(footballItemId(team.id, g.key))).length;
+```
+
+```diff
+-      <div class="row"><div class="tx"><small>One kit, ${FOOTBALL_TEAMS.length} colourways. Helmet, jersey, cleats, and a matching set for the lizard.</small>
++      <div class="row"><div class="tx"><small>Five pieces: helmet, jersey, cleats, and a matching set for the lizard. Buy one and it is yours in all ${FOOTBALL_TEAMS.length} colourways.</small>
+```
+
+```diff
+-      <label class="fb-pick"><span>Team</span>
++      <label class="fb-pick"><span>Preview</span>
+```
+
+```diff
+         ${sold.map(g => {
+-          const id = footballItemId(team.id, g.key);
+-          const it = BH_BY_ID[id];
++          const id = footballItemId(team.id, g.key);   // the PREVIEW id: the tile sells the garment, in every team
+           const owned = ownedCos.has(id);
+           const art = g.pets
+             ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 384)
+             : `<div class="fb-worn">${wornArtHtml(id, 88 * 2.3)}</div>`;
+           const canBuy = Number.isFinite(price) && coinBal >= price;
+           return `<div class="drop-item fb ${owned ? 'owned' : ''}">
+             ${art}
+-            <b>${esc(it.name)}</b>
++            <b>${esc(g.label)}</b>
++            <small class="fb-kitline">All ${FOOTBALL_TEAMS.length} colourways</small>
+             ${owned
+               ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
+               : `<button class="drop-buy" data-buyfb="${id}" ${canBuy ? '' : 'disabled'}>${Number.isFinite(price) ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
+           </div>`;
+         }).join('')}
+```
+
+```diff
+         <div class="drop-item fb fb-bundle ${bundleOwned ? 'owned' : ''}">
+           <div class="fb-kitmark" style="background:${team.a};border-color:${team.b}"><span>${sold.length}</span></div>
+-          <b>${esc(team.name)} full kit</b>
+-          <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')}</small>
++          <b>The full kit</b>
++          <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')} · all ${FOOTBALL_TEAMS.length} colourways</small>
+           ${bundleOwned
+             ? `<button class="drop-buy" disabled>The whole kit is yours</button>`
+-            : `<button class="drop-buy" data-buyfbkit="${team.id}" ${footballBundleSellable() && coinBal >= FOOTBALL_BUNDLE_PRICE_PLACEHOLDER ? '' : 'disabled'}>${
++            : `<button class="drop-buy" data-buyfbkit="all" ${footballBundleSellable() && coinBal >= FOOTBALL_BUNDLE_PRICE_PLACEHOLDER ? '' : 'disabled'}>${
+                 footballBundleSellable() ? `${ICONS.coin(12)} ${kit.bundle.toLocaleString()}` : 'Soon'}</button>`}
+```
+
+`buyFootballBundle` ignores the attribute's value, so `"all"` and a team id behave
+identically; the change is only so the markup stops claiming a team.
+
+**3. Nothing else.** The click handler at line ~9568 is unchanged:
+`b.dataset.buyfbkit` is still truthy, and `buyFootballItem(b.dataset.buyfb)` still
+passes one argument, which is what makes the `stocked` default the live flag.
+
+### After applying it
+
+```
+node tests/football-kit-audit.mjs     # SHELF and BUNDLE-BUYPATH pin app.js source
+node tests/unit.test.js
+```
+
+Audit row **BUNDLE-BUYPATH** pins `/data-buyfbkit/` and
+`buyFootballBundle(b.dataset.buyfbkit)` in `js/app.js`; both survive this patch. If
+the click handler is refactored, that row is what goes red.

@@ -56,10 +56,12 @@
  * coupling. The maths is the same composite scripts/football-masks.py verifies
  * itself with, so the two agree by construction rather than by luck.
  *
- * PURE: imports data/, js/loot.js is NOT imported (it reaches for IndexedDB);
- * the buy path's price rule is re-stated as the predicate and its source line
- * is pinned by a static read, which is the honest way to grade a branch you
- * cannot execute. 0.2s, no browser.
+ * PURE: imports data/, and (section 9c, 2026-09-04) js/loot.js over the
+ * in-memory IndexedDB in tests/mem-idb.mjs, so the till is DRIVEN rather than
+ * described: the ids, the wallet, the ownership check and the refund path are
+ * the shipped code. The price rule is ALSO re-stated as a predicate and its
+ * source line pinned by a static read, because a pin catches a rewrite the
+ * driven rows would sail through. 1.8s, no browser.
  *
  * PROVE-RED, each row against a real defect, every mutation on a throwaway tree
  * and every one asserted to have LANDED before its result was believed. All
@@ -97,8 +99,37 @@
  * the flag true the items are supposed to be in the pool, and the row grades
  * the branch that is live. PRICE is what catches that mutation.
  *
+ * OWNERSHIP, 2026-09-04. Tom: "buy the garment get all 32 colours." GRANT and
+ * BUNDLE were rewritten and seven rows added; every one was RUN red on a `cp -R`
+ * throwaway, with the FAIL line it produced:
+ *   GRANT / BUNDLE / BUY-ONE / REPEAT / BUY-BUNDLE / REPEAT-BUNDLE  all six on
+ *                  ONE mutation, footballGrantIds back to a single team:
+ *                  "helmet -> 4 ids over 1 teams x 4 keys ... expected 128"
+ *                  and "SOLD ... coins 95800 -> 91600 (delta -4200, expected 0)"
+ *   SHELF-DATA     FOOTBALL_SHELF back to teams x garments. "160 tiles"
+ *   SAVE           bundle re-priced 16,800 -> 20,000, still a discount but no
+ *                  longer a garment. "save 1000 (one garment is 4200)"
+ *   BUY-ONE        buyFootballItem grants the tapped id alone (drop the loop).
+ *                  "1 football rows over 1 teams ... expected ... 32 rows"
+ *   REPEAT         the refund after a lost grant race deleted, so an owned
+ *                  garment is refused AND charged. "refused 'owned', rows
+ *                  32 -> 32, coins 95800 -> 91600 (delta -4200, expected 0)".
+ *                  NOTE the pre-check alone is NOT enough to redden this row:
+ *                  deleting `owned.has(itemId)` leaves grantCosmetic's receipt
+ *                  refusing and refunding, which is the outcome the row grades.
+ *   BUY-BUNDLE     the bundle grants only its receipt piece. "1 rows over 1
+ *                  teams x 1 keys, every sold garment in every team: false"
+ *   REPEAT-BUNDLE  the `!want.length` refusal replaced by a charge.
+ *                  "bundle: SOLD; coins 83200 -> 66400 (delta -16800)"
+ *   SHUT           `stocked` defaulting to true on either path, which is the
+ *                  mutation that would ship the kit early. "garment sold,
+ *                  bundle refused" / "garment refused, bundle sold"
+ *   NOT-SOLD       drop `!garment?.sold`. "visor60 at the till: SOLD, coins
+ *                  100000 -> 95800, 32 football rows granted"
+ *
  *   node tests/football-kit-audit.mjs
  */
+import './mem-idb.mjs';   // installs globalThis.indexedDB before js/db.js opens it (section 9c)
 import { readFileSync, existsSync } from 'node:fs';
 import zlib from 'node:zlib';
 import path from 'node:path';
@@ -495,12 +526,39 @@ ok('VISOR-LIVE VISOR_EYES_POLICY is one of the three branches graded above',
   `live policy is '${FB.VISOR_EYES_POLICY}'` +
   (['clip', 'hide', 'refuse'].includes(FB.VISOR_EYES_POLICY) ? '' : ": no branch fires, so a clashing pair renders through the glass"));
 
-/* The helmet tile hands over its three visors, so nobody pays four times. */
+/* THE UNIT OF SALE IS THE GARMENT, IN EVERY TEAM'S COLOURS. Tom, 2026-09-04:
+   "buy the garment get all 32 colours." The helmet still drags its three visors,
+   so a helmet is 4 garment keys x 32 teams and a jersey is 1 x 32. Both counts
+   are DERIVED from TEAMS.length here, so a 33rd team moves the expectation
+   instead of reddening the row for the wrong reason. */
 const granted = FB.footballGrantIds(helmetId);
 const soloGrant = FB.footballGrantIds(FB.footballItemId(TEAMS[0].id, 'jersey'));
-ok('GRANT buying a helmet grants its three visors, and every other tile grants only itself',
-  granted.length === 4 && granted.every(id => fbIds.has(id)) && soloGrant.length === 1,
-  `${granted.join(', ')}; jersey grants ${soloGrant.join(', ')}`);
+const grantTeams = new Set(granted.map(id => (BH.BH_BY_ID[id] || {}).football?.team));
+const grantKeys = new Set(granted.map(id => (BH.BH_BY_ID[id] || {}).football?.garment));
+const soloKeys = new Set(soloGrant.map(id => (BH.BH_BY_ID[id] || {}).football?.garment));
+ok('GRANT one helmet is that helmet and its three visors in all 32 teams; one jersey is that jersey in all 32 and nothing else',
+  TEAMS.length > 0 && granted.length === TEAMS.length * 4 && granted.every(id => fbIds.has(id)) &&
+  grantTeams.size === TEAMS.length && grantKeys.size === 4 &&
+  soloGrant.length === TEAMS.length && soloKeys.size === 1 && soloKeys.has('jersey') &&
+  new Set(granted).size === granted.length && new Set(soloGrant).size === soloGrant.length,
+  `helmet -> ${granted.length} ids over ${grantTeams.size} teams x ${grantKeys.size} keys (${[...grantKeys].join(' ')}); ` +
+  `jersey -> ${soloGrant.length} ids, keys ${[...soloKeys].join(' ')}; expected ${TEAMS.length * 4} and ${TEAMS.length}`);
+
+/* THE SHELF IS FIVE THINGS, not 32 teams x 5. The Kit room's tile list is built
+   from this, so "the shop sells five garments" is a claim about data and can be
+   graded here, where the 160-tile version cannot pass. */
+const SHELF = FB.FOOTBALL_SHELF || [];
+const shelfKeys = SHELF.map(r => r.key);
+const shelfSold = FB.FOOTBALL_SOLD.map(g => g.key);
+ok('SHELF-DATA the shop shelf is exactly the five sold garments, each with a label, a slot and a finite price',
+  SHELF.length === 5 && shelfKeys.join() === shelfSold.join() &&
+  SHELF.every(r => r.label && r.slot && Number.isFinite(r.price) && r.price > 0) &&
+  SHELF.every(r => FB.FOOTBALL_GARMENT_BY_KEY[r.key]) &&
+  /* the pet tiles have to keep their species, or the shelf draws a lizard
+     garment on the human mannequin and the tile is a smear */
+  SHELF.every(r => (r.pets || null)?.join() === (FB.FOOTBALL_GARMENT_BY_KEY[r.key].pets || null)?.join()),
+  `${SHELF.length} tiles${SHELF.length > 8 ? ' (first 8)' : ''}: ${SHELF.slice(0, 8).map(r => `${r.label} (${r.slot}) ${r.price}${r.pets ? ` pets:${r.pets.join('/')}` : ''}`).join(' · ')}; ` +
+  `FOOTBALL_SOLD is ${shelfSold.length} deep, ${FB.FOOTBALL_SOLD.filter(g => g.pets).length} of them pet garments`);
 
 /* ---- 9. A LIVE KIT WITH NO PRICE ----------------------------------------- */
 /* The rule, as the buy path states it (js/loot.js buyFootballItem): a piece is
@@ -525,19 +583,21 @@ ok('PRICE-CONTROL the same predicate refuses a live kit priced null, and accepts
    N" can be wrong, and it can go live without a number (or with a number that
    is not actually a discount, which would print a lie on the tile). */
 const SOLD = FB.FOOTBALL_SOLD || [];
-const bundleIds = FB.footballBundleIds(TEAMS[0].id);
+const bundleIds = FB.footballBundleIds();
 const bundleSet = new Set(bundleIds);
-const soldCovered = SOLD.every(g => bundleSet.has(FB.footballItemId(TEAMS[0].id, g.key)));
+/* EVERY sold garment in EVERY team, not just the team whose tile was tapped. */
+const soldCovered = TEAMS.every(t => SOLD.every(g => bundleSet.has(FB.footballItemId(t.id, g.key))));
 const bundleReal = bundleIds.every(id => fbIds.has(id) && BH.BH_BY_ID[id]);
 /* The count is DERIVED, not typed: every sold tile's own grant list flattened,
-   which is how the helmet's three visors get in. Typing "8" here would go green
-   on a helmet that stopped granting them. */
+   which is how the helmet's three visors and the other 31 teams get in. Typing
+   "256" here would go green on a helmet that stopped granting its visors. */
 const bundleExpect = new Set(SOLD.flatMap(g => FB.footballGrantIds(FB.footballItemId(TEAMS[0].id, g.key))));
-ok('BUNDLE the team bundle hands over every SOLD garment of that team, the helmet still dragging its three visors',
-  SOLD.length > 0 && soldCovered && bundleReal &&
+ok('BUNDLE the bundle hands over every SOLD garment in every team, the helmet still dragging its three visors',
+  SOLD.length > 0 && TEAMS.length > 0 && soldCovered && bundleReal &&
   bundleSet.size === bundleIds.length && bundleSet.size === bundleExpect.size &&
+  bundleSet.size === TEAMS.length * (SOLD.length + 3) &&
   [...bundleExpect].every(id => bundleSet.has(id)),
-  `${SOLD.length} tiles -> ${bundleIds.length} ids (${bundleSet.size} unique, ${bundleExpect.size} expected from the tiles' own grants): ${bundleIds.map(i => i.replace(`fb-${TEAMS[0].id}-`, '')).join(' ')}`);
+  `${SOLD.length} tiles -> ${bundleIds.length} ids (${bundleSet.size} unique, ${bundleExpect.size} expected from the tiles' own grants, ${TEAMS.length * (SOLD.length + 3)} from ${TEAMS.length} teams x ${SOLD.length + 3} keys)`);
 
 /* THE ARITHMETIC, on numbers this file supplies, because the live ones are null
    on purpose. `full` is the tiles added up and `save` the difference, and both
@@ -565,18 +625,131 @@ ok('BUNDLE-PRICE-CONTROL the same predicate refuses null, refuses a bundle deare
   FB.footballBundleSellable(false, 600, 2400) === false,
   `live+null refused, live+0 refused, live+${600 * SOLD.length} (no discount) refused, no piece price refused, live+2400 sold, not-live+2400 refused`);
 
+/* THE SAVING TOM PRICED. 4,200 a garment, 16,800 the lot, five garments: the
+   tile's "you save N" is exactly one garment. Positive is the floor (a lie on
+   the tile is the failure BUNDLE-PRICE catches); this row pins the number Tom
+   actually named, so a re-price that quietly stops saving a garment is visible
+   rather than merely still-positive. */
+ok('SAVE the live bundle saves a real, positive amount, and it is exactly the price of one garment',
+  SOLD.length > 0 && Number.isFinite(mathLive.save) && mathLive.save > 0 &&
+  mathLive.save === FB.FOOTBALL_KIT_PRICE_PLACEHOLDER &&
+  mathLive.full === FB.FOOTBALL_KIT_PRICE_PLACEHOLDER * SOLD.length,
+  `${SOLD.length} garments at ${FB.FOOTBALL_KIT_PRICE_PLACEHOLDER} = ${mathLive.full}, bundle ${mathLive.bundle}, save ${mathLive.save} (one garment is ${FB.FOOTBALL_KIT_PRICE_PLACEHOLDER})`);
+
 const lootSrc = readFileSync(path.join(ROOT, 'js/loot.js'), 'utf8');
-const bundleGuarded = /!footballBundleSellable\(\)/.test(lootSrc) && /buyFootballBundle/.test(lootSrc);
+const bundleGuarded = /!stocked/.test(lootSrc) && /footballBundleSellable\(\)/.test(lootSrc) && /buyFootballBundle/.test(lootSrc);
 const bundleWired = /data-buyfbkit/.test(appSrc) && /buyFootballBundle\(b\.dataset\.buyfbkit\)/.test(appSrc);
 ok('BUNDLE-BUYPATH buyFootballBundle refuses on the same predicate, and the shelf tile really routes to it',
   bundleGuarded && bundleWired,
   `js/loot.js -> ${bundleGuarded ? 'buyFootballBundle guarded by footballBundleSellable()' : 'the bundle buy path is gone or its guard changed shape'}; ` +
   `js/app.js -> ${bundleWired ? '[data-buyfbkit] -> buyFootballBundle' : 'the bundle tile is not wired to the buy path'}`);
 
-const buyGuarded = /!FOOTBALL_KIT_LIVE\s*\|\|[^\n]*!Number\.isFinite\(cost\)/.test(lootSrc);
+const buyGuarded = /stocked = footballPieceSellable\(\)/.test(lootSrc) &&
+  /!stocked\s*\|\|[^\n]*!Number\.isFinite\(cost\)/.test(lootSrc);
 ok('PRICE-BUYPATH buyFootballItem still refuses on the same two conditions this file graded',
   buyGuarded,
-  buyGuarded ? 'js/loot.js: `!FOOTBALL_KIT_LIVE || !ids.length || !Number.isFinite(cost) || cost <= 0`' : 'the guard in buyFootballItem changed shape: re-read it and re-state the predicate above');
+  buyGuarded ? 'js/loot.js: `stocked = footballPieceSellable()`, then `!stocked || !ids.length || !garment?.sold || !Number.isFinite(cost) || cost <= 0`' : 'the guard in buyFootballItem changed shape: re-read it and re-state the predicate above');
+
+/* ---- 9c. THE TILL, DRIVEN ------------------------------------------------
+   Everything above grades DATA. What Tom ruled on is what a purchase leaves in
+   the player's inventory and what it takes out of their wallet, and no amount of
+   correct id-lists proves that: the money moves in js/loot.js. So these rows run
+   the real buyFootballItem and buyFootballBundle over the real db (tests/mem-idb
+   installs an in-memory indexedDB) with a real coin balance, and assert the COIN
+   DELTA as well as the rows, because "it granted 32 things" is not the claim.
+   "It granted 32 things and charged once" is.
+
+   The shop is shut (FOOTBALL_KIT_LIVE=false) until Tom flips it, so the buy
+   paths take `stocked` as a defaulted parameter and these rows pass true. That
+   is the ONLY thing simulated here: the ids, the wallet, the ownership check and
+   the refund path are all the shipped code. */
+const { kvSet, useDbName } = await import('../js/db.js');
+const loot = await import('../js/loot.js');
+useDbName('football-kit-audit');
+
+const teamOf = id => (BH.BH_BY_ID[id] || {}).football?.team;
+const keyOf = id => (BH.BH_BY_ID[id] || {}).football?.garment;
+const ownedFb = async () => [...await loot.ownedCosmeticIds()].filter(id => fbIds.has(id));
+const WALLET = 100000;
+await kvSet('coins', WALLET);
+
+const jerseyA = FB.footballItemId(TEAMS[0].id, 'jersey');
+const jerseyB = FB.footballItemId(TEAMS[1].id, 'jersey');
+const buy1 = await loot.buyFootballItem(jerseyA, true);
+const after1 = await ownedFb();
+const teams1 = new Set(after1.map(teamOf));
+const keys1 = new Set(after1.map(keyOf));
+const otherGarments = after1.filter(id => keyOf(id) !== 'jersey');
+ok('BUY-ONE one garment bought leaves it owned in all 32 teams, nothing of the other garments, and the wallet down exactly one price',
+  TEAMS.length > 0 && buy1.ok === true && after1.length === TEAMS.length &&
+  teams1.size === TEAMS.length && keys1.size === 1 && keys1.has('jersey') && otherGarments.length === 0 &&
+  buy1.cost === FB.FOOTBALL_KIT_PRICE_PLACEHOLDER && (await loot.coins()) === WALLET - FB.FOOTBALL_KIT_PRICE_PLACEHOLDER,
+  `${buy1.ok ? `bought "${buy1.label}"` : `REFUSED ${buy1.reason}`}: ${after1.length} football rows over ${teams1.size} teams, ` +
+  `keys {${[...keys1].join(' ')}}, ${otherGarments.length} rows of other garments; ` +
+  `coins ${WALLET} -> ${await loot.coins()} (expected ${WALLET - FB.FOOTBALL_KIT_PRICE_PLACEHOLDER}, ${TEAMS.length} rows, 1 key)`);
+
+const beforeRepeat = await loot.coins();
+const buy2 = await loot.buyFootballItem(jerseyB, true);
+const afterRepeat = await ownedFb();
+ok('REPEAT the same garment in another team is already owned: refused, nothing granted, and not one coin charged',
+  after1.length > 0 && buy2.ok === false && buy2.reason === 'owned' &&
+  afterRepeat.length === after1.length && (await loot.coins()) === beforeRepeat,
+  `buying ${jerseyB} after ${jerseyA}: ${buy2.ok ? `SOLD "${buy2.label}"` : `refused '${buy2.reason}'`}, ` +
+  `rows ${after1.length} -> ${afterRepeat.length}, coins ${beforeRepeat} -> ${await loot.coins()} (delta ${await loot.coins() - beforeRepeat}, expected 0)`);
+
+/* A SECOND, EMPTY WALLET for the bundle, so its row grades a bundle purchase and
+   not the leftovers of the one above. */
+useDbName('football-kit-audit-bundle');
+await kvSet('coins', WALLET);
+const emptyStart = await ownedFb();
+const buy3 = await loot.buyFootballBundle('ignored', true);
+const after3 = await ownedFb();
+const teams3 = new Set(after3.map(teamOf));
+const keys3 = new Set(after3.map(keyOf));
+const everySoldEverywhere = TEAMS.every(t => SOLD.every(g => after3.includes(FB.footballItemId(t.id, g.key))));
+ok('BUY-BUNDLE the bundle leaves all five garments in all 32 teams, on a wallet down exactly the bundle price',
+  emptyStart.length === 0 && TEAMS.length > 0 && SOLD.length > 0 && buy3.ok === true &&
+  everySoldEverywhere && after3.length === TEAMS.length * (SOLD.length + 3) &&
+  teams3.size === TEAMS.length && keys3.size === SOLD.length + 3 &&
+  buy3.cost === FB.FOOTBALL_BUNDLE_PRICE_PLACEHOLDER &&
+  (await loot.coins()) === WALLET - FB.FOOTBALL_BUNDLE_PRICE_PLACEHOLDER,
+  `started with ${emptyStart.length} football rows; ${buy3.ok ? `bought "${buy3.label}" (${buy3.granted} granted)` : `REFUSED ${buy3.reason}`}: ` +
+  `${after3.length} rows over ${teams3.size} teams x ${keys3.size} keys, every sold garment in every team: ${everySoldEverywhere}; ` +
+  `coins ${WALLET} -> ${await loot.coins()} (expected ${WALLET - FB.FOOTBALL_BUNDLE_PRICE_PLACEHOLDER}, ${TEAMS.length * (SOLD.length + 3)} rows)`);
+
+const beforeRebuy = await loot.coins();
+const buy4 = await loot.buyFootballItem(FB.footballItemId(TEAMS[5].id, 'helmet'), true);
+const buy5 = await loot.buyFootballBundle('ignored', true);
+ok('REPEAT-BUNDLE after the bundle, neither a garment tile nor the bundle tile can charge again',
+  after3.length > 0 && buy4.ok === false && buy4.reason === 'owned' &&
+  buy5.ok === false && buy5.reason === 'owned' && (await loot.coins()) === beforeRebuy,
+  `garment: ${buy4.ok ? 'SOLD' : `refused '${buy4.reason}'`}; bundle: ${buy5.ok ? 'SOLD' : `refused '${buy5.reason}'`}; ` +
+  `coins ${beforeRebuy} -> ${await loot.coins()} (delta ${await loot.coins() - beforeRebuy}, expected 0)`);
+
+/* THE SHUT SHOP, still shut. The parameter above exists so the till is testable,
+   not so the kit ships early: with nothing passed, both paths take the live flag
+   and refuse while FOOTBALL_KIT_LIVE is false. */
+useDbName('football-kit-audit-shut');
+await kvSet('coins', WALLET);
+const shutItem = await loot.buyFootballItem(jerseyA);
+const shutBundle = await loot.buyFootballBundle('ignored');
+ok('SHUT with nothing passed both buy paths still read the live flag, so a shut shop sells nothing and charges nothing',
+  (FB.FOOTBALL_KIT_LIVE ? shutItem.ok === true : shutItem.ok === false && shutItem.reason === 'not-stocked') &&
+  (FB.FOOTBALL_KIT_LIVE ? shutBundle.ok === true : shutBundle.ok === false && shutBundle.reason === 'not-stocked') &&
+  (FB.FOOTBALL_KIT_LIVE || (await loot.coins()) === WALLET),
+  `FOOTBALL_KIT_LIVE=${FB.FOOTBALL_KIT_LIVE}: garment ${shutItem.ok ? 'sold' : `refused '${shutItem.reason}'`}, ` +
+  `bundle ${shutBundle.ok ? 'sold' : `refused '${shutBundle.reason}'`}, coins ${WALLET} -> ${await loot.coins()}`);
+
+/* A VISOR IS GRANTED, NEVER SOLD: it has no tile, and if a stale id for one ever
+   reached the till it must not take a garment's price for a piece of a hat. */
+useDbName('football-kit-audit-visor');
+await kvSet('coins', WALLET);
+const visorBuy = await loot.buyFootballItem(FB.footballItemId(TEAMS[0].id, 'visor60'), true);
+ok('NOT-SOLD the till refuses a garment that has no shelf tile (a visor), and takes nothing for it',
+  visorBuy.ok === false && visorBuy.reason === 'not-stocked' &&
+  (await loot.coins()) === WALLET && (await ownedFb()).length === 0,
+  `visor60 at the till: ${visorBuy.ok ? 'SOLD' : `refused '${visorBuy.reason}'`}, coins ${WALLET} -> ${await loot.coins()}, ` +
+  `${(await ownedFb()).length} football rows granted`);
 
 /* ---------------------------------------------------------------------------
    THE WARDROBE'S COLOURWAY RAIL rests on ONE arithmetic fact, and this is the
