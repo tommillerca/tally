@@ -819,6 +819,70 @@ test('crate levers (c) awardDayCloseIfDue: an off-budget logged day grants no cr
   assert.equal(onCrates[0].crate, 'golden', 'the day-close crate is still the Bone (golden) crate');
 });
 
+/* BACKDATED LOGS PAY NOTHING (2026-09-05). Tom: past days stay editable (people
+   forget to log), but a food log dated before dateKey() must earn no XP, streak
+   or badge -- it is a diary correction, not a today action. Playtest repro:
+   open yesterday, Gwart says the day is finished, tap Add to Snacks, log an
+   apple: the diary changed and XP rose by 10 anyway, because onFoodLogged never
+   looked at entry.date against dateKey() before running its award() calls. The
+   fix is one guard at the top of onFoodLogged (js/game.js), so it holds for
+   every caller (relog, quick add, portion add) without touching commitLogEntry,
+   which must still let the db.put land either way (past days stay editable). */
+test('backdated log (2026-09-05): logging into yesterday awards 0 XP and leaves the ledger untouched', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-backdate-yesterday');
+  const yday = addDays(dateKey(), -1);
+  const e = { id: 'bd-1', date: yday, meal: 0, name: 'Apple', kcal: 95, p: 0, c: 25, f: 0 };
+  await dbm.db.put('log', e);
+  const game = await g.onFoodLogged(e, { targets: { kcal: 2000, p: 120 }, entriesForDate: [e] });
+  assert.equal(game.xp, 0, 'a backdated log must earn 0 XP');
+  assert.equal(game.streakMilestone, null, 'a backdated log must not fire a streak milestone');
+  assert.equal(game.newBadges.length, 0, 'a backdated log must not evaluate/award badges');
+  assert.equal(game.crates, 0, 'a backdated log must grant no crate');
+  const xpRows = await dbm.db.all('xp');
+  assert.equal(xpRows.length, 0, 'the XP ledger must be untouched by a backdated log');
+});
+
+test('backdated log (2026-09-05): logging into today still awards its base 10 XP', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-backdate-today');
+  const today = dateKey();
+  // control: the first log of a real today still pays (first-log bonus included)
+  const e1 = { id: 'bd-t1', date: today, meal: 0, name: 'Egg', kcal: 70, p: 6, c: 1, f: 5 };
+  await dbm.db.put('log', e1);
+  const first = await g.onFoodLogged(e1, { targets: { kcal: 4000, p: 500 }, entriesForDate: [e1] });
+  assert.ok(first.xp > 0, 'the first log of today must still pay (control)');
+  // a second log the same day, past first-log/protein/all-meals, must be the bare 10
+  const e2 = { id: 'bd-t2', date: today, meal: 1, name: 'Toast', kcal: 90, p: 3, c: 15, f: 2 };
+  await dbm.db.put('log', e2);
+  const second = await g.onFoodLogged(e2, { targets: { kcal: 4000, p: 500 }, entriesForDate: [e1, e2] });
+  assert.equal(second.xp, 10, 'a same-day log past the first-log bonus must pay exactly the base 10');
+});
+
+test("backdated log (2026-09-05): editing yesterday's entry still saves, and still pays 0", async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-backdate-edit');
+  const yday = addDays(dateKey(), -1);
+  const e = { id: 'bd-edit-1', date: yday, meal: 0, name: 'Apple', kcal: 95, p: 0, c: 25, f: 0 };
+  await dbm.db.put('log', e);
+  await g.onFoodLogged(e, { targets: {}, entriesForDate: [e] });
+  const edited = { ...e, name: 'Apple (large)', kcal: 130 };
+  await dbm.db.put('log', edited);   // the edit: same id, new fields, no different date
+  const stored = await dbm.db.get('log', 'bd-edit-1');
+  assert.equal(stored.name, 'Apple (large)', 'editing a past-day entry must still persist its name');
+  assert.equal(stored.kcal, 130, 'editing a past-day entry must still persist its new kcal');
+  const again = await g.onFoodLogged(edited, { targets: {}, entriesForDate: [edited] });
+  assert.equal(again.xp, 0, 're-running the reward path on an edited backdated entry still pays 0');
+  const xpRows = await dbm.db.all('xp');
+  assert.equal(xpRows.length, 0, 'the XP ledger stays untouched after editing a backdated entry');
+});
+
 /* THE COSMETIC PRICE LADDER, PINNED (round 33, 2026-09-04, Tom: "Just make
    everything cost more"). Same reasoning as the crate ranges above: these are
    shipped economy numbers and nothing in the tree noticed if one of them
@@ -5895,9 +5959,10 @@ test('a downloaded build can actually start: boot posts SKIP_WAITING to a waitin
   assert.match(reg, /updatefound/, 'a build that arrives mid-session is never let in');
 });
 
-test('REV-2: TestFlight invite card is gated by SHOW_BETA_THANKS flag', () => {
+test('REV-2: TestFlight invite card is gated by the store build flag', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
-  assert.match(app, /const\s+SHOW_BETA_THANKS\s*=\s*true/, 'SHOW_BETA_THANKS flag not found or not set to true');
+  assert.match(app, /const\s+STORE_BUILD\s*=\s*false/, 'STORE_BUILD flag not found or web default is not false');
+  assert.match(app, /const\s+SHOW_BETA_THANKS\s*=\s*!STORE_BUILD/, 'SHOW_BETA_THANKS is not derived from STORE_BUILD');
   assert.match(app, /async\s+function\s+openThanksCard\(\)\s*{\s*if\s*\(\s*!SHOW_BETA_THANKS\s*\)\s*return/, 'openThanksCard does not guard entry with SHOW_BETA_THANKS check');
   assert.match(app, /function\s+thanksBannerHtml\(\)\s*{\s*if\s*\(\s*!SHOW_BETA_THANKS\s*\)\s*return\s+''/, 'thanksBannerHtml does not return empty string when SHOW_BETA_THANKS is false');
   const newsFilter = app.match(/const\s+NEWS\s*=\s*\[[^]*?\]\.filter\([^)]*\)/);
@@ -6260,6 +6325,68 @@ test('football BUNDLE-QUOTE: buyFootballBundle charges only for the missing garm
   r = await loot.buyFootballBundle('ignored');
   assert.equal(r.ok, false, `5 owned must refuse, got ${JSON.stringify(r)}`);
   assert.equal(r.reason, 'owned', `5 owned must refuse as already owned, got ${JSON.stringify(r)}`);
+});
+
+/* P1 (Codex, 2026-09-05): buyFootballBundle quotes its cost from an owned-set
+   snapshot taken BEFORE any coins move, then charges that snapshot's cost, then
+   grants. A single-garment buy (buyFootballItem) for a DIFFERENT garment that
+   lands after the snapshot but before the bundle's grant loop still succeeds:
+   the bundle's loop reaches that garment's ids, finds them already granted
+   (grantCosmetic no-ops on an owned id) and moves on, so both purchases are
+   charged in full while the bundle delivered one fewer garment than it was
+   quoted for. Overcharge = one garment's price per overlapping single buy.
+   Reproduced on the REAL functions with REAL interleaving: Promise.all lets
+   both run under mem-idb's serialised transactions exactly as two overlapping
+   taps would (same technique as R26-O11 above), no mocked scheduling. */
+test('football BUNDLE-CONCURRENCY: an overlapping single-garment buy no longer overcharges the bundle', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const FB = await import('../data/football-teams.js');
+  const loot = await import('../js/loot.js');
+  const WALLET = 1000000;
+  const ownGarment = async key => {
+    const ids = FB.footballGrantIds(FB.footballItemId(FB.FOOTBALL_TEAMS[0].id, key));
+    for (const id of ids) await dbm.db.put('inv', { id: `cos:${id}`, kind: 'cos', itemId: id, source: 'x', ts: Date.now() });
+  };
+
+  // 1 garment already owned (jersey): the bundle quotes for the other 4 at
+  // 16,800 (4 x 4,200 ties the flat bundle price). A tap on a DIFFERENT
+  // missing garment (cleats) races the bundle buy.
+  dbm.useDbName('unit-fbrace-1');
+  await dbm.kvSet('coins', WALLET);
+  await ownGarment('jersey');
+  const cleatsId = FB.footballItemId(FB.FOOTBALL_TEAMS[3].id, 'cleats');
+  const [bundleR, itemR] = await Promise.all([
+    loot.buyFootballBundle('ignored'),
+    loot.buyFootballItem(cleatsId, true),
+  ]);
+  assert.equal(bundleR.ok, true, `bundle must sell, got ${JSON.stringify(bundleR)}`);
+  assert.equal(itemR.ok, true, `single buy must sell, got ${JSON.stringify(itemR)}`);
+  assert.equal(bundleR.cost, 16800, `4 missing at quote time ties the flat bundle price, got ${JSON.stringify(bundleR)}`);
+  assert.equal(itemR.cost, 4200, `one garment must cost one garment's price, got ${JSON.stringify(itemR)}`);
+  const spent = WALLET - await loot.coins();
+  assert.equal(spent, 16800, `single (4,200) + what the bundle actually delivered (3 new garments, quote 12,600) must total 16,800 and never more, got ${spent}`);
+  const owned = await loot.ownedCosmeticIds();
+  const garmentsOwned = FB.FOOTBALL_SOLD.filter(g => FB.FOOTBALL_TEAMS.some(t => owned.has(FB.footballItemId(t.id, g.key))));
+  assert.equal(garmentsOwned.length, FB.FOOTBALL_SOLD.length, `all ${FB.FOOTBALL_SOLD.length} garments must be owned after both purchases land, got ${garmentsOwned.map(g => g.key)}`);
+
+  // A plain bundle buy, no race, still costs its quote.
+  dbm.useDbName('unit-fbrace-plain');
+  await dbm.kvSet('coins', WALLET);
+  const plain = await loot.buyFootballBundle('ignored');
+  assert.equal(plain.ok, true, `an uncontested bundle must sell, got ${JSON.stringify(plain)}`);
+  assert.equal(plain.cost, 16800, `an uncontested bundle buy (0 owned) must cost the flat price, got ${JSON.stringify(plain)}`);
+  assert.equal(WALLET - await loot.coins(), 16800, `an uncontested bundle must charge exactly its quote, got ${WALLET - await loot.coins()}`);
+
+  // A double-tap bundle still refunds the loser in full.
+  dbm.useDbName('unit-fbrace-dbltap');
+  await dbm.kvSet('coins', WALLET);
+  const [d1, d2] = await Promise.all([loot.buyFootballBundle('ignored'), loot.buyFootballBundle('ignored')]);
+  const winner = d1.ok ? d1 : d2, loser = d1.ok ? d2 : d1;
+  assert.equal(winner.ok, true, `one of the two overlapping bundle taps must win, got ${JSON.stringify([d1, d2])}`);
+  assert.equal(loser.ok, false, 'the other must lose');
+  assert.equal(loser.reason, 'owned', `the loser must be refused as already owned, got ${JSON.stringify(loser)}`);
+  assert.equal(WALLET - await loot.coins(), winner.cost, `a double-tap bundle must charge exactly once, got spent ${WALLET - await loot.coins()} vs winner cost ${winner.cost}`);
 });
 
 await runAll();

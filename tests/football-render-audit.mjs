@@ -99,7 +99,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boot, seed, sleep, settle, setWidth, serveTree } from './godmode.js';
 import { FOOTBALL_TEAM_BY_ID, FOOTBALL_PETS, footballItemId, VISOR_BLOCKED_EYES } from '../data/football-teams.js';
-import { BH_BY_ID, PET_CROP } from '../data/boneheadz.js';
+import { BH_BY_ID, PET_CROP, bhFamilyKey } from '../data/boneheadz.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let fails = 0;
@@ -366,16 +366,33 @@ try {
      HIDDEN lizard's tile about half the time, whose rect is 0x0, and a mouse
      click at 0,0 lands on the app's back button. Measured on the first run of
      this file: "1 of 2 tapped", with the whole screen navigated away. So the
-     selector is scoped and a zero-sized hit is refused rather than clicked. */
+     selector is scoped and a zero-sized hit is refused rather than clicked.
+     THE FAMILY IS OPENED FIRST. Since 2026-09-05 (bhFamilies on the Stable) the
+     panel collapses every colourway of one master file into ONE [data-petfam]
+     tile, and the per-team [data-petwear] tiles exist only while that family is
+     open. This file owns two colourways of each garment, so both families are
+     collapsed and a bare tile query found nothing: "0 of 2 tapped". The family
+     key is the panel's species plus bhFamilyKey, the same string app.js builds,
+     and a real click on that tile (render() runs) is what un-collapses it. */
+  const centreOf = sel => page.evaluate(s => {
+    const b = document.querySelector(s);
+    if (!b) return null;
+    b.scrollIntoView({ block: 'center', inline: 'center' });
+    const r = b.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return null;
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, sel);
   const tapTile = async id => {
-    const hit = await page.evaluate(i => {
-      const b = document.querySelector(`.pet-wear:not([hidden]) [data-petwear="${i}"]`);
-      if (!b) return null;
-      b.scrollIntoView({ block: 'center', inline: 'center' });
-      const r = b.getBoundingClientRect();
-      if (!(r.width > 0 && r.height > 0)) return null;
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    }, id);
+    const tileSel = `.pet-wear:not([hidden]) [data-petwear="${id}"]`;
+    let hit = await centreOf(tileSel);
+    if (!hit) {
+      const sp = await page.evaluate(() => document.querySelector('.pet-wear:not([hidden])')?.dataset.pwsp);
+      const fam = await centreOf(`.pet-wear:not([hidden]) [data-petfam="${sp}:${bhFamilyKey(BH_BY_ID[id])}"][aria-expanded="false"]`);
+      if (!fam) return false;
+      await page.mouse.click(fam.x, fam.y);
+      await sleep(650);
+      hit = await centreOf(tileSel);
+    }
     if (!hit) return false;
     await page.mouse.click(hit.x, hit.y);
     await sleep(650);
@@ -429,6 +446,55 @@ try {
       ? wearBad.map(s => `${s.key}: ${s.st ? `${s.st.kind}, ${s.st.imgs.length} imgs, ${s.st.tints.length} tints` : 'nothing rendered'}`).join('; ')
       : surfaces.map(s => `${s.key} ${s.st.kind} ${s.st.imgs.length}img/${s.st.tints.length}tint`).join(', '));
   await shot('01-today-kit-on');
+
+  /* ---------------------------------------------------------- STAGE ---- */
+  /* THE SURFACE PET-WEARS ABOVE DOES NOT REACH. The Stable and Today draw a
+     dressed pet through croppedPetImg, the ONE function graded above; the
+     Wardrobe's Backpack/Build tab draws the SAME pet through avatarLayersHtml's
+     own stack, where a body-canvas pet is one more layer beside the player's
+     own gear rather than a box of its own. Tom, 2026-09-04 (re-affirmed here):
+     "the pet kit renders on the lizard, on every surface." Still wearing the
+     NAVY kit PET-WEARS just equipped above (petWear is one global kv row, not
+     per-species, so nothing has to be re-tapped), on all three lizards. */
+  const openBackpack = async () => {
+    await page.evaluate(() => { location.hash = '#/bonehead'; });
+    await sleep(900);
+    await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="crates"]')?.click());
+    await sleep(900);
+    await freeze();
+  };
+  const STAGE_SEL = '.bh-stage.lg';
+  const petSlotOf = g => BH_BY_ID[footballItemId(NAVY, g)].slot;    // -> CH, CT
+  const stageTintSel = PET_GARMENTS.map(g => `${STAGE_SEL} .fb-tint[data-fbslot="${petSlotOf(g)}"]`).join(', ');
+  const rgbFromCss = s => (s.match(/\d+/g) || []).map(Number);
+  const teamRGBs = [rgb(FOOTBALL_TEAM_BY_ID[NAVY].a), rgb(FOOTBALL_TEAM_BY_ID[NAVY].b)];
+  const stageRows = [];
+  for (const L of LIZARDS) {
+    await focus(L.inst.iid);
+    await openBackpack();
+    const rect = await rectOf(STAGE_SEL, 12);
+    /* THE SAME CONTRIBUTION MEASUREMENT VISOR-SEEN uses above: shoot the rect,
+       hide the worn layers (`.pw`, the class avatarLayersHtml now shares with
+       croppedPetImg's own worn layers), shoot again. Non-zero ink IS "the
+       lizard differs from the bare-lizard render", measured rather than
+       eyeballed, and `hidden` proves both garments were actually there to
+       hide (2: helmet + jersey). */
+    const wornInk = rect ? await diffOf(rect, `${STAGE_SEL} img.pw`) : { n: 0, hidden: 0 };
+    const tints = rect ? await page.evaluate(sel => [...document.querySelectorAll(sel)].map(t => {
+      const r = t.getBoundingClientRect(); const c = getComputedStyle(t);
+      return { w: +r.width.toFixed(1), h: +r.height.toFixed(1), bg: c.backgroundColor };
+    }), stageTintSel) : [];
+    stageRows.push({ key: L.key, rect: !!rect, wornInk: wornInk.n, hidden: wornInk.hidden, tints });
+  }
+  const stageBad = stageRows.filter(r => !r.rect || r.hidden !== PET_GARMENTS.length || r.wornInk <= 0
+    || r.tints.length !== 4
+    || !r.tints.every(t => t.w > 0 && t.h > 0 && teamRGBs.some(c => dist(rgbFromCss(t.bg), c) < 2)));
+  ok('STAGE the lizard on the Wardrobe stage (avatarLayersHtml\'s own stack, not croppedPetImg) wears its football kit too, tinted to the team\'s own hex, on all three lizards',
+    stageRows.length === 3 && stageBad.length === 0,
+    stageBad.length
+      ? stageBad.map(r => `${r.key}: ${!r.rect ? 'no .bh-stage.lg' : `${r.wornInk}px worn ink (${r.hidden}/${PET_GARMENTS.length} worn layer(s) found), ${r.tints.length} tint span(s) ${JSON.stringify(r.tints)}`}`).join('; ')
+      : stageRows.map(r => `${r.key} ${r.wornInk}px worn ink, ${r.tints.length} tints`).join(', '));
+  await shot('01b-stage-kit-on', await rectOf(STAGE_SEL, 12));
 
   /* -------------------------------------------------------- PET-SIZE ---- */
   /* Tom's trade is the animation, NOT the size: the animal must not jump when

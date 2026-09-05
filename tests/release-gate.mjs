@@ -210,6 +210,9 @@ if (own) console.log(`serving this repo at ${base}\n`);
 /* backup-version-audit is PURE for the same reason (mem-idb under the real
    js/db.js, ~1s): QA round 25 M6, the export version derives from DB_VERSION, a
    v1 file's skipped stores reach the toast, and a newer file is refused. */
+/* backup-conflict-audit is PURE too: mem-idb under the real client backup path.
+   It forces one 409, requires a single pull-and-retry, then decrypts the retried
+   server blob and proves both devices' rows survived the merge. */
 /* drip-badge-audit is PURE for the same reason (mem-idb under the real js/db.js
    and js/game.js, ~1s): QA round 23 F4, the Full drip badge counts the look the
    player actually wears (transmog resolved, a hidden slot is not drip). */
@@ -240,7 +243,8 @@ if (own) console.log(`serving this repo at ${base}\n`);
    drawings (alpha-silhouette IoU printed per pair) that name matching WOULD
    merge, so a well-meaning rewrite of the rule into name matching goes red with
    the evidence in the failure line. */
-const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs', 'unit.test.js', 'log-xp-farm-audit.mjs', 'drip-badge-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs', 'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs', 'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs', 'wardrobe-family-audit.mjs', 'football-kit-audit.mjs', 'restore-latch-audit.mjs'];
+const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs', 'backup-conflict-audit.mjs', 'unit.test.js', 'log-xp-farm-audit.mjs', 'drip-badge-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs', 'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs', 'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs', 'wardrobe-family-audit.mjs', 'football-kit-audit.mjs', 'restore-latch-audit.mjs'];
+PURE.unshift('store-copy-lint.mjs');
 const BROWSER = [
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
      repo has watched shape assertions stay green over broken state, so this one
@@ -478,7 +482,7 @@ const HELPERS = new Set([
   'godmode.js',        // the harness: boot, seed, serveTree
   'fight-sim.mjs',     // a sim library balance.mjs drives; no assertions of its own
   'badge-centre-lib.mjs', // the badge measurement badge-centre-audit.mjs drives; no assertions of its own
-  'mem-idb.mjs',       // the in-memory IndexedDB four PURE audits import; installs a global, asserts nothing (gate7 coverage red, 2026-09-04)
+  'mem-idb.mjs',       // shared in-memory IndexedDB for PURE audits; installs a global, asserts nothing (gate7 coverage red, 2026-09-04)
 ]);
 const onDisk = (await readdir(here))
   .filter(f => /\.(mjs|js)$/.test(f) && !HELPERS.has(f))

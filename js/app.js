@@ -93,7 +93,7 @@ import {
   petActionsFor, applyPetAction, talentRanks, nodeRanks, GUARD_STAMINA,
 } from './pit.js';
 import { HERO_EDGE } from '../data/hero-edge.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petCanWear,
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petWornItems, petCanWear,
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK, bhFamilyKey, bhFamilies } from '../data/boneheadz.js';
 // Football kit, 2026-09-04
 import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
@@ -2300,6 +2300,10 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
  * never lost. Same reasons apply, so the same shape applies.
  * The invite URL lives in ONE constant for the same reason DISCORD_URL does,
  * and the Discord link here IS DISCORD_URL: a second copy would rot. */
+/* False in the shared web source. native/build-www.sh flips this one literal in
+   its copied app.js for an App Store archive, leaving web and internal native
+   builds unchanged. Every distribution-only surface reads this flag. */
+const STORE_BUILD = false;
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/rtZ6Uyxc';
 /* Inline for the same reason as DISCORD_MARK: sw.js precaches an explicit
    list, so an asset file would need an entry there and this needs none.
@@ -4331,12 +4335,6 @@ async function renderToday(el) {
   <p class="note">This day already passed on this clock. Fresh rewards return tomorrow.</p>` : ''}
   ${unwitnessed ? `
   <p class="note">${DAY_GUARD_COPY.unwitnessed}</p>` : ''}
-  ${wbShow ? `
-  <div class="card wb-back" id="wbCard">
-    <b>Everything is where you left it.</b>
-    <span>${wbFacts.join(' ')}</span>
-    <button class="btn small ghost" id="wbOk">Good to be back</button>
-  </div>` : ''}
   ${hkStale ? `
   <button class="card hk-stale" id="hkStaleFix">
     <b>⚠️ Steps aren't syncing</b>
@@ -4381,6 +4379,15 @@ async function renderToday(el) {
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
   <p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>
   </details>
+  ${/* BELOW THE DAY, like the rebalance card under it (2026-09-05): inside .dayflow the
+       return card painted a panel inside the flat day and pushed the collapsed summary
+       past a 568px screen (today-container LEDGER, today-peek WHOLE on a lapsed seed). */''}
+  ${wbShow ? `
+  <div class="card wb-back" id="wbCard">
+    <b>Everything is where you left it.</b>
+    <span>${wbFacts.join(' ')}</span>
+    <button class="btn small ghost" id="wbOk">Good to be back</button>
+  </div>` : ''}
   ${/* OUTSIDE THE DAY, on purpose (2026-09-05). Inside .dayflow this card sat above
        the collapsed banner: it pushed the ring card 18px past its ceiling
        (hype-banner FIT), made the collapsed day taller than a 568px screen
@@ -4561,6 +4568,7 @@ async function renderToday(el) {
      reading position") failing for a real reason. */
   $('#dayRest', el)?.addEventListener('toggle', e => { S.dayOpen = e.target.open; });
 
+  let nbNormalized = false;
   $('#newsBanner', el)?.addEventListener('toggle', async e => {
     if (!e.target.open) return;
     /* The settled race is in this list too, so opening the pill clears its dot
@@ -4569,52 +4577,64 @@ async function renderToday(el) {
     const wk = lastSettledWeek();
     await kvSet('newsSeen', [...NEWS.map(n => n.id), wk && raceSeenKey(wk)].filter(Boolean));
     $('.nb-dot', el)?.remove();
-  });
-  /* EVERY NEWS TILE READS AT THE SAME SIZE, measured rather than hand-tuned.
-     Tom, 2026-08-27: "your icons are aligned right now theyre different themes
-     with different centreing and scaling it looks sloppy". He was right and the
-     numbers were ugly: across the nine rows the art filled between 0.36 and 3.80
-     of its 40px tile, a TEN-FOLD spread, and the Discord tile sat 19px off centre
-     on a 40px box because its art is a fixed 78px square.
 
-     The News tab solves this with per-class scales (.nw-fit .42, .nw-wall .52),
-     which covers two of the shapes and leaves tz-head and dc-app overflowing. A
-     tenth row would need an eleventh rule. So this measures what each tile
-     actually rendered and scales it to one target, which is correct for art
-     nobody has drawn yet.
+    /* EVERY NEWS TILE READS AT THE SAME SIZE, measured rather than hand-tuned.
+       Tom, 2026-08-27: "your icons are aligned right now theyre different themes
+       with different centreing and scaling it looks sloppy". He was right and the
+       numbers were ugly: across the nine rows the art filled between 0.36 and 3.80
+       of its 40px tile, a TEN-FOLD spread, and the Discord tile sat 19px off centre
+       on a 40px box because its art is a fixed 78px square.
 
-     ONE READ, ONE WRITE, on render only. Nothing here runs per frame, so the
-     settled-screen budget idle-perf-audit holds is untouched. */
-  requestAnimationFrame(() => {
-    for (const t of $$('.nb-thumb', el)) {
-      const kid = t.firstElementChild;
-      if (!kid) continue;
-      const tb = t.getBoundingClientRect(), kb = kid.getBoundingClientRect();
-      if (!kb.width || !kb.height) continue;
-      /* THE TARGET IS A WHOLE PIXEL-ART STEP, 24, not a fraction of the tile.
-         It was Math.min(tile) * 0.78 = 31.2px, and that put badge-crown.png on
-         screen at 31.2 against a declared 24. pixel-art-swap-audit holds every
-         pixel <img> to a whole step at its own width, because a fractional step
-         resamples the sprite and blurs it, and it caught this.
-         Exempting pixel art from the pass instead was tried and is worse: it
-         leaves one tile at 24 among eight at 31.2, which is the ragged row this
-         normalisation exists to fix (measured spread 7.2px against a 1.5 bound).
-         24 satisfies both rules at once: pixCur already snaps to it, so pixel art
-         scales by exactly 1.0 and everything else meets it. */
-      const TARGET = 24;
-      const scale = TARGET / Math.max(kb.width, kb.height);
-      kid.style.transformOrigin = 'center';
-      /* SCALE FIRST, THEN MEASURE THE OFFSET THAT IS LEFT. Doing both in one pass
-         off the pre-scale box put the Discord tile 29px out on a 40px square: in
-         `translate() scale()` the translate is in the PARENT's units, so dividing
-         it by the scale over-corrects by exactly that factor. Two passes is the
-         honest way to do it and costs one extra read of nine elements, once. */
-      kid.style.transform = `scale(${scale})`;
-      const sb = kid.getBoundingClientRect();
-      const dx = (tb.left + tb.width / 2) - (sb.left + sb.width / 2);
-      const dy = (tb.top + tb.height / 2) - (sb.top + sb.height / 2);
-      kid.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
-    }
+       The News tab solves this with per-class scales (.nw-fit .42, .nw-wall .52),
+       which covers two of the shapes and leaves tz-head and dc-app overflowing. A
+       tenth row would need an eleventh rule. So this measures what each tile
+       actually rendered and scales it to one target, which is correct for art
+       nobody has drawn yet.
+
+       MEASURED ON FIRST OPEN, NOT ON RENDER. It used to run in a bare
+       requestAnimationFrame scheduled at render time, while `.nb-list` was still
+       inside a CLOSED <details> -- a closed <details> keeps laying out its
+       content (this is why the read never came back zero), but the box it
+       reports for that hidden content is not reliable: measured against this
+       tree, the same unchanged code read the Discord tile at a correct 24px on
+       about half of a run of 20 and at its native, unscaled 78px on the other
+       half, no code difference between the two. Reading it once the box is
+       actually the one the player sees removes the coin flip. Still ONE READ,
+       ONE WRITE, just gated to the first open instead of render, so the
+       settled-screen budget idle-perf-audit holds is still untouched. */
+    if (nbNormalized) return;
+    nbNormalized = true;
+    requestAnimationFrame(() => {
+      for (const t of $$('.nb-thumb', el)) {
+        const kid = t.firstElementChild;
+        if (!kid) continue;
+        const tb = t.getBoundingClientRect(), kb = kid.getBoundingClientRect();
+        if (!kb.width || !kb.height) continue;
+        /* THE TARGET IS A WHOLE PIXEL-ART STEP, 24, not a fraction of the tile.
+           It was Math.min(tile) * 0.78 = 31.2px, and that put badge-crown.png on
+           screen at 31.2 against a declared 24. pixel-art-swap-audit holds every
+           pixel <img> to a whole step at its own width, because a fractional step
+           resamples the sprite and blurs it, and it caught this.
+           Exempting pixel art from the pass instead was tried and is worse: it
+           leaves one tile at 24 among eight at 31.2, which is the ragged row this
+           normalisation exists to fix (measured spread 7.2px against a 1.5 bound).
+           24 satisfies both rules at once: pixCur already snaps to it, so pixel art
+           scales by exactly 1.0 and everything else meets it. */
+        const TARGET = 24;
+        const scale = TARGET / Math.max(kb.width, kb.height);
+        kid.style.transformOrigin = 'center';
+        /* SCALE FIRST, THEN MEASURE THE OFFSET THAT IS LEFT. Doing both in one pass
+           off the pre-scale box put the Discord tile 29px out on a 40px square: in
+           `translate() scale()` the translate is in the PARENT's units, so dividing
+           it by the scale over-corrects by exactly that factor. Two passes is the
+           honest way to do it and costs one extra read of nine elements, once. */
+        kid.style.transform = `scale(${scale})`;
+        const sb = kid.getBoundingClientRect();
+        const dx = (tb.left + tb.width / 2) - (sb.left + sb.width / 2);
+        const dy = (tb.top + tb.height / 2) - (sb.top + sb.height / 2);
+        kid.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+      }
+    });
   });
   $$('.nb-row', el).forEach(b => b.addEventListener('click', () => {
     NEWS.find(n => n.id === b.dataset.news)?.open();
@@ -5217,13 +5237,19 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
     'You took the numbers off him. The Wardrobe gives them back.',
     'He is carrying no stats. I would fix that before a fight.',
   ];
+  /* PAST DAYS ARE EDITABLE, NOT FINISHED (Tom, 2026-09-05): people forget to log
+     a meal, so the day stays open to fix. What changed is the reward, not the
+     door: a backdated log earns no XP, streak or badge (js/game.js onFoodLogged),
+     so Gwart says so instead of claiming the day is carved shut, which is no
+     longer true and was the bug report (tap Add on yesterday, log an apple, XP
+     still rose). */
   if (!isToday) return [
-    'Yesterday is set. You cannot re-cut a finished thing.',
-    'Nothing to log back here. Have a browse if you like.',
-    'That day is carved. Admire it, but you cannot sand it.',
-    'Back here it is all finished. Today is where the work is.',
+    'Log the meal you forgot. Just do not expect XP for it.',
+    'Fix it if you missed it. Nobody pays you for old news.',
+    'Edit away. The reward already clocked out for the day.',
+    'Add the food, skip the applause. That is how it works back here.',
     'You have wandered off behind him. He is up ahead.',
-    'I keep the old days for reading, not for fixing.',
+    'I will take the correction. XP stopped listening yesterday.',
     'History is a decent read. He is a better one.',
   ];
   if (cropsRipe) return [
@@ -5751,6 +5777,19 @@ function avatarLayersHtml(eq, opts = {}) {
     const full = s.code === 'C' && itemId !== 'CX' && opts.shinyPetId === itemId
       ? `assets/bh/C/shiny/${itemId}.png` : bhAsset(item);
     const src = opts.thumb ? bhThumb(full, opts.thumb === true ? 192 : opts.thumb) : full;
+    /* Football kit, 2026-09-05: a pet stacked ON THE BODY CANVAS is a layer in
+       THIS stack, so its worn garments (petWear's CH/CT) belong here too, not
+       only in croppedPetImg's standalone box -- Tom: "the pet kit renders on
+       the lizard, on every surface". Same registration as the species layer
+       above (no inline geo, same --av-fit/--av-pos as every other slot), so
+       petWornItems' art (drawn pre-positioned on the pet's own 640 canvas)
+       lands where Cam put it. `opts.petWear`, never S.petWear read directly
+       here: a snapshot pet (a friend, a foe) must never be dressed out of the
+       VIEWER's own wardrobe, which is the shiny bug's shape (see
+       ownShinyPetId/snapShinyPetId above) applied to gear instead of colour.
+       The shiny recolour above and the worn layers below are independent
+       images, so a shiny keeps its kit for free: nothing here reads shinyPetId. */
+    const wornPetItems = s.code === 'C' ? petWornItems(itemId, opts.petWear || null) : [];
     // weapon / off-hand glow by rarity (epic/legendary)
     const slimed = S.slimeSlots && S.slimeSlots.has(s.code);
     /* `'wpnAura' in opts` rather than `opts.wpnAura || S.wpnAura`: a caller that
@@ -5785,7 +5824,16 @@ function avatarLayersHtml(eq, opts = {}) {
     // On a THUMBNAILED layer it first retries the full-size art, so a missing
     // thumbnail costs memory rather than the garment.
     const clipStyle = clipMask ? ` style="--fbm:url('${clipMask}')"` : '';
-    return `<img${glow}${clipStyle} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(item, '', opts.thumb)}`;
+    // Worn pet garments, same tiering as the species image above, each with its
+    // own football tint spans -- see the note on wornPetItems above. `pw`
+    // matches croppedPetImg's own class for a worn layer (see THE WORN LAYERS
+    // ARE MARKED there), so a worn piece reads the same way wherever it draws.
+    const wornHtml = wornPetItems.map(w => {
+      const wfull = bhAsset(w);
+      const wsrc = opts.thumb ? bhThumb(wfull, opts.thumb === true ? 192 : opts.thumb) : wfull;
+      return `<img class="pw" src="${wsrc}"${wsrc !== wfull ? ` data-full="${wfull}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(w, '', opts.thumb)}`;
+    }).join('');
+    return `<img${glow}${clipStyle} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(item, '', opts.thumb)}${wornHtml}`;
   }).join('');
   // Visible by DEFAULT. v233 shipped this with bh-composing baked into the
   // markup, which meant any stack injected somewhere composeAvatars() never
@@ -8542,7 +8590,17 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
       const qin = $('#qtyIn', wrap);
       qin.addEventListener('input', e => { amtRaw = e.target.value; sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
       qin.addEventListener('focus', () => qin.select());
-      qin.addEventListener('blur', () => { if (!(sel.qty > 0)) { sel.qty = 0.25; } qin.value = fmtQty(sel.qty); qin.setAttribute('aria-valuenow', sel.qty); });
+      qin.addEventListener('blur', () => {
+        // P2 playtest: "1,234" is refused by numParse (grouped, ambiguous with a
+        // decimal comma) but blur used to clamp the FIELD to 0.25 regardless,
+        // so it looked valid while amtRaw (what Add actually checks) still held
+        // the refused text. Leave invalid text on screen; only a genuinely
+        // blank field gets the 0.25 default.
+        if (amtRaw != null && !numParse(amtRaw).ok && numParse(amtRaw).why !== 'empty') return;
+        if (!(sel.qty > 0)) { sel.qty = 0.25; }
+        qin.value = fmtQty(sel.qty);
+        qin.setAttribute('aria-valuenow', sel.qty);
+      });
       $$('.t1-step button', qtyArea).forEach(b => b.addEventListener('click', () => {
         amtRaw = null;
         sel.qty = Math.max(0.25, Math.round(((sel.qty || 1) + Number(b.dataset.d)) * 100) / 100);
@@ -8560,32 +8618,40 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     });
   }
 
+  /* P2 playtest: while amtRaw holds text numParse refuses (e.g. "1,234",
+     grouped/ambiguous with a decimal comma), sel.qty/grams already sit at
+     whatever the live-typing coercion left them (usually 0), so the old
+     preview showed "0 kcal" and "0 x 1 large": a valid-looking answer the
+     draft does not actually hold. Blank it instead, same signal the Add
+     toast gives; a genuinely blank field (why: 'empty') still previews
+     normally off the last valid amount. */
   function preview() {
-    const n = nutrientsFor(food, sel) || { kcal: 0, p: 0, c: 0, f: 0 };
+    const badRaw = amtRaw != null && !numParse(amtRaw).ok && numParse(amtRaw).why !== 'empty';
+    const n = badRaw ? null : (nutrientsFor(food, sel) || { kcal: 0, p: 0, c: 0, f: 0 });
     /* M17: the stepper moved 1 to 1.25 with no aria-valuenow change. Every
        amount change (typed, stepped, chip) reaches preview(), so the spinbutton
        is kept in step here; #pvKcal is aria-live, so 282 to 353 is announced. */
     const amtEl = $(sel.mode === 'grams' ? '#gramsIn' : '#qtyIn', wrap);
     if (amtEl) amtEl.setAttribute('aria-valuenow', sel.mode === 'grams' ? sel.grams : sel.qty);
-    $('#pvKcal', wrap).textContent = Math.round(n.kcal).toLocaleString();
+    $('#pvKcal', wrap).textContent = n ? Math.round(n.kcal).toLocaleString() : '-';
     // QA r25 M19 follow-up: custom foods now keep untyped macros as null, and
     // fmtG(null) is '-', which read '-g'. Unknown stays a bare dash.
     const gOr = v => v == null ? '-' : fmtG(v) + 'g';
-    $('#pvP', wrap).textContent = gOr(n.p);
-    $('#pvC', wrap).textContent = gOr(n.c);
-    $('#pvF', wrap).textContent = gOr(n.f);
-    $('#pvServ', wrap).textContent = portionLabel(food, sel) || '';
+    $('#pvP', wrap).textContent = n ? gOr(n.p) : '-';
+    $('#pvC', wrap).textContent = n ? gOr(n.c) : '-';
+    $('#pvF', wrap).textContent = n ? gOr(n.f) : '-';
+    $('#pvServ', wrap).textContent = n ? (portionLabel(food, sel) || '') : '';
     /* The bars show THIS food's own macro split, not its share of the day. A
        single apple against a daily protein target is 1% and every bar reads as
        broken; its share of its own calories is always meaningful. */
-    const kp = (n.p || 0) * 4, kc = (n.c || 0) * 4, kf = (n.f || 0) * 9;
+    const kp = n ? (n.p || 0) * 4 : 0, kc = n ? (n.c || 0) * 4 : 0, kf = n ? (n.f || 0) * 9 : 0;
     const sum = kp + kc + kf;
     const bar = (id, part) => {
       const el = $(id, wrap);
       if (el) el.style.width = sum > 0 ? Math.round((part / sum) * 100) + '%' : '0%';
     };
     bar('#pvPBar', kp); bar('#pvCBar', kc); bar('#pvFBar', kf);
-    renderPayoff(n);
+    renderPayoff(n || { kcal: 0, p: 0, c: 0, f: 0 });
     // M16: preview() runs on open and on every portion or meal change, so it is
     // the one place the draft learns about this sheet
     if (addDraft && !editing) stampAddDraft({ sheet: 'portion', foodId: food.id, sel: { ...sel }, meal: curMeal });
@@ -8795,13 +8861,15 @@ function openQuickAdd(getMeal, entry = null) {
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
     </div>
     <div class="sheet-body">
-      <div class="t1-field hot"><label>Calories</label><input id="qaKcal" type="text" inputmode="numeric" placeholder="0" value="${entry ? Math.round(entry.kcal) : ''}"></div>
-      <div class="t1-field"><label>What was it</label><input id="qaName" placeholder="Dinner out (optional)" value="${esc(entry?.name === 'Quick add' ? '' : entry?.name || '')}"></div>
+      <div class="t1-field hot"><label>Calories</label><input id="qaKcal" type="text" inputmode="numeric" placeholder="0" value="${entry ? Math.round(entry.kcal) : ''}" aria-label="Calories"></div>
+      <div class="t1-field"><label>What was it</label><input id="qaName" placeholder="Dinner out (optional)" value="${esc(entry?.name === 'Quick add' ? '' : entry?.name || '')}" aria-label="What was it"></div>
       ${t1Sect('Macros, if you know them')}
       <div class="t1-g3">
-        <div class="t1-field"><label>Protein<span class="u">g</span></label><input id="qaP" type="text" inputmode="decimal" placeholder="·" value="${entry?.p ? fmtG(entry.p) : ''}"></div>
-        <div class="t1-field"><label>Carbs<span class="u">g</span></label><input id="qaC" type="text" inputmode="decimal" placeholder="·" value="${entry?.c ? fmtG(entry.c) : ''}"></div>
-        <div class="t1-field"><label>Fat<span class="u">g</span></label><input id="qaF" type="text" inputmode="decimal" placeholder="·" value="${entry?.f ? fmtG(entry.f) : ''}"></div>
+        <!-- P2 playtest, a11y: all three shared placeholder="." and no label
+             association, so a screen reader read three identical "textbox"es. -->
+        <div class="t1-field"><label>Protein<span class="u">g</span></label><input id="qaP" type="text" inputmode="decimal" placeholder="·" value="${entry?.p ? fmtG(entry.p) : ''}" aria-label="Protein, grams"></div>
+        <div class="t1-field"><label>Carbs<span class="u">g</span></label><input id="qaC" type="text" inputmode="decimal" placeholder="·" value="${entry?.c ? fmtG(entry.c) : ''}" aria-label="Carbs, grams"></div>
+        <div class="t1-field"><label>Fat<span class="u">g</span></label><input id="qaF" type="text" inputmode="decimal" placeholder="·" value="${entry?.f ? fmtG(entry.f) : ''}" aria-label="Fat, grams"></div>
       </div>
       ${entry ? '' : '<p class="note" style="margin-top:2px">Worth +10 XP, same as any other log.</p>'}
       ${entry ? '<div style="height:12px"></div><button class="btn danger" id="qaDel">Delete entry</button>' : ''}
@@ -9148,10 +9216,15 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
     : 0;
   const missing = k => (fromLabel && (v(k) === '' || v(k) == null) ? ' check' : '');
   const flag = k => (missing(k) ? '<span class="t1-tag warn">Check</span>' : '');
+  // P2 playtest, a11y: these numeric fields carried a visual <label> with no
+  // for/id and no aria-label, so a screen reader read every one of them as a
+  // bare "textbox". aria-label spells the unit out (UNIT_WORD) rather than
+  // reading "g" or "mg" as its own word.
+  const UNIT_WORD = { g: 'grams', mg: 'milligrams' };
   const fld = (id, label, key, unit = '', extra = '') => `
     <div class="t1-field${missing(key)}">
       <div class="lbl"><label>${label}${unit ? `<span class="u">${unit}</span>` : ''}</label>${flag(key)}</div>
-      <input id="${id}" type="text" inputmode="${extra || 'decimal'}" value="${v(key)}">
+      <input id="${id}" type="text" inputmode="${extra || 'decimal'}" value="${v(key)}" aria-label="${label}${unit ? ', ' + (UNIT_WORD[unit] || unit) : ''}">
     </div>`;
 
   const wrap = openSheet(`
@@ -9170,12 +9243,12 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
       </div>` : ''}
       <div class="warn" id="ffWarn"${warnings.length ? '' : ' hidden'}>${warnings.map(esc).join('<br>')}</div>
       ${t1Sect('What is it')}
-      <div class="t1-field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || pv.name || '')}"></div>
-      <div class="t1-field"><label>Brand</label><input id="ffBrand" placeholder="Optional" value="${esc(f?.brand || '')}"></div>
+      <div class="t1-field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || pv.name || '')}" aria-label="Name"></div>
+      <div class="t1-field"><label>Brand</label><input id="ffBrand" placeholder="Optional" value="${esc(f?.brand || '')}" aria-label="Brand"></div>
       ${t1Sect('One serving')}
       <div class="t1-g2">
-        <div class="t1-field"><label>Serving</label><input id="ffServ" value="${esc(servingLabel)}"></div>
-        <div class="t1-field"><label>Grams<span class="u">(optional)</span></label><input id="ffGrams" type="text" inputmode="decimal" value="${servingGrams ?? ''}" placeholder="e.g. 55"></div>
+        <div class="t1-field"><label>Serving</label><input id="ffServ" value="${esc(servingLabel)}" aria-label="Serving"></div>
+        <div class="t1-field"><label>Grams<span class="u">(optional)</span></label><input id="ffGrams" type="text" inputmode="decimal" value="${servingGrams ?? ''}" placeholder="e.g. 55" aria-label="Grams, optional"></div>
       </div>
       ${t1Sect('Per serving')}
       <div class="t1-g2">
@@ -9394,22 +9467,19 @@ function petShelfHtml(ownedCos, coinBal) {
    file's usual 1/0.86 crop window -- 102.3px, matching the number every other
    .fit-* call site here derives the same way -- and .fit-fbhead/.fit-torso/
    .fit-feet (app.css) scale that panel by 1.4/1.7/2.2, not one flat 2.3 for
-   all three. The old guess sent the helmet and jersey tiles straight to their
-   640 masters (their real worst case, 143px and 174px, both fit the 384
-   tier); only the cleats' steeper crop (225px) genuinely needs the master.
-   Measured 393x852 DPR 2, 2026-09-05, tests/memory-census.mjs's own probe. */
+   all three. Measured 393x852 DPR 2, 2026-09-05, tests/memory-census.mjs's own probe. */
 const FB_TILE_W = 88 / 0.86;
 const FB_TILE_SCALE = { 'fit-fbhead': 1.4, 'fit-torso': 1.7, 'fit-feet': 2.2 };
-/* fit-feet (the cleats) is the one of the three whose real ~225px worst case
-   clears no tier at all -- capping it at 192 CSS px (-> the 384 tier) still
-   costs it a mild upscale, so it caps one rung tighter, at 96 (-> 192), same
-   move already made for the pet tile beside it. Math.min is a no-op for
-   helmet/jersey: their real numbers (~143/~174px) already clear 384 alone. */
-const kitTierCss = it => {
-  const cls = fitClass(it);
-  const raw = FB_TILE_W * (FB_TILE_SCALE[cls] || 2.3);
-  return Math.min(raw, cls === 'fit-feet' ? 96 : 192);
-};
+/* NO CAP ANY MORE (2026-09-05): the caps here used to buy back memory the
+   poster hero was spending on a tier too small to serve its own box (see the
+   thumb:384 note on the hero above). Now that the kit room's tiles do not
+   decode at all while #fbSect is closed -- t3-dropbody below renders empty
+   until the details' own 'toggle' event fires -- there is nothing left to buy
+   back, so this returns the honest measured width and lets wornArtHtml's
+   bhTierFor pick from it same as every other caller: 384 for the helmet/jersey
+   (~143/174px, both clear it) and the 640 master for the cleats (~225px,
+   clears no tier -- fit-feet's crop is the steepest of the three). */
+const kitTierCss = it => FB_TILE_W * (FB_TILE_SCALE[fitClass(it)] || 2.3);
 function footballShelfHtml(ownedCos, coinBal, open = false) {
   const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];   // the PREVIEW colourway, not a variant on sale
   const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
@@ -9433,22 +9503,24 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
   <details class="t3-dropsect" id="fbSect"${open ? ' open' : ''}>
     <summary class="t3-drop fb-drop">
       <div class="fb-hero">
-        <div class="pc-worn fit-body">${avatarLayersHtml({ ...RACK_BASE, ...Object.fromEntries(sold.filter(g => !g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])) },
-          /* Measured 393x852 DPR 2: .fb-hero's .pc-worn is 309.6px at a 0.96
-             scale, real worst-case css ~297 -- bhTierFor(260) was already an
-             under-measure and 297 clears no tier either (needs >=594), same
-             as the master 384 would. Capped at 192 rather than left to
-             escalate, same rung the fb-hero-pet span beside it takes below:
-             the two portraits in this poster share one cap, not two. */
-          { wpnAura: null, skip: ['C'], thumb: 192 })}</div>
+     /* skip: ['C'] sits on the call line on purpose: figure-audit STACK reads each
+        avatarLayersHtml call in a two-line window (2026-09-05). */
+     /* MEASURED OFF THE RENDER, 440x956 DPR 2 (art-resolution-audit.mjs's own
+        viewport), tests/art-resolution-audit.mjs: this poster's mannequin draws
+        at 507 device px. Capped at 192 it was 2.64x its source -- the exact
+        defect that file exists to catch -- and Tom had already flagged this
+        poster as blurry once today. 384 clears it at 507/384 = 1.32x; the
+        master would too (507/640 = 0.79x) but costs 0.44 MB/layer more for a
+        sharpness margin nobody asked for. Sharpness wins for the hero (it is
+        the biggest art on the shop screen), paid for by the kit room's five
+        tiles no longer decoding while #fbSect is closed -- see t3-dropbody
+        below. */
+        <div class="pc-worn fit-body">${avatarLayersHtml({ ...RACK_BASE, ...Object.fromEntries(sold.filter(g => !g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])) }, { wpnAura: null, skip: ['C'], thumb: 384 })}</div>
         <span class="fb-hero-pet">${croppedPetImg(FOOTBALL_PETS[0], 96, false, null,
-          /* C4/CX's PET_CROP puts their real worst-case css at ~204-222 here
-             (px=96 x FILL 0.82 / their ~0.35 content fraction), so even 384
-             is already a cap below what bhTierFor's strict rule would allow --
-             this was never going to be the master either way. 192 matches the
-             kit-room's own pet tile below rather than inventing a third
-             number for the same lizard. */
-          Object.fromEntries(sold.filter(g => g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])), 192)}</span>
+          /* Same poster, same 1.4x rule: measured 444 device px, 444/192 = 2.31x
+             (also over) -> 444/384 = 1.16x. The two portraits in this poster
+             shared one cap before; they share one honest tier now instead. */
+          Object.fromEntries(sold.filter(g => g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])), 384)}</span>
       </div>
       <div class="tx">
         <span class="eyebrow">Locker room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
@@ -9458,7 +9530,29 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
         <span class="t3-price">${Number.isFinite(price) ? `${ICONS.coin(13)} ${price.toLocaleString()} a piece${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} the lot` : ''}` : 'Not for sale yet'}</span>
       </div>
     </summary>
-    <div class="t3-dropbody">
+    <div class="t3-dropbody">${
+      /* THE KIT ROOM'S OWN t1 COST. Five tiles and a bundle tile, each a full
+         mannequin stack (three to five layers apiece) -- the exact shape the
+         hero above pays extra to be sharp, and this is where that gets paid
+         back. EMPTY ON PURPOSE while closed, same pattern as the Today teaser
+         wall (1C): a closed <details> still keeps every <img> its markup
+         names in the document and the browser still decodes them (measured --
+         see the census note on this screen), so writing the tiles in here
+         unconditionally cost the same memory whether or not a player ever
+         opens the kit room. Filled by the 'toggle' listener on first open,
+         below in renderShop; wasOpen.fb re-renders it open-and-filled across a
+         team change or a buy so a re-render never blanks what the player is
+         looking at. */
+      open ? footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned) : ''
+    }</div>
+  </details>`;
+}
+/* THE KIT ROOM GRID, pulled out of footballShelfHtml so the 'toggle' listener
+   in renderShop can build the exact same markup on first open. team/sold/
+   price/quote/bundleOwned are cheap synchronous reads and the listener
+   re-derives its own copy rather than reaching into this closure. */
+function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned) {
+  return `
       <label class="fb-pick"><span>Team</span>
         <select id="fbTeam">${FOOTBALL_TEAMS.map(t => `<option value="${t.id}"${t.id === team.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
         <i class="fb-swatch" style="--fa:${team.a};--fb:${team.b}"></i></label>
@@ -9469,13 +9563,11 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
           /* THE PET TILE (g.pets) is pinned to 192, below what bhTierFor's
              strict rule would allow (her PET_CROP puts the real worst-case
              css at ~203-221 here, clearing no tier at all) -- same cap as
-             fb-hero-pet above, same lizard. The human tile below gets an
-             equivalent cap for a different reason: the cleats' fit-feet crop
-             (scale 2.2) is the one garment of the three whose real ~225px
-             worst case clears no tier either, so it caps down one more rung
-             than helmet/jersey (~143/~174px, both keep the honestly-earned
-             384 -- kitTierCss only tightens the cap for the one that would
-             otherwise escalate). */
+             fb-hero-pet above, same lizard. The human tile below is no longer
+             capped (kitTierCss now returns the honest measured width): the
+             helmet/jersey land on 384, the cleats' steeper fit-feet crop
+             (~225px) clears no tier and takes the 640 master, and none of it
+             is decoded at all unless this body is actually open. */
           const art = g.pets
             ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 192)
             : `<div class="fb-worn">${wornArtHtml(id, kitTierCss(BH_BY_ID[id]))}</div>`;
@@ -9510,9 +9602,7 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
             ? `<small class="fb-save">Was ${quote.full.toLocaleString()} · you save ${quote.save.toLocaleString()}</small>`
             : ''}
         </div>
-      </div>
-    </div>
-  </details>`;
+      </div>`;
 }
 
 async function renderShop(el) {
@@ -9969,16 +10059,13 @@ async function renderShop(el) {
   }));
   // Drop pieces: same two-tap arm-then-buy ritual as the coin shop, because these
   // are the most expensive single taps in the game.
-  // Football kit, 2026-09-04: the kit room's team picker re-renders the shelf on its own team
-  $('#fbTeam', el)?.addEventListener('change', e => { S.fbTeam = e.target.value; rerender(); });
-  /* The rail's "Kit room" button lands here. Consume the flag BEFORE the scroll
-     so a rerender() from any buy on this screen is a normal render again, and
-     bring the shelf to them rather than leaving it open below the fold. */
-  if (S.fbJump) {
-    S.fbJump = false;
-    requestAnimationFrame(() => $('#fbSect', el)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
-  }
-  el.querySelectorAll('[data-buydrop], [data-buyfb], [data-buyfbkit]').forEach((b => {
+  /* PULLED INTO A NAMED FUNCTION (2026-09-05) so the kit room's 'toggle'
+     listener below can wire the SAME buttons a second time, scoped to just
+     the tiles it just inserted: the kit room's own buy buttons do not exist
+     in `el` at all until the section is opened for the first time (its body
+     is lazy, see footballShelfHtml), so the one-shot querySelectorAll below
+     never sees them unless the section started open. */
+  const wireDropBuyButtons = scope => scope.querySelectorAll('[data-buydrop], [data-buyfb], [data-buyfbkit]').forEach((b => {
     let t = null;
     let busy = false;
     const reset = () => { b.dataset.armed = '0'; b.innerHTML = b.dataset.label || b.innerHTML; };
@@ -10018,6 +10105,42 @@ async function renderShop(el) {
       rerender();
     });
   }));
+  wireDropBuyButtons(el);
+  // Football kit, 2026-09-04: the kit room's team picker re-renders the shelf on its own team
+  $('#fbTeam', el)?.addEventListener('change', e => { S.fbTeam = e.target.value; rerender(); });
+  /* THE KIT ROOM'S BODY IS LAZY (2026-09-05): it does not exist in the markup
+     at all until #fbSect is opened, so its <img> tags never decode on a
+     player who never looks (see the census note on footballShelfHtml). This
+     is what fills it in, once, on the details' native 'toggle' event -- the
+     same event teaser-banner's .gbn-body is filled on (1C). team/sold/price/
+     quote/bundleOwned are re-derived here rather than threaded out of
+     footballShelfHtml's closure: they are five cheap synchronous reads, and
+     the alternative (storing them on S) is more state for the same answer.
+     `body.childElementCount` guards against re-filling an already-open
+     section: wasOpen.fb re-renders #fbSect already open AND already filled
+     (footballShelfHtml does that eagerly), so the FIRST toggle after a
+     buy/team-change re-render fires 'toggle' with nothing to do. */
+  $('#fbSect', el)?.addEventListener('toggle', e => {
+    if (!e.target.open) return;
+    const body = $('.t3-dropbody', e.target);
+    if (!body || body.childElementCount) return;
+    const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];
+    const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
+    const sold = FOOTBALL_SHELF;
+    const ownedHere = footballOwnedGarmentCount(ownedCos);
+    const quote = footballBundleQuote(ownedHere);
+    const bundleOwned = ownedHere === sold.length;
+    body.innerHTML = footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned);
+    $('#fbTeam', body)?.addEventListener('change', ev => { S.fbTeam = ev.target.value; rerender(); });
+    wireDropBuyButtons(body);
+  });
+  /* The rail's "Kit room" button lands here. Consume the flag BEFORE the scroll
+     so a rerender() from any buy on this screen is a normal render again, and
+     bring the shelf to them rather than leaving it open below the fold. */
+  if (S.fbJump) {
+    S.fbJump = false;
+    requestAnimationFrame(() => $('#fbSect', el)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }
   // the drop art sits small inside a 640² sprite sheet, so trim it to its ink
   // the same way the reveal cards do rather than showing a stamp in a big box
   hydratePackArt(el, '.t3-art[data-art]');
@@ -11117,7 +11240,9 @@ async function renderFoods(el) {
   }
   function bind() {
     bindRows(list);
-    $('#newFood', list)?.addEventListener('click', () => openFoodForm({}));
+    // P1 playtest: bare {} lost the selected meal (defaulted to Breakfast); every
+    // other opener here carries mealDefault()'s precedence, this one now does too.
+    $('#newFood', list)?.addEventListener('click', async () => openFoodForm({ meal: await mealDefault() }));
     $('#myFoodsQ', list)?.addEventListener('input', e => {
       const q = normFoodName(e.target.value);
       const hit = q ? customs.filter(f => normFoodName(f.name).includes(q)) : customs;
@@ -13368,7 +13493,7 @@ function newsBannerHtml(unseen, eq, dayClose) {
    the bottom of the file; the NEWS filter below reads it at MODULE LOAD, so every boot threw
    "Cannot access 'SHOW_BETA_THANKS' before initialization" and the app never opened its
    database. Caught only by the browser gate: app.js never loads in node. */
-const SHOW_BETA_THANKS = true; // gate the TestFlight invite card (openThanksCard, Crew entry, News row); false hides them in store builds
+const SHOW_BETA_THANKS = !STORE_BUILD; // internal invite card, Crew strip and News row; absent from store builds
 
 const NEWS = [
   /* THE WANDERER. Tom kept this row when every other launch interstitial went in
@@ -13471,7 +13596,7 @@ async function openWhatsNew() {
   const cards = CHANGES.map(c => `
     <div class="wn-entry">
       <div class="wn-head"><b>${esc(c.title)}</b><span class="wn-date">${esc(c.date)}</span></div>
-      ${c.needsBuild ? `<div class="wn-buildflag">📲 Needs the latest app update ${isNative() ? '(TestFlight / Play Store)' : ''} to work on your phone</div>` : ''}
+      ${c.needsBuild ? `<div class="wn-buildflag">📲 Needs the latest app update ${isNative() ? '(App Store / Play Store)' : ''} to work on your phone</div>` : ''}
       ${c.hero ? `<div class="wn-hero">
         ${c.hero.tag ? `<span class="rip">${esc(c.hero.tag)}</span>` : ''}
         <img src="${esc(c.hero.img)}" alt="${esc(c.hero.alt || '')}">
@@ -13494,7 +13619,7 @@ async function openWhatsNew() {
         <p class="note" style="margin:2px 2px 14px">Boneheadz Gym changes often. Here's what's new, newest first.</p>
         ${isNative() ? `<div class="wn-update-note">
           <b>📲 Update the app to get everything</b>
-          <span>The game here refreshes on its own, but brand-new <b>device features</b> (like workout &amp; bike-ride tracking from your watch) only arrive when you update the actual app. Open <b>TestFlight</b> (iPhone) or the <b>Play Store</b> (Android) and tap <b>Update</b>, then reopen Boneheadz.</span>
+          <span>The game here refreshes on its own, but brand-new <b>device features</b> (like workout &amp; bike-ride tracking from your watch) only arrive when you update the actual app. Open the <b>App Store</b> (iPhone) or the <b>Play Store</b> (Android) and tap <b>Update</b>, then reopen Boneheadz.</span>
         </div>` : ''}
         ${cards}
       </div>
@@ -13657,7 +13782,7 @@ async function renderSettings(el) {
     const AppPlug = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
     if (AppPlug && AppPlug.getInfo) { const i = await AppPlug.getInfo(); shellV = ` · shell ${i.version} (${i.build})`; }
   } catch { /* web: no shell */ }
-  const diag = await diagnosticsLine();
+  const diag = STORE_BUILD ? '' : await diagnosticsLine();
   const apiConfigured = !!(await social.apiBase());
   const me = apiConfigured ? await social.socialMe() : null;
   const crewData = me ? await social.listFriends().catch(() => ({ friends: [], incoming: [], outgoing: [] })) : null;
@@ -13832,7 +13957,7 @@ async function renderSettings(el) {
     ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
     <div class="settings-row"><div class="lab"><b>App version</b><span>Build ${APP_BUILD}${shellV} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
-    <div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>
+    ${STORE_BUILD ? '' : `<div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>`}
   </div>
 
   <p class="note" style="text-align:center;margin-top:18px">
@@ -15159,7 +15284,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <span class="bh-pill ward-fits">${fitCount}/${MAX_FITS} fits</span>
     </div>` : tab === 'shop' ? gwartHeroHtml() : `
     <div class="bh-hero mini">
-      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny })}</div>
+      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny, petWear: S.petWear })}</div>
       <div class="bh-hero-meta">
         <b class="bh-title">Lv ${lvl.level} · ${esc(myTitle || lvl.name)}</b>
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
@@ -19583,7 +19708,7 @@ function vaultRowHtml(v) {
 
 function sleepDiagHtml(dg) {
   if (!dg) {
-    return `<p class="note">Nothing recorded yet. Tap <b>Sync now</b> above. If it still says this afterwards, the app on this phone is older than the sleep diagnostics and needs a TestFlight update.</p>`;
+    return `<p class="note">Nothing recorded yet. Tap <b>Sync now</b> above. If it still says this afterwards, the app on this phone is older than the sleep diagnostics and needs an App Store update.</p>`;
   }
   const asleep = dg.rawAsleepMin || 0, inBed = dg.inBedMin || 0, n = dg.samples ?? 0;
   const verdict =

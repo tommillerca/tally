@@ -555,6 +555,46 @@ for (const [label, typed] of [['empty', ''], ['spaces', '   ']]) {
   await closeSheets();
 }
 
+/* P2 playtest (2026-09-04): a GROUPED comma in #qtyIn is refused on Add, and
+   that part always worked. But the tap that commits also blurs the field, and
+   the blur handler used to clamp #qtyIn's TEXT to "0.25" regardless of why
+   sel.qty was not > 0, while the preview (#pvKcal, #pvServ) still showed the
+   stale "0" / "0 x 1 large" from the live-typing coercion. Two different
+   fields told two different stories, neither matching the "1,234" the toast
+   quoted and neither matching the log row that never wrote. Assert the field,
+   the preview and the store all agree: nothing here should ever look valid
+   when the draft holds no valid amount. */
+console.log('\n--- PORTION QTY FIELD/PREVIEW AGREEMENT ---');
+await evalPage(async () => { const { db } = await import('./js/db.js'); await db.clear('log'); });
+await closeSheets();
+await openPortion('serving');
+await killToast();
+await typeInto('#qtyIn', '1,234');
+await sleep(300);
+await tap('#addBtn');   // the same gesture that blurs the field
+const commaToast = await waitToast();
+await sleep(400);
+const state = await evalPage(async () => {
+  const rows = await (await import('./js/db.js')).db.all('log');
+  return {
+    field: document.querySelector('#qtyIn')?.value ?? null,
+    preview: document.querySelector('#pvKcal')?.textContent ?? null,
+    servPreview: document.querySelector('#pvServ')?.textContent ?? null,
+    rows: rows.length,
+  };
+});
+check('QTY-COMMA the field keeps showing what was typed, not a silently-clamped 0.25',
+  state.field === '1,234', `field="${state.field}"`);
+check('QTY-COMMA the preview is blanked, not a valid-looking "0 kcal"',
+  state.preview === '-', `preview="${state.preview}"`);
+check('QTY-COMMA the serving preview is blanked too, not "0 x ..."',
+  state.servPreview === '', `servPreview="${state.servPreview}"`);
+check('QTY-COMMA and nothing reached the log',
+  state.rows === 0, `stored=${JSON.stringify(state)}`);
+check('QTY-COMMA the refusal still names the fix',
+  /comma/i.test(commaToast), `toast="${commaToast}"`);
+await closeSheets();
+
 /* ============ THE COMMA, PINNED SEPARATELY AND BOTH WAYS ============ */
 console.log('\n--- THE COMMA CASE ---');
 await reset('kg');

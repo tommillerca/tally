@@ -17,6 +17,17 @@ npx cap sync ios
 npx cap open ios        # opens Xcode
 ```
 
+For an App Store archive, build the web bundle with the store flag enabled:
+
+```
+cd native
+STORE_BUILD=1 ./build-www.sh
+npx cap sync ios
+```
+
+The flag is applied only to the copied `native/www/js/app.js`. The shared web
+source and ordinary internal native builds keep the beta feedback surfaces.
+
 In Xcode: select your team under Signing & Capabilities, pick your iPhone or a
 simulator, press Run. HealthKit capability + entitlements are already wired.
 Note: HealthKit provisioning is unreliable on a free personal team; the paid

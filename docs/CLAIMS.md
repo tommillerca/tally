@@ -39,6 +39,32 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 9. PROOF: dead-shell-audit.mjs | REACH: On a slow connection, the dead-shell watchdog no longer reloads the app while js/app.js is still downloading. It now waits for the module script to settle (load or error) before arming its 12s check, so a genuinely dead shell still recovers on the same schedule, but a merely slow one is no longer reloaded mid-download.
 
+10. PROOF: meal-memory-audit.mjs (MYFOODS_NEW) | REACH: Add Food, pick a meal, tap My foods, tap Create a food: the portion screen you land on keeps the meal you picked instead of jumping back to Breakfast.
+
+11. PROOF: input-validation-audit.mjs (QTY-COMMA) | REACH: On the portion screen, typing a thousands-comma amount like "1,234" into Servings is still refused, and now the field and the preview agree about it: the box keeps showing what you typed and the preview goes blank, instead of the box quietly showing "0.25" next to a preview still reading "0 kcal".
+
+12. PROOF: unit.test.js | REACH: Logging a forgotten meal onto a past day (the day's Add sheet, a relog, Quick add) no longer pays XP, a streak milestone, or a badge. Past days stay fully editable (an existing entry there still saves after being edited), but only a log dated today earns a reward. Gwart's line on a past day no longer claims the day is "finished"; it now says the day is open to fix, just unpaid.
+
+13. PROOF: football-render-audit.mjs (STAGE, proved red on the unfixed code) | REACH: Open your Bonehead's Backpack or Build tab with a lizard equipped and its helmet and jersey worn: the lizard on the big portrait now wears them too, tinted to your team, instead of the bare species art. True for the base lizard, its shiny, and the Day One Lizard alike.
+
+14. PROOF: unit.test.js, football-kit-audit.mjs | REACH: Buying the full football kit at the same time as buying one of its garments separately (two overlapping taps) no longer overcharges. The kit bundle now re-checks what it actually delivered after an overlapping single-garment buy lands, and refunds the difference, so a player is never charged for a garment the bundle didn't end up needing to grant.
+
+15. PROOF: a11y-audit.mjs (foodFieldNames) | REACH: A screen reader creating a custom food, or using Quick add, now hears each number field by name (Calories, Protein, Carbs, Fat, Sodium, Grams, and so on) instead of an unlabelled textbox, or three identical fields for Protein, Carbs and Fat.
+
+## store build (2026-09-05)
+
+1. PROOF: store-copy-lint.mjs, unit.test.js | REACH: The App Store archive has no internal-distribution invitation, thank-you strip, invitation News item, testing update copy, or Settings diagnostics. Web and internal builds keep those feedback routes.
+
+## r34 backup version (2026-09-05)
+
+1. PROOF: backup-conflict-audit.mjs (gate-registered PURE), api.test.mjs (local Worker) | REACH: Two devices that edit from the same cloud backup no longer overwrite each other. The stale device pulls the winner, merges both saves, and retries once.
+
+## gate-13 audit fixes (2026-09-05)
+
+1. PROOF: shell-watchdog-audit.mjs | REACH: NONE beyond what dead-shell-audit.mjs (a real-browser audit) already reaches: this closes a gap in the test's own fake DOM, which had stopped modelling the watchdog's script-load gate and was passing without ever running an assertion. No app behaviour changed.
+
+2. PROOF: news-banner-audit.mjs | REACH: The News banner's row icons on Today size and centre correctly the first time you open the banner, every time, instead of an even coin flip between a correct icon and one still at its native, oversized, off-centre size.
+
 ## v473
 
 1. PROOF: unit.test.js (gate-registered PURE), "a downloaded build can actually start: boot posts SKIP_WAITING to a waiting worker". Proven red on the tree that shipped v472: "nothing in the app tells a waiting worker to take over, so a downloaded build can never start". The defect it closes was measured on a real device, not modelled: a phone sat on v470 through repeated force quits while the server served v472, because the service worker deliberately never calls skipWaiting() and nothing had ever posted the message that lets a waiting worker in. | REACH: Open the app after a release. It reloads into the new build by itself instead of staying on the old one. A device already stuck before v473 cannot be rescued by it and needs a reinstall.

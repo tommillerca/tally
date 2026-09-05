@@ -14,6 +14,12 @@ export const CHANGES = [
     'The weekly step race now pays the place you actually finished even if you opened the app right as the week rolled over. Rolling into a new week used to erase your own spot on the old week\'s board a moment before the race paid out, so the one player who had just played was the one player who got nothing.',
     'The Pit\'s move tray shows what a move costs on its own line in the button\'s corner, instead of crowding the words into the hint underneath and pushing a row off the bottom of the tray.',
     'On a slow connection, the app no longer reloads itself while the next build is still downloading. It only steps in once a build has genuinely stalled.',
+    'Create a food from My foods while adding to a meal, and Add Food now keeps that meal all the way through: the portion screen you land on stays put instead of jumping back to Breakfast.',
+    'Typing a thousands-comma amount like 1,234 into Servings is still refused, but the box and the calorie preview now agree about it, instead of the box quietly showing 0.25 next to a preview reading 0 kcal.',
+    'Logging a forgotten meal onto a past day still saves in full, but only a log dated today pays XP, a streak milestone or a badge. Gwart\'s line on a past day says the day is open to fix, not finished.',
+    'Equip the lizard\'s helmet and jersey and it now wears them on the Wardrobe\'s Backpack and Build stage too, tinted to your team, instead of drawing as the bare species art there.',
+    'Buying the full football kit at the same moment as one of its pieces separately no longer overcharges: the kit re-checks what it actually delivered and refunds the difference.',
+    'Screen readers now hear every food field by its own name, Calories, Protein, Carbs, Fat, Sodium, Grams and so on, instead of an unlabeled textbox or three identical fields for Protein, Carbs and Fat.',
   ] },
 
   { n: 473, date: '2026-09-04', title: 'Updates can actually start', items: [
