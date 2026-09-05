@@ -9787,6 +9787,46 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pdk-tile:active, .pdk-teaser:active { transform: translateY(2px); box-shadow: 0 1px 0 #17151d; }
 .pdk-tile.on, .pdk-teaser.on { border-color: #a5e847; box-shadow: 0 3px 0 #17151d, 0 0 0 2px rgba(165, 232, 71, .35); }
 
+/* ---------- The Kennel, Kennel Phase A (2026-09-05) ----------
+   A display screen, not a shop: no glow anywhere on a pet here, deliberately
+   (Tom's ruling) -- .k-cell and .k-dot carry no box-shadow at all, unlike the
+   Paddock's rarity glow above. Owned vs unowned is colour and opacity only. */
+.k-gwart { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; color: var(--text-2); margin: 4px 0 14px; }
+.k-gwart b { color: var(--text); }
+/* SIX ROWS, ONE SCREEN, EVEN AT 320x568 (the narrowest phone this app
+   supports): a 6-owned-species roster (all six ordinary hatch species,
+   Bumbleseal included per Tom's ruling) must fit with no scroll, which is why
+   the row is 60px, not the plan's original 72px -- measured over budget at
+   72px on the narrow phone with all six owned. */
+.k-roster { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 14px; }
+.k-row { display: flex; align-items: center; gap: 12px; min-height: 60px; background: var(--surface-2); border-radius: var(--radius-sm); padding: 6px 12px; }
+.k-thumb { flex: 0 0 48px; width: 48px; height: 48px; display: grid; place-items: center; }
+.k-id { min-width: 0; flex: 1; }
+.k-id b { display: block; font-size: 14px; }
+.k-dots { display: flex; gap: 6px; margin-top: 4px; }
+.k-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-3); border: 1px solid var(--line-strong); display: inline-block; }
+.k-dot.on { background: var(--accent); border-color: var(--accent); }
+.k-cap { font-size: 11.5px; color: var(--text-3); margin: 3px 0 0; }
+.k-empty { color: var(--text-3); font-size: 13px; padding: 12px 0; }
+/* LABEL ABOVE, NOT BESIDE: a side label would eat into the same 5-column
+   budget the plan derives from sheet width alone (viewport - outer pad - four
+   12px gutters, over five columns), so the cell size computed in JS would no
+   longer match what CSS actually gives the row. Stacking keeps one formula. */
+/* COLUMN HEADERS, one row, above every species block -- same flex/gap as
+   .k-grid-cells so its 5 labels land over the 5 cells beneath them in every
+   row. DESIGN.md's one section-header idiom (.sect-h: 12px/700/.06em/upper-
+   case/--text-3), sized down for a column as narrow as 40px: "Midnight" does
+   not fit at 12px, so this shrinks the size rather than the tracking or the
+   case, keeping the same voice as every other section header. */
+.k-grid-head { display: flex; gap: 12px; margin-bottom: 4px; }
+.k-grid-head-cell { flex: 1; text-align: center; font-size: 9px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--text-3); line-height: 1.2; }
+.k-grid-row { margin-bottom: 10px; }
+.k-grid-label { display: block; font-size: 11px; color: var(--text-3); margin-bottom: 4px; }
+.k-grid-cells { display: flex; gap: 12px; }
+.k-cell { position: relative; aspect-ratio: 1; flex: 1; background: var(--surface-2); border-radius: var(--radius-sm); display: grid; place-items: center; overflow: hidden; }
+.k-cell.locked .petcrop img { filter: grayscale(1) brightness(.4); opacity: .55; }
+.k-cell svg { position: absolute; bottom: 4px; right: 4px; color: var(--text-3); }
+
 /* ---------- Discord card hero (Tom, 2026-08-12) ----------
    "the discord icon with a bonehead chillin next to it or something to really
    grab the attention". Two figures on one baseline, so it reads as a pair

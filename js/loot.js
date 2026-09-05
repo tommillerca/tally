@@ -7,6 +7,7 @@ import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneh
 import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
+import { isMorph, rollMorph, ownedPairs } from './pets.js';
 
 export const RARITIES = {
   common:    { label: 'Common',    color: '#9fac9f', w: 52, dupe: 10 },
@@ -1144,7 +1145,13 @@ export async function lifetimeStepsSum() {
    so it needs the row rather than the write, and building it here is what stops
    the two shapes drifting apart. */
 export async function eggRow(source, goal = EGG_GOAL_STEPS) {
-  return { id: newId(), kind: 'egg', stepsAtStart: await lifetimeStepsSum(), goal, source, ts: Date.now() };
+  /* Kennel Phase A, section 2.2: the MORPH is rolled here, at grant, not at hatch.
+     The species stays a hatch-time decision (rule 0.4, unchanged rng order in
+     hatchEgg below) so two eggs granted the same day cannot both mint the same
+     fresh species; the morph has no such constraint, and rolling it now is what
+     lets the egg's own shell carry a tint before it hatches (section 2.5). */
+  const morph = rollMorph(ownedPairs(await petInstances()));
+  return { id: newId(), kind: 'egg', stepsAtStart: await lifetimeStepsSum(), goal, source, morph, ts: Date.now() };
 }
 export async function grantEgg(source, goal = EGG_GOAL_STEPS) {
   const row = await eggRow(source, goal);
@@ -1187,8 +1194,9 @@ export const SHINY_CHANCE = 0.03;
 /* WHICH SPECIES HAVE SHINY ART. The shiny render path builds
    assets/bh/C/shiny/<id>.png, and minting a shiny instance for a species with
    no file there hands the player a broken image on what may be the most
-   premium item in the game (Bumbleseal is 50,000 coins and 1% of eggs; her
-   shiny would be 1 in 3,333). A browser cannot read the folder, so this list
+   premium item in the game (Bumbleseal is sold for 50,000 coins and, since
+   Kennel palettes 2026-09-05, hatches at the same even share as C1-C5). A
+   browser cannot read the folder, so this list
    is the folder's contents by hand, and pet-pool-audit pins the two to each
    other in both directions: an id here without art fails, and NEW SHINY ART
    SHIPPED WITHOUT EXTENDING THIS LIST FAILS TOO, which is what lets a future
@@ -1209,11 +1217,19 @@ export const SHINY_ART = ['C1', 'C2', 'C3', 'C4', 'C5'];
  * Two kinds of pet never take an even share:
  *   `exclusive`   never appears at all (awarded by name only).
  *   `hatchChance` appears at exactly that rate and is excluded from the even
- *                 split below. Bumbleseal (C6) is 1%: she is sold for 50,000
- *                 coins, and an even share of today's non-common pool would be
- *                 25%, which would make the price meaningless.
+ *                 split below.
  * Both are read off the catalogue rather than listed here, so the next pet
  * inherits the rule by declaring a field.
+ *
+ * KENNEL PALETTES, 2026-09-05. Tom: "roll Bumbleseal into things, her time as
+ * shop-exclusive has passed." Bumbleseal (C6) used to carry `hatchChance: 0.01`
+ * here -- sold for 50,000 coins, and an even share of the non-common pool
+ * would have been 25%, which would have made the price meaningless. That field
+ * is gone from her catalogue entry (data/boneheadz.js, scripts/build-cosmetics.py
+ * SPECIALS): she is now an ordinary member of `rest` below, same even split as
+ * C1-C5, still hatchable AND still separately purchasable in Gwart's Menagerie
+ * (js/loot.js buyPetItem / PET_SHOP.pet, untouched -- two independent
+ * acquisition paths, same as before). See tests/pet-pool-audit.mjs.
  *
  * `owned` is a Set of owned cosmetic ids: unowned species are preferred, and the
  * common pets are the consolation the pool falls back to when nothing better is
@@ -1225,9 +1241,11 @@ export function pickRandomPet(owned) {
   const rest = pets.filter(i => !i.hatchChance);
   const fresh = rest.filter(i => !owned.has(i.id));
   const poolAll = fresh.length ? fresh : rest;          // own them all -> a stacking dupe
-  const pool = poolAll.filter(i => i.rarity !== 'common');
-  const src = pool.length ? pool : poolAll;
-  return src[Math.floor(rng() * src.length)];
+  /* Kennel Phase A, section 2.1 (dupe pool fix): this used to filter to
+     `i.rarity !== 'common'`, dropping C3 Catfish and C4 Beardie from every
+     duplicate egg -- the comment that used to sit here admitted the rarity
+     weighting it implied never existed. Uniform pick over poolAll instead. */
+  return poolAll[Math.floor(rng() * poolAll.length)];
 }
 
 // Crack a ready egg: rolls a PET (slot C). A NEW species if you're missing any
@@ -1247,6 +1265,7 @@ export async function hatchEgg(invId) {
      hands the row to exactly one caller; anybody else sees it already gone. */
   if (!(await db.take('inv', row.id))) return { ready: false };
   const owned = await ownedCosmeticIds();
+  const priorInsts = await petInstances();
   /* The roll stays UNCONDITIONAL so the rng stream is identical to before; only
      the RESULT is gated. A species outside SHINY_ART must never mint shiny:
      the instance is persistent state, and state with no art is a broken image
@@ -1254,12 +1273,21 @@ export async function hatchEgg(invId) {
   const shinyRoll = rng() < SHINY_CHANCE;
   const pick = pickRandomPet(owned);
   const isShiny = shinyRoll && SHINY_ART.includes(pick.id);
-  await addPetInstance(pick.id, { shiny: isShiny });
-  /* DUPE IS ASKED OF THE PICK, not of whether a fresh species existed. It drives
-     one line of copy ("ANOTHER ONE!" against "IT HATCHED!") and the two agreed
-     only while every pet took an even share: a 1% pet can now come out of an egg
-     while unowned species are still on the board, and she is not a duplicate. */
-  return { ready: true, item: pick, shiny: isShiny, dupe: owned.has(pick.id) };
+  /* Kennel Phase A, section 2.3: the morph rides the EGG, read here, never a new
+     rng() call (rule 0.4: the rng stream in hatchEgg is unchanged). Shiny forces
+     base (rule 0.1/1.2); a row from before this field existed, or an unknown
+     value, reads as base too. */
+  const morph = isShiny ? 'base' : (isMorph(row.morph) ? row.morph : 'base');
+  await addPetInstance(pick.id, { shiny: isShiny, morph });
+  /* DUPE IS ASKED OF THE (SPECIES, MORPH) PAIR, not of species alone (section
+     2.5): a species can now hatch in more than one colour, so owning a base
+     Bulldog already is not "another one" of a fresh Ember Bulldog. It still
+     drives the same one line of copy ("ANOTHER ONE!" against the species+morph
+     stamp) and the species-level "a 1% pet is not a duplicate while other
+     species are still on the board" case from before is unaffected: a fresh
+     species is never a (sp, morph) dupe either. */
+  const dupe = priorInsts.some(x => x.sp === pick.id && (x.morph || 'base') === morph);
+  return { ready: true, item: pick, shiny: isShiny, dupe, morph };
 }
 
 /* ============ v126: pet INSTANCES (duplicates stack) ============
@@ -1336,7 +1364,7 @@ export const BREED_COOLDOWN_STEPS = 6000;
 /* The pet a breed consumed, for the reveal to show. Display-only: kept off the
    stored instance so nothing in the save grows a field it does not need. */
 export function breedParents(fed) {
-  return [{ sp: fed.sp, shiny: !!fed.shiny, lineage: fed.lineage || 0 }];
+  return [{ sp: fed.sp, shiny: !!fed.shiny, lineage: fed.lineage || 0, morph: isMorph(fed.morph) ? fed.morph : 'base' }];
 }
 
 // Live status for the breeding UI (dust, cooldown, whether you have >=2 pets).
@@ -1559,10 +1587,13 @@ export async function petInstances() {
 // row inside one kvUpdate, rather than reading a list and writing it back whole,
 // means a concurrent salvagePet / salvageInstance / breedPets kvUpdate on this
 // same row can never be undone by this call's own stale read.
-export async function addPetInstance(sp, { shiny = false, hatchedAtSteps = null, startLevelSteps = 0 } = {}) {
+export async function addPetInstance(sp, { shiny = false, morph = 'base', hatchedAtSteps = null, startLevelSteps = 0 } = {}) {
   await petInstances();   // migrates / heals a legacy save first, same as every other writer
   const anchor = hatchedAtSteps == null ? await lifetimeStepsSum() : hatchedAtSteps;
-  const inst = { iid: newIid(sp), sp, lineage: 0, shiny: !!shiny, hatchedAtSteps: anchor };
+  // Shiny forces base (rule 0.1/1.2); an unknown morph value renders base too
+  // (rule 0.6), so it is refused at the write rather than merely at render.
+  const safeMorph = shiny ? 'base' : (isMorph(morph) ? morph : 'base');
+  const inst = { iid: newIid(sp), sp, lineage: 0, shiny: !!shiny, morph: safeMorph, hatchedAtSteps: anchor };
   await kvUpdate('petInst', raw => addInstance(Array.isArray(raw) ? raw : [], inst), []);
   await grantCosmetic(sp, 'hatch');                 // idempotent ownership flag
   const petsRec = (await kvGet('pets', {})) || {};

@@ -82,10 +82,18 @@ function catfish(px) {
 
 // Returns animated HTML for an animated pet id, or null to fall back to a static image.
 // px = target display width in CSS pixels.
+//
+// KENNEL PALETTES, 2026-09-05: this used to take a `tint` (Kennel Phase A) CSS
+// filter string for a morph recolour, applied to the whole stack. Gone: a morph
+// is now a PNG variant of the flat master (js/pets.js morphAsset), and this
+// module draws the animated species from their OWN separate layer PNGs (body,
+// eyes, drops, shadow), which scripts/build-pet-morphs.py does not recolor. A
+// morphed pet forces the static cropped image instead (js/app.js petSpriteHtml,
+// same trade wearsFootball already makes) rather than tinting these layers.
 export function animatedPetHtml(petId, px) {
   if (petId === 'C1') return cloud(px);
   if (petId === 'C3') return catfish(px);
-  if (petId === 'C4') return lizard(px);
+  if (petId === 'C4') return lizard(px, 'lizard');
   if (petId === 'CX') return lizard(px, 'lizard-amethyst'); // Founder's Lizard (survey reward)
   return null;
 }

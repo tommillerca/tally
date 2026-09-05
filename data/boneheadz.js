@@ -1874,7 +1874,6 @@ const BH_ITEMS_ALL = [
   "id": "C6",
   "slot": "C",
   "rarity": "legendary",
-  "hatchChance": 0.01,
   "name": "Bumbleseal"
  },
  {
@@ -2137,7 +2136,10 @@ export function bhFamilies(items) {
  * trim tier crops from the MASTER's own box (masterBox), never its own alpha,
  * so a mask and its master always share one rectangle and the tint cannot
  * drift off the garment. */
-export const BH_THUMB_RE = /^assets\/bh\/((?:B|BG|CB|CE|CG|CM|C|E|FW|football|G|H|IL|IR|M|P|S|SK|T|U)\/(?:shiny\/)?[^/]+\.png)$/;
+/* `morph/` TOO (Kennel palettes, 2026-09-05): assets/bh/C/morph/<species>__<morph>.png,
+ * built by scripts/build-pet-morphs.py -- one more per-species recolour set sitting
+ * beside `shiny/`, tiered by the identical mirrored KEEP regex in that script. */
+export const BH_THUMB_RE = /^assets\/bh\/((?:B|BG|CB|CE|CG|CM|C|E|FW|football|G|H|IL|IR|M|P|S|SK|T|U)\/(?:shiny\/|morph\/)?[^/]+\.png)$/;
 export const BH_THUMB_TIERS = [192, 384];
 export function bhThumb(src, px = 192) {
   const m = BH_THUMB_RE.exec(src || '');
