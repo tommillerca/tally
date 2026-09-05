@@ -94,7 +94,7 @@ import {
 } from './pit.js';
 import { HERO_EDGE } from '../data/hero-edge.js';
 import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers,
-  BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
+  BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK, bhFamilyKey, bhFamilies } from '../data/boneheadz.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal, armMidnightTimer,
@@ -14917,6 +14917,45 @@ async function renderCharacter(wrap, tab, opts = {}) {
     const items = BH_ITEMS.filter(i => i.slot === slot && owned.has(i.id));
     const gearItems = GEAR_ITEMS.filter(g => g.slot === slot && gOwnedSet.has(g.id));
     const lockedCount = BH_ITEMS.filter(i => i.slot === slot).length - items.length;
+    /* ONE TILE PER DRAWING, NOT PER ITEM (Tom, 2026-09-04: "those that have
+       collected like 1000 head slots over the years will have a messy af
+       wardrobe"). The rule is in data/boneheadz.js with the art, measured
+       against the shipped silhouettes; here it only decides what gets a tile.
+       Measured on a full v473 collection at 390x844: Hat 57 tiles -> 36, a
+       1,420px grid -> 895px, and with the football kit's 128 helmets in the
+       catalogue 185 -> 40 rather than 185. A family of ONE is untouched below:
+       same classes, same one tap, no rail, because the fix for a big collection
+       must cost a small one nothing. */
+    const fams = [...bhFamilies(items).values()];
+    /* A FAMILY TILE ANSWERS TWO QUESTIONS AND THEY HAVE DIFFERENT ANSWERS.
+       The ART is the variant you are WEARING, because the tile is the only thing
+       on this screen that can say which one is on, and a family tile drawing a
+       colour you are not wearing is worse than no collapse at all. The RARITY
+       (border and tier letter) is the family's BEST, because 51 of the 59
+       families in the catalogue are mixed-rarity (T9 runs uncommon to legendary)
+       and QA round 23 F6 shipped the tier tag so a player can FIND their
+       legendaries in a big slot. Tie the tag to the worn variant instead and
+       collapsing hides every legendary behind whatever common you happen to have
+       on. Nothing else on the tile is invented: no family name, because deriving
+       one from the members' names is exactly the name-matching this rejected. */
+    const famArt = fam => fam.find(i => eq[slot] === i.id) || famBest(fam);
+    const famBest = fam => [...fam].sort((a, b) => RAR_ORDER.indexOf(b.rarity) - RAR_ORDER.indexOf(a.rarity))[0];
+    const famArtHtml = i => `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>`;
+    /* THE RAIL IS .pw-row, THE STABLE'S PET-ACCESSORY ROW, the same one the
+       football colourway rail specialises: flex, 8px gap, mandatory x-snap and
+       the 96px tile are all inherited, and only the size and the centre snap are
+       written in app.css. Its tiles carry data-equip like any other tile, so the
+       equip path, the ring and restageWardrobe need no idea it exists. NO
+       COMMIT BAR: the football rail has one because the SHOP charges. Trying a
+       colourway you already own is free and reversible, and this screen has
+       committed on the tap since v1. Built only at tap time, so it never carries
+       a stale `equipped` from render: the caller sets that from the live DOM. */
+    const famRailHtml = fam => `<div class="fam-rail pw-row" role="group" aria-label="${esc(famBest(fam).name)} colourways">
+        ${fam.map(i => `<button class="pw-item famr r-${i.rarity}" data-equip="${i.id}" title="${esc(i.name)} · ${esc(i.rarity)}" aria-label="${esc(i.name)}, ${esc(i.rarity)}">
+          <span class="famr-art">${famArtHtml(i)}${rarityTagHtml(i.rarity)}</span>
+          <b>${esc(i.name)}</b>
+        </button>`).join('')}
+      </div>`;
 
     const pdSlot = code => {
       const meta = BH_SLOTS.find(x => x.code === code);
@@ -15079,11 +15118,28 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="sect-h" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your fit</div>
       <div class="ward-grid" data-wslot="${slot}">
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
-        ${items.map(i => `
+        ${fams.map(fam => {
+          const i = famArt(fam);
+          /* A FAMILY OF ONE IS THE TILE THAT SHIPPED, byte for byte. No badge,
+             no data-family, no rail, nothing extra to hit-test. */
+          if (fam.length === 1) return `
           <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)} · ${esc(i.rarity)}">
-            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>
+            ${famArtHtml(i)}
             ${rarityTagHtml(i.rarity)}
-          </button>`).join('')}
+          </button>`;
+          /* data-equip AND data-family: the tap equips what the tile is showing
+             (so wearing this piece still costs exactly one tap, as it does
+             today) and opens the rail underneath it. data-fam-ids is what lets
+             restageWardrobe keep the ring and the art on the family tile when a
+             SIBLING is equipped from the rail. */
+          const best = famBest(fam);
+          return `
+          <button class="ward-cell fam r-${best.rarity} ${fam.some(v => eq[slot] === v.id) && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" data-family="${esc(bhFamilyKey(i))}" data-fam-ids="${esc(fam.map(v => v.id).join(' '))}" title="${esc(i.name)} · ${fam.length} colourways · best ${esc(best.rarity)}" aria-expanded="false" aria-label="${esc(i.name)}, ${fam.length} colourways, best ${esc(best.rarity)}">
+            ${famArtHtml(i)}
+            ${rarityTagHtml(best.rarity)}
+            <span class="ward-fam-n" aria-hidden="true">${fam.length}</span>
+          </button>`;
+        }).join('')}
         ${gearItems.map(g => {
           const art = BH_BY_ID[g.artId];
           const locked = wLevel < g.minLevel;
@@ -15335,6 +15391,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
       $('.mog-panel', wrap)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' });
     });
     $$('[data-pd]', content).forEach(wirePd);
+    /* NAMED, because the colourway rail's tiles are created after this runs and
+       must be wired by the SAME function. A second copy of the equip path for
+       the rail is how the two drift, and one of them is the one that spends. */
     /* A PICTURE THAT TAKES STATTED GEAR OFF ARMS FIRST (QA round 22 W5). Measured
        blind: one click on a .ward-cell in this grid dropped loadout.H, said nothing
        (#toast empty at 120/300/600ms) and left the stat chips reading the OLD
@@ -15363,7 +15422,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const done = await restageWardrobe(content, slot);
       if (!done) renderCharacter(wrap, 'wardrobe', { instant: true });   // fall back rather than leave it stale
     };
-    $$('[data-equip]', content).forEach(cell => {
+    /* ONE WIRING FUNCTION, so W5's arm-then-confirm is true on a rail tile too.
+       A tap that displaces statted gear must arm first wherever it is tapped;
+       a second copy of the equip path for the rail is how the two drift. */
+    const wireEquip = cell => {
+
       if (!wornGear) { cell.addEventListener('click', () => doEquip(cell)); return; }
       /* armToConfirm relabels the tile with innerHTML, and its cool-off restores
          the markup but not the pixels: a <canvas> comes back blank. Listener
@@ -15372,7 +15435,50 @@ async function renderCharacter(wrap, tab, opts = {}) {
          re-renders the screen and the cell is gone, so it is a no-op there. */
       cell.addEventListener('click', () => setTimeout(() => { if (cell.isConnected) hydratePackArt(cell, '.ward-art[data-art]'); }, ARM_COOLOFF_MS + 20));
       armToConfirm(cell, `Tap again: takes off ${wornGear.name}, ${gearLabel(wornGear).replace(/\+/g, '-')}`, () => doEquip(cell));
-    });
+    };
+    $$('[data-equip]', content).forEach(wireEquip);
+    /* THE RAIL IS DOM STATE, NOT APP STATE, on purpose. It is opened and closed
+       by the tile above it and nothing else ever needs to know: an equip tap
+       restages rather than re-renders (QA round 23 F1), so the only thing that
+       can close it out from under the player is changing slot, which SHOULD
+       close it. No S key, no persistence, no re-render path to keep in sync.
+       COLS mirrors .ward-grid's `repeat(4, ...)` in app.css: the rail is
+       full-width and goes at the END of the tapped tile's row, so it never
+       leaves a hole mid-row and never lands a screen away from what opened it. */
+    const COLS = 4;
+    $$('.ward-cell.fam[data-family]', content).forEach(tile => tile.addEventListener('click', () => {
+      const grid = tile.closest('.ward-grid');
+      if (!grid) return;
+      const open = $('.fam-rail', grid);
+      const wasMine = open && open.dataset.family === tile.dataset.family;
+      if (open) { open.remove(); $$('.ward-cell.fam', grid).forEach(t => t.setAttribute('aria-expanded', 'false')); }
+      if (wasMine) return;                       // second tap on the same tile closes it
+      const ids = new Set(tile.dataset.famIds.split(' '));
+      const fam = BH_ITEMS.filter(i => ids.has(i.id));
+      const rail = document.createElement('div');
+      rail.innerHTML = famRailHtml(fam);
+      const node = rail.firstElementChild;
+      node.dataset.family = tile.dataset.family;
+      const kids = [...grid.children];
+      const at = kids[Math.floor(kids.indexOf(tile) / COLS) * COLS + COLS] || null;
+      grid.insertBefore(node, at);
+      tile.setAttribute('aria-expanded', 'true');
+      /* THE RING COMES OFF THE LIVE DOM, NOT OFF `eq`. An equip tap restages
+         rather than re-renders, so by the time a rail is opened `eq` can be
+         several garments stale; the family tile's own data-equip is what
+         restageWardrobe keeps current. */
+      const worn = tile.classList.contains('equipped') ? tile.dataset.equip : '';
+      $$('[data-equip]', node).forEach(b => b.classList.toggle('equipped', b.dataset.equip === worn));
+      $$('[data-equip]', node).forEach(wireEquip);
+      hydratePackArt(node, '.ward-art[data-art]');
+      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      /* THE ONE YOU ARE WEARING OPENS UNDER YOUR THUMB. The rail snaps to
+         centre, so without this a family whose worn colourway is 20th opens on
+         the first tile and the player has to hunt for the ring they came to
+         move. `inline` only, and block: 'nearest', so this scrolls the rail and
+         not the page out from under the tap. */
+      $('.equipped', node)?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    }));
     /* A LOOK TAP MOVES FOUR THINGS AND REBUILDS NOTHING (QA round 23 F1).
        Preview and commit used to call renderCharacter(wrap, 'wardrobe',
        { instant: true }). That rebuilds #chBody, so #chContent held ZERO elements
@@ -23746,7 +23852,32 @@ async function restageWardrobe(content, slot) {
   if (!grid) return false;
   const wanted = eqNow[slot] || '';
   for (const c of $$('[data-equip]', grid)) {
-    c.classList.toggle('equipped', (c.dataset.equip || '') === wanted);
+    /* A COLLAPSED FAMILY TILE RINGS FOR ANY OF ITS VARIANTS. Without the
+       data-fam-ids branch, equipping a sibling out of the colourway rail leaves
+       the family tile dark while the piece is on the Bonehead, which is the one
+       thing collapsing must never do. A plain tile has no data-fam-ids and
+       falls through to exactly the comparison it always used. */
+    const ids = c.dataset.famIds ? c.dataset.famIds.split(' ') : [c.dataset.equip || ''];
+    c.classList.toggle('equipped', ids.includes(wanted));
+  }
+  /* AND IT DRAWS THE VARIANT IT IS RINGING. The tile's data-equip is the piece
+     it is showing, so it also has to move, or the next tap on the family tile
+     puts back the colour you just changed out of. */
+  for (const c of $$('.ward-cell.fam[data-fam-ids]', grid)) {
+    if (!c.dataset.famIds.split(' ').includes(wanted) || c.dataset.equip === wanted) continue;
+    const art = BH_BY_ID[wanted];
+    const cv = $('canvas.ward-art', c);
+    if (!art || !cv) continue;
+    c.dataset.equip = wanted;
+    cv.setAttribute('data-art', bhTrim(bhAsset(art)));
+    cv.setAttribute('aria-label', `${art.name}, ${art.rarity}`);
+    // the accessible name and the tooltip both name the piece on the tile, so
+    // they move with it; the count and the family's best tier do not change.
+    const n = c.dataset.famIds.split(' ').length;
+    const best = ([...c.classList].find(k => k.startsWith('r-')) || `r-${art.rarity}`).slice(2);
+    c.setAttribute('aria-label', `${art.name}, ${n} colourways, best ${best}`);
+    c.title = `${art.name} · ${n} colourways · best ${best}`;
+    await hydratePackArt(c, '.ward-art[data-art]');
   }
   return true;
 }

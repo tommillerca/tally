@@ -2025,6 +2025,66 @@ export const BH_ITEMS_WITH_UNRELEASED = BH_ITEMS_ALL;
 export const BH_BY_ID = Object.fromEntries(BH_ITEMS_ALL.map(i => [i.id, i]));
 export function bhAsset(item) { return item.file || `assets/bh/${item.slot}/${item.id}.png`; }
 
+/* ================= WHICH ITEMS ARE THE SAME DRAWING =================
+ *
+ * Tom, 2026-09-04: "we need to collapse similar items into a different interface
+ * because as we have different colourways and variations like this helmet or
+ * like the kitsune mask those that have collected like 1000 head slots over the
+ * years will have a messy af wardrobe."
+ *
+ * IT LIVES HERE, BESIDE bhAsset, FOR bhAsset'S OWN REASON: it is a question
+ * about the ART, a pure node test has to be able to ask it without evaluating
+ * js/app.js, and data/football-teams.js spreads its items into this catalogue
+ * and must get the same answer with no second copy of the rule.
+ *
+ * THE RULE IS THE ID STEM, AND IT IS MEASURED, NOT ASSUMED. Three candidates
+ * were graded against the shipped art by alpha-silhouette IoU at 256px (a
+ * recolour of one drawing keeps its outline; two different drawings do not),
+ * over all 363 player-slot items on v473:
+ *
+ *   rule            tiles  same-family pairs  pairs under IoU 0.80
+ *   id stem          233         125                    0
+ *   name prefix      320          38                   27
+ *   name last word   183         175                   17
+ *
+ * The id stem's WORST pair over the whole catalogue is IL16-1 Red Banner against
+ * IL16-3 Grin Banner at 0.907, and 99 of its 125 pairs are silhouette-identical.
+ * It is not a heuristic that happens to work: scripts/build-cosmetics.py emits
+ * `-N` for exactly this, so the stem is the artist's own statement of intent.
+ * The two rules the naming tempts you into both misfire on sight -- name prefix
+ * puts H10-4 Skull Band with HS22 Skull Cap (IoU 0.000) and G10 Ice Pair with
+ * GS3 Ice Tooth (0.051); name last word puts M3 Chewed Straw with M8 Gold Straw
+ * (0.000) and IL16-1 Red Banner with IL9 Sun Banner (0.019).
+ *
+ * `file` COMES FIRST BECAUSE ONE PNG IS ONE DRAWING BY DEFINITION. The football
+ * kit's 32 team helmets are `fb-<team>-helmet`, which share no id stem at all,
+ * and are one master PNG tinted at runtime. Their `file` is that master, so they
+ * collapse to one tile with no edit to the football data and no football
+ * knowledge here. Nothing in this file sets `file`, so the branch is inert for
+ * every hand-drawn item.
+ *
+ * `family` IS THE ESCAPE HATCH AND IS DELIBERATELY UNUSED TODAY. The known
+ * ceiling of the stem rule is UNDER-collapse, never over: series authored before
+ * the suffix convention wear four ids for one drawing (G3 One Silver / G6 One
+ * Amethyst / G9 One Ice / G13 One Gold; HS14-16 the beanies; HS19-21 the visors;
+ * ES3-5 the rounds), so the Grillz slot still shows 18 tiles for 18 items. That
+ * is a data fix -- one `family` key on each -- not a smarter rule, and inventing
+ * a cleverer matcher to catch them is how you get the name-prefix column above.
+ */
+export const bhFamilyKey = i =>
+  i.family || (i.file ? `${i.slot}:file:${i.file}` : `${i.slot}:${i.id.replace(/-\d+$/, '')}`);
+/* Insertion-ordered, so a caller that renders the map renders the catalogue's
+   own order and a family lands where its first member was. */
+export function bhFamilies(items) {
+  const out = new Map();
+  for (const i of items) {
+    const k = bhFamilyKey(i);
+    if (!out.has(k)) out.set(k, []);
+    out.get(k).push(i);
+  }
+  return out;
+}
+
 /* ================= WHICH SHEET AN ASSET COMES OFF =================
  *
  * THE RULE LIVES HERE, WITH bhAsset, FOR THE REASON PET_CROP AND petWornLayers
