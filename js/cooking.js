@@ -332,6 +332,35 @@ export async function advanceQueue(now = Date.now()) {
   return banked.map(b => b.recipe);
 }
 
+/* WHAT A DRAIN WOULD COLLECT, WITHOUT COLLECTING IT. Pure: no kv, no XP, no
+ * writes. Today's Kitchen card has to SAY how many dishes are waiting, and it
+ * used to find out by draining mid-render (QA r26 O15). Draining pays, and
+ * awardCapped drags level rewards, crates and eggs into the Today render tick,
+ * which tests/today-reads-lint.mjs row A1 grades at one full-store scan per
+ * store; it read health x4 and xp x2. The card only ever needed a COUNT.
+ *
+ * Mirrors advanceQueue's placement exactly so the number matches what the next
+ * real drain banks: an EMPTY pot takes the head of the queue starting `now` (so
+ * that cook can never already be finished, it only swallows an entry), and a
+ * FINISHED pot hands its entry over back-dated to the moment it came free, so a
+ * queue laid down on Monday reads right on Tuesday. Loops to the same fixpoint
+ * drainCookQueue's own loop reaches. Disjoint from readyCount: that counts the
+ * dishes sitting in pots, this counts the queued cooks behind them. */
+export function queueReadyCount(slots, queue, now = Date.now()) {
+  const q = queue.slice(slots.filter(c => !c).length);   // empty pots swallow the head of the line
+  const free = slots.filter(c => c && c.readyAt <= now).map(c => c.readyAt).sort((a, b) => a - b);
+  let ready = 0;
+  for (const r of q) {
+    if (!free.length) break;
+    const done = free[0] + r.cookMin * 60e3;
+    if (done > now) { free.shift(); continue; }   // that pot is cooking again, and not done yet
+    ready++;
+    free[0] = done;
+    free.sort((a, b) => a - b);
+  }
+  return ready;
+}
+
 export async function cookState(now = Date.now()) {
   const arr = await readSlots();
   const queue = (await readQueue()).map(x => RECIPE_BY_ID[x.recipeId]).filter(Boolean);
@@ -346,6 +375,8 @@ export async function cookState(now = Date.now()) {
     queue, queueLeft: Math.max(0, QUEUE_MAX - queue.length),
     freeCount: slots.filter(s => s.empty).length,
     readyCount: readySlots.length,
+    // queued cooks that would already have finished had the queue been drained
+    queueReady: queueReadyCount(arr, queue, now),
     anyCooking: slots.some(s => !s.empty && !s.ready),
     // back-compat for the home card / badges (any pot ready + its recipe)
     ready: readySlots.length > 0,

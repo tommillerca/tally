@@ -15,7 +15,7 @@ import {
   lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
   assumedActiveBurn, activeCalorieBonus, bmrMifflin, kcalFloor, gramsChipDefault, fmtG,
 } from '../js/nutrition.js';
-import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume, foodBuffLabel } from '../js/cooking.js';
+import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume, foodBuffLabel, queueReadyCount } from '../js/cooking.js';
 import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
 import { GEAR_ITEMS } from '../js/gear.js';
 import {
@@ -5453,10 +5453,26 @@ test('R26-O14 every day-keyed reward surface speaks the day-guard copy (>= 6 sit
 /* O15. advanceQueue had one caller (the Kitchen sheet's render), so a queue with
    the sheet closed never drained, and Today's card read the pot only. Every
    drain goes through drainCookQueue (which pays the cook XP), called from boot,
-   resume, Today's render and the Kitchen; the card counts what was banked.
+   resume and the Kitchen; the card counts what was banked.
+
+   RE-PREMISED 2026-09-04. O15 also drained from Today's RENDER, and that is now
+   forbidden rather than required. Draining pays, so awardCapped pulled
+   claimCapped > totalXp > rebuildXpTotal and grantLevelRewards > grantCrate >
+   grantEgg > lifetimeStepsSum into the Today draw: tests/today-reads-lint.mjs
+   row A1 grades renderToday AND everything it calls at exactly one full-store
+   scan per store and measured health x4, xp x2. THE PROMISE IS UNCHANGED and is
+   still what this test grades: a pot that finished while the app was shut is
+   collected and announced, never left sitting until the next Kitchen open. Only
+   the mechanism moved. The collecting stays on boot and resume (which is where a
+   closed app comes back), and Today's card now READS what a drain would collect
+   (cookState().queueReady, pure) instead of paying for it mid-render.
+
    Prove-red on main: drainCookQueue does not exist; kitchenCardHtml has no
-   `banked` and prints the single pot. */
-test('R26-O15 the cook queue drains from boot, resume, Today and the Kitchen, and the card counts finished cooks', () => {
+   `banked` and prints the single pot. Prove-red on the regression this test now
+   pins: put `await drainCookQueue()` back in renderToday (the "Today must not
+   drain" assert goes red), or drop queueReady from cookState / the card (the
+   queue-projection and card asserts go red). */
+test('R26-O15 the cook queue drains from boot, resume and the Kitchen, Today reads it without paying, and the card counts every finished cook', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   const helper = app.match(/\nasync function drainCookQueue\(\) \{[\s\S]*?\n\}\n/);
   assert.ok(helper, 'drainCookQueue is missing');
@@ -5465,22 +5481,62 @@ test('R26-O15 the cook queue drains from boot, resume, Today and the Kitchen, an
   const rest = app.replace(helper[0], '');
   assert.equal((rest.match(/\badvanceQueue\(/g) || []).length, 0, 'advanceQueue is called outside drainCookQueue: that path pays no cook XP');
   const callers = (rest.match(/\bdrainCookQueue\(\)/g) || []).length;
-  assert.ok(callers >= 4, `drainCookQueue has ${callers} callers, need boot + resume + Today + Kitchen (>= 4)`);
+  assert.ok(callers >= 3, `drainCookQueue has ${callers} callers, need boot + resume + Kitchen (>= 3)`);
   const boot = app.slice(app.indexOf('const closed = await awardDayCloseIfDue(S.settings.targets);'), app.indexOf('await ingestHkPayload(hkTaken);'));
   assert.match(boot, /await drainCookQueue\(\);/, 'boot does not drain the queue');
   const resume = app.slice(app.search(/onAppResume\((?:async )?\(\) => \{/), app.indexOf('setInterval(rollDayIfNeeded, 60e3)'));
   assert.match(resume, /drainCookQueue\(\)/, 'resume does not drain the queue');
-  const today = app.slice(app.indexOf('async function renderToday(el) {'), app.indexOf("kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe, _cookBanked)"));
-  assert.match(today, /await drainCookQueue\(\);\s*\/\/[^\n]*\n\s*const cook = await cookState\(\);/, 'Today must drain BEFORE it reads cookState for the card');
+  /* The Kitchen sheet is now named on its own. It used to ride on the >= 4
+     count, and dropping Today's caller would otherwise have let a 3 that never
+     reached the Kitchen pass. */
+  const kitchen = app.slice(app.indexOf('async function openKitchen() {'), app.indexOf('const canStartAny = cook.freeCount > 0'));
+  assert.match(kitchen, /await drainCookQueue\(\);/, "the Kitchen sheet's render does not drain the queue");
+
+  /* Comments stripped first: the line that removed the drain explains itself by
+     naming drainCookQueue, and a prose mention is not a call. */
+  const today = app.slice(app.indexOf('async function renderToday(el) {'), app.indexOf("kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe, _cookBanked)"))
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  assert.equal((today.match(/\bdrainCookQueue\(/g) || []).length, 0,
+    'Today must NOT drain: draining pays, and awardCapped drags the level/crate/egg machinery into the render tick (today-reads-lint A1)');
+  assert.match(today, /const cook = await cookState\(\);/, 'Today must still read cookState for the card');
+
+  /* THE PURE READ THAT REPLACED THE DRAIN, run for real. One pot that finished
+     two hours ago with a 20-minute cook queued behind it: a drain would bank the
+     pot's dish AND finish the queued one, so the card must say 2, and this is
+     the half that says the second one exists. */
+  const brothy = { id: 'x', name: 'Brothy', cookMin: 20 };
+  const slots = [{ recipeId: 'x', startedAt: 0, readyAt: 1000 - 120 * 60e3 }];
+  const queue = [brothy];
+  assert.equal(queueReadyCount(slots, queue, 1000), 1, 'a queued cook that would have finished behind a finished pot is not counted');
+  assert.equal(queueReadyCount(slots, [], 1000), 0, 'an empty queue can have nothing ready');
+  assert.equal(queueReadyCount([{ recipeId: 'x', startedAt: 0, readyAt: 1000 - 60e3 }], queue, 1000), 0,
+    'a queued cook that has only had a minute of the pot must not be counted as ready');
+  assert.equal(queueReadyCount([null], queue, 1000), 0, 'an empty pot starts the queued cook NOW: it cannot already be done');
+  assert.equal(queueReadyCount([{ recipeId: 'x', startedAt: 0, readyAt: 1000 + 60e3 }], queue, 1000), 0,
+    'a pot still cooking cannot hand the queue anything');
+  /* Two lined up behind a pot that came free two hours ago. drainCookQueue loops
+     to a fixpoint and would back-date both (20m + 20m still lands before now),
+     so the projection has to follow the chain, not stop at the first entry. */
+  assert.equal(queueReadyCount(slots, [brothy, brothy], 1000), 2, 'the projection stops at the first queue entry instead of following the chain');
+  // and it PAYS NOTHING and writes nothing: same inputs, same answer, untouched
+  assert.deepEqual(slots, [{ recipeId: 'x', startedAt: 0, readyAt: 1000 - 120 * 60e3 }], 'queueReadyCount mutated the slots it was handed');
+  assert.deepEqual(queue, [brothy], 'queueReadyCount mutated the queue it was handed');
+  // the glue hop: cookState must actually hand the projection to its callers
+  assert.match(readFileSync(join(here, '..', 'js', 'cooking.js'), 'utf8'),
+    /queueReady: queueReadyCount\(arr, queue, now\),/, 'cookState does not expose queueReady, so the card can never see it');
 
   // the card renderer, run for real: two finished cooks banked, no pot ready -> "2 dishes are ready!"
   const m = app.match(/\nfunction kitchenCardHtml\(cook, ingCount, buffs, cropsRipe = 0, banked = 0\) \{[\s\S]*?\n\}\n/);
   assert.ok(m, 'kitchenCardHtml does not take the banked count');
   const card = new Function('bhIcon', 'recipeIconHtml', 'esc', `${m[0]}; return kitchenCardHtml;`)(() => '', () => '', String);
-  const idle = { ready: false, readyCount: 0, recipe: null };
+  const idle = { ready: false, readyCount: 0, queueReady: 0, recipe: null };
   assert.match(card(idle, 0, [], 0, 2), /<b[^>]*>2 dishes are ready!<\/b>/, 'two finished cooks waiting in the Pantry are not announced');
-  assert.match(card({ ready: true, readyCount: 1, recipe: { name: 'Bone Broth' } }, 0, [], 0, 1), /2 dishes are ready!/, 'one pot ready plus one banked must read 2');
-  assert.match(card({ ready: true, readyCount: 1, recipe: { name: 'Bone Broth' } }, 0, [], 0, 0), /Bone Broth is ready!/, 'the single-pot line is unchanged when nothing was banked');
+  assert.match(card({ ready: true, readyCount: 1, queueReady: 0, recipe: { name: 'Bone Broth' } }, 0, [], 0, 1), /2 dishes are ready!/, 'one pot ready plus one banked must read 2');
+  assert.match(card({ ready: true, readyCount: 1, queueReady: 0, recipe: { name: 'Bone Broth' } }, 0, [], 0, 0), /Bone Broth is ready!/, 'the single-pot line is unchanged when nothing was banked');
+  // the case the Today drain used to cover, now covered by the read
+  assert.match(card({ ready: true, readyCount: 1, queueReady: 1, recipe: { name: 'Bone Broth' } }, 0, [], 0, 0), /2 dishes are ready!/,
+    'a pot ready with a finished cook still in the line must read 2: that is what draining mid-render used to buy');
+  assert.match(card({ ...idle, queueReady: 1 }, 0, [], 0, 0), /1 dish is ready!/, 'a queued cook that has finished must raise the card on its own');
   assert.equal(card(idle, 0, [], 0, 0), '', 'nothing ready, nothing banked: no card, as before');
   assert.match(app, /_cookBanked = 0;   \/\/ the Pantry is on screen from here/, 'opening the Kitchen must clear the announcement');
 });

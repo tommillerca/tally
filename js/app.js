@@ -3788,7 +3788,16 @@ async function renderToday(el) {
   // activity level already assumes (BMR x (factor-1)), credited at 50%.
   const activeBonus = activeCalorieBonus(S.settings.profile, hk?.activeKcal);
   const t = activeBonus > 0 ? { ...S.settings.targets, kcal: S.settings.targets.kcal + activeBonus } : S.settings.targets;
-  await drainCookQueue();   // QA round 26 O15: the card below must not describe a queue nothing has moved
+  /* A READ, NOT A DRAIN (2026-09-04). O15 had this line call drainCookQueue()
+     so the card below could not describe a queue nothing had moved. Draining
+     PAYS: awardCapped pulled claimCapped, totalXp/rebuildXpTotal and
+     grantLevelRewards > grantCrate > grantEgg > lifetimeStepsSum into the Today
+     render tick, and today-reads-lint row A1 (which grades renderToday AND
+     everything it calls) went from one full-store scan per store to health x4,
+     xp x2. cookState().queueReady projects the same queue against the same
+     clock without paying anything, and the card counts it. The drain itself
+     still runs from boot, resume and the Kitchen sheet, which is what keeps
+     O15's promise that a pot finished while the app was shut is collected. */
   const cook = await cookState();
   /* THE GARDEN IS OFF THE PLAYER'S PATH (2026-08-18). This is the single value
      every garden signal on Today reads from: the ripe-crop banner and its
@@ -6603,8 +6612,12 @@ async function drainCookQueue() {
 
 function kitchenCardHtml(cook, ingCount, buffs, cropsRipe = 0, banked = 0) {
   /* `banked`: finished cooks waiting in the Pantry that nothing has announced
-     yet (O15); counted with the pots so the line says how many are ready. */
-  const readyN = (cook && cook.readyCount || 0) + banked;
+     yet (O15); counted with the pots so the line says how many are ready.
+     `queueReady`: queued cooks that would already have finished behind a
+     finished pot. Today reads that instead of draining for it, so the card is
+     as truthful as it was without paying XP inside a render. Three disjoint
+     sets: in the Pantry, in a pot, still in the line. */
+  const readyN = (cook && cook.readyCount || 0) + (cook && cook.queueReady || 0) + banked;
   if (!readyN && !cropsRipe) return '';
   const line = !readyN
     ? `<b style="color:var(--accent)">${bhIcon('garden-sprout', 18)} ${cropsRipe} crop${cropsRipe === 1 ? '' : 's'} ready to pick!</b>`
