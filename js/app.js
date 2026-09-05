@@ -9410,7 +9410,7 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
             <small class="fb-kitline">All ${FOOTBALL_TEAMS.length} colourways</small>
             ${owned
               ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
-              : `<button class="drop-buy" data-buyfb="${id}" ${canBuy ? '' : 'disabled'}>${Number.isFinite(price) ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
+              : `<button class="drop-buy" data-buyfb="${id}" ${canBuy ? '' : 'disabled'} aria-label="Buy the ${esc(g.label)}${Number.isFinite(price) ? `, ${price.toLocaleString()} coins` : ''}, all ${FOOTBALL_TEAMS.length} teams">${Number.isFinite(price) ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
           </div>`;
         }).join('')}
         <div class="drop-item fb fb-bundle ${bundleOwned ? 'owned' : ''}">
@@ -9419,7 +9419,7 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
           <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')} · all ${FOOTBALL_TEAMS.length} colourways</small>
           ${bundleOwned
             ? `<button class="drop-buy" disabled>The whole kit is yours</button>`
-            : `<button class="drop-buy" data-buyfbkit="all" ${footballBundleSellable() && coinBal >= FOOTBALL_BUNDLE_PRICE_PLACEHOLDER ? '' : 'disabled'}>${
+            : `<button class="drop-buy" data-buyfbkit="all" ${footballBundleSellable() && coinBal >= FOOTBALL_BUNDLE_PRICE_PLACEHOLDER ? '' : 'disabled'} aria-label="Buy the full kit${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} coins` : ''}, all ${FOOTBALL_TEAMS.length} teams">${
                 footballBundleSellable() ? `${ICONS.coin(12)} ${kit.bundle.toLocaleString()}` : 'Soon'}</button>`}
           ${Number.isFinite(kit.save) && kit.save > 0
             ? `<small class="fb-save">Was ${kit.full.toLocaleString()} · you save ${kit.save.toLocaleString()}</small>`
