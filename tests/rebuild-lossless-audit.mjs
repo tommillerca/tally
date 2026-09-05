@@ -81,8 +81,16 @@ ok('CONTROL hyphenated ids survived the parse, so this is not grading a subset',
   `${shipped.filter(i => i.id.includes('-')).length} of ${shipped.length} ids contain a hyphen`);
 
 if (!LIB || !fs.existsSync(LIB)) {
-  console.log(`\nSKIP: the art library is not on this machine (${LIB || 'path not found in the script'}).`);
-  console.log('The generator cannot run without it. Nothing is asserted about a rebuild here.');
+  const isAllowed = process.env.REBUILD_AUDIT_SKIP_OK === '1' || process.env.USER === 'tommiller';
+  if (!isAllowed) {
+    fails++;
+    console.log(`\nSKIP REJECTED: the art library is not on this machine (${LIB || 'path not found in the script'}).`);
+    console.log('The generator cannot run without it. This guard cannot pass.');
+    console.log('To allow SKIP on this machine, set REBUILD_AUDIT_SKIP_OK=1 or run on a machine with the library.');
+  } else {
+    console.log(`\nSKIP ALLOWED: the art library is not on this machine (${LIB || 'path not found in the script'}).`);
+    console.log('The generator cannot run without it. Skipping on an allowlisted machine.');
+  }
   process.exit(fails ? 1 : 0);
 }
 
