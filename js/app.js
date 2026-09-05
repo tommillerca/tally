@@ -64,7 +64,7 @@ import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL } from './pets.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -492,29 +492,26 @@ const petWearsFootball = (petId, wear) => petWornTints(petId, wearOf(wear)).some
  * than leaving a hole (anti-regression rule 8), and only a layer that was
  * actually tiered carries it, so the untiered path emits byte-identical markup.
  */
-/* Kennel Phase A: one CSS filter per morph, applied identically across every
- * morphable species for now (Cam's to tune per species later, spec section 1.4).
- * Initial numbers converted from the mocks (scratchpad/pets/morphs.png): hue
- * +0.55/+0.35/+0.20/+0.70 of a turn for ember/frost/toxic/midnight, saturation
- * x1.1/0.8/1.3/0.9, value x0.95/1.05/0.9/0.55. No new PNGs (rule 0.7): this is
- * the whole art. CX is absent -- exempt from morphs, its amethyst art IS its
- * look (rule 0.7) -- and there is no 'base' entry, since base never tints. */
+/* KENNEL PALETTES, 2026-09-05: Phase A's MORPH_TINT (one CSS filter shared by
+ * every species) is gone -- Tom: "morphs are PER-SPECIES Cam-faithful
+ * palettes shipped as PNG variants, the CSS filter table is replaced." Every
+ * render path now resolves a morph through morphAsset (js/pets.js), which
+ * returns the recolored PNG (scripts/build-pet-morphs.py) or '' to fall back
+ * to base -- see the MORPH_ART import above and its call sites below.
+ *
+ * MORPH_FILTER survives ONLY for the backpack egg shell tease (eggTint,
+ * section 2.5): the species is not decided yet (rule 0.4), so there is no
+ * petId to resolve a variant PNG for, and a still-uncracked egg's colour is
+ * a tease, not the pet's actual look. */
 const MORPH_FILTER = {
   ember:    'hue-rotate(198deg) saturate(1.1) brightness(0.95)',
   frost:    'hue-rotate(126deg) saturate(0.8) brightness(1.05)',
   toxic:    'hue-rotate(72deg) saturate(1.3) brightness(0.9)',
   midnight: 'hue-rotate(252deg) saturate(0.9) brightness(0.55)',
 };
-const MORPH_TINT = Object.fromEntries(['C1', 'C2', 'C3', 'C4', 'C5', 'C6'].map(id => [id, MORPH_FILTER]));
-// The one filter helper every draw path (2.4) resolves through. '' for base,
-// shiny, CX, or a species with no tint entry -- never throws, never guesses art.
-function petTint(petId, morph) { return (morph && morph !== 'base' && MORPH_TINT[petId] && MORPH_TINT[petId][morph]) || ''; }
-// The backpack egg shell (section 2.5): the species is not decided yet (rule
-// 0.4), so there is no petId to key MORPH_TINT on -- this uses the plain
-// per-morph filter every species' entry is seeded from today.
 function eggTint(morph) { return (morph && morph !== 'base' && MORPH_FILTER[morph]) || ''; }
 
-function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined, thumb = null, tint = '') {
+function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined, thumb = null) {
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
   const c = PET_CROP[petId];
   const worn = petWornLayers(petId, wearOf(wear));
@@ -570,12 +567,13 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = und
      to misalign. Tiering it stops the mask decoding at 640 on a tile whose
      garment art is already tiered down. */
   const tintOf = i => (tints[i] || []).map(t => `<span class="fb-tint pw" style="${geo};--fbm:url('${tier ? bhThumb(t.mask, tier) : t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
-  /* Kennel Phase A: the morph filter goes on the BASE layer only, never on worn
-     accessories (Bumbleseal's sunglasses/stinger share her canvas and must not
-     tint, spec section 2.4) and never on the wrapper span (a filter there would
-     also catch the football tint spans, which paint team colour and must read
-     true). */
-  return `<span class="petcrop${worn.length ? ' dressed' : ''}" style="width:${px}px;height:${px}px">${layer(src, '', tint ? `;filter:${tint}` : '')}${worn.map((u, i) => layer(u, 'pw') + tintOf(i)).join('')}</span>`;
+  /* KENNEL PALETTES, 2026-09-05: a morph is now baked into `src` itself (the
+     caller passes morphAsset's variant PNG as srcOverride, same slot shiny's
+     `assets/bh/C/shiny/<id>.png` already used), never on worn accessories
+     (Bumbleseal's sunglasses/stinger share her canvas and must not recolor,
+     spec section 2.4) -- `layer(src)` below carries no filter, only shiny/morph's
+     own art. */
+  return `<span class="petcrop${worn.length ? ' dressed' : ''}" style="width:${px}px;height:${px}px">${layer(src)}${worn.map((u, i) => layer(u, 'pw') + tintOf(i)).join('')}</span>`;
 }
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
 // layer stack (C1/C4) or a content-cropped base image. Shiny state is cached in
@@ -774,22 +772,33 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
     // No morph tint: shiny always forces base (rule 0.1/1.2).
     return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear, thumb)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
-  /* Kennel Phase A: shiny forces base (rule 0.1/1.2, redundant defense against
+  /* Kennel palettes: shiny forces base (rule 0.1/1.2, redundant defense against
      any caller that somehow got here with isShiny true -- see the branches
      above, which return first). `morph` explicit, or the own-pet cache the same
      way `shiny` falls back to S.shinyPets two lines up. */
   const petMorph = isShiny ? 'base' : (morph !== undefined ? morph : ((S.petMorphs && S.petMorphs[petId]) || 'base'));
-  const tint = petTint(petId, petMorph);
-  return (wearsFootball ? null : animatedPetHtml(petId, S2, tint)) || croppedPetImg(petId, S2, ground, null, wear, thumb, tint);
+  const morphSrc = morphAsset(petId, petMorph);
+  /* A MORPHED PET FORCES THE STATIC CANVAS, same trade as wearsFootball just
+     above (2026-09-04) and for the identical reason: scripts/build-pet-morphs.py
+     recolors the flat master (assets/bh/C/<id>.png), not the animated species'
+     separate layer PNGs (body, eyes, drops, shadow), so there is no morphed art
+     for the animated stack to draw. Kennel Phase A's own CSS filter used to
+     paint the animated branch too, which is exactly how the reported bug
+     ("ember reads blue on the Beardie") reached C4's lizard: that filter is
+     gone (see js/pets.js morphAsset), so falling back to the animated layers
+     for a morphed pet would silently un-fix it. While morphed, the animated
+     species (cloud/catfish/lizard) stop moving; base morph animates exactly
+     as it always did. */
+  return (wearsFootball || morphSrc ? null : animatedPetHtml(petId, S2)) || croppedPetImg(petId, S2, ground, morphSrc || null, wear, thumb);
 }
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
 // it's an animated/hovering/grounded species. Shiny uses its recolour, same crop.
 function petPortraitHtml(petId, px, shiny = false, { mass = false, wear, thumb, morph } = {}) {
   if (petId === 'CX') shiny = false; // Day One Lizard: amethyst CX.png is the portrait (no shiny static)
-  const src = shiny ? `assets/bh/C/shiny/${petId}.png` : bhAsset(BH_BY_ID[petId]);
-  const tint = shiny ? '' : petTint(petId, morph);   // shiny forces base (rule 0.1/1.2)
-  const inner = croppedPetImg(petId, mass ? Math.round(px * petScale(petId)) : px, false, src, wear, thumb, tint);
+  // Kennel palettes: shiny forces base (rule 0.1/1.2) -- no morph lookup at all.
+  const src = shiny ? `assets/bh/C/shiny/${petId}.png` : (morphAsset(petId, morph) || bhAsset(BH_BY_ID[petId]));
+  const inner = croppedPetImg(petId, mass ? Math.round(px * petScale(petId)) : px, false, src, wear, thumb);
   return shiny ? `<div class="pet-shiny-wrap">${inner}<span class="shiny-spark">${sparkIco(12)}</span></div>` : inner;
 }
 async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); }
@@ -5903,11 +5912,11 @@ function avatarLayersHtml(eq, opts = {}) {
     // (the leaderboard) needs the shiny recolour swapped in; the shiny PNG
     // shares the base art's canvas geometry so it stacks identically
     const isPetShiny = s.code === 'C' && itemId !== 'CX' && opts.shinyPetId === itemId;
-    const full = isPetShiny ? `assets/bh/C/shiny/${itemId}.png` : bhAsset(item);
-    // opts.petMorph (Kennel Phase A): same idea as shinyPetId, but a filter
-    // rather than a file swap, so it needs a value rather than a match. Shiny
-    // forces base (rule 0.1/1.2) -- never both on the one image.
-    const petMorphTint = s.code === 'C' && !isPetShiny ? petTint(itemId, opts.petMorph) : '';
+    // opts.petMorph (Kennel palettes): same idea as shinyPetId, a file swap
+    // rather than a filter now (js/pets.js morphAsset). Shiny forces base
+    // (rule 0.1/1.2) -- never both on the one image.
+    const morphFull = s.code === 'C' && !isPetShiny ? morphAsset(itemId, opts.petMorph) : '';
+    const full = isPetShiny ? `assets/bh/C/shiny/${itemId}.png` : (morphFull || bhAsset(item));
     const src = opts.thumb ? bhThumb(full, opts.thumb === true ? 192 : opts.thumb) : full;
     /* Football kit, 2026-09-05: a pet stacked ON THE BODY CANVAS is a layer in
        THIS stack, so its worn garments (petWear's CH/CT) belong here too, not
@@ -5955,18 +5964,15 @@ function avatarLayersHtml(eq, opts = {}) {
     // must degrade to a missing garment, never iOS's blue "?" box over the body.
     // On a THUMBNAILED layer it first retries the full-size art, so a missing
     // thumbnail costs memory rather than the garment.
-    // clipMask (slot E) and petMorphTint (slot C) never co-occur -- different
-    // slots -- so one style attribute serves both without a collision.
-    const styleBits = [];
-    if (clipMask) styleBits.push(`--fbm:url('${clipMask}')`);
-    if (petMorphTint) styleBits.push(`filter:${petMorphTint}`);
-    const styleAttr = styleBits.length ? ` style="${styleBits.join(';')}"` : '';
+    // Kennel palettes: the morph is now baked into `full`/`src` above, so this
+    // style attribute is clipMask (slot E) only.
+    const styleAttr = clipMask ? ` style="--fbm:url('${clipMask}')"` : '';
     // Worn pet garments, same tiering as the species image above, each with its
     // own football tint spans -- see the note on wornPetItems above. `pw`
     // matches croppedPetImg's own class for a worn layer (see THE WORN LAYERS
     // ARE MARKED there), so a worn piece reads the same way wherever it draws.
-    // Never carries petMorphTint: Bumbleseal's accessories share her canvas and
-    // must not tint (spec section 2.4), same rule as croppedPetImg.
+    // Never a morph variant: Bumbleseal's accessories share her canvas and
+    // must not recolor (spec section 2.4), same rule as croppedPetImg.
     const wornHtml = wornPetItems.map(w => {
       const wfull = bhAsset(w);
       const wsrc = opts.thumb ? bhThumb(wfull, opts.thumb === true ? 192 : opts.thumb) : wfull;
@@ -15488,7 +15494,7 @@ function openHatchReveal(res, charWrap) {
   const revealEl = $('.hatch-reveal', wrap2);
   // draw the pet big + centered (the source PNG parks it in a corner)
   // No morph tint on shiny art: shiny forces base (rule 0.1/1.2).
-  if (item) { const cv = $('.hatch-art', wrap2); if (cv) drawTrimmedArt(cv, res.shiny ? `assets/bh/C/shiny/${item.id}.png` : bhAsset(item), undefined, null, petTint(item.id, res.morph)); }
+  if (item) { const cv = $('.hatch-art', wrap2); if (cv) drawTrimmedArt(cv, res.shiny ? `assets/bh/C/shiny/${item.id}.png` : (morphAsset(item.id, res.morph) || bhAsset(item))); }
   const okBtn = $('#hatchOk', wrap2);
   /* ADOPT USED TO CLOSE THE SHEET, and the cinematic is 5.75s long, so any
      player who tapped it early dismissed a pet they never saw. Tom hit exactly
@@ -17486,7 +17492,7 @@ async function paintFootballTints(ctx, tints, box, dest) {
     ctx.globalCompositeOperation = 'source-over';
   }
 }
-function drawTrimmedArt(canvas, src, pad = 0.08, tints = null, morphTint = '') {
+function drawTrimmedArt(canvas, src, pad = 0.08, tints = null) {
   return new Promise(res => {
     const img = new Image();
     img.onload = () => {
@@ -17511,7 +17517,7 @@ function drawTrimmedArt(canvas, src, pad = 0.08, tints = null, morphTint = '') {
          stepping only while the ink is still too small. */
       if (Math.max(bw, bh) < SMALL_INK) {
         const up = nextArtTier(src);
-        if (up) return void drawTrimmedArt(canvas, up, pad, tints, morphTint).then(res);
+        if (up) return void drawTrimmedArt(canvas, up, pad, tints).then(res);
       }
       const cw = canvas.width, ch = canvas.height, p = 1 - pad * 2;
       // Upscale cap + two-step scaling keep small source art (e.g. a 43px
@@ -17531,14 +17537,9 @@ function drawTrimmedArt(canvas, src, pad = 0.08, tints = null, morphTint = '') {
         from = off2; sx = 0; sy = 0; sw = bw * k; sh = bh * k;
       }
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-      // Kennel Phase A, section 2.4: the hatch reveal canvas paints a morph the
-      // same way its CSS-filter siblings do, just via the 2D context instead of
-      // a style attribute -- ctx.filter takes the identical CSS filter string.
-      // Reset after so a re-tiered recursive call (SMALL_INK above) or a later
-      // draw on this same canvas never inherits a stale filter.
-      ctx.filter = morphTint || 'none';
+      // Kennel palettes: a morph is baked into `src` itself now (the caller
+      // passes morphAsset's variant PNG), so this draw needs no filter.
       ctx.drawImage(from, sx, sy, sw, sh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
-      ctx.filter = 'none';
       if (tints && tints.length) {
         paintFootballTints(ctx, tints, [x0, y0, bw, bh], [(cw - dw) / 2, (ch - dh) / 2, dw, dh]).then(res, res);
         return;
@@ -19178,7 +19179,7 @@ async function openStable(opts = {}) {
         // product shot uses beside it. Census SHOT row, 2026-09-05: a copied
         // 192 from the Locker Room's much bigger tiles (measured there to
         // legitimately clear no tier) was reading a 384-eligible box as 192.
-        const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, true, petTint(sp, (S.petMorphs && S.petMorphs[sp]) || 'base')) : petShotHtml(i.id, 62);
+        const tile = a.football ? croppedPetImg(sp, 62, false, morphAsset(sp, (S.petMorphs && S.petMorphs[sp]) || 'base') || null, { [a.slot]: i.id }, true) : petShotHtml(i.id, 62);
         return `<button class="pw-item r-${a.rarity}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}">
           <span class="pw-art">${tile}</span>
           <b>${esc(a.name)}</b>
@@ -19204,7 +19205,7 @@ async function openStable(opts = {}) {
         const a = BH_BY_ID[i.id];
         const open = petFamOpen === key;
         // thumb:true, same fix and the same measured 384 as petWearItemBtn above.
-        const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, true, petTint(sp, (S.petMorphs && S.petMorphs[sp]) || 'base')) : petShotHtml(i.id, 62);
+        const tile = a.football ? croppedPetImg(sp, 62, false, morphAsset(sp, (S.petMorphs && S.petMorphs[sp]) || 'base') || null, { [a.slot]: i.id }, true) : petShotHtml(i.id, 62);
         const famTile = `<button class="pw-item fam r-${a.rarity}${worn ? ' on' : ''}" type="button" data-petfam="${esc(key)}" aria-expanded="${open}" aria-label="${esc(a.name)}, ${fam.length} colourways">
           <span class="pw-art">${tile}<span class="ward-fam-n" aria-hidden="true">${fam.length}</span></span>
           <b>${esc(a.name)}</b>

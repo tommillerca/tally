@@ -40,8 +40,8 @@ import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, gearDustValue, gearSt
   nickProblem, cleanNick, NICK_MAX,
   RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_REROLL_LADDER,
   rollCosmetic, crateEligible,
-  eggRow, grantEgg, hatchEgg, addPetInstance, petInstances } from '../js/loot.js';
-import { MORPHS, MORPH_WEIGHT, isMorph, rollMorph, ownedPairs, PET_ASSIGN } from '../js/pets.js';
+  eggRow, grantEgg, hatchEgg, addPetInstance, petInstances, pickRandomPet } from '../js/loot.js';
+import { MORPHS, MORPH_WEIGHT, isMorph, rollMorph, ownedPairs, PET_ASSIGN, MORPH_ART, MIDNIGHT_TIER, morphAsset } from '../js/pets.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, PET_SLOTS } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
@@ -6895,7 +6895,7 @@ test('KENNEL rollMorph: all pairs owned draws MORPH_WEIGHT within 1.5% over 20,0
      rng, no seed, and 'base' at weight 40/98 sits closer to the tolerance
      band than the smaller morphs. N=20,000 at +/-0.015 clean-code-false-red
      0/50 over the same probe. */
-  const species = ['C1', 'C2', 'C3', 'C4', 'C5'];
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
   const owned = new Set();
   for (const sp of species) for (const m of MORPHS) owned.add(`${sp}|${m}`);
   const N = 20000;
@@ -6911,24 +6911,49 @@ test('KENNEL rollMorph: all pairs owned draws MORPH_WEIGHT within 1.5% over 20,0
   }
 });
 
-/* PROVE-RED, 2026-09-05: this row is what caught the actual Phase A bug, not a
- * hypothetical one. rollMorph's own "which species count" list originally
- * included C6 (Bumbleseal, a 1% shop-exclusive hatch): since almost no player
- * owns her in ANY morph, (C6, base) stayed "unowned" forever, which kept
- * 'base' itself in the fresh-first candidate set alongside the four real
- * morphs and swamped them (base carries the highest MORPH_WEIGHT, 40). A
- * 200-egg sim below caught it directly: an owner of all five species hatched
- * nothing but base across 200 draws. Fixed by scoping the fresh-first
- * accounting to the five ordinary dupe-pool species (js/pets.js
- * MORPH_SPECIES), matching this file's own "25 (species x morph) pairs"
- * language (5 x 5, not 6 x 5). Reverting MORPH_SPECIES to include C6
- * reproduces the FAIL below. */
+/* PROVE-RED, 2026-09-05 morning: this row is what caught the actual Phase A
+ * bug, not a hypothetical one. rollMorph's own "which species count" list
+ * originally included C6 (Bumbleseal, then a 1% shop-exclusive hatch): since
+ * almost no player owned her in ANY morph, (C6, base) stayed "unowned"
+ * forever, which kept 'base' itself in the fresh-first candidate set
+ * alongside the four real morphs and swamped them (base carries the highest
+ * MORPH_WEIGHT, 40). A 200-egg sim below caught it directly: an owner of all
+ * five species hatched nothing but base across 200 draws. Fixed by scoping
+ * the fresh-first accounting to the five ordinary dupe-pool species
+ * (js/pets.js MORPH_SPECIES), matching this file's own then-current "25
+ * (species x morph) pairs" language (5 x 5, not 6 x 5).
+ *
+ * KENNEL PALETTES, 2026-09-05 afternoon: Tom's ruling reversed the premise --
+ * "roll Bumbleseal into things, her time as shop-exclusive has passed ...
+ * fresh-first accounting includes her." hatchChance is gone from her
+ * catalogue entry, she is now an ordinary member of the hatch pool exactly
+ * like C1-C5, and the pathological case above (a species nobody ever owns)
+ * cannot recur for her -- so MORPH_SPECIES is back to all six (js/pets.js),
+ * and this test owns all 6 species' pairs except the one deliberate gap. */
 test('KENNEL rollMorph: fresh-first -- only (C5, midnight) unowned draws midnight every time', () => {
-  const species = ['C1', 'C2', 'C3', 'C4', 'C5'];
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
   const owned = new Set();
   for (const sp of species) for (const m of MORPHS) { if (sp === 'C5' && m === 'midnight') continue; owned.add(`${sp}|${m}`); }
   for (let i = 0; i < 200; i++) {
     assert.equal(rollMorph(owned), 'midnight', 'the only unowned pair left is (C5, midnight); fresh-first must draw it every time');
+  }
+});
+
+/* PROVE-RED for the 6-species ruling specifically: the row above owns ALL of
+ * C6's pairs, so it cannot tell a MORPH_SPECIES of five (C6 excluded) from six
+ * (C6 included) -- C6 is irrelevant to it either way. This row leaves the ONE
+ * gap on C6 instead of C5, so it only stays green while fresh-first actually
+ * counts her: reverting js/pets.js MORPH_SPECIES to the five-species list
+ * (dropping C6) makes rollMorph ignore her gap entirely and this FAILS
+ * (measured: with the 5-species list restored, this row fails immediately --
+ * fresh becomes empty since C1-C5 are fully owned, so rollMorph falls through
+ * to a plain weighted draw over all five morphs instead of always 'toxic'). */
+test('KENNEL rollMorph: fresh-first also reacts to a gap on C6 (Bumbleseal) specifically', () => {
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  const owned = new Set();
+  for (const sp of species) for (const m of MORPHS) { if (sp === 'C6' && m === 'toxic') continue; owned.add(`${sp}|${m}`); }
+  for (let i = 0; i < 200; i++) {
+    assert.equal(rollMorph(owned), 'toxic', 'the only unowned pair left is (C6, toxic); fresh-first must count Bumbleseal and draw it every time');
   }
 });
 
@@ -6939,11 +6964,17 @@ test('KENNEL hatchEgg: reads the granted egg\'s morph, and the rng stream spends
   await dbm.db.put('inv', { id: 'egg-1', kind: 'egg', stepsAtStart: 0, goal: 0, source: 'test', morph: 'toxic', ts: Date.now() });
   const origGRV = globalThis.crypto.getRandomValues;
   /* hatchEgg's own stream, unchanged by this feature: shinyRoll (rolls 0.5,
-     misses SHINY_CHANCE 0.03), pickRandomPet's C6 shop-pet gate (rolls 0.5,
-     misses its 1%), then the final uniform pick (rolls 0, index 0 of the
-     5-pet pool -- C1). A morph read that spent an rng() call of its own would
-     shift every index after it and this count would no longer be 3. */
-  const stream = [0.5, 0.5, 0];
+     misses SHINY_CHANCE 0.03), then the final uniform pick (rolls 0.2, index 1
+     of the 6-pet pool [C6,C1,C2,C3,C4,C5] -- C1). A morph read that spent an
+     rng() call of its own would shift every index after it and this count
+     would no longer be 2.
+     KENNEL PALETTES, 2026-09-05: this used to be 3 calls (pickRandomPet's C6
+     shop-pet gate rolled a third, between these two) -- that gate is gone
+     along with C6's hatchChance field, so the stream and the count both
+     shrank by one. Measured directly (node -e against js/loot.js) rather than
+     hand-derived, because the catalogue lists C6 BEFORE C1-C5 (see
+     data/boneheadz.js), so the pool's index order is not the obvious one. */
+  const stream = [0.5, 0.2];
   let n = 0;
   globalThis.crypto.getRandomValues = a => { a[0] = Math.floor(stream[n++ % stream.length] * 0xffffffff); return a; };
   let res;
@@ -6952,7 +6983,7 @@ test('KENNEL hatchEgg: reads the granted egg\'s morph, and the rng stream spends
   } finally {
     globalThis.crypto.getRandomValues = origGRV;
   }
-  assert.equal(n, 3, `hatchEgg must spend exactly 3 rng() calls on this stream (shiny roll, the C6 shop gate, the final pick); a new call means the morph read is no longer free, got ${n}`);
+  assert.equal(n, 2, `hatchEgg must spend exactly 2 rng() calls on this stream (shiny roll, the final pick); a new call means the morph read is no longer free, got ${n}`);
   assert.equal(res.ready, true);
   assert.equal(res.item.id, 'C1', 'setup check: this fixed stream must pick C1');
   assert.equal(res.morph, 'toxic', 'hatchEgg must return the morph the egg was granted with');
@@ -6967,9 +6998,11 @@ test('KENNEL hatchEgg: shiny forces base even when the egg carries a colour (rul
   dbm.useDbName('unit-kennel-hatchmorph-shiny');
   await dbm.db.put('inv', { id: 'egg-2', kind: 'egg', stepsAtStart: 0, goal: 0, source: 'test', morph: 'toxic', ts: Date.now() });
   const origGRV = globalThis.crypto.getRandomValues;
-  // shinyRoll rolls 0 (< SHINY_CHANCE: shiny); the C6 shop gate rolls 0.5
-  // (misses); the final pick rolls 0 (C1, which has shiny art -- SHINY_ART).
-  const stream = [0, 0.5, 0];
+  // shinyRoll rolls 0 (< SHINY_CHANCE: shiny); the final pick rolls 0.2 (index
+  // 1 of the 6-pet pool [C6,C1,C2,C3,C4,C5] -- C1, which has shiny art --
+  // SHINY_ART). KENNEL PALETTES, 2026-09-05: no more C6 shop gate roll
+  // between these two (see the note on the test above).
+  const stream = [0, 0.2];
   let n = 0;
   globalThis.crypto.getRandomValues = a => { a[0] = Math.floor(stream[n++ % stream.length] * 0xffffffff); return a; };
   let res;
@@ -7025,19 +7058,24 @@ test('KENNEL addPetInstance: shiny forces base even when a morph is explicitly r
   assert.equal(insts[0].morph, 'base');
 });
 
-/* SIM, spec section 2.6: 200 eggs granted+hatched one after another for an
- * owner of all five species (so every hatch is a same-species dupe and the
- * morph is the only thing left to discover) must surface all 25 (species,
- * morph) pairs, with no morph outside MORPHS ever appearing. Real rng()
- * throughout (unseeded): empirically 0/30 trials missed a single pair before
- * this was committed (probed at 200 draws each), so this is not a flaky
- * statistical row -- fresh-first plus 200 draws is well past the point where
- * five morphs across five species can hide. */
-test('KENNEL sim: 200 eggs from an owner of five species surface all 25 (sp, morph) pairs, no phantom morph', async () => {
+/* SIM, spec section 2.6, re-scoped by KENNEL PALETTES (2026-09-05): 200 eggs
+ * granted+hatched one after another for an owner of all SIX species (so every
+ * hatch is a same-species dupe and the morph is the only thing left to
+ * discover) must surface all 30 (species, morph) pairs -- Tom's own count,
+ * "6 species x 5 morphs = 30 pairs" -- with no morph outside MORPHS ever
+ * appearing. This used to own five species and require 25 pairs (Bumbleseal
+ * was a 1% shop-exclusive, excluded from fresh-first accounting); her
+ * hatchChance gate is gone (js/loot.js pickRandomPet, data/boneheadz.js), she
+ * is an ordinary member of MORPH_SPECIES (js/pets.js) same as C1-C5, and this
+ * sim now owns and grades her the same way. Real rng() throughout (unseeded):
+ * re-probed at 200 draws with 6 species/30 pairs (this checkout), 0/30 trials
+ * missed a single pair -- the extra species does not need more draws because
+ * fresh-first the same identical mechanism, one more candidate deep. */
+test('KENNEL sim: 200 eggs from an owner of six species surface all 30 (sp, morph) pairs, no phantom morph', async () => {
   await import('./mem-idb.mjs');
   const dbm = await import('../js/db.js');
   dbm.useDbName('unit-kennel-sim-200eggs');
-  const species = ['C1', 'C2', 'C3', 'C4', 'C5'];
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
   for (const sp of species) await addPetInstance(sp, { morph: 'base' });
   for (let i = 0; i < 200; i++) {
     const row = await grantEgg('test', 0);
@@ -7045,38 +7083,131 @@ test('KENNEL sim: 200 eggs from an owner of five species surface all 25 (sp, mor
   }
   const insts = await petInstances();
   const pairs = new Set(insts.map(x => `${x.sp}|${x.morph || 'base'}`));
-  const allSpecies = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6']; // C6 (Bumbleseal) can rarely hatch too (1%)
-  const phantom = [...pairs].filter(p => { const [sp, m] = p.split('|'); return !allSpecies.includes(sp) || !MORPHS.includes(m); });
+  const phantom = [...pairs].filter(p => { const [sp, m] = p.split('|'); return !species.includes(sp) || !MORPHS.includes(m); });
   assert.equal(phantom.length, 0, `no morph outside MORPHS, and no species outside the hatch pool, got ${JSON.stringify(phantom)}`);
   const required = species.flatMap(sp => MORPHS.map(m => `${sp}|${m}`));
   const missing = required.filter(p => !pairs.has(p));
   assert.equal(missing.length, 0,
-    `all 25 (species, morph) pairs among the five owned species must appear across 200 hatches, missing: ${missing.join(', ') || 'none'} (${pairs.size} total distinct pairs seen)`);
+    `all 30 (species, morph) pairs among the six owned species must appear across 200 hatches, missing: ${missing.join(', ') || 'none'} (${pairs.size} total distinct pairs seen)`);
 });
 
 /* SIM, spec section 2.6: two eggs granted the same "day" (before either
- * hatches) for a player missing three species must still hatch two DIFFERENT
- * species -- pickRandomPet's pre-existing fresh-species rule (js/loot.js),
- * unaffected by the morph riding along on the egg row. 20 independent trials,
- * not 1: a single trial only catches "species decided from stale/no ownership"
- * 1-in-5 of the time (four other fresh species could still coincidentally
- * differ), so one green trial proves nothing. 20 trials all agreeing is a
- * ~99% catch rate for that regression while staying non-flaky on real code
- * (0/200 collisions measured empirically before this was committed). */
-test('KENNEL sim: two eggs granted the same day for a player missing three species hatch two different species', async () => {
+ * hatches) for a player missing several species must still hatch two
+ * DIFFERENT species -- pickRandomPet's pre-existing fresh-species rule
+ * (js/loot.js), unaffected by the morph riding along on the egg row. 20
+ * independent trials, not 1: a single trial only catches "species decided
+ * from stale/no ownership" a fraction of the time (the other fresh species
+ * could still coincidentally differ), so one green trial proves nothing. 20
+ * trials all agreeing is a high catch rate for that regression while staying
+ * non-flaky on real code.
+ *
+ * KENNEL PALETTES, 2026-09-05: this player now owns 2 of SIX species (was 2
+ * of five), missing C3/C4/C5/C6 -- C6's hatchChance gate is gone, so she is
+ * one more ordinary fresh species pickRandomPet can draw here, same as
+ * before for C3-C5. */
+test('KENNEL sim: two eggs granted the same day for a player missing four species hatch two different species', async () => {
   await import('./mem-idb.mjs');
   const dbm = await import('../js/db.js');
   for (let trial = 0; trial < 20; trial++) {
     dbm.useDbName(`unit-kennel-sim-twoeggs-${trial}`);
     await addPetInstance('C1', { morph: 'base' });
-    await addPetInstance('C2', { morph: 'base' });   // owns 2 of 5, missing C3/C4/C5
+    await addPetInstance('C2', { morph: 'base' });   // owns 2 of 6, missing C3/C4/C5/C6
     const row1 = await grantEgg('test', 0);
     const row2 = await grantEgg('test', 0);
     const res1 = await hatchEgg(row1.id);
     const res2 = await hatchEgg(row2.id);
     assert.equal(res1.ready, true); assert.equal(res2.ready, true);
     assert.notEqual(res1.item.id, res2.item.id,
-      `trial ${trial}: two eggs granted before either hatched must still mint two different species when three are missing, got ${res1.item.id} twice`);
+      `trial ${trial}: two eggs granted before either hatched must still mint two different species when four are missing, got ${res1.item.id} twice`);
+  }
+});
+
+/* ============ KENNEL PALETTES (2026-09-05): per-species morph PNG variants ==
+ * scripts/build-pet-morphs.py writes assets/bh/C/morph/<sp>__<morph>.png (and
+ * the three midnight-<tier> masters); scripts/build-bh-thumbs.py tiers them
+ * into thumb/{192,384,trim}. morphAsset (js/pets.js) is the gate every render
+ * path resolves through, mirroring SHINY_ART: a MORPH_ART species with a real
+ * morph returns the variant path, everything else returns '' (base). */
+
+const MORPH_ROOT = join(here, '..', 'assets', 'bh', 'C');
+const thumbPath = (tier, rel) => join(here, '..', 'assets', 'bh', 'thumb', String(tier), 'C', rel);
+
+test('KENNEL MORPH_ART: every one of the 30 (species, morph) pairs resolves to a real file at every tier', () => {
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  const missing = [];
+  for (const sp of species) {
+    for (const morph of MORPHS) {
+      const p = morphAsset(sp, morph);
+      if (morph === 'base') {
+        if (p !== '') missing.push(`${sp}|base: morphAsset returned ${JSON.stringify(p)}, expected '' (base falls back to the master)`);
+        const master = join(MORPH_ROOT, `${sp}.png`);
+        if (!existsSync(master)) missing.push(`${sp}|base master missing: ${master}`);
+        for (const tier of [192, 384, 'trim']) if (!existsSync(thumbPath(tier, `${sp}.png`))) missing.push(`${sp}|base thumb/${tier} missing`);
+        continue;
+      }
+      if (!p) { missing.push(`${sp}|${morph}: morphAsset returned '' (expected a variant path)`); continue; }
+      const rel = p.replace(/^assets\/bh\/C\//, '');
+      const abs = join(MORPH_ROOT, rel);
+      if (!existsSync(abs)) missing.push(`${sp}|${morph}: master missing at ${abs}`);
+      for (const tier of [192, 384, 'trim']) if (!existsSync(thumbPath(tier, rel))) missing.push(`${sp}|${morph}: thumb/${tier} missing at ${thumbPath(tier, rel)}`);
+    }
+  }
+  assert.equal(missing.length, 0, missing.join('; '));
+});
+
+/* PROVE-RED: petId 'CX' (exempt, spec section 0.7), an unknown morph string,
+ * and a species outside MORPH_ART must all resolve to '' (base), never throw,
+ * never guess a path. Flipping any one of the three guard clauses inside
+ * morphAsset (js/pets.js) to always pass reproduces a FAIL below (a CX path,
+ * a 'rainbow.png' path, or a path for a made-up species id). */
+test('KENNEL MORPH_ART: CX, an unknown morph, and an unlisted species all resolve to base', () => {
+  assert.equal(morphAsset('CX', 'ember'), '', 'CX is exempt from morphs (its amethyst art IS its look)');
+  assert.equal(morphAsset('C1', 'rainbow'), '', 'an unknown morph value must fall back to base, never guess a path');
+  assert.equal(morphAsset('C1', 'base'), '', 'base never resolves to a variant');
+  assert.equal(morphAsset('SK15', 'ember'), '', 'a species outside MORPH_ART falls back to base');
+  assert.deepEqual(MORPH_ART, ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'], 'MORPH_ART is exactly the six ordinary species, CX excluded');
+});
+
+/* Midnight ships three luminance tiers (Tom, 2026-09-05: "the midnight
+ * luminance tier is NOT decided yet"). All three masters exist on disk for
+ * every species RIGHT NOW so the swap is a one-line constant change with no
+ * rebuild; morphAsset resolves to whichever one MIDNIGHT_TIER names.
+ * PROVE-RED: editing MIDNIGHT_TIER in js/pets.js from 'medium' to 'dark' (or
+ * 'dusk') and re-running this file moves every assertion below to the other
+ * tier's filename and still passes -- that IS "a one-line change ships his
+ * pick"; the row would only fail if a tier's file were missing from disk. */
+test('KENNEL MIDNIGHT_TIER: all three tiers exist on disk; morphAsset resolves to the one the constant names', () => {
+  assert.ok(['dark', 'medium', 'dusk'].includes(MIDNIGHT_TIER), `MIDNIGHT_TIER must be one of dark/medium/dusk, got ${MIDNIGHT_TIER}`);
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  const missing = [];
+  for (const sp of species) {
+    for (const tier of ['dark', 'medium', 'dusk']) {
+      if (!existsSync(join(MORPH_ROOT, 'morph', `${sp}__midnight-${tier}.png`))) missing.push(`${sp} midnight-${tier}`);
+    }
+    const resolved = morphAsset(sp, 'midnight');
+    assert.equal(resolved, `assets/bh/C/morph/${sp}__midnight-${MIDNIGHT_TIER}.png`,
+      `morphAsset('${sp}', 'midnight') must name the MIDNIGHT_TIER file, got ${resolved}`);
+  }
+  assert.equal(missing.length, 0, `every midnight tier must exist so the constant can switch with no rebuild, missing: ${missing.join(', ')}`);
+});
+
+/* Bumbleseal (C6), re-premised 2026-09-05: Tom, "roll Bumbleseal into things,
+ * her time as shop-exclusive has passed." She no longer carries hatchChance
+ * (data/boneheadz.js, scripts/build-cosmetics.py), so pickRandomPet must draw
+ * her at the same even share as C1-C5, not the 1% she used to hatch at.
+ * PROVE-RED: putting `"hatchChance": 0.01` back on her catalogue entry moves
+ * her measured share to ~0.01 and every row below fails (see
+ * tests/pet-pool-audit.mjs for the fuller pool audit; this row is the
+ * unit-level pin the task asked for). */
+test('KENNEL Bumbleseal (C6) hatches at the same even ~1/6 share as C1-C5 over 20,000 seeded draws', () => {
+  const N = 20000, TOL = 0.015;
+  const tally = {};
+  for (let i = 0; i < N; i++) { const p = pickRandomPet(new Set()); tally[p.id] = (tally[p.id] || 0) + 1; }
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  for (const sp of species) {
+    const got = (tally[sp] || 0) / N;
+    assert.ok(Math.abs(got - 1 / 6) <= TOL,
+      `${sp}: expected ${(1 / 6).toFixed(4)} +/- ${TOL}, got ${got.toFixed(4)} over ${N} draws (tally ${JSON.stringify(tally)})`);
   }
 });
 
