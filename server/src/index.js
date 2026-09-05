@@ -143,6 +143,11 @@ const MAX_BACKUP_BYTES = 4 * 1024 * 1024; // encrypted full save (food log grows
    question a restore screen has to answer. */
 const BACKUP_DAILY_MS = 24 * 60 * 60 * 1000;
 const PROMOTE_DAILY = `backups.daily_at IS NULL OR excluded.updated_at - backups.daily_at >= ${BACKUP_DAILY_MS}`;
+/* `updated_at` is also the optimistic-lock version. Keep it monotonic even when
+   two pushes arrive inside one millisecond, otherwise both would receive the
+   same token and the second stale write would still be admitted. */
+const NEXT_BACKUP_VERSION =
+  'CASE WHEN excluded.updated_at > backups.updated_at THEN excluded.updated_at ELSE backups.updated_at + 1 END';
 /* THE PLAYER MUST STILL EXIST AT WRITE TIME, and that is a rule in the
    statement rather than an `if` in front of it, for the same reason the spire
    claim's cap and shield are (see the long note there). verifySigned reads the
@@ -160,7 +165,10 @@ const UPSERT_BACKUP =
      daily_blob = CASE WHEN ${PROMOTE_DAILY} THEN backups.blob       ELSE backups.daily_blob END,
      daily_size = CASE WHEN ${PROMOTE_DAILY} THEN backups.size       ELSE backups.daily_size END,
      daily_at   = CASE WHEN ${PROMOTE_DAILY} THEN excluded.updated_at ELSE backups.daily_at  END,
-     blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at`;
+     blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=${NEXT_BACKUP_VERSION}
+   RETURNING updated_at AS version`;
+const UPSERT_BACKUP_CAS = UPSERT_BACKUP.replace(
+  'RETURNING updated_at AS version', 'WHERE backups.updated_at = ? RETURNING updated_at AS version');
 /* The pre-migration statement: the same one, minus the daily slot. Only
    reachable from the "no such column" fallback in PUT /backup; see the note
    there. It carries the EXISTS clause too, because production is the tree most
@@ -168,7 +176,10 @@ const UPSERT_BACKUP =
 const UPSERT_BACKUP_NO_DAILY =
   'INSERT INTO backups (player_id, blob, app_v, size, updated_at) ' +
   'SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM players WHERE id = ?) ' +
-  'ON CONFLICT(player_id) DO UPDATE SET blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=excluded.updated_at';
+  `ON CONFLICT(player_id) DO UPDATE SET blob=excluded.blob, app_v=excluded.app_v, size=excluded.size, updated_at=${NEXT_BACKUP_VERSION} ` +
+  'RETURNING updated_at AS version';
+const UPSERT_BACKUP_NO_DAILY_CAS = UPSERT_BACKUP_NO_DAILY.replace(
+  'RETURNING updated_at AS version', 'WHERE backups.updated_at = ? RETURNING updated_at AS version');
 
 /* ---------------- names + friend codes ----------------
    NAME_ADJ / NAME_NOUN power the curated name builder: the client sends INDICES,
@@ -196,16 +207,28 @@ function makeFriendCode() {
 function newId() { return crypto.randomUUID(); }
 function pairKey(x, y) { return x < y ? [x, y] : [y, x]; } // canonical a<b for friendships
 
-/* A per-isolate fallback secret, for the keyed hashes below when nothing is
-   provisioned (local dev). LAZY, not a module-level const: the Workers runtime
-   forbids generating random values in global scope, so a `crypto.randomUUID()`
-   at the top of this file fails the whole Worker at startup rather than at the
-   line that wanted it. Never a security claim -- it only means a dev box gets
-   keyed values rather than silently unkeyed ones. */
-let ephemeralSecret = null;
-function fallbackSecret() {
-  if (!ephemeralSecret) ephemeralSecret = crypto.randomUUID();
-  return ephemeralSecret;
+/* SECRETS SELF-CHECK (QA round 29 S2/S6). Once per isolate, on the first
+   request or cron tick: log the NAME of every secret that is not provisioned,
+   never a value. Two of these were unset in production for the whole life of
+   the worker and nothing said so: ADD_TOKEN_SECRET fell back to the admin token
+   (S2) and RL_SECRET fell back to a per-isolate random UUID, so every rate
+   limit was really N limits for N isolates (S6). There is no startup hook on a
+   Worker, so "startup" is the first invocation. Provision with
+   `wrangler secret put <NAME>` BEFORE deploy; deploy.sh refuses without them.
+   The per-isolate random fallback that used to live here is GONE: a random
+   secret is exactly the wrong shape for a rate-limit salt (it multiplies the
+   budget by the isolate count) and no fallback at all is the right shape for
+   a signing key (see addTokenSecret). */
+const REQUIRED_SECRETS = ['ADMIN_TOKEN', 'ADD_TOKEN_SECRET', 'RL_SECRET'];
+let secretsChecked = false;
+function checkSecrets(env) {
+  if (secretsChecked) return;
+  secretsChecked = true;
+  const missing = REQUIRED_SECRETS.filter(k => !env[k]);
+  if (missing.length) console.error(`SECRETS MISSING: ${missing.join(', ')}. ` +
+    'ADD_TOKEN_SECRET unset = no leaderboard add tokens are minted (fail closed); ' +
+    'RL_SECRET unset = rate-limit buckets are UNSALTED hashes (real limits, reversible labels); ' +
+    'ADMIN_TOKEN unset = every admin route answers 401. Fix: npx wrangler secret put <NAME>');
 }
 
 /* ---------------- add tokens ----------------
@@ -231,14 +254,17 @@ function fallbackSecret() {
      becoming a permanent directory.
    - STATELESS: an HMAC over (playerId, expiry), so no table and no cleanup.
 
-   The secret: ADD_TOKEN_SECRET if set, else ADMIN_TOKEN (already a deployed
-   secret, so an un-provisioned deploy still issues unforgeable tokens rather
-   than silently issuing forgeable ones), else a per-isolate random value so
-   local dev works and nothing weaker ever reaches production by default. */
+   The secret: ADD_TOKEN_SECRET, and ONLY that (QA round 29 S2). It used to
+   fall back to ADMIN_TOKEN, and because ADD_TOKEN_SECRET was never provisioned
+   the admin token WAS the HMAC key for every add token in production: one
+   secret across two trust boundaries. Now an unset secret FAILS CLOSED: the
+   board is still served, no row carries an addToken, nothing is verifiable,
+   and checkSecrets() has already said why in the log. Local dev gets one from
+   `npm run dev` (--var ADD_TOKEN_SECRET). */
 const ADD_TOKEN_TTL_MS = 24 * 3600000;
 
 function addTokenSecret(env) {
-  return env.ADD_TOKEN_SECRET || env.ADMIN_TOKEN || fallbackSecret();
+  return env.ADD_TOKEN_SECRET || null;
 }
 async function addTokenMac(env, playerId, exp) {
   const enc = new TextEncoder();
@@ -246,7 +272,9 @@ async function addTokenMac(env, playerId, exp) {
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return hexOf(await crypto.subtle.sign('HMAC', key, enc.encode(`bh-add:${playerId}|${exp}`)), 16);
 }
+/** null when no secret is provisioned: the row simply carries no add handle. */
 async function makeAddToken(env, playerId, nowMs) {
+  if (!addTokenSecret(env)) return null;
   const exp = nowMs + ADD_TOKEN_TTL_MS;
   return `${exp.toString(36)}.${await addTokenMac(env, playerId, exp)}.${playerId}`;
 }
@@ -260,7 +288,7 @@ function sameSecret(a, b) {
 }
 /** playerId, or null when the token is malformed, expired or forged. */
 async function readAddToken(env, token, nowMs) {
-  if (typeof token !== 'string') return null;
+  if (typeof token !== 'string' || !addTokenSecret(env)) return null;
   const dot1 = token.indexOf('.');
   const dot2 = token.indexOf('.', dot1 + 1);
   if (dot1 <= 0 || dot2 <= dot1 + 1) return null;
@@ -325,13 +353,33 @@ const RECOVERY_ID_RE = /^[a-z0-9._-]{4,32}$/;
       future route that did write here still could not aim at a chosen IP.
       Falls back to the unkeyed digest when no secret is provisioned: the private
       table already makes it correct, and a deploy without the secret must not
-      lose rate limiting altogether.
+      lose rate limiting altogether. (QA round 29 S6: this paragraph was TRUE
+      of the design and FALSE of the code. The fallback was a random UUID per
+      isolate, so every isolate kept its own counters and the effective limit
+      was N times the declared one. It is now the plain digest, DETERMINISTIC
+      across isolates, and checkSecrets() logs the weaker mode by name.)
 
    Fixed windows, one row per (bucket, name, window), upserted with RETURNING so
    a check is ONE D1 write instead of a read plus a row per hit. The counters
    must not become the write amplification they exist to prevent. The known cost
    of a fixed window is a 2x burst across a boundary; every limit below is set
    with that doubling already assumed. */
+
+/* QA round 29 S4 (FLAGGED, number NOT changed here; Tom picks it). Every
+   accepted POST /events is up to 50 event rows + 1 devices upsert + 2
+   rate-limit upserts = 53 D1 row-writes, MEASURED by round 29 on a 2 KB body.
+   At 20,000/hour per IP that is 1.06M writes an hour, ~25.5M writes and
+   ~6.1 GB of events rows a DAY from ONE address with no account, into a
+   database with a hard 10 GB cap. The old value was 600/hour, raised in round
+   12 because ten users behind one NAT locked the eleventh out (see the note
+   inside RATE_LIMITS). Both numbers are wrong in different directions; a
+   Cloudflare rate-limiting rule in front of /events is the flood defence
+   either way, and this constant is the knob once that exists. */
+const RL_EVENTS_IP_PER_HOUR = 20000;
+/* QA round 29 S3: wrong admin tokens per IP per 10 minutes before a 429.
+   Conservative default, FLAGGED: 10 is ten typos for a human and 1,440 guesses
+   a day for a script against a 32+ byte random token. Tom may move it. */
+const RL_ADMIN_IP_FAILS = 10;
 
 /* Every limiter, with the traffic it has to survive. `limit` is per `windowMs`
    per subject. */
@@ -377,7 +425,15 @@ const RATE_LIMITS = {
      volumetric protection belongs in a Cloudflare rate-limiting rule in front
      of the Worker, which is a deploy-side change and not a code one. */
   rl_events_dev:  { limit: 120, windowMs: 3600000 },
-  rl_events_ip:   { limit: 20000, windowMs: 3600000 },
+  rl_events_ip:   { limit: RL_EVENTS_IP_PER_HOUR, windowMs: 3600000 },
+
+  /* --- admin auth failures (QA round 29 S3) ---
+     Counted per IP, FAILURES ONLY (adminAuth below), so the dashboard's own
+     reloads never spend it. RL_ADMIN_IP_FAILS wrong tokens in 10 minutes locks
+     that address out of every admin route for the rest of the window, right
+     token included. Round 29 sent 180 wrong tokens and saw 180 401s, no 429
+     and an empty rate_limits table. */
+  rl_admin_ip:    { limit: RL_ADMIN_IP_FAILS, windowMs: 600000 },
 
   /* --- account creation ---
      A device registers ONCE, ever, and again on a reinstall. 10/hour per IP
@@ -423,29 +479,42 @@ function hexOf(buf, bytes) {
 async function rlBucket(env, kind, value) {
   const enc = new TextEncoder();
   const material = `${kind}:${value}`;
-  const secret = env.RL_SECRET || fallbackSecret();
-  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  /* QA round 29 S6: no secret means an UNSALTED digest, never a random one. A
+     per-isolate salt made the counters per isolate; a fixed string keeps them
+     one budget per subject everywhere, which is the whole job. Weaker only in
+     that the bucket is a reversible label of the IP; checkSecrets() says so. */
+  if (!env.RL_SECRET) return hexOf(await crypto.subtle.digest('SHA-256', enc.encode(`bh-rl-unsalted:${material}`)), 12);
+  const key = await crypto.subtle.importKey('raw', enc.encode(env.RL_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return hexOf(await crypto.subtle.sign('HMAC', key, enc.encode(material)), 12);
 }
 
 const clientIp = request => request.headers.get('cf-connecting-ip') || 'unknown';
 
+const rlWindowStart = (cfg, now) => Math.floor(now / cfg.windowMs) * cfg.windowMs;
+
 /** Returns a 429 Response when the subject is over budget, else null.
- *  Counts FIRST and refuses after, so a refused request still costs the caller
- *  budget: a limiter that stops counting once you are over is one you can
- *  outrun by simply continuing. */
+ *  COUNTS ONLY WHAT IT ACCEPTS (QA round 29 S5). It used to count first and
+ *  refuse after, on the theory that a refused request should still cost the
+ *  caller budget. In a FIXED window that buys nothing: the window resets on
+ *  the clock regardless of how far over the counter went, so the extra counts
+ *  only ever hurt an honest client sharing the bucket (a NAT'd crowd behind a
+ *  spent IP bucket kept pushing the counter up for nobody's benefit) and they
+ *  were one D1 write per refused request, paid by us. The upsert's WHERE makes
+ *  the increment conditional: no row comes back when the bucket is full, and
+ *  a full bucket is left exactly at its limit. Still ONE D1 statement. */
 async function rateLimit(env, name, kind, value) {
   const cfg = RATE_LIMITS[name];
   if (!cfg) throw new Error(`no rate limit named ${name}`);
   const bucket = await rlBucket(env, kind, value);
   const now = Date.now();
-  const windowStart = Math.floor(now / cfg.windowMs) * cfg.windowMs;
+  const windowStart = rlWindowStart(cfg, now);
   const row = await env.DB.prepare(
     `INSERT INTO rate_limits (bucket, name, window_start, hits, expires_at) VALUES (?,?,?,1,?)
-     ON CONFLICT(bucket, name, window_start) DO UPDATE SET hits = hits + 1
+     ON CONFLICT(bucket, name, window_start) DO UPDATE SET hits = hits + 1 WHERE hits < ?
      RETURNING hits`)
-    .bind(bucket, name, windowStart, windowStart + cfg.windowMs * 2).first();
-  const hits = Number(row?.hits || 1);
+    .bind(bucket, name, windowStart, windowStart + cfg.windowMs * 2, cfg.limit).first();
+  /* No row = the conditional update did not fire = the bucket is full. */
+  const hits = row ? Number(row.hits) : cfg.limit + 1;
   /* Sweep on the FIRST hit of a fresh window only: self-throttling (one delete
      per bucket per window) and it keeps the table proportional to live traffic
      rather than to all traffic ever.
@@ -480,6 +549,43 @@ async function rateLimit(env, name, kind, value) {
  *  accidentally ship an unthrottled way to harvest ciphertext. */
 function rateLimitRecovery(request, env, name = 'rl_recovery') {
   return rateLimit(env, name, 'ip', clientIp(request));
+}
+
+/** Read-only: is this subject's bucket already full? One SELECT, no write. */
+async function rlFull(env, name, kind, value) {
+  const cfg = RATE_LIMITS[name];
+  const row = await env.DB.prepare('SELECT hits FROM rate_limits WHERE bucket = ? AND name = ? AND window_start = ?')
+    .bind(await rlBucket(env, kind, value), name, rlWindowStart(cfg, Date.now())).first();
+  return Number((row && row.hits) || 0) >= cfg.limit;
+}
+
+/* ---------------- admin auth (QA round 29 S2 + S3) ----------------
+   ONE gate for the four admin routes; each used to carry its own copy with
+   three defects in common. Returns null when authorised, else the Response.
+
+   S2. The token came in the URL (?token=), on a worker whose wrangler.toml
+       keeps EVERY invocation with head_sampling_rate = 1, so the admin secret
+       was written to the log store on every dashboard load. Bearer header
+       now. The query string is accepted ONLY while env.ADMIN_QUERY_TOKEN_OK
+       is '1', a one-release bridge for anyone still on the old dashboard;
+       default off, and dashboard.html already sends the header.
+   S3. `token !== env.ADMIN_TOKEN` was a byte-at-a-time early exit on a
+       secret, in the same file that defines sameSecret() and argues for it;
+       and 180 wrong guesses drew 180 401s, no 429 and no trace anywhere.
+       Failures are counted per IP in rl_admin_ip (rateLimit, so a refused
+       guess also spends nothing), the lock holds for the right token too,
+       and each failure is one log line: ip, path, ts. Never the token. */
+async function adminAuth(request, env, url) {
+  const ip = clientIp(request);
+  if (await rlFull(env, 'rl_admin_ip', 'ip', ip)) {
+    return json({ error: 'too many requests, try again later' }, 429, { 'retry-after': '600' });
+  }
+  const bearer = /^Bearer\s+(\S+)$/i.exec(request.headers.get('authorization') || '');
+  let token = (bearer && bearer[1]) || request.headers.get('x-admin-token') || request.headers.get('x-bh-admin') || '';
+  if (!token && env.ADMIN_QUERY_TOKEN_OK === '1') token = url.searchParams.get('token') || '';
+  if (env.ADMIN_TOKEN && sameSecret(token, env.ADMIN_TOKEN)) return null;
+  console.warn('admin auth failed', JSON.stringify({ ip, path: url.pathname, ts: Date.now() }));
+  return (await rateLimit(env, 'rl_admin_ip', 'ip', ip)) || json({ error: 'unauthorized' }, 401);
 }
 
 /* ---------------- events retention ----------------
@@ -823,7 +929,7 @@ async function pruneGrants(env, now = Date.now(), opts = {}) {
    WHAT WRITES THEM, AND HOW FAST IT COULD. All three are reached from UNSIGNED
    routes keyed on a device id the caller chooses, so the only thing standing
    between them and an infinite table is a per-IP budget:
-     devices  upserted by POST /events, 20,000/hour per IP. Round 12 grew it by
+     devices  upserted by POST /events, RL_EVENTS_IP_PER_HOUR (20,000) per IP per hour. Round 12 grew it by
               111 rows with nothing anywhere to stop it.
      reports  inserted by POST /report, 60/hour per IP = 1,440 rows a day.
               Round 12 grew it by 402 rows, same finding.
@@ -844,9 +950,16 @@ async function pruneGrants(env, now = Date.now(), opts = {}) {
         does too. One window across all three means no join ever degrades, and
         365 is 12x EVENT_RETENTION_DAYS, so no events row can lose its device.
      3. It buys a CEILING, which is the entire point. At the budgets above one
-        address can mint 14,400 devices rows and 1,440 reports rows a day.
-        Unbounded those are infinite; at 365 days they are 5.26M rows (about
-        510 MB) and 526k rows. Both fit inside 10 GB. "Forever" does not.
+        address can mint 480,000 devices rows (RL_EVENTS_IP_PER_HOUR = 20,000
+        x 24) and 1,440 reports rows a day. Unbounded those are infinite; at
+        365 days they are 175.2M devices rows (about 17 GB at the 97 bytes/row
+        measured above) and 526k reports rows. THE DEVICES FIGURE DOES NOT FIT
+        IN 10 GB (QA round 29 S7). This paragraph used to say 14,400 a day,
+        5.26M rows and 510 MB: that was computed from the OLD 600/hour events
+        limit and was stale by 33x from the day the limit was raised. The
+        window still bounds the leak; what makes the bound fit is the S4
+        decision on RL_EVENTS_IP_PER_HOUR (Tom's), or a Cloudflare rule in
+        front of /events. At the old 600/hour the year is 5.26M rows again.
      4. `leads` holds the only contact PII in this database, an email and an
         explicit opt-in to be mailed. A shorter window there would be a decision
         about somebody's mailing list rather than about storage, and it is also
@@ -1515,6 +1628,26 @@ function sanitizeSnapshot(rawSnap, row, nowMs) {
     snap.weekSteps = acceptedSteps;
   }
 
+  /* ---- THE FREEZE (QA round 34 P0) ----
+     PUSH BEFORE YOU PULL: js/app.js pushes this snapshot with the NEW week's
+     key one request before /steps/week settles last week from this same
+     table, and this row only ever kept one (week_key, week_steps) pair. So the
+     UPDATE below that advances week_key to the new week was also the moment
+     last week's total left the table -- the settler's own row stopped
+     matching `WHERE week_key = <last week>` a request before it asked to be
+     paid for exactly that week.
+     Whenever the accepted key is about to replace a DIFFERENT stored key, the
+     departing (key, steps) pair is copied into last_week_key/last_week_steps
+     before it is overwritten, so settlement can still find it under the key
+     it actually belongs to. A row that has never raced (storedKey null) or
+     isn't changing weeks this PUT leaves the frozen pair exactly as it was. */
+  let lastWeekKey = typeof row.last_week_key === 'string' ? row.last_week_key : null;
+  let lastWeekSteps = intOrNull(row.last_week_steps) || 0;
+  if (storedKey !== null && acceptedKey !== null && acceptedKey !== storedKey) {
+    lastWeekKey = storedKey;
+    lastWeekSteps = storedSteps;
+  }
+
   const level = intOrNull(snap.level) || 0;
   const raisesMax = level > prevMax;
   return {
@@ -1524,6 +1657,8 @@ function sanitizeSnapshot(rawSnap, row, nowMs) {
     maxLevelAt: raisesMax ? nowMs : (row.max_level_at || null),
     weekKey: acceptedKey,
     weekSteps: acceptedSteps,
+    lastWeekKey,
+    lastWeekSteps,
     /* THE BOARD'S RANK KEY, so it can be a column instead of a json_extract the
        ORDER BY has to compute for every player in the table. Current, not the
        max_level ratchet above: the leaderboard has always shown where a player
@@ -1613,7 +1748,50 @@ async function requestFriendship(env, meId, otherId) {
        ts     = CASE WHEN friendships.requested_by <> excluded.requested_by THEN excluded.ts   ELSE friendships.ts     END
      RETURNING status`).bind(a, b, meId, now, meId, otherId).first();
   if (!row) return { ok: true, status: 'pending', ignored: true };
-  return { ok: true, status: row.status === 'accepted' ? 'accepted' : 'pending' };
+  const status = row.status === 'accepted' ? 'accepted' : 'pending';
+  // reciprocating a request COMPLETES the friendship, same as /friends/accept,
+  // so it owes both sides the same news
+  if (status === 'accepted') await notifyFriendship(env, a, b, now);
+  return { ok: true, status };
+}
+
+/* BOTH SIDES ARE TOLD, AND IT RIDES THE GRANTS FEED, because that is the only
+   delivery this app has for "something in your Crew happened". Round 29 (S12)
+   drove an accept on two real accounts and watched 45 seconds of silence: the
+   friendship was in the database and neither player was ever told, on either
+   device. A grant is what a gift, a cheer and a lost spire all already use, so
+   there is no new channel here, only news on the existing one.
+   ONE KEY FOR THE PAIR, and the same string on both rows (UNIQUE is
+   (player_id, key), so the two do not collide). An accept that runs twice -- a
+   retried POST /friends/accept, or a reciprocated request re-sent -- delivers
+   exactly once to each side, and the client's own ledger claim would stop a
+   second payout even if it did not.
+   THE SENTENCE IS TRUE ON BOTH SIDES on purpose: "you two are Crew now" is a
+   fact about the pair, so neither row has to know who did the accepting.
+   Swallowed on failure: the friendship is already committed by the time we get
+   here, and a 500 on the accept would tell the player the opposite of what the
+   database now says. */
+async function notifyFriendship(env, aId, bId, now = Date.now()) {
+  try {
+    const [a, b] = pairKey(aId, bId);
+    const rows = await env.DB.prepare('SELECT id, handle, name FROM players WHERE id IN (?, ?)').bind(a, b).all();
+    const nameOf = id => {
+      const r = (rows.results || []).find(x => x.id === id);
+      return (r && (r.name || r.handle)) || 'A Bonehead';
+    };
+    /* THE KEY NAMES THE OTHER PLAYER, NOT THE PAIR, and that is a delete rule
+       rather than a style. UNIQUE is (player_id, key), so `crew-<them>-pair` is
+       already unique on my row and still deterministic, which is all the
+       idempotence needs. What it buys is that every crew row mentioning a
+       player starts with that player's id, so POST /account/delete removes them
+       all with one range and no name or id of a deleted account survives on
+       anybody else's feed. A pair key would have left both. Unlike a gift, a
+       crew row carries no value, so deleting it cannot cost anyone anything. */
+    const row = (to, other) => env.DB.prepare(
+      'INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+      .bind(to, `crew-${other}-pair`, 'crew', JSON.stringify({ note: `You and ${nameOf(other)} are Crew now.` }), now);
+    await env.DB.batch([row(a, b), row(b, a)]);
+  } catch (e) { console.log('notifyFriendship failed', String(e)); }
 }
 
 /* ---------------- daily-capped grants ----------------
@@ -1798,6 +1976,7 @@ export default {
      dashboard. A pruner that silently stops is indistinguishable from one that
      had nothing to do, right up until the 10 GB cap arrives. */
   async scheduled(event, env) {
+    checkSecrets(env);
     const now = Date.now();
     const cron = (event && event.cron) || null;
     let r = null, g = null, s = null, thrown = null;
@@ -1853,6 +2032,7 @@ export default {
   },
 
   async fetch(request, env) {
+    checkSecrets(env);
     const url = new URL(request.url);
     const path = url.pathname;
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
@@ -1973,7 +2153,7 @@ export default {
            forget, and the copy into spires.defender below would still carry the
            raw claim. */
         const prior = await env.DB.prepare(
-          'SELECT created_at, max_level, max_level_at, week_key, week_steps FROM players WHERE id = ?')
+          'SELECT created_at, max_level, max_level_at, week_key, week_steps, last_week_key, last_week_steps FROM players WHERE id = ?')
           .bind(auth.playerId).first();
         const checked = sanitizeSnapshot(body.snapshot, prior || {}, nowP);
         const snap = JSON.stringify(checked.snap);
@@ -1991,9 +2171,11 @@ export default {
           env.DB.prepare(
             `UPDATE players SET profile = ?, app_v = ?, last_seen = ?,
                max_level = ?, max_level_at = ?, week_key = ?, week_steps = ?,
+               last_week_key = ?, last_week_steps = ?,
                level = ?, badges = ? WHERE id = ?`)
             .bind(snap, String(body.appV || ''), nowP,
                   checked.maxLevel || null, checked.maxLevelAt, checked.weekKey, checked.weekSteps,
+                  checked.lastWeekKey, checked.lastWeekSteps,
                   checked.boardLevel, checked.boardBadges,
                   auth.playerId),
           env.DB.prepare('UPDATE spires SET defender = ?, updated_at = ? WHERE owner = ?')
@@ -2014,15 +2196,41 @@ export default {
         if (auth.err) return json({ error: auth.err }, 401);
         const body = JSON.parse(bodyText || '{}');
         if (typeof body.blob !== 'string' || !body.blob) return json({ error: 'missing blob' }, 400);
+        /* New clients always send baseVersion, including explicit null for the
+           first push. Missing stays as a rolling-deploy compatibility path for
+           older clients, which cannot participate in optimistic locking until
+           they update. An explicit stale token never gets that bypass. */
+        const hasBaseVersion = Object.prototype.hasOwnProperty.call(body, 'baseVersion');
+        const baseVersion = body.baseVersion;
+        if (hasBaseVersion && baseVersion !== null &&
+            (!Number.isSafeInteger(baseVersion) || baseVersion < 1)) {
+          return json({ error: 'invalid base version' }, 400);
+        }
         const now = Date.now();
+        const writeBackup = async (withDaily) => {
+          const sql = withDaily
+            ? (hasBaseVersion ? UPSERT_BACKUP_CAS : UPSERT_BACKUP)
+            : (hasBaseVersion ? UPSERT_BACKUP_NO_DAILY_CAS : UPSERT_BACKUP_NO_DAILY);
+          const args = [auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now, auth.playerId];
+          if (hasBaseVersion) args.push(baseVersion);
+          const stored = await env.DB.prepare(sql).bind(...args).first();
+          if (stored) return { stored };
+          const current = await env.DB.prepare('SELECT updated_at FROM backups WHERE player_id = ?')
+            .bind(auth.playerId).first();
+          return current ? { conflict: current.updated_at } : {};
+        };
         try {
-          const r = await env.DB.prepare(UPSERT_BACKUP)
-            .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now, auth.playerId).run();
+          const result = await writeBackup(true);
           /* Nothing landed means the EXISTS refused it, which has exactly one
-             cause: the account was deleted between verifySigned and here. Say
-             the same thing every other route says about an id that is not
-             there, rather than answering ok about a save nobody stored. */
-          if (!(r.meta && r.meta.changes)) return json({ error: 'unknown player' }, 401);
+             cause without a current backup: the account was deleted between
+             verifySigned and here. A current backup means the compare-and-swap
+             refused a stale base, and its version tells the client what it must
+             pull before retrying. */
+          if (result.conflict != null) {
+            return json({ error: 'stale backup', code: 'stale-backup', version: result.conflict }, 409);
+          }
+          if (!result.stored) return json({ error: 'unknown player' }, 401);
+          return json({ ok: true, updatedAt: result.stored.version, version: result.stored.version });
         } catch (e) {
           /* THE MIGRATION IS NOT APPLIED YET, AND THIS IS THE ONE ROUTE WHERE
              THAT MUST NOT MATTER. Two migrations in server/migrations/ are
@@ -2035,10 +2243,12 @@ export default {
           if (/no such column/i.test(String(e))) {
             console.error('backups.daily_* missing; storing without the archive. ' +
               'Apply migrations/2026-08-25-backup-daily-slot.sql', (e && e.message) || e);
-            const nd = await env.DB.prepare(UPSERT_BACKUP_NO_DAILY)
-              .bind(auth.playerId, body.blob, String(body.appV || ''), body.blob.length, now, auth.playerId).run();
-            if (!(nd.meta && nd.meta.changes)) return json({ error: 'unknown player' }, 401);
-            return json({ ok: true, updatedAt: now });
+            const result = await writeBackup(false);
+            if (result.conflict != null) {
+              return json({ error: 'stale backup', code: 'stale-backup', version: result.conflict }, 409);
+            }
+            if (!result.stored) return json({ error: 'unknown player' }, 401);
+            return json({ ok: true, updatedAt: result.stored.version, version: result.stored.version });
           }
           /* D1 HAS ITS OWN VALUE LIMIT, AND IT IS LOWER THAN MAX_BACKUP_BYTES.
              Measured 2026-08-17 by bisection against local D1: the largest blob
@@ -2066,7 +2276,8 @@ export default {
           }
           throw e;
         }
-        return json({ ok: true, updatedAt: now });
+        /* Successful writes return from the try block with the exact version
+           produced by the atomic INSERT ... RETURNING statement. */
       }
 
       /* Signed: pull the encrypted backup back down (fresh install / new phone).
@@ -2091,7 +2302,8 @@ export default {
           throw e;
         }
         if (!row || !row.blob) return json({ error: 'no backup' }, 404);
-        return json({ blob: row.blob, appV: row.app_v, updatedAt: row.updated_at });
+        return json({ blob: row.blob, appV: row.app_v, updatedAt: row.updated_at,
+          ...(!daily ? { version: row.updated_at } : {}) });
       }
 
       /* ---------------- account recovery ----------------
@@ -2312,7 +2524,19 @@ export default {
            get the same designed 409 with a suggested number as the one that reads
            the clash, because to the player they are the same event. */
         try {
-          await env.DB.prepare('UPDATE players SET name = ?, last_seen = ?, rename_of = NULL WHERE id = ?')
+          /* QA round 29 S9: the name being replaced goes onto prev_names (a JSON
+             array, newest last, capped at 10 by dropping the oldest) so the
+             delete cascade can scrub labels that were stamped under it. Done in
+             the same UPDATE, so a rename can never lose its own history to a
+             race. No `devices` or `reports` row knows its player (both are
+             written by unsigned routes, by design), so the history IS the link. */
+          await env.DB.prepare(
+            `UPDATE players SET name = ?, last_seen = ?, rename_of = NULL,
+               prev_names = CASE WHEN name IS NULL THEN prev_names
+                 WHEN json_array_length(COALESCE(prev_names, '[]')) >= 10
+                   THEN json_insert(json_remove(COALESCE(prev_names, '[]'), '$[0]'), '$[#]', name)
+                 ELSE json_insert(COALESCE(prev_names, '[]'), '$[#]', name) END
+             WHERE id = ?`)
             .bind(name, Date.now(), auth.playerId).run();
         } catch (e) {
           if (!/UNIQUE|constraint/i.test(String(e))) throw e;
@@ -2365,7 +2589,9 @@ export default {
         const ex = await env.DB.prepare('SELECT requested_by FROM friendships WHERE a = ? AND b = ?').bind(a, b).first();
         if (!ex) return json({ error: 'no such request' }, 404);
         if (ex.requested_by === auth.playerId) return json({ error: 'cannot accept your own request' }, 400);
-        await env.DB.prepare('UPDATE friendships SET status = ?, ts = ? WHERE a = ? AND b = ?').bind('accepted', Date.now(), a, b).run();
+        const acceptedAt = Date.now();
+        await env.DB.prepare('UPDATE friendships SET status = ?, ts = ? WHERE a = ? AND b = ?').bind('accepted', acceptedAt, a, b).run();
+        await notifyFriendship(env, a, b, acceptedAt);
         return json({ ok: true });
       }
 
@@ -2413,15 +2639,34 @@ export default {
           q("f.status <> 'accepted' AND f.requested_by <> ?").bind(me, me, me, FRIEND_PAGE + 1),
           q("f.status <> 'accepted' AND f.requested_by = ?").bind(me, me, me, FRIEND_PAGE + 1),
         ]);
+        /* QA round 27 R3: THE PROFILE BLOB IS FOR ACCEPTED FRIENDS ONLY.
+           Every row used to be shaped identically, so a pending outgoing row
+           carried the target's complete plaintext profile (yard, steps, gear,
+           everything PUT /profile stores). Minting an addToken off the public
+           leaderboard and POSTing /friends/add was enough to read anybody's
+           profile with no acceptance from the other side. A pending row now
+           carries exactly what the client's pending renderer reads
+           (js/app.js requestRowsHtml + friendRowAvatar: playerId, name,
+           profile.outfit / profile.pet for the avatar, profile.level for the
+           "Lv N" line) plus the handle. All of those are already public on
+           GET /leaderboard, so a pending row reveals nothing the board does
+           not. Same SELECT, two shapes. */
         const shape = r => {
           const meIsA = r.a === me;
-          return {
+          const prof = (() => { try { return JSON.parse(meIsA ? r.b_profile : r.a_profile); } catch { return null; } })();
+          const base = {
             playerId: meIsA ? r.b : r.a,
             name: (meIsA ? r.b_name : r.a_name) || (meIsA ? r.b_handle : r.a_handle),
             handle: meIsA ? r.b_handle : r.a_handle,
+          };
+          if (r.status !== 'accepted') {
+            return { ...base, profile: prof ? { outfit: prof.outfit ?? null, pet: prof.pet ?? null, level: prof.level ?? null } : null };
+          }
+          return {
+            ...base,
             friendCode: meIsA ? r.b_code : r.a_code,
             appV: meIsA ? r.b_v : r.a_v,
-            profile: (() => { try { return JSON.parse(meIsA ? r.b_profile : r.a_profile); } catch { return null; } })(),
+            profile: prof,
             since: r.ts,
             lastSeen: meIsA ? r.b_seen : r.a_seen,
           };
@@ -2887,6 +3132,41 @@ export default {
               AND week_steps > 0
             ORDER BY week_steps DESC LIMIT 25`).bind(weekKey).all()).results || [];
 
+        /* SETTLEMENT ONLY (QA round 34 P0): board(weekKey) above finds a racer
+           through their CURRENT week_key, which is exactly what stops working
+           the moment that racer's own next PUT /profile has already advanced
+           it to the week after `weekKey` -- "push before you pull" (js/app.js
+           opens Crew by pushing the new week's snapshot, then calls this
+           route). That PUT is also what freezes the departing pair into
+           last_week_key/last_week_steps (see sanitizeSnapshot), so the settled
+           board adds back anyone found there instead: two small queries
+           (this one has no matching index, but it runs once per real week
+           rollover, gated by the settled-marker check below, never per
+           request) rather than reshaping the hot live-board query above and
+           its pinned plan. No overlap is possible -- a row's last_week_key is
+           always the key BEFORE its current week_key, never equal to it -- so
+           the merge below needs no de-dup. */
+        const settledBoard = async weekKey => {
+          const current = await board(weekKey);
+          const frozen = (await env.DB.prepare(
+            `SELECT id, handle, name, json_extract(profile,'$.outfit') outfit,
+                    last_week_steps steps,
+                    level lvl,
+                    json_extract(profile,'$.levelName') lvlName,
+                    badges,
+                    json_extract(profile,'$.pet') pet,
+                    json_extract(profile,'$.stats') stats,
+                    json_array_length(COALESCE(json_extract(profile,'$.gear'), '[]')) gearCount,
+                    last_seen seenAt
+               FROM players
+              WHERE profile IS NOT NULL
+                AND COALESCE(is_test, 0) = 0
+                AND last_week_key = ?
+                AND CAST(COALESCE(json_extract(profile,'$.raceV'),0) AS INTEGER) >= ${RACE_RULES}
+                AND last_week_steps > 0`).bind(weekKey).all()).results || [];
+          return [...current, ...frozen].sort((a, b) => b.steps - a.steps).slice(0, 25);
+        };
+
         /* Settle the week just gone, once, before answering for this one.
            ONLY WHEN `wk` REALLY IS THIS WEEK. `wk` arrives in the query string,
            and settlement pays the podium for wk minus seven days and then marks
@@ -2905,7 +3185,7 @@ export default {
           : true;
         let champion = null;
         if (!already) {
-          const last = await board(prev);
+          const last = await settledBoard(prev);
           if (last.length) {
             const w = last[0];
             champion = { name: w.name || w.handle, steps: w.steps, week: prev };
@@ -3141,6 +3421,19 @@ export default {
           if (dupe) return json({ ok: true, duplicate: true });
         }
         if (!landed) return json({ error: 'daily cheer limit', code: 'limit' }, 429);
+        /* THE SENDER GETS A RECEIPT TOO (S12). A cheer was the one thing in the
+           Crew that left no trace on the side that sent it: the send toast is
+           gone in three seconds and nothing anywhere afterwards says it ever
+           happened. Same channel as the cheer itself, so there is nothing new
+           to deliver it. Only on the LANDED path: a duplicate returned above
+           already has its receipt, and a cap refusal has nothing to receipt.
+           `crew`, not `cheer`: a cheer-typed row would list in the sender's own
+           cheers inbox as though somebody had cheered THEM. */
+        const toName = await env.DB.prepare('SELECT handle, name FROM players WHERE id = ?').bind(to).first();
+        await env.DB.prepare('INSERT OR IGNORE INTO grants (player_id, key, type, payload, ts) VALUES (?,?,?,?,?)')
+          .bind(auth.playerId, `crew-${to}-cheerack-${day}-${ck || Date.now()}`, 'crew',
+            JSON.stringify({ note: `${(toName && (toName.name || toName.handle)) || 'Your friend'} got your cheer.` }), Date.now())
+          .run().catch(e => console.log('cheer receipt failed', String(e)));
         return json({ ok: true });
       }
 
@@ -3244,8 +3537,16 @@ export default {
         /* The two strings this account can have been labelled with anywhere.
            handle is NOT NULL, so there are always exactly two bindings and the
            statements below never have to change shape. */
-        const me = await env.DB.prepare('SELECT name, handle FROM players WHERE id = ?').bind(id).first();
+        const me = await env.DB.prepare('SELECT name, handle, prev_names FROM players WHERE id = ?').bind(id).first();
         const shown = (me && me.name) || (me && me.handle) || '', handle = (me && me.handle) || '';
+        /* QA round 29 S9: plus every name this account wore BEFORE the current
+           one (prev_names, written by POST /name). Round 29 renamed, then
+           deleted, and the old name stayed on devices/reports for a year while
+           the new one was scrubbed. Deduplicated, and the placeholder list is
+           built to fit, so the two UPDATEs below take 2 to 12 bindings. */
+        const prev = (() => { try { return JSON.parse((me && me.prev_names) || '[]'); } catch { return []; } })();
+        const labels = [...new Set([shown, handle, ...prev.filter(n => typeof n === 'string' && n)])];
+        const labelIn = labels.map(() => '?').join(',');
         /* Prefix ranges, not a scan. Every key a send-to-a-friend route mints
            starts with the SENDER's id, and idx_grants_key makes each of these a
            range seek; the same "no LIKE, playerIds contain '_'" shape
@@ -3271,19 +3572,37 @@ export default {
              has an index on `label` and neither should grow one to serve a
              route each account reaches exactly once (EXPLAIN QUERY PLAN, 2026-
              09-02: SCAN devices). Both tables are bounded by the 365 day
-             retention rules above; if devices ever approaches the 5.26M row
-             ceiling that note computes, an index on label is the upgrade, not a
-             different shape of scrub. */
-          env.DB.prepare('UPDATE devices SET label = NULL WHERE label = ? OR label = ?').bind(shown, handle),
-          env.DB.prepare('UPDATE reports SET label = NULL WHERE label = ? OR label = ?').bind(shown, handle),
+             retention rules above; if devices ever approaches the row ceiling
+             that note computes (175M at today's rl_events_ip, see S7 there), an
+             index on label is the upgrade, not a different shape of scrub. */
+          env.DB.prepare(`UPDATE devices SET label = NULL WHERE label IN (${labelIn})`).bind(...labels),
+          env.DB.prepare(`UPDATE reports SET label = NULL WHERE label IN (${labelIn})`).bind(...labels),
           env.DB.prepare('DELETE FROM spires WHERE owner = ?').bind(id),
           env.DB.prepare('DELETE FROM friendships WHERE a = ? OR b = ?').bind(id, id),
           env.DB.prepare('DELETE FROM trades WHERE from_p = ? OR to_p = ?').bind(id, id),
           env.DB.prepare('DELETE FROM pvp_fights WHERE challenger = ? OR defender = ?').bind(id, id),
+          /* CREW NEWS ABOUT A DELETED PLAYER IS DELETED, not scrubbed. Every
+             crew row naming somebody is keyed `crew-<their id>-...` precisely so
+             this one range reaches all of them on everybody else's feed: the
+             "you two are Crew now" line and the receipt for a cheer they
+             received. The gift and cheer rows above are scrubbed instead of
+             deleted because rewriting THEIR key rewrites the client's ledger key
+             and a rolled-back cursor would re-pay a real gift. A crew row pays
+             nothing, so it has no such claim on the id. */
+          env.DB.prepare('DELETE FROM grants WHERE key >= ? AND key < ?').bind(`crew-${id}-`, `crew-${id}-￿`),
           env.DB.prepare('DELETE FROM grants WHERE player_id = ?').bind(id),
           env.DB.prepare('DELETE FROM backups WHERE player_id = ?').bind(id),
           env.DB.prepare('DELETE FROM recovery WHERE player_id = ?').bind(id),
-          env.DB.prepare('DELETE FROM leads WHERE player = ?').bind(id),
+          /* QA round 27 R2: BY ID AND BY HANDLE. Until v472 the client wrote
+             `me.id || me.handle` into leads.player and `me.id` never existed,
+             so every survey row in production is keyed by the HANDLE and this
+             statement, binding the id, had never matched one: name, email and
+             opt-in outlived the account for 365 days. The client now sends the
+             real playerId; the second binding is a ONE-TIME WIDENING for the
+             rows already written under a handle. A handle is not unique (see
+             devices/reports above), so this can also clear a survey row of a
+             live player who shares the handle: a lost lead, never lost PII. */
+          env.DB.prepare('DELETE FROM leads WHERE player = ? OR player = ?').bind(id, handle),
           env.DB.prepare('DELETE FROM players WHERE id = ?').bind(id),
         ]);
         return json({ ok: true });
@@ -3309,7 +3628,16 @@ export default {
         const body = await request.json().catch(() => null);
         if (!body || typeof body.device !== 'string' || !Array.isArray(body.events)) return json({ error: 'bad body' }, 400);
         const device = body.device.slice(0, 64);
-        const limitedEdev = await rateLimit(env, 'rl_events_dev', 'device', device);
+        /* QA round 29 S5: the device bucket is keyed ip|device. body.device is a
+           string the caller invents, so alone it is a budget the caller mints at
+           will and, worse, one a stranger who learns a real device id can spend
+           on its owner's behalf. Pairing it with the source makes it a per-client
+           budget per address: an honest phone is unaffected (one id, one
+           address), a spent id from elsewhere cannot lock it out, and rotation
+           is bounded by rl_events_ip exactly as before. Same shape on /report
+           and /survey below. Not IP-only, because each has a paired IP bucket
+           with a larger number that already covers a shared address. */
+        const limitedEdev = await rateLimit(env, 'rl_events_dev', 'device', `${clientIp(request)}|${device}`);
         if (limitedEdev) return limitedEdev;
         const appV = String(body.appV || '').slice(0, 16);
         const batch = body.events.slice(0, 50); // cap per request
@@ -3377,7 +3705,7 @@ export default {
         if (!body || typeof body.device !== 'string' || typeof body.kind !== 'string') return json({ error: 'bad body' }, 400);
         const kind = body.kind.slice(0, 24); // 'den-nominate' | 'unreachable'
         const device = body.device.slice(0, 64);
-        const limitedRdev = await rateLimit(env, 'rl_report_dev', 'device', device);
+        const limitedRdev = await rateLimit(env, 'rl_report_dev', 'device', `${clientIp(request)}|${device}`); // QA round 29 S5: ip|device
         if (limitedRdev) return limitedRdev;
         const appV = String(body.appV || '').slice(0, 16);
         const label = (typeof body.label === 'string' && body.label) ? body.label.slice(0, 40) : null;
@@ -3404,7 +3732,7 @@ export default {
         const body = await request.json().catch(() => null);
         if (!body || typeof body.device !== 'string') return json({ error: 'bad body' }, 400);
         const device = body.device.slice(0, 64);
-        const limitedSdev = await rateLimit(env, 'rl_survey_dev', 'device', device);
+        const limitedSdev = await rateLimit(env, 'rl_survey_dev', 'device', `${clientIp(request)}|${device}`); // QA round 29 S5: ip|device
         if (limitedSdev) return limitedSdev;
         const player = (typeof body.player === 'string' && body.player) ? body.player.slice(0, 200) : null;
         const label = (typeof body.label === 'string' && body.label) ? body.label.slice(0, 40) : null;
@@ -3558,8 +3886,8 @@ export default {
        * activeByDay, 6x on testers, 4x on the whole route) and the milliseconds
        * as the shape of the curve, not as a promise. */
       if (path === '/stats' && request.method === 'GET') {
-        const token = url.searchParams.get('token') || request.headers.get('x-bh-admin') || '';
-        if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
+        const denied = await adminAuth(request, env, url); // QA round 29 S2/S3
+        if (denied) return denied;
         const today = new Date().toISOString().slice(0, 10);
         const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
         const q = async (sql, ...b) => (await env.DB.prepare(sql).bind(...b).first());
@@ -3727,10 +4055,13 @@ export default {
         return json({ windowDays: EVENT_RETENTION_DAYS, statsWindowDays: STATS_WINDOW_DAYS, totalDevices, dau, wau, totalEvents, byName, activeByDay, newByDay, screenTime, featureOpens, featureTime, playMinutes, sessions, avgSessionMin, returnRate, testers, byCountry, byCity, reports, leads, errors, errorsByBuild, vault, generatedAt: Date.now() });
       }
 
-      /* IS THE PRUNER HEALTHY. Gated by ADMIN_TOKEN, read via ?token= or the
-       * x-bh-admin header, which is the same pair /stats takes and the same
-       * secret; dashboard.html already holds it. No new auth scheme, and
-       * nothing here is reachable without the token.
+      /* IS THE PRUNER HEALTHY. Gated by ADMIN_TOKEN through adminAuth(), the
+       * same gate /stats takes and the same secret; dashboard.html already
+       * holds it. No new auth scheme, and nothing here is reachable without
+       * the token. (QA round 29 S2: this paragraph used to say "read via
+       * ?token= or the x-bh-admin header". The query string is refused now
+       * unless ADMIN_QUERY_TOKEN_OK=1, because head_sampling_rate = 1 retains
+       * every request URL; Authorization: Bearer is the way in.)
        *
        * THE QUESTION THIS ROUTE HAS TO SURVIVE is the one that had no answer on
        * 2026-08-24: the cron was enabled, the deploy output confirmed the
@@ -3764,8 +4095,8 @@ export default {
        * anyway. The dormant-grants count was the one that did NOT scale and it
        * is bounded by a LIMIT; see its own note below. */
       if (path === '/admin/prune' && request.method === 'GET') {
-        const token = url.searchParams.get('token') || request.headers.get('x-bh-admin') || '';
-        if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
+        const denied = await adminAuth(request, env, url); // QA round 29 S2/S3
+        if (denied) return denied;
         const limit = Math.max(1, Math.min(200, Number(url.searchParams.get('limit')) || 20));
         const now = Date.now();
         const cutoffDay = new Date(now - EVENT_RETENTION_DAYS * 86400000).toISOString().slice(0, 10);
@@ -3969,8 +4300,8 @@ export default {
          near-miss on a generated bone-name is obvious before anything is granted.
          Matches an id or a friend code exactly, or a name/handle by substring. */
       if (path === '/admin/players' && request.method === 'GET') {
-        const token = url.searchParams.get('token') || request.headers.get('x-admin-token') || '';
-        if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
+        const denied = await adminAuth(request, env, url); // QA round 29 S2/S3
+        if (denied) return denied;
         const q = (url.searchParams.get('q') || '').trim();
         if (q.length < 2) return json({ error: 'q must be at least 2 characters' }, 400);
         // LIKE wildcards in the query are escaped: a search for "100%" is a
@@ -4005,8 +4336,8 @@ export default {
          The response names WHO it landed on and WHAT they got, in English, so a
          mistyped name is caught while it is still only a row in `grants`. */
       if (path === '/admin/grant' && request.method === 'POST') {
-        const token = request.headers.get('x-admin-token') || '';
-        if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return json({ error: 'unauthorized' }, 401);
+        const denied = await adminAuth(request, env, url); // QA round 29 S2/S3
+        if (denied) return denied;
         const b = await request.json().catch(() => ({}));
         if (!b.playerId || !b.key || !b.note) return json({ error: 'playerId, key and note are required' }, 400);
         const built = adminGrantPayload(b);

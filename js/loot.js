@@ -4,6 +4,7 @@
 
 import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
+import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
 import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
 
@@ -64,6 +65,91 @@ export const DROP = {
   ],
 };
 
+/* Football kit, 2026-09-04: one tile per GARMENT, one flat price, and what it
+   hands over is that garment in every team's colours (footballGrantIds; the
+   helmet still drags its three visors, so 128 ids). Tom: "buy the garment get
+   all 32 colours." Same receipt-decides shape as buyDropItem: money first,
+   atomically; the grant race's loser is refunded. Refuses while the kit is not
+   live or has no price, so a flipped flag without a number sells nothing.
+
+   ALREADY OWNED MEANS ANY COLOURWAY. A second helmet in a different team is not
+   a second purchase, it is the same purchase, so the ownership check has to
+   refuse it before the coins move. It does, and not by accident: the 32 rows
+   granted above are all in ownedCosmeticIds(), so `owned.has(itemId)` is already
+   true for every team's copy. Graded by tests/football-kit-audit.mjs row REPEAT,
+   which asserts the coin delta is zero.
+
+   `stocked` is a parameter for the same reason footballBundleSellable's are: the
+   shop is shut until Tom flips FOOTBALL_KIT_LIVE, and a buy path nobody can call
+   is a buy path nobody has tested. Production callers pass nothing. */
+export async function buyFootballItem(itemId, stocked = footballPieceSellable()) {
+  const ids = footballGrantIds(itemId);
+  const cost = FOOTBALL_KIT_PRICE_PLACEHOLDER;
+  const garment = FOOTBALL_GARMENT_BY_KEY[(BH_BY_ID[itemId] || {}).football?.garment];
+  // `sold` and not merely "a football item": the three visors are granted, never
+  // sold, so a stray tile id for one must not take 4,200 for a piece of a hat.
+  if (!stocked || !ids.length || !garment?.sold || !Number.isFinite(cost) || cost <= 0) return { ok: false, reason: 'not-stocked' };
+  if ((await ownedCosmeticIds()).has(itemId)) return { ok: false, reason: 'owned' };
+  const left = await spendCoins(cost);
+  if (left === null) return { ok: false, reason: 'coins', need: cost, have: await coins() };
+  if (!await grantCosmetic(itemId, 'football')) {
+    await coinsAdd(cost);
+    return { ok: false, reason: 'owned' };
+  }
+  for (const id of ids) if (id !== itemId) await grantCosmetic(id, 'football');
+  return { ok: true, label: `${garment.label} · ${FOOTBALL_TEAMS.length} colourways`, granted: ids.length, cost, coins: left };
+}
+
+/* THE BUNDLE. Tom, 2026-09-04: "per garment only with a bundle of everything for
+   a slightly cheaper but expensive price." One purchase, all five sold garments,
+   each in all 32 colourways (256 ids: the helmet still drags its three visors).
+   There is one bundle now, not one per team; the first argument is the team tile
+   the player tapped and is IGNORED, kept only so js/app.js keeps working until
+   its shelf patch lands (docs/FOOTBALL-KIT.md).
+   Same receipt-decides shape as above. PRICED FOR WHAT IS MISSING (Tom,
+   2026-09-05, Impeccable's football-kit critique): a player who owns 3 of 5
+   garments used to pay the full 16,800 for the other two, worth 8,400.
+   footballBundleQuote charges min(bundle, piece x missing garments) instead;
+   footballOwnedGarmentCount counts a garment as owned the moment any one of
+   its 32 team ids is, matching how footballGrantIds hands them over. Owning
+   ALL of it is refused outright. */
+export async function buyFootballBundle(_teamId, stocked = footballBundleSellable()) {
+  const ids = footballBundleIds();
+  if (!ids.length || !stocked) return { ok: false, reason: 'not-stocked' };
+  const owned = await ownedCosmeticIds();
+  const want = ids.filter(id => !owned.has(id));
+  if (!want.length) return { ok: false, reason: 'owned' };
+  const { cost, missing, save } = footballBundleQuote(footballOwnedGarmentCount(owned));
+  if (!Number.isFinite(cost) || cost <= 0) return { ok: false, reason: 'not-stocked' };
+  const left = await spendCoins(cost);
+  if (left === null) return { ok: false, reason: 'coins', need: cost, have: await coins() };
+  /* The FIRST missing piece is the receipt, exactly as the single tile uses its
+     own item: two overlapping taps both spend, and the one that loses the grant
+     is refunded, so a bundle is never charged twice. */
+  if (!await grantCosmetic(want[0], 'football')) {
+    await coinsAdd(cost);
+    return { ok: false, reason: 'owned' };
+  }
+  const landed = new Set([want[0]]);
+  for (const id of want.slice(1)) if (await grantCosmetic(id, 'football')) landed.add(id);
+  /* OVERCHARGE GUARD (P1, Codex 2026-09-05). `want` and `cost` are a SNAPSHOT
+     taken before either coin moved. A single-garment buy for a DIFFERENT
+     garment that lands in the gap between that snapshot and this loop grants
+     the garment for free here (grantCosmetic just no-ops on an id already
+     owned) while `cost` was quoted as if the bundle still had to pay for it:
+     both purchases succeed, and the player is out one garment's price.
+     Re-quote against what THIS call actually delivered (a garment counts once
+     it lands one of its 32 ids, same rule footballOwnedGarmentCount uses, not
+     once per team id) and refund the gap. A clean run delivers exactly
+     `missing` garments and the requote matches `cost`, so refund is 0. */
+  const landedGarments = FOOTBALL_SOLD.filter(g =>
+    footballGrantIds(footballItemId(FOOTBALL_TEAMS[0].id, g.key)).some(id => landed.has(id))).length;
+  const fair = footballBundleQuote(FOOTBALL_SOLD.length - landedGarments).cost;
+  const refund = cost - fair;
+  const finalCoins = refund > 0 ? await coinsAdd(refund) : left;
+  return { ok: true, label: `The full kit · ${FOOTBALL_TEAMS.length} colourways`, granted: missing, cost, coins: finalCoins, save };
+}
+
 export async function buyDropItem(itemId) {
   const d = DROP.items.find(x => x.id === itemId);
   if (!d) throw new Error('not a drop item');
@@ -101,20 +187,55 @@ export async function buyDropItem(itemId) {
    tiles in a row sell the same kind of thing (measured alpha bounding boxes
    say the art supplies seven genuinely distinct crops, not nine, so the two
    lookalike pairs are seated non-adjacent by the order below). */
+/* ============ THE 2026-09-04 DOUBLING: THE ANCHOR HOLDS, THE REST DOUBLES ===
+ * Tom's ruling: "Just make everything cost more". Every coin and dust price on
+ * this shelf and the rarity shelf below is exactly 2x what it was, with ONE
+ * exception: the 300-coin / 35-dust common anchor, which is unchanged.
+ *
+ * WHY THE ANCHOR IS EXEMPT, measured rather than assumed
+ * (scratchpad/r33/prices/, same instrument as the round-33 faucet sim). At a
+ * flat 2x the light player's first cosmetic slips from day 22 to day 35 and
+ * their year's haul falls from 21 pieces to 9, because a light player buys
+ * commons and almost nothing else. Hold the anchor and the light player's whole
+ * year is byte-identical to today's, while the committed player's spend per
+ * piece doubles. So the doubling lands entirely on the players it was aimed at.
+ * This is also the invariant the rung below already carried, and 600 would have
+ * broken it: a 340-coin starting wallet must be able to buy something.
+ *
+ * WHAT THIS DOES NOT DO, and it must be said beside the numbers rather than in
+ * a report nobody re-reads: IT DOES NOT MAKE THE CATALOGUE LAST A YEAR. Same
+ * sim, committed player, day the shelf goes empty (mean of seeds 11/23/47):
+ * 140 at today's prices, 149 at THIS ladder, and it was 172 at the rejected
+ * flat 2x and 193 at 6x on seed 11. It asymptotes around 200 whatever the shop
+ * charges, because ~255 of the 355 buyable pieces arrive FREE in crates:
+ * rollCosmetic prefers UNOWNED, so a purchase and a crate drop are SUBSTITUTES
+ * drawing on one pool, not additions to a total. Day to day the player is
+ * income-bound, not price-bound, so raising prices does not raise spend (day 90
+ * committed spend is 26,500 before and 25,433 after); it only buys fewer pieces
+ * with the same coins (79 -> 75 by day 90). Price is a merchandise lever, not a
+ * pacing lever. The pacing lever is the crate cosmetic drop, which is E32-3's
+ * fifth-cut and is NOT shipped.
+ *
+ * CORROBORATION: Tom priced a single football garment at 4,200 by hand on
+ * 2026-09-04. That is 2.1x the legendary this ladder replaces, and within 5% of
+ * the 4,000 legendary it installs. The hand-set price and the ladder now agree.
+ */
 export const RACK_THEME = 'HEATWAVE';
 export const RACK_POOLS = [
-  [3000, ['H13-4', 'H13-2', 'H13-5']],    // legendary blowfish hats  head
-  [2400, ['B0-4', 'B20', 'B2']],          // rare bodies              whole figure
-  [2000, ['IL8-1', 'IL12-2', 'IL14']],    // legendary left hand      left hand
-  [1500, ['T10-1', 'T10-2', 'T6-1']],     // uncommon tees            torso
-  [1000, ['FW6-3', 'FW7-6', 'FW8-3']],    // rare kicks               feet
-  [900, ['P5-1', 'P5-2', 'P6-3']],        // epic swim trunks         hips
-  [700, ['S4-1', 'S5', 'S8']],            // uncommon socks           ankle
+  [6000, ['H13-4', 'H13-2', 'H13-5']],    // legendary blowfish hats  head
+  [4800, ['B0-4', 'B20', 'B2']],          // rare bodies              whole figure
+  [4000, ['IL8-1', 'IL12-2', 'IL14']],    // legendary left hand      left hand
+  [3000, ['T10-1', 'T10-2', 'T6-1']],     // uncommon tees            torso
+  [2000, ['FW6-3', 'FW7-6', 'FW8-3']],    // rare kicks               feet
+  [1800, ['P5-1', 'P5-2', 'P6-3']],       // epic swim trunks         hips
+  [1400, ['S4-1', 'S5', 'S8']],           // uncommon socks           ankle
   /* THE ANCHOR, and it is the point of this rung. A starting wallet is 340
      coins; with a 500-coin floor every one of the eighteen prices rendered out
      of reach and the screen had no affordable state on it at all, which reads
      as broken rather than expensive. Every rack carries one piece a starting
-     wallet can actually buy. */
+     wallet can actually buy. UNCHANGED BY THE 2026-09-04 DOUBLING: 600 would
+     have put this rung out of a starting wallet's reach, which is the exact
+     state this rung exists to prevent. */
   [300, ['U2', 'U4', 'U7']],              // common briefs            waist
 ];
 /* DUST IS THE CERTAINTY PREMIUM: coins buy whatever the rack happens to offer,
@@ -123,21 +244,30 @@ export const RACK_POOLS = [
    per-rung ladder rather than a formula, because a formula over eight rungs is
    what produced an inversion where plain white briefs cost 25% more dust than
    the aura. Implied coins-per-dust, dearest to cheapest: 15.0, 13.7, 12.5,
-   11.5, 10.5, 10.0, 9.3, 8.6, strictly single-directional. */
-export const RACK_DUST = [200, 175, 160, 130, 95, 90, 75, 35];
+   11.5, 10.5, 10.0, 9.3, 8.6, strictly single-directional.
+   DUST DOUBLED IN LOCKSTEP with the coins above (anchor rung excepted, as
+   there), so every one of those eight ratios is UNCHANGED to the decimal. Had
+   only the coins doubled, dust would silently have become half price relative
+   to them and the certainty premium would have collapsed. */
+export const RACK_DUST = [400, 350, 320, 260, 190, 180, 150, 35];
 /* AURAS GO ON WEAPONS, and the weapon in the tile is a MANNEQUIN, not the
    product: a plain common katana nobody is selling carries it so "you are
    buying the effect, not the sword" survives. Cell 4 is the centre of the
    three-wide grid. */
-export const RACK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 1200, dust: 110 };
+export const RACK_AURA = { key: 'tide', name: 'Tidewater Aura', carrier: 'IR7-3', rarity: 'epic', coin: 2400, dust: 220 };
 export const RACK_AURA_CELL = 4;
 /* THE REROLL IS A PRICE CURVE, NOT A COUNT CAP. Tom, 2026-08-31: "players
    should be able to pay an increasing amount to reroll the rack thats fine".
    This is deliberately a coin sink: post-Bumbleseal players sit on ~30,000
    inert coins with the crate shop closed. So the count is unlimited within the
    week and the PRICE is the ceiling: it starts at a quarter of a legendary
-   (RACK_RARITY_PRICE tops at 2,000), doubles per reroll, and holds at the cap.
-   Five rerolls cost 15,500; a 30,000 hoard funds about seven. The counter (and
+   (RACK_RARITY_PRICE tops at 4,000 since the 2026-09-04 doubling), doubles per
+   reroll, and holds at the cap. THE DERIVATION IS THE REASON THIS LADDER MOVED
+   TOO: the opening rung is a quarter of a legendary by construction, so leaving
+   it at 500 against a 4,000 legendary would have made the stated rule false and
+   quietly halved the endgame sink relative to the shelf it drains.
+   Five rerolls cost 31,000; the ~86,000 wallet the r33 price sim measures at
+   day 365 funds about six. The free first rung is untouched. The counter (and
    with it the curve) resets weekly with the rack record (rr: 0 in rack()).
    The old count-capped weekly ladder (one free + six paid, 2,000 total,
    approved 2026-08-20) is superseded by the 2026-08-31 ruling, with ONE thing
@@ -146,7 +276,7 @@ export const RACK_AURA_CELL = 4;
    already had, so the ladder opens at 0 and the sink starts at rung two.
    Reviewer-set from the shelf economy: five paid rerolls run 15,500 against
    the ~30,000 endgame hoard the ticket measured. */
-export const RACK_REROLL_LADDER = [0, 500, 1000, 2000, 4000, 8000];
+export const RACK_REROLL_LADDER = [0, 1000, 2000, 4000, 8000, 16000];
 
 // Same FNV-1a the dens turn over on, so the rack changes every Monday with no
 // server. The salt is the reroll counter, and since 2026-08-31 it moves ONLY
@@ -182,18 +312,26 @@ export const RACK_REROLL_LADDER = [0, 500, 1000, 2000, 4000, 8000];
  * (the same invariant RACK_DUST carries above). Implied here, cheapest to
  * dearest: 8.6, 9.3, 10.5, 10.8, 12.5. Strictly single-directional, and every
  * value is one already on the themed ladder so the two shelves cannot disagree
- * about what a piece of a given rarity is worth. */
+ * about what a piece of a given rarity is worth.
+ *
+ * DOUBLED 2026-09-04 with the themed shelf above, coin and dust together and
+ * the common anchor held, so all five of those ratios are unchanged and the
+ * two shelves still cannot disagree. The reasoning, the measurement and what
+ * this deliberately does NOT fix are all recorded at RACK_POOLS above; the
+ * numbers are pinned by tests/rack-price-ladder-audit.mjs. */
 export const RACK_ROTATE_N = 12;
 export const RACK_RARITY_PRICE = {
   common:    [300, 35],
-  uncommon:  [700, 75],
-  rare:      [1000, 95],
-  epic:      [1400, 130],
-  legendary: [2000, 160],
+  uncommon:  [1400, 150],
+  rare:      [2000, 190],
+  epic:      [2800, 260],
+  legendary: [4000, 320],
 };
 const RACK_PET_SLOTS = new Set(['C', 'CE', 'CB', 'CG', 'CM']);
+/* Football kit, 2026-09-04: kits have their own shelf at their own price, and
+   an id on two shelves is the indexOf collision rack-theme-lint exists for. */
 export const RACK_ROTATE_POOL = BH_ITEMS
-  .filter(i => !RACK_PET_SLOTS.has(i.slot) && !i.exclusive && !i.default && RACK_RARITY_PRICE[i.rarity])
+  .filter(i => !RACK_PET_SLOTS.has(i.slot) && !i.exclusive && !i.default && !i.football && RACK_RARITY_PRICE[i.rarity])
   .map(i => i.id)
   .sort();
 
@@ -728,7 +866,17 @@ function rng() {
    the arithmetic is exact by construction rather than by luck. The clamp is
    unchanged, it just happens inside the transaction now. */
 export async function coins() { return (await kvGet('coins', 0)) || 0; }
-export async function coinsAdd(n) { return kvBump('coins', n); }
+/* 'coinsRev' is a plain monotonic counter, bumped alongside every real coin
+   change and carried in the same backup blob as 'coins' (js/db.js exportAll
+   dumps every kv row). js/db.js importAll's cloud merge (replace:false) reads
+   it to tell a blob OLDER than the local ledger from one that is not, the
+   same "keepHigher" idiom already used there for the day ceilings, applied to
+   coins instead (QA round 34 P0). Two separate kvBump calls, not one
+   transaction: a crash between them only leaves coinsRev a step behind coins,
+   which weakens the guard for one write, it does not reintroduce the refund
+   bug the guard exists to stop. ponytail: a real fix bumps both in one kv
+   transaction if this ever needs to be exact under a crash; not worth it here. */
+export async function coinsAdd(n) { const v = await kvBump('coins', n); await kvBump('coinsRev', 1); return v; }
 
 /* THE ATOMIC SPEND, and it is the only honest way to take money in this file.
    Every buy used to read the balance, compare it to the price, and THEN call
@@ -793,8 +941,10 @@ export async function grantCosmetic(itemId, source) {
   return row;
 }
 
-export async function ownedGearIds() {
-  const inv = await db.all('inv');
+/* `inv` (QA round 28 G3): a caller holding the inv rows already (renderToday
+   reads them once per draw) hands them in; a bare call scans as before. */
+export async function ownedGearIds(inv) {
+  inv = inv || await db.all('inv');
   return new Set(inv.filter(r => r.kind === 'gear').map(r => r.gearId));
 }
 
@@ -872,12 +1022,23 @@ export async function disenchantGear(gearId) {
 export async function salvagePet(petId) {
   const item = BH_BY_ID[petId];
   if (!item || item.slot !== 'C') return { ok: false, reason: 'not-a-pet' };
-  const list = await petInstances();
+  const list = await petInstances();     // migrates / heals a legacy save first
   if (!speciesCount(list, petId)) return { ok: false, reason: 'not-owned' };
-  // sacrifice the WORST copy first (keeps your best / shinies); a better copy
-  // pays out more dust so salvaging a shiny or bred pet still feels fair.
-  const { instances, removed } = removeWorstInstance(list, petId);
-  await savePetInstances(instances);
+  /* THE COPY IS THE RIGHT TO ONE DUST PAYOUT, so taking it has to be what
+     decides whether there is one. Reading the roster, removing a copy and
+     writing the whole list back left both of two overlapping salvages holding
+     the same pre-read: one removal survived, and BOTH were paid full dust.
+     removeWorstInstance is pure precisely so it can run inside the transaction.
+     Sacrifices the WORST copy first (keeps your best / shinies); a better copy
+     pays out more dust so salvaging a shiny or bred pet still feels fair. */
+  let removed = null;
+  const instances = await kvUpdate('petInst', raw => {
+    const r = removeWorstInstance(Array.isArray(raw) ? raw : list, petId);
+    if (!r.removed) return undefined;
+    removed = r.removed;
+    return r.instances;
+  }, list);
+  if (!instances) return { ok: false, reason: 'not-owned' };
   const remaining = speciesCount(instances, petId);
   if (remaining === 0) {
     // last copy gone: drop ownership, unequip, clear the legacy anchor
@@ -954,9 +1115,15 @@ export async function lifetimeStepsSum() {
    `goal: 0` is a READY egg, which is how the Crew channel can hand a new player
    one they can crack straight away. eggProgress compares walked >= goal, so zero
    is ready on arrival with no special case anywhere else. */
+/* THE ROW grantEgg WRITES, without writing it. The Boneyard's collect pays its
+   crate INSIDE the ledger claim's own transaction (js/hunt.js, QA round 28 Y5),
+   so it needs the row rather than the write, and building it here is what stops
+   the two shapes drifting apart. */
+export async function eggRow(source, goal = EGG_GOAL_STEPS) {
+  return { id: newId(), kind: 'egg', stepsAtStart: await lifetimeStepsSum(), goal, source, ts: Date.now() };
+}
 export async function grantEgg(source, goal = EGG_GOAL_STEPS) {
-  const stepsAtStart = await lifetimeStepsSum();
-  const row = { id: newId(), kind: 'egg', stepsAtStart, goal, source, ts: Date.now() };
+  const row = await eggRow(source, goal);
   await db.put('inv', row);
   return row;
 }
@@ -1162,23 +1329,36 @@ export async function breedStatus() {
 export async function breedPets(keepIid, feedIid) {
   if (!keepIid || !feedIid || keepIid === feedIid) return { ok: false, reason: 'pick-two' };
   let list = await petInstances();
-  const keep = list.find(x => x.iid === keepIid);
-  const fed = list.find(x => x.iid === feedIid);
-  if (!keep || !fed) return { ok: false, reason: 'gone' };
+  const keep0 = list.find(x => x.iid === keepIid);
+  const fed0 = list.find(x => x.iid === feedIid);
+  if (!keep0 || !fed0) return { ok: false, reason: 'gone' };
   const lifetime = await lifetimeStepsSum();
   const credit = await kvGet('petBreedCredit', null);
   if (credit != null && lifetime - credit < BREED_COOLDOWN_STEPS) {
     return { ok: false, reason: 'cooldown', stepsLeft: BREED_COOLDOWN_STEPS - (lifetime - credit) };
   }
-  const newLineage = (keep.lineage || 0) + 1;
-
-  const consumed = breedParents(fed);
   // lineage is EARNED per feeding, not transferred: feeding a high-lineage pet in
   // does not vault the keeper up to it, so sacrificing a good pet is a waste
   // rather than a strategy.
-  keep.lineage = newLineage;
-  list = removeInstance(list, feedIid).instances;
-  await savePetInstances(list);
+  const consumed = breedParents(fed0);
+
+  /* THE PAIR STILL BEING THERE IS THE CLAIM (2026-09-04, claimed-row-audit): the
+     lineage bump and the removal used to be decided off this outer read and
+     written back whole, which could lose a concurrent salvagePet /
+     salvageInstance / reclaim on this row, or breed away a copy a concurrent
+     salvage had already taken. Both mutations happen in the one kvUpdate below,
+     re-read against the LIVE row, and it refuses (undefined) if either partner
+     is no longer there. */
+  let keep = null;
+  const next = await kvUpdate('petInst', raw => {
+    const cur = Array.isArray(raw) ? raw : list;
+    if (!cur.some(x => x.iid === keepIid) || !cur.some(x => x.iid === feedIid)) return undefined;
+    const bumped = cur.map(x => x.iid === keepIid ? { ...x, lineage: (x.lineage || 0) + 1 } : x);
+    keep = bumped.find(x => x.iid === keepIid);
+    return bumped.filter(x => x.iid !== feedIid);
+  }, list);
+  if (!next) return { ok: false, reason: 'gone' };
+  list = next;
   await kvSet('petBreedCredit', lifetime);
 
   // the keeper is the SAME pet, so its level bank is untouched. Only drop the
@@ -1194,18 +1374,18 @@ export async function breedPets(keepIid, feedIid) {
   if (wasEquipped === feedIid) { await kvSet('petEquipped', keep.iid); await equip('C', keep.sp); }
 
   // the fed species may now be extinct: same cleanup as before
-  if (speciesCount(list, fed.sp) === 0) {
+  if (speciesCount(list, fed0.sp) === 0) {
     const inv = await db.all('inv');
-    const row = inv.find(r => r.kind === 'cos' && r.itemId === fed.sp);
+    const row = inv.find(r => r.kind === 'cos' && r.itemId === fed0.sp);
     if (row) await db.del('inv', row.id);
     const eqp = await equipped({ raw: true });
-    if (eqp.C === fed.sp && keep.sp !== fed.sp) await equip('C', keep.sp);
-    const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[fed.sp]; await kvSet('pets', petsRec);
+    if (eqp.C === fed0.sp && keep.sp !== fed0.sp) await equip('C', keep.sp);
+    const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[fed0.sp]; await kvSet('pets', petsRec);
   }
   // No `cost` key: #203 made breeding free and deleted the variable, but left
   // it in this return, so every breed threw "cost is not defined" and the
   // result reveal never opened. No caller ever read it.
-  return { ok: true, offspring: { ...keep, parents: consumed, fedName: fed.sp } };
+  return { ok: true, offspring: { ...keep, parents: consumed, fedName: fed0.sp } };
 }
 
 let _iidSeq = 0;
@@ -1259,16 +1439,29 @@ export function healDupIids(list) {
  *   - Anchored to NOW, like a fresh hatch. hatchedAtSteps 0 would hand a
  *     recovered pet the player's entire walking history as levels. */
 let _petsReclaimed = false;
+/* THE READ INSIDE THE TRANSACTION IS THE CLAIM (2026-09-04, claimed-row-audit):
+   `list` is only ever a hint now, for the cheap precheck below and as the
+   kvUpdate fallback while 'petInst' is still mid-migration. The actual
+   "what's missing" decision is re-made against the LIVE row, so a concurrent
+   salvagePet / salvageInstance kvUpdate on this same key can never be
+   overwritten by a stale snapshot the way a plain kvSet here used to. */
 async function reclaimOwnedPets(list) {
   if (_petsReclaimed) return list;
   _petsReclaimed = true;
   const owned = await ownedCosmeticIds();
-  const missing = [...owned].filter(id => (BH_BY_ID[id] || {}).slot === 'C' && !list.some(x => x.sp === id));
-  if (!missing.length) return list;
+  const wantSpecies = [...owned].filter(id => (BH_BY_ID[id] || {}).slot === 'C');
+  if (!wantSpecies.some(id => !list.some(x => x.sp === id))) return list;   // cheap precheck; the real one is below
   const anchor = await lifetimeStepsSum();
-  const next = [...list, ...missing.map(sp => ({ iid: `r-${sp}`, sp, lineage: 0, shiny: false, hatchedAtSteps: anchor }))];
-  await kvSet('petInst', next);
-  import('./analytics.js').then(a => a.track('pet_reclaim', { sp: missing.join(',') })).catch(() => {});
+  let added = [];
+  const next = await kvUpdate('petInst', raw => {
+    const cur = Array.isArray(raw) ? raw : list;
+    const missing = wantSpecies.filter(id => !cur.some(x => x.sp === id));
+    if (!missing.length) return undefined;
+    added = missing;
+    return [...cur, ...missing.map(sp => ({ iid: `r-${sp}`, sp, lineage: 0, shiny: false, hatchedAtSteps: anchor }))];
+  }, list);
+  if (!next) return list;
+  import('./analytics.js').then(a => a.track('pet_reclaim', { sp: added.join(',') })).catch(() => {});
   return next;
 }
 
@@ -1277,33 +1470,57 @@ export async function petInstances() {
   if (Array.isArray(list)) {
     const healed = healDupIids(list);
     if (healed !== list) {
-      /* duplicate iids exist in the wild (mechanism unproven: every mint and
-         merge path here checks out, so the origin has to identify itself from
-         telemetry). COPY the pooled bond/level values onto the new ids, never
-         delete the original key: additive-DB rule, and the first row still
-         owns it. Raw kv reads, because petLevelBank() calls back into here. */
-      const bank = await kvGet('petLvlSteps', null);
-      const bonds = await kvGet('petBonds', null);
-      const nicks = await kvGet('petNick', null);
-      for (const row of healed) {
-        if (!row || !row.healedFrom) continue;
-        if (bank && bank[row.healedFrom] != null && bank[row.iid] == null) bank[row.iid] = bank[row.healedFrom];
-        if (bonds && bonds[row.healedFrom] != null && bonds[row.iid] == null) bonds[row.iid] = bonds[row.healedFrom];
-        if (nicks && nicks[row.healedFrom] != null && nicks[row.iid] == null) nicks[row.iid] = nicks[row.healedFrom];
+      /* THE HEAL ITSELF HAS TO BE THE CLAIM TOO (2026-09-04, claimed-row-audit):
+         healDupIids is pure, so re-running it against the LIVE row inside one
+         kvUpdate means a concurrent salvagePet / salvageInstance / reclaim on
+         this same row can never be clobbered by this stale `list` snapshot the
+         way the old unconditional kvSet was. `written` comes back undefined
+         when the live row no longer carries the dup this read saw (already
+         healed, or raced away some other way), and there is then nothing new
+         to copy onto the side stores below. */
+      const written = await kvUpdate('petInst', raw => {
+        const cur = Array.isArray(raw) ? raw : list;
+        const h = healDupIids(cur);
+        return h !== cur ? h : undefined;
+      }, list);
+      if (written) {
+        /* duplicate iids exist in the wild (mechanism unproven: every mint and
+           merge path here checks out, so the origin has to identify itself from
+           telemetry). COPY the pooled bond/level values onto the new ids, never
+           delete the original key: additive-DB rule, and the first row still
+           owns it. Raw kv reads, because petLevelBank() calls back into here. */
+        const bank = await kvGet('petLvlSteps', null);
+        const bonds = await kvGet('petBonds', null);
+        const nicks = await kvGet('petNick', null);
+        for (const row of written) {
+          if (!row || !row.healedFrom) continue;
+          if (bank && bank[row.healedFrom] != null && bank[row.iid] == null) bank[row.iid] = bank[row.healedFrom];
+          if (bonds && bonds[row.healedFrom] != null && bonds[row.iid] == null) bonds[row.iid] = bonds[row.healedFrom];
+          if (nicks && nicks[row.healedFrom] != null && nicks[row.iid] == null) nicks[row.iid] = nicks[row.healedFrom];
+        }
+        if (bank) await kvSet('petLvlSteps', bank);
+        if (bonds) await kvSet('petBonds', bonds);
+        if (nicks) await kvSet('petNick', nicks);
+        const dupIids = written.filter(r => r && r.healedFrom).map(r => r.healedFrom);
+        import('./analytics.js').then(a => a.track('pet_iid_heal', {
+          n: dupIids.length,
+          sample: dupIids.slice(0, 3),   // iid SHAPE is the diagnosis: m- rows point at the migration, p- rows at the mint
+        })).catch(() => {});
+        return reclaimOwnedPets(written);
       }
-      if (bank) await kvSet('petLvlSteps', bank);
-      if (bonds) await kvSet('petBonds', bonds);
-      if (nicks) await kvSet('petNick', nicks);
-      await kvSet('petInst', healed);
-      const dupIids = healed.filter(r => r && r.healedFrom).map(r => r.healedFrom);
-      import('./analytics.js').then(a => a.track('pet_iid_heal', {
-        n: dupIids.length,
-        sample: dupIids.slice(0, 3),   // iid SHAPE is the diagnosis: m- rows point at the migration, p- rows at the mint
-      })).catch(() => {});
-      return reclaimOwnedPets(healed);
+      return reclaimOwnedPets(list);
     }
     return reclaimOwnedPets(list);
   }
+  /* ONE-TIME MIGRATION, NOT A READ-MODIFY-WRITE (kept as a plain kvSet,
+     claimed-row-audit ACCEPTED): it fires only while 'petInst' is not yet an
+     array, and migrateInstances derives the array entirely from 'pets' +
+     ownedCosmeticIds(), both independent of petInst's own history, so two
+     callers racing this write byte-identical arrays. Every real mutator of
+     'petInst' (salvagePet, salvageInstance, reclaimOwnedPets, breedPets,
+     addPetInstance) calls petInstances() first, which is what runs this
+     migration, so nothing can observe a still-missing row and try to kvUpdate
+     it before this has run. */
   const owned = await ownedCosmeticIds();
   const ownedPets = [...owned].filter(id => (BH_BY_ID[id] || {}).slot === 'C');
   const petsRec = (await kvGet('pets', {})) || {};
@@ -1311,15 +1528,18 @@ export async function petInstances() {
   await kvSet('petInst', list);
   return list;
 }
-async function savePetInstances(list) { await kvSet('petInst', list); }
 
 // Add one instance of a species (a fresh hatch/dupe). Keeps the `inv` ownership
 // flag + legacy `pets` anchor in sync so species-keyed code keeps working.
+// THE APPEND IS THE CLAIM (2026-09-04, claimed-row-audit): appending to the LIVE
+// row inside one kvUpdate, rather than reading a list and writing it back whole,
+// means a concurrent salvagePet / salvageInstance / breedPets kvUpdate on this
+// same row can never be undone by this call's own stale read.
 export async function addPetInstance(sp, { shiny = false, hatchedAtSteps = null, startLevelSteps = 0 } = {}) {
-  const list = await petInstances();
+  await petInstances();   // migrates / heals a legacy save first, same as every other writer
   const anchor = hatchedAtSteps == null ? await lifetimeStepsSum() : hatchedAtSteps;
   const inst = { iid: newIid(sp), sp, lineage: 0, shiny: !!shiny, hatchedAtSteps: anchor };
-  await savePetInstances(addInstance(list, inst));
+  await kvUpdate('petInst', raw => addInstance(Array.isArray(raw) ? raw : [], inst), []);
   await grantCosmetic(sp, 'hatch');                 // idempotent ownership flag
   const petsRec = (await kvGet('pets', {})) || {};
   if (!petsRec[sp]) { petsRec[sp] = { hatchedAtSteps: anchor }; }
@@ -1430,12 +1650,16 @@ async function clearNick(iid) {
 // ownership + clears the legacy anchor when its species' last copy is gone, and
 // re-points the equipped pet if you just scrapped the one you had out.
 export async function salvageInstance(iid) {
-  const list = await petInstances();
+  const list = await petInstances();     // migrates / heals a legacy save first
   const inst = list.find(x => x.iid === iid);
   if (!inst) return { ok: false, reason: 'gone' };
   const item = BH_BY_ID[inst.sp] || {};
-  const next = list.filter(x => x.iid !== iid);
-  await savePetInstances(next);
+  // salvagePet's fix, by instance id: the take decides the payout, not a stale read
+  const next = await kvUpdate('petInst', raw => {
+    const arr = Array.isArray(raw) ? raw : list;
+    return arr.some(x => x.iid === iid) ? arr.filter(x => x.iid !== iid) : undefined;
+  }, list);
+  if (!next) return { ok: false, reason: 'gone' };
   const bank = await petLevelBank(); delete bank[iid]; await kvSet('petLvlSteps', bank);
   await clearBond(iid);              // a destroyed pet takes its affection with it
   await clearNick(iid);              // and its nickname
@@ -1651,16 +1875,24 @@ export async function setPetPick(petId, nodeId, picks) {
 export async function migrateLegacyEggs() {
   const inv = await inventory();
   const legacy = inv.filter(r => r.kind === 'crate' && r.crate === 'egg');
+  let converted = 0;
   for (const r of legacy) {
-    await db.del('inv', r.id);
+    /* TAKE, NOT DEL: db.del succeeds whether or not the row was still there, so
+       two boots running this at the same instant both read the same legacy row,
+       both "deleted" it and both granted an egg. `take` reports which call
+       actually found it, which is the same fix disenchantGear carries above. */
+    if (!await db.take('inv', r.id)) continue;
     await grantEgg(r.source || 'legacy');
+    converted++;
   }
-  return legacy.length;
+  return converted;
 }
 
+// eggRow's sibling, same reason: the row a crate grant writes, without the write.
+export function crateRow(kind, source) { return { id: newId(), kind: 'crate', crate: kind, source, ts: Date.now() }; }
 export async function grantCrate(kind, source) {
   if (kind === 'egg') return grantEgg(source); // eggs incubate, they don't open
-  const row = { id: newId(), kind: 'crate', crate: kind, source, ts: Date.now() };
+  const row = crateRow(kind, source);
   await db.put('inv', row);
   return row;
 }
@@ -1684,8 +1916,8 @@ export async function consumeConsumable(type) {
   return true;
 }
 
-export async function unopenedCrates() {
-  return (await inventory()).filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
+export async function unopenedCrates(inv) {   // `inv`: pre-read rows, QA round 28 G3 (see ownedGearIds)
+  return (inv || await inventory()).filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
 }
 
 /* ---------- crate rolling ---------- */
@@ -1739,10 +1971,11 @@ export function crateOdds(kind) {
    Wire Stinger). Derived from PET_SLOTS rather than listed, so a sixth accessory
    cannot arrive without inheriting the exclusion. */
 const petSlots = new Set(PET_SLOTS.map(s => s.code));
-export const crateEligible = i => !i.default && !i.exclusive && i.slot !== 'C' && !petSlots.has(i.slot);
+// Football kit, 2026-09-04: rack-only until Tom rules on crate drops (docs/FOOTBALL-KIT.md).
+export const crateEligible = i => !i.default && !i.exclusive && i.slot !== 'C' && !petSlots.has(i.slot) && !i.football;
 
-function candidates(rarity, owned, slotBias) {
-  let pool = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === rarity && !owned.has(i.id));
+function candidates(rarity, slotBias) {
+  let pool = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === rarity);
   if (slotBias && rng() < 0.5) {
     const biased = pool.filter(i => slotBias.includes(i.slot));
     if (biased.length) pool = biased;
@@ -1750,25 +1983,28 @@ function candidates(rarity, owned, slotBias) {
   return pool;
 }
 
-// One cosmetic roll. Prefers unowned at the rolled rarity, walks down then up,
-// and falls back to a duplicate (converted to coins) when the collection is fat.
+// One cosmetic roll: uniform over crateEligible items AT THE ROLLED RARITY,
+// owned or not. 2026-09-05, Tom's ruling on the crate-frequency audit
+// (scratchpad/r33/faucet/out/crate-frequency.md section 4c): the old code
+// preferred an unowned item and walked to neighbouring rarities when the
+// rolled one was fully owned, so every roll was a guaranteed new piece and
+// the rack above common sold almost nothing to a committed player (0.7 of 34
+// legendaries bought a year). An owned pick now returns dupe:true and pays
+// the same dupe table the terminal fallback below always paid.
 export function rollCosmetic(owned, floor, slotBias) {
   const rolled = RARITY_ORDER.indexOf(rollRarity(floor));
-  const order = [...RARITY_ORDER.slice(0, rolled + 1).reverse(), ...RARITY_ORDER.slice(rolled + 1)];
-  for (const r of order) {
-    const pool = candidates(r, owned, slotBias);
-    if (pool.length) return { item: pool[Math.floor(rng() * pool.length)], dupe: false };
+  const pool = candidates(RARITY_ORDER[rolled], slotBias);
+  if (pool.length) {
+    const item = pool[Math.floor(rng() * pool.length)];
+    return { item, dupe: owned.has(item.id) };
   }
-  // Terminal fallback: everything is owned, so this roll is a coin conversion.
-  // Pick the dupe AT THE RARITY WE JUST ROLLED, not uniformly over the whole
-  // catalogue. The catalogue is 10.2% legendary against a 3% drop weight, so a
-  // uniform pick paid the 400-coin legendary dupe 3.41x too often and turned a
-  // finished collection into the game's biggest coin faucet.
+  // Terminal fallback: this rarity has no crateEligible items at all (a data
+  // gap; "everything at this rarity is owned" is already handled above).
   // SAME predicate as candidates() above, not a second copy of it: this line
   // carrying its own `slot !== 'C'` is exactly how the pet accessories stayed
   // droppable here after they were shut out one function up.
-  const pool = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === RARITY_ORDER[rolled]);
-  const item = pool[Math.floor(rng() * pool.length)];
+  const pool2 = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === RARITY_ORDER[rolled]);
+  const item = pool2[Math.floor(rng() * pool2.length)];
   return { item, dupe: true };
 }
 
@@ -1789,6 +2025,18 @@ export async function openCrate(invId) {
     if (crateRow) await db.put('inv', crateRow);   // not a crate: put it straight back
     throw new Error('crate gone');
   }
+  /* THE TAKE RECEIPT (QA round 34 P0). A cloud merge (js/db.js importAll,
+     replace:false) `os.put`s every 'inv' row a blob carries, unconditionally:
+     right, for a row this device has never seen, wrong for one it already
+     opened, because a blob older than the local save still carries the
+     unopened row. Same bounded-list idiom js/social.js already uses for
+     'grantsSeen'. importAll checks this id before re-adding an inv row on a
+     merge; a crate this device has taken can never come back through one. */
+  await kvUpdate('crateTaken', cur => {
+    const arr = Array.isArray(cur) ? cur : [];
+    if (arr.includes(crateRow.id)) return undefined;
+    return [...arr, crateRow.id].slice(-500);
+  }, []);
   const def = CRATES[crateRow.crate] || CRATES.daily;
   const owned = await ownedCosmeticIds();
   const results = [];
@@ -1993,10 +2241,18 @@ export async function paidLooks() {
   // This WRITES on read, deliberately: seeding from the live transmog map alone
   // is not durable, because clearing the slot would erase the only evidence and
   // charge the player a second time for a look they already bought.
+  /* ONLY A LOOK WORN OVER STATTED GEAR IS SEEDED (QA round 22 W1). Under v221
+     an override only ever applied over gear, so that is the only shape a real
+     v221 purchase can have. A look sitting on a slot with NO gear got there for
+     0 dust under the 2026-08-11 free rule, and seeding it here was the second
+     of the two paths that turned a free apply into a permanent receipt:
+     unequip, apply the 60-dust look for 0, and the next paidLooks() read banked
+     it before the gear even went back on. */
   const add = [];
+  const lo = await gearLoadout();
   for (const [slot, artId] of Object.entries(await transmogMap())) {
     const k = paidKey(slot, artId);
-    if (artId !== TRANSMOG_HIDE && !set.has(k)) { set.add(k); add.push(k); }
+    if (artId !== TRANSMOG_HIDE && lo[slot] && !set.has(k)) { set.add(k); add.push(k); }
   }
   /* kvUpdate, not kvSet: `stored` was read before the transmogMap await, and
      markPaid CLAIMS on this same row. Writing the list whole dropped a receipt
@@ -2050,10 +2306,11 @@ export async function applyTransmog(slot, artId) {
     if (!(await collectedLooks()).has(artId)) return { ok: false, reason: 'not-collected' };
   }
   const tm = await transmogMap();
-  if (tm[slot] === artId) {
-    if (artId !== TRANSMOG_HIDE) await markPaid(slot, artId); // banked, not just worn
-    return { ok: true, cost: 0, already: true };
-  }
+  /* NO RECEIPT FOR RE-TAPPING A WORN LOOK (QA round 22 W1). This branch used
+     to markPaid, so a look worn for 0 through an empty slot became "owned" on
+     the next tap. A paid look was already banked by the spend below; a free one
+     must stay free-and-unbanked. */
+  if (tm[slot] === artId) return { ok: true, cost: 0, already: true };
   const cost = await transmogPrice(slot, artId);
   /* SPEND, THEN CLAIM THE LOOK, THEN REFUND IF THE CLAIM WAS ALREADY WON.
      There is no per-item receipt here the way the rack has one, but there does
@@ -2069,10 +2326,18 @@ export async function applyTransmog(slot, artId) {
     const left = await spendDust(cost);
     if (left === null) return { ok: false, reason: 'dust', need: cost, have: await boneDust() };
     paid = cost;
-  }
-  if (artId !== TRANSMOG_HIDE && !(await markPaid(slot, artId)) && paid) {
-    await boneDustAdd(paid);   // somebody else's tap banked this look: give it back
-    paid = 0;
+    /* THE RECEIPT IS BANKED ONLY WHEN DUST ACTUALLY MOVED (QA round 22 W1).
+       markPaid used to run on every apply, zero-cost ones included, so the
+       free rule in transmogPrice (no statted gear in the slot: 0) became an
+       exploit: unequip, apply a 60-dust look for 0, re-equip, and the look read
+       "owned" forever. Lane G measured an epic chest look taken for 0. The free
+       rule itself is unchanged (Tom, 2026-08-11); what changed is that a free
+       wear is a wear, not a purchase. Receipts already banked this way by
+       existing players are kept: no migration, on purpose. */
+    if (artId !== TRANSMOG_HIDE && !(await markPaid(slot, artId))) {
+      await boneDustAdd(paid);   // somebody else's tap banked this look: give it back
+      paid = 0;
+    }
   }
   /* kvUpdate, not read-mutate-kvSet: `tm` was read before the spend, so writing
      it whole put back whatever another slot's concurrent apply had just set. */
@@ -2149,9 +2414,6 @@ export async function fitPrice(fit) {
 export async function applyFit(id) {
   const fit = (await fits()).find(f => f.id === id);
   if (!fit) return { ok: false, reason: 'missing' };
-  const cost = await fitPrice(fit);
-  const bal = await boneDust();
-  if (cost > bal) return { ok: false, reason: 'dust', need: cost, have: bal };
   /* gear first (v425): a recorded piece goes back into a slot that is EMPTY
      right now, through equipGear so the owned/level checks all run. Empty-only,
      because the v222 contract holds for a dressed doll: a player who re-geared
@@ -2167,6 +2429,17 @@ export async function applyFit(id) {
       await equipGear(slot, gid).catch(() => {});
     }
   }
+  /* PRICE AFTER THE GEAR PASS, NOT BEFORE IT (QA round 22 W11). transmogPrice is
+     0 on a slot with no statted gear, so pricing the fit before its gear went
+     back on read every look against the wrong loadout: a fit saved with gear
+     and an unpaid look priced 0 for a stripped player and then applyTransmog
+     below charged full price anyway. Unreachable until W1, because every apply
+     banked a receipt so no fit could hold an unpaid look; the order is the
+     latent half of that ticket. Gear restore is free and reversible, so a fit
+     refused for dust here leaves the player re-geared and no poorer. */
+  const cost = await fitPrice(fit);
+  const bal = await boneDust();
+  if (cost > bal) return { ok: false, reason: 'dust', need: cost, have: bal };
   // gear slots: the fit's tm replaces the whole map, so a slot the fit does not
   // mention goes back to its gear's own look rather than keeping a stale override
   for (const slot of GEAR_SLOTS) {
@@ -2326,6 +2599,9 @@ export async function equip(slot, itemId, { keepGear = false } = {}) {
     if (!item || item.slot !== slot) throw new Error('bad item');
     const owned = await ownedCosmeticIds();
     if (!owned.has(itemId)) throw new Error('not owned');
+    /* Football kit, 2026-09-04: the 'refuse' branch of VISOR_EYES_POLICY. Under
+       'hide' (the default) this is inert and the renderer skips the eyes instead. */
+    if (visorRefusesEquip({ ...eq, [slot]: itemId })) throw new Error('visor');
     eq[slot] = itemId;
   }
   await kvSet('equipped', eq);
@@ -2358,11 +2634,23 @@ export async function equipGear(slot, gearId) {
   if (!owned.has(gearId)) throw new Error('not owned');
   const { totalXp, levelFor } = await import('./game.js'); // lazy: avoids circular init
   if (levelFor(await totalXp()).level < g.minLevel) throw new Error('level ' + g.minLevel + ' required');
+  /* AN UNPAID OVERRIDE DOES NOT SURVIVE STATS ENTERING THE SLOT (QA round 22
+     W1). transmogPrice charges 0 when the slot holds no statted gear, because
+     with nothing to disguise the look is a no-op. The moment gear goes in, that
+     premise is gone: the same override is now a real disguise over real stats,
+     the thing that costs dust. Unequip, apply for 0, re-equip was the exploit,
+     and this is the hop that closes it. A PAID look stays put (rule 3: your look
+     sticks as the gear underneath it changes). Read paidLooks() BEFORE the
+     loadout write: its seed is gear-gated, so the order is what keeps a free
+     look from being banked by this very call. */
+  const tm = await transmogMap();
+  const unpaidLook = tm[slot] && tm[slot] !== TRANSMOG_HIDE && !(await paidLooks()).has(paidKey(slot, tm[slot]));
   lo[slot] = gearId;
   await kvSet('gearloadout', lo);
   const eq = await equipped({ raw: true });
   eq[slot] = g.artId;
   await kvSet('equipped', eq);
+  if (unpaidLook) await dropTransmog(slot);
   return lo;
 }
 

@@ -409,7 +409,13 @@ svg { display: block; }
 .tab-badge {
   position: absolute; top: 1px; right: 12px; min-width: 16px; height: 16px; padding: 0 4px;
   display: grid; place-items: center; border-radius: 8px; background: var(--danger, #ff5c5c);
-  color: #fff; font-size: 10px; font-weight: 900; font-style: normal; line-height: 1;
+  /* --ink, NOT #fff. Measured off the render (r33 a11y, 390x844, the modal
+     pixel inside the badge's own box): white on --danger is rgb(255,255,255) on
+     rgb(255,109,94) = 2.76:1 at 10px/900, against the 4.5 small text needs.
+     --ink on the same plate measures 5.13:1, and it is the token the active tab
+     plate two rules down already uses for dark-ink-on-a-bright-plate. The plate
+     colour is untouched: the badge still reads as the app's one alarm colour. */
+  color: var(--ink, #2a2d28); font-size: 10px; font-weight: 900; font-style: normal; line-height: 1;
   box-shadow: 0 0 0 2px var(--bg, #0d0c12); animation: crewBadgePop 0.3s ease;
 }
 @keyframes crewBadgePop { 0% { transform: scale(0); } 70% { transform: scale(1.2); } 100% { transform: scale(1); } }
@@ -1678,7 +1684,23 @@ body::before {
   background: rgba(42, 45, 40, .82); border-radius: 999px;
   padding: 3px 10px; display: inline-block; margin-top: 6px;
 }
-.hero-scene.bounce .bh-anim { animation: bhbounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1), bh-idle 4s ease-in-out 0.7s infinite; }
+/* THE BOUNCE RUNS ALONE, AND THE IDLE COMES BACK AFTER IT (QA round 26 O5).
+   This rule used to read `bhbounce 0.7s ..., bh-idle 4s ease-in-out 0.7s
+   infinite`: two animations claiming `transform` on ONE element. Chrome will not
+   composite a property two animations claim, and it decides that when the
+   animation STARTS and never again, so the infinite bh-idle ran on the main
+   thread for as long as the element existed: 60 style recalcs a second and 15 to
+   22% of a core after one logged food, still 59.6/s five minutes later, until the
+   player left the tab (the innerHTML rebuild is the only thing that replaced the
+   element). Pausing animations dropped it to 0.1/s. Same trap the Emporium's
+   .wz-glow shipped (tests/idle-perf-audit.mjs, item 3).
+   Now the bounce is the ONLY animation here, and renderToday removes .bounce on
+   its animationend, so .bh-anim falls back to its own `bh-idle` (4s under
+   .hero-scene, above), which starts as a NEW animation, alone, and is composited.
+   Same picture: the idle began at 0.7s from phase 0 before, and it does now. The
+   failure mode is also safe: if the class were never removed, the element would
+   simply carry no animation, not a hot one. */
+.hero-scene.bounce .bh-anim { animation: bhbounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
 /* 22px, not 14: the four doors used to be followed by whatever nudge or banner
    happened to be live, and the quests came after that stack. With the nudge gone
@@ -2163,9 +2185,29 @@ body::before {
   display: grid; gap: 2px; justify-items: center; padding: 8px 3px 7px;
   background: var(--surface-2); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm);
+  position: relative;   /* containing block for small.cost below */
 }
 .fight-act b { font-family: var(--display); font-weight: 400; font-size: 15px; letter-spacing: 0.6px; }
 .fight-act small { font-size: 10px; color: var(--text-3); font-weight: 700; }
+/* QA round 28 P2, corrected 2026-09-04: a real <small class="cost"> element
+   (fight-hint-audit selects `small.cost`, fight-press-audit relies on it being
+   a SEPARATE element from the hint's own <small> so the hint's textContent
+   never carries the cost). ea987dd7 first added it as a plain grid sibling,
+   which .fight-act's `display:grid` auto-placed as a third implicit row and
+   cost ~14px of extra button height, failing fight-layout-audit's ROWS check
+   (2 of 3 rows fit a 188px tray instead of 3). 190b5eb1 "fixed" that by
+   deleting the element and concatenating its text onto the hint's <small>
+   instead, which wrapped the hint to two lines at 375/393 and made the
+   Bone Guard hint (fight-press-audit) always carry "Stamina" even when the
+   move's own facts had already dropped it to fit.
+   The actual fix is to keep it a real, separate element but take it OUT of
+   the grid's row flow: absolutely positioned in the corner, it costs the
+   button zero extra height because grid never sees it as a row. */
+.fight-act small.cost {
+  position: absolute; top: 2px; right: 3px; max-width: calc(100% - 8px);
+  font-size: 8px; line-height: 1.2; text-align: right; color: var(--text-3);
+  font-weight: 700; pointer-events: none;
+}
 .fight-act:disabled { opacity: 0.35; }
 .fight-act.endturn { background: var(--accent); border-color: var(--ink); }
 .fight-act.endturn b, .fight-act.endturn small { color: var(--accent-ink); }
@@ -4413,6 +4455,14 @@ body::before {
 .ward-cell.gear.locked img, .ward-cell.gear.locked canvas { filter: grayscale(0.85) brightness(0.55); }
 /* previewing a piece for inspect: blue highlight, distinct from green "equipped" */
 .ward-cell.selected { outline: 2px solid var(--protein); outline-offset: 1px; box-shadow: 0 0 12px rgba(124, 196, 255, 0.5); }
+/* KEYBOARD FOCUS MUST SURVIVE SELECTION (QA round 22 W12). .ward-cell.selected
+   (0,2,0) beat the global :focus-visible (0,1,0), so a focused selected tile
+   computed the identical 2px blue ring as an unfocused one. Three simple
+   selectors, honestly, rather than !important. */
+.ward-cell.selected:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* the armed state of a fit tile that would take statted gear off (QA round 22
+   W5): armToConfirm swaps the art for the consequence, in the app's arm gold */
+.ward-cell.arming { color: var(--gold); border-color: var(--gold); text-align: center; padding: 4px; }
 /* the inspect panel: full stats + what the ⚡ ability actually does */
 .gear-inspect {
   display: grid; grid-template-columns: 62px 1fr; gap: 10px 12px; margin: 12px 2px 4px;
@@ -5863,6 +5913,9 @@ body::before {
   display: flex; align-items: center; gap: 3px; padding: 2px 5px; font-size: 10px; line-height: 16px;
 }
 .ward-cell.look .look-cost.dust::after { content: none; }
+/* "owned" is a receipt, not a price: same chip, a different ground (QA round 22
+   W12 measured the two backgrounds at 1.00:1). Mint is the app's paid/done tint. */
+.ward-cell.look .look-cost.paid { background: var(--mint); color: var(--accent-ink); }
 .ward-cell.look .look-cost.dust img, .ward-cell.look .look-cost.dust svg {
   position: static; inset: auto; flex: none; object-fit: contain;
 }
@@ -5892,7 +5945,9 @@ body::before {
 .mog-lines em img, .mog-lines em svg { flex: none; }
 /* .btn is width:100%, and .look-bar's flex:none does NOT undo that: the
    shipped v1 bar has the button lying across its own status text. */
-.look-bar.mog-bar .btn.mog-go { width: auto; flex: none; padding: 10px 15px; font-size: 13.5px; }
+/* min-height (QA round 28 B2): 10px padding on 13.5px text measured 79x42, two
+   under the 44px floor. The padding and glyph are untouched; the box meets the floor. */
+.look-bar.mog-bar .btn.mog-go { width: auto; flex: none; padding: 10px 15px; font-size: 13.5px; min-height: 44px; }
 .mog-safe { text-align: center; margin-top: 8px; }
 /* THE COMMIT COMES TO THE THUMB (QA round 23 F3). 23 commits in the app spend a
    currency; 21 arm the control under the thumb, and this one, the cheapest of
@@ -5942,7 +5997,7 @@ body::before {
 .fit-rail::-webkit-scrollbar { display: none; }
 .fit-chip {
   position: relative; flex: none; display: flex; align-items: center; gap: 7px;
-  padding: 8px 12px; border-radius: 12px;
+  padding: 8px 12px; border-radius: 12px; min-height: 44px;
   background: var(--surface-2); border: 1.5px solid var(--line);
   font-size: 12.5px; font-weight: 700; color: var(--text-2); white-space: nowrap;
 }
@@ -6102,11 +6157,17 @@ body::before {
 .drop-item img { width: 88px; height: 88px; object-fit: contain;
   filter: drop-shadow(0 0 12px rgba(255, 201, 97, 0.25)); }
 .drop-item b { display: block; font-size: 13.5px; color: var(--text); margin: 4px 0 8px; }
-.drop-buy { width: 100%; border: 0; border-radius: 10px; padding: 9px; font-weight: 800;
+.drop-buy { width: 100%; min-height: 40px; border: 0; border-radius: 10px; padding: 9px; font-weight: 800;
   font-size: 13px; background: var(--accent); color: var(--accent-ink); }
 .drop-buy:disabled { opacity: 0.9; }
 .drop-item.owned .drop-buy, .drop-buy[disabled]:not([data-buydrop]) { background: var(--surface-3); color: var(--text-2); }
 .drop-buy[data-buydrop]:disabled { background: var(--surface-3); color: var(--text-3); opacity: 1; }
+/* OUT OF REACH IS STILL A PRICE, the rack's own rule (10178 .rk-buy .t3-price.cant):
+   pressable, same size, digits still there, only the FILL drops. The football
+   buy and bundle buttons use it instead of [disabled] when the price is real
+   but this wallet is short. */
+.drop-buy.cant { background: transparent; box-shadow: none; color: var(--accent);
+  border: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
 
 /* ================= Dark Spires (territory) ================= */
 /* Marker root carries position ONLY: MapLibre owns its transform, so every
@@ -6481,6 +6542,139 @@ body::before {
   .wpn-sheen { display: none; }
 }
 
+/* ===== Football kit, 2026-09-04: the team tint =====
+   One master per garment, coloured per team by two multiply layers, each a span
+   masked by an alpha PNG (mask-a the primary region, mask-b the secondary). The
+   same registration contract as .wpn-sheen above: mask-size and mask-position
+   read the surface's --av-fit/--av-pos so the colour cannot slide off the art.
+   Multiply against a master whose team regions are normalised to white lands the
+   team hex exactly (scripts/football-masks.py prints the numbers); the facemask,
+   glass and outlines are outside both masks and keep Cam's colour. Pet and
+   paddock layers pass their geometry inline (.pw / inkFitStyle) and their mask
+   is stretched to that box, since the <img> beside them is too. */
+.fb-tint {
+  position: absolute; inset: 0; pointer-events: none;
+  -webkit-mask-image: var(--fbm); mask-image: var(--fbm);
+  -webkit-mask-size: var(--av-fit, cover); mask-size: var(--av-fit, cover);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: var(--av-pos, center); mask-position: var(--av-pos, center);
+  mix-blend-mode: multiply;
+}
+.petcrop .fb-tint, .pdk-thumb .fb-tint, .pdk-tile .fb-tint { -webkit-mask-size: 100% 100%; mask-size: 100% 100%; }
+/* THE LASERS STAY INSIDE THE HELMET (VISOR_EYES_POLICY 'clip'). The eye LAYER is
+   kept and masked by the worn visor helmet's own art alpha, so the three items
+   that used to poke through the glass are bounded by the silhouette instead.
+   Same registration as .fb-tint and for the same reason: this mask is a 640
+   square on the same canvas as the eye master, and .bh-anim img is object-fit
+   cover or contain per surface, so the mask must take the surface's own
+   --av-fit/--av-pos or the clip slides off the art. It goes ON the <img>, which
+   already IS the layer, so there is no second box to keep in register. */
+.eye-clip {
+  -webkit-mask-image: var(--fbm); mask-image: var(--fbm);
+  -webkit-mask-size: var(--av-fit, cover); mask-size: var(--av-fit, cover);
+  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  -webkit-mask-position: var(--av-pos, center); mask-position: var(--av-pos, center);
+}
+/* the kit room */
+.fb-pick { display: flex; align-items: center; gap: 10px; margin: 0 2px 12px; font-size: 13px; color: var(--text-2); }
+.fb-pick select { flex: 1; min-width: 0; min-height: 40px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2);
+  color: var(--text); border: 1px solid var(--line-strong); font: inherit; }
+/* A TEAM IS TWO COLOURS ON A DIAGONAL, NOT A HEX CODE (Tom, 2026-09-04: "theyre not
+   robots"). One disc, split top-left to bottom-right, primary above. --fa/--fb are
+   set inline per team; the same disc serves the picker, the rail bar, the bundle
+   tile and the 32-team strip on the banner. */
+.fb-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink); flex: 0 0 auto;
+  background: linear-gradient(135deg, var(--fa) 0 50%, var(--fb) 50% 100%); box-shadow: var(--sh-sm); }
+.fb-swatch.xs { width: auto; height: auto; aspect-ratio: 1; border-width: 1px; box-shadow: none; }
+/* THE KIT ROOM POSTER (Tom, 2026-09-05): the art takes the whole left side and the
+   full height; the title sits over the copy; no coral, it sits on the surface like
+   the cards around it. The .t3-drop shell (border, radius, grain, open-state
+   radius) is kept so the section still behaves like the drop poster below it. */
+.t3-drop.fb-drop { display: flex; align-items: stretch; gap: 12px; padding: 0 14px 0 0;
+  background: var(--surface-2); border-color: var(--line-strong); }
+.fb-drop .tx { padding: 12px 0 13px; }
+.fb-drop h2 { margin: 2px 0 6px; }
+.fb-hero { position: relative; flex: 0 0 44%; min-width: 150px; align-self: stretch; overflow: hidden;
+  background: rgba(255, 255, 255, .04); border-right: 1px solid var(--line-strong); }
+.fb-hero .pc-worn { transform: translateX(-50%); }
+/* the whole Bonehead, centred; the lizard sits IN FRONT of his feet (Tom, 2026-09-05) */
+.fb-hero .pc-worn.fit-body .bh-anim { transform-origin: 50% 50%; transform: translate(-5%, 1%) scale(0.96); }
+/* one line: the two prices at the poster's chip size wrapped "the / lot" in a 230px column */
+.fb-drop .t3-price { font-size: 15px; white-space: nowrap; }
+.fb-hero-pet { position: absolute; right: -2px; bottom: -4px; z-index: 2; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
+.fb-hero-pet .petcrop { display: block; }
+.fb-teams { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; margin: 0 0 8px; }
+.drop-item.fb::before { content: 'KIT'; }
+.fb-worn { position: relative; width: 88px; height: 88px; margin: 0 auto; overflow: hidden; border-radius: 10px; }
+.drop-item.fb .petcrop { display: block; margin: 0 auto; }
+.drop-buy[data-buyfb]:disabled, .drop-buy[data-buyfbkit]:disabled { background: var(--surface-3); color: var(--text-3); opacity: 1; }
+/* The bundle cell: the same tile, spanning the grid, with the team's two colours
+   standing in for the product shot (five pieces in one 88px square would be a
+   contact sheet). */
+.drop-item.fb-bundle { grid-column: 1 / -1; }
+.drop-item.fb-bundle::before { content: 'FULL KIT'; }
+.fb-kitmark { width: 52px; height: 52px; border-radius: 50%; border: 3px solid var(--ink); margin: 4px auto 0;
+  background: linear-gradient(135deg, var(--fa) 0 50%, var(--fb) 50% 100%);}
+.fb-kitmark span { font-size: 17px; font-weight: 900; color: #fff; mix-blend-mode: difference; }
+.fb-kitline { display: block; font-size: 11px; color: var(--text-2); margin: -4px 0 8px; }
+.fb-save { display: block; font-size: 11px; color: var(--text-2); margin-top: 6px; }
+
+/* ===== THE COLOURWAY RAIL (Wardrobe, Tom 2026-09-04) =====================
+   "slide from east to west on the different tints". 32 teams of one garment,
+   one horizontal snap rail, the tile under the centre is the one being tried.
+
+   THE PRECEDENT IS .pw-row ABOVE, the Stable's pet-accessory row, and this
+   REUSES it rather than copying it: .fb-rail carries .pw-row and each tile
+   carries .pw-item, so the flex, the gap, the mandatory x-snap, the 96px tile
+   and the `on` state (fill AND border AND label, never colour alone) are that
+   row's, already shipped and already read by a returning player. Only what is
+   genuinely different is written here: a centre snap instead of a start snap,
+   because the selected tile is the one in the MIDDLE of a 32-long rail rather
+   than the one you scrolled to the edge; the padding that lets the first and
+   last tiles reach that centre; and the locked state.
+   NO MOMENTUM CODE. scroll-snap-type does the landing and the browser does the
+   fling; there is no scrolling library in this app and this does not add one. */
+.fb-rail-wrap { margin-top: 14px; }
+.fbr-h { margin-bottom: 4px; }
+.fbr-lead { text-align: center; margin: 0 2px 8px; }
+.fbr-fig { display: flex; justify-content: center; margin-bottom: 8px; }
+.fb-rail {
+  /* NO scroll-snap-type of its own: .pw-row above already declares
+     `x mandatory`, which is the point of reusing that row. A second copy here
+     was written first and is exactly the duplication that lets the two drift.
+     What IS different is the ALIGNMENT (centre, not start) and it lives on the
+     tile below. */
+  scroll-behavior: smooth;
+  scrollbar-width: none; margin: 0 calc(var(--pad) * -1); padding: 2px var(--pad) 6px;
+}
+/* No scroll-padding: the end margins below let the first and last tiles reach
+   the centre with no snapport arithmetic at all. `scroll-padding-inline: 50%`
+   is the other way to do it and it collapses the snapport to zero width, which
+   is a strange enough state that it is not worth relying on. (It was blamed for
+   a snap landing six teams away on 2026-09-04; that was mis-measured -- the real
+   cause was reading scrollLeft back in the middle of a smooth scroll -- and it
+   does NOT reproduce on its own, so this is a preference, not a fix.) */
+.fb-rail::-webkit-scrollbar { display: none; }
+.pw-item.fbr { width: 88px; scroll-snap-align: center; padding: 7px 5px 8px; }
+.pw-item.fbr:first-child { margin-left: calc(50% - 44px - var(--pad)); }
+.pw-item.fbr:last-child { margin-right: calc(50% - 44px - var(--pad)); }
+.pw-item.fbr b { font-size: 10px; line-height: 1.15; }
+.pw-item.fbr small { display: flex; align-items: center; justify-content: center; gap: 3px; }
+/* LOCKED IS SHOWN, NOT HIDDEN. A player owning one kit would otherwise get a
+   one-tile rail, and seeing their OWN Bonehead in the other 31 is the argument
+   for a second one. The tile still previews on the doll; only the bar can
+   commit, and on a locked colourway the bar routes to the Kit room. Same
+   grayscale+dim as .ward-cell.gear.locked, which is this screen's own idiom for
+   "real, yours later". */
+.pw-item.fbr.locked .fb-worn { filter: grayscale(0.85) brightness(0.6); }
+.pw-item.fbr.locked b { color: var(--text-3); }
+.pw-item.fbr.locked small { color: var(--text-3); }
+.pw-item.fbr.on.locked { border-color: var(--text-3); background: rgba(159, 172, 159, .1); }
+.fb-worn.sm { width: 64px; height: 64px; border-radius: 9px; }
+.fb-bar .mog-lines em { font-style: normal; }
+.fb-swatch.sm { width: 18px; height: 18px; display: inline-block; vertical-align: -4px; }
+@media (prefers-reduced-motion: reduce) { .fb-rail { scroll-behavior: auto; } }
+
 /* ===== A spire under siege (v266) =====
    The one state on the map with a deadline attached, so it gets the loudest
    treatment: coral, a pulse, and the countdown where the tribute number usually
@@ -6789,6 +6983,12 @@ body::before {
    17px; only the box grows to Apple's floor. Guarded statically by
    tests/unit.test.js "R25-M20 sheet-head icon buttons resolve to >= 44px". */
 .t1-tools .t1-icon-btn { width: 44px; height: 44px; min-height: 44px; }
+/* QA round 28 B2: the M20 rule above was scoped to .t1-tools on purpose and left
+   the "Change portion" chevron in a recents row (.t1-frow-split, recentRowHtml)
+   at 40x40, two pixels under the floor the same release declared. Same recipe,
+   second scope; the 18px glyph stays where it is, only the box grows. Pinned by
+   "R25-M20" in tests/unit.test.js and the `add` rows of tests/a11y-audit.mjs. */
+.t1-frow-split .t1-icon-btn { width: 44px; height: 44px; min-height: 44px; }
 .t1-icon-btn.gold { color: var(--gold); }
 .t1-icon-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 /* the body has to be the shrinking child or a pinned foot pushes off-screen */
@@ -10029,8 +10229,38 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    animate `transform`, and a running animation outranks a plain declaration in
    the cascade. Without it the crop simply does not happen. */
 .fit-head .bh-anim, .fit-torso .bh-anim, .fit-hips .bh-anim, .fit-feet .bh-anim, .fit-hand .bh-anim,
-.fit-hand-l .bh-anim, .fit-body .bh-anim, .fit-shin .bh-anim, .fit-waist .bh-anim { animation: none; }
+.fit-hand-l .bh-anim, .fit-body .bh-anim, .fit-shin .bh-anim, .fit-waist .bh-anim, .fit-fbhead .bh-anim { animation: none; }
 .fit-head .bh-anim { transform-origin: 43% 21%; transform: translate(4%, 26%) scale(2.3); }
+/* A FOOTBALL HELMET IS NOT A HAT (Tom, 2026-09-04: the Kit room's helmet tile is
+   "too zoomed in"). .fit-head above frames a skull for HEADWEAR; a football
+   helmet is shell plus a facemask hanging down over the whole face, and at 2.3
+   it blew off all four edges of its square.
+
+   MEASURED on the rendered 88px tile, the garment's own silhouette read as an
+   ALPHA -- the layer alone over a black ground and again over a white one --
+   because the obvious background diff measures the CONTRAST rather than the art
+   and reported this same helmet at two different sizes on two differently
+   coloured surfaces:
+
+     garment         ink % of tile      does the art run off the tile?
+     helmet        94.2  ->  43.4     ALL FOUR (L83 R45 T88 B46)  ->  none
+     jersey        42.6      42.6     none                        (unchanged)
+     cleats        33.4      33.4     none                        (unchanged)
+     lizard helm   23.6      23.6     none                        (unchanged)
+     lizard jersey 20.7      20.7     none                        (unchanged)
+
+   1.40 was picked from a seven-scale sweep of the real tile (2.30, 2.00, 1.80,
+   1.60, 1.40, 1.20, 1.00, then three translate variants around the winner). It
+   lands the helmet level with the jersey Tom said reads correctly and inside its
+   frame on every side, which is what a discrete object wants: the jersey's
+   sleeve and the cleats' soles are allowed to leave their frames because those
+   are crops of a body, not of a thing. The translate moves with the scale so the
+   art stays centred -- measured centre 48%/49% of the tile, against 46%/45% if
+   the old translate is kept. Same 1/0.86 window as every other .fit-*, so this
+   one declaration serves the Kit-room tile, the rack stage, a reveal card and
+   the wardrobe's colourway rail. Re-measured, with its own negative control,
+   by tests/football-tile-crop-audit.mjs on every run. */
+.fit-fbhead .bh-anim { transform-origin: 43% 21%; transform: translate(7%, 31%) scale(1.4); }
 .fit-torso .bh-anim { transform-origin: 46% 51%; transform: translate(4%, -1%) scale(1.7); }
 .fit-hips .bh-anim { transform-origin: 51% 66%; transform: translate(-1%, -16%) scale(2.0); }
 .fit-feet .bh-anim { transform-origin: 49% 83%; transform: translate(1%, -33%) scale(2.2); }
@@ -10412,7 +10642,7 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   color: var(--text-3); margin: 0 2px 8px; }
 .pw-empty { margin: 0 2px; }
 .pw-hint { margin: 2px 2px 0; }
-.pw-row { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; }
+.pw-row, .col-fam-rail { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 6px; }
 .pw-item { flex: none; width: 96px; scroll-snap-align: start; display: flex; flex-direction: column;
   align-items: center; gap: 3px; padding: 8px 6px 9px; border-radius: 14px; cursor: pointer;
   background: var(--surface); border: 1px solid var(--line); color: var(--text); }
@@ -10422,6 +10652,10 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   color: var(--text-3); text-align: center; }
 .pw-item.on { background: rgba(255, 201, 97, .12); border-color: var(--gold); }
 .pw-item.on small { color: var(--gold); }
+/* THE FAMILY TILE'S COUNT BADGE, same corner and same plate as the wardrobe's
+   .ward-fam-n (extended selector at that rule) -- .pw-art has no positioning
+   context of its own above. */
+.pw-item.fam .pw-art { position: relative; }
 /* =====================================================================   GWART'S EMPORIUM — the Shop tab's header (option A, approved 2026-08-20)
    ============================================================================
    The Shop tab drops the hub's character header entirely (no name heading, no
@@ -10851,7 +11085,7 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    of the section it is labelling, which is exactly what this must not be. It is
    a link with a hit area. margin-left:auto matches .sect-h .spin above. */
 .gd-what {
-  margin-left: auto; flex: none;
+  margin-left: auto; flex: none; min-height: 44px;
   padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: none;
   font: inherit; font-size: 11px; letter-spacing: 0.04em; text-transform: none;
   color: var(--text-3); cursor: pointer;
@@ -11161,4 +11395,88 @@ button.t3-price::before {
 .ward-cell.r-rare .ward-rar { color: var(--protein); }
 .ward-cell.r-epic .ward-rar { color: var(--violet); }
 .ward-cell.r-legendary .ward-rar { color: var(--gold); }
+
+/* =====================================================================
+   COLOURWAY FAMILIES — one tile per drawing, the variants on a rail
+   =====================================================================
+   Tom, 2026-09-04: "collapse similar items into a different interface ...
+   those that have collected like 1000 head slots over the years will have a
+   messy af wardrobe." The family RULE is data/boneheadz.js; this is the
+   interface it earns.
+
+   THE RAIL REUSES .pw-row RATHER THAN COPYING IT, which is the same call
+   .fb-rail (the football colourway rail) made and for the same reason: the
+   flex, the 8px gap, the mandatory x-snap, the 96px tile and the `on`/ring
+   idiom are already shipped and already read by a returning player. Only what
+   is genuinely different is written here -- the tile SIZE (the art has to be
+   readable, so 78px of picture over a name), the centre snap so the selected
+   colourway sits in the middle of a long rail rather than at an edge, the end
+   margins that let the first and last tiles reach that centre, and living
+   inside a CSS grid it has to span. No momentum code: scroll-snap-type lands
+   it and the browser does the fling. */
+/* TOP-LEFT, NOT TOP-RIGHT, AND THAT IS MEASURED. The first version sat at
+   `right: 3px; top: 3px`, which is where .ward-cell.equipped::after paints its
+   green tick (4px/4px, 20x20): on the tile you are actually wearing -- the one
+   most worth reading -- the count sat under the tick. Cosmetic tiles keep their
+   tier letter at bottom-left and only GEAR tiles use the top-left corner, so
+   this corner is free here. wardrobe-family-grid-audit's BADGE row measures the
+   two boxes against each other so the pair cannot drift back together. */
+.ward-cell.fam .ward-fam-n, .col-cell.fam .ward-fam-n, .pw-item.fam .ward-fam-n {
+  position: absolute; left: 3px; top: 3px; z-index: 2; pointer-events: none;
+  min-width: 15px; padding: 2px 4px; border-radius: 999px;
+  font-size: 9px; font-weight: 900; line-height: 1; text-align: center;
+  /* Same .88 plate as .ward-rar, and for the same measured reason: what is
+     behind it is Cam's art and the worst case is a white pixel. */
+  background: rgba(13, 12, 18, .88); color: var(--text);
+}
+/* THE OPEN TILE SAYS SO. Without this the rail below is the only evidence of
+   which of nine badged tiles it belongs to, and on a 4-wide grid it can be any
+   of the four above it. The badge fills rather than changing shape, so it is
+   the same target and the same box: fill AND text colour, never colour alone
+   (a11y-audit), and it reads at a glance beside the unfilled ones. */
+.ward-cell.fam[aria-expanded="true"] .ward-fam-n,
+.col-cell.fam[aria-expanded="true"] .ward-fam-n,
+.pw-item.fam[aria-expanded="true"] .ward-fam-n { background: var(--gold); color: #17140b; }
+/* THE COLLECTION'S OWN RAIL, same collapse as the Wardrobe's (.fam-rail) but
+   its tiles are .col-cell (an <img>, not a canvas): reuse .pw-row for the
+   flex/gap/snap and give the tiles a fixed width so aspect-ratio:1 has
+   something to work from inside a flex row. */
+.col-fam-rail {
+  grid-column: 1 / -1;          /* .col-grid is a 4-column grid; the rail spans it */
+  scroll-behavior: smooth; scrollbar-width: none;
+  margin: 1px calc(var(--pad) * -1) 3px; padding: 4px var(--pad) 8px;
+}
+.col-fam-rail::-webkit-scrollbar { display: none; }
+.col-fam-rail .col-cell.famr { flex: 0 0 72px; width: 72px; scroll-snap-align: center; }
+.col-fam-rail .col-cell.famr:first-child { margin-left: calc(50% - 36px - var(--pad)); }
+.col-fam-rail .col-cell.famr:last-child { margin-right: calc(50% - 36px - var(--pad)); }
+@media (prefers-reduced-motion: reduce) { .col-fam-rail { scroll-behavior: auto; } }
+.fam-rail {
+  grid-column: 1 / -1;          /* .ward-grid is a 4-column grid; the rail spans it */
+  /* NO scroll-snap-type of its own: .pw-row already declares `x mandatory`,
+     which is the point of reusing that row. */
+  scroll-behavior: smooth; scrollbar-width: none;
+  margin: 1px calc(var(--pad) * -1) 3px; padding: 4px var(--pad) 8px;
+}
+.fam-rail::-webkit-scrollbar { display: none; }
+.pw-item.famr {
+  position: relative;           /* .ward-rar is absolute and lands on the art */
+  width: 92px; scroll-snap-align: center; padding: 7px 5px 8px; gap: 5px;
+}
+.pw-item.famr:first-child { margin-left: calc(50% - 46px - var(--pad)); }
+.pw-item.famr:last-child { margin-right: calc(50% - 46px - var(--pad)); }
+.pw-item.famr .famr-art { position: relative; display: block; width: 78px; height: 78px; }
+.pw-item.famr .famr-art canvas.ward-art { display: block; width: 100%; height: 100%; }
+.pw-item.famr b { font-size: 10px; line-height: 1.15; }
+/* The ring is the grid's own `equipped`, not .pw-item's `on`: the rail's tiles
+   carry data-equip like every other tile and restageWardrobe rings them by that
+   attribute, so giving them a second selected-state class would be one more
+   thing to keep in sync for no visual gain. Fill AND border, never colour
+   alone (a11y-audit). */
+.pw-item.famr.equipped { background: rgba(255, 201, 97, .12); border-color: var(--gold); }
+.pw-item.famr.r-uncommon .ward-rar { color: var(--mint); }
+.pw-item.famr.r-rare .ward-rar { color: var(--protein); }
+.pw-item.famr.r-epic .ward-rar { color: var(--violet); }
+.pw-item.famr.r-legendary .ward-rar { color: var(--gold); }
+@media (prefers-reduced-motion: reduce) { .fam-rail { scroll-behavior: auto; } }
 

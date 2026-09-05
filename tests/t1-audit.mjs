@@ -120,7 +120,19 @@ const footOnScreen = async where => {
 };
 
 /* ---------- 1. the picker ---------- */
-await page.evaluate(() => { location.hash = '#/today'; });
+/* FORCE a real hashchange, not just an assignment. 2026-09-05: boot() now
+   normalises an empty hash to '#/today' via history.replaceState (so the
+   FIRST tab tap isn't a no-op), which means demo boot can already BE on
+   '#/today' by the time we get here. Assigning the same value is then a
+   no-op: no hashchange fires, route()'s closeAllSheets() never runs, and a
+   takeover left over from the intro-dismiss loop above (it clicks a Claim
+   button through an overlay a real finger could never reach, and the reward
+   crate reveal only dismisses on a tap-anywhere the loop never makes) sits
+   over the screen and eats the FAB tap below. Proven red exactly this way on
+   integ/day2 while it passed on origin/main, where boot leaves the hash
+   empty and the same assignment was a real navigation. Bouncing off '#/'
+   first guarantees the next assignment always differs. */
+await page.evaluate(() => { history.replaceState(null, '', '#/'); location.hash = '#/today'; });
 await sleep(1600);
 await tap('#fab', 'FAB');
 await sleep(1400);

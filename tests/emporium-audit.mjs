@@ -103,7 +103,7 @@ try {
     const imgs = [...document.querySelectorAll('.gw-hero img')];
     return {
       panel: R('.gw-panel'), art: R('.gw-art'), wm: R('.gw-wm'), gear: R('.gw-gear, .gw-panel .gear-btn'),
-      firstTile: R('.rk'), vw: innerWidth,
+      firstTile: R('.rk'), kitRoom: R('#fbSect'), vw: innerWidth,
       decoded: imgs.filter(i => i.naturalWidth > 0).length, imgs: imgs.length,
       sat: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0,
     };
@@ -218,9 +218,17 @@ try {
     !!geo.gear && !!geo.wm && (geo.gear.y >= geo.wm.b - 0.5 || geo.gear.b <= geo.wm.y + 0.5),
     geo.gear ? `gear y ${geo.gear.y}..${geo.gear.b}, wordmark y ${geo.wm.y}..${geo.wm.b}` : 'no gear found');
 
-  ok('SHELVES the rack still starts inside the first screen',
-    !!geo.firstTile && geo.firstTile.y < 852,
-    geo.firstTile ? `first tile at y ${geo.firstTile.y}` : 'no tile found');
+  /* RE-PREMISED 2026-09-05: the football Kit Room (`#fbSect`) shipped as the
+     LEAD shelf of the Shop, ABOVE the rack. docs/FOOTBALL-KIT.md, Tom
+     2026-09-04: "nfl shit goes to the lead shelf of the shop", shipped order
+     "Kit room #fbSect ... first child of #chContent", "the rack ... unchanged"
+     but now third in line. The rack (`.rk`) no longer starts inside the first
+     screen on purpose (measured 981-1037px depending on viewport); what the
+     row can still promise is that the NEW lead shelf does, and that the rack
+     still follows it rather than floating somewhere unrelated. */
+  ok('SHELVES the Kit Room starts inside the first screen and the rack follows it',
+    !!geo.kitRoom && geo.kitRoom.y < 852 && !!geo.firstTile && geo.firstTile.y > geo.kitRoom.y,
+    geo.kitRoom ? `Kit Room at y ${geo.kitRoom.y}, first rack tile at y ${geo.firstTile ? geo.firstTile.y : 'MISSING'}` : 'no Kit Room shelf found');
 
   ok('NO page errors', true);
 } finally {

@@ -45,10 +45,10 @@
  * surface an OS clock change moves. No traffic leaves 127.0.0.1.
  *
  * ONE THING THE SHIM CANNOT DO is separate the local calendar from UTC, which
- * is what a TIMEZONE change does. Those cases (the eastbound traveller, the
- * grace ceiling) are driven by moving the guard's own anchor row instead, and
- * are labelled ANCHOR where that is what happened, so nobody reads them as a
- * full end-to-end simulation.
+ * is what a TIMEZONE change does. The eastbound traveller is therefore driven
+ * as a two-day calendar jump (the only term the guard reads since rule 2 went,
+ * QA round 26 O10) and labelled ANCHOR so nobody reads it as a full
+ * end-to-end simulation.
  *
  * DIRECTION and BOUND, per surface:
  *   FORWARD WALK     direction: more per reset is worse.  BOUND: exactly zero
@@ -62,8 +62,6 @@
  *                    high-water mark.
  *   HONEST DAY       direction: ZERO payout is failure.   BOUND: a genuine
  *                    forward day more than 20h later pays the full day.
- *   GRACE CEILING    direction: too permissive is failure. BOUND: DAY_GRACE
- *                    days of headroom, asserted on BOTH sides of the edge.
  *   HONEST PLAYER    direction: a refusal is failure.     BOUND: none of the
  *                    evening-then-morning, traveller-east, or NTP-correction
  *                    cases may be refused.
@@ -181,8 +179,6 @@ try {
     reset: () => page.evaluate(async () => {
       const db = await import('./js/db.js');
       await db.kvSet('dayHighWater', null);
-      await db.kvSet('dayPaceKey', null);
-      await db.kvSet('dayPaceAt', 0);
       await db.kvSet(db.DAY_WITNESS_KEY, 0);   // a device with no history at all
       return true;
     }),
@@ -192,19 +188,6 @@ try {
       return { ...r, key: k || nut.dateKey(), state: await db.dayGuardState() };
     }, key || null),
     state: () => page.evaluate(async () => (await import('./js/db.js')).dayGuardState()),
-    // ANCHOR: pretend no UTC time has passed since the anchor, which is exactly
-    // what a timezone change does to the local calendar. The shim cannot.
-    anchorAtNow: () => page.evaluate(async () => {
-      const db = await import('./js/db.js');
-      await db.kvSet('dayPaceAt', Date.now());
-      return db.dayGuardState();
-    }),
-    anchorAgoMs: (ms) => page.evaluate(async v => {
-      const db = await import('./js/db.js');
-      await db.kvSet('dayPaceAt', Date.now() - v);
-      return db.dayGuardState();
-    }, ms),
-    grace: () => page.evaluate(async () => (await import('./js/db.js')).DAY_GRACE),
     witnessGrace: () => page.evaluate(async () => (await import('./js/db.js')).WITNESS_GRACE),
     /* Witness the server at a REAL instant `dayDelta` days from now. Deliberately
        computed off window.__realNow(), never off the shimmed clock: the whole
@@ -257,8 +240,12 @@ try {
     `${proof.ordStable} == ${proof.ordAfter}`);
   check('dayOrdinal() counts the shim move as exactly 3 days', proof.ordDiff === 3, `delta ${proof.ordDiff}`);
 
-  const GRACE = await guard.grace();
-  check('DAY_GRACE is a real, small number', Number.isInteger(GRACE) && GRACE >= 1 && GRACE <= 5, `DAY_GRACE=${GRACE}`);
+  /* Rule 2 (DAY_GRACE, the elapsed-time anchor) is gone: QA round 26 O10 found
+     it could not fire, because it read elapsed time off the clock that moved.
+     The rows that drove its anchor row (the grace ceiling, the banked idle
+     month) went with it; rule 3 owns those shapes now and is asserted below. */
+  check('rule 2 is not in js/db.js (it could not fire: QA round 26 O10)',
+    (await page.evaluate(async () => (await import('./js/db.js')).DAY_GRACE)) === undefined, 'DAY_GRACE must not be exported');
 
   /* One simulated day of play: log meals, settle yesterday, take the free Pit
      fights, claim whatever daily quests are genuinely satisfied, and read
@@ -430,7 +417,7 @@ try {
   const witnessed = await guard.witnessAt(0);
   const ceiling = witnessed + W_GRACE;
   check('witnessing the server sets a ceiling', Number.isFinite(witnessed) && witnessed > 20000,
-    `witness=${witnessed} ceiling=${ceiling} (UTC day ordinals)`);
+    `witness=${witnessed} ceiling=${ceiling} (local calendar day ordinals, 2026-09-05: not UTC any more)`);
   const day0 = await runCycle();
   const rows = [];
   const t0 = Date.now();
@@ -667,44 +654,23 @@ try {
     `base ${baseXp(honest)} vs ${baseXp(fwd)}, per quest ${perQuest(honest)} vs ${perQuest(fwd)}` +
     ` (totals ${honest.xp} on ${honest.questNames.length}q vs ${fwd.xp} on ${fwd.questNames.length}q, +105 control)`);
 
-  /* ================= 4. THE GRACE CEILING (ASSERTED, BOTH SIDES) ==========
-     Rule 2: the local date may not outrun UTC elapsed by more than DAY_GRACE.
-     The shim cannot move the local calendar without moving UTC, because that
-     is a TIMEZONE change, so the anchor row is moved instead and the case is
-     labelled ANCHOR. DIRECTION: too permissive is the failure the farmer wants
-     and too strict is the failure the traveller feels, so BOTH sides of the
-     edge are asserted. BOUND: exactly DAY_GRACE. */
-  console.log(`\n--- ANCHOR: the grace ceiling, both sides of DAY_GRACE=${GRACE} ---`);
-  for (const delta of [GRACE, GRACE + 1]) {
-    await guard.reset();
-    await shiftDays(300);
-    await guard.claim(await keyFor(300));          // seed the mark at +300
-    await shiftDays(300 + delta);
-    await guard.anchorAtNow();                     // ANCHOR: zero UTC elapsed
-    const r = await guard.claim(await keyFor(300 + delta));
-    const shouldPass = delta <= GRACE;
-    check(`${delta} local days with ZERO elapsed time is ${shouldPass ? 'allowed' : 'REFUSED'}`,
-      r.fresh === shouldPass && (shouldPass || r.reason === 'too-fast'),
-      `fresh=${r.fresh} reason=${r.reason} allowed=${r.allowed} claimed=${r.claimed}`);
-  }
-
-  /* Idle allowance must not bank. A player away for a month must not come back
-     holding thirty days of headroom to spend in one sitting.
+  /* ================= 4. THE IDLE MONTH (ASSERTED) =========================
+     A player away for a month must not come back holding thirty days of
+     headroom to spend in one sitting. Rule 2 claimed this job and could not do
+     it (QA round 26 O10); rule 3 does: the server has only reached +430, so
+     the ceiling is +430 + WITNESS_GRACE however long the device was idle.
      DIRECTION: an accepted jump here is the failure. */
   await guard.reset();
   await shiftDays(400);
   await guard.claim(await keyFor(400));
   await shiftDays(430);
-  /* Thirty days pass for the SERVER too, which is what makes this the honest
-     idle-month case rather than a walk. Without it rule 3 refuses +430 first
-     and this block would stop testing rule 2 at all. */
-  await guard.witnessAt(430);
+  await guard.witnessAt(430);                      // thirty days pass for the SERVER too
   await guard.claim(await keyFor(430));            // 30 honest days pass
-  await guard.anchorAtNow();                       // ANCHOR: from here, no time passes
-  const banked = await guard.claim(await keyFor(430 + GRACE + 1));
-  check('an idle month does NOT bank spendable allowance',
-    banked.fresh === false && banked.reason === 'too-fast',
-    `fresh=${banked.fresh} reason=${banked.reason} allowed=${banked.allowed} claimed=${banked.claimed}`);
+  const WG0 = await guard.witnessGrace();
+  const banked = await guard.claim(await keyFor(430 + WG0 + 1));
+  check('an idle month does NOT bank spendable allowance (rule 3 refuses past witness + WITNESS_GRACE)',
+    banked.fresh === false && banked.reason === 'unwitnessed',
+    `fresh=${banked.fresh} reason=${banked.reason} ceiling=${banked.ceiling} claimed=${banked.claimed}`);
 
   /* ================= 5. THE HONEST PLAYER MUST NOT BE REFUSED ============
      Every one of these is a real person, and every one of them is a FAILURE
@@ -734,20 +700,20 @@ try {
   const again = await guard.claim(morning.key);
   const st2 = await guard.state();
   check('a second call on the SAME day is fresh and stateless',
-    again.fresh === true && again.reason === 'same-day' && st1.paceAt === st2.paceAt,
-    `reason=${again.reason} paceAt ${st1.paceAt} == ${st2.paceAt}`);
+    again.fresh === true && again.reason === 'same-day' && JSON.stringify(st1) === JSON.stringify(st2),
+    `reason=${again.reason} state ${JSON.stringify(st1)} == ${JSON.stringify(st2)}`);
 
   // 5c. The eastbound traveller. LA Monday 22:00 PDT -> Sydney Wednesday 06:00
   //     AEST: two local dates for fifteen hours of flight. ANCHOR, because the
-  //     19-hour zone shift is exactly what the Date shim cannot express.
+  //     19-hour zone shift is exactly what the Date shim cannot express; the
+  //     guard reads calendar days only (rule 2 is gone), so the jump is the case.
   await guard.reset();
   await shiftDays(500);
   await guard.claim(await keyFor(500));
   await shiftDays(502);
-  await guard.anchorAgoMs(15 * HOUR);              // ANCHOR: 15h of flight
   const traveller = await guard.claim(await keyFor(502));
-  check('eastbound traveller crossing the date line is NOT refused (2 local days, 15h elapsed)',
-    traveller.fresh === true, `fresh=${traveller.fresh} reason=${traveller.reason} allowed=${traveller.allowed}`);
+  check('eastbound traveller crossing the date line is NOT refused (2 local days in one hop)',
+    traveller.fresh === true, `fresh=${traveller.fresh} reason=${traveller.reason}`);
 
   // 5d. The westbound traveller. This one DOES cost a day, and the cost is
   //     bounded and stated rather than hidden.
@@ -781,13 +747,12 @@ try {
 
   await guard.reset();
   await shiftDays(700);
-  const trueDay2 = await guard.claim(await keyFor(700));
-  await guard.anchorAtNow();
+  const trueDay2 = await guard.claim(await keyFor(700));               // seeds rule 3's witness at +700 too
   const garbageFuture = await guard.claim(await keyFor(700 + 3650));   // RTC reads a decade ahead
   const stateAfterFuture = await guard.state();
   const ntpBack = await guard.claim(await keyFor(700));
-  check('NTP: a garbage FUTURE clock is refused, writes nothing, and heals on correction',
-    garbageFuture.fresh === false && garbageFuture.reason === 'too-fast' &&
+  check('NTP: a garbage FUTURE clock is refused (by rule 3, since rule 2 could never see it), writes nothing, and heals on correction',
+    garbageFuture.fresh === false && garbageFuture.reason === 'unwitnessed' &&
     stateAfterFuture.highWater === trueDay2.state.highWater && ntpBack.fresh === true,
     `future=${garbageFuture.reason}, mark unmoved at ${stateAfterFuture.highWater}, after=${ntpBack.reason}`);
   check('the guard has no latch: every refusal is stateless',
@@ -887,9 +852,9 @@ try {
   check('an OLDER server answer cannot lower the ceiling', older === wire.after,
     `witness still ${older} after a /health 900 days in the past`);
 
-  /* 7c. BOTH SIDES OF THE OFFLINE ALLOWANCE. The pace anchor is pushed back
-     nine days first so rule 2 has headroom and cannot be the thing that
-     refuses: this block must fail on rule 3 or not at all. */
+  /* 7c. BOTH SIDES OF THE OFFLINE ALLOWANCE. Rule 3 is the only rule that can
+     refuse a forward day now (rule 2 retired, QA round 26 O10), so this block
+     fails on rule 3 or not at all. */
   await guard.reset();
   await shiftDays(500);
   const seededW = await guard.claim(await keyFor(500));
@@ -897,9 +862,7 @@ try {
   check('an offline device with no witness at all SEEDS and is let through',
     seededW.fresh === true && wState.witness > 0,
     `reason=${seededW.reason} witness seeded at ${wState.witness}`);
-  await guard.anchorAgoMs(9 * 86400000);
   const edgeIn = await guard.claim(await keyFor(500 + W_GRACE));
-  await guard.anchorAgoMs(9 * 86400000);
   const hwBeforeEdge = (await guard.state()).highWater;
   const edgeOut = await guard.claim(await keyFor(500 + W_GRACE + 1));
   const hwAfterEdge = (await guard.state()).highWater;
@@ -914,7 +877,6 @@ try {
   // 7d. HEALING. One successful /health, on any network, on any later day, and
   //     the refused day opens. This is what makes the offline story bearable.
   await guard.witnessAt(500 + W_GRACE + 1);
-  await guard.anchorAgoMs(9 * 86400000);
   const healed = await guard.claim(await keyFor(500 + W_GRACE + 1));
   check('one /health after the fact opens the refused day: the pause is not a loss',
     healed.fresh === true, `fresh=${healed.fresh} reason=${healed.reason}`);

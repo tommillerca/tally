@@ -91,7 +91,12 @@ export async function refreshPitEnergy() {
     s.fromLog = Math.max(s.fromLog || 0, logTarget);
     return s;
   }, {});
-  return view(st);
+  const v = view(st);
+  /* The Pit's energy line says "free fights refill at midnight", which is a
+     lie on a day the guard refused. Name the refusal so the line can carry
+     DAY_GUARD_COPY instead (QA round 26 O14). Only ever set on a refusal. */
+  if (day && !day.fresh) v.dayGuard = day.reason || true;
+  return v;
 }
 
 // Current energy without recomputing (fast read for gating a button).

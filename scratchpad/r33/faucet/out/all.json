@@ -1,0 +1,1118 @@
+[
+  {
+    "rules": "today",
+    "depth": "light",
+    "seed": 11,
+    "days": 365,
+    "coinsPerDay": 15.2,
+    "pitPerDay": 0,
+    "cratePerDay": 8.5,
+    "healthPerDay": 2.4,
+    "levelPerDay": 4.2,
+    "level": 21,
+    "cosmetics": 136,
+    "gear": 21,
+    "dust": 150,
+    "wallet": 226,
+    "spent": 6300,
+    "windowsDone": 0,
+    "dayOutOfThings": null,
+    "firstWindowDay": null,
+    "crateCoinRanges": {
+      "daily": [
+        20,
+        40
+      ],
+      "golden": [
+        10,
+        25
+      ]
+    },
+    "ms": 16683
+  },
+  {
+    "rules": "today",
+    "depth": "light",
+    "seed": 23,
+    "days": 365,
+    "coinsPerDay": 13.3,
+    "pitPerDay": 0,
+    "cratePerDay": 6.7,
+    "healthPerDay": 3,
+    "levelPerDay": 3.6,
+    "level": 19,
+    "cosmetics": 126,
+    "gear": 18,
+    "dust": 75,
+    "wallet": 280,
+    "spent": 5400,
+    "windowsDone": 0,
+    "dayOutOfThings": null,
+    "firstWindowDay": null,
+    "crateCoinRanges": {
+      "daily": [
+        20,
+        40
+      ],
+      "golden": [
+        10,
+        25
+      ]
+    },
+    "ms": 16213
+  },
+  {
+    "rules": "today",
+    "depth": "light",
+    "seed": 47,
+    "days": 365,
+    "coinsPerDay": 14.3,
+    "pitPerDay": 0,
+    "cratePerDay": 6.8,
+    "healthPerDay": 3.6,
+    "levelPerDay": 3.9,
+    "level": 20,
+    "cosmetics": 142,
+    "gear": 20,
+    "dust": 150,
+    "wallet": 76,
+    "spent": 6000,
+    "windowsDone": 0,
+    "dayOutOfThings": null,
+    "firstWindowDay": null,
+    "crateCoinRanges": {
+      "daily": [
+        20,
+        40
+      ],
+      "golden": [
+        10,
+        25
+      ]
+    },
+    "ms": 15984
+  },
+  {
+    "rules": "today",
+    "depth": "committed",
+    "seed": 11,
+    "days": 365,
+    "coinsPerDay": 368.9,
+    "pitPerDay": 71.3,
+    "cratePerDay": 112.4,
+    "healthPerDay": 151.4,
+    "levelPerDay": 33.8,
+    "level": 66,
+    "cosmetics": 357,
+    "gear": 122,
+    "dust": 2315,
+    "wallet": 99439,
+    "spent": 41200,
+    "windowsDone": 0,
+    "dayOutOfThings": null,
+    "firstWindowDay": null,
+    "crateCoinRanges": {
+      "daily": [
+        20,
+        40
+      ],
+      "golden": [
+        10,
+        25
+      ]
+    },
+    "ms": 32741
+  },
+  {
+    "rules": "today",
+    "depth": "committed",
+    "seed": 23,
+    "days": 365,
+    "coinsPerDay": 368.6,
+    "pitPerDay": 71.3,
+    "cratePerDay": 111.7,
+    "healthPerDay": 151.7,
+    "levelPerDay": 33.8,
+    "level": 66,
+    "cosmetics": 357,
+    "gear": 113,
+    "dust": 2375,
+    "wallet": 99355,
+    "spent": 39800,
+    "windowsDone": 0,
+    "dayOutOfThings": null,
+    "firstWindowDay": null,
+    "crateCoinRanges": {
+      "daily": [
+        20,
+        40
+      ],
+      "golden": [
+        10,
+        25
+      ]
+    },
+    "ms": 32871
+  },
+  {
+    "rules": "today",
+    "depth": "committed",
+    "seed": 47,
+    "days": 365,
+    "coinsPerDay": 376.2,
+    "pitPerDay": 71.7,
+    "cratePerDay": 115.7,
+    "healthPerDay": 155,
+    "levelPerDay": 33.8,
+    "level": 66,
+    "cosmetics": 357,
+    "gear": 134,
+    "dust": 2135,
+    "wallet": 98086,
+    "spent": 42600,
+    "windowsDone": 0,
+    "dayOutOfThings": null,
+    "firstWindowDay": null,
+    "crateCoinRanges": {
+      "daily": [
+        20,
+        40
+      ],
+      "golden": [
+        10,
+        25
+      ]
+    },
+    "ms": 31934
+  },
+  {
+    "rules": "today",
+    "depth": "heavy",
+    "seed": 11,
+    "days": 365,
+    "coinsPerDay": 645.3,
+    "pitPerDay": 192.7,
+    "cratePerDay": 148.4,
+    "healthPerDay": 253.1,
+    "levelPerDay": 51,
+    "level": 82,
+    "cosmetics": 357,
+    "gear": 142,
+    "dust": 4395,
+    "wallet": 191721,
+    "spent": 50500,
+    "windowsDone": 0,
+    "dayOutOfThings": null,
+    "firstWindowDay": null,
+    "crateCoinRanges": {
+      "daily": [
+        20,
+        40
+      ],
+      "golden": [
+        10,
+        25
+      ]
+    },
+    "ms": 40216
+  },
+  {
+    "rules": "today",
+    "depth": "heavy",
+    "seed": 23,
+    "days": 365,
+    "coinsPerDay": 657,
+    "pitPerDay": 192.5,
+    "cratePerDay": 152.1,
+    "healthPerDay": 261.4,
+    "levelPerDay": 51,
+    "level": 82,
+    "cosmetics": 357,
+    "gear": 150,
+    "dust": 4655,
+    "wallet": 191138,
+    "spent": 52500,
+    "windowsDone": 0,
+    "dayOutOfThings": null,
+    "firstWindowDay": null,
+    "crateCoinRanges": {
+      "daily": [
+        20,
+        40
+      ],
+      "golden": [
+        10,
+        25
+      ]
+    },
+    "ms": 40893
+  },
+  {
+    "rules": "today",
+    "depth": "heavy",
+    "seed": 47,
+    "days": 365,
+    "coinsPerDay": 646,
+    "pitPerDay": 192.3,
+    "cratePerDay": 148,
+    "healthPerDay": 254.6,
+    "levelPerDay": 51,
+    "level": 82,
+    "cosmetics": 357,
+    "gear": 137,
+    "dust": 4955,
+    "wallet": 191851,
+    "spent": 50100,
+    "windowsDone": 0,
+    "dayOutOfThings": null,
+    "firstWindowDay": null,
+    "crateCoinRanges": {
+      "daily": [
+        20,
+        40
+      ],
+      "golden": [
+        10,
+        25
+      ]
+    },
+    "ms": 39517
+  },
+  {
+    "rules": "fifth",
+    "depth": "light",
+    "seed": 11,
+    "days": 365,
+    "coinsPerDay": 106,
+    "pitPerDay": 0,
+    "cratePerDay": 98.5,
+    "healthPerDay": 3.6,
+    "levelPerDay": 3.9,
+    "level": 20,
+    "cosmetics": 108,
+    "gear": 9,
+    "dust": 2386,
+    "wallet": 1177,
+    "spent": 38160,
+    "windowsDone": 9,
+    "dayOutOfThings": null,
+    "firstWindowDay": 37,
+    "crateCoinRanges": {
+      "daily": [
+        60,
+        100
+      ],
+      "golden": [
+        400,
+        600
+      ]
+    },
+    "ms": 15655
+  },
+  {
+    "rules": "fifth",
+    "depth": "light",
+    "seed": 23,
+    "days": 365,
+    "coinsPerDay": 122,
+    "pitPerDay": 0,
+    "cratePerDay": 113.8,
+    "healthPerDay": 3.9,
+    "levelPerDay": 4.2,
+    "level": 21,
+    "cosmetics": 115,
+    "gear": 8,
+    "dust": 2572,
+    "wallet": 2722,
+    "spent": 42660,
+    "windowsDone": 10,
+    "dayOutOfThings": null,
+    "firstWindowDay": 29,
+    "crateCoinRanges": {
+      "daily": [
+        60,
+        100
+      ],
+      "golden": [
+        400,
+        600
+      ]
+    },
+    "ms": 16220
+  },
+  {
+    "rules": "fifth",
+    "depth": "light",
+    "seed": 47,
+    "days": 365,
+    "coinsPerDay": 100,
+    "pitPerDay": 0,
+    "cratePerDay": 92.6,
+    "healthPerDay": 3.5,
+    "levelPerDay": 3.9,
+    "level": 20,
+    "cosmetics": 101,
+    "gear": 2,
+    "dust": 2261,
+    "wallet": 3820,
+    "spent": 33660,
+    "windowsDone": 8,
+    "dayOutOfThings": null,
+    "firstWindowDay": 27,
+    "crateCoinRanges": {
+      "daily": [
+        60,
+        100
+      ],
+      "golden": [
+        400,
+        600
+      ]
+    },
+    "ms": 15660
+  },
+  {
+    "rules": "fifth",
+    "depth": "committed",
+    "seed": 11,
+    "days": 365,
+    "coinsPerDay": 877.9,
+    "pitPerDay": 71.5,
+    "cratePerDay": 618.1,
+    "healthPerDay": 154.4,
+    "levelPerDay": 33.8,
+    "level": 66,
+    "cosmetics": 259,
+    "gear": 14,
+    "dust": 15386,
+    "wallet": 183900,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 148,
+    "firstWindowDay": 3,
+    "crateCoinRanges": {
+      "daily": [
+        60,
+        100
+      ],
+      "golden": [
+        400,
+        600
+      ]
+    },
+    "ms": 30847
+  },
+  {
+    "rules": "fifth",
+    "depth": "committed",
+    "seed": 23,
+    "days": 365,
+    "coinsPerDay": 849.3,
+    "pitPerDay": 71.3,
+    "cratePerDay": 590.5,
+    "healthPerDay": 153.7,
+    "levelPerDay": 33.8,
+    "level": 66,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 15196,
+    "wallet": 173188,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 158,
+    "firstWindowDay": 4,
+    "crateCoinRanges": {
+      "daily": [
+        60,
+        100
+      ],
+      "golden": [
+        400,
+        600
+      ]
+    },
+    "ms": 30838
+  },
+  {
+    "rules": "fifth",
+    "depth": "committed",
+    "seed": 47,
+    "days": 365,
+    "coinsPerDay": 862.5,
+    "pitPerDay": 71.6,
+    "cratePerDay": 606.4,
+    "healthPerDay": 150.7,
+    "levelPerDay": 33.8,
+    "level": 66,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 15081,
+    "wallet": 177902,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 145,
+    "firstWindowDay": 3,
+    "crateCoinRanges": {
+      "daily": [
+        60,
+        100
+      ],
+      "golden": [
+        400,
+        600
+      ]
+    },
+    "ms": 30862
+  },
+  {
+    "rules": "fifth",
+    "depth": "heavy",
+    "seed": 11,
+    "days": 365,
+    "coinsPerDay": 1219.5,
+    "pitPerDay": 191.9,
+    "cratePerDay": 721.2,
+    "healthPerDay": 255.3,
+    "levelPerDay": 51,
+    "level": 82,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 19425,
+    "wallet": 309695,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 97,
+    "firstWindowDay": 2,
+    "crateCoinRanges": {
+      "daily": [
+        60,
+        100
+      ],
+      "golden": [
+        400,
+        600
+      ]
+    },
+    "ms": 38281
+  },
+  {
+    "rules": "fifth",
+    "depth": "heavy",
+    "seed": 23,
+    "days": 365,
+    "coinsPerDay": 1263.5,
+    "pitPerDay": 192.5,
+    "cratePerDay": 766.4,
+    "healthPerDay": 253.6,
+    "levelPerDay": 51,
+    "level": 82,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 20284,
+    "wallet": 326067,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 90,
+    "firstWindowDay": 3,
+    "crateCoinRanges": {
+      "daily": [
+        60,
+        100
+      ],
+      "golden": [
+        400,
+        600
+      ]
+    },
+    "ms": 38289
+  },
+  {
+    "rules": "fifth",
+    "depth": "heavy",
+    "seed": 47,
+    "days": 365,
+    "coinsPerDay": 1261.8,
+    "pitPerDay": 192.8,
+    "cratePerDay": 766.4,
+    "healthPerDay": 251.5,
+    "levelPerDay": 51,
+    "level": 82,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 20496,
+    "wallet": 326098,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 89,
+    "firstWindowDay": 3,
+    "crateCoinRanges": {
+      "daily": [
+        60,
+        100
+      ],
+      "golden": [
+        400,
+        600
+      ]
+    },
+    "ms": 38360
+  },
+  {
+    "rules": "fifth-half",
+    "depth": "light",
+    "seed": 11,
+    "days": 365,
+    "coinsPerDay": 61.8,
+    "pitPerDay": 0,
+    "cratePerDay": 54.2,
+    "healthPerDay": 3.6,
+    "levelPerDay": 3.9,
+    "level": 20,
+    "cosmetics": 78,
+    "gear": 9,
+    "dust": 2386,
+    "wallet": 2792,
+    "spent": 20400,
+    "windowsDone": 5,
+    "dayOutOfThings": null,
+    "firstWindowDay": 51,
+    "crateCoinRanges": {
+      "daily": [
+        30,
+        50
+      ],
+      "golden": [
+        200,
+        300
+      ]
+    },
+    "ms": 15608
+  },
+  {
+    "rules": "fifth-half",
+    "depth": "light",
+    "seed": 23,
+    "days": 365,
+    "coinsPerDay": 73.2,
+    "pitPerDay": 0,
+    "cratePerDay": 65,
+    "healthPerDay": 3.9,
+    "levelPerDay": 4.2,
+    "level": 21,
+    "cosmetics": 86,
+    "gear": 8,
+    "dust": 2572,
+    "wallet": 2752,
+    "spent": 24820,
+    "windowsDone": 6,
+    "dayOutOfThings": null,
+    "firstWindowDay": 42,
+    "crateCoinRanges": {
+      "daily": [
+        30,
+        50
+      ],
+      "golden": [
+        200,
+        300
+      ]
+    },
+    "ms": 15890
+  },
+  {
+    "rules": "fifth-half",
+    "depth": "light",
+    "seed": 47,
+    "days": 365,
+    "coinsPerDay": 59.7,
+    "pitPerDay": 0,
+    "cratePerDay": 52.3,
+    "healthPerDay": 3.5,
+    "levelPerDay": 3.9,
+    "level": 20,
+    "cosmetics": 78,
+    "gear": 2,
+    "dust": 2261,
+    "wallet": 2356,
+    "spent": 20400,
+    "windowsDone": 5,
+    "dayOutOfThings": null,
+    "firstWindowDay": 63,
+    "crateCoinRanges": {
+      "daily": [
+        30,
+        50
+      ],
+      "golden": [
+        200,
+        300
+      ]
+    },
+    "ms": 15712
+  },
+  {
+    "rules": "fifth-half",
+    "depth": "committed",
+    "seed": 11,
+    "days": 365,
+    "coinsPerDay": 639.7,
+    "pitPerDay": 71.5,
+    "cratePerDay": 379.9,
+    "healthPerDay": 154.4,
+    "levelPerDay": 33.8,
+    "level": 66,
+    "cosmetics": 259,
+    "gear": 14,
+    "dust": 15386,
+    "wallet": 96955,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 217,
+    "firstWindowDay": 7,
+    "crateCoinRanges": {
+      "daily": [
+        30,
+        50
+      ],
+      "golden": [
+        200,
+        300
+      ]
+    },
+    "ms": 30292
+  },
+  {
+    "rules": "fifth-half",
+    "depth": "committed",
+    "seed": 23,
+    "days": 365,
+    "coinsPerDay": 618.2,
+    "pitPerDay": 71.3,
+    "cratePerDay": 359.4,
+    "healthPerDay": 153.7,
+    "levelPerDay": 33.8,
+    "level": 66,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 15196,
+    "wallet": 88823,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 230,
+    "firstWindowDay": 6,
+    "crateCoinRanges": {
+      "daily": [
+        30,
+        50
+      ],
+      "golden": [
+        200,
+        300
+      ]
+    },
+    "ms": 31895
+  },
+  {
+    "rules": "fifth-half",
+    "depth": "committed",
+    "seed": 47,
+    "days": 365,
+    "coinsPerDay": 627.4,
+    "pitPerDay": 71.6,
+    "cratePerDay": 371.3,
+    "healthPerDay": 150.7,
+    "levelPerDay": 33.8,
+    "level": 66,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 15081,
+    "wallet": 92102,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 227,
+    "firstWindowDay": 6,
+    "crateCoinRanges": {
+      "daily": [
+        30,
+        50
+      ],
+      "golden": [
+        200,
+        300
+      ]
+    },
+    "ms": 32074
+  },
+  {
+    "rules": "fifth-half",
+    "depth": "heavy",
+    "seed": 11,
+    "days": 365,
+    "coinsPerDay": 935.6,
+    "pitPerDay": 191.9,
+    "cratePerDay": 437.4,
+    "healthPerDay": 255.3,
+    "levelPerDay": 51,
+    "level": 82,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 19425,
+    "wallet": 206077,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 143,
+    "firstWindowDay": 4,
+    "crateCoinRanges": {
+      "daily": [
+        30,
+        50
+      ],
+      "golden": [
+        200,
+        300
+      ]
+    },
+    "ms": 37678
+  },
+  {
+    "rules": "fifth-half",
+    "depth": "heavy",
+    "seed": 23,
+    "days": 365,
+    "coinsPerDay": 965.5,
+    "pitPerDay": 192.5,
+    "cratePerDay": 468.4,
+    "healthPerDay": 253.6,
+    "levelPerDay": 51,
+    "level": 82,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 20284,
+    "wallet": 217296,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 143,
+    "firstWindowDay": 4,
+    "crateCoinRanges": {
+      "daily": [
+        30,
+        50
+      ],
+      "golden": [
+        200,
+        300
+      ]
+    },
+    "ms": 39312
+  },
+  {
+    "rules": "fifth-half",
+    "depth": "heavy",
+    "seed": 47,
+    "days": 365,
+    "coinsPerDay": 959.1,
+    "pitPerDay": 192.8,
+    "cratePerDay": 463.8,
+    "healthPerDay": 251.5,
+    "levelPerDay": 51,
+    "level": 82,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 20496,
+    "wallet": 215622,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 140,
+    "firstWindowDay": 4,
+    "crateCoinRanges": {
+      "daily": [
+        30,
+        50
+      ],
+      "golden": [
+        200,
+        300
+      ]
+    },
+    "ms": 38670
+  },
+  {
+    "rules": "fifth-quarter",
+    "depth": "light",
+    "seed": 11,
+    "days": 365,
+    "coinsPerDay": 39.6,
+    "pitPerDay": 0,
+    "cratePerDay": 32.1,
+    "healthPerDay": 3.6,
+    "levelPerDay": 3.9,
+    "level": 20,
+    "cosmetics": 65,
+    "gear": 9,
+    "dust": 2386,
+    "wallet": 3112,
+    "spent": 12000,
+    "windowsDone": 3,
+    "dayOutOfThings": null,
+    "firstWindowDay": 103,
+    "crateCoinRanges": {
+      "daily": [
+        15,
+        25
+      ],
+      "golden": [
+        100,
+        150
+      ]
+    },
+    "ms": 15556
+  },
+  {
+    "rules": "fifth-quarter",
+    "depth": "light",
+    "seed": 23,
+    "days": 365,
+    "coinsPerDay": 48.8,
+    "pitPerDay": 0,
+    "cratePerDay": 40.6,
+    "healthPerDay": 3.9,
+    "levelPerDay": 4.2,
+    "level": 21,
+    "cosmetics": 72,
+    "gear": 8,
+    "dust": 2572,
+    "wallet": 2533,
+    "spent": 16120,
+    "windowsDone": 4,
+    "dayOutOfThings": null,
+    "firstWindowDay": 100,
+    "crateCoinRanges": {
+      "daily": [
+        15,
+        25
+      ],
+      "golden": [
+        100,
+        150
+      ]
+    },
+    "ms": 16329
+  },
+  {
+    "rules": "fifth-quarter",
+    "depth": "light",
+    "seed": 47,
+    "days": 365,
+    "coinsPerDay": 39.5,
+    "pitPerDay": 0,
+    "cratePerDay": 32.1,
+    "healthPerDay": 3.5,
+    "levelPerDay": 3.9,
+    "level": 20,
+    "cosmetics": 65,
+    "gear": 2,
+    "dust": 2261,
+    "wallet": 3398,
+    "spent": 12000,
+    "windowsDone": 3,
+    "dayOutOfThings": null,
+    "firstWindowDay": 97,
+    "crateCoinRanges": {
+      "daily": [
+        15,
+        25
+      ],
+      "golden": [
+        100,
+        150
+      ]
+    },
+    "ms": 16929
+  },
+  {
+    "rules": "fifth-quarter",
+    "depth": "committed",
+    "seed": 11,
+    "days": 365,
+    "coinsPerDay": 520.6,
+    "pitPerDay": 71.5,
+    "cratePerDay": 260.8,
+    "healthPerDay": 154.4,
+    "levelPerDay": 33.8,
+    "level": 66,
+    "cosmetics": 259,
+    "gear": 14,
+    "dust": 15386,
+    "wallet": 53484,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 270,
+    "firstWindowDay": 9,
+    "crateCoinRanges": {
+      "daily": [
+        15,
+        25
+      ],
+      "golden": [
+        100,
+        150
+      ]
+    },
+    "ms": 30120
+  },
+  {
+    "rules": "fifth-quarter",
+    "depth": "committed",
+    "seed": 23,
+    "days": 365,
+    "coinsPerDay": 502.5,
+    "pitPerDay": 71.3,
+    "cratePerDay": 243.7,
+    "healthPerDay": 153.7,
+    "levelPerDay": 33.8,
+    "level": 66,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 15196,
+    "wallet": 46608,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 278,
+    "firstWindowDay": 9,
+    "crateCoinRanges": {
+      "daily": [
+        15,
+        25
+      ],
+      "golden": [
+        100,
+        150
+      ]
+    },
+    "ms": 32766
+  },
+  {
+    "rules": "fifth-quarter",
+    "depth": "committed",
+    "seed": 47,
+    "days": 365,
+    "coinsPerDay": 509.8,
+    "pitPerDay": 71.6,
+    "cratePerDay": 253.8,
+    "healthPerDay": 150.7,
+    "levelPerDay": 33.8,
+    "level": 66,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 15081,
+    "wallet": 49193,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 278,
+    "firstWindowDay": 9,
+    "crateCoinRanges": {
+      "daily": [
+        15,
+        25
+      ],
+      "golden": [
+        100,
+        150
+      ]
+    },
+    "ms": 33384
+  },
+  {
+    "rules": "fifth-quarter",
+    "depth": "heavy",
+    "seed": 11,
+    "days": 365,
+    "coinsPerDay": 793.6,
+    "pitPerDay": 191.9,
+    "cratePerDay": 295.3,
+    "healthPerDay": 255.3,
+    "levelPerDay": 51,
+    "level": 82,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 19425,
+    "wallet": 154242,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 185,
+    "firstWindowDay": 6,
+    "crateCoinRanges": {
+      "daily": [
+        15,
+        25
+      ],
+      "golden": [
+        100,
+        150
+      ]
+    },
+    "ms": 40532
+  },
+  {
+    "rules": "fifth-quarter",
+    "depth": "heavy",
+    "seed": 23,
+    "days": 365,
+    "coinsPerDay": 816.5,
+    "pitPerDay": 192.5,
+    "cratePerDay": 319.4,
+    "healthPerDay": 253.6,
+    "levelPerDay": 51,
+    "level": 82,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 20284,
+    "wallet": 162923,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 182,
+    "firstWindowDay": 6,
+    "crateCoinRanges": {
+      "daily": [
+        15,
+        25
+      ],
+      "golden": [
+        100,
+        150
+      ]
+    },
+    "ms": 38170
+  },
+  {
+    "rules": "fifth-quarter",
+    "depth": "heavy",
+    "seed": 47,
+    "days": 365,
+    "coinsPerDay": 807.8,
+    "pitPerDay": 192.8,
+    "cratePerDay": 312.4,
+    "healthPerDay": 251.5,
+    "levelPerDay": 51,
+    "level": 82,
+    "cosmetics": 259,
+    "gear": 16,
+    "dust": 20496,
+    "wallet": 160377,
+    "spent": 141290,
+    "windowsDone": 28,
+    "dayOutOfThings": 166,
+    "firstWindowDay": 6,
+    "crateCoinRanges": {
+      "daily": [
+        15,
+        25
+      ],
+      "golden": [
+        100,
+        150
+      ]
+    },
+    "ms": 41005
+  }
+]

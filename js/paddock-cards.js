@@ -15,7 +15,7 @@
  * which the Boneyard reused as a SCREEN class, tied on specificity, and left the map
  * blank (tally/CLAUDE.md, "Scope reveal CSS to the surface it means").
  */
-import { BH_ITEMS, bhAsset, PET_CROP, petWornLayers, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
+import { BH_ITEMS, bhAsset, PET_CROP, petWornLayers, petWornTints, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
 import { bhIcon } from './icons-pack.js';
 
 export const PET_SPECIES = BH_ITEMS.filter(i => i.slot === 'C');
@@ -62,6 +62,7 @@ export function cardModel(row) {
        species check, so this is [] for every pet the accessories are not drawn
        for and no caller here has to remember which one that is. */
     worn: petWornLayers(row.sp, row.wear),
+    tints: petWornTints(row.sp, row.wear),   // Football kit, 2026-09-04: per worn layer
   };
 }
 
@@ -93,14 +94,18 @@ export function cardModel(row) {
    markup those grade is unchanged -- and the memory census asserts the decoded
    width on the live screen, because a box that arrives 0 in the app would look
    exactly like a pass while restoring all 80 MB. */
-const layeredArt = (sp, art, worn, { alt = '', eager = false, box = 0 } = {}) => {
+const layeredArt = (sp, art, worn, { alt = '', eager = false, box = 0, tints = [] } = {}) => {
   const tier = box ? bhTierFor(box * inkSize(sp)) : 0;
   return [art, ...(worn || [])].map((src, i) => {
     const use = tier ? bhThumb(src, tier) : src;
     /* A thumbnail that 404s falls back to the master rather than leaving a hole,
        and the fallback string is the app's own, imported rather than retyped. */
+    /* Football kit, 2026-09-04: a tinted garment's multiply spans ride the same
+       inkFitStyle string as its <img>, so they stay registered to it. */
+    const tint = (i > 0 && tints[i - 1] ? tints[i - 1] : [])
+      .map(t => `<span class="fb-tint" style="${inkFitStyle(sp)}--fbm:url('${esc(t.mask)}');background:${t.hex}" aria-hidden="true"></span>`).join('');
     return `<img src="${esc(use)}"${use === src ? '' : ` data-full="${esc(src)}" ${THUMB_FALLBACK}`}`
-      + ` style="${inkFitStyle(sp)}"${i === 0 ? ` alt="${esc(alt)}"` : ' alt=""'}${eager ? ' loading="eager"' : ''}>`;
+      + ` style="${inkFitStyle(sp)}"${i === 0 ? ` alt="${esc(alt)}"` : ' alt=""'}${eager ? ' loading="eager"' : ''}>${tint}`;
   }).join('');
 };
 
@@ -130,6 +135,7 @@ export function gridModel(roster) {
       sp: s.id, name: s.name, rarity: s.rarity, rarityColor: PDK_RARITY[s.rarity] || PDK_RARITY.common,
       art: bhAsset(s), owned: !!t, count: t ? t.count : 0,
       worn: t ? petWornLayers(s.id, wear) : [],
+      tints: t ? petWornTints(s.id, wear) : [],
       showCount: !!t && t.count > 1, anyShiny: !!(t && t.anyShiny),
       glow: s.rarity === 'legendary' || s.rarity === 'epic',
     };
@@ -239,7 +245,7 @@ export function cardHtml(m) {
   return `<article class="pdk-card" data-iid="${esc(m.iid)}">
     <button class="pdk-x-btn" data-act="close" aria-label="Close">×</button>
     <div class="pdk-head">
-      <span class="pdk-thumb">${layeredArt(m.sp, m.art, m.worn, { eager: true, box: PDK_THUMB_PX })}</span>
+      <span class="pdk-thumb">${layeredArt(m.sp, m.art, m.worn, { eager: true, box: PDK_THUMB_PX, tints: m.tints })}</span>
       <div class="pdk-id">
         <b class="pdk-name">${esc(m.name)}</b>
         <span class="pdk-chips">
@@ -341,7 +347,7 @@ export function panelHtml(roster, eggs, { tileBox = 0, showTeaser = true, inFiel
         <span class="pdk-eggbar"><i style="width:${Math.round(egg.pct * 100)}%"></i></span>
       </button>
       ${tiles.map(t => `<button class="pdk-tile${t.owned ? '' : ' pdk-lockt'}${t.glow ? ' r-' + t.rarity : ''}" data-sp="${esc(t.sp)}">
-        ${layeredArt(t.sp, t.art, t.worn, { alt: t.name, box: tileBox })}
+        ${layeredArt(t.sp, t.art, t.worn, { alt: t.name, box: tileBox, tints: t.tints })}
         ${t.showCount ? `<span class="pdk-x">×${t.count}</span>` : ''}
         ${t.anyShiny ? '<span class="pdk-star" aria-hidden="true"></span>' : ''}
         ${t.owned ? '' : '<span class="pdk-q">?</span>'}

@@ -110,6 +110,12 @@ const PET_PROOF = {
   buyDropItem: 'DROP.items is a hand-written list of T9/H13 cosmetics, no slot C',
   buyRackItem: "the weekly rack is built from wearable slots; pet-pool-audit measures the pools",
   openCrate: 'crate pools exclude pets and pet accessories, measured in pet-pool-audit',
+  /* Football kit, 2026-09-04: both paths grant footballGrantIds / footballBundleIds,
+     which are copies of the FIVE FOOTBALL_SHELF garments (H, T, FW and the lizard's
+     two accessory slots) across 32 teams. No species is in that list; the lizard
+     pieces are accessories the player's own lizard wears, not a lizard. */
+  buyFootballItem: 'footballGrantIds is one wearable garment in 32 colourways, no slot C',
+  buyFootballBundle: 'footballBundleIds is the five FOOTBALL_SHELF garments in 32 colourways, no slot C',
 };
 const lootSrc = readFileSync(path.join(ROOT, 'js/loot.js'), 'utf8');
 const fnStarts = [...lootSrc.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/gm)]

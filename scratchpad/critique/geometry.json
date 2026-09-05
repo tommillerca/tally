@@ -1,0 +1,232 @@
+{
+  "390x844": {
+    "poster_summary_rect": {
+      "x": 16,
+      "y": 408.9,
+      "width": 358,
+      "height": 245.8
+    },
+    "fb_hero_rect": {
+      "x": 18,
+      "y": 410.9,
+      "width": 150,
+      "height": 241.8
+    },
+    "tx_rect": {
+      "x": 180,
+      "y": 410.9,
+      "width": 178,
+      "height": 241.8
+    },
+    "price_chip": {
+      "rect": {
+        "width": 203.1,
+        "height": 26.3
+      },
+      "line_height_px": 20.25,
+      "ratio_height_to_lineheight": 1.3,
+      "one_line": true
+    },
+    "discs": {
+      "count": 32,
+      "each_size": {
+        "width": 8.31,
+        "height": 8.31
+      },
+      "all_same_size": true,
+      "last_disc_right_edge": 358,
+      "tx_right_edge": 358,
+      "fits_inside_tx": true,
+      "overflow_px": 0
+    },
+    "tap_targets": {
+      "summary_whole_poster": {
+        "x": 16,
+        "y": 408.9,
+        "width": 358,
+        "height": 245.8
+      },
+      "fbTeam_select": {
+        "x": 75.6,
+        "y": 666.7,
+        "width": 245.4,
+        "height": 36
+      },
+      "drop_buy_buttons": [
+        {
+          "label": "4,200",
+          "disabled": false,
+          "x": 42,
+          "y": 862.8,
+          "width": 137,
+          "height": 35.5
+        },
+        {
+          "label": "4,200",
+          "disabled": false,
+          "x": 211,
+          "y": 862.8,
+          "width": 137,
+          "height": 35.5
+        },
+        {
+          "label": "4,200",
+          "disabled": false,
+          "x": 42,
+          "y": 1067.4,
+          "width": 137,
+          "height": 35.5
+        },
+        {
+          "label": "4,200",
+          "disabled": false,
+          "x": 211,
+          "y": 1067.4,
+          "width": 137,
+          "height": 35.5
+        },
+        {
+          "label": "4,200",
+          "disabled": false,
+          "x": 42,
+          "y": 1272,
+          "width": 137,
+          "height": 35.5
+        },
+        {
+          "label": "16,800",
+          "disabled": false,
+          "x": 42,
+          "y": 1459.5,
+          "width": 306,
+          "height": 35.5
+        }
+      ]
+    },
+    "aria": {
+      "summary_tag": "summary",
+      "summary_role_implicit": "native <summary> inside <details> -- implicit disclosure widget, exposed to AT as a button-like control that toggles the details element; no explicit role/aria-expanded needed per HTML AAM",
+      "summary_has_explicit_aria_expanded": false,
+      "summary_aria_label": null,
+      "details_open": true,
+      "fbTeam_aria_label": null,
+      "fb_teams_role_img": "img",
+      "fb_teams_aria_label": "32 team colourways"
+    }
+  },
+  "375x667": {
+    "poster_summary_rect": {
+      "x": 16,
+      "y": 408.9,
+      "width": 343,
+      "height": 283.7
+    },
+    "fb_hero_rect": {
+      "x": 18,
+      "y": 410.9,
+      "width": 150,
+      "height": 279.7
+    },
+    "tx_rect": {
+      "x": 180,
+      "y": 410.9,
+      "width": 163,
+      "height": 279.7
+    },
+    "price_chip": {
+      "rect": {
+        "width": 203.1,
+        "height": 26.3
+      },
+      "line_height_px": 20.25,
+      "ratio_height_to_lineheight": 1.3,
+      "one_line": true
+    },
+    "discs": {
+      "count": 32,
+      "each_size": {
+        "width": 7.38,
+        "height": 7.38
+      },
+      "all_same_size": true,
+      "last_disc_right_edge": 343,
+      "tx_right_edge": 343,
+      "fits_inside_tx": true,
+      "overflow_px": 0
+    },
+    "tap_targets": {
+      "summary_whole_poster": {
+        "x": 16,
+        "y": 408.9,
+        "width": 343,
+        "height": 283.7
+      },
+      "fbTeam_select": {
+        "x": 75.6,
+        "y": 704.6,
+        "width": 230.4,
+        "height": 36
+      },
+      "drop_buy_buttons": [
+        {
+          "label": "4,200",
+          "disabled": false,
+          "x": 42,
+          "y": 900.7,
+          "width": 129.5,
+          "height": 35.5
+        },
+        {
+          "label": "4,200",
+          "disabled": false,
+          "x": 203.5,
+          "y": 900.7,
+          "width": 129.5,
+          "height": 35.5
+        },
+        {
+          "label": "4,200",
+          "disabled": false,
+          "x": 42,
+          "y": 1105.3,
+          "width": 129.5,
+          "height": 35.5
+        },
+        {
+          "label": "4,200",
+          "disabled": false,
+          "x": 203.5,
+          "y": 1105.3,
+          "width": 129.5,
+          "height": 35.5
+        },
+        {
+          "label": "4,200",
+          "disabled": false,
+          "x": 42,
+          "y": 1309.9,
+          "width": 129.5,
+          "height": 35.5
+        },
+        {
+          "label": "16,800",
+          "disabled": false,
+          "x": 42,
+          "y": 1497.4,
+          "width": 291,
+          "height": 35.5
+        }
+      ]
+    },
+    "aria": {
+      "summary_tag": "summary",
+      "summary_role_implicit": "native <summary> inside <details> -- implicit disclosure widget, exposed to AT as a button-like control that toggles the details element; no explicit role/aria-expanded needed per HTML AAM",
+      "summary_has_explicit_aria_expanded": false,
+      "summary_aria_label": null,
+      "details_open": true,
+      "fbTeam_aria_label": null,
+      "fb_teams_role_img": "img",
+      "fb_teams_aria_label": "32 team colourways"
+    }
+  }
+}

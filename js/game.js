@@ -153,6 +153,13 @@ export const XP_DAILY_CAP = { fight: 12, garden: 10, cook: 8, siege: 5, log: 20 
    award() already returns for a duplicate, so every caller's `if (g)` still
    means "something was actually granted". */
 export async function awardCapped(prefix, type, xp, label, cap, date, ref = null) {
+  return (await claimCapped(prefix, type, xp, label, cap, date, ref)).xp;
+}
+/* The loop behind awardCapped, returning `claimed` as well as xp. awardCapped's
+   number cannot say whether a 0-XP slot was taken (0 is both "capped" and "a
+   payload with no XP"), and the spar ledger below pays COINS off a 0-XP row, so
+   anything gating money on the slot must read `claimed` (QA round 28 P4). */
+async function claimCapped(prefix, type, xp, label, cap, date, ref = null) {
   const d = date || dateKey();
   for (let n = 1; n <= cap; n++) {
     const key = `${prefix}-${d}-${n}`;
@@ -166,7 +173,7 @@ export async function awardCapped(prefix, type, xp, label, cap, date, ref = null
        one keyed get per slot, no store scan. */
     if (ref != null) {
       const have = await db.get('xp', key);
-      if (have) { if (have.ref === ref) return 0; continue; }
+      if (have) { if (have.ref === ref) return { claimed: false, xp: 0 }; continue; }
     }
     /* `claimed`, not the xp number, decides whether this slot was ours. A
        second tab racing for the same n loses the addIfAbsent inside awardOnce
@@ -175,13 +182,32 @@ export async function awardCapped(prefix, type, xp, label, cap, date, ref = null
        12/day ceiling wrote the correct 12 rows and PAID 190 XP against a cap
        of 120, because both were told they had granted the same key. */
     const r = await awardOnce(key, type, xp, label, d, ref != null ? { ref } : null);
-    if (r.claimed) return r.xp;
+    if (r.claimed) return r;
     /* Lost the claim. If the winner was our own twin (two overlapping calls
        for one entry: reward-sop's "twoAtOnce" line paid 320 against 310), the
        entry is paid and we stop here instead of taking the next slot. */
-    if (ref != null && (await db.get('xp', key))?.ref === ref) return 0;
+    if (ref != null && (await db.get('xp', key))?.ref === ref) return { claimed: false, xp: 0 };
   }
-  return 0;
+  return { claimed: false, xp: 0 };
+}
+
+/* QA round 28 P4: SPARRING PAID WITH NO STATE TRANSITION. start() in the Pit
+   skips spendPitFight on purpose (sparring is free practice, Tom's call), and
+   settle() then paid 15 coins per win and 5 per loss with no ledger key, no
+   cooldown and no cap: the Glutton class, in the Pit itself. This is the
+   transition: "the nth spar of the day, n <= SPAR_DAILY_CAP, for a fight not yet
+   paid". Authority: the ledger key spar-<date>-<n>, with the fight's own id as
+   `ref` so a repeated settle of ONE fight (or two overlapping ones) takes one
+   slot. 0 XP on purpose: the win's XP is still the 'fight' cap in settle(); this
+   row exists to bound the coins, and coins are read off `claimed`.
+   FLAGGED, NOT DECIDED: SPAR_DAILY_CAP reuses XP_DAILY_CAP.fight (12/day) so no
+   new economy number is invented here; the 15/5 amounts are the shipped ones.
+   Whether a spar should also spend a Pit charge is Tom's call and unchanged. */
+export const SPAR_DAILY_CAP = XP_DAILY_CAP.fight;
+export const SPAR_COINS = { win: 15, loss: 5 };
+export async function claimSpar(fightId, won, date) {
+  const r = await claimCapped('spar', 'spar', 0, won ? 'Sparring win' : 'Sparring loss', SPAR_DAILY_CAP, date, fightId);
+  return { claimed: r.claimed, coins: r.claimed ? (won ? SPAR_COINS.win : SPAR_COINS.loss) : 0 };
 }
 
 export async function award(key, type, xp, label, date) {
@@ -264,14 +290,19 @@ export async function award(key, type, xp, label, date) {
    overwrite key/type/xp/ts: those five are what every reader and every dedupe in
    the app is built on, and a caller quietly shadowing `key` would break the
    claim this function exists to make. */
-export async function awardOnce(key, type, xp, label, date, extra = null) {
+/* `pay`, when given, is the REST of the reward, written in the SAME transaction
+   as the ledger row (db.claimAndPay). Without it the claim is atomic and the
+   payout that follows is not, so a process death in between spends the action
+   and hands over nothing (QA round 28 Y5, the Boneyard collect). Omitted by
+   every other caller, and omitting it is byte-for-byte the old path. */
+export async function awardOnce(key, type, xp, label, date, extra = null, pay = null) {
   const row = { ...(extra || {}), key, type, xp, label, date: date || dateKey(), ts: Date.now() };
   /* Read the stamp and the cache with no await between them, so the pair is
      consistent: `live` means base IS the xp total as of epoch e0. */
   const e0 = db.epoch('xp');
   const live = !!xpCache && xpCache.epoch === e0;
   const base = live ? xpCache.v : 0;
-  const claimed = await db.addIfAbsent('xp', row);
+  const claimed = pay ? await db.claimAndPay('xp', row, pay) : await db.addIfAbsent('xp', row);
   xpCache = live && db.epoch('xp') === e0 + 1
     ? { v: base + (claimed ? (xp || 0) : 0), epoch: e0 + 1 }
     : null;
@@ -539,6 +570,15 @@ async function streakAwards(streak) {
 // Called after a log entry is written. Returns {xp, newBadges, streakMilestone, boosted}.
 // A level crossed by this log is announced by awardOnce's `bh-levelup` event, not here.
 export async function onFoodLogged(entry, { via = null, targets = null, entriesForDate = [] } = {}) {
+  /* REWARDS PAY FOR TODAY ONLY (Tom, 2026-09-05). Past days stay editable (people
+     forget to log), but a log dated before dateKey() -- the device's own local
+     calendar day, never a UTC ordinal -- earns none of this function's rewards:
+     no log/firstlog/scan/label/protein/meals3 XP, no streak award, no badge
+     evaluation. Editing an existing TODAY entry already pays nothing beyond its
+     first log (the ref-keyed dedupe in awardCapped/award), unaffected by this. */
+  if (entry.date < dateKey()) {
+    return { xp: 0, total: await totalXp(), newBadges: [], streakMilestone: null, streak: 0, boosted: false, crates: 0 };
+  }
   let gained = 0;
   /* Capped and keyed by DATE, never by entry.id: see XP_DAILY_CAP.log. The
      date is the entry's own, so a backdated log spends that day's ceiling. */
@@ -757,7 +797,12 @@ export async function awardDayCloseIfDue(targets) {
      device has honestly arrived at a new day, and yesterday's own key is what
      the award() ledger already dedupes on. */
   const today = dateKey();
-  if (!(await claimDay(today)).fresh) return null;
+  const day = await claimDay(today);
+  /* Handed back rather than swallowed (QA round 26 O14): boot and the midnight
+     roll toast DAY_GUARD_COPY off this, where a bare null was indistinguishable
+     from "nothing owed". Carries no closed/consoled, so nothing counts it as a
+     payout; tests/gap-settle-audit.mjs reads it that way. */
+  if (!day.fresh) return { dayGuard: day.reason || true };
   let y = addDays(today, -1);
   let es = await db.byIndex('log', 'date', y);
   if (!es.length) {
@@ -788,8 +833,11 @@ export async function awardDayCloseIfDue(targets) {
     // reward, never a penalty ("you'll get 'em next time"). This rewards the ACT
     // of tracking, not the calorie number, so it never favours eating less: an
     // on-budget day always pays strictly more, and over/under both land here.
+    // No crate here (2026-09-05, crate-frequency audit lever 2): this was the
+    // lowest-value crate in the game, 145/yr for a committed player yielding
+    // 0.19 cosmetics each against 0.55 for a day-close Bone. The XP still pays.
     const g = await award(`dayeffort-${y}`, 'dayeffort', 25, 'Logged the day', y);
-    if (g) { await grantCrate('daily', 'dayeffort-' + y); consoled = true; }
+    if (g) consoled = true;
   }
   if (targets.p && tot.p >= targets.p) await award(`protein-${y}`, 'protein', 40, 'Protein target hit', y);
   const meals = new Set(es.map(e => e.meal));
@@ -822,10 +870,32 @@ export function dayCloseNews(xpRows) {
   }
   if (!r) return null;
   const gap = addDays(dateKey(new Date(r.ts)), -1) !== r.date;
+  // 2026-09-05: the dayeffort branch no longer grants a crate (crate-frequency
+  // audit lever 2), so its copy no longer promises one.
   const title = r.type === 'dayclose'
     ? (gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned')
-    : (gap ? 'You logged your last day here. That counts: Common Crate earned' : 'You logged yesterday. That counts: Common Crate earned');
+    : (gap ? 'You logged your last day here. That counts.' : 'You logged yesterday. That counts.');
   return { id: `dayclose-${r.date}`, type: r.type, title, date: r.date };
+}
+
+/* THE REBALANCE CARD (QA round 28 B1). R21-P1 made every stat start flat and
+   returned the habit-earned spread as unspent training points through a
+   one-shot kv (js/app.js habitBaseGrantTp), with no toast, notice or card: the
+   release's own mage audit measured a fighter dropping 312 HP to 210 on update
+   day and nothing on screen said why or that points were waiting. This is the
+   one place the explanation lives. Pure, so tests/unit.test.js can drive it:
+   the grant row in, a card (or null) out; `seen` is the dismissal flag the
+   Today button writes. COPY IS A DRAFT FOR TOM (flagged in the round-28 report):
+   edit the three strings here and nowhere else. */
+export const HABIT_GRANT_CARD = {
+  title: 'Your Bonehead was rebalanced',
+  body: n => `Every stat now starts flat, and the strength you had earned is waiting as ${n} training point${n === 1 ? '' : 's'}. Spend them in Training.`,
+  button: 'Open Training',
+};
+export function habitGrantCard(grant, seen) {
+  const tp = grant && typeof grant.tp === 'number' ? grant.tp : 0;
+  if (seen || tp <= 0) return null;   // nothing granted, or already explained: no card, ever again
+  return { tp, title: HABIT_GRANT_CARD.title, body: HABIT_GRANT_CARD.body(tp), button: HABIT_GRANT_CARD.button };
 }
 
 /* THE RETROACTIVE BACKFILL, AND THE BOOT LOOP IT USED TO CAUSE.
@@ -1030,8 +1100,16 @@ async function runInitBackfill(targets, onProgress) {
 }
 
 // One-time welcome kit when the RPG layer first arrives (or on fresh install).
+/* CLAIM HYGIENE, 2026-09-05 (welcome-kit cross-tab duplication). This used to
+   read kvGet('loot-init') and only write the flag at the very end, so two tabs
+   booting a fresh install at the same instant both read it absent and both
+   granted the whole kit: two golden crates, two daily crates, two Draughts,
+   doubled ingredients, two eggs. addIfAbsent on the SAME 'kv' key is the
+   test-and-set retireGardenIfNeeded/retireMerchantIfNeeded already use below:
+   the check and the write are one IndexedDB request, so exactly one caller
+   gets true and the loser returns null before touching a single grant. */
 export async function initLootIfNeeded() {
-  if (await kvGet('loot-init')) return null;
+  if (!(await db.addIfAbsent('kv', { k: 'loot-init', v: true }))) return null;
   await grantCrate('golden', 'welcome');
   await grantCrate('daily', 'welcome');
   /* A Draught in the kit, because logging stopped earning Vigor on 2026-08-15.
@@ -1075,7 +1153,7 @@ export async function initLootIfNeeded() {
      8,000-step default; anything in between would be a number no other egg in
      the game has ever carried. */
   await grantEgg('welcome', 0);
-  await kvSet('loot-init', true);
+  // the claim (and the flag) already landed at the top of this function
   return { crates: 2, draught: true, ingredients: 3, egg: true };
 }
 

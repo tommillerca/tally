@@ -5,7 +5,8 @@
   "scripts": {
     "db:local": "wrangler d1 execute bonez --local --file=schema.sql",
     "//dev": "--test-scheduled exposes /__scheduled locally, which is the only way to drive the retention cron in a test. Local dev only; it is not a route on the deployed worker.",
-    "dev": "wrangler dev --local --port 8788 --test-scheduled --var DEV:1 --var ADMIN_TOKEN:devtoken",
+    "//secrets": "ADD_TOKEN_SECRET and RL_SECRET are REQUIRED (QA round 29 S2/S6): without the first no add tokens are minted, without the second buckets are unsalted. Production: wrangler secret put <NAME>, before deploy. Local: the two --var below.",
+    "dev": "wrangler dev --local --port 8788 --test-scheduled --var DEV:1 --var ADMIN_TOKEN:devtoken --var ADD_TOKEN_SECRET:devaddsecret --var RL_SECRET:devrlsecret",
     "//test": "schema-plan needs nothing running; the others need `npm run dev`.",
     "test": "node schema-plan.test.mjs && node test/api.test.mjs && node retention.test.mjs && node grants-retention.test.mjs && node stale-retention.test.mjs && node future-dates.test.mjs",
     "test:future": "node future-dates.test.mjs",

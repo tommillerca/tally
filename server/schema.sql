@@ -12,6 +12,14 @@ CREATE TABLE IF NOT EXISTS players (
   last_seen INTEGER NOT NULL,
   siege_last INTEGER,                -- weekly siege limiter: one per player per 7 days
   rename_of TEXT,                    -- a name we owe them a change from (dup-name repair, 2026-08-08)
+  -- RENAME HISTORY (QA round 29 S9, 2026-09-04). JSON array of the names this
+  -- player wore before the current one, newest last, capped at 10 by POST /name.
+  -- devices.label and reports.label are stamped BY VALUE from unsigned routes
+  -- and hold no player id, so the /account/delete scrub can only reach a label
+  -- by knowing the string; without this, a rename left the old name on both
+  -- tables for the 365 day retention window. NULL = never renamed.
+  -- Existing DBs: migrations/2026-09-04-prev-names.sql.
+  prev_names TEXT,
   -- SNAPSHOT BOUNDS (2026-08-16). /profile used to store whatever the client
   -- asserted, and /leaderboard ranks on it, so one signed PUT of
   -- {level:999999, badges:999999} was rank 1 forever. These four columns are the
@@ -21,6 +29,17 @@ CREATE TABLE IF NOT EXISTS players (
   max_level_at INTEGER,              -- when max_level was last raised (the jump anchor)
   week_key TEXT,                     -- the race week the accepted week_steps belong to
   week_steps INTEGER,                -- highest weekSteps accepted for week_key (monotone)
+  -- THE FROZEN PAIR (2026-09-05, QA round 34 P0). PUT /profile keeps one
+  -- (week_key, week_steps) per row, so the settler's own snapshot push (its
+  -- weekKey already the new week, sent one request before /steps/week
+  -- settles) advanced week_key away from last week BEFORE the payout query
+  -- could find them there: the settler was paid nothing, an untouched rival
+  -- with no fresher row was. Whenever PUT /profile is about to replace a
+  -- different stored week_key, it copies the departing (week_key, week_steps)
+  -- here first, so settlement can still find last week's total under last
+  -- week's own key. Existing DBs: migrations/2026-09-05-week-freeze.sql.
+  last_week_key TEXT,                 -- the week_key this row had just BEFORE its current one
+  last_week_steps INTEGER,            -- what week_steps held for last_week_key when it rolled
   /* HOW FAR THIS PLAYER'S CLIENT HAS READ THE GRANTS FEED (2026-08-17).
      GET /grants is a cursor read: the client sends `since` and js/social.js
      pullGrants only advances its local grantCursor AFTER applying everything in

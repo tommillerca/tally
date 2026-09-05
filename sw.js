@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v473';
+const VERSION = 'tally-v474';
 const PRECACHE = [
   './',
   './index.html',
@@ -47,6 +47,7 @@ const PRECACHE = [
   './js/water.js',
   './js/talkbox.js',
   './data/boneheadz.js',
+  './data/football-teams.js',
   './assets/fonts/bangers.woff2',
   /* BoldPixels: the dialogue face. 4KB. No surface renders a talk box since v418
      took Today's line off, so this is precached AHEAD of Gwart rather than for a

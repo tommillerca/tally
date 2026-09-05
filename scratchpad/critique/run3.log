@@ -1,0 +1,21 @@
+[godmode] puppeteer 24.43.1 via repo node_modules: /Users/tommiller/Documents/Hyperframes Editor/tally/node_modules/puppeteer/lib/cjs/puppeteer/puppeteer.js
+WROTE fbsect.html (closed)
+WROTE fbsect-open.html (open)
+fbSect.open before screenshot: true
+wrapRect(full) {"x":16,"y":-0.078125,"width":358,"height":1132.921875}
+WROTE /private/tmp/claude-502/-Users-tommiller-Documents-Hyperframes-Editor/ad578513-d00a-4ff9-bdb3-c31e94189b3d/scratchpad/integ2/scratchpad/critique/fbsect-shot-dpr2.png
+wrapRect {"x":16,"y":-0.078125,"width":358,"height":1132.921875}
+sample {"rectx":180,"recty":427.921875,"dx":0,"dy":-4,"x":328,"y":848,"w":60,"h":4}
+  -> [29.7,27.9,36.9]
+sample {"rectx":180,"recty":446.515625,"dx":0,"dy":34.390625,"x":328,"y":961.96875,"w":60,"h":6}
+  -> [29.7,27.9,36.9]
+sample {"rectx":180,"recty":486.90625,"dx":0,"dy":92.9375,"x":328,"y":1159.84375,"w":60,"h":6}
+  -> [29.7,27.9,36.9]
+sample {"rectx":180,"recty":613.46875,"dx":2,"dy":2,"x":332,"y":1231.09375,"w":40,"h":20}
+  -> [29.5,27.9,36.4]
+sample {"rectx":42,"recty":839.9375,"dx":0,"dy":-3,"x":52,"y":1674.03125,"w":40,"h":4}
+  -> [18,16.4,24.9]
+sample {"rectx":42,"recty":1501,"dx":0,"dy":-3,"x":52,"y":2996.15625,"w":40,"h":4}
+  -> null
+WROTE computed.json
+done

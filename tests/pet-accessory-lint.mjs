@@ -197,21 +197,44 @@ function pngAlpha(file) {
   return { w, h, box: any ? [x0, y0, x1, y1] : null, ink: any ? [sx / sa / w, sy / sa / h] : null };
 }
 
-const SQUARE = 2048;
+/* THE PATH COMES OFF THE ITEM WHEN THE ITEM HAS ONE. Football kit, 2026-09-04:
+   its 64 pet pieces are 32 colourways of two shared masters and carry an
+   explicit `file`, so deriving `assets/bh/<slot>/<id>.png` looked for 64 PNGs
+   that were never meant to exist and turned every one of them into a red ART
+   row. bhAsset is the app's own answer to this question, so use it.
+
+   TWO SQUARES, both correct. Cam's own accessories are the raw 2048 canvas and
+   are SERVED tiered (BH_THUMB_RE covers CB/CE/CG/CM). A generated garment is a
+   BUILD OUTPUT that is never tiered, so scripts/football-masks.py ships it at
+   the square the largest surface actually draws (640 for the lizard's kit, its
+   reasoning in that file's SIZES block). What both squares have to be is SQUARE:
+   croppedPetImg lays every layer out as percentages of the pet's box, so the
+   registration rides on the aspect and not on the pixel count.
+
+   DEDUPED BY PATH, because 64 items sharing two files would otherwise decode
+   the same two PNGs 64 times. */
+const SQUARE = 2048, FOOTBALL_SQUARE = 640;
+const measured = new Map();
 const art = accessories.map(i => {
-  const rel = `assets/bh/${i.slot}/${i.id}.png`;
+  const rel = i.file || `assets/bh/${i.slot}/${i.id}.png`;
+  const want = i.football ? FOOTBALL_SQUARE : SQUARE;
   const full = path.join(ROOT, rel);
-  if (!existsSync(full)) return { id: i.id, rel, why: 'missing from disk' };
-  let png;
-  try { png = pngAlpha(full); } catch (e) { return { id: i.id, rel, why: e.message }; }
-  if (png.w !== SQUARE || png.h !== SQUARE) return { id: i.id, rel, why: `${png.w}x${png.h}, not ${SQUARE}x${SQUARE}, so it registers against nothing` };
-  if (!png.box) return { id: i.id, rel, why: 'fully transparent: a bought accessory nobody can see' };
-  return { id: i.id, rel, box: png.box, ink: png.ink };
+  if (!existsSync(full)) return { id: i.id, rel, item: i, why: 'missing from disk' };
+  let png = measured.get(rel);
+  if (!png) {
+    try { png = pngAlpha(full); } catch (e) { return { id: i.id, rel, item: i, why: e.message }; }
+    measured.set(rel, png);
+  }
+  if (png.w !== png.h) return { id: i.id, rel, item: i, why: `${png.w}x${png.h} is not square, so the layer's aspect fights the pet's` };
+  if (png.w !== want) return { id: i.id, rel, item: i, why: `${png.w}x${png.h}, not ${want}x${want}` };
+  if (!png.box) return { id: i.id, rel, item: i, why: 'fully transparent: a bought accessory nobody can see' };
+  return { id: i.id, rel, item: i, box: png.box, ink: png.ink, square: png.w };
 });
 const badArt = art.filter(a => a.why);
-ok(`ART every pet accessory has its ${SQUARE}x${SQUARE} layer on disk with ink in it`,
-  badArt.length === 0,
-  badArt.length ? badArt.map(a => `${a.rel}: ${a.why}`).join('; ') : art.map(a => `${a.id} [${a.box.join(',')}]`).join(' '));
+ok(`ART every pet accessory has a square layer on disk with ink in it (${SQUARE} for Cam's canvas, ${FOOTBALL_SQUARE} for a generated kit piece)`,
+  art.length > 0 && badArt.length === 0,
+  badArt.length ? `${badArt.length}: ${[...new Set(badArt.map(a => `${a.rel}: ${a.why}`))].slice(0, 4).join('; ')}`
+    : [...new Set(art.map(a => `${a.rel.split('/').pop()} ${a.square} [${a.box.join(',')}]`))].join('  '));
 
 /* ---- 5b. THE PRODUCT SHOT IS CENTRED ON THE INK MASS, NOT ON THE BOX ---- */
 /* Tom, twice: "your purse is focused on the strap right now in the preview not
@@ -245,44 +268,64 @@ ok(`SHOT every shop tile frames its item's alpha centroid, within ${SHOT_TOL} ar
     : 'PET_SHOP sells nothing, so no product shot was graded');
 
 /* ---- 6. the layer fits inside the box the base pet's scale leaves it ---- */
-/* THE BASE PET IS NAMED, BECAUSE NOTHING IN THE DATA LINKS AN ACCESSORY TO A
-   SPECIES. C6 is the only species with accessory art, and every shipped layer is
-   drawn on the Bumbleseal. When a second species gets its own accessories this
-   becomes a loop over the pairs, which needs a link in the catalogue that does
-   not exist yet. Grading every accessory against every species instead would
-   fail all of them on the first lizard, since a layer drawn for one pet is
-   nowhere near another one's ink. */
-const BASE_PET = 'C6';
-const base = (BH.PET_CROP || {})[BASE_PET];
+/* THE LINK NOW EXISTS, so this is the loop over pairs the old comment promised.
+   Until the football kit there was nothing in the data joining an accessory to a
+   species, so this row named C6 and graded every layer against the Bumbleseal.
+   petCanWear is that link: an item's `pets` names the species it was drawn for,
+   and an item without one is Bumbleseal's. Each accessory is graded against
+   EVERY species that can wear it, worst edge wins, because a layer drawn on the
+   Beardie hangs in empty air on the seal and this row's whole job is to notice
+   that kind of thing before a player pays for it. */
+const HOUSE_PET = ((BH.PET_SHOP || {}).pet || {}).id || 'C6';
+const speciesOf = it => (it.pets || [HOUSE_PET]).filter(id => (BH.PET_CROP || {})[id]);
+const base = (BH.PET_CROP || {})[HOUSE_PET];
 /* FILL is read out of the renderer rather than copied, so this budget cannot
    drift away from the maths that actually clips the art. */
 const appSrc = readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
 const FILL = Number((appSrc.match(/const FILL = ([\d.]+);/) || [])[1]);
 
-if (!base || !FILL) {
-  ok(`OVERHANG the clipping budget is derived from ${BASE_PET} and croppedPetImg's FILL`, false,
-    `PET_CROP.${BASE_PET} ${base ? 'read' : 'MISSING'}, FILL ${FILL || 'not found in js/app.js'}: the budget cannot be computed, so nothing was graded`);
-} else {
-  const cw = base.x1 - base.x0, ch = base.y1 - base.y0;
+/* The budget is a fraction of the SQUARE, so it is computed in each layer's own
+   square: the football pieces ship at 640 and Cam's at 2048, and comparing
+   art-px across the two would be comparing different units. */
+function overhang(a, petId) {
+  const c = (BH.PET_CROP || {})[petId];
+  const sq = a.square;
+  const cw = c.x1 - c.x0, ch = c.y1 - c.y0;
   const scale = FILL / Math.max(cw, ch);      // croppedPetImg: imgSize = px * FILL / max(cw, ch)
-  const slack = (1 - cw * scale) / 2;         // fraction of the BOX left free each side after centring
-  const budget = (slack / scale) * SQUARE;    // back into art-px in the 2048 square
-  const edges = [
-    ['left', a => base.x0 * SQUARE - a.box[0]],
-    ['right', a => a.box[2] - base.x1 * SQUARE],
-    ['top', a => base.y0 * SQUARE - a.box[1]],
-    ['bottom', a => a.box[3] - base.y1 * SQUARE],
-  ];
-  const spend = art.filter(a => a.box).map(a => {
-    const worst = edges.map(([side, f]) => ({ side, over: Math.max(0, Math.round(f(a))) }))
-      .reduce((m, e) => (e.over > m.over ? e : m));
-    return { id: a.id, ...worst, headroom: Math.round(budget) - worst.over };
-  });
+  /* PER AXIS. croppedPetImg fills 0.82 of the box against the LONGER edge of the
+     ink and centres on both, so a flat pet's spare room is not the same
+     sideways as it is top and bottom: the lizard's crop is 0.355 wide by 0.269
+     tall, which is 25 art-px of side budget against 53 above its head. One
+     number for both was near enough on Bumbleseal (0.720 by 0.713, a 2 art-px
+     difference) and reported a clipped helmet on the first flat pet. */
+  const budget = { x: Math.round(((1 - cw * scale) / 2 / scale) * sq), y: Math.round(((1 - ch * scale) / 2 / scale) * sq) };
+  const worst = [
+    ['left', 'x', c.x0 * sq - a.box[0]],
+    ['right', 'x', a.box[2] - c.x1 * sq],
+    ['top', 'y', c.y0 * sq - a.box[1]],
+    ['bottom', 'y', a.box[3] - c.y1 * sq],
+  ].map(([side, axis, over]) => ({ side, budget: budget[axis], over: Math.max(0, Math.round(over)) }))
+    .map(e => ({ ...e, headroom: e.budget - e.over }))
+    .reduce((m, e) => (e.headroom < m.headroom ? e : m));
+  return { petId, ...worst };
+}
+if (!base || !FILL) {
+  ok(`OVERHANG the clipping budget is derived from ${HOUSE_PET} and croppedPetImg's FILL`, false,
+    `PET_CROP.${HOUSE_PET} ${base ? 'read' : 'MISSING'}, FILL ${FILL || 'not found in js/app.js'}: the budget cannot be computed, so nothing was graded`);
+} else {
+  /* Deduped by ART, not by item: 64 football items are two files. */
+  const seen = new Set();
+  const spend = [];
+  for (const a of art) {
+    if (!a.box || seen.has(a.rel)) continue;
+    seen.add(a.rel);
+    for (const petId of speciesOf(a.item)) spend.push({ id: a.id, ...overhang(a, petId) });
+  }
   const clipped = spend.filter(s => s.headroom < 0);
-  ok(`OVERHANG no accessory overhangs ${BASE_PET}'s ink by more than the ${Math.round(budget)} art-px the box leaves it`,
+  ok('OVERHANG no accessory overhangs its own species\' ink by more than the art-px its box leaves it',
     spend.length > 0 && clipped.length === 0,
     spend.length
-      ? spend.map(s => `${s.id} ${s.side}+${s.over} (${s.headroom >= 0 ? `${s.headroom} spare` : `${-s.headroom} OVER, silently clipped`})`).join(', ')
+      ? spend.map(s => `${s.id}@${s.petId} ${s.side}+${s.over}/${s.budget} (${s.headroom >= 0 ? `${s.headroom} spare` : `${-s.headroom} OVER, silently clipped`})`).join(', ')
       : 'no accessory art was measurable, so no overhang was graded');
 }
 

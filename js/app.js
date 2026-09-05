@@ -1,13 +1,13 @@
 // Tally: app orchestrator. Screens, sheets, and flows.
-import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, newId, exportAll, importAll, STORES, useDbName, requestPersistence, eraseAll, watchForWipe, onWriteFailure, ERASED_FLAG, dayIsUnwitnessed } from './db.js';
 import { haptic, setHaptics } from './haptics.js';
 import { setFxLayer, confettiBurst, confettiRain, tweenNumber, popSound, levelSound, hitSound, coinSound, chimeSound, sparkleSound, questSound, dropSound, reducedMotion } from './fx.js';
 import { mountCrateBurst } from './crate-fx.js';
 import {
-  levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews,
+  levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
-  awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats,
+  awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar,
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
@@ -21,7 +21,7 @@ import {
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   stripAll, stripAllPlan,
-  DROP, buyDropItem, refundStreakFreezes,
+  DROP, buyDropItem, buyFootballItem, buyFootballBundle, refundStreakFreezes,
   RACK_THEME, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_AURA_CELL, RACK_RARITY_PRICE,
   setWornAura, ownsAura,
   rack, rerollRack, rackRerollCost, buyRackItem, wornAura,
@@ -30,7 +30,7 @@ import {
 } from './loot.js';
 import { dailyQuests, weeklyQuests, monthlyQuests, questCtx, questState, claimQuest, claimAllBonusIfDue, periodKeyOf } from './quests.js';
 import { getWellness, addWater, markBed, markSleep, WATER_GOAL, getRoutines, routinesDone, markRoutine, addRoutine, removeRoutine, ROUTINE_XP_CAP, manualWalksToday, logManualWalk, MANUAL_WALKS_PER_DAY } from './wellness.js';
-import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, compassLabel, distanceM, bearingDeg } from './hunt.js';
+import { spawnsForRoute, spawnKey, collectSpawn, SPAWN_TYPES, COLLECT_RADIUS_M, RARE_CUE_M, fmtDist, collectReach, compassLabel, distanceM, bearingDeg } from './hunt.js';
 import { isMimicSpawn, showMimicReveal, mimicPlateHtml, MIMIC_FIGHT } from './mimic.js';
 import { wanderersNear, inWandererCone, wandererKey, wandererMarkHtml, paintWandererCone, showWandererEncounter, WANDERER_FIGHT, CONE_RANGE_M, WANDERER_ART } from './wanderer.js';
 import { isWater } from './water.js';
@@ -73,7 +73,7 @@ import { attachWalk } from './walk.js';
 import { refreshPitEnergy, spendPitFight, refundPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
-  spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime,
+  spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, QUEUE_MAX, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime, foodBuffLabel,
   POTIONS, POTION_BY_ID, RECIPE_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
   pantryDishes, activatePantryDish, discardPantryDish,
@@ -90,14 +90,16 @@ import {
   deriveStats, legacyHabitStats, habitGrantPoints, derived, STAT_META, ACTIONS, makeFighter, createFight, actionsFor, allocatedStats, TRAIN_STEP, TRAIN_CAP,
   applyAction, endTurn, aiTakeTurn, LADDER, CHAMPION, scaleStats, expectedDamage,
   TALENT_TREES, talentPoints, canTakeTalent, RUNG_TALENTS, MISS_CHANCE, endlessFoe, endlessCeiling,
-  petActionsFor, applyPetAction, talentRanks, nodeRanks,
+  petActionsFor, applyPetAction, talentRanks, nodeRanks, GUARD_STAMINA,
 } from './pit.js';
 import { HERO_EDGE } from '../data/hero-edge.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers,
-  BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK } from '../data/boneheadz.js';
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petWornItems, petCanWear,
+  BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK, bhFamilyKey, bhFamilies } from '../data/boneheadz.js';
+// Football kit, 2026-09-04
+import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
 import { animatedPetHtml, petMassScale, ANIMATED_PETS } from './petanim.js';
 import {
-  computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal,
+  computeTargets, nutrientsFor, portionLabel, dayTotals, dateKey, addDays, dayOrdinal, armMidnightTimer,
   mealForHour, MEALS, fmtKcal, fmtG, fmtQty, streakFrom, weightTrend, trendRatePerWeek,
   lbToKg, kgToLb, ftInToCm, cmToFtIn, ACTIVITY_LEVELS, GOALS, kcalConsistent,
   activeCalorieBonus, assumedActiveBurn, manualTargets, gramsChipDefault,
@@ -265,6 +267,8 @@ const S = {
      render in the app, so the wardrobe cannot be an await. Refreshed before the
      first paint and after every equip. */
   petWear: {},
+  fbTeam: null,    // Football kit, 2026-09-04: the team the kit room is showing
+  fbJump: false,   // one-shot: the wardrobe's colourway rail sent the player to the Kit room, so open it
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
   wpnAura: null,   // the weapon aura bought off the rack, worn on every surface
 };
@@ -395,6 +399,20 @@ function staticMassScale(petId) {
 }
 // A pet's display scale, whichever way it is drawn. Flat species (lizards) would
 // otherwise render a third shorter than round ones (the cloud) in the same box.
+/* THE SPECIES' OWN SCALE, EVEN WHEN THE FOOTBALL KIT DRAWS IT STATICALLY, and
+   that is a measured choice rather than an oversight. When the kit forces a
+   lizard onto the static canvas (see petSpriteHtml) the two normalisations are
+   both available and they disagree by 1.28% on C4. MEASURED on the Stable card
+   at 124px, ink from a screenshot diff with the garments off and the clock
+   pinned (tests/football-render-audit.mjs row PET-SIZE):
+       animated lizard                     264 x 179 device px, 30941 px of ink
+       static under petMassScale (this)    260 x 194,           30257
+       static under staticMassScale        257 x 191,           29655
+   petMassScale is nearer on width (4px vs 7) and on area (684 vs 1286) and
+   staticMassScale is nearer on height (12px vs 15), so the scale is NOT what
+   makes the animal change size: the two DRAWINGS do, at aspect 1.475 animated
+   against 1.345 static. Switching the function would buy nothing measurable and
+   cost a fork in a function eleven surfaces call, so it does not switch. */
 function petScale(petId) {
   return ANIMATED_PETS.has(petId) ? petMassScale(petId) : staticMassScale(petId);
 }
@@ -417,6 +435,10 @@ function petScale(petId) {
  *                       be dressed out of the viewer's wardrobe.
  */
 const wearOf = wear => (wear === undefined ? S.petWear : wear);
+/* Is this pet wearing a football garment? A non-null tint list IS the answer:
+   petWornTints returns footballTints per worn layer, which is null for anything
+   else. Used by petSpriteHtml to force the static canvas (see there). */
+const petWearsFootball = (petId, wear) => petWornTints(petId, wearOf(wear)).some(Boolean);
 /* WHICH SHEET THESE LAYERS COME OFF, AND WHY THE CALLER DECIDES.
  *
  * This function was untiered everywhere, which was fine while every pet was a
@@ -469,6 +491,7 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = und
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
   const c = PET_CROP[petId];
   const worn = petWornLayers(petId, wearOf(wear));
+  const tints = petWornTints(petId, wearOf(wear));   // Football kit, 2026-09-04: per worn layer, or null
   if (!c) return `<span class="petcrop" style="width:${px}px;height:${px}px"><img src="${src}" style="width:${px}px;height:${px}px;object-fit:contain" alt=""></span>`;
   const FILL = 0.82;                                   // match the animated pets' ~63px fill in a 76px box
   const cw = c.x1 - c.x0, ch = c.y1 - c.y0;            // content size (fraction of the square)
@@ -504,11 +527,23 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = und
      square (9.3 art px at 2048, under one thumbnail pixel), measured across all
      six pet-era files. */
   const tier = thumb === true ? bhTierFor(imgSize) : thumb;
+  /* No trailing semicolon: this string is also the <img>'s whole style attribute,
+     and one spare `;` on every pet layer is a diff on 66KB of shipped Shop markup
+     that buys nothing. The tint spans below add their own separator. */
+  const geo = `position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)`;
   const layer = (u, cls = '') => {
     const s = tier ? bhThumb(u, tier) : u;
-    return `<img${cls ? ` class="${cls}"` : ''} src="${s}"${s === u ? '' : ` data-full="${u}" ${THUMB_FALLBACK}`} style="position:absolute;left:0;top:0;width:${pc(imgSize)};height:${pc(imgSize)};max-width:none;transform:translate(${(tx * 100 / imgSize).toFixed(4)}%,${(ty * 100 / imgSize).toFixed(4)}%)" alt="">`;
+    return `<img${cls ? ` class="${cls}"` : ''} src="${s}"${s === u ? '' : ` data-full="${u}" ${THUMB_FALLBACK}`} style="${geo}" alt="">`;
   };
-  return `<span class="petcrop${worn.length ? ' dressed' : ''}" style="width:${px}px;height:${px}px">${layer(src)}${worn.map(u => layer(u, 'pw')).join('')}</span>`;
+  /* Football kit, 2026-09-04: a tinted garment's two multiply spans take the SAME
+     geometry string as its <img>, so they inherit the registration untouched.
+     THE SAME `tier` AS `layer()` (2026-09-05): a CSS mask scales with
+     background-size, so a square 192/384 tier reads identically to the 640
+     master here -- unlike the canvas painter, there is no pixel-rect sampling
+     to misalign. Tiering it stops the mask decoding at 640 on a tile whose
+     garment art is already tiered down. */
+  const tintOf = i => (tints[i] || []).map(t => `<span class="fb-tint pw" style="${geo};--fbm:url('${tier ? bhThumb(t.mask, tier) : t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
+  return `<span class="petcrop${worn.length ? ' dressed' : ''}" style="width:${px}px;height:${px}px">${layer(src)}${worn.map((u, i) => layer(u, 'pw') + tintOf(i)).join('')}</span>`;
 }
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
 // layer stack (C1/C4) or a content-cropped base image. Shiny state is cached in
@@ -651,6 +686,20 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
   // special look, so always render its animated self even if the instance is shiny.
   // Every path scales by the species' visual mass, so a colourway is never a
   // different size from its base pet.
+  /* FOOTBALL WEAR FORCES THE STATIC CANVAS. Tom, 2026-09-04: "just put the pet
+     pieces on a version of the lizard that isnt animated for this."
+     croppedPetImg is the ONLY function that paints a pet's worn layers, and both
+     lizards (C4, CX) are in ANIMATED_PETS, so every animated branch below
+     returned before the kit could be drawn: the pet garments rendered in the kit
+     room and the roster portraits and were invisible on Today, the Stable, the
+     Paddock and the Pit. The trade is Tom's and it is explicit: while the kit is
+     ON the lizard stops moving; with no football wear it animates exactly as it
+     always did. `.some(Boolean)` over petWornTints rather than a new predicate,
+     because a non-null tint list IS "this worn layer is a football garment".
+     The shiny lizard comes along for free: C4's shiny is a recolour of the same
+     canvas, so the static branch below draws the kit on it with no per-variant
+     art, and CX (Day One, amethyst) is that same canvas again. */
+  const wearsFootball = petWearsFootball(petId, wear);
   const S2 = mass ? Math.round(px * petScale(petId)) : px;
   const isShiny = shiny !== undefined ? !!shiny : S.shinyPets.has(petId);
   /* SHINIES ANIMATE TOO. Tom, 2026-08-08: "make all animations apply for shinies
@@ -668,7 +717,7 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
        C4 lizard    26 -> 183  +157deg,  saturation x1.34
      CX is exempt as ever: its amethyst art IS its special look. */
   const SHINY_TINT = { C1: 'hue-rotate(54deg) saturate(1.03)', C3: 'hue-rotate(-169deg) saturate(1.43)', C4: 'hue-rotate(157deg) saturate(1.34)' };
-  if (isShiny && ANIMATED_PETS.has(petId) && SHINY_TINT[petId]) {
+  if (isShiny && !wearsFootball && ANIMATED_PETS.has(petId) && SHINY_TINT[petId]) {
     const anim = animatedPetHtml(petId, S2);
     if (anim) {
       return `<div class="pet-shiny-wrap"><div class="pa-shiny" style="filter:${SHINY_TINT[petId]}">${anim}</div>`
@@ -681,7 +730,7 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
     // canvas: a shiny lizard came out a fraction of the normal one.
     return `<div class="pet-shiny-wrap">${croppedPetImg(petId, S2, ground, `assets/bh/C/shiny/${petId}.png`, wear, thumb)}<span class="shiny-spark">${sparkIco(14)}</span></div>`;
   }
-  return animatedPetHtml(petId, S2) || croppedPetImg(petId, S2, ground, null, wear, thumb);
+  return (wearsFootball ? null : animatedPetHtml(petId, S2)) || croppedPetImg(petId, S2, ground, null, wear, thumb);
 }
 // PORTRAIT: always content-cropped + vertically CENTERED in its box (no animation,
 // no floor-seating), so a pet reads the same in a roster tile regardless of whether
@@ -1087,12 +1136,19 @@ function badgeIconHtml(emoji, s = 22) { const id = BADGE_ICON[(emoji || '').repl
 
 /* ================= splash montage ================= */
 
+/* NO FOOTBALL KIT ON A FIGURE NOBODY CHOSE. Measured the day FOOTBALL_KIT_LIVE
+   went true (2026-09-04): the kit is 128 of the 185 items in the H pool (69%),
+   32 of 51 in FW and 32 of 56 in T, so an unfiltered draw dresses most of the
+   splash montage in a helmet a player pays 4,200 coins for. js/loot.js
+   (RACK_ROTATE_POOL, crateEligible) and js/gear.js (GEAR_ITEMS) already carry
+   this exact `!i.football` clause; these two random-figure pools were simply
+   never on that list, because with the flag false it could not matter. */
 function randomOutfit() {
   const eq = { B: 'B0-1', SK: 'SK0-1' };
   for (const slot of BH_SLOTS) {
     if (slot.code === 'B' || slot.code === 'SK') continue;
     if (Math.random() < 0.55) {
-      const pool = BH_ITEMS.filter(i => i.slot === slot.code);
+      const pool = BH_ITEMS.filter(i => i.slot === slot.code && !i.football);
       eq[slot.code] = pool[(Math.random() * pool.length) | 0].id;
     }
   }
@@ -1100,6 +1156,14 @@ function randomOutfit() {
 }
 
 async function showSplash(userEq) {
+  /* QA round 27 R14(a). On a fresh install this full-screen montage sat over
+     the onboarding for ~2.7s (measured: the first CTA refused taps for
+     2,676 ms) and a tap on it only dismissed the splash, so the player's first
+     tap did nothing visible. The onboarding IS the intro on a first run (FEED
+     THE BONES + poster + Gwart), so the montage adds nothing there and costs
+     the first tap. Returning players keep it. Checked before `forced` so the
+     onb-audit tap row can prove itself on the real gate. */
+  if (!S.settings) return;
   const forced = location.search.includes('splash=1');
   if (navigator.webdriver && !forced) return;
   if (reducedMotion && !forced) return;
@@ -1463,9 +1527,23 @@ async function boot() {
      and the paint-time pass could not have seen those. */
   await refreshShinyPets();
   await refreshSlimedSlots();
+  /* THE WITNESS BEFORE THE DAY CLOSE (js/social.js settleServerDay). bootSync's
+     touchServerDay is fire-and-forget and loses the race with everything above,
+     so a player returning after 8+ days reached claimDay with a stale ceiling
+     and the close they were owed was refused. Bounded and self-gating: zero
+     wait on an ordinary boot, 1.5 s at most on a gap open, and an offline
+     return still boots and still gets its line on Today. */
+  if (!NOSOCIAL) await social.settleServerDay(dateKey()).catch(() => {});
   const closed = await awardDayCloseIfDue(S.settings.targets);
   if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 2400);
-  else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 2400);
+  else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts.' : "You logged yesterday. That counts.", 3600), 2400);
+  else if (closed?.dayGuard) setTimeout(() => dayGuardToast(closed.dayGuard), 2400);   // QA round 26 O14: the refusal used to be silent here
+  /* COOKING ADVANCES WHETHER OR NOT YOU ARE WATCHING (QA round 26 O15). The
+     queue only drained from the Kitchen sheet's own render, so three cooks sat
+     untouched for 40 real minutes and all resolved the moment the sheet opened.
+     Boot, resume and Today's render drain it too, through the one helper that
+     pays the cook XP. */
+  await drainCookQueue();
   await ingestHkPayload(hkTaken);
   /* THE SCREEN PAINTED BEFORE ANY OF THAT PAID. route() ran sixty lines up, and
      everything since writes coins, XP and crates behind a standing DOM: the
@@ -1482,7 +1560,7 @@ async function boot() {
      something actually paid, so a boot that owed nothing still paints once.
      Guarded on the sheet stack for the reason the resume refresh below is:
      route() closes every open sheet, and yanking one shut is a worse bug. */
-  if ((kit || pouch || settled || merch || ceil || closed || hkTaken) && !sheetStack.length) route({ keepScroll: true });
+  if ((kit || pouch || settled || merch || ceil || closed?.closed || closed?.consoled || hkTaken) && !sheetStack.length) route({ keepScroll: true });
   backupNudge();
   nativeAutoSync();
   setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
@@ -1493,8 +1571,22 @@ async function boot() {
      when a new day gets opened, and the day guard's ceiling (js/db.js rule 3)
      is only as fresh as the last /health we saw. Unsigned, anonymous, fails
      soft; skipped under NOSOCIAL so audits and ?demo never phone production. */
-  onAppResume(() => {
+  /* ONE TIMEOUT AIMED AT MIDNIGHT (QA round 26 O13), beside the 60 s interval
+     below: dateKey() flipped at 0 ms and the screen at up to 53 s. Re-aimed on
+     every resume because a suspended WebView's pending timer is stale. */
+  const midnight = armMidnightTimer(rollDayIfNeeded);
+  onAppResume(async () => {
     if (!NOSOCIAL) social.touchServerDay();
+    /* AND THE GAP OPEN GETS THE SAME BOUNDED WAIT THE BOOT DOES. A native shell
+       resumes after days without ever booting, so a 14-day return arrives here
+       rather than through boot(), and rollDayIfNeeded below is what closes the
+       owed day. settleServerDay returns instantly unless the ceiling is already
+       stale, so an ordinary resume waits nothing; when it is stale this is a
+       second /health milliseconds after the line above, which is the price of
+       having something to wait ON, once per long absence. */
+    if (!NOSOCIAL) await social.settleServerDay(dateKey()).catch(() => {});
+    midnight.rearm();
+    drainCookQueue().catch(() => {});   // QA round 26 O15: a pot that finished while suspended is collected now, not on the next Kitchen open
     /* A RESUME IS AN OPEN. iOS suspends the WebView for days without a boot, so
        the return gap has to be checked here too. The refresh below may already
        have painted by the time the kv lands, so a fresh detection repaints. */
@@ -1516,7 +1608,7 @@ async function boot() {
        bug than the one being fixed. */
     if (!sheetStack.length) refresh();
   });
-  setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight
+  setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight (the belt; the midnight timeout above is the brace, O13)
   refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
   initAnalytics(APP_BUILD); // anonymous first-party usage analytics. Tag events with the real running build (not the frozen social-protocol version)
 
@@ -1532,7 +1624,10 @@ async function boot() {
      pill, because a spin can pay a CRATE and that chip has to appear at all.
      resolve(false) means the wheel never opened, so a skipped day paints
      nothing. Sheet-stack guarded like every other unprompted refresh here. */
-  maybeShowDailyWheel({ sounds: S.sounds }).then(spun => { if (spun && !sheetStack.length) refresh(); }).catch(() => {});
+  maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
+    if (spun === true && !sheetStack.length) refresh();
+    else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);   // QA round 26 O14: the refused wheel used to vanish without a word
+  }).catch(() => {});
   refundStreakFreezes().then(r => {
     if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
   }).catch(() => {});
@@ -1605,13 +1700,20 @@ async function rollDayIfNeeded() {
     // follow the clock forward when you were actually sitting on "today".
     const wasOnToday = S.date === _dayAnchor;
     _dayAnchor = today;
-    if (wasOnToday) S.date = today;
+    if (wasOnToday) {
+      S.date = today;
+      await kvSet('lastOpenDay', today);
+    }
     const closed = await awardDayCloseIfDue(S.settings.targets);
     if (wasOnToday) route(); // a new day starts at the top, like a fresh open
     if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 1400);
-    else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts: Common Crate earned' : "You logged yesterday. That counts: Common Crate earned", 3600), 1400);
+    else if (closed?.consoled) setTimeout(() => toast(closed.gap ? 'You logged your last day here. That counts.' : "You logged yesterday. That counts.", 3600), 1400);
+    else if (closed?.dayGuard) setTimeout(() => dayGuardToast(closed.dayGuard), 1400);   // QA round 26 O14
     // pays on COLLECT, so it repaints on COLLECT: see the boot call site
-    maybeShowDailyWheel({ sounds: S.sounds }).then(spun => { if (spun && !sheetStack.length) refresh(); }).catch(() => {});
+    maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
+      if (spun === true && !sheetStack.length) refresh();
+      else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);   // QA round 26 O14
+    }).catch(() => {});
     refreshNotifSchedules();
     return true;
   } finally { _rolling = false; }
@@ -1796,11 +1898,9 @@ function openSpireIntro() {
       <button class="drop-cta" id="spireIntroGo">FIND A SPIRE</button>
       <button class="drop-later" id="spireIntroLater">Maybe later</button>
     </div>`;
-  document.body.appendChild(veil);
-  const close = () => veil.remove();
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   $('#spireIntroLater', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
-  $('#spireIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/boneyard'; });
+  $('#spireIntroGo', veil).addEventListener('click', () => { close(); setTimeout(() => { location.hash = '#/boneyard'; }, 220); });   // after the popstate has popped the veil, same 220 as spireAct
 }
 
 /* THE BESTIARY ANNOUNCEMENT (2026-08-09).
@@ -1837,11 +1937,9 @@ function openMageIntro() {
       <button class="drop-cta" id="mageGo">FIND HIS VAULT</button>
       <button class="drop-later" id="mageLater">Not now</button>
     </div>`;
-  document.body.appendChild(veil);
-  const close = () => veil.remove();
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   $('#mageLater', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
-  $('#mageGo', veil).addEventListener('click', () => { close(); location.hash = '#/boneyard'; });
+  $('#mageGo', veil).addEventListener('click', () => { close(); setTimeout(() => { location.hash = '#/boneyard'; }, 220); });   // after the popstate has popped the veil, same 220 as spireAct
 }
 if (typeof window !== 'undefined' && navigator.webdriver) window.__mageIntro = openMageIntro;
 if (typeof window !== 'undefined' && navigator.webdriver) window.__todayRow = day => bestiaryBannerHtml(remoteDen(day));
@@ -1890,12 +1988,10 @@ function openBossIntro() {
       <button class="drop-cta" id="bossIntroGo">GO HUNTING</button>
       <button class="drop-later" id="bossIntroLater">Not now</button>
     </div>`;
-  document.body.appendChild(veil);
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   composeAvatars(veil);
-  const close = () => veil.remove();
   $('#bossIntroLater', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
-  $('#bossIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/boneyard'; });
+  $('#bossIntroGo', veil).addEventListener('click', () => { close(); setTimeout(() => { location.hash = '#/boneyard'; }, 220); });   // after the popstate has popped the veil, same 220 as spireAct
 }
 if (typeof window !== 'undefined' && navigator.webdriver) window.__bossIntro = openBossIntro;
 
@@ -1938,12 +2034,10 @@ function openRaceIntro() {
       <button class="drop-cta" id="raceIntroGo">SEE THE BOARD</button>
       <button class="drop-later" id="raceIntroLater">Not now</button>
     </div>`;
-  document.body.appendChild(veil);
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   composeAvatars(veil);
-  const close = () => veil.remove();
   $('#raceIntroLater', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
-  $('#raceIntroGo', veil).addEventListener('click', () => { close(); location.hash = '#/friends'; });
+  $('#raceIntroGo', veil).addEventListener('click', () => { close(); setTimeout(() => { location.hash = '#/friends'; }, 220); });   // after the popstate has popped the veil, same 220 as spireAct
 }
 
 /* ======================= THE RESULTS, AFTER IT SETTLES =======================
@@ -2171,10 +2265,8 @@ async function openCommunityCard() {
       <button class="drop-later dc-close" id="communityLater">Not right now</button>
       <p class="note" style="text-align:center;margin:10px 0 0">The invite also lives in <b>News</b> and <b>Settings</b>, whenever you are ready.</p>
     </div>`;
-  document.body.appendChild(veil);
-  const close = () => veil.remove();
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   $('#communityLater', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
   // the join is an <a> so the OS handles it (app or browser); the card closes
   // behind it so returning players are not stuck under a stale veil
   $('#communityGo', veil).addEventListener('click', () => {
@@ -2211,6 +2303,10 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
  * never lost. Same reasons apply, so the same shape applies.
  * The invite URL lives in ONE constant for the same reason DISCORD_URL does,
  * and the Discord link here IS DISCORD_URL: a second copy would rot. */
+/* False in the shared web source. native/build-www.sh flips this one literal in
+   its copied app.js for an App Store archive, leaving web and internal native
+   builds unchanged. Every distribution-only surface reads this flag. */
+const STORE_BUILD = false;
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/rtZ6Uyxc';
 /* Inline for the same reason as DISCORD_MARK: sw.js precaches an explicit
    list, so an asset file would need an entry there and this needs none.
@@ -2220,6 +2316,7 @@ const THANKS_MARK = `<svg class="bt-mark" viewBox="0 0 24 22" width="16" height=
 /* The Crew strip, sibling of the Discord one. Not dismissible, same reason:
    it is the way back for everyone who tapped past the popup. */
 function thanksBannerHtml() {
+  if (!SHOW_BETA_THANKS) return '';
   return `<button class="glutton-banner dc-banner bt-banner" id="crewThanks">
     <span class="gbn-ico bt-bnr-ico">${THANKS_MARK}</span>
     <span class="gbn-txt"><i>Thanks for being early</i><b>Send a friend the invite link</b></span>
@@ -2228,6 +2325,7 @@ function thanksBannerHtml() {
 }
 
 async function openThanksCard() {
+  if (!SHOW_BETA_THANKS) return;
   const eq = await equipped();
   const veil = document.createElement('div');
   veil.className = 'drop-veil race-veil bt-veil';
@@ -2257,10 +2355,8 @@ async function openThanksCard() {
       <p class="note bt-url" style="text-align:center;margin:10px 0 0">or copy it yourself: <a href="${TESTFLIGHT_URL}" target="_blank" rel="noopener" id="thanksLink">testflight.apple.com/join/rtZ6Uyxc</a></p>
       <button class="drop-later dc-close" id="thanksClose">Close</button>
     </div>`;
-  document.body.appendChild(veil);
-  const close = () => veil.remove();
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   $('#thanksClose', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
   /* The same share path the friend code already uses: the OS sheet when there
      is one, clipboard when there is not, the raw string when even that is
      refused. Nothing new invented for a link. */
@@ -2400,20 +2496,19 @@ function openGardenPopup() {
       <button class="drop-cta" id="gardenSeeBtn">SEE THE GARDEN</button>
       <button class="drop-later" id="gardenLaterBtn">Maybe later</button>
     </div>`;
-  document.body.appendChild(veil);
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   /* WHY THESE FOUR ROWS. Only a fraction of players have ever reached the garden
      and nothing recorded which half of the funnel loses them: never shown the card,
      or shown it and said no. shown / suppressed / cta / later answer exactly that,
      on the same anonymous pipe as every other event. */
   trackEvent('garden_intro_shown');
-  const close = () => veil.remove();
   $('#gardenLaterBtn', veil).addEventListener('click', () => { trackEvent('garden_intro_later'); close(); });
-  veil.addEventListener('click', e => { if (e.target === veil) { trackEvent('garden_intro_later', { tap: 'veil' }); close(); } });
+  veil.addEventListener('click', e => { if (e.target === veil) trackEvent('garden_intro_later', { tap: 'veil' }); });   // the close itself is openVeil's
   $('#gardenSeeBtn', veil).addEventListener('click', async () => {
     trackEvent('garden_intro_cta');
     await kvSet(GARDEN_SEEN_KEY, 99);   // they took the tour: the popup's job is done
     close();
-    openHollow(() => refresh());
+    setTimeout(() => openHollow(() => refresh()), 220);   // after the popstate has popped the veil
   });
 }
 
@@ -2465,14 +2560,12 @@ function openDropPopup() {
       <button class="drop-cta" id="dropSeeBtn">SEE THE DROP</button>
       <button class="drop-later" id="dropLaterBtn">Maybe later</button>
     </div>`;
-  document.body.appendChild(veil);
-  const close = () => veil.remove();
+  const close = openVeil(veil);   // QA round 26 O1: stack + history, not a bare append
   $('#dropLaterBtn', veil).addEventListener('click', close);
-  veil.addEventListener('click', e => { if (e.target === veil) close(); });
   $('#dropSeeBtn', veil).addEventListener('click', async () => {
     await kvSet(DROP_SEEN_KEY, 99);   // they took the tour: the popup's job is done
     close();
-    openCharacter('shop');
+    setTimeout(() => openCharacter('shop'), 220);   // after the popstate has popped the veil
   });
   composeAvatars(veil);
 }
@@ -2546,7 +2639,10 @@ function teaserSeed(id) {
 }
 function teaserLook(item, pool) {
   const r = teaserSeed(item.id);
-  const skulls = BH_ITEMS.filter(i => i.slot === 'SK');
+  // !i.football like every other pool that dresses a figure nobody chose. The
+  // kit has no SK piece today, so this changes nothing; it is here so the rule
+  // is one rule and the day a football skull lands nobody has to remember.
+  const skulls = BH_ITEMS.filter(i => i.slot === 'SK' && !i.football);
   const eq = { B: 'B0-1', SK: skulls[r % skulls.length].id, [item.slot]: item.id };
   const others = pool.filter(i => i.slot !== item.slot);
   /* UNSIGNED shifts. `>>` is signed, and the hash is a full uint32, so `r >> 5`
@@ -2684,11 +2780,23 @@ async function refreshCrateBadge() {
  * So this is a reader, not a new store: no schema change, and every gift ever
  * received is already in the list the first time you open it.
  */
-const DELIVERY_TYPES = new Set(['gift', 'cheer', 'social', 'welcome', 'spire']);
+/* WHAT B ACTUALLY SEES, IN ONE PLACE. Five call sites told the sender what
+   happens next and no two of them agreed, and none of them was true: "They just
+   enter your code back to seal it" and "They accept by adding you back" both
+   describe the long way round (reciprocating DOES auto-accept, see
+   requestFriendship on the server) rather than the request row with an Accept
+   and an Ignore on it that B is actually shown, and which needs no typing at
+   all. Driven in round 29 (S12) on two real accounts. */
+const REQUEST_SENT_MSG = 'Request sent. They get Accept or Ignore in their Crew tab.';
+
+/* 'crew' is the news a friendship completed and the receipt for a cheer you
+   sent (S12): both are things that happened in the Crew, and Deliveries is the
+   only durable place in the app that lists those. */
+const DELIVERY_TYPES = new Set(['gift', 'cheer', 'social', 'welcome', 'spire', 'crew']);
 async function crewDeliveries(limit = 40) {
   const rows = await db.all('xp');
   return rows.filter(r => DELIVERY_TYPES.has(r.type) && r.label)
-    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+    .sort((a, b) => sentOrIngestTs(b) - sentOrIngestTs(a))
     .slice(0, limit);
 }
 /* CHEERS ARE THEIR OWN INBOX NOW.
@@ -2723,14 +2831,28 @@ const cheerAt = i => CHEERS[i] || null;
    message goes. onlineLabel itself is right for what it is for, so the fix is
    here at the two call sites that are not asking about presence: keep its
    buckets, swap the one that is not a time. */
-const deliveredWhen = ts => {
-  const l = onlineLabel(ts);
-  return l.on || !l.text ? 'just now' : l.text;
+/* AND IT IS THE TIME IT WAS SENT, NOT THE TIME WE FETCHED IT. Round 29 (S12):
+   three cheers sent minutes apart, one app open, and all three read "just now",
+   because a ledger row is stamped by awardOnce at ingest and this read that
+   stamp. The server has always sent the real one on the grant; js/social.js now
+   keeps it as `sentAt`, and this takes it.
+   A ROW WRITTEN BEFORE THAT SAYS SO. There is no send time to recover for it,
+   and the ingest stamp is a true fact about something else, so it is labelled
+   as what it is (an arrival) rather than reprinted as if it were the other. */
+const deliveredWhen = row => {
+  const sent = +(row && row.sentAt) || 0;
+  const l = onlineLabel(sent || (row && row.ts));
+  const text = l.on || !l.text ? 'just now' : l.text;
+  return sent ? text : `arrived ${text}`;
 };
+const sentOrIngestTs = r => +(r && r.sentAt) || (r && r.ts) || 0;
 async function crewCheers(limit = 60) {
   const rows = await db.all('xp');
+  /* Ordered by SEND time now that there is one: a batch pulled in one go has
+     one ingest stamp for all of it, so sorting on that put minutes-apart cheers
+     in whatever order the feed happened to hand them over. */
   return rows.filter(r => r.type === 'cheer' && r.label)
-    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+    .sort((a, b) => sentOrIngestTs(b) - sentOrIngestTs(a))
     .slice(0, limit);
 }
 /* The read watermark. It used to default to 0, which meant that the first time
@@ -3132,6 +3254,16 @@ function routeFromHash() {
 function route({ keepScroll = false } = {}) {
   // refresh() passes keepScroll: an in-place re-render, not a navigation
   const isNav = !keepScroll;
+  /* AN UNCOMMITTED PREVIEW MUST NOT FOLLOW THE PLAYER OUT AND BACK IN (QA round
+     22 W4). S.lookPreview is set by a look tap, drawn by the Wardrobe's stage and
+     cleared only on the commit and cancel paths, so a hub tab switch (Backpack,
+     then Wardrobe) or a hash change reopened the same slot with the preview art
+     still on the doll, captioned "After", bar armed: the screen said the player
+     owned a look they had not paid for. Every navigation funnels through here
+     (openCharacter either calls route() or sets the hash, which routes), so this
+     is the one clear point. Gated on isNav: refresh() is an in-place re-render,
+     not the player leaving. */
+  if (isNav) S.lookPreview = null;
   closeAllSheets();
   /* BEFORE the teardown, not after: screenCleanup is what rips the live map out
      of the DOM, so the paint has to be taken out of its reach first. When a hold
@@ -3147,7 +3279,9 @@ function route({ keepScroll = false } = {}) {
   // than leaving the bar with nothing selected.
   const navTab = tab === 'shop' ? 'bonehead' : tab;
   $$('#tabbar .tab').forEach(b => b.classList.toggle('active', b.dataset.tab === navTab));
-  refreshCrateBadge(); // fire-and-forget: every nav/refresh re-reads the crate count
+  // fire-and-forget: every nav/refresh re-reads the crate count, except Today,
+  // where renderToday sets it from the inv rows it already holds (QA round 28 G3)
+  if (tab !== 'today') refreshCrateBadge();
   // Redundant on Settings itself, and the Boneyard is full-bleed map.
   const gear = $('#gearBtn');
   // Today carries its own gear in the day strip, so the floating one stays out
@@ -3322,6 +3456,18 @@ function nextToast() {
    only poke #toast by hand and never proves the shipped path. */
 if (typeof window !== 'undefined' && navigator.webdriver) window.__toast = toast;
 
+/* SAY IT OUT LOUD, POLITELY. #srLive is static in index.html and this is the
+   only thing that writes it: textContent only, so the region is never destroyed
+   and rebuilt in the same tick as its message (the bug #toast shipped once).
+   The same text twice in a row is not a change any AT will announce, so a
+   repeated message gets a trailing space to force one. Polite on purpose:
+   nothing here is an interruption. */
+function announce(msg) {
+  const el = $('#srLive');
+  if (!el || !msg) return;
+  el.textContent = el.textContent === msg ? msg + ' ' : msg;
+}
+
 const sheetStack = [];
 /* set when a new service worker took over while a sheet was open, so the
    reload the toast promised happens the moment the last sheet closes */
@@ -3429,6 +3575,30 @@ function closeAllSheets() {
   while (sheetStack.length) closeTopSheet();
 }
 window.addEventListener('popstate', () => { if (sheetStack.length) closeTopSheet(); });
+
+/* A VEIL POSTER IS A MODAL, SO IT RIDES THE SHEET STACK. QA round 26 O1:
+   Today -> News -> "Dark Spires" opened a full-screen .drop-veil OUTSIDE the
+   stack. Escape did nothing, history.back() did nothing, it survived two route
+   changes and still covered the tab bar over a different screen; only its own
+   buttons removed it. The same shape repeated in all eight posters (spire, mage,
+   boss, race, discord, thanks, garden, drop). The three "is a modal open" checks
+   already treat .drop-veil as equal to the stack; it just never lived in the
+   stack that back pops. So every poster opens through here: the record rides
+   sheetStack exactly like a sheet (pushState here; Escape, popstate and
+   route() -> closeAllSheets all pop it through closeTopSheet, which removes a
+   wrap with no .sheet inside at once). The bare-veil tap closes it, same as a
+   sheet backdrop. Returns the close, which goes through history like a sheet's
+   Done button so the history stack stays in step, and only while this poster
+   is still on top: a CTA that already closed it must not pop what came next. */
+function openVeil(veil) {
+  document.body.appendChild(veil);
+  const rec = { wrap: veil };
+  sheetStack.push(rec);
+  history.pushState({ sheet: sheetStack.length }, '');
+  const close = () => { if (sheetStack[sheetStack.length - 1] === rec) history.back(); };
+  veil.addEventListener('click', e => { if (e.target === veil) close(); });
+  return close;
+}
 
 /* PRESS AND HOLD A DRESSED PET TO SEE WHAT SHE IS WEARING.
  *
@@ -3648,13 +3818,38 @@ const LOG_ONLY_LINE = '<p class="log-only">Nothing you grow or cook in the Kitch
 /* ONE LINE PER DAY-GUARD RULE (js/db.js claimDay). Keyed by the reason claimDay
    itself returns, so a rule added there without copy here degrades to `other`
    rather than to silence. Each names its own cause: "paused" with no reason is
-   what a player reads as "broken". */
+   what a player reads as "broken". ('too-fast' left with rule 2, QA round 26
+   O10: it could not fire, so its line could never show.)
+   EVERY DAY-KEYED REWARD SPEAKS THROUGH THIS (QA round 26 O14). It had one
+   call site, the quest-claim toast, so with the guard refusing the wheel, the
+   day close (boot and the midnight roll) and the Pit's free fights all went
+   silent. The six surfaces now: quest claim, wheel at boot, wheel on the roll,
+   day close at boot, day close on the roll, the Pit energy line. */
 const DAY_GUARD_COPY = {
   backwards: 'This device says it is an earlier day than the app has already seen, so today is not a new day yet. Rewards return when the date catches up.',
-  'too-fast': 'The date on this device has jumped further ahead than time actually passed. Rewards are paused until the calendar catches up.',
   unwitnessed: 'Rewards are paused until the app can check the clock with the server. Any connection, even a moment, fixes it.',
   other: 'Daily rewards are paused while the date settles. They return with the next fresh day.',
 };
+/* The toast form. At boot the day close and the wheel are refused within the
+   same second by the same rule, and two identical toasts stacked is noise, so
+   one voice within 8 s stands for all of them.
+   2026-09-05: the window used to suppress ANY call within 8s regardless of
+   reason, not just a repeat of the SAME one. honest-surfaces-audit measured it:
+   its own two-scenario sweep fires a real 'backwards' Claim, then ~5s later a
+   real 'unwitnessed' Claim, and the second toast never appeared -- a player who
+   hits two different refusals in quick succession (Claim, then the wheel, then
+   Pit) would read the first line and then silence for the rest, which is worse
+   than the "two identical toasts" noise this was written to stop. Keyed on the
+   reason too, so a genuine repeat still collapses to one voice and a different
+   cause still gets its own line. */
+let _dayGuardSaidAt = 0;
+let _dayGuardSaidReason = null;
+function dayGuardToast(reason) {
+  if (reason === _dayGuardSaidReason && Date.now() - _dayGuardSaidAt < 8000) return;
+  _dayGuardSaidAt = Date.now();
+  _dayGuardSaidReason = reason;
+  toast(DAY_GUARD_COPY[reason] || DAY_GUARD_COPY.other, 4200);
+}
 
 /* Set the first time Today renders Gwart; see the note at its read site below. */
 let gwEntranceSeen = false;
@@ -3664,13 +3859,34 @@ async function renderToday(el) {
   const yEntries = await entriesFor(addDays(S.date, -1));
   const allLog = await db.all('log');
   const streak = streakFrom([...new Set(allLog.map(e => e.date))], dateKey());
-  const xp = await totalXp();
+  /* ONE READ PER STORE PER DRAW (QA round 28 G3). M13 stopped renderToday's own
+     body re-reading log/xp/health, and tests/today-reads-lint.mjs graded that
+     body; the screen a player opens still paid three whole-inv scans from
+     OUTSIDE it (unopenedCrates here, ownedGearIds below, and route()'s
+     refreshCrateBadge in the same tick), a second xp scan in routinesDone and
+     totalXp's rebuild, and a health scan in hkStaleInfo. The xp and inv rows are
+     read here, once, and handed to every reader below; the lint now grades the
+     whole draw (every function this one calls in the tick) at exactly one scan
+     per store. Same rows, same snapshot, same screen. */
+  const allXp = await db.all('xp');
+  const inv = await db.all('inv');
+  const xp = allXp.reduce((a, r) => a + (r.xp || 0), 0);   // the same sum totalXp keeps, off the rows in hand
   const lvl = levelFor(xp);
   const hk = await db.get('health', S.date);
   // extra-active days earn calories back: measured active energy ABOVE what your
   // activity level already assumes (BMR x (factor-1)), credited at 50%.
   const activeBonus = activeCalorieBonus(S.settings.profile, hk?.activeKcal);
   const t = activeBonus > 0 ? { ...S.settings.targets, kcal: S.settings.targets.kcal + activeBonus } : S.settings.targets;
+  /* A READ, NOT A DRAIN (2026-09-04). O15 had this line call drainCookQueue()
+     so the card below could not describe a queue nothing had moved. Draining
+     PAYS: awardCapped pulled claimCapped, totalXp/rebuildXpTotal and
+     grantLevelRewards > grantCrate > grantEgg > lifetimeStepsSum into the Today
+     render tick, and today-reads-lint row A1 (which grades renderToday AND
+     everything it calls) went from one full-store scan per store to health x4,
+     xp x2. cookState().queueReady projects the same queue against the same
+     clock without paying anything, and the card counts it. The drain itself
+     still runs from boot, resume and the Kitchen sheet, which is what keeps
+     O15's promise that a pot finished while the app was shut is collected. */
   const cook = await cookState();
   /* THE GARDEN IS OFF THE PLAYER'S PATH (2026-08-18). This is the single value
      every garden signal on Today reads from: the ripe-crop banner and its
@@ -3685,12 +3901,12 @@ async function renderToday(el) {
   const newsSeen = new Set(await kvGet('newsSeen', []));
   const newsUnseen = NEWS.filter(n => !newsSeen.has(n.id)).length;
   const [coinBal, dustBal, pitEnergy] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
-  const crates = await unopenedCrates();
-  const allXp = await db.all('xp');
+  const crates = await unopenedCrates(inv);
+  setCrateBadge(crates.length);   // route() skips refreshCrateBadge on Today: this is the same count off the same rows (G3)
   const huntEnabled = !!(await kvGet('hunt-enabled'));
   const wellness = S.date === dateKey() ? await getWellness(S.date) : null;
   const routines = wellness ? await getRoutines() : [];
-  const routinesDoneToday = wellness ? await routinesDone(S.date) : new Set();
+  const routinesDoneToday = wellness ? await routinesDone(S.date, allXp) : new Set();
   // Manual "Add a walk" is only for players whose phone is NOT counting for
   // them; with Health connected the walk row would double-ask for data the
   // sync already has. null = hide the row entirely.
@@ -3761,6 +3977,16 @@ async function renderToday(el) {
      ordinary day once it has been opened. Display only, read off the read-only
      mark; it decides no award. Expires on its own when the calendar catches up. */
   const preSpent = isToday && dayOrdinal(await kvGet('dayHighWater', null)) > dayOrdinal(S.date);
+  /* RULE 3'S ONE LINE, same job and same shape as preSpent above. A player back
+     after 8+ days without the app once reaching /health has every daily gate
+     refused as `unwitnessed` (js/db.js claimDay), including the day close they
+     were owed, and Today said nothing at all: the crate simply never arrived.
+     js/social.js settleServerDay has already had its bounded go at clearing
+     this by the time a boot paints, so what is left here is the case it could
+     not fix, which is the one worth a sentence. The sentence is DAY_GUARD_COPY's
+     own, so this and the quest-claim toast can never drift apart. Display only;
+     it decides no award, and it clears itself on the next answer. */
+  const unwitnessed = isToday && await dayIsUnwitnessed(S.date);
   let wbFacts = [];
   if (wbShow) {
     const wk = questTiers.find(tier => tier.period === 'week');
@@ -3784,7 +4010,7 @@ async function renderToday(el) {
      reading inv for ownedGearIds while this same line read inv for the same
      set, then reading xp a second time for the level. Hand it the rows in hand.
      Same rows, same snapshot, same fighter; only the duplicate scans go. */
-  const unlockGear = await ownedGearIds();
+  const unlockGear = await ownedGearIds(inv);
   const unlockFighter = await buildFighter({ log: allLog, xpRows: allXp, health: healthRows, gOwned: unlockGear });
   const unlocks = computeHomeUnlocks({
     fighter: unlockFighter, level: lvl.level, coinBal, dustBal,
@@ -3792,7 +4018,11 @@ async function renderToday(el) {
     fightWins: allXp.filter(r => r.type === 'fight').length,
   });
   const pitAttn = unlocks.some(u => u.hero === 'pit');
-  const hkStale = await hkStaleInfo();
+  /* QA round 28 B1: read AFTER buildFighter above, which is where the one-shot
+     grant is written on the first fighter build after the update, so the card
+     appears on the same draw the points do. Two kv reads, no store scan. */
+  const rebal = habitGrantCard(await kvGet(HABIT_GRANT_KEY, null), await kvGet(HABIT_GRANT_SEEN_KEY, false));
+  const hkStale = await hkStaleInfo(healthRows);
   if (hkStale && !(await kvGet('hkStaleNotified', false))) {
     await kvSet('hkStaleNotified', true); // once per stall episode; cleared on the next good sync
     notifyNow('Steps stopped syncing', 'Apple Health has gone quiet. Your walking is not counting. Open Boneheadz and tap the banner to fix it.', 'any').catch(() => {});
@@ -4106,12 +4336,8 @@ async function renderToday(el) {
   <div class="dayflow">
   ${preSpent ? `
   <p class="note">This day already passed on this clock. Fresh rewards return tomorrow.</p>` : ''}
-  ${wbShow ? `
-  <div class="card wb-back" id="wbCard">
-    <b>Everything is where you left it.</b>
-    <span>${wbFacts.join(' ')}</span>
-    <button class="btn small ghost" id="wbOk">Good to be back</button>
-  </div>` : ''}
+  ${unwitnessed ? `
+  <p class="note">${DAY_GUARD_COPY.unwitnessed}</p>` : ''}
   ${hkStale ? `
   <button class="card hk-stale" id="hkStaleFix">
     <b>⚠️ Steps aren't syncing</b>
@@ -4146,18 +4372,47 @@ async function renderToday(el) {
        past and destroys the present on a tap is worse than a card that is not
        there. Un-gate it the day wellness gets a per-date store. */''}
   ${tsec('Wellness', isToday ? wellnessCardHtml(wellness, routines, routinesDoneToday, manualWalks) : '')}
-  ${tsec('Kitchen', kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe))}
+  ${tsec('Kitchen', kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe, _cookBanked))}
   ${tsec('Activity', healthCardHtml(hk, isToday))}
 
   <section class="tsec tsec-meals"><div class="tsec-h">Meals</div>
   ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
   </section>
 
+
   ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
   <p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>
   </details>
   </div>
   </section>
+  ${/* AFTER THE DAY SECTION ENTIRELY (2026-09-05, third move): today-container LEDGER grades
+       everything inside section.dayblk, not just the collapsed <details>. */''}
+  ${/* OUTSIDE THE DAY, on purpose (2026-09-05). Inside .dayflow this card sat above
+       the collapsed banner: it pushed the ring card 18px past its ceiling
+       (hype-banner FIT), made the collapsed day taller than a 568px screen
+       (today-peek WHOLE) and was the one panel painting inside the flat day
+       (today-container LEDGER). Below the day it explains the points without
+       moving the summary the day is. */''}
+  ${/* THE REBALANCE CARD (QA round 28 B1): the R21-P1 make-good explained, once.
+       Same quiet card skeleton as the return card (.wb-back: no alarm colour,
+       this is not a warning), copy from habitGrantCard (js/game.js). The button
+       is the dismissal: it records the card as seen and opens Training, where
+       the N points are waiting. */''}
+  ${rebal ? `
+  <div class="card wb-back" id="habitGrantCard">
+    <b>${esc(rebal.title)}</b>
+    <span>${esc(rebal.body)}</span>
+    <button class="btn" id="habitGrantGo">${esc(rebal.button)}</button>
+  </div>` : ''}
+  ${/* BELOW THE DAY, like the rebalance card under it (2026-09-05): inside .dayflow the
+       return card painted a panel inside the flat day and pushed the collapsed summary
+       past a 568px screen (today-container LEDGER, today-peek WHOLE on a lapsed seed). */''}
+  ${wbShow ? `
+  <div class="card wb-back" id="wbCard">
+    <b>Everything is where you left it.</b>
+    <span>${wbFacts.join(' ')}</span>
+    <button class="btn small ghost" id="wbOk">Good to be back</button>
+  </div>` : ''}
 
   ${/* THE PROMO SLOT IS GONE. Tom, 2026-09-03: "today still has the step
        challenge winner and monster banner at the bottom these should be gone now
@@ -4263,6 +4518,16 @@ async function renderToday(el) {
     if (e.target.closest('button')) return;
     openCharacter('crates');
   });
+  /* THE BOUNCE ENDS AND THE IDLE TAKES OVER ALONE (QA round 26 O5). .bounce used
+     to keep `bh-idle ... infinite` in the same animation list as bhbounce, which
+     Chrome never composites (two animations on one `transform`), so Today ran 60
+     style recalcs a second until the next innerHTML rebuild. The rule now carries
+     only the 0.7s bounce; dropping the class when it ends hands .bh-anim back its
+     own single idle animation, started fresh, which the compositor takes. Only
+     bhbounce: .hero-companion's petPop and other children bubble through here too. */
+  $('#bhStage').addEventListener('animationend', e => {
+    if (e.animationName === 'bhbounce') e.currentTarget.classList.remove('bounce');
+  });
   $('#charBtn')?.addEventListener('click', () => openCharacter('crates')); // Bonehead hub, landing on the Backpack the tile is named for
   $('#stableBtn')?.addEventListener('click', openStable);
   $('#pitBtn')?.addEventListener('click', openPit);
@@ -4280,8 +4545,16 @@ async function renderToday(el) {
     const btn = $('#coinBtn'); if (!btn || !btn.isConnected) return;
     const [c, d, pe] = await Promise.all([coins(), boneDust(), refreshPitEnergy()]);
     const put = (sel, v) => { const b = $(sel + ' b'); if (b) b.textContent = v; };
+    /* AND A BALANCE THAT CHANGES IN PLACE SAYS SO. This is the one path that
+       repaints the money without re-rendering the screen, which is exactly the
+       change a screen reader is never told about: measured, coins went 340 to
+       590 through this function and no live region fired. Announced only on a
+       real difference, read off the DOM the line above is about to overwrite,
+       so a repaint that changes nothing stays silent. */
+    const was = $('#coinBtn b')?.textContent;
     put('#coinBtn', c.toLocaleString()); put('#dustBtn', d.toLocaleString());
     put('#vigorBtn', String(pe.ready));
+    if (was != null && was !== c.toLocaleString()) announce(`${c.toLocaleString()} coins`);
   };
   $('#dustBtn')?.addEventListener('click', () => openCharacter('crates'));
   $('#vigorBtn')?.addEventListener('click', openPit);
@@ -4301,6 +4574,7 @@ async function renderToday(el) {
      reading position") failing for a real reason. */
   $('#dayRest', el)?.addEventListener('toggle', e => { S.dayOpen = e.target.open; });
 
+  let nbNormalized = false;
   $('#newsBanner', el)?.addEventListener('toggle', async e => {
     if (!e.target.open) return;
     /* The settled race is in this list too, so opening the pill clears its dot
@@ -4309,52 +4583,64 @@ async function renderToday(el) {
     const wk = lastSettledWeek();
     await kvSet('newsSeen', [...NEWS.map(n => n.id), wk && raceSeenKey(wk)].filter(Boolean));
     $('.nb-dot', el)?.remove();
-  });
-  /* EVERY NEWS TILE READS AT THE SAME SIZE, measured rather than hand-tuned.
-     Tom, 2026-08-27: "your icons are aligned right now theyre different themes
-     with different centreing and scaling it looks sloppy". He was right and the
-     numbers were ugly: across the nine rows the art filled between 0.36 and 3.80
-     of its 40px tile, a TEN-FOLD spread, and the Discord tile sat 19px off centre
-     on a 40px box because its art is a fixed 78px square.
 
-     The News tab solves this with per-class scales (.nw-fit .42, .nw-wall .52),
-     which covers two of the shapes and leaves tz-head and dc-app overflowing. A
-     tenth row would need an eleventh rule. So this measures what each tile
-     actually rendered and scales it to one target, which is correct for art
-     nobody has drawn yet.
+    /* EVERY NEWS TILE READS AT THE SAME SIZE, measured rather than hand-tuned.
+       Tom, 2026-08-27: "your icons are aligned right now theyre different themes
+       with different centreing and scaling it looks sloppy". He was right and the
+       numbers were ugly: across the nine rows the art filled between 0.36 and 3.80
+       of its 40px tile, a TEN-FOLD spread, and the Discord tile sat 19px off centre
+       on a 40px box because its art is a fixed 78px square.
 
-     ONE READ, ONE WRITE, on render only. Nothing here runs per frame, so the
-     settled-screen budget idle-perf-audit holds is untouched. */
-  requestAnimationFrame(() => {
-    for (const t of $$('.nb-thumb', el)) {
-      const kid = t.firstElementChild;
-      if (!kid) continue;
-      const tb = t.getBoundingClientRect(), kb = kid.getBoundingClientRect();
-      if (!kb.width || !kb.height) continue;
-      /* THE TARGET IS A WHOLE PIXEL-ART STEP, 24, not a fraction of the tile.
-         It was Math.min(tile) * 0.78 = 31.2px, and that put badge-crown.png on
-         screen at 31.2 against a declared 24. pixel-art-swap-audit holds every
-         pixel <img> to a whole step at its own width, because a fractional step
-         resamples the sprite and blurs it, and it caught this.
-         Exempting pixel art from the pass instead was tried and is worse: it
-         leaves one tile at 24 among eight at 31.2, which is the ragged row this
-         normalisation exists to fix (measured spread 7.2px against a 1.5 bound).
-         24 satisfies both rules at once: pixCur already snaps to it, so pixel art
-         scales by exactly 1.0 and everything else meets it. */
-      const TARGET = 24;
-      const scale = TARGET / Math.max(kb.width, kb.height);
-      kid.style.transformOrigin = 'center';
-      /* SCALE FIRST, THEN MEASURE THE OFFSET THAT IS LEFT. Doing both in one pass
-         off the pre-scale box put the Discord tile 29px out on a 40px square: in
-         `translate() scale()` the translate is in the PARENT's units, so dividing
-         it by the scale over-corrects by exactly that factor. Two passes is the
-         honest way to do it and costs one extra read of nine elements, once. */
-      kid.style.transform = `scale(${scale})`;
-      const sb = kid.getBoundingClientRect();
-      const dx = (tb.left + tb.width / 2) - (sb.left + sb.width / 2);
-      const dy = (tb.top + tb.height / 2) - (sb.top + sb.height / 2);
-      kid.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
-    }
+       The News tab solves this with per-class scales (.nw-fit .42, .nw-wall .52),
+       which covers two of the shapes and leaves tz-head and dc-app overflowing. A
+       tenth row would need an eleventh rule. So this measures what each tile
+       actually rendered and scales it to one target, which is correct for art
+       nobody has drawn yet.
+
+       MEASURED ON FIRST OPEN, NOT ON RENDER. It used to run in a bare
+       requestAnimationFrame scheduled at render time, while `.nb-list` was still
+       inside a CLOSED <details> -- a closed <details> keeps laying out its
+       content (this is why the read never came back zero), but the box it
+       reports for that hidden content is not reliable: measured against this
+       tree, the same unchanged code read the Discord tile at a correct 24px on
+       about half of a run of 20 and at its native, unscaled 78px on the other
+       half, no code difference between the two. Reading it once the box is
+       actually the one the player sees removes the coin flip. Still ONE READ,
+       ONE WRITE, just gated to the first open instead of render, so the
+       settled-screen budget idle-perf-audit holds is still untouched. */
+    if (nbNormalized) return;
+    nbNormalized = true;
+    requestAnimationFrame(() => {
+      for (const t of $$('.nb-thumb', el)) {
+        const kid = t.firstElementChild;
+        if (!kid) continue;
+        const tb = t.getBoundingClientRect(), kb = kid.getBoundingClientRect();
+        if (!kb.width || !kb.height) continue;
+        /* THE TARGET IS A WHOLE PIXEL-ART STEP, 24, not a fraction of the tile.
+           It was Math.min(tile) * 0.78 = 31.2px, and that put badge-crown.png on
+           screen at 31.2 against a declared 24. pixel-art-swap-audit holds every
+           pixel <img> to a whole step at its own width, because a fractional step
+           resamples the sprite and blurs it, and it caught this.
+           Exempting pixel art from the pass instead was tried and is worse: it
+           leaves one tile at 24 among eight at 31.2, which is the ragged row this
+           normalisation exists to fix (measured spread 7.2px against a 1.5 bound).
+           24 satisfies both rules at once: pixCur already snaps to it, so pixel art
+           scales by exactly 1.0 and everything else meets it. */
+        const TARGET = 24;
+        const scale = TARGET / Math.max(kb.width, kb.height);
+        kid.style.transformOrigin = 'center';
+        /* SCALE FIRST, THEN MEASURE THE OFFSET THAT IS LEFT. Doing both in one pass
+           off the pre-scale box put the Discord tile 29px out on a 40px square: in
+           `translate() scale()` the translate is in the PARENT's units, so dividing
+           it by the scale over-corrects by exactly that factor. Two passes is the
+           honest way to do it and costs one extra read of nine elements, once. */
+        kid.style.transform = `scale(${scale})`;
+        const sb = kid.getBoundingClientRect();
+        const dx = (tb.left + tb.width / 2) - (sb.left + sb.width / 2);
+        const dy = (tb.top + tb.height / 2) - (sb.top + sb.height / 2);
+        kid.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`;
+      }
+    });
   });
   $$('.nb-row', el).forEach(b => b.addEventListener('click', () => {
     NEWS.find(n => n.id === b.dataset.news)?.open();
@@ -4427,6 +4713,8 @@ async function renderToday(el) {
     await kvSet('wbReturnDay', null);
     $('#wbCard', el)?.remove();
   });
+  // QA round 28 B1: seen first, then Training; a second Today draw finds the flag and draws no card
+  $('#habitGrantGo', el)?.addEventListener('click', async () => { await kvSet(HABIT_GRANT_SEEN_KEY, true); openCharacter('talents'); });
   $('#hkStaleFix', el)?.addEventListener('click', async () => {
     // best case: a manual native sync brings steps right back
     if (isNative() && S.settings.hkNative) {
@@ -4462,7 +4750,7 @@ async function renderToday(el) {
        server confirming the date) used to name its cause. The fallback covers a
        bare `true` from an older caller and any rule added later. */
     if (res?.dayGuard) {
-      toast(DAY_GUARD_COPY[res.dayGuard] || DAY_GUARD_COPY.other, 4200);
+      dayGuardToast(res.dayGuard);
       return;
     }
     if (!res) return;
@@ -4955,13 +5243,19 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
     'You took the numbers off him. The Wardrobe gives them back.',
     'He is carrying no stats. I would fix that before a fight.',
   ];
+  /* PAST DAYS ARE EDITABLE, NOT FINISHED (Tom, 2026-09-05): people forget to log
+     a meal, so the day stays open to fix. What changed is the reward, not the
+     door: a backdated log earns no XP, streak or badge (js/game.js onFoodLogged),
+     so Gwart says so instead of claiming the day is carved shut, which is no
+     longer true and was the bug report (tap Add on yesterday, log an apple, XP
+     still rose). */
   if (!isToday) return [
-    'Yesterday is set. You cannot re-cut a finished thing.',
-    'Nothing to log back here. Have a browse if you like.',
-    'That day is carved. Admire it, but you cannot sand it.',
-    'Back here it is all finished. Today is where the work is.',
+    'Log the meal you forgot. Just do not expect XP for it.',
+    'Fix it if you missed it. Nobody pays you for old news.',
+    'Edit away. The reward already clocked out for the day.',
+    'Add the food, skip the applause. That is how it works back here.',
     'You have wandered off behind him. He is up ahead.',
-    'I keep the old days for reading, not for fixing.',
+    'I will take the correction. XP stopped listening yesterday.',
     'History is a decent read. He is a better one.',
   ];
   if (cropsRipe) return [
@@ -5419,13 +5713,65 @@ const bhTrim = src => {
    on a 2x phone and leaves a 3x phone a mild 0.75 upscale on the big tier, which
    measured as indistinguishable. Definition in data/boneheadz.js. */
 
+/* Football kit, 2026-09-04: the two multiply layers that colour a football
+   master for its team. Same mechanism as .wpn-sheen: a span masked by an alpha
+   PNG, registered to the art by the surface's own --av-fit/--av-pos. The mask
+   is a subset of the master's alpha, so the multiply only ever meets the
+   master's own pixels; the visor glass, facemask and outlines are outside both
+   masks and keep Cam's colour. `geo` carries per-layer inline geometry for the
+   pet renderer, whose layers are sized by style rather than by class. */
+/* The same two layers as footballTintHtml, for the surfaces that are a CANVAS
+   rather than a stack of spans. drawTrimmedArt reads it back off the element. */
+const fbTintAttr = item => {
+  const t = footballTints(item);
+  return t ? ` data-tints='${JSON.stringify(t)}'` : '';
+};
+/* `data-fbslot` NAMES WHICH GARMENT A TINT SPAN BELONGS TO. A stack can wear
+   four football pieces at once (helmet, jersey, cleats, and the lizard's two),
+   and the wardrobe's colourway rail repaints exactly one of them.
+   IT IS THE SECOND OF TWO SCOPES, NOT THE ONLY ONE, and saying so honestly
+   matters: the painter also pairs each span to a tint BY MASK FILENAME, and
+   since no two garments share a mask, that pairing alone already leaves the
+   jersey untouched during a helmet slide (proved by mutation 2026-09-04:
+   dropping [data-fbslot] from the painter's selector leaves every row green).
+   The attribute stays because it makes the selector say what it means at the
+   place it is read, and because it is one string on a span that already exists.
+   The rail needs it in this form:
+   every team shares ONE master PNG and ONE pair of masks per garment, so
+   sliding from one team to the next is two `style.background` writes on spans
+   that are already on screen, with no image to decode and no stage to rebuild.
+   See fbRail in renderCharacter. */
+/* `thumb` MIRRORS THE LAYER'S OWN TIER (2026-09-05), the same rule
+   croppedPetImg's tintOf follows below: a CSS mask scales with the span's own
+   background-size, so tiering it costs no registration, only memory. Passed
+   through from avatarLayersHtml's `opts.thumb`, so a tiled surface (the
+   Collection, the crew fan, the rail) never decodes a 640 mask under a
+   192/384 garment. A surface with NO thumb (the Today hero, the Wardrobe's
+   big stage) still caps at 384: nothing on this stack draws the mask over
+   384 CSS px today, so the master is reserved for a surface that measures a
+   real need for it, not handed out as this function's default. */
+const footballTintHtml = (item, geo = '', thumb = null) => {
+  const maskTier = thumb ? (thumb === true ? 192 : thumb) : 384;
+  return (footballTints(item) || [])
+    .map(t => `<span class="fb-tint" data-fbslot="${item.slot}" style="${geo}--fbm:url('${bhThumb(t.mask, maskTier)}');background:${t.hex}" aria-hidden="true"></span>`).join('');
+};
+
 function avatarLayersHtml(eq, opts = {}) {
   const skip = new Set(opts.skip || []);
   const slots = [...BH_SLOTS].sort((a, b) => a.z - b.z);
   const layers = slots.map(s => {
     if (skip.has(s.code)) return '';
+    // Football kit, 2026-09-04: a visor helmet occludes the three eye items that project past the glass (VISOR_EYES_POLICY 'hide')
+    if (s.code === 'E' && visorHidesEyes(eq)) return '';
     const itemId = eq[s.code];
     if (!itemId || !BH_BY_ID[itemId]) return '';
+    /* Football kit, 2026-09-04: under VISOR_EYES_POLICY 'clip' the three eye
+       items that project past the glass keep their layer and are MASKED by the
+       worn visor helmet's own art alpha, so the lasers are bounded inside the
+       helmet instead of escaping it. Nothing is computed here: the mask is a
+       640 square on the same canvas as the eye master, so app.css .eye-clip
+       hands it the surface's own --av-fit/--av-pos, exactly as .fb-tint does. */
+    const clipMask = s.code === 'E' ? visorClipMask(eq) : null;
     /* A pet that is not registered to the body canvas cannot be a body layer.
        One guard here rather than one per caller, because all eleven stacks that
        keep the C slot broke the same way: see petStacksOnBody above. */
@@ -5437,6 +5783,19 @@ function avatarLayersHtml(eq, opts = {}) {
     const full = s.code === 'C' && itemId !== 'CX' && opts.shinyPetId === itemId
       ? `assets/bh/C/shiny/${itemId}.png` : bhAsset(item);
     const src = opts.thumb ? bhThumb(full, opts.thumb === true ? 192 : opts.thumb) : full;
+    /* Football kit, 2026-09-05: a pet stacked ON THE BODY CANVAS is a layer in
+       THIS stack, so its worn garments (petWear's CH/CT) belong here too, not
+       only in croppedPetImg's standalone box -- Tom: "the pet kit renders on
+       the lizard, on every surface". Same registration as the species layer
+       above (no inline geo, same --av-fit/--av-pos as every other slot), so
+       petWornItems' art (drawn pre-positioned on the pet's own 640 canvas)
+       lands where Cam put it. `opts.petWear`, never S.petWear read directly
+       here: a snapshot pet (a friend, a foe) must never be dressed out of the
+       VIEWER's own wardrobe, which is the shiny bug's shape (see
+       ownShinyPetId/snapShinyPetId above) applied to gear instead of colour.
+       The shiny recolour above and the worn layers below are independent
+       images, so a shiny keeps its kit for free: nothing here reads shinyPetId. */
+    const wornPetItems = s.code === 'C' ? petWornItems(itemId, opts.petWear || null) : [];
     // weapon / off-hand glow by rarity (epic/legendary)
     const slimed = S.slimeSlots && S.slimeSlots.has(s.code);
     /* `'wpnAura' in opts` rather than `opts.wpnAura || S.wpnAura`: a caller that
@@ -5461,7 +5820,8 @@ function avatarLayersHtml(eq, opts = {}) {
       // draws more lit eyes.
       S.glow && s.code === 'E' && EMBER_EYES.has(itemId) ? 'eye-ember' : '',
     ].filter(Boolean).join(' ');
-    const glow = cls ? ` class="${cls}"` : '';
+    const clsAll = clipMask ? `${cls}${cls ? ' ' : ''}eye-clip` : cls;
+    const glow = clsAll ? ` class="${clsAll}"` : '';
     // NOT lazy, NOT async-decoded: these layers only mean anything stacked
     // together. Loading them independently is what made the character visibly
     // assemble itself, piece by piece, every single render.
@@ -5469,7 +5829,17 @@ function avatarLayersHtml(eq, opts = {}) {
     // must degrade to a missing garment, never iOS's blue "?" box over the body.
     // On a THUMBNAILED layer it first retries the full-size art, so a missing
     // thumbnail costs memory rather than the garment.
-    return `<img${glow} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>`;
+    const clipStyle = clipMask ? ` style="--fbm:url('${clipMask}')"` : '';
+    // Worn pet garments, same tiering as the species image above, each with its
+    // own football tint spans -- see the note on wornPetItems above. `pw`
+    // matches croppedPetImg's own class for a worn layer (see THE WORN LAYERS
+    // ARE MARKED there), so a worn piece reads the same way wherever it draws.
+    const wornHtml = wornPetItems.map(w => {
+      const wfull = bhAsset(w);
+      const wsrc = opts.thumb ? bhThumb(wfull, opts.thumb === true ? 192 : opts.thumb) : wfull;
+      return `<img class="pw" src="${wsrc}"${wsrc !== wfull ? ` data-full="${wfull}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(w, '', opts.thumb)}`;
+    }).join('');
+    return `<img${glow}${clipStyle} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(item, '', opts.thumb)}${wornHtml}`;
   }).join('');
   // Visible by DEFAULT. v233 shipped this with bh-composing baked into the
   // markup, which meant any stack injected somewhere composeAvatars() never
@@ -5525,6 +5895,35 @@ const RACK_FIT = { H: 'fit-head', E: 'fit-head', G: 'fit-head', M: 'fit-head', S
    one definition; a new slot that gets a .fit-* crop becomes wearable everywhere
    the moment it is added above. */
 const canWear = id => !!(BH_BY_ID[id] && RACK_FIT[BH_BY_ID[id].slot]);
+/* A FOOTBALL HELMET IS NOT A HAT, and the crop has to know it. Tom annotated the
+   Kit room's helmet tile, 2026-09-04: "too zoomed in".
+   MEASURED on the rendered tile at 88px, before and after, the garment's own
+   silhouette read as an ALPHA (the layer alone over a black ground and again
+   over a white one) so the number is the art and not its contrast against the
+   tile:
+
+     garment         ink % of tile      does the art run off the tile?
+     helmet        94.2  ->  43.4     ALL FOUR (L83 R45 T88 B46)  ->  none
+     jersey        42.6      42.6     none                        (unchanged)
+     cleats        33.4      33.4     none                        (unchanged)
+     lizard helm   23.6      23.6     none                        (unchanged)
+     lizard jersey 20.7      20.7     none                        (unchanged)
+
+   .fit-head's origin and its 2.3 scale are a measured frame for HEADWEAR sitting
+   on a skull. A football helmet is a bigger object: shell plus facemask hanging
+   down over the whole face, so the same frame blew it off every edge of the
+   square. It is not a tile bug and not a shop bug -- the same crop draws this
+   helmet on the rack, on a reveal card and on the wardrobe's colourway rail --
+   so the fix keys off the ITEM rather than the surface, and all four of them
+   move together. Only the helmet's number moves; the other four garments are
+   untouched, which is what "surgical" looks like when it is checked.
+   Only slot H: the four head pieces (helmet plus its three visors) are one
+   drawing with different glass. The jersey and the cleats measure correctly
+   under fit-torso and fit-feet and keep them.
+   The number in app.css .fit-fbhead came from a seven-scale sweep of the real
+   tile, not from an estimate, and tests/football-tile-crop-audit.mjs
+   re-measures it (and demonstrates its own failure) on every run. */
+const fitClass = it => (it && it.football && it.slot === 'H' ? 'fit-fbhead' : RACK_FIT[it.slot]);
 /* `css` is the width the WHOLE 640 square ends up occupying AFTER the crop's
    scale, not the width of the window it peeps through: a 222px card panel under
    fit-waist's scale(2.8) is a 622px canvas behind a 222px hole. bhTierFor turns
@@ -5552,7 +5951,7 @@ function wornArtHtml(id, css) {
   // wpnAura: null -- the player's bought aura must not leak onto a piece they
   // are being SHOWN. skip C for the same reason the rack does: their pet turning
   // up in a reveal card would read as part of the prize.
-  return `<div class="pc-worn ${RACK_FIT[it.slot]}">${avatarLayersHtml(
+  return `<div class="pc-worn ${fitClass(it)}">${avatarLayersHtml(
     { ...RACK_BASE, [it.slot]: id }, { wpnAura: null, skip: ['C'], thumb: bhTierFor(css) })}</div>`;
 }
 
@@ -5803,15 +6202,7 @@ function healthCardHtml(hk, isToday) {
 }
 
 // ---- Kitchen: cook scavenged ingredients into buff dishes ----
-function foodBuffLabel(b) {
-  if (b.kind === 'coins') return `+${Math.round(b.pct * 100)}% coins · ${fmtCookTime(Math.max(0, b.untilMs - Date.now()))} left`;
-  const bits = [];
-  if (b.damagePct) bits.push(`+${Math.round(b.damagePct * 100)}% dmg`);
-  if (b.hype) bits.push(`+${b.hype} Hype start`);
-  if (b.regenPct) bits.push(`heal ${Math.round(b.regenPct * 100)}%/turn`);
-  if (b.petFree) bits.push('pet special free');
-  return `${bits.join(' · ')} · ${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left`;
-}
+// foodBuffLabel moved to js/cooking.js (QA round 26 O17) so the node suite can format every recipe
 function potionShort(p) {
   const e = p.effect || {};
   if (e.heal && e.stamina) return 'refill + heal';
@@ -6090,12 +6481,24 @@ async function openGluttonSheet() {
   const onBeaten = () => healCleansed();
   addEventListener('bh-glutton-beaten', onBeaten);
   // the sheet outlives the listener otherwise: stop leaking one per open
-  const mo = new MutationObserver(() => { if (!wrap.isConnected) { removeEventListener('bh-glutton-beaten', onBeaten); mo.disconnect(); } });
-  mo.observe(document.getElementById('sheets'), { childList: true });
   // coming back to a backgrounded app, or back from any pushed sheet, re-checks
-  document.addEventListener('visibilitychange', async () => {
+  const onVisible = async () => {
     if (!document.hidden && wrap.isConnected && await gluttonBeaten(slot)) healCleansed();
+  };
+  document.addEventListener('visibilitychange', onVisible);
+  /* QA round 26 O6: the visibilitychange listener above was an anonymous closure
+     over `wrap`, added per open and never removed, so every Glutton sheet ever
+     opened stayed pinned by document (+4.47 listeners, +73 nodes per open, linear
+     over 30 opens). The observer below was written for exactly this leak and
+     already reaped onBeaten; it reaps both now. */
+  const mo = new MutationObserver(() => {
+    if (!wrap.isConnected) {
+      removeEventListener('bh-glutton-beaten', onBeaten);
+      document.removeEventListener('visibilitychange', onVisible);
+      mo.disconnect();
+    }
   });
+  mo.observe(document.getElementById('sheets'), { childList: true });
 
   $('#gluttonFight', wrap)?.addEventListener('click', async () => {
     // last line of defence: the ledger, read at the moment of the tap
@@ -6418,13 +6821,44 @@ function openSiegeSheet(s, view, siege) {
   });
 }
 
-function kitchenCardHtml(cook, ingCount, buffs, cropsRipe = 0) {
-  if ((!cook || !cook.ready) && !cropsRipe) return '';
-  const line = !cook || !cook.ready
+/* Dishes the queue finished and banked to the Pantry on the player's behalf
+   since the Kitchen was last opened (QA round 26 O15). advanceQueue hands them
+   back and nothing announced them: Today's card read the pot only, so two
+   paid-for cooks that had finished were never mentioned. Session-local on
+   purpose: the Pantry itself is the durable record, this is the announcement. */
+let _cookBanked = 0;
+/* THE ONE CALLER OF advanceQueue, so every dish it collects is paid the same XP
+   a manual Serve pays, exactly once, whichever surface drained it. Loops because
+   one call moves at most one queue entry per free pot: with one pot and two
+   finished cooks lined up, the second only starts once the first is banked. */
+async function drainCookQueue() {
+  let banked = 0;
+  for (let i = 0; i <= QUEUE_MAX; i++) {
+    const dishes = await advanceQueue();
+    if (!dishes.length) break;
+    for (const dish of dishes) await awardCapped('cook', 'cook', 8, `Cooked ${dish.name}`, XP_DAILY_CAP.cook);
+    banked += dishes.length;
+  }
+  _cookBanked += banked;
+  return banked;
+}
+
+function kitchenCardHtml(cook, ingCount, buffs, cropsRipe = 0, banked = 0) {
+  /* `banked`: finished cooks waiting in the Pantry that nothing has announced
+     yet (O15); counted with the pots so the line says how many are ready.
+     `queueReady`: queued cooks that would already have finished behind a
+     finished pot. Today reads that instead of draining for it, so the card is
+     as truthful as it was without paying XP inside a render. Three disjoint
+     sets: in the Pantry, in a pot, still in the line. */
+  const readyN = (cook && cook.readyCount || 0) + (cook && cook.queueReady || 0) + banked;
+  if (!readyN && !cropsRipe) return '';
+  const line = !readyN
     ? `<b style="color:var(--accent)">${bhIcon('garden-sprout', 18)} ${cropsRipe} crop${cropsRipe === 1 ? '' : 's'} ready to pick!</b>`
-    : cook.readyCount > 1
-    ? `<b style="color:var(--accent)">${cook.readyCount} dishes are ready!</b>`
-    : `<b style="color:var(--accent)">${recipeIconHtml(cook.recipe, 18)} ${esc(cook.recipe.name)} is ready!</b>`;
+    : readyN > 1
+    ? `<b style="color:var(--accent)">${readyN} dishes are ready!</b>`
+    : cook.ready
+    ? `<b style="color:var(--accent)">${recipeIconHtml(cook.recipe, 18)} ${esc(cook.recipe.name)} is ready!</b>`
+    : `<b style="color:var(--accent)">1 dish is ready!</b>`;
   return `<div class="card kitchen-card" id="kitchenCard">
     <div class="card-title"><span class="ct-name">KITCHEN</span> <span class="link">Collect</span></div>
     <div class="kc-line">${line}</div>
@@ -7311,6 +7745,7 @@ function showHarvest(res) {
 }
 
 async function openKitchen() {
+  _cookBanked = 0;   // the Pantry is on screen from here: the announcement is delivered (O15)
   const wrap = openSheet(`
     <div class="sheet-head"><h2>Kitchen</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body">
@@ -7374,12 +7809,11 @@ async function openKitchen() {
      behind it are untouched. */
   async function render() {
     if (!body.isConnected) return;
-    /* THE ONLY CALLER of advanceQueue, so the dishes it collected on the player's
-       behalf are paid the same XP a manual Serve pays, exactly once. cookState()
-       stays a plain read; the pots are shown here and nowhere the queue matters. */
-    for (const [i, dish] of (await advanceQueue()).entries()) {
-      await awardCapped('cook', 'cook', 8, `Cooked ${dish.name}`, XP_DAILY_CAP.cook);
-    }
+    /* Drains through drainCookQueue (the one caller of advanceQueue, which pays
+       the cook XP) so this sheet, boot, resume and Today all move the queue the
+       same way (QA round 26 O15). cookState() stays a plain read. */
+    await drainCookQueue();
+    _cookBanked = 0;   // whatever that drain banked is in the Pantry on this very screen
     const [inv, cook, buffs, potInv, coinBal, tmute, pantry] = await Promise.all([ingredients(), cookState(), activeFoodBuffs(), potionsInv(), coins(), transmuteStatus(), pantryDishes()]);
     const canStartAny = cook.freeCount > 0 || cook.queueLeft > 0;
     const recipeCard = r => {
@@ -7525,7 +7959,13 @@ async function openKitchen() {
     }
     $('#transmuteBtn', body)?.addEventListener('click', async () => {
       const res = await doTransmute();
-      if (!res.ok) { toast(res.reason === 'cooldown' ? `Transmute recharges in ${fmtCookTime(res.msLeft)}.` : `Need ${res.need} common ingredients. You have ${res.have}.`, 3000); return; }
+      if (!res.ok) {
+        // 'day' is the day guard (QA round 26 O3): the device's date is one the guard cannot vouch for yet
+        toast(res.reason === 'cooldown' ? `Transmute recharges in ${fmtCookTime(res.msLeft)}.`
+          : res.reason === 'day' ? 'The cauldron is not sure what day it is. Try again when the calendar catches up.'
+          : `Need ${res.need} common ingredients. You have ${res.have}.`, 3000);
+        return;
+      }
       trackEvent('transmute');
       /* THE POT TAKES THEM. Option B's moment: each filled socket's icon flies
          into the Ectoplasm socket, staggered, then the socket blooms in option
@@ -8156,7 +8596,17 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
       const qin = $('#qtyIn', wrap);
       qin.addEventListener('input', e => { amtRaw = e.target.value; sel.qty = Math.max(0, num(e.target.value) || 0); preview(); });
       qin.addEventListener('focus', () => qin.select());
-      qin.addEventListener('blur', () => { if (!(sel.qty > 0)) { sel.qty = 0.25; } qin.value = fmtQty(sel.qty); qin.setAttribute('aria-valuenow', sel.qty); });
+      qin.addEventListener('blur', () => {
+        // P2 playtest: "1,234" is refused by numParse (grouped, ambiguous with a
+        // decimal comma) but blur used to clamp the FIELD to 0.25 regardless,
+        // so it looked valid while amtRaw (what Add actually checks) still held
+        // the refused text. Leave invalid text on screen; only a genuinely
+        // blank field gets the 0.25 default.
+        if (amtRaw != null && !numParse(amtRaw).ok && numParse(amtRaw).why !== 'empty') return;
+        if (!(sel.qty > 0)) { sel.qty = 0.25; }
+        qin.value = fmtQty(sel.qty);
+        qin.setAttribute('aria-valuenow', sel.qty);
+      });
       $$('.t1-step button', qtyArea).forEach(b => b.addEventListener('click', () => {
         amtRaw = null;
         sel.qty = Math.max(0.25, Math.round(((sel.qty || 1) + Number(b.dataset.d)) * 100) / 100);
@@ -8174,32 +8624,40 @@ function openPortion(food, { meal = 0, entry = null, via = null, sel: sel0 = nul
     });
   }
 
+  /* P2 playtest: while amtRaw holds text numParse refuses (e.g. "1,234",
+     grouped/ambiguous with a decimal comma), sel.qty/grams already sit at
+     whatever the live-typing coercion left them (usually 0), so the old
+     preview showed "0 kcal" and "0 x 1 large": a valid-looking answer the
+     draft does not actually hold. Blank it instead, same signal the Add
+     toast gives; a genuinely blank field (why: 'empty') still previews
+     normally off the last valid amount. */
   function preview() {
-    const n = nutrientsFor(food, sel) || { kcal: 0, p: 0, c: 0, f: 0 };
+    const badRaw = amtRaw != null && !numParse(amtRaw).ok && numParse(amtRaw).why !== 'empty';
+    const n = badRaw ? null : (nutrientsFor(food, sel) || { kcal: 0, p: 0, c: 0, f: 0 });
     /* M17: the stepper moved 1 to 1.25 with no aria-valuenow change. Every
        amount change (typed, stepped, chip) reaches preview(), so the spinbutton
        is kept in step here; #pvKcal is aria-live, so 282 to 353 is announced. */
     const amtEl = $(sel.mode === 'grams' ? '#gramsIn' : '#qtyIn', wrap);
     if (amtEl) amtEl.setAttribute('aria-valuenow', sel.mode === 'grams' ? sel.grams : sel.qty);
-    $('#pvKcal', wrap).textContent = Math.round(n.kcal).toLocaleString();
+    $('#pvKcal', wrap).textContent = n ? Math.round(n.kcal).toLocaleString() : '-';
     // QA r25 M19 follow-up: custom foods now keep untyped macros as null, and
     // fmtG(null) is '-', which read '-g'. Unknown stays a bare dash.
     const gOr = v => v == null ? '-' : fmtG(v) + 'g';
-    $('#pvP', wrap).textContent = gOr(n.p);
-    $('#pvC', wrap).textContent = gOr(n.c);
-    $('#pvF', wrap).textContent = gOr(n.f);
-    $('#pvServ', wrap).textContent = portionLabel(food, sel) || '';
+    $('#pvP', wrap).textContent = n ? gOr(n.p) : '-';
+    $('#pvC', wrap).textContent = n ? gOr(n.c) : '-';
+    $('#pvF', wrap).textContent = n ? gOr(n.f) : '-';
+    $('#pvServ', wrap).textContent = n ? (portionLabel(food, sel) || '') : '';
     /* The bars show THIS food's own macro split, not its share of the day. A
        single apple against a daily protein target is 1% and every bar reads as
        broken; its share of its own calories is always meaningful. */
-    const kp = (n.p || 0) * 4, kc = (n.c || 0) * 4, kf = (n.f || 0) * 9;
+    const kp = n ? (n.p || 0) * 4 : 0, kc = n ? (n.c || 0) * 4 : 0, kf = n ? (n.f || 0) * 9 : 0;
     const sum = kp + kc + kf;
     const bar = (id, part) => {
       const el = $(id, wrap);
       if (el) el.style.width = sum > 0 ? Math.round((part / sum) * 100) + '%' : '0%';
     };
     bar('#pvPBar', kp); bar('#pvCBar', kc); bar('#pvFBar', kf);
-    renderPayoff(n);
+    renderPayoff(n || { kcal: 0, p: 0, c: 0, f: 0 });
     // M16: preview() runs on open and on every portion or meal change, so it is
     // the one place the draft learns about this sheet
     if (addDraft && !editing) stampAddDraft({ sheet: 'portion', foodId: food.id, sel: { ...sel }, meal: curMeal });
@@ -8409,13 +8867,15 @@ function openQuickAdd(getMeal, entry = null) {
       <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
     </div>
     <div class="sheet-body">
-      <div class="t1-field hot"><label>Calories</label><input id="qaKcal" type="text" inputmode="numeric" placeholder="0" value="${entry ? Math.round(entry.kcal) : ''}"></div>
-      <div class="t1-field"><label>What was it</label><input id="qaName" placeholder="Dinner out (optional)" value="${esc(entry?.name === 'Quick add' ? '' : entry?.name || '')}"></div>
+      <div class="t1-field hot"><label>Calories</label><input id="qaKcal" type="text" inputmode="numeric" placeholder="0" value="${entry ? Math.round(entry.kcal) : ''}" aria-label="Calories"></div>
+      <div class="t1-field"><label>What was it</label><input id="qaName" placeholder="Dinner out (optional)" value="${esc(entry?.name === 'Quick add' ? '' : entry?.name || '')}" aria-label="What was it"></div>
       ${t1Sect('Macros, if you know them')}
       <div class="t1-g3">
-        <div class="t1-field"><label>Protein<span class="u">g</span></label><input id="qaP" type="text" inputmode="decimal" placeholder="·" value="${entry?.p ? fmtG(entry.p) : ''}"></div>
-        <div class="t1-field"><label>Carbs<span class="u">g</span></label><input id="qaC" type="text" inputmode="decimal" placeholder="·" value="${entry?.c ? fmtG(entry.c) : ''}"></div>
-        <div class="t1-field"><label>Fat<span class="u">g</span></label><input id="qaF" type="text" inputmode="decimal" placeholder="·" value="${entry?.f ? fmtG(entry.f) : ''}"></div>
+        <!-- P2 playtest, a11y: all three shared placeholder="." and no label
+             association, so a screen reader read three identical "textbox"es. -->
+        <div class="t1-field"><label>Protein<span class="u">g</span></label><input id="qaP" type="text" inputmode="decimal" placeholder="·" value="${entry?.p ? fmtG(entry.p) : ''}" aria-label="Protein, grams"></div>
+        <div class="t1-field"><label>Carbs<span class="u">g</span></label><input id="qaC" type="text" inputmode="decimal" placeholder="·" value="${entry?.c ? fmtG(entry.c) : ''}" aria-label="Carbs, grams"></div>
+        <div class="t1-field"><label>Fat<span class="u">g</span></label><input id="qaF" type="text" inputmode="decimal" placeholder="·" value="${entry?.f ? fmtG(entry.f) : ''}" aria-label="Fat, grams"></div>
       </div>
       ${entry ? '' : '<p class="note" style="margin-top:2px">Worth +10 XP, same as any other log.</p>'}
       ${entry ? '<div style="height:12px"></div><button class="btn danger" id="qaDel">Delete entry</button>' : ''}
@@ -8762,10 +9222,15 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
     : 0;
   const missing = k => (fromLabel && (v(k) === '' || v(k) == null) ? ' check' : '');
   const flag = k => (missing(k) ? '<span class="t1-tag warn">Check</span>' : '');
+  // P2 playtest, a11y: these numeric fields carried a visual <label> with no
+  // for/id and no aria-label, so a screen reader read every one of them as a
+  // bare "textbox". aria-label spells the unit out (UNIT_WORD) rather than
+  // reading "g" or "mg" as its own word.
+  const UNIT_WORD = { g: 'grams', mg: 'milligrams' };
   const fld = (id, label, key, unit = '', extra = '') => `
     <div class="t1-field${missing(key)}">
       <div class="lbl"><label>${label}${unit ? `<span class="u">${unit}</span>` : ''}</label>${flag(key)}</div>
-      <input id="${id}" type="text" inputmode="${extra || 'decimal'}" value="${v(key)}">
+      <input id="${id}" type="text" inputmode="${extra || 'decimal'}" value="${v(key)}" aria-label="${label}${unit ? ', ' + (UNIT_WORD[unit] || unit) : ''}">
     </div>`;
 
   const wrap = openSheet(`
@@ -8784,12 +9249,12 @@ function openFoodForm({ existing = null, barcode = null, meal = 0, prefill = nul
       </div>` : ''}
       <div class="warn" id="ffWarn"${warnings.length ? '' : ' hidden'}>${warnings.map(esc).join('<br>')}</div>
       ${t1Sect('What is it')}
-      <div class="t1-field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || pv.name || '')}"></div>
-      <div class="t1-field"><label>Brand</label><input id="ffBrand" placeholder="Optional" value="${esc(f?.brand || '')}"></div>
+      <div class="t1-field"><label>Name</label><input id="ffName" placeholder="e.g. Protein granola" value="${esc(f?.name || pv.name || '')}" aria-label="Name"></div>
+      <div class="t1-field"><label>Brand</label><input id="ffBrand" placeholder="Optional" value="${esc(f?.brand || '')}" aria-label="Brand"></div>
       ${t1Sect('One serving')}
       <div class="t1-g2">
-        <div class="t1-field"><label>Serving</label><input id="ffServ" value="${esc(servingLabel)}"></div>
-        <div class="t1-field"><label>Grams<span class="u">(optional)</span></label><input id="ffGrams" type="text" inputmode="decimal" value="${servingGrams ?? ''}" placeholder="e.g. 55"></div>
+        <div class="t1-field"><label>Serving</label><input id="ffServ" value="${esc(servingLabel)}" aria-label="Serving"></div>
+        <div class="t1-field"><label>Grams<span class="u">(optional)</span></label><input id="ffGrams" type="text" inputmode="decimal" value="${servingGrams ?? ''}" placeholder="e.g. 55" aria-label="Grams, optional"></div>
       </div>
       ${t1Sect('Per serving')}
       <div class="t1-g2">
@@ -8966,7 +9431,7 @@ function petShelfHtml(ownedCos, coinBal) {
       <div class="pet-name">${esc(pet.name)}</div>
       <p>${esc(PET_SHOP.pet.blurb)}</p>
       <button class="t3-price pet-buy" data-petbuy="${PET_SHOP.pet.id}" data-amt="${PET_SHOP.pet.coin}"
-        ${coinBal < PET_SHOP.pet.coin ? 'data-short="1"' : ''}>${PET_SHOP.pet.coin.toLocaleString()}</button>
+        ${coinBal < PET_SHOP.pet.coin ? 'data-short="1"' : ''}><span class="sr-only">Buy ${esc(pet.name)} for </span>${PET_SHOP.pet.coin.toLocaleString()}<span class="sr-only"> coins</span></button>
     </div>
   </div>`;
   /* The accessories stay visible before she is owned, but they cannot be bought:
@@ -8984,7 +9449,7 @@ function petShelfHtml(ownedCos, coinBal) {
       ${owned ? `<div class="rk-owned">In your Wardrobe</div>`
         : locked ? `<div class="pet-lock">Needs ${esc(pet.name)}</div>`
         : `<button class="t3-price pet-buy" data-petbuy="${it.id}" data-amt="${it.coin}"
-             ${coinBal < it.coin ? 'data-short="1"' : ''}>${it.coin.toLocaleString()}</button>`}
+             ${coinBal < it.coin ? 'data-short="1"' : ''}><span class="sr-only">Buy ${esc(a.name)} for </span>${it.coin.toLocaleString()}<span class="sr-only"> coins</span></button>`}
     </div>`;
   };
   return `<div class="pet-shelf">${hero}
@@ -8992,6 +9457,171 @@ function petShelfHtml(ownedCos, coinBal) {
     <div class="pet-row">${PET_SHOP.items.map(tile).join('')}</div>
   </div>`;
 }
+/* Football kit, 2026-09-04: THE KIT ROOM. FIVE tiles, not 160: the unit of sale
+   is the GARMENT and buying one grants it in all 32 colourways (section 7.8 of
+   docs/FOOTBALL-KIT.md). The <select> over 32 teams is therefore a PREVIEW, and
+   it picks which colourway the five tiles are painted in. The five: helmet
+   (grants its three visors), jersey, cleats, and the lizard's helmet and
+   jersey. Player pieces are shown WORN on the neutral
+   mannequin through wornArtHtml, the rack's own rule; pet pieces on the Beardie
+   through croppedPetImg with an explicit wear object so the viewer's own
+   S.petWear never leaks onto a product shot. Gated by FOOTBALL_KIT_LIVE at the
+   call site; the price is FOOTBALL_KIT_PRICE_PLACEHOLDER and the buy path
+   refuses while it is not a number, so a live shelf with no price sells nothing. */
+/* THE KIT-ROOM TILE'S REAL WORST-CASE css, MEASURED (not the `88 * 2.3` guess
+   it replaces). `.fb-worn` is an 88px box, but `.pc-worn` inside it is the
+   file's usual 1/0.86 crop window -- 102.3px, matching the number every other
+   .fit-* call site here derives the same way -- and .fit-fbhead/.fit-torso/
+   .fit-feet (app.css) scale that panel by 1.4/1.7/2.2, not one flat 2.3 for
+   all three. Measured 393x852 DPR 2, 2026-09-05, tests/memory-census.mjs's own probe. */
+const FB_TILE_W = 88 / 0.86;
+const FB_TILE_SCALE = { 'fit-fbhead': 1.4, 'fit-torso': 1.7, 'fit-feet': 2.2 };
+/* NO CAP ANY MORE (2026-09-05): the caps here used to buy back memory the
+   poster hero was spending on a tier too small to serve its own box (see the
+   thumb:384 note on the hero above). Now that the kit room's tiles do not
+   decode at all while #fbSect is closed -- t3-dropbody below renders empty
+   until the details' own 'toggle' event fires -- there is nothing left to buy
+   back, so this returns the honest measured width and lets wornArtHtml's
+   bhTierFor pick from it same as every other caller: 384 for the helmet/jersey
+   (~143/174px, both clear it) and the 640 master for the cleats (~225px,
+   clears no tier -- fit-feet's crop is the steepest of the three). */
+const kitTierCss = it => FB_TILE_W * (FB_TILE_SCALE[fitClass(it)] || 2.3);
+function footballShelfHtml(ownedCos, coinBal, open = false) {
+  const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];   // the PREVIEW colourway, not a variant on sale
+  const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
+  const sold = FOOTBALL_SHELF;                                       // five garments, not 32 teams x five
+  /* OWNED, NOT "owned in the previewed team": a garment bought in any team
+     hands over all 32 (footballGrantIds), so counting by the preview team and
+     counting by ANY team agree, and footballOwnedGarmentCount is the one place
+     that rule lives (also used by buyFootballBundle's pricing below). */
+  const ownedHere = footballOwnedGarmentCount(ownedCos);
+  /* THE BUNDLE TILE. One extra cell at the end of the same grid, because it is
+     the same decision at a different size and a separate poster would compete
+     with the pieces it contains. `kit` is the flat listed price (the summary
+     line above the fold, unaffected by ownership); `quote` is what THIS
+     player actually pays right now: min(bundle, price x missing garments),
+     never the flat price for pieces already owned (Tom, 2026-09-05,
+     Impeccable's football-kit critique). */
+  const kit = footballBundleMath();
+  const quote = footballBundleQuote(ownedHere);
+  const bundleOwned = ownedHere === sold.length;
+  /* skip: ['C'] sits on the call line on purpose: figure-audit STACK reads each
+     avatarLayersHtml call in a two-line window (2026-09-05).
+     A comment placed HERE, above `return`, not between the markup lines below:
+     everything from the opening backtick to the closing one is a template
+     literal, so a comment sitting between two tags outside a `${}` is not a
+     comment at all -- it is literal text the browser renders as a real text
+     node. That is exactly how this got here (2026-09-05): the two blocks below
+     used to live inside the avatarLayersHtml call's own argument list (a real
+     JS comment, safe), and moving them "above the call line" for readability
+     put them in the HTML instead, as an 877-char text node sitting before
+     .pc-worn inside .fb-hero. That stray in-flow node blew out .pc-worn's
+     shrink-to-fit width (auto width, left:50%, right:auto) to 954px against
+     fb-hero's real 172px, scaling the whole mannequin 4.77x -- see
+     art-resolution-audit.mjs's RESOLUTION row and tests/proof/hero-after.png.
+     MEASURED OFF THE RENDER, 440x956 DPR 2 (art-resolution-audit.mjs's own
+     viewport): this poster's mannequin draws at 507 device px. Capped at 192 it
+     was 2.64x its source -- the exact defect that file exists to catch -- and
+     Tom had already flagged this poster as blurry once today. 384 clears it at
+     507/384 = 1.32x; the master would too (507/640 = 0.79x) but costs 0.44
+     MB/layer more for a sharpness margin nobody asked for. Sharpness wins for
+     the hero (it is the biggest art on the shop screen), paid for by the kit
+     room's five tiles no longer decoding while #fbSect is closed -- see
+     t3-dropbody below. */
+  return `
+  <details class="t3-dropsect" id="fbSect"${open ? ' open' : ''}>
+    <summary class="t3-drop fb-drop">
+      <div class="fb-hero">
+        <div class="pc-worn fit-body">${avatarLayersHtml({ ...RACK_BASE, ...Object.fromEntries(sold.filter(g => !g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])) }, { wpnAura: null, skip: ['C'], thumb: 384 })}</div>
+        <span class="fb-hero-pet">${croppedPetImg(FOOTBALL_PETS[0], 96, false, null,
+          /* Same poster, same 1.4x rule: measured 444 device px, 444/192 = 2.31x
+             (also over) -> 444/384 = 1.16x. The two portraits in this poster
+             shared one cap before; they share one honest tier now instead. */
+          Object.fromEntries(sold.filter(g => g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])), 384)}</span>
+      </div>
+      <div class="tx">
+        <span class="eyebrow">Locker room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
+        <h2>FOOTBALL KIT</h2>
+        <small>Helmet, jersey and cleats for your Bonehead. A helmet and jersey for the lizard. Buy a piece and it is yours in every team's colours.</small>
+        <div class="fb-teams" role="img" aria-label="${FOOTBALL_TEAMS.length} team colourways">${FOOTBALL_TEAMS.map(t => `<i class="fb-swatch xs" style="--fa:${t.a};--fb:${t.b}"></i>`).join('')}</div>
+        <span class="t3-price">${Number.isFinite(price) ? `${ICONS.coin(13)} ${price.toLocaleString()} a piece${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} the lot` : ''}` : 'Not for sale yet'}</span>
+      </div>
+    </summary>
+    <div class="t3-dropbody">${
+      /* THE KIT ROOM'S OWN t1 COST. Five tiles and a bundle tile, each a full
+         mannequin stack (three to five layers apiece) -- the exact shape the
+         hero above pays extra to be sharp, and this is where that gets paid
+         back. EMPTY ON PURPOSE while closed, same pattern as the Today teaser
+         wall (1C): a closed <details> still keeps every <img> its markup
+         names in the document and the browser still decodes them (measured --
+         see the census note on this screen), so writing the tiles in here
+         unconditionally cost the same memory whether or not a player ever
+         opens the kit room. Filled by the 'toggle' listener on first open,
+         below in renderShop; wasOpen.fb re-renders it open-and-filled across a
+         team change or a buy so a re-render never blanks what the player is
+         looking at. */
+      open ? footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned) : ''
+    }</div>
+  </details>`;
+}
+/* THE KIT ROOM GRID, pulled out of footballShelfHtml so the 'toggle' listener
+   in renderShop can build the exact same markup on first open. team/sold/
+   price/quote/bundleOwned are cheap synchronous reads and the listener
+   re-derives its own copy rather than reaching into this closure. */
+function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned) {
+  return `
+      <label class="fb-pick"><span>Team</span>
+        <select id="fbTeam">${FOOTBALL_TEAMS.map(t => `<option value="${t.id}"${t.id === team.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
+        <i class="fb-swatch" style="--fa:${team.a};--fb:${team.b}"></i></label>
+      <div class="drop-grid">
+        ${sold.map(g => {
+          const id = footballItemId(team.id, g.key);   // the PREVIEW id: the tile sells the garment, in every team
+          const owned = ownedCos.has(id);
+          /* THE PET TILE (g.pets) is pinned to 192, below what bhTierFor's
+             strict rule would allow (her PET_CROP puts the real worst-case
+             css at ~203-221 here, clearing no tier at all) -- same cap as
+             fb-hero-pet above, same lizard. The human tile below is no longer
+             capped (kitTierCss now returns the honest measured width): the
+             helmet/jersey land on 384, the cleats' steeper fit-feet crop
+             (~225px) clears no tier and takes the 640 master, and none of it
+             is decoded at all unless this body is actually open. */
+          const art = g.pets
+            ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 192)
+            : `<div class="fb-worn">${wornArtHtml(id, kitTierCss(BH_BY_ID[id]))}</div>`;
+          /* SELLABLE (the piece is on sale at all) is separate from AFFORDABLE
+             (this wallet can cover it right now): unsellable stays disabled
+             ("Soon"), unaffordable is enabled with `cant` and toasts the exact
+             shortfall on tap instead of ignoring it, the rack's own rule. */
+          const sellable = Number.isFinite(price);
+          const canBuy = sellable && coinBal >= price;
+          return `<div class="drop-item fb ${owned ? 'owned' : ''}">
+            ${art}
+            <b>${esc(g.label)}</b>
+            <small class="fb-kitline">All ${FOOTBALL_TEAMS.length} colourways</small>
+            ${owned
+              ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
+              : `<button class="drop-buy${sellable && !canBuy ? ' cant' : ''}" data-buyfb="${id}" data-amt="${price}" ${sellable ? '' : 'disabled'} aria-label="Buy the ${esc(g.label)}${sellable ? `, ${price.toLocaleString()} coins` : ''}, all ${FOOTBALL_TEAMS.length} teams">${sellable ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
+          </div>`;
+        }).join('')}
+        <div class="drop-item fb fb-bundle ${bundleOwned ? 'owned' : ''}">
+          <div class="fb-kitmark" style="--fa:${team.a};--fb:${team.b}"><span>${sold.length}</span></div>
+          <b>The full kit</b>
+          <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')} · all ${FOOTBALL_TEAMS.length} colourways</small>
+          ${(() => {
+            const bundleSellable = footballBundleSellable();
+            const canBuyBundle = bundleSellable && Number.isFinite(quote.cost) && coinBal >= quote.cost;
+            return bundleOwned
+              ? `<button class="drop-buy" disabled>The whole kit is yours</button>`
+              : `<button class="drop-buy${bundleSellable && !canBuyBundle ? ' cant' : ''}" data-buyfbkit="all" data-amt="${quote.cost}" ${bundleSellable ? '' : 'disabled'} aria-label="Buy the full kit${bundleSellable ? `, ${quote.cost.toLocaleString()} coins` : ''}, all ${FOOTBALL_TEAMS.length} teams">${
+                  bundleSellable ? `${ICONS.coin(12)} ${quote.cost.toLocaleString()}` : 'Soon'}</button>`;
+          })()}
+          ${Number.isFinite(quote.save) && quote.save > 0
+            ? `<small class="fb-save">Was ${quote.full.toLocaleString()} · you save ${quote.save.toLocaleString()}</small>`
+            : ''}
+        </div>
+      </div>`;
+}
+
 async function renderShop(el) {
   const [fighter, coinBal, dustBal, ownedCos, rk, playerEq, auraWorn, eggBought] =
     await Promise.all([buildFighter(), coins(), boneDust(), ownedCosmeticIds(), rack(), equipped(), wornAura(), dustEggBought()]);
@@ -9025,7 +9655,9 @@ async function renderShop(el) {
      theme, four racks inside it, this is rack N, and the right-hand side is a
      COUNTDOWN rather than a weekday ("New rack Monday" is ambiguous across
      timezones and reads as nonsense when you open the app on a Monday). */
-  const rackNo = Math.min(4, Math.ceil(new Date().getDate() / 7));
+  const weekKey = isoWeekKey(new Date());
+  const weekNum = parseInt(weekKey.split('-W')[1]);
+  const rackNo = ((weekNum - 1) % 4) + 1;
   const rackDaysLeft = (8 - (new Date().getDay() || 7)) % 7 || 7;
   /* RACK_BASE and RACK_FIT are module-level now (see wornArtHtml): the reveal
      cards draw the same mannequin, and two copies of the neutral base would
@@ -9055,9 +9687,20 @@ async function renderShop(el) {
        their own ground and a filled one 10.1:1. What it drops is the button
        affordance, not the price. It stays pressable and says what is missing,
        because a control that answers is kinder than one that ignores you. */
+  /* AND IT SAYS WHAT IT BUYS. Measured (r33 a11y): 41 of the 76 interactive
+     elements on this screen had an accessible name that was the number and
+     nothing else, so VoiceOver read "3,000" with no piece and no currency, forty
+     times down one screen. The name is carried by TWO .sr-only spans rather than
+     an aria-label on purpose: armToConfirm swaps the button's innerHTML to
+     "Buy?" on the first tap and never touches aria-label, so a label would have
+     kept announcing the resting price over the armed confirm state. Spans ride
+     innerHTML, so the armed button correctly names itself "Buy?" and restore()
+     puts the full name back. .sr-only is the app's one visually-hidden utility
+     (app.css:132), no visual change. */
+  const rackPieceName = id => id === RACK_AURA.key ? RACK_AURA.name : (BH_BY_ID[id]?.name || 'this piece');
   const rackPrice = (id, kind, amount, bal) =>
-    `<button class="t3-price${kind === 'dust' ? ' dust' : ''}${bal >= amount ? '' : ' cant'}" data-buyrack="${esc(id)}" data-cur="${kind}" data-amt="${amount}">${
-      kind === 'dust' ? ICONS.dust(13) : ICONS.coin(13)} ${amount.toLocaleString()}</button>`;
+    `<button class="t3-price${kind === 'dust' ? ' dust' : ''}${bal >= amount ? '' : ' cant'}" data-buyrack="${esc(id)}" data-cur="${kind}" data-amt="${amount}"><span class="sr-only">Buy ${esc(rackPieceName(id))} for </span>${
+      kind === 'dust' ? ICONS.dust(13) : ICONS.coin(13)} ${amount.toLocaleString()}<span class="sr-only"> ${kind === 'dust' ? 'Bone Dust' : 'coins'}</span></button>`;
   const rackBuyRow = (id, coin, dust, extra = '') => rackOwns(id)
     ? '<div class="rk-buy"><span class="rk-owned">' + ICONS.check(13) + ' Owned</span></div>'
     : `<div class="rk-buy${extra}">${rackPrice(id, 'coin', coin, coinBal)}<i class="rk-or">or</i>${rackPrice(id, 'dust', dust, dustBal)}</div>`;
@@ -9124,7 +9767,7 @@ async function renderShop(el) {
   const rackTile = (id, coin, dust, thumb) => {
     const it = BH_BY_ID[id];
     return `<div class="rk r-${it.rarity}${rackOwns(id) ? ' owned' : ''}">
-      <button class="rk-stage ${RACK_FIT[it.slot] || ''}" data-tryon="${id}" data-coin="${coin}" data-dust="${dust}" aria-label="Try on ${esc(it.name)}"
+      <button class="rk-stage ${fitClass(it) || ''}" data-tryon="${id}" data-coin="${coin}" data-dust="${dust}" aria-label="Try on ${esc(it.name)}"
         >${avatarLayersHtml({ ...RACK_BASE, [it.slot]: id }, { wpnAura: null, skip: ['C'], ...(thumb ? { thumb } : {}) })}<span class="rk-try">${ICONS.searchIco(15)}</span></button>
       ${rackTag(it.rarity)}<b>${esc(it.name)}</b>
       ${rackBuyRow(id, coin, dust)}
@@ -9264,8 +9907,48 @@ async function renderShop(el) {
   const cheapestRack = Math.min(...allRackCoins);
   const afford = { coins: allRackCoins.filter(c => c <= coinBal).length, dust: allRackDust.filter(d => d <= dustBal).length };
 
+  /* THE SUPPLIES PANEL AND ITS TWO SHELVES SURVIVE A RE-RENDER. Every buy and
+     the kit room's team picker call rerender(), which rebuilds el.innerHTML, so
+     the reveal state lived only in the markup being thrown away: picking a
+     second team slammed the kit room shut AND re-hid #shopRestBody, leaving the
+     player back at "Potions and charms" after every single tap, and a drop
+     purchase did the same to the drop shelf. Read it off the outgoing markup and
+     put it back. Anti-regression rule 8: the control that hides them owns
+     un-hiding them, and a re-render is not the player asking to close. */
+  const wasOpen = {
+    rest: !!$('#shopRestBody', el) && !$('#shopRestBody', el).hidden,
+    drop: !!$('#dropSect', el)?.open,
+    /* S.fbJump: the wardrobe's colourway rail sent them here for a colourway
+       they do not own, so the shelf it named is the shelf that opens. One-shot,
+       cleared below, so a later visit is a normal visit. */
+    fb: !!$('#fbSect', el)?.open || S.fbJump,
+  };
+
+  /* THE LEAD SHELF AND THE ONE BEHIND IT. Tom, 2026-09-04: "nfl shit goes to
+     the lead shelf of the shop", then, on the first attempt at the rest of it:
+     "dont put her in potion supplies find a way to have her prominent in the
+     shop but less than NFL." The first pass put her in the drop-shelf area,
+     which lives inside #shopRestBody behind the "Potions and charms · Supplies"
+     button, so a 50,000-coin legendary was invisible until somebody tapped. She
+     is SECOND now: the Kit room leads, she follows it immediately under a
+     heading of her own, both above the rack strip and neither behind a tap.
+
+     FLAG OFF, NOTHING MOVES, and that is the property that matters more than
+     the kit does: fbLead is '' and petLead is the bare pet shelf, so the
+     template below emits the byte-identical string it emitted before the kit
+     existed. Pinned by tests/shop-lead-order-audit.mjs (boxes on a screen) and
+     tests/unit.test.js (the order of the string). */
+  const petShelf = petShelfHtml(ownedCos, coinBal);
+  const fbLead = FOOTBALL_KIT_LIVE ? footballShelfHtml(ownedCos, coinBal, wasOpen.fb) : '';
+  /* Second under a heading of her own: arriving straight after the Kit room with
+     no label, she reads as part of it. .rk-theme is the strip the rack and the
+     rotating shelf already use, so this adds no CSS. */
+  const petLead = FOOTBALL_KIT_LIVE
+    ? `<div class="rk-theme"><b>GWART'S MENAGERIE</b><i></i><span>Pets and their gear</span></div>${petShelf}`
+    : petShelf;
+
   el.innerHTML = `
-  ${petShelfHtml(ownedCos, coinBal)}
+  ${fbLead}${petLead}
   <div class="rk-theme"><b>${esc(RACK_THEME)} · RACK ${rackNo} OF 4</b><i></i><span>New rack in ${rackDaysLeft}d</span></div>
   <!-- WHAT THIS WALLET REACHES, said in numbers rather than left to be inferred
        from which pills happen to be filled. A player at 340 coins could not buy
@@ -9301,9 +9984,9 @@ async function renderShop(el) {
   <button class="rk-reroll" id="rackReroll"${coinBal < rerollCost ? ' disabled' : ''}><span class="rk-rr"><b>Reroll this shelf</b><small>A fresh ${rotIds.length}, drawn from the whole catalogue. The ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())} nine above stay put.</small></span>
     <span class="t3-price">${rerollCost === 0 ? 'FREE' : `${ICONS.coin(13)} ${rerollCost.toLocaleString()}`}</span></button>` : ''}
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Potions and charms</b><small>Supplies ›</small></button>
-  <div id="shopRestBody" hidden>
+  <div id="shopRestBody"${wasOpen.rest ? '' : ' hidden'}>
 
-  <details class="t3-dropsect" id="dropSect">
+  <details class="t3-dropsect" id="dropSect"${wasOpen.drop ? ' open' : ''}>
     <summary class="t3-drop">
       ${dropOwned < DROP.items.length ? '<span class="new">NEW</span>' : ''}
       <span class="eyebrow">Fresh drop · ${DROP.items.length} pieces${dropOwned ? ` · ${dropOwned} yours` : ''}</span>
@@ -9395,12 +10078,28 @@ async function renderShop(el) {
   }));
   // Drop pieces: same two-tap arm-then-buy ritual as the coin shop, because these
   // are the most expensive single taps in the game.
-  el.querySelectorAll('[data-buydrop]').forEach((b => {
+  /* PULLED INTO A NAMED FUNCTION (2026-09-05) so the kit room's 'toggle'
+     listener below can wire the SAME buttons a second time, scoped to just
+     the tiles it just inserted: the kit room's own buy buttons do not exist
+     in `el` at all until the section is opened for the first time (its body
+     is lazy, see footballShelfHtml), so the one-shot querySelectorAll below
+     never sees them unless the section started open. */
+  const wireDropBuyButtons = scope => scope.querySelectorAll('[data-buydrop], [data-buyfb], [data-buyfbkit]').forEach((b => {
     let t = null;
     let busy = false;
     const reset = () => { b.dataset.armed = '0'; b.innerHTML = b.dataset.label || b.innerHTML; };
     b.addEventListener('click', async () => {
       if (busy) return;   // same latch as armToConfirm: a queued tap is not a new decision
+      /* CANT: this wallet cannot cover it, so there is nothing an arm-then-
+         confirm dance protects against. One tap answers with the shortfall,
+         the rack's own rule ("a control that answers is kinder than one that
+         ignores you"), instead of making an unaffordable price play the same
+         two-tap ritual as a real spend. */
+      if (b.classList.contains('cant')) {
+        const amt = +b.dataset.amt;
+        toast(`That costs ${amt.toLocaleString()}. You have ${coinBal.toLocaleString()}.`, 2600);
+        return;
+      }
       if (b.dataset.armed !== '1') {
         b.dataset.label = b.dataset.label || b.innerHTML;
         b.dataset.armed = '1'; b.textContent = 'Tap again to buy';
@@ -9410,16 +10109,57 @@ async function renderShop(el) {
       // reset() moved below the await for the armToConfirm reason: disarming
       // first re-armed the button in the same frame and let a burst buy twice.
       clearTimeout(t); busy = true;
-      const r = await buyDropItem(b.dataset.buydrop).finally(() => { busy = false; reset(); });
+      // Football kit, 2026-09-04: same arm-then-buy ritual, a second buy path behind it
+      const r = await (b.dataset.buyfbkit ? buyFootballBundle(b.dataset.buyfbkit)
+        : b.dataset.buyfb ? buyFootballItem(b.dataset.buyfb)
+        : buyDropItem(b.dataset.buydrop)).finally(() => { busy = false; reset(); });
       if (!r.ok) {
-        toast(r.reason === 'owned' ? 'Already in your Wardrobe.' : `Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600);
+        toast(r.reason === 'owned' ? 'Already in your Wardrobe.' : r.reason === 'not-stocked' ? 'Not for sale yet.' : `Not enough coins. That costs ${r.need.toLocaleString()}, you have ${r.have.toLocaleString()}.`, 2600);
         return;
       }
       levelSound(S.sounds); confettiBurst(innerWidth / 2, innerHeight * 0.35, 14);
-      toast(`${r.label} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left. Equip it in your Wardrobe.`, 3200);
+      toast(`${r.label} is yours. −${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left.`
+        + (r.granted ? ` ${r.granted} pieces${Number.isFinite(r.save) ? `, ${r.save.toLocaleString()} saved` : ''}.` : '')
+        + ' Equip it in your Wardrobe.', 3200);
       rerender();
     });
   }));
+  wireDropBuyButtons(el);
+  // Football kit, 2026-09-04: the kit room's team picker re-renders the shelf on its own team
+  $('#fbTeam', el)?.addEventListener('change', e => { S.fbTeam = e.target.value; rerender(); });
+  /* THE KIT ROOM'S BODY IS LAZY (2026-09-05): it does not exist in the markup
+     at all until #fbSect is opened, so its <img> tags never decode on a
+     player who never looks (see the census note on footballShelfHtml). This
+     is what fills it in, once, on the details' native 'toggle' event -- the
+     same event teaser-banner's .gbn-body is filled on (1C). team/sold/price/
+     quote/bundleOwned are re-derived here rather than threaded out of
+     footballShelfHtml's closure: they are five cheap synchronous reads, and
+     the alternative (storing them on S) is more state for the same answer.
+     `body.childElementCount` guards against re-filling an already-open
+     section: wasOpen.fb re-renders #fbSect already open AND already filled
+     (footballShelfHtml does that eagerly), so the FIRST toggle after a
+     buy/team-change re-render fires 'toggle' with nothing to do. */
+  $('#fbSect', el)?.addEventListener('toggle', e => {
+    if (!e.target.open) return;
+    const body = $('.t3-dropbody', e.target);
+    if (!body || body.childElementCount) return;
+    const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];
+    const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
+    const sold = FOOTBALL_SHELF;
+    const ownedHere = footballOwnedGarmentCount(ownedCos);
+    const quote = footballBundleQuote(ownedHere);
+    const bundleOwned = ownedHere === sold.length;
+    body.innerHTML = footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned);
+    $('#fbTeam', body)?.addEventListener('change', ev => { S.fbTeam = ev.target.value; rerender(); });
+    wireDropBuyButtons(body);
+  });
+  /* The rail's "Kit room" button lands here. Consume the flag BEFORE the scroll
+     so a rerender() from any buy on this screen is a normal render again, and
+     bring the shelf to them rather than leaving it open below the fold. */
+  if (S.fbJump) {
+    S.fbJump = false;
+    requestAnimationFrame(() => $('#fbSect', el)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }
   // the drop art sits small inside a 640² sprite sheet, so trim it to its ink
   // the same way the reveal cards do rather than showing a stamp in a big box
   hydratePackArt(el, '.t3-art[data-art]');
@@ -9434,11 +10174,18 @@ async function renderShop(el) {
       const amt = +b.dataset.amt;
       const r = await buyRackItem(b.dataset.buyrack, currency);
       if (!r.ok) {
-        toast(r.reason === 'owned' ? 'Already in your Wardrobe.'
+        /* SPOKEN AS WELL AS SHOWN, both outcomes. The toast IS a live region,
+           but it writes its text while it is still [hidden] and unhides in the
+           same tick, and a live region that is display:none when its content
+           lands is not reliably announced. #srLive is never hidden, so the one
+           sentence the player is owed after a spend is carried by both. Same
+           string, hoisted rather than written twice. */
+        const msg = r.reason === 'owned' ? 'Already in your Wardrobe.'
           : r.reason === 'write' ? `${r.label} did not save. Your coins are safe, tap again.`
           : r.reason === 'dust' ? `Need ${amt} Bone Dust (you have ${(r.have ?? dustBal).toLocaleString()}). Melt gear at the Salvage Bench.`
           : r.reason === 'coins' ? `Not enough coins. That costs ${amt.toLocaleString()}, you have ${(r.have ?? coinBal).toLocaleString()}.`
-          : 'That piece is not on the rack any more.', 2800);
+          : 'That piece is not on the rack any more.';
+        toast(msg, 2800); announce(msg);
         /* A RECOVERED PURCHASE JUST CHANGED THE TILE UNDER THE PLAYER'S FINGER.
            The early return skips the rerender every other path gets, so without
            this the piece is theirs and the rack still shows a price. */
@@ -9460,9 +10207,10 @@ async function renderShop(el) {
       const spent = r.currency === 'dust'
         ? `−${r.cost} dust, ${r.dust.toLocaleString()} left.`
         : `−${r.cost.toLocaleString()} coins, ${r.coins.toLocaleString()} left.`;
-      toast(r.isAura
+      const bought = r.isAura
         ? `${r.label} is on already, and every weapon you carry wears it. ${spent} Take it off on this tile any time.`
-        : `${r.label} is yours. ${spent} Free to wear in your Wardrobe.`, 3400);
+        : `${r.label} is yours. ${spent} Free to wear in your Wardrobe.`;
+      toast(bought, 3400); announce(bought);
       // bought from inside the try-on sheet: close it, so the rack behind it is
       // the thing the player lands on and the new Owned state is what they see
       if (inSheet && sheetStack.length) history.back();
@@ -10511,7 +11259,9 @@ async function renderFoods(el) {
   }
   function bind() {
     bindRows(list);
-    $('#newFood', list)?.addEventListener('click', () => openFoodForm({}));
+    // P1 playtest: bare {} lost the selected meal (defaulted to Breakfast); every
+    // other opener here carries mealDefault()'s precedence, this one now does too.
+    $('#newFood', list)?.addEventListener('click', async () => openFoodForm({ meal: await mealDefault() }));
     $('#myFoodsQ', list)?.addEventListener('input', e => {
       const q = normFoodName(e.target.value);
       const hit = q ? customs.filter(f => normFoodName(f.name).includes(q)) : customs;
@@ -10936,8 +11686,8 @@ async function renderFriends(el) {
     const shown = fresh.length ? fresh : rows.slice(0, 3);
     const rowHtml = r => `
       <div class="t3-row${isNew(r) ? ' unread' : ''}">
-        <span class="t3-med">${r.type === 'spire' ? badgePixHtml('tombstone', 20) : r.type === 'cheer' ? ICONS.bone(20) : ICONS.coin(20)}</span>
-        <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(deliveredWhen(r.ts))}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
+        <span class="t3-med">${r.type === 'spire' ? badgePixHtml('tombstone', 20) : (r.type === 'cheer' || r.type === 'crew') ? ICONS.bone(20) : ICONS.coin(20)}</span>
+        <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(deliveredWhen(r))}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
         ${isNew(r) ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
       </div>`;
     /* SEALED FIRST. Tom, 2026-08-08: "its boring to just have it appear with no
@@ -11037,7 +11787,7 @@ async function renderFriends(el) {
         <div class="cheer-tx">
           <b>${esc(who)}</b>
           <span class="cheer-said">${c ? esc(c.txt) : esc(r.label)}</span>
-          <small>${esc(deliveredWhen(r.ts))}</small>
+          <small>${esc(deliveredWhen(r))}</small>
         </div>
         ${r.cheerFrom ? `<button class="btn small ghost cheer-back" data-cheerback="${esc(r.cheerFrom)}" data-cheername="${esc(who)}">Cheer back</button>` : ''}
       </div>`;
@@ -11468,7 +12218,7 @@ async function renderFriends(el) {
     }
     inp.value = '';
     if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
-    else toast('Request sent. They just enter your code back to seal it.', 3600);
+    else toast(REQUEST_SENT_MSG, 3600);
     await paint();
   };
 
@@ -11645,7 +12395,7 @@ async function renderFriends(el) {
       const r = await social.friendAdd(b.dataset.lbadd);
       if (!r.ok) { b.disabled = false; b.textContent = '+ Add'; toast('Could not send that request. Try again.', 2600); return; }
       if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); b.outerHTML = `<span class="lb-tag crew">${ICONS.check(11)} Crew</span>`; }
-      else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); b.outerHTML = '<span class="lb-tag sent">Sent</span>'; }
+      else { popSound(S.sounds); toast(REQUEST_SENT_MSG, 3200); b.outerHTML = '<span class="lb-tag sent">Sent</span>'; }
       await paint();
     }));
   };
@@ -11892,7 +12642,7 @@ async function renderFriends(el) {
       const r = await social.friendAdd(b.dataset.lbadd);
       if (!r.ok) { b.disabled = false; b.textContent = '+ ADD'; toast('Could not send that request. Try again.', 2600); return; }
       if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
-      else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); }
+      else { popSound(S.sounds); toast(REQUEST_SENT_MSG, 3200); }
       await paint();
       hydrateNewcomers();
     }));
@@ -12017,7 +12767,7 @@ function openFriendProfile(f, onChange, opts = {}) {
       ${stranger ? (opts.isCrew
         ? `<p class="note" style="text-align:center;margin:6px 0 0">Already in your Crew.</p>`
         : opts.sent
-          ? `<p class="note" style="text-align:center;margin:6px 0 0">Request sent. They accept by adding you back.</p>`
+          ? `<p class="note" style="text-align:center;margin:6px 0 0">${REQUEST_SENT_MSG}</p>`
           /* NO TOKEN, NO BUTTON. friendAdd(undefined) is a guaranteed failure
              and all the player sees is "Could not send that request. Try
              again.", forever. A row can legitimately arrive without one: a
@@ -12061,7 +12811,7 @@ function openFriendProfile(f, onChange, opts = {}) {
     const r = await social.friendAdd(f.addToken);
     if (!r.ok) { b.disabled = false; b.textContent = '+ Add to my Crew'; toast(r.reached === false ? 'Could not reach the Crew server. Try again when you have signal.' : 'Could not send that request. Try again.', 3000); return; }
     if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
-    else { popSound(S.sounds); toast('Request sent. They accept by adding you back.', 3200); }
+    else { popSound(S.sounds); toast(REQUEST_SENT_MSG, 3200); }
     b.outerHTML = `<p class="note" style="text-align:center;margin:6px 0 0">${r.status === 'accepted' ? 'Already in your Crew.' : 'Request sent.'}</p>`;
     onChange && onChange();
   });
@@ -12758,6 +13508,12 @@ function newsBannerHtml(unseen, eq, dayClose) {
   </details>`;
 }
 
+/* DECLARED ABOVE ITS FIRST READER, on purpose (2026-09-04). This sat beside APP_BUILD at
+   the bottom of the file; the NEWS filter below reads it at MODULE LOAD, so every boot threw
+   "Cannot access 'SHOW_BETA_THANKS' before initialization" and the app never opened its
+   database. Caught only by the browser gate: app.js never loads in node. */
+const SHOW_BETA_THANKS = !STORE_BUILD; // internal invite card, Crew strip and News row; absent from store builds
+
 const NEWS = [
   /* THE WANDERER. Tom kept this row when every other launch interstitial went in
      v448: "the only news things staying are the new one with the wanderer on it
@@ -12842,7 +13598,7 @@ const NEWS = [
   /* The Bone Garden row came out on 2026-08-18 with the rest of the garden's
      player-facing routes: its CTA reopened openGardenPopup, whose own CTA opened
      the Hollow. REVIVAL: restore the row from git history at this line. */
-];
+].filter(n => !(n.id === 'thanks' && !SHOW_BETA_THANKS));
 
 function newsHtml(eq) {
   return NEWS.map(n => `
@@ -12859,7 +13615,7 @@ async function openWhatsNew() {
   const cards = CHANGES.map(c => `
     <div class="wn-entry">
       <div class="wn-head"><b>${esc(c.title)}</b><span class="wn-date">${esc(c.date)}</span></div>
-      ${c.needsBuild ? `<div class="wn-buildflag">📲 Needs the latest app update ${isNative() ? '(TestFlight / Play Store)' : ''} to work on your phone</div>` : ''}
+      ${c.needsBuild ? `<div class="wn-buildflag">📲 Needs the latest app update ${isNative() ? '(App Store / Play Store)' : ''} to work on your phone</div>` : ''}
       ${c.hero ? `<div class="wn-hero">
         ${c.hero.tag ? `<span class="rip">${esc(c.hero.tag)}</span>` : ''}
         <img src="${esc(c.hero.img)}" alt="${esc(c.hero.alt || '')}">
@@ -12882,7 +13638,7 @@ async function openWhatsNew() {
         <p class="note" style="margin:2px 2px 14px">Boneheadz Gym changes often. Here's what's new, newest first.</p>
         ${isNative() ? `<div class="wn-update-note">
           <b>📲 Update the app to get everything</b>
-          <span>The game here refreshes on its own, but brand-new <b>device features</b> (like workout &amp; bike-ride tracking from your watch) only arrive when you update the actual app. Open <b>TestFlight</b> (iPhone) or the <b>Play Store</b> (Android) and tap <b>Update</b>, then reopen Boneheadz.</span>
+          <span>The game here refreshes on its own, but brand-new <b>device features</b> (like workout &amp; bike-ride tracking from your watch) only arrive when you update the actual app. Open the <b>App Store</b> (iPhone) or the <b>Play Store</b> (Android) and tap <b>Update</b>, then reopen Boneheadz.</span>
         </div>` : ''}
         ${cards}
       </div>
@@ -12926,11 +13682,17 @@ async function openWhatsNew() {
     closeAllSheetsViaHistory();
     setTimeout(() => {
       n.open();
-      let waited = 0;
+      let waited = 0, gone = false;
       const back = setInterval(() => {
         waited += 300;
         const stillOpen = document.querySelector('.drop-veil') || document.querySelector('.tz-pop');
         if (stillOpen) return;
+        /* QA round 26 O1: a poster now closes through history.back() and its CTA
+           navigates 220ms AFTER that (hash, Hollow, shop), so the first tick that
+           sees no veil can land before the hash or the stack has moved and this
+           would re-open What's New only for route() to tear it down, or under the
+           Hollow. One more tick (300 > 220) and the CTA's destination is in place. */
+        if (!gone) { gone = true; return; }
         clearInterval(back);
         if (location.hash !== cameFrom) return;   // it took them somewhere deliberately
         /* AND A SHEET COUNTS AS "SOMEWHERE" TOO. This watched for a VEIL closing
@@ -13039,7 +13801,7 @@ async function renderSettings(el) {
     const AppPlug = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
     if (AppPlug && AppPlug.getInfo) { const i = await AppPlug.getInfo(); shellV = ` · shell ${i.version} (${i.build})`; }
   } catch { /* web: no shell */ }
-  const diag = await diagnosticsLine();
+  const diag = STORE_BUILD ? '' : await diagnosticsLine();
   const apiConfigured = !!(await social.apiBase());
   const me = apiConfigured ? await social.socialMe() : null;
   const crewData = me ? await social.listFriends().catch(() => ({ friends: [], incoming: [], outgoing: [] })) : null;
@@ -13214,7 +13976,7 @@ async function renderSettings(el) {
     ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
     <div class="settings-row"><div class="lab"><b>App version</b><span>Build ${APP_BUILD}${shellV} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
-    <div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>
+    ${STORE_BUILD ? '' : `<div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>`}
   </div>
 
   <p class="note" style="text-align:center;margin-top:18px">
@@ -14514,6 +15276,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
   const looksHave = await collectedLooks();
   // the fits cap, printed like every other cap in the app (QA round 23 F8)
   const fitCount = tab === 'wardrobe' ? (await fits()).length : 0;
+  // TILES, NOT PIECES (2026-09-05). The Collection this door opens draws one
+  // tile per bhFamilyKey, not one per owned piece, so a piece count on the
+  // door promised more than the screen behind it showed (looks-door-audit's
+  // COUNT row). bhFamilyKey folds in slot, so grouping across all of looksAll
+  // in one call is safe -- no cross-slot collisions.
+  const looksPieces = looksAll.filter(i => looksHave.has(i.id)).length;
+  const looksFamHave = bhFamilies(looksAll.filter(i => looksHave.has(i.id))).size;
+  const looksFamAll = bhFamilies(looksAll).size;
 
   const curtains = false; // dressing-room curtains retired (Tom's call)
   body.innerHTML = `
@@ -14533,7 +15303,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             it. Same .bh-pill as the wallet chips beside it, so it costs no new
             layout; it is a <button> with an accent edge so it reads as tappable
             rather than as one more read-only tally. */''}
-      <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${looksAll.filter(i => looksHave.has(i.id)).length}/${looksAll.length} looks</button>
+      <button class="bh-pill ward-looks" data-tab="looks">${sparkIco(13)} ${looksFamHave}/${looksFamAll} looks &middot; ${looksPieces} pieces</button>
       ${/* THE FITS CAP, STATED (QA round 23 F8). At 6 fits the save chip used to
             vanish with no copy and no total, the only storage cap in the app
             with none (the yard prints 24, favourites 6, recents 8, and the looks
@@ -14541,7 +15311,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <span class="bh-pill ward-fits">${fitCount}/${MAX_FITS} fits</span>
     </div>` : tab === 'shop' ? gwartHeroHtml() : `
     <div class="bh-hero mini">
-      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny })}</div>
+      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny, petWear: S.petWear })}</div>
       <div class="bh-hero-meta">
         <b class="bh-title">Lv ${lvl.level} · ${esc(myTitle || lvl.name)}</b>
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
@@ -14662,9 +15432,55 @@ async function renderCharacter(wrap, tab, opts = {}) {
        went missing on exactly the slots the panel was newly opened to. */
     const mogOf = code => ((gearLo[code] || rawEq[code]) ? tm[code] : null);
     const slotMeta = BH_SLOTS.find(s => s.code === slot);
-    const items = BH_ITEMS.filter(i => i.slot === slot && owned.has(i.id));
+    /* Football kit, 2026-09-04: WITH_UNRELEASED, filtered by ownership. An owned
+       piece must be wearable and previewable whether or not the kit is live yet;
+       nothing unowned leaks because `owned` is the filter. lockedCount below keeps
+       reading BH_ITEMS so an unreleased kit is not counted as "out there". */
+    const items = BH_ITEMS_WITH_UNRELEASED.filter(i => i.slot === slot && owned.has(i.id));
     const gearItems = GEAR_ITEMS.filter(g => g.slot === slot && gOwnedSet.has(g.id));
     const lockedCount = BH_ITEMS.filter(i => i.slot === slot).length - items.length;
+    /* ONE TILE PER DRAWING, NOT PER ITEM (Tom, 2026-09-04: "those that have
+       collected like 1000 head slots over the years will have a messy af
+       wardrobe"). The rule is in data/boneheadz.js with the art, measured
+       against the shipped silhouettes; here it only decides what gets a tile.
+       Measured on a full v473 collection at 390x844: Hat 57 tiles -> 36, a
+       1,420px grid -> 895px, and with the football kit's 128 helmets in the
+       catalogue 185 -> 40 rather than 185. A family of ONE is untouched below:
+       same classes, same one tap, no rail, because the fix for a big collection
+       must cost a small one nothing. */
+    const fams = [...bhFamilies(items).values()];
+    /* A FAMILY TILE ANSWERS TWO QUESTIONS AND THEY HAVE DIFFERENT ANSWERS.
+       The ART is the variant you are WEARING, because the tile is the only thing
+       on this screen that can say which one is on, and a family tile drawing a
+       colour you are not wearing is worse than no collapse at all. The RARITY
+       (border and tier letter) is the family's BEST, because 51 of the 59
+       families in the catalogue are mixed-rarity (T9 runs uncommon to legendary)
+       and QA round 23 F6 shipped the tier tag so a player can FIND their
+       legendaries in a big slot. Tie the tag to the worn variant instead and
+       collapsing hides every legendary behind whatever common you happen to have
+       on. Nothing else on the tile is invented: no family name, because deriving
+       one from the members' names is exactly the name-matching this rejected. */
+    const famArt = fam => fam.find(i => eq[slot] === i.id) || famBest(fam);
+    const famBest = fam => [...fam].sort((a, b) => RAR_ORDER.indexOf(b.rarity) - RAR_ORDER.indexOf(a.rarity))[0];
+    /* fbTintAttr rides the SAME item the tile shows (famArt: the worn variant, else the
+       family's best), so a collapsed football family paints in that colourway and every
+       rail tile paints its own. Without it the family tile drew the bare grey master. */
+    const famArtHtml = i => `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}"${fbTintAttr(i)} role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>`;
+    /* THE RAIL IS .pw-row, THE STABLE'S PET-ACCESSORY ROW, the same one the
+       football colourway rail specialises: flex, 8px gap, mandatory x-snap and
+       the 96px tile are all inherited, and only the size and the centre snap are
+       written in app.css. Its tiles carry data-equip like any other tile, so the
+       equip path, the ring and restageWardrobe need no idea it exists. NO
+       COMMIT BAR: the football rail has one because the SHOP charges. Trying a
+       colourway you already own is free and reversible, and this screen has
+       committed on the tap since v1. Built only at tap time, so it never carries
+       a stale `equipped` from render: the caller sets that from the live DOM. */
+    const famRailHtml = fam => `<div class="fam-rail pw-row" role="group" aria-label="${esc(famBest(fam).name)} colourways">
+        ${fam.map(i => `<button class="pw-item famr r-${i.rarity}" data-equip="${i.id}" title="${esc(i.name)} · ${esc(i.rarity)}" aria-label="${esc(i.name)}, ${esc(i.rarity)}">
+          <span class="famr-art">${famArtHtml(i)}${rarityTagHtml(i.rarity)}</span>
+          <b>${esc(i.name)}</b>
+        </button>`).join('')}
+      </div>`;
 
     const pdSlot = code => {
       const meta = BH_SLOTS.find(x => x.code === code);
@@ -14681,7 +15497,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
               ? `<span class="pd-swatch" style="background-image:url('${esc(bhThumb(bhAsset(art)))}')"></span>`
               // trim-normalize makes a compact skull render as big as a whole
               // body; extra pad keeps the skull tile from shouting (Tom, Aug 6)
-              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}"${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
+              : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}"${fbTintAttr(art)}${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
           : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? ICONS.hidden(18) : '+'}</span>`}
         ${mog ? `<span class="pd-mog" title="Look changed">${sparkIco(11)}</span>` : ''}
         <span class="pd-tag">${esc(label)}</span>
@@ -14773,6 +15589,114 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </div>`;
     };
 
+    /* ================= THE COLOURWAY RAIL (Tom, 2026-09-04) ==================
+       "the dressing room/wardrobe where you can slide from east to west on the
+       different tints".
+
+       WHAT IT IS. Football garments are the one family in the game where the
+       SAME piece exists in 32 versions that differ only in colour, so the grid
+       above is the wrong shape for them: 32 helmets in a 4-wide grid is eight
+       rows of near-identical tiles and no sense of "these are the same thing".
+       One horizontal rail, one tile per team, and the tile under the rail's
+       centre is the one being tried on. Sliding recolours the player's OWN
+       Bonehead, live, so the comparison happens on the character rather than on
+       a product shot.
+
+       WHY IT COSTS ALMOST NOTHING TO MOVE. All 32 teams of a garment share ONE
+       master PNG and ONE pair of alpha masks -- that is the whole point of the
+       mask pipeline (docs/FOOTBALL-KIT.md section 1). So a team change is not a
+       different image, it is two hex values on two spans that are already in the
+       document. fbPaint below writes exactly those two and touches nothing else:
+       no restageDoll, no innerHTML, no decode, no layout. restageDoll IS still
+       the commit path (through the existing equip -> restageWardrobe), because a
+       commit really does change what is worn.
+
+       THE PRECEDENT IS .pw-row, the Stable's pet-accessory row (app.css, "A ROW
+       OF TILES, NOT A GRID"): flex + overflow-x + scroll-snap-type: x mandatory,
+       flex:none tiles with scroll-snap-align, a hard `on` state that changes
+       fill AND border AND label. Same markup shape, same snap, same momentum
+       (the platform's own -- no JS scrolling library anywhere in this app).
+       .fit-rail was the other candidate and is the wrong one: it is a chip rail
+       with no snap and no art, built for six items, not thirty-two.
+
+       AN UNOWNED COLOURWAY IS SHOWN, LOCKED, WITH ITS PRICE. Not hidden, and
+       the reason is what the rail is FOR. A player who owns one helmet would
+       get a one-tile rail, which is not a rail; and seeing their own Bonehead
+       in the other 31 sets IS the argument for buying a second one. So every
+       tile previews on the doll and the lock lives on the BAR, which is the
+       only thing that can commit. It does not sell here: the button routes to
+       the Kit room with that team already picked, so buyFootballItem stays the
+       one and only till.
+
+       NOT OFFERED ON A DISGUISED SLOT. If a transmog is making a gear piece
+       LOOK like a football helmet then `eq[slot]` is football while `rawEq[slot]`
+       is not, and "wear this colourway" would mean re-buying a transmog rather
+       than swapping a cosmetic. The rail wants both to be the same football
+       item; anything else falls through to the look panel that already owns
+       that decision. */
+    const fbWornItem = eq[slot] && eq[slot] === rawEq[slot] ? BH_BY_ID[eq[slot]] : null;
+    const fbGarment = fbWornItem && fbWornItem.football ? fbWornItem.football.garment : null;
+    let railTeam = fbGarment ? fbWornItem.football.team : null;
+    const fbId = t => footballItemId(t, fbGarment);
+    const fbPrice = FOOTBALL_KIT_PRICE_PLACEHOLDER;
+    /* THE TILE IS THE PIECE AS WORN, not the loose PNG: same wornArtHtml
+       mannequin as the Kit room's own tiles and the rack's, so a helmet reads
+       as a helmet on a head at 64px instead of as a speck on a 640 canvas.
+       32 tiles share one base skeleton, one master and two masks, so the whole
+       rail is a handful of distinct image sources (measured: see
+       tests/football-rail-audit.mjs row RAIL-COST). */
+    const fbTile = t => {
+      const id = fbId(t.id), own = owned.has(id);
+      return `<button class="pw-item fbr${t.id === railTeam ? ' on' : ''}${own ? '' : ' locked'}" type="button"
+        data-fbteam="${t.id}" role="option" aria-selected="${t.id === railTeam}" title="${esc(t.name)}">
+        <span class="fb-worn sm">${wornArtHtml(id, 64 * 2.3)}</span>
+        <b>${esc(t.name)}</b>
+        <small>${fbTag(t.id)}</small>
+      </button>`;
+    };
+    /* ONE writer for the tile's state word, because the rail re-labels tiles in
+       place as it moves and a second copy of this ternary is how "Trying" ends
+       up on two tiles at once. */
+    const fbTag = teamId => {
+      const id = fbId(teamId);
+      /* NO PRICE ON A TILE. One garment, one price, all 32 teams; a price under every
+         locked team read as pay-per-colour (Tom, 2026-09-04, three times). */
+      if (!owned.has(id)) return `${ICONS.lock(9)} Locked`;
+      if (teamId !== railTeam) return 'Yours';
+      return eq[slot] === id ? 'Worn' : 'Trying';
+    };
+    const fbBarHtml = () => {
+      const t = FOOTBALL_TEAM_BY_ID[railTeam];
+      const id = fbId(railTeam), own = owned.has(id), worn = eq[slot] === id;
+      return `<div class="look-bar mog-bar fb-bar${!worn && own ? ' armed' : ''}">
+        <div class="mog-lines">
+          <span><i>Trying</i><b class="fbr-team">${esc(t.name)}</b></span>
+        </div>
+        ${worn ? '<button class="btn ghost mog-go" disabled>You are wearing it</button>'
+          : own ? `<button class="btn mog-go" data-fbwear="${id}">Wear it</button>`
+          : `<button class="btn ghost mog-go" data-fbshop="${t.id}"${FOOTBALL_KIT_LIVE && Number.isFinite(fbPrice) ? '' : ' disabled'}>${
+              FOOTBALL_KIT_LIVE && Number.isFinite(fbPrice) ? `${ICONS.coin(12)} ${fbPrice.toLocaleString()} · all ${FOOTBALL_TEAMS.length} teams` : 'Not for sale yet'}</button>`}
+      </div>`;
+    };
+    /* THE FIGURE SITS WITH THE RAIL, and it is the SAME lesson the Dressing
+       Room's Now/After pair answered on 2026-08-23: measured here at 430x932
+       with a helmet on, the rail's own top edge is at document y 1151 while the
+       paper doll's stage ends around y 400, so a player sliding the rail is
+       recolouring a Bonehead nine hundred pixels above the thumb doing the
+       sliding. The big doll still recolours (it is the same two spans and it
+       costs nothing to keep in step, so scrolling back up shows what you left);
+       this is the copy you can actually SEE while you slide. Same `figure`
+       helper and the same .mog-fig box the look panel uses, so it is the same
+       picture at a smaller size and not a second crop. */
+    const fbRailHtml = () => !fbGarment ? '' : `
+      <div class="fb-rail-wrap">
+        <div class="sect-h fbr-h"><span>${esc(FOOTBALL_GARMENT_BY_KEY[fbGarment].label)} · ${FOOTBALL_TEAMS.length} colourways</span></div>
+        <p class="note fbr-lead">Slide sideways. Your Bonehead changes colours as you go, and nothing is worn until you say so.</p>
+        <div class="fbr-fig">${figure({ ...look, [slot]: fbId(railTeam) })}</div>
+        <div class="pw-row fb-rail" role="listbox" aria-label="Team colourways" tabindex="0">${FOOTBALL_TEAMS.map(fbTile).join('')}</div>
+        ${fbBarHtml()}
+      </div>`;
+
     // SAVED FITS: a look you can put back on in one tap. Stats never move.
     const fitRail = `
       <div class="fit-rail">
@@ -14827,11 +15751,28 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <div class="sect-h" style="margin-top:10px">${esc(GEAR_SLOTS.includes(slot) ? GEAR_SLOT_LABELS[slot] : slotMeta.label)} · pick your fit</div>
       <div class="ward-grid" data-wslot="${slot}">
         ${slotMeta.default || (!items.length && !gearItems.length) ? '' : `<button class="ward-cell none ${!eq[slot] ? 'equipped' : ''}" data-equip="">None</button>`}
-        ${items.map(i => `
+        ${fams.map(fam => {
+          const i = famArt(fam);
+          /* A FAMILY OF ONE IS THE TILE THAT SHIPPED, byte for byte. No badge,
+             no data-family, no rail, nothing extra to hit-test. */
+          if (fam.length === 1) return `
           <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)} · ${esc(i.rarity)}">
-            <canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>
+            ${famArtHtml(i)}
             ${rarityTagHtml(i.rarity)}
-          </button>`).join('')}
+          </button>`;
+          /* data-equip AND data-family: the tap equips what the tile is showing
+             (so wearing this piece still costs exactly one tap, as it does
+             today) and opens the rail underneath it. data-fam-ids is what lets
+             restageWardrobe keep the ring and the art on the family tile when a
+             SIBLING is equipped from the rail. */
+          const best = famBest(fam);
+          return `
+          <button class="ward-cell fam r-${best.rarity} ${fam.some(v => eq[slot] === v.id) && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" data-family="${esc(bhFamilyKey(i))}" data-fam-ids="${esc(fam.map(v => v.id).join(' '))}" title="${esc(i.name)} · ${fam.length} colourways · best ${esc(best.rarity)}" aria-expanded="false" aria-label="${esc(i.name)}, ${fam.length} colourways, best ${esc(best.rarity)}">
+            ${famArtHtml(i)}
+            ${rarityTagHtml(best.rarity)}
+            <span class="ward-fam-n" aria-hidden="true">${fam.length}</span>
+          </button>`;
+        }).join('')}
         ${gearItems.map(g => {
           const art = BH_BY_ID[g.artId];
           const locked = wLevel < g.minLevel;
@@ -14844,6 +15785,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           </button>`;
         }).join('')}
       </div>
+      ${fbRailHtml()}
       ${(() => {
         // Inspect panel: tap a gear cell to preview its full stats + special ability
         // (⚡ talent + what it does), then Equip. Falls back to the equipped piece.
@@ -14974,7 +15916,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
         <div class="ward-grid look-grid">
           ${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
           ${cell(TRANSMOG_HIDE, '<span class="look-hide">🚫</span><span class="look-tag">Hide</span>', 'Show nothing in this slot')}
-          ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${lookPriceMap[i.id] ? `<span class="look-cost">${lookPriceMap[i.id]}</span>` : '<span class="look-cost paid">owned</span>'}`, i.name)).join('')}
+          ${/* costTag, not a bare number: the price carries the dust unit the same
+                way as the v2 panel's tiles (QA round 22 W13b) */''}
+          ${arts.map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}"></canvas>${costTag(i.id)}`, i.name)).join('')}
         </div>
         <div class="look-bar${changed ? ' armed' : ''}">
           <span class="lb-txt">${changed ? 'Trying' : 'Wearing'}: <b>${esc(nameOf(sel))}</b></span>
@@ -15069,19 +16013,217 @@ async function renderCharacter(wrap, tab, opts = {}) {
        (Tom, 2026-08-11: "they should be a larger size so you can see what you
        are transmogging"). Same trim as the doll slots. */
     hydratePackArt(content, '.pd-art[data-art], .ward-art[data-art]');
-    const wirePd = b => b.addEventListener('click', () => { S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null; renderCharacter(wrap, 'wardrobe', { instant: true }); });
+    const wirePd = b => b.addEventListener('click', async () => {
+      S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null;
+      await renderCharacter(wrap, 'wardrobe', { instant: true });
+      /* ARRIVE AT THE DRESSING ROOM (QA round 22 W13c). Measured on arrival at
+         375x667: scrollTop 0, .mog-panel top at 1147px, 0.000 of it visible, and
+         the only scrollIntoView on this screen went to the GEAR card. The F3 dock
+         keeps the bar reachable; this is about the panel the tap just opened.
+         'nearest' scrolls nothing when it is already in frame. Empty slot: no
+         panel, nothing moves. */
+      $('.mog-panel', wrap)?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' });
+    });
     $$('[data-pd]', content).forEach(wirePd);
-    $$('[data-equip]', content).forEach(cell => cell.addEventListener('click', async () => {
+    /* NAMED, because the colourway rail's tiles are created after this runs and
+       must be wired by the SAME function. A second copy of the equip path for
+       the rail is how the two drift, and one of them is the one that spends. */
+    /* A PICTURE THAT TAKES STATTED GEAR OFF ARMS FIRST (QA round 22 W5). Measured
+       blind: one click on a .ward-cell in this grid dropped loadout.H, said nothing
+       (#toast empty at 120/300/600ms) and left the stat chips reading the OLD
+       numbers (MARROW 58 +4 over a fighter at 54) until a forced re-render: -4
+       MAR, -2 HYP, -1 talent for a tap on a picture. equip() drops the statted
+       piece by design (loot.js), so the gating belongs here, and it ran
+       backwards: melt and a 12-dust look both arm-then-confirm, this did not.
+       The arm label names the consequence, gear and stats, the way the strip chip
+       names the gear. wornGear is this render's read of the slot and every path
+       that changes gear re-renders, so it is current. A tap that displaces
+       nothing stays one tap: a confirm on a free swap is friction. */
+    const doEquip = async cell => {
       await equip(slot, cell.dataset.equip || null);
       S.lookPreview = null;
       popSound(S.sounds); pushProfileSoon();
+      /* GEAR CAME OFF, so this is a gear change and takes the gear path, the
+         full render equipGear and the melt button use: the stat chips, the
+         inspect card, the Dressing Room's lead and every quoted price
+         (transmogPrice reads the slot's gear) all moved. restageWardrobe repaints
+         the doll and the rings only, which is what left the stale chips up. */
+      if (wornGear) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
       // Update IN PLACE. This used to call renderCharacter(), which rebuilt the
       // whole screen for one garment: every image element in every cell was
       // destroyed and re-created, so each tap flashed the entire page. Only two
       // things actually change when you equip something, so only those two move.
       const done = await restageWardrobe(content, slot);
       if (!done) renderCharacter(wrap, 'wardrobe', { instant: true });   // fall back rather than leave it stale
+    };
+    /* ONE WIRING FUNCTION, so W5's arm-then-confirm is true on a rail tile too.
+       A tap that displaces statted gear must arm first wherever it is tapped;
+       a second copy of the equip path for the rail is how the two drift. */
+    const wireEquip = cell => {
+
+      if (!wornGear) { cell.addEventListener('click', () => doEquip(cell)); return; }
+      /* armToConfirm relabels the tile with innerHTML, and its cool-off restores
+         the markup but not the pixels: a <canvas> comes back blank. Listener
+         order is registration order, so this runs on the same tap and redraws
+         the art once the cool-off has put the canvas back. A confirmed tap
+         re-renders the screen and the cell is gone, so it is a no-op there. */
+      cell.addEventListener('click', () => setTimeout(() => { if (cell.isConnected) hydratePackArt(cell, '.ward-art[data-art]'); }, ARM_COOLOFF_MS + 20));
+      armToConfirm(cell, `Tap again: takes off ${wornGear.name}, ${gearLabel(wornGear).replace(/\+/g, '-')}`, () => doEquip(cell));
+    };
+    $$('[data-equip]', content).forEach(wireEquip);
+    /* THE RAIL IS DOM STATE, NOT APP STATE, on purpose. It is opened and closed
+       by the tile above it and nothing else ever needs to know: an equip tap
+       restages rather than re-renders (QA round 23 F1), so the only thing that
+       can close it out from under the player is changing slot, which SHOULD
+       close it. No S key, no persistence, no re-render path to keep in sync.
+       COLS mirrors .ward-grid's `repeat(4, ...)` in app.css: the rail is
+       full-width and goes at the END of the tapped tile's row, so it never
+       leaves a hole mid-row and never lands a screen away from what opened it. */
+    const COLS = 4;
+    $$('.ward-cell.fam[data-family]', content).forEach(tile => tile.addEventListener('click', () => {
+      const grid = tile.closest('.ward-grid');
+      if (!grid) return;
+      const open = $('.fam-rail', grid);
+      const wasMine = open && open.dataset.family === tile.dataset.family;
+      if (open) { open.remove(); $$('.ward-cell.fam', grid).forEach(t => t.setAttribute('aria-expanded', 'false')); }
+      if (wasMine) return;                       // second tap on the same tile closes it
+      const ids = new Set(tile.dataset.famIds.split(' '));
+      const fam = BH_ITEMS.filter(i => ids.has(i.id));
+      const rail = document.createElement('div');
+      rail.innerHTML = famRailHtml(fam);
+      const node = rail.firstElementChild;
+      node.dataset.family = tile.dataset.family;
+      const kids = [...grid.children];
+      const at = kids[Math.floor(kids.indexOf(tile) / COLS) * COLS + COLS] || null;
+      grid.insertBefore(node, at);
+      tile.setAttribute('aria-expanded', 'true');
+      /* THE RING COMES OFF THE LIVE DOM, NOT OFF `eq`. An equip tap restages
+         rather than re-renders, so by the time a rail is opened `eq` can be
+         several garments stale; the family tile's own data-equip is what
+         restageWardrobe keeps current. */
+      const worn = tile.classList.contains('equipped') ? tile.dataset.equip : '';
+      $$('[data-equip]', node).forEach(b => b.classList.toggle('equipped', b.dataset.equip === worn));
+      $$('[data-equip]', node).forEach(wireEquip);
+      hydratePackArt(node, '.ward-art[data-art]');
+      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      /* THE ONE YOU ARE WEARING OPENS UNDER YOUR THUMB. The rail snaps to
+         centre, so without this a family whose worn colourway is 20th opens on
+         the first tile and the player has to hunt for the ring they came to
+         move. `inline` only, and block: 'nearest', so this scrolls the rail and
+         not the page out from under the tap. */
+      $('.equipped', node)?.scrollIntoView({ block: 'nearest', inline: 'center' });
     }));
+    /* THE RAIL MOVES TWO COLOURS AND NOTHING ELSE.
+       Every team of a garment is the same master PNG behind the same two masks,
+       so "recolour the doll" is literally two `style.background` writes on spans
+       that are already on screen: no restageDoll, no innerHTML, no decode, no
+       reflow. That is what makes it safe to drive off a scroll handler at one
+       write per animation frame.
+       `slot` scopes the selector, because a stack can wear four football pieces
+       and `.fb-tint` alone would repaint all of them (see footballTintHtml).
+       PAINT RETURNS THE SPAN COUNT and the caller checks it: a stage that grew
+       zero tint spans means the doll is NOT showing this garment, and silently
+       painting nothing is how a rail looks like it works while doing nothing at
+       all (tests/football-rail-audit.mjs row RAIL-DOLL).
+       SCROLLING IS THE PLATFORM'S. scroll-snap-type on .fb-rail does the
+       momentum and the landing; this only reads which tile ended up under the
+       centre. rail.scrollTo, never scrollIntoView: scrollIntoView walks up and
+       scrolls the PAGE too, and this app does not move a player's scroll
+       position for them. */
+    (() => {
+      const rail = $('.fb-rail', content);
+      if (!rail) return;
+      const cells = $$('[data-fbteam]', rail);
+      /* RECTS, NOT offsetLeft. offsetLeft happens to be right here (nothing
+         between the tile and the page is positioned) and it stops being right
+         the moment anything in the wardrobe grows a `position`, because it is
+         measured from the offsetParent and not from the scroller. Two rects
+         plus the scroller's own scrollLeft cannot be wrong about which box is
+         where, whatever the layout does later. */
+      const centreOn = (cell, behavior) => {
+        const cr = cell.getBoundingClientRect(), rr = rail.getBoundingClientRect();
+        rail.scrollTo({ left: rail.scrollLeft + (cr.left - rr.left) - (rail.clientWidth - cr.width) / 2, behavior });
+      };
+      const paint = teamId => {
+        const tints = footballTints(BH_BY_ID[fbId(teamId)]) || [];
+        /* BOTH copies of the character, and NOT the look panel's "Now" figure:
+           that one states what is currently worn and a rail preview repainting
+           it would erase the only before-picture on the screen. */
+        const spans = $$(`.bh-stage.lg .fb-tint[data-fbslot="${slot}"], .fbr-fig .fb-tint[data-fbslot="${slot}"]`, content);
+        /* PAIRED BY MASK, NEVER BY INDEX. There are TWO stacks on screen (the
+           paper doll and the rail's own figure), so the span list runs
+           [a, b, a, b] while `tints` is [a, b]: zipping them by position painted
+           the doll and left the figure -- the copy the player is actually
+           looking at while sliding -- on the old team, and reported a healthy
+           span count while doing it. Measured 2026-09-04: spans 4, painted 2.
+           The mask filename IS the region, so it is the key that cannot drift
+           with the number of stacks or with a one-colour garment. */
+        const byMask = new Map(tints.map(t => [t.mask.slice(t.mask.lastIndexOf('/') + 1), t.hex]));
+        let painted = 0;
+        for (const s of spans) {
+          const m = (s.style.getPropertyValue('--fbm').match(/([^/'"]+\.png)/) || [])[1];
+          const hex = byMask.get(m);
+          if (hex) { s.style.background = hex; painted++; }
+        }
+        return painted;
+      };
+      const wireBar = () => {
+        $('[data-fbwear]', content)?.addEventListener('click', async e => {
+          const id = e.currentTarget.dataset.fbwear;
+          await equip(slot, id);
+          S.lookPreview = null;
+          popSound(S.sounds); pushProfileSoon();
+          // same in-place swap the grid's own equip uses, and the same fallback
+          if (!(await restageWardrobe(content, slot))) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
+          eq[slot] = rawEq[slot] = id;
+          relabel(); refreshBar();
+        });
+        $('[data-fbshop]', content)?.addEventListener('click', e => {
+          /* The rail never sells. It hands the decision to the one till there is
+             (buyFootballItem, behind the Kit room), with the team already picked
+             and the shelf already open, so the button goes where it says. */
+          S.fbTeam = e.currentTarget.dataset.fbshop;
+          S.fbJump = true;
+          openCharacter('shop');
+        });
+      };
+      const refreshBar = () => { const b = $('.fb-bar', content); if (b) { b.outerHTML = fbBarHtml(); wireBar(); } };
+      const relabel = () => cells.forEach(c => {
+        const on = c.dataset.fbteam === railTeam;
+        c.classList.toggle('on', on);
+        c.setAttribute('aria-selected', String(on));
+        const tag = $('small', c);
+        if (tag) tag.innerHTML = fbTag(c.dataset.fbteam);
+      });
+      const select = teamId => {
+        if (!teamId || teamId === railTeam) return;
+        railTeam = teamId;
+        paint(teamId);
+        relabel(); refreshBar();
+      };
+      let raf = 0;
+      rail.addEventListener('scroll', () => {
+        if (raf) return;
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          const mid = rail.getBoundingClientRect().left + rail.clientWidth / 2;
+          let best = null, bd = Infinity;
+          for (const c of cells) {
+            const r = c.getBoundingClientRect(), d = Math.abs(r.left + r.width / 2 - mid);
+            if (d < bd) { bd = d; best = c; }
+          }
+          if (best) select(best.dataset.fbteam);
+        });
+      }, { passive: true });
+      cells.forEach(c => c.addEventListener('click', () => { select(c.dataset.fbteam); centreOn(c, 'smooth'); }));
+      // open ON the colourway being worn rather than on team #1
+      const worn = cells.find(c => c.dataset.fbteam === railTeam);
+      if (worn) requestAnimationFrame(() => centreOn(worn, 'auto'));
+      wireBar();
+      // test hook (webdriver only): the rail is driven by a real scroll in the
+      // audit, and this is how it reads back what the page thinks is selected
+      if (navigator.webdriver) window.__fbRail = () => ({ team: railTeam, garment: fbGarment, spans: paint(railTeam) });
+    })();
     /* A LOOK TAP MOVES FOUR THINGS AND REBUILDS NOTHING (QA round 23 F1).
        Preview and commit used to call renderCharacter(wrap, 'wardrobe',
        { instant: true }). That rebuilds #chBody, so #chContent held ZERO elements
@@ -15153,6 +16295,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
         return;
       }
       S.lookPreview = null;
+      /* THE BAR DISARMS IN THE SAME TICK AS THE RECEIPT (QA round 22 W13a).
+         restageLook re-reads the map and decodes the doll (up to 450ms) before it
+         rebuilds the bar, and armToConfirm restores the button's label the moment
+         onConfirm resolves, so after a successful commit the bar sat .armed with
+         a live "Wear it" until the restage landed. Nothing to buy in that window
+         (paid-once), but the player could not tell the purchase went through. */
+      $('.mog-bar', content)?.classList.remove('armed');
+      btn.disabled = true;
       levelSound(S.sounds); pushProfileSoon();
       toast(res.cost ? `Look changed. −${res.cost} dust.` : 'Look changed.', 2000);
       restageLook({ committed: true });
@@ -15185,16 +16335,28 @@ async function renderCharacter(wrap, tab, opts = {}) {
       levelSound(S.sounds); pushProfileSoon();
       renderCharacter(wrap, 'wardrobe', { instant: true });
     }));
-    $$('[data-melt-gear]', content).forEach(btn => btn.addEventListener('click', async () => {
-      // arm-then-confirm so a piece is never melted by accident
-      if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Tap again to melt'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.textContent = `Melt · +${gearDustValue(GEAR_BY_ID[btn.dataset.meltGear])} dust`; } }, 2600); return; }
-      const res = await disenchantGear(btn.dataset.meltGear);
-      if (!res.ok) { toast('Could not melt that piece.'); return; }
-      S.wardrobePreview = null; S.lookPreview = null;
-      popSound(S.sounds);
-      toast(`${res.name} melted into ${res.dust} Bone Dust. Its look is yours forever.`, 3200);
-      renderCharacter(wrap, 'wardrobe', { instant: true });
-    }));
+    /* MELT IS ON armToConfirm, THE SAME ARM AS EVERY SPEND (QA round 22 W2, W3).
+       This was its own inline dataset.armed dance: "Tap again to melt" named
+       nothing, a 2600 ms literal cool-off against ARM_COOLOFF_MS, no `.arming`
+       class, no haptic, no busy guard. So the one irreversible control on the
+       screen asked LESS than a 12-dust look, and melting the WORN piece took it
+       off (disenchantGear clears the loadout slot: Power 21 -> 20, Hype 29 -> 27
+       in lane D) with no string saying so. The label now names that consequence
+       when the piece is on the doll. W3: six rapid taps ran the second against
+       a row db.take had already spent and toasted "Could not melt that piece."
+       after a melt that worked; armToConfirm's `busy` swallows the burst. */
+    $$('[data-melt-gear]', content).forEach(btn => {
+      const g = GEAR_BY_ID[btn.dataset.meltGear];
+      const worn = !!g && gearLo[g.slot] === g.id;
+      armToConfirm(btn, worn ? `Tap again: melts ${g.name} and takes it off` : 'Tap again to melt', async () => {
+        const res = await disenchantGear(btn.dataset.meltGear);
+        if (!res.ok) { toast('Could not melt that piece.'); return; }
+        S.wardrobePreview = null; S.lookPreview = null;
+        popSound(S.sounds);
+        toast(`${res.name} melted into ${res.dust} Bone Dust. Its look is yours forever.`, 3200);
+        renderCharacter(wrap, 'wardrobe', { instant: true });
+      });
+    });
     $$('[data-petpick]', content).forEach(b => b.addEventListener('click', async () => {
       const petId = b.dataset.pet, tier = Number(b.dataset.tier), node = b.dataset.petpick;
       const meta = fighter.petMeta;
@@ -15228,16 +16390,39 @@ async function renderCharacter(wrap, tab, opts = {}) {
       for (const m of missing) byRar[m.rarity] = (byRar[m.rarity] || 0) + 1;
       const tease = RAR_ORDER.filter(r => byRar[r] && (r === 'legendary' || r === 'epic'))
         .map(r => `${byRar[r]} ${r}`).join(', ');
-      const sorted = [...have].sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity));
+      /* COLOURWAY FAMILIES, THE SAME COLLAPSE THE WARDROBE GRID USES.
+         bhFamilyKey groups the football kit's 32-team colourways (and every
+         hand-drawn -N series) into one drawing; the Collection was listing
+         every member as its own <img>, which is 567 of them on a completionist
+         and 90.6 MB at the end of a scroll. A family of one renders exactly as
+         before -- same classes, same one tap. A family of more than one gets a
+         single tile (the worn variant, else the first) with a count badge, and
+         a rail on tap reaches every member, so nothing collected is hidden. */
+      const famBest = fam => [...fam].sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity))[0];
+      const sortedFams = [...bhFamilies(have).values()]
+        .sort((a, b) => RAR_ORDER.indexOf(famBest(a).rarity) - RAR_ORDER.indexOf(famBest(b).rarity));
       return `
         <div class="col-head"><span>${esc(label)}</span><em>${have.length} of ${all.length}${tease ? ` · ${esc(tease)} out there` : ''}</em></div>
         <div class="col-grid">
-          ${/* 90px tiles, one per owned piece, 362 of them on a completionist:
-                579.7 MB at the end of a scroll on the 640px art. `loading=lazy`
-                was already here and it is why open was cheaper than the end --
-                lazy DEFERS, it does not BOUND, and nothing is ever released. */
+          ${/* 90px tiles, one per owned piece/family, 362 of them on a completionist
+                before the collapse: 579.7 MB at the end of a scroll on the 640px
+                art. `loading=lazy` was already here and it is why open was cheaper
+                than the end -- lazy DEFERS, it does not BOUND, and nothing is ever
+                released. */
             ''}
-          ${sorted.map(i => `<button class="col-cell r-${i.rarity} ${wornSet.has(i.id) ? 'worn' : ''} ${S.lookInspect === i.id ? 'selected' : ''}" data-look-info="${i.id}" title="${esc(i.name)}"><img src="${bhThumb(bhAsset(i))}" alt="${esc(i.name)}" loading="lazy"></button>`).join('')}
+          ${sortedFams.map(fam => {
+            if (fam.length === 1) {
+              const i = fam[0];
+              return `<button class="col-cell r-${i.rarity} ${wornSet.has(i.id) ? 'worn' : ''} ${S.lookInspect === i.id ? 'selected' : ''}" data-look-info="${i.id}" title="${esc(i.name)}"><img src="${bhThumb(bhAsset(i))}" alt="${esc(i.name)}" loading="lazy"></button>`;
+            }
+            const key = bhFamilyKey(fam[0]);
+            const i = fam.find(v => wornSet.has(v.id)) || fam[0];
+            const open = S.lookFamOpen === key;
+            const rail = !open ? '' : `<div class="col-fam-rail" role="group" aria-label="${esc(i.name)} colourways">
+              ${fam.map(v => `<button class="col-cell famr r-${v.rarity} ${wornSet.has(v.id) ? 'worn' : ''} ${S.lookInspect === v.id ? 'selected' : ''}" data-look-info="${v.id}" title="${esc(v.name)}"><img src="${bhThumb(bhAsset(v))}" alt="${esc(v.name)}" loading="lazy"></button>`).join('')}
+            </div>`;
+            return `<button class="col-cell fam r-${i.rarity} ${fam.some(v => wornSet.has(v.id)) ? 'worn' : ''}" data-fam-toggle="${esc(key)}" title="${esc(i.name)} · ${fam.length} colourways" aria-expanded="${open}" aria-label="${esc(i.name)}, ${fam.length} colourways"><img src="${bhThumb(bhAsset(i))}" alt="${esc(i.name)}" loading="lazy"><span class="ward-fam-n" aria-hidden="true">${fam.length}</span></button>${rail}`;
+          }).join('')}
           ${missing.map(() => '<button class="col-cell locked" data-look-locked="1" title="Not collected yet"><span class="lock-q">?</span></button>').join('')}
         </div>
         ${(() => {
@@ -15260,6 +16445,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${sections}`;
     $$('[data-look-info]', content).forEach(c => c.addEventListener('click', () => {
       S.lookInspect = S.lookInspect === c.dataset.lookInfo ? null : c.dataset.lookInfo;
+      popSound(S.sounds);
+      renderCharacter(wrap, 'looks', { instant: true });
+    }));
+    $$('[data-fam-toggle]', content).forEach(c => c.addEventListener('click', () => {
+      S.lookFamOpen = S.lookFamOpen === c.dataset.famToggle ? null : c.dataset.famToggle;
+      S.lookInspect = null;
       popSound(S.sounds);
       renderCharacter(wrap, 'looks', { instant: true });
     }));
@@ -15842,7 +17033,45 @@ const nextArtTier = src => {
    ponytail: unbounded Map, but the keys are asset paths from a closed set of a
    few hundred art files at four ints each; evict if that ever stops being true. */
 const TRIM_BOX = new Map();
-function drawTrimmedArt(canvas, src, pad = 0.08) {
+/* Football kit, 2026-09-04: THE CANVAS TILES HAD NO TEAM COLOUR.
+   Every football garment is one grey master plus two masked multiply layers, and
+   that mechanism is CSS (.fb-tint, a span masked by an alpha PNG). A <canvas>
+   cannot carry a CSS mask, so every canvas tile in the app painted the bare
+   master: measured on the Wardrobe's Hat grid, four Boneyard Bruisers helmets
+   rendered as four identical white helmets with 0 pixels of #14213D in any of
+   them, and a player owning two teams could not tell their kits apart.
+   The same two layers, drawn instead of styled: mask cropped and scaled by the
+   master's own trim box (the masks share its 640 canvas, so one transform serves
+   both), filled through source-in, composited multiply. A tile with no tints is
+   byte-identical to before. ONE painter serves .ward-art, .pd-art, .t3-art, the
+   crew chips and the pack cards, so this is the only place it belongs. */
+const loadArt = src => new Promise((res, rej) => {
+  const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src;
+});
+async function paintFootballTints(ctx, tints, box, dest) {
+  const [x0, y0, bw, bh] = box, [dx, dy, dw, dh] = dest;
+  const lay = document.createElement('canvas'); lay.width = ctx.canvas.width; lay.height = ctx.canvas.height;
+  const lc = lay.getContext('2d');
+  for (const t of tints) {
+    /* bhTrim(): this painter only ever draws a TRIMMED master (its only caller,
+       drawTrimmedArt, decodes `src` through bhTrim first), so the mask has to
+       be trimmed the same way or `box` below -- measured off the trimmed
+       master -- samples the wrong rectangle of a still-640 mask. Tiering the
+       mask sheet (scripts/build-bh-thumbs.py) built it from the SAME box, so
+       this is a same-size, same-crop swap, not a resize. Census TIER row,
+       2026-09-05: this was the wardrobe's 16 off-DOM master-mask decodes. */
+    let m; try { m = await loadArt(bhTrim(t.mask)); } catch { continue; }   // a missing mask loses a colour, never the tile
+    lc.globalCompositeOperation = 'source-over';
+    lc.clearRect(0, 0, lay.width, lay.height);
+    lc.drawImage(m, x0, y0, bw, bh, dx, dy, dw, dh);
+    lc.globalCompositeOperation = 'source-in';
+    lc.fillStyle = t.hex; lc.fillRect(0, 0, lay.width, lay.height);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.drawImage(lay, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+}
+function drawTrimmedArt(canvas, src, pad = 0.08, tints = null) {
   return new Promise(res => {
     const img = new Image();
     img.onload = () => {
@@ -15867,7 +17096,7 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
          stepping only while the ink is still too small. */
       if (Math.max(bw, bh) < SMALL_INK) {
         const up = nextArtTier(src);
-        if (up) return void drawTrimmedArt(canvas, up, pad).then(res);
+        if (up) return void drawTrimmedArt(canvas, up, pad, tints).then(res);
       }
       const cw = canvas.width, ch = canvas.height, p = 1 - pad * 2;
       // Upscale cap + two-step scaling keep small source art (e.g. a 43px
@@ -15888,6 +17117,10 @@ function drawTrimmedArt(canvas, src, pad = 0.08) {
       }
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(from, sx, sy, sw, sh, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+      if (tints && tints.length) {
+        paintFootballTints(ctx, tints, [x0, y0, bw, bh], [(cw - dw) / 2, (ch - dh) / 2, dw, dh]).then(res, res);
+        return;
+      }
       res();
     };
     /* A MISSING IMAGE MUST NOT LEAVE AN EMPTY CANVAS.
@@ -16320,7 +17553,8 @@ function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
      layer degrades the card to a missing garment, never to a hung reveal
      (anti-regression rule 8). */
   return Promise.all([
-    ...$$(sel, scope).map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined)),
+    ...$$(sel, scope).map(cv => drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined,
+      cv.dataset.tints ? JSON.parse(cv.dataset.tints) : null)),
     ...$$('.pc-worn img', scope).map(im => im.decode().catch(() => {})),
   ]);
 }
@@ -16754,12 +17988,12 @@ async function openCrateReveal(result) {
 // burned). Every successful steps ingest stamps hkLastSync; the home screen shows a
 // fix-it banner + fires one notification when the stamp goes stale while connected.
 const HK_STALE_MS = 36 * 3600e3;
-async function hkStaleInfo() {
+async function hkStaleInfo(healthRows = null) {   // `healthRows`: pre-read rows, QA round 28 G3
   if (!S.settings.hkConnected) return null;
   let last = await kvGet('hkLastSync', null);
   if (!last) {
     // pre-watchdog installs: seed from the newest day that has steps
-    const latest = (await db.all('health')).filter(r => r.steps != null).map(r => r.date).sort().pop();
+    const latest = (healthRows || await db.all('health')).filter(r => r.steps != null).map(r => r.date).sort().pop();
     if (!latest) return null;
     last = Date.parse(latest) + 24 * 3600e3;
     await kvSet('hkLastSync', last);
@@ -17264,6 +18498,10 @@ async function openStable(opts = {}) {
      markup be born at the OLD size and then transition, which is the only way to
      animate across a rebuild without rewriting the screen to patch in place. */
   let cfWasPanelled = false;
+  // which pet-wardrobe colourway family (keyed "sp:familyKey") has its rail
+  // open. render() rebuilds cfWear from scratch, so this has to live outside
+  // it the same way cfIid and openIid do.
+  let petFamOpen = null;
   // when we arrive from a pet level-up, that pet's tree is the reason we are here
   let focusIid = opts.focusIid || null;
   const focusSp = opts.focusSp || null;
@@ -17434,8 +18672,15 @@ async function openStable(opts = {}) {
        to forget.
        The tile art is petShotHtml, the shop's own product shot, so a piece
        looks the same in the wardrobe as it did on the tile you bought it from. */
-    const cfWear = (() => {
-      if (!roster.some(x => x.sp === PET_SHOP.pet.id)) return '';
+    /* Football kit, 2026-09-04: ONE PANEL PER SPECIES THAT HAS A WARDROBE, each
+       tagged data-pwsp and hidden unless its species is in front; the spin
+       handler flips `hidden` by that tag. Bumbleseal's panel is unchanged in
+       content; the Beardie (and the Day One Lizard) gets one the moment a
+       football piece drawn for it is owned, and no panel otherwise. */
+    const petSlotCodes = new Set(PET_SLOTS.map(sl => sl.code));
+    const cfWear = [...new Set(roster.map(x => x.sp))].map(sp => {
+      const petItems = BH_ITEMS_WITH_UNRELEASED.filter(i => petSlotCodes.has(i.slot) && petCanWear(i, sp));
+      if (sp !== PET_SHOP.pet.id && !petItems.some(i => ownedCos.has(i.id))) return '';
       /* BUILT WHENEVER SHE IS IN THE ROSTER, HIDDEN WHEN SHE IS NOT IN FRONT.
          Spinning the ring never re-runs render() (a full rebuild would fight the
          drag), so the four action buttons are repainted in place instead, and a
@@ -17444,26 +18689,64 @@ async function openStable(opts = {}) {
          The content does not depend on WHICH instance is focused: there is one
          Bumbleseal and one wardrobe. So only visibility moves, and the spin
          handler owns it. */
-      const shown = !!focused && focused.sp === PET_SHOP.pet.id;
-      const her = (BH_BY_ID[PET_SHOP.pet.id] || {}).name || 'your pet';
-      const mine = PET_SHOP.items.filter(i => ownedCos.has(i.id) && BH_BY_ID[i.id]);
+      const shown = !!focused && focused.sp === sp;
+      const her = (BH_BY_ID[sp] || {}).name || 'your pet';
+      const mine = petItems.filter(i => ownedCos.has(i.id));
       if (!mine.length) {
-        return `<div class="pet-wear"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+        return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
           <p class="note pw-empty">Nothing to wear yet. Gwart's Menagerie stocks ${PET_SHOP.items.length} pieces, all drawn for her.</p></div>`;
       }
-      return `<div class="pet-wear"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
-        <div class="pw-row">${mine.map(i => {
-          const a = BH_BY_ID[i.id];
-          const on = S.petWear[a.slot] === i.id;
-          const slotLbl = (PET_SLOTS.find(sl => sl.code === a.slot) || {}).label || a.slot;
-          return `<button class="pw-item r-${a.rarity}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}">
-            <span class="pw-art">${petShotHtml(i.id, 62)}</span>
-            <b>${esc(a.name)}</b>
-            <small>${on ? 'WORN' : esc(slotLbl)}</small>
-          </button>`;
-        }).join('')}</div>
+      const petWearItemBtn = i => {
+        const a = BH_BY_ID[i.id];
+        const on = S.petWear[a.slot] === i.id;
+        const slotLbl = (PET_SLOTS.find(sl => sl.code === a.slot) || {}).label || a.slot;
+        // a football piece has no product-shot sheet, so its tile is the pet wearing it
+        // thumb:true, not a hardcoded 192: this 62px tile's geometry (C4/CX's
+        // PET_CROP) resolves to imgSize ~143-146, and bhTierFor doubles for
+        // device pixels and lands on 384 -- the SAME tier petShotHtml's own
+        // product shot uses beside it. Census SHOT row, 2026-09-05: a copied
+        // 192 from the Locker Room's much bigger tiles (measured there to
+        // legitimately clear no tier) was reading a 384-eligible box as 192.
+        const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, true) : petShotHtml(i.id, 62);
+        return `<button class="pw-item r-${a.rarity}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}">
+          <span class="pw-art">${tile}</span>
+          <b>${esc(a.name)}</b>
+          <small>${on ? 'WORN' : esc(slotLbl)}</small>
+        </button>`;
+      };
+      /* THE FOOTBALL GARMENT COLLAPSE, SAME RULE AS THE HUMAN WARDROBE
+         (bhFamilyKey/bhFamilies): 32 team colourways of the Lizard Helmet or
+         Jersey share one master `file`, so an owned-everything account built
+         one <img> per team per species here -- 64 of the same source apiece
+         across the Beardie and the Day One Lizard panels, decoded even while
+         hidden under the OTHER pet in the ring (the panel has to exist for
+         both, see the comment above). A family of one renders exactly as
+         before. A family of more collapses to one tile (worn colourway, else
+         the first) with a count badge; tapping it opens a rail of every team
+         so nothing owned is unreachable. */
+      const petFams = [...bhFamilies(mine).values()];
+      const wearRow = petFams.map(fam => {
+        if (fam.length === 1) return petWearItemBtn(fam[0]);
+        const key = sp + ':' + bhFamilyKey(fam[0]);
+        const worn = fam.find(i => S.petWear[BH_BY_ID[i.id].slot] === i.id);
+        const i = worn || fam[0];
+        const a = BH_BY_ID[i.id];
+        const open = petFamOpen === key;
+        // thumb:true, same fix and the same measured 384 as petWearItemBtn above.
+        const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, true) : petShotHtml(i.id, 62);
+        const famTile = `<button class="pw-item fam r-${a.rarity}${worn ? ' on' : ''}" type="button" data-petfam="${esc(key)}" aria-expanded="${open}" aria-label="${esc(a.name)}, ${fam.length} colourways">
+          <span class="pw-art">${tile}<span class="ward-fam-n" aria-hidden="true">${fam.length}</span></span>
+          <b>${esc(a.name)}</b>
+          <small>${worn ? 'WORN' : fam.length + ' colours'}</small>
+        </button>`;
+        // display:contents so the rail's own tiles join .pw-row's flex/scroll
+        // directly instead of nesting a second scroller inside the first.
+        return open ? `${famTile}<span style="display:contents">${fam.map(petWearItemBtn).join('')}</span>` : famTile;
+      }).join('');
+      return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+        <div class="pw-row">${wearRow}</div>
         <p class="note pw-hint">Tap to put a piece on. Tap it again to take it off. One per spot.</p></div>`;
-    })();
+    }).join('');
 
 
 
@@ -17663,8 +18946,8 @@ async function openStable(opts = {}) {
        phone the overflow is negative and this is a no-op, which is why the
        Paddock door still greets you there. Idempotent, so the re-render after a
        tap lands you back looking at her rather than at the top of the sheet. */
-    const pwPanel = $('.pet-wear', body);
-    const pwTile = pwPanel && !pwPanel.hidden && $('.pw-item', pwPanel);
+    const pwPanel = $$('.pet-wear', body).find(p => !p.hidden);   // Football kit, 2026-09-04: several panels, one shown
+    const pwTile = pwPanel && $('.pw-item', pwPanel);
     const pwFrame = $('#cfFrame', body);
     if (pwTile && pwFrame) {
       const view = body.getBoundingClientRect();
@@ -18022,8 +19305,7 @@ async function openStable(opts = {}) {
       if (brB) { brB.dataset.breedsel = inst.iid; brB.textContent = inSel ? 'BREEDING' : 'BREED'; brB.classList.toggle('on', inSel); }
       if (dsB) { dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `DESTROY ${dustVal}`; }
       // her wardrobe follows the ring: shown only while she is the pet in front
-      const pwB = $('.pet-wear', body);
-      if (pwB) pwB.hidden = inst.sp !== PET_SHOP.pet.id;
+      $$('.pet-wear', body).forEach(pwB => { pwB.hidden = pwB.dataset.pwsp !== inst.sp; });   // Football kit, 2026-09-04
     }
 
     // No card-click-to-open-talents any more: on a carousel a tap means "bring
@@ -18061,6 +19343,11 @@ async function openStable(opts = {}) {
       const r = await togglePetWear(btn.dataset.petwear);
       if (!r.ok) { toast('That piece is not in your wardrobe.'); return; }
       await refreshPetWear();
+      popSound(S.sounds);
+      render();
+    }));
+    $$('[data-petfam]', body).forEach(btn => btn.addEventListener('click', () => {
+      petFamOpen = petFamOpen === btn.dataset.petfam ? null : btn.dataset.petfam;
       popSound(S.sounds);
       render();
     }));
@@ -18448,7 +19735,7 @@ function vaultRowHtml(v) {
 
 function sleepDiagHtml(dg) {
   if (!dg) {
-    return `<p class="note">Nothing recorded yet. Tap <b>Sync now</b> above. If it still says this afterwards, the app on this phone is older than the sleep diagnostics and needs a TestFlight update.</p>`;
+    return `<p class="note">Nothing recorded yet. Tap <b>Sync now</b> above. If it still says this afterwards, the app on this phone is older than the sleep diagnostics and needs an App Store update.</p>`;
   }
   const asleep = dg.rawAsleepMin || 0, inBed = dg.inBedMin || 0, n = dg.samples ?? 0;
   const verdict =
@@ -18792,6 +20079,25 @@ function warmMapArt() {
   return _mapArtWarm;
 }
 
+const NET_MSG = 'The Boneyard needs a network signal to draw the map. Your spawns are safe; try again when you are back online.';
+/* THE ONE PLACE THE BONEYARD'S DEAD-END COPY IS CHOSEN. QA round 27 R14(b): a
+   geolocation callback that never fires (no success, no error, not even the
+   API's own 20s timeout) used to fall through to the 25s boot bound, which
+   blamed the NETWORK. Denial (code 1) and an answered no-fix (code 2/3) already
+   produced the right copy; this routes the never-answered case to the same
+   no-fix line, so the message names what actually failed. Pure so
+   tests/unit.test.js can drive it. */
+function boneyardFloorMsg({ err = null, fixSeen = true, isAndroid = false } = {}) {
+  const geoErr = !!err && typeof err.code === 'number';
+  if (geoErr && err.code === 1) {
+    return isAndroid
+      ? 'Location is off. Allow it in Settings → Apps → Boneheadz Gym → Permissions → Location, then retry.'
+      : 'Location is off. Allow it in Settings → Boneheadz Gym → Location, then retry.';
+  }
+  if (geoErr || !fixSeen) return 'No location fix yet. Step outside or near a window and retry.';
+  return NET_MSG;
+}
+
 // The Boneyard is a screen, not a modal. It used to be a "full" sheet opened by
 // a special case in the tab handler, which is why it had a Done button and its
 // own back semantics while every other tab was a route.
@@ -18855,7 +20161,6 @@ async function renderBoneyard(el) {
     teardownMap();   // Retry lands here too: kill any half-made attempt first
     const attempt = ++mapAttempt;
     let bootT = 0;
-    const NET_MSG = 'The Boneyard needs a network signal to draw the map. Your spawns are safe; try again when you are back online.';
     /* The floor. Every dead end on this screen lands here: a labeled error, a
        Retry that re-enters startMap on a clean slate, and the seeded map key so
        the space is not 90% dead. */
@@ -18872,7 +20177,10 @@ async function renderBoneyard(el) {
        usable state (maplibre 'load', or any tile arriving) in 25s, floor to the
        error card. Cleared on 'load' and by floorMap. */
     let tilesSeen = false, tileErrs = 0, errGrace = null;
-    bootT = setTimeout(() => { if (!tilesSeen) floorMap(NET_MSG); }, 25000);
+    /* geoAnswered: did getCurrentPosition call EITHER callback? If the bound
+       fires with no answer, the map is not the problem, the fix is (R14(b)). */
+    let geoAnswered = false;
+    bootT = setTimeout(() => { if (!tilesSeen) floorMap(boneyardFloorMsg({ fixSeen: geoAnswered })); }, 25000);
     if (!('geolocation' in navigator)) { clearTimeout(bootT); body.innerHTML = '<p class="warn" style="margin:16px">This device has no location support.</p>'; return; }
     // compass permission must be requested inside this tap
     try {
@@ -18888,7 +20196,9 @@ async function renderBoneyard(el) {
     try {
       [maplibregl, boot] = await Promise.all([
         loadMaplibre(),
-        new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 })),
+        new Promise((res, rej) => navigator.geolocation.getCurrentPosition(
+          pos => { geoAnswered = true; res(pos); }, e => { geoAnswered = true; rej(e); },
+          { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 })),
       ]);
     } catch (err) {
       const geoErr = err && typeof err.code === 'number';
@@ -18898,14 +20208,7 @@ async function renderBoneyard(el) {
          were silent, and this was the loudest of them. Coarse code only, no
          coordinates, per the analytics contract. */
       if (geoErr) { try { trackEvent('geo_err', { code: err.code }); } catch { /* analytics never breaks the app */ } }
-      const isAndroid = /android/i.test(navigator.userAgent || '');
-      const locDenied = isAndroid
-        ? 'Location is off. Allow it in Settings → Apps → Boneheadz Gym → Permissions → Location, then retry.'
-        : 'Location is off. Allow it in Settings → Boneheadz Gym → Location, then retry.';
-      floorMap(geoErr && err.code === 1
-        ? locDenied
-        : geoErr ? 'No location fix yet. Step outside or near a window and retry.'
-        : NET_MSG);
+      floorMap(boneyardFloorMsg({ err, fixSeen: true, isAndroid: /android/i.test(navigator.userAgent || '') }));
       return;
     }
     if (attempt !== mapAttempt) return;   // player left (or retried) during the await
@@ -19419,13 +20722,18 @@ async function renderBoneyard(el) {
         // ingredient count is variable under the Boneyard supply change)
         const food = SPAWN_FOOD[s.type] ?? 1;
         const rw = def.crate === 'egg' ? 'Rare: walk to hatch a pet' : def.crate ? 'A crate of loot' : def.coins ? `${def.coins} coins` : food >= 2 ? `${food} cooking ingredients` : def.xp ? `${def.xp} XP` : 'A find';
-        return { name: def.label || 'Cache', reward: rw, distM: s.dist };
+        // A SPAWN SAYS WHETHER YOU CAN REACH IT, not just how far it is. The old
+        // footer said "walk to reach it" whether you were 12 m or 1.2 km out, so
+        // the ONLY thing on screen that knew the difference was the marker's
+        // `inrange` class. hunt.js:collectReach owns both sentences and is shared
+        // with the refused collect below.
+        return { name: def.label || 'Cache', reward: rw, distM: s.dist, foot: collectReach(s.dist) };
       }
       return null;
     }
     function showPoiTip(el) {
       const info = markerInfo(el); if (!info) return;
-      poiTip.innerHTML = `<b>${esc(info.name)}</b><span class="pt-b">${esc(info.reward)}</span>${info.distM != null ? `<span class="pt-f">${fmtDist(info.distM)} away · walk to reach it</span>` : ''}`;
+      poiTip.innerHTML = `<b>${esc(info.name)}</b><span class="pt-b">${esc(info.reward)}</span>${info.distM != null ? `<span class="pt-f">${info.foot || `${fmtDist(info.distM)} away · walk to reach it`}</span>` : ''}`;
       poiTip.hidden = false;
       const stage = $('#mapStage', body).getBoundingClientRect(), m = el.getBoundingClientRect();
       const tw = poiTip.offsetWidth, th = poiTip.offsetHeight;
@@ -20357,7 +21665,13 @@ async function renderBoneyard(el) {
       haptic.success();
       const id = $('#mapCollect', body).dataset.spawnId;
       const rec = [...spawnMarkers.values()].find(r => r.spawn.id === id);
-      if (!rec || rec.spawn.dist > COLLECT_RADIUS_M) return;
+      if (!rec) return;
+      /* A REFUSAL THAT SAYS NOTHING IS A BUG REPORT WAITING TO HAPPEN. This arm
+         swallowed the tap silently, so a player who drifted out of range between
+         the last refresh and the tap got a dead button and no reason. The den's
+         stale-tap arm above has said its sentence since round 3; this is the same
+         shape, with the number, through the one helper that owns the copy. */
+      if (rec.spawn.dist > COLLECT_RADIUS_M) { toast(collectReach(rec.spawn.dist), 3200); return; }
       /* ONE IN THREE BURIED CRATES BITES BACK, AND IT BRANCHES BEFORE THE
          PAYOUT, NOT AFTER IT. Tom, 2026-08-20: "1/3 chests can trigger a fight
          with this mimic. it should show the pixel art animation and then enter a
@@ -20416,14 +21730,15 @@ async function renderBoneyard(el) {
       const ceremony = !!SPAWN_TYPES[rec.spawn.type].crate;
       if (ceremony) confettiBurst(innerWidth / 2, innerHeight * 0.4, 20);
       coinSound(S.sounds);
-      // scavenging drops a cooking ingredient (deterministic per spawn; RAREs give
-      // Ectoplasm). ingN can now be 0: food is split across a denser field, so
-      // most finds carry none and the Herb patch carries two (cooking.js SPAWN_FOOD).
-      const { id: ingId, n: ingN } = spawnIngredient(rec.spawn);
-      if (ingN) await grantIngredient(ingId, ingN);
-      // active feast buff boosts the spawn's coins too
-      const fcm = await foodCoinMult();
-      if (res.coins && fcm > 1) { const bonus = Math.round(res.coins * (fcm - 1)); await coinsAdd(bonus); res.coins += bonus; }
+      /* THE PAYOUT IS COLLECTSPAWN'S, NOT THIS HANDLER'S (QA round 28 Y5). The
+         scavenged ingredient and the feast coin bonus used to be paid HERE, two
+         writes downstream of a ledger claim that had already spent the spawn, so
+         a process death between them handed the player nothing and the next tap
+         was correctly refused. Both now ride inside the claim's own transaction;
+         this block only reads what was delivered so it can name it.
+         ingN can be 0: food is split across a denser field, so most finds carry
+         none and the Herb patch carries two (cooking.js SPAWN_FOOD). */
+      const { id: ingId, n: ingN } = res.ing;
       /* THREE CHANGES MEET AT THIS ONE BLOCK and every part is load-bearing.
          Whoever edits it next should read all three before touching it.
 
@@ -20608,6 +21923,9 @@ async function renderBoneyard(el) {
  * to do with fighting.
  */
 const HABIT_GRANT_KEY = 'habitBaseGrant_v471';
+// QA round 28 B1: written by the Today card's button once the player has read why
+// their fighter changed; the card never shows again. Versioned like the grant.
+const HABIT_GRANT_SEEN_KEY = 'habitBaseGrantCardSeen_v471';
 async function habitBaseGrantTp(behavior) {
   const prev = await kvGet(HABIT_GRANT_KEY, null);
   if (prev && typeof prev.tp === 'number') return prev.tp;
@@ -20767,7 +22085,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v473'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v474'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -20778,9 +22096,15 @@ function presentGrantDelivery(r) {
   const coinGifts = [];   // coins-only gifts (shown as a line, not a card)
   const giftInfos = [];   // every gift (for the OS notification)
   const spireNews = [];    // towers lost or left dormant while I was away
+  const crewNews = [];    // "you two are Crew now", "she got your cheer": sentences, not rewards
   for (const g of r.appliedGrants || []) {
     const p = g.payload || {};
     if (g.type === 'cheer') { cheers.push(p); continue; }
+    /* CREW NEWS: a friendship completed, or a cheer you sent reached them. No
+       reward, so every branch below falls through it and it would land in the
+       ledger silently, exactly as the spire notice used to. It is a sentence,
+       so it gets a toast rather than a card. */
+    if (g.type === 'crew') { if (p.note) crewNews.push(p.note); continue; }
     // A LOST TOWER. The server has always sent this grant and the client has
     // always applied it to the ledger, but nothing here displayed it, so having
     // your spire taken was completely silent. It is the revenge-walk hook: it
@@ -20820,10 +22144,13 @@ function presentGrantDelivery(r) {
     const tx = CHEERS[c.cheer] ? CHEERS[c.cheer].txt : 'cheered you on';
     setTimeout(() => toast(`${em} ${esc(c.from || 'A friend')}: ${esc(tx)}`, 4200), i * 900);
   });
+  // crew news: same staggered treatment, queued after the cheers so two kinds
+  // of Crew toast never land on top of each other
+  crewNews.forEach((n, i) => setTimeout(() => toast(esc(n), 4200), (cheers.length + i) * 900));
   if (cards.length) { openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh); return; }
   if (coinGifts.length) { toast(coinGifts[0] + (coinGifts.length > 1 ? ` (+${coinGifts.length - 1} more)` : ''), 4200); bgRefresh(); return; }
   if (coinsSum || xpSum) { toast(`Crew delivery: ${[coinsSum ? `+${coinsSum} coins` : '', xpSum ? `+${xpSum} XP` : ''].filter(Boolean).join(' · ')}.`, 3600); bgRefresh(); return; }
-  if (cheers.length) { bgRefresh(); return; } // cheers already toasted, nothing else to reveal
+  if (cheers.length || crewNews.length) { bgRefresh(); return; } // already toasted, nothing else to reveal
   toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived.`, 3600); bgRefresh();
 }
 
@@ -21201,7 +22528,7 @@ async function renderPit(wrap) {
       <p class="pg-why">${downed.phase === 'lost' && !downed.forfeit
         ? `<b>${esc(downed.foe || 'The Pit')}</b> put you down.`
         : `You left your fight with <b>${esc(downed.foe || 'The Pit')}</b> before it was decided, so it goes down as a loss.`}
-        Your bones keep every stat: eat well, walk far, run it back.</p>
+        ${DEFEAT_STATS_NOTE}</p>
       <button class="btn" id="pitDefeatAck" style="width:100%">Back on your feet</button>
     </div>` : '';
 
@@ -21235,7 +22562,7 @@ async function renderPit(wrap) {
       <div class="tx">
         <b>${energy.ready} fight${energy.ready === 1 ? '' : 's'} in the tank</b>
         <div class="bar"><i style="width:${Math.min(100, Math.round(energy.ready / (energy.freeMax + 6) * 100))}%"></i></div>
-        <small>${energy.free} free today + ${energy.vigor} Vigor${tapped ? ' · walk to earn Vigor · free fights refill at midnight' : ' · walk to earn more'}</small>
+        <small>${energy.free} free today + ${energy.vigor} Vigor${energy.dayGuard ? ' · ' + (DAY_GUARD_COPY[energy.dayGuard] || DAY_GUARD_COPY.other) /* QA round 26 O14: "refill at midnight" is false on a refused day */ : tapped ? ' · walk to earn Vigor · free fights refill at midnight' : ' · walk to earn more'}</small>
       </div>
     </div>
     ${defeatSect}
@@ -21361,7 +22688,9 @@ function foeOutfitFor(name) {
   for (const slot of BH_SLOTS) {
     if (slot.code === 'B' || slot.code === 'SK' || slot.code === 'YD' || slot.code === 'BG') continue;
     if (seedRand() < 0.5) {
-      const pool = BH_ITEMS.filter(i => i.slot === slot.code && !i.file);
+      // !i.football for the same reason randomOutfit carries it: a Pit opponent
+      // is a figure nobody chose, and it must not wear the shop's paid kit free.
+      const pool = BH_ITEMS.filter(i => i.slot === slot.code && !i.file && !i.football);
       if (pool.length) eq[slot.code] = pool[Math.floor(seedRand() * pool.length)].id;
     }
   }
@@ -21461,6 +22790,10 @@ let pitOpening = false;
    badge, and re-typing rows would silently move a badge nobody asked to move.
    Anything not listed keeps 'Pit win', which is the ladder itself: rung, champ
    and endless are Pit fights and should read as such. */
+/* QA round 28 P5: the defeat copy told the loser to eat well and walk far, which since R21-P1's
+   flat base feeds no stat at all. The truthful sentence is the Build tab's own
+   (see the Training points note in openCharacter), reused here verbatim. */
+const DEFEAT_STATS_NOTE = 'Your bones keep every stat. Points come from hitting your protein target, closing a day on budget, and every 25,000 steps you walk: run it back.';
 const FIGHT_ROW_LABEL = {
   spar: 'Sparring win', boss: 'Den win', mini: 'Mini-boss win', secret: 'Secret boss win',
   glutton: 'Glutton win', spire: 'Spire fight', mimic: 'Boneyard win', wanderer: 'Boneyard win',
@@ -21498,6 +22831,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
      OPEN until settle() or onClose resolves it; see the lifecycle comment
      above openFight. Awaited so the record exists before the player can act. */
   const staked = PIT_STAKED_MODES.includes(foeCfg.mode);
+  // QA round 28 P4: the spar ledger's `ref`. One id per arena, so settle() can
+  // only ever take one spar-<date>-<n> slot for this fight (see claimSpar).
+  const fightId = newId();
   if (staked) await kvSet('pitFight', { phase: 'open', mode: foeCfg.mode, foe: foeCfg.name, at: Date.now() });
   /* THE FIRST FIGHT IS UNLOSABLE, and it is derived HERE because openFight is the
      one door every fight in the app walks through: the Pit ladder, the Champion,
@@ -21559,7 +22895,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
         </div>`;
       document.body.appendChild(vs);
       setTimeout(() => hitSound(S.sounds, 'thud'), 430);
-      setTimeout(() => { vs.style.opacity = '0'; vs.style.transition = 'opacity .25s'; }, 1150);
+      /* QA round 26 O12: the card kept pointer-events auto through its fade and
+         swallowed every tap for 1,391 ms after FIGHT, still at opacity 0.010 and
+         at 0 (29/29 samples). Taps go through to the fight controls from the
+         moment the fade starts; the card is only paint from here on. */
+      setTimeout(() => { vs.style.pointerEvents = 'none'; vs.style.opacity = '0'; vs.style.transition = 'opacity .25s'; }, 1150);
       setTimeout(() => vs.remove(), 1420);
     }
   }
@@ -21700,14 +23040,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
          PAINTED INK against the HUD's real rect at every viewport. -->
       <div class="fight-hud">
         <div class="hud-side you">
-          <div class="fname">You</div>
+          <div class="fname">You <span id="youHpN">${Math.round(player.hp)}/${player.d.maxHp}</span></div>
           <div class="bar fhp"><i id="youHp" style="width:100%"></i></div>
           <div class="microbars"><div class="bar fwind"><i id="youWind" style="width:100%"></i></div><div class="bar fhype"><i id="youHype" style="width:0%"></i></div></div>
           <div class="fstate" id="youState" hidden></div>
           ${petBody ? `<div class="hud-pet" id="hudPet"><span class="petname">${esc(petBody.name)}</span><div class="bar fhp mini" style="--pool:${Math.min(100, Math.round(petBody.d.maxHp / Math.max(1, player.d.maxHp) * 100))}%"><i id="petHp" style="width:100%"></i></div></div>` : ''}
         </div>
         <div class="hud-side foe">
-          <div class="fname">${esc(foe.name)}</div>
+          <div class="fname">${esc(foe.name)} <span id="foeHpN">${Math.round(foe.hp)}/${foe.d.maxHp}</span></div>
           <div class="bar fhp"><i id="foeHp" style="width:100%"></i></div>
           <div class="microbars"><div class="bar fwind"><i id="foeWind" style="width:100%"></i></div><div class="bar fhype"><i id="foeHype" style="width:0%"></i></div></div>
           <div class="fstate" id="foeState" hidden></div>
@@ -21931,6 +23271,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
      half the boss's pool is half as long as the boss's. It reads at a glance
      without a single digit on screen, which is the version he wanted. */
   function updateBars() {
+    // QA round 28 P2: HP was a bar with no number on 0 of 111 turns. The same
+    // value that drives the width is printed in the name plate over the bar.
+    el('youHpN').textContent = `${Math.max(0, Math.round(player.hp))}/${player.d.maxHp}`;
+    el('foeHpN').textContent = `${Math.max(0, Math.round(foe.hp))}/${foe.d.maxHp}`;
     el('youHp').style.width = (player.hp / player.d.maxHp * 100) + '%';
     el('youHp').style.background = player.hp / player.d.maxHp < 0.3 ? 'var(--danger)' : '';
     el('foeHp').style.width = (foe.hp / foe.d.maxHp * 100) + '%';
@@ -22470,9 +23814,37 @@ async function openFight(pitWrap, fighter, foeCfg) {
        hover. It is the same title= pattern the wardrobe, gear and Crew tiles
        already use. The third route needs no code: the Talents sheet renders the
        very same sentence at full width, which is where it comes from. */
+    /* QA round 28 P2: WHAT A MOVE COSTS WAS ONLY IN title=, which is hover or
+       long-press and does not exist on a phone. Haymaker sat disabled on 71 of
+       111 driven turns still advertising "~45 dmg · 88% hit" with no reason.
+       One extra <small> under the hint, same values actionsFor already decided
+       on: the cost when the move is legal, the reason when it is not (AP first,
+       then Stamina; flurry's floor is the 30 actionsFor tests, not its windCost,
+       which is "all of it"). No new copy beyond the value strings.
+       IT IS A REAL, SEPARATE <small class="cost">, not text folded into the
+       hint (2026-09-04 correction). ea987dd7 shipped it that way first and it
+       cost ~14px of extra button height, because .fight-act is `display:grid`
+       and grid auto-places a second small sibling into its own implicit row;
+       fight-layout-audit's ROWS went red (2 of 3 rows fit a 188px tray at
+       393x852). 190b5eb1 "fixed" the height by deleting the element and
+       appending its text onto the hint's <small> instead, which then wrapped
+       the hint to two lines at 375/393 (fight-hint-audit) and made the Bone
+       Guard hint always carry "Stamina" even when it had been shortened to
+       drop it (fight-press-audit). Both were real regressions of the OTHER
+       audit's rule, not a false alarm.
+       The element stays real and separate; app.css takes it OUT of the grid's
+       row flow with `position:absolute` (.fight-act small.cost) so it costs
+       the button zero extra height without folding its text into the hint. */
+    const costLine = a => {
+      if (!a.enabled && !fight.over) {
+        if (fight.ap < a.ap) return `Needs ${a.ap} AP`;
+        return `Stamina ${Math.floor(player.wind)}/${a.id === 'flurry' ? 30 : a.windCost}`;
+      }
+      return `${a.ap} AP${a.windCost ? ` · ${a.windCost} Stamina` : ''}${a.id === 'guard' ? ` · +${GUARD_STAMINA} Stamina` : ''}${a.id === 'signature' ? ` · ${player.hype} Hype` : ''}`;
+    };
     const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
       <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" title="${esc(moveDetail(a.id))}" ${a.enabled ? '' : 'disabled'}>
-        <b>${a.label}</b><small>${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>${a.windCost ? ' ' + a.windCost + 'w' : ''}`}</small>
+        <b>${a.label}</b><small>${hint || `<span class="ap-pips">${'<i></i>'.repeat(a.ap)}</span>`}</small><small class="cost">${costLine(a)}</small>
       </button>` : '';
     const dmgHint = id => {
       const est = expectedDamage(id, player, null, foe);
@@ -22490,7 +23862,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
 
     let html = '';
     const sig = get('signature');
-    if (sig) html += `<button class="fight-act sig" data-act="signature" title="${esc(moveDetail('signature'))}" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · full power${player.sigsUsed ? ' · encore' : ''}</small></button>`;
+    if (sig) html += `<button class="fight-act sig" data-act="signature" title="${esc(moveDetail('signature'))}" ${sig.enabled ? '' : 'disabled'} style="grid-column:1/-1"><b>SIGNATURE</b><small>${sig.enabled || fight.over ? `~${Math.round(120 * player.d.powerMult * (player.talents.has('showstopper') ? 1.25 : 1) * Math.pow(0.75, player.sigsUsed || 0))} dmg · full power${player.sigsUsed ? ' · encore' : ''} · ` : ''}<span class="cost">${costLine(sig)}</span></small></button>`;
 
     const casterRow = () => {
       let h = '';
@@ -22781,7 +24153,11 @@ async function openFight(pitWrap, fighter, foeCfg) {
       await awardCapped('fight', 'fight', 10, FIGHT_ROW_LABEL[foeCfg.mode] || 'Pit win', XP_DAILY_CAP.fight);
       trackEvent(foeCfg.mode === 'boss' ? 'boss_win' : foeCfg.mode === 'mini' ? 'mini_win' : 'pit_win', { mode: foeCfg.mode });
       xp += 10;
-      if (foeCfg.mode === 'spar') { coins = 15; }
+      /* QA round 28 P4: 15 coins per spar win used to be assigned here with no
+         ledger key and no cap (start() skips spendPitFight on purpose). The
+         coins now come off claimSpar's daily slot; past SPAR_DAILY_CAP, or on a
+         repeated settle of this fight, it pays 0. */
+      if (foeCfg.mode === 'spar') { coins = (await claimSpar(fightId, true)).coins; }
       else if (foeCfg.mode === 'boss') {
         const r = await claimDenWin(foeCfg.den);
         if (r) {
@@ -23078,8 +24454,12 @@ async function openFight(pitWrap, fighter, foeCfg) {
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
     } else if (fight.over.winner === 'f') {
-      coins = 5;
-      await coinsAdd(coins);
+      /* QA round 28 P4: a spar LOSS paid 5 coins unconditionally, with no charge
+         spent and no cap, so losing on purpose was a coin tap. Spars now take the
+         same daily slot as a spar win. Staked modes are unchanged: their 5 is
+         already bounded by the Pit charge spendPitFight took. */
+      coins = foeCfg.mode === 'spar' ? (await claimSpar(fightId, false)).coins : 5;
+      if (coins) await coinsAdd(coins);
       window.__refreshWalletPill?.();
     }
     /* Spend the day's attempt on this tower, whatever the outcome. Outside the
@@ -23112,7 +24492,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
                  return `<div class="got-row"><span class="got-ic">${c.iconHtml || ''}</span><b>${esc(c.name)}</b><span class="got-rar r-${c.rarity}">${r.label}</span></div>`;
                }).join('')}</div>`
             : `<div class="loot-cards settle-cards${extraCards.length === 1 ? ' one' : ''}">${extraCards.map(c => packCardHtml(c)).join('')}</div>`) : ''}`
-      : `<p class="note" style="margin:8px 0 16px">${esc(fight.over.winner === 'draw' ? 'Both of you collapse. Call it cardio.' : `+${coins} consolation coins. Your bones keep every stat: eat well, walk far, run it back.`)}</p>`;
+      : `<p class="note" style="margin:8px 0 16px">${esc(fight.over.winner === 'draw' ? 'Both of you collapse. Call it cardio.' : `${coins ? `+${coins} consolation coins. ` : ''}${DEFEAT_STATS_NOTE}`)}</p>`;
     setTimeout(() => {
       body.insertAdjacentHTML('beforeend', `
         <div class="fight-over">
@@ -23353,7 +24733,37 @@ async function restageWardrobe(content, slot) {
   if (!grid) return false;
   const wanted = eqNow[slot] || '';
   for (const c of $$('[data-equip]', grid)) {
-    c.classList.toggle('equipped', (c.dataset.equip || '') === wanted);
+    /* A COLLAPSED FAMILY TILE RINGS FOR ANY OF ITS VARIANTS. Without the
+       data-fam-ids branch, equipping a sibling out of the colourway rail leaves
+       the family tile dark while the piece is on the Bonehead, which is the one
+       thing collapsing must never do. A plain tile has no data-fam-ids and
+       falls through to exactly the comparison it always used. */
+    const ids = c.dataset.famIds ? c.dataset.famIds.split(' ') : [c.dataset.equip || ''];
+    c.classList.toggle('equipped', ids.includes(wanted));
+  }
+  /* AND IT DRAWS THE VARIANT IT IS RINGING. The tile's data-equip is the piece
+     it is showing, so it also has to move, or the next tap on the family tile
+     puts back the colour you just changed out of. */
+  for (const c of $$('.ward-cell.fam[data-fam-ids]', grid)) {
+    if (!c.dataset.famIds.split(' ').includes(wanted) || c.dataset.equip === wanted) continue;
+    const art = BH_BY_ID[wanted];
+    const cv = $('canvas.ward-art', c);
+    if (!art || !cv) continue;
+    c.dataset.equip = wanted;
+    cv.setAttribute('data-art', bhTrim(bhAsset(art)));
+    /* AND ITS TINTS. Every colourway of a football garment shares ONE master PNG, so
+       moving data-art alone redraws the tile in the team you just changed out of
+       (wardrobe-family-grid-audit WORN, checksum unchanged, 2026-09-04). */
+    const tints = footballTints(art);
+    if (tints) cv.dataset.tints = JSON.stringify(tints); else delete cv.dataset.tints;
+    cv.setAttribute('aria-label', `${art.name}, ${art.rarity}`);
+    // the accessible name and the tooltip both name the piece on the tile, so
+    // they move with it; the count and the family's best tier do not change.
+    const n = c.dataset.famIds.split(' ').length;
+    const best = ([...c.classList].find(k => k.startsWith('r-')) || `r-${art.rarity}`).slice(2);
+    c.setAttribute('aria-label', `${art.name}, ${n} colourways, best ${best}`);
+    c.title = `${art.name} · ${n} colourways · best ${best}`;
+    await hydratePackArt(c, '.ward-art[data-art]');
   }
   return true;
 }

@@ -105,6 +105,32 @@ await browser.close();
 ok('TRANSIENT the first load really did die (an empty sample would fake this)', beforeRetry <= 0, `screenKids=${beforeRetry}`);
 ok('TRANSIENT the automatic reload brings the app back with no user action', after > 0, `screenKids after retry=${after}, navigations=${navs}`);
 
+/* 4. SLOW: not dead, just slow -- QA r34 P1#3. Slow 3G + 6x CPU delayed first
+      content to 99.5s while the old 12s-from-page-load timer reloaded at 12s,
+      mid-download, making the outcome later, not earlier. js/app.js itself is
+      throttled 15s here; the watchdog must not fire while it is still in
+      flight, and the app must still come up once it lands. */
+const slowBrowser = await puppeteer.launch({ headless: 'new', defaultViewport: { width: 430, height: 932 }, executablePath: chromePath(), args: sandboxArgs() });
+const slowPage = await slowBrowser.newPage();
+let slowNavs = 0;
+// exposeFunction + evaluateOnNewDocument, NOT framenavigated: boot does a
+// same-document history.replaceState (js/app.js, stopping the first tab tap
+// being classified as a cross-tab nav) that framenavigated also fires for,
+// which would count a healthy boot as a second navigation here.
+await slowPage.exposeFunction('__docStarted', () => { slowNavs++; });
+await slowPage.evaluateOnNewDocument(() => { try { window.__docStarted(); } catch { /* binding not up yet on the very first doc */ } });
+await slowPage.setRequestInterception(true);
+slowPage.on('request', r => {
+  if (/\/js\/app\.js$/.test(r.url())) { setTimeout(() => r.continue().catch(() => {}), 15000); return; }
+  r.continue().catch(() => {});
+});
+await slowPage.goto(base + '?demo', { waitUntil: 'domcontentloaded', timeout: 60000 });
+await sleep(29000);
+const slowKids = await slowPage.evaluate(() => (document.getElementById('screen') || {}).children?.length ?? -1);
+await slowBrowser.close();
+ok('SLOW the watchdog does not fire while js/app.js is still in flight', slowNavs === 1, `${slowNavs} navigation(s)`);
+ok('SLOW the app comes up once the throttled script finally lands', slowKids > 0, `screenKids=${slowKids}`);
+
 console.log(`\n${fails.length ? `${fails.length} FAILED` : 'ALL PASS'}`);
 srv?.close();
 process.exit(fails.length ? 1 : 0);

@@ -21,7 +21,7 @@
 // rewards, friend badges). Each has a unique key; we ingest through the same
 // idempotent award() as local play, so replays and re-pulls are harmless.
 
-import { db, kvGet, kvSet, kvUpdate, exportAll, importAll, witnessServerDay } from './db.js';
+import { db, kvGet, kvSet, kvUpdate, exportAll, importAll, witnessServerDay, dayIsUnwitnessed } from './db.js';
 import { awardOnce } from './game.js';
 import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd, grantEgg, grantPet } from './loot.js';
 
@@ -441,12 +441,29 @@ async function registerKey(id) {
 
 // Opt in: register this device's pubkey. Re-running (or restoring a backup)
 // returns the same account.
+/* QA round 34 P0: A FRESHLY-MINTED KEY HAS NOTHING TO RESTORE. Onboarding
+   calls this then pushes a backup (js/app.js saveInitialSettings), and
+   nothing latched kv 'bootRestored' on that path: it is only ever set inside
+   bootSync/adoptIdentity, after a PULL. So the very next boot found the flag
+   absent, ran bootSync's one-shot pull, and merged the blob THIS SAME DEVICE
+   had just pushed back over itself — an already-opened crate and already-spent
+   coins, both older in that blob than the live save, came back.
+   'idMinted' (ensureIdentity above) is the existing signal for exactly this:
+   "no server account and no cloud backup can exist for it" for a key this
+   device generated itself. When that is true, the blob this device is about
+   to push (or just pushed) IS its whole state; there is nothing on the server
+   older or newer to protect against, so latch here instead of waiting for a
+   pull that would only ever restore what is already on the phone.
+   Does NOT fire for a RECOVERED identity (keychain/kv, no idMinted): that is
+   bootSync's own reinstall branch calling this same function, and a real
+   backup can genuinely exist for that key — it must still pull. */
 export async function goOnline() {
   const id = await ensureIdentity();
   const r = await registerKey(id);
   if (!r.ok) return r;
   const me = r.me;
   await kvSet('social', { playerId: me.playerId, handle: me.handle, friendCode: me.friendCode, name: me.name || null, onlineAt: Date.now() });
+  if (await kvGet('idMinted', null)) await kvSet('bootRestored', true);
   return { ok: true, me };
 }
 
@@ -780,9 +797,24 @@ export async function pushBackup(appV = '') {
        decryptability flipped with whoever pushed last. One extra call to the
        same lazy function; everything after it is unchanged. */
     await backupKey();
-    const snapshot = await exportAll();
-    const blob = await encryptBackup(snapshot);
-    const r = await signedFetch('PUT', '/backup', { blob, appV });
+    let r;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const snapshot = await exportAll();
+      const blob = await encryptBackup(snapshot);
+      const baseVersion = await kvGet('backupVersion', null);
+      r = await signedFetch('PUT', '/backup', { blob, appV, baseVersion });
+      if (r.status !== 409 || attempt > 0) break;
+      /* Another device advanced the cloud row after this device last pulled.
+         Pulling through the ordinary live-backup path is important: it decrypts
+         and reaches importAll({ replace:false }), preserving both devices'
+         local-only rows. The next loop rebuilds the encrypted blob from that
+         merged database and retries exactly once with the version just read. */
+      const pulled = await pullBackup();
+      if (!pulled.restored) {
+        await kvSet('backupFail', { at: Date.now(), reason: pulled.reason || 'http-409' });
+        return false;
+      }
+    }
     /* A 200 IS NOT AN ACKNOWLEDGEMENT. This read `if (r.ok)` alone, so anything
        that answers 200 counted as a stored save: a captive portal's login page,
        a proxy interstitial, a truncated body. `backupAt` was stamped to now and
@@ -800,7 +832,11 @@ export async function pushBackup(appV = '') {
        retrying on a real network. No new failure surface. */
     if (r.ok) {
       const d = await r.json().catch(() => ({}));
-      if (d && d.ok === true) { await kvSet('backupAt', Date.now()); await kvSet('backupFail', null); return true; }
+      if (d && d.ok === true) {
+        const version = d.version ?? d.updatedAt;
+        if (Number.isSafeInteger(version)) await kvSet('backupVersion', version);
+        await kvSet('backupAt', Date.now()); await kvSet('backupFail', null); return true;
+      }
       await kvSet('backupFail', { at: Date.now(), reason: 'bad-body' });
       return false;
     }
@@ -873,7 +909,9 @@ export async function pullBackup({ slot = null, replace = false } = {}) {
        opposite reason: it is being used BECAUSE the local save is wrong, so
        merging the good copy into the bad one would keep the bad one. */
     const counts = await importAll(snapshot, { replace });
-    return { restored: true, counts, updatedAt: data.updatedAt };
+    const version = data.version ?? data.updatedAt;
+    if (slot !== 'daily' && Number.isSafeInteger(version)) await kvSet('backupVersion', version);
+    return { restored: true, counts, updatedAt: data.updatedAt, version };
   } catch (e) { return { restored: false, reason: String(e && e.message || e) }; }
 }
 
@@ -956,7 +994,16 @@ const GIFTBOX = 'giftbox';
  * awardOnce collapses the check and the act into one IndexedDB request
  * (db.addIfAbsent), so exactly one caller anywhere on the device is ever told
  * `claimed: true` for a key, and only that one runs the side effects below. */
-async function applyPayload(key, type, p) {
+/* `sentAt` IS THE SERVER'S ts ON THE GRANT ROW, and it has always been on the
+   wire (GET /grants selects it) and always been thrown away here. Every reader
+   downstream had only the LEDGER row's ts, which awardOnce stamps at the moment
+   of ingest, so the whole feed took the timestamp of the pull that fetched it:
+   round 29 (S12) sent three cheers minutes apart, opened the app once, and all
+   three rendered "just now". Nothing on the device can reconstruct it after
+   this hop, so it is carried onto the row as an extra column. Rows written
+   before this have none, and js/app.js deliveredWhen falls back to the ingest
+   stamp and SAYS it is an arrival time rather than pretending. */
+async function applyPayload(key, type, p, sentAt) {
   /* THE TWO FIELDS A CHEER IS ACTUALLY MADE OF. /cheer sends
      { from, cheer, cheerFrom, note }, and until now only `note` survived the
      trip into the ledger: the INDEX (which of the twelve phrases) and the
@@ -967,7 +1014,8 @@ async function applyPayload(key, type, p) {
      it is the wire format and 0 is a legitimate value that `||` would eat. */
   const extra = type === 'cheer'
     ? { cheer: Number.isFinite(+p.cheer) ? +p.cheer : null, cheerFrom: p.cheerFrom || null, from: p.from || null }
-    : null;
+    : {};
+  if (+sentAt > 0) extra.sentAt = +sentAt;
   const claim = await awardOnce(key, type || 'social', p.xp || 0, p.note || 'From the Crew', undefined, extra);
   if (!claim.claimed) return false;            // already ingested: skip side effects too
   if (p.coins) await coinsAdd(p.coins);
@@ -1026,7 +1074,7 @@ export async function openGift(key) {
   /* If applyPayload says no, this key was already ingested somewhere else and
      nothing was paid, so there is nothing to reveal and the caller must not
      play an unwrap for a present that paid nobody. */
-  if (!await applyPayload(g.key, g.type, g.payload || {})) return null;
+  if (!await applyPayload(g.key, g.type, g.payload || {}, g.ts)) return null;
   return g;
 }
 
@@ -1053,7 +1101,7 @@ async function applyGrant(g) {
     }, []);
     return true;    // it landed: it is in your box, sealed
   }
-  return applyPayload(g.key, g.type, p);
+  return applyPayload(g.key, g.type, p, g.ts);
 }
 
 export async function pullGrants() {
@@ -1338,6 +1386,36 @@ export async function touchServerDay() {
     if (Number.isFinite(sv) && sv > 0) await kvSet('clockSkewMs', Date.now() - sv);
     return await witnessServerDay(j && j.ts);
   } catch { return null; }
+}
+
+/* THE ONE CASE WHERE FIRE-AND-FORGET IS NOT GOOD ENOUGH: the returning player.
+   bootSync kicks touchServerDay off and walks on, which is right on an ordinary
+   open (nothing is waiting on it) and wrong after a gap of 8+ days, because
+   then the very next thing the boot does is awardDayCloseIfDue -> claimDay,
+   which reads a ceiling the answer has not raised yet and refuses the day close
+   the player is owed as `unwitnessed`. Measured at 14 and 120 days away: the
+   Bone Crate never paid.
+
+   THE BOUND IS THE POINT, not the wait. This costs an ordinary boot NOTHING: it
+   returns immediately unless today is ALREADY above the ceiling, which is the
+   only state the wait can change. When it does wait it waits `ms` and no
+   longer, so an offline return, a captive-portal Wi-Fi and a dead API all boot
+   in 1.5 s and land exactly where they land today, unpaid with a line on Today
+   saying why (js/app.js DAY_GUARD_COPY.unwitnessed). The request is left in
+   flight rather than aborted: if it lands a second later the ceiling still
+   rises and the next open pays.
+
+   Resolves true only when the ceiling actually cleared, so a caller can tell
+   "the witness arrived" from "the bound ran out". */
+export async function settleServerDay(key, ms = 1500) {
+  if (!(await dayIsUnwitnessed(key))) return false;
+  let t;
+  await Promise.race([
+    touchServerDay().catch(() => null),
+    new Promise(r => { t = setTimeout(r, ms); }),
+  ]);
+  clearTimeout(t);
+  return !(await dayIsUnwitnessed(key));
 }
 
 export async function bootSync() {

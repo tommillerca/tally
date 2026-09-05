@@ -128,7 +128,7 @@ grant precisely so it stays meaningful. Handing it back **by name, to one
 ```sh
 cd server
 npx wrangler d1 execute bonez --local --file=schema.sql
-npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken
+npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken --var ADD_TOKEN_SECRET:devaddsecret --var RL_SECRET:devrlsecret
 node admin-grant.test.mjs                # the routes, 40 rows
 cd .. && node tests/admin-grant-audit.mjs # the pet actually landing, client side
 ```

@@ -578,9 +578,21 @@ test('the devices window outlives everything that joins to it', () => {
    the crowds worth measuring are the ones that go dark. */
 const CROWD_DEVICES = 100;
 test(`the /events IP budget clears ${CROWD_DEVICES} devices at the per-device ceiling`, () => {
-  const limitOf = n => Number(new RegExp(`${n}:\\s*\\{ limit: (\\d+)`).exec(source)?.[1]);
+  /* The limit is a number OR a named constant holding one (QA round 29 S4 gave
+     rl_events_ip a name so the 53-writes-per-request arithmetic could sit on
+     it). Reading only `\d+` made this row red on healthy code the moment
+     somebody named the value, which is the guard's bug and not the code's, so
+     one `const NAME = <digits>` hop is followed here. */
+  const limitOf = n => {
+    const raw = new RegExp(`${n}:\\s*\\{ limit: ([\\w$]+)`).exec(source)?.[1];
+    if (raw === undefined) return NaN;
+    if (/^\d+$/.test(raw)) return Number(raw);
+    const via = new RegExp(`const ${raw} = (\\d+)`).exec(source)?.[1];
+    assert.ok(via, `${n}'s limit is \`${raw}\`, and no \`const ${raw} = <number>\` defines it`);
+    return Number(via);
+  };
   const perDevice = limitOf('rl_events_dev'), perIp = limitOf('rl_events_ip');
-  assert.ok(perDevice > 0 && perIp > 0, 'rl_events_dev / rl_events_ip are not in RATE_LIMITS any more');
+  assert.ok(perDevice > 0 && perIp > 0, `rl_events_dev / rl_events_ip are not in RATE_LIMITS any more (read ${perDevice} and ${perIp})`);
   assert.ok(perIp >= perDevice * CROWD_DEVICES,
     `${perIp}/hour per IP is only ${Math.floor(perIp / perDevice)} devices at the ${perDevice}/hour device ceiling. ` +
     'On NAT that locks every further install out of analytics, first POST included.');
@@ -984,8 +996,12 @@ async function renderLeads(leads, form = null) {
     errorsByBuild: [], vault: {}, generatedAt: Date.now(),
   };
   const fetchStub = async u => (String(u).includes('/admin/prune') ? { ok: false } : { ok: true, json: async () => payload });
-  const app = new Function('document', 'localStorage', 'navigator', 'fetch', src + '\nreturn { load };')(
-    document, {}, { clipboard: { writeText: async () => {} } }, fetchStub);
+  /* sessionStorage as well as localStorage (QA round 29 S2): the admin token
+     moved out of localStorage on the game's own Pages origin and into the tab's
+     sessionStorage, so the script reads both and an unstubbed one is a
+     ReferenceError that reads as three dashboard failures. */
+  const app = new Function('document', 'localStorage', 'sessionStorage', 'navigator', 'fetch', src + '\nreturn { load };')(
+    document, {}, {}, { clipboard: { writeText: async () => {} } }, fetchStub);
   nodes.api.value = 'http://x'; nodes.token.value = 't';
   await app.load();
   if (form) {

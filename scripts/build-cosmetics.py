@@ -253,7 +253,10 @@ def _prior_items():
     except OSError:
         return {}
     try:
-        start = text.index('[', text.index('BH_ITEMS'))
+        # Anchor on the declaration itself: the football import's comment at the top of
+        # the file mentions BH_ITEMS_ALL before the array (2026-09-04), and the first
+        # mention used to be the array. tests/rebuild-lossless-audit.mjs anchors the same way.
+        start = text.index('[', text.index(f'{ITEMS_VAR} = ['))
         depth = 0
         for end in range(start, len(text)):
             if text[end] == '[':

@@ -6,6 +6,8 @@ import { dirname, join } from 'node:path';
 import assert from 'node:assert/strict';
 /* eggProgress is PURE (no db, no DOM), so it unit-tests directly. */
 import { eggProgress } from '../js/loot.js';
+/* onAppResume touches window/document only when CALLED, so it imports clean (O24). */
+import { onAppResume } from '../js/native.js';
 
 import {
   computeTargets, nutrientsFor, portionLabel, dayTotals, kcalConsistent,
@@ -13,7 +15,7 @@ import {
   lbToKg, kgToLb, ftInToCm, cmToFtIn, mealForHour,
   assumedActiveBurn, activeCalorieBonus, bmrMifflin, kcalFloor, gramsChipDefault, fmtG,
 } from '../js/nutrition.js';
-import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume } from '../js/cooking.js';
+import { RECIPES, INGREDIENTS, canCook, ingredientCount, fmtCookTime, POTIONS, POTION_BY_ID, potionCount, MAX_POTS, POT_PRICES, nextPotPrice, TRANSMUTE, transmuteConsume, foodBuffLabel, queueReadyCount } from '../js/cooking.js';
 import { isWalkableFeature, snapToWalkable } from '../js/geo.js';
 import { GEAR_ITEMS } from '../js/gear.js';
 import {
@@ -24,7 +26,7 @@ import {
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct, fetchOffProductEx } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews } from '../js/game.js';
+import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard } from '../js/game.js';
 import { STAT_META, STYLES } from '../js/pit.js';
 import * as pitMod from '../js/pit.js';
 const mkFighter = pitMod.makeFighter;
@@ -35,7 +37,9 @@ import {
 import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, gearDustValue, gearStatPoints, petDustValue,
   migrateInstances, bestInstance, speciesCount, removeWorstInstance, addInstance, creditSteps,
   removeInstance, breedParents, transmogCost, TRANSMOG_HIDE,
-  nickProblem, cleanNick, NICK_MAX } from '../js/loot.js';
+  nickProblem, cleanNick, NICK_MAX,
+  RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_REROLL_LADDER,
+  rollCosmetic, crateEligible } from '../js/loot.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, PET_SLOTS } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
@@ -722,12 +726,216 @@ test('snapToWalkable: snaps to a nearby road, respects the max distance, sits in
 });
 
 // ---- loot data ----
+/* RE-PREMISED 2026-09-04 (round 33, FAUCET-1). This test asserted the SHAPE of
+   CRATES and nothing about the numbers, which is the lesson "a guard can assert
+   SHAPE, never STATE" in its own file: `rolls >= 1` stays green whatever a
+   crate pays. The crate coin range is the single biggest lever on income the
+   economy has. The faucet sim (scratchpad/r33/faucet/faucet.mjs) measures the
+   fifth-cut plan's proposed Common [60,100] / Bone [400,600] at 2.4x today's
+   committed coins/day, and Tom's ruling was to halve that proposal, NOT to
+   change the shipped numbers, which are the ones below. So they are pinned:
+   changing what a crate pays now has to be a deliberate edit to this line and
+   a re-run of the sim, not a one-character drift nothing notices. */
 test('rarity weights sum to 100 and crates are sane', () => {
   assert.equal(RARITY_ORDER.reduce((a, r) => a + RARITIES[r].w, 0), 100);
   for (const k of Object.keys(CRATES)) {
     assert.ok(CRATES[k].rolls >= 1 && CRATES[k].floor < RARITY_ORDER.length, k);
   }
+  assert.deepEqual(CRATES.daily.coins, [20, 40], 'Common Crate coin range (shipped economy number)');
+  assert.deepEqual(CRATES.golden.coins, [10, 25], 'Bone Crate coin range (shipped economy number)');
+  assert.deepEqual(CRATES.egg.coins, [20, 50], 'Step Egg coin range (shipped economy number)');
   assert.ok(SHOP.every(s => s.cost > 0));
+});
+
+/* CRATE-FREQUENCY AUDIT LEVER 1 (2026-09-05), scratchpad/r33/faucet/out/crate-frequency.md
+   section 4c. rollCosmetic() used to prefer an unowned item and walk to a
+   neighbouring rarity when the rolled one was fully owned, so every roll was a
+   guaranteed new piece and the rack above common sold almost nothing to a
+   committed player (0.7 of 34 legendaries bought a year). It now picks
+   uniformly over crateEligible items AT THE ROLLED RARITY, owned or not. */
+test('crate levers (a) rollCosmetic: a fully-owned pool still dupes, at the rarity it rolled (seeded rng)', () => {
+  const pool = BH_ITEMS.filter(crateEligible);
+  const owned = new Set(pool.map(i => i.id));
+  // Fix the rng stream so the roll is reproducible: first draw picks the
+  // rarity (a tiny fraction always lands on RARITY_ORDER[0], 'common'),
+  // second draw picks the item (0 always lands on index 0 of the pool).
+  const origGRV = globalThis.crypto.getRandomValues;
+  const stream = [0.001, 0];
+  let n = 0;
+  globalThis.crypto.getRandomValues = a => { a[0] = Math.floor(stream[n++ % stream.length] * 0xffffffff); return a; };
+  let item, dupe;
+  try {
+    ({ item, dupe } = rollCosmetic(owned, 0, null));
+  } finally {
+    globalThis.crypto.getRandomValues = origGRV;
+  }
+  assert.equal(dupe, true, 'every item in the pool is owned, so the roll must come back a dupe');
+  assert.equal(item.rarity, 'common', 'the fixed rng stream rolls RARITY_ORDER[0] at floor 0');
+});
+
+test('crate levers (b) rollCosmetic: a half-owned pool draws uniformly (the unowned-preference prove-red)', () => {
+  const pool = BH_ITEMS.filter(crateEligible);
+  // own every other item WITHIN EACH RARITY, so the owned share is ~50% at
+  // every rarity a roll can land on, not just over the pool as a whole.
+  const byRarity = {};
+  for (const i of pool) (byRarity[i.rarity] ||= []).push(i);
+  const owned = new Set();
+  for (const r of Object.keys(byRarity)) byRarity[r].forEach((i, idx) => { if (idx % 2 === 0) owned.add(i.id); });
+  const ownedShare = owned.size / pool.length;
+  const N = 4000;
+  let dupes = 0;
+  for (let i = 0; i < N; i++) if (rollCosmetic(owned, 0, null).dupe) dupes++;
+  const got = dupes / N;
+  assert.ok(Math.abs(got - ownedShare) < 0.05,
+    `dupe share ${(got * 100).toFixed(1)}% against the pool's owned share ${(ownedShare * 100).toFixed(1)}% (tolerance 5 points): an unowned preference pulls this toward 0%`);
+});
+
+/* CRATE-FREQUENCY AUDIT LEVER 2 (2026-09-05): the off-budget "logged the day"
+   branch of awardDayCloseIfDue no longer grants a Common Crate (145/yr for a
+   committed player, yielding 0.19 cosmetics each against 0.55 for a Bone
+   crate). The XP still pays; only the crate is gone. On-budget day close is
+   unchanged. */
+test('crate levers (c) awardDayCloseIfDue: an off-budget logged day grants no crate; on-budget still grants its Bone crate', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  const TARGETS = { kcal: 2000, p: 120 };
+  const today = dateKey();
+  const yday = addDays(today, -1);
+
+  dbm.useDbName('unit-cratelev-offbudget');
+  await dbm.db.put('log', { id: 'off-1', date: yday, meal: 0, name: 'Feast', kcal: 2600, p: 90, c: 200, f: 90 });
+  const offClosed = await g.awardDayCloseIfDue(TARGETS);
+  const offCrates = (await dbm.db.all('inv')).filter(r => r.kind === 'crate');
+  assert.equal(offClosed?.consoled, true, 'an off-budget logged day must still be consoled (the XP still pays)');
+  assert.equal(offCrates.length, 0, 'an off-budget logged day must grant no crate');
+
+  dbm.useDbName('unit-cratelev-onbudget');
+  await dbm.db.put('log', { id: 'on-1', date: yday, meal: 0, name: 'Salad', kcal: 1800, p: 130, c: 150, f: 50 });
+  const onClosed = await g.awardDayCloseIfDue(TARGETS);
+  const onCrates = (await dbm.db.all('inv')).filter(r => r.kind === 'crate');
+  assert.equal(onClosed?.closed, true, 'an on-budget day must still close');
+  assert.equal(onCrates.length, 1, 'an on-budget day close must still grant exactly one crate');
+  assert.equal(onCrates[0].crate, 'golden', 'the day-close crate is still the Bone (golden) crate');
+});
+
+/* BACKDATED LOGS PAY NOTHING (2026-09-05). Tom: past days stay editable (people
+   forget to log), but a food log dated before dateKey() must earn no XP, streak
+   or badge -- it is a diary correction, not a today action. Playtest repro:
+   open yesterday, Gwart says the day is finished, tap Add to Snacks, log an
+   apple: the diary changed and XP rose by 10 anyway, because onFoodLogged never
+   looked at entry.date against dateKey() before running its award() calls. The
+   fix is one guard at the top of onFoodLogged (js/game.js), so it holds for
+   every caller (relog, quick add, portion add) without touching commitLogEntry,
+   which must still let the db.put land either way (past days stay editable). */
+test('backdated log (2026-09-05): logging into yesterday awards 0 XP and leaves the ledger untouched', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-backdate-yesterday');
+  const yday = addDays(dateKey(), -1);
+  const e = { id: 'bd-1', date: yday, meal: 0, name: 'Apple', kcal: 95, p: 0, c: 25, f: 0 };
+  await dbm.db.put('log', e);
+  const game = await g.onFoodLogged(e, { targets: { kcal: 2000, p: 120 }, entriesForDate: [e] });
+  assert.equal(game.xp, 0, 'a backdated log must earn 0 XP');
+  assert.equal(game.streakMilestone, null, 'a backdated log must not fire a streak milestone');
+  assert.equal(game.newBadges.length, 0, 'a backdated log must not evaluate/award badges');
+  assert.equal(game.crates, 0, 'a backdated log must grant no crate');
+  const xpRows = await dbm.db.all('xp');
+  assert.equal(xpRows.length, 0, 'the XP ledger must be untouched by a backdated log');
+});
+
+test('backdated log (2026-09-05): logging into today still awards its base 10 XP', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-backdate-today');
+  const today = dateKey();
+  // control: the first log of a real today still pays (first-log bonus included)
+  const e1 = { id: 'bd-t1', date: today, meal: 0, name: 'Egg', kcal: 70, p: 6, c: 1, f: 5 };
+  await dbm.db.put('log', e1);
+  const first = await g.onFoodLogged(e1, { targets: { kcal: 4000, p: 500 }, entriesForDate: [e1] });
+  assert.ok(first.xp > 0, 'the first log of today must still pay (control)');
+  // a second log the same day, past first-log/protein/all-meals, must be the bare 10
+  const e2 = { id: 'bd-t2', date: today, meal: 1, name: 'Toast', kcal: 90, p: 3, c: 15, f: 2 };
+  await dbm.db.put('log', e2);
+  const second = await g.onFoodLogged(e2, { targets: { kcal: 4000, p: 500 }, entriesForDate: [e1, e2] });
+  assert.equal(second.xp, 10, 'a same-day log past the first-log bonus must pay exactly the base 10');
+});
+
+test("backdated log (2026-09-05): editing yesterday's entry still saves, and still pays 0", async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-backdate-edit');
+  const yday = addDays(dateKey(), -1);
+  const e = { id: 'bd-edit-1', date: yday, meal: 0, name: 'Apple', kcal: 95, p: 0, c: 25, f: 0 };
+  await dbm.db.put('log', e);
+  await g.onFoodLogged(e, { targets: {}, entriesForDate: [e] });
+  const edited = { ...e, name: 'Apple (large)', kcal: 130 };
+  await dbm.db.put('log', edited);   // the edit: same id, new fields, no different date
+  const stored = await dbm.db.get('log', 'bd-edit-1');
+  assert.equal(stored.name, 'Apple (large)', 'editing a past-day entry must still persist its name');
+  assert.equal(stored.kcal, 130, 'editing a past-day entry must still persist its new kcal');
+  const again = await g.onFoodLogged(edited, { targets: {}, entriesForDate: [edited] });
+  assert.equal(again.xp, 0, 're-running the reward path on an edited backdated entry still pays 0');
+  const xpRows = await dbm.db.all('xp');
+  assert.equal(xpRows.length, 0, 'the XP ledger stays untouched after editing a backdated entry');
+});
+
+/* THE COSMETIC PRICE LADDER, PINNED (round 33, 2026-09-04, Tom: "Just make
+   everything cost more"). Same reasoning as the crate ranges above: these are
+   shipped economy numbers and nothing in the tree noticed if one of them
+   drifted. tests/rack-rotate-audit.mjs already checks the ladder's SHAPE (dust
+   never reverses, every rung has a dust twin) and stays green at any prices at
+   all, which is the shape-not-state hole this closes.
+
+   THREE THINGS ARE PINNED, and the third is the one that matters:
+   1. every coin and dust value, so a change is a deliberate edit here;
+   2. the ANCHOR, which is a rule and not a preference: a 340-coin starting
+      wallet must be able to buy the cheapest thing on the shelf, or the screen
+      has no affordable state on it at all (js/loot.js RACK_POOLS). This is the
+      reason the doubling exempted `common`, and it is measured: at a flat 2x
+      the sim's light player's first cosmetic slips day 22 -> 35 and their year
+      falls 21 pieces -> 9;
+   3. the RELATIONSHIP. Dust is the certainty premium, so coins-per-dust must
+      never reverse AND must not silently re-rate: doubling coins alone would
+      have halved dust's real price with every ordering check still green. Both
+      shelves' ratios are pinned to the values the shipped comments state. */
+test('rack: the cosmetic price ladder, its anchor and its coins-per-dust', () => {
+  assert.deepEqual(RACK_RARITY_PRICE, {
+    common:    [300, 35],
+    uncommon:  [1400, 150],
+    rare:      [2000, 190],
+    epic:      [2800, 260],
+    legendary: [4000, 320],
+  }, 'rarity ladder (shipped economy number)');
+  assert.deepEqual(RACK_POOLS.map(([coin]) => coin),
+    [6000, 4800, 4000, 3000, 2000, 1800, 1400, 300], 'themed rung prices (shipped economy number)');
+  assert.deepEqual(RACK_DUST, [400, 350, 320, 260, 190, 180, 150, 35], 'themed rung dust (shipped economy number)');
+  assert.deepEqual([RACK_AURA.coin, RACK_AURA.dust], [2400, 220], 'aura price (shipped economy number)');
+  /* The reroll's opening rung is a quarter of a legendary BY CONSTRUCTION
+     (js/loot.js RACK_REROLL_LADDER), so it is pinned to the ladder, not just to
+     itself: leaving it behind a doubled legendary makes the stated rule false. */
+  assert.deepEqual(RACK_REROLL_LADDER, [0, 1000, 2000, 4000, 8000, 16000], 'reroll ladder (shipped economy number)');
+  assert.equal(RACK_REROLL_LADDER[1], RACK_RARITY_PRICE.legendary[0] / 4,
+    'reroll opens at a quarter of a legendary, as its own comment claims');
+
+  // 2. the anchor: a starting wallet buys the cheapest rung, and one exists
+  const STARTING_WALLET = 340;   // js/loot.js RACK_POOLS, "a starting wallet is 340 coins"
+  const cheapestRung = Math.min(...RACK_POOLS.map(([c]) => c));
+  assert.ok(cheapestRung <= STARTING_WALLET,
+    `cheapest rack rung ${cheapestRung} is out of a ${STARTING_WALLET}-coin starting wallet's reach`);
+  assert.equal(RACK_RARITY_PRICE.common[0], cheapestRung,
+    'the two shelves disagree about the anchor: a common costs more on one than the other');
+
+  // 3. the relationship, both shelves, to the ratios the shipped comments state
+  const round1 = n => Math.round(n * 10) / 10;
+  assert.deepEqual(RACK_POOLS.map(([c], i) => round1(c / RACK_DUST[i])),
+    [15, 13.7, 12.5, 11.5, 10.5, 10, 9.3, 8.6], 'themed coins-per-dust, dearest to cheapest');
+  assert.deepEqual(['common', 'uncommon', 'rare', 'epic', 'legendary']
+    .map(r => round1(RACK_RARITY_PRICE[r][0] / RACK_RARITY_PRICE[r][1])),
+    [8.6, 9.3, 10.5, 10.8, 12.5], 'rarity coins-per-dust, cheapest to dearest');
 });
 
 // ---- boneheadz manifest ----
@@ -1078,6 +1286,57 @@ test('hunt: spawn keys are stable and ledger-friendly', () => {
 test('hunt: fmtDist', () => {
   assert.equal(huntMod.fmtDist(42), '42 m');
   assert.equal(huntMod.fmtDist(1620), '1.6 km');
+});
+/* Y4, round 28. The display and the collect decision read the SAME distance, so
+   any rounding band where they disagree is a promise the intro card breaks:
+   Math.round put 75.32 m on "75 m", which is exactly the number the card names
+   as collectable. This sweeps the whole neighbourhood of the radius at 1 cm
+   resolution and asserts the ONE invariant that matters, that "printed <= R" and
+   "collectable" are the same fact, rather than pinning one lucky number. */
+test('hunt: a printed distance can never contradict the collect decision', () => {
+  const R = huntMod.COLLECT_RADIUS_M;
+  const samples = [];
+  for (let cm = (R - 2) * 100; cm <= (R + 2) * 100; cm++) samples.push(cm / 100);
+  assert.ok(samples.length > 300, `empty/thin sample: ${samples.length}`);
+  let far = 0, near = 0;
+  for (const d of samples) {
+    const label = huntMod.fmtDist(d);
+    assert.match(label, /^\d+ m$/, `${d} m did not print in metres: ${label}`);
+    const shown = parseInt(label, 10);
+    const collectable = d <= R;
+    collectable ? near++ : far++;
+    assert.equal(shown <= R, collectable,
+      `${d} m prints "${label}" but collectSpawn ${collectable ? 'accepts' : 'refuses'} it`);
+  }
+  assert.ok(far > 100 && near > 100, `one-sided sample: ${near} in range, ${far} out`);
+  assert.equal(huntMod.fmtDist(75.32), '76 m'); // the exact band QA drove
+});
+/* Y2, round 28. Dens speak, the Wanderer speaks, the speed guard speaks; a spawn
+   you could see but not reach said nothing, and reachability lived only in a CSS
+   class. Both player-facing sentences come from here so the marker tip and the
+   refused collect cannot drift apart. */
+test('hunt: an out-of-range spawn says it is out of range and how far', () => {
+  const R = huntMod.COLLECT_RADIUS_M;
+  const far = huntMod.collectReach(R + 0.32);
+  assert.match(far, /^76 m away\./, far);
+  assert.match(far, new RegExp(`Get within ${R} m to collect it\\.$`), far);
+  const atEdge = huntMod.collectReach(R);
+  assert.notEqual(atEdge, far);                       // the two states must differ
+  assert.match(atEdge, /close enough/, atEdge);
+  assert.match(huntMod.collectReach(12), /^12 m away\./);
+});
+/* The pure sentence above is inert unless the map actually says it. These are the
+   two arms round 28 found silent: the refused collect (which returned with no
+   message at all) and the marker tip (which said "walk to reach it" whether you
+   were 12 m or 1.2 km out). */
+test('boneyard: the refused collect and the marker tip both speak', () => {
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const arms = src.match(/rec\.spawn\.dist > COLLECT_RADIUS_M[^\n]*/g) || [];
+  assert.equal(arms.length, 1, `expected one out-of-range collect arm, found ${arms.length}`);
+  assert.ok(/toast\(collectReach\(/.test(arms[0]),
+    `the refused collect is silent, it should toast collectReach(): ${arms[0].trim()}`);
+  assert.ok(/foot: collectReach\(s\.dist\)/.test(src),
+    'the spawn marker tip never says whether the spawn is reachable');
 });
 
 // ---- companion shortcut ----
@@ -1545,6 +1804,29 @@ test('kitchen: transmute consumes commons greedily from the most-abundant (v144)
   assert.equal(transmuteConsume({ marrow: 2 }, 6).taken, 2);
 });
 
+/* QA round 26 O17: every coins dish in the Pantry read "+25% coins · NaNh NaNm
+   left". The Pantry row hands the formatter the recipe's bare buff, which has a
+   duration (hours) and no deadline (untilMs), and the formatter subtracted the
+   missing deadline from the clock. Both shapes the app feeds it are graded:
+   the Pantry shape for EVERY recipe, and the live shape with a real deadline.
+   PROVE-RED: the pre-fix formatter body (untilMs - now unconditionally) prints
+   NaN for zombie-fajita in the Pantry shape. */
+test('kitchen: foodBuffLabel formats every recipe finitely, in the Pantry and live (QA r26 O17)', () => {
+  const NOW = 1_800_000_000_000;
+  let coinsDishes = 0;
+  for (const r of RECIPES) {
+    const pantry = foodBuffLabel({ ...r.buff, ...(r.buff.kind === 'combat' ? { fightsLeft: r.buff.fights } : {}) }, NOW);
+    assert.ok(typeof pantry === 'string' && pantry.length > 0 && !/NaN|undefined|Infinity/.test(pantry), `${r.id} pantry label: ${pantry}`);
+    if (r.buff.kind === 'coins') {
+      coinsDishes++;
+      assert.match(pantry, /^\+\d+% coins for \d+h/, `${r.id} pantry label states the duration it will run: ${pantry}`);
+      const live = foodBuffLabel({ ...r.buff, untilMs: NOW + 90 * 60000 }, NOW);
+      assert.equal(live, `+${Math.round(r.buff.pct * 100)}% coins · 1h 30m left`, 'a live coins buff still counts down');
+    }
+  }
+  assert.ok(coinsDishes > 0, 'an empty sample is a failure: no coins dish in RECIPES');
+});
+
 /* ---- v231 account recovery: the rules that decide whether a lost account can
    come back. A regression here is not a cosmetic bug, it is a wiped save. ---- */
 
@@ -1653,16 +1935,16 @@ test('css: the scroll container still reserves the safe area', () => {
    classes) by specificity then source order, the way the browser does, for the
    three controls QA measured under the floor. The pixel proof is
    tests/a11y-audit.mjs (M24 rows); this is the static half. ---- */
-test('R25-M20 sheet-head icon buttons and the amount input resolve to >= 44px', () => {
-  const css = readFileSync(join(here, '..', 'app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-  /* Simple selectors only: `.a`, `.a.b`, `.a .b`, `tag`, `.a input`. Anything
-     with an id, pseudo, attribute or combinator other than descendant is
-     skipped, which is safe here because a skipped rule can only make this
-     resolver report a SMALLER winner than the browser if that rule raised the
-     value, and every rule in these three chains is plain classes. */
+/* THE CASCADE RESOLVER, shared by R25-M20 and R22-W12 below. Simple selectors
+   only: `.a`, `.a.b`, `.a .b`, `tag`, `.a input`. Anything with an id, pseudo,
+   attribute or combinator other than descendant is skipped, which is safe here
+   because a skipped rule can only make this resolver report a SMALLER winner
+   than the browser if that rule raised the value, and every rule in the chains
+   it is asked about is plain classes.
+   el = { tag, classes, ancestors: [{tag, classes}, ...] nearest first } */
+function cssResolve(sheet, el, prop) {
   const compound = tok => { const m = tok.match(/^([a-z]+)?((?:\.[\w-]+)*)$/i); return m ? { tag: m[1] || null, classes: (m[2].match(/[\w-]+/g) || []) } : null; };
   const matchesCompound = (c, el) => (!c.tag || c.tag === el.tag) && c.classes.every(k => el.classes.includes(k));
-  // el = { tag, classes, ancestors: [{tag, classes}, ...] nearest first }
   const matches = (selector, el) => {
     const parts = selector.trim().split(/\s+/).map(compound);
     if (parts.some(p => !p) || /[#:>+~\[]/.test(selector)) return null;
@@ -1675,26 +1957,37 @@ test('R25-M20 sheet-head icon buttons and the amount input resolve to >= 44px', 
     return true;
   };
   const specificity = sel => (sel.match(/\.[\w-]+/g) || []).length * 10 + (sel.match(/(^|\s)[a-z]+/gi) || []).length;
-  const resolve = (el, prop, sheet = css) => {
-    let win = null, order = 0;
-    for (const m of sheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-      order++;
-      const decl = m[2].match(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`));
-      if (!decl) continue;
-      for (const sel of m[1].split(',')) {
-        if (!matches(sel, el)) continue;
-        const sp = specificity(sel);
-        if (!win || sp > win.sp || (sp === win.sp && order >= win.order)) win = { sp, order, sel: sel.trim(), value: decl[1].trim() };
-      }
+  let win = null, order = 0;
+  for (const m of sheet.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    order++;
+    const decl = m[2].match(new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`));
+    if (!decl) continue;
+    for (const sel of m[1].split(',')) {
+      if (!matches(sel, el)) continue;
+      const sp = specificity(sel);
+      if (!win || sp > win.sp || (sp === win.sp && order >= win.order)) win = { sp, order, sel: sel.trim(), value: decl[1].trim() };
     }
-    return win;
-  };
-  const px = v => { assert.match(v, /^\d+(\.\d+)?px$/, `expected a px value, got "${v}"`); return parseFloat(v); };
+  }
+  return win;
+}
+const cssPx = v => { assert.match(v, /^\d+(\.\d+)?px$/, `expected a px value, got "${v}"`); return parseFloat(v); };
+
+test('R25-M20 sheet-head icon buttons and the amount input resolve to >= 44px', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const resolve = (el, prop, sheet = css) => cssResolve(sheet, el, prop);
+  const px = cssPx;
   const sheetHead = [{ tag: 'div', classes: ['t1-tools'] }, { tag: 'div', classes: ['sheet-head'] }, { tag: 'div', classes: ['sheet', 't1'] }];
   const close = { tag: 'button', classes: ['sheet-close', 't1-icon-btn'], ancestors: sheetHead };
   const fav = { tag: 'button', classes: ['t1-icon-btn'], ancestors: sheetHead };
   const qty = { tag: 'input', classes: [], ancestors: [{ tag: 'div', classes: ['val'] }, { tag: 'div', classes: ['t1-step'] }, { tag: 'div', classes: ['sheet-body'] }] };
-  for (const [name, el] of [['.sheet-close.t1-icon-btn', close], ['#favBtn (.t1-icon-btn)', fav], ['#qtyIn (.t1-step .val input)', qty]]) {
+  /* QA round 28 B2: two more controls the same cascade left under the floor.
+     The chevron is a bare .t1-icon-btn OUTSIDE .t1-tools (a recents row), so
+     the M20 fix never reached it; "Wear it" is a .btn whose only height came
+     from padding, so no rule set min-height at all. Both red on main. */
+  const chev = { tag: 'button', classes: ['t1-icon-btn'], ancestors: [{ tag: 'div', classes: ['t1-frow', 't1-frow-split'] }, { tag: 'div', classes: ['sheet-body'] }, { tag: 'div', classes: ['sheet', 't1'] }] };
+  const wear = { tag: 'button', classes: ['btn', 'mog-go'], ancestors: [{ tag: 'div', classes: ['look-bar', 'mog-bar'] }, { tag: 'div', classes: ['mog-dock'] }] };
+  for (const [name, el] of [['.sheet-close.t1-icon-btn', close], ['#favBtn (.t1-icon-btn)', fav], ['#qtyIn (.t1-step .val input)', qty],
+    ['"Change portion" chevron (.t1-frow-split .t1-icon-btn, R28-B2)', chev], ['"Wear it" (.look-bar.mog-bar .btn.mog-go, R28-B2)', wear]]) {
     const w = resolve(el, 'min-height');
     assert.ok(w, `${name}: no rule sets min-height at all`);
     assert.ok(px(w.value) >= 44, `${name}: the winning min-height is "${w.sel} { min-height: ${w.value} }", under the 44px floor (QA round 25 M20)`);
@@ -3797,7 +4090,14 @@ test('every cosmetic any tier can be asked for is on disk', async () => {
  * literal db.all() calls in this function body are in scope. Statically finding
  * the rest would mean walking the call graph of a 22k-line module; the four
  * named callers below are the ones the finding measured. */
-test('R17-P2 renderToday keeps exactly its three known full-store reads', () => {
+/* QA round 28 G3 (2026-09-04): `inv` joined the list. Not a fourth read on the
+   draw: the same inv rows were being scanned THREE times outside this body
+   (unopenedCrates, ownedGearIds, route()'s refreshCrateBadge) and are now read
+   once here and handed down, so the draw went from three inv scans to one.
+   tests/today-reads-lint.mjs grades the whole draw (this body plus every awaited
+   callee) at exactly one scan per store, which is the guard this one could not
+   be (see WHAT IT CANNOT SEE above). */
+test('R17-P2 renderToday keeps exactly its four known full-store reads', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   const m = app.match(/\nasync function renderToday\(el\) \{\n([\s\S]*?)\n\}\n/);
   assert.ok(m, 'renderToday not found; the guard is reading the wrong shape and is measuring nothing');
@@ -3806,7 +4106,7 @@ test('R17-P2 renderToday keeps exactly its three known full-store reads', () => 
   assert.ok(body.length > 4000 && body.includes('questTiers'),
     `extracted body looks wrong (${body.length} chars); an empty sample passes every check below for free`);
   const found = [...body.matchAll(/db\.all\(\s*'([a-z]+)'\s*\)/g)].map(x => x[1]).sort();
-  assert.deepEqual(found, ['health', 'log', 'xp'],
+  assert.deepEqual(found, ['health', 'inv', 'log', 'xp'],
     `renderToday's full-store reads changed to [${found}]. A NEW one is unbounded growth on the tap that runs on every #prevDay / #nextDay and after every log: use db.byIndex('log','date',d) or a point db.get. FEWER is progress: update this list.`);
 });
 
@@ -4041,6 +4341,33 @@ test('Crew count reads N+ with a note when the server truncated the bucket', () 
   assert.match(app, /` · \$\{crewCount\(data\.friends, truncated\)\}`/, 'the fan count is not built through crewCount');
   assert.match(app, /truncBox\.hidden = unreached \|\| !truncated;/, 'the fan note is not hidden when the list is complete');
   assert.match(app, /id="cfanTrunc" hidden/, 'the fan note has no mount in the Crew markup');
+});
+
+/* QA round 27 R3: THE PENDING RENDERER READS ONLY WHAT THE SERVER STILL SENDS.
+   GET /friends used to ship the other player's complete plaintext profile on a
+   PENDING row, so a one-sided request read anybody's profile. The server now
+   shapes pending rows to exactly the set below (server/src/index.js, the
+   `shape` in GET /friends). This pins the client half: every `f.<field>` and
+   `f.profile.<field>` read inside requestRowsHtml, friendRowAvatar and
+   nameWithAlias must be in that set, so a renderer that grows a new read goes
+   red here instead of rendering blank against the live server. `alias` is
+   client-local (friendAliases kv), never on the wire. */
+test('R27-R3 the pending-request renderer reads no field the server no longer sends', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const fn = name => {
+    const a = app.indexOf(`function ${name}(`);
+    assert.ok(a > 0, `${name} is not in js/app.js`);
+    const b = app.indexOf('\n}\n', a);
+    return app.slice(a, b);
+  };
+  const src = fn('requestRowsHtml') + fn('friendRowAvatar') + fn('nameWithAlias');
+  const PENDING = new Set(['playerId', 'name', 'handle', 'profile', 'alias']);
+  const PENDING_PROFILE = new Set(['outfit', 'pet', 'level']);
+  const top = [...src.matchAll(/\bf\.(\w+)/g)].map(m => m[1]);
+  const prof = [...src.matchAll(/\bf\.profile\.(\w+)/g)].map(m => m[1]);
+  assert.ok(top.length >= 4 && prof.length >= 3, `CONTROL: too few reads found (${top.length}/${prof.length}), the slice is wrong`);
+  assert.deepEqual([...new Set(top)].filter(k => !PENDING.has(k)), [], 'the pending renderer reads a row field the server no longer sends on pending rows');
+  assert.deepEqual([...new Set(prof)].filter(k => !PENDING_PROFILE.has(k)), [], 'the pending renderer reads a profile field the server no longer sends on pending rows');
 });
 
 /* A BLOWN DAY LOOKED LIKE A PERFECT ONE. QA round 24 L8: macroRow had no over
@@ -4567,11 +4894,12 @@ test('R24-L17 commitLogEntry rolls the day before the row is written, and a fres
     get: async (st, id) => store.get(id) || undefined,
   };
   const routed = [];
+  const kvMap = new Map();
   const load = () => new Function('S', 'db', 'dateKey', 'awardDayCloseIfDue', 'route', 'toast', 'maybeShowDailyWheel',
-    'refreshNotifSchedules', 'recordMealUsed', 'onFoodLogged', 'entriesFor', 'trackEvent',
+    'refreshNotifSchedules', 'recordMealUsed', 'onFoodLogged', 'entriesFor', 'trackEvent', 'kvSet',
     `${rdn[0]}${cle[0]}; return { commitLogEntry, rollDayIfNeeded };`)(
     S, db, () => clock, async () => null, () => routed.push(S.date), () => {}, () => Promise.resolve(false),
-    () => {}, async () => {}, async () => ({ xp: 10 }), async () => [], () => {});
+    () => {}, async () => {}, async () => ({ xp: 10 }), async () => [], () => {}, async (k, v) => kvMap.set(k, v));
   const { commitLogEntry } = load();
 
   clock = '2026-09-04';                           // midnight passed; the 60 s timer has not fired
@@ -4587,10 +4915,10 @@ test('R24-L17 commitLogEntry rolls the day before the row is written, and a fres
   const S2 = { settings: { targets: {} }, date: '2026-09-03' };
   clock = '2026-09-03';
   const again = new Function('S', 'db', 'dateKey', 'awardDayCloseIfDue', 'route', 'toast', 'maybeShowDailyWheel',
-    'refreshNotifSchedules', 'recordMealUsed', 'onFoodLogged', 'entriesFor', 'trackEvent',
+    'refreshNotifSchedules', 'recordMealUsed', 'onFoodLogged', 'entriesFor', 'trackEvent', 'kvSet',
     `${rdn[0]}${cle[0]}; return { commitLogEntry };`)(
     S2, db, () => clock, async () => null, () => {}, () => {}, () => Promise.resolve(false),
-    () => {}, async () => {}, async () => ({ xp: 0 }), async () => [], () => {});
+    () => {}, async () => {}, async () => ({ xp: 0 }), async () => [], () => {}, async (k, v) => kvMap.set(k, v));
   clock = '2026-09-04';
   await again.commitLogEntry({ ...store.get('old'), kcal: 350 }, null);
   assert.equal(S2.date, '2026-09-04');
@@ -4618,12 +4946,12 @@ test('R24-L16 (a) dayCloseNews derives the toast copy and the closed date from t
     { id: 'dayclose-2026-09-02', type: 'dayclose', title: 'Yesterday closed on budget: Bone Crate earned', date: '2026-09-02' });
   assert.deepEqual(
     dayCloseNews([{ key: 'dayeffort-2026-09-02', type: 'dayeffort', xp: 25, date: '2026-09-02', ts: at('2026-09-03') }]),
-    { id: 'dayclose-2026-09-02', type: 'dayeffort', title: 'You logged yesterday. That counts: Common Crate earned', date: '2026-09-02' });
+    { id: 'dayclose-2026-09-02', type: 'dayeffort', title: 'You logged yesterday. That counts.', date: '2026-09-02' });
   // the gap case: settled two days after the closed day, the toast said "your last logged day"
   assert.equal(dayCloseNews([{ type: 'dayclose', date: '2026-08-30', ts: at('2026-09-03') }]).title,
     'Your last logged day closed on budget: Bone Crate earned');
   assert.equal(dayCloseNews([{ type: 'dayeffort', date: '2026-08-30', ts: at('2026-09-03') }]).title,
-    'You logged your last day here. That counts: Common Crate earned');
+    'You logged your last day here. That counts.');
   // newest CLOSED DAY wins, whatever order the store hands rows back in
   const r = dayCloseNews([
     { type: 'dayclose', date: '2026-09-02', ts: at('2026-09-03') },
@@ -4632,6 +4960,36 @@ test('R24-L16 (a) dayCloseNews derives the toast copy and the closed date from t
   ]);
   assert.equal(r.date, '2026-09-02');
   assert.equal(r.type, 'dayclose');
+});
+
+/* ---- QA round 28 B1: the R21-P1 make-good gets a card. The grant itself
+   (js/app.js habitBaseGrantTp) writes { tp, at } to kv once; habitGrantCard is
+   the pure half that turns that row plus the dismissal flag into a card or
+   nothing, so the once-ness is provable here without a DOM. Red on main: the
+   export does not exist. ---- */
+test('R28-B1 (a) habitGrantCard renders once with the grant N, never after dismissal, never without a grant', () => {
+  const card = habitGrantCard({ tp: 37, at: 1 }, false);
+  assert.ok(card, 'a grant row with unspent points must produce a card');
+  assert.equal(card.tp, 37);
+  assert.match(card.body, /\b37 training points\b/, `the body must carry N: ${card.body}`);
+  assert.match(card.body, /Training/, 'the body must say where the points are spent');
+  assert.equal(habitGrantCard({ tp: 1, at: 1 }, false).body.includes('1 training point.'), true, 'singular for one point');
+  assert.equal(habitGrantCard({ tp: 37, at: 1 }, true), null, 'once the button has been tapped the card never returns');
+  assert.equal(habitGrantCard({ tp: 0, at: 1 }, false), null, 'a zero grant (a new player, nothing to explain) draws no card');
+  assert.equal(habitGrantCard(null, false), null, 'no grant row yet (the fighter has not been built since the update) draws no card');
+  assert.equal(habitGrantCard({ at: 1 }, false), null, 'a malformed row draws no card rather than "undefined training points"');
+});
+test('R28-B1 (b) static: Today mounts the card after the grant is written, and its button marks it seen then opens Training', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const todayStart = app.indexOf('\nasync function renderToday(');
+  const today = app.slice(todayStart, app.indexOf('\n}\n', todayStart));
+  const grantAt = today.indexOf('habitGrantCard(await kvGet(HABIT_GRANT_KEY, null), await kvGet(HABIT_GRANT_SEEN_KEY, false))');
+  assert.ok(grantAt > 0, 'renderToday must derive the card from the grant row and the seen flag');
+  assert.ok(grantAt > today.indexOf('await buildFighter('), 'the grant row is read AFTER buildFighter writes it, so the card lands on the same draw as the points');
+  assert.match(today, /id="habitGrantCard"[\s\S]*?<button class="btn" id="habitGrantGo">/, 'the card carries its Training button');
+  assert.match(today, /\$\('#habitGrantGo', el\)\?\.addEventListener\('click', async \(\) => \{ await kvSet\(HABIT_GRANT_SEEN_KEY, true\); openCharacter\('talents'\); \}\)/,
+    'the button writes the seen flag and routes to Training (the talents tab of the hub)');
+  assert.match(app, /const HABIT_GRANT_SEEN_KEY = 'habitBaseGrantCardSeen_v471';/, 'the seen flag is versioned with the grant');
 });
 
 test('R24-L16 (b) renderToday feeds the derived day-close row to the news pill from the xp rows it already read', () => {
@@ -4644,8 +5002,8 @@ test('R24-L16 (b) renderToday feeds the derived day-close row to the news pill f
     'the pill no longer renders the day-close row\'s title and date');
   // the toast strings ARE the row strings: the toast copy at both call sites must still be what game.js derives
   const game = readFileSync(join(here, '..', 'js', 'game.js'), 'utf8');
-  for (const copy of ['Yesterday closed on budget: Bone Crate earned', 'You logged yesterday. That counts: Common Crate earned',
-    'Your last logged day closed on budget: Bone Crate earned', 'You logged your last day here. That counts: Common Crate earned']) {
+  for (const copy of ['Yesterday closed on budget: Bone Crate earned', 'You logged yesterday. That counts.',
+    'Your last logged day closed on budget: Bone Crate earned', 'You logged your last day here. That counts.']) {
     assert.ok(app.includes(copy), `toast copy changed: "${copy}" is no longer in app.js`);
     assert.ok(game.includes(copy), `row copy drifted from the toast: "${copy}" is no longer in game.js`);
   }
@@ -4736,9 +5094,9 @@ test('R23 F8: the fits cap is printed and the save chip stays, ghosted, with its
   const h = app.indexOf('<div class="ward-head">');
   const hEnd = app.indexOf("</div>` : tab === 'shop'", h);
   assert.ok(h > 0 && hEnd > h, 'the ward-head template moved: re-anchor this slice');
-  const head = n => new Function('lvl', 'coinBal', 'dustBal', 'ownedCount', 'boost', 'ICONS', 'sparkIco', 'looksAll', 'looksHave', 'esc', 'fitCount', 'MAX_FITS',
+  const head = n => new Function('lvl', 'coinBal', 'dustBal', 'ownedCount', 'boost', 'ICONS', 'sparkIco', 'looksFamHave', 'looksFamAll', 'looksPieces', 'esc', 'fitCount', 'MAX_FITS',
     'return `' + app.slice(h, hEnd) + '</div>`;')(
-    { level: 1, name: 'x' }, 0, 0, 0, 0, { coin: () => '', dust: () => '', bone: () => '', boltIco: () => '' }, () => '', [], new Set(), String, n, MAX);
+    { level: 1, name: 'x' }, 0, 0, 0, 0, { coin: () => '', dust: () => '', bone: () => '', boltIco: () => '' }, () => '', 0, 0, 0, String, n, MAX);
   assert.match(head(5), /<span class="bh-pill ward-fits">5\/6 fits<\/span>/, 'the header does not print 5/6 fits');
   assert.match(head(6), /<span class="bh-pill ward-fits">6\/6 fits<\/span>/, 'the header does not print 6/6 fits');
 
@@ -4755,6 +5113,835 @@ test('SW update checks bypass the HTTP cache (GitHub Pages max-age=600 held a de
   const calls = [...app.matchAll(/serviceWorker\.register\(([^)]*)\)/g)].map(m => m[1]);
   assert.equal(calls.length, 1, `expected exactly one register() call, found ${calls.length}`);
   assert.match(calls[0], /updateViaCache:\s*'none'/, 'register() does not pass updateViaCache: none, so a deploy can hide behind the HTTP cache');
+
+});
+
+/* ---- QA round 26 O5: one logged food left Today at 60 style recalcs/s and 15 to
+   22% of a core, forever. renderToday adds ONE class after a log, `bounce` on
+   .hero-scene (S.justLogged), and its rule read `bhbounce 0.7s ..., bh-idle 4s
+   ... infinite`: two animations on one `transform`, which Chrome never composites
+   and never re-decides, so the infinite half ran on the main thread until the next
+   innerHTML rebuild. This is the static half (the browser half is
+   tests/today-idle-cpu-audit.mjs): the rule carries exactly one animation and no
+   `infinite`, and app.js has the exit that hands the element back its own idle.
+   Proven red on origin/main 96c1104a: app.css:1681 carries `infinite`. ---- */
+test('R26-O5 the post-log bounce is one finite animation, and renderToday ends it', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = [...css.matchAll(/\.hero-scene\.bounce[^{]*\{([^}]*)\}/g)].map(m => m[1]);
+  assert.ok(rules.length >= 1, 'no .hero-scene.bounce rule in app.css: the celebration is gone, or moved (re-anchor)');
+  for (const body of rules) {
+    const anim = body.match(/animation\s*:\s*([^;]+)/);
+    if (!anim) continue;
+    assert.ok(!/infinite/.test(anim[1]), `.hero-scene.bounce animates forever: ${anim[1].trim()}`);
+    // a top-level comma separates animations; the ones inside cubic-bezier(...) do not
+    assert.ok(!anim[1].replace(/\([^)]*\)/g, '').includes(','), `.hero-scene.bounce lists two animations on one element, which Chrome never composites: ${anim[1].trim()}`);
+  }
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /addEventListener\('animationend',[\s\S]{0,200}animationName === 'bhbounce'[\s\S]{0,80}classList\.remove\('bounce'\)/,
+    'renderToday no longer removes .bounce on bhbounce animationend, so the idle never restarts alone');
+});
+
+/* ---------------------------------------------------------------------------
+ * QA round 27 R13. The Android manifest declared 17 Health Connect READ_
+ * permissions and HealthPlugin.kt requested all 17 as a "full superset", while
+ * queryToday() read 7 record types. Over-declared health permissions are a
+ * routine Play data-safety query, and a grant sheet that asks for VO2 max and
+ * body fat the app never reads is a trust problem with the player too.
+ *
+ * Three sets, all parsed from source, must be EQUAL:
+ *   manifest   <uses-permission android.permission.health.READ_X />
+ *   requested  HealthPermission.getReadPermission(XRecord::class) in readPerms
+ *   read       XRecord::class / XRecord.SOMETHING_TOTAL anywhere else in the plugin
+ * A mismatch in either direction goes red: a declared-but-unread permission
+ * (the R13 defect) and a read-but-undeclared one (requestAuth can never satisfy
+ * containsAll(readPerms), so Health stays "not connected" forever).
+ *
+ * PROVE-RED (2026-09-04, on origin/main v472): fails at the "manifest declares
+ * permissions the bridge never reads" assertion listing the 10 extras.
+ * ------------------------------------------------------------------------- */
+test('QA round 27 R13: Android manifest declares exactly the Health Connect types the bridge reads', () => {
+  const manifest = readFileSync(join(here, '..', 'native', 'android', 'app', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
+  const kt = readFileSync(join(here, '..', 'native', 'android', 'app', 'src', 'main', 'java', 'com', 'boneheadz', 'gym', 'HealthPlugin.kt'), 'utf8');
+
+  const declared = new Set([...manifest.matchAll(/android\.permission\.health\.(READ_[A-Z_]+)/g)].map(m => m[1]));
+  assert.ok(declared.size > 0, 'no health permissions found in the manifest: the regex or the path has drifted, this has not passed');
+
+  // Record class -> permission name. Health Connect's names are the class minus
+  // "Record" in UPPER_SNAKE, except the three it shortens.
+  const IRREGULAR = { ExerciseSessionRecord: 'READ_EXERCISE', HeartRateVariabilityRmssdRecord: 'READ_HEART_RATE_VARIABILITY', SleepSessionRecord: 'READ_SLEEP' };
+  const permOf = rec => IRREGULAR[rec] || 'READ_' + rec.replace(/Record$/, '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toUpperCase();
+
+  const permsBlock = kt.match(/private val readPerms = setOf\(([\s\S]*?)\n    \)/);
+  assert.ok(permsBlock, 'readPerms set not found in HealthPlugin.kt: re-anchor this test');
+  const requested = new Set([...permsBlock[1].matchAll(/getReadPermission\((\w+Record)::class\)/g)].map(m => permOf(m[1])));
+
+  // everything outside the imports and the request set is a READ SITE
+  const body = kt.replace(permsBlock[0], '').split('\n').filter(l => !/^import /.test(l)).join('\n');
+  const read = new Set([...body.matchAll(/\b(\w+Record)(?:::class|\.[A-Z_]+_TOTAL)/g)].map(m => permOf(m[1])));
+  assert.ok(read.size > 0, 'no read sites found in HealthPlugin.kt: the regex has drifted, this has not passed');
+
+  const diff = (a, b) => [...a].filter(x => !b.has(x)).sort();
+  assert.deepEqual(diff(declared, read), [], `manifest declares permissions the bridge never reads: ${diff(declared, read).join(', ')}`);
+  assert.deepEqual(diff(read, declared), [], `bridge reads types the manifest does not declare: ${diff(read, declared).join(', ')}`);
+  assert.deepEqual(diff(requested, read), [], `readPerms requests permissions the bridge never reads: ${diff(requested, read).join(', ')}`);
+  assert.deepEqual(diff(read, requested), [], `bridge reads types readPerms never requests (requestAuth can never be satisfied): ${diff(read, requested).join(', ')}`);
+  assert.equal(read.size, 7, `expected the 7 read types traced in R13, saw ${[...read].sort().join(', ')}: if a read was added on purpose, update this count with it`);
+});
+
+/* ---------------------------------------------------------------------------
+ * QA round 27 R14(a). The first CTA of a fresh install refused taps for
+ * 2,676 ms because the #splash montage (fixed, inset 0, z-index 400, opaque)
+ * sat over the onboarding. showSplash now returns before it builds anything
+ * when there is no profile yet, and it does so BEFORE the ?splash=1 force so
+ * the onb-audit row can tap through a forced splash and prove the gate.
+ * PROVE-RED (2026-09-04, origin/main v472): the gate is absent, fails at the
+ * first assertion.
+ * ------------------------------------------------------------------------- */
+test('QA round 27 R14(a): no splash is built over a fresh install\'s onboarding', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const fn = app.match(/async function showSplash\(userEq\) \{([\s\S]*?)\n\}/);
+  assert.ok(fn, 'showSplash not found: re-anchor this test');
+  const head = fn[1].slice(0, fn[1].indexOf("const forced"));
+  assert.match(head, /if \(!S\.settings\) return;/, 'showSplash builds the montage over onboarding again (no S.settings gate before the forced check)');
+  assert.ok(!/document\.createElement/.test(head), 'the gate must run before the splash element exists');
+  // the CSS half: the moment the splash fades it must stop eating taps
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
+  assert.match(css, /#splash\.out \{[^}]*pointer-events: none/, 'a fading splash must be non-interactive');
+});
+
+/* ---------------------------------------------------------------------------
+ * QA round 27 R14(b). Geolocation callback never fires -> the Boneyard waited
+ * 25.3 s and then blamed the network. boneyardFloorMsg is the single chooser:
+ * denied -> platform copy; answered no-fix OR never-answered -> the no-fix copy;
+ * everything else -> the network copy. floorMap always renders #mapRetry, so
+ * every branch here carries a retry.
+ * PROVE-RED (2026-09-04, origin/main v472): fails at the first assertion, the
+ * 25s bound hardcoding NET_MSG.
+ * ------------------------------------------------------------------------- */
+test('QA round 27 R14(b): a never-answered geolocation wait yields the no-fix copy, not the network copy', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(!/if \(!tilesSeen\) floorMap\(NET_MSG\); \}, 25000\)/.test(app),
+    'the 25s boot bound floors to NET_MSG unconditionally again: a silent geolocation blames the network');
+  const start = app.indexOf('function boneyardFloorMsg(');
+  assert.ok(start > 0, 'boneyardFloorMsg is gone');
+  const src = app.slice(start, app.indexOf('\n}\n', start) + 2);
+  const net = app.match(/const NET_MSG = '([^']+)';/);
+  assert.ok(net, 'NET_MSG constant not found at module level');
+  const chooser = new Function('NET_MSG', src + '\nreturn boneyardFloorMsg;')(net[1]);
+  const noFix = chooser({ err: { code: 3 } });                         // answered: timeout
+  assert.match(noFix, /No location fix yet/, 'an answered no-fix must say no fix');
+  assert.equal(chooser({ fixSeen: false }), noFix, 'a never-answered wait must produce the SAME no-fix copy, not the network copy');
+  assert.equal(chooser({ err: { code: 2 } }), noFix, 'position-unavailable is a no-fix too');
+  assert.match(chooser({ err: { code: 1 } }), /Location is off\. Allow it in Settings → Boneheadz Gym/, 'iOS denial copy');
+  assert.match(chooser({ err: { code: 1 }, isAndroid: true }), /Settings → Apps → Boneheadz Gym → Permissions/, 'Android denial copy');
+  assert.equal(chooser({}), net[1], 'a map that got a fix but no tiles is a network problem');
+  assert.equal(chooser({ err: new Error('import failed') }), net[1], 'a non-geo error (vendor import) is a network problem');
+  // the bound feeds the chooser what it knows, and the wait state is labelled
+  const sm = app.slice(app.indexOf('async function startMap()'), app.indexOf('if (attempt !== mapAttempt) return;   // player left'));
+  assert.match(sm, /floorMap\(boneyardFloorMsg\(\{ fixSeen: geoAnswered \}\)\); \}, 25000\)/, 'the 25s bound must pass geoAnswered to the chooser');
+  assert.match(sm, /pos => \{ geoAnswered = true; res\(pos\); \}, e => \{ geoAnswered = true; rej\(e\); \}/, 'both geolocation callbacks must mark the wait answered');
+  assert.match(sm, /Raising the map from the dirt\.\.\./, 'the wait state lost its label');
+  assert.match(app, /id="mapRetry"/, 'floorMap lost its Retry button');
+});
+
+/* ---------------------------------------------------------------------------
+ * QA round 26 O24. Inside the Capacitor shell both appStateChange(isActive)
+ * and visibilitychange fire on one foregrounding, so the resume body in app.js
+ * (rollover, health sync, social sync, refresh) ran twice per resume. Driven
+ * here with stub listeners: two triggers inside the 500 ms window run the body
+ * once; two transitions further apart run it twice.
+ * PROVE-RED (2026-09-04, origin/main v472): body ran 2 times on the first
+ * assertion.
+ * ------------------------------------------------------------------------- */
+test('QA round 26 O24: one resume body per foreground transition, both listeners kept', () => {
+  const handlers = { app: null, vis: null };
+  const savedWin = globalThis.window, savedDoc = globalThis.document, savedNow = Date.now;
+  globalThis.window = { Capacitor: { Plugins: { App: { addListener: (name, fn) => { if (name === 'appStateChange') handlers.app = fn; } } } } };
+  globalThis.document = { hidden: false, addEventListener: (name, fn) => { if (name === 'visibilitychange') handlers.vis = fn; } };
+  let t = 1_000_000; Date.now = () => t;
+  try {
+    let runs = 0;
+    onAppResume(() => { runs++; });
+    assert.ok(handlers.app && handlers.vis, 'both listeners must still be registered (each is the only one on its platform)');
+    // one foregrounding, both platforms report it a few ms apart
+    handlers.app({ isActive: true }); t += 20; handlers.vis();
+    assert.equal(runs, 1, `body ran ${runs} times for ONE foreground transition`);
+    handlers.app({ isActive: false }); // backgrounding never runs the body
+    globalThis.document.hidden = true; handlers.vis(); globalThis.document.hidden = false;
+    assert.equal(runs, 1, 'backgrounding ran the resume body');
+    // a second, real transition later
+    t += 600; handlers.vis(); t += 20; handlers.app({ isActive: true });
+    assert.equal(runs, 2, `two transitions must run the body twice, ran ${runs}`);
+  } finally {
+    globalThis.window = savedWin; globalThis.document = savedDoc; Date.now = savedNow;
+  }
+});
+
+/* ---------- QA round 26 O1: a veil poster rides the sheet stack ---------- *
+ * Today -> News -> "Dark Spires" opened a .drop-veil OUTSIDE the stack: Escape
+ * did nothing, history.back() did nothing, two route changes left it covering
+ * the tab bar. Eight posters shared the shape. openVeil is the one door. */
+const veilSlices = () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const fn = name => {
+    const a = app.indexOf(`\nfunction ${name}(`);
+    assert.ok(a > 0, `app.js must define ${name}`);
+    return app.slice(a, app.indexOf('\n}\n', a) + 3);
+  };
+  return { app, src: fn('openVeil') + fn('closeTopSheet') + fn('closeAllSheets') };
+};
+test('R26 O1 (a) openVeil pushes the stack; a popped history entry and a route change both remove the veil', () => {
+  const { app, src } = veilSlices();
+  // the popstate line every sheet relies on: openVeil borrows it, so pin it
+  assert.match(app, /addEventListener\('popstate', \(\) => \{ if \(sheetStack\.length\) closeTopSheet\(\); \}\)/, 'popstate must pop the top sheet');
+  assert.match(app, /if \(e\.key !== 'Escape' \|\| !sheetStack\.length\) return;\s*e\.preventDefault\(\);\s*history\.back\(\);/, 'Escape must go through history');
+  const sheetStack = [], pushes = [], backs = [];
+  let api;
+  // back() runs the shipped popstate handler, verbatim (asserted above)
+  const history = { pushState: st => pushes.push(st), back: () => { backs.push(1); if (sheetStack.length) api.closeTopSheet(); } };
+  api = new Function('sheetStack', 'history', 'document', '$', 'reducedMotion', 'updatePending', 'location',
+    `${src}; return { openVeil, closeTopSheet, closeAllSheets };`)(
+    sheetStack, history, { body: { appendChild: v => { v.appended = true; } } }, () => null, true, false, { reload() {} });
+  const { openVeil, closeAllSheets } = api;
+  const mkVeil = () => ({ appended: false, removed: false, remove() { this.removed = true; }, addEventListener(t, f) { this.tap = f; } });
+
+  // open: on the stack, one history entry, in the DOM
+  const v1 = mkVeil();
+  const close = openVeil(v1);
+  assert.equal(sheetStack.length, 1, 'opening a poster must push onto sheetStack');
+  assert.equal(sheetStack[0].wrap, v1, 'the stack record must point at the veil so closeTopSheet removes IT');
+  assert.deepEqual(pushes, [{ sheet: 1 }], 'opening a poster must push one history entry, like a sheet');
+  assert.ok(v1.appended, 'the veil must still be appended to document.body');
+  // back: the entry pops, the veil goes
+  close();
+  assert.equal(backs.length, 1, 'close must go through history.back(), not veil.remove()');
+  assert.equal(sheetStack.length, 0, 'a popped history entry must pop the poster');
+  assert.ok(v1.removed, 'and remove the veil from the DOM (no .sheet inside, so at once)');
+  // a second close after it is gone must not pop whatever is above
+  close();
+  assert.equal(backs.length, 1, 'close on an already-closed poster must not call history.back() again');
+  // route change: route() calls closeAllSheets(); the poster must not survive it
+  const v2 = mkVeil();
+  openVeil(v2);
+  closeAllSheets();
+  assert.equal(sheetStack.length, 0, 'a route change must clear the poster');
+  assert.ok(v2.removed, 'a route change must remove the veil');
+  // the bare-veil tap closes it, like a sheet backdrop
+  const v3 = mkVeil();
+  openVeil(v3);
+  v3.tap({ target: v3 });
+  assert.ok(v3.removed, 'a tap on the veil itself must close the poster');
+  v3.tap({ target: {} });   // a tap on the card must not throw or double-pop
+});
+test('R26 O1 (b) every .drop-veil poster opens through openVeil; none appends itself to body', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const src = app.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const openers = [...src.matchAll(/className = 'drop-veil/g)].map(m => m.index);
+  assert.ok(openers.length >= 8, `expected the eight posters, found ${openers.length} .drop-veil openers`);
+  const bypass = openers.filter(i => {
+    const rest = src.slice(i);
+    const m = rest.match(/openVeil\(veil\)|document\.body\.appendChild\(veil\)/);
+    return !m || m[0] !== 'openVeil(veil)';
+  }).map(i => src.slice(src.lastIndexOf('function ', i) + 9, src.indexOf('(', src.lastIndexOf('function ', i))));
+  assert.deepEqual(bypass, [], `${bypass.length} poster(s) bypass openVeil: ${bypass.join(', ')}`);
+  // the one bare append is the helper's own
+  assert.equal((src.match(/document\.body\.appendChild\(veil\)/g) || []).length, 1, 'only openVeil may append a veil to body');
+});
+
+/* ---------- QA round 26 O12: the versus card stops eating taps when it fades ---------- *
+ * pointer-events auto in 29/29 samples, still swallowing at opacity 0.010 and 0:
+ * the fade at 1150ms and the removal at 1420ms never turned hit-testing off. */
+test('R26 O12 the versus card is pointer-events none from the moment its fade starts', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf("vs.className = 'vs-card quake'");
+  assert.ok(a > 0, 'the versus card moved: re-anchor this slice');
+  const b = app.indexOf('vs.remove()', a);
+  assert.ok(b > a, 'the versus card must still be removed');
+  const slice = app.slice(a, b);
+  const fade = slice.match(/setTimeout\(\(\) => \{([^\n]*)opacity = '0'[^\n]*\}, (\d+)\);/);
+  assert.ok(fade, 'the fade timeout (opacity 0) must exist before the removal');
+  assert.match(fade[1], /pointerEvents = 'none'/, `the fade at ${fade[2]}ms must set pointer-events none in the same tick it starts fading`);
+});
+
+/* ---------- QA round 26 O6: the Glutton sheet reaps its visibilitychange listener ---------- *
+ * +4.47 listeners and +73 nodes per open over 30 opens: the visibilitychange
+ * closure over `wrap` was added per open and never removed, while the
+ * bh-glutton-beaten listener one line up was reaped by a MutationObserver
+ * written for exactly this bug. */
+test('R26 O6 after the Glutton sheet leaves the DOM its visibilitychange listener is removed', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('  const onBeaten = () => healCleansed();');
+  assert.ok(a > 0, 'the Glutton onBeaten line moved: re-anchor this slice');
+  const b = app.indexOf("$('#gluttonFight', wrap)?.addEventListener", a);
+  assert.ok(b > a, 'the Glutton fight handler moved: re-anchor this slice');
+  const added = [], removed = []; let moCb = null;
+  const wrap = { isConnected: true };
+  const doc = {
+    hidden: true,
+    addEventListener: (t, f) => added.push([t, f]),
+    removeEventListener: (t, f) => removed.push([t, f]),
+    getElementById: () => ({}),
+  };
+  const MO = function (cb) { moCb = cb; this.observe = () => {}; this.disconnect = () => {}; };
+  new Function('wrap', 'document', 'MutationObserver', 'addEventListener', 'removeEventListener', 'healCleansed', 'gluttonBeaten', 'slot', app.slice(a, b))(
+    wrap, doc, MO, () => {}, () => {}, () => {}, async () => false, 0);
+  const vis = added.filter(([t]) => t === 'visibilitychange');
+  assert.equal(vis.length, 1, 'the sheet must add exactly one visibilitychange listener');
+  assert.ok(moCb, 'the reaping MutationObserver must exist');
+  wrap.isConnected = false;
+  moCb();
+  const gone = removed.filter(([t, f]) => t === 'visibilitychange' && f === vis[0][1]);
+  assert.equal(gone.length, 1, 'once the sheet is gone the SAME visibilitychange handler must be removed from document');
+});
+
+test('melt: the worn piece is named as coming off, the arm is armToConfirm, a burst tap melts once (QA round 22 W2, W3)', async () => {
+  /* W2: melting the equipped piece takes it off (disenchantGear clears the loadout
+   * slot) and nothing said so; the melt button had its own inline arm with a 2600
+   * literal, no .arming class, no haptic, no busy guard. W3: six rapid taps ran a
+   * second melt against a row db.take had already spent and toasted a failure
+   * after a melt that worked. This drives the REAL handler slice through the REAL
+   * armToConfirm with a fake button: two synchronous clicks on an armed button
+   * must call disenchantGear once and toast no failure. */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const start = src.indexOf("$$('[data-melt-gear]', content)");
+  const end = src.indexOf("$$('[data-petpick]', content)", start);
+  assert.ok(start > 0 && end > start, 'the melt handler moved: re-anchor this slice');
+  const handler = src.slice(start, end);
+  assert.ok(!/2600/.test(handler), 'the melt cool-off must be ARM_COOLOFF_MS, not a 2600 literal');
+  assert.match(handler, /armToConfirm\(btn/, 'the melt button must arm through armToConfirm (class, haptic, busy, cool-off)');
+  const helper = src.slice(src.indexOf('const ARM_COOLOFF_MS'), src.indexOf('function badgeIconHtml'));
+  assert.match(helper, /const ARM_COOLOFF_MS = 3200;/, 'ARM_COOLOFF_MS moved; the helper slice is stale');
+
+  const run = async (worn) => {
+    const calls = { melt: 0, toasts: [], haptic: 0, rendered: 0, timers: [] };
+    const g = { id: 'g-x', slot: 'H', name: 'Bone Crown', rarity: 'rare' };
+    const btn = {
+      dataset: { meltGear: 'g-x' }, isConnected: true, innerHTML: 'Melt · +12 dust',
+      classes: new Set(), classList: { add(c) { this.classes.add(c); }, remove(c) { this.classes.delete(c); } },
+      addEventListener(_, fn) { this.fire = fn; },
+    };
+    btn.classList.classes = btn.classes;
+    const env = {
+      $$: () => [btn], content: null, GEAR_BY_ID: { 'g-x': g }, gearLo: worn ? { H: 'g-x' } : {},
+      disenchantGear: async () => { calls.melt++; return calls.melt === 1 ? { ok: true, dust: 12, name: g.name } : { ok: false, reason: 'not-owned' }; },
+      toast: m => calls.toasts.push(m), S: {}, popSound: () => {}, renderCharacter: () => { calls.rendered++; },
+      wrap: null, esc: s => String(s), haptic: { heavy: () => { calls.haptic++; } },
+      setTimeout: (fn, ms) => { calls.timers.push(ms); return 0; }, clearTimeout: () => {},
+    };
+    new Function(...Object.keys(env), helper + '\n' + handler)(...Object.values(env));
+    const ev = { preventDefault() {}, stopPropagation() {} };
+    await btn.fire(ev);                        // arm
+    const label = btn.innerHTML, arming = btn.classes.has('arming'), cooloff = calls.timers[0];
+    const p1 = btn.fire(ev), p2 = btn.fire(ev); // burst: two taps in one frame on the armed button
+    await Promise.all([p1, p2]);
+    return { label, arming, cooloff, ...calls };
+  };
+  const w = await run(true);
+  assert.ok(w.label.includes('Bone Crown') && w.label.includes('takes it off'), `worn piece: arm label must name the piece and say it comes off, got "${w.label}"`);
+  assert.ok(w.arming, 'the armed melt button must carry .arming like every other spend');
+  assert.equal(w.cooloff, 3200, 'the melt cool-off must be ARM_COOLOFF_MS (3200)');
+  assert.equal(w.melt, 1, `a burst of two taps on the armed button must melt once, melted ${w.melt}`);
+  assert.deepEqual(w.toasts.filter(t => /Could not melt/.test(t)), [], 'a swallowed second tap is not a failure to report');
+  assert.equal(w.haptic, 1, 'the committing tap thumps once');
+  const u = await run(false);
+  assert.equal(u.label, 'Tap again to melt', `unworn piece: plain melt label, got "${u.label}"`);
+  assert.ok(!u.label.includes('takes it off'), 'an unworn piece is not "taken off"');
+});
+
+/* ---- QA round 22 W5: a tap in the "pick your fit" grid that takes statted gear
+   off arms first. Measured on main: one click on .ward-cell.r-common dropped
+   loadout.H with no toast and the stat chips kept the OLD numbers (MARROW 58 +4
+   over a fighter at 54) until a forced re-render, because restageWardrobe
+   repaints the doll and the rings only. The pixel proof is the W5 rows in
+   tests/transmog-clarity-audit.mjs; this is the static half over the handler. */
+test('R22-W5 a displacing equip goes through armToConfirm and the gear path; a free swap stays one tap', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const start = app.indexOf('const doEquip = async cell =>');
+  assert.ok(start > 0, 'the [data-equip] handler is no longer doEquip (main wired the tap straight to equip())');
+  const slice = app.slice(start, app.indexOf('async function restageLook', start));
+  // the wiring: displacing tiles arm, naming the gear and its stats; free swaps do not
+  assert.match(slice, /if \(!wornGear\) \{ cell\.addEventListener\('click', \(\) => doEquip\(cell\)\); return; \}/,
+    'a tap that displaces nothing must stay one tap');
+  assert.match(slice, /armToConfirm\(cell, `Tap again: takes off \$\{wornGear\.name\}, \$\{gearLabel\(wornGear\)/,
+    'a tap that takes statted gear off must arm first and name the gear and its stats');
+  // the restage: gear came off, so the whole screen re-reads (stats, lead, prices)
+  const eq = slice.indexOf('await equip(slot, cell.dataset.equip || null)');
+  const full = slice.indexOf("if (wornGear) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }");
+  const inPlace = slice.indexOf('await restageWardrobe(content, slot)');
+  assert.ok(eq > 0 && full > eq && inPlace > full,
+    'after a displacing equip the handler must take the full render BEFORE the in-place restage (which never repaints .pd-stats or .mog-panel)');
+  // and the full render is where the stat chips and the panel come from
+  assert.match(app, /<div class="pd-stats">\$\{STAT_META\.map\(statChip\)\.join\(''\)\}<\/div>/, 'the stat chips are rendered by statChip inside renderCharacter');
+  assert.ok(app.includes('lookPriceMap[i.id] = await transmogPrice(slot, i.id)'), 'the panel prices come from transmogPrice inside renderCharacter');
+  // armToConfirm rewrites innerHTML, so the art must be redrawn after the cool-off
+  assert.match(slice, /hydratePackArt\(cell, '\.ward-art\[data-art\]'\); \}, ARM_COOLOFF_MS \+ 20\)/, 'the tile art must be redrawn once the cool-off restores the markup');
+});
+
+/* ---- QA round 22 W4: an uncommitted preview must not follow the player out and
+   back in. S.lookPreview was cleared only on commit/cancel; a hub tab switch or a
+   hash change reopened the slot with the preview on the doll, captioned "After",
+   bar armed. The clear lives in route() because every navigation lands there. */
+test('R22-W4 route() clears S.lookPreview on navigation, and both hub paths reach route()', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const route = app.slice(app.indexOf('function route({ keepScroll = false } = {})'), app.indexOf('const tab = currentTab();', app.indexOf('function route({ keepScroll = false } = {})')));
+  assert.match(route, /const isNav = !keepScroll;[\s\S]*if \(isNav\) S\.lookPreview = null;/, 'route() must null S.lookPreview on a navigation (QA round 22 W4)');
+  assert.doesNotMatch(route, /^\s*S\.lookPreview = null;/m, 'the clear must be gated on isNav: refresh() is not the player leaving');
+  const oc = app.slice(app.indexOf("function openCharacter(tab = 'wardrobe')"), app.indexOf('let pendingHubTab'));
+  assert.match(oc, /return route\(\);/, 'openCharacter on the hub must route()');
+  assert.match(oc, /location\.hash = '#\/bonehead';/, 'openCharacter off the hub must set the hash, which routes');
+  assert.match(app, /function routeFromHash\(\) \{[\s\S]{0,200}?route\(\);/, 'a hashchange must reach route()');
+});
+
+/* ---- QA round 22 W13, three bullets. (a) after a successful commit the bar sat
+   .armed with a live "Wear it" until restageLook decoded the doll; (b) the v1
+   tile printed a bare number; (c) the only scrollIntoView on the screen went to
+   the gear card, not the Dressing Room. */
+test('R22-W13 the bar disarms on commit, every price tag carries the unit, a doll-slot tap arrives at the panel', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  // (a) same tick as the receipt, before the async restage
+  const apply = app.slice(app.indexOf('async function applyLook(btn)'), app.indexOf("$$('[data-equipgear]', content)"));
+  const ok = apply.indexOf('S.lookPreview = null;'), disarm = apply.indexOf("classList.remove('armed')"), dis = apply.indexOf('btn.disabled = true;'), restage = apply.indexOf('restageLook({ committed: true })');
+  assert.ok(ok > 0 && disarm > ok && dis > ok && restage > dis, 'applyLook must drop .armed and disable the button before restageLook({ committed: true }) (QA round 22 W13a)');
+  // the resting bar: not armed, button disabled
+  assert.match(app, /class="look-bar mog-bar\$\{changed \? ' armed' : ''\}"/, 'the bar is armed only while a change is selected');
+  assert.match(app, /: '<button class="btn ghost mog-go" disabled>Wear it<\/button>'/, 'nothing selected renders a disabled Wear it');
+  // (b) no bare price span is left: every priced look tag goes through costTag (dust unit)
+  assert.doesNotMatch(app, /<span class="look-cost">\$\{/, 'a bare `12` price tag survives; use costTag (QA round 22 W13b)');
+  assert.equal((app.match(/\$\{costTag\(i\.id\)\}/g) || []).length, 2, 'both look grids (v2 and the ?mogv2=0 fallback) price through costTag');
+  // (c) the doll-slot tap scrolls the Dressing Room into view after the render lands
+  const pd = app.slice(app.indexOf('const wirePd = b =>'), app.indexOf("$$('[data-pd]', content).forEach(wirePd)"));
+  assert.match(pd, /await renderCharacter\(wrap, 'wardrobe', \{ instant: true \}\);[\s\S]*\$\('\.mog-panel', wrap\)\?\.scrollIntoView\(/, 'after a doll-slot tap the .mog-panel must be scrolled into view, after the render (QA round 22 W13c)');
+});
+
+/* ---- QA round 22 W12: four tap targets under Apple's 44px floor ("Wear it"
+   79x43, "What is this?" 105x24, "+ Save this fit" 128x34, "Take it all off"
+   120x34), focus invisible on a selected tile, and the price chip and the
+   "owned" chip on the same ground. Resolved through the CASCADE like R25-M20:
+   .mog-go is a .btn override, so a grep on one rule proves nothing. The pixel
+   half is the wardrobe rows in tests/a11y-audit.mjs. */
+test('R22-W12 the Dressing Room controls resolve to >= 44px, focus survives selection, owned is not a price', () => {
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const dock = [{ tag: 'div', classes: ['mog-dock'] }, { tag: 'div', classes: ['screen'] }];
+  const controls = [
+    ['Wear it (.look-bar.mog-bar .btn.mog-go)', { tag: 'button', classes: ['btn', 'mog-go'], ancestors: [{ tag: 'div', classes: ['look-bar', 'mog-bar'] }, ...dock] }],
+    ['What is this? (.gd-what)', { tag: 'button', classes: ['gd-what'], ancestors: [{ tag: 'div', classes: ['sect-h', 'mog-h'] }, { tag: 'div', classes: ['mog-panel'] }, ...dock] }],
+    ['+ Save this fit (.fit-chip.add)', { tag: 'button', classes: ['fit-chip', 'add'], ancestors: [{ tag: 'div', classes: ['fit-rail'] }] }],
+    ['Take it all off (.fit-chip.reset)', { tag: 'button', classes: ['fit-chip', 'reset'], ancestors: [{ tag: 'div', classes: ['fit-rail'] }] }],
+  ];
+  for (const [name, el] of controls) {
+    const w = cssResolve(css, el, 'min-height');
+    assert.ok(w, `${name}: no rule sets min-height at all (QA round 22 W12)`);
+    assert.ok(cssPx(w.value) >= 44, `${name}: the winning min-height is "${w.sel} { min-height: ${w.value} }", under the 44px floor`);
+  }
+  /* focus on a selected tile: a rule with MORE simple selectors than
+     .ward-cell.selected (2), and a different outline than the selection ring */
+  const sel = css.match(/\.ward-cell\.selected\s*\{([^}]*)\}/), foc = css.match(/\.ward-cell\.selected:focus-visible\s*\{([^}]*)\}/);
+  assert.ok(sel && foc, '.ward-cell.selected and .ward-cell.selected:focus-visible must both exist');
+  const outline = block => (block.match(/(?:^|;)\s*outline\s*:\s*([^;]+)/) || [])[1]?.trim();
+  assert.ok(outline(foc[1]) && outline(foc[1]) !== outline(sel[1]), `a focused selected tile must compute a different outline (selected: ${outline(sel[1])}, focused: ${outline(foc[1])})`);
+  // owned vs price: same chip class, different ground
+  const tile = [{ tag: 'button', classes: ['ward-cell', 'look'] }];
+  const paid = cssResolve(css, { tag: 'span', classes: ['look-cost', 'paid'], ancestors: tile }, 'background');
+  const price = cssResolve(css, { tag: 'span', classes: ['look-cost', 'dust'], ancestors: tile }, 'background');
+  assert.ok(paid && price, 'both chips must resolve a background');
+  assert.notEqual(paid.value, price.value, `"owned" and a price share a background (${paid.value}); the receipt needs its own ground`);
+});
+
+/* ================= QA round 26: the day plumbing (O10, O11, O13, O14, O15) =================
+   All node-level. mem-idb is the real js/db.js over an in-memory IndexedDB whose
+   transactions are SERIALISED (one at a time, in dispatch order), so a get-then-put
+   spanning two transactions interleaves with a second one exactly as a browser
+   lets it, and a single-transaction addIfAbsent cannot. That is the caveat and
+   the point: the race rows below can only ever see the SHAPE of the claim. */
+
+/* O11. The wheel's spin gate answered granted, granted: a kvGet/kvSet pair on
+   wheelLastDate, in one page or across two tabs. The claim is one addIfAbsent on
+   kv wheelspin:<date>. Prove-red on main: claimSpin does not exist there. */
+test('R26-O11 two overlapping spin claims on one day grant exactly once', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-r26-o11');
+  const { claimSpin } = await import('../js/wheel.js');
+  assert.equal(typeof claimSpin, 'function', 'wheel.js must export claimSpin, the addIfAbsent the spin is gated on');
+  /* CONTROL: the old shape under this harness. A get-then-put across two
+     transactions is what wheel.js shipped, and mem-idb lets both readers see
+     the row empty. If this control ever stops showing two grants the harness
+     has changed and the race row below proves nothing. */
+  const oldGate = async () => {
+    if ((await dbm.kvGet('wheelLastDate', null)) === '2026-09-04') return false;
+    await dbm.kvSet('wheelLastDate', '2026-09-04');
+    return true;
+  };
+  const ctl = await Promise.all([oldGate(), oldGate()]);
+  assert.deepEqual(ctl, [true, true], `harness control: the shipped get-then-put must double-grant here, got ${JSON.stringify(ctl)}`);
+  /* HARNESS PROBE. origin/main's mem-idb does not serialise transactions, so two
+     overlapping `add`s on one key both see it absent and both land: under it
+     this row cannot go green on correct code. The serialising mem-idb (kitchen
+     lane, integ/day2) makes it real. Probe with a bare addIfAbsent pair on a
+     throwaway key; only assert the race when the harness can carry it. */
+  const probe = await Promise.all([dbm.addIfAbsent('kv', { k: 'r26-o11-probe', v: 1 }), dbm.addIfAbsent('kv', { k: 'r26-o11-probe', v: 2 })]);
+  const both = await Promise.all([claimSpin('2026-09-04'), claimSpin('2026-09-04')]);
+  if (probe.filter(Boolean).length === 1) {
+    assert.equal(both.filter(Boolean).length, 1, `two overlapping claims: exactly one may be granted, got ${JSON.stringify(both)}`);
+  } else {
+    console.log('  R26-O11 note: mem-idb here does not serialise transactions (probe ' + JSON.stringify(probe) + '); the overlapping-claim row is skipped, the sequential rows below still hold');
+  }
+  assert.equal(await claimSpin('2026-09-04'), false, 'a later claim on the same day is refused');
+  assert.equal(await claimSpin('2026-09-05'), true, 'the next day is a fresh claim');
+  // the shape pin: the commit asks claimSpin BEFORE it grants, and returns `already` to the loser
+  const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
+  const c = wheel.slice(wheel.indexOf('const commit = async () => {'), wheel.indexOf('prize.grant(rng)'));
+  assert.ok(c.length > 0 && /await claimSpin\(today\)/.test(c), 'the wheel commit does not claim the spin with claimSpin before granting');
+  assert.match(c, /already: true/, 'the loser must be told (already: true), not handed a silent coinDelta 0');
+  assert.match(wheel, /result\.already \? 'Already spun today'/, "the reveal must say 'Already spun today' to the loser, not 'You won'");
+});
+
+/* O10. claimDay's rule 2 ('too-fast') read elapsed time off the clock that had
+   just moved, so no clock move could ever fire it; the header credited it with
+   the wild jumps rule 3 catches. Choice: REMOVED, header says rule 3 is the
+   guard. Prove-red on main: 'too-fast' is in db.js there, and a forged anchor
+   row makes claimDay say 'too-fast'. */
+test('R26-O10 rule 2 is gone from claimDay and from the header, and rule 3 refuses the jump it was credited with', async () => {
+  const dbSrc = readFileSync(join(here, '..', 'js', 'db.js'), 'utf8');
+  assert.ok(!/too-fast/.test(dbSrc), "js/db.js still carries 'too-fast': a rule that cannot fire is described as a guard again");
+  assert.ok(!/\bDAY_GRACE\b/.test(dbSrc), 'DAY_GRACE (rule 2\'s allowance) is still in js/db.js');
+  const body = dbSrc.slice(dbSrc.indexOf('export async function claimDay('), dbSrc.indexOf('export async function dayGuardState('));
+  assert.ok(!/dayPace/.test(body), 'claimDay still reads or writes the rule-2 anchor rows');
+  assert.match(dbSrc, /THERE IS NO RULE 2 ANY MORE/, 'the header must record why rule 2 went, so it is not rebuilt');
+  assert.match(dbSrc, /RULE 3: THE SERVER'S DAY\. This is the part no local rule could do, and it\n \* is THE guard against a forward clock move/, 'the header must name rule 3 as the forward-jump guard');
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(!/'too-fast':/.test(app), "DAY_GUARD_COPY still carries a 'too-fast' line for a rule that no longer exists");
+
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-r26-o10');
+  const { addDays, dayOrdinal } = await import('../js/nutrition.js');
+  const d0 = '2026-09-04';
+  assert.equal((await dbm.claimDay(d0)).reason, 'seeded');
+  // the only shape that ever made rule 2 fire: an anchor forged 100 days back, "zero time elapsed"
+  await dbm.kvSet('dayPaceKey', addDays(d0, -100)); await dbm.kvSet('dayPaceAt', Date.now());
+  const next = await dbm.claimDay(addDays(d0, 1));
+  assert.equal(next.reason, 'advanced', `a forged anchor must no longer be a refusal (rule 2 is gone), got ${JSON.stringify(next)}`);
+  // and the jump rule 2 was credited with (a decade-ahead RTC) is refused by rule 3, by name
+  const decade = await dbm.claimDay(addDays(d0, 3650));
+  assert.equal(decade.fresh, false); assert.equal(decade.reason, 'unwitnessed', `rule 3 must refuse the decade jump, got ${JSON.stringify(decade)}`);
+  assert.equal(decade.ceiling, dayOrdinal(d0) + dbm.WITNESS_GRACE);
+  const st = await dbm.dayGuardState();
+  assert.ok(!('paceKey' in st) && !('grace' in st), 'dayGuardState still reports rule-2 state');
+});
+
+/* 2026-09-05: clock-trust-audit's idle-month row went red because
+   witnessServerDay() ordinalized the server's ms as a UTC calendar day
+   (Math.floor(ms / DAY_MS)) while claimDay's o/oh are dayOrdinal(dateKey(...)),
+   the DEVICE's LOCAL calendar day. Off UTC+0 the two disagree for several hours
+   a day, so a probe built to land one day past ceiling (witness + WITNESS_GRACE)
+   landed exactly ON it and was let through. Pin that both sides now read the
+   SAME ordinal: witnessServerDay(ms) must equal dayOrdinal(dateKey(new
+   Date(ms))), not Math.floor(ms / 86400000). Prove-red on the old line: this
+   test TZ (America/Toronto, UTC-4/-5) disagrees with UTC for hours after every
+   UTC midnight, so both instants below are chosen where the two ordinals differ. */
+test('witnessServerDay ordinalizes the server ms as the LOCAL calendar day, not the UTC one', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const { dateKey, dayOrdinal } = await import('../js/nutrition.js');
+  dbm.useDbName('unit-witness-ordinal');
+
+  // near midnight UTC: 2026-11-08 02:00 UTC is 2026-11-07 21:00 EST locally.
+  const nearMidnightUtc = Date.UTC(2026, 10, 8, 2, 0, 0);
+  await dbm.kvSet(dbm.DAY_WITNESS_KEY, 0);
+  const w1 = await dbm.witnessServerDay(nearMidnightUtc);
+  assert.equal(w1, dayOrdinal(dateKey(new Date(nearMidnightUtc))),
+    `witness ordinal must be the LOCAL calendar day for this instant, got ${w1} (UTC-day math would give ${Math.floor(nearMidnightUtc / 86400000)})`);
+
+  // near a DST boundary: 2026-11-01 02:30 UTC is 2026-10-31 22:30 EDT, a few
+  // hours before America/Toronto folds back from EDT to EST that same night.
+  const nearDstFold = Date.UTC(2026, 10, 1, 2, 30, 0);
+  await dbm.kvSet(dbm.DAY_WITNESS_KEY, 0);
+  const w2 = await dbm.witnessServerDay(nearDstFold);
+  assert.equal(w2, dayOrdinal(dateKey(new Date(nearDstFold))),
+    `witness ordinal must track the LOCAL calendar day across a DST fold too, got ${w2} (UTC-day math would give ${Math.floor(nearDstFold / 86400000)})`);
+});
+
+/* O14. DAY_GUARD_COPY had one call site (the quest-claim toast), so five of the
+   six day-keyed rewards refused in silence. Every surface now reports through it.
+   Prove-red on main: dayGuardToast does not exist and the site count is 1. */
+test('R26-O14 every day-keyed reward surface speaks the day-guard copy (>= 6 sites, enumerated)', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const helper = app.match(/\nfunction dayGuardToast\(reason\) \{[\s\S]*?\n\}\n/);
+  assert.ok(helper, 'dayGuardToast (the one toast voice for DAY_GUARD_COPY) is missing');
+  assert.match(helper[0], /toast\(DAY_GUARD_COPY\[reason\] \|\| DAY_GUARD_COPY\.other, 4200\)/, 'dayGuardToast must speak DAY_GUARD_COPY, nothing new');
+  const rest = app.replace(helper[0], '');
+  const sites = (rest.match(/\bdayGuardToast\(/g) || []).length + (rest.match(/DAY_GUARD_COPY\[/g) || []).length;
+  assert.ok(sites >= 6, `DAY_GUARD_COPY reaches ${sites} surfaces, need >= 6`);
+  // one per surface, by anchor
+  const surfaces = {
+    'quest claim toast': /if \(res\?\.dayGuard\) \{\n\s*dayGuardToast\(res\.dayGuard\);/,
+    'day close at boot': /const closed = await awardDayCloseIfDue\(S\.settings\.targets\);\n  if \(closed\?\.closed\)[^\n]*\n  else if \(closed\?\.consoled\)[^\n]*\n  else if \(closed\?\.dayGuard\) setTimeout\(\(\) => dayGuardToast\(closed\.dayGuard\)/,
+    'day close on the midnight roll': /_rolling = true;[\s\S]*?else if \(closed\?\.dayGuard\) setTimeout\(\(\) => dayGuardToast\(closed\.dayGuard\)[\s\S]*?finally \{ _rolling = false; \}/,
+    'wheel at boot': /maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{\n    if \(spun === true && !sheetStack\.length\) refresh\(\);\n    else if \(spun\?\.dayGuard\) dayGuardToast\(spun\.dayGuard\)/,
+    'wheel on the midnight roll': /_rolling = true;[\s\S]*?maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{\n      if \(spun === true && !sheetStack\.length\) refresh\(\);\n      else if \(spun\?\.dayGuard\) dayGuardToast\(spun\.dayGuard\)[\s\S]*?finally \{ _rolling = false; \}/,
+    'Pit energy line': /energy\.dayGuard \? ' · ' \+ \(DAY_GUARD_COPY\[energy\.dayGuard\] \|\| DAY_GUARD_COPY\.other\)/,
+  };
+  for (const [name, re] of Object.entries(surfaces)) assert.match(app, re, `surface "${name}" does not report the day-guard refusal`);
+  // and the producers hand the reason back rather than swallowing it
+  assert.match(readFileSync(join(here, '..', 'js', 'game.js'), 'utf8'), /if \(!day\.fresh\) return \{ dayGuard: day\.reason \|\| true \};/, 'awardDayCloseIfDue still returns a bare null on refusal');
+  assert.match(readFileSync(join(here, '..', 'js', 'energy.js'), 'utf8'), /if \(day && !day\.fresh\) v\.dayGuard = day\.reason \|\| true;/, 'refreshPitEnergy does not name the refusal');
+  assert.match(readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8'), /if \(!day\.fresh\) return \{ dayGuard: day\.reason \|\| true \};/, 'maybeShowDailyWheel still returns a bare false on refusal');
+});
+
+/* O15. advanceQueue had one caller (the Kitchen sheet's render), so a queue with
+   the sheet closed never drained, and Today's card read the pot only. Every
+   drain goes through drainCookQueue (which pays the cook XP), called from boot,
+   resume and the Kitchen; the card counts what was banked.
+
+   RE-PREMISED 2026-09-04. O15 also drained from Today's RENDER, and that is now
+   forbidden rather than required. Draining pays, so awardCapped pulled
+   claimCapped > totalXp > rebuildXpTotal and grantLevelRewards > grantCrate >
+   grantEgg > lifetimeStepsSum into the Today draw: tests/today-reads-lint.mjs
+   row A1 grades renderToday AND everything it calls at exactly one full-store
+   scan per store and measured health x4, xp x2. THE PROMISE IS UNCHANGED and is
+   still what this test grades: a pot that finished while the app was shut is
+   collected and announced, never left sitting until the next Kitchen open. Only
+   the mechanism moved. The collecting stays on boot and resume (which is where a
+   closed app comes back), and Today's card now READS what a drain would collect
+   (cookState().queueReady, pure) instead of paying for it mid-render.
+
+   Prove-red on main: drainCookQueue does not exist; kitchenCardHtml has no
+   `banked` and prints the single pot. Prove-red on the regression this test now
+   pins: put `await drainCookQueue()` back in renderToday (the "Today must not
+   drain" assert goes red), or drop queueReady from cookState / the card (the
+   queue-projection and card asserts go red). */
+test('R26-O15 the cook queue drains from boot, resume and the Kitchen, Today reads it without paying, and the card counts every finished cook', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const helper = app.match(/\nasync function drainCookQueue\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(helper, 'drainCookQueue is missing');
+  assert.match(helper[0], /await advanceQueue\(\)/, 'drainCookQueue must call advanceQueue');
+  assert.match(helper[0], /awardCapped\('cook', 'cook', 8, `Cooked \$\{dish\.name\}`, XP_DAILY_CAP\.cook\)/, 'a drained dish must pay the same XP a manual Serve pays');
+  const rest = app.replace(helper[0], '');
+  assert.equal((rest.match(/\badvanceQueue\(/g) || []).length, 0, 'advanceQueue is called outside drainCookQueue: that path pays no cook XP');
+  const callers = (rest.match(/\bdrainCookQueue\(\)/g) || []).length;
+  assert.ok(callers >= 3, `drainCookQueue has ${callers} callers, need boot + resume + Kitchen (>= 3)`);
+  const boot = app.slice(app.indexOf('const closed = await awardDayCloseIfDue(S.settings.targets);'), app.indexOf('await ingestHkPayload(hkTaken);'));
+  assert.match(boot, /await drainCookQueue\(\);/, 'boot does not drain the queue');
+  const resume = app.slice(app.search(/onAppResume\((?:async )?\(\) => \{/), app.indexOf('setInterval(rollDayIfNeeded, 60e3)'));
+  assert.match(resume, /drainCookQueue\(\)/, 'resume does not drain the queue');
+  /* The Kitchen sheet is now named on its own. It used to ride on the >= 4
+     count, and dropping Today's caller would otherwise have let a 3 that never
+     reached the Kitchen pass. */
+  const kitchen = app.slice(app.indexOf('async function openKitchen() {'), app.indexOf('const canStartAny = cook.freeCount > 0'));
+  assert.match(kitchen, /await drainCookQueue\(\);/, "the Kitchen sheet's render does not drain the queue");
+
+  /* Comments stripped first: the line that removed the drain explains itself by
+     naming drainCookQueue, and a prose mention is not a call. */
+  const today = app.slice(app.indexOf('async function renderToday(el) {'), app.indexOf("kitchenCardHtml(cook, ingCount, foodbuffs, cropsRipe, _cookBanked)"))
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  assert.equal((today.match(/\bdrainCookQueue\(/g) || []).length, 0,
+    'Today must NOT drain: draining pays, and awardCapped drags the level/crate/egg machinery into the render tick (today-reads-lint A1)');
+  assert.match(today, /const cook = await cookState\(\);/, 'Today must still read cookState for the card');
+
+  /* THE PURE READ THAT REPLACED THE DRAIN, run for real. One pot that finished
+     two hours ago with a 20-minute cook queued behind it: a drain would bank the
+     pot's dish AND finish the queued one, so the card must say 2, and this is
+     the half that says the second one exists. */
+  const brothy = { id: 'x', name: 'Brothy', cookMin: 20 };
+  const slots = [{ recipeId: 'x', startedAt: 0, readyAt: 1000 - 120 * 60e3 }];
+  const queue = [brothy];
+  assert.equal(queueReadyCount(slots, queue, 1000), 1, 'a queued cook that would have finished behind a finished pot is not counted');
+  assert.equal(queueReadyCount(slots, [], 1000), 0, 'an empty queue can have nothing ready');
+  assert.equal(queueReadyCount([{ recipeId: 'x', startedAt: 0, readyAt: 1000 - 60e3 }], queue, 1000), 0,
+    'a queued cook that has only had a minute of the pot must not be counted as ready');
+  assert.equal(queueReadyCount([null], queue, 1000), 0, 'an empty pot starts the queued cook NOW: it cannot already be done');
+  assert.equal(queueReadyCount([{ recipeId: 'x', startedAt: 0, readyAt: 1000 + 60e3 }], queue, 1000), 0,
+    'a pot still cooking cannot hand the queue anything');
+  /* Two lined up behind a pot that came free two hours ago. drainCookQueue loops
+     to a fixpoint and would back-date both (20m + 20m still lands before now),
+     so the projection has to follow the chain, not stop at the first entry. */
+  assert.equal(queueReadyCount(slots, [brothy, brothy], 1000), 2, 'the projection stops at the first queue entry instead of following the chain');
+  // and it PAYS NOTHING and writes nothing: same inputs, same answer, untouched
+  assert.deepEqual(slots, [{ recipeId: 'x', startedAt: 0, readyAt: 1000 - 120 * 60e3 }], 'queueReadyCount mutated the slots it was handed');
+  assert.deepEqual(queue, [brothy], 'queueReadyCount mutated the queue it was handed');
+  // the glue hop: cookState must actually hand the projection to its callers
+  assert.match(readFileSync(join(here, '..', 'js', 'cooking.js'), 'utf8'),
+    /queueReady: queueReadyCount\(arr, queue, now\),/, 'cookState does not expose queueReady, so the card can never see it');
+
+  // the card renderer, run for real: two finished cooks banked, no pot ready -> "2 dishes are ready!"
+  const m = app.match(/\nfunction kitchenCardHtml\(cook, ingCount, buffs, cropsRipe = 0, banked = 0\) \{[\s\S]*?\n\}\n/);
+  assert.ok(m, 'kitchenCardHtml does not take the banked count');
+  const card = new Function('bhIcon', 'recipeIconHtml', 'esc', `${m[0]}; return kitchenCardHtml;`)(() => '', () => '', String);
+  const idle = { ready: false, readyCount: 0, queueReady: 0, recipe: null };
+  assert.match(card(idle, 0, [], 0, 2), /<b[^>]*>2 dishes are ready!<\/b>/, 'two finished cooks waiting in the Pantry are not announced');
+  assert.match(card({ ready: true, readyCount: 1, queueReady: 0, recipe: { name: 'Bone Broth' } }, 0, [], 0, 1), /2 dishes are ready!/, 'one pot ready plus one banked must read 2');
+  assert.match(card({ ready: true, readyCount: 1, queueReady: 0, recipe: { name: 'Bone Broth' } }, 0, [], 0, 0), /Bone Broth is ready!/, 'the single-pot line is unchanged when nothing was banked');
+  // the case the Today drain used to cover, now covered by the read
+  assert.match(card({ ready: true, readyCount: 1, queueReady: 1, recipe: { name: 'Bone Broth' } }, 0, [], 0, 0), /2 dishes are ready!/,
+    'a pot ready with a finished cook still in the line must read 2: that is what draining mid-render used to buy');
+  assert.match(card({ ...idle, queueReady: 1 }, 0, [], 0, 0), /1 dish is ready!/, 'a queued cook that has finished must raise the card on its own');
+  assert.equal(card(idle, 0, [], 0, 0), '', 'nothing ready, nothing banked: no card, as before');
+  assert.match(app, /_cookBanked = 0;   \/\/ the Pantry is on screen from here/, 'opening the Kitchen must clear the announcement');
+});
+
+/* O13. dateKey() flips at 0 ms; the visible day flipped at up to 53 s off the 60 s
+   interval. One setTimeout aimed at the next local midnight, re-armed after each
+   fire and on resume. Prove-red on main: nutrition.js has no armMidnightTimer. */
+test('R26-O13 the midnight timeout fires the roll at 0 ms and re-arms for the following midnight', async () => {
+  const nut = await import('../js/nutrition.js');
+  assert.equal(typeof nut.armMidnightTimer, 'function', 'nutrition.js must export armMidnightTimer');
+  const midnight = new Date(2026, 8, 5, 0, 0, 0, 0).getTime();   // local midnight
+  let now = midnight - 3000;                                     // 3 s before
+  const timers = [];
+  let rolls = 0;
+  const st = (cb, ms) => { timers.push({ cb, ms, cleared: false }); return timers.length - 1; };
+  const ct = id => { if (timers[id]) timers[id].cleared = true; };
+  const t = nut.armMidnightTimer(() => { rolls++; }, { now: () => now, setTimeout: st, clearTimeout: ct });
+  assert.equal(timers.length, 1, 'exactly ONE timeout is armed');
+  assert.ok(Math.abs(timers[0].ms - 3000) <= 1, `3 s before midnight the timeout must be ~3000 ms, got ${timers[0].ms}`);
+  now = midnight;                                                // the timer fires at 0 ms
+  timers[0].cb();
+  assert.equal(rolls, 1, 'the roll did not fire');
+  assert.equal(timers.length, 2, 'the timer did not re-arm after firing');
+  assert.ok(Math.abs(timers[1].ms - 86400000) <= 3600000 + 1, `re-armed for the following midnight (~24 h, DST allowed), got ${timers[1].ms}`);
+  assert.equal(nut.dateKey(new Date(now + timers[1].ms)), '2026-09-06', 'the re-armed timer must land on the next local midnight');
+  now = midnight + 7 * 3600000;                                  // resume at 07:00: the pending timer is stale
+  t.rearm();
+  assert.ok(timers[1].cleared, 'rearm must clear the pending timer');
+  assert.equal(timers.length, 3);
+  assert.ok(Math.abs(timers[2].ms - 17 * 3600000) <= 1, `re-aimed from the resume clock (17 h), got ${timers[2].ms}`);
+  // the app wires it beside the interval and re-aims it on resume
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /const midnight = armMidnightTimer\(rollDayIfNeeded\);/, 'app.js does not arm the midnight timeout on rollDayIfNeeded');
+  const resume = app.slice(app.search(/onAppResume\((?:async )?\(\) => \{/), app.indexOf('setInterval(rollDayIfNeeded, 60e3)'));
+  assert.match(resume, /midnight\.rearm\(\);/, 'resume does not re-aim the midnight timeout');
+});
+
+/* ---- QA round 28 P4: sparring paid with no state transition ----
+   Driven on v472: start() in the Pit skips spendPitFight (on purpose, practice
+   is free), two spars left freeUsed 0 / vigor 3, and settle() paid 15 coins per
+   win and 5 per loss off literals, with no ledger key, no cooldown and no cap.
+   The Glutton class, in the Pit itself. Runs the REAL js/game.js under mem-idb.
+   The cap NUMBER is SPAR_DAILY_CAP = XP_DAILY_CAP.fight, flagged for Tom, so the
+   hammer is read off the constant rather than pinned here. */
+test('QA round 28 P4: N spars pay at most the daily cap, and one fight id pays once', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-r28-p4-spar');
+  assert.equal(typeof g.claimSpar, 'function', 'game.js exports claimSpar');
+  assert.ok(Number.isInteger(g.SPAR_DAILY_CAP) && g.SPAR_DAILY_CAP > 0, 'SPAR_DAILY_CAP is a positive integer');
+  const DAY = '2031-07-07';
+  // CONTROL: the first spar of the day actually pays the shipped 15
+  const first = await g.claimSpar('r28-fight-0', true, DAY);
+  assert.deepEqual(first, { claimed: true, coins: 15 }, 'the first spar win must pay 15 (the shipped amount)');
+  // the same fight settled again pays nothing: the ref is the fight id
+  assert.deepEqual(await g.claimSpar('r28-fight-0', true, DAY), { claimed: false, coins: 0 }, 'a repeated settle of ONE fight took a second slot');
+  // hammer: cap + 5 distinct fights on one day pay exactly cap x 15 in total
+  let total = 15;
+  for (let i = 1; i < g.SPAR_DAILY_CAP + 5; i++) total += (await g.claimSpar(`r28-fight-${i}`, true, DAY)).coins;
+  assert.equal(total, g.SPAR_DAILY_CAP * 15, `${g.SPAR_DAILY_CAP + 5} spar wins paid ${total}, the ceiling is ${g.SPAR_DAILY_CAP * 15}`);
+  const rows = (await dbm.db.all('xp')).filter(r => r.type === 'spar' && r.date === DAY);
+  assert.equal(rows.length, g.SPAR_DAILY_CAP, 'the ledger holds exactly cap spar rows for the day');
+  assert.ok(rows.every(r => r.xp === 0), 'a spar slot carries 0 XP: the win XP is the fight cap in settle(), not here');
+  // a loss draws from the SAME pool: past the cap it pays 0 too
+  assert.deepEqual(await g.claimSpar('r28-fight-loss', false, DAY), { claimed: false, coins: 0 }, 'a spar loss past the cap still paid');
+  // and a loss inside the cap pays the shipped 5 (a different day)
+  assert.deepEqual(await g.claimSpar('r28-fight-loss', false, '2031-07-08'), { claimed: true, coins: 5 }, 'a spar loss inside the cap must pay 5');
+  /* Two OVERLAPPING settles of one fight are NOT graded here: tests/mem-idb.mjs
+     commits each transaction on its own macrotask, so two concurrent addIfAbsent
+     on one key BOTH resolve true (measured 2026-09-04: awardCapped with one ref
+     paid 10 + 10 and left one row, which real IndexedDB cannot do because it
+     serialises readwrite transactions on a store). The concurrent half is the
+     REPEAT spar row in tests/reward-sop-audit.mjs, against a real IndexedDB. */
+  // the settle wires it: no bare literal for the spar win, and the loss branch routes spars too
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.equal((app.match(/mode === 'spar'\) \{ coins = 15/g) || []).length, 0, 'settle() still assigns the 15-coin spar win off a literal');
+  assert.match(app, /mode === 'spar'\) \{ coins = \(await claimSpar\(fightId, true\)\)\.coins/, 'the spar win does not read its coins off claimSpar');
+  assert.match(app, /coins = foeCfg\.mode === 'spar' \? \(await claimSpar\(fightId, false\)\)\.coins : 5/, 'the spar loss does not read its coins off claimSpar');
+  assert.match(app, /const fightId = newId\(\);/, 'openFight mints no fightId for the spar ref');
+  // awardCapped callers are untouched by the claimCapped split: the number still means "granted"
+  assert.equal(await g.awardCapped('r28cap', 'fight', 10, 'x', 1, DAY), 10, 'awardCapped no longer returns the xp it granted');
+  assert.equal(await g.awardCapped('r28cap', 'fight', 10, 'x', 1, DAY), 0, 'awardCapped no longer returns 0 at the ceiling');
+});
+
+/* ---- QA round 28 P2: nothing on a button says what a move costs ----
+   Driven on v472 over 111 turns: Haymaker's 2 AP / 35 Stamina, Bone Guard's +22
+   and Signature's Hype dump lived only in title= (hover, absent on a phone);
+   Haymaker sat disabled on 71 of 111 turns while advertising "~45 dmg · 88%
+   hit" with no reason; HP was a bar with no number on 0 of 111 turns. The move
+   button renderer is a closure inside openFight, so its `costLine` + `btn`
+   source is sliced and run here with the values actionsFor would have handed it. */
+test('QA round 28 P2: every move button carries its cost in visible text, the reason when disabled, and the HP bars carry a number', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a0 = app.indexOf('    const costLine = a => {');
+  const a1 = app.indexOf("      </button>` : '';", a0);
+  assert.ok(a0 > 0 && a1 > a0, 'the costLine/btn block moved: re-anchor this slice');
+  const src = app.slice(a0, a1 + "      </button>` : '';".length);
+  const render = (fight, player, a) => new Function('fight', 'player', 'esc', 'moveDetail', 'GUARD_STAMINA',
+    src + '\nreturn btn(a, { hint: "~45 dmg · 88% hit" });'.replace('btn(a,', 'btn(arguments[5],'))(fight, player, String, () => 'TITLE', 22, a);
+  const visible = html => html.replace(/title="[^"]*"/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const hay = { id: 'haymaker', label: 'Haymaker', ap: 2, windCost: 35 };
+  // CONTROL: the hint itself still renders, so the slice is the real renderer
+  const on = render({ ap: 2, over: false }, { wind: 80, hype: 0 }, { ...hay, enabled: true });
+  assert.match(visible(on), /~45 dmg · 88% hit/, 'the slice did not render the hint: this test is looking at the wrong code');
+  assert.match(visible(on), /2 AP · 35 Stamina/, 'an enabled Haymaker does not print its 2 AP / 35 Stamina outside title=');
+  assert.ok(!/ disabled/.test(on), 'an enabled move rendered disabled');
+  // disabled for AP: the reason, with the same value actionsFor compared
+  const noAp = render({ ap: 1, over: false }, { wind: 80, hype: 0 }, { ...hay, enabled: false });
+  assert.match(noAp, / disabled/, 'control: the disabled attribute is present');
+  assert.match(visible(noAp), /Needs 2 AP/, 'a Haymaker disabled for AP does not say "Needs 2 AP" in visible text');
+  // disabled for Stamina: current/needed
+  const noWind = render({ ap: 2, over: false }, { wind: 12.6, hype: 0 }, { ...hay, enabled: false });
+  assert.match(visible(noWind), /Stamina 12\/35/, 'a Haymaker disabled for Stamina does not say "Stamina 12/35"');
+  assert.ok(!/Needs 2 AP/.test(visible(noWind)), 'the Stamina case is misreported as an AP case');
+  // Bone Guard's +22 (GUARD_STAMINA) and Signature's Hype are values, not prose
+  const guard = render({ ap: 1, over: false }, { wind: 50, hype: 0 }, { id: 'guard', label: 'Bone Guard', ap: 1, windCost: 12, enabled: true });
+  assert.match(visible(guard), /1 AP · 12 Stamina · \+22 Stamina/, 'Bone Guard does not print its +22 Stamina');
+  const sig = render({ ap: 2, over: false }, { wind: 50, hype: 100 }, { id: 'signature', label: 'Signature', ap: 2, windCost: 0, enabled: true });
+  assert.match(visible(sig), /2 AP · 100 Hype/, 'Signature does not print the Hype it spends');
+  // the full-width SIGNATURE button in renderActions carries the same sub-line
+  assert.match(app, /data-act="signature"[^\n]*<span class="cost">\$\{costLine\(sig\)\}<\/span><\/small>/, 'the SIGNATURE button has no cost on its hint line');
+  /* CORRECTED 2026-09-04: the line this replaces asserted a move row can NEVER
+     carry a second <small>, on the theory that .fight-act's `display:grid`
+     always turns one into an extra row. That theory was itself the bug, not a
+     caution: deleting the element also deleted the only thing fight-hint-
+     audit's `small.cost` selector can find, and folding its text onto the
+     hint's own <small> instead (1) wrapped the hint to two lines at 375/393
+     (fight-hint-audit's "every move label is one line") and (2) put "Stamina"
+     back into the Bone Guard hint even on the build where actionsFor had
+     already dropped it to make the hint fit (fight-press-audit). Tom's round
+     28 P2 ticket (~/Downloads/round28tickets.md) asked for the cost to be
+     VISIBLE outside title=, "Haymaker was disabled on 71 of 111 turns while
+     still advertising its damage, with no reason" - not for the hint to be
+     kept safe from a second element. The real fix keeps small.cost real and
+     separate and takes it OUT of .fight-act's grid row flow instead
+     (app.css: `.fight-act small.cost { position: absolute; ... }`), so this
+     now asserts the element exists on its own and that the CSS is what keeps
+     it from costing a row, not the element's absence. */
+  assert.ok(src.includes('</small><small class="cost">${costLine(a)}</small>'),
+    'a move row needs its own <small class="cost">, separate from the hint\'s <small>, for fight-hint-audit to find');
+  const css = readFileSync(join(here, '..', 'app.css'), 'utf8');
+  assert.match(css, /\.fight-act small\.cost\s*\{[^}]*position:\s*absolute/s,
+    'small.cost must be taken out of the grid row flow (position:absolute), or it costs the tray a row again (fight-layout ROWS)');
+  // HP number: printed in the HUD, updated from the same value that drives the width
+  assert.match(app, /<span id="youHpN">\$\{Math\.round\(player\.hp\)\}\/\$\{player\.d\.maxHp\}<\/span>/, 'the You HUD has no HP number');
+  assert.match(app, /<span id="foeHpN">\$\{Math\.round\(foe\.hp\)\}\/\$\{foe\.d\.maxHp\}<\/span>/, 'the foe HUD has no HP number');
+  const ub = app.slice(app.indexOf('  function updateBars() {'), app.indexOf("    el('youHp').style.width"));
+  assert.match(ub, /el\('youHpN'\)\.textContent = `\$\{Math\.max\(0, Math\.round\(player\.hp\)\)\}\/\$\{player\.d\.maxHp\}`/, 'updateBars does not refresh the You HP number');
+  assert.match(ub, /el\('foeHpN'\)\.textContent = `\$\{Math\.max\(0, Math\.round\(foe\.hp\)\)\}\/\$\{foe\.d\.maxHp\}`/, 'updateBars does not refresh the foe HP number');
+});
+
+/* ---- QA round 28 P5: the defeat copy fed a stat that no longer exists ----
+   "eat well, walk far" told the loser their habits would rebuild the fighter,
+   and since R21-P1's flat base habits feed training POINTS, not stats. The
+   Build tab already says so; the defeat panel and the settle note reuse it.
+   The quit-0 / loss-5 asymmetry is Tom's call and is NOT graded here. */
+test('QA round 28 P5: the stale "eat well, walk far" sentence is gone and both defeat surfaces carry the Training-points sentence', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.equal((app.match(/eat well, walk far/g) || []).length, 0, 'the false sentence is still in app.js');
+  const def = app.match(/const DEFEAT_STATS_NOTE = '([^']+)';/);
+  assert.ok(def, 'DEFEAT_STATS_NOTE is not defined once as a const');
+  assert.match(def[1], /hitting your protein target, closing a day on budget, and every 25,000 steps you walk/, 'the sentence is not the Build tab\'s own Training-points copy');
+  // CONTROL: the copy it reuses still exists where it came from
+  assert.match(app, /Points come from hitting your protein target, closing a day on budget, and every 25,000 steps you walk, so the build grows/, 'the Build tab source sentence moved: re-check the reuse');
+  assert.equal((app.match(/\$\{DEFEAT_STATS_NOTE\}/g) || []).length, 2, 'the note must be used on both defeat surfaces (the DOWN, NOT OUT panel and the settle note)');
 });
 
 test('a downloaded build can actually start: boot posts SKIP_WAITING to a waiting worker', () => {
@@ -4771,6 +5958,532 @@ test('a downloaded build can actually start: boot posts SKIP_WAITING to a waitin
   assert.ok(reg.length > 200, 'setup: the registration block was not found, so the assertions below prove nothing');
   assert.match(reg, /letItIn\(reg\)/, 'the handshake is not run at boot for a build that was already waiting');
   assert.match(reg, /updatefound/, 'a build that arrives mid-session is never let in');
+});
+
+test('REV-2: TestFlight invite card is gated by the store build flag', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /const\s+STORE_BUILD\s*=\s*false/, 'STORE_BUILD flag not found or web default is not false');
+  assert.match(app, /const\s+SHOW_BETA_THANKS\s*=\s*!STORE_BUILD/, 'SHOW_BETA_THANKS is not derived from STORE_BUILD');
+  assert.match(app, /async\s+function\s+openThanksCard\(\)\s*{\s*if\s*\(\s*!SHOW_BETA_THANKS\s*\)\s*return/, 'openThanksCard does not guard entry with SHOW_BETA_THANKS check');
+  assert.match(app, /function\s+thanksBannerHtml\(\)\s*{\s*if\s*\(\s*!SHOW_BETA_THANKS\s*\)\s*return\s+''/, 'thanksBannerHtml does not return empty string when SHOW_BETA_THANKS is false');
+  const newsFilter = app.match(/const\s+NEWS\s*=\s*\[[^]*?\]\.filter\([^)]*\)/);
+  assert.ok(newsFilter && newsFilter[0].includes("n.id === 'thanks'") && newsFilter[0].includes('SHOW_BETA_THANKS'), 'NEWS array is not filtered based on SHOW_BETA_THANKS');
+});
+
+test('REV-5: wheel weights sum to 95 and comment reflects it', () => {
+  const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
+  assert.match(wheel, /weights\s+sum\s+to\s+95.*probabilities\s+are\s+w\/95/, 'wheel comment does not state weights sum to 95 with normalized probabilities');
+  const prizeMatch = wheel.match(/const\s+PRIZES\s*=\s*\[[^]*?\n\];/);
+  assert.ok(prizeMatch, 'PRIZES array not found');
+  const prizes = prizeMatch[0];
+  const weights = [...prizes.matchAll(/weight:\s*(\d+)/g)].map(m => parseInt(m[1], 10));
+  const sum = weights.reduce((a, b) => a + b, 0);
+  assert.equal(sum, 95, `wheel weights sum to ${sum}, not 95: ${weights.join(' + ')} = ${sum}`);
+});
+
+/* ---- QA round 29, S12: the Crew surface says several things that are not true ----
+   Every one of these was DRIVEN on two real accounts against a local worker, so
+   each assertion below is pinned to a measured symptom rather than to a reading
+   of the code. */
+
+test('S12: the friending toast names the two buttons B actually gets', () => {
+  /* Measured: A sent a request and was told "They just enter your code back to
+     seal it." B's screen has an Accept and an Ignore on the request row and no
+     text field anywhere near it. */
+  /* FIVE call sites said this and no two agreed. Graded across the whole file,
+     not at the one the ticket named: the add-a-code box, the leaderboard row,
+     the leaderboard sheet and both arms of the stranger profile all send the
+     same request and all owe the same sentence. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const lies = app.split('\n')
+    .map((l, i) => [i + 1, l])
+    .filter(([, l]) => /Request sent\./.test(l) && !/REQUEST_SENT_MSG/.test(l))
+    .filter(([, l]) => /enter your code back|adding you back/i.test(l));
+  assert.deepEqual(lies, [], `these still describe a flow B is not shown: ${lies.map(([n, l]) => n + ': ' + l.trim()).join(' | ')}`);
+  const m = app.match(/^const REQUEST_SENT_MSG = '([^']+)';$/m);
+  assert.ok(m, 'there is no one string for what happens after a friend request is sent');
+  assert.ok(/Accept/.test(m[1]) && /Ignore/.test(m[1]),
+    `the request message does not name the Accept and Ignore B actually gets: ${m[1]}`);
+  const uses = (app.match(/REQUEST_SENT_MSG/g) || []).length - 1;
+  assert.ok(uses >= 5, `only ${uses} of the five request-sent surfaces use the shared message`);
+});
+
+/* THE LEDGER STAMPED THE PULL, NOT THE SEND. Three cheers sent minutes apart,
+   one app open, three rows reading "just now". Both halves are driven here
+   because neither is the bug on its own: js/social.js has to KEEP the server's
+   ts, and js/app.js has to READ it.
+   Runs the real applyPayload with a spy awardOnce (it is the one line that turns
+   a grant into a ledger row) and the real deliveredWhen + onlineLabel. */
+test('S12: a cheer sent nine minutes ago does not render "just now"', async () => {
+  const social = readFileSync(join(here, '..', 'js', 'social.js'), 'utf8');
+  const sa = social.indexOf('async function applyPayload(');
+  const sb = social.indexOf('\n// Test hook: a grant normally arrives', sa);
+  assert.ok(sa > 0 && sb > sa, 'applyPayload is not where the slice expects in js/social.js');
+  const rows = [];
+  const noop = async () => {};
+  const applyPayload = new Function('awardOnce', 'coinsAdd', 'boneDustAdd', 'grantCrate',
+    'grantConsumable', 'grantEgg', 'grantPet', 'grantGear', 'kvSet',
+    `${social.slice(sa, sb)}; return applyPayload;`)(
+    async (key, type, xp, label, date, extra) => { rows.push({ ...(extra || {}), key, type, xp, label, ts: Date.now() }); return { claimed: true, xp }; },
+    noop, noop, noop, noop, noop, noop, noop, noop);
+
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const oa = app.indexOf('function onlineLabel(');
+  const ob = app.indexOf('\nconst S = {', oa);
+  const da = app.indexOf('const deliveredWhen = ');
+  const db_ = app.indexOf('\nasync function crewCheers(', da);
+  assert.ok(oa > 0 && ob > oa && da > 0 && db_ > da, 'onlineLabel/deliveredWhen are not where the slice expects in js/app.js');
+  const deliveredWhen = new Function(`${app.slice(oa, ob)}\n${app.slice(da, db_)}; return deliveredWhen;`)();
+
+  const SENT = Date.now() - 9 * 60000;
+  await applyPayload('cheer-k1', 'cheer', { cheer: 3, cheerFrom: 'p2', from: 'Dusty Lulu', note: 'Dusty Lulu cheered you' }, SENT);
+  assert.equal(rows.length, 1, 'setup: the spy ledger took no row, so nothing below is being graded');
+  assert.equal(rows[0].sentAt, SENT,
+    'the ledger row carries no send time: the grant ts is dropped at applyPayload and every reader downstream sees the ingest stamp');
+  assert.equal(deliveredWhen(rows[0]), '9m ago',
+    `a cheer sent nine minutes ago rendered "${deliveredWhen(rows[0])}"`);
+  // and the ingest stamp is a different number, so the assertion above could have failed
+  assert.notEqual(rows[0].ts, SENT, 'setup: ingest and send time are the same instant here, so this proves nothing');
+});
+
+test('S12: a row with no send time falls back to ingest and says so', () => {
+  /* Every cheer and gift already in a player's ledger predates the fix and has
+     no sentAt to recover. Reprinting the ingest stamp as though it were the send
+     time is the bug; saying which one it is, is not. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const oa = app.indexOf('function onlineLabel(');
+  const ob = app.indexOf('\nconst S = {', oa);
+  const da = app.indexOf('const deliveredWhen = ');
+  const db_ = app.indexOf('\nasync function crewCheers(', da);
+  assert.ok(oa > 0 && ob > oa && da > 0 && db_ > da, 'onlineLabel/deliveredWhen are not where the slice expects in js/app.js');
+  const deliveredWhen = new Function(`${app.slice(oa, ob)}\n${app.slice(da, db_)}; return deliveredWhen;`)();
+  const old = { key: 'k', type: 'cheer', label: 'Someone cheered you', ts: Date.now() - 9 * 60000 };
+  assert.equal(deliveredWhen(old), 'arrived 9m ago',
+    `a pre-fix row rendered "${deliveredWhen(old)}" instead of naming the time as an arrival`);
+  assert.equal(deliveredWhen({ ts: Date.now() }), 'arrived just now', 'a fresh pre-fix row lost its label');
+  assert.equal(deliveredWhen({ sentAt: Date.now() }), 'just now', 'a row WITH a send time must not be labelled as an arrival');
+});
+
+test('S12: both sides are told a friendship completed, and a cheer is receipted to its sender', () => {
+  /* A waited 45 seconds after B accepted with nothing but analytics on the wire.
+     There is exactly one delivery channel for "a friend did something" in this
+     app -- the grants feed -- so this asserts the news goes onto THAT rather
+     than onto a new one, and that the client has somewhere to show it. */
+  const srv = readFileSync(join(here, '..', 'server', 'src', 'index.js'), 'utf8');
+  assert.match(srv, /async function notifyFriendship\(/, 'nothing on the server tells either side a friendship completed');
+  const na = srv.indexOf('async function notifyFriendship(');
+  const body = srv.slice(na, srv.indexOf('\n/* ---------------- daily-capped grants', na));
+  assert.ok(body.length > 200, 'setup: notifyFriendship body not found, so the assertions below prove nothing');
+  assert.equal((body.match(/INSERT OR IGNORE INTO grants/g) || []).length, 1, 'the pair of rows is not built from one statement');
+  assert.match(body, /row\(a, b\), row\(b, a\)/, 'only one side of the pair is told');
+  /* Keyed by the player it NAMES, which is what lets POST /account/delete reach
+     every crew row about a deleted account with one range. */
+  assert.match(body, /`crew-\$\{other\}-pair`/, 'a crew row is not keyed by the player it names');
+  const del = srv.slice(srv.indexOf("path === '/account/delete'"), srv.indexOf("path === '/events'"));
+  assert.match(del, /DELETE FROM grants WHERE key >= \? AND key < \?[\s\S]{0,80}crew-\$\{id\}-/,
+    'a deleted account keeps its name and its id on its friends\' crew news for a year');
+  // both completion paths: the explicit accept AND the reciprocated request
+  const accept = srv.slice(srv.indexOf("path === '/friends/accept'"), srv.indexOf("path === '/friends/remove'"));
+  assert.match(accept, /notifyFriendship\(/, '/friends/accept completes a friendship and tells nobody');
+  const req = srv.slice(srv.indexOf('async function requestFriendship('), na);
+  assert.match(req, /status === 'accepted'[\s\S]*notifyFriendship\(/, 'a reciprocated request auto-accepts and tells nobody');
+  // the cheer receipt, on the landed path only
+  const cheer = srv.slice(srv.indexOf("path === '/cheer' && request.method === 'POST'"), srv.indexOf("path === '/me' && request.method === 'GET'"));
+  assert.match(cheer, /crew-\$\{to\}-cheerack-/, 'a cheer still leaves no trace on the side that sent it');
+  assert.ok(cheer.indexOf('-cheerack-') > cheer.indexOf("code: 'limit' }, 429"),
+    'the cheer receipt is written before the cap refusal, so a refused cheer would be receipted');
+  // and the client can show a crew-typed grant at all
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /DELIVERY_TYPES = new Set\(\[[^\]]*'crew'/, "Deliveries does not list 'crew' rows, so the news lands in the ledger and is never shown");
+  assert.match(app, /g\.type === 'crew'[\s\S]{0,120}crewNews\.push/, 'a crew-typed grant falls through every reveal branch and arrives silently');
+});
+
+/* WHICH SHELF LEADS THE SHOP, AND WHICH ONE IS SECOND. Tom, 2026-09-04: "nfl
+   shit goes to the lead shelf of the shop", then, on the first attempt at the
+   rest: "dont put her in potion supplies find a way to have her prominent in the
+   shop but less than NFL." That first attempt put her in the drop-shelf area,
+   which lives inside #shopRestBody behind the "Potions and charms · Supplies"
+   button, so a 50,000-coin legendary was invisible until somebody tapped. The
+   ruling is SECOND: kit first, her immediately after it, both above the rack and
+   neither behind a tap.
+
+   The OFF order still matters even though the flag now ships true, because it is
+   the order every build before this one shipped and the flag is the one line
+   that would take the Shop back to it.
+
+   This does not regex the ternaries. It EVALUATES the two real lines out of
+   js/app.js with stub shelves, both ways, and substitutes the results into the
+   real template, so what is asserted is the order of the string the Shop
+   actually builds. tests/shop-lead-order-audit.mjs then measures the same two
+   orders as boxes on a screen. */
+test('shop lead shelf: the Kit room leads when the kit is live, Bumbleseal is second and out in the open, and with the flag off nothing moves at all', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const fn = app.indexOf('async function renderShop(el)');
+  const d0 = app.indexOf('const petShelf = petShelfHtml(', fn);
+  const s = app.indexOf('el.innerHTML = `', d0);
+  const e = app.indexOf('<div class="rk-tail"></div>`;', s);
+  assert.ok(fn > 0 && d0 > fn && s > d0 && e > s, 'the Shop template or its shelf constants moved: re-anchor this test');
+  const tpl = app.slice(s, e);
+  /* The two constants, run for real. Stub shelves are unmistakable markers so
+     a hit cannot be some other word in 12KB of template. */
+  const shelves = live => new Function(
+    'FOOTBALL_KIT_LIVE', 'petShelfHtml', 'footballShelfHtml', 'ownedCos', 'coinBal', 'wasOpen',
+    app.slice(d0, s) + 'return { fbLead, petLead };',
+  )(live, () => '<<PET>>', () => '<<FB>>', new Set(), 0, { fb: false });
+  const render = live => {
+    const v = shelves(live);
+    for (const k of ['fbLead', 'petLead']) {
+      assert.equal(tpl.split('${' + k + '}').length - 1, 1, `the template must place \${${k}} exactly once`);
+    }
+    /* petDrop is GONE, not merely empty: an unused slot left in the template is
+       how she gets quietly put back behind the supplies button. */
+    assert.equal(tpl.indexOf('${petDrop}'), -1, 'the old supplies-panel slot for Bumbleseal must be deleted, not left rendering an empty string');
+    return tpl.replace('${fbLead}', v.fbLead).replace('${petLead}', v.petLead);
+  };
+  const at = (h, t) => h.indexOf(t);
+  /* THE RACK STRIP BY ITS OWN TEXT, not by `class="rk-theme"`. That class is on
+     three strips (the rack, the rotating shelf, and now her heading), so the
+     first draft of this row matched HER heading and reported her below the rack
+     while she sat above it. */
+  const RACK = 'RACK ${rackNo} OF 4';
+
+  // ---- flag OFF: the shop every build before this one shipped ----
+  const off = render(false);
+  assert.equal(at(off, '<<FB>>'), -1, 'with FOOTBALL_KIT_LIVE false the Kit room must not be in the Shop at all');
+  assert.ok(at(off, '<<PET>>') > 0, 'with the flag off Bumbleseal must still be in the Shop');
+  assert.ok(at(off, RACK) > 0 && at(off, '<<PET>>') < at(off, RACK),
+    'with the flag off Bumbleseal must lead the Shop, above the rack, exactly as she did before the kit existed');
+  assert.equal(off.split('<<PET>>').length - 1, 1, 'Bumbleseal must be rendered once, not in two slots');
+
+  // ---- flag ON: the kit takes the lead and she is second, still out in the open ----
+  const on = render(true);
+  assert.ok(at(on, '<<FB>>') > 0 && at(on, '<<PET>>') > 0, 'with the flag on both shelves must be in the Shop');
+  assert.equal(on.split('<<PET>>').length - 1, 1, 'Bumbleseal must be rendered once, not in two slots');
+  assert.ok(at(on, RACK) > 0 && at(on, '<<FB>>') < at(on, RACK),
+    'the Kit room must lead the Shop, above the rack');
+  assert.ok(at(on, '<<FB>>') < at(on, '<<PET>>'),
+    'the Kit room must lead and Bumbleseal must sit below it, not the other way round');
+  assert.ok(at(on, '<<PET>>') < at(on, RACK),
+    'Bumbleseal must be SECOND, above the rack strip: anything below it is a demotion she was already rejected for');
+  assert.ok(at(on, '<<PET>>') < at(on, 'id="shopRest"'),
+    'Bumbleseal must sit above the "Potions and charms" button, not behind it');
+  assert.ok(at(on, '<<PET>>') < at(on, 'id="shopRestBody"'),
+    'Tom, 2026-09-04: "dont put her in potion supplies". She must not be inside #shopRestBody at all');
+  assert.ok(at(on, 'GWART') > at(on, '<<FB>>') && at(on, 'GWART') < at(on, '<<PET>>'),
+    'her slot must carry its own heading between the Kit room and her hero, or she reads as part of the kit');
+  assert.ok(at(on, 'id="dropSect"') > 0, 'the Puffer Pack must survive the move: Tom has not ruled on it');
+  assert.ok(at(on, 'id="dropSect"') > at(on, 'id="shopRestBody"'),
+    'the Puffer Pack stays where it is, inside the supplies panel');
+});
+
+/* ================= claimed-row-audit, 2026-09-04: the five re-routed writers =================
+   tests/claimed-row-audit.mjs's COVERAGE row finds a plain kvSet of a CLAIMED
+   row (one some function claims through kvUpdate) STATICALLY, by scanning
+   js/*.js; it does not itself drive the race. These four rows are that: the
+   real functions, over a real (serialising) IndexedDB, raced against the
+   ATOMIC SIBLING that made the row a claimed one in the first place
+   (grantPotion's kvUpdate on 'potions'; salvagePet's kvUpdate on 'petInst').
+   All node-level, mem-idb is the real js/db.js the way the R26 rows above use it.
+
+   ORDERING NOTE: the petInst race below MUST run before any other live call to
+   petInstances() in this file, because reclaimOwnedPets gates itself with a
+   process-lifetime `_petsReclaimed` flag ("once per page load") that this file
+   cannot reset from outside. It is placed first among these four for that
+   reason; addPetInstance and breedPets both call petInstances() internally too,
+   but neither depends on the reclaim actually firing, so their tests are safe
+   to run after. */
+
+// usePotion vs grantPotion: the sip and the brew race on kv 'potions'.
+test('CLAIMED-ROW race: usePotion cannot lose a concurrent grantPotion on kv potions', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-claimedrow-potions');
+  const cooking = await import('../js/cooking.js');
+  await dbm.kvSet('potions', { 'revenant-draught': 1 });
+  const [drunk] = await Promise.all([
+    cooking.usePotion('revenant-draught'),
+    cooking.grantPotion('spectral-fury', 1),
+  ]);
+  assert.equal(drunk, true, 'the drink must go through');
+  const inv = await cooking.potionsInv();
+  assert.deepEqual(inv, { 'spectral-fury': 1 },
+    `both the drink (revenant-draught emptied and dropped) and the concurrent grant (spectral-fury) must land, got ${JSON.stringify(inv)}`);
+});
+
+// petInstances' heal (duplicate iids) AND its reclaim (an owned pet with zero
+// copies) both fire off ONE call here, raced against salvagePet's own kvUpdate
+// on a third, unrelated species, so all three land on kv 'petInst'.
+test('CLAIMED-ROW race: petInstances\' heal-and-reclaim cannot lose, or be lost to, a concurrent salvagePet on kv petInst', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-claimedrow-healreclaim');
+  const loot = await import('../js/loot.js');
+  await dbm.kvSet('petInst', [
+    { iid: 'dup', sp: 'C4', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'dup', sp: 'C4', lineage: 1, shiny: false, hatchedAtSteps: 0 },  // duplicate iid: triggers the heal branch
+    { iid: 'k1', sp: 'C2', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'k2', sp: 'C2', lineage: 1, shiny: false, hatchedAtSteps: 0 },  // two copies: salvagePet takes the worst, one survives
+  ]);
+  await dbm.db.put('inv', { id: 'cos:C2', kind: 'cos', itemId: 'C2', source: 'x', ts: Date.now() });
+  await dbm.db.put('inv', { id: 'cos:C3', kind: 'cos', itemId: 'C3', source: 'x', ts: Date.now() });  // owned, zero copies: the ghost reclaim fixes
+  const [, salvage] = await Promise.all([loot.petInstances(), loot.salvagePet('C2')]);
+  assert.ok(salvage.ok, 'the salvage must go through');
+  const list = await dbm.kvGet('petInst', null);
+  const c4 = list.filter(x => x.sp === 'C4');
+  assert.equal(c4.length, 2, `the heal must not drop a C4 copy, got ${JSON.stringify(list)}`);
+  assert.equal(new Set(c4.map(x => x.iid)).size, 2, `the heal must re-id the duplicate rather than lose one, got ${JSON.stringify(c4)}`);
+  assert.ok(list.some(x => x.sp === 'C3'), `the reclaimed ghost pet must survive the concurrent salvage, got ${JSON.stringify(list)}`);
+  assert.equal(list.filter(x => x.sp === 'C2').length, 1, `the salvage must survive the concurrent heal/reclaim, got ${JSON.stringify(list)}`);
+});
+
+// addPetInstance vs salvagePet: a fresh hatch and a melt on two different species.
+test('CLAIMED-ROW race: addPetInstance cannot lose, or be lost to, a concurrent salvagePet on kv petInst', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-claimedrow-addpet');
+  const loot = await import('../js/loot.js');
+  await dbm.kvSet('petInst', [
+    { iid: 'k1', sp: 'C2', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'k2', sp: 'C2', lineage: 1, shiny: false, hatchedAtSteps: 0 },
+  ]);
+  const [added, salvage] = await Promise.all([
+    loot.addPetInstance('C4', {}),
+    loot.salvagePet('C2'),
+  ]);
+  assert.equal(added.sp, 'C4', 'addPetInstance must return the minted instance');
+  assert.ok(salvage.ok, 'the salvage must go through');
+  const list = await dbm.kvGet('petInst', null);
+  assert.ok(list.some(x => x.sp === 'C4'), `the hatched pet must survive the concurrent salvage, got ${JSON.stringify(list)}`);
+  assert.equal(list.filter(x => x.sp === 'C2').length, 1, `the salvage must survive the concurrent hatch, got ${JSON.stringify(list)}`);
+});
+
+// breedPets vs salvagePet: a breed on one species races a melt on another.
+test('CLAIMED-ROW race: breedPets cannot lose, or be lost to, a concurrent salvagePet on kv petInst', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-claimedrow-breed');
+  const loot = await import('../js/loot.js');
+  await dbm.kvSet('petInst', [
+    { iid: 'keep', sp: 'C2', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'feed', sp: 'C2', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'k1', sp: 'C4', lineage: 0, shiny: false, hatchedAtSteps: 0 },
+    { iid: 'k2', sp: 'C4', lineage: 1, shiny: false, hatchedAtSteps: 0 },
+  ]);
+  const [breed, salvage] = await Promise.all([
+    loot.breedPets('keep', 'feed'),
+    loot.salvagePet('C4'),
+  ]);
+  assert.ok(breed.ok, `the breed must go through, got ${JSON.stringify(breed)}`);
+  assert.ok(salvage.ok, `the salvage must go through, got ${JSON.stringify(salvage)}`);
+  const list = await dbm.kvGet('petInst', null);
+  assert.ok(!list.some(x => x.iid === 'feed'), 'the fed pet must be gone');
+  const keep = list.find(x => x.iid === 'keep');
+  assert.equal(keep.lineage, 1, `the keeper must gain lineage from the concurrent breed, got ${JSON.stringify(keep)}`);
+  assert.equal(list.filter(x => x.sp === 'C4').length, 1, `the salvage must survive the concurrent breed, got ${JSON.stringify(list)}`);
+});
+
+// Football kit critique (2026-09-05), rule 1: the bundle charges only for the
+// garments a player does not already own, min(bundle, 4,200 x missing), never
+// the flat 16,800 for whatever is left. One db per owned-count so each row
+// starts from a clean wallet and a known set of owned garments.
+test('football BUNDLE-QUOTE: buyFootballBundle charges only for the missing garments', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const FB = await import('../data/football-teams.js');
+  const loot = await import('../js/loot.js');
+  const WALLET = 100000;
+  // Grants a garment fully owned (all 32 team ids, the helmet dragging its
+  // three visors), the same shape footballGrantIds hands a real buyer.
+  const ownGarment = async key => {
+    const ids = FB.footballGrantIds(FB.footballItemId(FB.FOOTBALL_TEAMS[0].id, key));
+    for (const id of ids) await dbm.db.put('inv', { id: `cos:${id}`, kind: 'cos', itemId: id, source: 'x', ts: Date.now() });
+  };
+
+  dbm.useDbName('unit-fbbundle-0');
+  await dbm.kvSet('coins', WALLET);
+  let r = await loot.buyFootballBundle('ignored');
+  assert.equal(r.ok, true, `0 owned must sell, got ${JSON.stringify(r)}`);
+  assert.equal(r.cost, 16800, `0 owned (5 missing) must cost the full bundle price, got ${JSON.stringify(r)}`);
+
+  dbm.useDbName('unit-fbbundle-3');
+  await dbm.kvSet('coins', WALLET);
+  for (const key of ['helmet', 'jersey', 'cleats']) await ownGarment(key);
+  r = await loot.buyFootballBundle('ignored');
+  assert.equal(r.ok, true, `3 owned must still sell the other two, got ${JSON.stringify(r)}`);
+  assert.equal(r.cost, 8400, `3 owned (2 missing) must cost 4,200 x 2, got ${JSON.stringify(r)}`);
+  assert.equal(r.granted, 2, `3 owned must report 2 garments granted, got ${JSON.stringify(r)}`);
+
+  dbm.useDbName('unit-fbbundle-4');
+  await dbm.kvSet('coins', WALLET);
+  for (const key of ['helmet', 'jersey', 'cleats', 'pet-helmet']) await ownGarment(key);
+  r = await loot.buyFootballBundle('ignored');
+  assert.equal(r.ok, true, `4 owned must still sell the last one, got ${JSON.stringify(r)}`);
+  assert.equal(r.cost, 4200, `4 owned (1 missing) must cost one garment's price, got ${JSON.stringify(r)}`);
+
+  dbm.useDbName('unit-fbbundle-5');
+  await dbm.kvSet('coins', WALLET);
+  for (const key of ['helmet', 'jersey', 'cleats', 'pet-helmet', 'pet-jersey']) await ownGarment(key);
+  r = await loot.buyFootballBundle('ignored');
+  assert.equal(r.ok, false, `5 owned must refuse, got ${JSON.stringify(r)}`);
+  assert.equal(r.reason, 'owned', `5 owned must refuse as already owned, got ${JSON.stringify(r)}`);
+});
+
+/* P1 (Codex, 2026-09-05): buyFootballBundle quotes its cost from an owned-set
+   snapshot taken BEFORE any coins move, then charges that snapshot's cost, then
+   grants. A single-garment buy (buyFootballItem) for a DIFFERENT garment that
+   lands after the snapshot but before the bundle's grant loop still succeeds:
+   the bundle's loop reaches that garment's ids, finds them already granted
+   (grantCosmetic no-ops on an owned id) and moves on, so both purchases are
+   charged in full while the bundle delivered one fewer garment than it was
+   quoted for. Overcharge = one garment's price per overlapping single buy.
+   Reproduced on the REAL functions with REAL interleaving: Promise.all lets
+   both run under mem-idb's serialised transactions exactly as two overlapping
+   taps would (same technique as R26-O11 above), no mocked scheduling. */
+test('football BUNDLE-CONCURRENCY: an overlapping single-garment buy no longer overcharges the bundle', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const FB = await import('../data/football-teams.js');
+  const loot = await import('../js/loot.js');
+  const WALLET = 1000000;
+  const ownGarment = async key => {
+    const ids = FB.footballGrantIds(FB.footballItemId(FB.FOOTBALL_TEAMS[0].id, key));
+    for (const id of ids) await dbm.db.put('inv', { id: `cos:${id}`, kind: 'cos', itemId: id, source: 'x', ts: Date.now() });
+  };
+
+  // 1 garment already owned (jersey): the bundle quotes for the other 4 at
+  // 16,800 (4 x 4,200 ties the flat bundle price). A tap on a DIFFERENT
+  // missing garment (cleats) races the bundle buy.
+  dbm.useDbName('unit-fbrace-1');
+  await dbm.kvSet('coins', WALLET);
+  await ownGarment('jersey');
+  const cleatsId = FB.footballItemId(FB.FOOTBALL_TEAMS[3].id, 'cleats');
+  const [bundleR, itemR] = await Promise.all([
+    loot.buyFootballBundle('ignored'),
+    loot.buyFootballItem(cleatsId, true),
+  ]);
+  assert.equal(bundleR.ok, true, `bundle must sell, got ${JSON.stringify(bundleR)}`);
+  assert.equal(itemR.ok, true, `single buy must sell, got ${JSON.stringify(itemR)}`);
+  assert.equal(bundleR.cost, 16800, `4 missing at quote time ties the flat bundle price, got ${JSON.stringify(bundleR)}`);
+  assert.equal(itemR.cost, 4200, `one garment must cost one garment's price, got ${JSON.stringify(itemR)}`);
+  const spent = WALLET - await loot.coins();
+  assert.equal(spent, 16800, `single (4,200) + what the bundle actually delivered (3 new garments, quote 12,600) must total 16,800 and never more, got ${spent}`);
+  const owned = await loot.ownedCosmeticIds();
+  const garmentsOwned = FB.FOOTBALL_SOLD.filter(g => FB.FOOTBALL_TEAMS.some(t => owned.has(FB.footballItemId(t.id, g.key))));
+  assert.equal(garmentsOwned.length, FB.FOOTBALL_SOLD.length, `all ${FB.FOOTBALL_SOLD.length} garments must be owned after both purchases land, got ${garmentsOwned.map(g => g.key)}`);
+
+  // A plain bundle buy, no race, still costs its quote.
+  dbm.useDbName('unit-fbrace-plain');
+  await dbm.kvSet('coins', WALLET);
+  const plain = await loot.buyFootballBundle('ignored');
+  assert.equal(plain.ok, true, `an uncontested bundle must sell, got ${JSON.stringify(plain)}`);
+  assert.equal(plain.cost, 16800, `an uncontested bundle buy (0 owned) must cost the flat price, got ${JSON.stringify(plain)}`);
+  assert.equal(WALLET - await loot.coins(), 16800, `an uncontested bundle must charge exactly its quote, got ${WALLET - await loot.coins()}`);
+
+  // A double-tap bundle still refunds the loser in full.
+  dbm.useDbName('unit-fbrace-dbltap');
+  await dbm.kvSet('coins', WALLET);
+  const [d1, d2] = await Promise.all([loot.buyFootballBundle('ignored'), loot.buyFootballBundle('ignored')]);
+  const winner = d1.ok ? d1 : d2, loser = d1.ok ? d2 : d1;
+  assert.equal(winner.ok, true, `one of the two overlapping bundle taps must win, got ${JSON.stringify([d1, d2])}`);
+  assert.equal(loser.ok, false, 'the other must lose');
+  assert.equal(loser.reason, 'owned', `the loser must be refused as already owned, got ${JSON.stringify(loser)}`);
+  assert.equal(WALLET - await loot.coins(), winner.cost, `a double-tap bundle must charge exactly once, got spent ${WALLET - await loot.coins()} vs winner cost ${winner.cost}`);
+});
+
+/* CLAIM HYGIENE (2026-09-05), item 1: "reward claim burned on grant failure".
+ * js/quests.js:claimQuest used to mint the quest's ledger row with a plain
+ * award() and THEN pay coins / crate / dust / item / ingredient in five
+ * separate writes. A rejection in any of those (quota, the wipe-protocol
+ * freeze flag, an IndexedDB abort) landed AFTER the claim had already
+ * committed, and award() can never be re-run once its key exists: the quest
+ * read as claimed forever and the player got nothing. The fix bundles the
+ * whole payout into the SAME transaction as the claim via awardOnce's `pay`
+ * (js/hunt.js:collectSpawn's shape, QA round 28 Y5), so a rejected write now
+ * takes the claim down with it instead of leaving it stranded.
+ *
+ * INDUCE: db.claimAndPay is stubbed to reject for this one quest's key, the
+ * same style tests/purchase-write-failure-audit.mjs uses on db.addIfAbsent.
+ * PROVE-RED: reverting claimQuest to the old award()-then-separate-grants
+ * shape makes `threw` false (the stub's target, db.claimAndPay, is never
+ * called by that code) and the guard fails on its first assertion:
+ *   AssertionError [ERR_ASSERTION]: a rejected payout write must not be
+ *   swallowed silently: expected false to equal true
+ * which is itself the defect restated: the old code has no atomic seam a
+ * rejected write can be caught at, so nothing here would have stopped it. */
+test('R-claimhyg-1 claimQuest: a rejected payout write burns nothing and a retry pays exactly once', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const quests = await import('../js/quests.js');
+  dbm.useDbName('unit-claimhyg-questgrantfail');
+
+  const PK = dateKey();
+  const Q = { id: 'claimhyg-1', name: 'Grant-fail probe', coins: 40, crate: 'daily' };
+
+  const before = { coins: await dbm.kvGet('coins', 0), crates: (await dbm.db.all('inv')).length };
+
+  const realClaimAndPay = dbm.db.claimAndPay;
+  dbm.db.claimAndPay = (store, row, pay) =>
+    (store === 'xp' && row && row.key === `quest-${PK}-${Q.id}`)
+      ? Promise.reject(new Error('QuotaExceededError'))
+      : realClaimAndPay(store, row, pay);
+
+  let threw = false;
+  try { await quests.claimQuest(PK, Q, 'day'); } catch { threw = true; }
+  dbm.db.claimAndPay = realClaimAndPay;   // RECOVER: the write works again
+
+  assert.equal(threw, true, 'a rejected payout write must not be swallowed silently');
+  const ledgerRow = await dbm.db.get('xp', `quest-${PK}-${Q.id}`);
+  assert.equal(ledgerRow, undefined, 'the quest must not read as claimed when its own payout transaction rejected (claim burned, nothing paid)');
+  const afterFail = { coins: await dbm.kvGet('coins', 0), crates: (await dbm.db.all('inv')).length };
+  assert.equal(afterFail.coins, before.coins, 'a rejected quest claim must not move the wallet');
+  assert.equal(afterFail.crates, before.crates, 'a rejected quest claim must not grant a crate');
+
+  // RETRY: same quest, the write works again -- must pay exactly once.
+  const retry = await quests.claimQuest(PK, Q, 'day');
+  assert.ok(retry && retry.xp > 0 && retry.crate === 'daily', `the quest must be claimable again once the transient failure clears, got ${JSON.stringify(retry)}`);
+  const afterRetry = { coins: await dbm.kvGet('coins', 0), crates: (await dbm.db.all('inv')).filter(r => r.kind === 'crate').length };
+  assert.equal(afterRetry.coins, before.coins + Q.coins, 'the retry must pay coins exactly once');
+  assert.equal(afterRetry.crates, 1, 'the retry must grant exactly one crate');
+});
+
+/* CLAIM HYGIENE (2026-09-05), item 2: "welcome-kit cross-tab duplication".
+ * js/game.js:initLootIfNeeded used to gate on a plain kvGet('loot-init') read
+ * and only write the flag at the very end, so two tabs booting a fresh
+ * install at the same instant both read it absent and both ran the whole
+ * function: two golden crates, two daily crates, two Draughts, doubled
+ * ingredients, two eggs. The fix moves the claim to the top as a single
+ * db.addIfAbsent('kv', {k:'loot-init', v:true}) -- the same test-and-set
+ * retireGardenIfNeeded / retireMerchantIfNeeded already use a few hundred
+ * lines below it -- so the check and the write are one IndexedDB request and
+ * exactly one caller's grants run.
+ * PROVE-RED: reverting to the old kvGet-then-kvSet-at-the-end shape and
+ * rerunning this guard on two interleaved calls fails with:
+ *   AssertionError [ERR_ASSERTION]: exactly one welcome kit must land under
+ *   two interleaved boots, got 4 crates: expected 2 to equal 4 */
+test('R-claimhyg-2 initLootIfNeeded: two interleaved boots grant exactly one welcome kit', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-claimhyg-welcomerace');
+
+  const [r1, r2] = await Promise.all([g.initLootIfNeeded(), g.initLootIfNeeded()]);
+  const winner = r1 || r2, loser = r1 ? r2 : r1;
+  assert.ok(winner, `one of the two interleaved boots must win the kit, got ${JSON.stringify([r1, r2])}`);
+  assert.equal(loser, null, 'the loser of the race must be paid nothing, not a second kit');
+
+  const inv = await dbm.db.all('inv');
+  const crates = inv.filter(r => r.kind === 'crate').length;
+  const eggs = inv.filter(r => r.kind === 'egg').length;
+  const draughts = inv.filter(r => r.kind === 'vigor').length;
+  const ing = await dbm.kvGet('ingredients', {});
+  assert.equal(crates, 2, `exactly one welcome kit must land under two interleaved boots, got ${crates} crates`);
+  assert.equal(eggs, 1, `exactly one welcome egg must land, got ${eggs}`);
+  assert.equal(draughts, 1, `exactly one welcome Draught must land, got ${draughts}`);
+  assert.deepEqual(ing, { marrow: 2, salt: 1 }, `the starter pouch must not be doubled, got ${JSON.stringify(ing)}`);
+
+  // a THIRD, later boot must still pay nothing: the claim is not a one-race fluke
+  const r3 = await g.initLootIfNeeded();
+  assert.equal(r3, null, 'a later boot after the race must still find the kit already claimed');
 });
 
 await runAll();

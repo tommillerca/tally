@@ -9,7 +9,7 @@ Tom's personal Apple ID. NOT connected to veritree in any way (verified: zero
 - **Bundle ID:** `com.boneheadz.gym`
 - **Version / build:** 1.0 (1)  ← build number bumps each upload
 - **Category:** Health & Fitness (primary); Games (secondary, optional)
-- **Age rating:** 9+ (Infrequent/Mild Cartoon or Fantasy Violence — skeletons sparring)
+- **Age rating:** 12+ (Infrequent/Mild Cartoon or Fantasy Violence, skeletons sparring; Infrequent/Mild Alcohol, Tobacco, or Drug Use or References: Rollie, Last Cigarette, Fat Cigar stay as drawn. Tom, 2026-09-05: "dont rename")
 - **App icon:** 1024×1024 present in the asset catalog
 
 ## App Store Connect metadata (paste-ready)

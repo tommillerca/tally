@@ -1,7 +1,7 @@
 /* A ROW DATED IN THE FUTURE MUST NOT MOVE A SINGLE FIGURE ON /stats.
  *
  *   npx wrangler d1 execute bonez --local --file=schema.sql
- *   npm run dev            # or: npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken
+ *   npm run dev            # or: npx wrangler dev --local --port 8788 --var DEV:1 --var ADMIN_TOKEN:devtoken --var ADD_TOKEN_SECRET:devaddsecret --var RL_SECRET:devrlsecret
  *   node future-dates.test.mjs
  *
  * WHY THIS EXISTS. Every windowed aggregate on /stats was written `day >= ?`
@@ -60,7 +60,7 @@ const AGGREGATED = [
 ];
 
 async function stats() {
-  const r = await fetch(`${BASE}/stats?token=${TOKEN}`);
+  const r = await fetch(`${BASE}/stats`, { headers: { authorization: `Bearer ${TOKEN}` } }); // QA r29 S2: header, never the URL
   assert.equal(r.status, 200, `/stats needs ADMIN_TOKEN (got ${r.status})`);
   const j = await r.json();
   delete j.generatedAt;              // the one field that MUST differ

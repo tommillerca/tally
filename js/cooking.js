@@ -4,7 +4,8 @@
 // (stew / zombie-fajita flavor), fully separate from real calorie logging, and
 // buffs only ever ADD (wellbeing-safe: nothing here rewards eating less).
 
-import { kvGet, kvSet, kvUpdate } from './db.js';
+import { kvGet, kvSet, kvUpdate, claimDay } from './db.js';
+import { dateKey } from './nutrition.js';
 
 export const INGREDIENTS = {
   marrow:    { id: 'marrow',    name: 'Marrow',        icon: '🦴', iconId: 'ingr-marrow',    tier: 'common' },
@@ -156,14 +157,25 @@ export const RECIPE_BY_ID = Object.fromEntries([...RECIPES, ...POTIONS].map(r =>
 export async function potionsInv() { return (await kvGet('potions', {})) || {}; }
 export async function grantPotion(id, n = 1) {
   if (!POTION_BY_ID[id]) return;
-  const inv = await potionsInv(); inv[id] = (inv[id] || 0) + n; await kvSet('potions', inv);
+  /* QA round 26 O4: two Serve taps in one frame emptied both pots and banked ONE
+     potion (6/6). This was the last read-modify-write granter in the file; one
+     transaction, same as grantIngredient below. */
+  await kvUpdate('potions', inv => ({ ...(inv || {}), [id]: ((inv && inv[id]) || 0) + n }), {});
 }
+/* THE SIP HAS TO BE THE CLAIM TOO (2026-09-04, claimed-row-audit): reading the
+   satchel, decrementing in memory and writing the whole map back raced
+   grantPotion's own kvUpdate above it, the same shape O4 fixed on the granter
+   two lines up. A dish that finished cooking while a fight was open could bank
+   its potion via grantPotion between this read and this write, and the whole
+   map this call then wrote back had no idea that potion existed. */
 export async function usePotion(id) {
-  const inv = await potionsInv();
-  if (!(inv[id] > 0)) return false;
-  inv[id] -= 1; if (inv[id] <= 0) delete inv[id];
-  await kvSet('potions', inv);
-  return true;
+  const drunk = await kvUpdate('potions', cur => {
+    const next = { ...(cur || {}) };
+    if (!(next[id] > 0)) return undefined;
+    next[id] -= 1; if (next[id] <= 0) delete next[id];
+    return next;
+  }, {});
+  return !!drunk;
 }
 export function potionCount(inv) { return Object.values(inv || {}).reduce((a, n) => a + n, 0); }
 
@@ -328,6 +340,35 @@ export async function advanceQueue(now = Date.now()) {
   return banked.map(b => b.recipe);
 }
 
+/* WHAT A DRAIN WOULD COLLECT, WITHOUT COLLECTING IT. Pure: no kv, no XP, no
+ * writes. Today's Kitchen card has to SAY how many dishes are waiting, and it
+ * used to find out by draining mid-render (QA r26 O15). Draining pays, and
+ * awardCapped drags level rewards, crates and eggs into the Today render tick,
+ * which tests/today-reads-lint.mjs row A1 grades at one full-store scan per
+ * store; it read health x4 and xp x2. The card only ever needed a COUNT.
+ *
+ * Mirrors advanceQueue's placement exactly so the number matches what the next
+ * real drain banks: an EMPTY pot takes the head of the queue starting `now` (so
+ * that cook can never already be finished, it only swallows an entry), and a
+ * FINISHED pot hands its entry over back-dated to the moment it came free, so a
+ * queue laid down on Monday reads right on Tuesday. Loops to the same fixpoint
+ * drainCookQueue's own loop reaches. Disjoint from readyCount: that counts the
+ * dishes sitting in pots, this counts the queued cooks behind them. */
+export function queueReadyCount(slots, queue, now = Date.now()) {
+  const q = queue.slice(slots.filter(c => !c).length);   // empty pots swallow the head of the line
+  const free = slots.filter(c => c && c.readyAt <= now).map(c => c.readyAt).sort((a, b) => a - b);
+  let ready = 0;
+  for (const r of q) {
+    if (!free.length) break;
+    const done = free[0] + r.cookMin * 60e3;
+    if (done > now) { free.shift(); continue; }   // that pot is cooking again, and not done yet
+    ready++;
+    free[0] = done;
+    free.sort((a, b) => a - b);
+  }
+  return ready;
+}
+
 export async function cookState(now = Date.now()) {
   const arr = await readSlots();
   const queue = (await readQueue()).map(x => RECIPE_BY_ID[x.recipeId]).filter(Boolean);
@@ -342,6 +383,8 @@ export async function cookState(now = Date.now()) {
     queue, queueLeft: Math.max(0, QUEUE_MAX - queue.length),
     freeCount: slots.filter(s => s.empty).length,
     readyCount: readySlots.length,
+    // queued cooks that would already have finished had the queue been drained
+    queueReady: queueReadyCount(arr, queue, now),
     anyCooking: slots.some(s => !s.empty && !s.ready),
     // back-compat for the home card / badges (any pot ready + its recipe)
     ready: readySlots.length > 0,
@@ -462,8 +505,14 @@ export function transmuteConsume(inv, n) {
   for (const id of picks) { out[id]--; if (!out[id]) delete out[id]; }
   return { inv: out, taken: picks.length };
 }
+/* QA round 26 O3 (backward): a stamp in the FUTURE means the clock went back
+   since the last transmute. Read it as "just now", so the lockout is at most one
+   cooldown instead of growing one-for-one with the jump (measured 8780h at minus
+   365 days, surviving reload and riding along in exportAll). Shared by the status
+   and the claim below so the two cannot disagree. */
+function lastTransmute(raw, now) { return Math.min(Number(raw) || 0, now); }
 export async function transmuteStatus(now = Date.now()) {
-  const last = (await kvGet('transmuteAt', 0)) || 0;
+  const last = lastTransmute(await kvGet('transmuteAt', 0), now);
   const msLeft = Math.max(0, last + TRANSMUTE.cooldownMs - now);
   const inv = await ingredients();
   const commonsHave = COMMON_INGREDIENT_IDS.reduce((a, id) => a + (inv[id] || 0), 0);
@@ -473,16 +522,42 @@ export async function doTransmute(now = Date.now()) {
   const st = await transmuteStatus(now);
   if (!st.ready) return { ok: false, reason: 'cooldown', msLeft: st.msLeft };
   if (!st.canAfford) return { ok: false, reason: 'ingredients', need: TRANSMUTE.commons, have: st.commonsHave };
-  /* The take is one transaction, same as payIngredients above: transmuteConsume
-     is pure precisely so it can run inside one, and reading the larder then
-     writing it whole dropped anything granted in between. */
-  const taken = await kvUpdate('ingredients', raw => {
+  /* QA round 26 O3 (forward): with the cooldown as the only gate, a clock set
+     ahead paid ten Ectoplasm in forty seconds, because the gate reads the clock
+     being moved. Ask the day guard, like every other day-keyed reward (wheel,
+     quests, dens): a day past the witness ceiling, or behind the high-water
+     mark, is refused until real time catches up. AFTER the cheap refusals, so a
+     cooldown or an empty larder never opens a day as a side effect. */
+  if (!(await claimDay(dateKey(new Date(now)))).fresh) return { ok: false, reason: 'day' };
+  /* QA round 26 O2: the check above and the stamp were two transactions with the
+     spend and the grant awaited between them, so two overlapping taps both read
+     "ready" and both paid (8/8 on one page, 4/5 across two tabs). THE STAMP IS
+     THE CLAIM: one kvUpdate on 'transmuteAt' that re-reads the cooldown and
+     refuses INSIDE its own transaction, so the loser is turned away before
+     anything moves. `prev` is kept so a failed take below can hand the day back. */
+  let prev = 0;
+  const stamped = await kvUpdate('transmuteAt', raw => {
+    prev = Number(raw) || 0;
+    return lastTransmute(raw, now) + TRANSMUTE.cooldownMs > now ? undefined : now;
+  }, 0);
+  if (stamped === undefined) return { ok: false, reason: 'cooldown', msLeft: TRANSMUTE.cooldownMs };
+  /* Spend AND grant in ONE transaction on the larder: transmuteConsume is pure
+     precisely so it can run inside one, and reading the larder then writing it
+     whole dropped anything granted in between. The Ectoplasm rides in the same
+     write as the six commons it cost, so there is no state where one exists
+     without the other. */
+  const paid = await kvUpdate('ingredients', raw => {
     const res = transmuteConsume(raw || {}, TRANSMUTE.commons);
-    return res.taken < TRANSMUTE.commons ? undefined : res.inv;
+    if (res.taken < TRANSMUTE.commons) return undefined;
+    res.inv[TRANSMUTE.yields] = (res.inv[TRANSMUTE.yields] || 0) + 1;
+    return res.inv;
   }, {});
-  if (!taken) return { ok: false, reason: 'ingredients', need: TRANSMUTE.commons, have: st.commonsHave };
-  await grantIngredient(TRANSMUTE.yields, 1);
-  await kvSet('transmuteAt', now);
+  if (!paid) {
+    // the larder was drained between the affordability check and the take (a
+    // cook queued in another tab): give the day back, nothing was spent
+    await kvUpdate('transmuteAt', cur => (cur === now ? prev : undefined), 0);
+    return { ok: false, reason: 'ingredients', need: TRANSMUTE.commons, have: st.commonsHave };
+  }
   return { ok: true, yields: TRANSMUTE.yields };
 }
 
@@ -529,6 +604,27 @@ export async function consumeFightFoodBuffs(now = Date.now()) {
   for (const b of buffs) if (b.kind === 'combat' && b.fightsLeft > 0) { b.fightsLeft -= 1; changed = true; }
   const live = buffs.filter(b => b.kind === 'combat' ? b.fightsLeft > 0 : b.untilMs > now);
   if (changed || live.length !== buffs.length) await kvSet('foodbuffs', live);
+}
+
+/* One line under a dish, for a LIVE buff (kv 'foodbuffs', carries untilMs or
+   fightsLeft) or a dish still sitting in the Pantry (the recipe's bare `buff`).
+   QA round 26 O17: the Pantry handed a coins dish here with no `untilMs`, so
+   `untilMs - Date.now()` was NaN and every coins dish read "NaNh NaNm left". A
+   dish in the Pantry has a DURATION (`hours`), not a deadline: the clock only
+   starts when it is eaten, so it says how long it will run. The recipe data was
+   right; the formatter assumed every coins buff was already ticking. Lives here
+   rather than in app.js so a node test can format every recipe. */
+export function foodBuffLabel(b, now = Date.now()) {
+  if (b.kind === 'coins') {
+    const pct = `+${Math.round(b.pct * 100)}% coins`;
+    return b.untilMs == null ? `${pct} for ${fmtCookTime(b.hours * 3600e3)}` : `${pct} · ${fmtCookTime(Math.max(0, b.untilMs - now))} left`;
+  }
+  const bits = [];
+  if (b.damagePct) bits.push(`+${Math.round(b.damagePct * 100)}% dmg`);
+  if (b.hype) bits.push(`+${b.hype} Hype start`);
+  if (b.regenPct) bits.push(`heal ${Math.round(b.regenPct * 100)}%/turn`);
+  if (b.petFree) bits.push('pet special free');
+  return `${bits.join(' · ')} · ${b.fightsLeft} fight${b.fightsLeft === 1 ? '' : 's'} left`;
 }
 
 export function fmtCookTime(ms) {

@@ -123,8 +123,13 @@ if (key) {
   const sets = app.match(/kvSet\(HABIT_GRANT_KEY/g) || [];
   const gets = app.match(/kvGet\(HABIT_GRANT_KEY/g) || [];
   ok('ONCE    written in exactly one place', sets.length === 1, `${sets.length} kvSet calls`);
-  ok('ONCE    read before it is written', gets.length === 1
-    && app.indexOf('kvGet(HABIT_GRANT_KEY') < app.indexOf('kvSet(HABIT_GRANT_KEY'));
+  /* THE READ THAT GUARDS THE WRITE sits in the grant site itself, so it is the
+     LAST kvGet before the one kvSet, within the same function. Round 28 B1 added a
+     second, display-only read (the Today card that explains the rebalance), which
+     is not a second grant; counting reads file-wide turned it into a red (2026-09-04). */
+  const setAt = app.indexOf('kvSet(HABIT_GRANT_KEY');
+  const getAt = app.lastIndexOf('kvGet(HABIT_GRANT_KEY', setAt);
+  ok('ONCE    read before it is written', getAt > -1 && setAt - getAt < 600, `read ${setAt - getAt} chars before the write`);
   ok('ONCE    the stored value is never accumulated',
     !/HABIT_GRANT_KEY[\s\S]{0,400}?\.tp\s*\+[^+]/.test(app));
   ok('ONCE    an existing value returns unchanged',

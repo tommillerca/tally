@@ -358,7 +358,7 @@ const run = async () => {
     const url = `${BASE}/admin/grant`;
     const post = (body, tok) => fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...(tok ? { 'x-admin-token': tok } : {}) },
+      headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp(), ...(tok ? { 'x-admin-token': tok } : {}) }, // QA r29 S3: a wrong token counts against the IP
       body: JSON.stringify(body),
     });
     const T = 'devtoken';   // wrangler dev sets this via --var

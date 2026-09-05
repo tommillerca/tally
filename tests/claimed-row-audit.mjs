@@ -80,6 +80,8 @@ const ok = (name, cond, detail = '') => {
  * tree was converted to kvUpdate rather than listed here.
  * ======================================================================== */
 const ACCEPTED = [
+  { site: 'js/loot.js:petInstances', row: "'petInst'",
+    why: "the one-time legacy migration, not a read-modify-write, same shape as the rack rebuild below: it runs only while 'petInst' is not yet an array, and migrateInstances derives the array entirely from kv 'pets' + ownedCosmeticIds(), both independent of petInst's own history, so two callers racing this write byte-identical arrays. Every real mutator of 'petInst' (salvagePet, salvageInstance, reclaimOwnedPets, breedPets, addPetInstance) calls petInstances() first, which is what runs this migration, so nothing can reach a still-missing row and try to kvUpdate it before this has run. The HEAL branch two lines above (duplicate-iid repair) is a genuine read-modify-write and is a kvUpdate for that reason, same as reclaimOwnedPets, breedPets and addPetInstance below it." },
   { site: 'js/loot.js:rack', row: "'rack'",
     why: "the NEW-WEEK rebuild, not a read-modify-write. It runs only when no record for this week exists, and the record it writes is derived entirely from (week, salt 0), so two callers racing it write byte-identical records. Nothing can have claimed a row that did not exist yet: rerollRack refuses on `cur.week !== st.week`. The migration branch above it DOES carry state forward and is a kvUpdate for that reason." },
   { site: 'js/loot.js:stripAll', row: "'transmog'",

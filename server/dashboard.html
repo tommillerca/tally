@@ -80,27 +80,34 @@
     <button id="go">Load</button>
   </div>
   <div id="out"></div>
-  <p class="note">Private. Your Worker URL + admin token are saved in this browser only. Numbers are anonymous device counts.</p>
+  <p class="note">Private. Your Worker URL is saved in this browser; the admin token only for this tab. Numbers are anonymous device counts.</p>
 </main>
 <script>
   const $ = s => document.querySelector(s);
   $('#api').value = localStorage.bhApi || 'https://bonez-api.boneheadz.workers.dev';
-  $('#token').value = localStorage.bhTok || '';
+  /* QA round 29 S2: the token was in localStorage on the game's own Pages
+     origin, forever. sessionStorage now: it survives a reload of this tab and
+     dies with it. The URL stays in localStorage, it is not a secret. */
+  $('#token').value = sessionStorage.bhTok || '';
+  try { delete localStorage.bhTok; } catch {}
   const bar = (k, v, max) => `<div class="bar-row"><span class="k">${k}</span><span class="bar"><i style="width:${max ? Math.round(v / max * 100) : 0}%"></i></span><span class="v">${v}</span></div>`;
   const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   async function load() {
     const api = $('#api').value.trim().replace(/\/$/, ''), tok = $('#token').value.trim();
     if (!api || !tok) { $('#out').innerHTML = '<p class="err">Enter your Worker URL and admin token.</p>'; return; }
-    localStorage.bhApi = api; localStorage.bhTok = tok;
+    localStorage.bhApi = api; sessionStorage.bhTok = tok;
+    // QA round 29 S2: the token travels in a header, never the URL (the worker
+    // retains every request URL with head_sampling_rate = 1).
+    const auth = { headers: { authorization: 'Bearer ' + tok } };
     $('#out').innerHTML = 'Loading...';
     try {
-      const r = await fetch(api + '/stats?token=' + encodeURIComponent(tok));
+      const r = await fetch(api + '/stats', auth);
       if (!r.ok) { $('#out').innerHTML = `<p class="err">${r.status === 401 ? 'Wrong admin token.' : 'Error ' + r.status}</p>`; return; }
       const s = await r.json();
       /* RETENTION HEALTH. Separate route, separate failure: an older worker has
          no /admin/prune, so a null here means "cannot tell" and says so rather
          than taking the whole page down. */
-      const health = await fetch(api + '/admin/prune?limit=10&token=' + encodeURIComponent(tok))
+      const health = await fetch(api + '/admin/prune?limit=10', auth)
         .then(x => x.ok ? x.json() : null).catch(() => null);
       const actMax = Math.max(1, ...s.activeByDay.map(d => d.n));
       const nameMax = Math.max(1, ...s.byName.map(d => d.n));
@@ -351,7 +358,7 @@
     } catch (e) { $('#out').innerHTML = `<p class="err">Could not reach the server: ${e.message}</p>`; }
   }
   $('#go').onclick = load;
-  if (localStorage.bhApi && localStorage.bhTok) load();
+  if (localStorage.bhApi && sessionStorage.bhTok) load();
 </script>
 </body>
 </html>

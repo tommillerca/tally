@@ -166,6 +166,36 @@ ok('MYFOODS a chip tap with nothing committed, then My foods, opens the portion 
   `tapped ${target} (${hourDefault.labels[target]}), My foods row "${myFoods.row}" at ${myFoods.hash}, portion chip on ${portionOn.on}` +
   (portionOn.on === hourDefault.on ? ': the clock picked it, the tap was never read' : ''));
 
+/* MYFOODS_NEW (P1, 2026-09-04 playtest): same route as MYFOODS but through
+   "Create a food" instead of an existing row. renderFoods's #newFood button
+   called openFoodForm({}) with no meal at all (default param 0 = Breakfast),
+   never asking mealDefault() the way every other opener does. */
+await openAdd();
+await page.evaluate(m => document.querySelector(`#mealChips button[data-meal="${m}"]`)?.click(), target);
+await sleep(400);
+await page.evaluate(() => document.querySelector('#actMyFoods')?.click());
+await sleep(1400);
+await page.evaluate(() => document.querySelector('#newFood')?.click());
+await sleep(600);
+const filled = await page.evaluate(() => {
+  const name = document.querySelector('#ffName'), kcal = document.querySelector('#ffKcal');
+  if (!name || !kcal) return false;
+  name.value = 'Guard Test Food'; name.dispatchEvent(new Event('input', { bubbles: true }));
+  kcal.value = '200'; kcal.dispatchEvent(new Event('input', { bubbles: true }));
+  return true;
+});
+await page.evaluate(() => document.querySelector('#ffSave')?.click());
+await sleep(1200);
+const newFoodOn = await page.evaluate(() => {
+  const chips = [...document.querySelectorAll('#pMealChips button')];
+  return { count: chips.length, on: chips.findIndex(c => c.classList.contains('on')) };
+});
+
+ok('MYFOODS_NEW a chip tap, then My foods, then Create a food opens the portion sheet on the tapped meal',
+  filled && newFoodOn.count >= 3 && newFoodOn.on === target,
+  `tapped ${target} (${hourDefault.labels[target]}), portion chip on ${newFoodOn.on}` +
+  (newFoodOn.on === 0 && target !== 0 ? ': openFoodForm({}) defaulted to Breakfast, the tap was never read' : ''));
+
 await browser.close();
 console.log(fails.length
   ? `\n${fails.length} FAILED: ${fails.join(', ')}`

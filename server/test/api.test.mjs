@@ -193,8 +193,9 @@ await test('analytics: /events ingests an anonymous batch', async () => {
 });
 
 await test('analytics: /stats is admin-gated + aggregates', async () => {
-  assert.equal((await fetch(BASE + '/stats')).status, 401);
-  const ok = await fetch(BASE + '/stats?token=devtoken');
+  // QA r29 S3: a deliberate failure counts against its IP, so it brings its own
+  assert.equal((await fetch(BASE + '/stats', { headers: { 'cf-connecting-ip': rndIp() } })).status, 401);
+  const ok = await fetch(BASE + '/stats', { headers: { authorization: 'Bearer devtoken' } });
   assert.equal(ok.status, 200);
   const s = await ok.json();
   assert.ok(s.totalDevices >= 1 && s.totalEvents >= 3, JSON.stringify(s));
@@ -222,7 +223,7 @@ await test('/stats keeps the rate limiter out of byName and the tester board', a
   const planted = await (await fetch(`${BASE}/dev/ratelimit-count?name=rl_ridcheck`)).json();
   assert.ok(planted.n > 0, 'the limiter wrote no row, so this test proves nothing');
 
-  const s = await (await fetch(BASE + '/stats?token=devtoken')).json();
+  const s = await (await fetch(BASE + '/stats', { headers: { authorization: 'Bearer devtoken' } })).json();
   // DIRECTION: absent. Not "fewer than before": a single one is a wrong row on
   // a dashboard somebody makes decisions from.
   for (const rl of ['rl_recovery', 'rl_ridcheck']) {
@@ -246,6 +247,47 @@ await test('backup: PUT overwrites the previous row (one per player)', async () 
   await signedFetch(kp, player.playerId, 'PUT', '/backup', JSON.stringify({ blob: blob2 }));
   const got = await (await signedFetch(kp, player.playerId, 'GET', '/backup')).json();
   assert.equal(got.blob, blob2);
+});
+
+/* PROVEN RED on integ/day2 at ee52f249:
+     FAIL backup: stale device re-pulls, merges, and retries without losing either device
+       stale client B overwrote client A (200)
+   Both clients hold the same base token. The first update wins, the second must
+   receive 409, pull the winner, merge locally, then retry from that version. */
+await test('backup: stale device re-pulls, merges, and retries without losing either device', async () => {
+  const fresh = await makeKeys();
+  const reg = await (await regFetch(fresh.pubJwk)).json();
+  const put = async (blob, baseVersion) => signedFetch(fresh.kp, reg.playerId, 'PUT', '/backup',
+    JSON.stringify({ blob: JSON.stringify(blob), baseVersion }));
+  const get = async () => {
+    const r = await signedFetch(fresh.kp, reg.playerId, 'GET', '/backup');
+    assert.equal(r.status, 200, 'PRECONDITION: the current backup could not be pulled');
+    const d = await r.json();
+    return { ...d, blob: JSON.parse(d.blob) };
+  };
+
+  const first = await put({ common: true }, null);
+  assert.equal(first.status, 200, 'PRECONDITION: the first client could not create the backup');
+  const base = await get();
+  const baseVersion = base.version ?? base.updatedAt;
+  assert.ok(Number.isInteger(baseVersion), `PRECONDITION: GET returned no integer version (${JSON.stringify(base)})`);
+
+  const winner = await put({ common: true, fromA: true }, baseVersion);
+  assert.equal(winner.status, 200, 'PRECONDITION: client A did not win its push');
+
+  const loser = await put({ common: true, fromB: true }, baseVersion);
+  assert.equal(loser.status, 409, `stale client B overwrote client A (${loser.status})`);
+  const conflict = await loser.json();
+  assert.ok(Number.isInteger(conflict.version) && conflict.version !== baseVersion,
+    `409 did not carry the current version (${JSON.stringify(conflict)})`);
+
+  const current = await get();
+  assert.deepEqual(current.blob, { common: true, fromA: true }, 'the losing push changed the stored blob');
+  const merged = { ...current.blob, fromB: true };
+  const retry = await put(merged, current.version);
+  assert.equal(retry.status, 200, `the merged retry was refused (${retry.status})`);
+  assert.deepEqual((await get()).blob, { common: true, fromA: true, fromB: true },
+    'the retry did not land one merged blob containing both clients');
 });
 
 await test('backup: GET 404 when a player has none', async () => {
@@ -696,6 +738,69 @@ await test('friends: accept endpoint seals a one-way request', async () => {
   assert.ok(aList.friends.some(x => x.playerId === p3.playerId));
 });
 
+/* NEITHER SIDE WAS EVER TOLD THE FRIENDSHIP COMPLETED (round 29, S12). Driven
+   on two real accounts: B accepted, A sat for 45 seconds, and nothing but
+   analytics went over the wire. There is one delivery channel for "a friend did
+   something" in this app and it is the grants feed, so both sides get a grant
+   on it. Both COMPLETION paths are graded: the explicit accept, and the
+   reciprocated request that also flips the row to accepted. */
+const crewGrants = async (id, keys) => {
+  const g = await (await signedFetch(keys.kp, id, 'GET', '/grants?since=0')).json();
+  return (g.grants || []).filter(x => x.type === 'crew');
+};
+
+await test('S12 friends: BOTH sides are told when an accept completes the friendship', async () => {
+  const bk = await makeKeys();
+  const b = await (await regFetch(bk.pubJwk)).json();
+  assert.equal((await crewGrants(b.playerId, bk)).length, 0, 'PRECONDITION: a fresh account has no crew news');
+  await signedFetch(bk.kp, b.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
+  assert.equal((await crewGrants(b.playerId, bk)).length, 0, 'a PENDING request is not a completed friendship');
+  const acc = await signedFetch(kp, player.playerId, 'POST', '/friends/accept', JSON.stringify({ id: b.playerId }));
+  assert.equal(acc.status, 200);
+  const mine = await crewGrants(player.playerId, { kp });
+  const theirs = await crewGrants(b.playerId, bk);
+  assert.ok(mine.some(g => g.key === `crew-${b.playerId}-pair`), 'the accepter was not told');
+  assert.ok(theirs.some(g => g.key === `crew-${player.playerId}-pair`),
+    'a crew row is not keyed by the player it names, so account delete cannot reach it');
+  assert.equal(theirs.length, 1, 'the requester was not told exactly once');
+  assert.ok(/are Crew now/.test(theirs[0].payload.note), `the news does not say what happened: ${theirs[0].payload.note}`);
+  // idempotent: a retried accept must not deliver a second time to either side
+  await signedFetch(kp, player.playerId, 'POST', '/friends/accept', JSON.stringify({ id: b.playerId }));
+  assert.equal((await crewGrants(b.playerId, bk)).length, 1, 'a retried accept delivered the news twice');
+});
+
+await test('S12 friends: a reciprocated request completes it too, and tells both sides', async () => {
+  const ck2 = await makeKeys();
+  const c = await (await regFetch(ck2.pubJwk)).json();
+  await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: c.friendCode }));
+  assert.equal((await crewGrants(c.playerId, ck2)).length, 0, 'PRECONDITION: nothing delivered while it is pending');
+  const r = await (await signedFetch(ck2.kp, c.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }))).json();
+  assert.equal(r.status, 'accepted', 'PRECONDITION: reciprocating is what auto-accepts');
+  assert.equal((await crewGrants(c.playerId, ck2)).length, 1, 'the reciprocating side was not told');
+  const mine = await crewGrants(player.playerId, { kp });
+  assert.ok(mine.some(g => g.payload.note.includes('Crew now')), 'the original requester was not told');
+});
+
+await test('S12 cheer: the sender gets a receipt, and a refused cheer does not', async () => {
+  const dk = await makeKeys();
+  const d = await (await regFetch(dk.pubJwk)).json();
+  await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: d.friendCode }));
+  await signedFetch(dk.kp, d.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
+  const before = (await crewGrants(player.playerId, { kp })).length;
+  const ck2 = 'cheertap-' + RUNSUF;
+  const send = () => signedFetch(kp, player.playerId, 'POST', '/cheer', JSON.stringify({ to: d.playerId, cheer: 4, ck: ck2 }));
+  assert.equal((await send()).status, 200);
+  const after = await crewGrants(player.playerId, { kp });
+  const receipts = after.filter(g => g.key.startsWith(`crew-${d.playerId}-cheerack-`));
+  assert.ok(receipts.length >= 1, 'the sender got no receipt for a cheer that landed');
+  assert.equal(after.length, before + 1, 'a cheer wrote more than one row to the sender');
+  assert.ok(/got your cheer/.test(receipts[receipts.length - 1].payload.note),
+    `the receipt does not say the cheer arrived: ${receipts[receipts.length - 1].payload.note}`);
+  // a duplicate returns before the receipt, so a retried tap is not receipted twice
+  assert.equal((await send()).status, 200);
+  assert.equal((await crewGrants(player.playerId, { kp })).length, before + 1, 'a retried cheer wrote a second receipt');
+});
+
 await test('friends: cannot friend your own code', async () => {
   const r = await signedFetch(kp, player.playerId, 'POST', '/friends/request', JSON.stringify({ code: player.friendCode }));
   assert.equal(r.status, 400);
@@ -901,6 +1006,89 @@ await test('step race: ranks this week only, and pays last week exactly once', a
   assert.equal(settled2.podium.length, 1, 'the paid result is unchanged by the winner walking again');
   assert.equal(settled2.podium[0].steps, STALE_STEPS, 'and still reports the total they were paid on');
   assert.deepEqual(settled2.podium[0].name, settled1.podium[0].name, 'and still names the same player');
+});
+
+/* THE SETTLER GETS PAID TOO (QA round 34 P0).
+ *
+ * js/app.js opens Crew by pushing the player's OWN snapshot first -- already
+ * stamped with the new week's key, since the client computes it off local
+ * wall-clock time -- and only then calls /steps/week to settle. Before this
+ * fix that PUT overwrote the settler's own week_key/week_steps to the NEW
+ * week one request before the settlement query asked
+ * `WHERE week_key = <last week>` for exactly that player: the settler had
+ * already left the board they were about to be paid from.
+ *
+ * Two players alone on an otherwise empty previous board, 1st and 2nd: B
+ * (2nd place) is the one who opens the app and settles. Their own PUT
+ * /profile carries the new week before /steps/week is ever called, exactly
+ * as js/app.js sequences it. B must still be paid 2nd place.
+ *
+ * PROVE-RED: comment out the `last_week_key = ?, last_week_steps = ?` freeze
+ * in PUT /profile's UPDATE (src/index.js) and this fails -- B's own row no
+ * longer carries last week's total under any key the settlement board reads,
+ * so B is missing from the podium the same way the QA report describes. */
+await test('step race: the settler who just rolled into a new week is still paid their place', async () => {
+  const RACE_EPOCH = '2026-08-07', RACE_DAYS = 7, RACE_V = 2;
+  const epoch = Date.parse(RACE_EPOCH + 'T00:00:00Z');
+  const weekStart = epoch + Math.floor((Date.now() - epoch) / (RACE_DAYS * 86400000)) * RACE_DAYS * 86400000;
+  const wk = new Date(weekStart).toISOString().slice(0, 10);
+  const prev = new Date(weekStart - RACE_DAYS * 86400000).toISOString().slice(0, 10);
+  // Same reset idiom as the race test above: a real week key persists in the
+  // local D1 between runs, so clear the settlement receipt and any residue
+  // racers for both weeks first, or this is not a test.
+  try {
+    execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command',
+      `DELETE FROM grants WHERE key = 'stepweek-${prev}'`], { cwd: SERVER_DIR, stdio: 'ignore' });
+    execFileSync('npx', ['wrangler', 'd1', 'execute', 'bonez', '--local', '--command',
+      `DELETE FROM players WHERE json_extract(profile,'$.weekKey') IN ('${wk}','${prev}') ` +
+      `OR week_key IN ('${wk}','${prev}') OR last_week_key IN ('${wk}','${prev}')`],
+      { cwd: SERVER_DIR, stdio: 'ignore' });
+  } catch { /* a remote BASE cannot be reset; the pay-once assert below will say so */ }
+
+  const mk = async (level, weekKey, steps) => {
+    const k = await makeKeys();
+    const p = await (await regFetch(k.pubJwk)).json();
+    const body = JSON.stringify({ snapshot: { level, outfit: { SK: 'SK0-1' }, gear: [], weekKey, weekSteps: steps, raceV: RACE_V }, appV: 'test' });
+    assert.equal((await signedFetch(k.kp, p.playerId, 'PUT', '/profile', body)).status, 200);
+    return { k, p };
+  };
+  // Both players sync THIS week like everyone else, then /dev/week-warp moves
+  // their row back to where a player who really raced last week would have
+  // left it -- the same staging the existing race test uses for `stale`.
+  const first = await mk(5, wk, 1000);
+  const second = await mk(5, wk, 1000);
+  const FIRST_STEPS = 50000, SECOND_STEPS = 30000;
+  await fetch(BASE + '/dev/week-warp', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ playerId: first.p.playerId, weekKey: prev, steps: FIRST_STEPS }),
+  });
+  await fetch(BASE + '/dev/week-warp', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ playerId: second.p.playerId, weekKey: prev, steps: SECOND_STEPS }),
+  });
+
+  // THE SETTLER (`second`, currently in 2nd) opens Crew: their own client
+  // pushes the NEW week's snapshot first, exactly like js/app.js, BEFORE
+  // calling /steps/week at all.
+  const rolled = JSON.stringify({ snapshot: { level: 5, outfit: { SK: 'SK0-1' }, gear: [], weekKey: wk, weekSteps: 12, raceV: RACE_V }, appV: 'test' });
+  assert.equal((await signedFetch(second.k.kp, second.p.playerId, 'PUT', '/profile', rolled)).status, 200);
+
+  // PRECONDITION: the push above really did roll `second` off last week's
+  // live board, the same symptom the QA report names.
+  const liveBoard = await (await signedFetch(second.k.kp, second.p.playerId, 'GET', `/steps/week?week=${wk}`)).json();
+  // (this call also performs the settlement, exactly as B's own client would)
+  assert.ok(!liveBoard.players.some(x => x.playerId === second.p.playerId && x.steps === SECOND_STEPS),
+    'PRECONDITION: the settler\'s own push already left last week\'s live totals');
+
+  const grants = await (await signedFetch(second.k.kp, second.p.playerId, 'GET', '/grants?since=0')).json();
+  const prize = (grants.grants || []).find(x => x.key === `stepweek-${prev}`);
+  assert.ok(prize, 'FAIL: the settler (2nd place, last week) was paid nothing for the week they raced and settled');
+  assert.equal(prize.payload.place, 2, 'the settler is paid the place their frozen total actually earned');
+  assert.equal(prize.payload.steps, SECOND_STEPS, 'paid on the frozen total, not the 12 steps of the new week');
+
+  const winnerGrants = await (await signedFetch(first.k.kp, first.p.playerId, 'GET', '/grants?since=0')).json();
+  assert.ok((winnerGrants.grants || []).some(x => x.key === `stepweek-${prev}` && x.payload.place === 1),
+    'the untouched 1st place is still paid too');
 });
 
 await test('settled result: an unsettled week is empty, and empty is not an error', async () => {
@@ -1420,6 +1608,287 @@ await test('snapshot: an allowed key is still bounded, stripped and depth-limite
   assert.equal(prof.title, 'MarrowKing', 'a NUL and a bidi override survived into a rendered name');
   assert.equal(prof.yard.pets[0].sp, 'C3', 'CONTROL: the real field at that depth still travels');
   assert.equal(prof.yard.pets[0].deeper, null, 'a value nested below the deepest real field still travelled');
+});
+
+/* ---- QA round 27 R2: the survey row dies with the account ----
+   `sendSurvey` wrote `me.id || me.handle` into leads.player and the kv social
+   record has no `id`, so every survey row in production is keyed by the HANDLE
+   while /account/delete bound the player id: a delete that had never matched a
+   row, and the name + email + opt-in outlived the account for 365 days.
+   Two rows via the real POST /survey: one keyed the way the fixed client keys it
+   (playerId), one keyed the way every existing row is (handle). One real
+   DELETE. Zero rows for that player afterwards, observed through /stats, the
+   only reader of leads. Prove-red on 96c1104a: the handle-keyed row survived
+   ("R2: the legacy handle-keyed survey row survived the account delete"). */
+await test('R2: account delete removes the survey row, id-keyed AND legacy handle-keyed', async () => {
+  const k = await makeKeys();
+  const p = await (await regFetch(k.pubJwk)).json();
+  const tag = `r27-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const post = (device, player, email) => fetch(BASE + '/survey', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
+    body: JSON.stringify({ device, player, label: p.handle, name: 'Doomed Tester', email, emailOptin: true, feedback: tag }),
+  });
+  assert.equal((await post(`dev-${tag}-a`, p.playerId, `${tag}-id@example.test`)).status, 200, 'PRECONDITION: id-keyed survey POST');
+  assert.equal((await post(`dev-${tag}-b`, p.handle, `${tag}-handle@example.test`)).status, 200, 'PRECONDITION: handle-keyed survey POST');
+  const leadsOf = async () => ((await (await fetch(BASE + '/stats', { headers: { authorization: 'Bearer devtoken' } })).json()).leads || []).filter(l => l.feedback === tag);
+  assert.equal((await leadsOf()).length, 2, 'PRECONDITION: both survey rows must be visible in /stats before the delete');
+  assert.equal((await signedFetch(k.kp, p.playerId, 'POST', '/account/delete')).status, 200);
+  const left = await leadsOf();
+  assert.ok(!left.some(l => l.email.endsWith('-id@example.test')), 'R2: the id-keyed survey row survived the account delete');
+  assert.ok(!left.some(l => l.email.endsWith('-handle@example.test')), 'R2: the legacy handle-keyed survey row survived the account delete');
+  assert.equal(left.length, 0, `R2: ${left.length} survey row(s) still carry the deleted player's name and email`);
+});
+
+/* ---- QA round 27 R3: a pending friendship reveals no profile ----
+   GET /friends shaped every row alike, so an unanswered request I sent carried
+   the target's COMPLETE plaintext profile (weekSteps, yard, gear, everything).
+   Sending a request needs nothing from the other side, so anyone could read
+   anyone. A pending row now carries the pending renderer's set (playerId, name,
+   handle, profile.outfit / .pet / .level, all public on the leaderboard) and
+   nothing else; the accepted row keeps the whole profile. Prove-red on
+   96c1104a: "R3: a pending outgoing row carries a private profile field
+   (yard)". (weekSteps is not a marker: sanitizeSnapshot lifts it into the
+   week_steps column, so it never sits in the blob; yard and gear do.) */
+await test('R3: pending outgoing carries no profile blob; accepted carries it', async () => {
+  const a = await makeKeys(), b = await makeKeys();
+  const ap = await (await regFetch(a.pubJwk)).json();
+  const bp = await (await regFetch(b.pubJwk)).json();
+  const secret = { level: 7, outfit: { SK: 'SK0-1' }, pet: { id: 'C1', level: 2 }, gear: ['g1'], yard: { n: 1, pets: [{ sp: 'C1' }] }, stats: { power: 9 } };
+  assert.equal((await signedFetch(b.kp, bp.playerId, 'PUT', '/profile', JSON.stringify({ snapshot: secret, appV: 'test' }))).status, 200, 'PRECONDITION: target profile stored');
+  assert.equal((await signedFetch(a.kp, ap.playerId, 'POST', '/friends/request', JSON.stringify({ code: bp.friendCode }))).status, 200);
+  const PENDING = ['playerId', 'name', 'handle', 'profile'];
+  const PENDING_PROFILE = ['outfit', 'pet', 'level'];
+  const check = (row, who) => {
+    assert.ok(row, `PRECONDITION: ${who} row missing`);
+    assert.ok(!(row.profile && 'yard' in row.profile), `R3: a pending ${who} row carries a private profile field (yard)`);
+    assert.ok(!(row.profile && 'gear' in row.profile), `R3: a pending ${who} row carries a private profile field (gear)`);
+    assert.deepEqual(Object.keys(row).filter(k => !PENDING.includes(k)), [], `R3: pending ${who} row carries fields beyond the pending set`);
+    assert.deepEqual(Object.keys(row.profile || {}).filter(k => !PENDING_PROFILE.includes(k)), [], `R3: pending ${who} profile carries fields beyond outfit/pet/level`);
+    // CONTROL: the renderer's fields still travel (the avatar and the Lv line are not blank)
+    assert.equal(row.profile && row.profile.level, 7, `CONTROL: pending ${who} row lost profile.level, the renderer goes blank`);
+    assert.equal(row.profile && row.profile.outfit && row.profile.outfit.SK, 'SK0-1', `CONTROL: pending ${who} row lost profile.outfit`);
+  };
+  const aList = await (await signedFetch(a.kp, ap.playerId, 'GET', '/friends')).json();
+  check(aList.outgoing.find(x => x.playerId === bp.playerId), 'outgoing');
+  // the incoming side of the same row: A's profile is unset here, so only the field set is checked
+  const bList = await (await signedFetch(b.kp, bp.playerId, 'GET', '/friends')).json();
+  const inc = bList.incoming.find(x => x.playerId === ap.playerId);
+  assert.ok(inc, 'PRECONDITION: incoming row missing');
+  assert.deepEqual(Object.keys(inc).filter(k => !PENDING.includes(k)), [], 'R3: pending incoming row carries fields beyond the pending set');
+  // accepted: the whole profile, as before
+  assert.equal((await signedFetch(b.kp, bp.playerId, 'POST', '/friends/request', JSON.stringify({ code: ap.friendCode }))).status, 200);
+  const now = await (await signedFetch(a.kp, ap.playerId, 'GET', '/friends')).json();
+  const fr = now.friends.find(x => x.playerId === bp.playerId);
+  assert.ok(fr, 'PRECONDITION: reciprocation must accept');
+  assert.equal(fr.profile && fr.profile.yard && fr.profile.yard.n, 1, 'an ACCEPTED friend lost the full profile (yard)');
+  assert.deepEqual(fr.profile && fr.profile.gear, ['g1'], 'an ACCEPTED friend lost the full profile (gear)');
+  assert.ok(fr.friendCode && fr.since, 'an ACCEPTED friend lost friendCode/since');
+});
+
+/* ======================= QA round 29: server hardening =======================
+   S2 admin token out of the URL, add tokens on their own secret (fail closed).
+   S3 admin auth throttled per IP, constant-time compare.
+   S5 device buckets are per SOURCE (ip|device) and a refused request spends
+      nothing.
+   S6 no RL_SECRET means DETERMINISTIC unsalted buckets, not one budget per
+      isolate.
+   S9 rename history rides the player row and the delete cascade scrubs it.
+   Prove-red on 1609e8c6 (v472 + r27): every guard below went FAIL before the
+   fix; the lines are quoted in the PR report. */
+
+const ADMIN = { authorization: 'Bearer devtoken' };
+/* wrangler dev spawned with a chosen set of --var, on its own port and its own
+   --persist-to directory, so a worker WITHOUT a secret can be graded beside the
+   one npm run dev started WITH them. Same process-group kill as
+   tests/crew-pair-audit.mjs: SIGKILL on wrangler alone orphans workerd. */
+import { spawn } from 'node:child_process';
+import net from 'node:net';
+import os from 'node:os';
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const WRANGLER = path.join(SERVER_DIR, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
+const freePort = () => new Promise((res, rej) => {
+  const s = net.createServer(); s.once('error', rej);
+  s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => res(port)); });
+});
+async function spawnWorker(vars, persist) {
+  const env = { ...process.env, CI: '1', WRANGLER_SEND_METRICS: 'false' };
+  if (!fsMod.existsSync(path.join(persist, 'seeded'))) {
+    execFileSync(process.execPath, [WRANGLER, 'd1', 'execute', 'bonez', '--local', '--persist-to', persist, '--file=schema.sql'],
+      { cwd: SERVER_DIR, env, stdio: 'ignore' });
+    fsMod.writeFileSync(path.join(persist, 'seeded'), '1');
+  }
+  const port = await freePort();
+  const args = [WRANGLER, 'dev', '--local', '--port', String(port), '--persist-to', persist];
+  for (const [k, v] of Object.entries(vars)) args.push('--var', `${k}:${v}`);
+  const p = spawn(process.execPath, args, { cwd: SERVER_DIR, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+  let log = '';
+  p.stdout.on('data', d => { log += d; }); p.stderr.on('data', d => { log += d; });
+  const kill = () => { try { process.kill(-p.pid, 'SIGKILL'); } catch { /* gone */ } };
+  process.once('exit', kill);
+  const url = `http://127.0.0.1:${port}`;
+  const t0 = Date.now();
+  for (;;) {
+    try { if ((await fetch(url + '/health')).ok) break; } catch { /* not up */ }
+    if (Date.now() - t0 > 60000) { kill(); throw new Error(`spawned worker never answered on ${url}: ${log.slice(-400)}`); }
+    await sleep(300);
+  }
+  return { url, kill, log: () => log };
+}
+/* Only a LOCAL run can spawn workers and read the local D1 file. */
+const localOnly = () => { if (!/127\.0\.0\.1|localhost/.test(BASE)) unprovable('spawning workers and reading the local D1 file needs a local BASE'); };
+
+const survey = (base, device, ip, extra = {}) => fetch(base + '/survey', {
+  method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': ip },
+  body: JSON.stringify({ device, name: 'rl probe', ...extra }),
+});
+const rlRows = (name) => {
+  const { readdirSync } = fsMod;
+  let names = []; try { names = readdirSync(D1_DIR); } catch { return null; }
+  const file = names.filter(n => n.endsWith('.sqlite'))[0];
+  if (!file) return null;
+  const db = new DatabaseSync(path.join(D1_DIR, file), { readOnly: true });
+  try { return db.prepare('SELECT hits FROM rate_limits WHERE name = ?').all(name); } finally { db.close(); }
+};
+
+await test('r29 S2: the admin token is read from Authorization: Bearer', async () => {
+  const r = await fetch(BASE + '/stats', { headers: ADMIN });
+  assert.equal(r.status, 200, `S2: Authorization: Bearer <token> was refused (${r.status})`);
+  const p = await fetch(BASE + '/admin/prune', { headers: ADMIN });
+  assert.equal(p.status, 200, `S2: /admin/prune refused the Bearer header (${p.status})`);
+});
+
+await test('r29 S2: a token in the query string is refused unless ADMIN_QUERY_TOKEN_OK=1', async () => {
+  /* head_sampling_rate = 1 retains every request URL, so ?token= writes the
+     admin secret into the log store on every dashboard load. Off by default. */
+  const own = { headers: { 'cf-connecting-ip': rndIp() } }; // S3: these two failures spend this IP's bucket, not the suite's
+  const r = await fetch(BASE + '/stats?token=devtoken', own);
+  assert.equal(r.status, 401, `S2: ?token= in the URL still authenticates (${r.status})`);
+  const p = await fetch(BASE + '/admin/prune?token=devtoken', own);
+  assert.equal(p.status, 401, `S2: /admin/prune?token= still authenticates (${p.status})`);
+});
+
+await test('r29 S3: wrong admin tokens are counted per IP; 429 after the bucket, even for the right one', async () => {
+  const ip = rndIp();
+  const wrong = { authorization: 'Bearer not-the-token', 'cf-connecting-ip': ip };
+  const codes = [];
+  for (let i = 0; i < 12; i++) codes.push((await fetch(BASE + '/stats', { headers: wrong })).status);
+  // RL_ADMIN_IP_FAILS = 10 per 10 minutes (src/index.js). Ten 401s, then 429.
+  assert.deepEqual(codes.slice(0, 10), Array(10).fill(401), `S3: the first ten guesses should each be 401, got ${codes}`);
+  assert.deepEqual(codes.slice(10), [429, 429], `S3: guesses past the bucket are not refused with 429, got ${codes}`);
+  // the lockout holds for the right token from that IP too: a guesser who lands
+  // on it inside the window still has to wait
+  const right = await fetch(BASE + '/stats', { headers: { ...ADMIN, 'cf-connecting-ip': ip } });
+  assert.equal(right.status, 429, `S3: the locked-out IP got ${right.status} with the right token`);
+  // and another IP is unaffected (the bucket is per IP, not global)
+  const other = await fetch(BASE + '/stats', { headers: { ...ADMIN, 'cf-connecting-ip': rndIp() } });
+  assert.equal(other.status, 200, `S3: an unrelated IP is locked out too (${other.status})`);
+});
+
+const s5 = { device: 'r29-dev-' + Math.random().toString(36).slice(2, 10), ipA: rndIp(), ipB: rndIp() };
+await test('r29 S5: a refused request spends no budget (no bucket row ever exceeds its limit)', async () => {
+  localOnly();
+  /* DIFFERENTIAL, because the local D1 keeps every earlier run's rows in the
+     same day-long window (including rows an OLDER worker counted past the
+     limit): what must not change is the number of over-limit rows, and what
+     must appear is one row parked exactly AT the limit. */
+  const count = (rows, f) => rows.filter(r => f(Number(r.hits))).length;
+  const before = rlRows('rl_survey_dev');
+  if (!before) unprovable(`no local D1 file under ${D1_DIR}`);
+  // rl_survey_dev is 3 per day: three honest posts, then three refused ones
+  for (let i = 0; i < 3; i++) assert.equal((await survey(BASE, s5.device, s5.ipA)).status, 200, `PRECONDITION: honest post ${i + 1} of 3`);
+  for (let i = 0; i < 3; i++) assert.equal((await survey(BASE, s5.device, s5.ipA)).status, 429, `PRECONDITION: refused post ${i + 1}`);
+  const after = rlRows('rl_survey_dev');
+  assert.ok(after.length > before.length, 'CONTROL: the six posts created no rl_survey_dev row, so this proves nothing');
+  assert.equal(count(after, h => h > 3), count(before, h => h > 3),
+    `S5: a new rl_survey_dev row counted past the limit (${count(after, h => h > 3) - count(before, h => h > 3)} more than before): refused requests are spending budget`);
+  assert.ok(count(after, h => h === 3) >= count(before, h => h === 3) + 1, 'CONTROL: no new row sits exactly at the limit');
+});
+
+await test('r29 S5: a device budget is per SOURCE: a stranger cannot spend it', async () => {
+  // the SAME device string from another address is not locked out by the spend above
+  const b = await survey(BASE, s5.device, s5.ipB);
+  assert.equal(b.status, 200, `S5: device id spent from one IP locks the same id out from another (${b.status}); the bucket must be ip|device`);
+});
+
+await test('r29 S5: rotating device ids under one IP is bounded by the IP bucket', async () => {
+  /* Nothing keyed on a caller-chosen string can stop rotation; the IP bucket
+     is what does. rl_survey_ip is 10 per day. This one was already green on
+     1609e8c6 and is here so the bound cannot be lost. */
+  const ip = rndIp();
+  const codes = [];
+  for (let i = 0; i < 11; i++) codes.push((await survey(BASE, 'rot-' + Math.random().toString(36).slice(2, 10), ip)).status);
+  assert.deepEqual(codes.slice(0, 10), Array(10).fill(200), `first ten rotated posts should pass, got ${codes}`);
+  assert.equal(codes[10], 429, `the 11th rotated post from one IP was not refused (${codes[10]})`);
+});
+
+await test('r29 S9: rename then delete scrubs the OLD name from devices and reports', async () => {
+  localOnly();
+  const k = await makeKeys(); const p = await (await regFetch(k.pubJwk)).json();
+  const num = 700 + Math.floor(Math.random() * 250);
+  const first = await (await signedFetch(k.kp, p.playerId, 'POST', '/name', JSON.stringify({ adj: 7, noun: 21, num }))).json();
+  assert.ok(first.ok && first.name.includes('#'), `PRECONDITION: first name, got ${JSON.stringify(first)}`);
+  const device = 'r29-ren-' + Math.random().toString(36).slice(2, 10);
+  const hdr = { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() };
+  assert.equal((await fetch(BASE + '/events', { method: 'POST', headers: hdr,
+    body: JSON.stringify({ device, label: first.name, appV: 'r29', events: [{ name: 'app_open' }] }) })).status, 200);
+  assert.equal((await fetch(BASE + '/report', { method: 'POST', headers: hdr,
+    body: JSON.stringify({ device, label: first.name, kind: 'den-nominate', lat: 1, lng: 2, note: 'n' }) })).status, 200);
+  const second = await (await signedFetch(k.kp, p.playerId, 'POST', '/name', JSON.stringify({ adj: 8, noun: 22, num }))).json();
+  assert.ok(second.ok && second.name !== first.name, `PRECONDITION: rename, got ${JSON.stringify(second)}`);
+  const before = scanDb(first.name);
+  assert.ok(before.hits.length >= 2, `CONTROL: the old name must be findable before the delete, found [${before.hits}]`);
+  assert.equal((await signedFetch(k.kp, p.playerId, 'POST', '/account/delete')).status, 200);
+  const after = scanDb(first.name);
+  assert.ok(after.scanned > 0, 'CONTROL: empty scan');
+  assert.deepEqual(after.hits, [], `S9: the deleted player's OLD name survives: ${after.hits.join(', ')}`);
+  assert.deepEqual(scanDb(second.name).hits, [], 'the current name survives the delete (regression)');
+});
+
+/* One worker spawned with NEITHER optional secret (only DEV and ADMIN_TOKEN,
+   which is exactly how production was configured when round 29 ran). */
+const bare = { persist: null, w: null };
+await test('r29 S2: without ADD_TOKEN_SECRET the board is served but mints NO add tokens (fail closed)', async () => {
+  localOnly();
+  bare.persist = fsMod.mkdtempSync(path.join(os.tmpdir(), 'bonez-r29-'));
+  bare.w = await spawnWorker({ DEV: '1', ADMIN_TOKEN: 'devtoken' }, bare.persist);
+  const w = bare.w;
+  const mk = async () => {
+    const kk = await makeKeys();
+    const pp = await (await fetch(w.url + '/register', { method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': rndIp() },
+      body: JSON.stringify({ test: IS_TEST, run: RUN, pubkey: kk.pubJwk }) })).json();
+    const sign = async (method, p, body = '') => {
+      const ts = Date.now();
+      const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, kk.kp.privateKey, new TextEncoder().encode(`${method}\n${p}\n${ts}\n${body}`));
+      return fetch(w.url + p, { method, headers: { 'content-type': 'application/json', 'x-bh-player': pp.playerId, 'x-bh-ts': String(ts), 'x-bh-sig': b64(sig) }, body: method === 'GET' ? undefined : body });
+    };
+    assert.equal((await sign('PUT', '/profile', JSON.stringify({ snapshot: { level: 3 }, appV: 'r29' }))).status, 200, 'PRECONDITION: profile stored');
+    return { pp, sign };
+  };
+  const a = await mk(); await mk();
+  const res = await a.sign('GET', '/leaderboard');
+  assert.equal(res.status, 200, `the board itself must still be served (${res.status})`);
+  const board = await res.json();
+  assert.ok((board.players || []).length >= 2, `PRECONDITION: the board has rows, got ${(board.players || []).length}`);
+  const minted = board.players.filter(r => r.addToken);
+  assert.equal(minted.length, 0, `S2: ${minted.length} add token(s) minted with ADD_TOKEN_SECRET unset (falling back to the admin token)`);
+  // the startup self-check names what is missing, never a value
+  const log = w.log();
+  assert.ok(/ADD_TOKEN_SECRET/.test(log) && /RL_SECRET/.test(log), `S2/S6: the worker did not log the missing secrets by name. Log tail: ${log.slice(-300)}`);
+  assert.ok(!/devtoken/.test(log), 'the self-check printed a secret VALUE');
+});
+
+await test('r29 S6: without RL_SECRET a device budget survives a worker restart (deterministic buckets, not one per isolate)', async () => {
+  localOnly();
+  if (!bare.w) unprovable('the bare worker did not start');
+  const device = 'r29-iso-' + Math.random().toString(36).slice(2, 10), ip = rndIp();
+  try {
+    for (let i = 0; i < 3; i++) assert.equal((await survey(bare.w.url, device, ip)).status, 200, `PRECONDITION: post ${i + 1}`);
+    assert.equal((await survey(bare.w.url, device, ip)).status, 429, 'PRECONDITION: over budget on this isolate');
+    bare.w.kill(); await sleep(500);
+    bare.w = await spawnWorker({ DEV: '1', ADMIN_TOKEN: 'devtoken' }, bare.persist);
+    const again = await survey(bare.w.url, device, ip);
+    assert.equal(again.status, 429, `S6: a fresh isolate handed the same device a fresh budget (${again.status}); buckets were salted per isolate`);
+  } finally { bare.w.kill(); }
 });
 
 console.log(`\n${passed} passed, ${failed} failed${unproven ? `, ${unproven} UNPROVEN here (see the note on UNPROVEN above)` : ''}`);

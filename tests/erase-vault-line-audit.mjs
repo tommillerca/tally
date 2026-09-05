@@ -30,7 +30,7 @@ import net from 'node:net';
 import { existsSync, readdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { boot, sleep, serveTree, dismissOverlays } from './godmode.js';
+import { boot, sleep, serveTree, dismissOverlays, unproven } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let fails = 0;
@@ -74,7 +74,7 @@ async function startWorker() {
     { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise(r => seed.on('exit', r));
   const p = spawn(process.execPath, [bin, 'dev', '--local', '--port', String(port),
-    '--var', 'DEV:1', '--var', 'ADMIN_TOKEN:devtoken'],
+    '--var', 'DEV:1', '--var', 'ADMIN_TOKEN:devtoken', '--var', 'ADD_TOKEN_SECRET:devaddsecret', '--var', 'RL_SECRET:devrlsecret'], // QA r29 S2: no secret, no add tokens
     { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   const killTree = () => { try { process.kill(-p.pid, 'SIGKILL'); } catch { /* group already gone */ } };
   process.once('exit', killTree);
@@ -193,9 +193,14 @@ console.log(`      DEAD  ${JSON.stringify(lineDead)}`);
    false would still refuse to promise here, and this row would go green on it
    while the sheet told a player with a perfectly good vault copy that their save
    is about to be the only one. So the wording is the assertion. */
-ok('UNREACHABLE  with the server gone the sheet says it could not check, rather than reporting a definite no',
-  !PROMISES_A_COPY.test(lineDead) && /could not be reached/i.test(lineDead) && !/no cloud backup/i.test(lineDead),
-  lineDead || '(empty: #erVault never rendered)');
+if (process.env.API) {
+  unproven('UNREACHABLE  with the server gone the sheet says it could not check, rather than reporting a definite no',
+    'API= reuses a Worker, so close() is a no-op and the server stays up');
+} else {
+  ok('UNREACHABLE  with the server gone the sheet says it could not check, rather than reporting a definite no',
+    !PROMISES_A_COPY.test(lineDead) && /could not be reached/i.test(lineDead) && !/no cloud backup/i.test(lineDead),
+    lineDead || '(empty: #erVault never rendered)');
+}
 
 await browser.close().catch(() => {});
 srvHandle?.close();
