@@ -93,7 +93,7 @@ import {
   petActionsFor, applyPetAction, talentRanks, nodeRanks, GUARD_STAMINA,
 } from './pit.js';
 import { HERO_EDGE } from '../data/hero-edge.js';
-import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petCanWear,
+import { BH_SLOTS, BH_ITEMS, BH_ITEMS_WITH_UNRELEASED, BH_BY_ID, bhAsset, PET_CROP, PET_SLOTS, PET_HERO_REF, PET_HERO_HOUSE, PET_HERO_REL, PET_SHOP, PET_SHOT_PAD, petShotArt, petWornLayers, petWornTints, petWornItems, petCanWear,
   BH_THUMB_RE, BH_THUMB_TIERS, bhThumb, bhTierFor, THUMB_FALLBACK, bhFamilyKey, bhFamilies } from '../data/boneheadz.js';
 // Football kit, 2026-09-04
 import { FOOTBALL_KIT_LIVE, FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_GARMENTS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SHELF, FOOTBALL_PETS, footballItemId, footballTints, footballBundleMath, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, visorHidesEyes, visorClipMask } from '../data/football-teams.js';
@@ -5777,6 +5777,19 @@ function avatarLayersHtml(eq, opts = {}) {
     const full = s.code === 'C' && itemId !== 'CX' && opts.shinyPetId === itemId
       ? `assets/bh/C/shiny/${itemId}.png` : bhAsset(item);
     const src = opts.thumb ? bhThumb(full, opts.thumb === true ? 192 : opts.thumb) : full;
+    /* Football kit, 2026-09-05: a pet stacked ON THE BODY CANVAS is a layer in
+       THIS stack, so its worn garments (petWear's CH/CT) belong here too, not
+       only in croppedPetImg's standalone box -- Tom: "the pet kit renders on
+       the lizard, on every surface". Same registration as the species layer
+       above (no inline geo, same --av-fit/--av-pos as every other slot), so
+       petWornItems' art (drawn pre-positioned on the pet's own 640 canvas)
+       lands where Cam put it. `opts.petWear`, never S.petWear read directly
+       here: a snapshot pet (a friend, a foe) must never be dressed out of the
+       VIEWER's own wardrobe, which is the shiny bug's shape (see
+       ownShinyPetId/snapShinyPetId above) applied to gear instead of colour.
+       The shiny recolour above and the worn layers below are independent
+       images, so a shiny keeps its kit for free: nothing here reads shinyPetId. */
+    const wornPetItems = s.code === 'C' ? petWornItems(itemId, opts.petWear || null) : [];
     // weapon / off-hand glow by rarity (epic/legendary)
     const slimed = S.slimeSlots && S.slimeSlots.has(s.code);
     /* `'wpnAura' in opts` rather than `opts.wpnAura || S.wpnAura`: a caller that
@@ -5811,7 +5824,16 @@ function avatarLayersHtml(eq, opts = {}) {
     // On a THUMBNAILED layer it first retries the full-size art, so a missing
     // thumbnail costs memory rather than the garment.
     const clipStyle = clipMask ? ` style="--fbm:url('${clipMask}')"` : '';
-    return `<img${glow}${clipStyle} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(item, '', opts.thumb)}`;
+    // Worn pet garments, same tiering as the species image above, each with its
+    // own football tint spans -- see the note on wornPetItems above. `pw`
+    // matches croppedPetImg's own class for a worn layer (see THE WORN LAYERS
+    // ARE MARKED there), so a worn piece reads the same way wherever it draws.
+    const wornHtml = wornPetItems.map(w => {
+      const wfull = bhAsset(w);
+      const wsrc = opts.thumb ? bhThumb(wfull, opts.thumb === true ? 192 : opts.thumb) : wfull;
+      return `<img class="pw" src="${wsrc}"${wsrc !== wfull ? ` data-full="${wfull}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(w, '', opts.thumb)}`;
+    }).join('');
+    return `<img${glow}${clipStyle} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(item, '', opts.thumb)}${wornHtml}`;
   }).join('');
   // Visible by DEFAULT. v233 shipped this with bh-composing baked into the
   // markup, which meant any stack injected somewhere composeAvatars() never
@@ -15262,7 +15284,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
       <span class="bh-pill ward-fits">${fitCount}/${MAX_FITS} fits</span>
     </div>` : tab === 'shop' ? gwartHeroHtml() : `
     <div class="bh-hero mini">
-      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny })}</div>
+      <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny, petWear: S.petWear })}</div>
       <div class="bh-hero-meta">
         <b class="bh-title">Lv ${lvl.level} · ${esc(myTitle || lvl.name)}</b>
         <div class="xp-mini" style="width:110px"><i style="width:${lvl.pct}%"></i></div>
