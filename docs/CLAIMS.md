@@ -19,6 +19,55 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## perf grid and map (2026-09-05)
+
+Branch `perf/grid-and-map`, off `integ/day3`. Round 34 perf lane, two items,
+both measured with `scratchpad/r34/perf/perf-drive.mjs` at CPU 4x, 3 runs,
+medians (a driver row, not a browser-gate audit, per this round's brief).
+
+1. PROOF: wardrobe-family-grid-audit.mjs, football-tile-crop-audit.mjs,
+   memory-census.mjs (wardrobe row, all green), MANUAL medians from
+   perf-drive.mjs `wardrobe` mode, hoarder account (185 owned hats), CPU 4x,
+   opening the Wardrobe's hat slot: main-thread script time 166ms -> 73ms
+   (Performance.getMetrics ScriptDuration), longtask count 3 -> 2, longtask
+   total duration 250ms -> 186ms. memory-census's own OFF-DOM concurrent
+   bitmap row (a stricter, unthrottled instrument) fell from ~12.2 MB to
+   9.3 MB with the fix, TIER stayed 100% trim / 0 masters (292 bh images
+   sampled). | REACH: Wardrobe, any slot with enough colourways to fill more
+   than a couple of screens (Hat on a collector account is the extreme
+   case). Opening the slot no longer decodes and paints every collected
+   tile at once; a canvas paints once it is on screen or about to be
+   (one `.screen`-height of scroll margin on both sides), and a tile
+   scrolled straight past without lingering never pays for a decode it
+   would never show. The family rail, the equipped ring, and the football
+   tint painting are unaffected (all three guards above exercise them
+   directly and stay green).
+2. PROOF: NONE, stopped before writing code; MANUAL cost measured with
+   perf-drive.mjs `boneyard` mode, CPU 4x, 3 runs: a single Boneyard
+   revisit (Today -> Boneyard, map destroyed and rebuilt) costs a median
+   1,089ms of longtask time across 5 tasks, the longest at 462ms
+   (medians of runs at 823/1,267/1,089ms total). | REACH: not shipped.
+   `js/app.js`'s own comments on `holdOutgoing`/`screenCleanup` (the code
+   the task pointed at) say the map's teardown on every navigation away
+   from the Boneyard is deliberate, not an oversight: the "held outgoing
+   copy" mechanism already exists to hide the visual cut and explicitly
+   still runs the real `map.remove()` a moment later, because leaving one
+   map instance's destructor pointed at a DIFFERENT live map after a fast
+   Boneyard -> Today -> Boneyard is the exact bug that comment names.
+   All six marker sets (spawn, den, mini, secret, wanderer, spire) and
+   their poll timers and DOM listeners live inside `renderBoneyard`'s
+   single per-mount closure (~1,500 lines), by design; keeping the map
+   alive across visits means lifting that state to module scope and
+   turning `route()`'s wholesale `#screen` rebuild into a targeted
+   reattach for one screen only, which is a rewrite of the Boneyard's
+   lifecycle, not a surgical fix. None of the three named guards
+   (boneyard-audit.mjs, marker-anchor-audit.mjs, spawn-quiet-audit.mjs)
+   drive a repeated leave-and-return cycle, so a persistence bug (a
+   doubled listener, a marker left in the wrong place after a long time
+   away, a stale follow-cam lock) would ship undetected. Stopping here
+   rather than rearchitecting the screen on a guess; the 1-2s cost is
+   real and measured above but unaddressed.
+
 ## crew layout (2026-09-05)
 
 Branch `fix/crew-tab-layout`, not yet stamped to a release; folded into that

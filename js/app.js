@@ -16234,7 +16234,8 @@ async function renderCharacter(wrap, tab, opts = {}) {
        was a ~20px speck in an ~80px tile while the doll drew it 4-5x larger
        (Tom, 2026-08-11: "they should be a larger size so you can see what you
        are transmogging"). Same trim as the doll slots. */
-    hydratePackArt(content, '.pd-art[data-art], .ward-art[data-art]');
+    hydratePackArt(content, '.pd-art[data-art]');
+    lazyHydrateWardArt(content);       // PERF-4: the grid's tiles paint as they near the viewport, not all at once
     const wirePd = b => b.addEventListener('click', async () => {
       S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null;
       await renderCharacter(wrap, 'wardrobe', { instant: true });
@@ -17763,6 +17764,42 @@ const BURST = {
   epic:      { light: '#9b92e8', amp: .3,  haze: .06 },
   legendary: { light: '#ffc961', amp: .55, haze: .07 },
 };
+/* PERF-4 (2026-09-05): the Wardrobe grid mounts one .ward-art canvas per
+   family tile (and per look-picker tile), and hydratePackArt used to fire
+   every one of them through Promise.all the instant the screen rendered.
+   memory-census's hoarder account owns every hat, and the family collapse
+   still leaves ~250 tiles on that one slot: 250 concurrent decodes is the
+   long-task burst, not the grid markup itself (the DOM stays cheap either
+   way). Paint only what is on screen or one screen away in either
+   direction, unobserving a tile the moment it is painted so a second scroll
+   past it is free. A tile that never scrolls into view never pays for a
+   decode it would never show. */
+function lazyHydrateWardArt(scope) {
+  const els = $$('.ward-art[data-art]', scope);
+  if (!els.length) return;
+  if (!('IntersectionObserver' in window)) { hydratePackArt(scope, '.ward-art[data-art]'); return; }
+  /* ROOT MUST BE THE REAL SCROLLER, NOT THE IMPLICIT DOCUMENT. renderCharacter's
+     comment above says it straight: "#chBody is a plain div... .screen is the
+     element with overflow-y". root:null margins the top-level viewport, but a
+     scrollable ancestor between the tile and that viewport still clips the
+     intersection test to ITS OWN box, margin-free -- so a tile one row below
+     `.screen`'s fold measured isIntersecting:false forever, at every scroll
+     depth, with rootBounds correctly widened and its own rect correctly
+     inside that widened box. Root has to BE the clipping ancestor for the
+     margin to reach it. */
+  const root = scope.closest('.screen');
+  const vh = (root ? root.clientHeight : window.innerHeight) || 932;
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      io.unobserve(e.target);
+      const cv = e.target;
+      drawTrimmedArt(cv, cv.getAttribute('data-art'), parseFloat(cv.getAttribute('data-pad')) || undefined,
+        cv.dataset.tints ? JSON.parse(cv.dataset.tints) : null);
+    }
+  }, { root, rootMargin: `${vh}px 0px` });
+  els.forEach(cv => io.observe(cv));
+}
 function hydratePackArt(scope, sel = '.pc-canvas[data-art]') {
   /* A MANNEQUIN CARD HAS NO CANVAS, AND SILENCE HERE WOULD MEAN AN UNDECODED
      ENTRANCE. Every caller uses this promise as "the art is ready": renderCard
