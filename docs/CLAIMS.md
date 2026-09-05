@@ -120,6 +120,20 @@ release's own `## vNNN` entry when it ships. Round 35's Crew tab QA pass
 
 2. PROOF: news-banner-audit.mjs | REACH: The News banner's row icons on Today size and centre correctly the first time you open the banner, every time, instead of an even coin flip between a correct icon and one still at its native, oversized, off-centre size.
 
+## shop front door (2026-09-05)
+
+HANDOFFshoplocation20260905.md, round 36: "zero affordances anywhere outside the character hub say shop, buy, spend or store." Five fixes; PROOF for every row is shop-door-audit.mjs, which quotes 9 FAIL lines proven against the unfixed tree (7b4d0492) in its own header.
+
+1. PROOF: shop-door-audit.mjs (HUB-MEMORY) | REACH: Open the Shop from the hub, then Today, then Bonehead: you land back on the Shop tab instead of Wardrobe. The hub now remembers the last tab you had open, for the rest of that session.
+
+2. PROOF: shop-door-audit.mjs (WALLET) | REACH: On the Shop's rack, tapping the coin balance now takes you to Today, the same as the dust balance already did, since that is where coins actually come from (day close, the Pit, the step race).
+
+3. PROOF: shop-door-audit.mjs (COUNT) | REACH: The rack's "buys X of Y" line now drops both numbers the moment you buy something, instead of still counting a piece you already own against your wallet.
+
+4. PROOF: shop-door-audit.mjs (GIFT) | REACH: A coins-only Crew gift now opens with a real "Spend it in the Shop" button, tappable straight into the Shop, instead of a line of text with nothing behind it.
+
+5. PROOF: shop-door-audit.mjs (DOOR-SHAPE, DOOR-VIEWPORT, DOOR-ROUTE) | GATED: no live surface renders this banner. The Today teaser banner (cosmeticTeaserBannerHtml) these two rows fix is only ever called from outThereHtml, and nothing has called outThereHtml since Tom retired the "Out there today" card from Today on 2026-08-21 (tests/out-there-audit.mjs, skipped in the gate, says so in its own skip reason) -- the round-36 handoff's S9 finding predates that retirement and is stale against this tree. The button and its delegated click listener are real, shipped code, proven through the same webdriver-only hook (__teaserBanner) the app already exposes for this card's unreachable sibling bestiaryBannerHtml (__todayRow), but no player reaches it until the card, or this banner specifically, is revived. Not a player-facing claim until then.
+
 ## v473
 
 1. PROOF: unit.test.js (gate-registered PURE), "a downloaded build can actually start: boot posts SKIP_WAITING to a waiting worker". Proven red on the tree that shipped v472: "nothing in the app tells a waiting worker to take over, so a downloaded build can never start". The defect it closes was measured on a real device, not modelled: a phone sat on v470 through repeated force quits while the server served v472, because the service worker deliberately never calls skipWaiting() and nothing had ever posted the message that lets a waiting worker in. | REACH: Open the app after a release. It reloads into the new build by itself instead of staying on the old one. A device already stuck before v473 cannot be rescued by it and needs a reinstall.

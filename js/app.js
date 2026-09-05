@@ -268,6 +268,7 @@ const S = {
      first paint and after every equip. */
   petWear: {},
   fbTeam: null,    // Football kit, 2026-09-04: the team the kit room is showing
+  hubTab: null,    // S11, 2026-09-05: last hub sub-tab opened, session only (see renderBonehead)
   fbJump: false,   // one-shot: the wardrobe's colourway rail sent the player to the Kit room, so open it
   slimeSlots: new Set(), // avatar slots wearing SLIMED gear (Glutton drops)
   wpnAura: null,   // the weapon aura bought off the rack, worn on every surface
@@ -1943,6 +1944,10 @@ function openMageIntro() {
 }
 if (typeof window !== 'undefined' && navigator.webdriver) window.__mageIntro = openMageIntro;
 if (typeof window !== 'undefined' && navigator.webdriver) window.__todayRow = day => bestiaryBannerHtml(remoteDen(day));
+// S9: cosmeticTeaserBannerHtml is unreachable from a real boot (see outThereHtml's
+// RETIRED FROM TODAY comment), so an audit has no render to inspect without this,
+// same reason __todayRow exists for bestiaryBannerHtml.
+if (typeof window !== 'undefined' && navigator.webdriver) window.__teaserBanner = cosmeticTeaserBannerHtml;
 
 /* THE WALL. Tom, 2026-08-09: "the popup isn't showing enough monsters it's
    boring and text heavy let the art speak."
@@ -2737,9 +2742,24 @@ function cosmeticTeaserBannerHtml() {
       </div>
       <p class="glutton-mech"><b>The biggest drop this game has had.</b> Every crate can drop them, starting today.</p>
       <p class="glutton-mech tz-more">And we are nowhere near done.</p>
+      <!-- S9, 2026-09-05: the comment above this function has promised "a
+           straight line to the Shop" since it was written, and the body never
+           shipped one. Same shape as the garden banner's #gardenToKitchen: a
+           full-width ghost button as the last thing in the body. -->
+      <button class="btn ghost" id="teaserToShop" style="width:100%">Open the Shop</button>
     </div>
   </details>`;
 }
+// S9: wired at the module level, same reason the [data-guide] listener above
+// is: this banner (like its gardenBannerHtml/spireBannerHtml siblings) is only
+// reachable through outThereHtml, which nothing currently calls (see the
+// RETIRED FROM TODAY comment on outThereHtml) -- there is no render-time call
+// site left to attach a per-render listener from. Delegated so the button
+// works the moment the card is revived, with no further wiring.
+document.addEventListener('click', e => {
+  if (!e.target.closest?.('#teaserToShop')) return;
+  location.hash = '#/shop';
+});
 
 /* REMOVED 2026-08-25 with the rest of the launch takeovers. maybePromptName toasted and then opened the name builder at launch. The Crew tab and Settings both still offer it the moment you land on them with no name, which is where a name is actually wanted */
 
@@ -2896,7 +2916,12 @@ function revealGift(g) {
     cards.push({ wear: gear.artId, imgSrc: bhAsset(BH_BY_ID[gear.artId]), name: gear.name, rarity: gear.rarity, kind: 'GEAR', stats: 'Equip it in the Wardrobe' });
   }
   if (p.dust) cards.push({ iconHtml: ICONS.dust(120), name: `${p.dust} Bone Dust`, rarity: 'uncommon', kind: 'DUST', stats: 'Spend it on how your gear looks' });
-  if (!cards.length && p.coins) cards.push({ iconHtml: ICONS.coin(120), name: `${p.coins.toLocaleString()} coins`, rarity: 'common', kind: 'COINS', stats: 'Spend it in the Shop' });
+  /* S6: this line was plain text with no tap target, the only shop mention
+     outside the hub in the whole app. statsHtml (not stats) because it needs a
+     real control; it is a literal this app wrote, same rule render-sink-lint.mjs
+     already holds statsHtml to. Wired in openPackReveal's renderCard, where the
+     card's pointer-capture drag lives, so the button is not swallowed by it. */
+  if (!cards.length && p.coins) cards.push({ iconHtml: ICONS.coin(120), name: `${p.coins.toLocaleString()} coins`, rarity: 'common', kind: 'COINS', statsHtml: '<button type="button" class="pc-stats-link" id="giftShopLink">Spend it in the Shop ›</button>' });
   confettiRain(60); chimeSound(S.sounds); haptic.success();
   openPackReveal(cards, { coins: p.coins || 0, footerNote: `From ${giftSender(g)}` });
 }
@@ -2917,6 +2942,10 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__cheerPresets = () => CHEERS;
   window.__unseenDeliveries = () => unseenDeliveryCount();
   window.__refreshCrewBadge = () => refreshCrewBadge();
+  // S6: a coins-only gift is the rarest reveal in the game (every other payload
+  // shape beats it in the `if` chain above), so an audit needs a direct way to
+  // open one rather than farming a real Crew gift server-side.
+  window.__revealGift = g => revealGift(g);
 }
 // The badge is the sum of what is waiting for you in the tab: friend requests
 // AND unread deliveries. It used to count requests only, so a gift never
@@ -9901,10 +9930,19 @@ async function renderShop(el) {
      from the rest of the catalogue, priced by rarity. */
   const rotIds = (rk.rot || []).filter(id => BH_BY_ID[id] && RACK_RARITY_PRICE[BH_BY_ID[id].rarity]);
   const rotPrice = id => RACK_RARITY_PRICE[BH_BY_ID[id].rarity];
-  const allRackCoins = [...RACK_POOLS.map(p => p[0]), RACK_AURA.coin, ...rotIds.map(id => rotPrice(id)[0])];
-  const allRackDust = [...RACK_DUST, RACK_AURA.dust, ...rotIds.map(id => rotPrice(id)[1])];
+  /* S15: bought a 300 coin common, the wallet still read "buys 21 of 21" with
+     one of those 21 now owned. afford.coins counted every pool price against
+     the balance regardless of ownership. rackOwns/auraOwned already exist (the
+     tiles use them for the "owned" badge), so the wallet's count and its "of N"
+     denominator are filtered by the same read: an owned piece is not something
+     the wallet can still buy. */
+  const themedUnowned = rackIds.map((id, i) => ({ coin: RACK_POOLS[i][0], dust: RACK_DUST[i], owned: rackOwns(id) })).filter(e => !e.owned);
+  const rotUnowned = rotIds.filter(id => !rackOwns(id)).map(id => ({ coin: rotPrice(id)[0], dust: rotPrice(id)[1] }));
+  const auraUnowned = auraOwned ? [] : [{ coin: RACK_AURA.coin, dust: RACK_AURA.dust }];
+  const allRackCoins = [...themedUnowned.map(e => e.coin), ...auraUnowned.map(e => e.coin), ...rotUnowned.map(e => e.coin)];
+  const allRackDust = [...themedUnowned.map(e => e.dust), ...auraUnowned.map(e => e.dust), ...rotUnowned.map(e => e.dust)];
   const rackCount = allRackCoins.length;
-  const cheapestRack = Math.min(...allRackCoins);
+  const cheapestRack = rackCount ? Math.min(...allRackCoins) : 0;
   const afford = { coins: allRackCoins.filter(c => c <= coinBal).length, dust: allRackDust.filter(d => d <= dustBal).length };
 
   /* THE SUPPLIES PANEL AND ITS TWO SHELVES SURVIVE A RE-RENDER. Every buy and
@@ -9958,7 +9996,11 @@ async function renderShop(el) {
        decoration at 0 dust with no route to any, so the route is attached to the
        number that is zero. -->
   <div class="rk-wallet">
-    <span class="rk-w">${ICONS.coin(13)}<b>${coinBal.toLocaleString()}</b><i>${afford.coins ? `buys ${afford.coins} of ${rackCount}` : `${(cheapestRack - coinBal).toLocaleString()} short of the cheapest`}</i></span>
+    <!-- S7: the dust number has always carried a route ("melt gear to earn it");
+         the coin number never did, so a broke player was told what they could not
+         afford and never told how to earn more. Same treatment: a real line
+         naming where coins actually come from, tappable to Today. -->
+    <button class="rk-w link" id="rackCoin">${ICONS.coin(13)}<b>${coinBal.toLocaleString()}</b><i>${afford.coins ? `buys ${afford.coins} of ${rackCount}` : `${(cheapestRack - coinBal).toLocaleString()} short · day close, the Pit, the step race`} ›</i></button>
     <button class="rk-w link" id="rackDust">${ICONS.dust(13)}<b>${dustBal.toLocaleString()}</b><i>${afford.dust ? `buys ${afford.dust} of ${rackCount}` : 'melt gear to earn it'} ›</i></button>
   </div>
   <div class="rk-grid">
@@ -10287,6 +10329,7 @@ async function renderShop(el) {
     if (!body.hidden) body.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
   });
   $('#rackDust', el)?.addEventListener('click', () => openCharacter('crates'));
+  $('#rackCoin', el)?.addEventListener('click', () => { location.hash = '#/today'; });
 }
 
 /* ================= trends ================= */
@@ -15105,8 +15148,12 @@ function openCharacter(tab = 'wardrobe') {
 let pendingHubTab = null;
 
 async function renderBonehead(el) {
-  const tab = pendingHubTab || 'wardrobe';
+  // S11: the hub used to forget which sub-tab you were last on, so Shop then
+  // Today then Bonehead always landed back on Wardrobe. S.hubTab remembers it
+  // for the session (same in-memory pattern as S.fbTeam), never persisted.
+  const tab = pendingHubTab || S.hubTab || 'wardrobe';
   pendingHubTab = null;
+  S.hubTab = tab;
   /* THE HEADING IS THE PLAYER'S OWN NAME, not "Your Bonehead" (Tom, 2026-08-15,
      relaying his friends: whose bonehead it is was never in doubt). Both sources
      are LOCAL reads, so this costs no network and has no empty state on a fresh
@@ -17934,6 +17981,13 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         at(330, last ? done : advance);
       };
       tilt.addEventListener('pointerdown', e => {
+        /* S6: setPointerCapture retargets the compat mouse events too, so a
+           click that lands on #giftShopLink (or any button in the stats band)
+           would fire with e.target === tilt, not the button -- the exact
+           failure mode the comment on tilt's own click listener already
+           describes for the card as a whole. The fix has to sit here, before
+           capture is taken: at pointerdown time the target is still real. */
+        if (e.target.closest?.('button')) return;
         pid = e.pointerId; sx = e.clientX; dx = 0;
         try { tilt.setPointerCapture(pid); } catch { /* noop */ }
         tilt.style.transition = 'none';
@@ -17986,7 +18040,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       // capture element, so a click bound to the card (a child) never fired: the
       // footer said "tap or swipe" while only swiping worked. Measured with an
       // event probe, not guessed.
-      tilt.addEventListener('click', () => { if (Math.abs(dx) < 6) fling(-1); });
+      // S6: the gift reveal's coins card can carry a real <button> (#giftShopLink)
+      // in its stats band; without this guard tapping it also flung the card,
+      // same reason `reveal`'s own click listener a few lines down excludes
+      // buttons.
+      tilt.addEventListener('click', e => { if (e.target.closest('button')) return; if (Math.abs(dx) < 6) fling(-1); });
+      $('#giftShopLink', tilt)?.addEventListener('click', () => { location.hash = '#/shop'; });
       /* AND ANYWHERE ELSE ON THE SCREEN. Tom, 2026-08-10: "it's not a good swipe
          mechanic right now to next card that needs a fix too. Right now the swipe
          requires precision this game is meant for people to on a walk."
