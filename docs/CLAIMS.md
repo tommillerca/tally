@@ -31,6 +31,38 @@ release's own `## vNNN` entry when it ships. Round 35's Crew tab QA pass
 4. PROOF: crew-layout-audit.mjs (TOAST, proved red on the pre-fix tree: the test seam does not exist without the fix) | REACH: A cheer toast whose phrase has an apostrophe ("You're crushing it!") reads with a real apostrophe instead of the literal "You&#39;re crushing it!".
 5. PROOF: NONE in the browser gate; this is copy on a 403 branch of a coin-gift and free-gift send that unit.test.js and the browser audits do not drive, so the row says so rather than implying one. Measured live in round 34's SOCIAL lane (a real 403 from a real Worker after one player deleted their account). | REACH: Sending a gift to someone no longer in your Crew now says "They're not in your Crew any more" instead of the generic "Could not send. Try again" that sent the player around a loop that could never succeed.
 
+## kit live feedback (2026-09-05)
+
+Not a version bump: fixes on top of the live v474 Locker Room, against Tom's own
+words playing it. "There's also no news announcement banner or anything on the
+today page that would guide people to go do this." "The way that you presented
+the full kit is confusing. It looks like you're just buying the blue and gold
+colorway. I know there's text that says you get all of them, but that needs some
+work." "In the shop itself, the lizards are all blurry."
+
+1. PROOF: news-banner-audit.mjs, news-tab-audit.mjs, shop-lead-order-audit.mjs
+   (NEWS row, prove-red FAIL: `row present: false, hash after tap: #/today, #fbSect
+   open: false`) | REACH: Today's News pill now carries "The Locker Room is open"
+   as its newest, unread row, above the fold with the wardrobe's own unread dot.
+   Tapping it takes you straight to the Shop with the Locker Room already open,
+   the same one-shot the Wardrobe's colourway rail button already used.
+2. PROOF: shop-lead-order-audit.mjs (TINT-STRIP row, prove-red FAIL: all five
+   tiles read `{"n":0,"distinct":0}`), art-resolution-audit.mjs, memory-census.mjs
+   | REACH: Each of the five Locker Room tiles now shows the same 32-team strip
+   the poster above it does, not just the grey "All 32 colourways" line, so the
+   claim is visible on the tile you are looking at, not only stated in text.
+3. PROOF: shop-lead-order-audit.mjs (BUNDLE-5 row, prove-red FAIL: `0 icons, 0
+   distinct hexes`) | REACH: The full-kit tile no longer shows one two-tone disc
+   in whatever team you happen to be previewing. It shows all five pieces, each
+   in a different team's colours, under the line "Every piece, every team", so
+   buying the bundle no longer reads as buying one colourway.
+4. PROOF: shop-lead-order-audit.mjs (PET-384 row, prove-red FAIL: both pet tiles
+   read `assets/bh/thumb/192/football/...`), art-resolution-audit.mjs,
+   football-render-audit.mjs, memory-census.mjs | REACH: The lizard's two Locker
+   Room tiles (Lizard Helmet, Lizard Jersey) are no longer soft. They draw from
+   the same 384 tier the poster hero above them already uses, worst case 1.15x
+   its source instead of the 192 tier's ~2.3x.
+
 ## v474
 
 1. PROOF: unit.test.js, football-kit-audit.mjs, MANUAL measured off the rendered Shop screen (buy buttons and the team picker read 40px tall, up from 35.5px and 36px; a buy button below your balance stays enabled and pressable, and a tap answers with the coin shortfall) | REACH: The Locker Room shelf sells five football pieces, a helmet, a jersey, cleats and a matching helmet and jersey for the lizard, each 4,200 coins and yours in all 32 team colours the moment you buy it. Buying the full kit after already owning some of its five pieces charges only for what is missing, never more than the flat 16,800 kit price, and the "you save" line only appears when there really is a saving. Every buy button on the shelf is a full-size tap target, and one you cannot yet afford still responds to a tap and names the shortfall instead of going dead.
