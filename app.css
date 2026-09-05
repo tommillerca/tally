@@ -6559,14 +6559,18 @@ body::before {
    tile and the 32-team strip on the banner. */
 .fb-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink); flex: 0 0 auto;
   background: linear-gradient(135deg, var(--fa) 0 50%, var(--fb) 50% 100%); box-shadow: var(--sh-sm); }
-.fb-swatch.xs { width: auto; aspect-ratio: 1; border-width: 1px; box-shadow: none; }
+.fb-swatch.xs { width: auto; height: auto; aspect-ratio: 1; border-width: 1px; box-shadow: none; }
 .fb-drop .row { align-items: stretch; }
-.fb-hero { position: relative; flex: none; width: 132px; border-radius: 12px; background: rgba(42, 45, 40, .35);
+/* an explicit height: .pc-worn inside is absolutely positioned, so nothing else gives this box one */
+.fb-hero { position: relative; flex: none; width: 132px; height: 132px; align-self: center; border-radius: 12px; background: rgba(42, 45, 40, .35);
   border: 2px solid var(--ink); overflow: hidden; }
 .fb-hero .pc-worn { transform: translateX(-50%); }
+/* THE WHOLE FIGURE, helmet included: fit-body's waist-up crop took the helmet off
+   the one poster that sells helmets (measured 2026-09-05). */
+.fb-hero .pc-worn.fit-body .bh-anim { transform-origin: 50% 50%; transform: scale(1.18); }
 .fb-hero-pet { position: absolute; right: 2px; bottom: 2px; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
 .fb-hero-pet .petcrop { display: block; }
-.fb-teams { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; margin: 0 0 8px; }
+.fb-teams { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; margin: 0 0 8px; }
 .drop-item.fb::before { content: 'KIT'; }
 .fb-worn { position: relative; width: 88px; height: 88px; margin: 0 auto; overflow: hidden; border-radius: 10px; }
 .drop-item.fb .petcrop { display: block; margin: 0 auto; }
