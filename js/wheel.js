@@ -99,7 +99,7 @@ function wheelIconsHtml() {
 }
 
 // ---- prize table (wheel order; adjacent segments differ in value) ----
-// weights sum to 100. jackpot (the Bone Crate) is the gold wedge.
+// weights sum to 95; probabilities are w/95. jackpot (the Bone Crate) is the gold wedge.
 const PRIZES = [
   { key: 'c30',    coin: true,               tag: '30',     name: '30 Coins',       weight: 22, gold: false, grant: () => coinsAdd(30) },
   { key: 'daily',  iconId: 'crate-daily',    tag: 'Crate',  name: 'Common Crate',    weight: 12, gold: false, grant: () => grantCrate('daily', 'wheel') },

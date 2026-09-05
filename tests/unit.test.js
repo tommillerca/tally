@@ -5644,6 +5644,26 @@ test('a downloaded build can actually start: boot posts SKIP_WAITING to a waitin
   assert.match(reg, /updatefound/, 'a build that arrives mid-session is never let in');
 });
 
+test('REV-2: TestFlight invite card is gated by SHOW_BETA_THANKS flag', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /const\s+SHOW_BETA_THANKS\s*=\s*true/, 'SHOW_BETA_THANKS flag not found or not set to true');
+  assert.match(app, /async\s+function\s+openThanksCard\(\)\s*{\s*if\s*\(\s*!SHOW_BETA_THANKS\s*\)\s*return/, 'openThanksCard does not guard entry with SHOW_BETA_THANKS check');
+  assert.match(app, /function\s+thanksBannerHtml\(\)\s*{\s*if\s*\(\s*!SHOW_BETA_THANKS\s*\)\s*return\s+''/, 'thanksBannerHtml does not return empty string when SHOW_BETA_THANKS is false');
+  const newsFilter = app.match(/const\s+NEWS\s*=\s*\[[^]*?\]\.filter\([^)]*\)/);
+  assert.ok(newsFilter && newsFilter[0].includes("n.id === 'thanks'") && newsFilter[0].includes('SHOW_BETA_THANKS'), 'NEWS array is not filtered based on SHOW_BETA_THANKS');
+});
+
+test('REV-5: wheel weights sum to 95 and comment reflects it', () => {
+  const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
+  assert.match(wheel, /weights\s+sum\s+to\s+95.*probabilities\s+are\s+w\/95/, 'wheel comment does not state weights sum to 95 with normalized probabilities');
+  const prizeMatch = wheel.match(/const\s+PRIZES\s*=\s*\[[^]*?\n\];/);
+  assert.ok(prizeMatch, 'PRIZES array not found');
+  const prizes = prizeMatch[0];
+  const weights = [...prizes.matchAll(/weight:\s*(\d+)/g)].map(m => parseInt(m[1], 10));
+  const sum = weights.reduce((a, b) => a + b, 0);
+  assert.equal(sum, 95, `wheel weights sum to ${sum}, not 95: ${weights.join(' + ')} = ${sum}`);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
