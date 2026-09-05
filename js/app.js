@@ -1700,7 +1700,10 @@ async function rollDayIfNeeded() {
     // follow the clock forward when you were actually sitting on "today".
     const wasOnToday = S.date === _dayAnchor;
     _dayAnchor = today;
-    if (wasOnToday) S.date = today;
+    if (wasOnToday) {
+      S.date = today;
+      await kvSet('lastOpenDay', today);
+    }
     const closed = await awardDayCloseIfDue(S.settings.targets);
     if (wasOnToday) route(); // a new day starts at the top, like a fresh open
     if (closed?.closed) setTimeout(() => toast(closed.gap ? 'Your last logged day closed on budget: Bone Crate earned' : 'Yesterday closed on budget: Bone Crate earned', 3400), 1400);
@@ -9652,7 +9655,9 @@ async function renderShop(el) {
      theme, four racks inside it, this is rack N, and the right-hand side is a
      COUNTDOWN rather than a weekday ("New rack Monday" is ambiguous across
      timezones and reads as nonsense when you open the app on a Monday). */
-  const rackNo = Math.min(4, Math.ceil(new Date().getDate() / 7));
+  const weekKey = isoWeekKey(new Date());
+  const weekNum = parseInt(weekKey.split('-W')[1]);
+  const rackNo = ((weekNum - 1) % 4) + 1;
   const rackDaysLeft = (8 - (new Date().getDay() || 7)) % 7 || 7;
   /* RACK_BASE and RACK_FIT are module-level now (see wornArtHtml): the reveal
      cards draw the same mannequin, and two copies of the neutral base would

@@ -202,14 +202,14 @@ export const TALENT_TREES = [
   },
   {
     id: 'alchemist', name: 'The Alchemist', tag: 'The Toxicologist', color: '#8bd450',
-    flavor: 'Bombs, vials and decoctions. Every potion builds TOXICITY, and Toxicity powers your alchemy — but it bleeds off each turn, so keep brewing.',
+    flavor: 'Bombs, vials and decoctions. Every potion builds TOXICITY, and Toxicity powers your alchemy. It bleeds off each turn, so keep brewing.',
     nodes: [
-      { id: 'fireflask', tier: 1, name: 'Fire Flask', move: true, desc: 'NEW MOVE: hurl a Fire Flask at ANY range — alchemical fire that BURNS. Builds Toxicity.' },
+      { id: 'fireflask', tier: 1, name: 'Fire Flask', move: true, desc: 'NEW MOVE: hurl a Fire Flask at ANY range: alchemical fire that BURNS. Builds Toxicity.' },
       { id: 'potency', tier: 1, ranks: 5, name: 'Potency', desc: 'Your alchemy (flasks, vials, bombs) hits 3% harder per rank.' },
-      { id: 'acidvial', tier: 2, name: 'Acid Vial', move: true, desc: 'NEW MOVE: shatter an Acid Vial — damage and SUNDER (enemy takes +15% damage) for 2 turns.' },
-      { id: 'swallow', tier: 2, name: 'Swallow', move: true, desc: 'NEW MOVE: quaff a Swallow decoction — heal 12% max HP. 3 uses per fight.' },
+      { id: 'acidvial', tier: 2, name: 'Acid Vial', move: true, desc: 'NEW MOVE: shatter an Acid Vial. Damage and SUNDER (enemy takes +15% damage) for 2 turns.' },
+      { id: 'swallow', tier: 2, name: 'Swallow', move: true, desc: 'NEW MOVE: quaff a Swallow decoction: heal 12% max HP. 3 uses per fight.' },
       { id: 'concoction', tier: 2, ranks: 3, name: 'Concoction', desc: 'Your potions cost 2 less Stamina per rank.' },
-      { id: 'hardyliver', tier: 2, ranks: 5, name: 'Hardy Liver', desc: '+5 max HP per rank — a constitution that shrugs off its own brews.' },
+      { id: 'hardyliver', tier: 2, ranks: 5, name: 'Hardy Liver', desc: '+5 max HP per rank: a constitution that shrugs off its own brews.' },
       { id: 'catalyst', tier: 3, ranks: 5, name: 'Catalyst', desc: 'Every 10 Toxicity adds +2% alchemy damage per rank. Ride the high.' },
       { id: 'corrode', tier: 3, name: 'Corrode', desc: 'Acid Vials also drain 12 of the enemy Stamina.' },
       { id: 'distill', tier: 3, ranks: 3, name: 'Distill', desc: 'Your potions build 3 less Toxicity per rank (a cleaner brew).' },
@@ -219,11 +219,11 @@ export const TALENT_TREES = [
   },
   {
     id: 'crowlord', name: 'The Crow Lord', tag: 'The Murder', color: '#6f86c9',
-    flavor: 'Command a murder of crows. Call them to your Flock and they peck the enemy every turn — then unleash the whole Murder at once.',
+    flavor: 'Command a murder of crows. Call them to your Flock and they peck the enemy every turn, then unleash the whole Murder at once.',
     nodes: [
       { id: 'callcrows', tier: 1, name: 'Call the Murder', move: true, desc: 'NEW MOVE: summon 2 crows to your Flock (any range). Your Flock pecks the enemy at the start of each of your turns, and one crow leaves after it feeds. Keep calling them back.' },
       { id: 'sharpbeaks', tier: 1, ranks: 5, name: 'Sharp Beaks', desc: 'Each crow pecks +1 damage per rank.' },
-      { id: 'peckeyes', tier: 2, name: 'Peck the Eyes', move: true, desc: 'NEW MOVE: the flock dives — damage, BLIND the enemy for 2 turns, and add a crow to your Flock.' },
+      { id: 'peckeyes', tier: 2, name: 'Peck the Eyes', move: true, desc: 'NEW MOVE: the flock dives. Damage, BLIND the enemy for 2 turns, and add a crow to your Flock.' },
       { id: 'carrion', tier: 2, name: 'Carrion Feast', desc: 'Your crows heal you for 30% of their peck damage.' },
       { id: 'flock', tier: 2, ranks: 3, name: 'Growing Flock', desc: 'Your Flock holds +1 more crow per rank (base 4).' },
       { id: 'roost', tier: 2, ranks: 5, name: 'Dark Roost', desc: '+4 max HP per rank.' },

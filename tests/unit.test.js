@@ -4894,11 +4894,12 @@ test('R24-L17 commitLogEntry rolls the day before the row is written, and a fres
     get: async (st, id) => store.get(id) || undefined,
   };
   const routed = [];
+  const kvMap = new Map();
   const load = () => new Function('S', 'db', 'dateKey', 'awardDayCloseIfDue', 'route', 'toast', 'maybeShowDailyWheel',
-    'refreshNotifSchedules', 'recordMealUsed', 'onFoodLogged', 'entriesFor', 'trackEvent',
+    'refreshNotifSchedules', 'recordMealUsed', 'onFoodLogged', 'entriesFor', 'trackEvent', 'kvSet',
     `${rdn[0]}${cle[0]}; return { commitLogEntry, rollDayIfNeeded };`)(
     S, db, () => clock, async () => null, () => routed.push(S.date), () => {}, () => Promise.resolve(false),
-    () => {}, async () => {}, async () => ({ xp: 10 }), async () => [], () => {});
+    () => {}, async () => {}, async () => ({ xp: 10 }), async () => [], () => {}, async (k, v) => kvMap.set(k, v));
   const { commitLogEntry } = load();
 
   clock = '2026-09-04';                           // midnight passed; the 60 s timer has not fired
@@ -4914,10 +4915,10 @@ test('R24-L17 commitLogEntry rolls the day before the row is written, and a fres
   const S2 = { settings: { targets: {} }, date: '2026-09-03' };
   clock = '2026-09-03';
   const again = new Function('S', 'db', 'dateKey', 'awardDayCloseIfDue', 'route', 'toast', 'maybeShowDailyWheel',
-    'refreshNotifSchedules', 'recordMealUsed', 'onFoodLogged', 'entriesFor', 'trackEvent',
+    'refreshNotifSchedules', 'recordMealUsed', 'onFoodLogged', 'entriesFor', 'trackEvent', 'kvSet',
     `${rdn[0]}${cle[0]}; return { commitLogEntry };`)(
     S2, db, () => clock, async () => null, () => {}, () => {}, () => Promise.resolve(false),
-    () => {}, async () => {}, async () => ({ xp: 0 }), async () => [], () => {});
+    () => {}, async () => {}, async () => ({ xp: 0 }), async () => [], () => {}, async (k, v) => kvMap.set(k, v));
   clock = '2026-09-04';
   await again.commitLogEntry({ ...store.get('old'), kcal: 350 }, null);
   assert.equal(S2.date, '2026-09-04');
