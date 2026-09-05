@@ -570,6 +570,15 @@ async function streakAwards(streak) {
 // Called after a log entry is written. Returns {xp, newBadges, streakMilestone, boosted}.
 // A level crossed by this log is announced by awardOnce's `bh-levelup` event, not here.
 export async function onFoodLogged(entry, { via = null, targets = null, entriesForDate = [] } = {}) {
+  /* REWARDS PAY FOR TODAY ONLY (Tom, 2026-09-05). Past days stay editable (people
+     forget to log), but a log dated before dateKey() -- the device's own local
+     calendar day, never a UTC ordinal -- earns none of this function's rewards:
+     no log/firstlog/scan/label/protein/meals3 XP, no streak award, no badge
+     evaluation. Editing an existing TODAY entry already pays nothing beyond its
+     first log (the ref-keyed dedupe in awardCapped/award), unaffected by this. */
+  if (entry.date < dateKey()) {
+    return { xp: 0, total: await totalXp(), newBadges: [], streakMilestone: null, streak: 0, boosted: false, crates: 0 };
+  }
   let gained = 0;
   /* Capped and keyed by DATE, never by entry.id: see XP_DAILY_CAP.log. The
      date is the entry's own, so a backdated log spends that day's ceiling. */
