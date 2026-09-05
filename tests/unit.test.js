@@ -46,7 +46,7 @@ import {
   SEED_IDS, seedName, isRareSeed, growMinutes, GROW_MIN, GROW_MIN_RARE,
   HARVEST_BASE, HARVEST_BASE_RARE, COMPOSTS_PER_DAY, SPAWN_SEED_CHANCE, rollSpawnSeed,
 } from '../js/garden.js';
-import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN } from '../js/social.js';
+import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN, raceStanding } from '../js/social.js';
 import { MINI_THEMES } from '../js/poi.js';
 import { THEME_POOL, themedLook, FAMILIES } from '../js/bosses.js';
 
@@ -1857,6 +1857,55 @@ test('recovery: IDs accept what people type and reject what breaks the URL', () 
   assert.equal(m[1], String(RECOVERY_ID_RE), 'client and Worker recovery-id rules must match exactly');
 });
 
+/* ---- CREW-2: the race rank is the server's, never re-derived from a 10-row
+   slice. js/app.js's `ordinal` and `esc` are tiny pure copies here: app.js
+   itself cannot be imported in plain node (it touches `location` at the top
+   level), and duplicating two one-liners is cheaper than extracting a shared
+   module for them. ---- */
+const ord = n => { if (!(n > 0)) return ''; const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
+const escT = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+test('raceStanding: a true 14th reads 14th, not the old invented "11th"', () => {
+  // server sends only the top 10, but already knows you are 14th of 30
+  const top10 = Array.from({ length: 10 }, (_, i) => ({ rank: i + 1, name: `P${i + 1}`, steps: 20000 - i * 500, you: false }));
+  const race = { yourRank: 14, players: top10 };
+  const own = { weekKey: '2026-09-01', steps: 6000 };
+  const r = raceStanding(top10, race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.equal(r.rows.length, 10, 'the board itself stays the top 10, no synthetic 11th row');
+  assert.equal(r.yourRank, 14, 'the server rank is rendered as-is');
+  assert.ok(/14th/.test(r.standing), `expected "14th" in standing, got: ${r.standing}`);
+  assert.ok(!/11th/.test(r.standing), 'must never fall back to the old splice-and-renumber "11th"');
+});
+
+test('raceStanding: never ranked yet + you have walked -> a local lane, not a lie', () => {
+  const top10 = Array.from({ length: 3 }, (_, i) => ({ rank: i + 1, name: `P${i + 1}`, steps: 5000 - i * 1000, you: false }));
+  const race = { yourRank: null, players: top10 }; // your push has not landed on the server yet
+  const own = { weekKey: '2026-09-01', steps: 2000 };
+  const r = raceStanding(top10, race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.equal(r.rows.length, 4, 'your own known step count earns you a lane when the server has none for you');
+  assert.equal(r.yourRank, 4, 'ranked locally among the rows actually in view');
+  assert.ok(/4th/.test(r.standing));
+});
+
+test('raceStanding: unranked reads "unranked", never a NaN rank', () => {
+  // a row is flagged you (some future server could send this) but carries no
+  // numeric rank -- must not render ordinal(null) as "NaNth".
+  const rows = [{ rank: 1, name: 'P1', steps: 5000, you: true }, { rank: 2, name: 'P2', steps: 3000, you: false }];
+  const race = { yourRank: null, players: rows };
+  const own = { weekKey: '2026-09-01', steps: 0 };
+  const r = raceStanding(rows, race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.ok(/unranked/.test(r.standing), `expected "unranked", got: ${r.standing}`);
+  assert.ok(!/NaN/.test(r.standing));
+});
+
+test('raceStanding: nobody has walked -> the empty-board line, not a crash', () => {
+  const race = { yourRank: null, players: [] };
+  const own = { weekKey: '2026-09-01', steps: 0 };
+  const r = raceStanding([], race, '2026-09-01', own, 'Me', {}, ord, escT);
+  assert.equal(r.rows.length, 0);
+  assert.match(r.standing, /Nobody has walked/);
+});
+
 /* ---- v240 safe-area guard ------------------------------------------------
    The hero cancelled the screen's safe-area padding with a negative top margin.
    That was fine while a day header sat above it, and became a bug the moment the
@@ -2548,7 +2597,13 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
   const POWER_EXCEPTIONS = { buyDustEgg: /grantEgg/ };
   const owners = [...src.matchAll(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/gm)].map(m => [m.index, m[1]]);
   const ownerAt = i => { let n = '(top level)'; for (const [ix, name] of owners) { if (ix <= i) n = name; else break; } return n; };
-  const DUST_SPEND = /boneDustAdd\(\s*-|await spendDust\(/g;
+  /* WIDENED AGAIN 2026-09-05 (offline crash seam OFF-2a): buyRackItem folded
+     its spend into the SAME transaction as the receipt claim (db.claimAndPay),
+     so a crash between the two writes can no longer leave a debited wallet and
+     no receipt. The debit is a `bonedust:` kv callback inside that call rather
+     than `await spendDust(`, so the pattern needs the third shape or this
+     census goes blind on buyRackItem the same way it did on 2026-08-31. */
+  const DUST_SPEND = /boneDustAdd\(\s*-|await spendDust\(|\bbonedust:\s*\w+/g;
   const spends = [...src.matchAll(DUST_SPEND)].map(m => ownerAt(m.index));
   assert.ok(spends.length >= 2, `found ${spends.length} dust spends; the lint is reading the wrong thing`);
   assert.deepEqual([...new Set(spends)].sort(), Object.keys(DECLARED).sort(),
@@ -2580,6 +2635,8 @@ test('S0: dust buys looks, and every dust spend in the tree is declared', () => 
      of the pattern is proven to fire rather than merely present */
   const forgery2 = "function buyWithDust2(id) {\n  await spendDust(60);\n}\n";
   assert.equal([...forgery2.matchAll(new RegExp(DUST_SPEND.source, 'g'))].length, 1, 'the spend pattern cannot find a spendDust spend');
+  const forgery3 = "function buyWithDust3(id) {\n  claimAndPay('kv', row, { kv: { bonedust: debitOrThrow } });\n}\n";
+  assert.equal([...forgery3.matchAll(new RegExp(DUST_SPEND.source, 'g'))].length, 1, 'the spend pattern cannot find a claimAndPay bonedust spend');
   assert.ok(GRANTS.test(forgery), 'the grant pattern cannot detect a violation');
 });
 
@@ -6141,11 +6198,19 @@ test('shop lead shelf: the Kit room leads when the kit is live, Bumbleseal is se
     return tpl.replace('${fbLead}', v.fbLead).replace('${petLead}', v.petLead);
   };
   const at = (h, t) => h.indexOf(t);
-  /* THE RACK STRIP BY ITS OWN TEXT, not by `class="rk-theme"`. That class is on
-     three strips (the rack, the rotating shelf, and now her heading), so the
-     first draft of this row matched HER heading and reported her below the rack
-     while she sat above it. */
-  const RACK = 'RACK ${rackNo} OF 4';
+  /* RE-ANCHORED 2026-09-05: the RACK marker used to be the "RACK ${rackNo} OF
+     4" banner text, chosen over `class="rk-theme"` because that class sits on
+     three strips (the rack, the rotating shelf, and her heading) and the first
+     draft of this row matched HER heading and reported her below the rack
+     while she sat above it. That banner text moved out of this template
+     entirely that same day (Tom: "put it in the header Gwart currently
+     occupies"; gwartHeroHtml's `.rk-clock` now renders it), so a search for
+     those words would find nothing here forever. The themed-nine grid's own
+     opening tag is the truer anchor for "where the rack starts": it is
+     unique in this slice (the rotating shelf's is `rk-grid rot`, a different
+     substring) and it is the actual merchandise, not a label that can move
+     again independently of it. */
+  const RACK = '<div class="rk-grid">';
 
   // ---- flag OFF: the shop every build before this one shipped ----
   const off = render(false);
@@ -6174,6 +6239,82 @@ test('shop lead shelf: the Kit room leads when the kit is live, Bumbleseal is se
   assert.ok(at(on, 'id="dropSect"') > 0, 'the Puffer Pack must survive the move: Tom has not ruled on it');
   assert.ok(at(on, 'id="dropSect"') > at(on, 'id="shopRestBody"'),
     'the Puffer Pack stays where it is, inside the supplies panel');
+});
+
+/* THE ROTATING TWELVE ROTATE WEEKLY, 2026-09-05. Tom: "the rotating twelve
+   rotate WEEKLY". `rackRotatePick`'s own first parameter is named `week`, but
+   every call site inside js/loot.js's `rack()` was quietly passing `day`
+   (dateKey()), so the rotating shelf silently re-rolled every midnight while
+   the scarcity banner and the reroll ladder both counted in ISO weeks.
+   Real IndexedDB (mem-idb), real `rack()`, four rows each isolating its own
+   failure mode: the seed key production actually uses, that a stale per-day
+   stamp inside the SAME week does not move the shelf (the additive
+   migration: a day-keyed rotation a player already has rides out its week
+   unchanged), that crossing an ISO week boundary rebuilds the record whole,
+   and that a save from before the rotating shelf existed (no `rot` at all)
+   is filled in without disturbing its themed nine or its spent rerolls. */
+test('rack weekly rotation: keyed on the ISO week, holds within a week, rebuilds at the boundary, migrates a rot-less save in place', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const loot = await import('../js/loot.js');
+  const { isoWeekKey } = await import('../js/poi.js');
+  const week = isoWeekKey(new Date());
+
+  // ---- WEEK KEY: a fresh record seeds the rotating shelf on the ISO week ----
+  dbm.useDbName('unit-rackweek-fresh');
+  const fresh = await loot.rack();
+  const expectRot = loot.rackRotatePick(week, 0, fresh.ids);
+  assert.equal(fresh.week, week, 'a fresh record is keyed on the current ISO week');
+  assert.deepEqual(fresh.rot, expectRot,
+    'a fresh record seeds the rotating shelf on the ISO week, not the day (regression: seed with dateKey() instead)');
+
+  // ---- NO RE-ROLL INSIDE A WEEK: a stale day-keyed stamp must not move `rot` ----
+  dbm.useDbName('unit-rackweek-hold');
+  const st0 = await loot.rack();
+  await dbm.kvSet('rack', { ...st0, rotDay: '2000-01-01' });   // a day-keyed stamp from long ago, same week
+  const held = await loot.rack();
+  assert.deepEqual(held.rot, st0.rot, 'a stale rotDay inside the same week must not re-roll the rotating shelf');
+  assert.equal(held.week, st0.week, 'the record is still this week\'s');
+
+  // ---- RE-ROLL AT THE BOUNDARY: a record from a DIFFERENT week rebuilds whole ----
+  dbm.useDbName('unit-rackweek-boundary');
+  const st1 = await loot.rack();
+  await dbm.kvSet('rack', { ...st1, week: 'stale-week', rr: 3 });
+  const rebuilt = await loot.rack();
+  assert.equal(rebuilt.week, week, 'crossing the week boundary rebuilds the record for the current ISO week');
+  assert.equal(rebuilt.rr, 0, 'a new week resets the reroll counter');
+
+  // ---- MIGRATION: a pre-rotating-shelf save (ids but no `rot` at all) is filled in place ----
+  dbm.useDbName('unit-rackweek-migrate');
+  const st2 = await loot.rack();
+  await dbm.kvSet('rack', { week: st2.week, salt: st2.salt, ids: st2.ids, rr: 2 });   // no `rot` key at all
+  const migrated = await loot.rack();
+  assert.ok(Array.isArray(migrated.rot) && migrated.rot.length === loot.RACK_ROTATE_N,
+    'a save missing `rot` entirely gets one filled in');
+  assert.deepEqual(migrated.ids, st2.ids, 'migration must not disturb the themed nine');
+  assert.equal(migrated.rr, 2, 'migration must not disturb the spent reroll count');
+});
+
+/* THE NUDGE, 2026-09-05. Tom: "a Shop chip badge when the rack turned since
+   last seen, keyed rackSeenWeek, cleared on shop open." renderCharacter
+   (js/app.js) computes this off `rack()`'s own `week` against the stored
+   `rackSeenWeek`, and it is suppressed while the Shop tab itself is the one
+   rendering (a badge announcing "new" on the screen already showing it would
+   be the tab telling you about itself). Evaluated for real off the exact
+   source line rather than reimplemented, so a change to the guard's logic
+   moves this test with it. */
+test('rack nudge: the Shop chip badge fires once per week and clears when the Shop tab opens', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const m = app.match(/const rackTurned = (rk\.week !== rackSeenWeek && tab !== 'shop');/);
+  assert.ok(m, 'renderCharacter must compute rackTurned off rk.week vs rackSeenWeek, suppressed on the Shop tab itself: re-anchor this test if the line moved');
+  const rackTurned = (rk, rackSeenWeek, tab) => new Function('rk', 'rackSeenWeek', 'tab', `return ${m[1]};`)(rk, rackSeenWeek, tab);
+  assert.equal(rackTurned({ week: '2026-W36' }, '2026-W35', 'wardrobe'), true, 'a rack that turned since last seen must badge on another tab');
+  assert.equal(rackTurned({ week: '2026-W36' }, '2026-W36', 'wardrobe'), false, 'a rack already seen this week must not badge');
+  assert.equal(rackTurned({ week: '2026-W36' }, null, 'wardrobe'), true, 'a player who has never opened the Shop must see the badge (null seen-week)');
+  assert.equal(rackTurned({ week: '2026-W36' }, '2026-W35', 'shop'), false, 'the badge must not show while the Shop tab itself is open');
+
+  assert.match(app, /if \(tab === 'shop'\) await kvSet\('rackSeenWeek', rk\.week\);/,
+    'opening the Shop tab must clear the nudge by writing the CURRENT rack week to rackSeenWeek');
 });
 
 /* ================= claimed-row-audit, 2026-09-04: the five re-routed writers =================
@@ -6444,6 +6585,191 @@ test('R-claimhyg-1 claimQuest: a rejected payout write burns nothing and a retry
   const afterRetry = { coins: await dbm.kvGet('coins', 0), crates: (await dbm.db.all('inv')).filter(r => r.kind === 'crate').length };
   assert.equal(afterRetry.coins, before.coins + Q.coins, 'the retry must pay coins exactly once');
   assert.equal(afterRetry.crates, 1, 'the retry must grant exactly one crate');
+});
+
+/* OFFLINE CRASH SEAM OFF-2a (2026-09-05): "rack buy spends, then claims".
+ * js/loot.js:buyRackItem used to spend the coins/dust (its own IndexedDB
+ * transaction, via spendCoins/spendDust) and only THEN write the
+ * `rackbuy:<artId>` claim receipt (a separate transaction, via
+ * db.addIfAbsent). A crash between the two -- the app killed, the tab
+ * closed, the write rejected on quota/abort/the wipe-protocol freeze flag --
+ * left a debited wallet and no receipt. Nothing on disk remembered the spend
+ * had happened, so the retry that followed ran buyRackItem from scratch and
+ * spent again: a 6,000-coin item took 12,000 for one piece.
+ * The fix folds the claim and the spend into ONE transaction via
+ * db.claimAndPay (the same primitive js/game.js:awardOnce and
+ * js/quests.js:claimQuest use), with a synchronous kv callback that throws to
+ * abort the whole thing when the wallet is short, rolling the receipt back
+ * too. A crash before that transaction commits now leaves NEITHER a spend NOR
+ * a receipt, so the retry is a normal first buy.
+ * INDUCE: db.claimAndPay is stubbed to reject once for this item's receipt
+ * key, the same style tests/purchase-write-failure-audit.mjs uses on
+ * db.addIfAbsent.
+ * PROVE-RED: reverting buyRackItem to the old spend-then-addIfAbsent shape
+ * makes the stub miss entirely (it targets db.claimAndPay, which the old code
+ * never calls), so the simulated crash never fires and the first call just
+ * succeeds. Measured on the actual reverted code:
+ *   FAIL R-offseam-2a buyRackItem: a crash between spend and claim costs
+ *   exactly one price on retry
+ *     a rejected claim-and-spend write must not be swallowed silently
+ *   false !== true
+ * which is the defect restated: the old code has no atomic seam for a
+ * simulated crash to land on, because the spend already committed in its own
+ * transaction before the claim (the thing this test intercepts) ever runs. */
+test('R-offseam-2a buyRackItem: a crash between spend and claim costs exactly one price on retry', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const loot = await import('../js/loot.js');
+  dbm.useDbName('unit-offseam-2a-rackcrash');
+
+  const st = await loot.rack();
+  const artId = st.ids[0];
+  const price = loot.RACK_POOLS[0][0];
+  const WALLET = price * 3;
+  await dbm.kvSet('coins', WALLET);
+
+  const realClaimAndPay = dbm.db.claimAndPay;
+  let crashOnce = true;
+  dbm.db.claimAndPay = (store, row, pay) =>
+    (crashOnce && store === 'kv' && row && String(row.k || '').startsWith(`rackbuy:${artId}`))
+      ? (crashOnce = false, Promise.reject(new Error('simulated crash: process died mid-transaction')))
+      : realClaimAndPay(store, row, pay);
+
+  let threw = false;
+  try { await loot.buyRackItem(artId, 'coins'); } catch { threw = true; }
+  dbm.db.claimAndPay = realClaimAndPay;   // RECOVER: the write works again
+
+  assert.equal(threw, true, 'a rejected claim-and-spend write must not be swallowed silently');
+  assert.equal(await dbm.kvGet('coins', 0), WALLET, 'a crash before the transaction commits must not move the wallet');
+  assert.equal(await dbm.kvGet(`rackbuy:${artId}`, null), null, 'a crash before the transaction commits must leave no receipt');
+
+  const retry = await loot.buyRackItem(artId, 'coins');
+  assert.equal(retry.ok, true, `the retry must be a normal purchase, got ${JSON.stringify(retry)}`);
+  assert.equal((await loot.ownedCosmeticIds()).has(artId), true, 'the retry must grant the piece');
+  assert.equal(WALLET - await loot.coins(), price,
+    `a crash between the spend and the claim must not cost more than one price on retry: expected ${WALLET - await loot.coins()} to equal ${price}`);
+});
+
+/* OFFLINE CRASH SEAM OFF-2b (2026-09-05): "day-close pays the ledger, then the
+ * crate". js/game.js:awardDayCloseIfDue used to award() the day-close XP (its
+ * own IndexedDB transaction, addIfAbsent on the `dayclose-<date>` ledger key)
+ * and only THEN call grantCrate (a separate transaction, db.put on 'inv'). A
+ * crash between the two -- quota, abort, the wipe-protocol freeze flag -- left
+ * the ledger paid and no crate, and because award() can never be re-run once
+ * its key exists, the crate was gone forever: no retry, no later boot, ever
+ * grants it, because the day-close row already reads as claimed.
+ * The fix rides the crate inside the SAME transaction as the claim via
+ * awardOnce's `pay` (js/hunt.js:collectSpawn and js/quests.js:claimQuest's
+ * shape): crateRow mints the id synchronously so it can sit in `pay.puts`, and
+ * a rejected write there takes the claim down with it instead of stranding it.
+ * INDUCE: db.claimAndPay is stubbed to reject once for this exact day's
+ * `dayclose-<date>` key, the same style tests/unit.test.js:R-claimhyg-1 uses.
+ * PROVE-RED: reverting awardDayCloseIfDue to the old award()-then-grantCrate()
+ * shape makes the stub miss (it targets db.claimAndPay, which the old code
+ * never calls for this payout), so the simulated crash never fires and the
+ * guard fails on:
+ *   AssertionError [ERR_ASSERTION]: a rejected day-close write must not be
+ *   swallowed silently: expected false to equal true
+ * which is the defect restated: the old code has no atomic seam between the
+ * ledger claim and the crate for a crash to land on. */
+test('R-offseam-2b awardDayCloseIfDue: a rejected write burns neither the ledger nor the crate, and a retry pays exactly one crate', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const g = await import('../js/game.js');
+  dbm.useDbName('unit-offseam-2b-daycrash');
+
+  const TARGETS = { kcal: 2000, p: 120 };
+  const today = dateKey();
+  const yday = addDays(today, -1);
+  await dbm.db.put('log', { id: 'on-1', date: yday, meal: 0, name: 'Salad', kcal: 1800, p: 130, c: 150, f: 50 });
+
+  const realClaimAndPay = dbm.db.claimAndPay;
+  let crashOnce = true;
+  dbm.db.claimAndPay = (store, row, pay) =>
+    (crashOnce && store === 'xp' && row && row.key === `dayclose-${yday}`)
+      ? (crashOnce = false, Promise.reject(new Error('QuotaExceededError')))
+      : realClaimAndPay(store, row, pay);
+
+  let threw = false;
+  try { await g.awardDayCloseIfDue(TARGETS); } catch { threw = true; }
+  dbm.db.claimAndPay = realClaimAndPay;   // RECOVER: the write works again
+
+  assert.equal(threw, true, 'a rejected day-close write must not be swallowed silently');
+  assert.equal(await dbm.db.get('xp', `dayclose-${yday}`), undefined, 'a crash before the transaction commits must leave the ledger unclaimed');
+  assert.equal((await dbm.db.all('inv')).filter(r => r.kind === 'crate').length, 0, 'a crash before the transaction commits must grant no crate');
+
+  const retry = await g.awardDayCloseIfDue(TARGETS);
+  assert.equal(retry?.closed, true, `the retry must be a normal day close, got ${JSON.stringify(retry)}`);
+  const crates = (await dbm.db.all('inv')).filter(r => r.kind === 'crate');
+  assert.equal(crates.length, 1, 'the retry must grant exactly one crate');
+  assert.equal(crates[0].crate, 'golden', 'the day-close crate is still the Bone (golden) crate');
+});
+
+/* OFFLINE CRASH SEAM OFF-3 (2026-09-05): "the sync throttle stamps before the
+ * sync". js/social.js:autoSync used to write `socialSyncAt` to `now` BEFORE
+ * calling buildSnapshot/syncProfile/pullGrants, on the same line pattern
+ * pushBackup used to have for `backupAt` (fixed 2026-08-30, see the "A 200 IS
+ * NOT AN ACKNOWLEDGEMENT" comment on pushBackup above): the throttle is meant
+ * to mean "we tried in the last 5 minutes", and stamping it before the attempt
+ * makes it mean "we started an attempt in the last 5 minutes" instead, which
+ * includes attempts that crashed, threw offline, or never got a byte onto the
+ * wire. A device that dies (or throws) between the stamp and the first
+ * network call is not the once-in-a-blue-moon case here: it is the
+ * reconnect-after-a-gap case, the exact moment a lapsed player's profile and
+ * grants most need to sync, and the very next boot/resume within 5 minutes
+ * finds the throttle already tripped by a sync that never happened, and
+ * silently gives up rather than retrying.
+ * The fix moves the stamp to the end, after pullGrants() has actually
+ * returned: `now` is captured once at the top (unchanged, so the throttle
+ * window is still measured from the moment the attempt began) but only
+ * written back once the whole attempt has completed without throwing.
+ * INDUCE: pass a `buildSnapshot` that throws, standing in for a crash/offline
+ * failure partway through the attempt, with no server (this is a Node test,
+ * no wrangler dev) so a second, working call would fail on the throttle alone
+ * if the first call had wrongly stamped it.
+ * PROVE-RED: reverting the stamp to before the attempt (its 2026-08-30..
+ * 2026-09-05 position) means the FIRST (crashed) call stamps `socialSyncAt`
+ * before buildSnapshot() ever throws. Measured on the actual reverted code:
+ *   FAIL R-offseam-3 autoSync: socialSyncAt stamps only after a completed
+ *   attempt, not before it
+ *     an attempt that never completed must not stamp the throttle: the next
+ *     call has to retry, not silently wait out 5 minutes for nothing
+ * which is the defect restated: the stamp moves on an attempt that crashed
+ * before doing anything, so the very next call's throttle guard now reads
+ * "we just tried" for an attempt that never got past buildSnapshot(). */
+test('R-offseam-3 autoSync: socialSyncAt stamps only after a completed attempt, not before it', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const s = await import('../js/social.js');
+  dbm.useDbName('unit-offseam-3-syncstamp');
+  await dbm.kvSet('social', { playerId: 'offseam-3', handle: 'Audit Bones', friendCode: 'BONE-TEST-TEST', name: null, onlineAt: Date.now() });
+  await dbm.kvSet('backupAt', Date.now());   // keep pushBackup's own throttle out of this test's way
+
+  let fetchCalls = 0;
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    fetchCalls++;
+    const u = String(url);
+    if (u.includes('/profile')) return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    if (u.includes('/grants')) return { ok: true, status: 200, json: async () => ({ grants: [] }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+
+  try {
+    const crash = () => { throw new Error('simulated crash: process died mid-sync'); };
+    const r1 = await s.autoSync(crash, 'audit');
+    assert.equal(r1, null, 'a buildSnapshot crash must be swallowed, not thrown to the caller');
+    assert.equal(fetchCalls, 0, 'a crash inside buildSnapshot happens before any network call, so none should have fired');
+    assert.equal(await dbm.kvGet('socialSyncAt', 0), 0,
+      'an attempt that never completed must not stamp the throttle: the next call has to retry, not silently wait out 5 minutes for nothing');
+
+    const r2 = await s.autoSync(async () => ({ level: 1 }), 'audit');
+    assert.notEqual(r2, null, 'a crash on the previous attempt must not throttle the very next one behind SYNC_THROTTLE_MS');
+    assert.ok(fetchCalls >= 1, 'the retry must actually reach the network, not be swallowed by a stale throttle stamp');
+    assert.ok((await dbm.kvGet('socialSyncAt', 0)) > 0, 'a completed attempt must stamp the throttle');
+  } finally {
+    globalThis.fetch = origFetch;
+  }
 });
 
 /* CLAIM HYGIENE (2026-09-05), item 2: "welcome-kit cross-tab duplication".

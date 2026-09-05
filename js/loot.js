@@ -376,30 +376,34 @@ export async function rack() {
      themed rung under a player mid-week and quietly hand back their spent
      rerolls, so the record is kept and only the missing half is filled, on the
      salt it already carries. */
-  /* THE ROTATING SHELF IS DAILY, THE THEMED NINE AND THE REROLLS STAY WEEKLY.
-     Tom, 2026-08-27: "i think the rack should change up everyday to keep things
-     fresh and have people checking in".
+  /* THE ROTATING SHELF IS WEEKLY NOW, ON THE SAME KEY THE THEMED NINE USE.
+     Tom, 2026-09-05, reversing the 2026-08-27 daily ruling below: "the
+     rotating twelve rotate WEEKLY". `rackRotatePick`'s own first parameter is
+     named `week`, but every call site here was quietly passing `day`
+     (dateKey()), so the shelf silently re-rolled at midnight every night while
+     the banner and the reroll ladder both counted in weeks. Fixed by seeding
+     on `week`, the same key `cur.week` already gates this whole record on.
 
-     ONLY `rot` MOVES, AND THAT SEPARATION IS THE WHOLE CARE HERE. The comment
-     below records that `rr` used to reset on the day and that this handed out a
-     free full-rack draw EVERY DAY, surfacing any specific themed piece 94% of
-     weeks for nothing, which is precisely what a reroll must not do. Tom
-     approved weekly rerolls on 2026-08-20 and that is untouched: the day is
-     read for the shelf's seed and for nothing else. The themed rungs keep their
-     week too, so the theme still reads as a week-long thing to save up for.
-
-     Also covers the migration from the shelf's first shape: a save with no
-     `rot`, or one written on an earlier day, is filled in place rather than
-     rebuilt, so a player's spent rerolls and their themed nine survive. */
+     ADDITIVE MIGRATION: `rotDay` is no longer read as a freshness gate at all.
+     A record that already holds a `rot` array - drawn under the old per-day
+     code, its `rotDay` a date string rather than a week - is NOT force-redrawn
+     here. Once a record has SOME `rot`, it stands for the rest of that
+     `week`, which is exactly the boundary the old daily code was meant to
+     respect and did not; the day-keyed shelf a player already has simply
+     rides out its week unchanged. The only thing this migration branch still
+     does is fill in `rot` for a record that predates the rotating shelf
+     entirely (no `rot` at all): the record is kept and only the missing half
+     is filled, on the salt it already carries. The next NEW week (`cur.week
+     !== week`, below) rebuilds the record from scratch regardless. */
   const staleRot = cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length
-    && (!Array.isArray(cur.rot) || cur.rotDay !== day);
+    && !Array.isArray(cur.rot);
   if (staleRot) {
-    const rot = rackRotatePick(day, cur.salt || 0, cur.ids);
+    const rot = rackRotatePick(week, cur.salt || 0, cur.ids);
     /* Spread the record the TRANSACTION reads, not the one read above it:
        rerollRack claims `rr` on this same row, and writing `cur` whole handed a
        spent reroll back, which is a rung of the price ladder for free. It
-       refuses outright once somebody else has already rotated today. */
-    await kvUpdate('rack', prev => (prev && prev.rotDay !== day) ? { ...prev, rot, rotDay: day } : undefined, null);
+       refuses outright once somebody else has already filled `rot` in. */
+    await kvUpdate('rack', prev => (prev && !Array.isArray(prev.rot)) ? { ...prev, rot, rotDay: day } : undefined, null);
     cur.rot = rot; cur.rotDay = day;
   }
   if (cur && cur.week === week && Array.isArray(cur.ids) && cur.ids.length === RACK_POOLS.length) {
@@ -416,7 +420,7 @@ export async function rack() {
     return { ...cur, rr: cur.rr || 0 };
   }
   const ids = rackPick(week, 0);
-  const st = { week, salt: 0, ids, rot: rackRotatePick(day, 0, ids), rotDay: day, rr: 0 };
+  const st = { week, salt: 0, ids, rot: rackRotatePick(week, 0, ids), rotDay: day, rr: 0 };
   await kvSet('rack', st);
   return st;
 }
@@ -467,7 +471,7 @@ export async function rerollRack() {
        never fish a specific themed piece out of its rung. The new salt seeds
        the rotating draw alone, against the SAME themed ids, so the two shelves
        stay disjoint and buyRackItem's indexOf pricing cannot cross. */
-    return { week: cur.week, salt, ids: cur.ids, rot: rackRotatePick(day, salt, cur.ids), rotDay: day, rr: used + 1 };
+    return { week: cur.week, salt, ids: cur.ids, rot: rackRotatePick(cur.week, salt, cur.ids), rotDay: day, rr: used + 1 };
   });
   if (!next) { await coinsAdd(cost); return { ok: false, reason: 'race' }; }
   return { ok: true, cost, rr: next.rr, coins: left };
@@ -554,30 +558,45 @@ export async function buyRackItem(artId, currency = 'coins') {
   if (!Number.isFinite(price)) return { ok: false, reason: 'not-stocked' };
   const already = aura ? (await wornAura()) === artId : (await ownedCosmeticIds()).has(artId);
   if (already) return { ok: false, reason: 'owned' };
-  /* THE MONEY MOVES FIRST, and it moves ATOMICALLY. This used to read the
-     balance, compare, claim the receipt and only then debit. The receipt made a
-     second tap on the SAME piece free, which is the case that was tested, and
-     hid the case that was not: two DIFFERENT pieces bought at once each pass
-     their own stale read, each claim their own receipt, and both debits clamp
-     at zero. Measured on origin/main 2faa73b6: a 3,000-coin wallet bought a
-     3,000 and a 2,400 piece together and kept both, so the rack handed over
-     2,400 coins of legendary for nothing. In dust, 160 bought 160 + 130.
-     Spending first cannot do that: spendCoins/spendDust refuse inside the
-     transaction and leave the balance byte-identical. The receipt still decides
-     WHO GETS THE PIECE, and the loser of that claim is refunded below, so the
-     "charged exactly once" guarantee the old ordering gave is unchanged. */
-  const left = currency === 'dust' ? await spendDust(price) : await spendCoins(price);
-  if (left === null) {
-    return { ok: false, reason: currency, need: price,
-      have: currency === 'dust' ? await boneDust() : await coins() };
+  /* THE CLAIM AND THE SPEND ARE ONE TRANSACTION (fixed 2026-09-05, offline
+     crash seam OFF-2a). This used to spend first (its own transaction) and
+     claim the receipt second (a separate one): correct against a same-instant
+     double-tap (spendCoins/spendDust refuse inside their own transaction, so
+     two DIFFERENT pieces bought at once could not both clamp their debits to
+     zero, the bug measured on origin/main 2faa73b6), but a crash between the
+     two writes left a debited wallet and NO receipt. Nothing on disk
+     remembered the spend had happened, so the retry that followed spent again:
+     reproduced by making the receipt write reject once (the same trigger
+     purchase-write-failure-audit.mjs uses for quota/abort/freeze), a
+     6,000-coin item took 12,000. db.claimAndPay folds both into one IndexedDB
+     transaction, the same primitive js/game.js:awardOnce and js/quests.js
+     :claimQuest use to keep a claim and its payout atomic: the kv fn is
+     synchronous and can throw to abort the WHOLE transaction, which rolls the
+     receipt `add()` back too, so an insufficient wallet claims nothing and
+     spends nothing, exactly like spendCoins returning null. */
+  const debitOrThrow = cur => {
+    const bal = Number(cur) || 0;
+    if (bal < price) { const e = new Error('insufficient-funds'); e.insufficientFunds = true; throw e; }
+    return bal - price;
+  };
+  let claimed;
+  try {
+    claimed = await db.claimAndPay('kv',
+      { k: `rackbuy:${artId}`, v: { ts: Date.now(), price, currency } },
+      { kv: currency === 'dust' ? { bonedust: debitOrThrow } : { coins: debitOrThrow } });
+  } catch (e) {
+    if (e && e.insufficientFunds) {
+      return { ok: false, reason: currency, need: price,
+        have: currency === 'dust' ? await boneDust() : await coins() };
+    }
+    throw e;
   }
-  if (!(await db.addIfAbsent('kv', { k: `rackbuy:${artId}`, v: { ts: Date.now(), price, currency } }))) {
+  if (!claimed) {
     /* THE RECEIPT EXISTS, WHICH IS NOT THE SAME AS OWNING THE PIECE.
-       REFUND FIRST: this caller paid a moment ago and is not getting the piece,
-       because either somebody else's tap holds the receipt or the receipt is a
-       stuck one from an earlier run. Either way the money it just spent buys it
-       nothing, and the bounded give-back directly under the debit is what keeps
-       the total charged for this piece at exactly one price.
+       NO REFUND NEEDED: the claim and the spend are now the same transaction,
+       so losing the claim (somebody else's tap holds the receipt, or it is a
+       stuck one from an earlier run) means this call never touched the
+       balance either; there is nothing to give back.
        The gap the old ordering left is still here and still needs this branch:
        if any write after the claim rejects (db.js rejects on abort, on quota,
        and on the wipe-protocol freeze flag), the player has paid and owns
@@ -585,9 +604,7 @@ export async function buyRackItem(artId, currency = 'coins') {
        `owned`, so the UI told them "Already in your Wardrobe" about a piece that
        was not in it, and js/loot.js:194 means that receipt is never removed, so
        the piece was unbuyable FOREVER, on every future rack.
-       Recovery, not refund. A refund would have to delete the receipt, and a
-       delete that lands while the refund does not reopens the double-spend the
-       receipt exists to prevent. Finishing the grant instead is idempotent by
+       Recovery, not refund. Finishing the grant instead is idempotent by
        construction: grantCosmetic returns null when the row is already there and
        markPaid will not push a duplicate key, so running this twice is a no-op.
        It also needs no new field and no migration, because "paid but ungranted"
@@ -596,7 +613,6 @@ export async function buyRackItem(artId, currency = 'coins') {
        ownership record, so an aura receipt cannot be stuck. An aura that reads
        as unowned while a receipt exists is the separate worn-versus-bought bug
        in the try-on sheet, and paying it out here would be wrong. */
-    if (currency === 'dust') await boneDustAdd(price); else await coinsAdd(price);
     if (aura) return { ok: false, reason: 'owned' };
     if ((await ownedCosmeticIds()).has(artId)) return { ok: false, reason: 'owned' };
     await grantCosmetic(artId, 'rack');
@@ -637,12 +653,20 @@ export async function buyRackItem(artId, currency = 'coins') {
 
 /* BUYING FROM GWART'S MENAGERIE.
  *
- * Deliberately the SAME SHAPE as buyRackItem, because the failure modes are the
- * same and one of them already cost a real player their coins and their piece:
+ * Deliberately the SAME SHAPE buyRackItem used to be, because the failure modes
+ * are the same and one of them already cost a real player their coins and
+ * their piece:
  *   - the claim is won BEFORE the money moves, so a double-spend is impossible
  *   - the gap that ordering leaves is closed by the recovery branch below
  *   - the grant is wrapped, so a rejected write is reported instead of vanishing
- * If this ever diverges from buyRackItem, the divergence is the bug.
+ * NO LONGER IDENTICAL, since 2026-09-05 (offline crash seam OFF-2a):
+ * buyRackItem folded its spend and its claim into ONE db.claimAndPay
+ * transaction, because a crash between the two separate writes below (this
+ * function's shape) leaves a debited wallet and no receipt, and the retry that
+ * follows spends again. That same gap is still open here, unfixed, out of
+ * scope for OFF-2a: this function needs the identical treatment. Written down
+ * rather than left implied by a comment that no longer matches the code it
+ * used to describe.
  *
  * AN ACCESSORY IS UNBUYABLE UNTIL YOU OWN HER, and that is geometry, not
  * merchandising. Measured 2026-08-21: the glasses overlap Bumbleseal's ink by

@@ -3662,6 +3662,17 @@ body::before {
   transition: transform 0.45s cubic-bezier(0.3, 1.25, 0.55, 1), opacity 0.3s, border-color 0.25s, box-shadow 0.25s;
 }
 .cfan-card.feat { border: 3px solid var(--coral); box-shadow: 0 0 0 2px var(--ink), 5px 6px 0 rgba(0, 0, 0, 0.55); }
+/* CREW-9, 2026-09-05: the featured card's own rectangle is 194px wide, centred,
+   and the immediate neighbour's seat is only ~64-67px off that same centre
+   (measured via getBoundingClientRect + elementFromPoint), so a tap aimed at
+   the neighbour always hit the featured card on top of it instead. Shrinking
+   ONLY the featured card's hit region to a centred strip (still 97px wide,
+   well over the 40px minimum tap target) frees its outer edges so whatever is
+   genuinely on top there -- the neighbour -- receives the tap. pointer-events
+   is inherited, so the featured card goes fully inert and .cfan-hit opts back
+   in for the strip that stays its own. */
+.cfan-card.feat { pointer-events: none; }
+.cfan-hit { position: absolute; inset: 0 25% 0 25%; pointer-events: auto; }
 .cfan-card img { pointer-events: none; -webkit-user-drag: none; }
 .cfan-stage { position: absolute; inset: 0; }
 .cfan-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -6608,14 +6619,15 @@ body::before {
 .fb-worn { position: relative; width: 88px; height: 88px; margin: 0 auto; overflow: hidden; border-radius: 10px; }
 .drop-item.fb .petcrop { display: block; margin: 0 auto; }
 .drop-buy[data-buyfb]:disabled, .drop-buy[data-buyfbkit]:disabled { background: var(--surface-3); color: var(--text-3); opacity: 1; }
-/* The bundle cell: the same tile, spanning the grid, with the team's two colours
-   standing in for the product shot (five pieces in one 88px square would be a
-   contact sheet). */
+/* The bundle cell: the same tile, spanning the grid. Used to stand in for the
+   product shot with one two-tone disc in the previewed team's colours; Tom,
+   2026-09-05: "the way that you presented the full kit is confusing. It looks
+   like you're just buying the blue and gold colorway." Replaced with the five
+   garments themselves, each in a different team (.fb-allteams below), which is
+   the actual product shot the tile needs. */
 .drop-item.fb-bundle { grid-column: 1 / -1; }
 .drop-item.fb-bundle::before { content: 'FULL KIT'; }
-.fb-kitmark { width: 52px; height: 52px; border-radius: 50%; border: 3px solid var(--ink); margin: 4px auto 0;
-  background: linear-gradient(135deg, var(--fa) 0 50%, var(--fb) 50% 100%);}
-.fb-kitmark span { font-size: 17px; font-weight: 900; color: #fff; mix-blend-mode: difference; }
+.fb-allteams { display: flex; justify-content: center; gap: 4px; margin: 4px 0 8px; flex-wrap: wrap; }
 .fb-kitline { display: block; font-size: 11px; color: var(--text-2); margin: -4px 0 8px; }
 .fb-save { display: block; font-size: 11px; color: var(--text-2); margin-top: 6px; }
 
@@ -10352,7 +10364,11 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    note. */
 .rk-tail { height: 16px; }
 
-.rk-reroll { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px;
+/* 2026-09-05: moved from after the rotating grid to beside its own header, so
+   the free first reroll is visible before the 12 tiles rather than after them
+   (margin-bottom added for the same gap it used to get from margin-top alone,
+   now that the grid follows it instead of the other way round). */
+.rk-reroll { display: flex; align-items: center; gap: 10px; width: 100%; margin: 10px 0;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--radius-sm);
   box-shadow: var(--sh-sm); padding: 9px 12px; color: var(--text); }
 .rk-reroll b { text-align: left; font-size: var(--fs-3); }
@@ -10779,6 +10795,17 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   transform: translateX(-3px); text-shadow: 3px 4px 0 var(--ink);
 }
 .gw-gear { top: auto; bottom: 14px; right: 16px; }
+
+/* THE SCARCITY CLOCK, 2026-09-05 (see gwartHeroHtml in js/app.js). Moved off
+   an 11px `.rk-theme` strip below the pet shelf and the football Kit room and
+   into a sibling of `.gw-panel`: same header block, but outside the panel so
+   it cannot disturb the pixel-measured geometry tests/emporium-audit.mjs pins
+   (.gw-panel/.gw-art/.gw-wm/.gw-gear are all unchanged). Heading size reuses
+   the display-font idiom `.rr-banner .race-h b` already carries at --fs-5,
+   not a new scale. */
+.rk-clock { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin: 10px 2px 14px; text-align: center; }
+.rk-clock b { font-family: var(--display); font-weight: 400; font-size: var(--fs-5); letter-spacing: .02em; color: var(--text); }
+.rk-clock span { font-size: var(--fs-1); color: var(--text-3); }
 
 /* ---- Cam's spell-cast animation, inlined VERBATIM from tally-refs/wizard/
    animation/wizard-cast.css. Not one keyframe, duration, easing or percentage is

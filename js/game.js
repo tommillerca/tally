@@ -4,7 +4,7 @@
 
 import { db, kvGet, kvSet, claimDay } from './db.js';
 import { dayTotals, addDays, dateKey, streakFrom } from './nutrition.js';
-import { grantCrate, grantConsumable, coinsAdd, boneDustAdd, grantEgg, equipped } from './loot.js';
+import { grantCrate, crateRow, grantConsumable, coinsAdd, boneDustAdd, grantEgg, equipped } from './loot.js';
 import { gardenState, clearGarden, PLOT_PRICES, PLOTS_FREE, HARVEST_BASE, HARVEST_BASE_RARE } from './garden.js';
 import { grantIngredient } from './cooking.js';
 import { BH_SLOTS } from '../data/boneheadz.js';
@@ -825,9 +825,19 @@ export async function awardDayCloseIfDue(targets) {
   const onBudget = tot.kcal <= targets.kcal && tot.kcal >= targets.kcal * 0.6;
   let closed = false, consoled = false;
   if (onBudget) {
-    // locked in: the full reward
-    const g = await award(`dayclose-${y}`, 'dayclose', 50, 'Closed the day on budget', y);
-    if (g) { await grantCrate('golden', 'dayclose-' + y); closed = true; }
+    /* locked in: the full reward. The crate rides inside the SAME transaction
+       as the claim (fixed 2026-09-05, offline crash seam OFF-2b), the way
+       js/hunt.js:collectSpawn and js/quests.js:claimQuest already do this for
+       their own payouts: award() then a separate grantCrate() call left a
+       crash between the two able to pay the ledger and never the crate (or
+       vice versa on a retry that hit the crate write but not the ledger).
+       crateRow mints the id synchronously so it can ride in awardOnce's `pay`
+       puts, and a rejected write there takes the claim down with it instead of
+       leaving it stranded, so a retry after a crash pays exactly once. */
+    const crate = crateRow('golden', 'dayclose-' + y);
+    const claim = await awardOnce(`dayclose-${y}`, 'dayclose', 50, 'Closed the day on budget', y, null,
+      { puts: [{ store: 'inv', val: crate }] });
+    if (claim.claimed) closed = true;
   } else {
     // shame-free: you still logged the day, so you still earn - just a lighter
     // reward, never a penalty ("you'll get 'em next time"). This rewards the ACT

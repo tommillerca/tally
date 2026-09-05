@@ -1943,6 +1943,10 @@ function openMageIntro() {
 }
 if (typeof window !== 'undefined' && navigator.webdriver) window.__mageIntro = openMageIntro;
 if (typeof window !== 'undefined' && navigator.webdriver) window.__todayRow = day => bestiaryBannerHtml(remoteDen(day));
+// S9: cosmeticTeaserBannerHtml is unreachable from a real boot (see outThereHtml's
+// RETIRED FROM TODAY comment), so an audit has no render to inspect without this,
+// same reason __todayRow exists for bestiaryBannerHtml.
+if (typeof window !== 'undefined' && navigator.webdriver) window.__teaserBanner = cosmeticTeaserBannerHtml;
 
 /* THE WALL. Tom, 2026-08-09: "the popup isn't showing enough monsters it's
    boring and text heavy let the art speak."
@@ -2737,9 +2741,24 @@ function cosmeticTeaserBannerHtml() {
       </div>
       <p class="glutton-mech"><b>The biggest drop this game has had.</b> Every crate can drop them, starting today.</p>
       <p class="glutton-mech tz-more">And we are nowhere near done.</p>
+      <!-- S9, 2026-09-05: the comment above this function has promised "a
+           straight line to the Shop" since it was written, and the body never
+           shipped one. Same shape as the garden banner's #gardenToKitchen: a
+           full-width ghost button as the last thing in the body. -->
+      <button class="btn ghost" id="teaserToShop" style="width:100%">Open the Shop</button>
     </div>
   </details>`;
 }
+// S9: wired at the module level, same reason the [data-guide] listener above
+// is: this banner (like its gardenBannerHtml/spireBannerHtml siblings) is only
+// reachable through outThereHtml, which nothing currently calls (see the
+// RETIRED FROM TODAY comment on outThereHtml) -- there is no render-time call
+// site left to attach a per-render listener from. Delegated so the button
+// works the moment the card is revived, with no further wiring.
+document.addEventListener('click', e => {
+  if (!e.target.closest?.('#teaserToShop')) return;
+  location.hash = '#/shop';
+});
 
 /* REMOVED 2026-08-25 with the rest of the launch takeovers. maybePromptName toasted and then opened the name builder at launch. The Crew tab and Settings both still offer it the moment you land on them with no name, which is where a name is actually wanted */
 
@@ -2896,7 +2915,12 @@ function revealGift(g) {
     cards.push({ wear: gear.artId, imgSrc: bhAsset(BH_BY_ID[gear.artId]), name: gear.name, rarity: gear.rarity, kind: 'GEAR', stats: 'Equip it in the Wardrobe' });
   }
   if (p.dust) cards.push({ iconHtml: ICONS.dust(120), name: `${p.dust} Bone Dust`, rarity: 'uncommon', kind: 'DUST', stats: 'Spend it on how your gear looks' });
-  if (!cards.length && p.coins) cards.push({ iconHtml: ICONS.coin(120), name: `${p.coins.toLocaleString()} coins`, rarity: 'common', kind: 'COINS', stats: 'Spend it in the Shop' });
+  /* S6: this line was plain text with no tap target, the only shop mention
+     outside the hub in the whole app. statsHtml (not stats) because it needs a
+     real control; it is a literal this app wrote, same rule render-sink-lint.mjs
+     already holds statsHtml to. Wired in openPackReveal's renderCard, where the
+     card's pointer-capture drag lives, so the button is not swallowed by it. */
+  if (!cards.length && p.coins) cards.push({ iconHtml: ICONS.coin(120), name: `${p.coins.toLocaleString()} coins`, rarity: 'common', kind: 'COINS', statsHtml: '<button type="button" class="pc-stats-link" id="giftShopLink">Spend it in the Shop ›</button>' });
   confettiRain(60); chimeSound(S.sounds); haptic.success();
   openPackReveal(cards, { coins: p.coins || 0, footerNote: `From ${giftSender(g)}` });
 }
@@ -2917,6 +2941,10 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
   window.__cheerPresets = () => CHEERS;
   window.__unseenDeliveries = () => unseenDeliveryCount();
   window.__refreshCrewBadge = () => refreshCrewBadge();
+  // S6: a coins-only gift is the rarest reveal in the game (every other payload
+  // shape beats it in the `if` chain above), so an audit needs a direct way to
+  // open one rather than farming a real Crew gift server-side.
+  window.__revealGift = g => revealGift(g);
 }
 // The badge is the sum of what is waiting for you in the tab: friend requests
 // AND unread deliveries. It used to count requests only, so a gift never
@@ -9569,24 +9597,32 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
    price/quote/bundleOwned are cheap synchronous reads and the listener
    re-derives its own copy rather than reaching into this closure. */
 function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned) {
+  /* THE 32-DISC STRIP, reused verbatim from the hero above (same class, same
+     markup): Tom's live feedback on v474, "It looks like you're just buying the
+     blue and gold colorway. I know there's text that says you get all of them,
+     but that needs some work." The grey "All 32 colourways" line was easy to
+     miss; 32 team discs under it is the same claim made visible rather than
+     stated. No new CSS, no new art: `.fb-teams`/`.fb-swatch.xs` already draw the
+     hero's strip at any container width. */
+  const teamStripHtml = () => `<div class="fb-teams" role="img" aria-label="${FOOTBALL_TEAMS.length} team colourways">${FOOTBALL_TEAMS.map(t => `<i class="fb-swatch xs" style="--fa:${t.a};--fb:${t.b}"></i>`).join('')}</div>`;
   return `
-      <label class="fb-pick"><span>Team</span>
+      <label class="fb-pick"><span>Preview colours</span>
         <select id="fbTeam">${FOOTBALL_TEAMS.map(t => `<option value="${t.id}"${t.id === team.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
         <i class="fb-swatch" style="--fa:${team.a};--fb:${team.b}"></i></label>
       <div class="drop-grid">
         ${sold.map(g => {
           const id = footballItemId(team.id, g.key);   // the PREVIEW id: the tile sells the garment, in every team
           const owned = ownedCos.has(id);
-          /* THE PET TILE (g.pets) is pinned to 192, below what bhTierFor's
-             strict rule would allow (her PET_CROP puts the real worst-case
-             css at ~203-221 here, clearing no tier at all) -- same cap as
-             fb-hero-pet above, same lizard. The human tile below is no longer
-             capped (kitTierCss now returns the honest measured width): the
-             helmet/jersey land on 384, the cleats' steeper fit-feet crop
-             (~225px) clears no tier and takes the 640 master, and none of it
-             is decoded at all unless this body is actually open. */
+          /* THE PET TILE (g.pets) IS 384 NOW, matching fb-hero-pet above (same
+             lizard, same crop). It used to be pinned to 192: Tom, 2026-09-05,
+             "in the shop itself, the lizards are all blurry". Her PET_CROP puts
+             this box's worst-case css at ~203-221, so at DPR2 that is
+             406-442 device px -- over even 384 (1.06-1.15x), which is why
+             bhTierFor's OWN strict rule (>= css*2) lands on the master; 384 is
+             the same accepted-1.4x call the hero already made and already
+             passed art-resolution-audit on, not a stricter one applied here. */
           const art = g.pets
-            ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 192)
+            ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 384)
             : `<div class="fb-worn">${wornArtHtml(id, kitTierCss(BH_BY_ID[id]))}</div>`;
           /* SELLABLE (the piece is on sale at all) is separate from AFFORDABLE
              (this wallet can cover it right now): unsellable stays disabled
@@ -9598,14 +9634,28 @@ function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundl
             ${art}
             <b>${esc(g.label)}</b>
             <small class="fb-kitline">All ${FOOTBALL_TEAMS.length} colourways</small>
+            ${teamStripHtml()}
             ${owned
               ? `<button class="drop-buy" disabled>In your Wardrobe</button>`
               : `<button class="drop-buy${sellable && !canBuy ? ' cant' : ''}" data-buyfb="${id}" data-amt="${price}" ${sellable ? '' : 'disabled'} aria-label="Buy the ${esc(g.label)}${sellable ? `, ${price.toLocaleString()} coins` : ''}, all ${FOOTBALL_TEAMS.length} teams">${sellable ? `${ICONS.coin(12)} ${price.toLocaleString()}` : 'Soon'}</button>`}
           </div>`;
         }).join('')}
         <div class="drop-item fb fb-bundle ${bundleOwned ? 'owned' : ''}">
-          <div class="fb-kitmark" style="--fa:${team.a};--fb:${team.b}"><span>${sold.length}</span></div>
-          <b>The full kit</b>
+          ${/* FIVE GARMENTS, FIVE DIFFERENT TEAMS, not one two-tone disc in the
+               previewed team's colours (that disc IS the confusion Tom flagged:
+               a single team's palette standing in for "every team"). Same art,
+               same tiers the grid above already pays for -- the garment master
+               and its masks do not change per team, only the tint spans' colour
+               does, so this is DOM nodes, not new bytes. */''}
+          <div class="fb-allteams">${sold.map((g, i) => {
+            const bt = FOOTBALL_TEAMS[i % FOOTBALL_TEAMS.length];
+            const bid = footballItemId(bt.id, g.key);
+            return g.pets
+              ? croppedPetImg(FOOTBALL_PETS[0], 64, false, null, { [g.slot]: bid }, 384)
+              : `<span class="fb-worn sm">${wornArtHtml(bid, 64 * 2.3)}</span>`;
+          }).join('')}</div>
+          ${teamStripHtml()}
+          <b>Every piece, every team</b>
           <small class="fb-kitline">${sold.map(g => esc(g.label)).join(' · ')} · all ${FOOTBALL_TEAMS.length} colourways</small>
           ${(() => {
             const bundleSellable = footballBundleSellable();
@@ -9651,14 +9701,9 @@ async function renderShop(el) {
      that has to share the screen with five other departments is not a rack.
      No paragraph explains any of it: a rule a control cannot carry on its own
      is a broken control, not an under-explained one. */
-  /* THE BANNER AND THE RACK AGREE, and the banner says ONE thing. A month-long
-     theme, four racks inside it, this is rack N, and the right-hand side is a
-     COUNTDOWN rather than a weekday ("New rack Monday" is ambiguous across
-     timezones and reads as nonsense when you open the app on a Monday). */
-  const weekKey = isoWeekKey(new Date());
-  const weekNum = parseInt(weekKey.split('-W')[1]);
-  const rackNo = ((weekNum - 1) % 4) + 1;
-  const rackDaysLeft = (8 - (new Date().getDay() || 7)) % 7 || 7;
+  /* THE BANNER MOVED, 2026-09-05: it is Gwart's header now (gwartHeroHtml,
+     `.rk-clock`), at heading size instead of an 11px strip below the pet
+     shelf and the football Kit room. rackNo/rackDaysLeft are computed there. */
   /* RACK_BASE and RACK_FIT are module-level now (see wornArtHtml): the reveal
      cards draw the same mannequin, and two copies of the neutral base would
      drift apart the first time a slot default changed. */
@@ -9901,10 +9946,19 @@ async function renderShop(el) {
      from the rest of the catalogue, priced by rarity. */
   const rotIds = (rk.rot || []).filter(id => BH_BY_ID[id] && RACK_RARITY_PRICE[BH_BY_ID[id].rarity]);
   const rotPrice = id => RACK_RARITY_PRICE[BH_BY_ID[id].rarity];
-  const allRackCoins = [...RACK_POOLS.map(p => p[0]), RACK_AURA.coin, ...rotIds.map(id => rotPrice(id)[0])];
-  const allRackDust = [...RACK_DUST, RACK_AURA.dust, ...rotIds.map(id => rotPrice(id)[1])];
+  /* S15: bought a 300 coin common, the wallet still read "buys 21 of 21" with
+     one of those 21 now owned. afford.coins counted every pool price against
+     the balance regardless of ownership. rackOwns/auraOwned already exist (the
+     tiles use them for the "owned" badge), so the wallet's count and its "of N"
+     denominator are filtered by the same read: an owned piece is not something
+     the wallet can still buy. */
+  const themedUnowned = rackIds.map((id, i) => ({ coin: RACK_POOLS[i][0], dust: RACK_DUST[i], owned: rackOwns(id) })).filter(e => !e.owned);
+  const rotUnowned = rotIds.filter(id => !rackOwns(id)).map(id => ({ coin: rotPrice(id)[0], dust: rotPrice(id)[1] }));
+  const auraUnowned = auraOwned ? [] : [{ coin: RACK_AURA.coin, dust: RACK_AURA.dust }];
+  const allRackCoins = [...themedUnowned.map(e => e.coin), ...auraUnowned.map(e => e.coin), ...rotUnowned.map(e => e.coin)];
+  const allRackDust = [...themedUnowned.map(e => e.dust), ...auraUnowned.map(e => e.dust), ...rotUnowned.map(e => e.dust)];
   const rackCount = allRackCoins.length;
-  const cheapestRack = Math.min(...allRackCoins);
+  const cheapestRack = rackCount ? Math.min(...allRackCoins) : 0;
   const afford = { coins: allRackCoins.filter(c => c <= coinBal).length, dust: allRackDust.filter(d => d <= dustBal).length };
 
   /* THE SUPPLIES PANEL AND ITS TWO SHELVES SURVIVE A RE-RENDER. Every buy and
@@ -9949,7 +10003,6 @@ async function renderShop(el) {
 
   el.innerHTML = `
   ${fbLead}${petLead}
-  <div class="rk-theme"><b>${esc(RACK_THEME)} · RACK ${rackNo} OF 4</b><i></i><span>New rack in ${rackDaysLeft}d</span></div>
   <!-- WHAT THIS WALLET REACHES, said in numbers rather than left to be inferred
        from which pills happen to be filled. A player at 340 coins could not buy
        one of the nine and the screen never said so; the out-of-reach pills were
@@ -9958,7 +10011,11 @@ async function renderShop(el) {
        decoration at 0 dust with no route to any, so the route is attached to the
        number that is zero. -->
   <div class="rk-wallet">
-    <span class="rk-w">${ICONS.coin(13)}<b>${coinBal.toLocaleString()}</b><i>${afford.coins ? `buys ${afford.coins} of ${rackCount}` : `${(cheapestRack - coinBal).toLocaleString()} short of the cheapest`}</i></span>
+    <!-- S7: the dust number has always carried a route ("melt gear to earn it");
+         the coin number never did, so a broke player was told what they could not
+         afford and never told how to earn more. Same treatment: a real line
+         naming where coins actually come from, tappable to Today. -->
+    <button class="rk-w link" id="rackCoin">${ICONS.coin(13)}<b>${coinBal.toLocaleString()}</b><i>${afford.coins ? `buys ${afford.coins} of ${rackCount}` : `${(cheapestRack - coinBal).toLocaleString()} short · day close, the Pit, the step race`} ›</i></button>
     <button class="rk-w link" id="rackDust">${ICONS.dust(13)}<b>${dustBal.toLocaleString()}</b><i>${afford.dust ? `buys ${afford.dust} of ${rackCount}` : 'melt gear to earn it'} ›</i></button>
   </div>
   <div class="rk-grid">
@@ -9973,16 +10030,22 @@ async function renderShop(el) {
        must never be sold (pets, Bumbleseal's own pieces, exclusive art awarded
        by name, and the body and skull every player starts with). Same tile, same
        try-on, same buy row: a player should not have to learn a second shop. -->
-  <div class="rk-theme"><b>ALSO ON THE RACK</b><i></i><span>${rotIds.length} pieces &middot; new every day</span></div>
-  <div class="rk-grid rot">
-    ${rotIds.map(id => rackTile(id, rotPrice(id)[0], rotPrice(id)[1], 384)).join('')}
-  </div>
-  <!-- The reroll sits ON the shelf it moves. Its copy names the boundary out
+  <div class="rk-theme"><b>ALSO ON THE RACK</b><i></i><span>${rotIds.length} pieces &middot; new every week</span></div>
+  <!-- THE REROLL MOVED UP BESIDE ITS HEADER, 2026-09-05. Tom: "the free reroll
+       is 93.6% of the way down the page ... a free restock of twelve items is
+       the strongest reason to keep scrolling and it is placed where only a
+       player who has already scrolled everything will find it." It used to sit
+       under the 12-tile grid; it now sits ON the shelf it moves, right where
+       that shelf's own header names it, so the free first reroll is visible
+       before the grid rather than after it. Its copy names the boundary out
        loud (the themed nine above never reroll), the price is on the button
        before the tap, and a wallet that cannot cover it sees a disabled button
        rather than a taunt. -->
   <button class="rk-reroll" id="rackReroll"${coinBal < rerollCost ? ' disabled' : ''}><span class="rk-rr"><b>Reroll this shelf</b><small>A fresh ${rotIds.length}, drawn from the whole catalogue. The ${esc(RACK_THEME[0] + RACK_THEME.slice(1).toLowerCase())} nine above stay put.</small></span>
-    <span class="t3-price">${rerollCost === 0 ? 'FREE' : `${ICONS.coin(13)} ${rerollCost.toLocaleString()}`}</span></button>` : ''}
+    <span class="t3-price">${rerollCost === 0 ? 'FREE' : `${ICONS.coin(13)} ${rerollCost.toLocaleString()}`}</span></button>
+  <div class="rk-grid rot">
+    ${rotIds.map(id => rackTile(id, rotPrice(id)[0], rotPrice(id)[1], 384)).join('')}
+  </div>` : ''}
   <button class="t3-forage" id="shopRest">${crateIcon('daily', 24)}<b>Potions and charms</b><small>Supplies ›</small></button>
   <div id="shopRestBody"${wasOpen.rest ? '' : ' hidden'}>
 
@@ -10287,6 +10350,7 @@ async function renderShop(el) {
     if (!body.hidden) body.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
   });
   $('#rackDust', el)?.addEventListener('click', () => openCharacter('crates'));
+  $('#rackCoin', el)?.addEventListener('click', () => { location.hash = '#/today'; });
 }
 
 /* ================= trends ================= */
@@ -11294,6 +11358,15 @@ function parseDisplayName(name) {
   return { adj, noun, num: Number.isInteger(num) ? num : null };
 }
 
+// CREW-1: goOnline() posts the onboarding name pick and hands back `namePick`
+// (undefined when nothing was attempted). A refusal (someone already holds
+// that exact pick) is the one case that needs its own sentence instead of the
+// generic "You're online!" -- reused wording from openNameBuilder's own
+// taken-name toast so the app never has two voices for the same event.
+function toastNamePickRefusal(namePick) {
+  if (namePick && !namePick.ok && namePick.reason === 'taken') toast(`${namePick.name} is taken. Pick another.`, 3000);
+}
+
 /* THE RENAME NOTICE (v315, pending Tom's approval).
  *
  * Tom, 2026-08-08: "You should send a clear pop up with explanation about your
@@ -11434,8 +11507,18 @@ function friendRowAvatar(f) {
    nickname it should just show their username then nickname smaller beside not
    replace it fully." Their Bonehead name is who they are to everyone else and it
    stays the headline; your private note rides alongside it. */
+/* SOC-4: hostile names render as text everywhere (round 11, still holding),
+   but two properties of the RENDER let one through anyway. A 64-char name is
+   truncated SILENTLY by the plate/title's own CSS ellipsis (scrollWidth 462
+   vs clientWidth 168, no tooltip); a U+202E direction override in the name is
+   honoured visually and reverses whatever sits after it on the same line.
+   `title` gives the full name back on hover/long-press; unicode-bidi:isolate
+   contains the override inside this span instead of letting it leak into the
+   alias tag or the chevron beside it. One fix here covers both call sites the
+   round named (the fan plate's `<b>`, #fpTitle) and every other caller. */
 function nameWithAlias(f) {
-  return esc(f.name) + (f.alias ? ` <span class="alias-tag">${esc(f.alias)}</span>` : '');
+  return `<span class="pname-iso" title="${esc(f.name)}" style="unicode-bidi:isolate">${esc(f.name)}</span>`
+    + (f.alias ? ` <span class="alias-tag">${esc(f.alias)}</span>` : '');
 }
 /* THE CREW FAN (v323). One trading card per friend, fanned like a hand of cards.
    Approved mockup: market-quality-mockups/crew-fan.html; spec + acceptance:
@@ -11464,6 +11547,7 @@ function crewCardHtml(f) {
      anybody touched anything, and 120 friends reached 1537.5 MB. applyFan fills
      the seven seated stages and clears the rest. */
   return `<button class="cfan-card" data-fan="${esc(f.playerId)}">
+    <span class="cfan-hit"></span>
     <div class="cfan-stage"></div>
     ${ol.on ? '<span class="cfan-live" title="Online now"></span>' : ''}
     <span class="cfan-fstar" hidden>${ICONS.star(15)}</span>
@@ -11534,6 +11618,7 @@ async function renderFriends(el) {
       await social.syncProfile(await socialSnapshot(), APP_SOCIAL_V).catch(() => {});
       await social.pushBackup(APP_SOCIAL_V).catch(() => {});
       toast("You're online! Here's your friend code.", 3600);
+      toastNamePickRefusal(r.namePick);
       renderFriends(el);
       if (!(await social.socialMe())?.name) setTimeout(() => openNameBuilder(() => renderFriends(el)), 500);
     });
@@ -11543,6 +11628,19 @@ async function renderFriends(el) {
   const dispName = me.name || me.handle;
   el.innerHTML = `
     <h1 class="page-h1">The Crew<span class="sub">You're <b>${esc(dispName)}</b> · <button class="link" id="crewEditName">${me.name ? 'change name' : 'pick a name'}</button></span></h1>
+
+    <!-- CREW-7, 2026-09-05: a sealed gift used to sit inside DELIVERIES,
+         under the fan, cheers, the leaderboard, the race and ADD A FRIEND --
+         measured at 1301-1754px of scroll on a 390x844 phone, off the first
+         screen every time. A gift is the one thing in this tab that is
+         genuinely pending, so while one is sealed it renders here, above
+         even the fan (which is the one thing Tom's 2026-08-08 ORDER MATTERS
+         ruling below otherwise puts first). Opening it (or there being none)
+         collapses this back to nothing. -->
+    <div class="card gift-top-card" id="giftTopCard" hidden>
+      <div class="card-title">A GIFT IS WAITING</div>
+      <div id="giftTopList"></div>
+    </div>
 
     <!-- ORDER MATTERS HERE. Tom, 2026-08-08 (supersedes the same-day "greet with
          the leaderboard" call): "the fan should be at the very top when you open
@@ -11674,8 +11772,43 @@ async function renderFriends(el) {
     const rows = (await crewDeliveries()).filter(r => r.type !== 'cheer');
     const sealed = await social.giftBox();
     const card = $('#deliveriesCard', el), list = $('#deliveriesList', el);
+    const giftCard = $('#giftTopCard', el), giftList = $('#giftTopList', el);
     if (!card || !list) return;
-    if (!rows.length && !sealed.length) { card.hidden = true; return; }
+
+    /* SEALED GIFTS, at the TOP of the tab (CREW-7). Tom, 2026-08-08: "its
+       boring to just have it appear with no fanfare or credit to the sender."
+       A gift you have not opened is the only thing in this whole tab that is
+       genuinely pending, so it gets its own card above the fold rather than
+       filed under DELIVERIES history. */
+    if (giftCard && giftList) {
+      if (!sealed.length) { giftCard.hidden = true; }
+      else {
+        giftList.innerHTML = sealed.slice().reverse().map(g => `
+          <button class="gift-sealed" data-gift="${esc(g.key)}">
+            ${/* crateIcon, not bhIcon: 30 was the one golden chest in the app still
+                 drawn as a vector at a size the art covers (crateIcon serves its 24
+                 step from 24 up). .gift-sealed .wrap is a centring grid, so the 6px
+                 it loses costs the row nothing. */''}
+            <span class="wrap">${crateIcon('golden', 30)}</span>
+            <span class="tx"><b>${esc(giftSender(g))}</b><small>sent you a gift</small></span>
+            <span class="open">OPEN</span>
+          </button>`).join('');
+        $$('[data-gift]', giftList).forEach(b => b.addEventListener('click', async () => {
+          if (b.dataset.busy === '1') return;
+          b.dataset.busy = '1';
+          const g = await social.openGift(b.dataset.gift);
+          if (!g) { b.remove(); return; }
+          b.classList.add('popping');
+          await new Promise(r => setTimeout(r, 260));
+          revealGift(g);
+          await paintDeliveries();
+          await refreshCrewBadge();
+        }));
+        giftCard.hidden = false;
+      }
+    }
+
+    if (!rows.length) { card.hidden = true; return; }
     const seen = await seenAtOpen;
     const isNew = r => (r.ts || 0) > seen;
     /* Show what is actually news, not the archive. Tom, 2026-08-08: "the
@@ -11690,35 +11823,9 @@ async function renderFriends(el) {
         <div class="t3-tx"><b>${esc(r.label)}</b><small>${esc(deliveredWhen(r))}${r.xp ? ` · +${r.xp} XP` : ''}</small></div>
         ${isNew(r) ? '<span class="t3-lock" style="color:var(--coral);border-color:var(--coral)">NEW</span>' : ''}
       </div>`;
-    /* SEALED FIRST. Tom, 2026-08-08: "its boring to just have it appear with no
-       fanfare or credit to the sender. Otherwise deliveries reads like a receipt
-       you'd get at a store." A gift you have not opened is the only thing on
-       this card that is not history, so it sits on top, closed, with the sender's
-       name on it. */
-    const sealedHtml = sealed.slice().reverse().map(g => `
-      <button class="gift-sealed" data-gift="${esc(g.key)}">
-        ${/* crateIcon, not bhIcon: 30 was the one golden chest in the app still
-             drawn as a vector at a size the art covers (crateIcon serves its 24
-             step from 24 up). .gift-sealed .wrap is a centring grid, so the 6px
-             it loses costs the row nothing. */''}
-        <span class="wrap">${crateIcon('golden', 30)}</span>
-        <span class="tx"><b>${esc(giftSender(g))}</b><small>sent you a gift</small></span>
-        <span class="open">OPEN</span>
-      </button>`).join('');
     const rest = rows.length - shown.length;
-    list.innerHTML = sealedHtml + `<div class="dlv-rows">${shown.map(rowHtml).join('')}</div>`
+    list.innerHTML = `<div class="dlv-rows">${shown.map(rowHtml).join('')}</div>`
       + (rest > 0 ? `<button class="btn small ghost" id="deliveriesMore" style="width:100%;margin-top:8px">Show all ${rows.length}</button>` : '');
-    $$('[data-gift]', list).forEach(b => b.addEventListener('click', async () => {
-      if (b.dataset.busy === '1') return;
-      b.dataset.busy = '1';
-      const g = await social.openGift(b.dataset.gift);
-      if (!g) { b.remove(); return; }
-      b.classList.add('popping');
-      await new Promise(r => setTimeout(r, 260));
-      revealGift(g);
-      await paintDeliveries();
-      await refreshCrewBadge();
-    }));
     /* THE WAY OUT HAS TO STAY IN REACH. Tom, 2026-08-07: "the deliveries section
        when expanded becomes huge... the button to close it becomes too far down
        to reach and collapse again." Expanding used to replace the list with every
@@ -11965,7 +12072,7 @@ async function renderFriends(el) {
     $('#cfanStar', box).addEventListener('click', async () => {
       favs.has(f.playerId) ? favs.delete(f.playerId) : favs.add(f.playerId);
       await kvSet('crewFaves', [...favs]);
-      toast(favs.has(f.playerId) ? `${esc(f.alias || f.name)} starred: sorted to the front of the fan.` : 'Unstarred.', 2400);
+      toast(favs.has(f.playerId) ? `${f.alias || f.name} starred: sorted to the front of the fan.` : 'Unstarred.', 2400);
       const sb = $('#cfanStar', box);
       if (sb) { sb.classList.toggle('on', favs.has(f.playerId)); sb.innerHTML = ICONS.star(!!favs.has(f.playerId)); }
       resortFan(); paintFaves(); applyFan();   // cards glide to their new seats
@@ -11997,7 +12104,7 @@ async function renderFriends(el) {
     row.hidden = false;
   };
 
-  const paintFan = () => {
+  const paintFan = async () => {
     const wrap = $('#cfanWrap', el), pager = $('#cfanPager', el), deck = $('#cfanDeck', el);
     $('#cfanLoading', el)?.remove();
     /* THE FETCH FAILED IS NOT THE CREW IS EMPTY. `reached === false` only ever
@@ -12019,6 +12126,22 @@ async function renderFriends(el) {
       $('#cfanEmpty', el).hidden = true;
       const searchRow = $('#cfanSearchRow', el);
       if (searchRow) searchRow.hidden = true;
+      /* CREW-11/SOC-2: a device clock more than 5 minutes out 401s every
+         signed call, and this box's static markup told that player the same
+         "server is down" story a dead network gets -- while Settings and the
+         boot notice already say the true thing for the same 401 (cloudFailLine).
+         listFriends tags it `reason: 'clock'`; swap in that same wording here
+         instead of composing a second voice for one event. Reset both texts
+         on every paint (not only the clock branch) so a later retry that
+         comes back plain-unreachable does not keep yesterday's clock copy. */
+      const feTitle = $('.fe-title', unrBox), feNote = unrBox ? $('.note', unrBox) : null;
+      if (data.reason === 'clock') {
+        if (feTitle) feTitle.textContent = "Your device's clock is wrong";
+        if (feNote) feNote.textContent = cloudFailLine('clock', Number(await kvGet('clockSkewMs', 0)) || 0);
+      } else {
+        if (feTitle) feTitle.textContent = 'Could not reach the Crew server';
+        if (feNote) feNote.textContent = 'Your Crew is safe: this phone just cannot get to it right now. Everything else in the app works offline. Tap to try again.';
+      }
       /* Wired once: the box is in the static markup, so a second render must not
          stack a second listener on the same button. */
       if (unrBox && unrBox.dataset.wired !== '1') {
@@ -12245,7 +12368,14 @@ async function renderFriends(el) {
     const wait = $('#lbWait', el);
     if (!pod || !pod.isConnected) return;
     if (!players || !players.length) {
-      if (wait) wait.textContent = players ? 'No standings yet. Be the first name on the board.' : 'Could not reach the Crew server. Tap to try again.';
+      /* CREW-11/SOC-2: leaderboard() stashes kv 'lbFail' the same way pushBackup
+         and fetchStepRace do; a clock more than 5 minutes out is not "could not
+         reach the Crew server", it is the 401 every signed call gets, so say
+         the true thing (cloudFailLine, same wording as Settings/the boot notice). */
+      const lbFail = players ? null : await kvGet('lbFail', null);
+      if (wait) wait.textContent = players ? 'No standings yet. Be the first name on the board.'
+        : lbFail && lbFail.reason === 'clock' ? cloudFailLine('clock', Number(await kvGet('clockSkewMs', 0)) || 0)
+        : 'Could not reach the Crew server. Tap to try again.';
       return;
     }
     if (wait) wait.hidden = true;
@@ -12294,7 +12424,14 @@ async function renderFriends(el) {
     const body = $('#lbBody');
     const players = await fetchLb();
     if (!body || !body.isConnected) return;
-    if (!players) { body.innerHTML = '<p class="note" style="text-align:center;padding:22px 0">Could not reach the Crew server. Try again in a bit.</p>'; return; }
+    if (!players) {
+      const lbFail = await kvGet('lbFail', null);
+      const line = lbFail && lbFail.reason === 'clock'
+        ? cloudFailLine('clock', Number(await kvGet('clockSkewMs', 0)) || 0)
+        : 'Could not reach the Crew server. Try again in a bit.';
+      body.innerHTML = `<p class="note" style="text-align:center;padding:22px 0">${esc(line)}</p>`;
+      return;
+    }
     const friendIds = new Set((data.friends || []).map(f => f.playerId));
     const outIds = new Set((data.outgoing || []).map(f => f.playerId));
     const inIds = new Set((data.incoming || []).map(f => f.playerId));
@@ -12466,9 +12603,18 @@ async function renderFriends(el) {
        launches in: on day one nobody has synced a step, so the announcement said
        "SEE THE BOARD" and the board did not exist. Degrade to ugly, not gone. */
     if (!race) {
+      /* CREW-11/SOC-2: fetchStepRace stashes kv 'raceFail' the same way
+         pushBackup does; a clock more than 5 minutes out is not "could not
+         reach the Crew server" and "your steps are still counting" is false
+         in that case too (nothing signed is landing), so both the reason and
+         the line change together. */
+      const raceFail = await kvGet('raceFail', null);
+      const line = raceFail && raceFail.reason === 'clock'
+        ? cloudFailLine('clock', Number(await kvGet('clockSkewMs', 0)) || 0)
+        : 'Could not reach the Crew server. Your steps are still counting.';
       card.innerHTML = `<summary>
         <span class="gbn-ico race-ico">${badgePixHtml('badge-footprint', 24)}</span>
-        <span class="gbn-txt"><span class="race-h"><b>THE STEP RACE</b></span><small>Could not reach the Crew server. Your steps are still counting.</small></span>
+        <span class="gbn-txt"><span class="race-h"><b>THE STEP RACE</b></span><small>${esc(line)}</small></span>
         <span class="gbn-chev">›</span></summary>`;
       card.hidden = false;
       return;
@@ -12476,34 +12622,19 @@ async function renderFriends(el) {
     const endsMs = Date.parse(wk + 'T00:00:00') + RACE_DAYS * 86400000;
     const daysLeft = Math.max(0, Math.ceil((endsMs - Date.now()) / 86400000));
     const clock = daysLeft <= 0 ? 'settles tonight' : `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
-    /* YOU ARE ALWAYS ON YOUR OWN BOARD.
-       Tom, 2026-08-07: "ship the fix to the step race before you do anything else
-       right now it shows no leaders." The server can legitimately leave you off:
-       your push may not have landed yet, or your total may be gated out because it
-       was counted under older rules. Either way an empty board while you have
-       personally walked 4,000 steps reads as broken, and telling a walker "nobody
-       has walked a step yet" is simply false. Your own count is the one number
-       this device knows for certain, so it goes in regardless and the ranks are
-       recomputed around it. */
-    const rows = (race.players || []).slice();
-    if (!rows.some(p => p.you)) {
-      const own = await weekStepsNow();
-      if (own.weekKey === wk && own.steps > 0) {
-        rows.push({ name: (await social.displayName()) || 'You', steps: own.steps, outfit: myFit, you: true });
-        rows.sort((a, b) => b.steps - a.steps);
-        rows.forEach((p, i) => { p.rank = i + 1; });
-        race.yourRank = rows.findIndex(p => p.you) + 1;
-      }
-    }
+    /* CREW-2: yourRank is the SERVER's (server/src/index.js ~3229, computed
+       over up to 25 racers), rendered as-is, never recomputed here. The bug
+       this replaces: splicing your own row into the 10-row `players` slice
+       and re-ranking just that slice can only ever land inside those 10, so
+       a true 14th read "11th" and every player from 12th to 25th read the
+       same invented "11th". raceStanding (js/social.js) still adds a lane
+       for you when the server has genuinely never ranked you (a brand-new
+       week, or a push that has not landed yet, yourRank == null) -- never
+       when it already sent a real rank. Absent and un-computable reads
+       "unranked", never a made-up position. */
+    const own = await weekStepsNow();
+    const { rows, mine, behind, standing } = social.raceStanding(race.players || [], race, wk, own, await social.displayName(), myFit, ordinal, esc);
     const lead = rows.length ? rows[0].steps : 0;
-    const mine = rows.find(p => p.you) || null;
-    const behind = mine && lead > mine.steps ? lead - mine.steps : 0;
-
-    // the one line the collapsed banner exists to show
-    const standing = !rows.length ? 'Nobody has walked a step yet. Go take the lead.'
-      : !mine ? `${esc(rows[0].name)} leads with ${rows[0].steps.toLocaleString()} steps`
-      : behind ? `You are <b>${ordinal(race.yourRank)}</b>, ${behind.toLocaleString()} behind ${esc(rows[0].name)}`
-      : 'You are in front. Keep it that way.';
 
     const podium = race.podium || [];
     card.innerHTML = `
@@ -12631,21 +12762,39 @@ async function renderFriends(el) {
       .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0))
       .slice(0, 5);
     if (!fresh.length) { card.hidden = true; return; }
-    list.innerHTML = fresh.map(p => `
+    const rowHtml = p => `
       <div class="t3-row">
         ${lbAvatar(p, 'lb-av')}
         <div class="t3-tx"><b>${esc(p.name)}</b><small>Level ${p.level}${p.badges ? ` · ${p.badges} badges` : ''} · ${esc(onlineLabel(p.lastSeen).text || 'online now')}</small></div>
         <button class="btn ghost" data-lbadd="${esc(p.addToken)}">+ ADD</button>
-      </div>`).join('');
-    $$('[data-lbadd]', list).forEach(b => b.addEventListener('click', async () => {
-      b.disabled = true; b.textContent = '...';
-      const r = await social.friendAdd(b.dataset.lbadd);
-      if (!r.ok) { b.disabled = false; b.textContent = '+ ADD'; toast('Could not send that request. Try again.', 2600); return; }
-      if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
-      else { popSound(S.sounds); toast(REQUEST_SENT_MSG, 3200); }
-      await paint();
-      hydrateNewcomers();
-    }));
+      </div>`;
+    /* CREW-8, 2026-09-05: five rows of strangers cost 470px and were the single
+       biggest slice of the tab's 941px of dead space (measured, tests/crew-
+       layout-audit.mjs), always below the fold for the player who has one
+       friend and is the one this card is for. One row plus "see more" is the
+       same list, reachable in one tap, at a fifth of the height by default. */
+    const shown = fresh.slice(0, 1), rest = fresh.slice(1);
+    list.innerHTML = shown.map(rowHtml).join('')
+      + (rest.length ? `<button class="btn small ghost" id="newcomersMore" style="width:100%;margin-top:8px">See ${rest.length} more</button>` : '');
+    const wireAdd = () => $$('[data-lbadd]', list).forEach(b => {
+      if (b.dataset.wired) return;
+      b.dataset.wired = '1';
+      b.addEventListener('click', async () => {
+        b.disabled = true; b.textContent = '...';
+        const r = await social.friendAdd(b.dataset.lbadd);
+        if (!r.ok) { b.disabled = false; b.textContent = '+ ADD'; toast('Could not send that request. Try again.', 2600); return; }
+        if (r.status === 'accepted') { confettiRain(50); chimeSound(S.sounds); toast('Friend added! You two are in the Crew.', 3200); }
+        else { popSound(S.sounds); toast(REQUEST_SENT_MSG, 3200); }
+        await paint();
+        hydrateNewcomers();
+      });
+    });
+    wireAdd();
+    $('#newcomersMore', list)?.addEventListener('click', ev => {
+      ev.currentTarget.remove();
+      list.insertAdjacentHTML('beforeend', rest.map(rowHtml).join(''));
+      wireAdd();
+    });
     card.hidden = false;
   };
   $('#crewWhatsNew', el)?.addEventListener('click', openWhatsNew);
@@ -12883,12 +13032,20 @@ async function openGiftSheet(f) {
       const fm = (await kvGet('giftFreeSent', {})) || {}; fm[f.playerId] = day; await kvSet('giftFreeSent', fm);
       $('#giftFreeCard', wrap).classList.add('done'); btn.textContent = 'Sent';
       confettiBurst(innerWidth / 2, innerHeight * 0.4, 20); coinSound(S.sounds);
-      toast(`You sent ${esc(f.alias || f.name)} ${giftRewardLabel(r.reward)}!`, 3600);
+      toast(`You sent ${f.alias || f.name} ${giftRewardLabel(r.reward)}!`, 3600);
     } else if (r.status === 409) {
       const fm = (await kvGet('giftFreeSent', {})) || {}; fm[f.playerId] = day; await kvSet('giftFreeSent', fm);
       $('#giftFreeCard', wrap).classList.add('done'); btn.textContent = 'Sent';
-      toast(`You already sent ${esc(f.alias || f.name)} their free gift today.`, 3400);
-    } else { btn.disabled = false; btn.textContent = 'Send'; toast('Could not send. Try again in a bit.'); }
+      toast(`You already sent ${f.alias || f.name} their free gift today.`, 3400);
+    } else {
+      btn.disabled = false; btn.textContent = 'Send';
+      /* SOC-5, r34 SOCIAL lane, 2026-09-05: /gift answers 403 'not friends' when
+         the other side deleted their account or removed you, and "Could not
+         send. Try again in a bit." sent the player round a loop that can never
+         succeed. Say what actually happened; the Crew list confirms it the
+         moment this sheet closes. */
+      toast(r.status === 403 ? "They're not in your Crew any more." : 'Could not send. Try again in a bit.');
+    }
   });
 
   /* ONE TAP MUST NEVER SPEND, and this was the last place in the app where it
@@ -12924,13 +13081,19 @@ async function openGiftSheet(f) {
     if (r.ok) {
       giftKeys.delete(amt);
       coinSound(S.sounds);
-      toast(`You sent ${esc(f.alias || f.name)} ${amt} coins!`, 3400);
+      toast(`You sent ${f.alias || f.name} ${amt} coins!`, 3400);
       const nb = await coins(); const bl = $('#giftBal', wrap); if (bl) bl.textContent = `you have ${nb}`;
       $$('.gift-amt', wrap).forEach(x => { x.disabled = (+x.dataset.amt) > nb; });
     } else {
       await coinsAdd(amt); // refund
       b.disabled = false;
-      toast(r.status === 429 ? "That's the daily coin-gift limit for this friend." : 'Could not send. Your coins were not spent.', 3400);
+      /* SOC-5, r34 SOCIAL lane, 2026-09-05: driven live (round 34 SOCIAL run 6),
+         B sent A a gift after A deleted their account: 403 'not friends',
+         "Could not send. Your coins were not spent." with nothing telling B
+         the friend was gone, so the balance line was the only clue. */
+      toast(r.status === 429 ? "That's the daily coin-gift limit for this friend."
+        : r.status === 403 ? "They're not in your Crew any more. Your coins were not spent."
+        : 'Could not send. Your coins were not spent.', 3400);
     }
   }));
 }
@@ -12956,7 +13119,7 @@ function openCheerSheet(f) {
     $$('.cheer-chip', wrap).forEach(x => x.disabled = true);
     if (!keys.has(i)) keys.set(i, social.newSendKey());
     const r = await social.sendCheer(f.playerId, i, keys.get(i));
-    if (r.ok) { keys.delete(i); popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${esc(f.alias || f.name)}!`, 3000); history.back(); }
+    if (r.ok) { keys.delete(i); popSound(S.sounds); toast(`Sent ${CHEERS[i].emo} "${CHEERS[i].txt}" to ${f.alias || f.name}!`, 3000); history.back(); }
     /* 403 IS NOT "TRY AGAIN", AND IT IS REACHABLE FROM THE ONE BUTTON THAT DOES
        NOT COME OFF THE FRIENDS LIST. Cheer back is built from the inbox ROW on
        purpose (so it works offline), so it is still offered after the sender
@@ -13515,6 +13678,20 @@ function newsBannerHtml(unseen, eq, dayClose) {
 const SHOW_BETA_THANKS = !STORE_BUILD; // internal invite card, Crew strip and News row; absent from store builds
 
 const NEWS = [
+  /* THE LOCKER ROOM. Tom's live feedback on v474: "There's also no news
+     announcement banner or anything on the today page that would guide people to
+     go do this." Nothing pointed a player at the kit room at all, so this is the
+     one thing that does: newest row, so it is the unread dot AND the pill's
+     summary line ("News" collapses to `newest.title` while unseen). Opens the
+     REAL till (`#/shop` routes `renderShop`, which reads `S.fbJump` to open
+     `#fbSect` -- the same one-shot the wardrobe rail's own "Kit room" button
+     uses, see `wireBar` above), so this CTA and that button share one mechanism
+     rather than two. */
+  { id: 'lockerroom', date: 'Sep 5', title: 'The Locker Room is open',
+    blurb: 'Buy one piece and every team\'s colours are yours.',
+    thumb: () => `<img class="nw-img" src="assets/bh/thumb/192/football/helmet.png" alt="">`,
+    goes: 'Locker Room',
+    open: () => { S.fbTeam = FOOTBALL_TEAMS[0].id; S.fbJump = true; location.hash = '#/shop'; } },
   /* THE WANDERER. Tom kept this row when every other launch interstitial went in
      v448: "the only news things staying are the new one with the wanderer on it
      and the ones on crew that link the discord". It had never been written.
@@ -14043,6 +14220,7 @@ async function renderSettings(el) {
     await social.pushBackup(APP_SOCIAL_V).catch(() => {});
     const pulled = await social.pullGrants().catch(() => null);
     toast(`You're in the Crew! Your progress is now backed up.${pulled && pulled.applied ? ' A welcome gift is in your Backpack.' : ''}`, 4200);
+    toastNamePickRefusal(r.namePick);
     renderSettings(el);
     /* straight into picking a name (they just joined; don't leave them as the
        random fallback handle). The `namePrompted` write went with the boot
@@ -14673,7 +14851,7 @@ async function saveInitialSettings(np) {
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.
   if (!(S.demo || navigator.webdriver === true)) {
-    social.goOnline().then(r => { if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
+    social.goOnline().then(r => { toastNamePickRefusal(r.namePick); if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
   }
   enterAppFromOnboarding();
 }
@@ -15050,6 +15228,11 @@ function openCharacter(tab = 'wardrobe') {
 let pendingHubTab = null;
 
 async function renderBonehead(el) {
+  /* The Bonehead tab LANDS ON THE WARDROBE, by ruling. QA round 36 S11 proposed
+     remembering the last hub sub-tab; it was built on 2026-09-05 and reverted the
+     same day because Tom ruled on v421 that tapping the bottom Bonehead icon from
+     Backpack, Shop or Build takes you home to the Wardrobe (tray-destination-audit
+     BONEHEAD pins it). Deep links (#/shop) and pendingHubTab still pick a tab. */
   const tab = pendingHubTab || 'wardrobe';
   pendingHubTab = null;
   /* THE HEADING IS THE PLAYER'S OWN NAME, not "Your Bonehead" (Tom, 2026-08-15,
@@ -15213,8 +15396,34 @@ function openHatchReveal(res, charWrap) {
 
    The wordmark is the <h1>. The hub's name heading is hidden for this tab, so
    the page still has exactly one, and it is the shop's name rather than the
-   player's. */
-const gwartHeroHtml = () => `
+   player's.
+
+   THE SCARCITY CLOCK, 2026-09-05. Tom: "the scarcity clock is the smallest,
+   faintest thing on the page, and it is below the fold... put it in the
+   header Gwart currently occupies, at heading size." It used to be a
+   `.rk-theme` strip inside #chContent, below the pet shelf and the football
+   Kit room, at 11px. It is a SIBLING of `.gw-panel` here, not a child: the
+   panel's own geometry (BAND/CENTRED/GEAR, tests/emporium-audit.mjs) is
+   pixel-measured off Cam's art and must not move for a label, and Gwart's
+   hero and the shelf order below are Tom's ruling to leave alone. `.rk-clock`
+   reuses the display-font heading pattern `.race-banner .gbn-txt b` already
+   uses at --fs-5 rather than inventing a new scale. tests/shop-lead-order-
+   audit.mjs no longer finds "the rack" by this text (it moved off the shelf
+   entirely); it anchors on `.rk-grid` instead, dated the same day. */
+const gwartHeroHtml = rk => {
+  /* RACK N OF 4, DERIVED FROM THE SAME ISO WEEK THE SHELF USES. It used to be
+     Math.ceil(new Date().getDate() / 7), day-of-month over seven, which agreed
+     with the shelf's ISO week on only 15.4% of days across a year (measured,
+     scratchpad/r36). `rk.week` is already "YYYY-Wnn" (js/poi.js isoWeekKey);
+     reading the week number straight off it is what "reconcile with the real
+     theme cycle" means here, matching the formula already shipped on main. */
+  const rackNo = ((parseInt(rk.week.slice(-2), 10) - 1) % 4) + 1;
+  /* THE BANNER AND THE RACK AGREE, and the banner says ONE thing. A month-long
+     theme, four racks inside it, this is rack N, and the right-hand side is a
+     COUNTDOWN rather than a weekday ("New rack Monday" is ambiguous across
+     timezones and reads as nonsense when you open the app on a Monday). */
+  const rackDaysLeft = (8 - (new Date().getDay() || 7)) % 7 || 7;
+  return `
   <div class="gw-hero">
     <div class="gw-panel">
       ${/* HE IS TAPPABLE IN HIS OWN SHOP TOO. "Tapping Gwart, anywhere he
@@ -15240,7 +15449,9 @@ const gwartHeroHtml = () => `
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke-width="2"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2z" fill="none" stroke-width="1.6" stroke-linejoin="round"/></svg>
       </button>
     </div>
-  </div>`;
+  </div>
+  <div class="rk-clock"><b>${esc(RACK_THEME)} &middot; RACK ${rackNo} OF 4</b><span>New rack in ${rackDaysLeft}d</span></div>`;
+};
 
 async function renderCharacter(wrap, tab, opts = {}) {
   const body = $('#chBody', wrap);
@@ -15256,8 +15467,19 @@ async function renderCharacter(wrap, tab, opts = {}) {
   // content and the browser clamps the real scroller's offset.
   const scroller = body.closest('.screen') || body;
   const keepScroll = opts.instant ? scroller.scrollTop : null;
-  const [xp, eq, coinBal, inv, boost, dustBal, myTitle] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges(), boneDust(), championTitle()]);
+  const [xp, eq, coinBal, inv, boost, dustBal, myTitle, rk, rackSeenWeek] = await Promise.all([totalXp(), equipped(), coins(), inventory(), battleCharmCharges(), boneDust(), championTitle(), rack(), kvGet('rackSeenWeek', null)]);
   const lvl = levelFor(xp);
+  /* THE NUDGE, 2026-09-05. Tom: "a Shop chip badge when the rack turned since
+     last seen, keyed rackSeenWeek, cleared on shop open." Read regardless of
+     which tab is open (the badge sits on the Shop CHIP, visible from every
+     tab), suppressed while actually looking at the Shop tab (the record is
+     about to be marked seen below, and a badge announcing "new" on the screen
+     that is currently showing it would be the tab telling you about itself).
+     Cleared unconditionally on every Shop-tab render, same idiom as
+     setCrateBadge just below: read off the same state the tab is about to
+     show, not a separate write path that could drift from it. */
+  const rackTurned = rk.week !== rackSeenWeek && tab !== 'shop';
+  if (tab === 'shop') await kvSet('rackSeenWeek', rk.week);
   const chShiny = await ownShinyPetId(eq);   // your own stack, so your own collection answers
   const crates = inv.filter(r => r.kind === 'crate').sort((a, b) => a.ts - b.ts);
   // Opening a crate re-renders this screen in place (no route()), so the tab
@@ -15309,7 +15531,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             with none (the yard prints 24, favourites 6, recents 8, and the looks
             pill beside this one prints N/M). Same .bh-pill as the looks count. */''}
       <span class="bh-pill ward-fits">${fitCount}/${MAX_FITS} fits</span>
-    </div>` : tab === 'shop' ? gwartHeroHtml() : `
+    </div>` : tab === 'shop' ? gwartHeroHtml(rk) : `
     <div class="bh-hero mini">
       <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, shinyPetId: chShiny, petWear: S.petWear })}</div>
       <div class="bh-hero-meta">
@@ -15331,7 +15553,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             that CSS cannot carry. */''}
       <button role="tab" aria-selected="${tab === 'wardrobe'}" class="chip ch-tab ${tab === 'wardrobe' ? 'on' : ''}" data-tab="wardrobe">${pixCur('wardrobe', 24) || ICONS.bone(21)}<span>Wardrobe</span></button>
       <button role="tab" aria-selected="${tab === 'crates'}" class="chip ch-tab ${tab === 'crates' ? 'on' : ''}" data-tab="crates">${pixCur('crate', 24)}<span>Backpack</span>${crates.length ? `<i class="ch-badge">${crates.length}</i>` : ''}</button>
-      <button role="tab" aria-selected="${tab === 'shop'}" class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${pixCur('shop', 24) || ICONS.coin(24)}<span>Shop</span></button>
+      <button role="tab" aria-selected="${tab === 'shop'}" class="chip ch-tab ${tab === 'shop' ? 'on' : ''}" data-tab="shop">${pixCur('shop', 24) || ICONS.coin(24)}<span>Shop</span>${rackTurned ? '<i class="ch-badge">!</i>' : ''}</button>
       <button role="tab" aria-selected="${tab === 'talents'}" class="chip ch-tab ${tab === 'talents' ? 'on' : ''}" data-tab="talents">${pixCur('build', 24) || ICONS.pit(21)}<span>Build</span>${unspentTal > 0 ? `<i class="ch-badge">${unspentTal}</i>` : ''}</button>
       ${/* LEVEL and LOOKS both came off this hub 2026-08-17 on Tom's call. Level's
             screen is NOT deleted, only its chip: tab === 'progress' still renders
@@ -17879,6 +18101,13 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
         at(330, last ? done : advance);
       };
       tilt.addEventListener('pointerdown', e => {
+        /* S6: setPointerCapture retargets the compat mouse events too, so a
+           click that lands on #giftShopLink (or any button in the stats band)
+           would fire with e.target === tilt, not the button -- the exact
+           failure mode the comment on tilt's own click listener already
+           describes for the card as a whole. The fix has to sit here, before
+           capture is taken: at pointerdown time the target is still real. */
+        if (e.target.closest?.('button')) return;
         pid = e.pointerId; sx = e.clientX; dx = 0;
         try { tilt.setPointerCapture(pid); } catch { /* noop */ }
         tilt.style.transition = 'none';
@@ -17931,7 +18160,12 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       // capture element, so a click bound to the card (a child) never fired: the
       // footer said "tap or swipe" while only swiping worked. Measured with an
       // event probe, not guessed.
-      tilt.addEventListener('click', () => { if (Math.abs(dx) < 6) fling(-1); });
+      // S6: the gift reveal's coins card can carry a real <button> (#giftShopLink)
+      // in its stats band; without this guard tapping it also flung the card,
+      // same reason `reveal`'s own click listener a few lines down excludes
+      // buttons.
+      tilt.addEventListener('click', e => { if (e.target.closest('button')) return; if (Math.abs(dx) < 6) fling(-1); });
+      $('#giftShopLink', tilt)?.addEventListener('click', () => { location.hash = '#/shop'; });
       /* AND ANYWHERE ELSE ON THE SCREEN. Tom, 2026-08-10: "it's not a good swipe
          mechanic right now to next card that needs a fix too. Right now the swipe
          requires precision this game is meant for people to on a walk."
@@ -22085,7 +22319,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v474'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v475'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -22142,17 +22376,28 @@ function presentGrantDelivery(r) {
   cheers.forEach((c, i) => {
     const em = CHEERS[c.cheer] ? CHEERS[c.cheer].emo : '📣';
     const tx = CHEERS[c.cheer] ? CHEERS[c.cheer].txt : 'cheered you on';
-    setTimeout(() => toast(`${em} ${esc(c.from || 'A friend')}: ${esc(tx)}`, 4200), i * 900);
+    /* CREW-10, 2026-09-05: toast() writes textContent (js/app.js:3441), which
+       never decodes entities, so esc()'ing a phrase before handing it to toast
+       printed the literal characters: "You&#39;re crushing it!" for 2 of the
+       12 cheer phrases (any with an apostrophe). textContent is already safe
+       against injection, so esc() here bought nothing but the bug. */
+    setTimeout(() => toast(`${em} ${c.from || 'A friend'}: ${tx}`, 4200), i * 900);
   });
   // crew news: same staggered treatment, queued after the cheers so two kinds
   // of Crew toast never land on top of each other
-  crewNews.forEach((n, i) => setTimeout(() => toast(esc(n), 4200), (cheers.length + i) * 900));
+  crewNews.forEach((n, i) => setTimeout(() => toast(n, 4200), (cheers.length + i) * 900));
   if (cards.length) { openPackReveal(cards, { coins: coinsSum, footerNote: xpSum ? `+${xpSum} XP` : '' }).then(refresh); return; }
   if (coinGifts.length) { toast(coinGifts[0] + (coinGifts.length > 1 ? ` (+${coinGifts.length - 1} more)` : ''), 4200); bgRefresh(); return; }
   if (coinsSum || xpSum) { toast(`Crew delivery: ${[coinsSum ? `+${coinsSum} coins` : '', xpSum ? `+${xpSum} XP` : ''].filter(Boolean).join(' · ')}.`, 3600); bgRefresh(); return; }
   if (cheers.length || crewNews.length) { bgRefresh(); return; } // already toasted, nothing else to reveal
   toast(`Crew delivery: ${r.applied} reward${r.applied === 1 ? '' : 's'} arrived.`, 3600); bgRefresh();
 }
+/* Test hook (webdriver only), same pattern as __toast: tests/crew-layout-audit.mjs
+   drives the CREW-10 cheer/crew-news toast through the real function that
+   builds its text, rather than calling toast() directly (which would pass
+   even with the esc()-before-textContent bug this guards, since the bug was in
+   what callers handed to toast, not in toast itself). */
+if (typeof window !== 'undefined' && navigator.webdriver) window.__presentGrantDelivery = presentGrantDelivery;
 
 // Push a local notification when a friend sends a gift or cheer. Gated on the
 // same 'friends' (Crew) notif pref as friend requests. Aggregates so a batch

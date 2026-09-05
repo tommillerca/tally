@@ -145,13 +145,18 @@ const read = () => page.evaluate(() => {
       inView: r.width > 0 && r.height > 0 && r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight,
     };
   };
-  /* THE RACK STRIP BY ITS OWN TEXT. `.rk-theme` is on three strips now (the
-     rack, the rotating shelf, and Bumbleseal's heading), so selecting the first
-     one returns HER heading in the ON order and "above the rack" would compare
-     her to herself. Tag the real one and hand back a selector for it. */
-  const rackEl = [...document.querySelectorAll('.rk-theme')].find(n => /RACK\s+\d+\s+OF\s+\d+/.test(n.textContent));
-  if (rackEl) rackEl.setAttribute('data-rackstrip', '1');
-  const rackSel = '[data-rackstrip]';
+  /* THE RACK STRIP, RE-ANCHORED 2026-09-05. It used to be found by its own
+     text (the "RACK N OF 4" `.rk-theme` strip), which is why this scan
+     excluded the other two strips carrying that class (the rotating shelf's
+     header and Bumbleseal's own heading) by matching the words instead of the
+     class. That text banner moved into Gwart's header that same day (Tom:
+     "put it in the header Gwart currently occupies"), off the shelf and out
+     of #chContent entirely, so a scan for its words now finds nothing and
+     `rack` would read null forever. What this row actually protects - the kit
+     and the pet shelf sit ABOVE the rack's real merchandise - never depended
+     on the label; `.rk-grid:not(.rot)` (the themed-nine grid, always present,
+     unique) is the truer anchor and needs no tagging. */
+  const rackSel = '.rk-grid:not(.rot)';
   const c = document.querySelector('#chContent');
   const name = n => n ? n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') + (n.className ? '.' + String(n.className).trim().split(/\s+/).join('.') : '') : null;
   const drop = document.querySelector('#dropSect'), pet = document.querySelector('.pet-shelf');
@@ -270,6 +275,75 @@ try {
       && onPet.hero.x >= 0 && onPet.hero.x + onPet.hero.w <= vw + 1,
     `lead slot ${off.hero.w}x${off.hero.h}, second slot ${onPet.hero.w}x${onPet.hero.h}, ` +
     `left edge ${onPet.hero.x} and right edge ${(onPet.hero.x + onPet.hero.w).toFixed(1)} inside a ${vw}px viewport`);
+
+  /* ============ TOM'S LIVE FEEDBACK ON v474, 2026-09-05 ============
+   * "There's also no news announcement banner or anything on the today page
+   * that would guide people to go do this." and "the way that you presented
+   * the full kit is confusing. It looks like you're just buying the blue and
+   * gold colorway." and "in the shop itself, the lizards are all blurry."
+   * Reuses the ON page (the kit is live, we are already at #/shop) rather than
+   * a fresh boot: the NEWS check alone hops to Today and back. */
+  await page.evaluate(() => { location.hash = '#/today'; });
+  await sleep(1200);
+  await page.evaluate(() => document.querySelector('#newsBanner > summary')?.click());
+  await sleep(500);
+  const newsRowPresent = await page.evaluate(() => !!document.querySelector('[data-news="lockerroom"]'));
+  await page.evaluate(() => document.querySelector('[data-news="lockerroom"]')?.click());
+  await sleep(1400);
+  await settle(page);
+  const afterNews = await page.evaluate(() => ({
+    hash: location.hash,
+    fbOpen: document.querySelector('#fbSect')?.open === true,
+  }));
+  ok('NEWS the Locker Room announcement exists and its CTA lands on #/shop with the Kit room open',
+    newsRowPresent && afterNews.hash === '#/shop' && afterNews.fbOpen === true,
+    `row present: ${newsRowPresent}, hash after tap: ${afterNews.hash}, #fbSect open: ${afterNews.fbOpen}`);
+
+  // The tile checks below need the grid open on #/shop, independent of whether
+  // the NEWS row above got them there: that row's own failure must not blank
+  // every row after it, so land here and open it directly rather than relying
+  // on the CTA's own navigation.
+  if (afterNews.hash !== '#/shop') {
+    await page.evaluate(() => { location.hash = '#/shop'; });
+    await sleep(1600);
+    await settle(page);
+  }
+  if (!(await page.evaluate(() => document.querySelector('#fbSect')?.open === true))) {
+    await page.evaluate(() => document.querySelector('#fbSect > summary')?.click());
+    await sleep(700);
+  }
+  const kit = await page.evaluate(() => {
+    const hexOf = span => {
+      const m = span && /background:(#[0-9a-fA-F]{6})/.exec(span.getAttribute('style') || '');
+      return m ? m[1].toLowerCase() : null;
+    };
+    const garmentTiles = [...document.querySelectorAll('.drop-item.fb:not(.fb-bundle)')];
+    const perTile = garmentTiles.map(t => {
+      const swatches = [...t.querySelectorAll('.fb-teams .fb-swatch')];
+      const hexes = new Set(swatches.map(s => getComputedStyle(s).getPropertyValue('--fa').trim()));
+      return { n: swatches.length, distinct: hexes.size };
+    });
+    const bundle = document.querySelector('.fb-bundle');
+    const icons = bundle ? [...bundle.querySelectorAll('.fb-allteams > *')] : [];
+    const bundleHexes = icons.map(ic => hexOf(ic.querySelector('.fb-tint')));
+    const petImgs = garmentTiles.flatMap(t => [...t.querySelectorAll('.petcrop img')])
+      .map(i => i.getAttribute('src')).filter(s => s && s.includes('/football/'));
+    return {
+      perTile,
+      bundleIconCount: icons.length,
+      bundleDistinctHexes: new Set(bundleHexes.filter(Boolean)).size,
+      petImgs,
+    };
+  });
+  ok('TINT-STRIP every garment tile shows at least 3 distinct team hexes (the "every team" strip Tom asked to see, not just read)',
+    kit.perTile.length >= 3 && kit.perTile.every(t => t.distinct >= 3),
+    JSON.stringify(kit.perTile));
+  ok('BUNDLE-5 the bundle tile shows 5 garments in 5 distinct team hexes, not one two-tone disc in the previewed team',
+    kit.bundleIconCount === 5 && kit.bundleDistinctHexes === 5,
+    `${kit.bundleIconCount} icons, ${kit.bundleDistinctHexes} distinct hexes`);
+  ok('PET-384 the kit room\'s pet tiles request the 384 tier, matching the poster hero (was 192, "the lizards are all blurry")',
+    kit.petImgs.length > 0 && kit.petImgs.every(s => s.includes('/thumb/384/football/')),
+    JSON.stringify(kit.petImgs));
 
   ok('LEAD-CLEAN nothing threw across either order', errors.length === 0, errors.join(' | ') || 'clean');
 } catch (e) {

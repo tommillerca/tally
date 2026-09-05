@@ -266,6 +266,13 @@ function keyOf(store, val) {
 
 function reportWriteFailure(store, val, op, err) {
   if (err && String((err && err.message) || err) === FROZEN_MSG) return;   // erasing on purpose
+  /* A CLAIM-AND-SPEND that aborted because the wallet was short is an ordinary
+     "can't afford it" refusal (js/loot.js:buyRackItem, 2026-09-05 offline crash
+     fix), the same outcome spendCoins/spendDust already return silently as
+     `null`. It only rejects here because it shares claimAndPay's abort plumbing
+     with real write failures; it must not toast "that did not save" or queue a
+     write_fail event for a player who is simply short on coins. */
+  if (err && err.insufficientFunds) return;
   const key = keyOf(store, val);
   const quiet = writeIsQuiet(store, val);
   const quota = /quota|QuotaExceeded/i.test(`${(err && err.name) || ''} ${(err && err.message) || ''}`);

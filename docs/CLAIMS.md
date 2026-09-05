@@ -19,6 +19,37 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v475
+1. Folds in the day's dated sub-sections finished since v474: kit live feedback,
+rack weekly, shop front door, crew identity, crew layout and offline crash
+seams, plus claim hygiene's quest-claim row. Each row below combines one or
+more of those sections' original rows into the one changelog line it backs;
+the leftover rows that did not make this changelog (a GATED banner, an
+honest-403 gift copy, and the welcome-kit double-boot race) stay documented
+in their own dated sections further down, unpromoted. The sw-upgrade-audit
+re-premise merged the same day changed no player behaviour and is documented
+in its own section below, not folded in here.
+
+2. PROOF: news-banner-audit.mjs, news-tab-audit.mjs, shop-lead-order-audit.mjs | REACH: Today's News pill now carries "The Locker Room is open" as its newest, unread row, above the fold with the wardrobe's own unread dot. Tapping it takes you straight to the Shop with the Locker Room already open, the same one-shot the Wardrobe's colourway rail button already used.
+
+3. PROOF: shop-lead-order-audit.mjs (TINT-STRIP, BUNDLE-5), art-resolution-audit.mjs, memory-census.mjs | REACH: Each of the five Locker Room tiles now shows the same 32-team colour strip the poster above it does, instead of only the grey "All 32 colourways" line. The full-kit tile no longer shows one two-tone disc in whatever team you happen to be previewing; it shows all five pieces, each in a different team's colours, under "Every piece, every team", so buying the bundle reads as buying the whole kit, not one colourway.
+
+4. PROOF: shop-lead-order-audit.mjs (PET-384), art-resolution-audit.mjs, football-render-audit.mjs, memory-census.mjs | REACH: The lizard's two Locker Room tiles (Lizard Helmet, Lizard Jersey) are no longer soft. They draw from the same 384 tier the poster hero above them already uses, worst case 1.15x its source instead of the 192 tier's ~2.3x.
+
+5. PROOF: unit.test.js (rack weekly rotation, rack nudge), rack-rotate-audit.mjs, purchase-firewall.mjs (REROLL rows), shop-lead-order-audit.mjs, emporium-audit.mjs, t3-audit.mjs | REACH: The rotating twelve on the rack now turn over once a week, on the same Monday boundary the themed nine and the reroll ladder already used, instead of silently re-rolling every night. The scarcity clock ("HEATWAVE · RACK N OF 4 / New rack in Nd") moved off an 11px line below the pet shelf and the football Kit room and into Gwart's own header, at heading size, and its rack number is now read off the same ISO week the shelf itself turns on rather than the day of the month. The free first reroll of the week sits beside the rotating shelf's own header now, above its 12 tiles instead of 1,770px below them. A player who has not opened the Shop since the rack last turned sees a badge on the Shop tab; it clears the moment they open the Shop.
+
+6. PROOF: shop-door-audit.mjs (WALLET, GIFT) | REACH: On the Shop's rack, tapping the coin balance now takes you to Today, the same as the dust balance already did, since that is where coins actually come from (day close, the Pit, the step race). And a coins-only Crew gift now opens with a real "Spend it in the Shop" button, tappable straight into the Shop, instead of a line of text with nothing behind it.
+
+7. PROOF: shop-door-audit.mjs (COUNT) | REACH: The rack's "buys X of Y" line now drops both numbers the moment you buy something, instead of still counting a piece you already own against your wallet.
+
+8. PROOF: unit.test.js (raceStanding), crew-fan-audit.mjs, crew-pair-audit.mjs, and (for the clock-skew and champion-line rows) NONE in the browser gate: Worker-only behaviour, proved against a local dev in the server's own test suite rather than a browser audit | REACH: Going online for the first time now uses the name you picked at onboarding instead of a random handle, and tells you plainly if somebody already holds that exact name. Your line on the step race shows the rank the server actually has for you, even below 10th, rather than a number invented by squeezing you into the visible top 10, and reads "unranked" rather than a fake rank when the server genuinely has none for you yet. A device whose clock is more than five minutes out now sees its own wrong clock named on the Crew fan, the leaderboard and the step race alike, instead of being told the Crew server is unreachable. The step race's "who to beat" line (last week's winner) shows every time you open the board after it settles, not only in the one request that happened to settle it. And a friend's name on their Crew card or profile sheet now carries a full-name tooltip once it is long enough to be cut off, and can no longer visually reverse the text sitting next to it.
+
+9. PROOF: crew-layout-audit.mjs (GIFT, WORTH, HIT, TOAST) | REACH: An unopened gift now renders in its own card above the fan, on screen the moment Crew opens, instead of over a thousand pixels down under the fan, cheers, the leaderboard, the race and Add A Friend. The WORTH ADDING card opens on one stranger instead of five, with a "See N more" button that reveals the rest in place. Tapping a friend's card beside the featured one in the fan now brings that friend to the front, instead of opening whichever friend was already featured. And a cheer toast whose phrase has an apostrophe ("You're crushing it!") reads with a real apostrophe instead of the literal escaped entity.
+
+10. PROOF: unit.test.js (R-offseam-2a, R-offseam-2b, R-claimhyg-1), purchase-firewall.mjs, reward-sop-audit.mjs (COVERAGE, buyRackItem and awardDayCloseIfDue paying-site counts, quest/questAll live rows) | REACH: Three payout paths got the same fix: a crash or a rejected write between paying and receiving no longer leaves you half-charged. Buying a rack piece now lands the spend and the grant together, so a crash in between costs nothing and a retry after reopening charges exactly one price. The day-close crate that rides with yesterday's bonus now lands with that claim in one step, so it can no longer be banked as XP with the crate lost for good. And claiming a daily, weekly or monthly quest, or the all-three bonus crate, no longer risks reading as claimed while paying nothing: the whole payout lands in the same step as the claim, so a failed write takes nothing with it and a retry pays in full.
+
+11. PROOF: unit.test.js (R-offseam-3) | REACH: Reconnecting (or reopening the app) right as a friends/profile sync attempt failed used to mark that sync as "just tried" even though it never got anywhere, so the next open inside five minutes silently gave up instead of retrying. A failed attempt no longer starts that five-minute wait; the very next open tries again for real.
+
 ## v474
 
 1. PROOF: unit.test.js, football-kit-audit.mjs, MANUAL measured off the rendered Shop screen (buy buttons and the team picker read 40px tall, up from 35.5px and 36px; a buy button below your balance stays enabled and pressable, and a tap answers with the coin shortfall) | REACH: The Locker Room shelf sells five football pieces, a helmet, a jersey, cleats and a matching helmet and jersey for the lizard, each 4,200 coins and yours in all 32 team colours the moment you buy it. Buying the full kit after already owning some of its five pieces charges only for what is missing, never more than the flat 16,800 kit price, and the "you save" line only appears when there really is a saving. Every buy button on the shelf is a full-size tap target, and one you cannot yet afford still responds to a tap and names the shortfall instead of going dead.
@@ -53,8 +84,14 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 ## claim hygiene (2026-09-05)
 
-1. PROOF: unit.test.js (R-claimhyg-1), reward-sop-audit.mjs (COVERAGE, quest/questAll live rows) | REACH: Claiming a daily, weekly or monthly quest, or the all-three bonus crate, no longer risks the quest reading as permanently claimed while paying nothing. A rejected write (a full device, a stuck save) used to land AFTER the quest's ledger row was already minted, so the coins, crate, dust, item and ingredient could be lost for good with no way to retry. The whole payout now lands in the same transaction as the claim, so a failed write takes nothing with it and a later retry pays in full.
-2. PROOF: unit.test.js (R-claimhyg-2) | REACH: Opening the app on two devices (or two tabs) at the exact moment a brand-new account first boots no longer doubles the welcome kit. Only one welcome kit (2 crates, a Vigor Draught, the starter ingredients, and the starter egg) is ever granted per install, however many boots race to claim it.
+Not stamped to a release: the quest-claim row folded into v475 above; the
+welcome-kit row below did not make this changelog and stays here unpromoted.
+
+1. PROOF: unit.test.js (R-claimhyg-2) | REACH: Opening the app on two devices (or two tabs) at the exact moment a brand-new account first boots no longer doubles the welcome kit. Only one welcome kit (2 crates, a Vigor Draught, the starter ingredients, and the starter egg) is ever granted per install, however many boots race to claim it.
+
+## stage pet wear (2026-09-05)
+
+1. PROOF: football-render-audit.mjs (STAGE, proved red on the unfixed code) | REACH: Open your Bonehead's Backpack or Build tab with a lizard equipped and its helmet and jersey worn: the lizard on the big portrait now wears them too, tinted to your team, instead of the bare species art. True for the base lizard, its shiny, and the Day One Lizard alike.
 
 ## store build (2026-09-05)
 
@@ -69,6 +106,36 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 1. PROOF: shell-watchdog-audit.mjs | REACH: NONE beyond what dead-shell-audit.mjs (a real-browser audit) already reaches: this closes a gap in the test's own fake DOM, which had stopped modelling the watchdog's script-load gate and was passing without ever running an assertion. No app behaviour changed.
 
 2. PROOF: news-banner-audit.mjs | REACH: The News banner's row icons on Today size and centre correctly the first time you open the banner, every time, instead of an even coin flip between a correct icon and one still at its native, oversized, off-centre size.
+
+## sw upgrade audit (2026-09-05)
+
+Not stamped to a release; audit-only, no player behaviour changed. Branch
+`fix/sw-upgrade-audit-v473` re-premised four rows of tests/sw-upgrade-audit.mjs
+that still pinned the pre-v473 "a new build always waits until every client of
+the old worker closes" rule. v473 (commit 63367157) added `letItIn()`, which
+posts SKIP_WAITING to a waiting worker at boot, on install, and on
+`closeTopSheet()`; the four rows (SECOND OPEN, KILLSWITCH, SHEET CLOSED, and
+the APP_UPDATE_ANCHOR string the NO_APP_UPDATE prove-red mutation matches
+against) were failing on both v473 and v474 because they still expected the
+old, superseded behaviour. Re-premised to assert the letItIn ruling instead.
+
+1. PROOF: sw-upgrade-audit.mjs | REACH: NONE beyond what v473 already shipped and reached: this closes a gap in the audit's own premise, which still graded the pre-v473 rule and was failing (for the wrong reason) on live behaviour that has worked since v473. No app behaviour changed by this fix.
+
+## shop front door (2026-09-05)
+
+Not stamped to a release: rows 1-4 folded into v475 above. Row 5 below did not
+make this changelog (no live surface renders the banner it fixes) and stays
+here unpromoted.
+
+1. PROOF: shop-door-audit.mjs (DOOR-SHAPE, DOOR-VIEWPORT, DOOR-ROUTE) | GATED: no live surface renders this banner. The Today teaser banner (cosmeticTeaserBannerHtml) these two rows fix is only ever called from outThereHtml, and nothing has called outThereHtml since Tom retired the "Out there today" card from Today on 2026-08-21 (tests/out-there-audit.mjs, skipped in the gate, says so in its own skip reason) -- the round-36 handoff's S9 finding predates that retirement and is stale against this tree. The button and its delegated click listener are real, shipped code, proven through the same webdriver-only hook (__teaserBanner) the app already exposes for this card's unreachable sibling bestiaryBannerHtml (__todayRow), but no player reaches it until the card, or this banner specifically, is revived. Not a player-facing claim until then.
+
+## crew layout (2026-09-05)
+
+Not stamped to a release: rows 1-4 folded into v475 above. Row 5 below did not
+make this changelog (the copy path it fixes was not in scope) and stays here
+unpromoted.
+
+1. PROOF: NONE in the browser gate; this is copy on a 403 branch of a coin-gift and free-gift send that unit.test.js and the browser audits do not drive, so the row says so rather than implying one. Measured live in round 34's SOCIAL lane (a real 403 from a real Worker after one player deleted their account). | REACH: Sending a gift to someone no longer in your Crew now says "They're not in your Crew any more" instead of the generic "Could not send. Try again" that sent the player around a loop that could never succeed.
 
 ## v473
 

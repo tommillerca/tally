@@ -3216,6 +3216,28 @@ export default {
           // somebody's Deliveries as an empty gift. Re-checking an empty week is
           // one indexed query.
         }
+        /* SOC-3: `champion` used to populate ONLY inside `if (!already)`, i.e.
+           in the one response that actually ran settlement -- every other
+           /steps/week for the same current week (everybody who opens Crew
+           after the first person that morning) got `champion: null` and the
+           "who to beat" line simply never rendered for them. The grants row
+           written above IS the receipt (place 1 of settledKey, same shape
+           /steps/settled already reads back), so read it here too whenever
+           this response did not just write it itself. One indexed lookup
+           (idx_grants_key) per read, gated on `settleable` because a query
+           for a week that has not started yet has no meaningful "last race"
+           to report. */
+        if (!champion && settleable) {
+          const champRow = await env.DB.prepare(
+            `SELECT g.payload, p.name, p.handle
+               FROM grants g LEFT JOIN players p ON p.id = g.player_id
+              WHERE g.key = ? AND CAST(json_extract(g.payload,'$.place') AS INTEGER) = 1
+                AND COALESCE(p.is_test, 0) = 0`).bind(settledKey).first();
+          if (champRow) {
+            let pl = {}; try { pl = JSON.parse(champRow.payload || '{}'); } catch { /* a torn row reports no champion, not a 500 */ }
+            if (pl.steps) champion = { name: champRow.name || champRow.handle || 'A Bonehead', steps: pl.steps, week: prev };
+          }
+        }
 
         const rows = await board(wk);
         const meIdx = rows.findIndex(r => r.id === auth.playerId);
