@@ -367,18 +367,49 @@ try {
      click at 0,0 lands on the app's back button. Measured on the first run of
      this file: "1 of 2 tapped", with the whole screen navigated away. So the
      selector is scoped and a zero-sized hit is refused rather than clicked. */
-  const tapTile = async id => {
-    const hit = await page.evaluate(i => {
-      const b = document.querySelector(`.pet-wear:not([hidden]) [data-petwear="${i}"]`);
-      if (!b) return null;
-      b.scrollIntoView({ block: 'center', inline: 'center' });
-      const r = b.getBoundingClientRect();
-      if (!(r.width > 0 && r.height > 0)) return null;
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    }, id);
+  const findHit = async sel => page.evaluate(s => {
+    const b = document.querySelector(s);
+    if (!b) return null;
+    b.scrollIntoView({ block: 'center', inline: 'center' });
+    const r = b.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return null;
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, sel);
+  const clickSel = async sel => {
+    const hit = await findHit(sel);
     if (!hit) return false;
     await page.mouse.click(hit.x, hit.y);
     await sleep(650);
+    return true;
+  };
+  /* THE FOOTBALL GARMENT COLLAPSE, 2026-09-05: cfWear (js/app.js ~18540-18600)
+     now collapses same-file team colourways into one family tile per garment
+     (bhFamilyKey), the same pattern the wardrobe grid uses
+     (tests/wardrobe-family-grid-audit.mjs). A team's own [data-petwear] tile is
+     only in the DOM once its family's rail is open (petFamOpen, opened by
+     tapping the [data-petfam] tile), so a garment whose family has more than
+     one member is reached in two taps instead of one. bhFamilyKey is computed
+     from data/boneheadz.js, the same function the panel itself calls, so this
+     never re-derives the grouping rule -- it asks the app what key the panel
+     used. Each step asserts a live, non-zero-rect element before clicking it
+     and reports the selector it could not find, so a genuine "the rail cannot
+     reach this colourway" reads as a named product bug rather than "0 of 2
+     tapped". */
+  const tapTile = async id => {
+    const wearSel = `.pet-wear:not([hidden]) [data-petwear="${id}"]`;
+    if (await clickSel(wearSel)) return true;
+    const fam = await page.evaluate(async i => {
+      const panel = document.querySelector('.pet-wear:not([hidden])');
+      if (!panel) return { err: 'no visible .pet-wear panel' };
+      const { BH_BY_ID, bhFamilyKey } = await import('/data/boneheadz.js');
+      const it = BH_BY_ID[i];
+      if (!it) return { err: `${i} not in BH_BY_ID` };
+      return { key: `${panel.dataset.pwsp}:${bhFamilyKey(it)}` };
+    }, id);
+    if (fam.err) { console.log(`      tapTile(${id}): ${fam.err}`); return false; }
+    const famSel = `.pet-wear:not([hidden]) [data-petfam="${fam.key}"]`;
+    if (!await clickSel(famSel)) { console.log(`      tapTile(${id}): family tile not found, ${famSel}`); return false; }
+    if (!await clickSel(wearSel)) { console.log(`      tapTile(${id}): rail did not reveal ${wearSel}`); return false; }
     return true;
   };
 
