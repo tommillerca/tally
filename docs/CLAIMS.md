@@ -21,6 +21,36 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 ## v474
 
+1. PROOF: unit.test.js, football-kit-audit.mjs, MANUAL measured off the rendered Shop screen (buy buttons and the team picker read 40px tall, up from 35.5px and 36px; a buy button below your balance stays enabled and pressable, and a tap answers with the coin shortfall) | REACH: The Locker Room shelf sells five football pieces, a helmet, a jersey, cleats and a matching helmet and jersey for the lizard, each 4,200 coins and yours in all 32 team colours the moment you buy it. Buying the full kit after already owning some of its five pieces charges only for what is missing, never more than the flat 16,800 kit price, and the "you save" line only appears when there really is a saving. Every buy button on the shelf is a full-size tap target, and one you cannot yet afford still responds to a tap and names the shortfall instead of going dead.
+
+2. PROOF: wardrobe-family-audit.mjs (gate-registered PURE), wardrobe-family-grid-audit.mjs, memory-census.mjs | REACH: Your Collection and the Stable now collapse every colourway family, the football kit's 32 teams included, and any hand-drawn recolour series, into one tile per drawing with a count badge, the same rule the Wardrobe's own rail already used. A tap opens the rail to every colour you own.
+
+3. PROOF: unit.test.js | REACH: An outright cosmetic purchase on the rack costs about double what it did, in coins and in Bone Dust alike. Your very first Common piece is held at its old price, so a new player's early days play out exactly as they did before.
+
+4. PROOF: unit.test.js, loot-fallback-audit.mjs | REACH: Opening a crate can now hand you a cosmetic you already own instead of always being something new, so the rack above Common has something left to sell you; a duplicate still pays the same coins it always did. Also, a day you logged but missed your calorie budget on no longer comes with a bonus crate, though it still pays the same XP for logging it.
+
+5. PROOF: lapse-witness-audit.mjs (gate-registered PURE), unit.test.js | REACH: Coming back after a gap of more than a week used to lose a race against a day-guard check the app was still waiting on, so the Bone Crate earned on your last logged day silently never paid. Day close now waits for that check before deciding, and a restore can no longer roll your day ceiling backward either.
+
+6. PROOF: restore-latch-audit.mjs (gate-registered PURE), unit.test.js | REACH: Every fresh install used to restore its own cloud backup back over itself on its second open, undoing whatever the player had already spent: an opened crate reappeared and spent coins were quietly refunded. That is now closed two ways: the device that just created its cloud account no longer runs that pull at all (there is nothing on the server older or newer than what it just pushed), and even a forced merge of an older backup can no longer bring back a crate this device already opened or hand back a coin balance the device has since moved past. A genuine restore onto a different or reinstalled device is unaffected and still pulls its real backup in full.
+
+7. PROOF: NONE in the browser gate, and this row says so rather than implying one: the change is Worker code, so its evidence is the server test suite the deploy runs before each push, not a browser audit. Proved red on the pre-fix server (the settler, in second place last week, was paid nothing) and green after. | REACH: The weekly step race pays the place you actually finished even if you opened the app right as the week rolled over; before, that rollover could erase your own spot on the old week's board a request before it paid out. Server half switches on at the next Worker deploy.
+
+8. PROOF: unit.test.js, fight-tray-audit.mjs, fight-hint-audit.mjs | REACH: The Pit's move tray shows what a move costs as its own line in the button's corner, instead of folding it into the hint text, which used to wrap onto a second line and push the tray's third row off the bottom of the screen.
+
+9. PROOF: dead-shell-audit.mjs | REACH: On a slow connection, the dead-shell watchdog no longer reloads the app while js/app.js is still downloading. It now waits for the module script to settle (load or error) before arming its 12s check, so a genuinely dead shell still recovers on the same schedule, but a merely slow one is no longer reloaded mid-download.
+
+10. PROOF: meal-memory-audit.mjs (MYFOODS_NEW) | REACH: Add Food, pick a meal, tap My foods, tap Create a food: the portion screen you land on keeps the meal you picked instead of jumping back to Breakfast.
+
+11. PROOF: input-validation-audit.mjs (QTY-COMMA) | REACH: On the portion screen, typing a thousands-comma amount like "1,234" into Servings is still refused, and now the field and the preview agree about it: the box keeps showing what you typed and the preview goes blank, instead of the box quietly showing "0.25" next to a preview still reading "0 kcal".
+
+12. PROOF: unit.test.js | REACH: Logging a forgotten meal onto a past day (the day's Add sheet, a relog, Quick add) no longer pays XP, a streak milestone, or a badge. Past days stay fully editable (an existing entry there still saves after being edited), but only a log dated today earns a reward. Gwart's line on a past day no longer claims the day is "finished"; it now says the day is open to fix, just unpaid.
+
+13. PROOF: football-render-audit.mjs (STAGE, proved red on the unfixed code) | REACH: Open your Bonehead's Backpack or Build tab with a lizard equipped and its helmet and jersey worn: the lizard on the big portrait now wears them too, tinted to your team, instead of the bare species art. True for the base lizard, its shiny, and the Day One Lizard alike.
+
+14. PROOF: unit.test.js, football-kit-audit.mjs | REACH: Buying the full football kit at the same time as buying one of its garments separately (two overlapping taps) no longer overcharges. The kit bundle now re-checks what it actually delivered after an overlapping single-garment buy lands, and refunds the difference, so a player is never charged for a garment the bundle didn't end up needing to grant.
+
+15. PROOF: a11y-audit.mjs (foodFieldNames) | REACH: A screen reader creating a custom food, or using Quick add, now hears each number field by name (Calories, Protein, Carbs, Fat, Sodium, Grams, and so on) instead of an unlabelled textbox, or three identical fields for Protein, Carbs and Fat.
+
 ## claim hygiene (2026-09-05)
 
 1. PROOF: unit.test.js (R-claimhyg-1), reward-sop-audit.mjs (COVERAGE, quest/questAll live rows) | REACH: Claiming a daily, weekly or monthly quest, or the all-three bonus crate, no longer risks the quest reading as permanently claimed while paying nothing. A rejected write (a full device, a stuck save) used to land AFTER the quest's ledger row was already minted, so the coins, crate, dust, item and ingredient could be lost for good with no way to retry. The whole payout now lands in the same transaction as the claim, so a failed write takes nothing with it and a later retry pays in full.
