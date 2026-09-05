@@ -811,8 +811,10 @@ ok('RAIL-SLOT-TAG a football tint span declares its slot, and the wardrobe\'s pa
   `${paintScoped ? 'the rail painter selects .fb-tint[data-fbslot="${slot}"]' : 'the rail painter is no longer scoped by slot: a helmet slide would repaint the jersey'}`);
 
 /* ---- 11. NO PAID KIT ON A FIGURE NOBODY CHOSE ---------------------------- */
-/* The day FOOTBALL_KIT_LIVE went true the 256 items entered BH_ITEMS, and BH_ITEMS
-   is what every "draw an item for this slot" pool reads. Measured on that tree:
+/* PROVENANCE. Tom, 2026-09-04: "if it is ready ship it live like i said before."
+   FOOTBALL_KIT_LIVE went true that day and the 256 items entered BH_ITEMS, which
+   is what every "draw an item for this slot" pool reads. Measured on that tree,
+   2026-09-04, by counting BH_ITEMS per slot with and without `football`:
    the kit is 128 of the 185 items in the H pool (69%), 32 of 51 in FW and 32 of
    56 in T, so an unfiltered draw dresses most of the splash montage and most Pit
    opponents in a helmet a player pays 4,200 coins for. js/loot.js
