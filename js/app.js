@@ -4375,6 +4375,13 @@ async function renderToday(el) {
   <section class="tsec tsec-meals"><div class="tsec-h">Meals</div>
   ${MEALS.map((name, i) => mealBlock(name, i, entries.filter(e => e.meal === i), yEntries.filter(e => e.meal === i), Math.round(t.kcal * MEAL_SPLIT[i]))).join('')}
   </section>
+
+
+  ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
+  <p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>
+  </details>
+  </div>
+  </section>
   ${/* AFTER THE DAY SECTION ENTIRELY (2026-09-05, third move): today-container LEDGER grades
        everything inside section.dayblk, not just the collapsed <details>. */''}
   ${/* OUTSIDE THE DAY, on purpose (2026-09-05). Inside .dayflow this card sat above
@@ -4403,13 +4410,6 @@ async function renderToday(el) {
     <span>${wbFacts.join(' ')}</span>
     <button class="btn small ghost" id="wbOk">Good to be back</button>
   </div>` : ''}
-
-
-  ${tot.kcal > 0 ? `<div class="micro-line">Fiber ${fmtG(tot.fiber)} g · Sugar ${fmtG(tot.sugar)} g · Sodium ${Math.round(tot.sodium).toLocaleString()} mg</div>` : ''}
-  <p class="day-signoff">${esc(signOffLine(entries.length, tot, t))}</p>
-  </details>
-  </div>
-  </section>
 
   ${/* THE PROMO SLOT IS GONE. Tom, 2026-09-03: "today still has the step
        challenge winner and monster banner at the bottom these should be gone now
