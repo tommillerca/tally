@@ -9812,6 +9812,14 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
    budget the plan derives from sheet width alone (viewport - outer pad - four
    12px gutters, over five columns), so the cell size computed in JS would no
    longer match what CSS actually gives the row. Stacking keeps one formula. */
+/* COLUMN HEADERS, one row, above every species block -- same flex/gap as
+   .k-grid-cells so its 5 labels land over the 5 cells beneath them in every
+   row. DESIGN.md's one section-header idiom (.sect-h: 12px/700/.06em/upper-
+   case/--text-3), sized down for a column as narrow as 40px: "Midnight" does
+   not fit at 12px, so this shrinks the size rather than the tracking or the
+   case, keeping the same voice as every other section header. */
+.k-grid-head { display: flex; gap: 12px; margin-bottom: 4px; }
+.k-grid-head-cell { flex: 1; text-align: center; font-size: 9px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--text-3); line-height: 1.2; }
 .k-grid-row { margin-bottom: 10px; }
 .k-grid-label { display: block; font-size: 11px; color: var(--text-3); margin-bottom: 4px; }
 .k-grid-cells { display: flex; gap: 12px; }

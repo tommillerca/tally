@@ -16,6 +16,10 @@
  *           a button that opens the real Kennel sheet (#kennelBody rendered).
  *   GRID    live, DOM. Exactly 30 .k-cell nodes, always, regardless of
  *           ownership -- the grid is the full catalogue, not a filtered view.
+ *   HEADERS live, DOM. One column header per colourway (Base, Ember, Frost,
+ *           Toxic, Midnight, in that order) sits above the species blocks --
+ *           added 2026-09-05 so a 30-cell grid with no labels does not force
+ *           a player to count columns to know which cell is which morph.
  *   OWNED   live, DOM. A (species, morph) pair actually granted through the
  *           real writer (addPetInstance, which hatchEgg and grantPet both
  *           route through) draws its cell WITHOUT the locked class, decoded
@@ -77,6 +81,12 @@
  *        separate failure from a short one, graded as one row per viewport)
  *   the Gwart line's text swapped for an unrelated sentence
  *     -> GWART   FAIL "Gwart says: Nice pets." Only GWART.
+ *
+ * An eighth mutation, added with the HEADERS row itself (2026-09-05): the
+ * gridHead column-header markup dropped from the grid's innerHTML.
+ *     -> HEADERS FAIL "(no .k-grid-head-cell found)". Only HEADERS; GRID,
+ *        OWNED and UNOWNED stayed green because the header row carries no
+ *        cell data, only column labels above the real cells.
  *
  * SAMPLE seeds four species (C2/ember, C3/base, C5/toxic, C6/base) through the
  * real writer, and grades OWNED/ROSTER against 5, not 4: the demo profile's own
@@ -166,6 +176,10 @@ try {
   })));
   ok('GRID the collection grid has exactly 30 cells (6 species x 5 morphs, Bumbleseal counts as a normal species per Tom\'s ruling)',
     grid.length === 30, `${grid.length} cells`);
+
+  const headers = await page.evaluate(() => [...document.querySelectorAll('.k-grid-head-cell')].map(c => c.textContent));
+  ok('HEADERS the grid carries a column header naming each of the five colourways, Base through Midnight, in order',
+    JSON.stringify(headers) === JSON.stringify(['Base', 'Ember', 'Frost', 'Toxic', 'Midnight']), headers.join(', ') || '(no .k-grid-head-cell found)');
 
   const cell = (sp, morph) => grid.find(c => c.sp === sp && c.morph === morph);
   const ownedCell = cell('C2', 'ember');
