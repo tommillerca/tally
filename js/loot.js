@@ -1302,23 +1302,36 @@ export async function breedStatus() {
 export async function breedPets(keepIid, feedIid) {
   if (!keepIid || !feedIid || keepIid === feedIid) return { ok: false, reason: 'pick-two' };
   let list = await petInstances();
-  const keep = list.find(x => x.iid === keepIid);
-  const fed = list.find(x => x.iid === feedIid);
-  if (!keep || !fed) return { ok: false, reason: 'gone' };
+  const keep0 = list.find(x => x.iid === keepIid);
+  const fed0 = list.find(x => x.iid === feedIid);
+  if (!keep0 || !fed0) return { ok: false, reason: 'gone' };
   const lifetime = await lifetimeStepsSum();
   const credit = await kvGet('petBreedCredit', null);
   if (credit != null && lifetime - credit < BREED_COOLDOWN_STEPS) {
     return { ok: false, reason: 'cooldown', stepsLeft: BREED_COOLDOWN_STEPS - (lifetime - credit) };
   }
-  const newLineage = (keep.lineage || 0) + 1;
-
-  const consumed = breedParents(fed);
   // lineage is EARNED per feeding, not transferred: feeding a high-lineage pet in
   // does not vault the keeper up to it, so sacrificing a good pet is a waste
   // rather than a strategy.
-  keep.lineage = newLineage;
-  list = removeInstance(list, feedIid).instances;
-  await savePetInstances(list);
+  const consumed = breedParents(fed0);
+
+  /* THE PAIR STILL BEING THERE IS THE CLAIM (2026-09-04, claimed-row-audit): the
+     lineage bump and the removal used to be decided off this outer read and
+     written back whole, which could lose a concurrent salvagePet /
+     salvageInstance / reclaim on this row, or breed away a copy a concurrent
+     salvage had already taken. Both mutations happen in the one kvUpdate below,
+     re-read against the LIVE row, and it refuses (undefined) if either partner
+     is no longer there. */
+  let keep = null;
+  const next = await kvUpdate('petInst', raw => {
+    const cur = Array.isArray(raw) ? raw : list;
+    if (!cur.some(x => x.iid === keepIid) || !cur.some(x => x.iid === feedIid)) return undefined;
+    const bumped = cur.map(x => x.iid === keepIid ? { ...x, lineage: (x.lineage || 0) + 1 } : x);
+    keep = bumped.find(x => x.iid === keepIid);
+    return bumped.filter(x => x.iid !== feedIid);
+  }, list);
+  if (!next) return { ok: false, reason: 'gone' };
+  list = next;
   await kvSet('petBreedCredit', lifetime);
 
   // the keeper is the SAME pet, so its level bank is untouched. Only drop the
@@ -1334,18 +1347,18 @@ export async function breedPets(keepIid, feedIid) {
   if (wasEquipped === feedIid) { await kvSet('petEquipped', keep.iid); await equip('C', keep.sp); }
 
   // the fed species may now be extinct: same cleanup as before
-  if (speciesCount(list, fed.sp) === 0) {
+  if (speciesCount(list, fed0.sp) === 0) {
     const inv = await db.all('inv');
-    const row = inv.find(r => r.kind === 'cos' && r.itemId === fed.sp);
+    const row = inv.find(r => r.kind === 'cos' && r.itemId === fed0.sp);
     if (row) await db.del('inv', row.id);
     const eqp = await equipped({ raw: true });
-    if (eqp.C === fed.sp && keep.sp !== fed.sp) await equip('C', keep.sp);
-    const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[fed.sp]; await kvSet('pets', petsRec);
+    if (eqp.C === fed0.sp && keep.sp !== fed0.sp) await equip('C', keep.sp);
+    const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[fed0.sp]; await kvSet('pets', petsRec);
   }
   // No `cost` key: #203 made breeding free and deleted the variable, but left
   // it in this return, so every breed threw "cost is not defined" and the
   // result reveal never opened. No caller ever read it.
-  return { ok: true, offspring: { ...keep, parents: consumed, fedName: fed.sp } };
+  return { ok: true, offspring: { ...keep, parents: consumed, fedName: fed0.sp } };
 }
 
 let _iidSeq = 0;
@@ -1399,16 +1412,29 @@ export function healDupIids(list) {
  *   - Anchored to NOW, like a fresh hatch. hatchedAtSteps 0 would hand a
  *     recovered pet the player's entire walking history as levels. */
 let _petsReclaimed = false;
+/* THE READ INSIDE THE TRANSACTION IS THE CLAIM (2026-09-04, claimed-row-audit):
+   `list` is only ever a hint now, for the cheap precheck below and as the
+   kvUpdate fallback while 'petInst' is still mid-migration. The actual
+   "what's missing" decision is re-made against the LIVE row, so a concurrent
+   salvagePet / salvageInstance kvUpdate on this same key can never be
+   overwritten by a stale snapshot the way a plain kvSet here used to. */
 async function reclaimOwnedPets(list) {
   if (_petsReclaimed) return list;
   _petsReclaimed = true;
   const owned = await ownedCosmeticIds();
-  const missing = [...owned].filter(id => (BH_BY_ID[id] || {}).slot === 'C' && !list.some(x => x.sp === id));
-  if (!missing.length) return list;
+  const wantSpecies = [...owned].filter(id => (BH_BY_ID[id] || {}).slot === 'C');
+  if (!wantSpecies.some(id => !list.some(x => x.sp === id))) return list;   // cheap precheck; the real one is below
   const anchor = await lifetimeStepsSum();
-  const next = [...list, ...missing.map(sp => ({ iid: `r-${sp}`, sp, lineage: 0, shiny: false, hatchedAtSteps: anchor }))];
-  await kvSet('petInst', next);
-  import('./analytics.js').then(a => a.track('pet_reclaim', { sp: missing.join(',') })).catch(() => {});
+  let added = [];
+  const next = await kvUpdate('petInst', raw => {
+    const cur = Array.isArray(raw) ? raw : list;
+    const missing = wantSpecies.filter(id => !cur.some(x => x.sp === id));
+    if (!missing.length) return undefined;
+    added = missing;
+    return [...cur, ...missing.map(sp => ({ iid: `r-${sp}`, sp, lineage: 0, shiny: false, hatchedAtSteps: anchor }))];
+  }, list);
+  if (!next) return list;
+  import('./analytics.js').then(a => a.track('pet_reclaim', { sp: added.join(',') })).catch(() => {});
   return next;
 }
 
@@ -1417,33 +1443,57 @@ export async function petInstances() {
   if (Array.isArray(list)) {
     const healed = healDupIids(list);
     if (healed !== list) {
-      /* duplicate iids exist in the wild (mechanism unproven: every mint and
-         merge path here checks out, so the origin has to identify itself from
-         telemetry). COPY the pooled bond/level values onto the new ids, never
-         delete the original key: additive-DB rule, and the first row still
-         owns it. Raw kv reads, because petLevelBank() calls back into here. */
-      const bank = await kvGet('petLvlSteps', null);
-      const bonds = await kvGet('petBonds', null);
-      const nicks = await kvGet('petNick', null);
-      for (const row of healed) {
-        if (!row || !row.healedFrom) continue;
-        if (bank && bank[row.healedFrom] != null && bank[row.iid] == null) bank[row.iid] = bank[row.healedFrom];
-        if (bonds && bonds[row.healedFrom] != null && bonds[row.iid] == null) bonds[row.iid] = bonds[row.healedFrom];
-        if (nicks && nicks[row.healedFrom] != null && nicks[row.iid] == null) nicks[row.iid] = nicks[row.healedFrom];
+      /* THE HEAL ITSELF HAS TO BE THE CLAIM TOO (2026-09-04, claimed-row-audit):
+         healDupIids is pure, so re-running it against the LIVE row inside one
+         kvUpdate means a concurrent salvagePet / salvageInstance / reclaim on
+         this same row can never be clobbered by this stale `list` snapshot the
+         way the old unconditional kvSet was. `written` comes back undefined
+         when the live row no longer carries the dup this read saw (already
+         healed, or raced away some other way), and there is then nothing new
+         to copy onto the side stores below. */
+      const written = await kvUpdate('petInst', raw => {
+        const cur = Array.isArray(raw) ? raw : list;
+        const h = healDupIids(cur);
+        return h !== cur ? h : undefined;
+      }, list);
+      if (written) {
+        /* duplicate iids exist in the wild (mechanism unproven: every mint and
+           merge path here checks out, so the origin has to identify itself from
+           telemetry). COPY the pooled bond/level values onto the new ids, never
+           delete the original key: additive-DB rule, and the first row still
+           owns it. Raw kv reads, because petLevelBank() calls back into here. */
+        const bank = await kvGet('petLvlSteps', null);
+        const bonds = await kvGet('petBonds', null);
+        const nicks = await kvGet('petNick', null);
+        for (const row of written) {
+          if (!row || !row.healedFrom) continue;
+          if (bank && bank[row.healedFrom] != null && bank[row.iid] == null) bank[row.iid] = bank[row.healedFrom];
+          if (bonds && bonds[row.healedFrom] != null && bonds[row.iid] == null) bonds[row.iid] = bonds[row.healedFrom];
+          if (nicks && nicks[row.healedFrom] != null && nicks[row.iid] == null) nicks[row.iid] = nicks[row.healedFrom];
+        }
+        if (bank) await kvSet('petLvlSteps', bank);
+        if (bonds) await kvSet('petBonds', bonds);
+        if (nicks) await kvSet('petNick', nicks);
+        const dupIids = written.filter(r => r && r.healedFrom).map(r => r.healedFrom);
+        import('./analytics.js').then(a => a.track('pet_iid_heal', {
+          n: dupIids.length,
+          sample: dupIids.slice(0, 3),   // iid SHAPE is the diagnosis: m- rows point at the migration, p- rows at the mint
+        })).catch(() => {});
+        return reclaimOwnedPets(written);
       }
-      if (bank) await kvSet('petLvlSteps', bank);
-      if (bonds) await kvSet('petBonds', bonds);
-      if (nicks) await kvSet('petNick', nicks);
-      await kvSet('petInst', healed);
-      const dupIids = healed.filter(r => r && r.healedFrom).map(r => r.healedFrom);
-      import('./analytics.js').then(a => a.track('pet_iid_heal', {
-        n: dupIids.length,
-        sample: dupIids.slice(0, 3),   // iid SHAPE is the diagnosis: m- rows point at the migration, p- rows at the mint
-      })).catch(() => {});
-      return reclaimOwnedPets(healed);
+      return reclaimOwnedPets(list);
     }
     return reclaimOwnedPets(list);
   }
+  /* ONE-TIME MIGRATION, NOT A READ-MODIFY-WRITE (kept as a plain kvSet,
+     claimed-row-audit ACCEPTED): it fires only while 'petInst' is not yet an
+     array, and migrateInstances derives the array entirely from 'pets' +
+     ownedCosmeticIds(), both independent of petInst's own history, so two
+     callers racing this write byte-identical arrays. Every real mutator of
+     'petInst' (salvagePet, salvageInstance, reclaimOwnedPets, breedPets,
+     addPetInstance) calls petInstances() first, which is what runs this
+     migration, so nothing can observe a still-missing row and try to kvUpdate
+     it before this has run. */
   const owned = await ownedCosmeticIds();
   const ownedPets = [...owned].filter(id => (BH_BY_ID[id] || {}).slot === 'C');
   const petsRec = (await kvGet('pets', {})) || {};
@@ -1451,15 +1501,18 @@ export async function petInstances() {
   await kvSet('petInst', list);
   return list;
 }
-async function savePetInstances(list) { await kvSet('petInst', list); }
 
 // Add one instance of a species (a fresh hatch/dupe). Keeps the `inv` ownership
 // flag + legacy `pets` anchor in sync so species-keyed code keeps working.
+// THE APPEND IS THE CLAIM (2026-09-04, claimed-row-audit): appending to the LIVE
+// row inside one kvUpdate, rather than reading a list and writing it back whole,
+// means a concurrent salvagePet / salvageInstance / breedPets kvUpdate on this
+// same row can never be undone by this call's own stale read.
 export async function addPetInstance(sp, { shiny = false, hatchedAtSteps = null, startLevelSteps = 0 } = {}) {
-  const list = await petInstances();
+  await petInstances();   // migrates / heals a legacy save first, same as every other writer
   const anchor = hatchedAtSteps == null ? await lifetimeStepsSum() : hatchedAtSteps;
   const inst = { iid: newIid(sp), sp, lineage: 0, shiny: !!shiny, hatchedAtSteps: anchor };
-  await savePetInstances(addInstance(list, inst));
+  await kvUpdate('petInst', raw => addInstance(Array.isArray(raw) ? raw : [], inst), []);
   await grantCosmetic(sp, 'hatch');                 // idempotent ownership flag
   const petsRec = (await kvGet('pets', {})) || {};
   if (!petsRec[sp]) { petsRec[sp] = { hatchedAtSteps: anchor }; }
