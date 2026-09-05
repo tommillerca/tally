@@ -797,9 +797,24 @@ export async function pushBackup(appV = '') {
        decryptability flipped with whoever pushed last. One extra call to the
        same lazy function; everything after it is unchanged. */
     await backupKey();
-    const snapshot = await exportAll();
-    const blob = await encryptBackup(snapshot);
-    const r = await signedFetch('PUT', '/backup', { blob, appV });
+    let r;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const snapshot = await exportAll();
+      const blob = await encryptBackup(snapshot);
+      const baseVersion = await kvGet('backupVersion', null);
+      r = await signedFetch('PUT', '/backup', { blob, appV, baseVersion });
+      if (r.status !== 409 || attempt > 0) break;
+      /* Another device advanced the cloud row after this device last pulled.
+         Pulling through the ordinary live-backup path is important: it decrypts
+         and reaches importAll({ replace:false }), preserving both devices'
+         local-only rows. The next loop rebuilds the encrypted blob from that
+         merged database and retries exactly once with the version just read. */
+      const pulled = await pullBackup();
+      if (!pulled.restored) {
+        await kvSet('backupFail', { at: Date.now(), reason: pulled.reason || 'http-409' });
+        return false;
+      }
+    }
     /* A 200 IS NOT AN ACKNOWLEDGEMENT. This read `if (r.ok)` alone, so anything
        that answers 200 counted as a stored save: a captive portal's login page,
        a proxy interstitial, a truncated body. `backupAt` was stamped to now and
@@ -817,7 +832,11 @@ export async function pushBackup(appV = '') {
        retrying on a real network. No new failure surface. */
     if (r.ok) {
       const d = await r.json().catch(() => ({}));
-      if (d && d.ok === true) { await kvSet('backupAt', Date.now()); await kvSet('backupFail', null); return true; }
+      if (d && d.ok === true) {
+        const version = d.version ?? d.updatedAt;
+        if (Number.isSafeInteger(version)) await kvSet('backupVersion', version);
+        await kvSet('backupAt', Date.now()); await kvSet('backupFail', null); return true;
+      }
       await kvSet('backupFail', { at: Date.now(), reason: 'bad-body' });
       return false;
     }
@@ -890,7 +909,9 @@ export async function pullBackup({ slot = null, replace = false } = {}) {
        opposite reason: it is being used BECAUSE the local save is wrong, so
        merging the good copy into the bad one would keep the bad one. */
     const counts = await importAll(snapshot, { replace });
-    return { restored: true, counts, updatedAt: data.updatedAt };
+    const version = data.version ?? data.updatedAt;
+    if (slot !== 'daily' && Number.isSafeInteger(version)) await kvSet('backupVersion', version);
+    return { restored: true, counts, updatedAt: data.updatedAt, version };
   } catch (e) { return { restored: false, reason: String(e && e.message || e) }; }
 }
 

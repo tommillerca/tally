@@ -19,6 +19,10 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## r34 backup version (2026-09-05)
+
+1. PROOF: backup-conflict-audit.mjs (gate-registered PURE), api.test.mjs (local Worker) | REACH: Two devices that edit from the same cloud backup no longer overwrite each other. The stale device pulls the winner, merges both saves, and retries once.
+
 ## r34 P0 restore latch (2026-09-05)
 
 1. PROOF: restore-latch-audit.mjs (gate-registered PURE), unit.test.js | REACH: Every fresh install used to restore its own cloud backup back over itself on its second open, undoing whatever the player had already spent: an opened crate reappeared and spent coins were quietly refunded. That is now closed two ways — the device that just created its cloud account no longer runs that pull at all (there is nothing on the server older or newer than what it just pushed), and even a forced merge of an older backup can no longer bring back a crate this device already opened or hand back a coin balance the device has since moved past. A genuine restore onto a different or reinstalled device is unaffected and still pulls its real backup in full.
