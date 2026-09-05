@@ -2220,6 +2220,7 @@ const THANKS_MARK = `<svg class="bt-mark" viewBox="0 0 24 22" width="16" height=
 /* The Crew strip, sibling of the Discord one. Not dismissible, same reason:
    it is the way back for everyone who tapped past the popup. */
 function thanksBannerHtml() {
+  if (!SHOW_BETA_THANKS) return '';
   return `<button class="glutton-banner dc-banner bt-banner" id="crewThanks">
     <span class="gbn-ico bt-bnr-ico">${THANKS_MARK}</span>
     <span class="gbn-txt"><i>Thanks for being early</i><b>Send a friend the invite link</b></span>
@@ -2228,6 +2229,7 @@ function thanksBannerHtml() {
 }
 
 async function openThanksCard() {
+  if (!SHOW_BETA_THANKS) return;
   const eq = await equipped();
   const veil = document.createElement('div');
   veil.className = 'drop-veil race-veil bt-veil';
@@ -12842,7 +12844,7 @@ const NEWS = [
   /* The Bone Garden row came out on 2026-08-18 with the rest of the garden's
      player-facing routes: its CTA reopened openGardenPopup, whose own CTA opened
      the Hollow. REVIVAL: restore the row from git history at this line. */
-];
+].filter(n => !(n.id === 'thanks' && !SHOW_BETA_THANKS));
 
 function newsHtml(eq) {
   return NEWS.map(n => `
@@ -20768,6 +20770,7 @@ const XP_PIPS = 20;
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
 const APP_BUILD = 'v473'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const SHOW_BETA_THANKS = true; // gate the TestFlight invite card (openThanksCard, Crew entry, News row); false hides them in store builds
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
