@@ -39,7 +39,9 @@ import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, gearDustValue, gearSt
   removeInstance, breedParents, transmogCost, TRANSMOG_HIDE,
   nickProblem, cleanNick, NICK_MAX,
   RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_REROLL_LADDER,
-  rollCosmetic, crateEligible } from '../js/loot.js';
+  rollCosmetic, crateEligible,
+  eggRow, grantEgg, hatchEgg, addPetInstance, petInstances } from '../js/loot.js';
+import { MORPHS, MORPH_WEIGHT, isMorph, rollMorph, ownedPairs, PET_ASSIGN } from '../js/pets.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, PET_SLOTS } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
@@ -6879,6 +6881,203 @@ test('R-claimhyg-2 initLootIfNeeded: two interleaved boots grant exactly one wel
   // a THIRD, later boot must still pay nothing: the claim is not a one-race fluke
   const r3 = await g.initLootIfNeeded();
   assert.equal(r3, null, 'a later boot after the race must still find the kit already claimed');
+});
+
+/* ============ KENNEL PHASE A (2026-09-05): morphs (cosmetic pet recolours) ==
+ * Spec: BUILDpetskennel20260905.md section 2.6. Morphs never touch battle
+ * stats (rule 0.1), and the species stays a hatch-time roll after db.take
+ * with the rng order in hatchEgg unchanged (rule 0.4) -- these rows exist to
+ * catch a regression on either guarantee, not just to exercise the feature. */
+
+test('KENNEL rollMorph: all pairs owned draws MORPH_WEIGHT within 1.5% over 20,000 draws', () => {
+  /* N and tolerance, MEASURED: N=10,000 at +/-0.01 (the spec's own numbers)
+     false-positived 3/50 clean-code trials (found here, not assumed) -- real
+     rng, no seed, and 'base' at weight 40/98 sits closer to the tolerance
+     band than the smaller morphs. N=20,000 at +/-0.015 clean-code-false-red
+     0/50 over the same probe. */
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5'];
+  const owned = new Set();
+  for (const sp of species) for (const m of MORPHS) owned.add(`${sp}|${m}`);
+  const N = 20000;
+  const TOL = 0.015;
+  const tally = {};
+  for (let i = 0; i < N; i++) { const m = rollMorph(owned); tally[m] = (tally[m] || 0) + 1; }
+  const totalW = Object.values(MORPH_WEIGHT).reduce((a, b) => a + b, 0);
+  for (const m of MORPHS) {
+    const expected = MORPH_WEIGHT[m] / totalW;
+    const got = (tally[m] || 0) / N;
+    assert.ok(Math.abs(got - expected) <= TOL,
+      `${m}: expected ${expected.toFixed(4)} +/- ${TOL}, got ${got.toFixed(4)} over ${N} draws (tally ${JSON.stringify(tally)})`);
+  }
+});
+
+/* PROVE-RED, 2026-09-05: this row is what caught the actual Phase A bug, not a
+ * hypothetical one. rollMorph's own "which species count" list originally
+ * included C6 (Bumbleseal, a 1% shop-exclusive hatch): since almost no player
+ * owns her in ANY morph, (C6, base) stayed "unowned" forever, which kept
+ * 'base' itself in the fresh-first candidate set alongside the four real
+ * morphs and swamped them (base carries the highest MORPH_WEIGHT, 40). A
+ * 200-egg sim below caught it directly: an owner of all five species hatched
+ * nothing but base across 200 draws. Fixed by scoping the fresh-first
+ * accounting to the five ordinary dupe-pool species (js/pets.js
+ * MORPH_SPECIES), matching this file's own "25 (species x morph) pairs"
+ * language (5 x 5, not 6 x 5). Reverting MORPH_SPECIES to include C6
+ * reproduces the FAIL below. */
+test('KENNEL rollMorph: fresh-first -- only (C5, midnight) unowned draws midnight every time', () => {
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5'];
+  const owned = new Set();
+  for (const sp of species) for (const m of MORPHS) { if (sp === 'C5' && m === 'midnight') continue; owned.add(`${sp}|${m}`); }
+  for (let i = 0; i < 200; i++) {
+    assert.equal(rollMorph(owned), 'midnight', 'the only unowned pair left is (C5, midnight); fresh-first must draw it every time');
+  }
+});
+
+test('KENNEL hatchEgg: reads the granted egg\'s morph, and the rng stream spends no new call', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-kennel-hatchmorph-basic');
+  await dbm.db.put('inv', { id: 'egg-1', kind: 'egg', stepsAtStart: 0, goal: 0, source: 'test', morph: 'toxic', ts: Date.now() });
+  const origGRV = globalThis.crypto.getRandomValues;
+  /* hatchEgg's own stream, unchanged by this feature: shinyRoll (rolls 0.5,
+     misses SHINY_CHANCE 0.03), pickRandomPet's C6 shop-pet gate (rolls 0.5,
+     misses its 1%), then the final uniform pick (rolls 0, index 0 of the
+     5-pet pool -- C1). A morph read that spent an rng() call of its own would
+     shift every index after it and this count would no longer be 3. */
+  const stream = [0.5, 0.5, 0];
+  let n = 0;
+  globalThis.crypto.getRandomValues = a => { a[0] = Math.floor(stream[n++ % stream.length] * 0xffffffff); return a; };
+  let res;
+  try {
+    res = await hatchEgg('egg-1');
+  } finally {
+    globalThis.crypto.getRandomValues = origGRV;
+  }
+  assert.equal(n, 3, `hatchEgg must spend exactly 3 rng() calls on this stream (shiny roll, the C6 shop gate, the final pick); a new call means the morph read is no longer free, got ${n}`);
+  assert.equal(res.ready, true);
+  assert.equal(res.item.id, 'C1', 'setup check: this fixed stream must pick C1');
+  assert.equal(res.morph, 'toxic', 'hatchEgg must return the morph the egg was granted with');
+  const insts = await petInstances();
+  assert.equal(insts.length, 1);
+  assert.equal(insts[0].morph, 'toxic', 'the persisted instance must carry the egg\'s morph');
+});
+
+test('KENNEL hatchEgg: shiny forces base even when the egg carries a colour (rule 0.1/1.2)', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-kennel-hatchmorph-shiny');
+  await dbm.db.put('inv', { id: 'egg-2', kind: 'egg', stepsAtStart: 0, goal: 0, source: 'test', morph: 'toxic', ts: Date.now() });
+  const origGRV = globalThis.crypto.getRandomValues;
+  // shinyRoll rolls 0 (< SHINY_CHANCE: shiny); the C6 shop gate rolls 0.5
+  // (misses); the final pick rolls 0 (C1, which has shiny art -- SHINY_ART).
+  const stream = [0, 0.5, 0];
+  let n = 0;
+  globalThis.crypto.getRandomValues = a => { a[0] = Math.floor(stream[n++ % stream.length] * 0xffffffff); return a; };
+  let res;
+  try {
+    res = await hatchEgg('egg-2');
+  } finally {
+    globalThis.crypto.getRandomValues = origGRV;
+  }
+  assert.equal(res.shiny, true, 'setup check: this stream must mint a shiny');
+  assert.equal(res.morph, 'base', 'shiny forces base even though the egg rolled toxic');
+  const insts = await petInstances();
+  assert.equal(insts[0].shiny, true);
+  assert.equal(insts[0].morph, 'base');
+});
+
+test('KENNEL hatchEgg: a pre-Phase-A egg row with no morph field, or an unknown one, hatches base', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-kennel-hatchmorph-legacy');
+  await dbm.db.put('inv', { id: 'egg-3', kind: 'egg', stepsAtStart: 0, goal: 0, source: 'test', ts: Date.now() }); // no `morph` key at all
+  await dbm.db.put('inv', { id: 'egg-4', kind: 'egg', stepsAtStart: 0, goal: 0, source: 'test', morph: 'rainbow', ts: Date.now() }); // unknown value
+  const origGRV = globalThis.crypto.getRandomValues;
+  const stream = [0.5, 0.5, 0];
+  let n = 0;
+  globalThis.crypto.getRandomValues = a => { a[0] = Math.floor(stream[n++ % stream.length] * 0xffffffff); return a; };
+  let res3, res4;
+  try {
+    res3 = await hatchEgg('egg-3');
+    res4 = await hatchEgg('egg-4');
+  } finally {
+    globalThis.crypto.getRandomValues = origGRV;
+  }
+  assert.equal(res3.morph, 'base', 'a row with no morph field at all must hatch base, never throw or read undefined');
+  assert.equal(res4.morph, 'base', 'a row with an unknown morph value must hatch base rather than mint a phantom colour');
+});
+
+test('KENNEL addPetInstance: an unknown morph is refused at the write, stored as base (rule 0.6)', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-kennel-addinst-unknown');
+  await addPetInstance('C1', { morph: 'rainbow' });
+  const insts = await petInstances();
+  assert.equal(insts[0].morph, 'base');
+});
+
+test('KENNEL addPetInstance: shiny forces base even when a morph is explicitly requested', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-kennel-addinst-shinybase');
+  await addPetInstance('C1', { shiny: true, morph: 'ember' });
+  const insts = await petInstances();
+  assert.equal(insts[0].shiny, true);
+  assert.equal(insts[0].morph, 'base');
+});
+
+/* SIM, spec section 2.6: 200 eggs granted+hatched one after another for an
+ * owner of all five species (so every hatch is a same-species dupe and the
+ * morph is the only thing left to discover) must surface all 25 (species,
+ * morph) pairs, with no morph outside MORPHS ever appearing. Real rng()
+ * throughout (unseeded): empirically 0/30 trials missed a single pair before
+ * this was committed (probed at 200 draws each), so this is not a flaky
+ * statistical row -- fresh-first plus 200 draws is well past the point where
+ * five morphs across five species can hide. */
+test('KENNEL sim: 200 eggs from an owner of five species surface all 25 (sp, morph) pairs, no phantom morph', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  dbm.useDbName('unit-kennel-sim-200eggs');
+  const species = ['C1', 'C2', 'C3', 'C4', 'C5'];
+  for (const sp of species) await addPetInstance(sp, { morph: 'base' });
+  for (let i = 0; i < 200; i++) {
+    const row = await grantEgg('test', 0);
+    await hatchEgg(row.id);
+  }
+  const insts = await petInstances();
+  const pairs = new Set(insts.map(x => `${x.sp}|${x.morph || 'base'}`));
+  const allSpecies = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6']; // C6 (Bumbleseal) can rarely hatch too (1%)
+  const phantom = [...pairs].filter(p => { const [sp, m] = p.split('|'); return !allSpecies.includes(sp) || !MORPHS.includes(m); });
+  assert.equal(phantom.length, 0, `no morph outside MORPHS, and no species outside the hatch pool, got ${JSON.stringify(phantom)}`);
+  const required = species.flatMap(sp => MORPHS.map(m => `${sp}|${m}`));
+  const missing = required.filter(p => !pairs.has(p));
+  assert.equal(missing.length, 0,
+    `all 25 (species, morph) pairs among the five owned species must appear across 200 hatches, missing: ${missing.join(', ') || 'none'} (${pairs.size} total distinct pairs seen)`);
+});
+
+/* SIM, spec section 2.6: two eggs granted the same "day" (before either
+ * hatches) for a player missing three species must still hatch two DIFFERENT
+ * species -- pickRandomPet's pre-existing fresh-species rule (js/loot.js),
+ * unaffected by the morph riding along on the egg row. 20 independent trials,
+ * not 1: a single trial only catches "species decided from stale/no ownership"
+ * 1-in-5 of the time (four other fresh species could still coincidentally
+ * differ), so one green trial proves nothing. 20 trials all agreeing is a
+ * ~99% catch rate for that regression while staying non-flaky on real code
+ * (0/200 collisions measured empirically before this was committed). */
+test('KENNEL sim: two eggs granted the same day for a player missing three species hatch two different species', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  for (let trial = 0; trial < 20; trial++) {
+    dbm.useDbName(`unit-kennel-sim-twoeggs-${trial}`);
+    await addPetInstance('C1', { morph: 'base' });
+    await addPetInstance('C2', { morph: 'base' });   // owns 2 of 5, missing C3/C4/C5
+    const row1 = await grantEgg('test', 0);
+    const row2 = await grantEgg('test', 0);
+    const res1 = await hatchEgg(row1.id);
+    const res2 = await hatchEgg(row2.id);
+    assert.equal(res1.ready, true); assert.equal(res2.ready, true);
+    assert.notEqual(res1.item.id, res2.item.id,
+      `trial ${trial}: two eggs granted before either hatched must still mint two different species when three are missing, got ${res1.item.id} twice`);
+  }
 });
 
 await runAll();
