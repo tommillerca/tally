@@ -9383,7 +9383,7 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
           Object.fromEntries(sold.filter(g => g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])), 384)}</span>
       </div>
       <div class="tx">
-        <span class="eyebrow">Kit room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
+        <span class="eyebrow">Locker room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
         <h2>FOOTBALL KIT</h2>
         <small>Helmet, jersey and cleats for your Bonehead. A helmet and jersey for the lizard. Buy a piece and it is yours in every team's colours.</small>
         <div class="fb-teams" role="img" aria-label="${FOOTBALL_TEAMS.length} team colourways">${FOOTBALL_TEAMS.map(t => `<i class="fb-swatch xs" style="--fa:${t.a};--fb:${t.b}"></i>`).join('')}</div>
