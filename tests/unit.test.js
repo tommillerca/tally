@@ -46,7 +46,7 @@ import {
   SEED_IDS, seedName, isRareSeed, growMinutes, GROW_MIN, GROW_MIN_RARE,
   HARVEST_BASE, HARVEST_BASE_RARE, COMPOSTS_PER_DAY, SPAWN_SEED_CHANCE, rollSpawnSeed,
 } from '../js/garden.js';
-import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN, raceStanding } from '../js/social.js';
+import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN, raceStanding, raceClockLabel } from '../js/social.js';
 import { MINI_THEMES } from '../js/poi.js';
 import { THEME_POOL, themedLook, FAMILIES } from '../js/bosses.js';
 
@@ -1949,6 +1949,20 @@ test('raceStanding: 1st place is never told it is behind anyone', () => {
    and hand the Pit a foe whose every move computed off `undefined`
    ("Jab ~NaN dmg"). PROVE-RED: change hasFightableStats back to `!!stats`
    and the second assertion below fails. ---- */
+/* ---- CREW-6: "settles tonight" never rendered because daysLeft (a ceiling)
+   jumps 1 -> 7 the instant the week rolls and can never observe 0. PROVE-RED:
+   change the threshold back to `msLeft <= 0` and the first two rows fail. ---- */
+test('raceClockLabel: the whole last calendar day settles tonight, not "1 day left"', () => {
+  assert.equal(raceClockLabel(30000), 'settles tonight', '30s left, same as 23:59:30');
+  assert.equal(raceClockLabel(86400000 - 1000), 'settles tonight', 'anywhere in the final day, e.g. 00:00:01 in');
+  assert.equal(raceClockLabel(0), 'settles tonight');
+});
+test('raceClockLabel: more than a day out still counts down in days', () => {
+  assert.equal(raceClockLabel(86400001), '2 days left');
+  assert.equal(raceClockLabel(7 * 86400000), '7 days left');
+  assert.equal(raceClockLabel(86400000 * 1.5), '2 days left', 'a fraction of a day rounds UP, never claims settling early');
+});
+
 test('hasFightableStats: a real snapshot passes, an empty object does not', () => {
   const real = { power: 20, marrow: 20, wind: 20, reflex: 20, hype: 20 };
   assert.equal(hasFightableStats(real), true);
