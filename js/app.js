@@ -9499,22 +9499,33 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
   const kit = footballBundleMath();
   const quote = footballBundleQuote(ownedHere);
   const bundleOwned = ownedHere === sold.length;
+  /* skip: ['C'] sits on the call line on purpose: figure-audit STACK reads each
+     avatarLayersHtml call in a two-line window (2026-09-05).
+     A comment placed HERE, above `return`, not between the markup lines below:
+     everything from the opening backtick to the closing one is a template
+     literal, so a comment sitting between two tags outside a `${}` is not a
+     comment at all -- it is literal text the browser renders as a real text
+     node. That is exactly how this got here (2026-09-05): the two blocks below
+     used to live inside the avatarLayersHtml call's own argument list (a real
+     JS comment, safe), and moving them "above the call line" for readability
+     put them in the HTML instead, as an 877-char text node sitting before
+     .pc-worn inside .fb-hero. That stray in-flow node blew out .pc-worn's
+     shrink-to-fit width (auto width, left:50%, right:auto) to 954px against
+     fb-hero's real 172px, scaling the whole mannequin 4.77x -- see
+     art-resolution-audit.mjs's RESOLUTION row and tests/proof/hero-after.png.
+     MEASURED OFF THE RENDER, 440x956 DPR 2 (art-resolution-audit.mjs's own
+     viewport): this poster's mannequin draws at 507 device px. Capped at 192 it
+     was 2.64x its source -- the exact defect that file exists to catch -- and
+     Tom had already flagged this poster as blurry once today. 384 clears it at
+     507/384 = 1.32x; the master would too (507/640 = 0.79x) but costs 0.44
+     MB/layer more for a sharpness margin nobody asked for. Sharpness wins for
+     the hero (it is the biggest art on the shop screen), paid for by the kit
+     room's five tiles no longer decoding while #fbSect is closed -- see
+     t3-dropbody below. */
   return `
   <details class="t3-dropsect" id="fbSect"${open ? ' open' : ''}>
     <summary class="t3-drop fb-drop">
       <div class="fb-hero">
-     /* skip: ['C'] sits on the call line on purpose: figure-audit STACK reads each
-        avatarLayersHtml call in a two-line window (2026-09-05). */
-     /* MEASURED OFF THE RENDER, 440x956 DPR 2 (art-resolution-audit.mjs's own
-        viewport), tests/art-resolution-audit.mjs: this poster's mannequin draws
-        at 507 device px. Capped at 192 it was 2.64x its source -- the exact
-        defect that file exists to catch -- and Tom had already flagged this
-        poster as blurry once today. 384 clears it at 507/384 = 1.32x; the
-        master would too (507/640 = 0.79x) but costs 0.44 MB/layer more for a
-        sharpness margin nobody asked for. Sharpness wins for the hero (it is
-        the biggest art on the shop screen), paid for by the kit room's five
-        tiles no longer decoding while #fbSect is closed -- see t3-dropbody
-        below. */
         <div class="pc-worn fit-body">${avatarLayersHtml({ ...RACK_BASE, ...Object.fromEntries(sold.filter(g => !g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])) }, { wpnAura: null, skip: ['C'], thumb: 384 })}</div>
         <span class="fb-hero-pet">${croppedPetImg(FOOTBALL_PETS[0], 96, false, null,
           /* Same poster, same 1.4x rule: measured 444 device px, 444/192 = 2.31x
