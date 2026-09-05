@@ -1,11 +1,31 @@
 # The football kit
 
 2026-09-04. Thirty-two invented teams, five garments Cam drew once, tinted per
-team at runtime. Built but **not live**: `FOOTBALL_KIT_LIVE = false` in
-`data/football-teams.js`, so every piece carries `unreleased` and nothing in the
-game can see it. Section 7 is the list of things only Tom can answer, and
-section 10 records the shop-shelf patch that brought `js/app.js` in line with the
-ownership ruling in 7.8: five tiles, each sold in all 32 colourways.
+team at runtime. **LIVE** as of 2026-09-04 (Tom: "if it is ready ship it live
+like i said before"): `FOOTBALL_KIT_LIVE = true` in `data/football-teams.js`, so
+all 256 pieces are in `BH_ITEMS` and the Kit room is the LEAD shelf of the Shop,
+with Bumbleseal second under her own heading. Section 7 is the list of things
+only Tom can answer, and section 10 records the shop-shelf patch that brought
+`js/app.js` in line with the ownership ruling in 7.8: five tiles, each sold in
+all 32 colourways.
+
+**The shelf order.** Tom, 2026-09-04: "nfl shit goes to the lead shelf of the
+shop", then "dont put her in potion supplies find a way to have her prominent in
+the shop but less than NFL." First attempt put Bumbleseal in the drop-shelf area,
+which lives inside `#shopRestBody` behind the "Potions and charms · Supplies"
+button, and was rejected: a 50,000-coin legendary pet invisible until somebody
+taps. Shipped order, measured at 430x932:
+
+| | shelf | box |
+|---|---|---|
+| 1 | Kit room `#fbSect` | 398x164.6, first child of `#chContent` |
+| 2 | `GWART'S MENAGERIE` heading + Bumbleseal `.pet-shelf` | hero 398x211.6, above the rack strip, outside `#shopRestBody` |
+| 3 | the rack, the rotating shelf, then the supplies panel unchanged | Puffer Pack did not move |
+
+With the flag false the Shop renders the EXACT bytes it did before the kit
+existed: `#chContent.innerHTML` is 66,341 characters, md5
+`89bf6a176dc3f41526a58a82ae1d9406`, against v472 `7d2b4ce5`, and the screenshot
+md5s match too (`a6ad65b3ea98aae93f073db18895a632`).
 
 ## 1. What exists
 
@@ -347,11 +367,27 @@ something.
 `'hide'` and `'refuse'` are intact, still exported, still guarded, and still one
 word away.
 
-**7.4 The live date.** `FOOTBALL_KIT_LIVE = false`. Flipping it to `true` puts
-256 items into `BH_ITEMS`, which is the rack's rotating pool, the crate pool,
-gear derivation, the Looks tab and the random splash outfits, all at once, and
-turns the kit room on in the shop. That is a large single-drop injection into
-the rack's weekly rotation. Worth deciding alongside 7.5.
+**7.4 The live date. ANSWERED 2026-09-04: `FOOTBALL_KIT_LIVE = true`.** Tom:
+"if it is ready ship it live like i said before."
+
+The 256 items are now in `BH_ITEMS`, and this is what that did and did not
+reach. Already excluded by their own `!i.football` clause, so unchanged: the
+rack's rotating pool and the crate pool (`js/loot.js` `RACK_ROTATE_POOL`,
+`crateEligible`) and gear derivation (`js/gear.js` `GEAR_ITEMS`). So the "large
+single-drop injection into the rack's weekly rotation" this section worried
+about does not happen: the kit sells on its own shelf at its own price and
+nowhere else.
+
+NOT excluded until the flip, and fixed in the same session: the random-FIGURE
+pools. Measured with the flag true, the kit is 128 of the 185 items in the H
+pool (69.2%), 32 of 51 in FW and 32 of 56 in T, so an unfiltered draw put a
+4,200-coin helmet on most of the splash montage and most unnamed Pit opponents.
+`randomOutfit`, `foeOutfitFor` and `teaserLook` carry `!i.football` now, and
+`football-kit-audit` rows POOL-COVERAGE / POOL-RANDOM / POOL-CONTROL keep the
+list honest. Reversible in one word if Tom wants NPCs in team colours.
+
+Still reached, and correctly: the Looks tab's denominator and the Wardrobe's
+per-slot locked count, which is what a released purchasable item should do.
 
 **7.5 Rack-only, crate drops, or both.** The flag is binary today: released
 means visible to every pool. If the kit should be shop-only and never a crate
