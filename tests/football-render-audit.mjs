@@ -99,7 +99,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boot, seed, sleep, settle, setWidth, serveTree } from './godmode.js';
 import { FOOTBALL_TEAM_BY_ID, FOOTBALL_PETS, footballItemId, VISOR_BLOCKED_EYES } from '../data/football-teams.js';
-import { BH_BY_ID, PET_CROP } from '../data/boneheadz.js';
+import { BH_BY_ID, PET_CROP, bhFamilyKey } from '../data/boneheadz.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let fails = 0;
@@ -366,16 +366,33 @@ try {
      HIDDEN lizard's tile about half the time, whose rect is 0x0, and a mouse
      click at 0,0 lands on the app's back button. Measured on the first run of
      this file: "1 of 2 tapped", with the whole screen navigated away. So the
-     selector is scoped and a zero-sized hit is refused rather than clicked. */
+     selector is scoped and a zero-sized hit is refused rather than clicked.
+     THE FAMILY IS OPENED FIRST. Since 2026-09-05 (bhFamilies on the Stable) the
+     panel collapses every colourway of one master file into ONE [data-petfam]
+     tile, and the per-team [data-petwear] tiles exist only while that family is
+     open. This file owns two colourways of each garment, so both families are
+     collapsed and a bare tile query found nothing: "0 of 2 tapped". The family
+     key is the panel's species plus bhFamilyKey, the same string app.js builds,
+     and a real click on that tile (render() runs) is what un-collapses it. */
+  const centreOf = sel => page.evaluate(s => {
+    const b = document.querySelector(s);
+    if (!b) return null;
+    b.scrollIntoView({ block: 'center', inline: 'center' });
+    const r = b.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return null;
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }, sel);
   const tapTile = async id => {
-    const hit = await page.evaluate(i => {
-      const b = document.querySelector(`.pet-wear:not([hidden]) [data-petwear="${i}"]`);
-      if (!b) return null;
-      b.scrollIntoView({ block: 'center', inline: 'center' });
-      const r = b.getBoundingClientRect();
-      if (!(r.width > 0 && r.height > 0)) return null;
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    }, id);
+    const tileSel = `.pet-wear:not([hidden]) [data-petwear="${id}"]`;
+    let hit = await centreOf(tileSel);
+    if (!hit) {
+      const sp = await page.evaluate(() => document.querySelector('.pet-wear:not([hidden])')?.dataset.pwsp);
+      const fam = await centreOf(`.pet-wear:not([hidden]) [data-petfam="${sp}:${bhFamilyKey(BH_BY_ID[id])}"][aria-expanded="false"]`);
+      if (!fam) return false;
+      await page.mouse.click(fam.x, fam.y);
+      await sleep(650);
+      hit = await centreOf(tileSel);
+    }
     if (!hit) return false;
     await page.mouse.click(hit.x, hit.y);
     await sleep(650);
