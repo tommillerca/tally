@@ -1,18 +1,24 @@
-/* WHICH SHELF LEADS THE SHOP, MEASURED AS BOXES ON A SCREEN.
+/* WHICH SHELF LEADS THE SHOP AND WHICH ONE IS SECOND, MEASURED AS BOXES ON A
+ * SCREEN.
  *
- * Tom, 2026-09-04: "bumbleseal moves to the shelf make sure it looks good and
- * resized as needed, nfl shit goes to the lead shelf of the shop." So there are
- * two orders and one flag between them:
+ * Tom, 2026-09-04: "nfl shit goes to the lead shelf of the shop", then, on the
+ * first attempt at the rest of it: "dont put her in potion supplies find a way
+ * to have her prominent in the shop but less than NFL." That first attempt put
+ * Bumbleseal in the drop-shelf area, which lives inside #shopRestBody behind the
+ * "Potions and charms . Supplies" button, so a 50,000-coin legendary pet was
+ * invisible until somebody tapped. The ruling is SECOND, in the open:
  *
+ *   FOOTBALL_KIT_LIVE true    the Kit room leads, Bumbleseal follows it under a
+ *                             heading of her own, both above the rack strip and
+ *                             neither of them inside #shopRestBody
  *   FOOTBALL_KIT_LIVE false   the pet hero leads, the Kit room does not exist
- *   FOOTBALL_KIT_LIVE true    the Kit room leads and the pet shelf drops into
- *                             the supplies panel beside the Puffer Pack
  *
- * THE OFF ORDER IS THE ONE THAT MATTERS. The flag is false in the shipped tree,
- * so every player alive is looking at the off order; a broken Shop for all of
- * them is far worse than a late kit. That is why the off rows here are not just
- * "the pet shelf is present" but "the pet shelf is the FIRST child of the Shop
- * container, above the rack strip, with no football markup anywhere in it".
+ * THE FLAG NOW SHIPS TRUE (Tom: "if it is ready ship it live like i said
+ * before"), so the ON half is the shop every player has and it is graded on the
+ * REAL data/football-teams.js, not on an override. The OFF half is the shop
+ * every build before this one shipped, and it is the one that proves the flag is
+ * still a single line back to safety: it is produced by serving the same file
+ * with the flag rewritten to false at the network.
  *
  * WHY A BROWSER ROW AT ALL, when tests/unit.test.js already pins the order of
  * the string the Shop builds: a string order is not a screen order. A block can
@@ -22,37 +28,37 @@
  * viewport before any claim is made about where it sits, because a detached node
  * hands back an all-zero rect that reads perfectly clean.
  *
- * HOW THE FLAG IS FLIPPED, and it is never flipped on disk: data/football-teams.js
- * is intercepted at the network and served with FOOTBALL_KIT_LIVE = true for the
- * ON half. The interception is COUNTED and the page is asked to import the module
- * and report the flag back, so an override that silently failed to match a URL
- * reads as SETUP rather than passing three rows about an unchanged shop. That was
- * a real failure of the first draft of this file: with no counter, an override
- * that never fired produced "the flag-off shop looks like the flag-off shop",
- * which is true and worthless.
+ * HOW THE OFF HALF IS PRODUCED, and the flag is never flipped on disk:
+ * data/football-teams.js is intercepted at the network and served with
+ * FOOTBALL_KIT_LIVE = false. The interception is COUNTED and the page is asked
+ * to import the module and report the flag back, so an override that silently
+ * failed to match a URL reads as SETUP rather than passing rows about an
+ * unchanged shop. That was a real failure of the first draft of this file: with
+ * no counter, an override that never fired produced "the flag-off shop looks
+ * like the flag-off shop", which is true and worthless. The ON half asks the
+ * page for the flag too, for the same reason in the other direction.
+ *
+ * THE RACK STRIP IS FOUND BY ITS OWN TEXT, never by `.rk-theme`. Three strips
+ * carry that class (the rack, the rotating shelf, and now Bumbleseal's own
+ * heading), so `querySelector('.rk-theme')` returns HER heading in the ON order
+ * and the row that claims "above the rack" would have been comparing her to
+ * herself.
  *
  * PROVE-RED, on a `tar`-copied throwaway tree, 2026-09-04, exit codes read
- * directly and never through a pipe. All three exit 1:
+ * directly and never through a pipe. All exit 1:
  *
- *   const petLead = petShelf            (drop the gate: she leads AND drops)
- *     FAIL  DROP-ON Bumbleseal moved into the supplies panel behind the Puffer
- *     Pack, and the Puffer Pack is still there  | 2 pet shelf/shelves in the
- *     Shop (want exactly 1), inside #shopRestBody: true, after #dropSect in the
- *     document: false, Puffer Pack present: true
+ *   petLead put back inside #shopRestBody (the rejected first pass)
+ *     FAIL  SECOND-ON Bumbleseal is the second shelf in the Shop, above the rack
+ *     and out in the open  | (see the run log recorded with this branch)
+ *
+ *   ${fbLead}${petLead} swapped to ${petLead}${fbLead}
+ *     FAIL  LEAD-ON the Kit room is the first shelf in the Shop and the pet shelf
+ *     is not
  *
  *   const fbLead = footballShelfHtml(...)   (ungated: the kit leaks into the
- *                                            shop every player has today)
+ *                                            flag-off shop)
  *     FAIL  LEAD-OFF with the kit shut the pet hero leads the Shop and there is
- *     no football markup in it  | first child details#fbSect.t3-dropsect (1 pet
- *     shelf/shelves), #fbSect present: true, football markup: true; hero
- *     .pet-hero 398x211.6 at 16,573.5 ... above rack strip .rk-theme ...
- *
- *   ${petDrop} moved above ${fbLead}     (she takes the lead back)
- *     FAIL  LEAD-ON the Kit room is the first shelf in the Shop and the pet
- *     shelf is not  | the Shop's first child is div.rk-theme, wanted the Kit
- *     room (#fbSect); kit #fbSect 398x164.6 at 16,899.8 ...
- *     FAIL  DROP-ON ... | 1 pet shelf/shelves in the Shop (want exactly 1),
- *     inside #shopRestBody: false, after #dropSect in the document: false
+ *     no football markup in it
  *
  * Run: node tests/shop-lead-order-audit.mjs [baseUrl] [--shots DIR]
  * HEADLESS_MODE=shell on this Mac. Self-serving: with no URL it serves this
@@ -77,14 +83,15 @@ const shotsAt = process.argv.indexOf('--shots');
 const SHOTS = shotsAt > 0 ? process.argv[shotsAt + 1] : null;
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 
-/* The ON half's module, built from the file this audit is about to SERVE rather
+/* The OFF half's module, built from the file this audit is about to SERVE rather
    than from a copy pasted in here, so a rename of the flag is a hard error and
    not a silent "the shop did not change". */
 const FB_SRC = readFileSync(path.join(ROOT, 'data', 'football-teams.js'), 'utf8');
-const FB_LIVE = FB_SRC.replace('export const FOOTBALL_KIT_LIVE = false;', 'export const FOOTBALL_KIT_LIVE = true;');
-setup('SETUP the shipped tree has the kit shut and this file can open it for the ON half',
-  /export const FOOTBALL_KIT_LIVE = false;/.test(FB_SRC) && /export const FOOTBALL_KIT_LIVE = true;/.test(FB_LIVE),
-  `committed data/football-teams.js declares the flag false: ${/= false;/.test(FB_SRC)}`);
+const FB_OFF = FB_SRC.replace(/export const FOOTBALL_KIT_LIVE = true;/, 'export const FOOTBALL_KIT_LIVE = false;');
+setup('SETUP the shipped tree has the kit LIVE and this file can shut it again for the OFF half',
+  /export const FOOTBALL_KIT_LIVE = true;/.test(FB_SRC) && /export const FOOTBALL_KIT_LIVE = false;/.test(FB_OFF),
+  `committed data/football-teams.js declares the flag true: ${/export const FOOTBALL_KIT_LIVE = true;/.test(FB_SRC)}, ` +
+  `the served OFF variant declares it false: ${/export const FOOTBALL_KIT_LIVE = false;/.test(FB_OFF)}`);
 
 const argUrl = process.argv.slice(2).find(a => !a.startsWith('--') && /^https?:/.test(a));
 const srv = argUrl ? null : await serveTree(ROOT);
@@ -93,15 +100,17 @@ const errors = [];
 page.on('pageerror', e => errors.push(e.message));
 
 let hits = 0;
+/* on=true is the SHIPPED file, served by the server with nothing intercepted.
+   on=false serves FB_OFF, and only that direction increments the counter. */
 const overrideFlag = async on => {
   hits = 0;
   page.removeAllListeners('request');
   await page.setCacheEnabled(false);
   await page.setRequestInterception(true);
   page.on('request', r => {
-    if (on && new URL(r.url()).pathname.endsWith('/data/football-teams.js')) {
+    if (!on && new URL(r.url()).pathname.endsWith('/data/football-teams.js')) {
       hits++;
-      return r.respond({ status: 200, contentType: 'text/javascript; charset=utf-8', body: FB_LIVE });
+      return r.respond({ status: 200, contentType: 'text/javascript; charset=utf-8', body: FB_OFF });
     }
     r.continue();
   });
@@ -136,6 +145,13 @@ const read = () => page.evaluate(() => {
       inView: r.width > 0 && r.height > 0 && r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight,
     };
   };
+  /* THE RACK STRIP BY ITS OWN TEXT. `.rk-theme` is on three strips now (the
+     rack, the rotating shelf, and Bumbleseal's heading), so selecting the first
+     one returns HER heading in the ON order and "above the rack" would compare
+     her to herself. Tag the real one and hand back a selector for it. */
+  const rackEl = [...document.querySelectorAll('.rk-theme')].find(n => /RACK\s+\d+\s+OF\s+\d+/.test(n.textContent));
+  if (rackEl) rackEl.setAttribute('data-rackstrip', '1');
+  const rackSel = '[data-rackstrip]';
   const c = document.querySelector('#chContent');
   const name = n => n ? n.tagName.toLowerCase() + (n.id ? '#' + n.id : '') + (n.className ? '.' + String(n.className).trim().split(/\s+/).join('.') : '') : null;
   const drop = document.querySelector('#dropSect'), pet = document.querySelector('.pet-shelf');
@@ -151,12 +167,24 @@ const read = () => page.evaluate(() => {
     firstCls: [...(c?.firstElementChild?.classList || [])],
     kids: [...(c?.children || [])].map(name),
     hero: box('.pet-hero'), shelf: box('.pet-shelf'), fb: box('#fbSect'),
-    drop: box('#dropSect'), rack: box('.rk-theme'),
+    drop: box('#dropSect'), rack: box(rackSel),
     hasFb: !!document.querySelector('#fbSect'),
     fbMarkup: /data-buyfb|fb-kitline|id="fbSect"/.test(c ? c.innerHTML : ''),
     petCount: document.querySelectorAll('.pet-shelf').length,
     petInSupplies: !!document.querySelector('#shopRestBody .pet-shelf'),
     petAfterDrop: drop && pet ? (drop.compareDocumentPosition(pet) & Node.DOCUMENT_POSITION_FOLLOWING) > 0 : null,
+    /* Which top-level child of the Shop she is. 0 = leading, 1 = second. Read
+       off the real child list rather than from a y-coordinate, because two
+       shelves can share a y in a future layout and 'second' is an order. */
+    petSlot: pet ? [...(c?.children || [])].findIndex(n => n === pet || n.contains(pet)) : -1,
+    fbSlot: (() => { const f = document.querySelector('#fbSect'); return f ? [...(c?.children || [])].findIndex(n => n === f || n.contains(f)) : -1; })(),
+    /* Her own heading: present, between the kit and her, and carrying words. */
+    petHeadingText: (() => {
+      if (!pet) return null;
+      let n = pet.previousElementSibling;
+      return n && n.classList.contains('rk-theme') ? n.textContent.trim() : null;
+    })(),
+    restHidden: (() => { const b = document.querySelector('#shopRestBody'); return b ? b.hidden : null; })(),
   };
 });
 const live = b => !!b && b.inDoc && b.paints && b.w > 8 && b.h > 8;
@@ -166,44 +194,37 @@ try {
   await seed(page, { level: 20, coins: 400000 });
   await setWidth(page, 430, 932);
 
-  /* ---------------- THE SHOP EVERY PLAYER HAS TODAY ---------------- */
+  /* ------- THE SHOP EVERY BUILD BEFORE THIS ONE SHIPPED (flag off) ------- */
   await overrideFlag(false);
   await goShop();
   const off = await read();
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'shop-flag-off.png') });
-  setup('SAMPLE the Shop rendered with real content and a real pet hero in it',
-    off.found && off.len > 5000 && off.kids.length > 4 && live(off.hero),
-    `#chContent ${off.len} chars, ${off.kids.length} shelves, hero ${fmt(off.hero)}`);
+  const flagOffInPage = await page.evaluate(async () => (await import('/data/football-teams.js')).FOOTBALL_KIT_LIVE);
+  setup('SAMPLE the OFF half really is the OFF half: the override was served, the page reports the flag false, and the Shop has real content in it',
+    hits > 0 && flagOffInPage === false && off.found && off.len > 5000 && off.kids.length > 4 && live(off.hero),
+    `override served ${hits}x, page reads FOOTBALL_KIT_LIVE=${flagOffInPage}; #chContent ${off.len} chars, ${off.kids.length} shelves, hero ${fmt(off.hero)}`);
 
   ok('LEAD-OFF with the kit shut the pet hero leads the Shop and there is no football markup in it',
     off.firstCls.includes('pet-shelf') && off.petCount === 1 && !off.hasFb && !off.fbMarkup
       && live(off.hero) && off.hero.inView && live(off.rack) && off.hero.y < off.rack.y,
     `first child ${off.first} (${off.petCount} pet shelf/shelves), #fbSect present: ${off.hasFb}, football markup: ${off.fbMarkup}; hero ${fmt(off.hero)} above rack strip ${fmt(off.rack)}`);
 
-  /* ---------------- AND THE SHOP ONCE TOM FLIPS THE FLAG ---------------- */
+  /* ---------------- AND THE SHOP AS IT SHIPS (flag true on disk) ---------------- */
   await overrideFlag(true);
   await goShop();
   const on = await read();
-  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'shop-flag-on.png') });
   const flagInPage = await page.evaluate(async () => (await import('/data/football-teams.js')).FOOTBALL_KIT_LIVE);
-  setup('SAMPLE the ON half really is the ON half: the override was served and the page reports the flag true',
-    hits > 0 && flagInPage === true && on.found && on.hasFb,
-    `override served ${hits}x, page reads FOOTBALL_KIT_LIVE=${flagInPage}, #fbSect present: ${on.hasFb}`);
+  setup('SAMPLE the ON half is the SHIPPED file with nothing intercepted, and the page reports the flag true',
+    hits === 0 && flagInPage === true && on.found && on.hasFb,
+    `interceptions in this half: ${hits} (must be 0), page reads FOOTBALL_KIT_LIVE=${flagInPage}, #fbSect present: ${on.hasFb}`);
 
   ok('LEAD-ON the Kit room is the first shelf in the Shop and the pet shelf is not',
-    on.firstId === 'fbSect' && live(on.fb) && on.fb.inView && live(on.rack) && on.fb.y < on.rack.y,
+    on.firstId === 'fbSect' && on.fbSlot === 0 && live(on.fb) && on.fb.inView && live(on.rack) && on.fb.y < on.rack.y,
     `the Shop's first child is ${on.first}, wanted the Kit room (#fbSect); kit ${fmt(on.fb)} above rack strip ${fmt(on.rack)}`);
 
-  ok('DROP-ON Bumbleseal moved into the supplies panel behind the Puffer Pack, and the Puffer Pack is still there',
-    on.petCount === 1 && on.petInSupplies && on.petAfterDrop === true && !!on.drop,
-    `${on.petCount} pet shelf/shelves in the Shop (want exactly 1), inside #shopRestBody: ${on.petInSupplies}, ` +
-    `after #dropSect in the document: ${on.petAfterDrop}, Puffer Pack present: ${!!on.drop}`);
-
-  /* Open the supplies panel and park her on screen: everything above measured
-     her collapsed, which is a zero rect and proves nothing about how she looks. */
-  await page.evaluate(() => document.querySelector('#shopRest')?.click());
-  await sleep(900);
-  await settle(page);
+  /* Park her on screen before anything is claimed about her box: she sits below
+     the kit poster, and a rect measured off-viewport proves nothing about how
+     she looks. Scroll first, THEN read, THEN shoot. */
   await page.evaluate(() => {
     const sc = document.querySelector('.screen'), el = document.querySelector('.pet-hero');
     if (sc && el) sc.scrollTop = Math.max(0, el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 70);
@@ -211,18 +232,35 @@ try {
   });
   await sleep(500);
   await settle(page);
-  const opened = await read();
-  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'shop-flag-on-bumbleseal.png') });
-  setup('SAMPLE the supplies panel opened and Bumbleseal is on screen to be measured',
-    live(opened.hero) && opened.hero.inView,
-    `hero ${fmt(opened.hero)}`);
+  const onPet = await read();
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'shop-flag-on.png') });
+  setup('SAMPLE Bumbleseal is on screen in the ON order, with NO tap anywhere: she was scrolled to, never revealed',
+    live(onPet.hero) && onPet.hero.inView && onPet.restHidden === true,
+    `hero ${fmt(onPet.hero)}; #shopRestBody still hidden: ${onPet.restHidden} (nothing on this screen was clicked)`);
+
+  /* THE ROW TOM'S SECOND NOTE EXISTS FOR. "dont put her in potion supplies find
+     a way to have her prominent in the shop but less than NFL." Second, above
+     the rack, under her own heading, and provably NOT behind the supplies
+     button: #shopRestBody is still hidden at the moment this is measured, so a
+     shelf inside it would have a zero rect and no reader would ever see it. */
+  ok('SECOND-ON Bumbleseal is the second shelf in the Shop, above the rack and out in the open rather than in the supplies panel',
+    on.petCount === 1 && !on.petInSupplies && on.petSlot > on.fbSlot && on.petSlot <= on.fbSlot + 2
+      && !!on.petHeadingText && live(onPet.hero) && onPet.hero.inView
+      && live(onPet.rack) && onPet.hero.y < onPet.rack.y && onPet.restHidden === true,
+    `${on.petCount} pet shelf/shelves; #chContent child index: kit ${on.fbSlot}, her ${on.petSlot}; ` +
+    `inside #shopRestBody: ${on.petInSupplies} (and that panel is hidden: ${onPet.restHidden}); ` +
+    `her own heading above her: ${JSON.stringify(on.petHeadingText)}; hero ${fmt(onPet.hero)} above rack strip ${fmt(onPet.rack)}`);
+
+  ok('PUFFER-ON the Puffer Pack stayed exactly where it was, inside the supplies panel, and did not follow her out',
+    !!on.drop && on.petAfterDrop === false && !!(on.kids || []).length,
+    `#dropSect present: ${!!on.drop}, and the pet shelf is AFTER it in the document: ${on.petAfterDrop} (must be false: she is above it now); Shop children: ${on.kids.join(' > ')}`);
 
   const vw = await page.evaluate(() => innerWidth);
-  ok('SIZE-ON her hero is the same box in its new slot as it is in the lead, and it still fits the screen',
-    Math.abs(opened.hero.w - off.hero.w) <= 1 && Math.abs(opened.hero.h - off.hero.h) <= 1
-      && opened.hero.x >= 0 && opened.hero.x + opened.hero.w <= vw + 1,
-    `lead slot ${off.hero.w}x${off.hero.h}, drop slot ${opened.hero.w}x${opened.hero.h}, ` +
-    `left edge ${opened.hero.x} and right edge ${(opened.hero.x + opened.hero.w).toFixed(1)} inside a ${vw}px viewport`);
+  ok('SIZE-ON her hero is the same box in the second slot as it is in the lead, and it still fits the screen',
+    Math.abs(onPet.hero.w - off.hero.w) <= 1 && Math.abs(onPet.hero.h - off.hero.h) <= 1
+      && onPet.hero.x >= 0 && onPet.hero.x + onPet.hero.w <= vw + 1,
+    `lead slot ${off.hero.w}x${off.hero.h}, second slot ${onPet.hero.w}x${onPet.hero.h}, ` +
+    `left edge ${onPet.hero.x} and right edge ${(onPet.hero.x + onPet.hero.w).toFixed(1)} inside a ${vw}px viewport`);
 
   ok('LEAD-CLEAN nothing threw across either order', errors.length === 0, errors.join(' | ') || 'clean');
 } catch (e) {
@@ -235,5 +273,5 @@ try {
 
 console.log(fails
   ? '\nTHE SHOP IS NOT LEADING WITH THE SHELF IT WAS TOLD TO LEAD WITH.'
-  : '\nLEAD SHELF: the pet hero leads while the kit is shut, the Kit room leads once it is open, and she keeps her box on the way down');
+  : '\nSHELF ORDER: the Kit room leads, Bumbleseal is second and needs no tap to be seen, the Puffer Pack stayed put, and shutting the flag puts the old Shop back exactly');
 process.exit(fails);

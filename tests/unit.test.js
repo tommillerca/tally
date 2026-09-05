@@ -4757,18 +4757,25 @@ test('SW update checks bypass the HTTP cache (GitHub Pages max-age=600 held a de
   assert.match(calls[0], /updateViaCache:\s*'none'/, 'register() does not pass updateViaCache: none, so a deploy can hide behind the HTTP cache');
 });
 
-/* WHICH SHELF LEADS THE SHOP. Tom, 2026-09-04: "bumbleseal moves to the shelf
-   ... nfl shit goes to the lead shelf of the shop". Two orders, one flag, and
-   the one that matters is the OFF one: FOOTBALL_KIT_LIVE is false in the shipped
-   tree, so every player alive sees the flag-off Shop and a mistake here breaks
-   it for all of them to ship a kit nobody can buy yet.
+/* WHICH SHELF LEADS THE SHOP, AND WHICH ONE IS SECOND. Tom, 2026-09-04: "nfl
+   shit goes to the lead shelf of the shop", then, on the first attempt at the
+   rest: "dont put her in potion supplies find a way to have her prominent in the
+   shop but less than NFL." That first attempt put her in the drop-shelf area,
+   which lives inside #shopRestBody behind the "Potions and charms · Supplies"
+   button, so a 50,000-coin legendary was invisible until somebody tapped. The
+   ruling is SECOND: kit first, her immediately after it, both above the rack and
+   neither behind a tap.
 
-   This does not regex the ternaries. It EVALUATES the three real lines out of
+   The OFF order still matters even though the flag now ships true, because it is
+   the order every build before this one shipped and the flag is the one line
+   that would take the Shop back to it.
+
+   This does not regex the ternaries. It EVALUATES the two real lines out of
    js/app.js with stub shelves, both ways, and substitutes the results into the
    real template, so what is asserted is the order of the string the Shop
    actually builds. tests/shop-lead-order-audit.mjs then measures the same two
    orders as boxes on a screen. */
-test('shop lead shelf: the Kit room leads when the kit is live, Bumbleseal drops to the drop shelf, and with the flag off nothing moves at all', () => {
+test('shop lead shelf: the Kit room leads when the kit is live, Bumbleseal is second and out in the open, and with the flag off nothing moves at all', () => {
   const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   const fn = app.indexOf('async function renderShop(el)');
   const d0 = app.indexOf('const petShelf = petShelfHtml(', fn);
@@ -4776,44 +4783,56 @@ test('shop lead shelf: the Kit room leads when the kit is live, Bumbleseal drops
   const e = app.indexOf('<div class="rk-tail"></div>`;', s);
   assert.ok(fn > 0 && d0 > fn && s > d0 && e > s, 'the Shop template or its shelf constants moved: re-anchor this test');
   const tpl = app.slice(s, e);
-  /* The three constants, run for real. Stub shelves are unmistakable markers so
+  /* The two constants, run for real. Stub shelves are unmistakable markers so
      a hit cannot be some other word in 12KB of template. */
   const shelves = live => new Function(
     'FOOTBALL_KIT_LIVE', 'petShelfHtml', 'footballShelfHtml', 'ownedCos', 'coinBal', 'wasOpen',
-    app.slice(d0, s) + 'return { fbLead, petLead, petDrop };',
+    app.slice(d0, s) + 'return { fbLead, petLead };',
   )(live, () => '<<PET>>', () => '<<FB>>', new Set(), 0, { fb: false });
   const render = live => {
     const v = shelves(live);
-    for (const k of ['fbLead', 'petLead', 'petDrop']) {
+    for (const k of ['fbLead', 'petLead']) {
       assert.equal(tpl.split('${' + k + '}').length - 1, 1, `the template must place \${${k}} exactly once`);
     }
-    return tpl.replace('${fbLead}', v.fbLead).replace('${petLead}', v.petLead).replace('${petDrop}', v.petDrop);
+    /* petDrop is GONE, not merely empty: an unused slot left in the template is
+       how she gets quietly put back behind the supplies button. */
+    assert.equal(tpl.indexOf('${petDrop}'), -1, 'the old supplies-panel slot for Bumbleseal must be deleted, not left rendering an empty string');
+    return tpl.replace('${fbLead}', v.fbLead).replace('${petLead}', v.petLead);
   };
   const at = (h, t) => h.indexOf(t);
+  /* THE RACK STRIP BY ITS OWN TEXT, not by `class="rk-theme"`. That class is on
+     three strips (the rack, the rotating shelf, and now her heading), so the
+     first draft of this row matched HER heading and reported her below the rack
+     while she sat above it. */
+  const RACK = 'RACK ${rackNo} OF 4';
 
-  // ---- flag OFF: the shop every player has today ----
+  // ---- flag OFF: the shop every build before this one shipped ----
   const off = render(false);
   assert.equal(at(off, '<<FB>>'), -1, 'with FOOTBALL_KIT_LIVE false the Kit room must not be in the Shop at all');
   assert.ok(at(off, '<<PET>>') > 0, 'with the flag off Bumbleseal must still be in the Shop');
-  assert.ok(at(off, '<<PET>>') < at(off, 'class="rk-theme"'),
-    'with the flag off Bumbleseal must lead the Shop, above the rack, exactly as she does today');
+  assert.ok(at(off, RACK) > 0 && at(off, '<<PET>>') < at(off, RACK),
+    'with the flag off Bumbleseal must lead the Shop, above the rack, exactly as she did before the kit existed');
   assert.equal(off.split('<<PET>>').length - 1, 1, 'Bumbleseal must be rendered once, not in two slots');
 
-  // ---- flag ON: the kit takes the lead and she moves down beside the Puffer Pack ----
+  // ---- flag ON: the kit takes the lead and she is second, still out in the open ----
   const on = render(true);
   assert.ok(at(on, '<<FB>>') > 0 && at(on, '<<PET>>') > 0, 'with the flag on both shelves must be in the Shop');
   assert.equal(on.split('<<PET>>').length - 1, 1, 'Bumbleseal must be rendered once, not in two slots');
-  assert.ok(at(on, '<<FB>>') < at(on, 'class="rk-theme"'),
+  assert.ok(at(on, RACK) > 0 && at(on, '<<FB>>') < at(on, RACK),
     'the Kit room must lead the Shop, above the rack');
   assert.ok(at(on, '<<FB>>') < at(on, '<<PET>>'),
     'the Kit room must lead and Bumbleseal must sit below it, not the other way round');
+  assert.ok(at(on, '<<PET>>') < at(on, RACK),
+    'Bumbleseal must be SECOND, above the rack strip: anything below it is a demotion she was already rejected for');
+  assert.ok(at(on, '<<PET>>') < at(on, 'id="shopRest"'),
+    'Bumbleseal must sit above the "Potions and charms" button, not behind it');
+  assert.ok(at(on, '<<PET>>') < at(on, 'id="shopRestBody"'),
+    'Tom, 2026-09-04: "dont put her in potion supplies". She must not be inside #shopRestBody at all');
+  assert.ok(at(on, 'GWART') > at(on, '<<FB>>') && at(on, 'GWART') < at(on, '<<PET>>'),
+    'her slot must carry its own heading between the Kit room and her hero, or she reads as part of the kit');
   assert.ok(at(on, 'id="dropSect"') > 0, 'the Puffer Pack must survive the move: Tom has not ruled on it');
-  assert.ok(at(on, '<<PET>>') > at(on, 'id="dropSect"'),
-    'Bumbleseal belongs in the drop-shelf area, after the Puffer Pack');
-  assert.ok(at(on, '<<PET>>') < at(on, 'Coin shop'),
-    'Bumbleseal must stay above the Coin shop, on the drop shelf rather than adrift at the foot of the page');
-  assert.ok(at(on, '<<PET>>') > at(on, 'id="shopRestBody"'),
-    'Bumbleseal must land inside the supplies panel with the drop shelf, not between the rack and the panel');
+  assert.ok(at(on, 'id="dropSect"') > at(on, 'id="shopRestBody"'),
+    'the Puffer Pack stays where it is, inside the supplies panel');
 });
 
 await runAll();

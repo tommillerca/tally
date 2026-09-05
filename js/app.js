@@ -9444,28 +9444,28 @@ async function renderShop(el) {
     fb: !!$('#fbSect', el)?.open || S.fbJump,
   };
 
-  /* THE LEAD SHELF. Tom, 2026-09-04: "bumbleseal moves to the shelf ... nfl shit
-     goes to the lead shelf of the shop". So when the kit is live the Kit room
-     takes the top of the Shop and Bumbleseal drops to the drop shelf, into the
-     slot the Kit room used to hold, beside the Puffer Pack rather than instead
-     of it.
+  /* THE LEAD SHELF AND THE ONE BEHIND IT. Tom, 2026-09-04: "nfl shit goes to
+     the lead shelf of the shop", then, on the first attempt at the rest of it:
+     "dont put her in potion supplies find a way to have her prominent in the
+     shop but less than NFL." The first pass put her in the drop-shelf area,
+     which lives inside #shopRestBody behind the "Potions and charms · Supplies"
+     button, so a 50,000-coin legendary was invisible until somebody tapped. She
+     is SECOND now: the Kit room leads, she follows it immediately under a
+     heading of her own, both above the rack strip and neither behind a tap.
 
-     FLAG OFF, NOTHING MOVES, and that is the property that matters more than the
-     kit does: fbLead and petDrop are both '' and petLead is the pet shelf, so
-     the template below emits the byte-identical string it emitted before this
-     change. Pinned by tests/shop-lead-order-audit.mjs, which renders the Shop
-     off the committed app.js and off this one and requires the two to match
-     character for character while the flag is false. */
+     FLAG OFF, NOTHING MOVES, and that is the property that matters more than
+     the kit does: fbLead is '' and petLead is the bare pet shelf, so the
+     template below emits the byte-identical string it emitted before the kit
+     existed. Pinned by tests/shop-lead-order-audit.mjs (boxes on a screen) and
+     tests/unit.test.js (the order of the string). */
   const petShelf = petShelfHtml(ownedCos, coinBal);
   const fbLead = FOOTBALL_KIT_LIVE ? footballShelfHtml(ownedCos, coinBal, wasOpen.fb) : '';
-  const petLead = FOOTBALL_KIT_LIVE ? '' : petShelf;
-  /* She is a 50,000-coin legendary arriving under a shop heading rather than as
-     the page's own headline, so she gets a heading of her own: an unlabelled
-     hero halfway down a shelf reads as a leftover. .rk-theme is the strip the
-     rack and the rotating shelf already use, so this adds no CSS. */
-  const petDrop = FOOTBALL_KIT_LIVE
+  /* Second under a heading of her own: arriving straight after the Kit room with
+     no label, she reads as part of it. .rk-theme is the strip the rack and the
+     rotating shelf already use, so this adds no CSS. */
+  const petLead = FOOTBALL_KIT_LIVE
     ? `<div class="rk-theme"><b>GWART'S MENAGERIE</b><i></i><span>Pets and their gear</span></div>${petShelf}`
-    : '';
+    : petShelf;
 
   el.innerHTML = `
   ${fbLead}${petLead}
@@ -9536,8 +9536,6 @@ async function renderShop(el) {
       </div>
     </div>
   </details>
-
-  ${petDrop}
 
   <div class="t3-sect"><b>Coin shop</b><i></i></div>
   <div class="t3-cells">

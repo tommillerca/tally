@@ -28,15 +28,25 @@
  * the helmet in all 32, and a second helmet in another team is refused as
  * already-owned rather than charged (js/loot.js buyFootballItem).
  *
- * THE FLAGS. FOOTBALL_KIT_LIVE=false marks every item `unreleased`, which is the
- * catalogue's existing gate: BH_ITEMS (the rack's rotating pool, the crate pool,
- * gear derivation, the Looks tab, random splash outfits) never sees them, while
- * BH_BY_ID still resolves them so an owned piece renders and previews. The shop
- * shelf is gated on the same flag directly. FOOTBALL_KIT_PRICE_PLACEHOLDER is
- * null until Tom names a number: tests/football-kit-audit.mjs refuses a live kit
- * with no price, and buyFootballItem refuses a non-finite one, the same way
- * buyRackItem does. */
-export const FOOTBALL_KIT_LIVE = false;                 // Tom flips this to sell the kit
+ * THE FLAGS. FOOTBALL_KIT_LIVE=false marked every item `unreleased`, which is
+ * the catalogue's existing gate: BH_ITEMS (the rack's rotating pool, the crate
+ * pool, gear derivation, the Looks tab, random splash outfits) never saw them,
+ * while BH_BY_ID still resolved them so an owned piece rendered and previewed.
+ * The shop shelf is gated on the same flag directly.
+ *
+ * IT IS TRUE AS OF 2026-09-04 (Tom: "if it is ready ship it live like i said
+ * before"), so the kit is now IN BH_ITEMS. The three pools that would have been
+ * wrong to feed it into carry their own `!i.football` guard and are unaffected:
+ * RACK_ROTATE_POOL and crateEligible in js/loot.js (a 4,200-coin garment must
+ * not fall out of a crate or turn up on the rotating shelf at a rarity price)
+ * and GEAR_ITEMS in js/gear.js (a coin shelf must never sell power). What DOES
+ * change with the flag is the Looks tab's denominator, the Wardrobe's per-slot
+ * locked count, and the random outfits worn by splash-montage figures and Pit
+ * opponents, all of which are the correct behaviour for a released item.
+ * The price is real (4,200 a garment, 16,800 the lot): tests/football-kit-audit.mjs
+ * refuses a live kit with no price, and buyFootballItem refuses a non-finite
+ * one, the same way buyRackItem does. */
+export const FOOTBALL_KIT_LIVE = true;                  // Tom, 2026-09-04: "if it is ready ship it live like i said before"
 export const FOOTBALL_KIT_PRICE_PLACEHOLDER = 4200;     // Tom, 2026-09-04: 3x the epic rung (1,400). Beta wallets are deep; re-price at launch.
 /* THE BUNDLE. Tom, 2026-09-04: "per garment only with a bundle of everything for
  * a slightly cheaper but expensive price." ONE tile, not one per team: it hands
