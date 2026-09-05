@@ -289,6 +289,14 @@ try {
     !accA.sections.some(h => /pending/i.test(h)), JSON.stringify(accA.sections));
   if (!accA.crew.includes(meB.playerId) || !accB.crew.includes(meA.playerId)) die('the pair never became friends: nothing below would mean anything');
 
+  /* DRAIN THE FRIENDSHIP-COMPLETED GRANT ON BOTH SIDES (S12, round29tickets.md:
+     "Neither side is ever told the friendship completed"; fix/r33-lapse... no,
+     commit 3252a3a3 "S12: the Crew tells the truth about what it did", merged
+     2026-09-04). ACCEPT now hands BOTH sides a `crew-<them>-pair` grant, same
+     as the welcome grant drained after MARK above, so the next sync below is
+     gift-only rather than picking up this one too. */
+  await sync(A); await sync(B);
+
   /* ---------------- SEALED / PAYS-ONCE / AGAIN ---------------- */
   const GIFT = 100;
   const sent = await soc(A, 'sendGift', meB.playerId, 'spend', GIFT);

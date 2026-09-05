@@ -81,13 +81,19 @@ const shopSize = await page.evaluate(async () => (await import('./js/loot.js')).
    (Tom's ruling; see the S0 register in tests/unit.test.js). It renders as a
    [data-dustegg] t3-cell, and tests/dust-egg-audit.mjs owns its behaviour; this
    row only keeps the census exact, so a second uncatalogued cell still fails. */
+/* drop: 2, not 1, since 2026-09-04. The football Kit Room shelf (`#fbSect`,
+   footballShelfHtml) reuses the same `.t3-drop` poster class as the Puffer
+   Pack drop (`#dropSect`): docs/FOOTBALL-KIT.md, "the Kit room is the LEAD
+   shelf of the Shop" (Tom, 2026-09-04, FOOTBALL_KIT_LIVE shipped live). Two
+   legitimate drop-styled posters now render on this screen; widening this
+   would drift the same way a bare `>= 1` would, so it stays an exact count. */
 const shop = {
   drop: await count('.t3-drop'), prices: await count('.t3-price'),
   cells: await count('.t3-cell'), dustEgg: await count('[data-dustegg]'),
   forage: await count('.t3-forage'), catalogue: shopSize,
 };
 ok('Shop renders the Tier 3 language',
-   shop.drop === 1 && shop.prices >= 4 && shopSize > 0 && shop.dustEgg === 1
+   shop.drop === 2 && shop.prices >= 4 && shopSize > 0 && shop.dustEgg === 1
    && shop.cells === shopSize + shop.dustEgg && shop.forage >= 1,
    JSON.stringify(shop));
 // the drop poster IS the disclosure: opening it must reveal the real per-item grid
