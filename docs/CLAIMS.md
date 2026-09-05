@@ -19,6 +19,10 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## stage pet wear (2026-09-05)
+
+1. PROOF: football-render-audit.mjs (STAGE, proved red on the unfixed code) | REACH: Open your Bonehead's Backpack or Build tab with a lizard equipped and its helmet and jersey worn: the lizard on the big portrait now wears them too, tinted to your team, instead of the bare species art. True for the base lizard, its shiny, and the Day One Lizard alike.
+
 ## store build (2026-09-05)
 
 1. PROOF: store-copy-lint.mjs, unit.test.js | REACH: The App Store archive has no internal-distribution invitation, thank-you strip, invitation News item, testing update copy, or Settings diagnostics. Web and internal builds keep those feedback routes.
