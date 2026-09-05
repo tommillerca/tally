@@ -536,8 +536,13 @@ function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = und
     return `<img${cls ? ` class="${cls}"` : ''} src="${s}"${s === u ? '' : ` data-full="${u}" ${THUMB_FALLBACK}`} style="${geo}" alt="">`;
   };
   /* Football kit, 2026-09-04: a tinted garment's two multiply spans take the SAME
-     geometry string as its <img>, so they inherit the registration untouched. */
-  const tintOf = i => (tints[i] || []).map(t => `<span class="fb-tint pw" style="${geo};--fbm:url('${t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
+     geometry string as its <img>, so they inherit the registration untouched.
+     THE SAME `tier` AS `layer()` (2026-09-05): a CSS mask scales with
+     background-size, so a square 192/384 tier reads identically to the 640
+     master here -- unlike the canvas painter, there is no pixel-rect sampling
+     to misalign. Tiering it stops the mask decoding at 640 on a tile whose
+     garment art is already tiered down. */
+  const tintOf = i => (tints[i] || []).map(t => `<span class="fb-tint pw" style="${geo};--fbm:url('${tier ? bhThumb(t.mask, tier) : t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
   return `<span class="petcrop${worn.length ? ' dressed' : ''}" style="width:${px}px;height:${px}px">${layer(src)}${worn.map((u, i) => layer(u, 'pw') + tintOf(i)).join('')}</span>`;
 }
 // Pet sprite: shiny -> static recolored variant (+ glow); else the animated
@@ -5704,8 +5709,20 @@ const fbTintAttr = item => {
    sliding from one team to the next is two `style.background` writes on spans
    that are already on screen, with no image to decode and no stage to rebuild.
    See fbRail in renderCharacter. */
-const footballTintHtml = (item, geo = '') => (footballTints(item) || [])
-  .map(t => `<span class="fb-tint" data-fbslot="${item.slot}" style="${geo}--fbm:url('${t.mask}');background:${t.hex}" aria-hidden="true"></span>`).join('');
+/* `thumb` MIRRORS THE LAYER'S OWN TIER (2026-09-05), the same rule
+   croppedPetImg's tintOf follows below: a CSS mask scales with the span's own
+   background-size, so tiering it costs no registration, only memory. Passed
+   through from avatarLayersHtml's `opts.thumb`, so a tiled surface (the
+   Collection, the crew fan, the rail) never decodes a 640 mask under a
+   192/384 garment. A surface with NO thumb (the Today hero, the Wardrobe's
+   big stage) still caps at 384: nothing on this stack draws the mask over
+   384 CSS px today, so the master is reserved for a surface that measures a
+   real need for it, not handed out as this function's default. */
+const footballTintHtml = (item, geo = '', thumb = null) => {
+  const maskTier = thumb ? (thumb === true ? 192 : thumb) : 384;
+  return (footballTints(item) || [])
+    .map(t => `<span class="fb-tint" data-fbslot="${item.slot}" style="${geo}--fbm:url('${bhThumb(t.mask, maskTier)}');background:${t.hex}" aria-hidden="true"></span>`).join('');
+};
 
 function avatarLayersHtml(eq, opts = {}) {
   const skip = new Set(opts.skip || []);
@@ -5768,7 +5785,7 @@ function avatarLayersHtml(eq, opts = {}) {
     // On a THUMBNAILED layer it first retries the full-size art, so a missing
     // thumbnail costs memory rather than the garment.
     const clipStyle = clipMask ? ` style="--fbm:url('${clipMask}')"` : '';
-    return `<img${glow}${clipStyle} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(item)}`;
+    return `<img${glow}${clipStyle} src="${src}"${src !== full ? ` data-full="${full}"` : ''} alt="" ${THUMB_FALLBACK}>${footballTintHtml(item, '', opts.thumb)}`;
   }).join('');
   // Visible by DEFAULT. v233 shipped this with bh-composing baked into the
   // markup, which meant any stack injected somewhere composeAvatars() never
@@ -16884,7 +16901,14 @@ async function paintFootballTints(ctx, tints, box, dest) {
   const lay = document.createElement('canvas'); lay.width = ctx.canvas.width; lay.height = ctx.canvas.height;
   const lc = lay.getContext('2d');
   for (const t of tints) {
-    let m; try { m = await loadArt(t.mask); } catch { continue; }   // a missing mask loses a colour, never the tile
+    /* bhTrim(): this painter only ever draws a TRIMMED master (its only caller,
+       drawTrimmedArt, decodes `src` through bhTrim first), so the mask has to
+       be trimmed the same way or `box` below -- measured off the trimmed
+       master -- samples the wrong rectangle of a still-640 mask. Tiering the
+       mask sheet (scripts/build-bh-thumbs.py) built it from the SAME box, so
+       this is a same-size, same-crop swap, not a resize. Census TIER row,
+       2026-09-05: this was the wardrobe's 16 off-DOM master-mask decodes. */
+    let m; try { m = await loadArt(bhTrim(t.mask)); } catch { continue; }   // a missing mask loses a colour, never the tile
     lc.globalCompositeOperation = 'source-over';
     lc.clearRect(0, 0, lay.width, lay.height);
     lc.drawImage(m, x0, y0, bw, bh, dx, dy, dw, dh);
@@ -18525,7 +18549,13 @@ async function openStable(opts = {}) {
         const on = S.petWear[a.slot] === i.id;
         const slotLbl = (PET_SLOTS.find(sl => sl.code === a.slot) || {}).label || a.slot;
         // a football piece has no product-shot sheet, so its tile is the pet wearing it
-        const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, 192) : petShotHtml(i.id, 62);
+        // thumb:true, not a hardcoded 192: this 62px tile's geometry (C4/CX's
+        // PET_CROP) resolves to imgSize ~143-146, and bhTierFor doubles for
+        // device pixels and lands on 384 -- the SAME tier petShotHtml's own
+        // product shot uses beside it. Census SHOT row, 2026-09-05: a copied
+        // 192 from the Locker Room's much bigger tiles (measured there to
+        // legitimately clear no tier) was reading a 384-eligible box as 192.
+        const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, true) : petShotHtml(i.id, 62);
         return `<button class="pw-item r-${a.rarity}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}">
           <span class="pw-art">${tile}</span>
           <b>${esc(a.name)}</b>
@@ -18550,7 +18580,8 @@ async function openStable(opts = {}) {
         const i = worn || fam[0];
         const a = BH_BY_ID[i.id];
         const open = petFamOpen === key;
-        const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, 192) : petShotHtml(i.id, 62);
+        // thumb:true, same fix and the same measured 384 as petWearItemBtn above.
+        const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, true) : petShotHtml(i.id, 62);
         const famTile = `<button class="pw-item fam r-${a.rarity}${worn ? ' on' : ''}" type="button" data-petfam="${esc(key)}" aria-expanded="${open}" aria-label="${esc(a.name)}, ${fam.length} colourways">
           <span class="pw-art">${tile}<span class="ward-fam-n" aria-hidden="true">${fam.length}</span></span>
           <b>${esc(a.name)}</b>
