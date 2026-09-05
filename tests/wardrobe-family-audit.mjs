@@ -159,9 +159,13 @@ const kitFams = bhFamilies(kit);
 ok('FILE items sharing one art file are one family, a different file is another',
   kitFams.size === 2 && [...kitFams.values()].some(g => g.length === 2),
   `${kit.length} tinted items -> ${kitFams.size} tiles holding [${[...kitFams.values()].map(g => g.length).join(', ')}] (32 team helmets would be one tile of 32)`);
-ok('FILE the branch is inert for the hand-drawn catalogue',
-  ITEMS.every(i => !i.file),
-  `${ITEMS.filter(i => i.file).length} catalogue items carry a file`);
+/* Re-premised 2026-09-04 when the football kit joined the catalogue: the `file` branch is
+   no longer inert, it is EXACTLY the football branch. Every item carrying a file must be a
+   football item, and there must be some (the count is the control; zero would grade nothing). */
+const withFile = ITEMS.filter(i => i.file);
+ok('FILE every catalogue item carrying a file is a football item, and there are some',
+  withFile.length > 0 && withFile.every(i => i.football),
+  `${withFile.length} items carry a file, ${withFile.filter(i => !i.football).length} of them not football`);
 
 /* ---- OVERRIDE: the escape hatch ------------------------------------------ */
 const over = bhFamilies([

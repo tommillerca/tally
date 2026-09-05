@@ -13252,6 +13252,12 @@ function newsBannerHtml(unseen, eq, dayClose) {
   </details>`;
 }
 
+/* DECLARED ABOVE ITS FIRST READER, on purpose (2026-09-04). This sat beside APP_BUILD at
+   the bottom of the file; the NEWS filter below reads it at MODULE LOAD, so every boot threw
+   "Cannot access 'SHOW_BETA_THANKS' before initialization" and the app never opened its
+   database. Caught only by the browser gate: app.js never loads in node. */
+const SHOW_BETA_THANKS = true; // gate the TestFlight invite card (openThanksCard, Crew entry, News row); false hides them in store builds
+
 const NEWS = [
   /* THE WANDERER. Tom kept this row when every other launch interstitial went in
      v448: "the only news things staying are the new one with the wanderer on it
@@ -21734,7 +21740,6 @@ const XP_PIPS = 20;
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
 const APP_BUILD = 'v473'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
-const SHOW_BETA_THANKS = true; // gate the TestFlight invite card (openThanksCard, Crew entry, News row); false hides them in store builds
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
