@@ -907,6 +907,33 @@ export async function importAll(data, { replace = true } = {}) {
     if (!replace) {
       const localKeys = new Set(localKv.map(r => r && r.k));
       kvRows = data.kv.filter(r => !(r && DEVICE_KV.includes(r.k) && localKeys.has(r.k)));
+      /* QA round 34 P0: A BLOB OLDER THAN THE LOCAL COIN LEDGER DOES NOT GET TO
+         WIN. 'coins' is deliberately not in DEVICE_KV (a genuine restore, e.g.
+         adopting a different identity's account, SHOULD hand over that
+         identity's balance), so on an ordinary merge the payload's 'coins' row
+         always overwrote the local one. That is exactly backwards the one time
+         the blob is older than the device's own ledger: the device that just
+         registered pushes its starting balance, the player spends some of it,
+         and the next boot's pull (or any later merge of that same stale blob)
+         handed the pre-spend number straight back, a silent refund.
+         'coinsRev' (js/loot.js coinsAdd) is a plain counter bumped on every
+         real coin change and carried in the same blob 'coins' is, so it is the
+         local proxy for "has this ledger moved since this blob was written"
+         without needing the server-side blob version QA round 34's follow-up
+         (docs/ROADMAP.md) will add. Only ever refuses the payload; never forces
+         local coins UP either, so a genuine restore (payload's coinsRev is
+         equal or ahead, including every file that predates 'coinsRev' and
+         therefore reads 0) is untouched. Scoped to !replace: restoreDailyBackup
+         calls this with replace:true specifically TO roll coins back to an
+         older, known-good number, and this guard must never fight that. */
+      const localCoinsRev = Number((localKv.find(r => r.k === 'coinsRev') || {}).v) || 0;
+      const fileCoinsRev = Number((data.kv.find(r => r && r.k === 'coinsRev') || {}).v) || 0;
+      if (localCoinsRev > fileCoinsRev) {
+        const localCoins = localKv.find(r => r.k === 'coins');
+        const localRev = localKv.find(r => r.k === 'coinsRev');
+        if (localCoins) keptKv.push(localCoins);
+        if (localRev) keptKv.push(localRev);
+      }
     }
     /* THE DAY CEILINGS ONLY EVER GO UP, INCLUDING THROUGH A RESTORE, and
        unlike DEVICE_KV above the payload does NOT get to win. Every other mark
@@ -929,6 +956,21 @@ export async function importAll(data, { replace = true } = {}) {
     keepHigher(DAY_WITNESS_KEY, v => Number(v) || 0);
     keepHigher('dayHighWater', v => dayOrdinal(v) || 0);
   }
+  /* THE TAKE RECEIPT (QA round 34 P0). A merge (!replace) `os.put`s every
+     'inv' row the blob carries, which is right for a row this device has
+     never seen and wrong for one it already opened: a blob older than the
+     local save still carries the now-opened crate, and the put brings it
+     back. js/loot.js openCrate records every crate id it takes in kv
+     'crateTaken' (bounded, same idiom as js/social.js's 'grantsSeen'); a
+     merge never re-adds an inv row on that list. Scoped to !replace for the
+     same reason as the coinsRev guard above: a `replace:true` restore is
+     deliberately reverting to an older save, receipts and all, and must not
+     be second-guessed. */
+  let invRows = data.inv;
+  if (!replace && declared.has('inv')) {
+    const taken = new Set((await kvGet('crateTaken', [])) || []);
+    if (taken.size) invRows = data.inv.filter(r => !(r && taken.has(r.id)));
+  }
   return new Promise((resolve, reject) => {
     let t;
     try { t = idb.transaction(STORES, 'readwrite'); }
@@ -946,7 +988,7 @@ export async function importAll(data, { replace = true } = {}) {
         /* Clear and puts in one transaction, so they land together or not
            at all. Only for stores the file declares: see the header. */
         if (replace && declared.has(s)) os.clear();
-        for (const row of (s === 'kv' ? (kvRows || []) : (data[s] || []))) os.put(row);
+        for (const row of (s === 'kv' ? (kvRows || []) : s === 'inv' ? (invRows || []) : (data[s] || []))) os.put(row);
         if (s === 'kv') for (const row of keptKv) os.put(row);
       }
       /* An import replaces the contents of every store, so every derived cache

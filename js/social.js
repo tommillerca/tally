@@ -441,12 +441,29 @@ async function registerKey(id) {
 
 // Opt in: register this device's pubkey. Re-running (or restoring a backup)
 // returns the same account.
+/* QA round 34 P0: A FRESHLY-MINTED KEY HAS NOTHING TO RESTORE. Onboarding
+   calls this then pushes a backup (js/app.js saveInitialSettings), and
+   nothing latched kv 'bootRestored' on that path: it is only ever set inside
+   bootSync/adoptIdentity, after a PULL. So the very next boot found the flag
+   absent, ran bootSync's one-shot pull, and merged the blob THIS SAME DEVICE
+   had just pushed back over itself — an already-opened crate and already-spent
+   coins, both older in that blob than the live save, came back.
+   'idMinted' (ensureIdentity above) is the existing signal for exactly this:
+   "no server account and no cloud backup can exist for it" for a key this
+   device generated itself. When that is true, the blob this device is about
+   to push (or just pushed) IS its whole state; there is nothing on the server
+   older or newer to protect against, so latch here instead of waiting for a
+   pull that would only ever restore what is already on the phone.
+   Does NOT fire for a RECOVERED identity (keychain/kv, no idMinted): that is
+   bootSync's own reinstall branch calling this same function, and a real
+   backup can genuinely exist for that key — it must still pull. */
 export async function goOnline() {
   const id = await ensureIdentity();
   const r = await registerKey(id);
   if (!r.ok) return r;
   const me = r.me;
   await kvSet('social', { playerId: me.playerId, handle: me.handle, friendCode: me.friendCode, name: me.name || null, onlineAt: Date.now() });
+  if (await kvGet('idMinted', null)) await kvSet('bootRestored', true);
   return { ok: true, me };
 }
 

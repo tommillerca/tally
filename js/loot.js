@@ -850,7 +850,17 @@ function rng() {
    the arithmetic is exact by construction rather than by luck. The clamp is
    unchanged, it just happens inside the transaction now. */
 export async function coins() { return (await kvGet('coins', 0)) || 0; }
-export async function coinsAdd(n) { return kvBump('coins', n); }
+/* 'coinsRev' is a plain monotonic counter, bumped alongside every real coin
+   change and carried in the same backup blob as 'coins' (js/db.js exportAll
+   dumps every kv row). js/db.js importAll's cloud merge (replace:false) reads
+   it to tell a blob OLDER than the local ledger from one that is not, the
+   same "keepHigher" idiom already used there for the day ceilings, applied to
+   coins instead (QA round 34 P0). Two separate kvBump calls, not one
+   transaction: a crash between them only leaves coinsRev a step behind coins,
+   which weakens the guard for one write, it does not reintroduce the refund
+   bug the guard exists to stop. ponytail: a real fix bumps both in one kv
+   transaction if this ever needs to be exact under a crash; not worth it here. */
+export async function coinsAdd(n) { const v = await kvBump('coins', n); await kvBump('coinsRev', 1); return v; }
 
 /* THE ATOMIC SPEND, and it is the only honest way to take money in this file.
    Every buy used to read the balance, compare it to the price, and THEN call
@@ -1999,6 +2009,18 @@ export async function openCrate(invId) {
     if (crateRow) await db.put('inv', crateRow);   // not a crate: put it straight back
     throw new Error('crate gone');
   }
+  /* THE TAKE RECEIPT (QA round 34 P0). A cloud merge (js/db.js importAll,
+     replace:false) `os.put`s every 'inv' row a blob carries, unconditionally:
+     right, for a row this device has never seen, wrong for one it already
+     opened, because a blob older than the local save still carries the
+     unopened row. Same bounded-list idiom js/social.js already uses for
+     'grantsSeen'. importAll checks this id before re-adding an inv row on a
+     merge; a crate this device has taken can never come back through one. */
+  await kvUpdate('crateTaken', cur => {
+    const arr = Array.isArray(cur) ? cur : [];
+    if (arr.includes(crateRow.id)) return undefined;
+    return [...arr, crateRow.id].slice(-500);
+  }, []);
   const def = CRATES[crateRow.crate] || CRATES.daily;
   const owned = await ownedCosmeticIds();
   const results = [];
