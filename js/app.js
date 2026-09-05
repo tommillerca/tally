@@ -9372,6 +9372,27 @@ function petShelfHtml(ownedCos, coinBal) {
    S.petWear never leaks onto a product shot. Gated by FOOTBALL_KIT_LIVE at the
    call site; the price is FOOTBALL_KIT_PRICE_PLACEHOLDER and the buy path
    refuses while it is not a number, so a live shelf with no price sells nothing. */
+/* THE KIT-ROOM TILE'S REAL WORST-CASE css, MEASURED (not the `88 * 2.3` guess
+   it replaces). `.fb-worn` is an 88px box, but `.pc-worn` inside it is the
+   file's usual 1/0.86 crop window -- 102.3px, matching the number every other
+   .fit-* call site here derives the same way -- and .fit-fbhead/.fit-torso/
+   .fit-feet (app.css) scale that panel by 1.4/1.7/2.2, not one flat 2.3 for
+   all three. The old guess sent the helmet and jersey tiles straight to their
+   640 masters (their real worst case, 143px and 174px, both fit the 384
+   tier); only the cleats' steeper crop (225px) genuinely needs the master.
+   Measured 393x852 DPR 2, 2026-09-05, tests/memory-census.mjs's own probe. */
+const FB_TILE_W = 88 / 0.86;
+const FB_TILE_SCALE = { 'fit-fbhead': 1.4, 'fit-torso': 1.7, 'fit-feet': 2.2 };
+/* fit-feet (the cleats) is the one of the three whose real ~225px worst case
+   clears no tier at all -- capping it at 192 CSS px (-> the 384 tier) still
+   costs it a mild upscale, so it caps one rung tighter, at 96 (-> 192), same
+   move already made for the pet tile beside it. Math.min is a no-op for
+   helmet/jersey: their real numbers (~143/~174px) already clear 384 alone. */
+const kitTierCss = it => {
+  const cls = fitClass(it);
+  const raw = FB_TILE_W * (FB_TILE_SCALE[cls] || 2.3);
+  return Math.min(raw, cls === 'fit-feet' ? 96 : 192);
+};
 function footballShelfHtml(ownedCos, coinBal, open = false) {
   const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];   // the PREVIEW colourway, not a variant on sale
   const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
@@ -9396,9 +9417,21 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
     <summary class="t3-drop fb-drop">
       <div class="fb-hero">
         <div class="pc-worn fit-body">${avatarLayersHtml({ ...RACK_BASE, ...Object.fromEntries(sold.filter(g => !g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])) },
-          { wpnAura: null, skip: ['C'], thumb: bhTierFor(260) })}</div>
+          /* Measured 393x852 DPR 2: .fb-hero's .pc-worn is 309.6px at a 0.96
+             scale, real worst-case css ~297 -- bhTierFor(260) was already an
+             under-measure and 297 clears no tier either (needs >=594), same
+             as the master 384 would. Capped at 192 rather than left to
+             escalate, same rung the fb-hero-pet span beside it takes below:
+             the two portraits in this poster share one cap, not two. */
+          { wpnAura: null, skip: ['C'], thumb: 192 })}</div>
         <span class="fb-hero-pet">${croppedPetImg(FOOTBALL_PETS[0], 96, false, null,
-          Object.fromEntries(sold.filter(g => g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])), 384)}</span>
+          /* C4/CX's PET_CROP puts their real worst-case css at ~204-222 here
+             (px=96 x FILL 0.82 / their ~0.35 content fraction), so even 384
+             is already a cap below what bhTierFor's strict rule would allow --
+             this was never going to be the master either way. 192 matches the
+             kit-room's own pet tile below rather than inventing a third
+             number for the same lizard. */
+          Object.fromEntries(sold.filter(g => g.pets).map(g => [g.slot, footballItemId(team.id, g.key)])), 192)}</span>
       </div>
       <div class="tx">
         <span class="eyebrow">Locker room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
@@ -9416,9 +9449,19 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
         ${sold.map(g => {
           const id = footballItemId(team.id, g.key);   // the PREVIEW id: the tile sells the garment, in every team
           const owned = ownedCos.has(id);
+          /* THE PET TILE (g.pets) is pinned to 192, below what bhTierFor's
+             strict rule would allow (her PET_CROP puts the real worst-case
+             css at ~203-221 here, clearing no tier at all) -- same cap as
+             fb-hero-pet above, same lizard. The human tile below gets an
+             equivalent cap for a different reason: the cleats' fit-feet crop
+             (scale 2.2) is the one garment of the three whose real ~225px
+             worst case clears no tier either, so it caps down one more rung
+             than helmet/jersey (~143/~174px, both keep the honestly-earned
+             384 -- kitTierCss only tightens the cap for the one that would
+             otherwise escalate). */
           const art = g.pets
-            ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 384)
-            : `<div class="fb-worn">${wornArtHtml(id, 88 * 2.3)}</div>`;
+            ? croppedPetImg(FOOTBALL_PETS[0], 88, false, null, { [g.slot]: id }, 192)
+            : `<div class="fb-worn">${wornArtHtml(id, kitTierCss(BH_BY_ID[id]))}</div>`;
           /* SELLABLE (the piece is on sale at all) is separate from AFFORDABLE
              (this wallet can cover it right now): unsellable stays disabled
              ("Soon"), unaffordable is enabled with `cant` and toasts the exact
@@ -16178,16 +16221,39 @@ async function renderCharacter(wrap, tab, opts = {}) {
       for (const m of missing) byRar[m.rarity] = (byRar[m.rarity] || 0) + 1;
       const tease = RAR_ORDER.filter(r => byRar[r] && (r === 'legendary' || r === 'epic'))
         .map(r => `${byRar[r]} ${r}`).join(', ');
-      const sorted = [...have].sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity));
+      /* COLOURWAY FAMILIES, THE SAME COLLAPSE THE WARDROBE GRID USES.
+         bhFamilyKey groups the football kit's 32-team colourways (and every
+         hand-drawn -N series) into one drawing; the Collection was listing
+         every member as its own <img>, which is 567 of them on a completionist
+         and 90.6 MB at the end of a scroll. A family of one renders exactly as
+         before -- same classes, same one tap. A family of more than one gets a
+         single tile (the worn variant, else the first) with a count badge, and
+         a rail on tap reaches every member, so nothing collected is hidden. */
+      const famBest = fam => [...fam].sort((a, b) => RAR_ORDER.indexOf(a.rarity) - RAR_ORDER.indexOf(b.rarity))[0];
+      const sortedFams = [...bhFamilies(have).values()]
+        .sort((a, b) => RAR_ORDER.indexOf(famBest(a).rarity) - RAR_ORDER.indexOf(famBest(b).rarity));
       return `
         <div class="col-head"><span>${esc(label)}</span><em>${have.length} of ${all.length}${tease ? ` · ${esc(tease)} out there` : ''}</em></div>
         <div class="col-grid">
-          ${/* 90px tiles, one per owned piece, 362 of them on a completionist:
-                579.7 MB at the end of a scroll on the 640px art. `loading=lazy`
-                was already here and it is why open was cheaper than the end --
-                lazy DEFERS, it does not BOUND, and nothing is ever released. */
+          ${/* 90px tiles, one per owned piece/family, 362 of them on a completionist
+                before the collapse: 579.7 MB at the end of a scroll on the 640px
+                art. `loading=lazy` was already here and it is why open was cheaper
+                than the end -- lazy DEFERS, it does not BOUND, and nothing is ever
+                released. */
             ''}
-          ${sorted.map(i => `<button class="col-cell r-${i.rarity} ${wornSet.has(i.id) ? 'worn' : ''} ${S.lookInspect === i.id ? 'selected' : ''}" data-look-info="${i.id}" title="${esc(i.name)}"><img src="${bhThumb(bhAsset(i))}" alt="${esc(i.name)}" loading="lazy"></button>`).join('')}
+          ${sortedFams.map(fam => {
+            if (fam.length === 1) {
+              const i = fam[0];
+              return `<button class="col-cell r-${i.rarity} ${wornSet.has(i.id) ? 'worn' : ''} ${S.lookInspect === i.id ? 'selected' : ''}" data-look-info="${i.id}" title="${esc(i.name)}"><img src="${bhThumb(bhAsset(i))}" alt="${esc(i.name)}" loading="lazy"></button>`;
+            }
+            const key = bhFamilyKey(fam[0]);
+            const i = fam.find(v => wornSet.has(v.id)) || fam[0];
+            const open = S.lookFamOpen === key;
+            const rail = !open ? '' : `<div class="col-fam-rail" role="group" aria-label="${esc(i.name)} colourways">
+              ${fam.map(v => `<button class="col-cell famr r-${v.rarity} ${wornSet.has(v.id) ? 'worn' : ''} ${S.lookInspect === v.id ? 'selected' : ''}" data-look-info="${v.id}" title="${esc(v.name)}"><img src="${bhThumb(bhAsset(v))}" alt="${esc(v.name)}" loading="lazy"></button>`).join('')}
+            </div>`;
+            return `<button class="col-cell fam r-${i.rarity} ${fam.some(v => wornSet.has(v.id)) ? 'worn' : ''}" data-fam-toggle="${esc(key)}" title="${esc(i.name)} · ${fam.length} colourways" aria-expanded="${open}" aria-label="${esc(i.name)}, ${fam.length} colourways"><img src="${bhThumb(bhAsset(i))}" alt="${esc(i.name)}" loading="lazy"><span class="ward-fam-n" aria-hidden="true">${fam.length}</span></button>${rail}`;
+          }).join('')}
           ${missing.map(() => '<button class="col-cell locked" data-look-locked="1" title="Not collected yet"><span class="lock-q">?</span></button>').join('')}
         </div>
         ${(() => {
@@ -16210,6 +16276,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
       ${sections}`;
     $$('[data-look-info]', content).forEach(c => c.addEventListener('click', () => {
       S.lookInspect = S.lookInspect === c.dataset.lookInfo ? null : c.dataset.lookInfo;
+      popSound(S.sounds);
+      renderCharacter(wrap, 'looks', { instant: true });
+    }));
+    $$('[data-fam-toggle]', content).forEach(c => c.addEventListener('click', () => {
+      S.lookFamOpen = S.lookFamOpen === c.dataset.famToggle ? null : c.dataset.famToggle;
+      S.lookInspect = null;
       popSound(S.sounds);
       renderCharacter(wrap, 'looks', { instant: true });
     }));
@@ -18250,6 +18322,10 @@ async function openStable(opts = {}) {
      markup be born at the OLD size and then transition, which is the only way to
      animate across a rebuild without rewriting the screen to patch in place. */
   let cfWasPanelled = false;
+  // which pet-wardrobe colourway family (keyed "sp:familyKey") has its rail
+  // open. render() rebuilds cfWear from scratch, so this has to live outside
+  // it the same way cfIid and openIid do.
+  let petFamOpen = null;
   // when we arrive from a pet level-up, that pet's tree is the reason we are here
   let focusIid = opts.focusIid || null;
   const focusSp = opts.focusSp || null;
@@ -18444,19 +18520,48 @@ async function openStable(opts = {}) {
         return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
           <p class="note pw-empty">Nothing to wear yet. Gwart's Menagerie stocks ${PET_SHOP.items.length} pieces, all drawn for her.</p></div>`;
       }
+      const petWearItemBtn = i => {
+        const a = BH_BY_ID[i.id];
+        const on = S.petWear[a.slot] === i.id;
+        const slotLbl = (PET_SLOTS.find(sl => sl.code === a.slot) || {}).label || a.slot;
+        // a football piece has no product-shot sheet, so its tile is the pet wearing it
+        const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, 192) : petShotHtml(i.id, 62);
+        return `<button class="pw-item r-${a.rarity}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}">
+          <span class="pw-art">${tile}</span>
+          <b>${esc(a.name)}</b>
+          <small>${on ? 'WORN' : esc(slotLbl)}</small>
+        </button>`;
+      };
+      /* THE FOOTBALL GARMENT COLLAPSE, SAME RULE AS THE HUMAN WARDROBE
+         (bhFamilyKey/bhFamilies): 32 team colourways of the Lizard Helmet or
+         Jersey share one master `file`, so an owned-everything account built
+         one <img> per team per species here -- 64 of the same source apiece
+         across the Beardie and the Day One Lizard panels, decoded even while
+         hidden under the OTHER pet in the ring (the panel has to exist for
+         both, see the comment above). A family of one renders exactly as
+         before. A family of more collapses to one tile (worn colourway, else
+         the first) with a count badge; tapping it opens a rail of every team
+         so nothing owned is unreachable. */
+      const petFams = [...bhFamilies(mine).values()];
+      const wearRow = petFams.map(fam => {
+        if (fam.length === 1) return petWearItemBtn(fam[0]);
+        const key = sp + ':' + bhFamilyKey(fam[0]);
+        const worn = fam.find(i => S.petWear[BH_BY_ID[i.id].slot] === i.id);
+        const i = worn || fam[0];
+        const a = BH_BY_ID[i.id];
+        const open = petFamOpen === key;
+        const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, 192) : petShotHtml(i.id, 62);
+        const famTile = `<button class="pw-item fam r-${a.rarity}${worn ? ' on' : ''}" type="button" data-petfam="${esc(key)}" aria-expanded="${open}" aria-label="${esc(a.name)}, ${fam.length} colourways">
+          <span class="pw-art">${tile}<span class="ward-fam-n" aria-hidden="true">${fam.length}</span></span>
+          <b>${esc(a.name)}</b>
+          <small>${worn ? 'WORN' : fam.length + ' colours'}</small>
+        </button>`;
+        // display:contents so the rail's own tiles join .pw-row's flex/scroll
+        // directly instead of nesting a second scroller inside the first.
+        return open ? `${famTile}<span style="display:contents">${fam.map(petWearItemBtn).join('')}</span>` : famTile;
+      }).join('');
       return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
-        <div class="pw-row">${mine.map(i => {
-          const a = BH_BY_ID[i.id];
-          const on = S.petWear[a.slot] === i.id;
-          const slotLbl = (PET_SLOTS.find(sl => sl.code === a.slot) || {}).label || a.slot;
-          // a football piece has no product-shot sheet, so its tile is the pet wearing it
-          const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, 192) : petShotHtml(i.id, 62);
-          return `<button class="pw-item r-${a.rarity}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}">
-            <span class="pw-art">${tile}</span>
-            <b>${esc(a.name)}</b>
-            <small>${on ? 'WORN' : esc(slotLbl)}</small>
-          </button>`;
-        }).join('')}</div>
+        <div class="pw-row">${wearRow}</div>
         <p class="note pw-hint">Tap to put a piece on. Tap it again to take it off. One per spot.</p></div>`;
     }).join('');
 
@@ -19055,6 +19160,11 @@ async function openStable(opts = {}) {
       const r = await togglePetWear(btn.dataset.petwear);
       if (!r.ok) { toast('That piece is not in your wardrobe.'); return; }
       await refreshPetWear();
+      popSound(S.sounds);
+      render();
+    }));
+    $$('[data-petfam]', body).forEach(btn => btn.addEventListener('click', () => {
+      petFamOpen = petFamOpen === btn.dataset.petfam ? null : btn.dataset.petfam;
       popSound(S.sounds);
       render();
     }));
