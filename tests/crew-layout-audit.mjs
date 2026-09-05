@@ -130,7 +130,11 @@ if (hookPresent) {
   // showing or queued ahead of the one this triggers, so poll rather than read
   // #toast once after a fixed delay.
   let toastTxt = null;
-  for (let i = 0; i < 30 && !(toastTxt || '').includes('crushing'); i++) {
+  /* 2026-09-05 gate 15: under the gate's load the boot queue (Kitchen starter
+     ingredients, day close) held #toast past 6 s and this row read the Kitchen
+     line. 24 s covers a full boot queue; the row still fails if the cheer never
+     shows, because only a toast containing "crushing" is accepted below. */
+  for (let i = 0; i < 120 && !(toastTxt || '').includes('crushing'); i++) {
     toastTxt = await page.evaluate(() => document.querySelector('#toast')?.textContent || null);
     if ((toastTxt || '').includes('crushing')) break;
     await sleep(200);
