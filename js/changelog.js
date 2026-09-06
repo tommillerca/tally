@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 491, date: '2026-09-06', title: 'Day one tells the truth', items: [
+    'The quest board on your first day always has something you can actually do: the pool is filtered for what you have unlocked before the draw, one daily comes from the logging loop the game just taught you, and two players installing on the same day no longer get the same board.',
+    'Onboarding said logging food pays XP and coins. Food pays XP; coins come from quests, crates and closing the day, and the line says so now.',
+    'Gwart no longer opens with a scold on the day you install or before you have logged anything, and a fresh install starts with zero unread news instead of ten.',
+  ] },
   { n: 490, date: '2026-09-06', title: 'Your first pet comes home', items: [
     'Hatch your first egg and the pet is on Today with you, where before the Stable said she was out with you while Today showed nothing and the EQUIP button stayed greyed out. The two records agree now, and a Stable button is never disabled for a pet you are not actually wearing.',
     'A pet name with odd characters no longer breaks the Stable heading, and a damaged pet record is skipped instead of emptying the whole Stable.',
