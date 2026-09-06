@@ -19,8 +19,8 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
-## v488
-1. The integration train (integ/day5) off v487: Kennel phase A, palettes, the approved v2 recolour art and the Kennel UI; crew activity; the Wardrobe paint virtualization; the truthful iOS permission strings (not a player-visible change, documented in docs/PERMISSION-STRINGS.md). Each row below folds the dated sections further down.
+## v492
+1. The integration train (integ/day5) off v491: Kennel phase A, palettes, the approved v2 recolour art and the Kennel UI; crew activity; the Wardrobe paint virtualization; the truthful iOS permission strings (not a player-visible change, documented in docs/PERMISSION-STRINGS.md). Each row below folds the dated sections further down.
 
 2. PROOF: unit.test.js, pet-pool-audit.mjs, pet-morph-audit.mjs, kennel-audit.mjs | REACH: a granted egg rolls a morph fresh-first over species x morph pairs at MORPH_WEIGHT, the hatch reads it, morphs never touch stats; each morph is a per-fill recolour PNG of Cam's master (ink, whites and creams byte-identical, one midnight tier, Tom approved the sheet 2026-09-06) with tiers built; the Kennel sheet inside the Stable lists every species with a 30-cell collection grid and column headers.
 
@@ -43,6 +43,100 @@ R39-6, 8, 9, 10, 11, 13, 14, 21, 23, 30, 32, re-measured on this tree before fix
 5. PROOF: kennel-audit.mjs | REACH: In the Kennel, tap a grid cell (or focus it and press Enter or Space): the row names that colourway; tap it again and the species name comes back. The dots under a pet are indicators.
 6. PROOF: kennel-audit.mjs | REACH: Open the Kennel on a 320 wide phone owning every colourway of every pet: all six rows fit above the fold, the caption ends in an ellipsis instead of wrapping, and each column header sits over its column.
 7. PROOF: pet-morph-audit.mjs | REACH: Open the Backpack with an incubating Ember egg: the shell reads orange, not blue. Frost reads blue, Toxic green, Midnight purple.
+## day one tells the truth (2026-09-06)
+
+Not stamped to a release: hotfix/dayone-board, off v482. HANDOFFr3920260906.md
+R39-2, R39-3, R39-28, R39-29, re-measured on this tree before fixing.
+
+1. PROOF: unit.test.js, quest-pick-audit.mjs, quest-daymore-audit.mjs | REACH:
+   A brand-new player's first Quests board always has 3 dailies you can
+   actually do, and one of them is something onboarding itself taught you
+   (Log anything at all, or Log 3 meals in a day). Two players who install on
+   the same calendar day no longer see the identical board.
+
+2. PROOF: unit.test.js | REACH: Onboarding's LOG FOOD screen no longer says
+   logging a meal pays coins. It doesn't; coins come from quests, crates and
+   the day close, so the line now only promises what logging actually pays
+   (XP).
+
+3. PROOF: unit.test.js | REACH: Gwart never opens with a scold ("Half the day
+   gone and not a crumb on the page") on your first day, or on any day you
+   have never logged a single thing. That line only ever fires on an
+   established account that has logged before and chose not to today.
+
+4. PROOF: unit.test.js, news-banner-audit.mjs, news-tab-audit.mjs,
+   newsrow-return-audit.mjs | REACH: A fresh install starts with 0 unread news
+   on Today. Every announcement the game has ever made is older than your
+   account, so it is marked read the moment onboarding finishes; the News tab
+   still lists every one of them, you just are not told you are behind on ten
+   things you were never here for.
+## first pet reaches Today (2026-09-06)
+
+Not stamped to a release: hotfix/first-pet, off v487 (d7906217). HANDOFFr3920260906.md
+R39-1 (P0) and R39-31, both re-measured on v487 before fixing: a cold install that
+hatched the welcome egg through the Backpack's own HATCH button came home to
+`equipped()` = `{B, SK}`, no C slot, no `#heroPetBtn`, and a Stable saying OUT WITH
+YOU with EQUIP disabled. Root cause: `equippedPetIid()`'s heal wrote `petEquipped`
+and never the paper-doll C slot; only `setEquippedPet` wrote both, and nothing on
+the hatch path called it.
+
+1. PROOF: first-pet-audit.mjs, pet-ownership-audit.mjs | REACH: Install fresh, finish
+   onboarding, open your Bonehead, tap Backpack, tap HATCH on the welcome egg and
+   Adopt. Back on Today your new pet is standing beside your Bonehead. No second
+   egg needed.
+
+2. PROOF: first-pet-audit.mjs | REACH: If you already hatched on v482 to v487 and
+   came home to no pet, the next time the game asks which pet is out (opening the
+   Stable, or the step credit that runs when Today refreshes) the slot is repaired
+   and she appears. Nothing to tap.
+
+3. PROOF: pet-ownership-audit.mjs | REACH: In the Stable, EQUIP is only greyed out
+   as OUT WITH YOU while that pet is actually the one drawn on Today. A pet the
+   home screen is not showing can always be equipped.
+
+4. PROOF: pet-ownership-audit.mjs, unit.test.js | REACH: The "(name)'s wardrobe"
+   heading in the Stable shows the species name as text whatever characters it
+   carries. Catalogue names are ours today, so nothing visible changes for
+   players.
+
+5. PROOF: pet-ownership-audit.mjs | REACH: A save carrying a pet row with no
+   species no longer empties the Stable. Every real pet is still drawn; the bad
+   row is skipped and noted once in the console.
+## onboarding fits the SE, sheets survive a double tap (2026-09-06)
+
+Not stamped to a release: hotfix/onboarding-fold. HANDOFFr3920260906.md R39-12,
+R39-15, re-measured on this tree before fixing.
+
+1. PROOF: onb-audit.mjs | REACH: on an iPhone SE-sized phone (375x667) or
+   smaller (320x568), onboarding's primary button is on screen the moment each
+   step paints, with no scrolling and no scroll cue needed. It used to sit 22px
+   below the fold on the reveal step ("That's me") and 293px below it on the
+   plan step ("Start tracking"), because the button was pushed down by
+   `margin-top: auto`, which only works when the screen has room to spare. It
+   now rides the bottom of the scrollable area from first paint instead.
+
+2. PROOF: sheet-doubletap-audit.mjs | REACH: opening any sheet in the app (the
+   Kennel button among them) with a fast double-tap no longer opens it and
+   immediately closes it again. The second tap used to land on the new sheet's
+   own backdrop mid slide-up and read as a request to dismiss it; the backdrop
+   now ignores a tap in the first 300ms after it appears, so a normal
+   dismissal tap (at 400ms or later) still works exactly as before.
+## the worn kit holds its colour (2026-09-06)
+
+Not stamped to a release: hotfix/wardrobe-tint-flash, off v487. Tom, live v487:
+"Switching to wardrobe makes the helmet or jersey run through every colour
+quickly if you're on that item slot at the time. Makes me think these items
+layer every colour at once?" Measured before fixing: the stage's two tint spans
+took 18 distinct colour pairs inside 1.5s of the tab tap, the rail's scrollLeft
+walking 0 to 2000 underneath them. Nothing was layered: the rail opened on the
+worn tile with `centreOn(worn, 'auto')`, `'auto'` defers to `.fb-rail`'s
+`scroll-behavior: smooth`, and the rail's scroll handler painted the doll with
+every team the animated centring passed. After: 1 colour, 2 spans per garment.
+
+1. PROOF: football-rail-audit.mjs | REACH: Wear a football helmet or jersey in
+   any team but the first, open the Bonehead tab with that slot selected, or tap
+   its slot chip. The piece on your Bonehead is your team's colours from the
+   first frame; it no longer flicks through the other 31 on the way in.
 
 ## backup and recovery truth (2026-09-06)
 
@@ -91,6 +185,34 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 2. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit sheet, right where a fight is offered, now names an active dish buff and its plain-words effect, or (no buff active but ingredients or a cooked dish owned) points at the Kitchen; says nothing when there is truly nothing to cook. Cooking is measured at +37.7 to +59.9pp win rate in the real fight engine and renderPit never mentioned it before. Red on both the buff line and the nudge line with the Pit's kitchen line removed; the quiet state stays correctly green either way, which is the point.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
+
+## v491
+1. A hotfix off v490, QA round 39's R39-2, 3, 28, 29. Its rows are the dated "day one tells the truth" section further down, folded here. No quest reward or coin value changed.
+
+2. PROOF: unit.test.js, quest-pick-audit.mjs, quest-daymore-audit.mjs | REACH: pick() filters the pool by gate state before drawing, a day-one board carries q-first or q-3meals, and a per-install salt folds into the date seed (rows red on the pre-fix pick; quest-daymore's SCOPED sweep proves the substitution applies to the day-one gate combination and nowhere else, red when the guard is loosened).
+
+3. PROOF: unit.test.js | REACH: the onboarding LOG FOOD line no longer promises coins; food pays XP and the line names quests, crates and the day close as the coin sources (row red before).
+
+4. PROOF: unit.test.js, news-banner-audit.mjs, news-tab-audit.mjs | REACH: Gwart never scolds on the install day or before anything has ever been logged (row red before), and saveInitialSettings marks every live NEWS row seen so a fresh install shows zero unread while the rows stay listed (row red with the write removed).
+
+## v490
+1. A hotfix off v489, QA round 39's R39-1 (P0) and R39-31. Its rows are the dated "first pet reaches Today" section further down, folded here.
+
+2. PROOF: first-pet-audit.mjs, pet-ownership-audit.mjs | REACH: equippedPetIid's heal writes both records (petEquipped and the paper-doll C slot), hatchEgg calls it so the first hatched pet is out before the reveal closes, and the Stable only shows OUT WITH YOU (disabled) when the worn outfit actually holds that species. Node rows red on v487 (C=undefined on HEAL, STUCK and HATCH); browser FIRSTPET red on v487 (real onboarding, real HATCH, heroPetBtn false), green after (heroPetBtn true, both records agree).
+
+3. PROOF: pet-ownership-audit.mjs | REACH: the Stable's wardrobe heading escapes the species name (HER row red: a name containing <b> rendered bold), and an instance row without sp is skipped with one warning instead of throwing out of bhAsset and emptying the Stable (GHOST row red: 0 cards, TypeError).
+
+## v489
+1. A hotfix off v488, QA round 39's R39-15 and R39-12. Its rows are the dated "onboarding fits the SE, sheets survive a double tap" section further down, folded here.
+
+2. PROOF: onb-audit.mjs | REACH: the onboarding primary button's bottom edge is inside the viewport at first paint at 375x667 and 320x568 on both the reveal and plan steps (the foot is sticky to the screen bottom, safe-area aware); red before with the measured overflows (21.7, 293.5, 162.2 and 330.5 px).
+
+3. PROOF: sheet-doubletap-audit.mjs | REACH: two real taps 60 ms apart on a sheet trigger leave the sheet open, and a backdrop tap at 400 ms still closes it, because the shared openSheet backdrop handler ignores clicks within 300 ms of open (red before with the guard reverted).
+
+## v488
+1. A hotfix off v487 from Tom's live play test. Its row is the dated "the worn kit holds its colour" section further down, folded here.
+
+2. PROOF: football-rail-audit.mjs | REACH: arriving on the Wardrobe with a football piece worn paints the stage once, in the worn team, because the rail's opening centring is instant instead of a smooth scroll whose per-frame select repainted the stage spans (RAIL-HOLDS row red before: 18 distinct colours across 88 samples; after: 1; RAIL-STACK shows two tint spans per garment throughout, so nothing was ever layered).
 
 ## v487
 1. A hotfix off v486, Codex's two round-37 lanes (R37-14, 19, 20 and R37-17). Its rows are their dated sections further down, folded here.

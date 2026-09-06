@@ -1286,6 +1286,8 @@ export async function hatchEgg(invId) {
      value, reads as base too. */
   const morph = isShiny ? 'base' : (isMorph(row.morph) ? row.morph : 'base');
   await addPetInstance(pick.id, { shiny: isShiny, morph });
+  // first hatch: nobody is out yet, so the heal in equippedPetIid equips her (R39-1)
+  await equippedPetIid();
   /* DUPE IS ASKED OF THE (SPECIES, MORPH) PAIR, not of species alone (section
      2.5): a species can now hatch in more than one colour, so owning a base
      Bulldog already is not "another one" of a fresh Ember Bulldog. It still
@@ -1878,12 +1880,29 @@ export async function petLevelBank() {
 export async function equippedPetIid() {
   let iid = await kvGet('petEquipped', null);
   const insts = await petInstances();
-  if (iid && insts.some(x => x.iid === iid)) return iid;
-  // migrate / repair: fall back to the old paper-doll species, else the best pet owned
-  const oldSp = (await equipped({ raw: true })).C;
-  const target = (oldSp && bestInstance(insts, oldSp)) || bestInstance(insts, insts[0] && insts[0].sp) || insts[0] || null;
-  iid = target ? target.iid : null;
-  await kvSet('petEquipped', iid);
+  let inst = iid ? insts.find(x => x.iid === iid) : null;
+  if (!inst) {
+    // migrate / repair: fall back to the old paper-doll species, else the best pet owned
+    const oldSp = (await equipped({ raw: true })).C;
+    inst = (oldSp && bestInstance(insts, oldSp)) || bestInstance(insts, insts[0] && insts[0].sp) || insts[0] || null;
+    iid = inst ? inst.iid : null;
+    await kvSet('petEquipped', iid);
+  }
+  /* THE TWO RECORDS MUST AGREE (R39-1, 2026-09-06). This heal used to write
+     petEquipped alone, and only setEquippedPet ever wrote the paper-doll C slot,
+     so a first hatch left the Stable saying OUT WITH YOU (button disabled) while
+     Today, which draws equipped().C, showed no pet at all, and nothing on any
+     screen could repair it. Whatever this function answers is the pet that is
+     out, so the slot follows it, on every path and not only the heal. The same
+     read-then-kvSet equip() itself does, not equip('C'): the species is owned by
+     construction (every instance minter grants the cos row), and equip() scans
+     inv for its ownership check, which today-reads-lint A1 forbids on Today's
+     tick. Plain kvSet, like equip and equipGear (claimed-row-audit): two callers
+     racing this write the same slot value. */
+  if (inst) {
+    const eq = await equipped({ raw: true });
+    if (eq.C !== inst.sp) { eq.C = inst.sp; await kvSet('equipped', eq); }
+  }
   return iid;
 }
 export async function setEquippedPet(iid) {

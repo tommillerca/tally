@@ -66,6 +66,14 @@ ok('SETUP docs/CLAIMS.md exists', existsSync(claimsPath),
 if (!existsSync(claimsPath)) { console.log('\nclaim-evidence: FAILED'); process.exit(1); }
 
 const claims = readFileSync(claimsPath, 'utf8');
+/* 2026-09-06: the v489 merge shipped three conflict markers in this file to main
+   (#395, fixed in #396). Nothing graded the file's own integrity. A marker is
+   never legitimate content here, so it fails the newest entry's evidence. */
+{
+  const markers = claims.split('\n').map((l, i) => [l, i + 1]).filter(([l]) => /^(<<<<<<< |=======$|>>>>>>> )/.test(l));
+  ok('CLAIMS docs/CLAIMS.md carries no merge conflict markers', markers.length === 0,
+    markers.length ? `${markers.length} marker(s) at line(s) ${markers.map(([, n]) => n).join(', ')}` : 'clean');
+}
 const block = claims.split(/^##\s+/m).find(b => b.startsWith(`v${newest.n}`));
 ok(`CLAIMS docs/CLAIMS.md has a section for v${newest.n}`, !!block,
   block ? 'found' : `add "## v${newest.n}" with one line per item`);
