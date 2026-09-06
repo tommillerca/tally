@@ -6226,7 +6226,7 @@ function composeAvatars(root = document) {
 }
 
 function healthCardHtml(hk, isToday) {
-  if (!hk && !(S.settings.hkConnected && isToday)) return '';
+  if (!hk && !isToday) return '';
   const steps = hk?.steps;
   const active = hk?.activeKcal;
   const goal = 10000;
@@ -20105,9 +20105,11 @@ async function syncFromClipboard() {
       toast(`Same reading you already synced on ${prevClip.date}. Run your "Sync Boneheadz" shortcut again to pick up today's steps.`, 4600);
       return;
     }
+    const firstSync = !S.settings.hkConnected;
     await ingestHealth(payload);
     await kvSet('hkClipLast', { ...clipId, date: payload.date });
-    refresh();
+    if (firstSync && currentTab() !== 'today') location.hash = '#/today';
+    else refresh();
   } catch {
     toast('Nothing to paste yet. Run the Sync Boneheadz shortcut (it copies your steps), then come back and tap Sync.', 3200);
   }

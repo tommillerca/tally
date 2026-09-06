@@ -19,6 +19,13 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## health card today (2026-09-06)
+
+1. PROOF: health-intake-audit.mjs | REACH: Open Today before connecting Apple
+   Health. The Activity card and its Sync control are present for the first
+   import. Completing that first sync from Settings returns to Today, where the
+   synced activity is visible.
+
 ## v482
 1. A hotfix off v481, QA round 37's first-session and crate-tap items (R37-1, 5, 6; R37-2 verified already fixed by the round-34 restore latch). Its rows are the dated "first session and crate taps" section further down, folded here.
 
