@@ -218,6 +218,33 @@ await p.browserContext().close();
   await ctx.close();
 }
 
+/* ---------- R39-15: the primary CTA sits at the fold on a short phone ----------
+   Handoff round 39: at 375x667 (iPhone SE) step 2's "That's me" measured 22px
+   below the fold at first paint and step 3's "Start tracking" 293px below, with
+   no scroll cue. .onb-foot used margin-top:auto, which only pushes the button
+   down when #screen has leftover space; a short phone overflows before that
+   space exists, so the button just sits wherever the content stack ends.
+   Fixed with position:sticky (bottom:0) on .onb-foot so it rides #screen's own
+   scrollport edge from first paint instead of the end of the content.
+   PROVE-RED (run against origin/main before the CSS/markup change): both rows
+   at both viewports failed with bottom > viewport, matching the numbers above. */
+for (const vp of [{ w: 375, h: 667 }, { w: 320, h: 568 }]) {
+  const ctx = await browser.createBrowserContext();
+  const pv = await ctx.newPage();
+  await pv.setViewport({ width: vp.w, height: vp.h, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await pv.goto(base, { waitUntil: 'networkidle2' });
+  await sleep(2000);
+  await pv.evaluate(() => document.getElementById('onbGo')?.click());
+  await sleep(700);
+  const meBottom = await pv.evaluate(() => document.getElementById('onbMe')?.getBoundingClientRect().bottom);
+  ok(`R39-15 "That's me" is inside the fold at ${vp.w}x${vp.h}`, meBottom != null && meBottom <= vp.h, `bottom=${meBottom} viewport=${vp.h}`);
+  await pv.evaluate(() => document.getElementById('onbMe')?.click());
+  await sleep(700);
+  const saveBottom = await pv.evaluate(() => document.getElementById('onbSave')?.getBoundingClientRect().bottom);
+  ok(`R39-15 "Start tracking" is inside the fold at ${vp.w}x${vp.h}`, saveBottom != null && saveBottom <= vp.h, `bottom=${saveBottom} viewport=${vp.h}`);
+  await ctx.close();
+}
+
 ok('NO page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
 await browser.close();

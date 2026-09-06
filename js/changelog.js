@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 489, date: '2026-09-06', title: 'Onboarding fits the small phones, and sheets survive a double tap', items: [
+    'On an iPhone SE the button that moves onboarding forward sat below the fold with nothing to say so; "Start tracking" was almost a full screen down. The button now stays pinned at the bottom of the screen on every step.',
+    'Tapping a button twice quickly used to open a sheet and close it again, because the second tap landed on the backdrop mid-slide. A sheet ignores backdrop taps for its first moment now.',
+  ] },
   { n: 488, date: '2026-09-06', title: 'The worn kit holds its colour', items: [
     'Opening the Wardrobe on a football piece made the helmet or jersey flash through every team\'s colours for half a second before settling. The rail was sliding to your team and repainting the piece with each team it passed. It lands on your team in one step now.',
   ] },
