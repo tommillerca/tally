@@ -180,6 +180,13 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
 
+## v492
+1. A hotfix off v491 from Tom's live play test. Its rows are the dated "pit readout and exit" section further down, folded here.
+
+2. PROOF: fight-hint-audit.mjs | REACH: no move's cost pill overlaps its label at 375x667, 393x852 or 430x932 (measured 3.6 px on every move and 13.2 px on Bone Guard before; 0 after), and Bone Guard's cost fits one line.
+
+3. PROOF: pit-exit-motion-audit.mjs | REACH: closing the fight sheet through the real Done rewrites #pitBody exactly once; the redundant setTimeout renderPit that fired at 262 ms on top of onClose's own render is gone (red before: 2 writes), with rAF frame timing bounded against a same-run Stable close.
+
 ## v491
 1. A hotfix off v490, QA round 39's R39-2, 3, 28, 29. Its rows are the dated "day one tells the truth" section further down, folded here. No quest reward or coin value changed.
 
