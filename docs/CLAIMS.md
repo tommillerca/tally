@@ -19,6 +19,38 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## first pet reaches Today (2026-09-06)
+
+Not stamped to a release: hotfix/first-pet, off v487 (d7906217). HANDOFFr3920260906.md
+R39-1 (P0) and R39-31, both re-measured on v487 before fixing: a cold install that
+hatched the welcome egg through the Backpack's own HATCH button came home to
+`equipped()` = `{B, SK}`, no C slot, no `#heroPetBtn`, and a Stable saying OUT WITH
+YOU with EQUIP disabled. Root cause: `equippedPetIid()`'s heal wrote `petEquipped`
+and never the paper-doll C slot; only `setEquippedPet` wrote both, and nothing on
+the hatch path called it.
+
+1. PROOF: first-pet-audit.mjs, pet-ownership-audit.mjs | REACH: Install fresh, finish
+   onboarding, open your Bonehead, tap Backpack, tap HATCH on the welcome egg and
+   Adopt. Back on Today your new pet is standing beside your Bonehead. No second
+   egg needed.
+
+2. PROOF: first-pet-audit.mjs | REACH: If you already hatched on v482 to v487 and
+   came home to no pet, the next time the game asks which pet is out (opening the
+   Stable, or the step credit that runs when Today refreshes) the slot is repaired
+   and she appears. Nothing to tap.
+
+3. PROOF: pet-ownership-audit.mjs | REACH: In the Stable, EQUIP is only greyed out
+   as OUT WITH YOU while that pet is actually the one drawn on Today. A pet the
+   home screen is not showing can always be equipped.
+
+4. PROOF: pet-ownership-audit.mjs, unit.test.js | REACH: The "(name)'s wardrobe"
+   heading in the Stable shows the species name as text whatever characters it
+   carries. Catalogue names are ours today, so nothing visible changes for
+   players.
+
+5. PROOF: pet-ownership-audit.mjs | REACH: A save carrying a pet row with no
+   species no longer empties the Stable. Every real pet is still drawn; the bad
+   row is skipped and noted once in the console.
 ## onboarding fits the SE, sheets survive a double tap (2026-09-06)
 
 Not stamped to a release: hotfix/onboarding-fold. HANDOFFr3920260906.md R39-12,
@@ -102,6 +134,13 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 2. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit sheet, right where a fight is offered, now names an active dish buff and its plain-words effect, or (no buff active but ingredients or a cooked dish owned) points at the Kitchen; says nothing when there is truly nothing to cook. Cooking is measured at +37.7 to +59.9pp win rate in the real fight engine and renderPit never mentioned it before. Red on both the buff line and the nudge line with the Pit's kitchen line removed; the quiet state stays correctly green either way, which is the point.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
+
+## v490
+1. A hotfix off v489, QA round 39's R39-1 (P0) and R39-31. Its rows are the dated "first pet reaches Today" section further down, folded here.
+
+2. PROOF: first-pet-audit.mjs, pet-ownership-audit.mjs | REACH: equippedPetIid's heal writes both records (petEquipped and the paper-doll C slot), hatchEgg calls it so the first hatched pet is out before the reveal closes, and the Stable only shows OUT WITH YOU (disabled) when the worn outfit actually holds that species. Node rows red on v487 (C=undefined on HEAL, STUCK and HATCH); browser FIRSTPET red on v487 (real onboarding, real HATCH, heroPetBtn false), green after (heroPetBtn true, both records agree).
+
+3. PROOF: pet-ownership-audit.mjs | REACH: the Stable's wardrobe heading escapes the species name (HER row red: a name containing <b> rendered bold), and an instance row without sp is skipped with one warning instead of throwing out of bhAsset and emptying the Stable (GHOST row red: 0 cards, TypeError).
 
 ## v489
 1. A hotfix off v488, QA round 39's R39-15 and R39-12. Its rows are the dated "onboarding fits the SE, sheets survive a double tap" section further down, folded here.

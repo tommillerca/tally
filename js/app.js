@@ -19057,6 +19057,7 @@ async function openFriendPaddock(f) {
     </div>`, { cls: 'sheet-paddock' });
 }
 
+let stableGhostWarned = false;   // R39-31: one warning per session, not one per render
 async function openStable(opts = {}) {
   let sel = [];      // iids flagged for breeding
   let offSp = null;
@@ -19088,7 +19089,19 @@ async function openStable(opts = {}) {
     if (!body) return;
     /* eqOwn is the WORN OUTFIT (equipped()), not equippedPetIid(): the Paddock door
        below draws your own Bonehead at the gate, the same way the scene does. */
-    const [insts, eqIid, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
+    /* equippedPetIid FIRST, alone: it repairs the paper-doll C slot when the two
+       records disagree (R39-1), and equipped() below has to read the repaired
+       slot rather than race it inside the same Promise.all. */
+    const eqIid0 = await equippedPetIid();
+    const [instsAll, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
+    /* R39-31: an instance row with no species cannot be drawn (bhAsset threw a
+       TypeError and the whole Stable came up empty). Skip it here and say so once. */
+    const insts = instsAll.filter(x => x && x.sp);
+    if (insts.length !== instsAll.length && !stableGhostWarned) { stableGhostWarned = true; console.warn('Stable: skipped instance row(s) with no sp', instsAll.filter(x => !x || !x.sp)); }
+    /* OUT WITH YOU means the C slot holds her. A petEquipped that the worn outfit
+       does not agree with is a pet the Stable must still offer EQUIP for, or the
+       player has no control anywhere that can put her on Today (R39-1). */
+    const eqIid = eqOwn.C && insts.some(x => x.iid === eqIid0 && x.sp === eqOwn.C) ? eqIid0 : null;
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
     /* THE PRIVATE NICKNAME, beside the species name and never instead of it.
        Same shape as nameWithAlias() for friends: the real identity stays the
@@ -19282,7 +19295,7 @@ async function openStable(opts = {}) {
       const her = (BH_BY_ID[sp] || {}).name || 'your pet';
       const mine = petItems.filter(i => ownedCos.has(i.id));
       if (!mine.length) {
-        return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+        return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${esc(her)}'s wardrobe</div>
           <p class="note pw-empty">Nothing to wear yet. Gwart's Menagerie stocks ${PET_SHOP.items.length} pieces, all drawn for her.</p></div>`;
       }
       const petWearItemBtn = (i, fam = null) => {
@@ -19331,7 +19344,7 @@ async function openStable(opts = {}) {
           <small>${on ? (wornFb.length ? 'Worn' : 'Picked') : own ? 'Yours' : `${ICONS.lock(9)} Locked`}</small>
         </button>`;
       }).join('')}</div>`;
-      return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+      return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${esc(her)}'s wardrobe</div>
         <div class="pw-row">${wearRow}</div>${railRow}
         <p class="note pw-hint">Tap to put a piece on. Tap it again to take it off. One per spot.${fbMine.length ? ' Tap a team to change her colours.' : ''}</p></div>`;
     }).join('');
@@ -22708,7 +22721,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v489'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v490'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

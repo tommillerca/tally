@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 490, date: '2026-09-06', title: 'Your first pet comes home', items: [
+    'Hatch your first egg and the pet is on Today with you, where before the Stable said she was out with you while Today showed nothing and the EQUIP button stayed greyed out. The two records agree now, and a Stable button is never disabled for a pet you are not actually wearing.',
+    'A pet name with odd characters no longer breaks the Stable heading, and a damaged pet record is skipped instead of emptying the whole Stable.',
+  ] },
   { n: 489, date: '2026-09-06', title: 'Onboarding fits the small phones, and sheets survive a double tap', items: [
     'On an iPhone SE the button that moves onboarding forward sat below the fold with nothing to say so; "Start tracking" was almost a full screen down. The button now stays pinned at the bottom of the screen on every step.',
     'Tapping a button twice quickly used to open a sheet and close it again, because the second tap landed on the backdrop mid-slide. A sheet ignores backdrop taps for its first moment now.',
