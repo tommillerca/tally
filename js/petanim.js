@@ -87,7 +87,7 @@ function catfish(px) {
 // filter string for a morph recolour, applied to the whole stack. Gone: a morph
 // is now a PNG variant of the flat master (js/pets.js morphAsset), and this
 // module draws the animated species from their OWN separate layer PNGs (body,
-// eyes, drops, shadow), which scripts/build-pet-morphs.py does not recolor. A
+// eyes, drops, shadow), which scripts/build-pet-morphs-v2.py does not recolor. A
 // morphed pet forces the static cropped image instead (js/app.js petSpriteHtml,
 // same trade wearsFootball already makes) rather than tinting these layers.
 export function animatedPetHtml(petId, px) {

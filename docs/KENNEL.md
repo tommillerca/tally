@@ -159,7 +159,9 @@ changes, one branch (`feat/kennel-palettes`, off `feat/kennel-phase-a`):
    target does not; stretch saturation proportionally around each cluster's
    own median (internal shading survives); leave V pixel-for-pixel untouched
    except midnight, whose three luminance tiers (dark/medium/dusk, anchored at
-   V 0.60/0.75/0.85) are ALL built, because the tier is not decided (below);
+   V 0.60/0.75/0.85) were ALL built at the time, because the tier was not yet
+   decided (below) -- SUPERSEDED, see section 9: the v2 recolour Tom approved
+   2026-09-06 ships exactly one midnight, no tier choice;
    nudge each cluster's own brightest ~18% of V (Cam's cel-highlight facet) per
    morph. 36 masters (6 species x 6 morph candidates: ember/frost/toxic x3
    midnight tiers), 2.17 MB total. `scripts/build-bh-thumbs.py`'s KEEP regex
@@ -171,7 +173,8 @@ changes, one branch (`feat/kennel-palettes`, off `feat/kennel-phase-a`):
    -- a plain membership list mirroring `SHINY_ART`, js/loot.js -- C1-C6, CX
    exempt), `MIDNIGHT_TIER` (`'dark' | 'medium' | 'dusk'`, defaults `'medium'`
    -- the one-line switch that ships Tom's pick once he makes it, since all
-   three tiers are already built and thumbed), and `morphAsset(petId, morph)`
+   three tiers are already built and thumbed -- REMOVED in section 9, the v2
+   art ships one midnight, no switch needed), and `morphAsset(petId, morph)`
    (the path resolver: '' for base/CX/unknown morph/an unlisted species, else
    the variant path -- mirrors `bhAsset`). `js/app.js`'s old `MORPH_TINT` (a
    CSS filter table shared by every species) and `petTint` are gone; every
@@ -226,7 +229,9 @@ changes, one branch (`feat/kennel-palettes`, off `feat/kennel-phase-a`):
   thumbed, in the shipped tree right now (rather than only the chosen one),
   ~0.7 MB of the 2.17 MB total -- the read of "generate all three... one-line
   change ships his pick" that seemed most literal and required no follow-up
-  script run when Tom decides.
+  script run when Tom decides. SUPERSEDED, see section 9: this whole build was
+  a placeholder pending the real recolour; the approved v2 art ships one
+  midnight and `MIDNIGHT_TIER` is gone.
 
 ## 7. Tests (kennel palettes)
 
@@ -240,8 +245,9 @@ changes, one branch (`feat/kennel-palettes`, off `feat/kennel-phase-a`):
   resolves all 30 (species, morph) pairs to a real file at every tier (master
   + 192/384/trim), CX/an unknown morph/an unlisted species all resolve to base,
   all three midnight tiers exist on disk and `morphAsset` resolves to the one
-  `MIDNIGHT_TIER` names, and Bumbleseal hatches at the same ~1/6 share as
-  C1-C5 over 20,000 seeded draws.
+  `MIDNIGHT_TIER` names (this row and the `MIDNIGHT_TIER` constant are gone as
+  of section 9: v2 ships one midnight), and Bumbleseal hatches at the same
+  ~1/6 share as C1-C5 over 20,000 seeded draws.
 - `tests/pet-pool-audit.mjs`: SAMPLE/RATE (pinned C6 at 1%) replaced with a
   SAMPLE row pinning no hatch-chance gate; SPLIT now grades all six species
   with a catalogue-derived `reserved`/`expected` rather than a formula that
@@ -306,3 +312,36 @@ GWART pins the explainer line's text; FIT pins that all six roster rows sit
 above the fold with no scroll at both 390x844 and 320x568. Proven red in a
 `cp -R` copy, seven mutations, one row failing in each -- see the file's own
 header for the exact FAIL lines.
+
+## 9. Kennel v2: the approved recolour replaces the palette build (2026-09-06)
+
+Tom on the v2 recolour sheet: "now this is quality work. approved." Wired in
+the same day. Two changes from section 6/7's palette build, both because the
+old build was always a placeholder pending the real recolour, not a shipped
+final:
+
+1. **The art.** `scripts/build-pet-morphs-v2.py` (region-aware: every visible
+   pixel is explained as a blend of two of the species' own declared fill
+   regions, each remapped to an absolute target hue per morph with its own
+   S/V structure kept -- `docs/pet-morphs-v2/table.md` is the per-region
+   source-to-target table and its own ink/white/cream-identity checks) is the
+   only morph generator now. It ships straight into `assets/bh/C/morph/` via
+   `--ship` -- there is no `morph-v2/` staging folder in the tree, and
+   `scripts/build-pet-morphs.py` (section 6's build) is deleted: nothing else
+   referenced it once its output was replaced pixel-for-pixel by the same
+   filenames.
+2. **One midnight, not three.** Section 6 built three provisional luminance
+   tiers (`dark`/`medium`/`dusk`) because the pick was not yet made; v2 ships
+   exactly one `<sp>__midnight.png` per species (24 files total: 6 species x
+   4 morphs -- ember/frost/toxic/midnight), so `js/pets.js` loses the
+   `MIDNIGHT_TIER` constant and `morphAsset`'s tier-stem branch: the stem is
+   just the morph name now, same shape as ember/frost/toxic. Every reference
+   to `MIDNIGHT_TIER`/`midnight-dark`/`midnight-medium`/`midnight-dusk` in
+   code, tests and docs was removed or re-premised with this note; the
+   `tests/unit.test.js` KENNEL row that pinned three-tiers-on-disk is gone
+   (replaced by a row pinning exactly one midnight file per species).
+
+Everything else in section 6 (the gate shape, `MORPH_ART`, the per-draw-path
+wiring, the animated-species-forces-static trade, Bumbleseal's even hatch
+share) is unchanged -- v2 is a drop-in art swap at the same paths, not a
+new mechanism.

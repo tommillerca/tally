@@ -41,7 +41,7 @@ import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, gearDustValue, gearSt
   RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_REROLL_LADDER,
   rollCosmetic, crateEligible,
   eggRow, grantEgg, hatchEgg, addPetInstance, petInstances, pickRandomPet } from '../js/loot.js';
-import { MORPHS, MORPH_WEIGHT, isMorph, rollMorph, ownedPairs, PET_ASSIGN, MORPH_ART, MIDNIGHT_TIER, morphAsset } from '../js/pets.js';
+import { MORPHS, MORPH_WEIGHT, isMorph, rollMorph, ownedPairs, PET_ASSIGN, MORPH_ART, morphAsset } from '../js/pets.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, PET_SLOTS } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
@@ -7122,12 +7122,13 @@ test('KENNEL sim: two eggs granted the same day for a player missing four specie
   }
 });
 
-/* ============ KENNEL PALETTES (2026-09-05): per-species morph PNG variants ==
- * scripts/build-pet-morphs.py writes assets/bh/C/morph/<sp>__<morph>.png (and
- * the three midnight-<tier> masters); scripts/build-bh-thumbs.py tiers them
- * into thumb/{192,384,trim}. morphAsset (js/pets.js) is the gate every render
- * path resolves through, mirroring SHINY_ART: a MORPH_ART species with a real
- * morph returns the variant path, everything else returns '' (base). */
+/* ============ KENNEL v2 (2026-09-06): per-species morph PNG variants ========
+ * scripts/build-pet-morphs-v2.py writes assets/bh/C/morph/<sp>__<morph>.png,
+ * one file per (species, morph) pair including a single midnight (no tier
+ * suffix); scripts/build-bh-thumbs.py tiers them into thumb/{192,384,trim}.
+ * morphAsset (js/pets.js) is the gate every render path resolves through,
+ * mirroring SHINY_ART: a MORPH_ART species with a real morph returns the
+ * variant path, everything else returns '' (base). */
 
 const MORPH_ROOT = join(here, '..', 'assets', 'bh', 'C');
 const thumbPath = (tier, rel) => join(here, '..', 'assets', 'bh', 'thumb', String(tier), 'C', rel);
@@ -7168,27 +7169,28 @@ test('KENNEL MORPH_ART: CX, an unknown morph, and an unlisted species all resolv
   assert.deepEqual(MORPH_ART, ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'], 'MORPH_ART is exactly the six ordinary species, CX excluded');
 });
 
-/* Midnight ships three luminance tiers (Tom, 2026-09-05: "the midnight
- * luminance tier is NOT decided yet"). All three masters exist on disk for
- * every species RIGHT NOW so the swap is a one-line constant change with no
- * rebuild; morphAsset resolves to whichever one MIDNIGHT_TIER names.
- * PROVE-RED: editing MIDNIGHT_TIER in js/pets.js from 'medium' to 'dark' (or
- * 'dusk') and re-running this file moves every assertion below to the other
- * tier's filename and still passes -- that IS "a one-line change ships his
- * pick"; the row would only fail if a tier's file were missing from disk. */
-test('KENNEL MIDNIGHT_TIER: all three tiers exist on disk; morphAsset resolves to the one the constant names', () => {
-  assert.ok(['dark', 'medium', 'dusk'].includes(MIDNIGHT_TIER), `MIDNIGHT_TIER must be one of dark/medium/dusk, got ${MIDNIGHT_TIER}`);
+/* KENNEL v2, 2026-09-06: Tom approved the recolour sheet with ONE midnight
+ * look (the three provisional luminance tiers from the earlier build were
+ * never shipped -- MIDNIGHT_TIER is gone from js/pets.js). morphAsset's stem
+ * is just the morph name now, same shape as ember/frost/toxic.
+ * PROVE-RED: reintroducing a tier suffix in morphAsset (`midnight-medium`
+ * instead of `midnight`) makes the plain-name file below missing and fails;
+ * a leftover `__midnight-<tier>.png` file in the folder (an artifact of the
+ * old build) fails the second assertion. */
+test('KENNEL midnight: exactly one midnight file per species, no leftover luminance-tier files', () => {
   const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
   const missing = [];
   for (const sp of species) {
-    for (const tier of ['dark', 'medium', 'dusk']) {
-      if (!existsSync(join(MORPH_ROOT, 'morph', `${sp}__midnight-${tier}.png`))) missing.push(`${sp} midnight-${tier}`);
-    }
     const resolved = morphAsset(sp, 'midnight');
-    assert.equal(resolved, `assets/bh/C/morph/${sp}__midnight-${MIDNIGHT_TIER}.png`,
-      `morphAsset('${sp}', 'midnight') must name the MIDNIGHT_TIER file, got ${resolved}`);
+    assert.equal(resolved, `assets/bh/C/morph/${sp}__midnight.png`,
+      `morphAsset('${sp}', 'midnight') must name the single midnight file, got ${resolved}`);
+    if (!existsSync(join(MORPH_ROOT, 'morph', `${sp}__midnight.png`))) missing.push(`${sp} midnight`);
+    for (const tier of ['dark', 'medium', 'dusk']) {
+      const stale = join(MORPH_ROOT, 'morph', `${sp}__midnight-${tier}.png`);
+      assert.ok(!existsSync(stale), `stale luminance-tier file must not exist: ${stale}`);
+    }
   }
-  assert.equal(missing.length, 0, `every midnight tier must exist so the constant can switch with no rebuild, missing: ${missing.join(', ')}`);
+  assert.equal(missing.length, 0, `every species must have a midnight file, missing: ${missing.join(', ')}`);
 });
 
 /* Bumbleseal (C6), re-premised 2026-09-05: Tom, "roll Bumbleseal into things,

@@ -20,7 +20,9 @@ Method (docs/pet-recolor-animation-skill.md, section 2, made region-aware):
 
 Outputs (default scratchpad/kennel/v2 next to the repo, or $OUT_DIR): the morph
 PNGs, sheet.png (2x on --surface-2), sheet-today.png (1x on Today green),
-zooms.png, table.md, and, with --ship, copies into assets/bh/C/morph-v2/.
+zooms.png, table.md, and, with --ship, copies straight into the live art
+folder assets/bh/C/morph/ (approved v2 art, 2026-09-06 -- this is the only
+morph folder now; there is no separate morph-v2/ staging copy in the tree).
 """
 import os, sys, colorsys
 import numpy as np
@@ -388,7 +390,7 @@ def main():
         L.append("")
     open(os.path.join(OUT, "table.md"), "w").write("\n".join(L))
     if ship:
-        dst = os.path.join(SRC, "morph-v2"); os.makedirs(dst, exist_ok=True)
+        dst = os.path.join(SRC, "morph"); os.makedirs(dst, exist_ok=True)
         for cid in res:
             for m in MORPHS: res[cid][m].save(os.path.join(dst, f"{cid}__{m}.png"))
         print("shipped to", dst)
