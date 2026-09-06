@@ -7187,7 +7187,10 @@ test('KENNEL MORPH_ART: CX, an unknown morph, and an unlisted species all resolv
  * old build) fails the second assertion. */
 /* R39-10 (2026-09-06): the Kennel's "Collection N / 30" counted owned.size,
    which includes CX (the Founder's Lizard, exempt, no cell): "31 / 30" with a
-   full set, "2 / 30" with one cell. Only pairs that have a cell count. */
+   full set, "2 / 30" with one cell. Only pairs that have a cell count.
+   PROVE-RED (2026-09-06): with ownedCellCount returning owned.size (the old
+   counter) in a throwaway copy, this row alone failed: "a Founder's Lizard
+   owner with one cell reads 1, not 2 / 2 !== 1", 336 passed, 1 failed. */
 test('KENNEL ownedCellCount: CX and an off-grid species never count; a full 6x5 set is exactly 30', () => {
   const grid = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
   const one = ownedPairs([{ sp: 'CX', morph: 'base' }, { sp: 'C1', morph: 'ember' }]);

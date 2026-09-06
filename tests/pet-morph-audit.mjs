@@ -47,6 +47,22 @@
  * indistinguishable from "nothing was ever morphed" -- exactly the failure
  * mode TINT and the ACCESSORY control row exist to catch, and did.
  *
+ * QA ROUND 39 (2026-09-06, HANDOFFr3920260906.md R39-13/14/21): four rows
+ * added at the end of run(), RUN RED against the integ/day5 (v488) js/app.js
+ * and js/paddock.js in a cp -R copy with this file over the old code,
+ * HEADLESS_MODE=shell, exit 1. All four failed, the eighteen rows above them
+ * stayed green; verbatim:
+ *
+ *   EQUIPPED FAIL ".../assets/bh/C/C5.png" (#1 base, #2 midnight, midnight
+ *            equipped: Today painted the first-hatched copy's base)
+ *   PADDOCK  FAIL "copy-1 .../C5.png  copy-2 .../C5.png" (paddockRoster
+ *            carried no morph, so both copies drew base in your own field)
+ *   EQUIPPED FAIL ".../assets/bh/C/morph/C5__midnight.png" (the reverse: #1
+ *            midnight, #2 base, base equipped, Today painted midnight)
+ *   EGG      FAIL "base rgb(174.8,161.2,138.7) vs ember rgb(149.9,152.5,180.7),
+ *            delta 49.64" (the hue-rotate painted an Ember shell BLUE, the
+ *            exact failure mode the brief measured at 155,158,188)
+ *
  * Run: HEADLESS_MODE=shell node tests/pet-morph-audit.mjs [baseUrl] [--shots DIR]
  * Self-serving with no URL: serves this checkout, can never grade production.
  */

@@ -399,4 +399,9 @@ Guards: `tests/kennel-audit.mjs` (COUNT x2, LINE, FIT re-premised to the full
 30-pair roster, HIT, HEAD, TOGGLE, KEYS, CLIP x2), `tests/pet-morph-audit.mjs`
 (EQUIPPED x2, PADDOCK, EGG), `tests/unit.test.js` (`ownedCellCount`). Every
 new row was run red against the integ/day5 code with the new tests in a
-throwaway copy; the FAIL lines are in each file's header.
+throwaway copy; the FAIL lines are in each file's header. One honest gap: the
+re-premised FIT row stayed green on the OLD code on this Mac (last row bottom
+555.125 of 568), because this Chromium fits the longest caption at 320 by
+about 9px where the QA rig's Linux fallback font wrapped it; LINE (at 300
+wide, with a SETUP row proving the overflow is real) is the row that goes red
+for R39-6 here.

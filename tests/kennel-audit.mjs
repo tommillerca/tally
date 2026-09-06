@@ -88,6 +88,35 @@
  *        OWNED and UNOWNED stayed green because the header row carries no
  *        cell data, only column labels above the real cells.
  *
+ * QA ROUND 39 (2026-09-06, HANDOFFr3920260906.md R39-6/8/9/10/11/23/30): nine
+ * rows added, RUN RED against the integ/day5 (v488) app.css/js/app.js/js/pets.js
+ * in a cp -R copy with these tests over the old code, HEADLESS_MODE=shell,
+ * exit 1. Every one of the nine failed and nothing else moved; verbatim:
+ *
+ *   COUNT   FAIL "Collection · 6 / 30" (expects 5 / 30: the Founder's Lizard,
+ *           CX, counted as a cell)
+ *   COUNT   FAIL "Collection · 31 / 30" (the full set plus CX)
+ *   LINE    FAIL "caption heights 31.0 x6 vs line-height 15.5" (the caption
+ *           wrapped to two lines at 300 wide)
+ *   HIT     FAIL "30 cells, smallest 48.00px, tag DIV" (the cell was not the
+ *           control; the 10px .k-dot was)
+ *   HEAD    FAIL "drift px: 0.27, 0.81, 1.34, 1.88, 1.07" (flex headers over
+ *           flex cells)
+ *   TOGGLE  FAIL '"undefined" -> "undefined" -> "undefined"' (no
+ *           .k-grid-label[data-sp], no cell handler)
+ *   KEYS    FAIL 'Enter -> "undefined", Space -> "undefined"'
+ *   CLIP    FAIL "1024x768: cell 104.0px, art 188.0px, 30 overflow" (art sized
+ *           from window.innerWidth, clipped by the 600px sheet)
+ *   CLIP    FAIL "rotated to 320x568: cell 48.0px, art 188.0px, 30 overflow"
+ *           (the size frozen at open)
+ *
+ * FIT, re-premised to the full 30-pair roster, stayed GREEN on the old code on
+ * this Mac (last row bottom 555.125 of 568): the QA rig's Linux fallback font
+ * wraps "Ember, Frost, Toxic, Midnight owned" at 320 and this Chromium fits it
+ * by about 9px. LINE at 300 wide is the row that carries R39-6 here, and its
+ * SETUP row first proves the text really overflows its box so the ellipsis
+ * path is exercised, not assumed.
+ *
  * SAMPLE seeds four species (C2/ember, C3/base, C5/toxic, C6/base) through the
  * real writer, and grades OWNED/ROSTER against 5, not 4: the demo profile's own
  * default equipped pet is C1 (js/app.js's demo seed grants cosmetic 'C1',
