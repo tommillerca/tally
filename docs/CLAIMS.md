@@ -96,6 +96,21 @@ in its own section below, not folded in here.
 
 15. PROOF: a11y-audit.mjs (foodFieldNames) | REACH: A screen reader creating a custom food, or using Quick add, now hears each number field by name (Calories, Protein, Carbs, Fat, Sodium, Grams, and so on) instead of an unlabelled textbox, or three identical fields for Protein, Carbs and Fat.
 
+## dressing room families (2026-09-06)
+
+Tom, live on v476: "the colour picker in the wardrobe works well but down in the
+transmog mirror section it's individually listing every single cleat/shirt etc as
+its own thing without a colour picker". Nothing about the price, the paid-once
+rule or the arm-then-confirm flow moved; every row of transmog-clarity-audit and
+transmog-receipt-audit still grades them. dressing-room-audit's FAMILY and RAIL
+rows were proved red against v477's js/app.js (36 tiles for 34 looks, no family
+tile) and its OWN rows by mutation (the own-look branch deleting the slot instead
+of restoring it).
+
+1. PROOF: dressing-room-audit.mjs | REACH: Open your Bonehead, Wardrobe, tap a gear slot you own football garments for. The look picker now shows one tile per garment with its colourway count, the same as the fit grid above it, instead of one tile per team. Tap it and the team rail opens; tap a team and that colourway is the look being tried, drawn on the After figure and named in the bar. The tile paints the team you are trying, and the one you wear when nothing is being tried.
+
+2. PROOF: dressing-room-audit.mjs | REACH: With a look applied over a gear piece, tap "Its own look" in Hat, Top, Pants, Shoes or Feet: the After figure draws that gear's own art, and Wear it puts it on the big stage with the disguise gone. Tom's "shows the sock" report did not reproduce on a healthy network; a layer that fails to load degrades to the default by design.
+
 ## claim hygiene (2026-09-05)
 
 Not stamped to a release: the quest-claim row folded into v475 above; the
