@@ -19,6 +19,15 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v482
+1. A hotfix off v481, QA round 37's first-session and crate-tap items (R37-1, 5, 6; R37-2 verified already fixed by the round-34 restore latch). Its rows are the dated "first session and crate taps" section further down, folded here.
+
+2. PROOF: first-session-lifecycle-audit.mjs | REACH: the install session binds the app lifecycle (resume handling, the midnight roll, sync on return) the same way every later boot does; the audit drives real onboarding to Today in one page, walks a pinned clock across midnight, fires a real resume and reads the day marker advance (red with the onboarding call removed: before null, want the new day, got null).
+
+3. PROOF: crate-reveal-audit.mjs | REACH: a tap on the crate card at 900, 1400 or 1800 ms no longer destroys the reveal before it draws; the item lands and reads back (EARLYTAP rows, red before: survivedTap true, landedOk false).
+
+4. PROOF: crate-reveal-audit.mjs | REACH: the Add-food button is hidden and inert while a reveal is mounted and for 360 ms after, and the close hint no longer overlaps its box at 393x852 or 375x667 (FABSAFE rows, red before: overlap 3364 px, FAB hit at 600 and 900 ms).
+
 ## v481
 1. A hotfix off v480, QA round 37's notification items (R37-3, 4, 9, 10, 11, 12, 23). Its rows are the dated "notifications consent" section further down, folded here.
 
@@ -109,6 +118,16 @@ the intervening train).
 2. PROOF: crew-slime-leak-audit.mjs | REACH: the slime glow is scoped to the player's own worn item and every render of someone else's outfit (Crew cards, friend rows and profiles, leaderboard heads, race runners, foes, the boss wall, a rival keeper, a visited paddock's keeper) is marked foreign. The audit seeds slimed kicks on the viewer, three friends with kicks in the deck, reads zero slimed layers inside the Crew deck while the viewer's own hero shows the glow; red on v476 with 2 friend layers lit.
 
 3. PROOF: crew-slime-leak-audit.mjs | REACH: the Crew's sealed-gift card renders one gift and "and N more waiting" instead of every sealed gift; six seeded gifts render one button; red on v476 with six.
+
+## first session and crate taps (2026-09-06)
+
+Not stamped to a release. Round 37 handoff, R37-1/R37-5/R37-6.
+
+1. PROOF: first-session-lifecycle-audit.mjs | REACH: an install that finishes onboarding (rather than reopening into an existing save) now gets a day rollover and a resume handler from its very first session: backgrounding and returning does something, and the app closes yesterday if it is left open past midnight. Both used to be registered only from boot(), which a fresh install never runs. bindAppLifecycle() is now called from both boot() and the end of onboarding, guarded so a second call is a no-op.
+
+2. PROOF: crate-reveal-audit.mjs | REACH: tapping a crate reveal's card in the roughly one second before it visibly lands (rather than beside it) no longer destroys the item unseen and unrecoverable. The same guard that already protected a tap-anywhere-on-the-screen now also protects a tap that lands directly on the card.
+
+3. PROOF: crate-reveal-audit.mjs | REACH: the crate reveal's "tap to close" hint no longer sits on top of the Add-food button. A second tap in the same spot shortly after closing a crate can no longer land you on Today with the Add-food sheet open instead of nothing.
 
 ## v476
 1. A hotfix off v475, two changes. Nothing else from the day's integration train is in it.

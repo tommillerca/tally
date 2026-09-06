@@ -347,6 +347,147 @@ const tap = await page.evaluate(async () => {
 ok('TAP a tap advances the card WITHOUT a click event (the real touch case)',
   !tap.err && tap.before !== tap.after && /r-rare/.test(tap.after), JSON.stringify(tap));
 
+
+/* ---- EARLYTAP: R37-5, A TAP BEFORE THE CARD LANDS MUST NOT DESTROY IT -----
+   Round 37 handoff, R37-5: a tap on the card between 900 and 1800ms into the
+   open deleted the reveal before it had ever drawn, permanently losing the
+   item (three real grants lost this way on a real device: a Cobalt Puffer, a
+   Lemon, an Odd Pair, none ever seen and none recoverable from any surface).
+   The `dataset.landed` guard already existed on the reveal-level tap-anywhere
+   handler (the one bound in renderCard's `if (reveal && !reveal.dataset.tapWired)`
+   block) but NOT on the tilt's own pointerup (`end`) or click listener, so a
+   tap landing ON the card itself, rather than beside it, still flung or
+   dismissed it before `landed(tier)` had ever run.
+   PROVE-RED: remove either `if (!reveal.dataset.landed) return;` line added to
+   `end` and the tilt's click listener in openPackReveal (js/app.js) and this
+   goes red: the reveal disappears mid-tap and the card is never confirmed. */
+{
+  await page.evaluate(async () => {
+    for (let i = 0; i < 6; i++) {
+      if (!document.querySelector('.pack-reveal')) break;
+      const b = document.querySelector('.pack-reveal .sheet-close');
+      if (b) b.click(); else history.back();
+      await new Promise(r => setTimeout(r, 400));
+    }
+  });
+  await sleep(500);
+  for (const tapAt of [900, 1400, 1800]) {
+    const r = await page.evaluate(async ms => {
+      window.__crateForce = 1;
+      window.__packReveal([{ name: 'Early tap', rarity: 'rare', kind: 'GEAR · HAT', stats: '+7 POW' }], { coins: 0, crate: 'daily' });
+      await new Promise(res => setTimeout(res, ms));
+      const tilt = document.querySelector('.pack-tilt');
+      if (!tilt) return { err: 'no tilt mounted at tap time' };
+      const b = tilt.getBoundingClientRect();
+      const cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+      // the real device path: pointerdown/pointerup, deliberately NO click
+      // (see the TAP row above -- a touch the browser suspects might be a
+      // scroll never gets a compat click at all)
+      tilt.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 11, clientX: cx, clientY: cy, bubbles: true }));
+      tilt.dispatchEvent(new PointerEvent('pointerup', { pointerId: 11, clientX: cx, clientY: cy, bubbles: true }));
+      await new Promise(res => setTimeout(res, 200));
+      const survivedTap = !!document.querySelector('.pack-reveal');
+      // wait past the real landing beat (PACE's own 1.9s ceiling), then read the card back
+      await new Promise(res => setTimeout(res, 2300));
+      const el = document.querySelector('.pack-card, .pc-card, .pack-reveal [class*="card"]');
+      const landedOk = !!el && (el.textContent || '').includes('Early tap');
+      /* Only close if a reveal is actually still there. On the UNGUARDED tree
+         the premature tap already destroyed it (that IS the bug this row
+         proves), and an unconditional history.back() here would pop a SECOND
+         time, past the app's own root state -- a test-harness artifact, not
+         the app crashing. */
+      const b2 = document.querySelector('.pack-reveal .sheet-close');
+      if (b2) b2.click(); else if (document.querySelector('.pack-reveal')) history.back();
+      await new Promise(res => setTimeout(res, 600));
+      return { survivedTap, landedOk };
+    }, tapAt);
+    ok(`EARLYTAP ${tapAt}ms: a tap on the card before it lands does not destroy the reveal`,
+      !r.err && r.survivedTap, JSON.stringify(r));
+    ok(`EARLYTAP ${tapAt}ms: the item still lands and reads back (nothing lost)`,
+      !r.err && r.landedOk, JSON.stringify(r));
+    await sleep(400);
+  }
+  // and the click-listener half of the same guard, in case a real click DOES arrive
+  const rc = await page.evaluate(async () => {
+    window.__crateForce = 1;
+    window.__packReveal([{ name: 'Early click', rarity: 'rare', kind: 'GEAR · HAT', stats: '+7 POW' }], { coins: 0, crate: 'daily' });
+    await new Promise(res => setTimeout(res, 900));
+    const tilt = document.querySelector('.pack-tilt');
+    if (!tilt) return { err: 'no tilt' };
+    tilt.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    // wait past fling's own 330ms dismiss delay, THEN past the real landing
+    // beat (PACE's 1.9s ceiling), so an unguarded click has had time to finish
+    // destroying the reveal before we ask whether it survived.
+    await new Promise(res => setTimeout(res, 2600));
+    const el = document.querySelector('.pack-card, .pc-card, .pack-reveal [class*="card"]');
+    const landedOk = !!el && (el.textContent || '').includes('Early click');
+    const b = document.querySelector('.pack-reveal .sheet-close');
+    if (b) b.click(); else if (document.querySelector('.pack-reveal')) history.back();
+    await new Promise(res => setTimeout(res, 600));
+    return { landedOk };
+  });
+  ok('EARLYTAP 900ms: a direct click on the card before it lands does not destroy it (nothing lost)',
+    !rc.err && rc.landedOk, JSON.stringify(rc));
+}
+
+
+/* ---- FABSAFE: R37-6, THE CLOSE HINT MUST NEVER HIT THE ADD-FOOD FAB -------
+   Round 37 handoff, R37-6: #packFoot (188x80) sat 100% over #fab, 3,364px² of
+   overlap, measured at both 393x852 and 375x667. closeTopSheet's restoreFocus
+   un-inerts the tab bar and the dying sheet goes pointer-events:none the
+   INSTANT a close begins (by design, so a dying sheet never eats a tap meant
+   for what is behind it -- correct for every other sheet in the app), which
+   left a real window where a second tap at the same spot 400 to 900ms later
+   landed on the FAB and opened the Add-food sheet on top of the closing
+   crate. Fixed two ways, both graded here: the FAB is held
+   pointer-events:none + hidden for the reveal's whole life plus a beat past
+   its own ~320ms teardown (js/app.js), and #packFoot is shifted clear of the
+   FAB's box in CSS (app.css, .pack-foot margin-bottom).
+   PROVE-RED: drop either half (the `fab.style` lines around openSheet's call
+   in openPackReveal, or app.css's `.pack-foot` margin-bottom) and this goes
+   red -- OVERLAP stops reading 0, or a sample resolves to the FAB again. */
+for (const [w, h] of [[393, 852], [375, 667]]) {
+  await setWidth(page, w, h);
+  await page.evaluate(async () => {
+    for (let i = 0; i < 6; i++) {
+      if (!document.querySelector('.pack-reveal')) break;
+      const b = document.querySelector('.pack-reveal .sheet-close');
+      if (b) b.click(); else history.back();
+      await new Promise(r => setTimeout(r, 400));
+    }
+  });
+  await sleep(500);
+  const fabSafe = await page.evaluate(async () => {
+    window.__crateForce = 1;
+    window.__packReveal([{ name: 'FAB safe', rarity: 'rare', kind: 'GEAR · HAT', stats: '+7 POW' }], { coins: 12, crate: 'daily' });
+    await new Promise(res => setTimeout(res, 1900));   // past landing
+    const foot = document.querySelector('#packFoot'), fab = document.querySelector('#fab');
+    if (!foot || !fab) return { err: 'missing #packFoot or #fab' };
+    const fr = foot.getBoundingClientRect(), ar = fab.getBoundingClientRect();
+    const overlapPx = Math.max(0, Math.min(fr.right, ar.right) - Math.max(fr.left, ar.left))
+      * Math.max(0, Math.min(fr.bottom, ar.bottom) - Math.max(fr.top, ar.top));
+    const cx = fr.left + fr.width / 2, cy = fr.top + fr.height / 2;
+    // dismiss with the real close control, then sample the SAME on-screen spot
+    // the player just tapped, across the whole close animation
+    const b = document.querySelector('.pack-reveal .sheet-close');
+    if (b) b.click(); else history.back();
+    const samples = [];
+    let last = 0;
+    for (const t of [0, 100, 200, 400, 600, 900]) {
+      await new Promise(res => setTimeout(res, t - last)); last = t;
+      const hit = document.elementFromPoint(cx, cy);
+      samples.push({ t, isFab: !!(hit && hit.closest && hit.closest('.fab')) });
+    }
+    return { overlapPx, samples };
+  });
+  ok(`FABSAFE ${w}x${h}: #packFoot no longer overlaps #fab (was 100% of its box)`,
+    !fabSafe.err && fabSafe.overlapPx === 0, JSON.stringify(fabSafe));
+  ok(`FABSAFE ${w}x${h}: no sample from 0 to 900ms after the close tap resolves to the FAB`,
+    !fabSafe.err && fabSafe.samples.every(s => !s.isFab), JSON.stringify(fabSafe.samples));
+  await sleep(800);
+}
+await setWidth(page, 393, 852);  // restore, for the sections below
+
 /* ---- TAIL: THE LAST AUTHORED FRAME HAS TO BE SEEN -------------------------
    Tom, 2026-08-17: "the first chest you open for both kind clips the end of the
    animation a little bit but the second chest doesn't."
