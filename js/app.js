@@ -4566,7 +4566,10 @@ async function renderToday(el) {
   $('#stableBtn')?.addEventListener('click', openStable);
   $('#pitBtn')?.addEventListener('click', openPit);
   $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
-  $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
+  /* 2026-09-06, QA round 37 R37-16: the coin pill opened the Backpack, the same
+     door the crate chip beside it already is, and nothing on Today led to the
+     Shop (the v475 teaser banner is gated off). Coins are for the Shop. */
+  $('#coinBtn')?.addEventListener('click', () => openCharacter('shop'));
   /* refreshWalletPill: repaint the four numbers in place, nothing else. The
      Pit is a sheet OVER this screen, and a fight settle pays coins while this
      DOM stands behind it; only #pitBody was re-rendered on close, so the pill
@@ -13561,6 +13564,14 @@ function newsThumb(n, eq) {
 const HYPE_PLATES = {
   'assets/bh/mimic/mimic.png':       { w: 640, h: 518, x0: 0, y0: 0, x1: 1, y1: 1 },
   'assets/bh/wanderer/wanderer.png': { w: 640, h: 640, x0: 0.0938, y0: 0.1375, x1: 0.9719, y1: 0.7891 },
+  /* THE LOCKER ROOM POSTER, 2026-09-06. Tom on v477: "the banner on home page for
+     news has the wanderer as the top art not the new shop page with anything
+     enticing". This file is the kit-room poster's own hero (the Bonehead in the
+     Bruisers kit with the lizard in front), rendered off the real shop DOM at
+     3x with every background cleared and trimmed to its ink, so the news hero
+     shows the thing the row sells. Ink measured off the file: x 0.1156..0.8828,
+     seated on the floor. */
+  'assets/bh/football/poster.png':   { w: 640, h: 640, x0: 0.1156, y0: 0, x1: 0.8828, y1: 1 },
   // The Live Wire, measured the same way on 2026-09-03: his ink fills his file.
   'assets/bh/mage/mage.png':         { w: 1024, h: 905, x0: 0, y0: 0, x1: 1, y1: 1 },
 };
@@ -13708,6 +13719,7 @@ const NEWS = [
   { id: 'lockerroom', date: 'Sep 5', title: 'The Locker Room is open',
     blurb: 'Buy one piece and every team\'s colours are yours.',
     thumb: () => `<img class="nw-img" src="assets/bh/thumb/192/football/helmet.png" alt="">`,
+    hero: 'assets/bh/football/poster.png',   // the pill's hero slot: newest row with a measured plate wins (newsHero)
     goes: 'Locker Room',
     open: () => { S.fbTeam = FOOTBALL_TEAMS[0].id; S.fbJump = true; location.hash = '#/shop'; } },
   /* THE WANDERER. Tom kept this row when every other launch interstitial went in
@@ -22387,7 +22399,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v477'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v478'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
