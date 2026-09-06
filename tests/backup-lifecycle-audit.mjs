@@ -107,6 +107,16 @@ try {
     idb.close();
   });
 
+  // CONTROL: with the tab still visible and nothing fired, the grown save must
+  // NOT push on its own within the same wait window. Without this, a PASS below
+  // would not distinguish "the hidden transition caused the push" from "this
+  // build pushes on some unrelated timer regardless of visibility" -- the exact
+  // kind of blind guard tests/guard-hygiene-lint.mjs exists to catch.
+  await sleep(3000);
+  const beforeControl = seenBackupPuts.length;
+  ok('R38-2 CONTROL: a grown save does not push on its own with no hidden transition',
+    beforeControl === 0, `saw ${beforeControl} PUT /backup call(s) with no trigger fired`);
+
   const before = seenBackupPuts.length;
 
   // Fire the real backgrounding transition: override the (normally read-only)
