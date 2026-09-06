@@ -8,6 +8,7 @@ import {
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
   awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar, sparBoardState,
+  bagPick, seedBagFromRecent, GW_RECENT_CAP,
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
@@ -4204,6 +4205,7 @@ async function renderToday(el) {
     everLogged: allLog.length > 0,
     freshInstall: !!S.settings.createdAt && dateKey(new Date(S.settings.createdAt)) === S.date,
   };
+  await loadGwMemory(); // B13: seed the anti-repeat bag from the last reload before he speaks
   const gwLine = gwartLine(gwCtx);
   /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
      the render that emits the markup, so the very first Today of the session
@@ -5327,20 +5329,33 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
  * The bag is keyed on the STRINGS, not on a bucket, so a state change
  * mid-session (the crate gets opened) carries the memory across instead of
  * resetting it, and an interpolated line (`Day 4.`) behaves like any other. It
- * is bounded by the pool it is drawing from, because that is what empties it. */
+ * is bounded by the pool it is drawing from, because that is what empties it.
+ *
+ * B13: the bag above was module scope, so it died on every reload. A player
+ * who opens the app once a day never keeps a session alive long enough for
+ * it to matter, and got the same line twelve days running. Persist the last
+ * few lines said (kv `gwRecent`) and seed the bag from them at the first
+ * renderToday of a fresh load (loadGwMemory, called there before he first
+ * speaks), so a boot's first pick still excludes what was said last time
+ * instead of starting the bag empty. The picking algorithm itself
+ * (bagPick/seedBagFromRecent) lives in js/game.js so it is one thing, not
+ * two, and a guard can drive it without a DOM. */
 const gwSaid = new Set();
 let gwLast = '';
+let gwMemoryLoaded = false;
+async function loadGwMemory() {
+  if (gwMemoryLoaded) return;
+  gwMemoryLoaded = true;
+  try { gwLast = seedBagFromRecent(gwSaid, await kvGet('gwRecent', [])) || gwLast; }
+  catch { /* cosmetic; never block a render on this */ }
+}
 function gwPick(pool) {
-  if (!pool.length) return gwLast;
-  let fresh = pool.filter(l => !gwSaid.has(l));
-  if (!fresh.length) {
-    gwSaid.clear();
-    fresh = pool.filter(l => l !== gwLast);
-    if (!fresh.length) fresh = pool;            // a one-line pool has no second choice
-  }
-  const line = fresh[Math.floor(Math.random() * fresh.length)];
+  const line = bagPick(pool, gwSaid, gwLast);
   gwSaid.add(line);
   gwLast = line;
+  // B13: fire-and-forget; gwPick stays sync so every caller (tap, idle timer,
+  // the opening line) is unchanged. Only the last few survive a reload.
+  kvSet('gwRecent', [...gwSaid].slice(-GW_RECENT_CAP)).catch(() => {});
   return line;
 }
 /* THE CRATE REMINDER FIRES ONCE PER APP OPEN. Tom, 2026-08-22: "If you have an

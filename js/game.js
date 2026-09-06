@@ -1344,3 +1344,31 @@ export function parseHkPayload(input) {
       exerciseMin == null && cycleKm == null && workouts == null && !wtypes) return null;
   return { date, steps, activeKcal, weightKg, exerciseMin, cycleKm, workouts, wtypes };
 }
+
+/* B13: Gwart's anti-repeat "bag" (see gwPick in js/app.js), factored out here
+   so it is one algorithm instead of two, and so a guard can drive it without
+   a DOM. `said` is the bag (a Set, mutated by the caller after picking) and
+   `last` is the most recently said line; a line is drawn only from what is
+   not already in the bag, and an empty bag refills minus whatever is on
+   screen right now so an immediate repeat cannot happen. */
+export function bagPick(pool, said, last, rand = Math.random) {
+  if (!pool.length) return last;
+  let fresh = pool.filter(l => !said.has(l));
+  if (!fresh.length) {
+    said.clear();
+    fresh = pool.filter(l => l !== last);
+    if (!fresh.length) fresh = pool;          // a one-line pool has no second choice
+  }
+  return fresh[Math.floor(rand() * fresh.length)];
+}
+/* The bag died on every reload (module scope), so a once-a-day player heard
+   the same line for a fortnight. `gwRecent` in kv holds the last few lines
+   actually said; seeding the bag from it before the first pick of a fresh
+   load makes that pick still exclude what was said last time, instead of
+   starting from an empty bag. Capped, not the whole history: enough to stop
+   an immediate repeat, not a full log. */
+export const GW_RECENT_CAP = 5;
+export function seedBagFromRecent(said, recent) {
+  for (const line of recent) said.add(line);
+  return recent.length ? recent[recent.length - 1] : '';
+}

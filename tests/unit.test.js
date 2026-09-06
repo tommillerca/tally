@@ -26,7 +26,7 @@ import {
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct, fetchOffProductEx } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard, sparBoardState, SPAR_DAILY_CAP } from '../js/game.js';
+import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard, sparBoardState, SPAR_DAILY_CAP, bagPick, seedBagFromRecent, GW_RECENT_CAP } from '../js/game.js';
 import { STAT_META, STYLES } from '../js/pit.js';
 import * as pitMod from '../js/pit.js';
 const mkFighter = pitMod.makeFighter;
@@ -7356,6 +7356,52 @@ test('B3 the victory card omits the +0 coin pill', () => {
   const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
   assert.ok(/\$\{coins \? `<span class="reward-pill">\$\{ICONS\.coin\(15\)\} \+\$\{coins\}<\/span>` : ''\}/.test(src),
     'the coin reward pill must be conditional on coins, same as the XP pill beside it');
+});
+
+test('B13 Gwart\'s bag survives 5 consecutive boots with no immediate repeat', () => {
+  /* A "boot" is a fresh module load: a brand-new `said` Set (the bag dies on
+     reload, that part is correct and unchanged), seeded from whatever was
+     persisted to kv last time (gwRecent), then one pick. Deterministic RNG
+     (always take index 0 of the eligible pool) makes this reproducible: it
+     is also the shape that PROVES the old bug, below. */
+  const POOL = ['gear1', 'gear2', 'gear3', 'gear4', 'gear5', 'gear6', 'gear7']; // 7 lines, B13's own count
+  const rand0 = () => 0;
+  let persisted = []; // stands in for kv 'gwRecent' across boots
+  let prevLine = null;
+  for (let boot = 0; boot < 5; boot++) {
+    const said = new Set();
+    const seededLast = seedBagFromRecent(said, persisted);
+    const line = bagPick(POOL, said, seededLast, rand0);
+    if (prevLine !== null) assert.notEqual(line, prevLine, `boot ${boot} immediately repeated boot ${boot - 1}'s line ("${line}")`);
+    prevLine = line;
+    said.add(line);
+    persisted = [...said].slice(-GW_RECENT_CAP);
+  }
+});
+
+test('B13 PROVE-RED: the same 5 boots repeat every time with no seeding', () => {
+  /* This is the bug as shipped: gwSaid/gwLast were module-scope with nothing
+     read back from kv, so every reload started the bag empty and unaware of
+     what was last said. Same pool, same deterministic RNG, just skip
+     seedBagFromRecent (the fix): every boot pulls the same first line. */
+  const POOL = ['gear1', 'gear2', 'gear3', 'gear4', 'gear5', 'gear6', 'gear7'];
+  const rand0 = () => 0;
+  const linesSaid = [];
+  for (let boot = 0; boot < 5; boot++) {
+    const said = new Set(); // dies on reload, never seeded: the reported bug
+    linesSaid.push(bagPick(POOL, said, '', rand0));
+  }
+  assert.ok(linesSaid.every(l => l === linesSaid[0]),
+    'sanity check on the bug shape: an unseeded bag with a fixed RNG must repeat every boot');
+});
+
+test('B13 renderToday seeds the bag before Gwart speaks, and gwPick persists it', () => {
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const gwLineAt = src.indexOf('const gwLine = gwartLine(gwCtx);');
+  assert.ok(gwLineAt > -1, 'renderToday\'s opening gwartLine call is gone from js/app.js');
+  const before = src.slice(Math.max(0, gwLineAt - 200), gwLineAt);
+  assert.match(before, /await loadGwMemory\(\);/, 'renderToday must seed the bag from kv before Gwart\'s opening line');
+  assert.match(src, /function gwPick\(pool\) \{[\s\S]{0,300}kvSet\('gwRecent'/, 'gwPick must persist the bag to kv so the next boot can seed from it');
 });
 
 await runAll();
