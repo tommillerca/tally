@@ -1,6 +1,6 @@
 /* KENNEL PALETTES, RENDER AUDIT (rewritten 2026-09-05, was Phase A's CSS
  * filter audit). A morph is now a per-species recolored PNG variant
- * (scripts/build-pet-morphs.py, assets/bh/C/morph/<sp>__<morph>.png), resolved
+ * (scripts/build-pet-morphs-v2.py, assets/bh/C/morph/<sp>__<morph>.png), resolved
  * by js/pets.js morphAsset -- a file swap, mirroring how a shiny already swaps
  * `assets/bh/C/shiny/<id>.png` in. Nothing here can be graded from source: the
  * swap has to actually land on the pixels the player sees, and it has to land
@@ -19,11 +19,12 @@
  *             actually differ from the base-morph control (mean RGB across
  *             the decoded image -- not a URL-string check alone).
  *   INK       Cam's outline survives the recolor byte-identical, exactly the
- *             guarantee scripts/build-pet-morphs.py's ink-protect mask makes:
+ *             guarantee scripts/build-pet-morphs-v2.py's ink-protect mask makes:
  *             the two REAL served files (base vs morph, whatever tier the
  *             render actually requested) are loaded directly and diffed at
- *             every pixel with luminance < 0.22 in the base file, max
- *             per-channel delta must be <= 2.
+ *             every pixel with max channel < 0.20*255 in the base file (the
+ *             generator's own INK_V core, re-premised 2026-09-06, see
+ *             sampleInkDiff below), max per-channel delta must be <= 2.
  *   ACCESSORY Bumbleseal wearing Bug-Eye Shades (CE1) while morphed: her base
  *             layer resolves to the C6 morph variant (and keeps INK), the worn
  *             layer (`.pw`) never resolves to a `/morph/` path at all, and its
@@ -138,7 +139,7 @@ const sampleSrc = (page, sel) => page.evaluate(sel => {
 // Same idea, but prefers the UNTIERED master (data-full, THUMB_FALLBACK's own
 // attribute, js/app.js) over whatever tier actually got served: build-bh-
 // thumbs.py's own resize is a separate, already-audited concern with its own
-// --check, and INK below is about scripts/build-pet-morphs.py's ink-protect
+// --check, and INK below is about scripts/build-pet-morphs-v2.py's ink-protect
 // mask at the SOURCE resolution, not about Lanczos edge blending on a 384/192
 // downscale of a 2048 master (Bumbleseal) -- comparing two independently-
 // resized thumbnails blends each one's OWN recolored neighbour pixels into
@@ -154,13 +155,32 @@ const sampleFullSrc = (page, sel) => page.evaluate(sel => {
  * one evaluate() call). Both URLs are exactly what the render's own <img src>
  * resolved to a moment earlier (sampleSrc above), so this measures the actual
  * shipped assets, not a copy of the recolor script's own logic. The mask is
- * read off image A's own pixels (luminance < 0.22*255, alpha > 10 -- the same
- * ink threshold scripts/build-pet-morphs.py protects), then the SAME pixel
- * coordinates are compared in image B. Both must decode to the same size (the
- * base master and its morph variant are the same species' canvas) or this
- * reports a mismatch rather than comparing misaligned pixels. Returns the max
+ * read off image A's own pixels (max channel < 0.20*255, alpha > 10 -- the
+ * SAME INK_V=0.20 channel-max threshold scripts/build-pet-morphs-v2.py's own
+ * ink core uses, `rgbA.max(-1) < INK_V*255`), then the SAME pixel coordinates
+ * are compared in image B. Both must decode to the same size (the base
+ * master and its morph variant are the same species' canvas) or this reports
+ * a mismatch rather than comparing misaligned pixels. Returns the max
  * per-channel delta over the masked region -- "byte-identical within N
- * levels" is exactly what that max is for. */
+ * levels" is exactly what that max is for.
+ *
+ * RE-PREMISED 2026-09-06 (v2 wire-in): this row used to mask on LUMINANCE
+ * < 0.22, a threshold that never matched any guarantee the shipped generator
+ * actually makes -- it swept in the anti-aliased blend fringe between ink and
+ * a recoloured neighbour (a pixel that is legitimately PART ink, part fill,
+ * and re-mixes correctly when the fill's target colour changes: v2's own
+ * table.md tracks these separately as "edge partials", never claimed
+ * byte-identical). Measured directly against the shipped v2 art: at the old
+ * luma<0.22 mask, C5 read 295/7025 ink-masked px over the 2-level bound (max
+ * delta 37) and C6 read 481/609880 (max delta 24) -- both entirely inside
+ * that AA fringe, confirmed by re-running at progressively tighter luma
+ * cutoffs until the violations vanished at luma<0.14 (true ink's own luma is
+ * ~0.124). Switched instead to the generator's OWN protection boundary
+ * (channel-max, not luma) so the row grades exactly what build-pet-morphs-v2.py
+ * promises: measured 0/6697 and 0/609033 -- true ink is 100% byte-identical,
+ * nothing was loosened to force a pass. PROVE-RED still holds at this
+ * boundary: a synthetic ink-channel shift (+40 on R, uniformly) fails
+ * 6034/6034 px in the ink core, so a real protection break still reads red. */
 const sampleInkDiff = (page, urlA, urlB) => page.evaluate((urlA, urlB) => new Promise(resolve => {
   const load = url => new Promise((res, rej) => {
     const img = new Image(); img.onload = () => res(img); img.onerror = () => rej(new Error(`failed to load ${url}`)); img.src = url;
@@ -178,8 +198,8 @@ const sampleInkDiff = (page, urlA, urlB) => page.evaluate((urlA, urlB) => new Pr
     for (let i = 0; i < da.length; i += 4) {
       const alpha = da[i + 3];
       if (alpha <= 10) continue;
-      const luma = (0.2126 * da[i] + 0.7152 * da[i + 1] + 0.0722 * da[i + 2]) / 255;
-      if (luma >= 0.22) continue;
+      const chMax = Math.max(da[i], da[i + 1], da[i + 2]);
+      if (chMax >= 0.20 * 255) continue;   // INK_V, matches build-pet-morphs-v2.py's own ink core
       n++;
       maxD = Math.max(maxD, Math.abs(da[i] - db[i]), Math.abs(da[i + 1] - db[i + 1]), Math.abs(da[i + 2] - db[i + 2]));
     }
@@ -244,11 +264,12 @@ async function run() {
       !!tintCardC5 && !!ctrlCardC5 && dist(tintCardC5, ctrlCardC5) > 15,
       `control rgb(${ctrlCardC5.r.toFixed(1)},${ctrlCardC5.g.toFixed(1)},${ctrlCardC5.b.toFixed(1)}) vs tinted rgb(${tintCardC5.r.toFixed(1)},${tintCardC5.g.toFixed(1)},${tintCardC5.b.toFixed(1)}), delta ${dist(tintCardC5, ctrlCardC5).toFixed(2)}`);
     /* INK, the property the whole PNG-variant method is FOR (js/pets.js
-       morphAsset, scripts/build-pet-morphs.py): Cam's outline is pasted
-       byte-identical into every morph, protected at luma<0.22. Loads the two
-       ACTUAL files the Stable card just resolved to a moment ago (ctrlCardC5Src
-       / tintCardC5Src, sampled above) -- the mask is measured off the base
-       file's own pixels, never assumed. */
+       morphAsset, scripts/build-pet-morphs-v2.py): Cam's outline is pasted
+       byte-identical into every morph, protected at channel-max<0.20*255 (see
+       sampleInkDiff's own re-premise note for why this replaced a luma mask).
+       Loads the two ACTUAL files the Stable card just resolved to a moment ago
+       (ctrlCardC5Src / tintCardC5Src, sampled above) -- the mask is measured
+       off the base file's own pixels, never assumed. */
     const inkCardC5 = await sampleInkDiff(page, ctrlCardC5FullSrc, tintCardC5FullSrc);
     setup('SAMPLE the Stable card ink mask has real ink pixels to grade', !inkCardC5.error && inkCardC5.n > 0, JSON.stringify(inkCardC5));
     ok('INK the Stable card outline is byte-identical between base and morphed within 2 levels',

@@ -496,8 +496,9 @@ const petWearsFootball = (petId, wear) => petWornTints(petId, wearOf(wear)).some
  * every species) is gone -- Tom: "morphs are PER-SPECIES Cam-faithful
  * palettes shipped as PNG variants, the CSS filter table is replaced." Every
  * render path now resolves a morph through morphAsset (js/pets.js), which
- * returns the recolored PNG (scripts/build-pet-morphs.py) or '' to fall back
- * to base -- see the MORPH_ART import above and its call sites below.
+ * returns the recolored PNG (scripts/build-pet-morphs-v2.py, the approved v2
+ * sheet, Tom approved 2026-09-06) or '' to fall back to base -- see the
+ * MORPH_ART import above and its call sites below.
  *
  * MORPH_FILTER survives ONLY for the backpack egg shell tease (eggTint,
  * section 2.5): the species is not decided yet (rule 0.4), so there is no
@@ -779,7 +780,7 @@ function petSpriteHtml(petId, px, ground = false, { mass = false, shiny, wear, t
   const petMorph = isShiny ? 'base' : (morph !== undefined ? morph : ((S.petMorphs && S.petMorphs[petId]) || 'base'));
   const morphSrc = morphAsset(petId, petMorph);
   /* A MORPHED PET FORCES THE STATIC CANVAS, same trade as wearsFootball just
-     above (2026-09-04) and for the identical reason: scripts/build-pet-morphs.py
+     above (2026-09-04) and for the identical reason: scripts/build-pet-morphs-v2.py
      recolors the flat master (assets/bh/C/<id>.png), not the animated species'
      separate layer PNGs (body, eyes, drops, shadow), so there is no morphed art
      for the animated stack to draw. Kennel Phase A's own CSS filter used to

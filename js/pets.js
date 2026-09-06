@@ -232,10 +232,13 @@ export function passivePct(level) { return 0.04 + (level - 1) * 0.008; }
  * Rolled at egg-grant time (js/loot.js eggRow), read at hatch. Order here IS
  * tier order for fusion (Phase C), not shipped yet.
  *
- * KENNEL PALETTES, 2026-09-05. Tom: "morphs are PER-SPECIES Cam-faithful
- * palettes shipped as PNG variants, the CSS filter table is replaced." Phase
- * A's MORPH_TINT/petTint (js/app.js, one CSS filter shared by every species)
- * is gone; scripts/build-pet-morphs.py recolors each species' own master into
+ * KENNEL PALETTES V2, 2026-09-06. Tom approved the v2 recolour sheet
+ * ("now this is quality work. approved"): anatomy-first, per-fill regions
+ * recoloured against an absolute target hue per morph (not a shared
+ * hue-rotate), with ink/eye-white/cream protected byte-identical -- the fix
+ * for a colour reading wrong on a specific species. One midnight tier (the
+ * three-luminance-tier build was provisional; v2 ships a single midnight).
+ * scripts/build-pet-morphs-v2.py recolors each species' own master into
  * assets/bh/C/morph/<species>__<morph>.png, and MORPH_ART/morphAsset below are
  * the gate every render path resolves through -- mirrors SHINY_ART (js/loot.js):
  * file exists (species is in MORPH_ART) -> use the variant PNG; else base. */
@@ -251,19 +254,13 @@ export function isMorph(m) { return MORPHS.includes(m); }
  * Bumbleseal (C6) IS in here now (Kennel palettes, 2026-09-05: she is a normal
  * species for the morph grid, see MORPH_SPECIES below and js/loot.js). */
 export const MORPH_ART = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
-/* Midnight ships three luminance tiers (scripts/build-pet-morphs.py builds all
- * three: assets/bh/C/morph/<sp>__midnight-{dark,medium,dusk}.png) because Tom's
- * ruling, 2026-09-05: "the midnight luminance tier is NOT decided yet." This is
- * the one-line switch that ships his pick once he makes it. */
-export const MIDNIGHT_TIER = 'medium'; // 'dark' | 'medium' | 'dusk'
 /* The one path helper every draw path resolves through (mirrors bhAsset,
  * the cosmetics manifest). '' for base, CX, an unknown morph, or a species with no
  * morph art -- never guesses, never throws; the caller falls back to the base
  * asset exactly the way a missing shiny id would. */
 export function morphAsset(petId, morph) {
   if (!morph || morph === 'base' || !isMorph(morph) || petId === 'CX' || !MORPH_ART.includes(petId)) return '';
-  const stem = morph === 'midnight' ? `midnight-${MIDNIGHT_TIER}` : morph;
-  return `assets/bh/C/morph/${petId}__${stem}.png`;
+  return `assets/bh/C/morph/${petId}__${morph}.png`;
 }
 
 // Same crypto source loot.js's rng() uses, duplicated rather than imported: pets.js
