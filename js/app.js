@@ -16710,9 +16710,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
         });
       }, { passive: true });
       cells.forEach(c => c.addEventListener('click', () => { select(c.dataset.fbteam); centreOn(c, 'smooth'); }));
-      // open ON the colourway being worn rather than on team #1
+      // open ON the colourway being worn rather than on team #1. 'instant', NOT
+      // 'auto': 'auto' DEFERS to .fb-rail's own scroll-behavior: smooth, so this
+      // centring was a ~600ms animated slide from tile 0 to the worn tile and the
+      // scroll handler above painted BOTH dolls with every team it passed (Tom,
+      // live v487, 2026-09-06: "run through every colour quickly"; measured 16
+      // distinct colours in 1.5s wearing team #22). One frame, one scroll event,
+      // nearest tile is railTeam, select() returns early, nothing repaints.
+      // football-rail-audit RAIL-HOLDS grades it at the real tab and slot chip.
       const worn = cells.find(c => c.dataset.fbteam === railTeam);
-      if (worn) requestAnimationFrame(() => centreOn(worn, 'auto'));
+      if (worn) requestAnimationFrame(() => centreOn(worn, 'instant'));
       wireBar();
       // test hook (webdriver only): the rail is driven by a real scroll in the
       // audit, and this is how it reads back what the page thinks is selected
@@ -22701,7 +22708,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v487'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v489'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

@@ -19,6 +19,7 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+<<<<<<< HEAD
 ## onboarding fits the SE, sheets survive a double tap (2026-09-06)
 
 Not stamped to a release: hotfix/onboarding-fold. HANDOFFr3920260906.md R39-12,
@@ -38,6 +39,24 @@ R39-15, re-measured on this tree before fixing.
    own backdrop mid slide-up and read as a request to dismiss it; the backdrop
    now ignores a tap in the first 300ms after it appears, so a normal
    dismissal tap (at 400ms or later) still works exactly as before.
+=======
+## the worn kit holds its colour (2026-09-06)
+
+Not stamped to a release: hotfix/wardrobe-tint-flash, off v487. Tom, live v487:
+"Switching to wardrobe makes the helmet or jersey run through every colour
+quickly if you're on that item slot at the time. Makes me think these items
+layer every colour at once?" Measured before fixing: the stage's two tint spans
+took 18 distinct colour pairs inside 1.5s of the tab tap, the rail's scrollLeft
+walking 0 to 2000 underneath them. Nothing was layered: the rail opened on the
+worn tile with `centreOn(worn, 'auto')`, `'auto'` defers to `.fb-rail`'s
+`scroll-behavior: smooth`, and the rail's scroll handler painted the doll with
+every team the animated centring passed. After: 1 colour, 2 spans per garment.
+
+1. PROOF: football-rail-audit.mjs | REACH: Wear a football helmet or jersey in
+   any team but the first, open the Bonehead tab with that slot selected, or tap
+   its slot chip. The piece on your Bonehead is your team's colours from the
+   first frame; it no longer flicks through the other 31 on the way in.
+>>>>>>> origin/main
 
 ## backup and recovery truth (2026-09-06)
 
@@ -86,6 +105,18 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 2. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit sheet, right where a fight is offered, now names an active dish buff and its plain-words effect, or (no buff active but ingredients or a cooked dish owned) points at the Kitchen; says nothing when there is truly nothing to cook. Cooking is measured at +37.7 to +59.9pp win rate in the real fight engine and renderPit never mentioned it before. Red on both the buff line and the nudge line with the Pit's kitchen line removed; the quiet state stays correctly green either way, which is the point.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
+
+## v489
+1. A hotfix off v488, QA round 39's R39-15 and R39-12. Its rows are the dated "onboarding fits the SE, sheets survive a double tap" section further down, folded here.
+
+2. PROOF: onb-audit.mjs | REACH: the onboarding primary button's bottom edge is inside the viewport at first paint at 375x667 and 320x568 on both the reveal and plan steps (the foot is sticky to the screen bottom, safe-area aware); red before with the measured overflows (21.7, 293.5, 162.2 and 330.5 px).
+
+3. PROOF: sheet-doubletap-audit.mjs | REACH: two real taps 60 ms apart on a sheet trigger leave the sheet open, and a backdrop tap at 400 ms still closes it, because the shared openSheet backdrop handler ignores clicks within 300 ms of open (red before with the guard reverted).
+
+## v488
+1. A hotfix off v487 from Tom's live play test. Its row is the dated "the worn kit holds its colour" section further down, folded here.
+
+2. PROOF: football-rail-audit.mjs | REACH: arriving on the Wardrobe with a football piece worn paints the stage once, in the worn team, because the rail's opening centring is instant instead of a smooth scroll whose per-frame select repainted the stage spans (RAIL-HOLDS row red before: 18 distinct colours across 88 samples; after: 1; RAIL-STACK shows two tint spans per garment throughout, so nothing was ever layered).
 
 ## v487
 1. A hotfix off v486, Codex's two round-37 lanes (R37-14, 19, 20 and R37-17). Its rows are their dated sections further down, folded here.
