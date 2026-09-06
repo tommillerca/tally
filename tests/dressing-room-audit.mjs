@@ -85,6 +85,8 @@ const quiet = () => page.evaluate(() => { const t = document.querySelector('#toa
    and dust for the paid disguises the OWN rows put on and take off. */
 await seed(page, { level: 30, dust: 2000 });
 const KIT_SLOT = 'FW';
+/* Tom, 2026-09-05, on (B): "this could be with other clothes too not just shoe", so
+   every gear slot the Dressing Room offers, not the one in the report. */
 const GEAR_SLOTS = ['H', 'T', 'P', 'S', 'FW'];
 
 /* ---- SEED ---------------------------------------------------------------- */
@@ -194,7 +196,7 @@ const rail = await page.evaluate(() => {
     zeroBoxes: tiles.filter(t => t.getBoundingClientRect().height === 0 || t.getBoundingClientRect().width === 0).length,
     distinctTints: new Set(tiles.map(t => t.querySelector('canvas')?.dataset.tints || '')).size,
     prices: r.querySelectorAll('.look-cost').length, expanded: tile.getAttribute('aria-expanded'),
-    bar: (document.querySelector('.mog-bar')?.textContent || '').replace(/\s+/g, ' ').trim() };
+    bar: (document.querySelector('.mog-dock > .mog-bar')?.textContent || '').replace(/\s+/g, ' ').trim() };
 });
 console.log('rail:', JSON.stringify(rail));
 check('RAIL tapping the family tile opens a rail with one tinted tile per colourway',
@@ -220,8 +222,12 @@ const afterPick = pick.why ? pick : {
     famSel: document.querySelector('.mog-panel .look-grid .ward-cell.fam')?.classList.contains('selected'),
     railSel: document.querySelector('.mog-panel .fam-rail [data-look].selected')?.dataset.look,
     caps: [...document.querySelectorAll('.mog-cap')].map(c => c.textContent.trim()),
-    bar: (document.querySelector('.mog-bar')?.textContent || '').replace(/\s+/g, ' ').trim(),
+    bar: (document.querySelector('.mog-dock > .mog-bar')?.textContent || '').replace(/\s+/g, ' ').trim(),
     apply: document.querySelector('[data-look-apply]')?.dataset.lookApply ?? null,
+    /* the fit rail's team bar (Trying / You are wearing it) is a .mog-bar too, ABOVE the
+       dock; restageLook's bare $('.mog-bar') replaced IT with the Dressing Room's bar and
+       left the dock's own bar stale (measured 2026-09-06 in the after-rail screenshot) */
+    fbBar: !!document.querySelector('.fb-bar'), bars: document.querySelectorAll('.mog-dock > .mog-bar').length,
   })),
 };
 console.log('pick:', JSON.stringify(pick), JSON.stringify(afterPick));
@@ -231,8 +237,9 @@ check('PICK the After figure paints the tapped team\'s primary on the garment, d
 check('PICK the family tile now stands for that colourway and the rail rings it',
   !pick.why && afterPick.famLook === pick.id && afterPick.famSel && afterPick.railSel === pick.id,
   `tile ${afterPick.famLook}, selected ${afterPick.famSel}, rail ${afterPick.railSel}`);
-check('PICK the bar names it and offers to wear it',
-  !pick.why && afterPick.bar.includes(pick.name) && afterPick.apply === pick.id, afterPick.bar);
+check('PICK the dock\'s bar names it and offers to wear it, and the fit rail keeps its own team bar',
+  !pick.why && afterPick.bar.includes(pick.name) && afterPick.apply === pick.id && afterPick.fbBar && afterPick.bars === 1,
+  `dock bar "${afterPick.bar}", fit-rail bar ${afterPick.fbBar}, dock bars ${afterPick.bars}`);
 await page.evaluate(() => document.querySelector('[data-look-apply]')?.click());
 await sleep(2000); await quiet();
 const worn = { ...await state(KIT_SLOT), now: await layer('.mog-figs figure:nth-of-type(1)', KIT_SLOT) };
