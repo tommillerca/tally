@@ -19,8 +19,8 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
-## v483
-1. The integration train (integ/day5) off v482: Kennel phase A, palettes, the approved v2 recolour art and the Kennel UI; crew activity; the Wardrobe paint virtualization; the truthful iOS permission strings (not a player-visible change, documented in docs/PERMISSION-STRINGS.md). Each row below folds the dated sections further down.
+## v484
+1. The integration train (integ/day5) off v483: Kennel phase A, palettes, the approved v2 recolour art and the Kennel UI; crew activity; the Wardrobe paint virtualization; the truthful iOS permission strings (not a player-visible change, documented in docs/PERMISSION-STRINGS.md). Each row below folds the dated sections further down.
 
 2. PROOF: unit.test.js, pet-pool-audit.mjs, pet-morph-audit.mjs, kennel-audit.mjs | REACH: a granted egg rolls a morph fresh-first over species x morph pairs at MORPH_WEIGHT, the hatch reads it, morphs never touch stats; each morph is a per-fill recolour PNG of Cam's master (ink, whites and creams byte-identical, one midnight tier, Tom approved the sheet 2026-09-06) with tiers built; the Kennel sheet inside the Stable lists every species with a 30-cell collection grid and column headers.
 
@@ -31,6 +31,24 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 5. PROOF: unit.test.js, crew-activity-audit.mjs | REACH: raceStanding's gap is to the racer above; raceClockLabel fires "settles tonight" on the last calendar day; settlement writes a reward-less place grant for every non-podium finisher; hasFightableStats demands a real number for every stat before any fight or stat bar renders.
 
 6. PROOF: wardrobe-family-grid-audit.mjs, football-tile-crop-audit.mjs, memory-census.mjs | REACH: hydratePackArt paints only tiles on screen or one screen away via an IntersectionObserver rooted on the real scroller (measured 166 ms to 73 ms main-thread script opening the hat slot at 4x CPU, 185 owned hats; OFF-DOM decoded bitmaps 12.2 MB to 9.3 MB).
+## kitchen on day one (2026-09-06)
+
+Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
+
+1. PROOF: kitchen-welcome-audit.mjs | REACH: a fresh install's welcome-kit toast (the message every new player actually receives, whether they finish onboarding or boot straight into an existing settings row) now says "exactly one Bone Broth. Cook it." instead of stopping at the ingredient count. The instruction used to live only on the pre-existing-install backfill path (`kit ? null : backfillStarterSeedsIfNeeded()`), which a fresh install's `kit` being truthy meant it never reached. Red with the appended copy reverted; drives real onboarding, polls #toast rather than reading it once.
+
+2. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit sheet, right where a fight is offered, now names an active dish buff and its plain-words effect, or (no buff active but ingredients or a cooked dish owned) points at the Kitchen; says nothing when there is truly nothing to cook. Cooking is measured at +37.7 to +59.9pp win rate in the real fight engine and renderPit never mentioned it before. Red on both the buff line and the nudge line with the Pit's kitchen line removed; the quiet state stays correctly green either way, which is the point.
+
+3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
+
+## v483
+1. A hotfix off v482, QA round 38's Kitchen items (R38-21, 22, 23). Its rows are the dated "kitchen on day one" section further down, folded here.
+
+2. PROOF: kitchen-welcome-audit.mjs | REACH: the welcome kit toast on a real fresh install names Bone Broth and says to cook it (red with the copy reverted: the kit toast fires and names no recipe).
+
+3. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit carries one line naming the active dish buff, or pointing at the Kitchen when ingredients or a dish are owned, and nothing when there is nothing to cook (BUFF and NUDGE rows red with the line removed, QUIET grades the absence).
+
+4. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a cooking pot can be cancelled and refunds its ingredients in one atomic step, and the day-one Kitchen says which recipe the starter kit is for before the first tap (TIP and CANCEL rows red when reverted separately; the strand itself reproduced first: marrow 1, salt 0, 0 of 13 buttons).
 
 ## v482
 1. A hotfix off v481, QA round 37's first-session and crate-tap items (R37-1, 5, 6; R37-2 verified already fixed by the round-34 restore latch). Its rows are the dated "first session and crate taps" section further down, folded here.
