@@ -19,6 +19,13 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v476
+1. A hotfix off v475, two changes. Nothing else from the day's integration train is in it.
+
+2. PROOF: no-debug-markers-lint.mjs | REACH: the TEMP DIAGNOSTICS OVERLAY (a fixed pre at z-index 999999 mirroring console.error) that v475 shipped in the page shell is removed. The lint scans the shell, the worker, the stylesheet and every module under js/ and data/ for "do not commit", TEMP DIAGNOSTICS or an id="dbg" sink and exits 1 on the first hit; proven red on v475's own shell (two hits, lines 31 and 33) before the removal.
+
+3. PROOF: football-kit-audit.mjs, football-render-audit.mjs | REACH: the Locker Room poster's summary no longer overrides its display (WebKit's disclosure hit test ignored a real tap when the summary itself was a flex row; measured on the iOS 17 Pro Simulator: fbSect.open stayed false after a tap, true after the fix). The flex row lives on an inner wrapper, the POSTER-TOGGLE row pins that and was proven red by reinstating the override (DISPLAY OVERRIDE, exit 1), and the render audit re-measures the poster's hero, discs and tiles after the move.
+
 ## v475
 1. Folds in the day's dated sub-sections finished since v474: kit live feedback,
 rack weekly, shop front door, crew identity, crew layout and offline crash
