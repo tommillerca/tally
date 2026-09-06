@@ -15,7 +15,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const MARK = /do not commit|TEMP DIAGNOSTICS|id="dbg"/i;
+// "do not commit" inside quotes is prose QUOTING the marker (js/changelog.js:8
+// describes this very check), not a marker; a real marker is never written quoted.
+const MARK = /(?<!")do not commit(?!")|TEMP DIAGNOSTICS|id="dbg"/i;
 const files = ['index.html', 'sw.js', 'app.css',
   ...readdirSync(join(ROOT, 'js')).filter(f => f.endsWith('.js')).map(f => 'js/' + f),
   ...readdirSync(join(ROOT, 'data')).filter(f => f.endsWith('.js')).map(f => 'data/' + f)];
