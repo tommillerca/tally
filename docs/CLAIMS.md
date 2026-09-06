@@ -19,6 +19,16 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## kitchen on day one (2026-09-06)
+
+Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
+
+1. PROOF: kitchen-welcome-audit.mjs | REACH: a fresh install's welcome-kit toast (the message every new player actually receives, whether they finish onboarding or boot straight into an existing settings row) now says "exactly one Bone Broth. Cook it." instead of stopping at the ingredient count. The instruction used to live only on the pre-existing-install backfill path (`kit ? null : backfillStarterSeedsIfNeeded()`), which a fresh install's `kit` being truthy meant it never reached. Red with the appended copy reverted; drives real onboarding, polls #toast rather than reading it once.
+
+2. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit sheet, right where a fight is offered, now names an active dish buff and its plain-words effect, or (no buff active but ingredients or a cooked dish owned) points at the Kitchen; says nothing when there is truly nothing to cook. Cooking is measured at +37.7 to +59.9pp win rate in the real fight engine and renderPit never mentioned it before. Red on both the buff line and the nudge line with the Pit's kitchen line removed; the quiet state stays correctly green either way, which is the point.
+
+3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
+
 ## v482
 1. A hotfix off v481, QA round 37's first-session and crate-tap items (R37-1, 5, 6; R37-2 verified already fixed by the round-34 restore latch). Its rows are the dated "first session and crate taps" section further down, folded here.
 
