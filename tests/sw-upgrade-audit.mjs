@@ -195,12 +195,12 @@
  *   --prove-red=killswitch-ignored  checkStamp() returns immediately, so
  *                             version.json is never fetched. KILLSWITCH goes
  *                             red.
- *   --prove-red=stale-version B changes the files but does NOT bump VERSION.
- *                             Online, nothing breaks, which is itself the
- *                             finding. What goes red is the OFFLINE copy at the
- *                             explicit /index.html url: that cache key is only
- *                             ever rewritten by a fresh install, so it holds the
- *                             old shell beside the new modules.
+ *   (stale-version was REMOVED 2026-09-06 with the real-old-build premise: it
+ *   modelled "B changes the files but sw.js is byte-identical", and with a real
+ *   old build B's sw.js is never byte-identical, so the mode could only produce
+ *   harness reds ("want tally-v471 and tally-v471"). The discipline it stood
+ *   for, four stamps agreeing and bumping together, is tests/version-stamp-
+ *   audit.mjs, PURE and gate-registered.)
  *   --prove-red=404           one PRECACHE entry 404s in B. The install throws,
  *                             READY is never written, and the old worker stays
  *                             in charge serving its own whole build.
@@ -252,7 +252,7 @@ const ONLY = argOf('only') || '';
    REMOVED on the same date: it used to restore the pre-v197 shape as a defect,
    and cache-first is now the shipped design, so keeping it would have pinned a
    superseded instruction. Source: docs/FEEDBACK-2026-08-22-v424.md item 18. */
-const MODES = ['network-first', 'stranded', 'mixed', 'killswitch-ignored', 'stale-version', '404', 'waiting', 'window', 'refetch', 'blank', 'nobanner'];
+const MODES = ['network-first', 'stranded', 'mixed', 'killswitch-ignored', '404', 'waiting', 'window', 'refetch', 'blank', 'nobanner'];
 if (PROVE && !MODES.includes(PROVE)) {
   console.log(`FAIL  SETUP unknown --prove-red=${PROVE} (${MODES.join(' | ')})`);
   process.exit(1);
@@ -303,8 +303,6 @@ let NO_APP_UPDATE = false;
 const A_NUM = swVersion(fs.readFileSync(path.join(OLD_ROOT, 'sw.js'), 'utf8'));
 function transform(rel, buf, mode) {
   const v = mode === 'A' ? 'A' : 'B';
-  /* stale-version: B's files with A's stamps, i.e. a release that forgot to bump */
-  const stale = mode === 'B' && PROVE === 'stale-version';
   let s;
   switch (rel) {
     case 'index.html':
@@ -314,7 +312,6 @@ function transform(rel, buf, mode) {
       return buf.toString() + `\n:root{--tally-upgrade-marker:"${v}"}/*TALLY_UPGRADE_MARKER:${v}*/\n`;
     case 'js/app.js':
       s = buf.toString();
-      if (stale) s = s.replace(/const APP_BUILD = 'v(\d+)'/, `const APP_BUILD = 'v${A_NUM}'`);
       /* THE KILLSWITCH ROW HAS TO BE ABOUT THE WORKER, NOT ABOUT THE PAGE.
          js/app.js already calls reg.update() on every visibilitychange, and it
          would find the new build on its own, so a KILLSWITCH row run against
@@ -338,16 +335,8 @@ function transform(rel, buf, mode) {
          module-scope const can be read from outside, and the RUNNING value is
          the whole question. Identical in both versions apart from the letter. */
       return s + `\ntry { window.__tallyLayerJs = '${v}'; window.__tallyBuild = APP_BUILD; } catch (e) {}\n/*TALLY_UPGRADE_MARKER:${v}*/\n`;
-    /* THE KILLSWITCH STAMP IS A REAL FILE AND HAS TO MOVE WITH THE BUILD.
-       Left at A's number in version B, every device would call registration
-       .update() once a minute for ever, and the KILLSWITCH row would pass on a
-       permanent alarm rather than on a real one. */
-    case 'version.json':
-      s = buf.toString();
-      return stale ? s.replace(/tally-v(\d+)/, `tally-v${A_NUM}`) : s;
     case 'sw.js':
       s = buf.toString();
-      if (stale) s = s.replace(/tally-v(\d+)/g, `tally-v${A_NUM}`);
       // R38-17: B is a build that dropped a module (see DROPPED)
       if (mode === 'B') s = s.replace(`  './${DROPPED}',\n`, '');
       /* Each mutation is applied to BOTH versions, because a regression that
@@ -800,7 +789,7 @@ async function scenario(name, srv, act, { broken = null, offlineAfter = false, n
 
 /* ---- the scenarios --------------------------------------------------------- */
 const A_VERSION = `tally-v${A_NUM}`;
-const B_VERSION = PROVE === 'stale-version' ? A_VERSION : `tally-v${swVersion(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'))}`;
+const B_VERSION = `tally-v${swVersion(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'))}`;
 /* THE BYTE-IDENTICAL SET, computed the way the server serves it (transform
    applied), so CARRIED compares against what the worker could actually have
    reused: every url in BOTH precache lists whose A bytes equal its B bytes. */
@@ -839,7 +828,7 @@ if (PROVE) console.log(`PROVE-RED MODE: ${PROVE}\n`);
 if (PROVE) {
   const swA = fs.readFileSync(path.join(ROOT, 'sw.js'));
   const raw = swA.toString();
-  const bumped = raw;   // B's own stamps are real now, nothing is bumped
+  const bumped = raw;   // B's stamps are its own; the name is kept so gone() reads as before
   const served = transform('sw.js', swA, 'B').toString();
   /* THE ANCHOR MUST HAVE BEEN THERE AND MUST NOW BE GONE. Checking only that
      the bytes changed would pass on the VERSION bump alone, and checking only
@@ -851,7 +840,6 @@ if (PROVE) {
     'stranded': gone(SW_ANCHORS.scoped) && gone(SW_ANCHORS.sweep),
     'mixed': gone(SW_ANCHORS.gate) && served.includes('    if (!nav && PRECACHED.has(req.url)'),
     'killswitch-ignored': gone(SW_ANCHORS.throttle) && served.includes('  if (true) return;'),
-    'stale-version': swVersion(served) === A_NUM && swVersion(raw) !== A_NUM,
     '404': new RegExp(`['"]\\./${BREAK.replace(/[.]/g, '\\.')}['"]`).test(raw),
     'waiting': gone(SW_ANCHORS.skip),
     'window': gone(SW_ANCHORS.sweep) && served.includes('keys.filter(k => k !== VERSION).map'),
