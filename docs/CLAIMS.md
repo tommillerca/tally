@@ -57,6 +57,78 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 2. PROOF: hype-banner-audit.mjs, news-banner-audit.mjs | REACH: the news pill's hero slot promotes the Locker Room row: a poster rendered from the real kit-room DOM (Bonehead in the Bruisers kit, lizard in front) registered as a measured plate, so the hero shows the newest thing on sale instead of the Wanderer. The hype audit re-measures the hero (one hero, art decoded, whole figure, fits, caption length) with the new plate in it; the news audit keeps every row bounded.
 
 3. PROOF: shop-door-audit.mjs | REACH: Today's coin pill opens the Shop. The COIN-PILL row taps the real pill and reads the Shop chip lit; red on v477 (tapped, chip off).
+## update path (2026-09-06)
+
+Not stamped to a release: hotfix/update-path, off v482. HANDOFFr3820260906.md
+R38-1, R38-3, R38-4, R38-15, R38-17, R38-18. The lever that admits a downloaded
+build moves out of js/app.js (the half a stranded device never runs) and into
+sw.js's own install, which is the only new code guaranteed to execute on an old
+device. tests/sw-upgrade-audit.mjs now serves side A as a REAL old build
+(`git archive 96c1104a`, v471, pre-letItIn) instead of this tree with VERSION
+bumped; on that premise the untouched audit was 53/53 green against the exact
+sw.js that stranded every tester, and with the real A it reads red on the
+pre-fix sw.js and green on this one.
+
+1. PROOF: sw-upgrade-audit.mjs (SECOND OPEN "after the install lands and the app
+   is RESUMED" and "real activation" rows; red with sw.js alone reverted to
+   origin/main: `after resume: shell=A module=A css=A build=v471, registration
+   {"active":"activated","installing":null,"waiting":"installed"}`; green on
+   this tree: `shell=B module=B css=B build=v482, registration
+   {"active":"activated","installing":null,"waiting":null}`), unit.test.js (the
+   SKIP_WAITING handshake rows, unchanged and still green) | REACH: A player on
+   any build from v427 to v482 opens the app once with signal. The new worker
+   downloads the whole build in the background, then takes over by itself the
+   moment the last file is cached; the page they are on reloads once (or, with a
+   sheet open, when they close it) and they are on the new build. No button, no
+   force-quit, no second open. Nothing on their side has to know how to let it in.
+
+2. PROOF: sw-upgrade-audit.mjs (WINDOW row: the v471 page, with the v482 worker
+   already in charge under it, lazily imports js/changelog.js, which B drops
+   from PRECACHE and 404s; answered `200 text/javascript, module: 3`; red under
+   --prove-red=window, which deletes the previous generation on activate again,
+   and red on the pre-fix sw.js because the swap never happens) plus the
+   re-premised "exactly two tally-v* caches survive" and sentinel rows | REACH:
+   During the seconds between the new build taking over and the page reloading,
+   the old page still finds every file of its own build: activate keeps one
+   previous cache generation and deletes only older ones, and every lookup reads
+   this build's cache first, then the kept one. A module the new build removed
+   is still served to the page that asked for it. What is NOT closed: a module
+   both builds carry is answered from the NEW build during that window (the
+   pre-v427 shape), bounded by the reload the swap itself triggers.
+
+3. PROOF: sw-upgrade-audit.mjs (GET LATEST OFFLINE row: Settings "Get latest"
+   pressed on the new build with the network gone; red under --prove-red=blank,
+   which restores origin/main's hardRefresh) | REACH: Tapping "Get latest" with
+   no signal now toasts "No connection. Try again when you have signal" and
+   leaves the worker, the caches and the running app exactly as they were. It
+   used to unregister every worker and delete every cache before reloading,
+   which with no signal left a blank app (0 characters, no caches, no
+   registration) across reopen and force-quit until the network came back. With
+   signal it asks the registration for the new worker and lets that worker's own
+   install and activate do the swap, so the old cache is deleted only after the
+   new build has fully landed. The dead `location.reload(true)` argument is gone.
+
+4. PROOF: sw-upgrade-audit.mjs (TODAY BANNER and SETTINGS ROW rows, driven on
+   the new build's page with version.json claiming v999; red under
+   --prove-red=nobanner) | REACH: The "Update available. You're on vX; vY is
+   live. Get latest" banner is on Today, the screen a player actually opens, not
+   only on Progress. The Settings build row reads "Build vX, vY is live" when
+   behind instead of the same "tap if the app looks out of date" it showed
+   whether current or six builds back. Both read version.json (the worker's own
+   never-cached killswitch stamp, thirty bytes) rather than downloading sw.js.
+
+5. PROOF: sw-upgrade-audit.mjs (CARRIED rows: of 188 byte-identical precache
+   entries between v471 and this tree, 188 in the new cache are the previous
+   generation's own copies validated by a 304 and 0 were re-downloaded; the
+   install pulled 3,586 KB of an 11,582 KB precache; red under
+   --prove-red=refetch and on the pre-fix sw.js, which pulled 11,474 KB) |
+   REACH: An update downloads the files that changed, not all 211. Install asks
+   the server conditionally (If-None-Match against the ETag the previous
+   generation stored, with the browser HTTP cache bypassed so a small or evicted
+   one changes nothing) and copies the old entry across on a 304. On the
+   measured v471 to v477 gap that is about 3.2 MB instead of about 11 MB, on
+   the bad connection this player is on by definition.
+
 ## notifications consent (2026-09-06)
 
 Not stamped to a release: hotfix/notify-consent, off v477. HANDOFFr3720260906.md
