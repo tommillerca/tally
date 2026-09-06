@@ -11693,7 +11693,17 @@ function crewCardArtHtml(f) {
    per friend, priority order: a spire, then a level, then new gear, then a
    badge. A friend seen for the first time gets no label (nothing to compare
    against yet), never a false "since yesterday". */
+/* 2026-09-06, nav-perf bisect: this ran an uncached kvGet + kvSet on EVERY
+   Friends render (warm lap 58-63 ms -> 67-74 ms across nine runs, the step
+   landing exactly on the CREW-4 commit). The diff only has new information
+   when the friends payload changed, so it is memoised on a signature of the
+   fields it reads; an unchanged payload returns the same labels with zero
+   kv traffic, which also keeps a label on screen for a whole session instead
+   of vanishing on the next repaint. */
+let sinceMemo = { sig: null, labels: {} };
 async function friendSinceYesterdayMap(friends) {
+  const sig = (friends || []).map(f => { const p = f.profile || {}; return `${f.playerId}:${p.level || 1}:${p.gearCount ?? (p.gear ? p.gear.length : 0)}:${p.badges || 0}:${f.spires || 0}`; }).join('|');
+  if (sig === sinceMemo.sig) return sinceMemo.labels;
   const cache = (await kvGet('friendSnaps', null)) || {};
   const next = {}, labels = {};
   for (const f of friends || []) {
@@ -11713,6 +11723,7 @@ async function friendSinceYesterdayMap(friends) {
     else if (now.badges > was.badges) labels[f.playerId] = 'Earned a new badge';
   }
   await kvSet('friendSnaps', next);
+  sinceMemo = { sig, labels };
   return labels;
 }
 function crewCardHtml(f, since) {
