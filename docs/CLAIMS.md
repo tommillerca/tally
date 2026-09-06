@@ -67,6 +67,15 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
 
+## v486
+1. A hotfix off v485, QA round 38's update-path items (R38-1, 3, 4, 15, 17, 18). Its rows are the dated "update path" section further down, folded here.
+
+2. PROOF: sw-upgrade-audit.mjs | REACH: the new worker's own install precaches, writes READY and calls skipWaiting, so a downloaded build activates on a device whose page never had letItIn; side A of the audit is now a real v471 build (git archive 96c1104a) served over TLS, and the SECOND OPEN row is red with sw.js reverted (after resume: build v471, waiting installed) and green with the fix (build v486, waiting null).
+
+3. PROOF: sw-upgrade-audit.mjs, offline-boot-audit.mjs | REACH: activate keeps one previous READY cache generation and fromCaches serves this build first then the kept one, so a module the new build dropped still answers 200 to an old page mid-swap (WINDOW row red before: 404, import failed); hardRefresh proves reachability against version.json before touching a cache and asks the registration for the new worker, so Get latest offline keeps the app and says there is no connection (GET LATEST OFFLINE row red before: caches [], the page is gone).
+
+4. PROOF: sw-upgrade-audit.mjs | REACH: the update banner renders on Today with a real hit box and the Settings build row names the live build when behind (TODAY BANNER and SETTINGS ROW rows red before); precache carries byte-identical entries from the kept generation instead of re-downloading them (CARRIED row: 187 of 187 carried, 3755 KB served of 11582; red before: carried 0).
+
 ## v485
 1. A hotfix off v484, QA round 38's backup and recovery items (R38-2, 10, 11, 12, 13, 14). Its rows are the dated "backup and recovery truth" section further down, folded here. Server change included: no D1 migration; Tom deploys the Worker.
 
