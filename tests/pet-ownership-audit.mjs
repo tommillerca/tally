@@ -64,6 +64,16 @@
  *   SAMPLE   drop C6 and the other species from BH_ITEMS: 2 FAILED (SETUP), and
  *            the run stops rather than passing on nothing.
  *
+ * PROVE-RED, the R39 rows (2026-09-06), on v487 d7906217 in a throwaway worktree
+ * with this file copied in unchanged, HEADLESS_MODE=shell. 5 FAILED, the 21
+ * older rows green, exit 1:
+ *   FAIL  HER the Stable's wardrobe heading shows a species name containing <b> as text, not markup  | {"found":true,"text":"Bumblesealx's wardrobe","bold":true}
+ *   FAIL  GHOST an instance row with no sp is skipped: the Stable still draws every real species and throws nothing  | 0 cards, ghost card false, page errors TypeError: Cannot read properties of undefined (reading 'file') bhAsset (.../data/boneheadz.js:2034:45)
+ *   FAIL  STABLE-EQ the Stable never disables EQUIP for a pet the worn outfit does not hold (the button is disabled only while C is her species)  | {"found":true,"disabled":true,"label":"OUT WITH YOU","sp":"C6"}
+ *   FAIL  STABLE-EQ and opening the Stable heals the slot, so Today draws her again  | C=undefined petEquipped species=C6
+ *   FAIL  FIRSTPET hatching the welcome egg through the real HATCH button puts her on Today: C slot set, #heroPetBtn drawn, both records agree  | {"hash":"#/today","petEquipped":"pmtq2uv10-1-C5","eqSp":"C5","instances":["C5"],"heroPetBtn":false}
+ * Green on hotfix/first-pet: 26 PASS, 52s.
+ *
  * Run: node tests/pet-ownership-audit.mjs [baseUrl] [--shots DIR]
  * Self-serving: with no URL it serves this checkout, so it can never grade
  * production.
