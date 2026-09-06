@@ -73,7 +73,7 @@ import { attachWalk } from './walk.js';
 import { refreshPitEnergy, spendPitFight, refundPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
-  spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, QUEUE_MAX, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime, foodBuffLabel,
+  spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, QUEUE_MAX, collectDish, cancelCook, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime, foodBuffLabel,
   POTIONS, POTION_BY_ID, RECIPE_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
   pantryDishes, activatePantryDish, discardPantryDish,
@@ -1570,7 +1570,13 @@ async function boot() {
     route({ keepScroll: true }); // the screen painted at their old level; show the real one
   }
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), init && init.xp > 0 ? 4200 : 900);
+  /* R38-21: this toast is the ONLY thing that fires on a fresh install (kit is
+     always truthy the first time, so backfillStarterSeedsIfNeeded below never
+     runs for a new player), and it used to stop at "ingredients in the
+     Kitchen" with no instruction at all: new players got the pouch-catches-up
+     copy's ingredient count but never its "cook it" line. Same instruction,
+     said once, on the message every new player actually receives. */
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), init && init.xp > 0 ? 4200 : 900);
   // the pouch reaches installs that predate it; see backfillStarterSeedsIfNeeded
   const pouch = kit ? null : await backfillStarterSeedsIfNeeded();
   if (pouch) setTimeout(() => toast(`${pouch.ingredients} starter ingredients in your Kitchen: exactly one Bone Broth. Cook it.`, 4200), init && init.xp > 0 ? 4200 : 1400);
@@ -2989,6 +2995,15 @@ async function checkFriendRequests() {
     if (!(await social.isOnline())) return;
     const { fresh, incoming } = await social.newFriendRequests();
     await setCrewBadgeFrom((incoming || []).length); // requests + unread deliveries
+    /* R38-8: q-friend / w-friends need an ACTUAL accepted friend, not just a
+       reachable account (isOnline() alone let a zero-friend account draw
+       them). Cache the count locally so quest gating (Today render) never
+       waits on a live fetch; checkFriendRequests already runs on boot + resume,
+       not per render. A failed read must not become the new baseline, same
+       rule listFriends documents for itself: only write on a read that
+       actually reached the server. */
+    const friendsData = await social.listFriends();
+    if (friendsData.reached !== false) await kvSet('friendCount', (friendsData.friends || []).length);
     if (!fresh.length) return;
     const prefs = await notifPrefs();
     if (prefs.enabled && prefs.friends) {
@@ -3962,7 +3977,13 @@ async function renderToday(el) {
   // them; with Health connected the walk row would double-ask for data the
   // sync already has. null = hide the row entirely.
   const manualWalks = wellness && !S.settings.hkConnected ? await manualWalksToday(S.date) : null;
-  const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled, socialOn: await social.isOnline().catch(() => false),
+  const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled,
+    /* R38-8: isOnline() only means "has an API and an account", so a
+       zero-friend account was handed q-friend as one of two dailies. Gate on
+       whether the CACHED friends list (checkFriendRequests, boot + resume
+       cadence) has ever recorded an accepted friend, so this never waits on a
+       live fetch and a brief connectivity blip cannot flicker the gate. */
+    socialOn: (await kvGet('friendCount', 0)) > 0,
     /* A quest list should describe a day this player can actually have. The Pit
        appears once they have been there (win or lose: trying is the gate, not
        winning), and the Kitchen once it has something in it. */
@@ -3985,14 +4006,45 @@ async function renderToday(el) {
   const qbase = {
     date: S.date, entries, allXp, allLog, healthRows, targets: S.settings.targets,
     priorFoodIds: new Set(allLog.filter(e => e.date < S.date && e.foodId).map(e => e.foodId)),
+    // R38-8 q-new-food: Quick Add's foodId: null entries have no id to compare,
+    // so they are matched by name instead, against prior-day Quick Add names.
+    priorQuickNames: new Set(allLog.filter(e => e.date < S.date && !e.foodId && e.name).map(e => String(e.name).trim().toLowerCase())),
     weighedToday: !!(await db.get('weights', S.date)),
     hkConnected: qopts.hkConnected, huntEnabled,
+    // R38-8 q-water partial credit: only known for the day actually on screen.
+    waterCups: wellness ? wellness.water : null,
+    // R38-8 monthly proration: account creation, so a first month that started
+    // mid-month scales down instead of asking for the whole month's total.
+    createdAt: S.settings.createdAt,
   };
+  /* R38-24: a capability change must not re-pick a quest already shown this
+     period. dailyQuests/weeklyQuests/monthlyQuests only ever DROP a quest
+     under a new gate (never substitute) EXCEPT the single-quest floor, which
+     searches outside the drawn set and so can swap for a different quest the
+     moment something else in the drawn set unlocks (see quests.js pick()).
+     Only tracked for the LIVE period (isToday): a past day is a read-only
+     record (Tom, 2026-08-23) so nothing there can be unlocked out from under
+     it, and clobbering today's sticky record with a past day's would be worse
+     than the bug. */
+  const liveToday = S.date === dateKey();
+  const floorMemo = liveToday ? ((await kvGet('questFloor', null)) || {}) : {};
+  async function pickSticky(tier, fn) {
+    const periodKey = periodKeyOf(tier, S.date);
+    if (!liveToday) return fn(S.date, qopts);
+    const rec = floorMemo[tier];
+    const stickyId = (rec && rec.periodKey === periodKey) ? rec.id : undefined;
+    const quests = fn(S.date, { ...qopts, stickyId });
+    if (quests.length === 1 && (!rec || rec.periodKey !== periodKey || rec.id !== quests[0].id)) {
+      floorMemo[tier] = { periodKey, id: quests[0].id };
+      await kvSet('questFloor', floorMemo);
+    }
+    return quests;
+  }
   // three quest tiers, each with its own period-scoped context
   const questTiers = [
-    { period: 'day', label: "TODAY'S QUESTS", quests: dailyQuests(S.date, qopts), ctx: questCtx('day', qbase) },
-    { period: 'week', label: 'THIS WEEK', quests: weeklyQuests(S.date, qopts), ctx: questCtx('week', qbase) },
-    { period: 'month', label: 'THIS MONTH', quests: monthlyQuests(S.date, qopts), ctx: questCtx('month', qbase) },
+    { period: 'day', label: "TODAY'S QUESTS", quests: await pickSticky('day', dailyQuests), ctx: questCtx('day', qbase) },
+    { period: 'week', label: 'THIS WEEK', quests: await pickSticky('week', weeklyQuests), ctx: questCtx('week', qbase) },
+    { period: 'month', label: 'THIS MONTH', quests: await pickSticky('month', monthlyQuests), ctx: questCtx('month', qbase) },
   ];
   const tot = shownTotals(entries);   // sum of the rounded rows, so the ring agrees with them (L8)
   const remaining = Math.round(t.kcal - tot.kcal);
@@ -4310,13 +4362,33 @@ async function renderToday(el) {
     <div class="q-card-body">
     ${isToday ? '' : `<p class="note">A record of ${esc(title)}. Quests are claimed on the day.</p>`}
     ${questTiers.map(tier => {
-      let monthEndNote = '';
+      /* R38-7: weeklies and monthlies reset with no warning; the monthly tier
+         already had one line (js/app.js, added earlier). Same treatment for
+         weeklies (their own reset day, Monday) and for dailies in their last
+         hours, so all three tiers say the same kind of thing before they
+         reset the player's progress in front of them. */
+      let resetNote = '';
       if (tier.period === 'month') {
         const [y, m, d] = S.date.split('-').map(Number);
         const daysInMonth = new Date(y, m, 0).getDate();
         const daysRemaining = daysInMonth - d;
         if (daysRemaining <= 3 && tier.quests.some(q => questState(q, tier.ctx).cur > 0)) {
-          monthEndNote = '<p class="note" style="margin-top: 4px; margin-bottom: 8px;">Monthly quests reset on the 1st</p>';
+          resetNote = '<p class="note" style="margin-top: 4px; margin-bottom: 8px;">Monthly quests reset on the 1st</p>';
+        }
+      } else if (tier.period === 'week') {
+        // weekKeyOf (js/quests.js) is Monday-start, so the last day of the ISO
+        // week is Sunday. Date arithmetic off S.date, same as the monthly note
+        // above, not the live clock.
+        const [y, m, d] = S.date.split('-').map(Number);
+        const dow = (new Date(y, m - 1, d).getDay() + 6) % 7; // 0=Mon..6=Sun
+        if (dow === 6 && tier.quests.some(q => questState(q, tier.ctx).cur > 0)) {
+          resetNote = '<p class="note" style="margin-top: 4px; margin-bottom: 8px;">Weekly quests reset Monday</p>';
+        }
+      } else if (tier.period === 'day' && isToday) {
+        // needs the live wall clock (a past day's "hours left" is meaningless),
+        // so gated on isToday unlike the week/month notes above.
+        if (new Date().getHours() >= 21 && tier.quests.some(q => questState(q, tier.ctx).cur > 0)) {
+          resetNote = '<p class="note" style="margin-top: 4px; margin-bottom: 8px;">Daily quests reset at midnight</p>';
         }
       }
       return `
@@ -4325,7 +4397,7 @@ async function renderToday(el) {
              that is not today. The tier list is built before isToday exists, so
              the label is corrected here rather than reordering that block. */''}
       <div class="q-tier-h">${tier.period === 'day' && !isToday ? 'DAILY QUESTS' : tier.label}</div>
-      ${monthEndNote}
+      ${resetNote}
       <div class="q-list">
       ${tier.quests.map(q => {
         const st = questState(q, tier.ctx);
@@ -4351,7 +4423,6 @@ async function renderToday(el) {
       </div>
     </div>`;
     }).join('')}
-    <button class="link" id="qProg" style="margin-top:4px">Quest progress</button>
     </div>
   </details>
 
@@ -4583,7 +4654,10 @@ async function renderToday(el) {
   $('#charBtn')?.addEventListener('click', () => openCharacter('crates')); // Bonehead hub, landing on the Backpack the tile is named for
   $('#stableBtn')?.addEventListener('click', openStable);
   $('#pitBtn')?.addEventListener('click', openPit);
-  $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
+  /* R38-24: "Quest progress" opened Trends, a screen that says "quest" zero
+     times. The quest drawer right above this button already shows every
+     quest's own progress bar, so the link had nowhere honest left to point:
+     dropped rather than wired to a screen that repeats itself. */
   /* 2026-09-06, QA round 37 R37-16: the coin pill opened the Backpack, the same
      door the crate chip beside it already is, and nothing on Today led to the
      Shop (the v475 teaser banner is gated off). Coins are for the Shop. */
@@ -4710,7 +4784,18 @@ async function renderToday(el) {
   // controls no longer yanks the player to the top.
   $('#wWater')?.addEventListener('click', async () => {
     const { w, xp } = await addWater(1); dropSound(S.sounds);
-    if (xp > 0) { confettiBurst(innerWidth / 2, innerHeight * 0.4, 12); chimeSound(S.sounds); toast(`Hydrated! +${xp} XP. Claim the water quest for coins.`, 2800); }
+    if (xp > 0) {
+      confettiBurst(innerWidth / 2, innerHeight * 0.4, 12); chimeSound(S.sounds);
+      /* R38-24: this used to say "Claim the water quest for coins" every time
+         the wellness goal was reached, unconditionally — it fired on a day
+         one's board that held only q-sleep and q-protein, no water quest in
+         sight. Only mention it when q-water is actually today's board and not
+         already claimed. */
+      const dayTier = questTiers.find(t => t.period === 'day');
+      const waterQ = dayTier?.quests.find(x => x.id === 'q-water');
+      const waterHint = waterQ && !questState(waterQ, dayTier.ctx).claimed ? ' Claim the water quest for coins.' : '';
+      toast(`Hydrated! +${xp} XP.${waterHint}`, 2800);
+    }
     else toast(`Water ${w.water}/${WATER_GOAL} cups${w.water >= WATER_GOAL ? '' : ` · ${WATER_GOAL - w.water} to go for +8 XP`}`, 1800);
     refresh();
   });
@@ -4788,6 +4873,12 @@ async function renderToday(el) {
     const tier = questTiers.find(t => t.period === period);
     const q = tier?.quests.find(x => x.id === b.dataset.claim);
     if (!q) return;
+    /* R38-5: the same day/week/month re-check the minute timer uses, run
+       BEFORE the claim rather than trusted to have already run. An app left
+       open past the roll relies on the 60s interval (or the midnight timeout)
+       to catch it; a backgrounded tab can throttle both, so a tap can still
+       land on a stale board. This catches the day up (and repaints) first. */
+    await rollDayIfNeeded();
     const res = await claimQuest(b.dataset.pkey, q, period);
     /* The period is already paid out. This is reachable when a gate flips and
        swaps a quest into a list whose slots are spent, so it has to explain
@@ -4808,7 +4899,22 @@ async function renderToday(el) {
       dayGuardToast(res.dayGuard);
       return;
     }
-    if (!res) return;
+    /* R38-5: the third refusal, and it used to be the only one that stayed
+       silent. claimQuest returns bare null for a period that closed (the
+       clock rolled past midnight/Monday/the 1st while this board sat open) OR
+       for a write that genuinely failed to mint, and the handler swallowed
+       both: no coins, no toast, no reveal, and the button stayed put looking
+       claimable. Tell the truth about which one happened (periodKeyOf is the
+       same closed-period test claimQuest itself uses) and repaint either way
+       so a dead CLAIM never lingers on screen. */
+    if (!res) {
+      const closed = b.dataset.pkey < periodKeyOf(period, dateKey());
+      toast(closed
+        ? `That quest closed ${period === 'day' ? 'at midnight' : period === 'week' ? 'when the week turned over' : 'when the month turned over'}.`
+        : 'Could not claim that quest. Try again.', 3200);
+      refresh();
+      return;
+    }
     trackEvent('quest_claim', { id: q.id, period });
     confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 240, period === 'day' ? 14 : 22);
     period === 'day' ? questSound(S.sounds) : levelSound(S.sounds);
@@ -7893,11 +7999,26 @@ async function openKitchen() {
         <span class="pot-ico">${recipeIconHtml(s.recipe, 26)}</span>
         <b>${esc(s.recipe.name)}</b>
         ${s.ready ? `<button class="btn small pot-serve" data-serve="${s.index}">Serve</button>`
-          : `<div class="cook-bar"><i style="width:${pct}%"></i></div><small>${fmtCookTime(s.remainingMs)} left</small>`}
+          /* R38-23: a wrong recipe used to have no way back. Cancel refunds the
+             ingredients in full (nothing has been served yet), so a day-one
+             mis-tap is a lost few minutes, never a stranded save. */
+          : `<div class="cook-bar"><i style="width:${pct}%"></i></div><small>${fmtCookTime(s.remainingMs)} left</small><button class="btn small ghost pot-serve" data-cancel="${s.index}">Cancel</button>`}
       </div>`;
     };
     const buyPrice = nextPotPrice(cook.potsOwned);
+    /* R38-23, HALF TWO: the starter pouch is exactly Bone Broth's ingredients,
+       but Stoneskin Draught is also affordable from it and cooking that one
+       first left a day-one save stuck. Said BEFORE the first tap, and only
+       while it is still true: nothing has ever been cooked (no pot running or
+       queued, no dish ever served to the Pantry, no buff ever eaten) and the
+       ingredients on hand can still make it. A returning player who has
+       actually cooked before never sees this again. */
+    const neverCooked = cook.slots.every(s => s.empty) && !cook.queue.length && !pantry.length && !buffs.length;
+    const starterRecipe = RECIPE_BY_ID['bone-broth'];
+    const starterTip = neverCooked && canCook(starterRecipe, inv)
+      ? `<p class="note" style="margin:2px 2px 10px">Your starter ingredients are exactly enough for <b>${esc(starterRecipe.name)}</b> — look for it under Dishes below and cook that first.</p>` : '';
     body.innerHTML = `
+      ${starterTip}
       <div class="sect-h">Cauldrons${cook.potsOwned > 1 ? ` · ${cook.potsOwned} pots` : ''}</div>
       <div class="pot-row">
         ${cook.slots.map(potCard).join('')}
@@ -8001,6 +8122,21 @@ async function openKitchen() {
     $$('[data-toss]', body).forEach(btn => btn.addEventListener('click', async () => {
       if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Toss it?'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.innerHTML = ICONS.close(13); } }, 2400); return; }
       await discardPantryDish(Number(btn.dataset.toss));
+      render();
+    }));
+    /* R38-23: same armed-confirm pattern as data-toss above, so a stray tap
+       cannot throw away real cook progress. Also flagged 'arming' (not just
+       data-toss's bare dataset), because THIS sheet re-renders on a 1000ms
+       cook timer (below): without it, the pot's own progress tick would wipe
+       the "Cancel?" state before a second, real tap could ever land it. */
+    $$('[data-cancel]', body).forEach(btn => btn.addEventListener('click', async () => {
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1'; btn.classList.add('arming'); btn.textContent = 'Cancel?';
+        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.classList.remove('arming'); btn.textContent = 'Cancel'; } }, 2400);
+        return;
+      }
+      const r = await cancelCook(Number(btn.dataset.cancel));
+      if (r) toast(`${r.icon} ${r.name} cancelled. Ingredients are back in your Kitchen.`, 2800);
       render();
     }));
     // THE CAULDRON. A player bought one of these by accident on a single tap, which
@@ -14060,6 +14196,17 @@ async function renderSettings(el) {
   const backupOn = apiConfigured ? await social.cloudBackupOn() : false;
   const backupAt = apiConfigured ? await kvGet('backupAt', 0) : 0;
   const backupFail = apiConfigured ? await kvGet('backupFail', null) : null;
+  /* R38-10/R38-14 (2026-09-06): this card used to say "reinstall the app or
+     get a new phone and your progress comes back on its own" unconditionally,
+     one line above a Recovery code row that can read "NOT SET. Delete the
+     app and this account is gone for good." Same combined truth the Erase
+     sheet now uses (social.restoreTruth), so the two rows agree. */
+  const restore = me ? social.restoreTruth(await social.hasCloudBackup(), recoverySet && !!myRid) : null;
+  const restoreLine = !restore ? ''
+    : restore.restorable ? 'Restore it on any device with your recovery code.'
+      : restore.why === 'no-backup' ? 'Nothing has backed up yet.'
+        : restore.why === 'no-recovery' ? 'Reinstalling THIS device brings it back automatically; a new device needs a recovery code, which is not set.'
+          : 'The cloud could not be reached to confirm this.';
   const backupAge = backupAt ? (Date.now() - backupAt < 36e5 ? 'just now' : Math.round((Date.now() - backupAt) / 36e5) + 'h ago') : 'never';
   /* A FAILED PUSH USED TO READ EXACTLY LIKE A HEALTHY ONE. pushBackup returned a
      bare false, so `backupAt` just stopped moving and this row went on quoting an
@@ -14109,7 +14256,7 @@ async function renderSettings(el) {
       <div class="lab"><b>Cloud backup</b><span>${backupLabel}</span></div>
       <div class="seg" style="width:130px"><button id="cbOn" class="${backupOn ? 'on' : ''}">On</button><button id="cbOff" class="${backupOn ? '' : 'on'}">Off</button></div>
     </div>
-    <p class="note" style="margin:8px 0 0">Your whole save backs up automatically, end-to-end <b>encrypted</b> so only your phone can read it (the server can't). Reinstall the app or get a new phone and your progress comes back on its own. Share your friend code so friends can add you.</p>`
+    <p class="note" style="margin:8px 0 0">Your whole save backs up automatically, end-to-end <b>encrypted</b> so only your phone can read it (the server can't). ${restoreLine} Share your friend code so friends can add you.</p>`
     : `
     <p class="note" style="margin:0 0 10px">Go online to back up your progress (end-to-end encrypted, only your phone can read it) and join the Crew: friend codes, and soon trading and PvP.</p>
     <button class="btn" id="goOnlineBtn">Go Online</button>
@@ -14456,36 +14603,30 @@ async function renderSettings(el) {
         <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
       </div>
       <div class="sheet-body">
-        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. <span id="erVault">Checking whether a cloud copy exists...</span><span id="erRecov"></span></p>
+        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. <span id="erVault">Checking whether a cloud copy exists...</span></p>
         <div class="t1-field"><label>Type ERASE to confirm</label><input id="erIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ERASE"></div>
       </div>
       <div class="t1-foot"><button class="btn danger-ish" id="erGo" disabled>Erase it all</button></div>`, { cls: 't1', name: 'Erase' });
-    /* ONE LOOKUP INSTEAD OF AN "IF". This line used to read "If cloud backup is
-       on, the vault copy survives", which handed the player the job of working
-       out whether that if applied to them, on the one dialog whose entire point
-       is that it cannot be undone. The app can just ask: social.hasCloudBackup()
-       answers for THIS account, and its three answers are three sentences.
+    /* ONE LOOKUP, ONE TRUTH (R38-10, 2026-09-06). This used to fill #erVault
+       from hasCloudBackup() alone ("a cloud backup does exist... can be
+       restored later") and a SEPARATE span from recoveryWarning() alone ("no
+       recovery code yet, this account is gone"), independently true and
+       directly contradictory read together: a backup existing on the server
+       is not restorable without a recovery code. social.restoreTruth combines
+       both into the one sentence the player actually needs.
        UNKNOWN READS AS NO ON PURPOSE. An unreachable server must never be
        reported as a copy that survives, because that is the one wrong answer
        that costs somebody their save. Off the click path so the sheet still
        opens instantly, and the typed-ERASE gate is slower than the probe. */
-    social.hasCloudBackup().then(has => {
+    Promise.all([social.hasCloudBackup(), social.hasRecoveryPhrase(), social.myRecoveryId()]).then(([has, phrase, id]) => {
       const line = $('#erVault', wrap);
       if (!line) return;   // sheet already dismissed
-      line.innerHTML = has === true
-        ? 'A cloud backup <b>does</b> exist for this account: that copy survives and can be restored later.'
-        : has === false
-          ? 'There is <b>no</b> cloud backup for this account, so this is the only copy.'
-          : 'The cloud could not be reached, so no vault copy can be confirmed. Treat this as the only copy.';
-    });
-    /* QA round 25 M9: on the web there is no keychain, so a wipe with no
-       recovery code set makes the cloud ciphertext unreadable forever. The app
-       already owns the sentence (the weekly nudge); it now appears HERE, before
-       the irreversible tap, and only when no code exists. Same async fill
-       pattern as #erVault, same predicate as the nudge (social.recoveryWarning). */
-    Promise.all([social.hasRecoveryPhrase(), social.myRecoveryId()]).then(([phrase, id]) => {
-      const warn = social.recoveryWarning(phrase, id), el = $('#erRecov', wrap);
-      if (warn && el) el.innerHTML = ` <b>${warn}</b>`;
+      const { restorable, why } = social.restoreTruth(has, phrase && id);
+      line.innerHTML = restorable
+        ? 'A cloud backup <b>does</b> exist for this account and can be restored later with your recovery code.'
+        : why === 'no-backup' ? 'There is <b>no</b> cloud backup for this account, so this is the only copy.'
+          : why === 'no-recovery' ? 'A cloud backup exists, but with <b>no recovery code set</b> there is no way to prove this account is yours on a new device: this is the only copy that will ever come back.'
+            : 'The cloud could not be reached, so no vault copy can be confirmed. Treat this as the only copy.';
     }).catch(() => {});
     const input = $('#erIn', wrap), go = $('#erGo', wrap);
     input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'ERASE'; });
@@ -14931,7 +15072,8 @@ async function saveInitialSettings(np) {
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', (await import('./changelog.js')).changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), 1200);
+  // R38-21: same instruction as boot()'s copy of this toast, see the comment there.
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.
@@ -22533,7 +22675,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v482'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v485'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -22981,6 +23123,22 @@ async function renderPit(wrap) {
      an app kill, a re-open, and any number of re-renders. A record still in
      phase 'open' can only mean the app died mid-fight, which is an abandon, so
      it reads as a forfeit. Reuses the .pit-gate styling; no new CSS. */
+  /* R38-22: cooking is the strongest lever on fight win rate the game has
+     (measured in the real fight engine, tests/fight-sim.mjs: +37.7pp Bone
+     Broth, +50.3pp Hearty Hash, +59.9pp Necromancer's Feast) and this sheet
+     never said so. ONE line, no new panel, no numbers the game does not
+     already show elsewhere: a live combat buff is named with its own plain-
+     words label (foodBuffLabel), or, with nothing active, a nudge toward the
+     Kitchen when there is something there to cook. Combat buffs only: coin
+     buffs affect the world, not this fight. */
+  const pitCombatBuffs = (await activeFoodBuffs()).filter(b => b.kind === 'combat');
+  const pitInv = await ingredients();
+  const pitPantry = await pantryDishes();
+  const kitchenLine = pitCombatBuffs.length
+    ? `<p class="note" style="margin:2px 2px 8px">${pitCombatBuffs.map(b => `${b.icon} <b>${esc(b.name)}</b> active: ${esc(foodBuffLabel(b))}`).join(' · ')}</p>`
+    : (ingredientCount(pitInv) > 0 || pitPantry.length > 0)
+      ? `<p class="note" style="margin:2px 2px 8px">${pitPantry.length ? 'A cooked dish is waiting' : 'Ingredients are waiting'} in your Kitchen — cook up a buff before your next fight.</p>`
+      : '';
   const defeatSect = downed ? `
     <div class="pit-gate" id="pitDefeat">
       <div class="pg-head"><span class="pg-ico">${badgePixHtml('tombstone', 22)}</span><b>DOWN, NOT OUT</b></div>
@@ -23024,6 +23182,7 @@ async function renderPit(wrap) {
         <small>${energy.free} free today + ${energy.vigor} Vigor${energy.dayGuard ? ' · ' + (DAY_GUARD_COPY[energy.dayGuard] || DAY_GUARD_COPY.other) /* QA round 26 O14: "refill at midnight" is false on a refused day */ : tapped ? ' · walk to earn Vigor · free fights refill at midnight' : ' · walk to earn more'}</small>
       </div>
     </div>
+    ${kitchenLine}
     ${defeatSect}
     <button class="t3-forage" id="buildBtn" style="margin:0 0 4px">${pixCur('build', 24) || ICONS.pit(20)}<b>Shape your build</b><small>stats &amp; talents ›</small>${unspent > 0 ? `<i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
     ${pitSections}`;

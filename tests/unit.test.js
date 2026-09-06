@@ -6908,6 +6908,294 @@ test('R37-12 immRateCheck: a minimal rate limit caps immediate pushes per rollin
   assert.equal(rolled.ok, true, 'once the window elapses, a new push must be allowed again');
 });
 
+/* R38-2 (2026-09-06, measured on v477 against a v477 Worker, main is v482):
+ * a whole session never reached the cloud. BACKUP_THROTTLE_MS is 600s and
+ * autoSync only ever ran the backup push at boot/resume, so nothing pushed on
+ * background or on close: a logged meal, two opened crates, all gone on a
+ * restore because the throttle was still counting down when the app closed.
+ * FIX: js/social.js dueBackupPush() -- due by the ordinary 600s throttle, OR
+ * (past a 20s floor) because the exported save has grown since the last
+ * push. Both autoSync and the new onAppHide(visibilitychange/pagehide) wiring
+ * read this same decision.
+ * PROVE-RED: reverting dueBackupPush to the old bare `elapsed > BACKUP_THROTTLE_MS`
+ * (no growth bypass, no floor) fails this test with:
+ *   AssertionError: a save that grew past the floor must bypass the 600s throttle
+ * because a grown save inside the throttle window would return false. */
+test('R38-2 dueBackupPush: grown vs unchanged, inside vs past the floor', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const s = await import('../js/social.js');
+  const BACKUP_THROTTLE_MS = 10 * 60 * 1000; // mirrors js/social.js's own constant
+  dbm.useDbName('unit-r38-2-duebackup');
+  await dbm.kvSet('social', { playerId: 'r38-2', handle: 'Audit Bones', friendCode: 'BONE-TEST-TEST', name: null, onlineAt: Date.now() });
+
+  const savedNow = Date.now;
+  const origFetch = globalThis.fetch;
+  let t = 1_000_000;
+  Date.now = () => t;
+  // stub PUT /backup as an always-succeeding server; pushBackup itself
+  // (not this test) decides what backupLastBytes gets set to
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/backup')) return { ok: true, status: 200, json: async () => ({ ok: true, updatedAt: t }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  try {
+    // never pushed (backupAt 0): elapsed is huge, due unconditionally
+    assert.equal(await s.dueBackupPush(), true, 'no prior push at all must be due');
+
+    assert.equal(await s.pushBackup('test'), true, 'the stubbed push must report success (setup, not the thing under test)');
+
+    // just pushed, nothing changed, still inside the floor: not due
+    t += 5_000;
+    assert.equal(await s.dueBackupPush(), false, 'unchanged save inside the 20s floor must not be due');
+
+    // past the floor, but the export is byte-identical: still not due
+    t += 20_000; // t is now 25s past the push
+    assert.equal(await s.dueBackupPush(), false, 'unchanged save past the floor must not be due (nothing to push)');
+
+    // the save grows (a logged meal): past the floor, this must bypass the 600s throttle
+    await dbm.db.put('log', { id: 'r38-2-meal-1', at: t, kcal: 400 });
+    assert.equal(await s.dueBackupPush(), true, 'a save that grew past the floor must bypass the 600s throttle');
+
+    // push again (as onAppHide would), then confirm the ordinary throttle still fires on its own with nothing further grown
+    assert.equal(await s.pushBackup('test'), true, 'the second stubbed push must also report success');
+    t += BACKUP_THROTTLE_MS + 1;
+    assert.equal(await s.dueBackupPush(), true, 'elapsed past the ordinary throttle must be due even with nothing grown');
+  } finally {
+    Date.now = savedNow;
+    globalThis.fetch = origFetch;
+  }
+});
+
+/* R38-11 (2026-09-06, measured on v477; main is v482, re-verified on this tree):
+ * a correct friend code plus a correct phrase returned 404, and the client
+ * told the player "No account found for that friend code" -- false for the
+ * common case. server/src/index.js's `/recovery/<code>` route was deliberately
+ * narrowed on 2026-08-16: once an account has a recovery_id (which the ONLY
+ * in-app way to set a phrase, openRecoverySheet in js/app.js, always attaches),
+ * the friend-code lookup answers the SAME 404 as "no recovery set", on purpose
+ * (a distinct status would make the route an oracle for which friend codes
+ * belong to accounts worth attacking elsewhere). The route is intentionally
+ * closed, not broken, so the fix is honest copy, not reopening it.
+ * PROVE-RED: reverting js/social.js restoreWithPhrase's friend-code reason to
+ * the old bare `No account found for that friend code.` fails this test with:
+ *   AssertionError: the friend-code 404 copy must not claim no account exists
+ */
+test('R38-11 restoreWithPhrase: a 404 on the (intentionally narrowed) friend-code route must not claim "no account"', async () => {
+  await import('./mem-idb.mjs');
+  const s = await import('../js/social.js');
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/recovery/id/')) return { ok: false, status: 404, json: async () => ({ error: 'no account' }) };
+    if (String(url).includes('/recovery/')) return { ok: false, status: 404, json: async () => ({ error: 'no recovery set' }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  try {
+    const byCode = await s.restoreWithPhrase('BONE-AAAA-BBBB', 'a phrase long enough to pass validation');
+    assert.equal(byCode.ok, false, 'a 404 must not report success');
+    assert.doesNotMatch(byCode.reason, /no account found/i, 'the friend-code 404 copy must not claim no account exists');
+    assert.match(byCode.reason, /recovery id/i, 'the friend-code 404 copy must point the player at a recovery ID instead');
+
+    // the recovery-ID route has no such narrowing (server/src/index.js has no
+    // legacy-population check there): its 404 really does mean no account, so
+    // that copy is unchanged.
+    const byId = await s.restoreWithPhrase('tom-bones', 'a phrase long enough to pass validation');
+    assert.equal(byId.ok, false, 'a 404 must not report success');
+    assert.match(byId.reason, /no account found/i, 'the recovery-ID 404 copy is genuinely "no account" and must say so');
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+});
+
+/* R38-12 (2026-09-06), client half: a 429 used to say "Wait a few minutes" no
+ * matter what the server actually answered, discarding the body's
+ * retryAfterMs (server/src/index.js's rateLimit sends it on every 429; the
+ * server-side prove-red for the account-vs-IP keying lives in
+ * server/test/api.test.mjs and server/recovery.test.mjs, which need a local
+ * wrangler dev and are not re-run here).
+ * PROVE-RED: reverting restoreWithPhrase's 429 branch to the old bare
+ * `return { ok: false, reason: 'Too many attempts. Wait a few minutes.' };`
+ * fails this test with:
+ *   AssertionError: the reason must quote the server's actual wait, not a
+ *   generic "a few minutes"
+ */
+test('R38-12 restoreWithPhrase: a 429 shows the real wait from retryAfterMs, not a generic guess', async () => {
+  await import('./mem-idb.mjs');
+  const s = await import('../js/social.js');
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 429, json: async () => ({ error: 'too many requests, try again later', retryAfterMs: 137_000 }) });
+  try {
+    const r = await s.restoreWithPhrase('BONE-AAAA-BBBB', 'a phrase long enough to pass validation');
+    assert.equal(r.ok, false);
+    assert.doesNotMatch(r.reason, /a few minutes/i, 'the reason must quote the server\'s actual wait, not a generic "a few minutes"');
+    assert.match(r.reason, /3m/, `137s should round up to 3m, got ${JSON.stringify(r.reason)}`);
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+});
+
+// ---- R38 quest lane: claims tell the truth, gates match reality ----
+
+test('R38-5 quest claim handler: a closed period toasts the truth and repaints, never swallows null', () => {
+  /* PROVE-RED: on the pre-fix handler (bare `if (!res) return;`, no
+     rollDayIfNeeded() call before claimQuest) this fails with:
+       FAIL (old handler): a bare `if (!res) return;` silently swallows a
+       closed-period refusal (must toast + repaint instead) */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const start = src.indexOf("$$('[data-claim]')");
+  const end = src.indexOf("$$('[data-addmeal]')", start);
+  assert.ok(start !== -1 && end > start, 'the quest claim handler must exist');
+  const block = src.slice(start, end);
+  assert.ok(/rollDayIfNeeded\(\)/.test(block.split('claimQuest(')[0]),
+    'must run the same day re-check the minute timer uses BEFORE calling claimQuest');
+  assert.ok(!/if \(!res\) return;/.test(block),
+    'a bare `if (!res) return;` silently swallows a closed-period refusal');
+  const nullIdx = block.indexOf('if (!res) {');
+  assert.ok(nullIdx !== -1, 'the null result must get its own branch, not a bare return');
+  const nullBranch = block.slice(nullIdx, nullIdx + 500);
+  assert.ok(/toast\(/.test(nullBranch), 'the null-result branch must toast something, matching the other two refusal paths');
+  assert.ok(/refresh\(\)/.test(nullBranch), 'the null-result branch must repaint so a dead CLAIM cannot linger on screen');
+});
+
+test('R38-8 q-new-food: a Quick Add of an unseen name counts as a new food', () => {
+  /* PROVE-RED: on the pre-fix progress fn (`e.foodId && !priorFoodIds.has(...)`,
+     which a foodId:null Quick Add entry can never satisfy) this fails with:
+       FAIL (old code): a brand-new Quick Add food must count toward
+       q-new-food, got 0/1
+       0 !== 1 */
+  const ctx = questCtx('day', {
+    date: '2026-09-06',
+    entries: [{ id: 'e1', date: '2026-09-06', meal: 0, foodId: null, name: 'Mystery Stew' }],
+    allXp: [], allLog: [], priorFoodIds: new Set(), priorQuickNames: new Set(),
+  });
+  const q = DAILY_POOL.find(x => x.id === 'q-new-food');
+  const st = q.progress(ctx);
+  assert.equal(st.cur, 1, `a brand-new Quick Add food must count toward q-new-food, got ${st.cur}/${st.target}`);
+  // a name already logged on a prior day must NOT count as new again
+  const ctxRepeat = questCtx('day', {
+    date: '2026-09-06',
+    entries: [{ id: 'e2', date: '2026-09-06', meal: 0, foodId: null, name: 'Mystery Stew' }],
+    allXp: [], allLog: [], priorFoodIds: new Set(), priorQuickNames: new Set(['mystery stew']),
+  });
+  assert.equal(q.progress(ctxRepeat).cur, 0, 'a Quick Add name already logged before must not count as new');
+});
+
+test('R38-8 w-boss / m-boss: gated on pitTried like every other Pit quest', () => {
+  /* PROVE-RED: on the pre-fix pools (no `need` field on either) this fails with:
+       FAIL (old, w-boss): w-boss must gate on pitTried like every other Pit
+       quest, got need=undefined
+       undefined !== 'pit'
+     (m-boss fails the same way.) */
+  const wBoss = WEEKLY_POOL.find(x => x.id === 'w-boss');
+  const mBoss = MONTHLY_POOL.find(x => x.id === 'm-boss');
+  assert.equal(wBoss.need, 'pit', `w-boss must gate on pitTried, got need=${wBoss.need}`);
+  assert.equal(mBoss.need, 'pit', `m-boss must gate on pitTried, got need=${mBoss.need}`);
+  // sweep every day of a year: a day-one profile (pitTried:false) must never be offered either
+  const NEW = { hkConnected: false, huntEnabled: false, socialOn: false, pitTried: false, kitchenReady: false };
+  let hit = 0;
+  for (let i = 0; i < 400; i++) {
+    const date = new Date(2026, 0, 1 + i).toISOString().slice(0, 10);
+    if (weeklyQuests(date, NEW).some(x => x.id === 'w-boss')) hit++;
+    if (monthlyQuests(date, NEW).some(x => x.id === 'm-boss')) hit++;
+  }
+  assert.equal(hit, 0, `w-boss/m-boss must never be offered to a pre-Pit profile, offered ${hit} times across 400 dates`);
+});
+
+test('R38-8 q-water: shows partial progress instead of a hidden 0/1', () => {
+  /* PROVE-RED: on the pre-fix progress fn (`clamp(c.waterToday ? 1 : 0, 1)`,
+     ignoring cup count entirely) this fails with:
+       FAIL (old q-water): q-water must show partial credit for 3 of 8 cups,
+       got 0/1
+       0 !== 3 */
+  const q = DAILY_POOL.find(x => x.id === 'q-water');
+  const ctx = questCtx('day', { date: '2026-09-06', entries: [], allXp: [], allLog: [], priorFoodIds: new Set(), waterCups: 3 });
+  const st = q.progress(ctx);
+  assert.equal(st.cur, 3, `q-water must show partial credit for 3 of 8 cups, got ${st.cur}/${st.target}`);
+  assert.equal(st.target, 8, `q-water's target must be the real WATER_GOAL, got ${st.target}`);
+  // a past day (no per-day cup count on record) falls back to the old all-or-nothing read
+  const ctxPast = questCtx('day', { date: '2026-09-01', entries: [], allXp: [{ key: 'water-2026-09-01' }], allLog: [], priorFoodIds: new Set(), waterCups: null });
+  const stPast = q.progress(ctxPast);
+  assert.equal(stPast.cur, 1); assert.equal(stPast.target, 1);
+});
+
+test('R38-8 monthly proration: a first month started mid-month scales the target, reward untouched', () => {
+  /* PROVE-RED: on the pre-fix pool (fixed 200000 target, no monthScale) this
+     fails with:
+       FAIL (old m-steps target): a day-one player joining Sept 28 (3 days
+       left) must get an achievable target, got 200000 */
+  const mSteps = MONTHLY_POOL.find(x => x.id === 'm-steps');
+  const mProtein = MONTHLY_POOL.find(x => x.id === 'm-protein');
+  const joinedLate = new Date(2026, 8, 28).getTime(); // account created Sept 28, a 30-day month
+  const ctx = questCtx('month', { date: '2026-09-28', entries: [], allXp: [], allLog: [], priorFoodIds: new Set(), healthRows: [], createdAt: joinedLate });
+  const st = mSteps.progress(ctx);
+  // 30-day Sept, joined the 28th: days remaining = 30-28+1=3; scale=3/30; target=round(200000*0.1)=20000
+  assert.equal(st.target, 20000, `expected a prorated target of 20000, got ${st.target}`);
+  assert.equal(mSteps.coins, 400, 'the reward must stay untouched by proration');
+  const stP = mProtein.progress(ctx);
+  assert.ok(stP.target <= 3, `m-protein's target must not exceed the 3 days actually left, got ${stP.target}`);
+  // an existing player (created in an EARLIER month) keeps the full target
+  const ctxExisting = questCtx('month', { date: '2026-09-28', entries: [], allXp: [], allLog: [], priorFoodIds: new Set(), healthRows: [], createdAt: new Date(2026, 0, 1).getTime() });
+  assert.equal(mSteps.progress(ctxExisting).target, 200000, 'an existing player must not get an easier target just because the month is running out');
+});
+
+test('R38-24 capability change must not re-pick a quest already shown this period', () => {
+  /* PROVE-RED: on the pre-fix pick() (the floor fallback searches outside the
+     drawn set with no memory of what was already shown) this fails with:
+       FAIL (old pick, capability swap): connecting a capability must never
+       drop a quest already shown this period; before=q-scan
+       after=q-pit1,q-pit3
+       + actual - expected
+       + []
+       - [ 'q-scan' ] */
+  const A = { hkConnected: false, huntEnabled: false, socialOn: false, pitTried: false, kitchenReady: false };
+  const before = dailyQuests('2026-01-02', A).map(x => x.id);
+  assert.equal(before.length, 1, 'setup: this date must engage the single-quest floor with everything locked');
+  // app.js persists the floor id in kv the first time it engages and threads it back in as stickyId
+  const after = dailyQuests('2026-01-02', { ...A, pitTried: true, stickyId: before[0] }).map(x => x.id);
+  assert.deepEqual(after.filter(id => before.includes(id)), before,
+    `connecting a capability must never drop a quest already shown this period; before=${before} after=${after}`);
+});
+
+test('R38-8 q-friend / w-friends: gated on an actual accepted friend, not mere reachability', () => {
+  /* PROVE-RED: on the pre-fix wiring (`socialOn: await social.isOnline().catch(() => false)`)
+     this fails with:
+       FAIL (old socialOn): q-friend/w-friends must not gate on mere
+       reachability (isOnline), only on an actual accepted friend */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(!/socialOn: await social\.isOnline\(\)\.catch/.test(src),
+    'q-friend/w-friends must not gate on mere reachability (isOnline), only on an actual accepted friend');
+  assert.ok(/socialOn: \(await kvGet\('friendCount', 0\)\) > 0/.test(src),
+    'must gate on a cached accepted-friend count');
+  assert.ok(/kvSet\('friendCount'/.test(src),
+    'the cached friend count must actually be written somewhere (checkFriendRequests)');
+});
+
+test('R38-7 weeklies and dailies carry the same reset warning the monthly tier already has', () => {
+  /* PROVE-RED: on the pre-fix markup (only the monthly note existed) this
+     fails with:
+       FAIL (old, week note): weeklies must warn before they reset, same as
+       monthlies
+       FAIL (old, day note): dailies in their last hours must warn, same as
+       monthlies */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(/Monthly quests reset on the 1st/.test(src), 'the existing monthly note must be untouched');
+  assert.ok(/Weekly quests reset Monday/.test(src), 'weeklies must warn before they reset, same as monthlies');
+  assert.ok(/Daily quests reset at midnight/.test(src), 'dailies in their last hours must warn, same as monthlies');
+});
+
+test('R38-24 "Quest progress" no longer opens Trends, and the water toast is not unconditional', () => {
+  /* PROVE-RED: on the pre-fix markup this fails with:
+       FAIL (old, qProg present): Quest progress must not point at Trends
+       (#/progress), a screen with no quests on it
+       FAIL (old, unconditional water toast): the water-quest hint must not
+       fire unconditionally */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(!src.includes('id="qProg"'), 'Quest progress must not point at Trends (#/progress), a screen with no quests on it');
+  assert.ok(!/Hydrated! \+\$\{xp\} XP\. Claim the water quest for coins\./.test(src),
+    'the water-quest hint must not fire unconditionally');
+  assert.ok(/waterHint/.test(src), 'the water toast must compute a conditional hint instead');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

@@ -194,14 +194,49 @@ await test('availability checks do NOT spend the restore budget', async () => {
   assert.equal(r.status, 200, 'a real lookup still works after a dozen name checks');
 });
 
-await test('unsigned lookups are rate limited (429)', async () => {
-  // the limiter is per hashed IP across ALL recovery routes; burn through it
+/* R38-12 (2026-09-06). This used to be one test, "unsigned lookups are rate
+ * limited (429)", that burned through 25 DIFFERENT recovery ids from one
+ * unset IP and asserted SOME request 429'd -- which passed only because the
+ * limiter was keyed on IP ALONE, across every account it was ever asked about.
+ * That is the bug: a household or cafe wifi with one player mid-guess against
+ * THEIR OWN account locked out every other phone behind it, on that phone's
+ * very first attempt at anyone else's account. rateLimitRecoveryAccount
+ * (server/src/index.js) now keys the tight rl_recovery budget per ACCOUNT (the
+ * id/code being looked up) and adds a separate, looser rl_recovery_ip ceiling
+ * alongside it. Three tests, because the old one conflated three different
+ * claims into a single 429: */
+await test('R38-12: repeated guesses against ONE account still throttle, and report a real wait', async () => {
+  const ip = rndIp();
+  const rid = uniq();   // never registered; still the account this IP is probing
+  let saw429 = false, body = null;
+  for (let i = 0; i < 15 && !saw429; i++) {
+    const r = await fetch(`${BASE}/recovery/id/${rid}`, { headers: { 'cf-connecting-ip': ip } });
+    if (r.status === 429) { saw429 = true; body = await r.json(); }
+  }
+  assert.ok(saw429, 'repeated guesses against ONE account must still throttle, or a phrase can be attacked at speed');
+  assert.ok(Number.isFinite(body && body.retryAfterMs) && body.retryAfterMs > 0,
+    `429 must report a real retryAfterMs so the client can show an honest wait instead of "a few minutes", got ${JSON.stringify(body)}`);
+});
+
+await test('R38-12: a different phone on the same wifi guessing a DIFFERENT account is not locked out', async () => {
+  const ip = rndIp();
+  const ridExhausted = uniq();
+  // burn ridExhausted's own account budget from this IP, same as the test above
+  for (let i = 0; i < 11; i++) await fetch(`${BASE}/recovery/id/${ridExhausted}`, { headers: { 'cf-connecting-ip': ip } });
+  // the SAME ip, a fresh account: must not inherit ridExhausted's lockout
+  const r = await fetch(`${BASE}/recovery/id/${uniq()}`, { headers: { 'cf-connecting-ip': ip } });
+  assert.equal(r.status, 404,
+    `a fresh phone on the same IP guessing a DIFFERENT account got ${r.status} -- the old per-IP lockout is back`);
+});
+
+await test('R38-12: the looser per-IP ceiling still bounds one address hammering many different accounts', async () => {
+  const ip = rndIp();
   let saw429 = false;
-  for (let i = 0; i < 25 && !saw429; i++) {
-    const r = await fetch(`${BASE}/recovery/id/${uniq()}`);
+  for (let i = 0; i < 65 && !saw429; i++) {
+    const r = await fetch(`${BASE}/recovery/id/${uniq()}`, { headers: { 'cf-connecting-ip': ip } });
     if (r.status === 429) saw429 = true;
   }
-  assert.ok(saw429, 'ciphertext lookups must throttle, or the phrase can be attacked at speed');
+  assert.ok(saw429, 'one IP hammering many different accounts must still throttle eventually, or keying per account removed the only backstop');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

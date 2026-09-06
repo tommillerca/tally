@@ -935,10 +935,27 @@ export async function importAll(data, { replace = true } = {}) {
          older, known-good number, and this guard must never fight that. */
       const localCoinsRev = Number((localKv.find(r => r.k === 'coinsRev') || {}).v) || 0;
       const fileCoinsRev = Number((data.kv.find(r => r && r.k === 'coinsRev') || {}).v) || 0;
-      if (localCoinsRev > fileCoinsRev) {
-        const localCoins = localKv.find(r => r.k === 'coins');
+      /* R38-13 (2026-09-06): a TIE here -- both devices moved the ledger the
+         SAME number of times, independently, offline -- used to fall straight
+         through to the payload winning regardless of which balance was
+         actually higher. Measured on two real devices: B's 25 silently
+         replaced by A's 10. coinsRev now bumps by the MAGNITUDE of each
+         change (js/loot.js coinsAdd), not a flat 1, so an exact tie means the
+         two devices' changes happened to sum to the exact same total, which
+         an independently divergent history essentially never produces by
+         accident. Any tie that still slips through (including two saves that
+         both predate coinsRev, which both read 0 via the fallback above and
+         always tie) keeps the HIGHER balance: "never lower a balance from a
+         stale blob" is the rule this whole app runs on, not "resolve every
+         conflict correctly", and a merge with no ordering signal left has no
+         way to do the latter. */
+      const localCoinsRow = localKv.find(r => r.k === 'coins');
+      const fileCoinsRow = data.kv.find(r => r && r.k === 'coins');
+      const localCoins = Number(localCoinsRow && localCoinsRow.v) || 0;
+      const fileCoins = Number(fileCoinsRow && fileCoinsRow.v) || 0;
+      if (localCoinsRev > fileCoinsRev || (localCoinsRev === fileCoinsRev && localCoins > fileCoins)) {
         const localRev = localKv.find(r => r.k === 'coinsRev');
-        if (localCoins) keptKv.push(localCoins);
+        if (localCoinsRow) keptKv.push(localCoinsRow);
         if (localRev) keptKv.push(localRev);
       }
     }
@@ -976,7 +993,15 @@ export async function importAll(data, { replace = true } = {}) {
   let invRows = data.inv;
   if (!replace && declared.has('inv')) {
     const taken = new Set((await kvGet('crateTaken', [])) || []);
-    if (taken.size) invRows = data.inv.filter(r => !(r && taken.has(r.id)));
+    /* R38-13 (2026-09-06): crateTaken above only ever covered openCrate. Every
+       OTHER place this file deletes an 'inv' row outright (a spent
+       consumable, a used Battle Charm, a pet's last cosmetic copy on
+       salvage/extinction) had no receipt at all, so the SAME stale-blob merge
+       revived them: measured, a spent Vigor Draught came back 1 -> 0 -> 1
+       through a two-device merge. js/loot.js now records every one of those
+       ids into kv 'invTaken' (same bounded idiom, see markInvTaken there). */
+    const invTaken = new Set((await kvGet('invTaken', [])) || []);
+    if (taken.size || invTaken.size) invRows = data.inv.filter(r => !(r && (taken.has(r.id) || invTaken.has(r.id))));
   }
   return new Promise((resolve, reject) => {
     let t;
