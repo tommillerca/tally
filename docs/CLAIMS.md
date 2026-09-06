@@ -84,6 +84,11 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
 
+## v488
+1. A hotfix off v487 from Tom's live play test. Its row is the dated "the worn kit holds its colour" section further down, folded here.
+
+2. PROOF: football-rail-audit.mjs | REACH: arriving on the Wardrobe with a football piece worn paints the stage once, in the worn team, because the rail's opening centring is instant instead of a smooth scroll whose per-frame select repainted the stage spans (RAIL-HOLDS row red before: 18 distinct colours across 88 samples; after: 1; RAIL-STACK shows two tint spans per garment throughout, so nothing was ever layered).
+
 ## v487
 1. A hotfix off v486, Codex's two round-37 lanes (R37-14, 19, 20 and R37-17). Its rows are their dated sections further down, folded here.
 

@@ -4,6 +4,9 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 488, date: '2026-09-06', title: 'The worn kit holds its colour', items: [
+    'Opening the Wardrobe on a football piece made the helmet or jersey flash through every team\'s colours for half a second before settling. The rail was sliding to your team and repainting the piece with each team it passed. It lands on your team in one step now.',
+  ] },
   { n: 487, date: '2026-09-06', title: 'Crates pay off, and Health has a door on Today', items: [
     'Opening a crate now tells you what you got and where to wear it, a new piece says New with its rarity instead of a blank line under a duplicate\'s coin count, and Common Crates have an Open all so five of them take one tap instead of thirteen.',
     'Before your first Health sync, Today shows the Activity card in a not-connected state with the Sync control on it, and a first successful sync brings you back to Today instead of leaving you in Settings next to Erase.',
