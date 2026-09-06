@@ -67,6 +67,10 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
 
+## register 429 wallet (2026-09-06)
+
+1. PROOF: unit.test.js | REACH: a fresh install receives the complete social-welcome grant locally before registration. Two consecutive 429 responses retry once, leave exactly 50 welcome coins and 10 XP under the server's existing receipt key, and surface one named failure toast. A later registration cannot pay the grant twice.
+
 ## v487
 1. A hotfix off v486, Codex's two round-37 lanes (R37-14, 19, 20 and R37-17). Its rows are their dated sections further down, folded here.
 

@@ -15078,7 +15078,7 @@ async function saveInitialSettings(np) {
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.
   if (!(S.demo || navigator.webdriver === true)) {
-    social.goOnline().then(r => { toastNamePickRefusal(r.namePick); if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
+    social.goOnline({ onRegisterFailure: message => toast(message, 4200) }).then(r => { toastNamePickRefusal(r.namePick); if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
   }
   enterAppFromOnboarding();
 }
