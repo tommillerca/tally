@@ -577,6 +577,29 @@ ok('VISOR-LIVE VISOR_EYES_POLICY is one of the three branches graded above',
   `live policy is '${FB.VISOR_EYES_POLICY}'` +
   (['clip', 'hide', 'refuse'].includes(FB.VISOR_EYES_POLICY) ? '' : ": no branch fires, so a clashing pair renders through the glass"));
 
+/* THE POSTER'S <summary> STAYS display:block (2026-09-05, iOS Safari/WebKit).
+   Measured on-device (iPhone 17 Pro Simulator): a real tap on the Locker Room
+   poster never toggled #fbSect open when .t3-drop.fb-drop set display:flex on
+   the <summary> itself -- fbSect.open read false after the tap, though setting
+   .open = true from script opened it fine and rendered the kit grid correctly,
+   so the defect is WebKit's native disclosure-toggle hit test, not the layout.
+   Headless Chromium's real click toggled it every time under the SAME markup,
+   which is why this needs a browser measurement rather than a source read to
+   have been caught, and why it is pinned here as a rule rather than re-measured
+   forever: the flex layout now lives on an inner .fb-drop-row div (the same
+   precedent as the Bumbleseal drop's .row, above), and the <summary> itself is
+   never given a display of anything but the base .t3-drop block. */
+const fbDropRule = /\.t3-drop\.fb-drop\s*\{([^}]*)\}/.exec(cssSrc);
+const fbDropRowRule = /\.fb-drop-row\s*\{([^}]*)\}/.exec(cssSrc);
+const summaryStaysBlock = !!fbDropRule && !/display\s*:\s*(flex|grid|inline-flex|inline-grid)/.test(fbDropRule[1]);
+const rowIsFlex = !!fbDropRowRule && /display\s*:\s*flex/.test(fbDropRowRule[1]);
+const markupWrapped = /<summary class="t3-drop fb-drop">\s*<div class="fb-drop-row">/.test(appSrc);
+ok('POSTER-TOGGLE the football kit poster\'s <summary> never overrides display away from block; the side-by-side layout lives on .fb-drop-row instead',
+  summaryStaysBlock && rowIsFlex && markupWrapped,
+  `app.css .t3-drop.fb-drop -> ${fbDropRule ? (summaryStaysBlock ? 'no display override (stays block)' : `DISPLAY OVERRIDE: ${fbDropRule[1].trim()}`) : 'rule not found'}; ` +
+  `.fb-drop-row -> ${fbDropRowRule ? (rowIsFlex ? 'display: flex' : `not flex: ${fbDropRowRule[1].trim()}`) : 'MISSING'}; ` +
+  `js/app.js markup -> ${markupWrapped ? 'summary wraps fb-hero/tx in .fb-drop-row' : 'the wrapper div is gone or was renamed'}`);
+
 /* THE UNIT OF SALE IS THE GARMENT, IN EVERY TEAM'S COLOURS. Tom, 2026-09-04:
    "buy the garment get all 32 colours." The helmet still drags its three visors,
    so a helmet is 4 garment keys x 32 teams and a jersey is 1 x 32. Both counts

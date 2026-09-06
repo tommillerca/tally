@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 476, date: '2026-09-06', title: 'A debug overlay leaves, and the Locker Room opens on iPhone', items: [
+    'v475 shipped a leftover developer overlay: any error under the hood printed as green text across the top of the screen. It is gone, and a new check on every release fails if anything marked "do not commit" is about to ship again.',
+    'On iPhone, tapping the Locker Room poster did nothing. Safari ignores a tap on a disclosure whose header is laid out as a flex row, so the row moved inside the header. The poster opens on a real tap now.',
+  ] },
   { n: 475, date: '2026-09-05', title: 'The rack holds still, and the Crew gets honest', items: [
     'The Today page finally mentions the Locker Room. A News row announces it the moment it opens, above the fold, and tapping the row drops you straight into the Shop with the room already open.',
     'The full-kit tile in the Locker Room shows all five pieces in five different teams now, not one two-tone disc, so it actually looks like you\'re getting all 32 colours instead of just the one you were previewing.',
