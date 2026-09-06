@@ -19,6 +19,26 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## onboarding fits the SE, sheets survive a double tap (2026-09-06)
+
+Not stamped to a release: hotfix/onboarding-fold. HANDOFFr3920260906.md R39-12,
+R39-15, re-measured on this tree before fixing.
+
+1. PROOF: onb-audit.mjs | REACH: on an iPhone SE-sized phone (375x667) or
+   smaller (320x568), onboarding's primary button is on screen the moment each
+   step paints, with no scrolling and no scroll cue needed. It used to sit 22px
+   below the fold on the reveal step ("That's me") and 293px below it on the
+   plan step ("Start tracking"), because the button was pushed down by
+   `margin-top: auto`, which only works when the screen has room to spare. It
+   now rides the bottom of the scrollable area from first paint instead.
+
+2. PROOF: sheet-doubletap-audit.mjs | REACH: opening any sheet in the app (the
+   Kennel button among them) with a fast double-tap no longer opens it and
+   immediately closes it again. The second tap used to land on the new sheet's
+   own backdrop mid slide-up and read as a request to dismiss it; the backdrop
+   now ignores a tap in the first 300ms after it appears, so a normal
+   dismissal tap (at 400ms or later) still works exactly as before.
+
 ## backup and recovery truth (2026-09-06)
 
 Not stamped to a release: hotfix/backup-recovery, off v482. HANDOFFr3820260906.md

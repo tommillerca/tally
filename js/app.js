@@ -3566,7 +3566,14 @@ function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
   const rec = { wrap, onClose: () => { try { trackEvent('feat_time', { f: feat, ms: Date.now() - openedAt }); } catch { /* noop */ } try { onClose?.(); } catch { /* noop */ } } };
   sheetStack.push(rec);
   history.pushState({ sheet: sheetStack.length }, '');
-  $('.sheet-backdrop', wrap).addEventListener('click', () => history.back());
+  /* R39-12: a double-tap on a sheet trigger opened this sheet and closed it right
+     back, because the second tap lands here mid slide-up (0.28s) before the new
+     backdrop has moved out from under the finger. Measured 6/6 at a 60ms gap
+     between taps, 5/6 at 90ms, 0/6 at 150ms+. Arm the backdrop for the same
+     300ms the slide-up takes (a hair over the CSS's 0.28s) rather than trying
+     to catch it with animationend, which reduced motion and a backgrounded tab
+     can both skip. A tap at 400ms+ (the other guard) still closes normally. */
+  $('.sheet-backdrop', wrap).addEventListener('click', () => { if (Date.now() - openedAt < 300) return; history.back(); });
   $$('.sheet-close', wrap).forEach(b => b.addEventListener('click', () => history.back()));
   composeAvatars(wrap);   // sheets show Boneheads too, same reveal-when-ready rule
   /* Inert the world behind it, move focus in, and remember where focus came from
@@ -15030,9 +15037,10 @@ function renderOnboarding(step = 0, ctx = {}) {
     <h1>THE PLAN</h1>
     ${onbGwartHtml(2)}
     <div id="pfHost">${profileFormHtml({}, 'lb')}</div>
-    <button class="btn" id="onbSave">Start tracking</button>
-    <button class="onb-quiet" id="onbSkip">Skip for now: uses a rough default plan <b>(30 yr &middot; 5'10" &middot; 180 lb)</b> you can fix any time in Settings.</button>
-    <div style="height:26px"></div>
+    <div class="onb-foot">
+      <button class="btn" id="onbSave">Start tracking</button>
+      <button class="onb-quiet" id="onbSkip">Skip for now: uses a rough default plan <b>(30 yr &middot; 5'10" &middot; 180 lb)</b> you can fix any time in Settings.</button>
+    </div>
   </div>`;
   { const b = $('.onb-gwrow .talkbox', el); if (b) runTalkBox(b, ONB_GWART[2], { name: 'GWART' }); }
   $('#onbBack')?.addEventListener('click', () => renderOnboarding(1, ctx));
