@@ -86,6 +86,12 @@ try {
     if (txt) seen.add(txt);
     await sleep(300);
   }
+  /* POSITIVE CONTROL: the polling loop above must be capable of seeing SOME
+     toast, or a broken selector / a poll that always reads '' would make
+     every check below pass on empty air. Proven against a toast this build
+     definitely fires regardless of R38-21 (any onboarding completion shows
+     something), so a genuinely blind poll goes red here first. */
+  ok('SAMPLE the #toast poll captured at least one non-empty message', seen.size > 0, seen.size ? `${seen.size} distinct` : '(nothing ever read)');
   const kitToast = [...seen].find(t => /welcome kit/i.test(t));
   ok('KIT the welcome-kit toast fired at all (an empty sample is a FAILURE)', !!kitToast, kitToast || `saw: ${[...seen].join(' || ')}`);
   ok('INSTRUCTION the welcome-kit toast names the recipe and tells the player to cook it',

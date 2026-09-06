@@ -84,6 +84,15 @@ try {
   await seedCook([], {}, []);
   const quietText = await pitText();
   ok('QUIET nothing to cook and no buff active: no Kitchen line at all', !/kitchen/i.test(quietText));
+  /* POSITIVE CONTROL: QUIET asserts an ABSENCE ("kitchen" is not on the
+     page), and an absence needs a control. A broken openPit (wrong selector,
+     the sheet never opened, #pitBody empty) would also read as "no kitchen
+     text found" and pass QUIET for the wrong reason. Pin the sheet actually
+     rendered its real content every time by checking known-present, always-on
+     Pit copy this change never touched. */
+  ok('SAMPLE #pitBody rendered real content on every read, not an empty/broken sheet',
+    [buffText, nudgeText, dishNudgeText, quietText].every(t => /MANY ENTER/i.test(t) && t.length > 300),
+    JSON.stringify([buffText.length, nudgeText.length, dishNudgeText.length, quietText.length]));
 
   ok('NOERR no page error', errors.length === 0, errors.join(' | ').slice(0, 300));
 } finally {
