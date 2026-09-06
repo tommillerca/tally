@@ -763,11 +763,6 @@ async function scenario(name, srv, act, { broken = null, offlineAfter = false, n
 }
 
 /* ---- the scenarios --------------------------------------------------------- */
-const srv = await serveVersioned();
-console.log(`serving at ${srv.url}: A = ${OLD_REF} (${A_VERSION}, a real old build, from ${OLD_ROOT}), B = this tree (${B_VERSION})`);
-console.log(`${IDENTICAL.length} precache entries are byte-identical between A and B; B drops and 404s ${DROPPED} (R38-17)`);
-if (PROVE) console.log(`PROVE-RED MODE: ${PROVE}\n`);
-
 const A_VERSION = `tally-v${A_NUM}`;
 const B_VERSION = PROVE === 'stale-version' ? A_VERSION : `tally-v${swVersion(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'))}`;
 /* THE BYTE-IDENTICAL SET, computed the way the server serves it (transform
@@ -794,6 +789,11 @@ const PRECACHE_LEN = (() => {
   const arr = s.slice(s.indexOf('PRECACHE'), s.indexOf('];', s.indexOf('PRECACHE')));
   return [...arr.matchAll(/['"]\.\/[^'"]*['"]/g)].length;
 })();
+
+const srv = await serveVersioned();
+console.log(`serving at ${srv.url}: A = ${OLD_REF} (${A_VERSION}, a real old build, from ${OLD_ROOT}), B = this tree (${B_VERSION})`);
+console.log(`${IDENTICAL.length} precache entries are byte-identical between A and B; B drops and 404s ${DROPPED} (R38-17)`);
+if (PROVE) console.log(`PROVE-RED MODE: ${PROVE}\n`);
 
 /* A PROVE-RED THAT MATCHES NOTHING IS A BLINDFOLD, not a proof. The first safe
    area guard written in this repo silently matched nothing and read as green, so

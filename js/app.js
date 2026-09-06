@@ -11233,10 +11233,7 @@ function activityRecoveryHtml(days) {
 /* THE NETWORK'S ANSWER TO "WHAT IS LIVE". version.json is the worker's own
    killswitch stamp: thirty bytes, never cached by any route (sw.js), so this is
    both the cheapest and the only honest question. 0 means offline or unreadable. */
-let latestAt = 0, latestSeen = 0;
-async function latestBuild({ fresh = false } = {}) {
-  // once a minute for the banners (Today re-renders on every log); fresh for the button
-  if (!fresh && Date.now() - latestAt < 60000) return latestSeen;
+async function latestBuild() {
   try {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), 5000);
@@ -11244,8 +11241,7 @@ async function latestBuild({ fresh = false } = {}) {
     clearTimeout(t);
     if (!res.ok) return 0;
     const m = String((await res.json()).version || '').match(/tally-v(\d+)/);
-    latestAt = Date.now(); latestSeen = m ? +m[1] : 0;
-    return latestSeen;
+    return m ? +m[1] : 0;
   } catch { return 0; }
 }
 const runningBuild = () => parseInt(String(APP_BUILD).replace(/\D/g, ''), 10) || 0;
@@ -11262,7 +11258,7 @@ const runningBuild = () => parseInt(String(APP_BUILD).replace(/\D/g, ''), 10) ||
    activate is what deletes the old cache, and controllerchange reloads this
    page. Nothing is deleted before the new build has fully landed. */
 async function hardRefresh() {
-  if (!(await latestBuild({ fresh: true }))) { toast('No connection. Try again when you have signal', 3200); return; }
+  if (!(await latestBuild())) { toast('No connection. Try again when you have signal', 3200); return; }
   toast('Getting the latest build...', 2200);
   try {
     const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;

@@ -386,7 +386,7 @@ self.addEventListener('activate', e => {
     const keys = await caches.keys();
     await Promise.all(keys.filter(k => k !== VERSION && k !== keep).map(k => caches.delete(k)));
     /* claim(): only reaches clients no worker controls (a first-ever install, or
-       a page that loaded while hardRefresh had the registration down). Clients
+       a page that loaded while nothing was registered). Clients
        the OLD worker controlled are moved to this one by the activation itself,
        claim or no claim, so for the upgrade case it is a no-op; kept for the
        first-install case, where it is what makes the very first visit work
