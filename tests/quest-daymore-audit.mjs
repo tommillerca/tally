@@ -48,28 +48,55 @@ ok(`DAY-ONE none of ${IMPOSSIBLE_ON_DAY_ONE.join('/')} is ever handed to a brand
    next one. Substitution is the exploit #283 closed (a flag flip minted fresh
    ledger keys; measured 1445 XP/day against an intended 605), so gates now only
    REMOVE from a seed-fixed draw and a day-one list can legitimately be short.
-   What must still hold instead:
-     1. never EMPTY (zero quests is a dead screen; pick() keeps a floor of one),
-     2. fewer, never different: the day-one list is a SUBSET of the same date's
-        ungated list, so unlocking reveals quests, never swaps them. The ONE
-        allowed exception is pick()'s floor: a draw that is gated wall to wall
-        collapses to a single fallback quest from outside the draw, because an
-        empty list is a dead screen. A floor day is exactly a length-1 list;
-        any other non-subset shape is substitution creeping back in. */
-let empties = 0, swapped = 0, floorDays = 0;
+
+   TIGHTENED 2026-09-06 (R39-3): a genuinely fresh player (every one of the five
+   gates explicitly false, opts===NEW below) draws a board that can be
+   under-filled or teach nothing onboarding covers, so dailyQuests() now fills
+   and forces an onboarding anchor for THAT ONE GATE STATE ONLY (js/quests.js:
+   `dayOne = opts.hkConnected === false && ... === false`) -- pick()'s general
+   draw-then-filter, and every other one of the 32 flag combinations, is
+   untouched. So "fewer never different" is no longer a blanket rule: it is
+   swept across all 32 combinations below, and the assertion is that only ONE
+   of them (bitmask 0, every flag false) is allowed to produce a MULTI-QUEST
+   board that is not a subset of the fully-open list. A single-quest board that
+   is not in that subset is pick()'s OWN pre-existing floor -- a draw gated
+   wall to wall falls back to one quest from outside the top-n slice, on any
+   gate combination, always length 1 -- and is not this ticket's substitution;
+   it is excluded the same way the pre-2026-09-06 version of this row excluded
+   it. Any OTHER combination going non-subset at length > 1 means #283's
+   exploit -- a gate flip minting a freshly-claimable board -- has come back on
+   a path this fix did not intend to touch. */
+let empties = 0;
+const GATE_FLAGS = ['hkConnected', 'huntEnabled', 'socialOn', 'pitTried', 'kitchenReady'];
+const substitutingCombos = new Set();
+let dayOneSubstituted = 0;
 for (let i = 0; i < 365; i++) {
   const d = new Date(2026, 0, 1 + i).toISOString().slice(0, 10);
-  const newIds = dailyQuests(d, NEW).map(q => q.id);
-  const allIds = new Set(dailyQuests(d, {}).map(q => q.id));
-  if (newIds.length === 0) empties++;
-  else if (!newIds.every(id => allIds.has(id))) {
-    if (newIds.length === 1) floorDays++; else swapped++;
+  // The ceiling is ALL_ON (every gate explicitly true), not {}: hk/hunt/social
+  // read their flag's truthiness directly in pick(), so an UNDEFINED flag is
+  // falsy there and {} quietly excludes those three gates' quests too (only
+  // pit/kitchen treat undefined as "no opinion" via their off() helper --
+  // that asymmetry is pre-existing and not this ticket's to fix). ALL_ON is
+  // the one opts value guaranteed to pass every gate, so it is the true
+  // fully-open ceiling every other combination must be a subset of.
+  const allIds = new Set(dailyQuests(d, VET).map(q => q.id));
+  if (dailyQuests(d, NEW).length === 0) empties++;
+  for (let m = 0; m < 32; m++) {
+    const o = {}; GATE_FLAGS.forEach((f, j) => { o[f] = !!(m & (1 << j)); });
+    const ids = dailyQuests(d, o).map(q => q.id);
+    if (ids.length <= 1) continue; // pick()'s pre-existing floor, legitimate on any mask
+    if (!ids.every(id => allIds.has(id))) {
+      if (m === 0) dayOneSubstituted++; else substitutingCombos.add(m);
+    }
   }
 }
 ok('DAY-ONE the list is never empty, across a whole year',
   empties === 0, `${empties} empty days`);
-ok('DAY-ONE fewer never different: gating only removes from the draw (floor days excepted, and a floor day is length 1)',
-  swapped === 0, `${swapped} days where gating SWAPPED a quest; ${floorDays} legitimate floor days`);
+ok('CONTROL: the day-one anchor-fill actually fires somewhere in the sweep (else the row below passes for free)',
+  dayOneSubstituted > 0, `${dayOneSubstituted} day-one substitutions seen`);
+ok('SCOPED: across all 32 gate combinations x a whole year, only the all-locked day-one state (bitmask 0) ever produces a multi-quest non-subset board',
+  substitutingCombos.size === 0,
+  `non-subset multi-quest boards seen on bitmask(es) ${[...substitutingCombos].sort((a, b) => a - b).join(', ')} too (0 = day-one, expected and excluded above)`);
 
 /* The gates must OPEN, or we have just deleted content. */
 const vetIds = new Set();

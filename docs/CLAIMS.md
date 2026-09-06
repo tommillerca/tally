@@ -19,6 +19,33 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## day one tells the truth (2026-09-06)
+
+Not stamped to a release: hotfix/dayone-board, off v482. HANDOFFr3920260906.md
+R39-2, R39-3, R39-28, R39-29, re-measured on this tree before fixing.
+
+1. PROOF: unit.test.js, quest-pick-audit.mjs, quest-daymore-audit.mjs | REACH:
+   A brand-new player's first Quests board always has 3 dailies you can
+   actually do, and one of them is something onboarding itself taught you
+   (Log anything at all, or Log 3 meals in a day). Two players who install on
+   the same calendar day no longer see the identical board.
+
+2. PROOF: unit.test.js | REACH: Onboarding's LOG FOOD screen no longer says
+   logging a meal pays coins. It doesn't; coins come from quests, crates and
+   the day close, so the line now only promises what logging actually pays
+   (XP).
+
+3. PROOF: unit.test.js | REACH: Gwart never opens with a scold ("Half the day
+   gone and not a crumb on the page") on your first day, or on any day you
+   have never logged a single thing. That line only ever fires on an
+   established account that has logged before and chose not to today.
+
+4. PROOF: unit.test.js, news-banner-audit.mjs, news-tab-audit.mjs,
+   newsrow-return-audit.mjs | REACH: A fresh install starts with 0 unread news
+   on Today. Every announcement the game has ever made is older than your
+   account, so it is marked read the moment onboarding finishes; the News tab
+   still lists every one of them, you just are not told you are behind on ten
+   things you were never here for.
 ## first pet reaches Today (2026-09-06)
 
 Not stamped to a release: hotfix/first-pet, off v487 (d7906217). HANDOFFr3920260906.md
@@ -134,6 +161,15 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 2. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit sheet, right where a fight is offered, now names an active dish buff and its plain-words effect, or (no buff active but ingredients or a cooked dish owned) points at the Kitchen; says nothing when there is truly nothing to cook. Cooking is measured at +37.7 to +59.9pp win rate in the real fight engine and renderPit never mentioned it before. Red on both the buff line and the nudge line with the Pit's kitchen line removed; the quiet state stays correctly green either way, which is the point.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
+
+## v491
+1. A hotfix off v490, QA round 39's R39-2, 3, 28, 29. Its rows are the dated "day one tells the truth" section further down, folded here. No quest reward or coin value changed.
+
+2. PROOF: unit.test.js, quest-pick-audit.mjs, quest-daymore-audit.mjs | REACH: pick() filters the pool by gate state before drawing, a day-one board carries q-first or q-3meals, and a per-install salt folds into the date seed (rows red on the pre-fix pick; quest-daymore's SCOPED sweep proves the substitution applies to the day-one gate combination and nowhere else, red when the guard is loosened).
+
+3. PROOF: unit.test.js | REACH: the onboarding LOG FOOD line no longer promises coins; food pays XP and the line names quests, crates and the day close as the coin sources (row red before).
+
+4. PROOF: unit.test.js, news-banner-audit.mjs, news-tab-audit.mjs | REACH: Gwart never scolds on the install day or before anything has ever been logged (row red before), and saveInitialSettings marks every live NEWS row seen so a fresh install shows zero unread while the rows stay listed (row red with the write removed).
 
 ## v490
 1. A hotfix off v489, QA round 39's R39-1 (P0) and R39-31. Its rows are the dated "first pet reaches Today" section further down, folded here.

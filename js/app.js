@@ -3998,7 +3998,10 @@ async function renderToday(el) {
     /* Real state, not a constant: the Kitchen counts once it has anything in
        it. Hardcoding false would have hidden these from every player forever,
        which is a worse bug than the one being fixed. */
-    kitchenReady: Object.values(await ingredients()).some(n => n > 0) };
+    kitchenReady: Object.values(await ingredients()).some(n => n > 0),
+    // R39-3: per-install salt for the daily seed (dailyQuests folds this in),
+    // so two accounts installing on the same date do not share a board.
+    createdAt: S.settings.createdAt };
   const healthRows = await db.all('health');
   // Surface an auto watch sleep read in the wellness card when the player hasn't
   // hand-logged tonight (so it reads "from your watch" instead of asking).
@@ -4024,11 +4027,15 @@ async function renderToday(el) {
     // mid-month scales down instead of asking for the whole month's total.
     createdAt: S.settings.createdAt,
   };
-  /* R38-24: a capability change must not re-pick a quest already shown this
-     period. dailyQuests/weeklyQuests/monthlyQuests only ever DROP a quest
-     under a new gate (never substitute) EXCEPT the single-quest floor, which
-     searches outside the drawn set and so can swap for a different quest the
-     moment something else in the drawn set unlocks (see quests.js pick()).
+  /* R38-24 + R39-3: a capability change must not re-pick a quest already shown
+     this period. dailyQuests/weeklyQuests/monthlyQuests backfill a gated-out
+     slot from further into the same seeded order (quests.js pick()), so a
+     capability unlocking mid-period can change which quests reach the top n
+     unless whatever was already shown is pinned. `questFloor` persists the
+     FULL id list a period was shown the first time it renders (not just a
+     single floor id), and every later render of the same period threads it
+     back in as stickyIds so pick() keeps those ids and only ever adds a fresh
+     slot on top, never swaps one out.
      Only tracked for the LIVE period (isToday): a past day is a read-only
      record (Tom, 2026-08-23) so nothing there can be unlocked out from under
      it, and clobbering today's sticky record with a past day's would be worse
@@ -4039,10 +4046,11 @@ async function renderToday(el) {
     const periodKey = periodKeyOf(tier, S.date);
     if (!liveToday) return fn(S.date, qopts);
     const rec = floorMemo[tier];
-    const stickyId = (rec && rec.periodKey === periodKey) ? rec.id : undefined;
-    const quests = fn(S.date, { ...qopts, stickyId });
-    if (quests.length === 1 && (!rec || rec.periodKey !== periodKey || rec.id !== quests[0].id)) {
-      floorMemo[tier] = { periodKey, id: quests[0].id };
+    const stickyIds = (rec && rec.periodKey === periodKey) ? rec.ids : undefined;
+    const quests = fn(S.date, { ...qopts, stickyIds });
+    const ids = quests.map(q => q.id);
+    if (!rec || rec.periodKey !== periodKey || JSON.stringify(rec.ids) !== JSON.stringify(ids)) {
+      floorMemo[tier] = { periodKey, ids };
       await kvSet('questFloor', floorMemo);
     }
     return quests;
@@ -4191,6 +4199,10 @@ async function renderToday(el) {
        choose statted gear to wear." Gwart is that somebody. */
     gearOwned: unlockGear.size,
     gearWorn: Object.keys(unlockFighter.gearLo || {}).length,
+    // R39-28: never scold a player who has not logged a single thing yet, or
+    // is still on the day they installed.
+    everLogged: allLog.length > 0,
+    freshInstall: !!S.settings.createdAt && dateKey(new Date(S.settings.createdAt)) === S.date,
   };
   const gwLine = gwartLine(gwCtx);
   /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
@@ -5371,7 +5383,7 @@ function gwartLine(ctx) {
    at the bottom. The general pool is the only one that is pure character. */
 function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
   steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0,
-  gearOwned = 0, gearWorn = 0 }) {
+  gearOwned = 0, gearWorn = 0, everLogged = true, freshInstall = false }) {
   const hour = new Date().getHours();
   if (crates.length) return [
     'A crate by his feet, still shut. I gave him hands for this.',
@@ -5448,7 +5460,11 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
   if (!entries.length) return [
     'Nothing logged yet. He runs on what you eat. Feed the boy.',
     'Empty ledger so far. He is patient. I am less so.',
-    hour < 11 ? 'Morning. The ledger is blank. It usually starts that way.'
+    /* R39-28: a brand-new player who has never logged a single thing (or is
+       still on the very day they installed) gets the welcome line no matter
+       the hour. "Half the day gone" reads as a scold, and nobody has failed
+       at anything yet on their first day, or before their first entry. */
+    (hour < 11 || freshInstall || !everLogged) ? 'Morning. The ledger is blank. It usually starts that way.'
       : 'Half the day gone and not a crumb on the page.',
     'Whatever you ate, write it. Accurate beats flattering.',
     'Feed the ledger and he does the rest. Fair deal.',
@@ -15003,7 +15019,7 @@ function renderOnboarding(step = 0, ctx = {}) {
         <button class="onb-reroll" id="onbReroll" aria-label="New name">${t1Stroke(18, '<path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 5v6h-6"/>')}</button>
       </div>
       <div class="onb-earns">
-        <div class="onb-earn"><span class="ic">${ICONS.star(18)}</span><b>LOG FOOD</b><small>XP and coins, every meal</small></div>
+        <div class="onb-earn"><span class="ic">${ICONS.star(18)}</span><b>LOG FOOD</b><small>XP, every meal</small></div>
         ${/* pixCur first, like its two siblings: ICONS.star and ICONS.pit both ask
              18 and both serve the 16 step, so a vector egg here left one of three
              icons in a three-icon row drawn in a different medium. */''}
@@ -15079,6 +15095,12 @@ async function saveInitialSettings(np) {
   await saveSettings();
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', (await import('./changelog.js')).changelogLatest()); // new player starts caught-up; What's New only pops for real updates
+  // R39-29: same reasoning as changelogSeen above. NEWS is a static array of
+  // everything the game has ever announced, so on a fresh install every row in
+  // it is by definition dated before this install; marking them all seen here
+  // means the unread badge only ever counts news posted AFTER today, not the
+  // whole backlog the account was never around for.
+  await kvSet('newsSeen', NEWS.map(n => n.id));
   const kit = await initLootIfNeeded();
   // R38-21: same instruction as boot()'s copy of this toast, see the comment there.
   if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), 1200);
@@ -22721,7 +22743,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v490'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v491'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
