@@ -291,7 +291,7 @@ export const MONTHLY_POOL = [
     progress: c => clamp(c.proteinDays, scaleT(20, c)) },
 ];
 
-function pick(pool, seedStr, n, { hkConnected, huntEnabled, socialOn, pitTried, kitchenReady, stickyId } = {}) {
+function pick(pool, seedStr, n, { hkConnected, huntEnabled, socialOn, pitTried, kitchenReady, stickyIds } = {}) {
   /* Callers that predate a gate must not silently lose quests, so an undefined
      flag means "no opinion, keep it". Only an explicit false hides one. */
   const off = (flag) => flag === false;
@@ -318,37 +318,24 @@ function pick(pool, seedStr, n, { hkConnected, huntEnabled, socialOn, pitTried, 
     const j = Math.floor(rand() * (i + 1));
     [order[i], order[j]] = [order[j], order[i]];
   }
-  /* DRAW FIRST, THEN FILTER, NEVER SUBSTITUTE. The loop this replaces walked
-     the shuffled order SKIPPING gated quests until it had n, so a flag flip
-     changed which quests filled the back of the set: substitution, new ledger
-     keys, freshly claimable rewards. Measured on 2026-08-30 when Tom's ruling
-     ("no one should get a quest they cannot complete") added gates to the
-     weekly and monthly tiers: worst reachable XP/day rose to 1445, past the
-     1315 this comment's own history calls an exploit.
-     Now the period's set is the first n of the shuffled order, fixed by the
-     seed alone, and gates only REMOVE from it. A locked player sees fewer
-     quests, never different ones, so unlocking mid-period reveals at most the
-     quests that were always theirs and mints nothing fresh.
-     THE FLOOR: a player whose whole draw is gated gets the first quest they
+  /* THE FLOOR: a player whose whole draw is gated gets the first quest they
      CAN do, because zero quests is a dead screen (the first-week rule). That
      floor is the one surviving substitution and it is bounded at one. */
   const drawn = order.slice(0, n);
   let out = drawn.filter(ok);
-  /* R38-24: THE FLOOR ITSELF CAN BE SWAPPED. "A locked player sees fewer
-     quests, never different ones" (the comment above) holds for members of
-     `drawn`, but the floor fallback below searches the WHOLE order, so IT can
-     pick a quest outside `drawn`. Measured: connecting Health mid-month
-     dropped a floor quest (m-protein, already shown, already in progress) the
-     instant hkConnected made a DIFFERENT drawn member (m-steps) newly `ok`,
-     because the branch below only fires while `out` is empty and stopped
-     being empty. `stickyId` is the id of whatever floor quest THIS player was
-     already shown for THIS period (app.js persists it in kv the first time the
-     floor engages, and only then); as long as it is still `ok`, it stays
-     even after something else in `drawn` unlocks, so a capability change can
-     only ADD to what a player has seen this period, never replace it. */
-  if (stickyId && !out.some(q => q.id === stickyId)) {
-    const sticky = order.find(q => q.id === stickyId && ok(q));
-    if (sticky) out = [sticky, ...out].slice(0, n);
+  /* R38-24: PIN WHAT A PLAYER HAS ALREADY BEEN SHOWN THIS PERIOD. `stickyIds`
+     is the id list THIS player was already shown for THIS period (app.js
+     persists it in kv the first time a period is rendered, and threads it back
+     in on every later render); every id in it that is still `ok` is kept, so a
+     capability change can only ADD to what a player has seen this period,
+     never replace it. Generalized 2026-09-06 (R39-3) from a single floor id to
+     a list so a caller (dailyQuests' day-one anchor, below) can pin more than
+     one quest at once; harmless to every other caller since nobody else passes
+     more than the original single id. */
+  const pinned = (stickyIds || []).map(id => order.find(q => q.id === id)).filter(q => q && ok(q));
+  if (pinned.length) {
+    const pinnedIds = new Set(pinned.map(q => q.id));
+    out = [...pinned, ...out.filter(q => !pinnedIds.has(q.id))].slice(0, n);
   }
   if (!out.length) {
     const fallback = order.find(ok);
@@ -393,7 +380,43 @@ export function claimsThisPeriod(rows, periodKey, period = 'day') {
   return rows.filter(r => r.key.startsWith(pre) && ids.has(r.key.slice(pre.length))).length;
 }
 
-export function dailyQuests(date, opts = {}) { return pick(DAILY_POOL, 'quests:' + date, QUEST_N.day, opts); }
+/* R39-3: the daily seed used to be the date string alone, so every install on
+   the same calendar day drew the identical board. opts.createdAt (the
+   account's own creation timestamp, already persisted at onboarding and
+   already threaded into questCtx for month proration) is folded in as a
+   stable per-install salt: two players installing the same day get different
+   boards, and the SAME player's board is still the same seed on every render
+   of that day (createdAt never changes). Optional, so every existing caller
+   that omits it (tests, __questOrder) draws exactly as before. */
+export function dailyQuests(date, opts = {}) {
+  const seed = 'quests:' + date + (opts.createdAt ? ':' + opts.createdAt : '');
+  const quests = pick(DAILY_POOL, seed, QUEST_N.day, opts);
+  const hasAnchor = q => q.id === 'q-first' || q.id === 'q-3meals';
+  if (quests.length >= QUEST_N.day && quests.some(hasAnchor)) return quests;
+  /* R39-3: a day-one board (every one of the five gates off) can pass pick()
+     above and still land under-filled (a gated slot in the fixed draw, nothing
+     to replace it) or full of quests nothing in onboarding ever taught
+     (q-sleep, q-protein are gateless but untaught). Scoped to EXACTLY this one
+     gate state -- not "whatever pick() under-fills" generally -- so it cannot
+     touch the reachable-quest ceiling every OTHER combination is held to
+     (tests/quest-pick-audit.mjs: pick()'s general algorithm above is
+     untouched). Fill any missing slot and force one ANCHOR from the loop
+     onboarding actually teaches, drawing from the SAME seeded order (pick()
+     asked for the full pool length is exactly that order, filtered to what a
+     player with every gate off can reach). */
+  const dayOne = opts.hkConnected === false && opts.huntEnabled === false && opts.socialOn === false
+    && opts.pitTried === false && opts.kitchenReady === false;
+  if (!dayOne) return quests;
+  const reachable = pick(DAILY_POOL, seed, DAILY_POOL.length, opts);
+  const anchor = reachable.find(hasAnchor) || DAILY_POOL.find(q => q.id === 'q-first');
+  const out = quests.slice();
+  for (const q of reachable) {
+    if (out.length >= QUEST_N.day) break;
+    if (!out.some(x => x.id === q.id)) out.push(q);
+  }
+  if (!out.some(hasAnchor)) out[out.length - 1] = anchor;
+  return out.slice(0, QUEST_N.day);
+}
 export function weeklyQuests(date, opts = {}) { return pick(WEEKLY_POOL, 'weekly:' + weekKeyOf(date), QUEST_N.week, opts); }
 export function monthlyQuests(date, opts = {}) { return pick(MONTHLY_POOL, 'monthly:' + monthKeyOf(date), QUEST_N.month, opts); }
 

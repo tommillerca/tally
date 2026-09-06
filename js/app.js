@@ -3991,7 +3991,10 @@ async function renderToday(el) {
     /* Real state, not a constant: the Kitchen counts once it has anything in
        it. Hardcoding false would have hidden these from every player forever,
        which is a worse bug than the one being fixed. */
-    kitchenReady: Object.values(await ingredients()).some(n => n > 0) };
+    kitchenReady: Object.values(await ingredients()).some(n => n > 0),
+    // R39-3: per-install salt for the daily seed (dailyQuests folds this in),
+    // so two accounts installing on the same date do not share a board.
+    createdAt: S.settings.createdAt };
   const healthRows = await db.all('health');
   // Surface an auto watch sleep read in the wellness card when the player hasn't
   // hand-logged tonight (so it reads "from your watch" instead of asking).
@@ -4017,11 +4020,15 @@ async function renderToday(el) {
     // mid-month scales down instead of asking for the whole month's total.
     createdAt: S.settings.createdAt,
   };
-  /* R38-24: a capability change must not re-pick a quest already shown this
-     period. dailyQuests/weeklyQuests/monthlyQuests only ever DROP a quest
-     under a new gate (never substitute) EXCEPT the single-quest floor, which
-     searches outside the drawn set and so can swap for a different quest the
-     moment something else in the drawn set unlocks (see quests.js pick()).
+  /* R38-24 + R39-3: a capability change must not re-pick a quest already shown
+     this period. dailyQuests/weeklyQuests/monthlyQuests backfill a gated-out
+     slot from further into the same seeded order (quests.js pick()), so a
+     capability unlocking mid-period can change which quests reach the top n
+     unless whatever was already shown is pinned. `questFloor` persists the
+     FULL id list a period was shown the first time it renders (not just a
+     single floor id), and every later render of the same period threads it
+     back in as stickyIds so pick() keeps those ids and only ever adds a fresh
+     slot on top, never swaps one out.
      Only tracked for the LIVE period (isToday): a past day is a read-only
      record (Tom, 2026-08-23) so nothing there can be unlocked out from under
      it, and clobbering today's sticky record with a past day's would be worse
@@ -4032,10 +4039,11 @@ async function renderToday(el) {
     const periodKey = periodKeyOf(tier, S.date);
     if (!liveToday) return fn(S.date, qopts);
     const rec = floorMemo[tier];
-    const stickyId = (rec && rec.periodKey === periodKey) ? rec.id : undefined;
-    const quests = fn(S.date, { ...qopts, stickyId });
-    if (quests.length === 1 && (!rec || rec.periodKey !== periodKey || rec.id !== quests[0].id)) {
-      floorMemo[tier] = { periodKey, id: quests[0].id };
+    const stickyIds = (rec && rec.periodKey === periodKey) ? rec.ids : undefined;
+    const quests = fn(S.date, { ...qopts, stickyIds });
+    const ids = quests.map(q => q.id);
+    if (!rec || rec.periodKey !== periodKey || JSON.stringify(rec.ids) !== JSON.stringify(ids)) {
+      floorMemo[tier] = { periodKey, ids };
       await kvSet('questFloor', floorMemo);
     }
     return quests;
