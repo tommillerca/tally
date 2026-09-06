@@ -1,0 +1,2 @@
+ok    REACH  scanned 57 shipped file(s)
+PASS  MARKER no "do not commit", TEMP DIAGNOSTICS or id="dbg" in any shipped file

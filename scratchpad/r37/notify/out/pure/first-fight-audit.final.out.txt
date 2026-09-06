@@ -1,0 +1,6 @@
+PASS  CONTROL an unguarded day-one player really does lose rung 1  31 losses and 0 draws in 400 unguarded fights (7.8% loss rate)
+PASS  the first fight is won 100% of the time  400/400 wins, 0 losses, 0 draws
+PASS  no first fight ends in a draw either  0 draws
+PASS  the guard does NOT apply once they have won one  unguarded record 369W/31L/0D
+
+all green

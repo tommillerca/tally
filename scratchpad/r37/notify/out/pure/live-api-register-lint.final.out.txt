@@ -1,0 +1,5 @@
+PASS  15 register calls, 0 unflagged, 0 annotated, 14 labelled, 1 deliberately unlabelled
+PASS  WALL maskWebdriver refuses the production API host  https://bonez-api.boneheadz.workers.dev/register -> abort
+PASS  WALL CONTROL and lets a loopback request through  http://127.0.0.1:8765/index.html -> continue
+PASS  MASK no audit installs the webdriver mask by hand  286 test files scanned, all masks go through godmode
+PASS  MASK SAMPLE the helper is actually used by audits  8 caller(s): beta-thanks-audit.mjs, cloud-restore-silent-audit.mjs, community-audit.mjs, first-session-audit.mjs, header-freshness-audit.mjs, honest-surfaces-audit.mjs, notif-audit.mjs, profile-units-audit.mjs

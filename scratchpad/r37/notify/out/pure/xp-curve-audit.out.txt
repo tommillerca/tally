@@ -1,0 +1,9 @@
+PASS  SHAPE a late rank never pays a bigger share of a level than an early one  late(30-120) 0.528 vs early(1-15) 0.575
+PASS  CONTROL the pre-fix linear curve fails SHAPE  linear late 1.052 vs early 0.693
+PASS  FIRST-HOUR the pre-den span pays at least what it paid on main  ranks 1-7: 788 xp, level 3 (main: 774, level 3)
+PASS  MONOTONE within a kind, XP never falls as you climb
+PASS  BOSS-PREMIUM a drawn boss always out-pays an ordinary rung at its own rank
+PASS  SAMPLE the ladder yielded ranks of every kind  120 ranks, kinds: ordinary,mimic,mage,glutton,wanderer
+
+share of a level per rank: r1 40%  r10 55%  r20 47%  r50 43%  r80 42%  r120 41%
+all green

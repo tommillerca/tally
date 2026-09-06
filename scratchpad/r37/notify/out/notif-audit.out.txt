@@ -1,0 +1,24 @@
+[godmode] puppeteer 24.43.1 via repo node_modules: /Users/tommiller/Documents/Hyperframes Editor/tally/node_modules/puppeteer/lib/cjs/puppeteer/puppeteer.js
+DEFAULTS (read from notifPrefs on empty kv): {"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":true}
+ok   SETUP  DEFAULTS include siege = true (the fifth kind, not written by either button)  siege=true
+after #notifAll (stored kv): {"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":true}
+ok   ALL  #notifAll writes enabled/reminder/streak/friends all true  {"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":true}
+after #notifEss (stored kv): {"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":false}
+ok   ESS  #notifEss writes enabled/reminder/streak/friends all true  {"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":false}
+merged prefs over a stored payload with no siege key: {"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":true}
+ok   MERGE  notifPrefs merges stored-over-DEFAULTS so an omitted siege reads true  merged.siege=true
+ok   CONTROL  the permission really reads granted before notifyNow is graded  Notification.permission = granted via redefined accessor
+ok   TEST  notifyNow returns true when permission is granted (web path)  notifyNow returned true
+toast log: ["3 starter ingredients in your Kitchen: exactly one Bone Broth. Cook it.","All notifications on.","Essentials only: log reminder, streak saver + Crew activity (friend requests, gifts, cheers).","Test notification sent."]
+test toast: Test notification sent.
+ok   TEST  #notifTest button toasts success (not "Could not send")  toast="Test notification sent."
+ok   BOOT-ASKER  CONTROL the spy is installed and navigator.webdriver reads false (an unmasked page grades nothing)  masked, spy live
+ok   BOOT-ASKER  a launch asks for notification permission ZERO times  Notification.requestPermission called 0x on boot
+ok   BOOT-ASKER  and pressing "Everything" in Settings DOES ask, so the ask moved rather than died  1 ask(s) after the toggle, 0 before
+ok   BOOT-ASKER  maybeRequestNotifPermission has not come back  absent
+ok   R37-3 CONTROL  the mocked shell reads as native (else this proves nothing)  notifPlatform()=native
+denied-permission toast log: ["Could not send. Check permission."]
+denied-permission test toast: Could not send. Check permission.
+ok   R37-3  #notifTest under a DENIED native permission must say "Could not send", never "Sent"  toast="Could not send. Check permission."
+
+NOTIFICATIONS VERIFIED

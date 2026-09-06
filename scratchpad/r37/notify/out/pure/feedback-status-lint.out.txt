@@ -1,0 +1,12 @@
+ok    SETUP feedback batches were found to grade  3 batch file(s)
+ok    STATUS every captured item says OPEN, SHIPPED or DROPPED  35 items across 3 batch(es)
+ok    SEALED no item body swallowed a section heading  35 item bodies sealed
+ok    PLAN every batch with open items has a plan beside it  every open batch is planned
+
+    STILL OPEN FROM TOM (4):
+      2026-08-21-v421 #10  The Bonehead is badly off centre on Today [OPEN — needs Tom's RULING, not code. The pair
+      2026-08-22-v424 #6  "im pretty sure youve somehow added a bunch of bot testers again because we
+      2026-08-22-v424 #8  "can we have the boneheadz background extend upward into the dynamic island
+      2026-08-22-v424 #9  "we need to create a new and interesting mechanic for the game, here it is:
+
+feedback-status: clean

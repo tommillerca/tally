@@ -98,7 +98,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boot, seed, sleep, settle, setWidth, serveTree } from './godmode.js';
-import { FOOTBALL_TEAM_BY_ID, FOOTBALL_PETS, footballItemId, VISOR_BLOCKED_EYES } from '../data/football-teams.js';
+import { FOOTBALL_TEAMS, FOOTBALL_TEAM_BY_ID, FOOTBALL_PETS, footballItemId, VISOR_BLOCKED_EYES } from '../data/football-teams.js';
 import { BH_BY_ID, PET_CROP, bhFamilyKey } from '../data/boneheadz.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -367,29 +367,33 @@ try {
      click at 0,0 lands on the app's back button. Measured on the first run of
      this file: "1 of 2 tapped", with the whole screen navigated away. So the
      selector is scoped and a zero-sized hit is refused rather than clicked.
-     THE FAMILY IS OPENED FIRST. Since 2026-09-05 (bhFamilies on the Stable) the
-     panel collapses every colourway of one master file into ONE [data-petfam]
-     tile, and the per-team [data-petwear] tiles exist only while that family is
-     open. This file owns two colourways of each garment, so both families are
-     collapsed and a bare tile query found nothing: "0 of 2 tapped". The family
-     key is the panel's species plus bhFamilyKey, the same string app.js builds,
-     and a real click on that tile (render() runs) is what un-collapses it. */
-  const centreOf = sel => page.evaluate(s => {
-    const b = document.querySelector(s);
-    if (!b) return null;
-    b.scrollIntoView({ block: 'center', inline: 'center' });
-    const r = b.getBoundingClientRect();
-    if (!(r.width > 0 && r.height > 0)) return null;
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  }, sel);
+     THE TEAM IS PICKED FIRST. Since 2026-09-05 (bhFamilies on the Stable, then
+     Tom's "two items then colours below" the same day) the panel draws ONE
+     tile per garment family showing the rail's team, and a rail of team tiles
+     under the row. So a colourway's own [data-petwear] tile exists only while
+     its team is the rail's: a real click on that team's [data-pwteam] tile
+     (render() runs) is what brings it up. */
+  /* Two reads with a wait between: the team rail scrolls SMOOTHLY, so a rect
+     read in the same tick as scrollIntoView is a rect mid-flight and the click
+     lands on whichever tile happened to be passing (measured 2026-09-05: the
+     Windrow Wasps tap landed on a neighbour and the helmet stayed navy). */
+  const centreOf = async sel => {
+    const found = await page.evaluate(s => { const b = document.querySelector(s); if (!b) return false; b.scrollIntoView({ block: 'center', inline: 'center' }); return true; }, sel);
+    if (!found) return null;
+    await sleep(500);
+    return page.evaluate(s => {
+      const r = document.querySelector(s).getBoundingClientRect();
+      if (!(r.width > 0 && r.height > 0)) return null;
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }, sel);
+  };
   const tapTile = async id => {
     const tileSel = `.pet-wear:not([hidden]) [data-petwear="${id}"]`;
     let hit = await centreOf(tileSel);
     if (!hit) {
-      const sp = await page.evaluate(() => document.querySelector('.pet-wear:not([hidden])')?.dataset.pwsp);
-      const fam = await centreOf(`.pet-wear:not([hidden]) [data-petfam="${sp}:${bhFamilyKey(BH_BY_ID[id])}"][aria-expanded="false"]`);
-      if (!fam) return false;
-      await page.mouse.click(fam.x, fam.y);
+      const team = await centreOf(`.pet-wear:not([hidden]) .fb-rail [data-pwteam="${BH_BY_ID[id].football.team}"]`);
+      if (!team) return false;
+      await page.mouse.click(team.x, team.y);
       await sleep(650);
       hit = await centreOf(tileSel);
     }
@@ -417,6 +421,45 @@ try {
     bare.kind === 'animated' && bare.tints.length === 0 && bareInk.n > 0 && bare.imgs.every(i => i.nw > 0),
     `${bare.kind} stage, ${bare.imgs.length} layers, ${bare.tints.length} tint spans, ${bareInk.n} ink px in ${bareInk.bw}x${bareInk.bh} device px`);
   await shot('00-bare-lizard', bareRect);
+
+  /* ---------------------------------------------------------- SHELF ---- */
+  /* Tom, 2026-09-05 on v476: "the way you equip the lizard stuff in the stable
+     means that you gotta scroll past all the helmet colours before you get to
+     the shirt. it should be two items then colours below just like the boneheadz
+     wardrobe." So: the garment row holds exactly one tile per family
+     (bhFamilies over what this lizard owns, two here), each a real [data-petwear]
+     tap, and a team rail sits under it with a tile per team. Proven red on v476
+     (fca972e2): 0 garment tiles (the families were [data-petfam] tiles that
+     opened their 32 colourways INLINE) and no rail. */
+  const shelf = await page.evaluate(() => {
+    const p = document.querySelector('.pet-wear:not([hidden])');
+    if (!p) return null;
+    const rail = p.querySelector('.fb-rail');
+    return {
+      sp: p.dataset.pwsp,
+      garments: [...p.querySelectorAll('.pw-row:not(.fb-rail) [data-petwear]')].map(b => b.dataset.petwear),
+      inline: p.querySelectorAll('.pw-row:not(.fb-rail) [data-petwear]').length,
+      teams: rail ? rail.querySelectorAll('[data-pwteam]').length : 0,
+      railBelow: rail ? rail.getBoundingClientRect().top >= p.querySelector('.pw-row:not(.fb-rail)').getBoundingClientRect().bottom : false,
+      tap: rail ? Math.min(...[...rail.querySelectorAll('[data-pwteam]')].map(b => { const r = b.getBoundingClientRect(); return Math.min(r.width, r.height); })) : 0,
+    };
+  });
+  const ownedPetFams = new Set(petIds(NAVY).concat(petIds(GOLD)).map(id => bhFamilyKey(BH_BY_ID[id]))).size;
+  ok(`SHELF the lizard's wardrobe row is one tile per garment family (${ownedPetFams}) with a ${FOOTBALL_TEAMS.length}-team rail BELOW it, every team tile at least 40px`,
+    !!shelf && shelf.inline === ownedPetFams && shelf.teams === FOOTBALL_TEAMS.length && shelf.railBelow && shelf.tap >= 40,
+    shelf ? `${shelf.inline} garment tiles (${shelf.garments.join(' ')}), ${shelf.teams} team tiles, rail below row ${shelf.railBelow}, smallest team tile ${shelf.tap}px` : 'no visible wardrobe panel');
+  /* OPERATE IT: wear the navy helmet, tap the yellow team, and the helmet on her
+     must now be the yellow one, with the jersey still off. Then take it off
+     again so PET-WEARS below starts from the bare lizard it expects. */
+  const wornNavy = await tapTile(footballItemId(NAVY, 'pet-helmet'));
+  const gold = await centreOf(`.pet-wear:not([hidden]) .fb-rail [data-pwteam="${GOLD}"]`);
+  if (gold) { await page.mouse.click(gold.x, gold.y); await sleep(700); }
+  const wearNow = await page.evaluate(async () => (await import('/js/loot.js')).petWear());
+  const shownTile = await page.evaluate(() => document.querySelector('.pet-wear:not([hidden]) .pw-row:not(.fb-rail) .pw-item.on')?.dataset.petwear || null);
+  ok(`SHELF-TEAM tapping a team tile recolours the worn garment: navy helmet on, tap ${FOOTBALL_TEAM_BY_ID[GOLD].name}, the helmet is now theirs and the jersey stays off`,
+    wornNavy && !!gold && wearNow.CH === footballItemId(GOLD, 'pet-helmet') && !wearNow.CT && shownTile === footballItemId(GOLD, 'pet-helmet'),
+    `navy tapped ${wornNavy}, team tile ${gold ? 'found' : 'MISSING'}, wear ${JSON.stringify(wearNow)}, worn tile shows ${shownTile}`);
+  if (wearNow.CH) await tapTile(wearNow.CH);
 
   /* ------------------------------------------------------ PET-WEARS ---- */
   const worn = [];

@@ -1,0 +1,14 @@
+ok   there are common-fed combat dishes to measure at all  5 dishes
+ok   bone-broth costs 1.50 ingredients per fight it covers  ceiling 1.5
+ok   hearty-hash costs 1.00 ingredients per fight it covers  ceiling 1.5
+ok   marrow-stew costs 1.00 ingredients per fight it covers  ceiling 1.5
+ok   hunters-skewer costs 1.50 ingredients per fight it covers  ceiling 1.5
+ok   bonemeal-kibble costs 1.00 ingredients per fight it covers  ceiling 1.5
+ok   the sim actually ran fights  90 fights
+ok   the sim actually grew something  7.1/day
+ok   median player keeps a dish up for 64% of fights  floor 55%
+ok   CONTROL the rejected needs-x2 table really does fall through that floor  40% buffed, floor 55% (measured 40% when this was written)
+
+note  median player grows 7.1 and spends 2.4 ingredients a day (199 banked by day 30). That gap is the open design question, not a regression.
+
+all good

@@ -1,0 +1,1 @@
+ok store copy: beta surfaces unreachable and store strings clean

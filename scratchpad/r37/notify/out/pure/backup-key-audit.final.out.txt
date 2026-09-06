@@ -1,0 +1,26 @@
+ok   SETUP  device A registered
+ok   SETUP  device A pushed its FIRST-EVER backup (empty sample = FAIL)  | pushes=1
+ok   SETUP  device A holds aesJwk after the push  | without this the decrypt rows below cannot run
+ok   SETUP  first blob decrypts under A's own current key
+ok   FIRSTBLOB  the first blob embeds kv identity WITH aesJwk  | aesJwk present
+ok   MERGEGUARD  merge never overwrites kv identity on a device that has one  | d=LOCAL aes=GOOD-KEY
+ok   MERGEWINS  control: payload still wins a NON-device key on merge
+ok   MERGEFRESH  control: a device key the device lacks still lands (fresh-install unchanged)
+ok   ROUNDTRIP  B adopts A's bundle and pulls A's save  | ok=true restored=true pullReason= 
+ok   ROUNDTRIP  A's log row is on device B after the pull
+ok   KEYSTABLE  B's aesJwk after the pull is byte-equal to A's (no re-mint)  | same key
+ok   ROUNDTRIP  B pushed (the write that used to poison the cloud copy)
+ok   ROUNDTRIP  A pulls after B's push and CAN STILL DECRYPT  | restored=true reason=
+ok   ROUNDTRIP  B's row arrived on A (the merge really ran)
+ok   ROUNDTRIP  A's own data survived the round trip
+ok   DECRYPT  a wrong-key blob is named reason:'decrypt', never "no save" or a laundered exception  | restored=false reason="decrypt"
+ok   DECRYPT  the local save is untouched by the failed pull
+ok   DECRYPT  the server copy is untouched (self-heal by the good device stays possible)
+ok   SRC-PUSH  pushBackup awaits backupKey() BEFORE exportAll()  | order ok
+ok   SRC-MERGE  importAll filters DEVICE_KV on the MERGE path too  | a !replace branch consulting DEVICE_KV inside importAll
+ok   SRC-REASON  pullBackup names the decrypt failure reason:'decrypt'
+ok   SRC-ADOPT  adoptIdentity forwards pullReason to its callers
+ok   SRC-BOOT  the boot pull toast has a dedicated decrypt branch with honest copy
+ok   SRC-RESTORE  both adoptIdentity surfaces (phrase restore, vault adopt) branch on pullReason  | 4 surface(s) found, need 2
+
+all green
