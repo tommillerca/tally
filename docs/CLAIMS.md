@@ -83,10 +83,11 @@ pre-fix sw.js and green on this one.
    force-quit, no second open. Nothing on their side has to know how to let it in.
 
 2. PROOF: sw-upgrade-audit.mjs (WINDOW row: the v471 page, with the v482 worker
-   already in charge under it, lazily imports js/changelog.js, which B drops
-   from PRECACHE and 404s; answered `200 text/javascript, module: 3`; red under
-   --prove-red=window, which deletes the previous generation on activate again,
-   and red on the pre-fix sw.js because the swap never happens) plus the
+   already in charge under it, lazily imports js/ocr.js, which B drops from
+   PRECACHE and 404s; answered `200 text/javascript`; red under
+   --prove-red=window, which deletes the previous generation on activate again:
+   `status=404, import()=FAILED: TypeError: Failed to fetch dynamically imported
+   module`; and red on the pre-fix sw.js because the swap never happens) plus the
    re-premised "exactly two tally-v* caches survive" and sentinel rows | REACH:
    During the seconds between the new build taking over and the page reloading,
    the old page still finds every file of its own build: activate keeps one
@@ -117,11 +118,12 @@ pre-fix sw.js and green on this one.
    whether current or six builds back. Both read version.json (the worker's own
    never-cached killswitch stamp, thirty bytes) rather than downloading sw.js.
 
-5. PROOF: sw-upgrade-audit.mjs (CARRIED rows: of 188 byte-identical precache
-   entries between v471 and this tree, 188 in the new cache are the previous
+5. PROOF: sw-upgrade-audit.mjs (CARRIED rows: of 187 byte-identical precache
+   entries between v471 and this tree, 187 in the new cache are the previous
    generation's own copies validated by a 304 and 0 were re-downloaded; the
-   install pulled 3,586 KB of an 11,582 KB precache; red under
-   --prove-red=refetch and on the pre-fix sw.js, which pulled 11,474 KB) |
+   install pulled 3,755 KB of an 11,582 KB precache; red under
+   --prove-red=refetch, `carried=0 fresh=188, 11,899 KB served`, and on the
+   pre-fix sw.js, which pulled 11,474 KB) |
    REACH: An update downloads the files that changed, not all 211. Install asks
    the server conditionally (If-None-Match against the ETag the previous
    generation stored, with the browser HTTP cache bypassed so a small or evicted
