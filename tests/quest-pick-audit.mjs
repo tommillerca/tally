@@ -51,8 +51,19 @@ const ok = (name, cond, detail) => {
    its pre-gate value. The intermediate state, gates with the old substituting
    picker, measured day 9 / week 9 / month 4 / 1445 XP, which is why these are
    assertions and not history. */
-const CEILING = { day: 5, week: 6, month: 3 };
-const CEILING_XP = 975;
+/* Loosened 2026-09-06 (R39-3), daily only: a day-one board (every one of the
+   five gates off) could draw 3, lose one to a gate, and show 2 with nothing
+   onboarding ever taught (q-sleep, q-protein are gateless but untaught).
+   dailyQuests() now fills and forces one onboarding ANCHOR (q-first/q-3meals)
+   for that ONE gate combination alone -- pick()'s general algorithm above,
+   and every other one of the 32 combinations, is untouched (test 1 and the
+   week/month rows here still hold at their old values). The unavoidable cost
+   is that single combination's own reachable set, which the sweep cannot
+   separate from the other 31: day rose 5 -> 7, XP/day 975 -> 1000 (week and
+   month did not move). Still well under the pre-gate exploit figures above
+   (day 9, 1445 XP) and the CAP (605 XP/day) still bounds the actual payout. */
+const CEILING = { day: 7, week: 6, month: 3 };
+const CEILING_XP = 1000;
 /* The pre-fix figures, kept so the direction is legible: the old picker reached
    11/8/3 and 1315 XP on its own base. The ordering fix does not get to n by
    itself and was never going to (a gated quest ahead of the n-th ungated one

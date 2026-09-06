@@ -4,6 +4,22 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 491, date: '2026-09-06', title: 'Day one tells the truth', items: [
+    'The quest board on your first day always has something you can actually do: the pool is filtered for what you have unlocked before the draw, one daily comes from the logging loop the game just taught you, and two players installing on the same day no longer get the same board.',
+    'Onboarding said logging food pays XP and coins. Food pays XP; coins come from quests, crates and closing the day, and the line says so now.',
+    'Gwart no longer opens with a scold on the day you install or before you have logged anything, and a fresh install starts with zero unread news instead of ten.',
+  ] },
+  { n: 490, date: '2026-09-06', title: 'Your first pet comes home', items: [
+    'Hatch your first egg and the pet is on Today with you, where before the Stable said she was out with you while Today showed nothing and the EQUIP button stayed greyed out. The two records agree now, and a Stable button is never disabled for a pet you are not actually wearing.',
+    'A pet name with odd characters no longer breaks the Stable heading, and a damaged pet record is skipped instead of emptying the whole Stable.',
+  ] },
+  { n: 489, date: '2026-09-06', title: 'Onboarding fits the small phones, and sheets survive a double tap', items: [
+    'On an iPhone SE the button that moves onboarding forward sat below the fold with nothing to say so; "Start tracking" was almost a full screen down. The button now stays pinned at the bottom of the screen on every step.',
+    'Tapping a button twice quickly used to open a sheet and close it again, because the second tap landed on the backdrop mid-slide. A sheet ignores backdrop taps for its first moment now.',
+  ] },
+  { n: 488, date: '2026-09-06', title: 'The worn kit holds its colour', items: [
+    'Opening the Wardrobe on a football piece made the helmet or jersey flash through every team\'s colours for half a second before settling. The rail was sliding to your team and repainting the piece with each team it passed. It lands on your team in one step now.',
+  ] },
   { n: 487, date: '2026-09-06', title: 'Crates pay off, and Health has a door on Today', items: [
     'Opening a crate now tells you what you got and where to wear it, a new piece says New with its rarity instead of a blank line under a duplicate\'s coin count, and Common Crates have an Open all so five of them take one tap instead of thirteen.',
     'Before your first Health sync, Today shows the Activity card in a not-connected state with the Sync control on it, and a first successful sync brings you back to Today instead of leaving you in Settings next to Erase.',

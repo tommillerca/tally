@@ -7152,14 +7152,91 @@ test('R38-24 capability change must not re-pick a quest already shown this perio
        after=q-pit1,q-pit3
        + actual - expected
        + []
-       - [ 'q-scan' ] */
+       - [ 'q-scan' ]
+     R39-3 (2026-09-06) moved this from dailyQuests to monthlyQuests: the
+     day-one fix guarantees 3 reachable dailies for every all-locked board (10
+     of the 18 daily quests carry no `need` at all), so daily can no longer
+     engage the single-quest floor this date relied on. MONTHLY_POOL still has
+     only one gateless entry (m-protein), so the floor -- and the swap it used
+     to allow -- is still reachable there, on the same date. */
   const A = { hkConnected: false, huntEnabled: false, socialOn: false, pitTried: false, kitchenReady: false };
-  const before = dailyQuests('2026-01-02', A).map(x => x.id);
+  const before = monthlyQuests('2026-01-02', A).map(x => x.id);
   assert.equal(before.length, 1, 'setup: this date must engage the single-quest floor with everything locked');
-  // app.js persists the floor id in kv the first time it engages and threads it back in as stickyId
-  const after = dailyQuests('2026-01-02', { ...A, pitTried: true, stickyId: before[0] }).map(x => x.id);
+  // app.js persists the shown id list in kv the first time a period renders and threads it back in as stickyIds
+  const after = monthlyQuests('2026-01-02', { ...A, pitTried: true, stickyIds: before }).map(x => x.id);
   assert.deepEqual(after.filter(id => before.includes(id)), before,
     `connecting a capability must never drop a quest already shown this period; before=${before} after=${after}`);
+});
+test('R39-3 the day-one daily board is always 3 reachable quests, and one of them is the onboarding anchor', () => {
+  /* PROVE-RED on the pre-fix pick() (draw-then-filter, floor only at zero):
+     2026-09-06 with every gate off draws q-sleep, q-steps8, q-protein, drops
+     q-steps8 (needs hk), and shows only 2 -- neither q-first nor q-3meals. */
+  const A = { hkConnected: false, huntEnabled: false, socialOn: false, pitTried: false, kitchenReady: false };
+  const board = dailyQuests('2026-09-06', A);
+  assert.equal(board.length, 3, `a day-one board must draw all 3 dailies, got ${board.map(q => q.id)}`);
+  assert.ok(board.every(q => !q.need), `every day-one slot must be reachable with no gate on, got ${board.map(q => q.id)}`);
+  assert.ok(board.some(q => q.id === 'q-first' || q.id === 'q-3meals'),
+    `a day-one board must include something onboarding actually teaches (q-first/q-3meals), got ${board.map(q => q.id)}`);
+  // swept, not one lucky date: every day of a year, day-one is always 3 reachable + the anchor
+  for (let i = 0; i < 365; i++) {
+    const date = new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString().slice(0, 10);
+    const b = dailyQuests(date, A);
+    assert.equal(b.length, 3, `${date}: day-one board must be 3, got ${b.map(q => q.id)}`);
+    assert.ok(b.every(q => !q.need), `${date}: every day-one slot must be reachable, got ${b.map(q => q.id)}`);
+    assert.ok(b.some(q => q.id === 'q-first' || q.id === 'q-3meals'), `${date}: no onboarding anchor, got ${b.map(q => q.id)}`);
+  }
+  // an anchor already shown (persisted stickyIds) is never bumped once a gate opens
+  const opened = dailyQuests('2026-09-06', { ...A, pitTried: true, stickyIds: board.map(q => q.id) }).map(q => q.id);
+  assert.deepEqual(opened.filter(id => board.some(q => q.id === id)), board.map(q => q.id),
+    `unlocking pitTried must not drop a day-one quest already shown; before=${board.map(q => q.id)} after=${opened}`);
+  // two installs, same date, different createdAt salt: must not share a board
+  const p1 = dailyQuests('2026-09-06', { ...A, createdAt: 111 }).map(q => q.id);
+  const p2 = dailyQuests('2026-09-06', { ...A, createdAt: 222222 }).map(q => q.id);
+  assert.notDeepEqual(p1, p2, 'two different createdAt salts drew the identical board on the same date');
+});
+
+test('R39-2 onboarding LOG FOOD copy does not promise coins (logging food pays XP only)', () => {
+  /* PROVE-RED on the pre-fix copy: "XP and coins, every meal" while
+     onFoodLogged's only reward is XP (js/game.js) -- coins come from quests,
+     crates and the day close, not from logging a meal. */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const m = src.match(/<b>LOG FOOD<\/b><small>([^<]*)<\/small>/);
+  assert.ok(m, 'onboarding LOG FOOD line not found');
+  assert.ok(!/coin/i.test(m[1]), `onboarding LOG FOOD copy must not promise coins, got "${m[1]}"`);
+});
+
+test('R39-28 Gwart never scolds a fresh player for an empty ledger (install day or never logged)', () => {
+  /* PROVE-RED: on the pre-fix pool, "Half the day gone and not a crumb on the
+     page" is chosen purely on the clock (hour >= 11), so a brand-new player who
+     opens the app at 15:00 on install day, having logged nothing ever, gets
+     scolded before they have had a chance to do anything wrong. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('function gwartPool('), b = app.indexOf('\n/* GWART ON THE PET');
+  assert.ok(a > 0 && b > a, 'gwartPool is not in js/app.js');
+  class FakeDate extends Date {
+    constructor(...args) { if (args.length) super(...args); else super('2026-09-06T15:00:00'); }
+  }
+  const gwartPool = new Function('Date', `${app.slice(a, b)}; return gwartPool;`)(FakeDate);
+  const SCOLD = 'Half the day gone and not a crumb on the page.';
+  const base = { entries: [], tot: {}, targets: {}, crates: [], streak: 0, level: 1, isToday: true };
+  assert.ok(gwartPool(base).includes(SCOLD), 'setup: an ordinary empty ledger at 15:00 must still be able to scold');
+  assert.ok(!gwartPool({ ...base, freshInstall: true }).includes(SCOLD), 'install day must never scold at 15:00');
+  assert.ok(!gwartPool({ ...base, everLogged: false }).includes(SCOLD), 'a player who has never logged anything must never be scolded at 15:00');
+});
+
+test('R39-29 a fresh install marks every existing News row seen, so the unread badge starts at 0', () => {
+  /* PROVE-RED on the pre-fix saveInitialSettings: it set changelogSeen but
+     never newsSeen, so a brand-new account's newsUnseen count (js/app.js
+     renderToday, `NEWS.filter(n => !newsSeen.has(n.id)).length`) was the
+     ENTIRE backlog -- every row the game has ever announced, all dated
+     before this install -- rather than 0. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('async function saveInitialSettings(');
+  const b = app.indexOf('\nfunction enterAppFromOnboarding');
+  assert.ok(a > 0 && b > a, 'saveInitialSettings is not in js/app.js');
+  const body = app.slice(a, b);
+  assert.ok(/await kvSet\('newsSeen',\s*NEWS\.map\(n => n\.id\)\)/.test(body),
+    'saveInitialSettings must mark every row of the live NEWS array seen on a fresh install, so News rows dated before the install count as read, not unread');
 });
 
 test('R38-8 q-friend / w-friends: gated on an actual accepted friend, not mere reachability', () => {
@@ -7200,6 +7277,17 @@ test('R38-24 "Quest progress" no longer opens Trends, and the water toast is not
   assert.ok(!/Hydrated! \+\$\{xp\} XP\. Claim the water quest for coins\./.test(src),
     'the water-quest hint must not fire unconditionally');
   assert.ok(/waterHint/.test(src), 'the water toast must compute a conditional hint instead');
+});
+
+test("R39-31 the Stable's wardrobe heading escapes the species name at both sites", () => {
+  /* PROVE-RED: on d7906217 (pre-fix) this fails with:
+       FAIL both wardrobe headings must go through esc(): 0 escaped, 2 raw
+     Source pin only; the rendered half (a name carrying <b> read back as text
+     from the real Stable) is pet-ownership-audit HER. */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const escaped = (src.match(/<div class="pw-h">\$\{esc\(her\)\}'s wardrobe/g) || []).length;
+  const raw = (src.match(/<div class="pw-h">\$\{her\}'s wardrobe/g) || []).length;
+  assert.ok(escaped === 2 && raw === 0, `both wardrobe headings must go through esc(): ${escaped} escaped, ${raw} raw`);
 });
 
 await runAll();
