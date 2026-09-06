@@ -7048,10 +7048,11 @@ test('R37-24 register 429: the welcome wallet lands once and the failed retry to
   const s = await import('../js/social.js');
   dbm.useDbName('unit-r37-24-register-429');
   const origFetch = globalThis.fetch;
-  let registerCalls = 0, toasts = 0;
+  let registerCalls = 0, toasts = 0, allowSuccess = false;
   globalThis.fetch = async url => {
     if (String(url).endsWith('/register')) {
       registerCalls++;
+      if (allowSuccess) return { ok: true, status: 200, json: async () => ({ playerId: 'r37-24', handle: 'Audit Bones', friendCode: 'BONE-TEST-TEST', name: null }) };
       return { ok: false, status: 429, json: async () => ({ error: 'rate limited' }) };
     }
     return { ok: false, status: 404, json: async () => ({}) };
@@ -7065,8 +7066,12 @@ test('R37-24 register 429: the welcome wallet lands once and the failed retry to
     assert.equal((await dbm.db.get('xp', 'social-welcome'))?.xp, 10,
       'the local receipt must mirror the full server welcome payload so dedupe does not lose its 10 XP');
     assert.equal(toasts, 1, 'the failed retry must produce exactly one named failure toast');
-    await s.goOnline({ retryDelayMs: 0, onRegisterFailure: () => { toasts++; } });
+    allowSuccess = true;
+    const landed = await s.goOnline({ retryDelayMs: 0, onRegisterFailure: () => { toasts++; } });
+    assert.equal(landed.ok, true, 'a later registration must land once the server accepts it');
     assert.equal(await dbm.kvGet('coins', 0), 50, 'a later retry must not pay the welcome grant twice');
+    assert.equal(toasts, 1, 'a later successful registration must not repeat the failure toast');
+    assert.equal((await dbm.kvGet('social', null))?.playerId, 'r37-24', 'the successful retry must store the real player id');
   } finally {
     globalThis.fetch = origFetch;
   }
