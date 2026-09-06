@@ -14241,7 +14241,11 @@ async function renderSettings(el) {
      them and have setNotifPrefs write the change, for a control that will
      never push anything. Denied disables them visibly, not just in theory. */
   const notifRow = (key, label, sub) => `
-    <div class="settings-row"${notifPerm === 'denied' ? ' style="opacity:.45;pointer-events:none"' : ''}>
+    ${/* 2026-09-06: dimmed, and the buttons carry `disabled` below; NOT pointer-events:none.
+         a11y-audit's rule (its own header): a disabled control still has to be
+         reachable at its centre. The v481 row blocked the hit test with the card
+         and went red on 16 tap probes. */''}
+    <div class="settings-row"${notifPerm === 'denied' ? ' style="opacity:.45"' : ''}>
       <div class="lab"><b>${label}</b><span>${sub}</span></div>
       <div class="seg" style="width:110px"><button data-noti="${key}" data-on="1" class="${np[key] ? 'on' : ''}"${notifPerm === 'denied' ? ' disabled' : ''}>On</button><button data-noti="${key}" data-on="0" class="${np[key] ? '' : 'on'}"${notifPerm === 'denied' ? ' disabled' : ''}>Off</button></div>
     </div>`;
