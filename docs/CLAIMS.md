@@ -19,6 +19,15 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v481
+1. A hotfix off v480, QA round 37's notification items (R37-3, 4, 9, 10, 11, 12, 23). Its rows are the dated "notifications consent" section further down, folded here.
+
+2. PROOF: unit.test.js, notif-audit.mjs | REACH: the native send path checks permission before claiming success and the Settings test button says it could not send under denied (red before: toast "Sent. Background the app to see it."); nothing schedules while permission is prompt or denied, and one line of consent copy precedes the OS prompt (notifGateOk rows, red: got true for prompt).
+
+3. PROOF: unit.test.js, notif-tier-audit.mjs | REACH: immediate pushes take distinct ids from a pool (red: got 9 === 9) and pushes due between 22:00 and 08:00 local move to 08:00 (red: 0:00 must clamp to 08:00).
+
+4. PROOF: notif-tier-audit.mjs, unit.test.js | REACH: the Dark Spires siege reminder has its own Settings row so the Essentials preset visibly changes the page and its toast names what it drops; a committed meal log re-runs the schedule sync so the evening reminder clears; denied permission dims the sub-toggles and the web note stops advertising retired pushes.
+
 ## v480
 1. A hotfix off v479 from Tom's live session. Its rows are the dated "dressing room families" section further down, folded here.
 
@@ -39,6 +48,60 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 2. PROOF: hype-banner-audit.mjs, news-banner-audit.mjs | REACH: the news pill's hero slot promotes the Locker Room row: a poster rendered from the real kit-room DOM (Bonehead in the Bruisers kit, lizard in front) registered as a measured plate, so the hero shows the newest thing on sale instead of the Wanderer. The hype audit re-measures the hero (one hero, art decoded, whole figure, fits, caption length) with the new plate in it; the news audit keeps every row bounded.
 
 3. PROOF: shop-door-audit.mjs | REACH: Today's coin pill opens the Shop. The COIN-PILL row taps the real pill and reads the Shop chip lit; red on v477 (tapped, chip off).
+## notifications consent (2026-09-06)
+
+Not stamped to a release: hotfix/notify-consent, off v477. HANDOFFr3720260906.md
+R37-3, R37-4, R37-9, R37-10, R37-11, R37-12, R37-23, re-measured on this tree
+before fixing (all seven were still live on v477, none were already fixed by
+the intervening train).
+
+1. PROOF: unit.test.js (notifGateOk), notif-audit.mjs | REACH: The Settings
+   "Send a test notification" button can no longer tell a player who denied
+   notifications that it sent one. notifyNow's native branch checks the real
+   OS permission before scheduling anything; denied now toasts "Could not
+   send. Check permission." instead of "Sent."
+
+2. PROOF: unit.test.js (notifGateOk), notif-audit.mjs, notif-tier-audit.mjs |
+   REACH: Nothing schedules on a device that has not granted notification
+   permission, even though notifications default to on for a new player. The
+   19:00 daily reminder is no longer already scheduled on a fresh install
+   before permission is ever asked. One line of consent copy in Settings
+   ("Turning this on asks your device for permission to send notifications")
+   now sits ahead of the OS prompt; the ask itself still only happens from an
+   explicit Settings control, and boot still asks for nothing.
+
+3. PROOF: unit.test.js (nextImmId, immRateCheck), notif-tier-audit.mjs | REACH:
+   A friend's gift and cheer arriving moments apart no longer erase each
+   other. Every immediate push (friend request, gift, cheer, siege discovery,
+   the HealthKit stall notice, the Settings test button) now gets a distinct
+   id from a small pool instead of sharing one, plus a generous rate ceiling
+   against a genuine runaway.
+
+4. PROOF: unit.test.js (clampQuietHours) | REACH: The Dark Spires siege
+   reminder (the T-12h nudge) no longer fires between 22:00 and 08:00 local;
+   a time that would land overnight moves to 08:00 instead.
+
+5. PROOF: notif-tier-audit.mjs | REACH: Settings > Notifications now shows a
+   Dark Spires siege row, so "Just essentials" visibly differs from
+   "Everything" instead of rendering byte-identical cards. The Essentials
+   toast now names what it actually keeps on (log reminder, streak saver,
+   Crew activity: friend requests, gifts, cheers) instead of saying "friend
+   requests" for a key that also covers gifts and cheers.
+
+6. PROOF: unit.test.js (R37-9 commitLogEntry / R24-L17) | REACH: Logging a
+   meal now re-syncs notification schedules immediately. A morning-only
+   logger who eats dinner mid-evening no longer gets the 20:30 "keep your
+   streak" nag with the streak already safe; it's pushed to tomorrow evening
+   instead.
+
+7. PROOF: NONE beyond what the Settings render itself proves (no dedicated
+   audit row; small enough to read directly) | REACH: The three (now four)
+   notification sub-toggles render visibly dimmed and disabled once
+   permission is denied in system settings, instead of staying live and
+   still writing preferences that can never fire. The web/PWA note no longer
+   advertises "rare" pushes retired in v251; it now names exactly what does
+   and doesn't work in a browser (immediate pushes only; the daily reminder
+   and streak saver need the installed app).
 
 ## v477
 1. A hotfix off v476, two Crew fixes from Tom's live session. Nothing from the integration train is in it.

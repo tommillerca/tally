@@ -14033,10 +14033,14 @@ async function renderSettings(el) {
   const notifPerm = await notifPermissionState();
   const clUnseen = (await import('./changelog.js')).changelogUnseen(await kvGet('changelogSeen', 0));
   const surveyDone = await kvGet('surveyDone', false);
+  /* R37-23: denied permission left these three (now four) sub-toggles fully
+     live, so a player who blocked the app in system settings could still flip
+     them and have setNotifPrefs write the change, for a control that will
+     never push anything. Denied disables them visibly, not just in theory. */
   const notifRow = (key, label, sub) => `
-    <div class="settings-row">
+    <div class="settings-row"${notifPerm === 'denied' ? ' style="opacity:.45;pointer-events:none"' : ''}>
       <div class="lab"><b>${label}</b><span>${sub}</span></div>
-      <div class="seg" style="width:110px"><button data-noti="${key}" data-on="1" class="${np[key] ? 'on' : ''}">On</button><button data-noti="${key}" data-on="0" class="${np[key] ? '' : 'on'}">Off</button></div>
+      <div class="seg" style="width:110px"><button data-noti="${key}" data-on="1" class="${np[key] ? 'on' : ''}"${notifPerm === 'denied' ? ' disabled' : ''}>On</button><button data-noti="${key}" data-on="0" class="${np[key] ? '' : 'on'}"${notifPerm === 'denied' ? ' disabled' : ''}>Off</button></div>
     </div>`;
   el.innerHTML = `
   <h1 class="page-h1">Settings</h1>
@@ -14091,16 +14095,21 @@ async function renderSettings(el) {
       <div class="lab"><b>Notifications</b><span>${np.enabled ? (notifPerm === 'denied' ? 'Blocked in system settings' : 'On') : 'Off: nothing gets pushed to you'}</span></div>
       <div class="seg" style="width:110px"><button data-noti="enabled" data-on="1" class="${np.enabled ? 'on' : ''}">On</button><button data-noti="enabled" data-on="0" class="${np.enabled ? '' : 'on'}">Off</button></div>
     </div>
+    <!-- R37-4: one line of consent copy ahead of the OS prompt. Only shown
+         before a decision exists (not once granted or denied), so it never
+         contradicts what actually happened. -->
+    ${notifPerm !== 'granted' && notifPerm !== 'denied' ? '<p class="note" style="margin:8px 2px 0">Turning this on asks your device for permission to send notifications.</p>' : ''}
     ${np.enabled ? `
     ${notifRow('friends', 'Crew activity', 'Friend requests, gifts and cheers')}
     ${notifRow('reminder', 'Daily log reminder', 'A nudge in the evening to log your food')}
     ${notifRow('streak', 'Streak saver', 'Warns you before a streak would break')}
+    ${notifRow('siege', 'Dark Spires siege', 'A push when your spire is besieged, and again 12h before it ends')}
     <div class="notif-presets">
       <button class="btn small ghost" id="notifAll">Everything (power user)</button>
       <button class="btn small ghost" id="notifEss">Just essentials</button>
     </div>
     <button class="btn small ghost" id="notifTest" style="margin-top:8px">Send a test notification</button>
-    ${notifPlat === 'web' ? '<p class="note" style="margin:8px 2px 0">In a browser only immediate notifications work; scheduled rare + reminder pushes need the installed app.</p>' : ''}
+    ${notifPlat === 'web' ? '<p class="note" style="margin:8px 2px 0">In a browser, only immediate pushes work (Crew activity, siege alerts). The daily log reminder and streak saver need the installed app.</p>' : ''}
     ${notifPerm === 'denied' ? '<p class="note" style="margin:8px 2px 0">Notifications are blocked. Enable Boneheadz Gym in your device Settings, then flip this back on.</p>' : ''}` : ''}
   </div>` : ''}
 
@@ -14316,7 +14325,7 @@ async function renderSettings(el) {
       if (!ok) { toast('Notifications need permission. Allow them when prompted, or enable in system settings.', 3600); renderSettings(el); return; }
     }
     prefs[key] = on;
-    if (key === 'enabled' && on && !prefs.reminder && !prefs.streak && !prefs.friends) { prefs.reminder = prefs.streak = prefs.friends = true; }
+    if (key === 'enabled' && on && !prefs.reminder && !prefs.streak && !prefs.friends && !prefs.siege) { prefs.reminder = prefs.streak = prefs.friends = prefs.siege = true; }
     await applyNotifs(prefs);
   }));
   $('#notifAll', el)?.addEventListener('click', async () => {
@@ -14327,12 +14336,11 @@ async function renderSettings(el) {
   $('#notifEss', el)?.addEventListener('click', async () => {
     const ok = await requestNotifPermission();
     if (!ok) { toast('Allow notifications when prompted to turn these on.', 3400); return; }
-    // Essentials is exactly the three kinds this toast names, so `siege` goes OFF.
-    // Both presets used to write the same four keys, which made "Just essentials"
-    // and "Everything (power user)" byte-identical and the labels a lie. `siege`
-    // is the fifth kind (notify.js DEFAULTS) and the only one with no row of its
-    // own, so these two buttons are the only place it can be set at all.
-    await applyNotifs({ enabled: true, reminder: true, streak: true, friends: true, siege: false }, 'Essentials only: reminders, streak saver + friend requests.');
+    // R37-11: Essentials drops `siege`, the one kind Everything keeps on. Both
+    // presets used to write the same four keys (siege had no row at all), so
+    // the two buttons rendered byte-identical cards and this toast still named
+    // only "friend requests" for a key that also covers gifts and cheers.
+    await applyNotifs({ enabled: true, reminder: true, streak: true, friends: true, siege: false }, 'Essentials only: log reminder, streak saver + Crew activity (friend requests, gifts, cheers).');
   });
   $('#notifTest', el)?.addEventListener('click', async () => {
     const fired = await notifyNow('Boneheadz Gym', 'Test notification. If you can see this, you are all set.', 'any');
@@ -14962,6 +14970,15 @@ async function commitLogEntry(e, btn, via = null) {
     trackEvent('log_write_failed', { quota: !!full });
     return null;                       // the sheet stays open, the entry stays put
   }
+  /* R37-9: every UI log writer routes through here, so this is the one place
+     that re-arms notifications the moment logging a meal could change what
+     they should say. Without it, a morning-only logger who ate dinner at
+     19:05 still got the 20:30 "keep your streak" nag with the streak already
+     safe: syncNotifications recomputes the one-shot from today's actual log
+     rows, so a day that just became complete pushes the nag to tomorrow
+     evening instead. Only reached once the row above actually committed;
+     fire-and-forget, never delays the save. */
+  Promise.resolve(refreshNotifSchedules()).catch(() => {});
   try {
     await recordMealUsed(e.meal);
     return await onFoodLogged(e, { via, targets: S.settings.targets, entriesForDate: await entriesFor(e.date) });
@@ -22445,7 +22462,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v480'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v481'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

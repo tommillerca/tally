@@ -1,0 +1,42 @@
+ok   SOURCE: u8ToB64 is where this audit thinks it is  | found
+ok   NO-SPREAD: the encoder does not spread the whole array into one call  | chunked
+ok   SMALL-1B: one byte  | 1 bytes round-tripped
+ok   SMALL-1K: a new player  | 1024 bytes round-tripped
+ok   SMALL-64K: below every engine limit  | 65536 bytes round-tripped
+ok   SPREAD-200K: past the reporter's floor  | 204800 bytes round-tripped
+ok   SPREAD-1MB: a mature save  | 1048576 bytes round-tripped
+ok   SPREAD-4MB: the server's nominal ceiling  | 4194304 bytes round-tripped
+ok   EDGE-32767: chunk boundary  | 32767 bytes round-tripped
+ok   EDGE-32768: chunk boundary  | 32768 bytes round-tripped
+ok   EDGE-32769: chunk boundary  | 32769 bytes round-tripped
+ok   EDGE-65536: chunk boundary  | 65536 bytes round-tripped
+ok   EDGE-65537: chunk boundary  | 65537 bytes round-tripped
+ok   EDGE-98311: chunk boundary  | 98311 bytes round-tripped
+ok   SOURCE: the backup crypto is where this audit thinks it is  | through=true encryptBackup=true decryptBackup=true
+ok   ORDER: encryptBackup compresses BEFORE it encrypts  | compress at 862, encrypt at 1302
+ok   FIXTURE: real food names were lifted from data/generic-foods.js  | 200 names
+ok   FIXTURE: the snapshot is a mature save, not a toy  | exportAll 1,457,305 bytes, 3650 log rows, 10950 xp rows
+ok   MAGIC: a legacy plaintext can never be mistaken for gzip  | first byte of JSON.stringify(exportAll()) is "{"
+ok   STAGED: the shipped write path matches the rollout decision on record  | encryptBackup emits the legacy format, as staged; the reader still accepts gzip (COMPAT rows)
+ok   RATIO: gzip cuts a mature save by at least 3x  | exportAll 1,457,305 -> compressed 208,861 bytes = 6.98x, blob (base64) 1,943,112 bytes
+ok   INCOMPRESSIBLE: gzipping the CIPHERTEXT instead saves nothing  | ciphertext 1,457,333 -> 1,457,796 bytes = 1.000x
+ok   CEILING: a compressed mature save fits beside its own archived daily copy  | compressed blob would be 278,498 of a ~1,099,971 byte budget (the legacy blob is 1,943,112, which does NOT fit)
+ok   CEILING-CONTROL: the UNCOMPRESSED blob really did overflow that budget  | 1,943,112 vs 1,099,971
+ok   ROUNDTRIP-foods: compress -> encrypt -> decrypt -> decompress is byte-identical  | 200 rows, 28,247 canonical bytes
+ok   ROUNDTRIP-log: compress -> encrypt -> decrypt -> decompress is byte-identical  | 3650 rows, 664,944 canonical bytes
+ok   ROUNDTRIP-weights: compress -> encrypt -> decrypt -> decompress is byte-identical  | 365 rows, 11,987 canonical bytes
+ok   ROUNDTRIP-kv: compress -> encrypt -> decrypt -> decompress is byte-identical  | 5 rows, 766 canonical bytes
+ok   ROUNDTRIP-xp: compress -> encrypt -> decrypt -> decompress is byte-identical  | 10950 rows, 675,094 canonical bytes
+ok   ROUNDTRIP-health: compress -> encrypt -> decrypt -> decompress is byte-identical  | 365 rows, 27,170 canonical bytes
+ok   ROUNDTRIP-inv: compress -> encrypt -> decrypt -> decompress is byte-identical  | 730 rows, 48,974 canonical bytes
+ok   COMPAT-foods: an OLD uncompressed blob still restores through the new reader  | 200 rows
+ok   COMPAT-log: an OLD uncompressed blob still restores through the new reader  | 3650 rows
+ok   COMPAT-weights: an OLD uncompressed blob still restores through the new reader  | 365 rows
+ok   COMPAT-kv: an OLD uncompressed blob still restores through the new reader  | 5 rows
+ok   COMPAT-xp: an OLD uncompressed blob still restores through the new reader  | 10950 rows
+ok   COMPAT-health: an OLD uncompressed blob still restores through the new reader  | 365 rows
+ok   COMPAT-inv: an OLD uncompressed blob still restores through the new reader  | 730 rows
+ok   NO-STREAMS: a device without CompressionStream still writes a readable blob  | 1,943,112 byte blob, uncompressed, readable by the new reader
+ok   SAMPLE: the audit ran a real number of rows  | 39 rows
+
+40 pass, 0 fail
