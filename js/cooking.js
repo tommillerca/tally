@@ -441,6 +441,37 @@ export async function collectDish(slotIndex = null, now = Date.now()) {
   return r;
 }
 
+/* R38-23: A DAY-ONE COOK CAN STRAND THEMSELVES. Bone Broth needs {marrow:2,
+ * salt:1}, which is exactly the starter pouch, but Stoneskin Draught needs
+ * {marrow:1, salt:1} and is ALSO affordable with it: a day-one save has both
+ * buttons enabled, and cooking the wrong one leaves {marrow:1, salt:0}, which
+ * cooks nothing else in the game (measured: 606 coins of foraging to recover a
+ * specific dish, against a day-one wallet of roughly 300). There was no way
+ * back out of a pot once started.
+ *
+ * Same claim shape as collectDish above: read-and-null the slot in ONE
+ * transaction, so two overlapping cancels of one pot cannot both refund it.
+ * Refuses once the pot is already empty (served via collectDish, or already
+ * cancelled), which slotsFrom's !arr[slotIndex] check covers for free. Works
+ * whether the pot is still cooking or sitting ready-to-serve: either way the
+ * dish has not been SERVED (collectDish never ran), so nothing has been paid
+ * out yet and a full ingredient refund is honest. */
+export async function cancelCook(slotIndex) {
+  const pots = await potsOwned();
+  let cancelled = null;
+  await kvUpdate('cooking', (raw) => {
+    const arr = slotsFrom(raw, pots);
+    if (slotIndex == null || !arr[slotIndex]) return undefined;
+    cancelled = arr[slotIndex];
+    arr[slotIndex] = null;
+    return arr;
+  }, null);
+  if (!cancelled) return null;
+  const r = RECIPE_BY_ID[cancelled.recipeId];
+  if (r) await refundIngredients(r);
+  return r;
+}
+
 /* ---------- Pantry (v152): cooked dishes stockpile until you choose to use one ----------
  * Old behavior force-activated a dish the moment you collected it. Now collecting
  * banks it in the Pantry (kv 'pantry' = [{recipeId,name,icon,iconId,cookedAt}]);

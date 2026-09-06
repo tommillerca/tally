@@ -4,6 +4,16 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 484, date: '2026-09-06', title: 'Quests tell the truth', items: [
+    'A finished quest left on the board past midnight showed a CLAIM button that did nothing. It now says the quest closed and clears, and the board re-checks the day before any claim.',
+    'Quests you could not actually finish, fixed: a Quick Add now counts as a new food; friend quests only appear once you have a friend; the boss quests wait until you have tried the Pit; the water quest shows your cups; and a monthly that appears late in the month asks for the days you have left, not the whole month.',
+    'Weeklies say they reset Monday and dailies say so in their last hours, the way monthlies already did. The stray "claim the water quest" hint only shows when that quest is on your board, and connecting Health no longer swaps out a quest you were already working on.',
+  ] },
+  { n: 483, date: '2026-09-06', title: 'The Kitchen explains itself on day one', items: [
+    'The welcome kit now tells you what your three starter ingredients are for: exactly one Bone Broth, and to cook it. That line existed and never fired.',
+    'The Pit names the dish buff you have on, in plain words, right where a fight is offered, and points at the Kitchen when you have something to cook. Cooking was the strongest thing in the game and the Pit never mentioned it.',
+    'A pot that is still cooking can be cancelled and hands the ingredients back. On day one, tapping the wrong recipe used to leave you with nothing you could cook and no way out.',
+  ] },
   { n: 482, date: '2026-09-06', title: 'Day one wakes up, and the crate keeps what it dug up', items: [
     'On the very first day, the app never noticed you coming back or midnight passing until you relaunched it: no sync on return, no day close if it stayed open. The first session now binds the same wake-ups every later session has.',
     'Tapping a crate card in the first second, before it had drawn, threw away the item you had just won. The card now waits until it has landed before a tap can dismiss it.',
