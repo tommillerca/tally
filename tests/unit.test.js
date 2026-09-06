@@ -26,7 +26,7 @@ import {
 import { parseNutritionText } from '../js/labelparse.js';
 import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct, fetchOffProductEx } from '../js/sources.js';
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
-import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard } from '../js/game.js';
+import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard, sparBoardState, SPAR_DAILY_CAP } from '../js/game.js';
 import { STAT_META, STYLES } from '../js/pit.js';
 import * as pitMod from '../js/pit.js';
 const mkFighter = pitMod.makeFighter;
@@ -7331,6 +7331,31 @@ test("R39-31 the Stable's wardrobe heading escapes the species name at both site
   const escaped = (src.match(/<div class="pw-h">\$\{esc\(her\)\}'s wardrobe/g) || []).length;
   const raw = (src.match(/<div class="pw-h">\$\{her\}'s wardrobe/g) || []).length;
   assert.ok(escaped === 2 && raw === 0, `both wardrobe headings must go through esc(): ${escaped} escaped, ${raw} raw`);
+});
+
+test('B3 sparBoardState tells the truth at slots 12 of 12', () => {
+  /* PROVE-RED: before this selector existed, the board line was a hardcoded
+     "+15 coins on a win" with no state check at all, so at 12 of 12 (the cap)
+     it still claimed a coin reward that claimSpar no longer pays. */
+  assert.equal(SPAR_DAILY_CAP, 12, 'cap moved; sparBoardState fixture below assumes 12');
+  const under = sparBoardState(11);
+  assert.equal(under.capped, false, '11 of 12 spent must not read as capped');
+  assert.equal(under.line, '+15 coins on a win');
+  const at = sparBoardState(12);
+  assert.equal(at.capped, true, '12 of 12 spent (the cap) must read as capped');
+  assert.notEqual(at.line, '+15 coins on a win', 'the board must stop promising a coin reward once paid slots are spent');
+  assert.match(at.line, /paid spars are done/i);
+  const over = sparBoardState(13);
+  assert.equal(over.capped, true, 'past the cap must still read as capped');
+});
+
+test('B3 the victory card omits the +0 coin pill', () => {
+  /* PROVE-RED: the reward-row used to render `+${coins}` unconditionally, so a
+     capped spar win (coins:0 from claimSpar) printed a literal "+0" coin pill
+     under a card that also offers XP. */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(/\$\{coins \? `<span class="reward-pill">\$\{ICONS\.coin\(15\)\} \+\$\{coins\}<\/span>` : ''\}/.test(src),
+    'the coin reward pill must be conditional on coins, same as the XP pill beside it');
 });
 
 await runAll();

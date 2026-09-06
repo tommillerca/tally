@@ -209,6 +209,17 @@ export async function claimSpar(fightId, won, date) {
   const r = await claimCapped('spar', 'spar', 0, won ? 'Sparring win' : 'Sparring loss', SPAR_DAILY_CAP, date, fightId);
   return { claimed: r.claimed, coins: r.claimed ? (won ? SPAR_COINS.win : SPAR_COINS.loss) : 0 };
 }
+/* B3: the board used to say "+15 coins on a win" even past the cap above, the
+   same dishonesty the Pit-charge gate was already fixed for ("free fights
+   refill at midnight"). Pure copy/state selector, kept separate from
+   renderPit's DOM so a guard can assert the copy/state at slots 12 of 12
+   without touching a screen. Counting, not payout: this decides what the
+   sparring row SAYS, never what claimSpar pays. */
+export const SPAR_BOARD_LINE = { open: '+15 coins on a win', capped: "Today's paid spars are done · XP still counts" };
+export function sparBoardState(sparUsedToday, cap = SPAR_DAILY_CAP) {
+  const capped = sparUsedToday >= cap;
+  return { capped, line: capped ? SPAR_BOARD_LINE.capped : SPAR_BOARD_LINE.open };
+}
 
 export async function award(key, type, xp, label, date) {
   return (await awardOnce(key, type, xp, label, date)).xp;

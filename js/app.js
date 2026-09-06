@@ -7,7 +7,7 @@ import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
-  awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar,
+  awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar, sparBoardState,
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
@@ -23066,6 +23066,9 @@ async function renderPit(wrap) {
   const fighter = await buildFighter();
   const xpRows = await db.all('xp');
   const beaten = pitBeatKeys(xpRows);
+  // B3: today's paid sparring slots, for the board line only (see sparBoardState).
+  const sparUsed = xpRows.filter(r => r.type === 'spar' && r.date === date).length;
+  const sparBoard = sparBoardState(sparUsed);
   const rungsBeaten = LADDER.filter(r => beaten.has(`pitrung-${r.rung}`)).length;
   const champOpen = rungsBeaten >= LADDER.length;
   const champBeaten = beaten.has('pitchamp');
@@ -23105,7 +23108,7 @@ async function renderPit(wrap) {
     <div class="t3-sect"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:11px">Always free</span></div>
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
       <div class="t3-row"><span class="t3-med">${ICONS.pit(24)}</span>
-        <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · +15 coins on a win</small></div>
+        <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · ${sparBoard.line}</small></div>
         <button class="btn ghost" data-spar="${m}" data-name="${name}" aria-label="Fight ${esc(name)}">FIGHT</button>
       </div>`).join('')}`;
   const ladderSect = `
@@ -25173,7 +25176,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       ? `<p class="note" style="margin:8px 0 16px">${won ? 'Nice win!' : 'Good scrap.'} You already claimed today's reward against ${esc(foeCfg.name)}. Battle a different friend for more coins + XP.</p>`
       : won
       ? `<div class="reward-row">
-           <span class="reward-pill">${ICONS.coin(15)} +${coins}</span>
+           ${coins ? `<span class="reward-pill">${ICONS.coin(15)} +${coins}</span>` : ''}
            ${xp ? `<span class="reward-pill">${ICONS.star(14)} +${xp} XP</span>` : ''}
            ${extras.map(e => `<span class="reward-pill">${esc(e)}</span>`).join('')}
          </div>
