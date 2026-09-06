@@ -19,6 +19,44 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## backup and recovery truth (2026-09-06)
+
+Not stamped to a release: hotfix/backup-recovery, off v482. HANDOFFr3820260906.md
+R38-2, R38-10, R38-11, R38-12, R38-13, re-measured on this tree before fixing.
+R38-10's `hasCloudBackup()` half was already fixed by an earlier round (it asks
+the server, not the opt-in flag); the contradiction between the two screens was
+not, and R38-2, R38-11, R38-12 and R38-13 were all still live on v482.
+
+1. PROOF: unit.test.js, backup-lifecycle-audit.mjs | REACH: Closing the app, or
+   switching away from it, now pushes your encrypted cloud backup instead of
+   waiting for the next boot or resume. A session that logs a meal or opens a
+   crate reaches the cloud within seconds of being backgrounded, instead of
+   sitting unsynced until a 10-minute throttle happens to have elapsed.
+
+2. PROOF: unit.test.js, erase-vault-line-audit.mjs | REACH: The Erase sheet and
+   Settings no longer say your progress "can be restored later" one line above
+   a warning that no recovery code is set. A cloud backup with no recovery code
+   is not restorable on a new device, and both screens now say exactly that
+   instead of contradicting themselves.
+
+3. PROOF: unit.test.js | REACH: Restoring by an old friend code plus your
+   phrase, on an account that has since set a recovery ID, no longer says "No
+   account found for that friend code." It names the actual fix: use your
+   recovery ID instead.
+
+4. PROOF: unit.test.js, api.test.mjs, recovery.test.mjs | REACH: A recovery
+   attempt against one account no longer locks out every other phone on the
+   same wifi network. The lockout is now keyed per account rather than per IP,
+   and a locked-out attempt shows the real wait instead of a flat "a few
+   minutes."
+
+5. PROOF: coins-merge-tie-audit.mjs, restore-latch-audit.mjs,
+   backup-key-audit.mjs, backup-conflict-audit.mjs | REACH: Two devices that
+   each moved the coin ledger the same number of times no longer have the
+   lower of the two balances silently win on the next sync. A spent
+   consumable, a used Battle Charm, or a pet cosmetic removed on salvage can no
+   longer come back through a stale cloud merge either.
+
 ## kitchen on day one (2026-09-06)
 
 Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
@@ -28,6 +66,17 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 2. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit sheet, right where a fight is offered, now names an active dish buff and its plain-words effect, or (no buff active but ingredients or a cooked dish owned) points at the Kitchen; says nothing when there is truly nothing to cook. Cooking is measured at +37.7 to +59.9pp win rate in the real fight engine and renderPit never mentioned it before. Red on both the buff line and the nudge line with the Pit's kitchen line removed; the quiet state stays correctly green either way, which is the point.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
+
+## v485
+1. A hotfix off v484, QA round 38's backup and recovery items (R38-2, 10, 11, 12, 13, 14). Its rows are the dated "backup and recovery truth" section further down, folded here. Server change included: no D1 migration; Tom deploys the Worker.
+
+2. PROOF: unit.test.js, backup-lifecycle-audit.mjs | REACH: visibilitychange to hidden and pagehide push the encrypted backup, and a save whose export grew bypasses the 600 s throttle past a 20 s floor (red: 0 PUT /backup after the hidden transition; the throttle row red on the bare elapsed check).
+
+3. PROOF: erase-vault-line-audit.mjs, unit.test.js | REACH: the Erase sheet and Settings read one restoreTruth (none, no recovery code, restorable, unreachable) so no sentence contradicts its neighbour, and a deleted account flips a second device to signed-out copy on the 401.
+
+4. PROOF: unit.test.js | REACH: the recovery lockout is keyed per account with a looser per-IP ceiling, the client quotes the server's retryAfterMs, and the friend-code 404 copy names the real fix (the route is deliberately closed once a recovery id exists) instead of claiming no account exists. Server rows live in server/recovery.test.mjs and server/test/api.test.mjs, run against a local wrangler dev: 16/16 and 86/86.
+
+5. PROOF: unit.test.js | REACH: coinsRev bumps by magnitude so an equal revision means an equal sum and importAll keeps the higher balance on a true tie (red: got 10, expected 25); consumeConsumable, activateBattleCharm, refundStreakFreezes and the pet-extinction removals write the same taken receipt crates already had, so the additive merge cannot revive a spent item (red: the item reappears in the REVIVE row).
 
 ## v484
 1. A hotfix off v483, QA round 38's quest items (R38-5, 7, 8, 24). Its rows are the dated "quests tell the truth" section further down, folded here. No quest reward or coin value changed.

@@ -6908,6 +6908,132 @@ test('R37-12 immRateCheck: a minimal rate limit caps immediate pushes per rollin
   assert.equal(rolled.ok, true, 'once the window elapses, a new push must be allowed again');
 });
 
+/* R38-2 (2026-09-06, measured on v477 against a v477 Worker, main is v482):
+ * a whole session never reached the cloud. BACKUP_THROTTLE_MS is 600s and
+ * autoSync only ever ran the backup push at boot/resume, so nothing pushed on
+ * background or on close: a logged meal, two opened crates, all gone on a
+ * restore because the throttle was still counting down when the app closed.
+ * FIX: js/social.js dueBackupPush() -- due by the ordinary 600s throttle, OR
+ * (past a 20s floor) because the exported save has grown since the last
+ * push. Both autoSync and the new onAppHide(visibilitychange/pagehide) wiring
+ * read this same decision.
+ * PROVE-RED: reverting dueBackupPush to the old bare `elapsed > BACKUP_THROTTLE_MS`
+ * (no growth bypass, no floor) fails this test with:
+ *   AssertionError: a save that grew past the floor must bypass the 600s throttle
+ * because a grown save inside the throttle window would return false. */
+test('R38-2 dueBackupPush: grown vs unchanged, inside vs past the floor', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const s = await import('../js/social.js');
+  const BACKUP_THROTTLE_MS = 10 * 60 * 1000; // mirrors js/social.js's own constant
+  dbm.useDbName('unit-r38-2-duebackup');
+  await dbm.kvSet('social', { playerId: 'r38-2', handle: 'Audit Bones', friendCode: 'BONE-TEST-TEST', name: null, onlineAt: Date.now() });
+
+  const savedNow = Date.now;
+  const origFetch = globalThis.fetch;
+  let t = 1_000_000;
+  Date.now = () => t;
+  // stub PUT /backup as an always-succeeding server; pushBackup itself
+  // (not this test) decides what backupLastBytes gets set to
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/backup')) return { ok: true, status: 200, json: async () => ({ ok: true, updatedAt: t }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  try {
+    // never pushed (backupAt 0): elapsed is huge, due unconditionally
+    assert.equal(await s.dueBackupPush(), true, 'no prior push at all must be due');
+
+    assert.equal(await s.pushBackup('test'), true, 'the stubbed push must report success (setup, not the thing under test)');
+
+    // just pushed, nothing changed, still inside the floor: not due
+    t += 5_000;
+    assert.equal(await s.dueBackupPush(), false, 'unchanged save inside the 20s floor must not be due');
+
+    // past the floor, but the export is byte-identical: still not due
+    t += 20_000; // t is now 25s past the push
+    assert.equal(await s.dueBackupPush(), false, 'unchanged save past the floor must not be due (nothing to push)');
+
+    // the save grows (a logged meal): past the floor, this must bypass the 600s throttle
+    await dbm.db.put('log', { id: 'r38-2-meal-1', at: t, kcal: 400 });
+    assert.equal(await s.dueBackupPush(), true, 'a save that grew past the floor must bypass the 600s throttle');
+
+    // push again (as onAppHide would), then confirm the ordinary throttle still fires on its own with nothing further grown
+    assert.equal(await s.pushBackup('test'), true, 'the second stubbed push must also report success');
+    t += BACKUP_THROTTLE_MS + 1;
+    assert.equal(await s.dueBackupPush(), true, 'elapsed past the ordinary throttle must be due even with nothing grown');
+  } finally {
+    Date.now = savedNow;
+    globalThis.fetch = origFetch;
+  }
+});
+
+/* R38-11 (2026-09-06, measured on v477; main is v482, re-verified on this tree):
+ * a correct friend code plus a correct phrase returned 404, and the client
+ * told the player "No account found for that friend code" -- false for the
+ * common case. server/src/index.js's `/recovery/<code>` route was deliberately
+ * narrowed on 2026-08-16: once an account has a recovery_id (which the ONLY
+ * in-app way to set a phrase, openRecoverySheet in js/app.js, always attaches),
+ * the friend-code lookup answers the SAME 404 as "no recovery set", on purpose
+ * (a distinct status would make the route an oracle for which friend codes
+ * belong to accounts worth attacking elsewhere). The route is intentionally
+ * closed, not broken, so the fix is honest copy, not reopening it.
+ * PROVE-RED: reverting js/social.js restoreWithPhrase's friend-code reason to
+ * the old bare `No account found for that friend code.` fails this test with:
+ *   AssertionError: the friend-code 404 copy must not claim no account exists
+ */
+test('R38-11 restoreWithPhrase: a 404 on the (intentionally narrowed) friend-code route must not claim "no account"', async () => {
+  await import('./mem-idb.mjs');
+  const s = await import('../js/social.js');
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/recovery/id/')) return { ok: false, status: 404, json: async () => ({ error: 'no account' }) };
+    if (String(url).includes('/recovery/')) return { ok: false, status: 404, json: async () => ({ error: 'no recovery set' }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  try {
+    const byCode = await s.restoreWithPhrase('BONE-AAAA-BBBB', 'a phrase long enough to pass validation');
+    assert.equal(byCode.ok, false, 'a 404 must not report success');
+    assert.doesNotMatch(byCode.reason, /no account found/i, 'the friend-code 404 copy must not claim no account exists');
+    assert.match(byCode.reason, /recovery id/i, 'the friend-code 404 copy must point the player at a recovery ID instead');
+
+    // the recovery-ID route has no such narrowing (server/src/index.js has no
+    // legacy-population check there): its 404 really does mean no account, so
+    // that copy is unchanged.
+    const byId = await s.restoreWithPhrase('tom-bones', 'a phrase long enough to pass validation');
+    assert.equal(byId.ok, false, 'a 404 must not report success');
+    assert.match(byId.reason, /no account found/i, 'the recovery-ID 404 copy is genuinely "no account" and must say so');
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+});
+
+/* R38-12 (2026-09-06), client half: a 429 used to say "Wait a few minutes" no
+ * matter what the server actually answered, discarding the body's
+ * retryAfterMs (server/src/index.js's rateLimit sends it on every 429; the
+ * server-side prove-red for the account-vs-IP keying lives in
+ * server/test/api.test.mjs and server/recovery.test.mjs, which need a local
+ * wrangler dev and are not re-run here).
+ * PROVE-RED: reverting restoreWithPhrase's 429 branch to the old bare
+ * `return { ok: false, reason: 'Too many attempts. Wait a few minutes.' };`
+ * fails this test with:
+ *   AssertionError: the reason must quote the server's actual wait, not a
+ *   generic "a few minutes"
+ */
+test('R38-12 restoreWithPhrase: a 429 shows the real wait from retryAfterMs, not a generic guess', async () => {
+  await import('./mem-idb.mjs');
+  const s = await import('../js/social.js');
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 429, json: async () => ({ error: 'too many requests, try again later', retryAfterMs: 137_000 }) });
+  try {
+    const r = await s.restoreWithPhrase('BONE-AAAA-BBBB', 'a phrase long enough to pass validation');
+    assert.equal(r.ok, false);
+    assert.doesNotMatch(r.reason, /a few minutes/i, 'the reason must quote the server\'s actual wait, not a generic "a few minutes"');
+    assert.match(r.reason, /3m/, `137s should round up to 3m, got ${JSON.stringify(r.reason)}`);
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+});
+
 // ---- R38 quest lane: claims tell the truth, gates match reality ----
 
 test('R38-5 quest claim handler: a closed period toasts the truth and repaints, never swallows null', () => {

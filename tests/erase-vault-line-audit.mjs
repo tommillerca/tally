@@ -12,9 +12,14 @@
  *
  * WHY THE COPY MATTERS. The erase sheet is a destructive confirmation. It used
  * to hedge, "If cloud backup is on, the vault copy survives", leaving the player
- * to work out whether that if was about them. The three states below are the
- * three sentences it can now say, and the one that must never appear is a
- * promise of a surviving copy on a device that could not reach the server.
+ * to work out whether that if was about them; then (R38-10, 2026-09-06) it hedged
+ * a different way, promising "can be restored later" from a blob existing alone,
+ * one sentence above a separate warning that no recovery code was set -- which
+ * contradict each other, because a blob with no recovery code is NOT restorable
+ * on a new device. social.restoreTruth combines both facts into one truth, and
+ * the four states below are the four sentences the sheet can now say: never say
+ * "restored later" without a blob AND a recovery code both being true, and never
+ * promise a surviving copy on a device that could not reach the server either.
  *
  * THE COPY IS READ OFF THE RENDERED SHEET, never off js/app.js. A source grep
  * would go green on a string that no state ever reaches.
@@ -149,16 +154,32 @@ console.log(`      NONE  ${JSON.stringify(lineNone)}`);
 ok('NO BACKUP  the sheet says plainly that there is none, and never that a copy survives',
   /no cloud backup/i.test(lineNone) && !PROMISES_A_COPY.test(lineNone), lineNone || '(empty: #erVault never rendered)');
 
-/* ---------------- 2. a blob really on the server ---------------- */
+/* ---------------- 2. a blob on the server, but no recovery code yet ---------------- */
+/* R38-10 (2026-09-06): a blob existing is NOT restorable on its own -- without a
+   recovery code there is no way to prove the account on a NEW device, which is
+   exactly the contradiction the erase sheet used to ship ("a cloud backup does
+   exist... can be restored later" beside "no recovery code yet, this account
+   is gone"). This state must say so plainly and must NOT promise a copy. */
 const pushed = await soc('pushBackup', 'audit');
-ok('SETUP  a real encrypted blob is now on the Worker (if this fails the row below is checking nothing)', pushed === true, `pushBackup -> ${pushed}`);
-const lineHas = await vaultLine();
-console.log(`      HAS   ${JSON.stringify(lineHas)}`);
-ok('HAS BACKUP  the same sheet now states the copy exists, with no "if" left in it',
-  PROMISES_A_COPY.test(lineHas) && !/\bIf cloud backup is on\b/i.test(lineHas) && !/no cloud backup/i.test(lineHas),
-  lineHas || '(empty: #erVault never rendered)');
-ok('DISTINCT  the two states are different sentences, not one sentence sampled twice',
-  !!lineNone && !!lineHas && lineNone !== lineHas, `${JSON.stringify(lineNone)} vs ${JSON.stringify(lineHas)}`);
+ok('SETUP  a real encrypted blob is now on the Worker (if this rows below are checking nothing)', pushed === true, `pushBackup -> ${pushed}`);
+const lineHasNoRecovery = await vaultLine();
+console.log(`      HAS/NO-RECOVERY  ${JSON.stringify(lineHasNoRecovery)}`);
+ok('HAS BACKUP, NO RECOVERY  a blob with no recovery code must say it is NOT restorable, never "can be restored later"',
+  !PROMISES_A_COPY.test(lineHasNoRecovery) && /no recovery code set/i.test(lineHasNoRecovery) && !/no cloud backup/i.test(lineHasNoRecovery),
+  lineHasNoRecovery || '(empty: #erVault never rendered)');
+
+/* ---------------- 2b. a blob on the server AND a recovery code set ---------------- */
+const recSet = await soc('setRecoveryPhrase', 'correct horse battery staple', 'r38-10-audit');
+ok('SETUP  a recovery phrase + id is now set (if this fails the row below is checking nothing)', !!(recSet && recSet.ok), JSON.stringify(recSet));
+const lineHasWithRecovery = await vaultLine();
+console.log(`      HAS/RECOVERY  ${JSON.stringify(lineHasWithRecovery)}`);
+ok('HAS BACKUP + RECOVERY  only NOW does the sheet promise the copy survives, with no "if" left in it',
+  PROMISES_A_COPY.test(lineHasWithRecovery) && !/\bIf cloud backup is on\b/i.test(lineHasWithRecovery) && !/no cloud backup/i.test(lineHasWithRecovery),
+  lineHasWithRecovery || '(empty: #erVault never rendered)');
+ok('DISTINCT  the three states are three different sentences, not one sentence sampled three times',
+  !!lineNone && !!lineHasNoRecovery && !!lineHasWithRecovery
+    && lineNone !== lineHasNoRecovery && lineHasNoRecovery !== lineHasWithRecovery && lineNone !== lineHasWithRecovery,
+  `${JSON.stringify(lineNone)} vs ${JSON.stringify(lineHasNoRecovery)} vs ${JSON.stringify(lineHasWithRecovery)}`);
 
 /* ---------------- 3. the server's clamp signal is kept ---------------- */
 /* A level no honest client can hold. sanitizeSnapshot pulls it down to the

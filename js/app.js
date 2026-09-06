@@ -14171,6 +14171,17 @@ async function renderSettings(el) {
   const backupOn = apiConfigured ? await social.cloudBackupOn() : false;
   const backupAt = apiConfigured ? await kvGet('backupAt', 0) : 0;
   const backupFail = apiConfigured ? await kvGet('backupFail', null) : null;
+  /* R38-10/R38-14 (2026-09-06): this card used to say "reinstall the app or
+     get a new phone and your progress comes back on its own" unconditionally,
+     one line above a Recovery code row that can read "NOT SET. Delete the
+     app and this account is gone for good." Same combined truth the Erase
+     sheet now uses (social.restoreTruth), so the two rows agree. */
+  const restore = me ? social.restoreTruth(await social.hasCloudBackup(), recoverySet && !!myRid) : null;
+  const restoreLine = !restore ? ''
+    : restore.restorable ? 'Restore it on any device with your recovery code.'
+      : restore.why === 'no-backup' ? 'Nothing has backed up yet.'
+        : restore.why === 'no-recovery' ? 'Reinstalling THIS device brings it back automatically; a new device needs a recovery code, which is not set.'
+          : 'The cloud could not be reached to confirm this.';
   const backupAge = backupAt ? (Date.now() - backupAt < 36e5 ? 'just now' : Math.round((Date.now() - backupAt) / 36e5) + 'h ago') : 'never';
   /* A FAILED PUSH USED TO READ EXACTLY LIKE A HEALTHY ONE. pushBackup returned a
      bare false, so `backupAt` just stopped moving and this row went on quoting an
@@ -14220,7 +14231,7 @@ async function renderSettings(el) {
       <div class="lab"><b>Cloud backup</b><span>${backupLabel}</span></div>
       <div class="seg" style="width:130px"><button id="cbOn" class="${backupOn ? 'on' : ''}">On</button><button id="cbOff" class="${backupOn ? '' : 'on'}">Off</button></div>
     </div>
-    <p class="note" style="margin:8px 0 0">Your whole save backs up automatically, end-to-end <b>encrypted</b> so only your phone can read it (the server can't). Reinstall the app or get a new phone and your progress comes back on its own. Share your friend code so friends can add you.</p>`
+    <p class="note" style="margin:8px 0 0">Your whole save backs up automatically, end-to-end <b>encrypted</b> so only your phone can read it (the server can't). ${restoreLine} Share your friend code so friends can add you.</p>`
     : `
     <p class="note" style="margin:0 0 10px">Go online to back up your progress (end-to-end encrypted, only your phone can read it) and join the Crew: friend codes, and soon trading and PvP.</p>
     <button class="btn" id="goOnlineBtn">Go Online</button>
@@ -14567,36 +14578,30 @@ async function renderSettings(el) {
         <div class="t1-tools"><button class="sheet-close t1-icon-btn" aria-label="Cancel">${ICONS.close(17)}</button></div>
       </div>
       <div class="sheet-body">
-        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. <span id="erVault">Checking whether a cloud copy exists...</span><span id="erRecov"></span></p>
+        <p class="note" style="margin-bottom:12px">Your log, foods, weights, XP, gear and Bonehead on <b>this device</b> will be gone. <span id="erVault">Checking whether a cloud copy exists...</span></p>
         <div class="t1-field"><label>Type ERASE to confirm</label><input id="erIn" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ERASE"></div>
       </div>
       <div class="t1-foot"><button class="btn danger-ish" id="erGo" disabled>Erase it all</button></div>`, { cls: 't1', name: 'Erase' });
-    /* ONE LOOKUP INSTEAD OF AN "IF". This line used to read "If cloud backup is
-       on, the vault copy survives", which handed the player the job of working
-       out whether that if applied to them, on the one dialog whose entire point
-       is that it cannot be undone. The app can just ask: social.hasCloudBackup()
-       answers for THIS account, and its three answers are three sentences.
+    /* ONE LOOKUP, ONE TRUTH (R38-10, 2026-09-06). This used to fill #erVault
+       from hasCloudBackup() alone ("a cloud backup does exist... can be
+       restored later") and a SEPARATE span from recoveryWarning() alone ("no
+       recovery code yet, this account is gone"), independently true and
+       directly contradictory read together: a backup existing on the server
+       is not restorable without a recovery code. social.restoreTruth combines
+       both into the one sentence the player actually needs.
        UNKNOWN READS AS NO ON PURPOSE. An unreachable server must never be
        reported as a copy that survives, because that is the one wrong answer
        that costs somebody their save. Off the click path so the sheet still
        opens instantly, and the typed-ERASE gate is slower than the probe. */
-    social.hasCloudBackup().then(has => {
+    Promise.all([social.hasCloudBackup(), social.hasRecoveryPhrase(), social.myRecoveryId()]).then(([has, phrase, id]) => {
       const line = $('#erVault', wrap);
       if (!line) return;   // sheet already dismissed
-      line.innerHTML = has === true
-        ? 'A cloud backup <b>does</b> exist for this account: that copy survives and can be restored later.'
-        : has === false
-          ? 'There is <b>no</b> cloud backup for this account, so this is the only copy.'
-          : 'The cloud could not be reached, so no vault copy can be confirmed. Treat this as the only copy.';
-    });
-    /* QA round 25 M9: on the web there is no keychain, so a wipe with no
-       recovery code set makes the cloud ciphertext unreadable forever. The app
-       already owns the sentence (the weekly nudge); it now appears HERE, before
-       the irreversible tap, and only when no code exists. Same async fill
-       pattern as #erVault, same predicate as the nudge (social.recoveryWarning). */
-    Promise.all([social.hasRecoveryPhrase(), social.myRecoveryId()]).then(([phrase, id]) => {
-      const warn = social.recoveryWarning(phrase, id), el = $('#erRecov', wrap);
-      if (warn && el) el.innerHTML = ` <b>${warn}</b>`;
+      const { restorable, why } = social.restoreTruth(has, phrase && id);
+      line.innerHTML = restorable
+        ? 'A cloud backup <b>does</b> exist for this account and can be restored later with your recovery code.'
+        : why === 'no-backup' ? 'There is <b>no</b> cloud backup for this account, so this is the only copy.'
+          : why === 'no-recovery' ? 'A cloud backup exists, but with <b>no recovery code set</b> there is no way to prove this account is yours on a new device: this is the only copy that will ever come back.'
+            : 'The cloud could not be reached, so no vault copy can be confirmed. Treat this as the only copy.';
     }).catch(() => {});
     const input = $('#erIn', wrap), go = $('#erGo', wrap);
     input.addEventListener('input', () => { go.disabled = input.value.trim().toUpperCase() !== 'ERASE'; });
@@ -22640,7 +22645,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v484'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v485'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

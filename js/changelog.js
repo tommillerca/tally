@@ -4,6 +4,12 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 485, date: '2026-09-06', title: 'Your save reaches the cloud before you leave', items: [
+    'Backing out of the app or closing it now pushes your backup, and a save that has grown since the last push does not wait ten minutes. Before this, a whole session of meals and crates could sit unsent and a new phone would restore the older save with a cheerful Welcome back.',
+    'The Erase sheet and Settings tell one truth about whether your progress can come back: what exists, what is missing, and what to set. A deleted account no longer shows a second phone as online with a fresh backup.',
+    'Recovery attempts are counted per account, not per wifi network, so a housemate guessing their phrase cannot lock you out, and the wait shown is the real one. A friend code alone no longer claims no account exists; it tells you to use your recovery ID.',
+    'Two phones on one account: a coin balance can no longer be silently replaced by the other phone\'s older number, and a potion you drank on one phone stays drunk after the two saves meet.',
+  ] },
   { n: 484, date: '2026-09-06', title: 'Quests tell the truth', items: [
     'A finished quest left on the board past midnight showed a CLAIM button that did nothing. It now says the quest closed and clears, and the board re-checks the day before any claim.',
     'Quests you could not actually finish, fixed: a Quick Add now counts as a new food; friend quests only appear once you have a friend; the boss quests wait until you have tried the Pit; the water quest shows your cups; and a monthly that appears late in the month asks for the days you have left, not the whole month.',

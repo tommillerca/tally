@@ -890,7 +890,7 @@ function rng() {
    the arithmetic is exact by construction rather than by luck. The clamp is
    unchanged, it just happens inside the transaction now. */
 export async function coins() { return (await kvGet('coins', 0)) || 0; }
-/* 'coinsRev' is a plain monotonic counter, bumped alongside every real coin
+/* 'coinsRev' is a monotonic counter, bumped alongside every real coin
    change and carried in the same backup blob as 'coins' (js/db.js exportAll
    dumps every kv row). js/db.js importAll's cloud merge (replace:false) reads
    it to tell a blob OLDER than the local ledger from one that is not, the
@@ -899,8 +899,15 @@ export async function coins() { return (await kvGet('coins', 0)) || 0; }
    transaction: a crash between them only leaves coinsRev a step behind coins,
    which weakens the guard for one write, it does not reintroduce the refund
    bug the guard exists to stop. ponytail: a real fix bumps both in one kv
-   transaction if this ever needs to be exact under a crash; not worth it here. */
-export async function coinsAdd(n) { const v = await kvBump('coins', n); await kvBump('coinsRev', 1); return v; }
+   transaction if this ever needs to be exact under a crash; not worth it here.
+   R38-13 (2026-09-06): bumped by the MAGNITUDE of the change, not a flat 1.
+   Two devices moving the ledger the same NUMBER of times used to tie under a
+   flat counter regardless of how much money actually moved, and importAll's
+   tie-break silently let the payload's balance win either way -- measured,
+   a real 25 replaced by a real 10. A magnitude sum only ties when the two
+   devices' changes happened to add up to the exact same total, which an
+   independently divergent history essentially never does by accident. */
+export async function coinsAdd(n) { const v = await kvBump('coins', n); await kvBump('coinsRev', Math.max(1, Math.abs(n))); return v; }
 
 /* THE ATOMIC SPEND, and it is the only honest way to take money in this file.
    Every buy used to read the balance, compare it to the price, and THEN call
@@ -1068,7 +1075,7 @@ export async function salvagePet(petId) {
     // last copy gone: drop ownership, unequip, clear the legacy anchor
     const inv = await db.all('inv');
     const row = inv.find(r => r.kind === 'cos' && r.itemId === petId);
-    if (row) await db.del('inv', row.id);
+    if (row) { await db.del('inv', row.id); await markInvTaken(row.id); }   // R38-13
     const eq = await equipped({ raw: true });
     if (eq.C === petId) await equip('C', null);
     const pets = (await kvGet('pets', {})) || {}; delete pets[petId]; await kvSet('pets', pets);
@@ -1401,7 +1408,7 @@ export async function breedPets(keepIid, feedIid) {
   if (speciesCount(list, fed0.sp) === 0) {
     const inv = await db.all('inv');
     const row = inv.find(r => r.kind === 'cos' && r.itemId === fed0.sp);
-    if (row) await db.del('inv', row.id);
+    if (row) { await db.del('inv', row.id); await markInvTaken(row.id); }   // R38-13
     const eqp = await equipped({ raw: true });
     if (eqp.C === fed0.sp && keep.sp !== fed0.sp) await equip('C', keep.sp);
     const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[fed0.sp]; await kvSet('pets', petsRec);
@@ -1695,7 +1702,7 @@ export async function salvageInstance(iid) {
   if (speciesCount(next, inst.sp) === 0) {
     const inv = await db.all('inv');
     const row = inv.find(r => r.kind === 'cos' && r.itemId === inst.sp);
-    if (row) await db.del('inv', row.id);
+    if (row) { await db.del('inv', row.id); await markInvTaken(row.id); }   // R38-13
     const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[inst.sp]; await kvSet('pets', petsRec);
   }
   const dust = petDustValue(item) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8;
@@ -1937,6 +1944,7 @@ export async function consumeConsumable(type) {
   const row = (await inventory()).filter(r => r.kind === type).sort((a, b) => a.ts - b.ts)[0];
   if (!row) return false;
   await db.del('inv', row.id);
+  await markInvTaken(row.id);   // R38-13
   return true;
 }
 
@@ -2030,6 +2038,24 @@ export function rollCosmetic(owned, floor, slotBias) {
   const pool2 = BH_ITEMS.filter(i => crateEligible(i) && i.rarity === RARITY_ORDER[rolled]);
   const item = pool2[Math.floor(rng() * pool2.length)];
   return { item, dupe: true };
+}
+
+/* R38-13 (2026-09-06): the SAME receipt idiom openCrate's 'crateTaken' uses
+   below, for every OTHER 'inv' row this file deletes outright rather than
+   through db.take (a spent consumable, a used Battle Charm, a pet's last
+   cosmetic copy on salvage/extinction). js/db.js importAll's merge (!replace)
+   `os.put`s every 'inv' row a blob carries, unconditionally: right for a row
+   this device has never seen, wrong for one it already removed, because a
+   blob older than the local save still carries it. Measured: a spent Vigor
+   Draught came back 1 -> 0 -> 1 through a two-device merge. Own kv key
+   ('invTaken', not 'crateTaken') so this never has to reason about the crate
+   path's own list; importAll checks both. */
+async function markInvTaken(id) {
+  await kvUpdate('invTaken', cur => {
+    const arr = Array.isArray(cur) ? cur : [];
+    if (arr.includes(id)) return undefined;
+    return [...arr, id].slice(-500);
+  }, []);
 }
 
 /* SPEND THE CRATE BEFORE YOU ROLL IT, AND SPEND IT ATOMICALLY.
@@ -2697,6 +2723,7 @@ export async function activateBattleCharm() {
   const row = inv.find(r => r.kind === 'xp2');
   if (!row) return { ok: false, reason: 'none' };
   await db.del('inv', row.id);
+  await markInvTaken(row.id);   // R38-13
   buffs.xp2 = 5;
   await kvSet('buffs', buffs);
   return { ok: true, charges: 5 };
@@ -2754,6 +2781,6 @@ export async function refundStreakFreezes() {
   if (!rows.length) return null;
   const coins = rows.length * 100;
   await coinsAdd(coins);
-  for (const r of rows) await db.del('inv', r.id);
+  for (const r of rows) { await db.del('inv', r.id); await markInvTaken(r.id); }   // R38-13
   return { count: rows.length, coins };
 }
