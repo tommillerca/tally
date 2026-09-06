@@ -30,8 +30,9 @@ import { dateKey, streakFrom } from './nutrition.js';
 import { streakDateSet } from './game.js';
 
 // New users have notifications ON by default (Tom's call). enabled=true only
-// takes effect once the OS grants permission (requested once at boot); until
-// then nothing fires. Existing users who deliberately turned it off saved
+// takes effect once the OS grants permission, asked from an explicit Settings
+// control (never at boot, see notifGateOk below); until then nothing fires,
+// nothing schedules. Existing users who deliberately turned it off saved
 // {enabled:false} and keep that.
 // `siege` is the ONE notification type Dark Spires adds. The project has a hard
 // reduced-frequency rule, so it fires at most twice per siege (once on discovery,
@@ -42,7 +43,60 @@ const DEFAULTS = { enabled: true, reminder: true, streak: true, friends: true, s
 export async function notifPrefs() { return { ...DEFAULTS, ...((await kvGet('notifPrefs', {})) || {}) }; }
 export async function setNotifPrefs(p) { await kvSet('notifPrefs', p); }
 
-const ID = { reminder: 1, streak: 2, siege: 3, test: 9, rareLo: 1000, rareHi: 1899 };
+// immLo..immHi is a small pool for every IMMEDIATE push (friend request, gift,
+// cheer, siege discovery, HealthKit stall, the Settings test button). They
+// used to all schedule as one shared id (9), so two firing within the same
+// ~500ms window (a real gift-then-cheer sequence) had the second overwrite
+// the first before it ever displayed (R37-12). Round-robin through the pool
+// instead so back-to-back pushes get distinct ids.
+const ID = { reminder: 1, streak: 2, siege: 3, immLo: 9, immHi: 14, rareLo: 1000, rareHi: 1899 };
+const IMM_IDS = []; for (let i = ID.immLo; i <= ID.immHi; i++) IMM_IDS.push(i);
+let immCursor = 0;
+function nextImmId() { const id = IMM_IDS[immCursor % IMM_IDS.length]; immCursor++; return id; }
+
+// PURE, exported for the node unit test: given the recent send timestamps and
+// "now", decide whether one more immediate push is allowed, and return the
+// pruned list to keep as state. ponytail: in-memory, per-session, cap = pool
+// size over a 60s window; raise IMM_MAX or the window if a legitimate burst
+// (many friends gifting at once) ever needs more headroom than that.
+const IMM_WINDOW_MS = 60000;
+const IMM_MAX = IMM_IDS.length;
+export function immRateCheck(recentTimestamps, now) {
+  const kept = recentTimestamps.filter(t => now - t < IMM_WINDOW_MS);
+  const ok = kept.length < IMM_MAX;
+  if (ok) kept.push(now);
+  return { ok, kept };
+}
+let immSentAt = [];
+function immRateOk() { const { ok, kept } = immRateCheck(immSentAt, Date.now()); immSentAt = kept; return ok; }
+
+// PURE, exported for the node unit test: the permission x prefs decision every
+// scheduling path below makes before it ever touches the OS. `extraKey` is one
+// additional preference to gate on ('siege' for the siege reminder); omit it
+// for "master switch + permission only" (the recurring reminder/streak decide
+// their OWN inclusion, per-key, when building the notis list in
+// syncNotifications). Reused by notifyNow, syncNotifications and
+// scheduleSiegeReminder so the three cannot drift from each other or from this
+// test: DEFAULTS.enabled defaults true (R37-4), so without the permState check
+// here a fresh install schedules the 19:00 reminder before ever asking.
+export function notifGateOk(prefs, permState, extraKey = null) {
+  if (!prefs || !prefs.enabled) return false;
+  if (extraKey && prefs[extraKey] === false) return false;
+  return permState === 'granted';
+}
+
+// PURE, exported for the node unit test: no push lands 22:00-08:00 local; a
+// time in that window moves to the next 08:00 (R37-10). Takes/returns a plain
+// timestamp so it has no Capacitor/DOM dependency.
+export function clampQuietHours(ts) {
+  const d = new Date(ts);
+  const h = d.getHours();
+  if (h >= 22 || h < 8) {
+    if (h >= 22) d.setDate(d.getDate() + 1);
+    d.setHours(8, 0, 0, 0);
+  }
+  return d.getTime();
+}
 
 function ln() { try { return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) || null; } catch { return null; } }
 
@@ -100,15 +154,21 @@ export async function notifPermissionState() {
    costs nothing. */
 export async function notifyNow(title, body, kind = 'any') {
   const prefs = await notifPrefs();
-  if (!prefs.enabled) return false;
-  if (kind !== 'any' && prefs[kind] === false) return false;
   const p = notifPlatform();
   try {
     if (p === 'native') {
-      await ln().schedule({ notifications: [{ id: ID.test, title, body, schedule: { at: new Date(Date.now() + 500) } }] });
+      /* R37-3: this branch used to hardcode `return true` with no permission
+         check at all, so a player who denied notifications got told "Sent"
+         (the Settings test button, verbatim) while the OS silently dropped it.
+         checkPermissions() is the same call requestNotifPermission() makes;
+         reading it here means the truth and the toast can never disagree. */
+      const perm = await ln().checkPermissions();
+      if (!notifGateOk(prefs, perm.display, kind === 'any' ? null : kind)) return false;
+      if (!immRateOk()) return false;
+      await ln().schedule({ notifications: [{ id: nextImmId(), title, body, schedule: { at: new Date(Date.now() + 500) } }] });
       return true;
     }
-    if (p === 'web' && Notification.permission === 'granted') {
+    if (p === 'web' && notifGateOk(prefs, Notification.permission, kind === 'any' ? null : kind)) {
       const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
       if (reg && reg.showNotification) await reg.showNotification(title, { body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png' });
       else new Notification(title, { body });
@@ -125,9 +185,12 @@ export async function notifyNow(title, body, kind = 'any') {
 export async function scheduleSiegeReminder(name, spireName, until) {
   if (notifPlatform() !== 'native') return false;
   const prefs = await notifPrefs();
-  if (!prefs.enabled || !prefs.siege) return false;
   const L = ln(); if (!L) return false;
-  const at = until - 12 * 3600000;
+  const perm = await L.checkPermissions().catch(() => ({ display: 'denied' }));
+  if (!notifGateOk(prefs, perm.display, 'siege')) return false;
+  // R37-10: the raw T-12h offset landed at 2, 3 and 5am across 8 measured open
+  // times. Clamp to the 08:00-22:00 window before scheduling.
+  const at = clampQuietHours(until - 12 * 3600000);
   try {
     await L.cancel({ notifications: [{ id: ID.siege }] });
     if (at <= Date.now() + 60000) return false;      // too close to be useful
@@ -158,7 +221,13 @@ export async function syncNotifications() {
     const mine = (pend.notifications || []).filter(n => n.id === ID.reminder || n.id === ID.streak).map(n => ({ id: n.id }));
     if (mine.length) await L.cancel({ notifications: mine });
   } catch { /* ignore */ }
-  if (!p.enabled) return;
+  /* R37-4: DEFAULTS.enabled is true for every new player, so without this the
+     19:00 reminder was already scheduled on a fresh install before the app had
+     ever asked for permission (prompt/denied never blocked scheduling, only
+     the pref did). Cancelling stale ids above still runs regardless, so a
+     revoked permission cleans up rather than leaving orphaned schedules. */
+  const perm = await L.checkPermissions().catch(() => ({ display: 'denied' }));
+  if (!notifGateOk(p, perm.display)) return;
   const notis = [];
   if (p.reminder) notis.push({ id: ID.reminder, title: 'Boneheadz Gym', body: "Log today's food. Your skeleton earns XP from every meal.", schedule: { on: { hour: 19, minute: 0 }, allowWhileIdle: true } });
   if (p.streak) {
