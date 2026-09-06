@@ -16513,7 +16513,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
         for (const i of slotArts) lookPriceMap[i.id] = await transmogPrice(slot, i.id);
       }
       const done = committed ? await restageWardrobe(content, slot) : await restageDoll(content, previewEq());
-      const panel = $('.mog-panel', content), figs = $('.mog-figs', content), bar = $('.mog-bar', content);
+      /* THE DOCK'S BAR, BY ADDRESS. With a football garment worn the fit rail above
+         carries its own .mog-bar.fb-bar, so a bare '.mog-bar' landed on that one:
+         a look tap replaced the team bar with a copy of this one and left the real
+         one stale (dressing-room-audit PICK, 2026-09-06, "You get Boneyard Bruisers
+         Cleats, as equipped" after tapping Thornback Toads). */
+      const panel = $('.mog-panel', content), figs = $('.mog-figs', content), bar = $('.mog-dock > .mog-bar', content);
       if (!done || !panel || !figs || !bar) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
       const { cur, sel } = mogState();
       figs.innerHTML = mogFigsHtml();
@@ -16582,7 +16587,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
          onConfirm resolves, so after a successful commit the bar sat .armed with
          a live "Wear it" until the restage landed. Nothing to buy in that window
          (paid-once), but the player could not tell the purchase went through. */
-      $('.mog-bar', content)?.classList.remove('armed');
+      $('.mog-dock > .mog-bar', content)?.classList.remove('armed');
       btn.disabled = true;
       levelSound(S.sounds); pushProfileSoon();
       toast(res.cost ? `Look changed. −${res.cost} dust.` : 'Look changed.', 2000);

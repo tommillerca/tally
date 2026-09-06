@@ -111,6 +111,8 @@ of restoring it).
 
 2. PROOF: dressing-room-audit.mjs | REACH: With a look applied over a gear piece, tap "Its own look" in Hat, Top, Pants, Shoes or Feet: the After figure draws that gear's own art, and Wear it puts it on the big stage with the disguise gone. Tom's "shows the sock" report did not reproduce on a healthy network; a layer that fails to load degrades to the default by design.
 
+3. PROOF: dressing-room-audit.mjs | REACH: With a football garment worn (so the fit grid's team bar is showing above the Dressing Room), tapping a look no longer swaps that team bar for a second "You keep / You get / You pay" bar while the real one at the bottom keeps the old text. The bottom bar updates and the team bar stays. Not named in the brief; found in the after-rail screenshot, and it was live on v477.
+
 ## claim hygiene (2026-09-05)
 
 Not stamped to a release: the quest-claim row folded into v475 above; the
