@@ -747,11 +747,19 @@ async function scenario(name, srv, act, { broken = null, offlineAfter = false, n
     }
     // settle long enough for a controllerchange self-reload to happen and finish
     await sleep(9000);
+    /* A PAGE THAT CANNOT BE SAMPLED IS A DEAD APP, NOT A HARNESS ERROR. Under
+       --prove-red=blank the old hardRefresh deletes every cache and unregisters
+       with the network gone, and the document that follows has nothing in it to
+       evaluate against; the first version of this threw here, turned the whole
+       scenario into ERROR, and hid the very row that names the bug. A sample
+       that cannot be taken reads as every layer absent and #screen empty, so
+       the alive/partial rows below go red by name. */
+    const DEAD = { readyIn: [], stampCached: [], bootMs: null, shell: '-', module: '-', css: '-', build: '-', cachedShell: '-', cachedModule: '-', cachedCss: '-', controlled: false, caches: {}, screenKids: 0, dead: true };
     out.after = {
-      loads: await page.evaluate(() => { try { return +(sessionStorage.getItem('__loads') || 0); } catch { return -1; } }),
-      layers: await LAYERS(page),
-      version: await ACTIVE_VERSION(page),
-      reg: await REG_STATE(page),
+      loads: await page.evaluate(() => { try { return +(sessionStorage.getItem('__loads') || 0); } catch { return -1; } }).catch(() => -1),
+      layers: await LAYERS(page).catch(() => DEAD),
+      version: await ACTIVE_VERSION(page).catch(() => null),
+      reg: await REG_STATE(page).catch(() => ({ none: true })),
     };
     /* AND THEN TAKE THE NETWORK AWAY. Online, every shell request is answered
        from the network, so the precache is never the thing being read and its
