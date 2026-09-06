@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 480, date: '2026-09-06', title: 'The Dressing Room learns families too', items: [
+    'The Dressing Room listed every team\'s cleats and jerseys as separate looks with no way to pick a team. It shows one tile per piece now, and tapping it opens the same team rail the Wardrobe has, each colourway drawn on the piece itself.',
+    'With a football piece on, tapping looks in the Dressing Room could overwrite the Wardrobe\'s own team bar with a copy of the Dressing Room\'s and leave the real one stale. Each bar keeps to itself now.',
+  ] },
   { n: 479, date: '2026-09-06', title: 'The Stable gets shorter', items: [
     'The lizard\'s wardrobe in the Stable used to lay out every team\'s helmet before you reached the jersey. It is two pieces now, with the team colours on a rail underneath, the same way the Bonehead\'s wardrobe works. Tap a team and every football piece she has on changes colour.',
     'The Stable ring shows one card per kind of pet instead of one per copy, so fifty Bulldogs no longer stand between you and the lizard. The card carries how many you have, and the row under it steps through the copies.',

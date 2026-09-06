@@ -19,6 +19,13 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v480
+1. A hotfix off v479 from Tom's live session. Its rows are the dated "dressing room families" section further down, folded here.
+
+2. PROOF: dressing-room-audit.mjs, wardrobe-family-grid-audit.mjs | REACH: the Dressing Room look picker shows one tile per family with the team rail (FAMILY and RAIL rows, red on v477: 35 tiles for 33 looks, no family tile), and "its own look" resolves to the gear's own art in all five slots (OWN rows, red by mutation).
+
+3. PROOF: dressing-room-audit.mjs | REACH: the Dressing Room's bar and the fit rail's team bar are addressed separately, so a look tap no longer replaces the Wardrobe's team bar (PICK row, red before the selector fix).
+
 ## v479
 1. A hotfix off v478, two Stable fixes from Tom's live session. Its rows are the dated "stable collapse" section further down, folded here.
 
