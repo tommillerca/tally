@@ -19,6 +19,24 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## pit readout and exit (2026-09-06)
+
+Not stamped to a release: hotfix/pit-ap-exit, off v487. Tom on live v487, two
+reports in one message.
+
+1. PROOF: fight-hint-audit.mjs | REACH: In a fight, a move's AP/Stamina cost no
+   longer overlaps its name (worst on Bone Guard, whose cost line is the only
+   one long enough to wrap to two lines and paint over "BONE GUARD"). Measured
+   on the pre-fix code at 375x667 and 393x852: every move's cost overlapped its
+   label by 3.6px, Bone Guard's by 13.2px; both are 0px after.
+
+2. PROOF: pit-exit-motion-audit.mjs | REACH: Closing a fight from the Pit (the
+   Done button after a win) no longer does two full re-renders of the Pit
+   screen behind it. Measured with a real tap on the real button: the Pit was
+   being rewritten twice, once right away and once a quarter-second later,
+   landing on the tail of the close animation for no reason the second
+   time - a leftover duplicate of a re-render the sheet's own close handler
+   already ran. It is rewritten once now.
 ## day one tells the truth (2026-09-06)
 
 Not stamped to a release: hotfix/dayone-board, off v482. HANDOFFr3920260906.md
@@ -161,6 +179,13 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 2. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit sheet, right where a fight is offered, now names an active dish buff and its plain-words effect, or (no buff active but ingredients or a cooked dish owned) points at the Kitchen; says nothing when there is truly nothing to cook. Cooking is measured at +37.7 to +59.9pp win rate in the real fight engine and renderPit never mentioned it before. Red on both the buff line and the nudge line with the Pit's kitchen line removed; the quiet state stays correctly green either way, which is the point.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
+
+## v492
+1. A hotfix off v491 from Tom's live play test. Its rows are the dated "pit readout and exit" section further down, folded here.
+
+2. PROOF: fight-hint-audit.mjs | REACH: no move's cost pill overlaps its label at 375x667, 393x852 or 430x932 (measured 3.6 px on every move and 13.2 px on Bone Guard before; 0 after), and Bone Guard's cost fits one line.
+
+3. PROOF: pit-exit-motion-audit.mjs | REACH: closing the fight sheet through the real Done rewrites #pitBody exactly once; the redundant setTimeout renderPit that fired at 262 ms on top of onClose's own render is gone (red before: 2 writes), with rAF frame timing bounded against a same-run Stable close.
 
 ## v491
 1. A hotfix off v490, QA round 39's R39-2, 3, 28, 29. Its rows are the dated "day one tells the truth" section further down, folded here. No quest reward or coin value changed.

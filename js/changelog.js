@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 492, date: '2026-09-06', title: 'The Pit reads clean and leaves smoothly', items: [
+    'The stamina cost on each move no longer paints over the move\'s name; Bone Guard\'s cost line, the only one that wrapped to two lines, fits on one.',
+    'Leaving a fight was redrawing the Pit twice, the second time right on the tail of the close animation. It draws once now, so the exit is as smooth as every other sheet.',
+  ] },
   { n: 491, date: '2026-09-06', title: 'Day one tells the truth', items: [
     'The quest board on your first day always has something you can actually do: the pool is filtered for what you have unlocked before the draw, one daily comes from the logging loop the game just taught you, and two players installing on the same day no longer get the same board.',
     'Onboarding said logging food pays XP and coins. Food pays XP; coins come from quests, crates and closing the day, and the line says so now.',
