@@ -1,0 +1,35 @@
+[godmode] puppeteer 24.43.1 via repo node_modules: /Users/tommiller/Documents/Hyperframes Editor/tally/node_modules/puppeteer/lib/cjs/puppeteer/puppeteer.js
+DEFAULTS: {"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":true}
+ok   SETUP  notify.js DEFAULTS expose at least one content kind to differ on  content kinds = [reminder, streak, friends, siege]
+#notifAll  stored: {"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":true}  merged: {"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":true}
+#notifEss  stored: {"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":false}  merged: {"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":false}
+ok   TIERS  #notifAll and #notifEss do NOT write byte-equal preferences  All={"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":true} Ess={"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":false}
+ok   TIERS  the two tiers differ in the MERGED view a reader sees, not only in the raw payload  All={"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":true} Ess={"enabled":true,"reminder":true,"streak":true,"friends":true,"siege":false}
+ok   SUBSET  no kind is louder under Essentials than under Everything  louder under Essentials: []
+ok   SUBSET  Essentials silences between 1 and 4 of the 4 content kinds  silenced: [siege] (1)
+ok   SUBSET  Essentials keeps `enabled` true: it is a quieter tier, not the Off switch  enabled=true
+ok   SUBSET  Everything leaves every content kind on  reminder=true streak=true friends=true siege=true
+ok   DRIVE  every content kind has the immediate-push driver the copy contract is graded on  no immediate driver for: [] (write one, do not drop the kind)
+device queue counts: {"reminder":{"immediate":{"all":1,"ess":1,"off":0},"syncNotifications":{"all":2,"ess":2,"off":0}},"streak":{"immediate":{"all":1,"ess":1,"off":0},"syncNotifications":{"all":2,"ess":2,"off":0}},"friends":{"immediate":{"all":1,"ess":1,"off":0}},"siege":{"immediate":{"all":1,"ess":0,"off":0},"scheduleSiegeReminder":{"all":1,"ess":0,"off":0}},"any":{"immediate":{"all":1,"ess":1,"off":0}}}
+ok   DRIVE  the fake shell really reports native, so the device scheduler was exercised  notifPlatform()=native
+ok   DRIVE  every kind was actually driven (an empty sample set is a failure, not a pass)  probed: [reminder, streak, friends, siege, any]
+ok   DRIVE  under Everything each kind queues exactly one immediate push, so a 0 elsewhere means something  all 1
+#notifEss toast copy: "Essentials only: log reminder, streak saver + Crew activity (friend requests, gifts, cheers)."
+ok   COPY  the #notifEss handler still raises a toast that enumerates what the player gets  copy="Essentials only: log reminder, streak saver + Crew activity (friend requests, gifts, cheers)."
+ok   COPY  every content kind has a phrase this audit knows how to look for in the copy  no COPY_WORDS entry for: [] (add one, do not skip the kind)
+ok   COPY  every kind the Essentials toast names is actually DELIVERED under Essentials  promised but not delivered: []
+ok   COPY  every kind the Essentials toast does NOT name queues ZERO pushes under Essentials  unmentioned but still delivered: []
+ok   COPY  the stored Essentials preference and the device queue agree, kind by kind
+ok   OFF  with notifications fully off nothing at all is queued, no kind exempt  still delivered with enabled=false: []
+notifyNow call sites: [{"at":"js/app.js:2978","kind":"friends"},{"at":"js/app.js:2979","kind":"friends"},{"at":"js/app.js:4062","kind":"any"},{"at":"js/app.js:14334","kind":"any"},{"at":"js/app.js:22445","kind":"friends"},{"at":"js/app.js:22446","kind":"friends"},{"at":"js/app.js:22449","kind":"friends"},{"at":"js/app.js:22450","kind":"friends"},{"at":"js/app.js:22646","kind":"siege"}]
+ok   GATE  the scan found the notifyNow call sites at all (an empty scan is a failure)  9 found
+ok   GATE  every notifyNow call site names a kind notify.js knows, so none can slip the gate
+ok   GATE  the siege DISCOVERY push names kind `siege` (the half that was ungated)  js/app.js:22646
+ok   READ  every kind Essentials silences is consulted by real code before it notifies  ungated: []
+ok   DRIVE  siege/immediate: Everything queues at least one push (an empty sample proves nothing)  queued 1 under Everything
+ok   DRIVE  siege/immediate: Essentials queues strictly fewer, down to 0  Everything queued 1, Essentials queued 0
+ok   DRIVE  siege/scheduleSiegeReminder: Everything queues at least one push (an empty sample proves nothing)  queued 1 under Everything
+ok   DRIVE  siege/scheduleSiegeReminder: Essentials queues strictly fewer, down to 0  Everything queued 1, Essentials queued 0
+ok   DRIVE  siege/immediate: Essentials queues exactly ZERO, not merely fewer  queued 0 under Essentials
+
+NOTIFICATION TIERS VERIFIED

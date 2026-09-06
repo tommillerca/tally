@@ -1,0 +1,25 @@
+PASS  IDENT   fresh vs 60-day, zero allocation  fresh[power:20 marrow:20 wind:20 reflex:20 hype:20] 60d[power:20 marrow:20 wind:20 reflex:20 hype:20]
+PASS  IDENT   60-day vs a different history, zero allocation  other[power:20 marrow:20 wind:20 reflex:20 hype:20] 60d[power:20 marrow:20 wind:20 reflex:20 hype:20]
+PASS  FLAT    every stat starts on the same number  power:20 marrow:20 wind:20 reflex:20 hype:20
+PASS  CONTROL allocation still moves a stat  20 -> 30 for 5 points at 2/pt
+PASS  CONTROL allocation moves ONLY the stat it was spent on  power:30 marrow:20 wind:20 reflex:20 hype:20
+PASS  GRANT   60-day: points cover the base that was removed  194pt x 2 = 388 vs 388 stat points removed
+PASS  GRANT   60-day: rebuild fits under TRAIN_CAP  worst stat needs +80 of 100
+PASS  GRANT   60-day: rebuilt fighter is no weaker than the old one  was[power:100 marrow:100 wind:100 reflex:100 hype:88] now[power:100 marrow:100 wind:100 reflex:100 hype:88]
+PASS  GRANT   mid: points cover the base that was removed  68pt x 2 = 136 vs 133 stat points removed
+PASS  GRANT   mid: rebuild fits under TRAIN_CAP  worst stat needs +40 of 100
+PASS  GRANT   mid: rebuilt fighter is no weaker than the old one  was[power:38 marrow:50 wind:59 reflex:31 hype:55] now[power:38 marrow:50 wind:60 reflex:32 hype:56]
+PASS  GRANT   fresh: points cover the base that was removed  0pt x 2 = 0 vs 0 stat points removed
+PASS  GRANT   fresh: rebuild fits under TRAIN_CAP  worst stat needs +0 of 100
+PASS  GRANT   fresh: rebuilt fighter is no weaker than the old one  was[power:20 marrow:20 wind:20 reflex:20 hype:20] now[power:20 marrow:20 wind:20 reflex:20 hype:20]
+PASS  GRANT   the same snapshot always yields the same points
+PASS  GRANT   a fresh account is granted nothing
+PASS  ONCE    the grant has a versioned kv key  habitBaseGrant_v471
+PASS  ONCE    written in exactly one place  1 kvSet calls
+PASS  ONCE    read before it is written  read 156 chars before the write
+PASS  ONCE    the stored value is never accumulated
+PASS  ONCE    an existing value returns unchanged
+PASS  DROPPED habitStats is gone from the fighter
+PASS  DROPPED nothing reads habitStats
+
+ALL PASS

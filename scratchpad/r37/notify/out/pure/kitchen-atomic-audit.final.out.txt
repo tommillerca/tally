@@ -1,0 +1,17 @@
+ok   CONTROL a ready, funded transmute pays  {"ok":true,"yields":"ectoplasm"}
+ok   CONTROL one transmute: six commons out, one Ectoplasm in  {"marrow":6,"ectoplasm":1}
+ok   SEQUENTIAL the second transmute on the same day is refused  {"ok":false,"reason":"cooldown","msLeft":72000000}
+ok   CONCURRENT two overlapping transmutes: exactly one wins  [{"ok":true,"yields":"ectoplasm"},{"ok":false,"reason":"cooldown","msLeft":72000000}]
+ok   CONCURRENT two overlapping transmutes: ONE Ectoplasm minted, SIX commons spent  inv={"marrow":6,"ectoplasm":1} (12 commons in; on main both taps pay: ectoplasm 2, commons 0)
+ok   CONCURRENT the stamp was written once, to now
+ok   BACKWARD a stamp 365 days in the future leaves at most one cooldown, not 8780h  msLeft=20.0h against cooldown 20h
+ok   BACKWARD the clamp does not free the transmute early (msLeft > 0, ready false)
+ok   FORWARD a jump past the witness ceiling is refused  {"ok":false,"reason":"day"}
+ok   FORWARD a refused jump spends nothing and mints nothing  {"marrow":12}
+ok   FORWARD a refused jump leaves the stamp untouched
+ok   CONTROL a 21h-old stamp on a witnessed day still pays  {"ok":true,"yields":"ectoplasm"}
+ok   SHAPE the cooldown is still 20h
+ok   CONCURRENT two overlapping grantPotion(id) land two potions  count=2 (main: 1, one Serve lost)
+ok   CONCURRENT two different potions granted at once both land  {"vital-tonic":3,"fury-flask":1}
+
+all green, 15 checks

@@ -49,6 +49,9 @@ import {
 import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN, raceStanding } from '../js/social.js';
 import { MINI_THEMES } from '../js/poi.js';
 import { THEME_POOL, themedLook, FAMILIES } from '../js/bosses.js';
+/* notifGateOk, clampQuietHours, immRateCheck, nextImmId are PURE (no
+   Capacitor/DOM), so they unit-test directly like eggProgress above. */
+import { notifGateOk, clampQuietHours, immRateCheck, nextImmId, IMM_IDS, IMM_MAX, IMM_WINDOW_MS } from '../js/notify.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = f => JSON.parse(readFileSync(join(here, 'fixtures', f), 'utf8'));
@@ -5100,9 +5103,13 @@ test('R23 F6: Dressing Room look tiles are sorted by rarity and carry r-<rarity>
   assert.ok(slice.includes('const lookTilesHtml ='), 'lookTilesHtml is gone: the look grid is back to an unsorted, untiered arts.map');
   const rarOrder = app.match(/^const RAR_ORDER = .*$/m)[0];
   const tagFn = app.match(/function rarityTagHtml\(rarity\) \{[\s\S]*?\n\}/)[0];
+  /* the family collapse (2026-09-05) is graded in pixels by dressing-room-audit; here
+     every fixture piece is its own family so the sort and the tiers stay the subject */
   const lookTilesHtml = new Function('cur', 'sel', 'esc', 'ownArt', 'wornGear', 'bhTrim', 'bhAsset', 'ICONS', 'TRANSMOG_HIDE', 'costTag',
+    'fbTintAttr', 'bhFamilies', 'bhFamilyKey',
     `${rarOrder}; ${tagFn}; ${slice}; return lookTilesHtml;`)(
-    '', '', String, { id: 'own' }, null, x => x, i => i.id + '.png', { hidden: () => '<svg/>' }, '__hide__', () => '<span class="look-cost paid">owned</span>');
+    '', '', String, { id: 'own' }, null, x => x, i => i.id + '.png', { hidden: () => '<svg/>' }, '__hide__', () => '<span class="look-cost paid">owned</span>',
+    () => '', arr => new Map(arr.map(i => [i.id, [i]])), i => i.id);
   // declaration order deliberately interleaves tiers, the way BH_ITEMS does
   const arts = [
     { id: 'c1', name: 'C one', rarity: 'common' }, { id: 'l1', name: 'L one', rarity: 'legendary' },
@@ -5564,7 +5571,8 @@ test('R22-W13 the bar disarms on commit, every price tag carries the unit, a dol
   assert.match(app, /: '<button class="btn ghost mog-go" disabled>Wear it<\/button>'/, 'nothing selected renders a disabled Wear it');
   // (b) no bare price span is left: every priced look tag goes through costTag (dust unit)
   assert.doesNotMatch(app, /<span class="look-cost">\$\{/, 'a bare `12` price tag survives; use costTag (QA round 22 W13b)');
-  assert.equal((app.match(/\$\{costTag\(i\.id\)\}/g) || []).length, 2, 'both look grids (v2 and the ?mogv2=0 fallback) price through costTag');
+  // 3 since 2026-09-05: the v2 grid prices a lone tile and a family tile separately
+  assert.equal((app.match(/\$\{costTag\(i\.id\)\}/g) || []).length, 3, 'both look grids (v2 and the ?mogv2=0 fallback) price through costTag');
   // (c) the doll-slot tap scrolls the Dressing Room into view after the render lands
   const pd = app.slice(app.indexOf('const wirePd = b =>'), app.indexOf("$$('[data-pd]', content).forEach(wirePd)"));
   assert.match(pd, /await renderCharacter\(wrap, 'wardrobe', \{ instant: true \}\);[\s\S]*\$\('\.mog-panel', wrap\)\?\.scrollIntoView\(/, 'after a doll-slot tap the .mog-panel must be scrolled into view, after the render (QA round 22 W13c)');
@@ -6810,6 +6818,94 @@ test('R-claimhyg-2 initLootIfNeeded: two interleaved boots grant exactly one wel
   // a THIRD, later boot must still pay nothing: the claim is not a one-race fluke
   const r3 = await g.initLootIfNeeded();
   assert.equal(r3, null, 'a later boot after the race must still find the kit already claimed');
+});
+
+/* ---- notifications consent (2026-09-06): R37-3/4/10/12 -------------------
+   HANDOFFr3720260906.md, measured on v471. The Settings test button lied to a
+   player who had denied notifications (native branch hardcoded `return true`
+   with no permission check), and DEFAULTS.enabled=true meant the daily
+   reminder was scheduled on a fresh install before permission was ever asked.
+   Both notifyNow and syncNotifications now share one gate. */
+test('R37-3/R37-4 notifGateOk: permission x prefs decides every scheduling/push path', () => {
+  /* PROVE-RED: reverting notifGateOk in js/notify.js to the pre-fix shape
+     (`if (!prefs.enabled) return false; if (extraKey && prefs[extraKey] ===
+     false) return false; return true;` -- no permState read at all) fails
+     with:
+       AssertionError [ERR_ASSERTION]: a prompt/denied permission must never
+       gate true (R37-3/R37-4): got true for prompt */
+  const on = { enabled: true, friends: true, siege: true };
+  const off = { enabled: false, friends: true, siege: true };
+  const noSiege = { enabled: true, friends: true, siege: false };
+  for (const permState of ['prompt', 'denied', 'unsupported', 'default']) {
+    assert.equal(notifGateOk(on, permState), false,
+      `a prompt/denied permission must never gate true (R37-3/R37-4): got true for ${permState}`);
+  }
+  assert.equal(notifGateOk(on, 'granted'), true, 'enabled + granted permission must gate true');
+  assert.equal(notifGateOk(off, 'granted'), false, 'the master switch off must gate false even when permission is granted');
+  assert.equal(notifGateOk(noSiege, 'granted', 'siege'), false, 'a false per-kind pref must gate false even when granted');
+  assert.equal(notifGateOk(noSiege, 'granted', 'friends'), true, 'an unrelated kind must not be gated by a different pref being off');
+  assert.equal(notifGateOk(null, 'granted'), false, 'missing prefs must never gate true');
+});
+
+test('R37-10 clampQuietHours: no push lands 22:00-08:00 local, moved to the next 08:00', () => {
+  /* PROVE-RED: reverting clampQuietHours to `(ts) => ts` (identity, no clamp)
+     fails with:
+       AssertionError [ERR_ASSERTION]: 0:00 must clamp to 08:00, got 0:00 */
+  const at = (day, h) => { const d = new Date(2026, 8, day, 0, 0, 0, 0); d.setHours(h, 0, 0, 0); return d.getTime(); };
+  const hourOf = ts => new Date(ts).getHours();
+  const dayOf = ts => new Date(ts).getDate();
+  // measured in the report: 14:00 open fired at 02:00, 15:00 at 03:00, 17:00 at 05:00
+  for (const h of [0, 2, 3, 5, 7]) {
+    const clamped = clampQuietHours(at(10, h));
+    assert.equal(hourOf(clamped), 8, `${h}:00 must clamp to 08:00, got ${hourOf(clamped)}:00`);
+    assert.equal(dayOf(clamped), 10, `${h}:00 clamps forward to the SAME calendar day's 08:00, got day ${dayOf(clamped)}`);
+  }
+  for (const h of [22, 23]) {
+    const clamped = clampQuietHours(at(10, h));
+    assert.equal(hourOf(clamped), 8, `${h}:00 must clamp to 08:00, got ${hourOf(clamped)}:00`);
+    assert.equal(dayOf(clamped), 11, `${h}:00 clamps forward to the NEXT calendar day's 08:00, got day ${dayOf(clamped)}`);
+  }
+  for (const h of [8, 12, 19, 21]) {
+    const orig = at(10, h);
+    assert.equal(clampQuietHours(orig), orig, `${h}:00 is inside the safe window and must not move`);
+  }
+});
+
+test('R37-12 nextImmId: back-to-back immediate pushes get distinct ids from a small pool', () => {
+  /* PROVE-RED: reverting nextImmId to `() => 9` (the old shared id every
+     immediate push used) fails with:
+       AssertionError [ERR_ASSERTION]: two immediate pushes back-to-back must
+       not share an id, got 9 === 9 */
+  const first = nextImmId(), second = nextImmId();
+  assert.notEqual(first, second, `two immediate pushes back-to-back must not share an id, got ${first} === ${second}`);
+  assert.ok(IMM_IDS.includes(first) && IMM_IDS.includes(second), 'ids must come from the declared pool');
+  const seen = new Set();
+  for (let i = 0; i < IMM_IDS.length * 2; i++) seen.add(nextImmId());
+  assert.equal(seen.size, IMM_IDS.length, `round-robin must cycle through all ${IMM_IDS.length} pool ids, got ${seen.size} distinct`);
+});
+
+test('R37-12 immRateCheck: a minimal rate limit caps immediate pushes per rolling window', () => {
+  /* PURE function takes an explicit clock, so the boundary is deterministic
+     instead of waiting real seconds. The ceiling (IMM_MAX) is a safety net
+     against a runaway loop, not a throttle on ordinary play -- a returning
+     player can legitimately trigger several distinct immediate kinds (friend
+     request, gift, cheer, siege discovery, stall notice) inside one boot, and
+     tests/notif-tier-audit.mjs drives 15+ of those in one page in quick
+     succession, so the cap must sit comfortably above that.
+     PROVE-RED: reverting immRateCheck to always `{ ok: true, kept: [...recentTimestamps, now] }`
+     (no cap at all) fails with:
+       AssertionError [ERR_ASSERTION]: a burst past IMM_MAX must be capped,
+       got 23 allowed of 23 attempts */
+  let recent = [], allowed = 0;
+  const now = 1_000_000;
+  for (let i = 0; i < IMM_MAX + 3; i++) {
+    const { ok, kept } = immRateCheck(recent, now + i);
+    recent = kept;
+    if (ok) allowed++;
+  }
+  assert.equal(allowed, IMM_MAX, `a burst past IMM_MAX must be capped, got ${allowed} allowed of ${IMM_MAX + 3} attempts`);
+  const rolled = immRateCheck(recent, now + IMM_WINDOW_MS + 1000);
+  assert.equal(rolled.ok, true, 'once the window elapses, a new push must be allowed again');
 });
 
 await runAll();

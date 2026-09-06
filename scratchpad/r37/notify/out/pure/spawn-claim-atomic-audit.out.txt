@@ -1,0 +1,15 @@
+ok   SETUP the feast buff is live, so the coin half includes the bonus Y5 names  x1.5
+ok   CONTROL both collects were paid, so there is a real payout to grade  {"coins":{"xp":6,"coins":18,"crate":null,"ing":{"id":"salt","n":1},"type":"coins","label":"Coin pile"},"crate":{"xp":6,"coins":0,"crate":"daily","ing":{"id":"bog","n":1},"type":"crate","label":"Buried crate"}}
+ok   CONTROL the coin spawn paid its coins WITH the feast multiplier applied  +18 coins
+ok   CONTROL the crate spawn left an inventory row  +1 inv rows
+ok   CONTROL both spawns paid their scavenged ingredient  +2 ingredients, expected 2
+ok   CONTROL both ledger keys were minted  spawn-2099-03-04-y5-coins-2, spawn-2099-03-04-y5-crate-1
+ok   CONTROL the kill actually reached the claim (an unclaimed sample proves nothing)  key spawn-2099-03-04-y5-coins-17 minted
+ok   KILL a minted coin claim carries its coins, feast bonus included  +18 coins on a minted claim
+ok   KILL a minted coin claim carries its scavenged ingredient  +1 ingredients, owed 1
+ok   CONTROL the crate kill reached the claim too  key spawn-2099-03-04-y5-crate-7 minted
+ok   KILL a minted crate claim carries its crate row  +1 inv rows on a minted claim
+ok   KILL a minted crate claim carries its scavenged ingredient  +1 ingredients, owed 1
+ok   SPENT a killed collect has really spent the spawn: the retry is refused  null
+
+SPAWN CLAIM ATOMICITY VERIFIED

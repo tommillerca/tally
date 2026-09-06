@@ -1,0 +1,26 @@
+ok   the generator produced a field to measure  200000 spawns over 40000 cells
+ok   the field produced ingredients to measure  117079 ingredients
+ok   the food spawn produced drops to measure  herbs: 85528 drops
+ok   no spawn type pays garden seeds any more  none
+ok   the food spawn (herbs) carries more than one ingredient  SPAWN_FOOD.herbs = 2
+ok   coins per cell 41.46 did not rise above v400  ceiling 46.54
+ok   XP per cell 52.13 did not rise above v400  ceiling 53.98
+ok   ingredients per cell 2.93 clears the no-garden floor  floor 2.6 (v400 was 2.00)
+ok   only 37% of spawns carry food  ceiling 75%, v400 was 100%
+ok   the viewport was actually sampled  25 samples
+ok   13.5 spawns sit in a phone viewport  floor 8; with the projection corrected, v400 was 1.4 and zoom 16.4 was 3.4
+ok   13.5 spawns is still a drawable number of markers  ceiling 24
+ok   the cookbook demands something to weight against  27 units
+ok   the app derives the same demand table this audit recounts  {"marrow":6,"salt":3,"graveroot":4,"bog":4,"sinew":5,"ember":5}
+ok   herbs can drop marrow at all  20.6%
+ok   herbs can drop graveroot at all  15.2%
+ok   herbs can drop ember at all  17.7%
+ok   herbs can drop bog at all  15.4%
+ok   herbs can drop sinew at all  18.3%
+ok   herbs can drop salt at all  12.9%
+ok   the food spawn's worst-served ingredient (salt) is within a quarter of its demand  1.16x  drop 12.9% vs need 11.1%
+
+note  per cell: 5.00 spawns, 41.46 coins, 52.13 XP, 2.93 ingredients (37% of spawns carry food).
+note  whole-field mix: marrow 20.6%, graveroot 13.3%, ember 18.6%, bog 13.5%, sinew 19.0%, salt 15.0%
+
+all good

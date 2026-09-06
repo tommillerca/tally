@@ -1,0 +1,9 @@
+PASS  SETUP the pool is real (an empty pool would pass everything below)  18 quests
+PASS  DAY-ONE none of q-pit1/q-pit3/q-cook/q-harvest is ever handed to a brand-new player, across a whole year  365 days clean
+PASS  DAY-ONE the list is never empty, across a whole year  0 empty days
+PASS  DAY-ONE fewer never different: gating only removes from the draw (floor days excepted, and a floor day is length 1)  0 days where gating SWAPPED a quest; 20 legitimate floor days
+PASS  VETERAN the Pit quests come back once the player has fought  q-pit1, q-pit3
+PASS  VETERAN the Kitchen quests come back once it has ingredients  q-cook
+PASS  COMPAT a caller that passes no flags still sees the gated quests (undefined is not false)  13 distinct ids
+
+day one is a day you can actually have

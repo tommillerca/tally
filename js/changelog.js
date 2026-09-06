@@ -4,6 +4,23 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 481, date: '2026-09-06', title: 'Notifications ask first, and tell the truth', items: [
+    'Nothing gets scheduled until you say yes: turning notifications on now asks your device for permission first, with a line that says so. If you said no, the test button says it could not send instead of pretending it did.',
+    'Two pushes landing in the same instant used to cancel each other (a gift and a cheer a moment apart lost the gift). They keep their own slots now, and nothing fires between 10pm and 8am; anything due then waits for the morning.',
+    'The Dark Spires siege reminder has its own switch in Settings, so Just essentials actually changes something on the page. And logging dinner clears the evening reminder instead of leaving it armed.',
+  ] },
+  { n: 480, date: '2026-09-06', title: 'The Dressing Room learns families too', items: [
+    'The Dressing Room listed every team\'s cleats and jerseys as separate looks with no way to pick a team. It shows one tile per piece now, and tapping it opens the same team rail the Wardrobe has, each colourway drawn on the piece itself.',
+    'With a football piece on, tapping looks in the Dressing Room could overwrite the Wardrobe\'s own team bar with a copy of the Dressing Room\'s and leave the real one stale. Each bar keeps to itself now.',
+  ] },
+  { n: 479, date: '2026-09-06', title: 'The Stable gets shorter', items: [
+    'The lizard\'s wardrobe in the Stable used to lay out every team\'s helmet before you reached the jersey. It is two pieces now, with the team colours on a rail underneath, the same way the Bonehead\'s wardrobe works. Tap a team and every football piece she has on changes colour.',
+    'The Stable ring shows one card per kind of pet instead of one per copy, so fifty Bulldogs no longer stand between you and the lizard. The card carries how many you have, and the row under it steps through the copies.',
+  ] },
+  { n: 478, date: '2026-09-06', title: 'The Locker Room takes the front page', items: [
+    'The News banner on Today led with the Wanderer while the Locker Room was the newest thing in the game. It now leads with the kit itself: your Bonehead and the lizard in team colours, one tap from the room.',
+    'The coin pill on Today opens the Shop now. It used to open the Backpack, the same place the crate chip beside it already goes, and nothing on Today pointed at where coins get spent.',
+  ] },
   { n: 477, date: '2026-09-06', title: 'Your glow stays yours, and one gift at a time', items: [
     'If you wore a slimed piece, its green glow was painting itself onto every friend in the Crew, the leaderboard and the race. The glow now stays on your own Bonehead.',
     'The gift card at the top of the Crew tab showed every unopened gift as its own row. It now shows the newest one with a count of the rest, and the next one steps up as you open them.',
