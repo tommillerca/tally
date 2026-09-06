@@ -1862,9 +1862,15 @@ export async function equippedPetIid() {
      so a first hatch left the Stable saying OUT WITH YOU (button disabled) while
      Today, which draws equipped().C, showed no pet at all, and nothing on any
      screen could repair it. Whatever this function answers is the pet that is
-     out, so the slot follows it, on every path and not only the heal. */
-  if (inst && (await equipped({ raw: true })).C !== inst.sp) {
-    try { await equip('C', inst.sp); } catch { /* a read path never throws over a slot repair */ }
+     out, so the slot follows it, on every path and not only the heal. The same
+     read-then-kvSet equip() itself does, not equip('C'): the species is owned by
+     construction (every instance minter grants the cos row), and equip() scans
+     inv for its ownership check, which today-reads-lint A1 forbids on Today's
+     tick. Plain kvSet, like equip and equipGear (claimed-row-audit): two callers
+     racing this write the same slot value. */
+  if (inst) {
+    const eq = await equipped({ raw: true });
+    if (eq.C !== inst.sp) { eq.C = inst.sp; await kvSet('equipped', eq); }
   }
   return iid;
 }

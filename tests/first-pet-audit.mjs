@@ -31,10 +31,10 @@
  *            the row that fails if the fix is "always equip the newest".
  *
  * PROVE-RED on d7906217 (pre-fix), this file copied in unchanged:
- *   FAIL HEAL one owned pet and nothing equipped: equippedPetIid equips her in BOTH records  petEquipped=p...-C1 C=undefined
+ *   FAIL HEAL one owned pet and nothing equipped: equippedPetIid equips her in BOTH records  petEquipped=pmtpwgn2w-1-C6 C=undefined
  *   FAIL STUCK the shipped bug state (petEquipped valid, C slot empty) is repaired by the next equippedPetIid  C=undefined
- *   FAIL HATCH hatchEgg on a goal-0 egg leaves the hatched species in the C slot with petEquipped agreeing  C=undefined
- *   CONTROL green on both trees, as a control should be.
+ *   FAIL HATCH hatchEgg on a goal-0 egg leaves the hatched species in the C slot with petEquipped agreeing  hatched=C1 C=undefined petEquipped=null
+ *   first-pet: 3 FAILED, exit 1. CONTROL green on both trees, as a control should be.
  *
  * PURE: node only, mem-idb under the real js/db.js + js/loot.js, ~1s.
  *   node tests/first-pet-audit.mjs
