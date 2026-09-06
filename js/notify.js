@@ -56,11 +56,14 @@ export function nextImmId() { const id = IMM_IDS[immCursor % IMM_IDS.length]; im
 
 // PURE, exported for the node unit test: given the recent send timestamps and
 // "now", decide whether one more immediate push is allowed, and return the
-// pruned list to keep as state. ponytail: in-memory, per-session, cap = pool
-// size over a 60s window; raise IMM_MAX or the window if a legitimate burst
-// (many friends gifting at once) ever needs more headroom than that.
-const IMM_WINDOW_MS = 60000;
-const IMM_MAX = IMM_IDS.length;
+// pruned list to keep as state. This is a safety net against a genuine
+// runaway (a bug looping notifyNow), not a throttle on ordinary play: a
+// player who was away can legitimately have a friend request, a gift, a
+// cheer, a siege discovery and a stall notice all fire within the same boot.
+// ponytail: in-memory, per-session, fixed ceiling; raise it if a real burst
+// (a mass gift event, say) ever needs more headroom than this.
+export const IMM_WINDOW_MS = 10000;
+export const IMM_MAX = 20;
 export function immRateCheck(recentTimestamps, now) {
   const kept = recentTimestamps.filter(t => now - t < IMM_WINDOW_MS);
   const ok = kept.length < IMM_MAX;

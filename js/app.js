@@ -14328,7 +14328,7 @@ async function renderSettings(el) {
     // presets used to write the same four keys (siege had no row at all), so
     // the two buttons rendered byte-identical cards and this toast still named
     // only "friend requests" for a key that also covers gifts and cheers.
-    await applyNotifs({ enabled: true, reminder: true, streak: true, friends: true, siege: false }, 'Essentials only: log reminder, streak saver + Crew activity. Siege alerts are off.');
+    await applyNotifs({ enabled: true, reminder: true, streak: true, friends: true, siege: false }, 'Essentials only: log reminder, streak saver + Crew activity (friend requests, gifts, cheers).');
   });
   $('#notifTest', el)?.addEventListener('click', async () => {
     const fired = await notifyNow('Boneheadz Gym', 'Test notification. If you can see this, you are all set.', 'any');

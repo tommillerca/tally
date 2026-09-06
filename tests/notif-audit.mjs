@@ -269,6 +269,68 @@ const reAdded = /async function maybeRequestNotifPermission/.test(appSrc);
 check('BOOT-ASKER  maybeRequestNotifPermission has not come back',
   !reAdded, reAdded ? 'js/app.js declares maybeRequestNotifPermission again' : 'absent');
 
+/* ------ 6. R37-3: the native branch must not lie under DENIED permission ------ */
+/* HANDOFFr3720260906.md R37-3, measured on v471: notifyNow's native branch
+ * (js/notify.js) hardcoded `return true` with no permission check, so a
+ * player who denied notifications and tapped "Send a test notification" in
+ * Settings got told "Sent. Background the app to see it." while the OS
+ * silently dropped it. Every section above drove the WEB branch (this is a
+ * browser, no real Capacitor); this mocks a native shell with
+ * LocalNotifications reporting DENIED so the exact buggy branch runs, drives
+ * the real button and reads the real toast queue -- same MutationObserver
+ * pattern as section 4, because a queued toast can come and go inside one
+ * poll interval. Run LAST: the mock persists across reloads (Puppeteer
+ * evaluateOnNewDocument scripts stack per session) and would otherwise route
+ * section 5's requestNotifPermission spy down the wrong (native) branch. */
+await page.evaluateOnNewDocument(() => {
+  window.Capacitor = {
+    isNativePlatform: () => true,
+    Plugins: {
+      LocalNotifications: {
+        checkPermissions: async () => ({ display: 'denied' }),
+        requestPermissions: async () => ({ display: 'denied' }),
+        schedule: async () => ({}),
+        cancel: async () => ({}),
+        getPending: async () => ({ notifications: [] }),
+      },
+    },
+  };
+});
+await page.reload({ waitUntil: 'networkidle2' });
+await sleep(2500);
+await page.evaluate(() => { location.hash = '#/settings'; });
+await sleep(2500);
+await page.waitForSelector('#notifTest', { timeout: 10000 });
+
+const platformNative = await page.evaluate(async () => (await import('./js/notify.js')).notifPlatform());
+check('R37-3 CONTROL  the mocked shell reads as native (else this proves nothing)',
+  platformNative === 'native', `notifPlatform()=${platformNative}`);
+
+await page.evaluate(() => {
+  window.__toastLogDenied = [];
+  const el = document.getElementById('toast');
+  if (!el) return;
+  const push = () => {
+    const t = (el.textContent || '').trim();
+    if (t && window.__toastLogDenied[window.__toastLogDenied.length - 1] !== t) window.__toastLogDenied.push(t);
+  };
+  new MutationObserver(push).observe(el, { childList: true, subtree: true, characterData: true });
+});
+await page.evaluate(() => document.querySelector('#notifTest')?.click());
+const DENIED_TOAST_RE = /sent\.|could not send/i;
+let deniedToast = '';
+for (const t0 = Date.now(); Date.now() - t0 < 25000;) {
+  deniedToast = await page.evaluate(re =>
+    (window.__toastLogDenied || []).find(t => new RegExp(re, 'i').test(t)) || '', DENIED_TOAST_RE.source);
+  if (deniedToast) break;
+  await sleep(250);
+}
+console.log('denied-permission toast log:', JSON.stringify(await page.evaluate(() => window.__toastLogDenied || [])));
+console.log('denied-permission test toast:', deniedToast);
+check('R37-3  #notifTest under a DENIED native permission must say "Could not send", never "Sent"',
+  /could not send/i.test(deniedToast) && !/^sent\./i.test(deniedToast),
+  `toast="${deniedToast}"`);
+
 await browser.close();
 srv.kill();
 console.log(bad ? `\n${bad} FAILED` : '\nNOTIFICATIONS VERIFIED');

@@ -51,7 +51,7 @@ import { MINI_THEMES } from '../js/poi.js';
 import { THEME_POOL, themedLook, FAMILIES } from '../js/bosses.js';
 /* notifGateOk, clampQuietHours, immRateCheck, nextImmId are PURE (no
    Capacitor/DOM), so they unit-test directly like eggProgress above. */
-import { notifGateOk, clampQuietHours, immRateCheck, nextImmId, IMM_IDS } from '../js/notify.js';
+import { notifGateOk, clampQuietHours, immRateCheck, nextImmId, IMM_IDS, IMM_MAX, IMM_WINDOW_MS } from '../js/notify.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = f => JSON.parse(readFileSync(join(here, 'fixtures', f), 'utf8'));
@@ -6881,22 +6881,26 @@ test('R37-12 nextImmId: back-to-back immediate pushes get distinct ids from a sm
 
 test('R37-12 immRateCheck: a minimal rate limit caps immediate pushes per rolling window', () => {
   /* PURE function takes an explicit clock, so the boundary is deterministic
-     instead of waiting real seconds.
+     instead of waiting real seconds. The ceiling (IMM_MAX) is a safety net
+     against a runaway loop, not a throttle on ordinary play -- a returning
+     player can legitimately trigger several distinct immediate kinds (friend
+     request, gift, cheer, siege discovery, stall notice) inside one boot, and
+     tests/notif-tier-audit.mjs drives 15+ of those in one page in quick
+     succession, so the cap must sit comfortably above that.
      PROVE-RED: reverting immRateCheck to always `{ ok: true, kept: [...recentTimestamps, now] }`
      (no cap at all) fails with:
-       AssertionError [ERR_ASSERTION]: a burst past the pool size must be
-       capped, got 9 allowed of 9 attempts */
-  const cap = IMM_IDS.length;
+       AssertionError [ERR_ASSERTION]: a burst past IMM_MAX must be capped,
+       got 23 allowed of 23 attempts */
   let recent = [], allowed = 0;
   const now = 1_000_000;
-  for (let i = 0; i < cap + 3; i++) {
+  for (let i = 0; i < IMM_MAX + 3; i++) {
     const { ok, kept } = immRateCheck(recent, now + i);
     recent = kept;
     if (ok) allowed++;
   }
-  assert.equal(allowed, cap, `a burst past the pool size must be capped, got ${allowed} allowed of ${cap + 3} attempts`);
-  const rolled = immRateCheck(recent, now + 61000);
-  assert.equal(rolled.ok, true, 'once the 60s window elapses, a new push must be allowed again');
+  assert.equal(allowed, IMM_MAX, `a burst past IMM_MAX must be capped, got ${allowed} allowed of ${IMM_MAX + 3} attempts`);
+  const rolled = immRateCheck(recent, now + IMM_WINDOW_MS + 1000);
+  assert.equal(rolled.ok, true, 'once the window elapses, a new push must be allowed again');
 });
 
 await runAll();
