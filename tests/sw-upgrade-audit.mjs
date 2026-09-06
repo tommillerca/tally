@@ -527,9 +527,15 @@ async function launch() {
    old one" is visible rather than averaged away. */
 const LAYERS = async page => page.evaluate(async () => {
   const rx = /TALLY_UPGRADE_MARKER:([AB])/;
+  /* NEWEST GENERATION FIRST, the way sw.js's fromCaches reads (an unscoped
+     caches.match walks OLDEST first, and with a previous generation kept that
+     would print the old copy for a worker that never serves it). */
   const cacheOf = async u => {
-    try { const r = await caches.match(u); if (!r) return '-'; const m = rx.exec(await r.text()); return m ? m[1] : '?'; }
-    catch { return '-'; }
+    try {
+      const names = (await caches.keys()).filter(k => /^tally-v\d+$/.test(k)).sort((a, b) => +b.match(/\d+/)[0] - +a.match(/\d+/)[0]);
+      for (const n of names) { const r = await caches.match(u, { cacheName: n }); if (r) { const m = rx.exec(await r.text()); return m ? m[1] : '?'; } }
+      return '-';
+    } catch { return '-'; }
   };
   const meta = document.querySelector('meta[name="tally-upgrade-marker"]');
   const css = getComputedStyle(document.documentElement).getPropertyValue('--tally-upgrade-marker').trim().replace(/["']/g, '');
@@ -771,11 +777,12 @@ const B_VERSION = PROVE === 'stale-version' ? A_VERSION : `tally-v${swVersion(fs
 const precacheOf = root => {
   const s = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
   const arr = s.slice(s.indexOf('PRECACHE'), s.indexOf('];', s.indexOf('PRECACHE')));
-  return [...arr.matchAll(/['"]\.\/([^'"]*)['"]/g)].map(m => m[1]);
+  // './' (the directory) is served as index.html and never byte-identical anyway
+  return [...arr.matchAll(/['"]\.\/([^'"]*)['"]/g)].map(m => m[1]).filter(r => r && fs.existsSync(path.join(root, r)) && fs.statSync(path.join(root, r)).isFile());
 };
 const IDENTICAL = (() => {
   const b = new Set(precacheOf(ROOT).filter(r => r !== DROPPED));
-  return precacheOf(OLD_ROOT).filter(rel => b.has(rel) && fs.existsSync(path.join(OLD_ROOT, rel)) && fs.existsSync(path.join(ROOT, rel))
+  return precacheOf(OLD_ROOT).filter(rel => b.has(rel) && fs.existsSync(path.join(ROOT, rel))
     && Buffer.from(transform(rel, fs.readFileSync(path.join(OLD_ROOT, rel)), 'A')).equals(Buffer.from(transform(rel, fs.readFileSync(path.join(ROOT, rel)), 'B'))));
 })();
 /* The bound for THROTTLED BOOT. See the row that uses it for where it comes
@@ -783,7 +790,7 @@ const IDENTICAL = (() => {
    noise cannot move it, and --prove-red=network-first proves it can go red. */
 const BOOT_BUDGET_MS = 3000;
 
-const PRECACHE_BYTES = precacheOf(ROOT).reduce((a, rel) => a + (fs.existsSync(path.join(ROOT, rel)) ? fs.statSync(path.join(ROOT, rel)).size : 0), 0);
+const PRECACHE_BYTES = precacheOf(ROOT).reduce((a, rel) => a + fs.statSync(path.join(ROOT, rel)).size, 0);
 const PRECACHE_LEN = (() => {
   const s = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
   const arr = s.slice(s.indexOf('PRECACHE'), s.indexOf('];', s.indexOf('PRECACHE')));
@@ -1285,9 +1292,13 @@ if (so && !so.error) {
   ok('CARRIED (R38-18): the bytes the install pulled are the changed files, not the whole build',
     n.bytes != null && n.bytes < PRECACHE_BYTES / 2,
     `${n.bytes == null ? '?' : (n.bytes / 1024).toFixed(0)} KB served against ${(PRECACHE_BYTES / 1024).toFixed(0)} KB in the precache`);
-  ok('SECOND OPEN: the build being served is the one the sentinel says is complete',
-    L.readyIn.length === 1 && L.readyIn[0] === B_VERSION,
-    `sentinel in: ${L.readyIn.join(', ') || 'NO CACHE'} (want ${B_VERSION})`);
+  /* two sentinels now: the build in charge, and the previous generation that
+     activate kept whole for the old page (R38-17). What must hold is that the
+     build being SERVED has one; the kept one keeping its own is what makes it
+     usable at all. */
+  ok('SECOND OPEN: the build being served is the one the sentinel says is complete (the kept previous generation keeps its own)',
+    L.readyIn.includes(B_VERSION) && L.readyIn.every(k => k === A_VERSION || k === B_VERSION),
+    `sentinel in: ${L.readyIn.join(', ') || 'NO CACHE'} (want ${B_VERSION}, and at most ${A_VERSION} beside it)`);
 }
 
 /* THE OFFLINE COPY, WHICH IS THE ONE THE PRECACHE ACTUALLY OWNS.
