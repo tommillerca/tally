@@ -4221,6 +4221,7 @@ async function renderToday(el) {
        First child, so it starts at the scroll origin and can never paint into
        the strip a pull opens. */''}
   <div class="today-plate" aria-hidden="true"></div>
+  <div id="updBanner"></div>
   <!-- The scene is CORAL by default (the deck's hero colour), but an equipped
        backdrop covers it completely, and on a tab switch the card paints a frame
        or two before that image decodes: Tom, 2026-08-08, "im seeing the coral
@@ -4953,6 +4954,7 @@ async function renderToday(el) {
   }));
 
   if (isToday) hydrateRaceResult(el);
+  checkForUpdate(el);
 }
 
 /* THE CALORIE RING, ONE DEFINITION, TWO SCREENS.
@@ -11364,42 +11366,65 @@ function activityRecoveryHtml(days) {
   return `<div class="card trend-hero"><div class="card-title">ACTIVITY</div>${heartPrompt}<p class="note" style="margin-top:${heartPrompt ? '12' : '2'}px">Your steps and workouts are tracked below. Connect a watch (Heart Rate + HRV) to unlock a daily readiness score up here.</p></div>${mix}`;
 }
 
-// Hard refresh: drop the service worker + all caches and reload, so a stale
-// client actually pulls the newest build. Shared by Settings and the Trends banner.
+/* THE NETWORK'S ANSWER TO "WHAT IS LIVE". version.json is the worker's own
+   killswitch stamp: thirty bytes, never cached by any route (sw.js), so this is
+   both the cheapest and the only honest question. 0 means offline or unreadable. */
+async function latestBuild() {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 5000);
+    const res = await fetch('version.json?cb=' + Date.now(), { cache: 'no-store', signal: ctl.signal });
+    clearTimeout(t);
+    if (!res.ok) return 0;
+    const m = String((await res.json()).version || '').match(/tally-v(\d+)/);
+    return m ? +m[1] : 0;
+  } catch { return 0; }
+}
+const runningBuild = () => parseInt(String(APP_BUILD).replace(/\D/g, ''), 10) || 0;
+
+/* "Get latest", shared by Settings and the Today/Progress banner.
+   R38-3 (2026-09-06): this used to unregister every worker and delete every
+   cache BEFORE reloading, on the assumption the reload would reinstall. With no
+   signal it left a blank app (0 chars on screen, no caches, no registration)
+   that stayed blank across reopen and force-quit until the network came back,
+   and it is the button the app points STALE players at, i.e. exactly the people
+   on a bad connection. Now: prove the network is reachable first, then ask the
+   registration for the new worker and let it do the work. Its install fetches
+   the new build into a NEW cache and only then calls skipWaiting (sw.js), its
+   activate is what deletes the old cache, and controllerchange reloads this
+   page. Nothing is deleted before the new build has fully landed. */
 async function hardRefresh() {
+  if (!(await latestBuild())) { toast('No connection. Try again when you have signal', 3200); return; }
   toast('Getting the latest build...', 2200);
   try {
-    if ('serviceWorker' in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.unregister()));
+    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+    if (reg) {
+      await reg.update();
+      const w = reg.installing || reg.waiting;
+      if (w) {
+        if (w.state === 'installed') { try { w.postMessage('SKIP_WAITING'); } catch { /* it swaps on its own */ } }
+        w.addEventListener('statechange', () => { if (w.state === 'redundant') toast('The update did not install. Try again later', 3200); });
+        return;   // its activation fires controllerchange, and that handler reloads
+      }
     }
-    if (window.caches) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
-    }
-  } catch { /* best effort */ }
-  setTimeout(() => location.reload(true), 500);
+  } catch { /* fall through to a plain reload */ }
+  location.reload();
 }
 
 // Ask the network (not the SW cache) what the latest shipped build is, and show a
-// "Get latest" banner at the top of Progress when this client is behind. It hides
+// "Get latest" banner at the top of the screen when this client is behind. It hides
 // itself the moment the running build matches, so it only nags when truly stale.
+// On Today and Progress (R38-15: it was Progress only, and a stranded player
+// never sees Progress).
 async function checkForUpdate(el) {
-  try {
-    const res = await fetch('sw.js?cb=' + Date.now(), { cache: 'no-store' });
-    if (!res.ok) return;
-    const m = (await res.text()).match(/tally-v(\d+)/);
-    if (!m) return;
-    const latest = +m[1];
-    const running = parseInt(String(APP_BUILD).replace(/\D/g, ''), 10) || 0;
-    if (latest <= running) return; // up to date -> no banner
-    const b = $('#updBanner', el);
-    if (!b) return;
-    b.innerHTML = `<button class="upd-banner" id="updBannerBtn">
-      <span class="ub-txt"><b>Update available</b><span>New features are ready. You're on ${esc(APP_BUILD)}; v${latest} is live.</span></span>
-      <span class="ub-cta">Get latest</span></button>`;
-    $('#updBannerBtn', el)?.addEventListener('click', hardRefresh);
-  } catch { /* offline / blocked: just skip the banner */ }
+  const latest = await latestBuild();
+  if (latest <= runningBuild()) return; // up to date, or offline -> no banner
+  const b = $('#updBanner', el);
+  if (!b || !b.isConnected) return;
+  b.innerHTML = `<button class="upd-banner" id="updBannerBtn">
+    <span class="ub-txt"><b>Update available</b><span>New features are ready. You're on ${esc(APP_BUILD)}; v${latest} is live.</span></span>
+    <span class="ub-cta">Get latest</span></button>`;
+  $('#updBannerBtn', el)?.addEventListener('click', hardRefresh);
 }
 
 function openWeightSheet() {
@@ -14355,7 +14380,7 @@ async function renderSettings(el) {
     <div class="settings-row"><div class="lab"><b>Send feedback</b><span>Tell the developer what you think</span></div><button class="btn small ghost" id="feedbackBtn">Write</button></div>
     ${surveyDone ? '' : `<div class="settings-row"><div class="lab"><b>Day One survey 💜</b><span>Share your thoughts, keep the exclusive Day One Lizard</span></div><button class="btn small" id="surveyBtn" style="background:#b96cf0;color:#1a0f26">Claim</button></div>`}
     <div class="settings-row"><div class="lab"><b>What's New</b><span>See what changed in recent updates</span></div><button class="btn small ghost" id="whatsNewBtn">Read${clUnseen ? ` <i class="q-badge">${clUnseen}</i>` : ''}</button></div>
-    <div class="settings-row"><div class="lab"><b>App version</b><span>Build ${APP_BUILD}${shellV} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
+    <div class="settings-row"><div class="lab"><b>App version</b><span id="buildLine">Build ${APP_BUILD}${shellV} · tap if the app looks out of date</span></div><button class="btn small ghost" id="updateBtn">Get latest</button></div>
     ${STORE_BUILD ? '' : `<div class="settings-row"><div class="lab"><b>Diagnostics</b><span id="diagLine">${esc(diag)}</span></div><button class="btn small ghost" id="copyDiag">Copy</button></div>`}
   </div>
 
@@ -14667,6 +14692,11 @@ async function renderSettings(el) {
   // reload from the network. This is the escape hatch when a stale cached build
   // is stuck on the device (data is untouched - it lives in IndexedDB).
   $('#updateBtn')?.addEventListener('click', hardRefresh);
+  // R38-15: "Build v471 · tap if..." read the same six builds behind as current
+  latestBuild().then(latest => {
+    const line = $('#buildLine');
+    if (line && latest > runningBuild()) line.textContent = `Build ${APP_BUILD}${shellV}, v${latest} is live`;
+  });
   /* Copy, not just screenshot: a screenshot means somebody retypes these values to
      search for them. Clipboard can be refused, so the fallback is selecting the text
      rather than a toast claiming a copy that did not happen. */
@@ -22645,7 +22675,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v485'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v486'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

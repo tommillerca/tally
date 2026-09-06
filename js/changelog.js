@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 486, date: '2026-09-06', title: 'Updates reach every phone', items: [
+    'If you have been stuck on an old build, this is the one that unsticks you: a downloaded update now lets itself in instead of waiting for permission from code you did not have yet. Anyone on a build before v473 has been downloading updates and never running them.',
+    'The previous build\'s files are kept for one update, so an app that is mid-screen when the swap lands can still load what it needs. And Get latest checks for signal before it clears anything, so tapping it offline no longer leaves a blank app.',
+    'The update banner lives on Today now, not only on the Progress screen, and Settings says which build is live when you are behind. Updates also stop re-downloading the files that did not change: this one carried 187 of 187 unchanged files forward and fetched 3.7 MB instead of 11.5.',
+  ] },
   { n: 485, date: '2026-09-06', title: 'Your save reaches the cloud before you leave', items: [
     'Backing out of the app or closing it now pushes your backup, and a save that has grown since the last push does not wait ten minutes. Before this, a whole session of meals and crates could sit unsent and a new phone would restore the older save with a cheerful Welcome back.',
     'The Erase sheet and Settings tell one truth about whether your progress can come back: what exists, what is missing, and what to set. A deleted account no longer shows a second phone as online with a fresh backup.',
