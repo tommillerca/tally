@@ -19,6 +19,13 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v479
+1. A hotfix off v478, two Stable fixes from Tom's live session. Its rows are the dated "stable collapse" section further down, folded here.
+
+2. PROOF: football-render-audit.mjs | REACH: the pet wear shelf shows one tile per garment family with the 32-team rail below it, every team tile at least 40px; tapping a team recolours every football piece the lizard wears (SHELF and SHELF-TEAM rows, red on v476: 0 garment tiles, 0 team tiles).
+
+3. PROOF: pet-ownership-audit.mjs | REACH: the Stable ring draws one card per species with a count badge and a copy row under the caption; twelve Bulldogs collapse to one card carrying 12, and one swipe from the Bulldog lands on the lizard (COLLAPSE, COLLAPSE-COUNT, COLLAPSE-REACH rows, red on v476 with 14 cards).
+
 ## v478
 1. A hotfix off v477 from Tom's live session and QA round 37. Nothing from the integration train is in it.
 
