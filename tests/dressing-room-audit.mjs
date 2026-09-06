@@ -12,10 +12,11 @@
  *
  * v474 collapsed the fit grid to one tile per bhFamilyKey with a colourway rail
  * (wardrobe-family-grid-audit). The look picker never got it: measured on this
- * tree before the fix at 393x852 with the cleats owned, 34 tiles in a 765px grid,
- * 32 of them the SAME untinted master PNG (no fbTintAttr), so a player could not
- * tell one team from another, let alone pick one. After: 4 tiles, 77px, one
- * family tile carrying the count and its worn colourway, a 31-tile rail on tap.
+ * tree before the fix at 393x852 with the cleats owned, 35 tiles for 33 offered
+ * looks, 31 of them the SAME untinted master PNG (no fbTintAttr), so a player could
+ * not tell one team from another, let alone pick one. After: 5 tiles in a 163px
+ * grid, one family tile carrying the count and its worn colourway, a 31-tile rail
+ * on tap.
  *
  * WHAT IT ASSERTS
  *   SEED     the kit is owned in the slot and every gear slot under test holds
@@ -39,9 +40,9 @@
  *            big stage, with the disguise gone from the map. Never the default,
  *            never nothing. A row with no layer in the slot is a FAILURE.
  *
- * PROVE-RED, 2026-09-05, in an rsync copy of the tree outside the worktree with
- * origin/main's js/app.js and app.css restored (the pre-fix picker):
- *   FAIL FAMILY one look tile per family, not per piece  36 tiles for 34 looks;
+ * PROVE-RED, 2026-09-06, this file run from a `git archive origin/main` tree
+ * (v477, the pre-fix picker), 8 FAILED:
+ *   FAIL FAMILY one look tile per family, not per piece  35 tiles for 33 looks;
  *        the rule says 2 + 3 = 5
  *   FAIL RAIL tapping the family tile opens a rail with one tinted tile per
  *        colourway  no .ward-cell.fam in the look grid

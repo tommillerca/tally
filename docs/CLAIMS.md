@@ -103,7 +103,7 @@ transmog mirror section it's individually listing every single cleat/shirt etc a
 its own thing without a colour picker". Nothing about the price, the paid-once
 rule or the arm-then-confirm flow moved; every row of transmog-clarity-audit and
 transmog-receipt-audit still grades them. dressing-room-audit's FAMILY and RAIL
-rows were proved red against v477's js/app.js (36 tiles for 34 looks, no family
+rows were proved red against v477's js/app.js (35 tiles for 33 looks, no family
 tile) and its OWN rows by mutation (the own-look branch deleting the slot instead
 of restoring it).
 
