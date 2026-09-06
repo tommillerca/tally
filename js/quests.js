@@ -454,7 +454,11 @@ export async function claimQuest(periodKey, q, period = 'day') {
   const pay = {
     kv: {
       coins: cur => Math.max(0, (Number(cur) || 0) + coins),
-      coinsRev: cur => Math.max(0, (Number(cur) || 0) + 1),
+      // R38-13 (2026-09-06): bumped by the coin MAGNITUDE, matching js/loot.js
+      // coinsAdd's own fix -- a flat +1 here would undermine the sum-based
+      // merge tie-break for every quest payout. One-line, quest-lane-adjacent;
+      // see js/db.js importAll's coinsRev comment for the full reasoning.
+      coinsRev: cur => Math.max(0, (Number(cur) || 0) + Math.max(1, Math.abs(coins))),
       // v153: richer, more enticing rewards beyond coins — Bone Dust and
       // ingredients so the reward table isn't all coins.
       ...(q.dust ? { bonedust: cur => Math.max(0, (Number(cur) || 0) + q.dust) } : {}),
