@@ -19,6 +19,26 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v480
+1. A hotfix off v479 from Tom's live session. Its rows are the dated "dressing room families" section further down, folded here.
+
+2. PROOF: dressing-room-audit.mjs, wardrobe-family-grid-audit.mjs | REACH: the Dressing Room look picker shows one tile per family with the team rail (FAMILY and RAIL rows, red on v477: 35 tiles for 33 looks, no family tile), and "its own look" resolves to the gear's own art in all five slots (OWN rows, red by mutation).
+
+3. PROOF: dressing-room-audit.mjs | REACH: the Dressing Room's bar and the fit rail's team bar are addressed separately, so a look tap no longer replaces the Wardrobe's team bar (PICK row, red before the selector fix).
+
+## v479
+1. A hotfix off v478, two Stable fixes from Tom's live session. Its rows are the dated "stable collapse" section further down, folded here.
+
+2. PROOF: football-render-audit.mjs | REACH: the pet wear shelf shows one tile per garment family with the 32-team rail below it, every team tile at least 40px; tapping a team recolours every football piece the lizard wears (SHELF and SHELF-TEAM rows, red on v476: 0 garment tiles, 0 team tiles).
+
+3. PROOF: pet-ownership-audit.mjs | REACH: the Stable ring draws one card per species with a count badge and a copy row under the caption; twelve Bulldogs collapse to one card carrying 12, and one swipe from the Bulldog lands on the lizard (COLLAPSE, COLLAPSE-COUNT, COLLAPSE-REACH rows, red on v476 with 14 cards).
+
+## v478
+1. A hotfix off v477 from Tom's live session and QA round 37. Nothing from the integration train is in it.
+
+2. PROOF: hype-banner-audit.mjs, news-banner-audit.mjs | REACH: the news pill's hero slot promotes the Locker Room row: a poster rendered from the real kit-room DOM (Bonehead in the Bruisers kit, lizard in front) registered as a measured plate, so the hero shows the newest thing on sale instead of the Wanderer. The hype audit re-measures the hero (one hero, art decoded, whole figure, fits, caption length) with the new plate in it; the news audit keeps every row bounded.
+
+3. PROOF: shop-door-audit.mjs | REACH: Today's coin pill opens the Shop. The COIN-PILL row taps the real pill and reads the Shop chip lit; red on v477 (tapped, chip off).
 ## notifications consent (2026-09-06)
 
 Not stamped to a release: hotfix/notify-consent, off v477. HANDOFFr3720260906.md
@@ -150,6 +170,30 @@ in its own section below, not folded in here.
 14. PROOF: unit.test.js, football-kit-audit.mjs | REACH: Buying the full football kit at the same time as buying one of its garments separately (two overlapping taps) no longer overcharges. The kit bundle now re-checks what it actually delivered after an overlapping single-garment buy lands, and refunds the difference, so a player is never charged for a garment the bundle didn't end up needing to grant.
 
 15. PROOF: a11y-audit.mjs (foodFieldNames) | REACH: A screen reader creating a custom food, or using Quick add, now hears each number field by name (Calories, Protein, Carbs, Fat, Sodium, Grams, and so on) instead of an unlabelled textbox, or three identical fields for Protein, Carbs and Fat.
+
+## stable collapse (2026-09-05)
+
+Not stamped to a release. Tom, on v476: "you gotta scroll past all the helmet colours before you get to the shirt. it should be two items then colours below just like the boneheadz wardrobe" and "the stable is overwhelming with too much of the same pet ... scrolling past 50 bulldogs to get to the lizard".
+
+1. PROOF: football-render-audit.mjs (SHELF, SHELF-TEAM, proved red on v476) | REACH: In the Stable, a lizard's wardrobe now shows one tile per garment (helmet, jersey) with a rail of the 32 team colours underneath, the same shape as your Bonehead's Wardrobe. Tapping a team recolours whatever football piece she has on; with nothing on, it picks the team the next garment tap wears.
+
+2. PROOF: pet-ownership-audit.mjs (COLLAPSE, COLLAPSE-COUNT, COLLAPSE-REACH, proved red on v476) | REACH: The Stable ring shows one card per kind of pet, not one per copy. Twelve Bulldogs are one card with a "×12" badge, and the lizard is one swipe away. A row under the focused card lists that kind's copies (name, level, shiny, which one is out) so you can step through them, breed, dress or destroy any one of them without leaving the ring.
+## dressing room families (2026-09-06)
+
+Tom, live on v476: "the colour picker in the wardrobe works well but down in the
+transmog mirror section it's individually listing every single cleat/shirt etc as
+its own thing without a colour picker". Nothing about the price, the paid-once
+rule or the arm-then-confirm flow moved; every row of transmog-clarity-audit and
+transmog-receipt-audit still grades them. dressing-room-audit's FAMILY and RAIL
+rows were proved red against v477's js/app.js (35 tiles for 33 looks, no family
+tile) and its OWN rows by mutation (the own-look branch deleting the slot instead
+of restoring it).
+
+1. PROOF: dressing-room-audit.mjs | REACH: Open your Bonehead, Wardrobe, tap a gear slot you own football garments for. The look picker now shows one tile per garment with its colourway count, the same as the fit grid above it, instead of one tile per team. Tap it and the team rail opens; tap a team and that colourway is the look being tried, drawn on the After figure and named in the bar. The tile paints the team you are trying, and the one you wear when nothing is being tried.
+
+2. PROOF: dressing-room-audit.mjs | REACH: With a look applied over a gear piece, tap "Its own look" in Hat, Top, Pants, Shoes or Feet: the After figure draws that gear's own art, and Wear it puts it on the big stage with the disguise gone. Tom's "shows the sock" report did not reproduce on a healthy network; a layer that fails to load degrades to the default by design.
+
+3. PROOF: dressing-room-audit.mjs | REACH: With a football garment worn (so the fit grid's team bar is showing above the Dressing Room), tapping a look no longer swaps that team bar for a second "You keep / You get / You pay" bar while the real one at the bottom keeps the old text. The bottom bar updates and the team bar stays. Not named in the brief; found in the after-rail screenshot, and it was live on v477.
 
 ## claim hygiene (2026-09-05)
 

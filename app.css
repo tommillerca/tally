@@ -5866,13 +5866,13 @@ body::before {
   color: var(--text-2); background: rgba(13, 12, 18, .84); padding: 2.5px 2px; line-height: 1.3;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
 }
-.ward-cell.look .look-cost {
+.ward-cell.look .look-cost, .pw-item.famr .look-cost {
   position: absolute; right: 3px; bottom: 3px; z-index: 2;
   font-size: 9px; font-weight: 900; line-height: 1; padding: 3px 4px; border-radius: 5px;
   color: var(--text-1, #efe9f5); background: rgba(13, 12, 18, .86); pointer-events: none;
 }
 /* same ◆ the top bar uses for Bone Dust, so the price reads without a legend */
-.ward-cell.look .look-cost::after { content: ' ◆'; opacity: .75; }
+.ward-cell.look .look-cost::after, .pw-item.famr .look-cost::after { content: ' ◆'; opacity: .75; }
 .ward-cell.look .look-hide { font-size: 20px; opacity: .6; }
 .look-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -5920,14 +5920,14 @@ body::before {
    instead). And `.ward-cell img` is position:absolute;inset:0, which pinned the
    crystal to the tile's corner ON TOP of the digits. So the pill is sized to fit
    a real 16px icon and the icon is put back in flow. */
-.ward-cell.look .look-cost.dust {
+.ward-cell.look .look-cost.dust, .pw-item.famr .look-cost.dust {
   display: flex; align-items: center; gap: 3px; padding: 2px 5px; font-size: 10px; line-height: 16px;
 }
-.ward-cell.look .look-cost.dust::after { content: none; }
+.ward-cell.look .look-cost.dust::after, .pw-item.famr .look-cost.dust::after { content: none; }
 /* "owned" is a receipt, not a price: same chip, a different ground (QA round 22
    W12 measured the two backgrounds at 1.00:1). Mint is the app's paid/done tint. */
-.ward-cell.look .look-cost.paid { background: var(--mint); color: var(--accent-ink); }
-.ward-cell.look .look-cost.dust img, .ward-cell.look .look-cost.dust svg {
+.ward-cell.look .look-cost.paid, .pw-item.famr .look-cost.paid { background: var(--mint); color: var(--accent-ink); }
+.ward-cell.look .look-cost.dust img, .ward-cell.look .look-cost.dust svg, .pw-item.famr .look-cost.dust img, .pw-item.famr .look-cost.dust svg {
   position: static; inset: auto; flex: none; object-fit: contain;
 }
 .mog-panel .look-hide svg { opacity: .75; }
@@ -6682,13 +6682,16 @@ body::before {
 .pw-item.fbr:last-child { margin-right: calc(50% - 44px - var(--pad)); }
 .pw-item.fbr b { font-size: 10px; line-height: 1.15; }
 .pw-item.fbr small { display: flex; align-items: center; justify-content: center; gap: 3px; }
+/* The Stable's pet rail (2026-09-05) puts a team DISC on the .fbr tile instead of
+   a mannequin: the garment tiles above it already show the team on the animal. */
+.pw-item.fbr .fb-swatch { width: 34px; height: 34px; margin: 3px 0 1px; }
 /* LOCKED IS SHOWN, NOT HIDDEN. A player owning one kit would otherwise get a
    one-tile rail, and seeing their OWN Bonehead in the other 31 is the argument
    for a second one. The tile still previews on the doll; only the bar can
    commit, and on a locked colourway the bar routes to the Kit room. Same
    grayscale+dim as .ward-cell.gear.locked, which is this screen's own idiom for
    "real, yours later". */
-.pw-item.fbr.locked .fb-worn { filter: grayscale(0.85) brightness(0.6); }
+.pw-item.fbr.locked .fb-worn, .pw-item.fbr.locked .fb-swatch { filter: grayscale(0.85) brightness(0.6); }
 .pw-item.fbr.locked b { color: var(--text-3); }
 .pw-item.fbr.locked small { color: var(--text-3); }
 .pw-item.fbr.on.locked { border-color: var(--text-3); background: rgba(159, 172, 159, .1); }
@@ -8889,6 +8892,21 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
   background: var(--accent); color: var(--ink); border-top: 2px solid #17151d; padding: 3px 0 2px;
 }
 .cf-eq.sel { background: var(--violet); color: var(--text); }
+/* ONE CARD PER SPECIES (2026-09-05): how many copies the card stands for.
+   Bottom-right, above the .cf-eq strip, because .cf-chip owns top-left and
+   .cf-lv owns top-right; same ink plate as .cf-chip so it reads over Cam's art. */
+.cf-n {
+  position: absolute; right: 8px; bottom: 26px; z-index: 2;
+  font-family: var(--display); font-size: 13px; letter-spacing: .04em; color: var(--text);
+  background: var(--ink); border: 2px solid rgba(0, 0, 0, .35); border-radius: 999px; padding: 1px 7px;
+}
+/* The copies of the species in front, one .chip each, in a scroll row under the
+   caption. Empty (a species with one copy) takes no room at all. 40px floor. */
+.cf-kin { display: flex; gap: 6px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+  margin: 10px calc(var(--pad) * -1) 0; padding: 0 var(--pad); }
+.cf-kin::-webkit-scrollbar { display: none; }
+.cf-kin:empty { display: none; }
+.cf-kin .chip { min-height: 40px; display: inline-flex; align-items: center; scroll-snap-align: center; }
 .cf-cap { padding: 4px 4px 0; text-align: center; }
 .cf-cap b {
   display: block; font-family: var(--display); font-weight: 400; font-size: 27px;
@@ -11511,6 +11529,9 @@ button.t3-price::before {
    thing to keep in sync for no visual gain. Fill AND border, never colour
    alone (a11y-audit). */
 .pw-item.famr.equipped { background: rgba(255, 201, 97, .12); border-color: var(--gold); }
+/* The Dressing Room's rail (data-look tiles, 2026-09-05): `selected` is the colourway being
+   tried, the same class the look grid's own tiles use for it. */
+.pw-item.famr.selected { outline: 2px solid var(--protein); outline-offset: 1px; }
 .pw-item.famr.r-uncommon .ward-rar { color: var(--mint); }
 .pw-item.famr.r-rare .ward-rar { color: var(--protein); }
 .pw-item.famr.r-epic .ward-rar { color: var(--violet); }
