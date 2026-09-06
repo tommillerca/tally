@@ -6110,7 +6110,7 @@ function wornArtHtml(id, css) {
 // (how Brock's shiny lizard rendered base-purple on the board).
 const lbAvatar = (p, cls = 'lb-av') =>
   `<div class="${cls}">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' },
-    { noYard: true, skip: ['BG'], thumb: true, shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null, petMorph: snapPetMorph(p.pet) })}</div>`;
+    { noYard: true, skip: ['BG'], thumb: true, foreign: true, shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null, petMorph: snapPetMorph(p.pet) })}</div>`;
 /* THE BOARD SHOWS THE BONEHEAD, NOT A THUMBNAIL. Tom, 2026-08-08: "make the
    leaderboard look cooler, maybe the number is on top of the bonehead art? right
    now the art is soooo small in the list" and "show the art proudly over 1. 2. 3.
