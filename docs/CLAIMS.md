@@ -19,6 +19,19 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v483
+1. The integration train (integ/day5) off v482: Kennel phase A, palettes, the approved v2 recolour art and the Kennel UI; crew activity; the Wardrobe paint virtualization; the truthful iOS permission strings (not a player-visible change, documented in docs/PERMISSION-STRINGS.md). Each row below folds the dated sections further down.
+
+2. PROOF: unit.test.js, pet-pool-audit.mjs, pet-morph-audit.mjs, kennel-audit.mjs | REACH: a granted egg rolls a morph fresh-first over species x morph pairs at MORPH_WEIGHT, the hatch reads it, morphs never touch stats; each morph is a per-fill recolour PNG of Cam's master (ink, whites and creams byte-identical, one midnight tier, Tom approved the sheet 2026-09-06) with tiers built; the Kennel sheet inside the Stable lists every species with a 30-cell collection grid and column headers.
+
+3. PROOF: unit.test.js, pet-pool-audit.mjs, friend-paddock-audit.mjs, pet-morph-audit.mjs | REACH: Bumbleseal hatches at the same even share as C1 to C5 with her hatchChance removed; the morph rides the friend wire like shiny and every pet surface (Today hero, Stable card, Paddock scene own and visited, friend profile hero and paddock row, level-up sheet) resolves the variant art, red on the pre-fix scene with 0 of 30 sprites.
+
+4. PROOF: crew-activity-audit.mjs | REACH: a friend's card names what changed since the last look from a cached snapshot (silent on first sight and on nothing changed); GET /friends carries a spire count per side shown on card and profile; the Crew badge counts an improved race rank once.
+
+5. PROOF: unit.test.js, crew-activity-audit.mjs | REACH: raceStanding's gap is to the racer above; raceClockLabel fires "settles tonight" on the last calendar day; settlement writes a reward-less place grant for every non-podium finisher; hasFightableStats demands a real number for every stat before any fight or stat bar renders.
+
+6. PROOF: wardrobe-family-grid-audit.mjs, football-tile-crop-audit.mjs, memory-census.mjs | REACH: hydratePackArt paints only tiles on screen or one screen away via an IntersectionObserver rooted on the real scroller (measured 166 ms to 73 ms main-thread script opening the hat slot at 4x CPU, 185 owned hats; OFF-DOM decoded bitmaps 12.2 MB to 9.3 MB).
+
 ## v482
 1. A hotfix off v481, QA round 37's first-session and crate-tap items (R37-1, 5, 6; R37-2 verified already fixed by the round-34 restore latch). Its rows are the dated "first session and crate taps" section further down, folded here.
 
