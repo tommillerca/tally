@@ -19,6 +19,13 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v477
+1. A hotfix off v476, two Crew fixes from Tom's live session. Nothing from the integration train is in it.
+
+2. PROOF: crew-slime-leak-audit.mjs | REACH: the slime glow is scoped to the player's own worn item and every render of someone else's outfit (Crew cards, friend rows and profiles, leaderboard heads, race runners, foes, the boss wall, a rival keeper, a visited paddock's keeper) is marked foreign. The audit seeds slimed kicks on the viewer, three friends with kicks in the deck, reads zero slimed layers inside the Crew deck while the viewer's own hero shows the glow; red on v476 with 2 friend layers lit.
+
+3. PROOF: crew-slime-leak-audit.mjs | REACH: the Crew's sealed-gift card renders one gift and "and N more waiting" instead of every sealed gift; six seeded gifts render one button; red on v476 with six.
+
 ## v476
 1. A hotfix off v475, two changes. Nothing else from the day's integration train is in it.
 
