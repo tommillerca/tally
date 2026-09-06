@@ -1211,6 +1211,71 @@ async function showSplash(userEq) {
 
 /* ================= boot ================= */
 
+/* R37-1: the install session never got a boot tail. boot() returns early,
+   above, for a fresh install with no S.settings (straight into onboarding),
+   and enterAppFromOnboarding (the path that session actually takes once
+   onboarding finishes) rebound only the tab bar, hashchange and analytics.
+   Everything below was therefore never registered for a first session: no
+   resume handling, no day-rollover interval, no notif scheduling, no
+   autoSync. Lifted verbatim out of boot() so both paths bind it. Every call
+   inside is already idempotent (autoSync, notif refresh, the day roll), and
+   the module-level guard makes a second call from either path a no-op. */
+let lifecycleBound = false;
+function bindAppLifecycle() {
+  if (lifecycleBound) return;
+  lifecycleBound = true;
+  const NOSOCIAL = S.demo || navigator.webdriver === true;
+  backupNudge();
+  nativeAutoSync();
+  setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
+  // social: push the game snapshot + encrypted backup, pull server grants
+  // (throttled, silent). initFromQuery + bootSync already ran above.
+  if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(cloudTroubleNotice).then(() => checkFriendRequests()).then(checkSieges);
+  /* touchServerDay BEFORE rollDayIfNeeded: coming back to the app is exactly
+     when a new day gets opened, and the day guard's ceiling (js/db.js rule 3)
+     is only as fresh as the last /health we saw. Unsigned, anonymous, fails
+     soft; skipped under NOSOCIAL so audits and ?demo never phone production. */
+  /* ONE TIMEOUT AIMED AT MIDNIGHT (QA round 26 O13), beside the 60 s interval
+     below: dateKey() flipped at 0 ms and the screen at up to 53 s. Re-aimed on
+     every resume because a suspended WebView's pending timer is stale. */
+  const midnight = armMidnightTimer(rollDayIfNeeded);
+  onAppResume(async () => {
+    if (!NOSOCIAL) social.touchServerDay();
+    /* AND THE GAP OPEN GETS THE SAME BOUNDED WAIT THE BOOT DOES. A native shell
+       resumes after days without ever booting, so a 14-day return arrives here
+       rather than through boot(), and rollDayIfNeeded below is what closes the
+       owed day. settleServerDay returns instantly unless the ceiling is already
+       stale, so an ordinary resume waits nothing; when it is stale this is a
+       second /health milliseconds after the line above, which is the price of
+       having something to wait ON, once per long absence. */
+    if (!NOSOCIAL) await social.settleServerDay(dateKey()).catch(() => {});
+    midnight.rearm();
+    drainCookQueue().catch(() => {});   // QA round 26 O15: a pot that finished while suspended is collected now, not on the next Kitchen open
+    /* A RESUME IS AN OPEN. iOS suspends the WebView for days without a boot, so
+       the return gap has to be checked here too. The refresh below may already
+       have painted by the time the kv lands, so a fresh detection repaints. */
+    maybeWelcomeBack().then(back => { if (back && !sheetStack.length) refresh(); }).catch(() => {});
+    rollDayIfNeeded(); nativeAutoSync();
+    if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(cloudTroubleNotice).then(() => checkFriendRequests()).then(checkSieges);
+    flushAnalytics(); refreshNotifSchedules();
+    /* COMING BACK MEANS READING THE STORE AGAIN. With the app open twice, the
+       other tab has been spending and earning while this one sat there, and
+       nothing here re-read anything: measured with two real pages, tab A came
+       back to the foreground showing 500 coins while the store held 1500, and
+       stayed on 500 until something navigated. The arithmetic was never wrong
+       (every spend re-reads the balance at the moment it is taken, measured:
+       a 200 spend from that stale screen went 1500 -> 1300, not 500 -> 300) but
+       the number on the screen was a lie for as long as the tab was left alone.
+       Guarded on the sheet stack for the same reason the service worker's
+       reload is: refresh() re-routes, which closes every open sheet, and
+       yanking a player's sheet shut because they alt-tabbed would be a worse
+       bug than the one being fixed. */
+    if (!sheetStack.length) refresh();
+  });
+  setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight (the belt; the midnight timeout above is the brace, O13)
+  refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
+}
+
 async function boot() {
   if (S.demo) { useDbName('tally-demo'); document.body.insertAdjacentHTML('beforeend', '<div class="demo-badge">DEMO</div>'); }
   S.settings = await kvGet('settings');
@@ -1567,55 +1632,7 @@ async function boot() {
      Guarded on the sheet stack for the reason the resume refresh below is:
      route() closes every open sheet, and yanking one shut is a worse bug. */
   if ((kit || pouch || settled || merch || ceil || closed?.closed || closed?.consoled || hkTaken) && !sheetStack.length) route({ keepScroll: true });
-  backupNudge();
-  nativeAutoSync();
-  setTimeout(checkPetLevelUp, 1500); // catch pet level-ups that happened while away
-  // social: push the game snapshot + encrypted backup, pull server grants
-  // (throttled, silent). initFromQuery + bootSync already ran above.
-  if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(cloudTroubleNotice).then(() => checkFriendRequests()).then(checkSieges);
-  /* touchServerDay BEFORE rollDayIfNeeded: coming back to the app is exactly
-     when a new day gets opened, and the day guard's ceiling (js/db.js rule 3)
-     is only as fresh as the last /health we saw. Unsigned, anonymous, fails
-     soft; skipped under NOSOCIAL so audits and ?demo never phone production. */
-  /* ONE TIMEOUT AIMED AT MIDNIGHT (QA round 26 O13), beside the 60 s interval
-     below: dateKey() flipped at 0 ms and the screen at up to 53 s. Re-aimed on
-     every resume because a suspended WebView's pending timer is stale. */
-  const midnight = armMidnightTimer(rollDayIfNeeded);
-  onAppResume(async () => {
-    if (!NOSOCIAL) social.touchServerDay();
-    /* AND THE GAP OPEN GETS THE SAME BOUNDED WAIT THE BOOT DOES. A native shell
-       resumes after days without ever booting, so a 14-day return arrives here
-       rather than through boot(), and rollDayIfNeeded below is what closes the
-       owed day. settleServerDay returns instantly unless the ceiling is already
-       stale, so an ordinary resume waits nothing; when it is stale this is a
-       second /health milliseconds after the line above, which is the price of
-       having something to wait ON, once per long absence. */
-    if (!NOSOCIAL) await social.settleServerDay(dateKey()).catch(() => {});
-    midnight.rearm();
-    drainCookQueue().catch(() => {});   // QA round 26 O15: a pot that finished while suspended is collected now, not on the next Kitchen open
-    /* A RESUME IS AN OPEN. iOS suspends the WebView for days without a boot, so
-       the return gap has to be checked here too. The refresh below may already
-       have painted by the time the kv lands, so a fresh detection repaints. */
-    maybeWelcomeBack().then(back => { if (back && !sheetStack.length) refresh(); }).catch(() => {});
-    rollDayIfNeeded(); nativeAutoSync();
-    if (!NOSOCIAL) social.autoSync(socialSnapshot, APP_SOCIAL_V).then(presentGrantDelivery).then(cloudTroubleNotice).then(() => checkFriendRequests()).then(checkSieges);
-    flushAnalytics(); refreshNotifSchedules();
-    /* COMING BACK MEANS READING THE STORE AGAIN. With the app open twice, the
-       other tab has been spending and earning while this one sat there, and
-       nothing here re-read anything: measured with two real pages, tab A came
-       back to the foreground showing 500 coins while the store held 1500, and
-       stayed on 500 until something navigated. The arithmetic was never wrong
-       (every spend re-reads the balance at the moment it is taken, measured:
-       a 200 spend from that stale screen went 1500 -> 1300, not 500 -> 300) but
-       the number on the screen was a lie for as long as the tab was left alone.
-       Guarded on the sheet stack for the same reason the service worker's
-       reload is: refresh() re-routes, which closes every open sheet, and
-       yanking a player's sheet shut because they alt-tabbed would be a worse
-       bug than the one being fixed. */
-    if (!sheetStack.length) refresh();
-  });
-  setInterval(rollDayIfNeeded, 60e3); // and for an app left open across midnight (the belt; the midnight timeout above is the brace, O13)
-  refreshNotifSchedules(); // (re)schedule reminders + upcoming rare pushes per prefs
+  bindAppLifecycle(); // R37-1: resume handling, day-roll interval, notif scheduling, autoSync
   initAnalytics(APP_BUILD); // anonymous first-party usage analytics. Tag events with the real running build (not the frozen social-protocol version)
 
   // daily haunted prize wheel: once per day, after the splash intro. Self-gates
@@ -14893,6 +14910,7 @@ function enterAppFromOnboarding() {
      build, not the frozen social-protocol version. This is the path that did
      the opposite. The first session is exactly the row retention work needs. */
   initAnalytics(APP_BUILD); // start analytics from the first session too (boot's init is skipped by the onboarding return)
+  bindAppLifecycle(); // R37-1: this session took the onboarding path, not boot(), and never got resume/day-roll/notif/autoSync binding
   location.hash = '#/today';
   route();
 }
