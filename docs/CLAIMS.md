@@ -19,6 +19,23 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## the worn kit holds its colour (2026-09-06)
+
+Not stamped to a release: hotfix/wardrobe-tint-flash, off v487. Tom, live v487:
+"Switching to wardrobe makes the helmet or jersey run through every colour
+quickly if you're on that item slot at the time. Makes me think these items
+layer every colour at once?" Measured before fixing: the stage's two tint spans
+took 18 distinct colour pairs inside 1.5s of the tab tap, the rail's scrollLeft
+walking 0 to 2000 underneath them. Nothing was layered: the rail opened on the
+worn tile with `centreOn(worn, 'auto')`, `'auto'` defers to `.fb-rail`'s
+`scroll-behavior: smooth`, and the rail's scroll handler painted the doll with
+every team the animated centring passed. After: 1 colour, 2 spans per garment.
+
+1. PROOF: football-rail-audit.mjs | REACH: Wear a football helmet or jersey in
+   any team but the first, open the Bonehead tab with that slot selected, or tap
+   its slot chip. The piece on your Bonehead is your team's colours from the
+   first frame; it no longer flicks through the other 31 on the way in.
+
 ## backup and recovery truth (2026-09-06)
 
 Not stamped to a release: hotfix/backup-recovery, off v482. HANDOFFr3820260906.md
