@@ -1,0 +1,33 @@
+QUEST ROTATION
+
+1. the seeded order does not move when a gate flips
+  ok    day: gates-off list is the gates-on list minus gated quests, same order
+  ok    week: gates-off list is the gates-on list minus gated quests, same order
+  ok    month: gates-off list is the gates-on list minus gated quests, same order
+
+2a. distinct quests reachable, 365 dates x 32 flag states
+  ok    CONTROL: the sweep actually ran 365 dates x 32 flag states
+  ok    CONTROL: the sweep found real variation, not one repeated answer
+  ok    day: worst 5 reachable over the year, ceiling 5, intended 3
+  ok    week: worst 6 reachable over the year, ceiling 6, intended 3
+  ok    month: worst 3 reachable over the year, ceiling 3, intended 2
+  ok    worst reachable XP/day 975 is at most 975
+
+2b. the claim cap bounds the payout regardless of the date
+  ok    the cap holds a period to QUEST_N, so a day banks at most 605 XP
+  ok    the cap is what closes the gap: 975 reachable vs 605 bankable
+
+3. a daily claim must not spend a monthly slot
+  ok    the day sees exactly its own 3
+  ok    the month sees 1, not the 3 daily rows nested under its prefix
+  ok    the week sees exactly its own 1
+  ok    MONDAY: three dailies claimed on a Monday count as 3 dailies
+  ok    MONDAY: those same dailies spend NONE of the weekly budget
+  ok    MONDAY: and weeklies claimed on a Monday spend none of the DAILY budget
+
+4. the cap and the picker agree
+  ok    day: picker returns QUEST_N.day (3)
+  ok    week: picker returns QUEST_N.week (3)
+  ok    month: picker returns QUEST_N.month (2)
+
+PASS

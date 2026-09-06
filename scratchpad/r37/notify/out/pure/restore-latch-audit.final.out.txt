@@ -1,0 +1,22 @@
+ok   GUARD  device registered (empty sample = FAIL)  | {"ok":true,"me":{"playerId":"p-My8Ciz07FIYzQCpre9DMsk6Q","handle":"AUDIT BONES","friendCode":"AUD1","name":null}}
+ok   GUARD  LATCH: bootRestored set true right after a freshly-minted register
+ok   CONTROL  the fixture had something to lose: a crate it opened and coins it spent (an empty sample is a failure)  | crates opened from=1 coins=93
+ok   GUARD  second boot did not pull (bootRestored already latched)  | {"restored":false,"reason":"already"}
+ok   GUARD  crate count unchanged after second boot  | before=0 after=0
+ok   GUARD  coins unchanged after second boot (no refund)  | before=93 after=93
+ok   GUARD  no restore reported (reason !== restored, no toast fires)
+ok   GUARD-RECEIPT  forced merge still runs (this row is not a no-op)
+ok   GUARD-RECEIPT  the opened crate does not come back even under a forced merge  | before=0 afterForcedMerge=0
+ok   GUARD-RECEIPT  coins are not refunded either, under the same forced merge (coinsRev guard)  | before=93 afterForcedMerge=93
+ok   REINSTALL  same account recovered on reinstall
+ok   REINSTALL  LATCH does not fire for a recovered (non-minted) identity
+ok   REINSTALL  a real restore still pulls and merges  | {"restored":true,"counts":{"foods":0,"log":0,"weights":0,"skipped":[]},"updatedAt":1788667046088,"version":1788667046088}
+ok   REINSTALL  device A's newer crate arrived on the reinstalled device  | expected=1 got=1
+ok   REINSTALL  device A's newer coin balance arrived
+ok   SRC-LATCH  goOnline() latches bootRestored on a freshly-minted identity
+ok   SRC-RECEIPT  openCrate records a take receipt
+ok   SRC-MERGEGUARD  importAll's merge path consults the crate receipt for inv rows
+ok   SRC-COINSREV  importAll's merge path guards coins with a coinsRev comparison
+ok   SRC-COINSREV-BUMP  coinsAdd bumps coinsRev alongside coins
+
+all green

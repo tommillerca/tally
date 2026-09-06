@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 481, date: '2026-09-06', title: 'Notifications ask first, and tell the truth', items: [
+    'Nothing gets scheduled until you say yes: turning notifications on now asks your device for permission first, with a line that says so. If you said no, the test button says it could not send instead of pretending it did.',
+    'Two pushes landing in the same instant used to cancel each other (a gift and a cheer a moment apart lost the gift). They keep their own slots now, and nothing fires between 10pm and 8am; anything due then waits for the morning.',
+    'The Dark Spires siege reminder has its own switch in Settings, so Just essentials actually changes something on the page. And logging dinner clears the evening reminder instead of leaving it armed.',
+  ] },
   { n: 480, date: '2026-09-06', title: 'The Dressing Room learns families too', items: [
     'The Dressing Room listed every team\'s cleats and jerseys as separate looks with no way to pick a team. It shows one tile per piece now, and tapping it opens the same team rail the Wardrobe has, each colourway drawn on the piece itself.',
     'With a football piece on, tapping looks in the Dressing Room could overwrite the Wardrobe\'s own team bar with a copy of the Dressing Room\'s and leave the real one stale. Each bar keeps to itself now.',

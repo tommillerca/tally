@@ -1,0 +1,14 @@
+ok    SETUP the changelog was parsed and has entries to grade  241 entries
+ok    SETUP the newest entry (v477) has items to grade  2 items
+ok    SETUP docs/CLAIMS.md exists  found
+ok    CLAIMS docs/CLAIMS.md has a section for v477  found
+ok    CLAIMS every item in the newest entry is answered  2 answered of 2 claims
+ok    PROOF every claim names an audit that exists and the gate actually runs  2 claims backed
+ok    REACH no claim in a shipped entry is GATED, PENDING-DEPLOY or NEEDS-PEER  all 2 reachable
+ok    REACH the route is written out, not left as a word  every route spelled out
+
+    WHAT v477 CLAIMS, AND WHAT BACKS IT:
+      2. the slime glow is scoped to the player's own worn item and every ren  <- crew-slime-leak-audit.mjs
+      3. the Crew's sealed-gift card renders one gift and "and N more waiting  <- crew-slime-leak-audit.mjs
+
+claim-evidence: clean

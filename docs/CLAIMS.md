@@ -19,6 +19,15 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v481
+1. A hotfix off v480, QA round 37's notification items (R37-3, 4, 9, 10, 11, 12, 23). Its rows are the dated "notifications consent" section further down, folded here.
+
+2. PROOF: unit.test.js, notif-audit.mjs | REACH: the native send path checks permission before claiming success and the Settings test button says it could not send under denied (red before: toast "Sent. Background the app to see it."); nothing schedules while permission is prompt or denied, and one line of consent copy precedes the OS prompt (notifGateOk rows, red: got true for prompt).
+
+3. PROOF: unit.test.js, notif-tier-audit.mjs | REACH: immediate pushes take distinct ids from a pool (red: got 9 === 9) and pushes due between 22:00 and 08:00 local move to 08:00 (red: 0:00 must clamp to 08:00).
+
+4. PROOF: notif-tier-audit.mjs, unit.test.js | REACH: the Dark Spires siege reminder has its own Settings row so the Essentials preset visibly changes the page and its toast names what it drops; a committed meal log re-runs the schedule sync so the evening reminder clears; denied permission dims the sub-toggles and the web note stops advertising retired pushes.
+
 ## v480
 1. A hotfix off v479 from Tom's live session. Its rows are the dated "dressing room families" section further down, folded here.
 
