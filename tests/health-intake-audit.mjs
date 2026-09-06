@@ -52,6 +52,31 @@ const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d 
    the row query miss the write. Same trap I hit on the weight-edit audit. */
 const appToday = await page.evaluate(async () => (await import('./js/nutrition.js')).dateKey());
 
+/* -------- 0. FIRST-SYNC ENTRY POINT. A new player has no health row and
+   hkConnected:false. Today must still render the Activity card and the same
+   #hkSync control used by connected web players, otherwise Settings is the only
+   discoverable route into this feature. */
+await page.evaluate(async () => {
+  const { db, kvGet, kvSet } = await import('./js/db.js');
+  const settings = await kvGet('settings', {});
+  await kvSet('settings', { ...settings, hkConnected: false, hkNative: false });
+  await db.clear('health');
+  location.hash = '#/today';
+  location.reload();
+});
+await page.waitForSelector('#screen .dayrest', { timeout: 10000 });
+const firstSyncEntry = await page.evaluate(() => {
+  const sync = document.querySelector('#screen #hkSync');
+  const card = sync?.closest('.card');
+  return {
+    controls: document.querySelectorAll('#screen #hkSync').length,
+    title: card?.textContent || '',
+  };
+});
+check('TODAY FIRST SYNC  disconnected Today renders one Activity card with its Sync control',
+  firstSyncEntry.controls === 1 && /ACTIVITY/i.test(firstSyncEntry.title),
+  JSON.stringify(firstSyncEntry));
+
 /* -------- 1. parseHkPayload happy path. Call the exported function
    directly (this is testing the parser, not the UI plumbing) with the
    canonical clipboard template. */
@@ -149,6 +174,13 @@ const afterValid = await page.evaluate(async d => {
 check('SYNC  a valid clipboard payload writes the health row for today',
   afterValid.health && afterValid.health.steps === 7654 && afterValid.health.activeKcal === 321,
   JSON.stringify(afterValid.health));
+check('SYNC  a first successful clipboard sync returns the player to Today',
+  await page.evaluate(() => location.hash === '#/today'),
+  `hash=${await page.evaluate(() => location.hash)}`);
+/* The remaining intake cases deliberately keep driving Settings' manual sync
+   button, so return there after proving the first-sync navigation. */
+await page.evaluate(() => { location.hash = '#/settings'; });
+await page.waitForSelector('#hkSyncNow', { timeout: 10000 });
 check('SYNC  a valid payload with weightlb writes a weights row for today with the converted kg',
   afterValid.weights.length === 1 &&
     afterValid.weights[0].date === appToday &&

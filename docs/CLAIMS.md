@@ -95,6 +95,12 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 3. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit carries one line naming the active dish buff, or pointing at the Kitchen when ingredients or a dish are owned, and nothing when there is nothing to cook (BUFF and NUDGE rows red with the line removed, QUIET grades the absence).
 
 4. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a cooking pot can be cancelled and refunds its ingredients in one atomic step, and the day-one Kitchen says which recipe the starter kit is for before the first tap (TIP and CANCEL rows red when reverted separately; the strand itself reproduced first: marrow 1, salt 0, 0 of 13 buttons).
+## health card today (2026-09-06)
+
+1. PROOF: health-intake-audit.mjs | REACH: Open Today before connecting Apple
+   Health. The Activity card and its Sync control are present for the first
+   import. Completing that first sync from Settings returns to Today, where the
+   synced activity is visible.
 
 ## v482
 1. A hotfix off v481, QA round 37's first-session and crate-tap items (R37-1, 5, 6; R37-2 verified already fixed by the round-34 restore latch). Its rows are the dated "first session and crate taps" section further down, folded here.
