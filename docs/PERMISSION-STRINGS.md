@@ -26,3 +26,6 @@ Nothing here has been applied; `native/ios/App/App/Info.plist` is untouched.
   uploaded" is false the moment a player claims a Spire. Tom should decide
   the exact wording; the table gives the fact (2.2 km cell, not exact
   position, only on an explicit claim tap) to work from.
+
+
+Approved by Tom 2026-09-06 (both rewrites) and applied to Info.plist on integ/day5.
