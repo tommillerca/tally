@@ -15087,6 +15087,12 @@ async function saveInitialSettings(np) {
   await saveSettings();
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', (await import('./changelog.js')).changelogLatest()); // new player starts caught-up; What's New only pops for real updates
+  // R39-29: same reasoning as changelogSeen above. NEWS is a static array of
+  // everything the game has ever announced, so on a fresh install every row in
+  // it is by definition dated before this install; marking them all seen here
+  // means the unread badge only ever counts news posted AFTER today, not the
+  // whole backlog the account was never around for.
+  await kvSet('newsSeen', NEWS.map(n => n.id));
   const kit = await initLootIfNeeded();
   // R38-21: same instruction as boot()'s copy of this toast, see the comment there.
   if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), 1200);
