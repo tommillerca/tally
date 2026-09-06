@@ -4,6 +4,14 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 479, date: '2026-09-06', title: 'The Stable gets shorter', items: [
+    'The lizard\'s wardrobe in the Stable used to lay out every team\'s helmet before you reached the jersey. It is two pieces now, with the team colours on a rail underneath, the same way the Bonehead\'s wardrobe works. Tap a team and every football piece she has on changes colour.',
+    'The Stable ring shows one card per kind of pet instead of one per copy, so fifty Bulldogs no longer stand between you and the lizard. The card carries how many you have, and the row under it steps through the copies.',
+  ] },
+  { n: 478, date: '2026-09-06', title: 'The Locker Room takes the front page', items: [
+    'The News banner on Today led with the Wanderer while the Locker Room was the newest thing in the game. It now leads with the kit itself: your Bonehead and the lizard in team colours, one tap from the room.',
+    'The coin pill on Today opens the Shop now. It used to open the Backpack, the same place the crate chip beside it already goes, and nothing on Today pointed at where coins get spent.',
+  ] },
   { n: 477, date: '2026-09-06', title: 'Your glow stays yours, and one gift at a time', items: [
     'If you wore a slimed piece, its green glow was painting itself onto every friend in the Crew, the leaderboard and the race. The glow now stays on your own Bonehead.',
     'The gift card at the top of the Crew tab showed every unopened gift as its own row. It now shows the newest one with a count of the rest, and the next one steps up as you open them.',

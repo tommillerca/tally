@@ -4566,7 +4566,10 @@ async function renderToday(el) {
   $('#stableBtn')?.addEventListener('click', openStable);
   $('#pitBtn')?.addEventListener('click', openPit);
   $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
-  $('#coinBtn')?.addEventListener('click', () => openCharacter('crates'));
+  /* 2026-09-06, QA round 37 R37-16: the coin pill opened the Backpack, the same
+     door the crate chip beside it already is, and nothing on Today led to the
+     Shop (the v475 teaser banner is gated off). Coins are for the Shop. */
+  $('#coinBtn')?.addEventListener('click', () => openCharacter('shop'));
   /* refreshWalletPill: repaint the four numbers in place, nothing else. The
      Pit is a sheet OVER this screen, and a fight settle pays coins while this
      DOM stands behind it; only #pitBody was re-rendered on close, so the pill
@@ -13561,6 +13564,14 @@ function newsThumb(n, eq) {
 const HYPE_PLATES = {
   'assets/bh/mimic/mimic.png':       { w: 640, h: 518, x0: 0, y0: 0, x1: 1, y1: 1 },
   'assets/bh/wanderer/wanderer.png': { w: 640, h: 640, x0: 0.0938, y0: 0.1375, x1: 0.9719, y1: 0.7891 },
+  /* THE LOCKER ROOM POSTER, 2026-09-06. Tom on v477: "the banner on home page for
+     news has the wanderer as the top art not the new shop page with anything
+     enticing". This file is the kit-room poster's own hero (the Bonehead in the
+     Bruisers kit with the lizard in front), rendered off the real shop DOM at
+     3x with every background cleared and trimmed to its ink, so the news hero
+     shows the thing the row sells. Ink measured off the file: x 0.1156..0.8828,
+     seated on the floor. */
+  'assets/bh/football/poster.png':   { w: 640, h: 640, x0: 0.1156, y0: 0, x1: 0.8828, y1: 1 },
   // The Live Wire, measured the same way on 2026-09-03: his ink fills his file.
   'assets/bh/mage/mage.png':         { w: 1024, h: 905, x0: 0, y0: 0, x1: 1, y1: 1 },
 };
@@ -13708,6 +13719,7 @@ const NEWS = [
   { id: 'lockerroom', date: 'Sep 5', title: 'The Locker Room is open',
     blurb: 'Buy one piece and every team\'s colours are yours.',
     thumb: () => `<img class="nw-img" src="assets/bh/thumb/192/football/helmet.png" alt="">`,
+    hero: 'assets/bh/football/poster.png',   // the pill's hero slot: newest row with a measured plate wins (newsHero)
     goes: 'Locker Room',
     open: () => { S.fbTeam = FOOTBALL_TEAMS[0].id; S.fbJump = true; location.hash = '#/shop'; } },
   /* THE WANDERER. Tom kept this row when every other launch interstitial went in
@@ -18796,10 +18808,10 @@ async function openStable(opts = {}) {
      markup be born at the OLD size and then transition, which is the only way to
      animate across a rebuild without rewriting the screen to patch in place. */
   let cfWasPanelled = false;
-  // which pet-wardrobe colourway family (keyed "sp:familyKey") has its rail
-  // open. render() rebuilds cfWear from scratch, so this has to live outside
+  // the team the pet wardrobe's rail is armed with while nothing football is
+  // worn. render() rebuilds cfWear from scratch, so this has to live outside
   // it the same way cfIid and openIid do.
-  let petFamOpen = null;
+  let petRailTeam = FOOTBALL_TEAMS[0].id;
   // when we arrive from a pet level-up, that pet's tree is the reason we are here
   let focusIid = opts.focusIid || null;
   const focusSp = opts.focusSp || null;
@@ -18888,7 +18900,23 @@ async function openStable(opts = {}) {
        NOT a hand-rolled crop: PET_CROP + croppedPetImg already exist, and mass
        normalisation is why a flat lizard is not drawn a third shorter than the
        round cloud in the same square (figure contract rule 2). */
-    const roster = order.flatMap(sp => bySp[sp]);
+    /* ONE CARD PER SPECIES (2026-09-05). Tom, on v476: "the stable is overwhelming
+       with too much of the same pet, we need to find a way to collapse based on
+       type of pet, for instance scrolling past 50 bulldogs to get to the lizard."
+       bySp is already the grouping. The ring gets one card per species showing
+       the copy you are on (cfIid), else the one you have out, else the best by
+       level, shiny, lineage; a count badge says how many; and the caption grows
+       a row of that species' copies (kinChips) to step through without leaving
+       the ring. Everything downstream still keys by iid, so breeding, equip and
+       destroy work exactly as before on whichever copy is showing. */
+    const cfInst = insts.find(x => x.iid === cfIid) || null;
+    const rank = x => [petLevel(bank[x.iid] || 0), x.shiny ? 1 : 0, x.lineage || 0];
+    const byBest = (p, q) => { const a = rank(p), b = rank(q); return (b[0] - a[0]) || (b[1] - a[1]) || (b[2] - a[2]); };
+    const roster = order.map(sp => (cfInst && cfInst.sp === sp ? cfInst : null) || bySp[sp].find(x => x.iid === eqIid) || bySp[sp].slice().sort(byBest)[0]);
+    const kinChips = inst => bySp[inst.sp].length < 2 ? '' : bySp[inst.sp].slice().sort(byBest).map(x => {
+      const on = x.iid === inst.iid;
+      return `<button class="chip${on ? ' on' : ''}" type="button" data-kin="${x.iid}" role="option" aria-selected="${on}">${nicks[x.iid] ? esc(nicks[x.iid]) + ' · ' : ''}Lv ${petLevel(bank[x.iid] || 0)}${x.shiny ? ' ✦' : ''}${x.iid === eqIid ? ' · out' : ''}</button>`;
+    }).join('');
     const focusIdx = Math.max(0, roster.findIndex(x => x.iid === (cfIid || eqIid)));
     const focused = roster[focusIdx] || roster[0] || null;
     const cfCards = roster.map((x, i) => {
@@ -18910,6 +18938,7 @@ async function openStable(opts = {}) {
              (except CX, whose amethyst art IS its special look) renders its
              recoloured still instead of quietly losing the shiny. -->
         <span class="cf-art">${petSpriteHtml(x.sp, 124, false, { mass: true, shiny: x.shiny, thumb: true })}</span>
+        ${bySp[x.sp].length > 1 ? `<span class="cf-n" aria-label="${bySp[x.sp].length} of this species">×${bySp[x.sp].length}</span>` : ''}
         ${isEq ? '<span class="cf-eq">Out with you</span>' : ''}
         ${inSel && !isEq ? '<span class="cf-eq sel">Breeding</span>' : ''}
       </div>`;
@@ -18930,6 +18959,7 @@ async function openStable(opts = {}) {
           <span class="role"><span class="dot r-${it.rarity || 'common'}"></span>${esc(fam.name || fam.key || '')} · ${esc((RARITIES[it.rarity] || {}).label || '')}</span>
           <dl class="cf-meta">${rows.map(([k, v]) => `<div class="row"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
         </div>
+        <div class="cf-kin" role="listbox" aria-label="Your ${esc(it.name || focused.sp)}s">${kinChips(focused)}</div>
         <div class="cf-dots">${cfDots}</div>`;
     })();
     const cfActs = (() => {
@@ -18994,7 +19024,7 @@ async function openStable(opts = {}) {
         return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
           <p class="note pw-empty">Nothing to wear yet. Gwart's Menagerie stocks ${PET_SHOP.items.length} pieces, all drawn for her.</p></div>`;
       }
-      const petWearItemBtn = i => {
+      const petWearItemBtn = (i, fam = null) => {
         const a = BH_BY_ID[i.id];
         const on = S.petWear[a.slot] === i.id;
         const slotLbl = (PET_SLOTS.find(sl => sl.code === a.slot) || {}).label || a.slot;
@@ -19006,44 +19036,43 @@ async function openStable(opts = {}) {
         // 192 from the Locker Room's much bigger tiles (measured there to
         // legitimately clear no tier) was reading a 384-eligible box as 192.
         const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, true) : petShotHtml(i.id, 62);
-        return `<button class="pw-item r-${a.rarity}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}">
-          <span class="pw-art">${tile}</span>
+        return `<button class="pw-item r-${a.rarity}${fam ? ' fam' : ''}${on ? ' on' : ''}" type="button" data-petwear="${i.id}" aria-pressed="${on}"${fam ? ` aria-label="${esc(a.name)}, ${fam.length} colourways"` : ''}>
+          <span class="pw-art">${tile}${fam ? `<span class="ward-fam-n" aria-hidden="true">${fam.length}</span>` : ''}</span>
           <b>${esc(a.name)}</b>
           <small>${on ? 'WORN' : esc(slotLbl)}</small>
         </button>`;
       };
-      /* THE FOOTBALL GARMENT COLLAPSE, SAME RULE AS THE HUMAN WARDROBE
-         (bhFamilyKey/bhFamilies): 32 team colourways of the Lizard Helmet or
-         Jersey share one master `file`, so an owned-everything account built
-         one <img> per team per species here -- 64 of the same source apiece
-         across the Beardie and the Day One Lizard panels, decoded even while
-         hidden under the OTHER pet in the ring (the panel has to exist for
-         both, see the comment above). A family of one renders exactly as
-         before. A family of more collapses to one tile (worn colourway, else
-         the first) with a count badge; tapping it opens a rail of every team
-         so nothing owned is unreachable. */
-      const petFams = [...bhFamilies(mine).values()];
-      const wearRow = petFams.map(fam => {
+      /* THE FOOTBALL GARMENT COLLAPSE, SAME SHAPE AS THE HUMAN WARDROBE (v474,
+         bhFamilyKey/bhFamilies): one tile per family, then ONE team rail under
+         the row. Tom, 2026-09-05 on v476: "you gotta scroll past all the helmet
+         colours before you get to the shirt. it should be two items then colours
+         below just like the boneheadz wardrobe." v476 opened a family INLINE, so
+         32 helmet tiles sat between the helmet and the jersey.
+         The rail's team is whatever football piece she has on (first worn wins),
+         else the last team picked here; a garment tile wears that team's copy of
+         itself, and a team tile recolours every football piece she has on.
+         Swatches, not 32 lizard renders: the garment tiles above already show
+         the team on her, and one <img> per team per species is the decode bill
+         the v476 collapse existed to stop. */
+      const fbMine = mine.filter(i => i.football);
+      const wornFb = fbMine.filter(i => S.petWear[BH_BY_ID[i.id].slot] === i.id);
+      const team = wornFb.length ? wornFb[0].football.team : petRailTeam;
+      const wearRow = [...bhFamilies(mine).values()].map(fam => {
         if (fam.length === 1) return petWearItemBtn(fam[0]);
-        const key = sp + ':' + bhFamilyKey(fam[0]);
         const worn = fam.find(i => S.petWear[BH_BY_ID[i.id].slot] === i.id);
-        const i = worn || fam[0];
-        const a = BH_BY_ID[i.id];
-        const open = petFamOpen === key;
-        // thumb:true, same fix and the same measured 384 as petWearItemBtn above.
-        const tile = a.football ? croppedPetImg(sp, 62, false, null, { [a.slot]: i.id }, true) : petShotHtml(i.id, 62);
-        const famTile = `<button class="pw-item fam r-${a.rarity}${worn ? ' on' : ''}" type="button" data-petfam="${esc(key)}" aria-expanded="${open}" aria-label="${esc(a.name)}, ${fam.length} colourways">
-          <span class="pw-art">${tile}<span class="ward-fam-n" aria-hidden="true">${fam.length}</span></span>
-          <b>${esc(a.name)}</b>
-          <small>${worn ? 'WORN' : fam.length + ' colours'}</small>
-        </button>`;
-        // display:contents so the rail's own tiles join .pw-row's flex/scroll
-        // directly instead of nesting a second scroller inside the first.
-        return open ? `${famTile}<span style="display:contents">${fam.map(petWearItemBtn).join('')}</span>` : famTile;
+        return petWearItemBtn(worn || fam.find(i => i.football && i.football.team === team) || fam[0], fam);
       }).join('');
+      const railRow = !fbMine.length ? '' : `<div class="pw-row fb-rail" role="listbox" aria-label="Team colourways">${FOOTBALL_TEAMS.map(t => {
+        const own = fbMine.some(i => i.football.team === t.id), on = t.id === team;
+        return `<button class="pw-item fbr${on ? ' on' : ''}${own ? '' : ' locked'}" type="button" data-pwteam="${t.id}" role="option" aria-selected="${on}" title="${esc(t.name)}">
+          <i class="fb-swatch" style="--fa:${t.a};--fb:${t.b}"></i>
+          <b>${esc(t.name)}</b>
+          <small>${on ? (wornFb.length ? 'Worn' : 'Picked') : own ? 'Yours' : `${ICONS.lock(9)} Locked`}</small>
+        </button>`;
+      }).join('')}</div>`;
       return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
-        <div class="pw-row">${wearRow}</div>
-        <p class="note pw-hint">Tap to put a piece on. Tap it again to take it off. One per spot.</p></div>`;
+        <div class="pw-row">${wearRow}</div>${railRow}
+        <p class="note pw-hint">Tap to put a piece on. Tap it again to take it off. One per spot.${fbMine.length ? ' Tap a team to change her colours.' : ''}</p></div>`;
     }).join('');
 
 
@@ -19244,6 +19273,16 @@ async function openStable(opts = {}) {
        phone the overflow is negative and this is a no-op, which is why the
        Paddock door still greets you there. Idempotent, so the re-render after a
        tap lands you back looking at her rather than at the top of the sheet. */
+    /* THE RAIL OPENS ON THE PICKED TEAM, not on team one. Rects and not
+       offsetLeft, for the reason the wardrobe's own rail gives; instant, because
+       .fb-rail declares scroll-behavior smooth and this is a landing, not a move. */
+    const centreRail = () => {
+      const rail = $('.pet-wear:not([hidden]) .fb-rail', body), on = rail && $('.on', rail);
+      if (!on) return;
+      const cr = on.getBoundingClientRect(), rr = rail.getBoundingClientRect();
+      rail.scrollTo({ left: rail.scrollLeft + (cr.left - rr.left) - (rail.clientWidth - cr.width) / 2, behavior: 'instant' });
+    };
+    centreRail();
     const pwPanel = $$('.pet-wear', body).find(p => !p.hidden);   // Football kit, 2026-09-04: several panels, one shown
     const pwTile = pwPanel && $('.pw-item', pwPanel);
     const pwFrame = $('#cfFrame', body);
@@ -19604,6 +19643,9 @@ async function openStable(opts = {}) {
       if (dsB) { dsB.dataset.destroy = inst.iid; dsB.dataset.dust = dustVal; dsB.textContent = `DESTROY ${dustVal}`; }
       // her wardrobe follows the ring: shown only while she is the pet in front
       $$('.pet-wear', body).forEach(pwB => { pwB.hidden = pwB.dataset.pwsp !== inst.sp; });   // Football kit, 2026-09-04
+      centreRail();
+      const kin = $('.cf-kin', body);
+      if (kin) { kin.innerHTML = kinChips(inst); kin.setAttribute('aria-label', `Your ${it.name || inst.sp}s`); }
     }
 
     // No card-click-to-open-talents any more: on a carousel a tap means "bring
@@ -19644,11 +19686,31 @@ async function openStable(opts = {}) {
       popSound(S.sounds);
       render();
     }));
-    $$('[data-petfam]', body).forEach(btn => btn.addEventListener('click', () => {
-      petFamOpen = petFamOpen === btn.dataset.petfam ? null : btn.dataset.petfam;
+    /* A TEAM TILE RECOLOURS WHAT SHE HAS ON, in one tap. togglePetWear on a slot
+       that already holds a different id REPLACES it (one item per slot), so a
+       swap is one write per worn piece and she is never bare in between. With
+       nothing football worn it only arms the rail, so the next garment tap wears
+       that team. */
+    $$('[data-pwteam]', body).forEach(btn => btn.addEventListener('click', async () => {
+      const team = btn.dataset.pwteam, sp = btn.closest('.pet-wear').dataset.pwsp;
+      petRailTeam = team;
+      for (const cur of Object.values(S.petWear).map(id => BH_BY_ID[id]).filter(i => i && i.football && petCanWear(i, sp) && i.football.team !== team)) {
+        const r = await togglePetWear(footballItemId(team, cur.football.garment));
+        if (!r.ok) { toast('That colourway is not in your wardrobe.'); break; }
+      }
+      await refreshPetWear();
       popSound(S.sounds);
       render();
     }));
+    /* ONE LISTENER ON THE ROW, not one per chip: repaintFocus rewrites the chips
+       when the ring turns, and a listener on the container survives that. */
+    $('.cf-kin', body)?.addEventListener('click', e => {
+      const b = e.target.closest('[data-kin]');
+      if (!b) return;
+      cfIid = b.dataset.kin;
+      popSound(S.sounds);
+      render();
+    });
     $$('[data-petnick]', body).forEach(btn => btn.addEventListener('click', () => {
       const iid = btn.dataset.petnick;
       const inst = insts.find(x => x.iid === iid);
@@ -22383,7 +22445,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v477'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v479'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
