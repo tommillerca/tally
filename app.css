@@ -2204,7 +2204,15 @@ body::before {
    the grid's row flow: absolutely positioned in the corner, it costs the
    button zero extra height because grid never sees it as a row. */
 .fight-act small.cost {
-  position: absolute; top: 2px; right: 3px; max-width: calc(100% - 8px);
+  /* top: -3px (2026-09-06, was 2px). Even a single-line cost's line box ran
+     3.6px into the label's box below it (measured at 393x852 and 375x667):
+     harmless there because a font's line-height leaves empty space the ink
+     never reaches, but it is exactly what let a two-line cost (Bone Guard,
+     the only move with a three-clause cost) paint straight over "BONE GUARD".
+     Nudging the pill up clears the label's box on every button, not just the
+     one that happened to wrap. Purely a repaint of an out-of-flow element:
+     costs nothing in row height. */
+  position: absolute; top: -3px; right: 3px; max-width: calc(100% - 8px);
   font-size: 8px; line-height: 1.2; text-align: right; color: var(--text-3);
   font-weight: 700; pointer-events: none;
 }

@@ -23112,7 +23112,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v492'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v493'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -24902,7 +24902,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
         if (fight.ap < a.ap) return `Needs ${a.ap} AP`;
         return `Stamina ${Math.floor(player.wind)}/${a.id === 'flurry' ? 30 : a.windCost}`;
       }
-      return `${a.ap} AP${a.windCost ? ` · ${a.windCost} Stamina` : ''}${a.id === 'guard' ? ` · +${GUARD_STAMINA} Stamina` : ''}${a.id === 'signature' ? ` · ${player.hype} Hype` : ''}`;
+      /* "Stamina" dropped from the guard clause (2026-09-06): with it, Bone
+         Guard's is the only cost line with three clauses ("1 AP · 12 Stamina ·
+         +22 Stamina"), and it is the one wide enough to wrap to a second line
+         inside the button, which runs straight into the label sitting right
+         below (small.cost is absolutely positioned over the button's own
+         content, not laid out in flow). The unit was already stated by the
+         clause before it; repeating the word bought nothing. */
+      return `${a.ap} AP${a.windCost ? ` · ${a.windCost} Stamina` : ''}${a.id === 'guard' ? ` · +${GUARD_STAMINA}` : ''}${a.id === 'signature' ? ` · ${player.hype} Hype` : ''}`;
     };
     const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
       <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" title="${esc(moveDetail(a.id))}" ${a.enabled ? '' : 'disabled'}>
@@ -25636,7 +25643,21 @@ async function openFight(pitWrap, fighter, foeCfg) {
            the map. */
         const retryLoss = STALE_LAUNCHER.includes(foeCfg.mode) && !won;
         if (fromMap && !retryLoss) { closeAllSheetsViaHistory(); closeAllSheets(); maybeCelebrate(); return; }
-        history.back(); if (!fromMap && foeCfg.mode !== 'friend') setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate();
+        /* Tom, 2026-09-06: "exit animation from the pit feels slightly laggy".
+           THE setTimeout(renderPit, 250) THAT USED TO BE HERE WAS A SECOND,
+           REDUNDANT RE-RENDER. history.back() already fires the popstate that
+           closes this sheet, and openSheet's own onClose (above, where this
+           sheet is opened) already does `if (pitWrap...) renderPit(pitWrap)`
+           for exactly this reason (the FIGHT-button-stays-live bug, 2026-08-11).
+           Measured with a MutationObserver on #pitBody around a real
+           #fightDone tap: it was rewritten TWICE, at 16ms (onClose's own
+           render) and again at 262ms, which is this setTimeout landing right
+           on top of the .2s sheetOut close transition (app.css) - a second
+           full IndexedDB read + DOM rebuild competing with the slide for the
+           main thread, for no correctness reason: onClose's render already
+           covers every path this one did. Deleting it, not deferring it: there
+           is nothing left for it to do. */
+        history.back(); maybeCelebrate();
       });
     }, fast ? 80 : 750);
   }

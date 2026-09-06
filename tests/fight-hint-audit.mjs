@@ -83,6 +83,12 @@ const readTray = () => page.evaluate(() => {
     hidden: tray.scrollHeight - tray.clientHeight,
     moves: moves.map(b => {
       const r = b.getBoundingClientRect();
+      // 2026-09-06: small.cost is position:absolute (out of the grid's row
+      // flow, see app.js costLine), so it can silently overlap the label
+      // sitting below it instead of ever registering as a layout problem.
+      const labelR = b.querySelector('b')?.getBoundingClientRect();
+      const costR = b.querySelector('small.cost')?.getBoundingClientRect();
+      const overlapPx = (labelR && costR) ? Math.max(0, Math.min(labelR.bottom, costR.bottom) - Math.max(labelR.top, costR.top)) : 0;
       return {
         name: (b.querySelector('b')?.textContent || '').trim(),
         hint: (b.querySelector('small')?.textContent || '').trim(),
@@ -91,6 +97,7 @@ const readTray = () => page.evaluate(() => {
         cost: (b.querySelector('small.cost')?.textContent || '').trim(), disabled: b.disabled,
         h: +r.height.toFixed(1),
         inView: r.top >= tr.top - 1 && r.bottom <= tr.bottom + 1,
+        overlapPx: +overlapPx.toFixed(1),
       };
     }),
     /* HOW MANY ROWS ARE VISIBLE, and how many the tray has ROOM for.
@@ -129,6 +136,21 @@ for (const [W, H] of [[375, 667], [393, 852], [430, 932]]) {
   ok(`${W}x${H}: every move label is one line`, wrapped.length === 0,
     wrapped.length ? wrapped.map(m => `"${m.name}"(${m.nameLines}L)/"${m.hint}"(${m.hintLines}L)`).join(', ')
                    : `${t.moves.length} buttons, rows ${JSON.stringify(t.rowHs)}`);
+
+  /* Tom on live v487: "some text overlaps like bone guard button". small.cost
+     sits position:absolute over the button (see app.js costLine), so a two-line
+     cost paints straight through the label instead of pushing it down.
+     PROVEN RED against the pre-2026-09-06 code (top:2px, guard's cost line
+     still carrying the trailing "Stamina"): every move overlapped its label by
+     3.6px at both 393x852 and 375x667 (a single-line cost's line-height simply
+     ran into the label's box, harmless there), and Bone Guard's cost wrapped to
+     a second line and overlapped by 13.2px at both sizes, painting over
+     "BONE GUARD". Fixed by nudging small.cost to top:-3px (clears every
+     button, not just the one that wraps) and dropping the redundant trailing
+     "Stamina" word so Bone Guard's cost no longer wraps at all. */
+  const overlapping = t.moves.filter(m => m.overlapPx > 0);
+  ok(`${W}x${H}: no move's cost pill overlaps its label`, overlapping.length === 0,
+    overlapping.length ? overlapping.map(m => `"${m.name}" ${m.overlapPx}px cost="${m.cost}"`).join(', ') : 'no overlap');
 
   /* QA round 28 P2 (WRITTEN, NOT RUN on the machine that wrote it: static-only
      rule that day). Every move button prints its cost in VISIBLE text, not only

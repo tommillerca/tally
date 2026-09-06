@@ -6027,9 +6027,15 @@ test('QA round 28 P2: every move button carries its cost in visible text, the re
   const noWind = render({ ap: 2, over: false }, { wind: 12.6, hype: 0 }, { ...hay, enabled: false });
   assert.match(visible(noWind), /Stamina 12\/35/, 'a Haymaker disabled for Stamina does not say "Stamina 12/35"');
   assert.ok(!/Needs 2 AP/.test(visible(noWind)), 'the Stamina case is misreported as an AP case');
-  // Bone Guard's +22 (GUARD_STAMINA) and Signature's Hype are values, not prose
+  // Bone Guard's +22 (GUARD_STAMINA) and Signature's Hype are values, not prose.
+  // "Stamina" dropped from the guard clause 2026-09-06: with it, Bone Guard was
+  // the only cost line with three clauses and the one wide enough to wrap to a
+  // second line inside the button, painting over the label below it
+  // (small.cost is position:absolute, see app.js costLine and app.css). The
+  // unit was already named by the clause before it.
   const guard = render({ ap: 1, over: false }, { wind: 50, hype: 0 }, { id: 'guard', label: 'Bone Guard', ap: 1, windCost: 12, enabled: true });
-  assert.match(visible(guard), /1 AP · 12 Stamina · \+22 Stamina/, 'Bone Guard does not print its +22 Stamina');
+  assert.match(visible(guard), /1 AP · 12 Stamina · \+22\b/, 'Bone Guard does not print its +22 Stamina');
+  assert.ok(!/\+22 Stamina/.test(visible(guard)), 'Bone Guard still carries the redundant trailing "Stamina" that wraps its cost to a second line');
   const sig = render({ ap: 2, over: false }, { wind: 50, hype: 100 }, { id: 'signature', label: 'Signature', ap: 2, windCost: 0, enabled: true });
   assert.match(visible(sig), /2 AP · 100 Hype/, 'Signature does not print the Hype it spends');
   // the full-width SIGNATURE button in renderActions carries the same sub-line

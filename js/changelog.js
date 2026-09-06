@@ -4,12 +4,16 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
-  { n: 492, date: '2026-09-06', title: 'The Kennel opens, and the Crew tells you what changed', items: [
+  { n: 493, date: '2026-09-06', title: 'The Kennel opens, and the Crew tells you what changed', items: [
     'Pets hatch in colourways now. Every egg rolls a colour for the species inside: the plain one most of the time, or ember, frost, toxic or midnight. Each is a proper recolour of Cam\'s art, not a filter, and the Kennel in the Stable shows every species and colour you have collected, with the gaps you have not.',
     'Bumbleseal hatches from step eggs like every other pet now instead of sitting behind a 50,000 coin price. Your morph pets show everywhere your pets already show: Today\'s hero, the Stable, the Paddock, your friends\' paddocks and profiles.',
     'A friend\'s Crew card says the one thing that changed since you last looked: leveled up, new gear, took a spire. Cards and profiles show how many spires a friend holds, and the Crew badge lights when your own race rank improves overnight.',
     'The race gap is to the racer directly above you, not to first place. Settles tonight fires for the whole last day of the week. Everyone outside the podium gets told where they placed. And a friend whose stats never synced says so instead of showing a fight with NaN damage.',
     'The Wardrobe grid only paints the tiles on screen and one screen ahead, so opening a slot with two hundred hats no longer stalls.',
+  ] },
+  { n: 492, date: '2026-09-06', title: 'The Pit reads clean and leaves smoothly', items: [
+    'The stamina cost on each move no longer paints over the move\'s name; Bone Guard\'s cost line, the only one that wrapped to two lines, fits on one.',
+    'Leaving a fight was redrawing the Pit twice, the second time right on the tail of the close animation. It draws once now, so the exit is as smooth as every other sheet.',
   ] },
   { n: 491, date: '2026-09-06', title: 'Day one tells the truth', items: [
     'The quest board on your first day always has something you can actually do: the pool is filtered for what you have unlocked before the draw, one daily comes from the logging loop the game just taught you, and two players installing on the same day no longer get the same board.',
