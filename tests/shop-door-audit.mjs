@@ -111,6 +111,13 @@ try {
 
   /* ================= HUB LANDS HOME (v421 ruling over S11) ================= */
   await go('#/shop');
+  /* COIN-PILL (2026-09-06, R37-16): Today's wallet coin pill is the one control on
+     the first screen that already means "coins"; it opened the Backpack, which the
+     crate chip beside it already does. A real tap must land on the Shop. */
+  await page.evaluate(() => { location.hash = '#/today'; }); await sleep(1200);
+  const coinTap = await page.evaluate(() => { const b = document.querySelector('#coinBtn'); if (!b) return false; b.click(); return true; });
+  await sleep(1400);
+  ok('COIN-PILL a real tap on Today\'s coin pill lands on the Shop, not the Backpack', coinTap && await chipOn('shop'), `tapped=${coinTap}, shop chip on=${await chipOn('shop')}`);
   ok('HUB-SHOP landing on #/shop lights the Shop chip', await chipOn('shop'));
   await go('#/today');
   await page.evaluate(() => { location.hash = '#/bonehead'; });
