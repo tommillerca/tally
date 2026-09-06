@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v485';
+const VERSION = 'tally-v488';
 const PRECACHE = [
   './',
   './index.html',
@@ -315,37 +315,84 @@ const STAMP = './version.json';
    atomic set, which is the mixing hole wearing a different hat. */
 const PRECACHED = new Set(PRECACHE.map(u => new URL(u, self.location.href).href));
 
+/* THE PREVIOUS GENERATION: the newest OTHER cache that holds a whole build.
+   Read at install (to reuse its identical entries) and at activate (to keep it,
+   see below). READY is the test, not the name: a half-filled cache from an
+   install that died is named like a build and is not one. */
+const byBuild = (a, b) => (+(b.match(/\d+/) || [0])[0]) - (+(a.match(/\d+/) || [0])[0]);
+async function prevGen() {
+  const keys = (await caches.keys()).filter(k => k !== VERSION && /^tally-v\d+$/.test(k)).sort(byBuild);
+  for (const k of keys) if (await caches.match(READY, { cacheName: k }).catch(() => null)) return k;
+  return null;
+}
+
 self.addEventListener('install', e => {
-  // no-cache: revalidate against the server so a stale HTTP cache can't poison the precache
   e.waitUntil((async () => {
     const c = await caches.open(VERSION);
-    await Promise.all(PRECACHE.map(u => fetch(new Request(u, { cache: 'no-cache' })).then(r => {
+    const prev = await prevGen();
+    const old = prev ? await caches.open(prev) : null;
+    await Promise.all(PRECACHE.map(async u => {
+      /* R38-18: 189 of the 211 entries were byte-identical between v471 and
+         v477 and every one was re-downloaded. GitHub Pages sends strong ETags,
+         so an entry the previous generation already holds is asked for
+         CONDITIONALLY, against the server rather than the browser's HTTP cache
+         (no-store, so a small or evicted HTTP cache changes nothing), and a 304
+         copies the previous copy across. Anything without a previous copy or an
+         ETag takes the old road: no-cache, so a stale HTTP cache cannot poison
+         the precache. */
+      const have = old && await old.match(u);
+      const etag = have && have.headers.get('ETag');
+      if (etag) {
+        const r = await fetch(new Request(u, { cache: 'no-store', headers: { 'If-None-Match': etag } }));
+        if (r.status === 304) return c.put(u, have);
+        if (r.ok) return c.put(u, r);
+        throw new Error('precache ' + u + ' -> ' + r.status);
+      }
+      const r = await fetch(new Request(u, { cache: 'no-cache' }));
       if (r.ok) return c.put(u, r);
       throw new Error('precache ' + u + ' -> ' + r.status);
-    })));
+    }));
     await c.put(READY, new Response(VERSION, { headers: { 'Content-Type': 'text/plain' } }));
+    /* skipWaiting() IS BACK, AND IT IS HERE ON PURPOSE (R38-1, 2026-09-06).
+       v427 took it out so a new build waited for the last client of the old
+       worker to close; v473 found that inside WKWebView that client never
+       closes, and added letItIn (js/app.js posts SKIP_WAITING). But letItIn
+       lives in the NEW app.js, which is the half a stranded device never runs:
+       measured on a real v471 save upgrading to v477, the new worker installed,
+       sat in `waiting`, and resume, reopen and three force-quits all stayed on
+       v471. Every TestFlight tester is on a pre-v473 build. The only code of a
+       new build that is guaranteed to execute on an old device is THIS file, so
+       the lever lives here: the moment the whole build is in cache, this worker
+       takes over. The old page gets controllerchange and reloads itself (or, with
+       a sheet open, on closing it), which every build since v387 does.
+       What it reintroduces is the mixed-build window (R38-17): the old page keeps
+       running while this worker answers its fetches. activate below keeps the
+       previous generation's cache for exactly that page, so a lazy import it
+       makes during the window is never a 404. A module that exists in both
+       builds is answered from THIS build (newest first), which is the pre-v427
+       shape and is closed by the reload the swap itself triggers. */
+    await self.skipWaiting();
   })());
-  /* AND NO skipWaiting(), WHICH IS THE ATOMIC SWAP.
-     skipWaiting() activated the new worker underneath a page that had already
-     executed the OLD module graph. From that moment every lazy import() the
-     running page made was answered out of the NEW cache: two builds in one
-     document. It was survivable only because app.js reloads the page on
-     controllerchange, and that reload IS Tom's "it does a full reload after I
-     have been away for a minute" (js/app.js: controllerchange -> location
-     .reload, armed by reg.update() on every visibilitychange).
-     Waiting instead means the new build takes over when the last client of the
-     old one goes away, i.e. on the next open, with a document that runs one
-     build end to end. The download still happens now, in the background; only
-     the swap is deferred. Settings' "Get latest" (hardRefresh) is the manual
-     lever for anyone who does not want to wait. */
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    /* KEEP ONE PREVIOUS GENERATION (R38-17). The old build's page is still
+       running when this fires (skipWaiting above), and its lazy imports go
+       through this worker: with its cache gone, a module the new build renamed
+       or dropped is a 404 into a live document. One generation back is kept
+       for it; everything older, and every half-filled install, goes. */
+    const keep = await prevGen();
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== VERSION && k !== keep).map(k => caches.delete(k)));
+    /* claim(): only reaches clients no worker controls (a first-ever install, or
+       a page that loaded while nothing was registered). Clients
+       the OLD worker controlled are moved to this one by the activation itself,
+       claim or no claim, so for the upgrade case it is a no-op; kept for the
+       first-install case, where it is what makes the very first visit work
+       offline without a second load. */
+    await self.clients.claim();
+  })());
 });
 
 /* IS THERE A WHOLE BUILD IN THERE. Memoised for the life of the worker: the
@@ -364,6 +411,14 @@ let readyP = null;
    branch must not be able to produce. Degrade to the network instead. */
 const shellReady = () => (readyP || (readyP = caches.match(READY, { cacheName: VERSION }).then(r => !!r).catch(() => false)));
 
+/* NEWEST GENERATION FIRST. An unscoped caches.match walks caches in creation
+   order, i.e. OLDEST first, and with a previous generation kept (activate) that
+   would hand the new page last build's copy of any file both builds carry, for
+   as long as the old cache lives. Every fallback and every static-asset lookup
+   goes through here: this build's cache, then anything else still kept, which is
+   what lets the old page find a file only its own build had. */
+const fromCaches = async key => (await caches.match(key, { cacheName: VERSION }).catch(() => null)) || (await caches.match(key));
+
 /* THE ONE FILE THAT ALWAYS TOUCHES THE NETWORK, AND WHY IT HAS TO EXIST.
  *
  * A bad service worker is the only bug that survives its own fix being
@@ -376,7 +431,8 @@ const shellReady = () => (readyP || (readyP = caches.match(READY, { cacheName: V
  * any cache, and is excluded from the shell branch by name. When it names a
  * build other than the one this worker IS, the worker asks the browser for a
  * new sw.js, which is the full re-download: a new worker, a new install, a new
- * complete cache, and the old one deleted on activate.
+ * complete cache, and everything older than the previous generation deleted on
+ * activate.
  *
  * It is deliberately not sw.js itself. sw.js is ~12KB and the point of the
  * exercise is not paying for bytes on a bad connection; the stamp is the
@@ -394,12 +450,10 @@ function checkStamp() {
     .then(r => (r.ok ? r.json() : null))
     .then(j => {
       if (!j || !j.version || j.version === VERSION) return;
-      /* THE NEW BUILD IS ALREADY ON THE DEVICE, IT IS JUST WAITING FOR THE LAST
-         CLIENT OF THIS WORKER TO GO AWAY. Without this, a player who keeps the
-         app open sees the stamp disagree every minute for as long as they leave
-         it open, and every one of those calls re-fetches sw.js. That is a
-         repeating cost on exactly the bad connection this branch exists to stop
-         punishing, in service of an update that has already arrived. */
+      /* THE NEW BUILD IS ALREADY DOWNLOADING (or installed and about to take
+         over: its own install calls skipWaiting). Asking again would re-fetch
+         sw.js every minute on exactly the bad connection this branch exists to
+         stop punishing, in service of an update that has already arrived. */
       if (self.registration.waiting || self.registration.installing) return;
       return self.registration.update();
     })
@@ -426,7 +480,9 @@ function checkStamp() {
  *     one whole build;
  *   - only urls in PRECACHED are eligible, so a runtime-cached stray from some
  *     other build cannot be served as if it belonged to this one;
- *   - activate deletes every other tally-v* cache, so there is one;
+ *   - activate keeps ONE previous generation (for the old page still running
+ *     through the swap, R38-17) and deletes everything older, and every lookup
+ *     outside the scoped hit above reads this build's cache first (fromCaches);
  *   - and nothing is stuck, because checkStamp() above always reaches the
  *     network.
  * The trade that IS accepted: the visit a release lands on is served the old
@@ -467,12 +523,12 @@ async function shell(req) {
        which is the tell: it failed BECAUSE it was online.
        One bad file during a deploy now falls back to the last good copy of
        that file instead of taking the app down. */
-    const hit = await caches.match(req);
+    const hit = await fromCaches(req);
     if (hit) return hit;
-    if (nav) return (await caches.match('./index.html')) || res;
+    if (nav) return (await fromCaches('./index.html')) || res;
     return res;
   } catch {
-    return (await caches.match(req)) || (await caches.match('./index.html'));
+    return (await fromCaches(req)) || (await fromCaches('./index.html'));
   }
 }
 
@@ -500,7 +556,7 @@ self.addEventListener('fetch', e => {
 
   // static assets: cache-first
   e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+    fromCaches(e.request).then(hit => hit || fetch(e.request).then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
       return res;
     }))

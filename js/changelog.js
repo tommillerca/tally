@@ -4,12 +4,27 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
-  { n: 485, date: '2026-09-06', title: 'The Kennel opens, and the Crew tells you what changed', items: [
+  { n: 488, date: '2026-09-06', title: 'The Kennel opens, and the Crew tells you what changed', items: [
     'Pets hatch in colourways now. Every egg rolls a colour for the species inside: the plain one most of the time, or ember, frost, toxic or midnight. Each is a proper recolour of Cam\'s art, not a filter, and the Kennel in the Stable shows every species and colour you have collected, with the gaps you have not.',
     'Bumbleseal hatches from step eggs like every other pet now instead of sitting behind a 50,000 coin price. Your morph pets show everywhere your pets already show: Today\'s hero, the Stable, the Paddock, your friends\' paddocks and profiles.',
     'A friend\'s Crew card says the one thing that changed since you last looked: leveled up, new gear, took a spire. Cards and profiles show how many spires a friend holds, and the Crew badge lights when your own race rank improves overnight.',
     'The race gap is to the racer directly above you, not to first place. Settles tonight fires for the whole last day of the week. Everyone outside the podium gets told where they placed. And a friend whose stats never synced says so instead of showing a fight with NaN damage.',
     'The Wardrobe grid only paints the tiles on screen and one screen ahead, so opening a slot with two hundred hats no longer stalls.',
+  ] },
+  { n: 487, date: '2026-09-06', title: 'Crates pay off, and Health has a door on Today', items: [
+    'Opening a crate now tells you what you got and where to wear it, a new piece says New with its rarity instead of a blank line under a duplicate\'s coin count, and Common Crates have an Open all so five of them take one tap instead of thirteen.',
+    'Before your first Health sync, Today shows the Activity card in a not-connected state with the Sync control on it, and a first successful sync brings you back to Today instead of leaving you in Settings next to Erase.',
+  ] },
+  { n: 486, date: '2026-09-06', title: 'Updates reach every phone', items: [
+    'If you have been stuck on an old build, this is the one that unsticks you: a downloaded update now lets itself in instead of waiting for permission from code you did not have yet. Anyone on a build before v473 has been downloading updates and never running them.',
+    'The previous build\'s files are kept for one update, so an app that is mid-screen when the swap lands can still load what it needs. And Get latest checks for signal before it clears anything, so tapping it offline no longer leaves a blank app.',
+    'The update banner lives on Today now, not only on the Progress screen, and Settings says which build is live when you are behind. Updates also stop re-downloading the files that did not change: this one carried 187 of 187 unchanged files forward and fetched 3.7 MB instead of 11.5.',
+  ] },
+  { n: 485, date: '2026-09-06', title: 'Your save reaches the cloud before you leave', items: [
+    'Backing out of the app or closing it now pushes your backup, and a save that has grown since the last push does not wait ten minutes. Before this, a whole session of meals and crates could sit unsent and a new phone would restore the older save with a cheerful Welcome back.',
+    'The Erase sheet and Settings tell one truth about whether your progress can come back: what exists, what is missing, and what to set. A deleted account no longer shows a second phone as online with a fresh backup.',
+    'Recovery attempts are counted per account, not per wifi network, so a housemate guessing their phrase cannot lock you out, and the wait shown is the real one. A friend code alone no longer claims no account exists; it tells you to use your recovery ID.',
+    'Two phones on one account: a coin balance can no longer be silently replaced by the other phone\'s older number, and a potion you drank on one phone stays drunk after the two saves meet.',
   ] },
   { n: 484, date: '2026-09-06', title: 'Quests tell the truth', items: [
     'A finished quest left on the board past midnight showed a CLAIM button that did nothing. It now says the quest closed and clears, and the board re-checks the day before any claim.',
