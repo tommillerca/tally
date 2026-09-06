@@ -6967,6 +6967,46 @@ test('R38-2 dueBackupPush: grown vs unchanged, inside vs past the floor', async 
   }
 });
 
+/* R38-11 (2026-09-06, measured on v477; main is v482, re-verified on this tree):
+ * a correct friend code plus a correct phrase returned 404, and the client
+ * told the player "No account found for that friend code" -- false for the
+ * common case. server/src/index.js's `/recovery/<code>` route was deliberately
+ * narrowed on 2026-08-16: once an account has a recovery_id (which the ONLY
+ * in-app way to set a phrase, openRecoverySheet in js/app.js, always attaches),
+ * the friend-code lookup answers the SAME 404 as "no recovery set", on purpose
+ * (a distinct status would make the route an oracle for which friend codes
+ * belong to accounts worth attacking elsewhere). The route is intentionally
+ * closed, not broken, so the fix is honest copy, not reopening it.
+ * PROVE-RED: reverting js/social.js restoreWithPhrase's friend-code reason to
+ * the old bare `No account found for that friend code.` fails this test with:
+ *   AssertionError: the friend-code 404 copy must not claim no account exists
+ */
+test('R38-11 restoreWithPhrase: a 404 on the (intentionally narrowed) friend-code route must not claim "no account"', async () => {
+  await import('./mem-idb.mjs');
+  const s = await import('../js/social.js');
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/recovery/id/')) return { ok: false, status: 404, json: async () => ({ error: 'no account' }) };
+    if (String(url).includes('/recovery/')) return { ok: false, status: 404, json: async () => ({ error: 'no recovery set' }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  try {
+    const byCode = await s.restoreWithPhrase('BONE-AAAA-BBBB', 'a phrase long enough to pass validation');
+    assert.equal(byCode.ok, false, 'a 404 must not report success');
+    assert.doesNotMatch(byCode.reason, /no account found/i, 'the friend-code 404 copy must not claim no account exists');
+    assert.match(byCode.reason, /recovery id/i, 'the friend-code 404 copy must point the player at a recovery ID instead');
+
+    // the recovery-ID route has no such narrowing (server/src/index.js has no
+    // legacy-population check there): its 404 really does mean no account, so
+    // that copy is unchanged.
+    const byId = await s.restoreWithPhrase('tom-bones', 'a phrase long enough to pass validation');
+    assert.equal(byId.ok, false, 'a 404 must not report success');
+    assert.match(byId.reason, /no account found/i, 'the recovery-ID 404 copy is genuinely "no account" and must say so');
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

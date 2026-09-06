@@ -1426,7 +1426,24 @@ export async function restoreWithPhrase(handle, phrase) {
   try {
     const res = await apiFetch(base + url);
     if (res.status === 429) return { ok: false, reason: 'Too many attempts. Wait a few minutes.' };
-    if (!res.ok) return { ok: false, reason: `No account found for that ${isCode ? 'friend code' : 'recovery ID'}.` };
+    /* R38-11 (2026-09-06): a correct friend code + a correct phrase used to come
+       back here as "No account found for that friend code", which is false for
+       the common case. server/src/index.js's `/recovery/<code>` route (the one
+       'isCode' hits) was deliberately narrowed on 2026-08-16 to accounts that
+       have NEVER set a recovery id: once a recovery id exists, the friend-code
+       lookup answers the SAME 404 as "no recovery set", on purpose (a distinct
+       status would let an attacker use this route as an oracle for which codes
+       belong to accounts worth attacking elsewhere). So a 404 here means either
+       "no such account" or "this account has a recovery ID now, use that
+       instead" and the server will never say which -- the honest copy has to
+       cover both without claiming the account doesn't exist. The recovery-ID
+       route (isCode false) has no such narrowing: its 404 really does mean no
+       account, so that copy is unchanged. */
+    if (!res.ok) {
+      return { ok: false, reason: isCode
+        ? 'No recovery data found for that friend code. If you have set a recovery ID, use that instead: a friend code only works for an account that never set one.'
+        : 'No account found for that recovery ID.' };
+    }
     meta = await res.json();
   } catch { return { ok: false, reason: 'Could not reach the server.' }; }
   let bundle;
