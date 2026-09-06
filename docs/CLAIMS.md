@@ -19,6 +19,44 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## backup and recovery truth (2026-09-06)
+
+Not stamped to a release: hotfix/backup-recovery, off v482. HANDOFFr3820260906.md
+R38-2, R38-10, R38-11, R38-12, R38-13, re-measured on this tree before fixing.
+R38-10's `hasCloudBackup()` half was already fixed by an earlier round (it asks
+the server, not the opt-in flag); the contradiction between the two screens was
+not, and R38-2, R38-11, R38-12 and R38-13 were all still live on v482.
+
+1. PROOF: unit.test.js, backup-lifecycle-audit.mjs | REACH: Closing the app, or
+   switching away from it, now pushes your encrypted cloud backup instead of
+   waiting for the next boot or resume. A session that logs a meal or opens a
+   crate reaches the cloud within seconds of being backgrounded, instead of
+   sitting unsynced until a 10-minute throttle happens to have elapsed.
+
+2. PROOF: unit.test.js, erase-vault-line-audit.mjs | REACH: The Erase sheet and
+   Settings no longer say your progress "can be restored later" one line above
+   a warning that no recovery code is set. A cloud backup with no recovery code
+   is not restorable on a new device, and both screens now say exactly that
+   instead of contradicting themselves.
+
+3. PROOF: unit.test.js | REACH: Restoring by an old friend code plus your
+   phrase, on an account that has since set a recovery ID, no longer says "No
+   account found for that friend code." It names the actual fix: use your
+   recovery ID instead.
+
+4. PROOF: unit.test.js, api.test.mjs, recovery.test.mjs | REACH: A recovery
+   attempt against one account no longer locks out every other phone on the
+   same wifi network. The lockout is now keyed per account rather than per IP,
+   and a locked-out attempt shows the real wait instead of a flat "a few
+   minutes."
+
+5. PROOF: coins-merge-tie-audit.mjs, restore-latch-audit.mjs,
+   backup-key-audit.mjs, backup-conflict-audit.mjs | REACH: Two devices that
+   each moved the coin ledger the same number of times no longer have the
+   lower of the two balances silently win on the next sync. A spent
+   consumable, a used Battle Charm, or a pet cosmetic removed on salvage can no
+   longer come back through a stale cloud merge either.
+
 ## v482
 1. A hotfix off v481, QA round 37's first-session and crate-tap items (R37-1, 5, 6; R37-2 verified already fixed by the round-34 restore latch). Its rows are the dated "first session and crate taps" section further down, folded here.
 
