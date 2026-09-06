@@ -4192,6 +4192,10 @@ async function renderToday(el) {
        choose statted gear to wear." Gwart is that somebody. */
     gearOwned: unlockGear.size,
     gearWorn: Object.keys(unlockFighter.gearLo || {}).length,
+    // R39-28: never scold a player who has not logged a single thing yet, or
+    // is still on the day they installed.
+    everLogged: allLog.length > 0,
+    freshInstall: !!S.settings.createdAt && dateKey(new Date(S.settings.createdAt)) === S.date,
   };
   const gwLine = gwartLine(gwCtx);
   /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
@@ -5372,7 +5376,7 @@ function gwartLine(ctx) {
    at the bottom. The general pool is the only one that is pure character. */
 function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
   steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0,
-  gearOwned = 0, gearWorn = 0 }) {
+  gearOwned = 0, gearWorn = 0, everLogged = true, freshInstall = false }) {
   const hour = new Date().getHours();
   if (crates.length) return [
     'A crate by his feet, still shut. I gave him hands for this.',
@@ -5449,7 +5453,11 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
   if (!entries.length) return [
     'Nothing logged yet. He runs on what you eat. Feed the boy.',
     'Empty ledger so far. He is patient. I am less so.',
-    hour < 11 ? 'Morning. The ledger is blank. It usually starts that way.'
+    /* R39-28: a brand-new player who has never logged a single thing (or is
+       still on the very day they installed) gets the welcome line no matter
+       the hour. "Half the day gone" reads as a scold, and nobody has failed
+       at anything yet on their first day, or before their first entry. */
+    (hour < 11 || freshInstall || !everLogged) ? 'Morning. The ledger is blank. It usually starts that way.'
       : 'Half the day gone and not a crumb on the page.',
     'Whatever you ate, write it. Accurate beats flattering.',
     'Feed the ledger and he does the rest. Fair deal.',

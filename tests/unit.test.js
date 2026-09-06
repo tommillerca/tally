@@ -7199,6 +7199,25 @@ test('R39-2 onboarding LOG FOOD copy does not promise coins (logging food pays X
   assert.ok(!/coin/i.test(m[1]), `onboarding LOG FOOD copy must not promise coins, got "${m[1]}"`);
 });
 
+test('R39-28 Gwart never scolds a fresh player for an empty ledger (install day or never logged)', () => {
+  /* PROVE-RED: on the pre-fix pool, "Half the day gone and not a crumb on the
+     page" is chosen purely on the clock (hour >= 11), so a brand-new player who
+     opens the app at 15:00 on install day, having logged nothing ever, gets
+     scolded before they have had a chance to do anything wrong. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('function gwartPool('), b = app.indexOf('\n/* GWART ON THE PET');
+  assert.ok(a > 0 && b > a, 'gwartPool is not in js/app.js');
+  class FakeDate extends Date {
+    constructor(...args) { if (args.length) super(...args); else super('2026-09-06T15:00:00'); }
+  }
+  const gwartPool = new Function('Date', `${app.slice(a, b)}; return gwartPool;`)(FakeDate);
+  const SCOLD = 'Half the day gone and not a crumb on the page.';
+  const base = { entries: [], tot: {}, targets: {}, crates: [], streak: 0, level: 1, isToday: true };
+  assert.ok(gwartPool(base).includes(SCOLD), 'setup: an ordinary empty ledger at 15:00 must still be able to scold');
+  assert.ok(!gwartPool({ ...base, freshInstall: true }).includes(SCOLD), 'install day must never scold at 15:00');
+  assert.ok(!gwartPool({ ...base, everLogged: false }).includes(SCOLD), 'a player who has never logged anything must never be scolded at 15:00');
+});
+
 test('R38-8 q-friend / w-friends: gated on an actual accepted friend, not mere reachability', () => {
   /* PROVE-RED: on the pre-fix wiring (`socialOn: await social.isOnline().catch(() => false)`)
      this fails with:
