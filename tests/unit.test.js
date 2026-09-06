@@ -7007,6 +7007,33 @@ test('R38-11 restoreWithPhrase: a 404 on the (intentionally narrowed) friend-cod
   }
 });
 
+/* R38-12 (2026-09-06), client half: a 429 used to say "Wait a few minutes" no
+ * matter what the server actually answered, discarding the body's
+ * retryAfterMs (server/src/index.js's rateLimit sends it on every 429; the
+ * server-side prove-red for the account-vs-IP keying lives in
+ * server/test/api.test.mjs and server/recovery.test.mjs, which need a local
+ * wrangler dev and are not re-run here).
+ * PROVE-RED: reverting restoreWithPhrase's 429 branch to the old bare
+ * `return { ok: false, reason: 'Too many attempts. Wait a few minutes.' };`
+ * fails this test with:
+ *   AssertionError: the reason must quote the server's actual wait, not a
+ *   generic "a few minutes"
+ */
+test('R38-12 restoreWithPhrase: a 429 shows the real wait from retryAfterMs, not a generic guess', async () => {
+  await import('./mem-idb.mjs');
+  const s = await import('../js/social.js');
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 429, json: async () => ({ error: 'too many requests, try again later', retryAfterMs: 137_000 }) });
+  try {
+    const r = await s.restoreWithPhrase('BONE-AAAA-BBBB', 'a phrase long enough to pass validation');
+    assert.equal(r.ok, false);
+    assert.doesNotMatch(r.reason, /a few minutes/i, 'the reason must quote the server\'s actual wait, not a generic "a few minutes"');
+    assert.match(r.reason, /3m/, `137s should round up to 3m, got ${JSON.stringify(r.reason)}`);
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

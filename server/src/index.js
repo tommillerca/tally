@@ -385,7 +385,18 @@ const RL_ADMIN_IP_FAILS = 10;
    per subject. */
 const RATE_LIMITS = {
   // --- unsigned recovery lookups (budgets unchanged: these were already tuned) ---
-  rl_recovery:    { limit: 10,  windowMs: 600000 },   // hands out CIPHERTEXT: tight on purpose
+  rl_recovery:    { limit: 10,  windowMs: 600000 },   // hands out CIPHERTEXT: tight on purpose, now keyed PER ACCOUNT (R38-12)
+  /* R38-12 (2026-09-06): a LOOSER ceiling alongside rl_recovery, not instead of
+     it. rl_recovery used to be the only limiter and it was keyed on IP, so a
+     household or cafe wifi with one player mid-guess against THEIR OWN account
+     locked out every other phone behind it -- a fresh phone got 429 on its very
+     first attempt, at anyone else's account. Keying rl_recovery per account
+     (the code/recovery-id being looked up) fixes that, but an IP-only budget
+     still has a job: bounding one address hammering many DIFFERENT accounts.
+     6x the account limit is loose enough that a shared address stays clear
+     under ordinary use (a wifi's worth of people each making a normal handful
+     of attempts against their OWN accounts) while still capping abuse. */
+  rl_recovery_ip: { limit: 60,  windowMs: 600000 },
   rl_ridcheck:    { limit: 60,  windowMs: 600000 },   // only reveals whether a name is taken
 
   /* --- analytics ingest ---
@@ -546,9 +557,26 @@ async function rateLimit(env, name, kind, value) {
 
 /** The unsigned recovery routes, limited per IP. Kept as its own name because
  *  the point of a shared limiter here is that adding a recovery route can never
- *  accidentally ship an unthrottled way to harvest ciphertext. */
+ *  accidentally ship an unthrottled way to harvest ciphertext.
+ *  Still IP-only: used for rl_ridcheck (is this candidate name taken?), which
+ *  has no existing account behind it, so there is nothing to key per-account. */
 function rateLimitRecovery(request, env, name = 'rl_recovery') {
   return rateLimit(env, name, 'ip', clientIp(request));
+}
+
+/** The two ciphertext-by-handle recovery routes (fetch the wrapped bundle by
+ *  friend code or by recovery id), keyed per ACCOUNT -- the code/id being
+ *  looked up -- with the tight rl_recovery budget, plus the looser
+ *  rl_recovery_ip ceiling alongside it (see its RATE_LIMITS comment for why
+ *  both, not one instead of the other). R38-12 (2026-09-06): these two used to
+ *  share rateLimitRecovery above, per IP alone, which is the bug: a household
+ *  or cafe wifi with one player mid-guess against their OWN account locked out
+ *  every OTHER phone behind it, on THAT phone's very first attempt at anyone
+ *  else's account. */
+async function rateLimitRecoveryAccount(request, env, subject) {
+  const ipLimited = await rateLimit(env, 'rl_recovery_ip', 'ip', clientIp(request));
+  if (ipLimited) return ipLimited;
+  return rateLimit(env, 'rl_recovery', 'account', subject);
 }
 
 /** Read-only: is this subject's bucket already full? One SELECT, no write. */
@@ -2372,7 +2400,7 @@ export default {
       if (path.startsWith('/recovery/id/') && request.method === 'GET') {
         const rid = decodeURIComponent(path.slice('/recovery/id/'.length)).toLowerCase().trim();
         if (!RECOVERY_ID_RE.test(rid)) return json({ error: 'bad recovery id' }, 400);
-        const limited = await rateLimitRecovery(request, env);
+        const limited = await rateLimitRecoveryAccount(request, env, rid);
         if (limited) return limited;
         const row = await env.DB.prepare(
           'SELECT wrapped, salt, iters FROM recovery WHERE recovery_id = ?').bind(rid).first();
@@ -2412,7 +2440,7 @@ export default {
       if (path.startsWith('/recovery/') && request.method === 'GET') {
         const code = decodeURIComponent(path.slice('/recovery/'.length)).toUpperCase().trim();
         if (!/^BONE-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) return json({ error: 'bad code' }, 400);
-        const limited = await rateLimitRecovery(request, env);
+        const limited = await rateLimitRecoveryAccount(request, env, code);
         if (limited) return limited;
         const p = await env.DB.prepare('SELECT id FROM players WHERE friend_code = ?').bind(code).first();
         if (!p) return json({ error: 'no account' }, 404);

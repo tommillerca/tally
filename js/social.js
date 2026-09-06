@@ -1407,6 +1407,15 @@ export function restoreTruth(hasBackup, recoverySet) {
   return { restorable: !!recoverySet, why: recoverySet ? null : 'no-recovery' };
 }
 
+// R38-12: a real wait, not a guess. Minutes once it is a minute or more (the
+// windows here are 10 minutes), otherwise seconds -- rounded up, so a player
+// who waits exactly what this says is never told to try again a beat early.
+function fmtWaitMs(ms) {
+  const secs = Math.ceil(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  return `${Math.ceil(secs / 60)}m`;
+}
+
 // Rebuild the account on a fresh device: fetch the wrapped bundle by friend code,
 // unwrap with the phrase, install the identity, then the normal backup pull works.
 // handle is EITHER a recovery id (what everyone gets from v231 on) or a
@@ -1425,7 +1434,16 @@ export async function restoreWithPhrase(handle, phrase) {
   let meta;
   try {
     const res = await apiFetch(base + url);
-    if (res.status === 429) return { ok: false, reason: 'Too many attempts. Wait a few minutes.' };
+    /* R38-12 (2026-09-06): this used to say "wait a few minutes" no matter what
+       the server actually answered, discarding the body's retryAfterMs (server/
+       src/index.js's rateLimit sends it on every 429). The lockout is also now
+       keyed per account rather than per IP, so a real wait here means the
+       player's OWN attempts against THIS account, not a shared address. */
+    if (res.status === 429) {
+      const body = await res.json().catch(() => ({}));
+      const ms = Number(body && body.retryAfterMs) || 0;
+      return { ok: false, reason: ms > 0 ? `Too many attempts. Wait ${fmtWaitMs(ms)} and try again.` : 'Too many attempts. Wait a few minutes.' };
+    }
     /* R38-11 (2026-09-06): a correct friend code + a correct phrase used to come
        back here as "No account found for that friend code", which is false for
        the common case. server/src/index.js's `/recovery/<code>` route (the one
