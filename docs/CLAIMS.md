@@ -19,7 +19,6 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
-<<<<<<< HEAD
 ## onboarding fits the SE, sheets survive a double tap (2026-09-06)
 
 Not stamped to a release: hotfix/onboarding-fold. HANDOFFr3920260906.md R39-12,
@@ -39,7 +38,6 @@ R39-15, re-measured on this tree before fixing.
    own backdrop mid slide-up and read as a request to dismiss it; the backdrop
    now ignores a tap in the first 300ms after it appears, so a normal
    dismissal tap (at 400ms or later) still works exactly as before.
-=======
 ## the worn kit holds its colour (2026-09-06)
 
 Not stamped to a release: hotfix/wardrobe-tint-flash, off v487. Tom, live v487:
@@ -56,7 +54,6 @@ every team the animated centring passed. After: 1 colour, 2 spans per garment.
    any team but the first, open the Bonehead tab with that slot selected, or tap
    its slot chip. The piece on your Bonehead is your team's colours from the
    first frame; it no longer flicks through the other 31 on the way in.
->>>>>>> origin/main
 
 ## backup and recovery truth (2026-09-06)
 
