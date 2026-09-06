@@ -345,3 +345,58 @@ Everything else in section 6 (the gate shape, `MORPH_ART`, the per-draw-path
 wiring, the animated-species-forces-static trade, Bumbleseal's even hatch
 share) is unchanged -- v2 is a drop-in art swap at the same paths, not a
 new mechanism.
+
+## 10. QA round 39 (2026-09-06): the Kennel after a hostile pass
+
+HANDOFFr3920260906.md, KENNEL and GRID lanes, measured on integ/day5 v483 and
+re-verified on v488 before fixing. Branch `kennel/r39`.
+
+- **R39-13, the wrong copy's colour.** `refreshPetMorphs` (js/app.js) filled
+  `S.petMorphs` from `bestInstance`, which sorts on lineage then shiny and
+  keeps the first-hatched copy on a tie, while the Pit reads the equipped
+  instance. Now the EQUIPPED copy answers for its species (`bestInstance` only
+  for species with no equipped copy), and `ownPetMorph` re-reads before
+  answering, because the Stable's EQUIP button swaps the copy without touching
+  the cache and Today repaints off it on the way back. One helper, so the
+  splash, Today's hero, the try-on rack, the level-up sheet, the Crew hero and
+  the Boneyard marker all agree with the Pit.
+- **R39-14, `js/paddock.js` exception (dated 2026-09-06).** Section 0 marks
+  `js/paddock.js` off limits for the Kennel spec's scope. `paddockRoster()`
+  carried `shiny` but not `morph`, so the consumer's `morph: r.morph` in
+  `js/app.js` was always undefined and every copy of a species drew the same
+  colour in your own field while a friend's field was right. One field added
+  beside `shiny` (`morph: x.morph`), nothing else in the file touched. The
+  card slider (`js/paddock-cards.js`, R39-22) is still off limits and still
+  draws base art.
+- **R39-8/9, art sized from the viewport.** `openKennel` computed a cell size
+  from `window.innerWidth`, but `.sheet` caps at 600px, so above 605px the art
+  overflowed its clipped cell (43% visible at 1280x800) and a size frozen at
+  open survived a rotation (154px art in a 48px cell). `croppedPetImg`'s
+  layers are percentages of `.petcrop`, so the box is drawn at a nominal 48px
+  and `app.css` sizes it to the grid track (`.k-cell .petcrop { width: 100% }`,
+  `!important` over the inline px): no JS measurement, no resize listener.
+- **R39-10, the counter.** `owned.size` counted CX. `ownedCellCount`
+  (js/pets.js) counts only pairs with a cell.
+- **R39-11/23, the control.** The 10px `.k-dot` was the control (click-only,
+  Enter and Space dead) and the 62px `.k-cell` had no handler. The cell is a
+  real `<button>` now (48px at 320 wide, keyboard for free, `aria-pressed`);
+  pressing it names the colourway in the row's own label and pressing it again
+  restores the species name. The dots are indicators (`aria-hidden`).
+- **R39-6/30, the layout.** The caption ellipsises on one line, so a collector's
+  "Ember, Frost, Toxic, Midnight owned" cannot grow the row past the 320x568
+  fold; head and cells share one `grid-template-columns: repeat(5, minmax(0,
+  1fr))` so the headers cannot drift off their columns.
+- **R39-21, the egg shell.** `MORPH_FILTER`'s hue-rotate is gone. `eggTint`
+  returns a flat palette colour (`MORPH_SHELL`, hues from the v2 recolour
+  targets) multiplied onto the shell through a mask of the shell itself.
+  Measured: an Ember shell went from mean RGB 150,153,181 (blue) to 155,71,32.
+- **R39-32, reported.** Long pet names now ellipsise in the roster and the
+  grid labels (a trivial CSS half); a missing morph PNG still leaves a blank
+  box (`THUMB_FALLBACK` removes the image), not reachable with today's
+  catalogue, left as is.
+
+Guards: `tests/kennel-audit.mjs` (COUNT x2, LINE, FIT re-premised to the full
+30-pair roster, HIT, HEAD, TOGGLE, KEYS, CLIP x2), `tests/pet-morph-audit.mjs`
+(EQUIPPED x2, PADDOCK, EGG), `tests/unit.test.js` (`ownedCellCount`). Every
+new row was run red against the integ/day5 code with the new tests in a
+throwaway copy; the FAIL lines are in each file's header.

@@ -31,6 +31,19 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 5. PROOF: unit.test.js, crew-activity-audit.mjs | REACH: raceStanding's gap is to the racer above; raceClockLabel fires "settles tonight" on the last calendar day; settlement writes a reward-less place grant for every non-podium finisher; hasFightableStats demands a real number for every stat before any fight or stat bar renders.
 
 6. PROOF: wardrobe-family-grid-audit.mjs, football-tile-crop-audit.mjs, memory-census.mjs | REACH: hydratePackArt paints only tiles on screen or one screen away via an IntersectionObserver rooted on the real scroller (measured 166 ms to 73 ms main-thread script opening the hat slot at 4x CPU, 185 owned hats; OFF-DOM decoded bitmaps 12.2 MB to 9.3 MB).
+## kennel round 39 (2026-09-06)
+
+Not stamped to a release: kennel/r39, off integ/day5 (v488). HANDOFFr3920260906.md
+R39-6, 8, 9, 10, 11, 13, 14, 21, 23, 30, 32, re-measured on this tree before fixing.
+
+1. PROOF: pet-morph-audit.mjs | REACH: Own two copies of one species in different colours and equip the second: Today's hero, the splash, the try-on rack, the level-up sheet, the Crew hero and the Boneyard marker paint the copy you equipped, the same one the Pit fights with.
+2. PROOF: pet-morph-audit.mjs | REACH: Open your own Paddock from the Stable with two copies of one species in different colours: each copy is drawn in its own colour, as it already was in a friend's field.
+3. PROOF: kennel-audit.mjs | REACH: Open the Kennel on an iPad or a desktop window, or rotate the phone with it open: every pet sits inside its cell instead of spilling past it.
+4. PROOF: kennel-audit.mjs, unit.test.js | REACH: Open the Kennel owning a Founder's Lizard: the Collection counter reads N / 30 for the cells you have filled, never 31 / 30 or one more than you can see.
+5. PROOF: kennel-audit.mjs | REACH: In the Kennel, tap a grid cell (or focus it and press Enter or Space): the row names that colourway; tap it again and the species name comes back. The dots under a pet are indicators.
+6. PROOF: kennel-audit.mjs | REACH: Open the Kennel on a 320 wide phone owning every colourway of every pet: all six rows fit above the fold, the caption ends in an ellipsis instead of wrapping, and each column header sits over its column.
+7. PROOF: pet-morph-audit.mjs | REACH: Open the Backpack with an incubating Ember egg: the shell reads orange, not blue. Frost reads blue, Toxic green, Midnight purple.
+
 ## backup and recovery truth (2026-09-06)
 
 Not stamped to a release: hotfix/backup-recovery, off v482. HANDOFFr3820260906.md

@@ -237,6 +237,28 @@ try {
       m.rows === 6 && m.bottom != null && m.bottom <= h && m.caps.every(c => /Ember, Frost, Toxic, Midnight owned/.test(c)),
       `${m.rows} row(s), last row bottom ${m.bottom}${m.bottom > h ? ` > ${h}` : ` of ${h}`}; caption "${m.caps[0]}"`);
   }
+  /* R39-6 LINE: the caption is what wrapped. On the QA rig (Linux fallback
+     font) "Ember, Frost, Toxic, Midnight owned" wrapped at 320 and grew every
+     row 63 -> 79px; on this Mac's Chromium it fits at 320 by about 9px, so the
+     wrap is provoked at 300 wide instead, where SETUP first confirms the text
+     really overflows its box (an ellipsis path nothing exercised is not a
+     guard) and the row then asserts it stayed on one line. */
+  await setWidth(page, 300, 568);
+  await openKennel();
+  const line = await page.evaluate(() => [...document.querySelectorAll('.k-cap')].map(c => {
+    const cs = getComputedStyle(c);
+    // the text's own one-line width, measured with the caption's real font, so a
+    // wrapped caption (old code) still reads as "wider than its box"
+    const ctx = document.createElement('canvas').getContext('2d'); ctx.font = cs.font;
+    return { text: c.textContent, overflow: ctx.measureText(c.textContent).width > c.clientWidth + 1, h: c.getBoundingClientRect().height, lh: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.4 };
+  }));
+  setup('SAMPLE at 300 wide the longest caption really overflows its box (so the one-line rule below is exercised)', line.length === 6 && line.every(l => l.overflow),
+    `${line.length} caption(s), overflowing: ${line.filter(l => l.overflow).length}, box ${line[0]?.h.toFixed(1)}px`);
+  ok('LINE a caption that overflows stays on ONE line (ellipsis), so the roster\'s row height never depends on how many colourways are owned',
+    line.every(l => l.h <= l.lh * 1.5), `caption heights ${line.map(l => l.h.toFixed(1)).join(', ')} vs line-height ${line[0]?.lh.toFixed(1)}`);
+
+  await setWidth(page, 320, 568);
+  await openKennel();
   ct = await countText();
   ok('COUNT the collection counter reads 30 / 30 with the full set plus a Founder\'s Lizard, never 31 / 30', /Collection\s*·\s*30 \/ 30/.test(ct), ct);
 
@@ -283,7 +305,7 @@ try {
   const clip = () => page.evaluate(() => {
     const out = [...document.querySelectorAll('.k-cell')].map(c => {
       const r = c.getBoundingClientRect(), a = c.querySelector('.petcrop')?.getBoundingClientRect();
-      return { key: `${c.dataset.sp}|${c.dataset.morph}`, cell: r.width, art: a ? a.width : 0, over: a ? Math.max(a.left - r.left, r.right - a.right, a.top - r.top, r.bottom - a.bottom) < -0.6 : true };
+      return { key: `${c.dataset.sp}|${c.dataset.morph}`, cell: r.width, art: a ? a.width : 0, over: a ? Math.min(a.left - r.left, r.right - a.right, a.top - r.top, r.bottom - a.bottom) < -0.6 : true };
     });
     return { n: out.length, cell: out[0]?.cell, art: out[0]?.art, bad: out.filter(o => o.over) };
   });

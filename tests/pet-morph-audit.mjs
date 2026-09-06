@@ -77,8 +77,8 @@ const urlArg = process.argv[2] && !process.argv[2].startsWith('--') ? process.ar
  * wearing Bug-Eye Shades (CE1) so the accessory-exemption has a real worn
  * layer to grade. Same demo-mode guard seed() uses: this can never touch a
  * real save. */
-async function seedMorphs(page, { c5 = 'base', c6 = 'base', wear = false } = {}) {
-  const res = await page.evaluate(async ({ c5, c6, wear }) => {
+async function seedMorphs(page, { c5 = 'base', c6 = 'base', wear = false, insts = null, equipped = 'morphtest-C5', inv = null } = {}) {
+  const res = await page.evaluate(async ({ c5, c6, wear, insts, equipped, inv }) => {
     if (!new URLSearchParams(location.search).has('demo')) return { error: 'not in ?demo mode' };
     const dbs = (await indexedDB.databases()).map(d => d.name);
     const name = dbs.find(n => n === 'tally-demo');
@@ -91,16 +91,19 @@ async function seedMorphs(page, { c5 = 'base', c6 = 'base', wear = false } = {})
       tx.objectStore('kv').put(row);
       tx.oncomplete = res2; tx.onerror = () => rej(tx.error);
     });
-    const insts = [
+    insts = insts || [
       { iid: 'morphtest-C5', sp: 'C5', lineage: 0, shiny: false, morph: c5, hatchedAtSteps: 0 },
       { iid: 'morphtest-C6', sp: 'C6', lineage: 0, shiny: false, morph: c6, hatchedAtSteps: 0 },
     ];
     await put({ k: 'petInst', v: insts });
-    await put({ k: 'petEquipped', v: 'morphtest-C5' });
-    await put({ k: 'equipped', v: { C: 'C5' } });
+    await put({ k: 'petEquipped', v: equipped });
+    await put({ k: 'equipped', v: { C: insts.find(x => x.iid === equipped)?.sp || 'C5' } });
     await put({ k: 'petWear', v: wear ? { CE: 'CE1' } : {} });
+    for (const row of inv || []) await new Promise((res2, rej) => {
+      const tx = db.transaction('inv', 'readwrite'); tx.objectStore('inv').put(row); tx.oncomplete = res2; tx.onerror = () => rej(tx.error);
+    });
     return { ok: true };
-  }, { c5, c6, wear });
+  }, { c5, c6, wear, insts, equipped, inv });
   if (res.error) throw new Error(res.error);
   await page.reload({ waitUntil: 'networkidle2' });
   await sleep(2400);
@@ -207,6 +210,40 @@ const sampleInkDiff = (page, urlA, urlB) => page.evaluate((urlA, urlB) => new Pr
   }).catch(e => resolve({ error: String(e) }));
 }), urlA, urlB);
 
+/* MEAN COLOUR OF WHAT IS ON SCREEN, from a real screenshot of the element: the
+   egg shell's tint is a mix-blend-mode overlay (app.css .t3-egg .art.tinted),
+   which a canvas redraw of the <img> cannot reproduce. The clip's own corner
+   pixel is the card background; only pixels that differ from it are averaged,
+   so the surface colour around the shell does not dilute the reading. */
+const sampleScreen = async (page, sel) => {
+  const clip = await page.evaluate(sel => {
+    const el = document.querySelector(sel); if (!el) return null;
+    el.scrollIntoView({ block: 'center' });
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) };
+  }, sel);
+  if (!clip || !clip.width) return null;
+  const b64 = await page.screenshot({ clip, encoding: 'base64' });
+  return page.evaluate(b64 => new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+      const ctx = cv.getContext('2d'); ctx.drawImage(img, 0, 0);
+      const d = ctx.getImageData(0, 0, cv.width, cv.height).data;
+      const bg = [d[0], d[1], d[2]];
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) < 12) continue;
+        r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+      }
+      resolve(n ? { r: r / n, g: g / n, b: b / n, n } : { n: 0 });
+    };
+    img.onerror = () => resolve({ error: 'decode' });
+    img.src = 'data:image/png;base64,' + b64;
+  }), b64);
+};
+const rgb = c => `rgb(${c.r.toFixed(1)},${c.g.toFixed(1)},${c.b.toFixed(1)})`;
+
 const shot = async (page, name) => {
   if (!SHOTS) return;
   await settle(page);
@@ -302,6 +339,60 @@ async function run() {
     setup('SAMPLE Bumbleseal\'s base-layer ink mask has real ink pixels to grade', !inkC6.error && inkC6.n > 0, JSON.stringify(inkC6));
     ok('INK Bumbleseal\'s base-layer outline is byte-identical between base and morphed within 2 levels',
       !inkC6.error && inkC6.maxD <= 2, JSON.stringify(inkC6));
+
+    /* ---- EQUIPPED (R39-13): two copies, the EQUIPPED one paints ------------ */
+    /* bestInstance sorts on lineage then shiny, so a tie kept the first-hatched
+       copy: with a base #1 and a midnight #2 (midnight equipped) Today painted
+       base while the Pit painted midnight. Both directions, so a fix that
+       simply prefers the newer copy cannot pass. */
+    const copies = (m1, m2) => [
+      { iid: 'copy-1', sp: 'C5', lineage: 0, shiny: false, morph: m1, hatchedAtSteps: 0 },
+      { iid: 'copy-2', sp: 'C5', lineage: 0, shiny: false, morph: m2, hatchedAtSteps: 0 },
+    ];
+    await seedMorphs(page, { insts: copies('base', 'midnight'), equipped: 'copy-2' });
+    const eqSrcA = await sampleSrc(page, '#heroPetBtn .petcrop img:not(.pw)');
+    ok('EQUIPPED Today\'s hero paints the EQUIPPED copy: #1 base, #2 midnight, midnight equipped -> the midnight variant', /\/morph\/C5__midnight/.test(eqSrcA || ''), eqSrcA);
+
+    /* PADDOCK (R39-14), on the same two copies: your own field paints each
+       copy its own colour (paddockRoster carries morph beside shiny). */
+    await page.click('#stableBtn').catch(() => {});
+    await sleep(700);
+    await page.evaluate(() => document.getElementById('stableToPaddock')?.click());
+    await sleep(1400);
+    const pdk = await page.evaluate(() => Object.fromEntries(['copy-1', 'copy-2'].map(iid => {
+      const img = document.querySelector(`.sheet-paddock .pdk-pet[data-iid="${iid}"] img:not(.pw)`);
+      return [iid, img ? (img.currentSrc || img.src) : null];
+    })));
+    setup('SAMPLE both copies are on the own Paddock scene', !!pdk['copy-1'] && !!pdk['copy-2'], JSON.stringify(pdk));
+    ok('PADDOCK your own Paddock paints each copy its own colour: the base copy off the base master, the midnight copy off its variant',
+      !/\/morph\//.test(pdk['copy-1']) && /\/morph\/C5__midnight/.test(pdk['copy-2']), `copy-1 ${pdk['copy-1']}  copy-2 ${pdk['copy-2']}`);
+
+    await seedMorphs(page, { insts: copies('midnight', 'base'), equipped: 'copy-2' });
+    const eqSrcB = await sampleSrc(page, '#heroPetBtn .petcrop img:not(.pw)');
+    ok('EQUIPPED the reverse: #1 midnight, #2 base, base equipped -> the base master, not the first-hatched copy\'s midnight', !!eqSrcB && !/\/morph\//.test(eqSrcB), eqSrcB);
+
+    /* ---- EGG (R39-21): the shell tease is a flat palette tint ------------- */
+    /* The old hue-rotate path painted an EMBER egg blue (mean RGB 155,158,188).
+       Two eggs, told apart by their step goals in the card copy; the base egg is
+       the control so "no tint at all" (a cream shell, which also has red over
+       blue) cannot pass. */
+    await seedMorphs(page, { insts: copies('base', 'base'), equipped: 'copy-1', inv: [
+      { id: 'eggtest-base', kind: 'egg', stepsAtStart: 0, goal: 5000, source: 'audit', morph: 'base', ts: 1 },
+      { id: 'eggtest-ember', kind: 'egg', stepsAtStart: 0, goal: 7777, source: 'audit', morph: 'ember', ts: 2 },
+    ] });
+    await page.evaluate(() => { location.hash = '#/bonehead'; });
+    await sleep(900);
+    await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="crates"]')?.click());
+    await sleep(1200);
+    await page.evaluate(() => { [...document.querySelectorAll('.t3-egg')].forEach(e => { e.dataset.audit = /7,777/.test(e.textContent) ? 'ember' : /5,000/.test(e.textContent) ? 'base' : ''; }); });
+    const eggBase = await sampleScreen(page, '.t3-egg[data-audit="base"] .art');
+    const eggEmber = await sampleScreen(page, '.t3-egg[data-audit="ember"] .art');
+    await shot(page, 'egg-shells');
+    setup('SAMPLE both egg cards rendered and their shells have pixels', !!eggBase && !!eggEmber && eggBase.n > 50 && eggEmber.n > 50,
+      `base ${JSON.stringify(eggBase)}  ember ${JSON.stringify(eggEmber)}`);
+    ok('EGG an Ember egg\'s shell reads warm on screen: mean red exceeds blue by 20+, and it differs from the untinted shell',
+      eggEmber.r > eggEmber.b + 20 && dist(eggEmber, eggBase) > 15,
+      `base ${rgb(eggBase)} vs ember ${rgb(eggEmber)}, delta ${dist(eggEmber, eggBase).toFixed(2)}`);
 
     console.log(fails
       ? '\nKENNEL MORPH RENDER AUDIT: FAILED'
