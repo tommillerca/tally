@@ -7189,6 +7189,16 @@ test('R39-3 the day-one daily board is always 3 reachable quests, and one of the
   assert.notDeepEqual(p1, p2, 'two different createdAt salts drew the identical board on the same date');
 });
 
+test('R39-2 onboarding LOG FOOD copy does not promise coins (logging food pays XP only)', () => {
+  /* PROVE-RED on the pre-fix copy: "XP and coins, every meal" while
+     onFoodLogged's only reward is XP (js/game.js) -- coins come from quests,
+     crates and the day close, not from logging a meal. */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const m = src.match(/<b>LOG FOOD<\/b><small>([^<]*)<\/small>/);
+  assert.ok(m, 'onboarding LOG FOOD line not found');
+  assert.ok(!/coin/i.test(m[1]), `onboarding LOG FOOD copy must not promise coins, got "${m[1]}"`);
+});
+
 test('R38-8 q-friend / w-friends: gated on an actual accepted friend, not mere reachability', () => {
   /* PROVE-RED: on the pre-fix wiring (`socialOn: await social.isOnline().catch(() => false)`)
      this fails with:
