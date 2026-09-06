@@ -39,6 +39,13 @@
  *            made it, so v421's exact broken write is reproduced and a reload
  *            must heal it, once, without minting a second copy on the reload
  *            after that.
+ *   COLLAPSE live, DOM (2026-09-05). Tom on v476: "the stable is overwhelming
+ *            with too much of the same pet ... scrolling past 50 bulldogs to get
+ *            to the lizard." Twelve Bulldogs and one lizard, and the ring must
+ *            draw TWO cards, the Bulldog card must carry the 12, and one real
+ *            pointer swipe from the Bulldog must land on the lizard. Proven red
+ *            on v476 (fca972e2): 13 cards, no count, the swipe lands on Bulldog
+ *            number two.
  *
  * EMPTY IS A FAILURE. SAMPLE refuses to grade anything unless the catalogue has
  * pets in it and the shop is selling one, because every row here is "this thing
@@ -173,6 +180,81 @@ const { browser, page } = await boot(base);
 try {
   await seed(page, { level: 20, coins: 400000 });
   await setWidth(page, 393, 852);
+
+  /* ---- COLLAPSE: one card per species ---- */
+  /* FIRST, before the grants below own every species: the demo save opens with
+     its own pet or two and reclaimOwnedPets re-mints a copy of anything owned at
+     boot, so a roster of exactly two species is only buildable while almost
+     nothing is owned. The herd goes in through the same writer hatching uses
+     (addPetInstance), everything but the herd and the lizard is cut with kvSet
+     the way breed-sheet-scroll-audit builds its roster, and a Bulldog is
+     EQUIPPED so the ring OPENS on the herd: a ring that already opened on the
+     lizard would pass REACH without moving. Whatever the demo save reclaims on
+     top is read back live and graded as species, never assumed. */
+  const HERD = 'C5', ONE = 'C4', N_HERD = 12;
+  const herd = await page.evaluate(async ([herdSp, oneSp, n]) => {
+    const loot = await import('/js/loot.js');
+    const { kvSet } = await import('/js/db.js');
+    for (let i = (await loot.petInstances()).filter(x => x.sp === herdSp).length; i < n; i++) await loot.addPetInstance(herdSp, {});
+    if (!(await loot.petInstances()).some(x => x.sp === oneSp)) await loot.addPetInstance(oneSp, {});
+    const all = await loot.petInstances();
+    const list = [...all.filter(x => x.sp === herdSp).slice(0, n), all.find(x => x.sp === oneSp)];
+    await kvSet('petInst', list);
+    await loot.setEquippedPet(list[0].iid);
+    return { herd: list.filter(x => x.sp === herdSp).length, total: list.length };
+  }, [HERD, ONE, N_HERD]);
+  setup(`SAMPLE the roster was cut to ${N_HERD} ${HERD} and one ${ONE}`, herd.total === N_HERD + 1 && herd.herd === N_HERD, JSON.stringify(herd));
+  await page.reload({ waitUntil: 'networkidle2' });
+  await sleep(2400);
+  await page.waitForFunction(() => !!document.getElementById('stableBtn'), { timeout: 30000, polling: 100 }).catch(() => {});
+  await page.evaluate(() => document.getElementById('stableBtn')?.click());
+  await page.waitForFunction(() => !!document.querySelector('#stableBody .cf-card.focus'), { timeout: 30000, polling: 100 }).catch(() => {});
+  await settle(page, 600);
+  const ring = await page.evaluate(async herdSp => {
+    const loot = await import('/js/loot.js');
+    const insts = await loot.petInstances();
+    const cards = [...document.querySelectorAll('#stableBody .cf-card')];
+    const herdCard = cards.find(c => c.dataset.sp === herdSp);
+    const badge = herdCard && herdCard.querySelector('.cf-n');
+    return {
+      owned: insts.length, herdOwned: insts.filter(x => x.sp === herdSp).length, species: [...new Set(insts.map(x => x.sp))],
+      cards: cards.map(c => c.dataset.sp),
+      badge: badge ? badge.textContent.trim() : null,
+      badgeBox: badge ? badge.getBoundingClientRect().width > 0 && badge.getBoundingClientRect().height > 0 : false,
+      focus: document.querySelector('#stableBody .cf-card.focus')?.dataset.sp || null,
+      kin: document.querySelectorAll('#stableBody .cf-kin [data-kin]').length,
+    };
+  }, HERD);
+  ok(`COLLAPSE the ring draws ONE card per species owned, not one per copy: ${N_HERD} ${HERD} collapse to a single card`,
+    ring.herdOwned === N_HERD && ring.cards.length === ring.species.length && ring.species.every(sp => ring.cards.includes(sp)),
+    `${ring.owned} copies of ${ring.species.length} species (${ring.species.join(' ')}), ${ring.cards.length} cards: ${ring.cards.join(' ')}`);
+  ok(`COLLAPSE-COUNT the ${HERD} card carries the herd's size and the caption lists every copy`,
+    ring.badge !== null && new RegExp(`\\b${N_HERD}\\b`).test(ring.badge) && ring.badgeBox && ring.kin === N_HERD,
+    `badge ${JSON.stringify(ring.badge)} (drawn ${ring.badgeBox}), ${ring.kin} copy chips under the caption`);
+  setup(`SAMPLE the ring opened on the ${HERD}, so the swipe below has somewhere to go`, ring.focus === HERD, `opened on ${ring.focus}`);
+  /* ONE REAL SWIPE, towards the lizard (the ring wraps, so the short way is
+     read off the card indexes), slow enough that the ring's own momentum carries
+     at most a card: 0.6 of a card over ~600ms, which the spring rounds to the
+     next card. Mouse pointer events are what the frame listens for; a tap is
+     excluded by moving past its 5px slop. */
+  const fr = await page.evaluate(oneSp => {
+    const r = document.getElementById('cfFrame').getBoundingClientRect();
+    const cards = [...document.querySelectorAll('#stableBody .cf-card')];
+    const from = cards.findIndex(c => c.classList.contains('focus')), to = cards.findIndex(c => c.dataset.sp === oneSp);
+    let d = to - from; if (d > cards.length / 2) d -= cards.length; if (d < -cards.length / 2) d += cards.length;
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, card: cards[0].getBoundingClientRect().width, dir: Math.sign(d) || 1 };
+  }, ONE);
+  await page.mouse.move(fr.x, fr.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 12; i++) { await page.mouse.move(fr.x - fr.dir * fr.card * 0.6 * i / 12, fr.y); await sleep(50); }
+  await page.mouse.up();
+  await sleep(1200);
+  const after = await page.evaluate(() => document.querySelector('#stableBody .cf-card.focus')?.dataset.sp || null);
+  ok(`COLLAPSE-REACH one swipe from the ${HERD} lands on the ${ONE}, not on the next ${HERD}`,
+    after === ONE, `focused ${after} after one swipe (started on ${ring.focus}, ${ring.cards.length} cards in the ring)`);
+  await shot(page, 'stable-collapse');
+  await page.evaluate(() => document.querySelector('.sheet-close')?.click());
+  await sleep(600);
 
   /* THE REAL PATHS. Anything the shop sells is BOUGHT, through buyPetItem, which
      is the path that was broken; everything else arrives through grantPet, which
@@ -332,6 +414,7 @@ try {
   ok('RECLAIM an account that already bought her gets her back on the next boot, exactly once',
     healed.every(h => h.copies === 1 && h.inRoster),
     healed.map((h, i) => `boot ${i + 1}: ${h.copies} copies, roster ${h.inRoster}`).join('; '));
+
 } finally {
   await browser.close();
   if (srv) srv.close();
