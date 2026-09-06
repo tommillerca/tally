@@ -15727,9 +15727,13 @@ async function renderCharacter(wrap, tab, opts = {}) {
        colourway you already own is free and reversible, and this screen has
        committed on the tap since v1. Built only at tap time, so it never carries
        a stale `equipped` from render: the caller sets that from the live DOM. */
-    const famRailHtml = fam => `<div class="fam-rail pw-row" role="group" aria-label="${esc(famBest(fam).name)} colourways">
-        ${fam.map(i => `<button class="pw-item famr r-${i.rarity}" data-equip="${i.id}" title="${esc(i.name)} · ${esc(i.rarity)}" aria-label="${esc(i.name)}, ${esc(i.rarity)}">
-          <span class="famr-art">${famArtHtml(i)}${rarityTagHtml(i.rarity)}</span>
+    /* `attr` is the tile's action attribute: data-equip in the fit grid, data-look in
+       the Dressing Room (2026-09-05, Tom: the look picker "individually listing every
+       single cleat/shirt etc as its own thing without a colour picker"). Same rail,
+       same tiles; `tag` lets the look grid add its price to each colourway. */
+    const famRailHtml = (fam, attr = 'equip', tag = () => '') => `<div class="fam-rail pw-row" role="group" aria-label="${esc(famBest(fam).name)} colourways">
+        ${fam.map(i => `<button class="pw-item famr r-${i.rarity}" data-${attr}="${i.id}" title="${esc(i.name)} · ${esc(i.rarity)}" aria-label="${esc(i.name)}, ${esc(i.rarity)}">
+          <span class="famr-art">${famArtHtml(i)}${rarityTagHtml(i.rarity)}${tag(i)}</span>
           <b>${esc(i.name)}</b>
         </button>`).join('')}
       </div>`;
@@ -16081,7 +16085,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           : '';
         const { cur, sel, cost, afford, changed } = mogState();
         const arts = slotArts;
-        const cell = (val, inner, title, extra = '') => `<button class="ward-cell look ${extra} ${cur === val ? 'equipped' : ''} ${sel === val ? 'selected' : ''}" data-look="${esc(val)}" title="${esc(title)}">${inner}</button>`;
+        const cell = (val, inner, title, extra = '', attrs = '') => `<button class="ward-cell look ${extra} ${cur === val ? 'equipped' : ''} ${sel === val ? 'selected' : ''}" data-look="${esc(val)}" title="${esc(title)}"${attrs}>${inner}</button>`;
         /* THE LOOK TILES, ONE RENDERER (QA round 23 F6). Measured on a heavy
            account: 57 collected looks made a 1420px grid in BH_ITEMS declaration
            order with NO organisation, and 56 of 56 tiles carried no rarity class
@@ -16093,10 +16097,27 @@ async function renderCharacter(wrap, tab, opts = {}) {
            cells (own look / Hide) stay first and carry no tier. The module-level
            RAR_ORDER runs common -> legendary, hence b - a for legendary first.
            No search, favourites or sort controls: that is design, Tom's call. */
-        const lookTilesHtml = arts => `${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
+        /* ONE TILE PER FAMILY HERE TOO (2026-09-05). v474 collapsed the fit grid
+           above by bhFamilyKey and this grid never got it, so a player with the
+           football kit met 32 cleats as 32 tiles, every one drawn off the same
+           untinted master (no fbTintAttr) so they were 32 identical grey shoes
+           with no way to tell a team apart: Tom, "individually listing every
+           single cleat/shirt etc as its own thing without a colour picker."
+           Same rule, same helpers, same rail (famRailHtml with data-look), and
+           the tile paints the colourway it stands for. bhFamilies keeps first-
+           member order, so grouping the rarity-sorted list keeps the sort. */
+        const lookArt = i => `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14"${fbTintAttr(i)} role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>`;
+        const lookTilesHtml = arts => `${cell('', `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(ownArt)))}" data-pad="0.14"${fbTintAttr(ownArt)}></canvas><span class="look-tag">${wornGear ? 'Its own look' : 'As equipped'}</span>`, wornGear ? 'Wear the gear as it is' : 'Wear what you already have on')}
             ${cell(TRANSMOG_HIDE, `<span class="look-hide">${ICONS.hidden(22)}</span><span class="look-tag">Hide</span>`, 'Show nothing in this slot')}
-            ${[...arts].sort((a, b) => RAR_ORDER.indexOf(b.rarity) - RAR_ORDER.indexOf(a.rarity))
-              .map(i => cell(i.id, `<canvas class="ward-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(i)))}" data-pad="0.14" role="img" aria-label="${esc(i.name)}, ${esc(i.rarity)}"></canvas>${costTag(i.id)}${rarityTagHtml(i.rarity)}`, `${i.name} · ${i.rarity}`, `r-${i.rarity}`)).join('')}`;
+            ${[...bhFamilies([...arts].sort((a, b) => RAR_ORDER.indexOf(b.rarity) - RAR_ORDER.indexOf(a.rarity))).values()]
+              .map(fam => {
+                /* the tile shows the colourway being tried, else the one worn, else the family's best (first after the sort) */
+                const i = fam.find(v => v.id === sel) || fam.find(v => v.id === cur) || fam[0];
+                if (fam.length === 1) return cell(i.id, `${lookArt(i)}${costTag(i.id)}${rarityTagHtml(i.rarity)}`, `${i.name} · ${i.rarity}`, `r-${i.rarity}`);
+                return cell(i.id, `${lookArt(i)}${costTag(i.id)}${rarityTagHtml(fam[0].rarity)}<span class="ward-fam-n" aria-hidden="true">${fam.length}</span>`,
+                  `${i.name} · ${fam.length} colourways`, `fam r-${fam[0].rarity}`,
+                  ` data-family="${esc(bhFamilyKey(i))}" data-fam-ids="${esc(fam.map(v => v.id).join(' '))}" aria-expanded="false" aria-label="${esc(i.name)}, ${fam.length} colourways"`);
+              }).join('')}`;
         /* ---------------------------------------------------------------- v2
            THE NEW-PLAYER GRILL, 2026-08-23, measured at 430x932 on a seeded
            mid-game account. Four findings, and this branch answers them in order:
@@ -16332,7 +16353,11 @@ async function renderCharacter(wrap, tab, opts = {}) {
        full-width and goes at the END of the tapped tile's row, so it never
        leaves a hole mid-row and never lands a screen away from what opened it. */
     const COLS = 4;
-    $$('.ward-cell.fam[data-family]', content).forEach(tile => tile.addEventListener('click', () => {
+    /* ONE OPENER FOR BOTH GRIDS (2026-09-05). `attr` names the rail tiles' action
+       (equip / look), `wire` is the grid's own tap handler for them and `ring`
+       marks the tiles' state the way that grid does. A second copy of this for
+       the Dressing Room is how the two rails would drift. */
+    const wireFamTile = (tile, { attr, tag, wire, ring }) => tile.addEventListener('click', () => {
       const grid = tile.closest('.ward-grid');
       if (!grid) return;
       const open = $('.fam-rail', grid);
@@ -16342,20 +16367,14 @@ async function renderCharacter(wrap, tab, opts = {}) {
       const ids = new Set(tile.dataset.famIds.split(' '));
       const fam = BH_ITEMS.filter(i => ids.has(i.id));
       const rail = document.createElement('div');
-      rail.innerHTML = famRailHtml(fam);
+      rail.innerHTML = famRailHtml(fam, attr, tag);
       const node = rail.firstElementChild;
       node.dataset.family = tile.dataset.family;
       const kids = [...grid.children];
       const at = kids[Math.floor(kids.indexOf(tile) / COLS) * COLS + COLS] || null;
       grid.insertBefore(node, at);
       tile.setAttribute('aria-expanded', 'true');
-      /* THE RING COMES OFF THE LIVE DOM, NOT OFF `eq`. An equip tap restages
-         rather than re-renders, so by the time a rail is opened `eq` can be
-         several garments stale; the family tile's own data-equip is what
-         restageWardrobe keeps current. */
-      const worn = tile.classList.contains('equipped') ? tile.dataset.equip : '';
-      $$('[data-equip]', node).forEach(b => b.classList.toggle('equipped', b.dataset.equip === worn));
-      $$('[data-equip]', node).forEach(wireEquip);
+      $$(`[data-${attr}]`, node).forEach(b => { ring(b); wire(b); });
       hydratePackArt(node, '.ward-art[data-art]');
       node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       /* THE ONE YOU ARE WEARING OPENS UNDER YOUR THUMB. The rail snaps to
@@ -16363,7 +16382,15 @@ async function renderCharacter(wrap, tab, opts = {}) {
          the first tile and the player has to hunt for the ring they came to
          move. `inline` only, and block: 'nearest', so this scrolls the rail and
          not the page out from under the tap. */
-      $('.equipped', node)?.scrollIntoView({ block: 'nearest', inline: 'center' });
+      ($('.selected', node) || $('.equipped', node))?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    });
+    $$(`.ward-grid[data-wslot] .ward-cell.fam[data-family]`, content).forEach(tile => wireFamTile(tile, {
+      attr: 'equip', tag: () => '', wire: wireEquip,
+      /* THE RING COMES OFF THE LIVE DOM, NOT OFF `eq`. An equip tap restages
+         rather than re-renders, so by the time a rail is opened `eq` can be
+         several garments stale; the family tile's own data-equip is what
+         restageWardrobe keeps current. */
+      ring: b => b.classList.toggle('equipped', tile.classList.contains('equipped') && b.dataset.equip === tile.dataset.equip),
     }));
     /* THE RAIL MOVES TWO COLOURS AND NOTHING ELSE.
        Every team of a garment is the same master PNG behind the same two masks,
@@ -16498,13 +16525,24 @@ async function renderCharacter(wrap, tab, opts = {}) {
         for (const i of slotArts) lookPriceMap[i.id] = await transmogPrice(slot, i.id);
       }
       const done = committed ? await restageWardrobe(content, slot) : await restageDoll(content, previewEq());
-      const panel = $('.mog-panel', content), figs = $('.mog-figs', content), bar = $('.mog-bar', content);
+      /* THE DOCK'S BAR, BY ADDRESS. With a football garment worn the fit rail above
+         carries its own .mog-bar.fb-bar, so a bare '.mog-bar' landed on that one:
+         a look tap replaced the team bar with a copy of this one and left the real
+         one stale (dressing-room-audit PICK, 2026-09-06, "You get Boneyard Bruisers
+         Cleats, as equipped" after tapping Thornback Toads). */
+      const panel = $('.mog-panel', content), figs = $('.mog-figs', content), bar = $('.mog-dock > .mog-bar', content);
       if (!done || !panel || !figs || !bar) { renderCharacter(wrap, 'wardrobe', { instant: true }); return; }
       const { cur, sel } = mogState();
       figs.innerHTML = mogFigsHtml();
       for (const c of $$('[data-look]', panel)) {
-        c.classList.toggle('equipped', c.dataset.look === cur);
-        c.classList.toggle('selected', c.dataset.look === sel);
+        /* A COLLAPSED FAMILY TILE RINGS FOR ANY OF ITS COLOURWAYS and draws the one
+           being tried, the same two moves restageWardrobe makes on the fit grid's
+           family tiles (famTileShow). A plain tile has no data-fam-ids and falls
+           through to the exact comparison it always used. */
+        const ids = c.dataset.famIds ? c.dataset.famIds.split(' ') : [c.dataset.look];
+        c.classList.toggle('equipped', ids.includes(cur));
+        c.classList.toggle('selected', ids.includes(sel));
+        if (c.dataset.famIds && ids.includes(sel) && c.dataset.look !== sel) await famTileShow(c, BH_BY_ID[sel], 'look');
         const tag = $('.look-cost', c);
         if (tag && lookPriceMap[c.dataset.look] !== undefined) tag.outerHTML = costTag(c.dataset.look);
       }
@@ -16524,10 +16562,18 @@ async function renderCharacter(wrap, tab, opts = {}) {
     }
     // Tap a look to try it on: free, instant, no commitment. Dust is only spent
     // by the Apply button in the bar.
-    $$('[data-look]', content).forEach(cell => cell.addEventListener('click', () => {
+    const wireLook = cell => cell.addEventListener('click', () => {
       S.lookPreview = cell.dataset.look;
       popSound(S.sounds);
       restageLook();
+    });
+    $$('[data-look]', content).forEach(wireLook);
+    /* The Dressing Room's family tiles open the same rail as the fit grid's, with
+       data-look tiles wired to the look tap above. Rings come off the panel's
+       own state (cur / sel), not off the DOM, because a preview never re-renders. */
+    $$('.look-grid .ward-cell.fam[data-family]', content).forEach(tile => wireFamTile(tile, {
+      attr: 'look', tag: i => costTag(i.id), wire: wireLook,
+      ring: b => { const { cur, sel } = mogState(); b.classList.toggle('equipped', b.dataset.look === cur); b.classList.toggle('selected', b.dataset.look === sel); },
     }));
     function wireMogBar() {
       $$('[data-look-apply]', content).forEach(btn => {
@@ -16553,7 +16599,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
          onConfirm resolves, so after a successful commit the bar sat .armed with
          a live "Wear it" until the restage landed. Nothing to buy in that window
          (paid-once), but the player could not tell the purchase went through. */
-      $('.mog-bar', content)?.classList.remove('armed');
+      $('.mog-dock > .mog-bar', content)?.classList.remove('armed');
       btn.disabled = true;
       levelSound(S.sounds); pushProfileSoon();
       toast(res.cost ? `Look changed. −${res.cost} dust.` : 'Look changed.', 2000);
@@ -22399,7 +22445,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v479'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v480'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -25071,26 +25117,32 @@ async function restageWardrobe(content, slot) {
      puts back the colour you just changed out of. */
   for (const c of $$('.ward-cell.fam[data-fam-ids]', grid)) {
     if (!c.dataset.famIds.split(' ').includes(wanted) || c.dataset.equip === wanted) continue;
-    const art = BH_BY_ID[wanted];
-    const cv = $('canvas.ward-art', c);
-    if (!art || !cv) continue;
-    c.dataset.equip = wanted;
-    cv.setAttribute('data-art', bhTrim(bhAsset(art)));
-    /* AND ITS TINTS. Every colourway of a football garment shares ONE master PNG, so
-       moving data-art alone redraws the tile in the team you just changed out of
-       (wardrobe-family-grid-audit WORN, checksum unchanged, 2026-09-04). */
-    const tints = footballTints(art);
-    if (tints) cv.dataset.tints = JSON.stringify(tints); else delete cv.dataset.tints;
-    cv.setAttribute('aria-label', `${art.name}, ${art.rarity}`);
-    // the accessible name and the tooltip both name the piece on the tile, so
-    // they move with it; the count and the family's best tier do not change.
-    const n = c.dataset.famIds.split(' ').length;
-    const best = ([...c.classList].find(k => k.startsWith('r-')) || `r-${art.rarity}`).slice(2);
-    c.setAttribute('aria-label', `${art.name}, ${n} colourways, best ${best}`);
-    c.title = `${art.name} · ${n} colourways · best ${best}`;
-    await hydratePackArt(c, '.ward-art[data-art]');
+    await famTileShow(c, BH_BY_ID[wanted], 'equip');
   }
   return true;
+}
+
+/* Point a collapsed family tile at `art`: the piece it shows, acts on and names.
+ * Shared by restageWardrobe (data-equip, the fit grid) and restageLook
+ * (data-look, the Dressing Room), so the two collapsed grids cannot drift. */
+async function famTileShow(c, art, attr) {
+  const cv = $('canvas.ward-art', c);
+  if (!art || !cv) return;
+  c.dataset[attr] = art.id;
+  cv.setAttribute('data-art', bhTrim(bhAsset(art)));
+  /* AND ITS TINTS. Every colourway of a football garment shares ONE master PNG, so
+     moving data-art alone redraws the tile in the team you just changed out of
+     (wardrobe-family-grid-audit WORN, checksum unchanged, 2026-09-04). */
+  const tints = footballTints(art);
+  if (tints) cv.dataset.tints = JSON.stringify(tints); else delete cv.dataset.tints;
+  cv.setAttribute('aria-label', `${art.name}, ${art.rarity}`);
+  // the accessible name and the tooltip both name the piece on the tile, so
+  // they move with it; the count and the family's best tier do not change.
+  const n = c.dataset.famIds.split(' ').length;
+  const best = ([...c.classList].find(k => k.startsWith('r-')) || `r-${art.rarity}`).slice(2);
+  c.setAttribute('aria-label', `${art.name}, ${n} colourways, best ${best}`);
+  c.title = `${art.name} · ${n} colourways · best ${best}`;
+  await hydratePackArt(c, '.ward-art[data-art]');
 }
 
 /* The doll half of restageWardrobe on its own, taking the look to draw, so a

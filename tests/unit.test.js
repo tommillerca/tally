@@ -5100,9 +5100,13 @@ test('R23 F6: Dressing Room look tiles are sorted by rarity and carry r-<rarity>
   assert.ok(slice.includes('const lookTilesHtml ='), 'lookTilesHtml is gone: the look grid is back to an unsorted, untiered arts.map');
   const rarOrder = app.match(/^const RAR_ORDER = .*$/m)[0];
   const tagFn = app.match(/function rarityTagHtml\(rarity\) \{[\s\S]*?\n\}/)[0];
+  /* the family collapse (2026-09-05) is graded in pixels by dressing-room-audit; here
+     every fixture piece is its own family so the sort and the tiers stay the subject */
   const lookTilesHtml = new Function('cur', 'sel', 'esc', 'ownArt', 'wornGear', 'bhTrim', 'bhAsset', 'ICONS', 'TRANSMOG_HIDE', 'costTag',
+    'fbTintAttr', 'bhFamilies', 'bhFamilyKey',
     `${rarOrder}; ${tagFn}; ${slice}; return lookTilesHtml;`)(
-    '', '', String, { id: 'own' }, null, x => x, i => i.id + '.png', { hidden: () => '<svg/>' }, '__hide__', () => '<span class="look-cost paid">owned</span>');
+    '', '', String, { id: 'own' }, null, x => x, i => i.id + '.png', { hidden: () => '<svg/>' }, '__hide__', () => '<span class="look-cost paid">owned</span>',
+    () => '', arr => new Map(arr.map(i => [i.id, [i]])), i => i.id);
   // declaration order deliberately interleaves tiers, the way BH_ITEMS does
   const arts = [
     { id: 'c1', name: 'C one', rarity: 'common' }, { id: 'l1', name: 'L one', rarity: 'legendary' },
@@ -5564,7 +5568,8 @@ test('R22-W13 the bar disarms on commit, every price tag carries the unit, a dol
   assert.match(app, /: '<button class="btn ghost mog-go" disabled>Wear it<\/button>'/, 'nothing selected renders a disabled Wear it');
   // (b) no bare price span is left: every priced look tag goes through costTag (dust unit)
   assert.doesNotMatch(app, /<span class="look-cost">\$\{/, 'a bare `12` price tag survives; use costTag (QA round 22 W13b)');
-  assert.equal((app.match(/\$\{costTag\(i\.id\)\}/g) || []).length, 2, 'both look grids (v2 and the ?mogv2=0 fallback) price through costTag');
+  // 3 since 2026-09-05: the v2 grid prices a lone tile and a family tile separately
+  assert.equal((app.match(/\$\{costTag\(i\.id\)\}/g) || []).length, 3, 'both look grids (v2 and the ?mogv2=0 fallback) price through costTag');
   // (c) the doll-slot tap scrolls the Dressing Room into view after the render lands
   const pd = app.slice(app.indexOf('const wirePd = b =>'), app.indexOf("$$('[data-pd]', content).forEach(wirePd)"));
   assert.match(pd, /await renderCharacter\(wrap, 'wardrobe', \{ instant: true \}\);[\s\S]*\$\('\.mog-panel', wrap\)\?\.scrollIntoView\(/, 'after a doll-slot tap the .mog-panel must be scrolled into view, after the render (QA round 22 W13c)');
