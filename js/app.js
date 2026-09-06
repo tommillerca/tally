@@ -16987,6 +16987,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             <span class="art">${crateIcon(kind, 56)}</span>
             <b>${esc(def.label).toUpperCase()}</b>
             <button class="btn" data-open="${list[0].id}">OPEN</button>
+            ${kind === 'daily' && list.length > 1 ? '<button class="btn ghost" data-open-all="daily">OPEN ALL</button>' : ''}
           </div>`;
         }).join('');
       })()}</div>` : '<p class="note" style="text-align:center;padding:12px 0 16px">No unopened crates. Finish quests, close days on budget, and walk 10k steps to earn more.</p>'}
@@ -17155,6 +17156,18 @@ async function renderCharacter(wrap, tab, opts = {}) {
       b.disabled = true;
       const result = await openCrate(b.dataset.open);
       await openCrateReveal(result);
+      renderCharacter(wrap, 'crates');
+    }));
+    $$('[data-open-all]', content).forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true;
+      const held = crates.filter(c => c.crate === b.dataset.openAll);
+      const opened = [];
+      for (const crate of held) opened.push(await openCrate(crate.id));
+      await openCrateReveal({
+        crate: b.dataset.openAll,
+        results: opened.flatMap(r => r.results || []),
+        coins: opened.reduce((sum, r) => sum + (r.coins || 0), 0),
+      });
       renderCharacter(wrap, 'crates');
     }));
     $('#useBoost', content)?.addEventListener('click', async () => {
@@ -18484,12 +18497,15 @@ function crateResultToCard(r) {
   }
   const isPet = r.item && r.item.slot === 'C';
   if (r.type === 'dupe') return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET · DUPE' : 'DUPE', statsHtml: `Duplicate → +${r.coins} ${ICONS.coin(11)}` };
-  return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: '' };
+  return { wear: r.item.id, imgSrc: bhAsset(r.item), name: r.item.name, rarity: r.item.rarity, kind: isPet ? 'PET' : (esc((BH_SLOTS.find(s => s.code === r.item.slot) || {}).label || 'COSMETIC').toUpperCase()), stats: `New · ${(RARITIES[r.item.rarity] || RARITIES.common).label}` };
 }
 
 async function openCrateReveal(result) {
   const cards = (result.results || []).map(crateResultToCard).filter(Boolean);
-  return openPackReveal(cards, { coins: result.coins, crate: result.crate });
+  await openPackReveal(cards, { coins: result.coins, crate: result.crate });
+  const claimed = (result.results || []).find(r => r.type === 'cos' || r.type === 'gear');
+  const item = claimed?.item || claimed?.gear;
+  if (item) toast(`${item.name} claimed. Equip it in your Wardrobe.`, 3200);
 }
 
 /* ================= Apple Health bridge ================= */
