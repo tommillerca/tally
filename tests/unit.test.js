@@ -7273,6 +7273,17 @@ test('R38-24 "Quest progress" no longer opens Trends, and the water toast is not
   assert.ok(/waterHint/.test(src), 'the water toast must compute a conditional hint instead');
 });
 
+test("R39-31 the Stable's wardrobe heading escapes the species name at both sites", () => {
+  /* PROVE-RED: on d7906217 (pre-fix) this fails with:
+       FAIL both wardrobe headings must go through esc(): 0 escaped, 2 raw
+     Source pin only; the rendered half (a name carrying <b> read back as text
+     from the real Stable) is pet-ownership-audit HER. */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const escaped = (src.match(/<div class="pw-h">\$\{esc\(her\)\}'s wardrobe/g) || []).length;
+  const raw = (src.match(/<div class="pw-h">\$\{her\}'s wardrobe/g) || []).length;
+  assert.ok(escaped === 2 && raw === 0, `both wardrobe headings must go through esc(): ${escaped} escaped, ${raw} raw`);
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

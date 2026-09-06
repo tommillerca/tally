@@ -3566,7 +3566,14 @@ function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
   const rec = { wrap, onClose: () => { try { trackEvent('feat_time', { f: feat, ms: Date.now() - openedAt }); } catch { /* noop */ } try { onClose?.(); } catch { /* noop */ } } };
   sheetStack.push(rec);
   history.pushState({ sheet: sheetStack.length }, '');
-  $('.sheet-backdrop', wrap).addEventListener('click', () => history.back());
+  /* R39-12: a double-tap on a sheet trigger opened this sheet and closed it right
+     back, because the second tap lands here mid slide-up (0.28s) before the new
+     backdrop has moved out from under the finger. Measured 6/6 at a 60ms gap
+     between taps, 5/6 at 90ms, 0/6 at 150ms+. Arm the backdrop for the same
+     300ms the slide-up takes (a hair over the CSS's 0.28s) rather than trying
+     to catch it with animationend, which reduced motion and a backgrounded tab
+     can both skip. A tap at 400ms+ (the other guard) still closes normally. */
+  $('.sheet-backdrop', wrap).addEventListener('click', () => { if (Date.now() - openedAt < 300) return; history.back(); });
   $$('.sheet-close', wrap).forEach(b => b.addEventListener('click', () => history.back()));
   composeAvatars(wrap);   // sheets show Boneheads too, same reveal-when-ready rule
   /* Inert the world behind it, move focus in, and remember where focus came from
@@ -15046,9 +15053,10 @@ function renderOnboarding(step = 0, ctx = {}) {
     <h1>THE PLAN</h1>
     ${onbGwartHtml(2)}
     <div id="pfHost">${profileFormHtml({}, 'lb')}</div>
-    <button class="btn" id="onbSave">Start tracking</button>
-    <button class="onb-quiet" id="onbSkip">Skip for now: uses a rough default plan <b>(30 yr &middot; 5'10" &middot; 180 lb)</b> you can fix any time in Settings.</button>
-    <div style="height:26px"></div>
+    <div class="onb-foot">
+      <button class="btn" id="onbSave">Start tracking</button>
+      <button class="onb-quiet" id="onbSkip">Skip for now: uses a rough default plan <b>(30 yr &middot; 5'10" &middot; 180 lb)</b> you can fix any time in Settings.</button>
+    </div>
   </div>`;
   { const b = $('.onb-gwrow .talkbox', el); if (b) runTalkBox(b, ONB_GWART[2], { name: 'GWART' }); }
   $('#onbBack')?.addEventListener('click', () => renderOnboarding(1, ctx));
@@ -16724,9 +16732,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
         });
       }, { passive: true });
       cells.forEach(c => c.addEventListener('click', () => { select(c.dataset.fbteam); centreOn(c, 'smooth'); }));
-      // open ON the colourway being worn rather than on team #1
+      // open ON the colourway being worn rather than on team #1. 'instant', NOT
+      // 'auto': 'auto' DEFERS to .fb-rail's own scroll-behavior: smooth, so this
+      // centring was a ~600ms animated slide from tile 0 to the worn tile and the
+      // scroll handler above painted BOTH dolls with every team it passed (Tom,
+      // live v487, 2026-09-06: "run through every colour quickly"; measured 16
+      // distinct colours in 1.5s wearing team #22). One frame, one scroll event,
+      // nearest tile is railTeam, select() returns early, nothing repaints.
+      // football-rail-audit RAIL-HOLDS grades it at the real tab and slot chip.
       const worn = cells.find(c => c.dataset.fbteam === railTeam);
-      if (worn) requestAnimationFrame(() => centreOn(worn, 'auto'));
+      if (worn) requestAnimationFrame(() => centreOn(worn, 'instant'));
       wireBar();
       // test hook (webdriver only): the rail is driven by a real scroll in the
       // audit, and this is how it reads back what the page thinks is selected
@@ -19064,6 +19079,7 @@ async function openFriendPaddock(f) {
     </div>`, { cls: 'sheet-paddock' });
 }
 
+let stableGhostWarned = false;   // R39-31: one warning per session, not one per render
 async function openStable(opts = {}) {
   let sel = [];      // iids flagged for breeding
   let offSp = null;
@@ -19095,7 +19111,19 @@ async function openStable(opts = {}) {
     if (!body) return;
     /* eqOwn is the WORN OUTFIT (equipped()), not equippedPetIid(): the Paddock door
        below draws your own Bonehead at the gate, the same way the scene does. */
-    const [insts, eqIid, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
+    /* equippedPetIid FIRST, alone: it repairs the paper-doll C slot when the two
+       records disagree (R39-1), and equipped() below has to read the repaired
+       slot rather than race it inside the same Promise.all. */
+    const eqIid0 = await equippedPetIid();
+    const [instsAll, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
+    /* R39-31: an instance row with no species cannot be drawn (bhAsset threw a
+       TypeError and the whole Stable came up empty). Skip it here and say so once. */
+    const insts = instsAll.filter(x => x && x.sp);
+    if (insts.length !== instsAll.length && !stableGhostWarned) { stableGhostWarned = true; console.warn('Stable: skipped instance row(s) with no sp', instsAll.filter(x => !x || !x.sp)); }
+    /* OUT WITH YOU means the C slot holds her. A petEquipped that the worn outfit
+       does not agree with is a pet the Stable must still offer EQUIP for, or the
+       player has no control anywhere that can put her on Today (R39-1). */
+    const eqIid = eqOwn.C && insts.some(x => x.iid === eqIid0 && x.sp === eqOwn.C) ? eqIid0 : null;
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
     /* THE PRIVATE NICKNAME, beside the species name and never instead of it.
        Same shape as nameWithAlias() for friends: the real identity stays the
@@ -19289,7 +19317,7 @@ async function openStable(opts = {}) {
       const her = (BH_BY_ID[sp] || {}).name || 'your pet';
       const mine = petItems.filter(i => ownedCos.has(i.id));
       if (!mine.length) {
-        return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+        return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${esc(her)}'s wardrobe</div>
           <p class="note pw-empty">Nothing to wear yet. Gwart's Menagerie stocks ${PET_SHOP.items.length} pieces, all drawn for her.</p></div>`;
       }
       const petWearItemBtn = (i, fam = null) => {
@@ -19338,7 +19366,7 @@ async function openStable(opts = {}) {
           <small>${on ? (wornFb.length ? 'Worn' : 'Picked') : own ? 'Yours' : `${ICONS.lock(9)} Locked`}</small>
         </button>`;
       }).join('')}</div>`;
-      return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+      return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${esc(her)}'s wardrobe</div>
         <div class="pw-row">${wearRow}</div>${railRow}
         <p class="note pw-hint">Tap to put a piece on. Tap it again to take it off. One per spot.${fbMine.length ? ' Tap a team to change her colours.' : ''}</p></div>`;
     }).join('');
@@ -22715,7 +22743,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v487'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v490'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

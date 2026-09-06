@@ -67,6 +67,10 @@
  *          -> RAIL-LOCKED
  *   RED  the animation clock left unpinned (this file's own control)
  *          -> RAIL-STILL, and RAIL-DOLL and RAIL-BOTH-STAGES with it
+ *   RED  centreOn(worn, 'auto') on open (2026-09-06, live v487). 'auto' defers
+ *          to .fb-rail's scroll-behavior: smooth, so opening the Wardrobe slid
+ *          the rail from tile 0 to the worn tile and painted every team passed
+ *          -> RAIL-HOLDS, RAIL-HOLDS-CHIP (measured on d7906217: 18 distinct colours across 88 samples, both rows; RAIL-STACK stays green, 2 spans)
  *
  *   GREEN, and each one is a claim withdrawn rather than a hole:
  *   - `scroll-padding-inline: 50%` put back on .fb-rail. It was blamed for a
@@ -266,6 +270,60 @@ try {
     await loot.equip('H', ids[0]);
     await loot.equip('T', ids[2]);
   }, [footballItemId(NAVY, GARMENT), footballItemId(GOLD, GARMENT), footballItemId(NAVY, 'jersey')]);
+
+  /* THE WORN KIT HOLDS ITS COLOUR ON ARRIVAL. Tom, live v487, 2026-09-06:
+     "Switching to wardrobe makes the helmet or jersey run through every colour
+     quickly if you're on that item slot at the time." The rail opens on the
+     worn tile with centreOn(worn, 'auto'), and 'auto' DEFERS to .fb-rail's own
+     scroll-behavior: smooth, so the opening centring was a ~600ms animated
+     slide from tile 0 to the worn tile, and the scroll handler painted both
+     dolls with every team it passed. Measured on d7906217 wearing Windrow Wasps
+     (#22): 16 distinct colour pairs on the stage's spans inside 1.5s, scrollLeft
+     walking 0 to 2000. Every other row in this file wears team #0, where the
+     centring has nowhere to go, which is why none of them could see it.
+     So: worn team #22, the REAL controls (the tray's Bonehead tab, then the slot
+     chip), the spans' computed background sampled every 16ms for 1.5s, and the
+     count of distinct colours must be ONE. Runs BEFORE freeze(): a pinned clock
+     is harmless here, but this must never be moved under a pinned
+     scroll-behavior, which is exactly what hides the bug. */
+  const rgbCss = hx => `rgb(${rgb(hx).join(', ')})`;
+  const sampleTints = async fire => {
+    await page.evaluate(() => {
+      window.__tintLog = [];
+      const t0 = performance.now();
+      const tick = () => {
+        const spans = [...document.querySelectorAll('.bh-stage.lg .fb-tint[data-fbslot="H"]')];
+        if (spans.length) window.__tintLog.push({ n: spans.length, c: spans.map(s => getComputedStyle(s).backgroundColor).join('|') });
+        if (performance.now() - t0 < 1500) setTimeout(tick, 16);
+      };
+      tick();
+    });
+    await fire();
+    await new Promise(r => setTimeout(r, 1800));
+    const log = await page.evaluate(() => window.__tintLog);
+    return { samples: log.length, colours: [...new Set(log.map(s => s.c))], spans: [...new Set(log.map(s => s.n))] };
+  };
+  const wornTints = await page.evaluate(async id => {
+    const l = await import('/js/loot.js'), d = await import('/data/football-teams.js');
+    await l.equip('H', id);
+    return d.footballTints(d.FOOTBALL_ITEMS.find(i => i.id === id)).length;
+  }, footballItemId(GOLD, GARMENT));
+  await page.evaluate(() => { location.hash = '#/'; }); await settle(page); await settle(page);
+  const arrive = await sampleTints(() => page.click('.tab[data-tab="bonehead"]'));
+  setup('SAMPLE the arrival capture saw the worn helmet\'s tint spans on the stage', arrive.samples >= 40 && wornTints > 0,
+    `${arrive.samples} samples, ${wornTints} tints per garment`);
+  const holdLine = r => `${r.colours.length} distinct colour${r.colours.length === 1 ? '' : 's'} across ${r.samples} samples: ${r.colours.slice(0, 4).join(' > ')}${r.colours.length > 4 ? ' > ...' : ''}`;
+  ok('RAIL-HOLDS the worn helmet shows exactly ONE team from the moment the Wardrobe arrives via the tray\'s Bonehead tab',
+    arrive.colours.length === 1 && arrive.colours[0].startsWith(rgbCss(FOOTBALL_TEAM_BY_ID[GOLD].a)), holdLine(arrive));
+  ok('RAIL-STACK the stage carries one .fb-tint per tint region of the worn piece, never a second stack',
+    arrive.spans.length === 1 && arrive.spans[0] === wornTints, `spans per sample ${arrive.spans.join(',')}, expected ${wornTints}`);
+  await page.click('[data-pd="T"]'); await settle(page); await settle(page);
+  const chip = await sampleTints(() => page.click('[data-pd="H"]'));
+  ok('RAIL-HOLDS-CHIP and the same when the slot chip re-selects the helmet slot',
+    chip.samples >= 40 && chip.colours.length === 1 && chip.colours[0].startsWith(rgbCss(FOOTBALL_TEAM_BY_ID[GOLD].a)), holdLine(chip));
+  // back to the fixture every row below was written against: team #0 worn, arriving fresh
+  await page.evaluate(async id => { await (await import('/js/loot.js')).equip('H', id); }, footballItemId(NAVY, GARMENT));
+  await page.evaluate(() => { location.hash = '#/'; }); await settle(page); await settle(page);
 
   const t0 = Date.now();
   await page.evaluate(() => { location.hash = '#/bonehead'; });
