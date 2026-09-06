@@ -168,7 +168,7 @@
  * --prove-red=waiting (or reverting sw.js alone) is its red.
  *   WINDOW (R38-17): activate keeps ONE previous cache generation, so the old
  *   page still running through the swap finds a module the new build dropped.
- *   B drops js/changelog.js from PRECACHE and 404s it (as a future build that
+ *   B drops js/ocr.js from PRECACHE and 404s it (as a future build that
  *   deletes a module would), and the v471 page lazily imports it inside the
  *   sheet window. --prove-red=window deletes the previous generation again.
  *   CARRIED (R38-18): install asks the server conditionally for entries the
@@ -282,9 +282,11 @@ const OLD_ROOT = (() => {
 })();
 /* R38-17's simulated deletion: B serves this module as a 404 and drops it from
    its PRECACHE, the way a future build that removes a module would. It is only
-   ever imported lazily (What's New), in both builds, so B itself never needs it
-   during this audit. */
-const DROPPED = 'js/changelog.js';
+   ever imported lazily (the label scanner), in both builds, and nothing this
+   audit drives reaches it, so B itself never needs it. (changelog.js was the
+   first pick and was wrong: Settings and Progress import it on render, so B's
+   own Settings died at the R38-15 rows.) */
+const DROPPED = 'js/ocr.js';
 const swVersion = src => (src.match(/tally-v(\d+)/) || [])[1];
 /* 2026-09-05: v473 (commit 63367157) wrapped this line in
    `.then(() => letItIn(reg))`; the anchor below used to be the pre-v473 text
