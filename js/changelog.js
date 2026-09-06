@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 483, date: '2026-09-06', title: 'The Kitchen explains itself on day one', items: [
+    'The welcome kit now tells you what your three starter ingredients are for: exactly one Bone Broth, and to cook it. That line existed and never fired.',
+    'The Pit names the dish buff you have on, in plain words, right where a fight is offered, and points at the Kitchen when you have something to cook. Cooking was the strongest thing in the game and the Pit never mentioned it.',
+    'A pot that is still cooking can be cancelled and hands the ingredients back. On day one, tapping the wrong recipe used to leave you with nothing you could cook and no way out.',
+  ] },
   { n: 482, date: '2026-09-06', title: 'Day one wakes up, and the crate keeps what it dug up', items: [
     'On the very first day, the app never noticed you coming back or midnight passing until you relaunched it: no sync on return, no day close if it stayed open. The first session now binds the same wake-ups every later session has.',
     'Tapping a crate card in the first second, before it had drawn, threw away the item you had just won. The card now waits until it has landed before a tap can dismiss it.',

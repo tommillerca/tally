@@ -73,7 +73,7 @@ import { attachWalk } from './walk.js';
 import { refreshPitEnergy, spendPitFight, refundPitFight, addVigor, FREE_FIGHTS } from './energy.js';
 import {
   INGREDIENTS, INGREDIENT_IDS, COMMON_INGREDIENT_IDS, RARE_INGREDIENT, RECIPES, ingredients, grantIngredient, canCook, ingredientCount,
-  spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, QUEUE_MAX, collectDish, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime, foodBuffLabel,
+  spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, QUEUE_MAX, collectDish, cancelCook, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime, foodBuffLabel,
   POTIONS, POTION_BY_ID, RECIPE_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
   pantryDishes, activatePantryDish, discardPantryDish,
@@ -1570,7 +1570,13 @@ async function boot() {
     route({ keepScroll: true }); // the screen painted at their old level; show the real one
   }
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), init && init.xp > 0 ? 4200 : 900);
+  /* R38-21: this toast is the ONLY thing that fires on a fresh install (kit is
+     always truthy the first time, so backfillStarterSeedsIfNeeded below never
+     runs for a new player), and it used to stop at "ingredients in the
+     Kitchen" with no instruction at all: new players got the pouch-catches-up
+     copy's ingredient count but never its "cook it" line. Same instruction,
+     said once, on the message every new player actually receives. */
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), init && init.xp > 0 ? 4200 : 900);
   // the pouch reaches installs that predate it; see backfillStarterSeedsIfNeeded
   const pouch = kit ? null : await backfillStarterSeedsIfNeeded();
   if (pouch) setTimeout(() => toast(`${pouch.ingredients} starter ingredients in your Kitchen: exactly one Bone Broth. Cook it.`, 4200), init && init.xp > 0 ? 4200 : 1400);
@@ -7991,11 +7997,26 @@ async function openKitchen() {
         <span class="pot-ico">${recipeIconHtml(s.recipe, 26)}</span>
         <b>${esc(s.recipe.name)}</b>
         ${s.ready ? `<button class="btn small pot-serve" data-serve="${s.index}">Serve</button>`
-          : `<div class="cook-bar"><i style="width:${pct}%"></i></div><small>${fmtCookTime(s.remainingMs)} left</small>`}
+          /* R38-23: a wrong recipe used to have no way back. Cancel refunds the
+             ingredients in full (nothing has been served yet), so a day-one
+             mis-tap is a lost few minutes, never a stranded save. */
+          : `<div class="cook-bar"><i style="width:${pct}%"></i></div><small>${fmtCookTime(s.remainingMs)} left</small><button class="btn small ghost pot-serve" data-cancel="${s.index}">Cancel</button>`}
       </div>`;
     };
     const buyPrice = nextPotPrice(cook.potsOwned);
+    /* R38-23, HALF TWO: the starter pouch is exactly Bone Broth's ingredients,
+       but Stoneskin Draught is also affordable from it and cooking that one
+       first left a day-one save stuck. Said BEFORE the first tap, and only
+       while it is still true: nothing has ever been cooked (no pot running or
+       queued, no dish ever served to the Pantry, no buff ever eaten) and the
+       ingredients on hand can still make it. A returning player who has
+       actually cooked before never sees this again. */
+    const neverCooked = cook.slots.every(s => s.empty) && !cook.queue.length && !pantry.length && !buffs.length;
+    const starterRecipe = RECIPE_BY_ID['bone-broth'];
+    const starterTip = neverCooked && canCook(starterRecipe, inv)
+      ? `<p class="note" style="margin:2px 2px 10px">Your starter ingredients are exactly enough for <b>${esc(starterRecipe.name)}</b> — look for it under Dishes below and cook that first.</p>` : '';
     body.innerHTML = `
+      ${starterTip}
       <div class="sect-h">Cauldrons${cook.potsOwned > 1 ? ` · ${cook.potsOwned} pots` : ''}</div>
       <div class="pot-row">
         ${cook.slots.map(potCard).join('')}
@@ -8099,6 +8120,21 @@ async function openKitchen() {
     $$('[data-toss]', body).forEach(btn => btn.addEventListener('click', async () => {
       if (btn.dataset.armed !== '1') { btn.dataset.armed = '1'; btn.textContent = 'Toss it?'; setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.innerHTML = ICONS.close(13); } }, 2400); return; }
       await discardPantryDish(Number(btn.dataset.toss));
+      render();
+    }));
+    /* R38-23: same armed-confirm pattern as data-toss above, so a stray tap
+       cannot throw away real cook progress. Also flagged 'arming' (not just
+       data-toss's bare dataset), because THIS sheet re-renders on a 1000ms
+       cook timer (below): without it, the pot's own progress tick would wipe
+       the "Cancel?" state before a second, real tap could ever land it. */
+    $$('[data-cancel]', body).forEach(btn => btn.addEventListener('click', async () => {
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1'; btn.classList.add('arming'); btn.textContent = 'Cancel?';
+        setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = '0'; btn.classList.remove('arming'); btn.textContent = 'Cancel'; } }, 2400);
+        return;
+      }
+      const r = await cancelCook(Number(btn.dataset.cancel));
+      if (r) toast(`${r.icon} ${r.name} cancelled. Ingredients are back in your Kitchen.`, 2800);
       render();
     }));
     // THE CAULDRON. A player bought one of these by accident on a single tap, which
@@ -15001,7 +15037,8 @@ async function saveInitialSettings(np) {
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', (await import('./changelog.js')).changelogLatest()); // new player starts caught-up; What's New only pops for real updates
   const kit = await initLootIfNeeded();
-  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen`, 3600), 1200);
+  // R38-21: same instruction as boot()'s copy of this toast, see the comment there.
+  if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), 1200);
   // The cloud account is created HERE, not at first boot: bootSync no longer
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.
@@ -22603,7 +22640,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v482'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v483'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -23051,6 +23088,22 @@ async function renderPit(wrap) {
      an app kill, a re-open, and any number of re-renders. A record still in
      phase 'open' can only mean the app died mid-fight, which is an abandon, so
      it reads as a forfeit. Reuses the .pit-gate styling; no new CSS. */
+  /* R38-22: cooking is the strongest lever on fight win rate the game has
+     (measured in the real fight engine, tests/fight-sim.mjs: +37.7pp Bone
+     Broth, +50.3pp Hearty Hash, +59.9pp Necromancer's Feast) and this sheet
+     never said so. ONE line, no new panel, no numbers the game does not
+     already show elsewhere: a live combat buff is named with its own plain-
+     words label (foodBuffLabel), or, with nothing active, a nudge toward the
+     Kitchen when there is something there to cook. Combat buffs only: coin
+     buffs affect the world, not this fight. */
+  const pitCombatBuffs = (await activeFoodBuffs()).filter(b => b.kind === 'combat');
+  const pitInv = await ingredients();
+  const pitPantry = await pantryDishes();
+  const kitchenLine = pitCombatBuffs.length
+    ? `<p class="note" style="margin:2px 2px 8px">${pitCombatBuffs.map(b => `${b.icon} <b>${esc(b.name)}</b> active: ${esc(foodBuffLabel(b))}`).join(' · ')}</p>`
+    : (ingredientCount(pitInv) > 0 || pitPantry.length > 0)
+      ? `<p class="note" style="margin:2px 2px 8px">${pitPantry.length ? 'A cooked dish is waiting' : 'Ingredients are waiting'} in your Kitchen — cook up a buff before your next fight.</p>`
+      : '';
   const defeatSect = downed ? `
     <div class="pit-gate" id="pitDefeat">
       <div class="pg-head"><span class="pg-ico">${badgePixHtml('tombstone', 22)}</span><b>DOWN, NOT OUT</b></div>
@@ -23094,6 +23147,7 @@ async function renderPit(wrap) {
         <small>${energy.free} free today + ${energy.vigor} Vigor${energy.dayGuard ? ' · ' + (DAY_GUARD_COPY[energy.dayGuard] || DAY_GUARD_COPY.other) /* QA round 26 O14: "refill at midnight" is false on a refused day */ : tapped ? ' · walk to earn Vigor · free fights refill at midnight' : ' · walk to earn more'}</small>
       </div>
     </div>
+    ${kitchenLine}
     ${defeatSect}
     <button class="t3-forage" id="buildBtn" style="margin:0 0 4px">${pixCur('build', 24) || ICONS.pit(20)}<b>Shape your build</b><small>stats &amp; talents ›</small>${unspent > 0 ? `<i class="hero-badge" style="position:static;display:inline-block;margin-left:4px">${unspent}</i>` : ''}</button>
     ${pitSections}`;
