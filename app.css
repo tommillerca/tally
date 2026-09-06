@@ -6600,9 +6600,19 @@ body::before {
 /* THE KIT ROOM POSTER (Tom, 2026-09-05): the art takes the whole left side and the
    full height; the title sits over the copy; no coral, it sits on the surface like
    the cards around it. The .t3-drop shell (border, radius, grain, open-state
-   radius) is kept so the section still behaves like the drop poster below it. */
-.t3-drop.fb-drop { display: flex; align-items: stretch; gap: 12px; padding: 0 14px 0 0;
+   radius) is kept so the section still behaves like the drop poster below it.
+   THE SUMMARY ITSELF STAYS display:block (2026-09-05): a <summary> with its own
+   display overridden to flex does not reliably fire the native disclosure
+   toggle on tap in iOS Safari -- measured on-device: a real tap on this poster
+   never opened #fbSect, while setting .open=true from script did and rendered
+   the kit grid correctly, so the failure is the click-to-toggle path, not the
+   layout or the art. Every other <summary class="t3-drop"> in this file (the
+   Bumbleseal drop, below) already keeps the summary at this base display:block
+   and puts its flex row on an inner div instead (see .row above); .fb-drop-row
+   is that same fix for the football poster, not a new pattern. */
+.t3-drop.fb-drop { padding: 0 14px 0 0;
   background: var(--surface-2); border-color: var(--line-strong); }
+.fb-drop-row { display: flex; align-items: stretch; gap: 12px; }
 .fb-drop .tx { padding: 12px 0 13px; }
 .fb-drop h2 { margin: 2px 0 6px; }
 .fb-hero { position: relative; flex: 0 0 44%; min-width: 150px; align-self: stretch; overflow: hidden;
