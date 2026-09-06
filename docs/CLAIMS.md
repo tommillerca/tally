@@ -96,6 +96,14 @@ in its own section below, not folded in here.
 
 15. PROOF: a11y-audit.mjs (foodFieldNames) | REACH: A screen reader creating a custom food, or using Quick add, now hears each number field by name (Calories, Protein, Carbs, Fat, Sodium, Grams, and so on) instead of an unlabelled textbox, or three identical fields for Protein, Carbs and Fat.
 
+## stable collapse (2026-09-05)
+
+Not stamped to a release. Tom, on v476: "you gotta scroll past all the helmet colours before you get to the shirt. it should be two items then colours below just like the boneheadz wardrobe" and "the stable is overwhelming with too much of the same pet ... scrolling past 50 bulldogs to get to the lizard".
+
+1. PROOF: football-render-audit.mjs (SHELF, SHELF-TEAM, proved red on v476) | REACH: In the Stable, a lizard's wardrobe now shows one tile per garment (helmet, jersey) with a rail of the 32 team colours underneath, the same shape as your Bonehead's Wardrobe. Tapping a team recolours whatever football piece she has on; with nothing on, it picks the team the next garment tap wears.
+
+2. PROOF: pet-ownership-audit.mjs (COLLAPSE, COLLAPSE-COUNT, COLLAPSE-REACH, proved red on v476) | REACH: The Stable ring shows one card per kind of pet, not one per copy. Twelve Bulldogs are one card with a "×12" badge, and the lizard is one swipe away. A row under the focused card lists that kind's copies (name, level, shiny, which one is out) so you can step through them, breed, dress or destroy any one of them without leaving the ring.
+
 ## claim hygiene (2026-09-05)
 
 Not stamped to a release: the quest-claim row folded into v475 above; the

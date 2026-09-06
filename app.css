@@ -6691,7 +6691,7 @@ body::before {
    commit, and on a locked colourway the bar routes to the Kit room. Same
    grayscale+dim as .ward-cell.gear.locked, which is this screen's own idiom for
    "real, yours later". */
-.pw-item.fbr.locked .fb-worn { filter: grayscale(0.85) brightness(0.6); }
+.pw-item.fbr.locked .fb-worn, .pw-item.fbr.locked .fb-swatch { filter: grayscale(0.85) brightness(0.6); }
 .pw-item.fbr.locked b { color: var(--text-3); }
 .pw-item.fbr.locked small { color: var(--text-3); }
 .pw-item.fbr.on.locked { border-color: var(--text-3); background: rgba(159, 172, 159, .1); }
