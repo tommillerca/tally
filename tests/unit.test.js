@@ -7218,6 +7218,21 @@ test('R39-28 Gwart never scolds a fresh player for an empty ledger (install day 
   assert.ok(!gwartPool({ ...base, everLogged: false }).includes(SCOLD), 'a player who has never logged anything must never be scolded at 15:00');
 });
 
+test('R39-29 a fresh install marks every existing News row seen, so the unread badge starts at 0', () => {
+  /* PROVE-RED on the pre-fix saveInitialSettings: it set changelogSeen but
+     never newsSeen, so a brand-new account's newsUnseen count (js/app.js
+     renderToday, `NEWS.filter(n => !newsSeen.has(n.id)).length`) was the
+     ENTIRE backlog -- every row the game has ever announced, all dated
+     before this install -- rather than 0. */
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('async function saveInitialSettings(');
+  const b = app.indexOf('\nfunction enterAppFromOnboarding');
+  assert.ok(a > 0 && b > a, 'saveInitialSettings is not in js/app.js');
+  const body = app.slice(a, b);
+  assert.ok(/await kvSet\('newsSeen',\s*NEWS\.map\(n => n\.id\)\)/.test(body),
+    'saveInitialSettings must mark every row of the live NEWS array seen on a fresh install, so News rows dated before the install count as read, not unread');
+});
+
 test('R38-8 q-friend / w-friends: gated on an actual accepted friend, not mere reachability', () => {
   /* PROVE-RED: on the pre-fix wiring (`socialOn: await social.isOnline().catch(() => false)`)
      this fails with:

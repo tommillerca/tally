@@ -19,6 +19,34 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## day one tells the truth (2026-09-06)
+
+Not stamped to a release: hotfix/dayone-board, off v482. HANDOFFr3920260906.md
+R39-2, R39-3, R39-28, R39-29, re-measured on this tree before fixing.
+
+1. PROOF: unit.test.js, quest-pick-audit.mjs, quest-daymore-audit.mjs | REACH:
+   A brand-new player's first Quests board always has 3 dailies you can
+   actually do, and one of them is something onboarding itself taught you
+   (Log anything at all, or Log 3 meals in a day). Two players who install on
+   the same calendar day no longer see the identical board.
+
+2. PROOF: unit.test.js | REACH: Onboarding's LOG FOOD screen no longer says
+   logging a meal pays coins. It doesn't; coins come from quests, crates and
+   the day close, so the line now only promises what logging actually pays
+   (XP).
+
+3. PROOF: unit.test.js | REACH: Gwart never opens with a scold ("Half the day
+   gone and not a crumb on the page") on your first day, or on any day you
+   have never logged a single thing. That line only ever fires on an
+   established account that has logged before and chose not to today.
+
+4. PROOF: unit.test.js, news-banner-audit.mjs, news-tab-audit.mjs,
+   newsrow-return-audit.mjs | REACH: A fresh install starts with 0 unread news
+   on Today. Every announcement the game has ever made is older than your
+   account, so it is marked read the moment onboarding finishes; the News tab
+   still lists every one of them, you just are not told you are behind on ten
+   things you were never here for.
+
 ## backup and recovery truth (2026-09-06)
 
 Not stamped to a release: hotfix/backup-recovery, off v482. HANDOFFr3820260906.md
