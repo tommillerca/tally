@@ -67,6 +67,13 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
 
+## v487
+1. A hotfix off v486, Codex's two round-37 lanes (R37-14, 19, 20 and R37-17). Its rows are their dated sections further down, folded here.
+
+2. PROOF: crate-reveal-audit.mjs | REACH: a crate open toasts the item and where to wear it, the non-dupe card carries a New plus rarity payoff line, and Common Crates get a sequential Open all through the existing reveal timing (38 rows green; each new row red on the pre-fix code).
+
+3. PROOF: health-intake-audit.mjs | REACH: Today renders the Activity card in a not-connected state with the Sync control before the first Health sync, and a first successful sync routes back to Today (red on the pre-fix code where healthCardHtml returned nothing).
+
 ## v486
 1. A hotfix off v485, QA round 38's update-path items (R38-1, 3, 4, 15, 17, 18). Its rows are the dated "update path" section further down, folded here.
 

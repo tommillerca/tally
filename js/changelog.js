@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 487, date: '2026-09-06', title: 'Crates pay off, and Health has a door on Today', items: [
+    'Opening a crate now tells you what you got and where to wear it, a new piece says New with its rarity instead of a blank line under a duplicate\'s coin count, and Common Crates have an Open all so five of them take one tap instead of thirteen.',
+    'Before your first Health sync, Today shows the Activity card in a not-connected state with the Sync control on it, and a first successful sync brings you back to Today instead of leaving you in Settings next to Erase.',
+  ] },
   { n: 486, date: '2026-09-06', title: 'Updates reach every phone', items: [
     'If you have been stuck on an old build, this is the one that unsticks you: a downloaded update now lets itself in instead of waiting for permission from code you did not have yet. Anyone on a build before v473 has been downloading updates and never running them.',
     'The previous build\'s files are kept for one update, so an app that is mid-screen when the swap lands can still load what it needs. And Get latest checks for signal before it clears anything, so tapping it offline no longer leaves a blank app.',
