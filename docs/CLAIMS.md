@@ -135,6 +135,13 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
 
+## v490
+1. A hotfix off v489, QA round 39's R39-1 (P0) and R39-31. Its rows are the dated "first pet reaches Today" section further down, folded here.
+
+2. PROOF: first-pet-audit.mjs, pet-ownership-audit.mjs | REACH: equippedPetIid's heal writes both records (petEquipped and the paper-doll C slot), hatchEgg calls it so the first hatched pet is out before the reveal closes, and the Stable only shows OUT WITH YOU (disabled) when the worn outfit actually holds that species. Node rows red on v487 (C=undefined on HEAL, STUCK and HATCH); browser FIRSTPET red on v487 (real onboarding, real HATCH, heroPetBtn false), green after (heroPetBtn true, both records agree).
+
+3. PROOF: pet-ownership-audit.mjs | REACH: the Stable's wardrobe heading escapes the species name (HER row red: a name containing <b> rendered bold), and an instance row without sp is skipped with one warning instead of throwing out of bhAsset and emptying the Stable (GHOST row red: 0 cards, TypeError).
+
 ## v489
 1. A hotfix off v488, QA round 39's R39-15 and R39-12. Its rows are the dated "onboarding fits the SE, sheets survive a double tap" section further down, folded here.
 
