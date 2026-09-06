@@ -4,6 +4,9 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 493, date: '2026-09-06', title: 'Your welcome coins are yours even when signup stalls', items: [
+    'If the Crew servers refuse a brand-new signup for a moment (a busy shared wifi can do it), you no longer walk into Today with an empty wallet and no word about it. The 50 welcome coins land locally first, signup retries once, and if it still fails a line says so and the coins stay yours.',
+  ] },
   { n: 492, date: '2026-09-06', title: 'The Pit reads clean and leaves smoothly', items: [
     'The stamina cost on each move no longer paints over the move\'s name; Bone Guard\'s cost line, the only one that wrapped to two lines, fits on one.',
     'Leaving a fight was redrawing the Pit twice, the second time right on the tail of the close animation. It draws once now, so the exit is as smooth as every other sheet.',
