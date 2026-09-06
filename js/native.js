@@ -78,3 +78,15 @@ export function onAppResume(cb) {
   } catch { /* app plugin absent */ }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) fire(); });
 }
+
+// Fires cb when a session might be ENDING: backgrounded, or the page is being
+// torn down. touches window/document only when CALLED (O24 pattern above), so
+// it imports clean in Node.
+// visibilitychange->hidden is the reliable one: script keeps running for a
+// beat after it fires. pagehide is the last-chance signal on top of it and can
+// cut async work off mid-flight, so cb is told which one fired ({final:true}
+// for pagehide) and can ask for a keepalive fetch there instead.
+export function onAppHide(cb) {
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cb({ final: false }); });
+  window.addEventListener('pagehide', () => cb({ final: true }));
+}

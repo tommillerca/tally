@@ -24,6 +24,7 @@
 import { db, kvGet, kvSet, kvUpdate, exportAll, importAll, witnessServerDay, dayIsUnwitnessed } from './db.js';
 import { awardOnce } from './game.js';
 import { coinsAdd, grantCrate, grantConsumable, grantGear, boneDustAdd, grantEgg, grantPet } from './loot.js';
+import { onAppHide } from './native.js';
 
 // Production API. Empty until the worker is deployed; the Go Online UI stays
 // hidden while unset. Overridable for tests/dev via ?api= or kv 'apiBase'.
@@ -364,7 +365,9 @@ export function apiFetch(url, opts = {}) {
   return fetch(url, { ...opts, signal: ac.signal }).finally(() => clearTimeout(t));
 }
 
-async function signedFetch(method, path, bodyObj = null) {
+// fetchOpts overlays apiFetch's own options (only pushBackup's pagehide path
+// uses it, for `{ keepalive: true }`; everyone else gets the old behaviour).
+async function signedFetch(method, path, bodyObj = null, fetchOpts = {}) {
   const base = await apiBase();
   const me = await kvGet('social', null);
   if (!base || !me) throw new Error('offline');
@@ -376,6 +379,7 @@ async function signedFetch(method, path, bodyObj = null) {
     method,
     headers: { 'content-type': 'application/json', 'x-bh-player': me.playerId, 'x-bh-ts': String(ts), 'x-bh-sig': b64(sig) },
     body: method === 'GET' ? undefined : body,
+    ...fetchOpts,
   });
 }
 
@@ -875,7 +879,9 @@ export async function syncProfile(snapshot, appV = '') {
 /* ---------------- full encrypted backup ---------------- */
 // Encrypt the ENTIRE local save (foods, log, weights, kv, xp, health, inv) and
 // push the ciphertext. Never throws to the caller path; returns ok/false.
-export async function pushBackup(appV = '') {
+// opts.keepalive: R38-2's pagehide caller, so the request can survive the tab
+// closing under it (see the top-level onAppHide wiring below).
+export async function pushBackup(appV = '', opts = {}) {
   try {
     /* THE OPT-OUT IS A WRITE GUARD, NOT JUST A RESTORE ONE. `cloudOff` used to
        be read in exactly one place, bootSync's restore path, so Settings ->
@@ -905,11 +911,13 @@ export async function pushBackup(appV = '') {
        same lazy function; everything after it is unchanged. */
     await backupKey();
     let r;
+    let sentBytes = 0; // R38-2: the plaintext size this attempt actually sent, for dueBackupPush's growth check
     for (let attempt = 0; attempt < 2; attempt++) {
       const snapshot = await exportAll();
+      sentBytes = saveBytes(snapshot);
       const blob = await encryptBackup(snapshot);
       const baseVersion = await kvGet('backupVersion', null);
-      r = await signedFetch('PUT', '/backup', { blob, appV, baseVersion });
+      r = await signedFetch('PUT', '/backup', { blob, appV, baseVersion }, opts.keepalive ? { keepalive: true } : {});
       if (r.status !== 409 || attempt > 0) break;
       /* Another device advanced the cloud row after this device last pulled.
          Pulling through the ordinary live-backup path is important: it decrypts
@@ -942,7 +950,9 @@ export async function pushBackup(appV = '') {
       if (d && d.ok === true) {
         const version = d.version ?? d.updatedAt;
         if (Number.isSafeInteger(version)) await kvSet('backupVersion', version);
-        await kvSet('backupAt', Date.now()); await kvSet('backupFail', null); return true;
+        await kvSet('backupAt', Date.now()); await kvSet('backupFail', null);
+        await kvSet('backupLastBytes', sentBytes); // R38-2
+        return true;
       }
       await kvSet('backupFail', { at: Date.now(), reason: 'bad-body' });
       return false;
@@ -1381,6 +1391,22 @@ export async function hasRecoveryPhrase() { return !!(await kvGet('recoverySetAt
 export const NO_RECOVERY_CODE_MSG = 'No recovery code yet. Delete the app and this account is gone: set one in Settings.';
 export function recoveryWarning(hasPhrase, recoveryId) { return hasPhrase && recoveryId ? '' : NO_RECOVERY_CODE_MSG; }
 
+/* R38-10/R38-14 (2026-09-06): ONE truth about whether this account can come
+   back on a device that is not this one, instead of two facts computed
+   independently and left for the player to reconcile. The Erase sheet used to
+   say "a cloud backup does exist and can be restored later" one sentence
+   above "no recovery code yet, this account is gone"; Settings said "your
+   progress comes back on its own" one line above "NOT SET". Both screens now
+   derive their copy from this.
+   hasBackup is hasCloudBackup()'s three-way answer; recoverySet is the SAME
+   predicate recoveryWarning already uses (hasPhrase && recoveryId): a phrase
+   with no id still needs a friend code to restore, which this app does not
+   treat as "covered" (see recoveryWarning's own comment). */
+export function restoreTruth(hasBackup, recoverySet) {
+  if (hasBackup !== true) return { restorable: false, why: hasBackup === false ? 'no-backup' : 'unknown' };
+  return { restorable: !!recoverySet, why: recoverySet ? null : 'no-recovery' };
+}
+
 // Rebuild the account on a fresh device: fetch the wrapped bundle by friend code,
 // unwrap with the phrase, install the identity, then the normal backup pull works.
 // handle is EITHER a recovery id (what everyone gets from v231 on) or a
@@ -1591,12 +1617,64 @@ export async function cloudBackupOn() { return !(await kvGet('cloudOff', false))
 // is always recoverable without the user ever tapping "Export".
 const SYNC_THROTTLE_MS = 5 * 60 * 1000;
 const BACKUP_THROTTLE_MS = 10 * 60 * 1000;
+/* R38-2: floor under the byte-growth bypass below, so backgrounding the app
+   (or a burst of taps that each grow the save a little) fires at most one
+   push per floor window instead of one per event. */
+const BACKUP_FLOOR_MS = 20 * 1000;
+
+// R38-2: byte length of everything exportAll() carries EXCEPT kv. kv is where
+// backupAt/backupFail/backupLastBytes/socialSyncAt and the rest of this
+// module's own bookkeeping live, and they update on every push/sync attempt,
+// so counting them would make "grown since last push" true forever after the
+// very first successful push, independent of whether the player did anything.
+// foods/log/weights/xp/health/inv is the actual save.
+function saveBytes(snapshot) {
+  const { kv, ...rest } = snapshot;
+  return JSON.stringify(rest).length;
+}
+// The plaintext export's size, not the encrypted blob's (AES-GCM padding/nonce
+// means blob length does not track save growth 1:1).
+async function currentExportBytes() {
+  try { return saveBytes(await exportAll()); } catch { return 0; }
+}
+
+// Should THIS call push the encrypted backup right now: due by the ordinary
+// throttle, or (past a short floor) because the save has grown since the last
+// push. Shared by autoSync (boot/resume) and onAppHide (background/close)
+// below so both read the same decision.
+export async function dueBackupPush() {
+  if (!(await isOnline())) return false;
+  const elapsed = Date.now() - ((await kvGet('backupAt', 0)) || 0);
+  if (elapsed > BACKUP_THROTTLE_MS) return true;
+  if (elapsed < BACKUP_FLOOR_MS) return false;
+  const lastBytes = (await kvGet('backupLastBytes', 0)) || 0;
+  return (await currentExportBytes()) > lastBytes;
+}
+
+/* R38-2: nothing pushed the encrypted backup on background or on close before
+   this; autoSync only ever ran at boot (js/app.js bindAppLifecycle) and on
+   resume, so a whole session's progress could sit unsynced until the player
+   happened to reopen the app. Wired here rather than in app.js's lifecycle
+   code so this fix cannot collide with the update/boot lane working the same
+   file. visibilitychange->hidden gets the ordinary (awaited-internally) push;
+   pagehide is the last-chance signal and may cut async work off mid-flight,
+   so it additionally asks for a keepalive fetch, which only helps when the
+   body is under the browser's keepalive size cap -- over that, the fetch
+   throws synchronously and pushBackup's own catch already turns it into a
+   quiet `false`, which is the "where the body fits" bound, not a return address
+   for finding out it wasn't. Guarded: this module is imported directly by
+   Node tests with no document/window (see onAppResume's O24 comment). */
+if (typeof document !== 'undefined' && typeof window !== 'undefined') {
+  onAppHide(({ final }) => {
+    dueBackupPush().then(due => due && pushBackup('', { keepalive: final })).catch(() => {});
+  });
+}
+
 export async function autoSync(buildSnapshot, appV = '') {
   try {
     if (!(await isOnline())) return null;
     const now = Date.now();
-    const lastBackup = (await kvGet('backupAt', 0)) || 0;
-    if (now - lastBackup > BACKUP_THROTTLE_MS) {
+    if (await dueBackupPush()) {
       const pushed = await pushBackup(appV);
       /* LAUNCH VISIBILITY (2026-08-30): a backup that silently stops pushing is
          invisible progress loss waiting for a dead phone. Fire-and-forget, and

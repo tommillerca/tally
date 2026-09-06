@@ -6908,6 +6908,65 @@ test('R37-12 immRateCheck: a minimal rate limit caps immediate pushes per rollin
   assert.equal(rolled.ok, true, 'once the window elapses, a new push must be allowed again');
 });
 
+/* R38-2 (2026-09-06, measured on v477 against a v477 Worker, main is v482):
+ * a whole session never reached the cloud. BACKUP_THROTTLE_MS is 600s and
+ * autoSync only ever ran the backup push at boot/resume, so nothing pushed on
+ * background or on close: a logged meal, two opened crates, all gone on a
+ * restore because the throttle was still counting down when the app closed.
+ * FIX: js/social.js dueBackupPush() -- due by the ordinary 600s throttle, OR
+ * (past a 20s floor) because the exported save has grown since the last
+ * push. Both autoSync and the new onAppHide(visibilitychange/pagehide) wiring
+ * read this same decision.
+ * PROVE-RED: reverting dueBackupPush to the old bare `elapsed > BACKUP_THROTTLE_MS`
+ * (no growth bypass, no floor) fails this test with:
+ *   AssertionError: a save that grew past the floor must bypass the 600s throttle
+ * because a grown save inside the throttle window would return false. */
+test('R38-2 dueBackupPush: grown vs unchanged, inside vs past the floor', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const s = await import('../js/social.js');
+  const BACKUP_THROTTLE_MS = 10 * 60 * 1000; // mirrors js/social.js's own constant
+  dbm.useDbName('unit-r38-2-duebackup');
+  await dbm.kvSet('social', { playerId: 'r38-2', handle: 'Audit Bones', friendCode: 'BONE-TEST-TEST', name: null, onlineAt: Date.now() });
+
+  const savedNow = Date.now;
+  const origFetch = globalThis.fetch;
+  let t = 1_000_000;
+  Date.now = () => t;
+  // stub PUT /backup as an always-succeeding server; pushBackup itself
+  // (not this test) decides what backupLastBytes gets set to
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/backup')) return { ok: true, status: 200, json: async () => ({ ok: true, updatedAt: t }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  try {
+    // never pushed (backupAt 0): elapsed is huge, due unconditionally
+    assert.equal(await s.dueBackupPush(), true, 'no prior push at all must be due');
+
+    assert.equal(await s.pushBackup('test'), true, 'the stubbed push must report success (setup, not the thing under test)');
+
+    // just pushed, nothing changed, still inside the floor: not due
+    t += 5_000;
+    assert.equal(await s.dueBackupPush(), false, 'unchanged save inside the 20s floor must not be due');
+
+    // past the floor, but the export is byte-identical: still not due
+    t += 20_000; // t is now 25s past the push
+    assert.equal(await s.dueBackupPush(), false, 'unchanged save past the floor must not be due (nothing to push)');
+
+    // the save grows (a logged meal): past the floor, this must bypass the 600s throttle
+    await dbm.db.put('log', { id: 'r38-2-meal-1', at: t, kcal: 400 });
+    assert.equal(await s.dueBackupPush(), true, 'a save that grew past the floor must bypass the 600s throttle');
+
+    // push again (as onAppHide would), then confirm the ordinary throttle still fires on its own with nothing further grown
+    assert.equal(await s.pushBackup('test'), true, 'the second stubbed push must also report success');
+    t += BACKUP_THROTTLE_MS + 1;
+    assert.equal(await s.dueBackupPush(), true, 'elapsed past the ordinary throttle must be due even with nothing grown');
+  } finally {
+    Date.now = savedNow;
+    globalThis.fetch = origFetch;
+  }
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
