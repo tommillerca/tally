@@ -19,6 +19,25 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## pit readout and exit (2026-09-06)
+
+Not stamped to a release: hotfix/pit-ap-exit, off v487. Tom on live v487, two
+reports in one message.
+
+1. PROOF: fight-hint-audit.mjs | REACH: In a fight, a move's AP/Stamina cost no
+   longer overlaps its name (worst on Bone Guard, whose cost line is the only
+   one long enough to wrap to two lines and paint over "BONE GUARD"). Measured
+   on the pre-fix code at 375x667 and 393x852: every move's cost overlapped its
+   label by 3.6px, Bone Guard's by 13.2px; both are 0px after.
+
+2. PROOF: pit-exit-motion-audit.mjs | REACH: Closing a fight from the Pit (the
+   Done button after a win) no longer does two full re-renders of the Pit
+   screen behind it. Measured with a real tap on the real button: the Pit was
+   being rewritten twice, once right away and once a quarter-second later,
+   landing on the tail of the close animation for no reason the second
+   time - a leftover duplicate of a re-render the sheet's own close handler
+   already ran. It is rewritten once now.
+
 ## backup and recovery truth (2026-09-06)
 
 Not stamped to a release: hotfix/backup-recovery, off v482. HANDOFFr3820260906.md
