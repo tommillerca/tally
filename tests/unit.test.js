@@ -49,6 +49,9 @@ import {
 import { phraseProblem, recoveryIdProblem, RECOVERY_ID_RE, RECOVERY_ITERS, RECOVERY_MIN_LEN, raceStanding } from '../js/social.js';
 import { MINI_THEMES } from '../js/poi.js';
 import { THEME_POOL, themedLook, FAMILIES } from '../js/bosses.js';
+/* notifGateOk, clampQuietHours, immRateCheck, nextImmId are PURE (no
+   Capacitor/DOM), so they unit-test directly like eggProgress above. */
+import { notifGateOk, clampQuietHours, immRateCheck, nextImmId, IMM_IDS } from '../js/notify.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = f => JSON.parse(readFileSync(join(here, 'fixtures', f), 'utf8'));
@@ -6810,6 +6813,90 @@ test('R-claimhyg-2 initLootIfNeeded: two interleaved boots grant exactly one wel
   // a THIRD, later boot must still pay nothing: the claim is not a one-race fluke
   const r3 = await g.initLootIfNeeded();
   assert.equal(r3, null, 'a later boot after the race must still find the kit already claimed');
+});
+
+/* ---- notifications consent (2026-09-06): R37-3/4/10/12 -------------------
+   HANDOFFr3720260906.md, measured on v471. The Settings test button lied to a
+   player who had denied notifications (native branch hardcoded `return true`
+   with no permission check), and DEFAULTS.enabled=true meant the daily
+   reminder was scheduled on a fresh install before permission was ever asked.
+   Both notifyNow and syncNotifications now share one gate. */
+test('R37-3/R37-4 notifGateOk: permission x prefs decides every scheduling/push path', () => {
+  /* PROVE-RED: reverting notifGateOk in js/notify.js to the pre-fix shape
+     (`if (!prefs.enabled) return false; if (extraKey && prefs[extraKey] ===
+     false) return false; return true;` -- no permState read at all) fails
+     with:
+       AssertionError [ERR_ASSERTION]: a prompt/denied permission must never
+       gate true (R37-3/R37-4): got true for prompt */
+  const on = { enabled: true, friends: true, siege: true };
+  const off = { enabled: false, friends: true, siege: true };
+  const noSiege = { enabled: true, friends: true, siege: false };
+  for (const permState of ['prompt', 'denied', 'unsupported', 'default']) {
+    assert.equal(notifGateOk(on, permState), false,
+      `a prompt/denied permission must never gate true (R37-3/R37-4): got true for ${permState}`);
+  }
+  assert.equal(notifGateOk(on, 'granted'), true, 'enabled + granted permission must gate true');
+  assert.equal(notifGateOk(off, 'granted'), false, 'the master switch off must gate false even when permission is granted');
+  assert.equal(notifGateOk(noSiege, 'granted', 'siege'), false, 'a false per-kind pref must gate false even when granted');
+  assert.equal(notifGateOk(noSiege, 'granted', 'friends'), true, 'an unrelated kind must not be gated by a different pref being off');
+  assert.equal(notifGateOk(null, 'granted'), false, 'missing prefs must never gate true');
+});
+
+test('R37-10 clampQuietHours: no push lands 22:00-08:00 local, moved to the next 08:00', () => {
+  /* PROVE-RED: reverting clampQuietHours to `(ts) => ts` (identity, no clamp)
+     fails with:
+       AssertionError [ERR_ASSERTION]: 0:00 must clamp to 08:00, got 0:00 */
+  const at = (day, h) => { const d = new Date(2026, 8, day, 0, 0, 0, 0); d.setHours(h, 0, 0, 0); return d.getTime(); };
+  const hourOf = ts => new Date(ts).getHours();
+  const dayOf = ts => new Date(ts).getDate();
+  // measured in the report: 14:00 open fired at 02:00, 15:00 at 03:00, 17:00 at 05:00
+  for (const h of [0, 2, 3, 5, 7]) {
+    const clamped = clampQuietHours(at(10, h));
+    assert.equal(hourOf(clamped), 8, `${h}:00 must clamp to 08:00, got ${hourOf(clamped)}:00`);
+    assert.equal(dayOf(clamped), 10, `${h}:00 clamps forward to the SAME calendar day's 08:00, got day ${dayOf(clamped)}`);
+  }
+  for (const h of [22, 23]) {
+    const clamped = clampQuietHours(at(10, h));
+    assert.equal(hourOf(clamped), 8, `${h}:00 must clamp to 08:00, got ${hourOf(clamped)}:00`);
+    assert.equal(dayOf(clamped), 11, `${h}:00 clamps forward to the NEXT calendar day's 08:00, got day ${dayOf(clamped)}`);
+  }
+  for (const h of [8, 12, 19, 21]) {
+    const orig = at(10, h);
+    assert.equal(clampQuietHours(orig), orig, `${h}:00 is inside the safe window and must not move`);
+  }
+});
+
+test('R37-12 nextImmId: back-to-back immediate pushes get distinct ids from a small pool', () => {
+  /* PROVE-RED: reverting nextImmId to `() => 9` (the old shared id every
+     immediate push used) fails with:
+       AssertionError [ERR_ASSERTION]: two immediate pushes back-to-back must
+       not share an id, got 9 === 9 */
+  const first = nextImmId(), second = nextImmId();
+  assert.notEqual(first, second, `two immediate pushes back-to-back must not share an id, got ${first} === ${second}`);
+  assert.ok(IMM_IDS.includes(first) && IMM_IDS.includes(second), 'ids must come from the declared pool');
+  const seen = new Set();
+  for (let i = 0; i < IMM_IDS.length * 2; i++) seen.add(nextImmId());
+  assert.equal(seen.size, IMM_IDS.length, `round-robin must cycle through all ${IMM_IDS.length} pool ids, got ${seen.size} distinct`);
+});
+
+test('R37-12 immRateCheck: a minimal rate limit caps immediate pushes per rolling window', () => {
+  /* PURE function takes an explicit clock, so the boundary is deterministic
+     instead of waiting real seconds.
+     PROVE-RED: reverting immRateCheck to always `{ ok: true, kept: [...recentTimestamps, now] }`
+     (no cap at all) fails with:
+       AssertionError [ERR_ASSERTION]: a burst past the pool size must be
+       capped, got 9 allowed of 9 attempts */
+  const cap = IMM_IDS.length;
+  let recent = [], allowed = 0;
+  const now = 1_000_000;
+  for (let i = 0; i < cap + 3; i++) {
+    const { ok, kept } = immRateCheck(recent, now + i);
+    recent = kept;
+    if (ok) allowed++;
+  }
+  assert.equal(allowed, cap, `a burst past the pool size must be capped, got ${allowed} allowed of ${cap + 3} attempts`);
+  const rolled = immRateCheck(recent, now + 61000);
+  assert.equal(rolled.ok, true, 'once the 60s window elapses, a new push must be allowed again');
 });
 
 await runAll();

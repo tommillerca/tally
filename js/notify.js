@@ -50,9 +50,9 @@ export async function setNotifPrefs(p) { await kvSet('notifPrefs', p); }
 // the first before it ever displayed (R37-12). Round-robin through the pool
 // instead so back-to-back pushes get distinct ids.
 const ID = { reminder: 1, streak: 2, siege: 3, immLo: 9, immHi: 14, rareLo: 1000, rareHi: 1899 };
-const IMM_IDS = []; for (let i = ID.immLo; i <= ID.immHi; i++) IMM_IDS.push(i);
+export const IMM_IDS = []; for (let i = ID.immLo; i <= ID.immHi; i++) IMM_IDS.push(i);
 let immCursor = 0;
-function nextImmId() { const id = IMM_IDS[immCursor % IMM_IDS.length]; immCursor++; return id; }
+export function nextImmId() { const id = IMM_IDS[immCursor % IMM_IDS.length]; immCursor++; return id; }
 
 // PURE, exported for the node unit test: given the recent send timestamps and
 // "now", decide whether one more immediate push is allowed, and return the
