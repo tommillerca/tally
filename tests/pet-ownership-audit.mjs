@@ -530,8 +530,16 @@ try {
     }
     await fresh.evaluate(() => (document.getElementById('cratesBtn') || document.getElementById('charBtn'))?.click());
     await fresh.waitForFunction(() => !!document.querySelector('#chTabs .chip[data-tab="crates"]'), { timeout: 15000, polling: 100 }).catch(() => {});
-    await fresh.evaluate(() => document.querySelector('#chTabs .chip[data-tab="crates"]')?.click());
-    await fresh.waitForFunction(() => !!document.querySelector('[data-hatch]'), { timeout: 15000, polling: 100 }).catch(() => {});
+    /* 2026-09-06: on the train the hub's chip existed before its handler was
+       bound (onboarding exit does more work there: lifecycle bind, news seen,
+       morph refresh), so a single click landed on a deaf chip and the row read
+       "hatch buttons 0" against an egg that was ready. Click the REAL chip until
+       the tab actually shows the egg, bounded. */
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await fresh.evaluate(() => document.querySelector('#chTabs .chip[data-tab="crates"]')?.click());
+      const got = await fresh.waitForFunction(() => !!document.querySelector('[data-hatch]'), { timeout: 2500, polling: 100 }).then(() => true).catch(() => false);
+      if (got) break;
+    }
     const hatchable = await fresh.evaluate(() => document.querySelectorAll('[data-hatch]').length);
     ok('FIRSTPET-SETUP real onboarding landed on Today and the Backpack offers the welcome egg\'s HATCH button',
       hatchable >= 1, `${onb.join(' ')} hatch buttons ${hatchable}`);
