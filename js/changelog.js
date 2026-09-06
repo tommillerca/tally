@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 482, date: '2026-09-06', title: 'Day one wakes up, and the crate keeps what it dug up', items: [
+    'On the very first day, the app never noticed you coming back or midnight passing until you relaunched it: no sync on return, no day close if it stayed open. The first session now binds the same wake-ups every later session has.',
+    'Tapping a crate card in the first second, before it had drawn, threw away the item you had just won. The card now waits until it has landed before a tap can dismiss it.',
+    'The crate\'s close hint sat exactly on top of the Add-food button, so a quick second tap opened the food sheet. The button steps aside while a crate is open and the hint moved off it.',
+  ] },
   { n: 481, date: '2026-09-06', title: 'Notifications ask first, and tell the truth', items: [
     'Nothing gets scheduled until you say yes: turning notifications on now asks your device for permission first, with a line that says so. If you said no, the test button says it could not send instead of pretending it did.',
     'Two pushes landing in the same instant used to cancel each other (a gift and a cheer a moment apart lost the gift). They keep their own slots now, and nothing fires between 10pm and 8am; anything due then waits for the morning.',
