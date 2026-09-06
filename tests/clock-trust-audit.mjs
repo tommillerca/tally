@@ -829,17 +829,22 @@ try {
   await sleep(1200);
   await guard.clearWitness();
   const hitsBefore = healthHits;
-  const wire = await page.evaluate(async () => {
-    const [social, db] = await Promise.all([import('./js/social.js'), import('./js/db.js')]);
+  const wire = await page.evaluate(async (__serverMs) => {
+    const [social, db, nut] = await Promise.all([import('./js/social.js'), import('./js/db.js'), import('./js/nutrition.js')]);
     const before = (await db.dayGuardState()).witness;
     const got = await social.touchServerDay();
-    return { before, got, after: (await db.dayGuardState()).witness, api: await social.apiBase() };
-  });
+    /* 2026-09-06: expected ordinal comes from the app's own LOCAL-day pair
+       (dayOrdinal(dateKey(...)), the unit witnessServerDay writes since v475's
+       fix), not Math.floor(ms / 86400000). The UTC floor agreed by day and
+       disagreed by exactly one after 20:00 Eastern; gate 16 went red on that. */
+    const want = nut.dayOrdinal(nut.dateKey(new Date(__serverMs)));
+    return { before, got, after: (await db.dayGuardState()).witness, api: await social.apiBase(), want };
+  }, serverDay);
   check('touchServerDay actually called /health on the stub, not the real API',
     healthHits > hitsBefore && wire.api === healthUrl, `${healthHits - hitsBefore} hit(s) on ${wire.api}`);
   check('the ceiling moves to the day the SERVER said, and to nothing else',
-    wire.before === 0 && wire.after === Math.floor(serverDay / 86400000),
-    `${wire.before} -> ${wire.after}, server ts ${serverDay} = day ${Math.floor(serverDay / 86400000)}`);
+    wire.before === 0 && wire.after === wire.want,
+    `${wire.before} -> ${wire.after}, server ts ${serverDay} = local day ${wire.want}`);
 
   // 7b. MONOTONIC. A replayed, stale or forged-backwards answer must not lower
   //     the ceiling, or the farmer just serves themselves an old timestamp.
