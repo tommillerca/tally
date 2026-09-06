@@ -257,7 +257,7 @@ export const MORPH_ART = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
  * the one-line switch that ships his pick once he makes it. */
 export const MIDNIGHT_TIER = 'medium'; // 'dark' | 'medium' | 'dusk'
 /* The one path helper every draw path resolves through (mirrors bhAsset,
- * data/boneheadz.js). '' for base, CX, an unknown morph, or a species with no
+ * the cosmetics manifest). '' for base, CX, an unknown morph, or a species with no
  * morph art -- never guesses, never throws; the caller falls back to the base
  * asset exactly the way a missing shiny id would. */
 export function morphAsset(petId, morph) {
@@ -280,7 +280,7 @@ function rng() {
 // dupe-pool pets (spec section 2.2's "(species x morph) pairs"). Excludes CX
 // (exempt from morphs per spec section 0.7 -- its amethyst art IS its look).
 // A hand-kept list, not derived from PET_ASSIGN: this module stays import-free
-// (no data/boneheadz.js), and "hatch-pool species" is exactly the distinction
+// (no cosmetics manifest), and "hatch-pool species" is exactly the distinction
 // pickRandomPet's own `rest` (js/loot.js) draws on, which this list mirrors.
 //
 // C6 (Bumbleseal) WAS excluded here (2026-09-05 morning): she was a 1%
