@@ -3566,7 +3566,14 @@ function openSheet(html, { cls = '', onClose = null, name = null } = {}) {
   const rec = { wrap, onClose: () => { try { trackEvent('feat_time', { f: feat, ms: Date.now() - openedAt }); } catch { /* noop */ } try { onClose?.(); } catch { /* noop */ } } };
   sheetStack.push(rec);
   history.pushState({ sheet: sheetStack.length }, '');
-  $('.sheet-backdrop', wrap).addEventListener('click', () => history.back());
+  /* R39-12: a double-tap on a sheet trigger opened this sheet and closed it right
+     back, because the second tap lands here mid slide-up (0.28s) before the new
+     backdrop has moved out from under the finger. Measured 6/6 at a 60ms gap
+     between taps, 5/6 at 90ms, 0/6 at 150ms+. Arm the backdrop for the same
+     300ms the slide-up takes (a hair over the CSS's 0.28s) rather than trying
+     to catch it with animationend, which reduced motion and a backgrounded tab
+     can both skip. A tap at 400ms+ (the other guard) still closes normally. */
+  $('.sheet-backdrop', wrap).addEventListener('click', () => { if (Date.now() - openedAt < 300) return; history.back(); });
   $$('.sheet-close', wrap).forEach(b => b.addEventListener('click', () => history.back()));
   composeAvatars(wrap);   // sheets show Boneheads too, same reveal-when-ready rule
   /* Inert the world behind it, move focus in, and remember where focus came from
@@ -3991,7 +3998,10 @@ async function renderToday(el) {
     /* Real state, not a constant: the Kitchen counts once it has anything in
        it. Hardcoding false would have hidden these from every player forever,
        which is a worse bug than the one being fixed. */
-    kitchenReady: Object.values(await ingredients()).some(n => n > 0) };
+    kitchenReady: Object.values(await ingredients()).some(n => n > 0),
+    // R39-3: per-install salt for the daily seed (dailyQuests folds this in),
+    // so two accounts installing on the same date do not share a board.
+    createdAt: S.settings.createdAt };
   const healthRows = await db.all('health');
   // Surface an auto watch sleep read in the wellness card when the player hasn't
   // hand-logged tonight (so it reads "from your watch" instead of asking).
@@ -4017,11 +4027,15 @@ async function renderToday(el) {
     // mid-month scales down instead of asking for the whole month's total.
     createdAt: S.settings.createdAt,
   };
-  /* R38-24: a capability change must not re-pick a quest already shown this
-     period. dailyQuests/weeklyQuests/monthlyQuests only ever DROP a quest
-     under a new gate (never substitute) EXCEPT the single-quest floor, which
-     searches outside the drawn set and so can swap for a different quest the
-     moment something else in the drawn set unlocks (see quests.js pick()).
+  /* R38-24 + R39-3: a capability change must not re-pick a quest already shown
+     this period. dailyQuests/weeklyQuests/monthlyQuests backfill a gated-out
+     slot from further into the same seeded order (quests.js pick()), so a
+     capability unlocking mid-period can change which quests reach the top n
+     unless whatever was already shown is pinned. `questFloor` persists the
+     FULL id list a period was shown the first time it renders (not just a
+     single floor id), and every later render of the same period threads it
+     back in as stickyIds so pick() keeps those ids and only ever adds a fresh
+     slot on top, never swaps one out.
      Only tracked for the LIVE period (isToday): a past day is a read-only
      record (Tom, 2026-08-23) so nothing there can be unlocked out from under
      it, and clobbering today's sticky record with a past day's would be worse
@@ -4032,10 +4046,11 @@ async function renderToday(el) {
     const periodKey = periodKeyOf(tier, S.date);
     if (!liveToday) return fn(S.date, qopts);
     const rec = floorMemo[tier];
-    const stickyId = (rec && rec.periodKey === periodKey) ? rec.id : undefined;
-    const quests = fn(S.date, { ...qopts, stickyId });
-    if (quests.length === 1 && (!rec || rec.periodKey !== periodKey || rec.id !== quests[0].id)) {
-      floorMemo[tier] = { periodKey, id: quests[0].id };
+    const stickyIds = (rec && rec.periodKey === periodKey) ? rec.ids : undefined;
+    const quests = fn(S.date, { ...qopts, stickyIds });
+    const ids = quests.map(q => q.id);
+    if (!rec || rec.periodKey !== periodKey || JSON.stringify(rec.ids) !== JSON.stringify(ids)) {
+      floorMemo[tier] = { periodKey, ids };
       await kvSet('questFloor', floorMemo);
     }
     return quests;
@@ -4184,6 +4199,10 @@ async function renderToday(el) {
        choose statted gear to wear." Gwart is that somebody. */
     gearOwned: unlockGear.size,
     gearWorn: Object.keys(unlockFighter.gearLo || {}).length,
+    // R39-28: never scold a player who has not logged a single thing yet, or
+    // is still on the day they installed.
+    everLogged: allLog.length > 0,
+    freshInstall: !!S.settings.createdAt && dateKey(new Date(S.settings.createdAt)) === S.date,
   };
   const gwLine = gwartLine(gwCtx);
   /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
@@ -5364,7 +5383,7 @@ function gwartLine(ctx) {
    at the bottom. The general pool is the only one that is pure character. */
 function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
   steps = 0, dishReady = false, cropsRipe = 0, fightsReady = 0,
-  gearOwned = 0, gearWorn = 0 }) {
+  gearOwned = 0, gearWorn = 0, everLogged = true, freshInstall = false }) {
   const hour = new Date().getHours();
   if (crates.length) return [
     'A crate by his feet, still shut. I gave him hands for this.',
@@ -5441,7 +5460,11 @@ function gwartPool({ entries, tot, targets, crates, streak, level, isToday,
   if (!entries.length) return [
     'Nothing logged yet. He runs on what you eat. Feed the boy.',
     'Empty ledger so far. He is patient. I am less so.',
-    hour < 11 ? 'Morning. The ledger is blank. It usually starts that way.'
+    /* R39-28: a brand-new player who has never logged a single thing (or is
+       still on the very day they installed) gets the welcome line no matter
+       the hour. "Half the day gone" reads as a scold, and nobody has failed
+       at anything yet on their first day, or before their first entry. */
+    (hour < 11 || freshInstall || !everLogged) ? 'Morning. The ledger is blank. It usually starts that way.'
       : 'Half the day gone and not a crumb on the page.',
     'Whatever you ate, write it. Accurate beats flattering.',
     'Feed the ledger and he does the rest. Fair deal.',
@@ -14996,7 +15019,7 @@ function renderOnboarding(step = 0, ctx = {}) {
         <button class="onb-reroll" id="onbReroll" aria-label="New name">${t1Stroke(18, '<path d="M20 11a8 8 0 1 0-2.3 6.3"/><path d="M20 5v6h-6"/>')}</button>
       </div>
       <div class="onb-earns">
-        <div class="onb-earn"><span class="ic">${ICONS.star(18)}</span><b>LOG FOOD</b><small>XP and coins, every meal</small></div>
+        <div class="onb-earn"><span class="ic">${ICONS.star(18)}</span><b>LOG FOOD</b><small>XP, every meal</small></div>
         ${/* pixCur first, like its two siblings: ICONS.star and ICONS.pit both ask
              18 and both serve the 16 step, so a vector egg here left one of three
              icons in a three-icon row drawn in a different medium. */''}
@@ -15030,9 +15053,10 @@ function renderOnboarding(step = 0, ctx = {}) {
     <h1>THE PLAN</h1>
     ${onbGwartHtml(2)}
     <div id="pfHost">${profileFormHtml({}, 'lb')}</div>
-    <button class="btn" id="onbSave">Start tracking</button>
-    <button class="onb-quiet" id="onbSkip">Skip for now: uses a rough default plan <b>(30 yr &middot; 5'10" &middot; 180 lb)</b> you can fix any time in Settings.</button>
-    <div style="height:26px"></div>
+    <div class="onb-foot">
+      <button class="btn" id="onbSave">Start tracking</button>
+      <button class="onb-quiet" id="onbSkip">Skip for now: uses a rough default plan <b>(30 yr &middot; 5'10" &middot; 180 lb)</b> you can fix any time in Settings.</button>
+    </div>
   </div>`;
   { const b = $('.onb-gwrow .talkbox', el); if (b) runTalkBox(b, ONB_GWART[2], { name: 'GWART' }); }
   $('#onbBack')?.addEventListener('click', () => renderOnboarding(1, ctx));
@@ -15071,6 +15095,12 @@ async function saveInitialSettings(np) {
   await saveSettings();
   await kvSet('game-init', true); // fresh install: nothing to backfill
   await kvSet('changelogSeen', (await import('./changelog.js')).changelogLatest()); // new player starts caught-up; What's New only pops for real updates
+  // R39-29: same reasoning as changelogSeen above. NEWS is a static array of
+  // everything the game has ever announced, so on a fresh install every row in
+  // it is by definition dated before this install; marking them all seen here
+  // means the unread badge only ever counts news posted AFTER today, not the
+  // whole backlog the account was never around for.
+  await kvSet('newsSeen', NEWS.map(n => n.id));
   const kit = await initLootIfNeeded();
   // R38-21: same instruction as boot()'s copy of this toast, see the comment there.
   if (kit) setTimeout(() => toast(`Welcome kit: 2 crates and a pet egg ready to hatch on your Bonehead, and ${kit.ingredients} ingredients in the Kitchen: exactly one Bone Broth. Cook it.`, 4200), 1200);
@@ -16702,9 +16732,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
         });
       }, { passive: true });
       cells.forEach(c => c.addEventListener('click', () => { select(c.dataset.fbteam); centreOn(c, 'smooth'); }));
-      // open ON the colourway being worn rather than on team #1
+      // open ON the colourway being worn rather than on team #1. 'instant', NOT
+      // 'auto': 'auto' DEFERS to .fb-rail's own scroll-behavior: smooth, so this
+      // centring was a ~600ms animated slide from tile 0 to the worn tile and the
+      // scroll handler above painted BOTH dolls with every team it passed (Tom,
+      // live v487, 2026-09-06: "run through every colour quickly"; measured 16
+      // distinct colours in 1.5s wearing team #22). One frame, one scroll event,
+      // nearest tile is railTeam, select() returns early, nothing repaints.
+      // football-rail-audit RAIL-HOLDS grades it at the real tab and slot chip.
       const worn = cells.find(c => c.dataset.fbteam === railTeam);
-      if (worn) requestAnimationFrame(() => centreOn(worn, 'auto'));
+      if (worn) requestAnimationFrame(() => centreOn(worn, 'instant'));
       wireBar();
       // test hook (webdriver only): the rail is driven by a real scroll in the
       // audit, and this is how it reads back what the page thinks is selected
@@ -19042,6 +19079,7 @@ async function openFriendPaddock(f) {
     </div>`, { cls: 'sheet-paddock' });
 }
 
+let stableGhostWarned = false;   // R39-31: one warning per session, not one per render
 async function openStable(opts = {}) {
   let sel = [];      // iids flagged for breeding
   let offSp = null;
@@ -19073,7 +19111,19 @@ async function openStable(opts = {}) {
     if (!body) return;
     /* eqOwn is the WORN OUTFIT (equipped()), not equippedPetIid(): the Paddock door
        below draws your own Bonehead at the gate, the same way the scene does. */
-    const [insts, eqIid, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), equippedPetIid(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
+    /* equippedPetIid FIRST, alone: it repairs the paper-doll C slot when the two
+       records disagree (R39-1), and equipped() below has to read the repaired
+       slot rather than race it inside the same Promise.all. */
+    const eqIid0 = await equippedPetIid();
+    const [instsAll, bank, st, eqOwn, nicks, ownedCos] = await Promise.all([petInstances(), petLevelBank(), breedStatus(), equipped(), petNicks(), ownedCosmeticIds()]);
+    /* R39-31: an instance row with no species cannot be drawn (bhAsset threw a
+       TypeError and the whole Stable came up empty). Skip it here and say so once. */
+    const insts = instsAll.filter(x => x && x.sp);
+    if (insts.length !== instsAll.length && !stableGhostWarned) { stableGhostWarned = true; console.warn('Stable: skipped instance row(s) with no sp', instsAll.filter(x => !x || !x.sp)); }
+    /* OUT WITH YOU means the C slot holds her. A petEquipped that the worn outfit
+       does not agree with is a pet the Stable must still offer EQUIP for, or the
+       player has no control anywhere that can put her on Today (R39-1). */
+    const eqIid = eqOwn.C && insts.some(x => x.iid === eqIid0 && x.sp === eqOwn.C) ? eqIid0 : null;
     sel = sel.filter(iid => insts.some(x => x.iid === iid));
     /* THE PRIVATE NICKNAME, beside the species name and never instead of it.
        Same shape as nameWithAlias() for friends: the real identity stays the
@@ -19267,7 +19317,7 @@ async function openStable(opts = {}) {
       const her = (BH_BY_ID[sp] || {}).name || 'your pet';
       const mine = petItems.filter(i => ownedCos.has(i.id));
       if (!mine.length) {
-        return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+        return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${esc(her)}'s wardrobe</div>
           <p class="note pw-empty">Nothing to wear yet. Gwart's Menagerie stocks ${PET_SHOP.items.length} pieces, all drawn for her.</p></div>`;
       }
       const petWearItemBtn = (i, fam = null) => {
@@ -19316,7 +19366,7 @@ async function openStable(opts = {}) {
           <small>${on ? (wornFb.length ? 'Worn' : 'Picked') : own ? 'Yours' : `${ICONS.lock(9)} Locked`}</small>
         </button>`;
       }).join('')}</div>`;
-      return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${her}'s wardrobe</div>
+      return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${esc(her)}'s wardrobe</div>
         <div class="pw-row">${wearRow}</div>${railRow}
         <p class="note pw-hint">Tap to put a piece on. Tap it again to take it off. One per spot.${fbMine.length ? ' Tap a team to change her colours.' : ''}</p></div>`;
     }).join('');
@@ -22693,7 +22743,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v487'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v492'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -24476,7 +24526,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
         if (fight.ap < a.ap) return `Needs ${a.ap} AP`;
         return `Stamina ${Math.floor(player.wind)}/${a.id === 'flurry' ? 30 : a.windCost}`;
       }
-      return `${a.ap} AP${a.windCost ? ` · ${a.windCost} Stamina` : ''}${a.id === 'guard' ? ` · +${GUARD_STAMINA} Stamina` : ''}${a.id === 'signature' ? ` · ${player.hype} Hype` : ''}`;
+      /* "Stamina" dropped from the guard clause (2026-09-06): with it, Bone
+         Guard's is the only cost line with three clauses ("1 AP · 12 Stamina ·
+         +22 Stamina"), and it is the one wide enough to wrap to a second line
+         inside the button, which runs straight into the label sitting right
+         below (small.cost is absolutely positioned over the button's own
+         content, not laid out in flow). The unit was already stated by the
+         clause before it; repeating the word bought nothing. */
+      return `${a.ap} AP${a.windCost ? ` · ${a.windCost} Stamina` : ''}${a.id === 'guard' ? ` · +${GUARD_STAMINA}` : ''}${a.id === 'signature' ? ` · ${player.hype} Hype` : ''}`;
     };
     const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
       <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" title="${esc(moveDetail(a.id))}" ${a.enabled ? '' : 'disabled'}>
@@ -25210,7 +25267,21 @@ async function openFight(pitWrap, fighter, foeCfg) {
            the map. */
         const retryLoss = STALE_LAUNCHER.includes(foeCfg.mode) && !won;
         if (fromMap && !retryLoss) { closeAllSheetsViaHistory(); closeAllSheets(); maybeCelebrate(); return; }
-        history.back(); if (!fromMap && foeCfg.mode !== 'friend') setTimeout(() => renderPit(pitWrap), 250); maybeCelebrate();
+        /* Tom, 2026-09-06: "exit animation from the pit feels slightly laggy".
+           THE setTimeout(renderPit, 250) THAT USED TO BE HERE WAS A SECOND,
+           REDUNDANT RE-RENDER. history.back() already fires the popstate that
+           closes this sheet, and openSheet's own onClose (above, where this
+           sheet is opened) already does `if (pitWrap...) renderPit(pitWrap)`
+           for exactly this reason (the FIGHT-button-stays-live bug, 2026-08-11).
+           Measured with a MutationObserver on #pitBody around a real
+           #fightDone tap: it was rewritten TWICE, at 16ms (onClose's own
+           render) and again at 262ms, which is this setTimeout landing right
+           on top of the .2s sheetOut close transition (app.css) - a second
+           full IndexedDB read + DOM rebuild competing with the slide for the
+           main thread, for no correctness reason: onClose's render already
+           covers every path this one did. Deleting it, not deferring it: there
+           is nothing left for it to do. */
+        history.back(); maybeCelebrate();
       });
     }, fast ? 80 : 750);
   }
