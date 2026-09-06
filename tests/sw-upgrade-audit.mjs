@@ -1554,9 +1554,12 @@ if (sheet && !sheet.error) {
      would grade the old worker serving its own file and prove nothing. */
   const lz = sheet.lazy || {};
   console.log(`         WINDOW: with ${d.version} in charge under the ${d.module} page, import('./${DROPPED}') (dropped from B) answered ${lz.status} ${lz.type || ''}, module: ${lz.exports}`);
+  /* graded on the STATUS the worker answered for the exact url the page imports:
+     the import() beside it can be satisfied by the document's module map if the
+     old build already loaded that module, so it is printed, not graded. */
   ok(`WINDOW (R38-17): the old page's lazy import of a module the new build dropped is still served during the swap (previous cache generation kept)`,
-    normVer(d.version) === B_VERSION && d.module === 'A' && lz.status === 200 && typeof lz.exports === 'number',
-    `worker in charge=${d.version} (want ${B_VERSION}), page=${d.module} (want A), status=${lz.status}, module=${lz.exports}`);
+    normVer(d.version) === B_VERSION && d.module === 'A' && lz.status === 200,
+    `worker in charge=${d.version} (want ${B_VERSION}), page=${d.module} (want A), status=${lz.status} (want 200), import()=${lz.exports}`);
   /* 2026-09-05, v473 (commit 63367157) REVERSED THIS ROW BACK, ON PURPOSE, AND
      THAT IS NOT A ROT BACK TO THE PRE-v427 BUG. The comment this replaces
      described why a mid-session swap must never happen while the sheet is
