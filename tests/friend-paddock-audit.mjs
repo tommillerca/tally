@@ -473,7 +473,7 @@ try {
      sprites as the variant PNG, the same way shiny does. Two seeded pets carry
      one (C2 ember, C3 frost); the walk cap can seat out at most one of them.
      Proven red on the pre-fix scene, which built the friend roster without
-     morph: "0 of 15 sprites resolve a /morph/ variant". */
+     morph: "0 of 30 sprites resolve a /morph/ variant" (solo run on gatesnap 2b7eb2da, 2026-09-06). */
   ok('MORPH their morph pets draw their colourway out in their field, not the base art',
     fld.morphed >= 1, `${fld.morphed} of ${fld.imgs} sprites resolve a /morph/ variant`);
 
