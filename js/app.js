@@ -24476,7 +24476,14 @@ async function openFight(pitWrap, fighter, foeCfg) {
         if (fight.ap < a.ap) return `Needs ${a.ap} AP`;
         return `Stamina ${Math.floor(player.wind)}/${a.id === 'flurry' ? 30 : a.windCost}`;
       }
-      return `${a.ap} AP${a.windCost ? ` · ${a.windCost} Stamina` : ''}${a.id === 'guard' ? ` · +${GUARD_STAMINA} Stamina` : ''}${a.id === 'signature' ? ` · ${player.hype} Hype` : ''}`;
+      /* "Stamina" dropped from the guard clause (2026-09-06): with it, Bone
+         Guard's is the only cost line with three clauses ("1 AP · 12 Stamina ·
+         +22 Stamina"), and it is the one wide enough to wrap to a second line
+         inside the button, which runs straight into the label sitting right
+         below (small.cost is absolutely positioned over the button's own
+         content, not laid out in flow). The unit was already stated by the
+         clause before it; repeating the word bought nothing. */
+      return `${a.ap} AP${a.windCost ? ` · ${a.windCost} Stamina` : ''}${a.id === 'guard' ? ` · +${GUARD_STAMINA}` : ''}${a.id === 'signature' ? ` · ${player.hype} Hype` : ''}`;
     };
     const btn = (a, { hint = '', glow = false, weak = false } = {}) => a ? `
       <button class="fight-act ${glow ? 'glow' : ''} ${weak ? 'weak' : ''}" data-act="${a.id}" title="${esc(moveDetail(a.id))}" ${a.enabled ? '' : 'disabled'}>
