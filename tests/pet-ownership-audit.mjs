@@ -175,7 +175,7 @@ ok('TABLES every pet species is registered in the tables that decide whether it 
 const argUrl = process.argv.slice(2).find(a => !a.startsWith('--') && /^https?:/.test(a));
 const srv = argUrl ? null : await serveTree(ROOT);
 const base = argUrl || process.env.URL || srv.url;
-const { browser, page } = await boot(base);
+const { browser, page, errors } = await boot(base);   // errors: boot's pageerror log, read by GHOST below
 
 try {
   await seed(page, { level: 20, coins: 400000 });
@@ -414,6 +414,137 @@ try {
   ok('RECLAIM an account that already bought her gets her back on the next boot, exactly once',
     healed.every(h => h.copies === 1 && h.inRoster),
     healed.map((h, i) => `boot ${i + 1}: ${h.copies} copies, roster ${h.inRoster}`).join('; '));
+
+  /* ---- R39-31 (2026-09-06): the Stable over a name and a row it did not expect ---- */
+  /* HER: the wardrobe heading interpolated the species name raw (`${her}`). The
+     catalogue names are ours today, so this pins the sink rather than a live
+     exploit: the shop pet's name is given a `<b>` in the live module (the app
+     and this evaluate share one module instance per URL), the real Stable is
+     opened, and the heading must carry the brackets as TEXT with no element
+     born from them. Pre-fix: textContent "Bumbleseal's wardrobe", a <b> node. */
+  const her = await page.evaluate(async id => {
+    const { BH_BY_ID } = await import('/data/boneheadz.js');
+    const real = BH_BY_ID[id].name;
+    BH_BY_ID[id].name = real + '<b>x</b>';
+    try {
+      document.getElementById('stableBtn')?.click();
+      const t0 = Date.now();
+      while (!document.querySelector(`#stableBody .pet-wear[data-pwsp="${id}"] .pw-h`) && Date.now() - t0 < 15000) await new Promise(r => setTimeout(r, 100));
+      const h = document.querySelector(`#stableBody .pet-wear[data-pwsp="${id}"] .pw-h`);
+      return { found: !!h, text: h ? h.textContent : null, bold: !!(h && h.querySelector('b')) };
+    } finally { BH_BY_ID[id].name = real; }
+  }, PET_SHOP.pet.id);
+  ok(`HER the Stable's wardrobe heading shows a species name containing <b> as text, not markup`,
+    her.found && her.text.includes('<b>x</b>') && !her.bold, JSON.stringify(her));
+  await page.evaluate(() => document.querySelector('.sheet-close')?.click());
+  await settle(page, 500);
+
+  /* GHOST: an instance row with no `sp` threw a TypeError out of bhAsset and the
+     whole Stable came up with ZERO cards (measured on d7906217). The Stable must
+     draw everybody else and throw nothing; the ghost is logged once, not fatal. */
+  const ghostBefore = await page.evaluate(async () => {
+    const { kvGet, kvSet } = await import('/js/db.js');
+    const l = await kvGet('petInst', []);
+    l.push({ iid: 'p-ghost-r39-31', lineage: 0, shiny: false, hatchedAtSteps: 0 });
+    await kvSet('petInst', l);
+    return l.length;
+  });
+  const errs0 = errors.length;
+  await page.evaluate(() => document.getElementById('stableBtn')?.click());
+  await page.waitForFunction(() => !!document.querySelector('#stableBody .cf-card'), { timeout: 15000, polling: 100 }).catch(() => {});
+  await settle(page, 500);
+  const ghost = await page.evaluate(() => ({
+    cards: document.querySelectorAll('#stableBody .cf-card').length,
+    ghostCard: !!document.querySelector('#stableBody .cf-card[data-sp="undefined"]'),
+  }));
+  ok('GHOST an instance row with no sp is skipped: the Stable still draws every real species and throws nothing',
+    ghostBefore > 1 && ghost.cards >= 1 && !ghost.ghostCard && errors.length === errs0,
+    `${ghost.cards} cards, ghost card ${ghost.ghostCard}, page errors ${errors.slice(errs0).join(' | ') || 'none'}`);
+  await page.evaluate(async () => {
+    document.querySelector('.sheet-close')?.click();
+    const { kvGet, kvSet } = await import('/js/db.js');
+    await kvSet('petInst', (await kvGet('petInst', [])).filter(x => x && x.sp));
+  });
+  await settle(page, 500);
+
+  /* ---- R39-1 (2026-09-06), P0: the first pet you hatch reaches Today ---- */
+  /* STABLE-EQ: the shipped state exactly. petEquipped names a real instance and
+     the paper-doll C slot is empty, which is what v482..v487 left every player in
+     after their first hatch. The Stable then said OUT WITH YOU with EQUIP
+     disabled, so no control anywhere could put her on Today. The rule is
+     CONSISTENCY, in the direction that matters: the button may only be disabled
+     while the worn outfit actually holds her. Pre-fix: disabled=true, C=undefined. */
+  const stuck = await page.evaluate(async () => {
+    const loot = await import('/js/loot.js');
+    const { kvSet } = await import('/js/db.js');
+    const iid = await loot.equippedPetIid();
+    const eq = await loot.equipped({ raw: true }); delete eq.C; await kvSet('equipped', eq);
+    return { iid, C: (await loot.equipped({ raw: true })).C };
+  });
+  setup('SAMPLE the shipped disagreement was reproduced: petEquipped set, C slot empty',
+    !!stuck.iid && stuck.C === undefined, JSON.stringify(stuck));
+  await page.evaluate(() => document.getElementById('stableBtn')?.click());
+  await page.waitForFunction(() => !!document.querySelector('#stableBody [data-eq]'), { timeout: 15000, polling: 100 }).catch(() => {});
+  await settle(page, 500);
+  const eqBtn = await page.evaluate(async () => {
+    const loot = await import('/js/loot.js');
+    const b = document.querySelector('#stableBody [data-eq]');
+    const inst = (await loot.petInstances()).find(x => x.iid === (b && b.dataset.eq));
+    return { found: !!b, disabled: !!(b && b.disabled), label: b ? b.textContent : null, sp: inst ? inst.sp : null, C: (await loot.equipped({ raw: true })).C };
+  });
+  ok('STABLE-EQ the Stable never disables EQUIP for a pet the worn outfit does not hold (the button is disabled only while C is her species)',
+    eqBtn.found && !(eqBtn.disabled && eqBtn.C !== eqBtn.sp), JSON.stringify(eqBtn));
+  ok('STABLE-EQ and opening the Stable heals the slot, so Today draws her again',
+    eqBtn.found && !!eqBtn.sp && eqBtn.C === eqBtn.sp, `C=${eqBtn.C} petEquipped species=${eqBtn.sp}`);
+  await page.evaluate(() => document.querySelector('.sheet-close')?.click());
+  await settle(page, 400);
+
+  /* FIRSTPET: the whole path, as a player walks it. A SECOND page on the plain
+     `tally` database (this profile has never opened it, so it is a cold install):
+     the real onboarding buttons, the Bonehead hub's Backpack chip, the welcome
+     egg's own HATCH button, the reveal's Adopt, then home. Today must draw her
+     (#heroPetBtn, which petFrom(null, eq.C) only yields with a C slot) and both
+     records must agree. Pre-fix on d7906217: eq={B,SK}, petEquipped set,
+     #heroPetBtn absent. */
+  const fresh = await browser.newPage();
+  const freshErrors = [];
+  fresh.on('pageerror', e => freshErrors.push(String(e)));
+  try {
+    await fresh.goto(base.replace(/\/?$/, '/'), { waitUntil: 'networkidle2' });
+    await sleep(900);
+    const onb = [];
+    for (const id of ['#onbGo', '#onbMe', '#onbSkip']) {
+      const has = await fresh.$(id);
+      onb.push(`${id}:${!!has}`);
+      if (has) { await fresh.click(id); await sleep(id === '#onbSkip' ? 1800 : 500); }
+    }
+    await fresh.evaluate(() => (document.getElementById('cratesBtn') || document.getElementById('charBtn'))?.click());
+    await fresh.waitForFunction(() => !!document.querySelector('#chTabs .chip[data-tab="crates"]'), { timeout: 15000, polling: 100 }).catch(() => {});
+    await fresh.evaluate(() => document.querySelector('#chTabs .chip[data-tab="crates"]')?.click());
+    await fresh.waitForFunction(() => !!document.querySelector('[data-hatch]'), { timeout: 15000, polling: 100 }).catch(() => {});
+    const hatchable = await fresh.evaluate(() => document.querySelectorAll('[data-hatch]').length);
+    ok('FIRSTPET-SETUP real onboarding landed on Today and the Backpack offers the welcome egg\'s HATCH button',
+      hatchable >= 1, `${onb.join(' ')} hatch buttons ${hatchable}`);
+    await fresh.evaluate(() => document.querySelector('[data-hatch]')?.click());
+    await fresh.waitForFunction(() => !!document.querySelector('#hatchOk'), { timeout: 15000, polling: 100 }).catch(() => {});
+    await sleep(600);
+    /* Adopt is two states (skip the cinematic, then leave); under webdriver the
+       reveal is already shown, so one tap leaves and a second is a no-op. */
+    for (let i = 0; i < 2; i++) { await fresh.evaluate(() => document.querySelector('#hatchOk')?.click()); await sleep(700); }
+    await fresh.evaluate(() => { location.hash = '#/today'; });
+    await fresh.waitForFunction(() => !!document.querySelector('#heroPetBtn'), { timeout: 8000, polling: 100 }).catch(() => {});
+    const home = await fresh.evaluate(async () => {
+      const loot = await import('/js/loot.js');
+      const { kvGet } = await import('/js/db.js');
+      const insts = await loot.petInstances();
+      const iid = await kvGet('petEquipped', null);
+      return { hash: location.hash, C: (await loot.equipped({ raw: true })).C, petEquipped: iid, eqSp: (insts.find(x => x.iid === iid) || {}).sp || null, instances: insts.map(x => x.sp), heroPetBtn: !!document.querySelector('#heroPetBtn') };
+    });
+    ok('FIRSTPET hatching the welcome egg through the real HATCH button puts her on Today: C slot set, #heroPetBtn drawn, both records agree',
+      home.instances.length === 1 && !!home.C && home.C === home.instances[0] && home.eqSp === home.C && home.heroPetBtn,
+      JSON.stringify(home));
+    ok('FIRSTPET no page error across onboarding, the hatch and the return home', freshErrors.length === 0, freshErrors.join(' | ').slice(0, 300));
+  } finally { await fresh.close(); }
 
 } finally {
   await browser.close();

@@ -19,6 +19,39 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## first pet reaches Today (2026-09-06)
+
+Not stamped to a release: hotfix/first-pet, off v487 (d7906217). HANDOFFr3920260906.md
+R39-1 (P0) and R39-31, both re-measured on v487 before fixing: a cold install that
+hatched the welcome egg through the Backpack's own HATCH button came home to
+`equipped()` = `{B, SK}`, no C slot, no `#heroPetBtn`, and a Stable saying OUT WITH
+YOU with EQUIP disabled. Root cause: `equippedPetIid()`'s heal wrote `petEquipped`
+and never the paper-doll C slot; only `setEquippedPet` wrote both, and nothing on
+the hatch path called it.
+
+1. PROOF: first-pet-audit.mjs, pet-ownership-audit.mjs | REACH: Install fresh, finish
+   onboarding, open your Bonehead, tap Backpack, tap HATCH on the welcome egg and
+   Adopt. Back on Today your new pet is standing beside your Bonehead. No second
+   egg needed.
+
+2. PROOF: first-pet-audit.mjs | REACH: If you already hatched on v482 to v487 and
+   came home to no pet, the next time the game asks which pet is out (opening the
+   Stable, or the step credit that runs when Today refreshes) the slot is repaired
+   and she appears. Nothing to tap.
+
+3. PROOF: pet-ownership-audit.mjs | REACH: In the Stable, EQUIP is only greyed out
+   as OUT WITH YOU while that pet is actually the one drawn on Today. A pet the
+   home screen is not showing can always be equipped.
+
+4. PROOF: pet-ownership-audit.mjs, unit.test.js | REACH: The "(name)'s wardrobe"
+   heading in the Stable shows the species name as text whatever characters it
+   carries. Catalogue names are ours today, so nothing visible changes for
+   players.
+
+5. PROOF: pet-ownership-audit.mjs | REACH: A save carrying a pet row with no
+   species no longer empties the Stable. Every real pet is still drawn; the bad
+   row is skipped and noted once in the console.
+
 ## backup and recovery truth (2026-09-06)
 
 Not stamped to a release: hotfix/backup-recovery, off v482. HANDOFFr3820260906.md

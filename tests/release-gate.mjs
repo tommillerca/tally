@@ -233,6 +233,13 @@ if (own) console.log(`serving this repo at ${base}\n`);
    is the last one the process gets, then reads the invariant off the database
    rather than off a return value a dead process never produces. Cheap, and it
    guards a permanent loss: a spent spawn cannot be re-collected. */
+/* first-pet-audit is PURE for the same reason drip-badge-audit is: mem-idb under
+   the real js/db.js + js/loot.js, ~1s. R39-1 (P0, 2026-09-06): the heal in
+   equippedPetIid wrote petEquipped and never the paper-doll C slot, so a first
+   hatch left Today with no pet and the Stable unable to fix it. Proven red on
+   d7906217 (HEAL, STUCK, HATCH), CONTROL green on both trees. The browser half
+   (real onboarding, the real HATCH button, Today's #heroPetBtn) is
+   pet-ownership-audit FIRSTPET / STABLE-EQ. */
 /* wardrobe-family-audit is PURE for the same reason pet-accessory-lint is: it
    imports data/boneheadz.js and nothing else, and runs in under a second. It
    grades bhFamilyKey, the function that decides which of a player's cosmetics
@@ -243,7 +250,7 @@ if (own) console.log(`serving this repo at ${base}\n`);
    drawings (alpha-silhouette IoU printed per pair) that name matching WOULD
    merge, so a well-meaning rewrite of the rule into name matching goes red with
    the evidence in the failure line. */
-const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs', 'backup-conflict-audit.mjs', 'unit.test.js', 'log-xp-farm-audit.mjs', 'drip-badge-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs', 'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs', 'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs', 'wardrobe-family-audit.mjs', 'football-kit-audit.mjs', 'restore-latch-audit.mjs'];
+const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-atomic-audit.mjs', 'backup-encoder-audit.mjs', 'backup-key-audit.mjs', 'backup-version-audit.mjs', 'backup-conflict-audit.mjs', 'unit.test.js', 'log-xp-farm-audit.mjs', 'drip-badge-audit.mjs', 'xp-key-provenance-lint.mjs', 'facegate-audit.mjs', 'garden-appetite-guard.mjs', 'pit.test.js', 'quest-daymore-audit.mjs', 'quest-pick-audit.mjs', 'first-fight-audit.mjs', 'stat-source-audit.mjs', 'bastions-rep-sim.mjs', 'analytics-tag-audit.mjs', 'icon-inventory-audit.mjs', 'version-stamp-audit.mjs', 'boneyard-supply-audit.mjs', 'loot-fallback-audit.mjs', 'guard-hygiene-lint.mjs', 'guard-provenance-lint.mjs', 'feedback-status-lint.mjs', 'rack-theme-lint.mjs', 'rack-rotate-audit.mjs', 'pet-accessory-lint.mjs', 'pet-pool-audit.mjs', 'manifest-exports-audit.mjs', 'xp-curve-audit.mjs', 'live-api-register-lint.mjs', 'claim-evidence-lint.mjs', 'thumb-freshness-lint.mjs', 'render-sink-lint.mjs', 'lapse-witness-audit.mjs', 'spawn-claim-atomic-audit.mjs', 'wardrobe-family-audit.mjs', 'football-kit-audit.mjs', 'restore-latch-audit.mjs', 'first-pet-audit.mjs'];
 PURE.unshift('store-copy-lint.mjs');
 PURE.unshift('no-debug-markers-lint.mjs');
 const BROWSER = [
