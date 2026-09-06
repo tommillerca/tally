@@ -182,8 +182,12 @@ try {
 
   const yardKeys = Object.keys(built.yard).sort();
   const petKeys = [...new Set(built.yard.pets.flatMap(x => Object.keys(x)))].sort();
+  /* 2026-09-06, Kennel: `morph` joined the per-pet wire on purpose. It is a
+     colourway of the species, public exactly like `shiny`, resolved by the
+     reader through isMorph (unknown -> base). Decided with Tom's approval of
+     the morph sheet the same day; the LEAKY list below is unchanged. */
   ok('SHAPE the yard carries a count, a capped pet list and one wardrobe, and nothing else',
-    yardKeys.join(',') === 'n,pets,wear' && petKeys.join(',') === 'shiny,sp',
+    yardKeys.join(',') === 'n,pets,wear' && petKeys.join(',') === 'morph,shiny,sp',
     `yard keys [${yardKeys.join(',')}], per-pet keys [${petKeys.join(',')}]`);
 
   /* PROVENANCE, 2026-08-23: the fields that must NEVER reach another player. Source
@@ -261,8 +265,8 @@ try {
        possible draw contains dressed pets and the row measures the WARDROBE,
        not the calendar. TALLY still has its three numbers and FIELD still
        measures the capped path: the counts are unchanged. */
-    pets: [{ sp: PET, shiny: false }, { sp: 'C1', shiny: true }, { sp: 'C2', shiny: false },
-      { sp: 'C3', shiny: false }, ...Array.from({ length: 11 }, () => ({ sp: 'C6', shiny: false }))],
+    pets: [{ sp: PET, shiny: false }, { sp: 'C1', shiny: true }, { sp: 'C2', shiny: false, morph: 'ember' },
+      { sp: 'C3', shiny: false, morph: 'frost' }, ...Array.from({ length: 11 }, () => ({ sp: 'C6', shiny: false }))],
     wear: THEIR_WEAR,
   };
   const reachByTap = async () => {
@@ -324,6 +328,7 @@ try {
         figures: pets.length,
         drawn: pets.filter(p => { const b = box(p); return b.w > 0 && b.h > 0; }).length,
         decoded: imgs.filter(i => i.naturalWidth > 0).length,
+        morphed: imgs.filter(i => /\/morph\/C\d__(?:ember|frost)\.png$/.test(i.getAttribute('src') || '')).length,
         imgs: imgs.length,
         keeper: [...document.querySelectorAll('.sheet-paddock .pdk-keeper img')].filter(i => i.naturalWidth > 0).length,
         /* the dressable species, out in the field, and what it is wearing:
@@ -463,6 +468,14 @@ try {
   ok('DRESSED their pet is wearing THEIR wardrobe out in their field, not the viewer\'s',
     fld.dressedBoxes > 0 && fld.wornOn.includes(DIDS[0]) && !fld.wornOn.includes(DIDS[1]),
     `${fld.dressedBoxes} dressed pet(s) in the field wearing [${fld.wornOn.join(',') || 'nothing'}] | theirs=${DIDS[0]} viewer's=${DIDS[1]}`);
+
+  /* MORPH (2026-09-06, Kennel): the wire's `morph` reaches the visited field's
+     sprites as the variant PNG, the same way shiny does. Two seeded pets carry
+     one (C2 ember, C3 frost); the walk cap can seat out at most one of them.
+     Proven red on the pre-fix scene, which built the friend roster without
+     morph: "0 of 15 sprites resolve a /morph/ variant". */
+  ok('MORPH their morph pets draw their colourway out in their field, not the base art',
+    fld.morphed >= 1, `${fld.morphed} of ${fld.imgs} sprites resolve a /morph/ variant`);
 
   /* TALLY: three numbers are in play and only one is the brag. 37 owned, 15 on
      the wire, 11 standing in the field after the walk cap. The count must be the

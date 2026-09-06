@@ -18736,7 +18736,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
   const petHtml = r => {
     const p = places[r.iid];
     if (!p) return '';
-    const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny, wear: r.wear || null, thumb: true });
+    const art = petSpriteHtml(r.sp, p.w, p.kind === 'walk' || p.kind === 'flop', { shiny: r.shiny, wear: r.wear || null, thumb: true, morph: r.morph });   // 2026-09-06: the paddock scene carries the Kennel morph like it carries shiny (own instance record, or the friend's wire)
     const rarity = (BH_BY_ID[r.sp] || {}).rarity;
     const glow = p.kind === 'fly' && rarity === 'legendary' ? ' pdk-gold' : p.kind === 'hover' && rarity === 'epic' ? ' pdk-epic' : '';
     const pos = p.kind === 'walk'
@@ -18946,7 +18946,7 @@ async function openFriendPaddock(f) {
   const { placePaddock, PDK_SCENE, motionFor } = await import('./paddock.js');
   const eqVisitor = await equipped();        // YOUR worn look, so you are in their field too
   const wear = yard.wear || null;             // THEIRS or bare, never undefined
-  const roster = yard.pets.map((x, i) => ({ iid: `y${i}`, sp: x.sp, shiny: !!x.shiny, motion: motionFor(x.sp), wear }));
+  const roster = yard.pets.map((x, i) => ({ iid: `y${i}`, sp: x.sp, shiny: !!x.shiny, morph: isMorph(x.morph) ? x.morph : 'base', motion: motionFor(x.sp), wear }));
   const places = placePaddock(roster, PDK_SCENE, dateKey());
   const out = roster.filter(r => places[r.iid]).length;
   openSheet(`
