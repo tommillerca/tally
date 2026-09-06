@@ -177,6 +177,17 @@
  *   revalidation gets a NEW stamp), and the row counts B entries carrying A's
  *   stamp against the byte-identical set. --prove-red=refetch drops the ETag.
  *
+ * THREE GENERATIONS (2026-09-06, from the Codex read-only audit of sw.js). The
+ * R38-17 sweep kept "the newest READY cache other than mine", which is the
+ * previous RELEASE, not the generation the still-running page came from. A
+ * page held on A by an open sheet outlives B's activate (A kept) and then C's
+ * (B kept, A DELETED under it); its next lazy import of a module only A carries
+ * is a 404 into a live document. This file now serves a THIRD build for that
+ * one scenario: C = this tree with VERSION bumped once more and the marker set
+ * to C (the bytes differ from B's only there, which is what makes the browser
+ * install it), dropping js/ocr.js exactly as B does. Red on the pre-fix sw.js
+ * with no flag at all, which is how the finding was proved before the fix.
+ *
  * PROVE-RED (each names a different assertion, each read as an exit code):
  *   --prove-red=network-first  put the defect back: the shell branch never
  *                             consults the cache. THROTTLED BOOT goes red. This
@@ -302,7 +313,7 @@ let NO_APP_UPDATE = false;
 
 const A_NUM = swVersion(fs.readFileSync(path.join(OLD_ROOT, 'sw.js'), 'utf8'));
 function transform(rel, buf, mode) {
-  const v = mode === 'A' ? 'A' : 'B';
+  const v = mode;   // 'A' | 'B' | 'C'
   let s;
   switch (rel) {
     case 'index.html':
@@ -337,8 +348,10 @@ function transform(rel, buf, mode) {
       return s + `\ntry { window.__tallyLayerJs = '${v}'; window.__tallyBuild = APP_BUILD; } catch (e) {}\n/*TALLY_UPGRADE_MARKER:${v}*/\n`;
     case 'sw.js':
       s = buf.toString();
-      // R38-17: B is a build that dropped a module (see DROPPED)
-      if (mode === 'B') s = s.replace(`  './${DROPPED}',\n`, '');
+      // R38-17: B (and C) are builds that dropped a module (see DROPPED)
+      if (mode !== 'A') s = s.replace(`  './${DROPPED}',\n`, '');
+      // THREE GENERATIONS: C is this tree one VERSION further on
+      if (mode === 'C') s = s.replace(/const VERSION = 'tally-v\d+'/, `const VERSION = '${C_VERSION}'`);
       /* Each mutation is applied to BOTH versions, because a regression that
          only appeared in the new worker could not affect the old one, and the
          old one is what serves the visit a release lands on. */
@@ -367,6 +380,8 @@ function transform(rel, buf, mode) {
       // no conditional reuse: every entry re-downloaded
       if (PROVE === 'refetch') s = s.replace(SW_ANCHORS.etag, '      const etag = null;');
       return s;
+    case 'version.json':
+      return mode === 'C' ? `{ "version": "${C_VERSION}" }` : buf;
     default:
       return buf;
   }
@@ -441,7 +456,7 @@ async function serveVersioned() {
     const root = state.mode === 'A' ? OLD_ROOT : ROOT;
     const full = path.resolve(root, rel);
     if (state.broken && state.mode === 'B' && rel === state.broken) { res.writeHead(404); return res.end('deliberately missing'); }
-    if (state.mode === 'B' && rel === DROPPED) { res.writeHead(404); return res.end('this build dropped it'); }
+    if (state.mode !== 'A' && rel === DROPPED) { res.writeHead(404); return res.end('this build dropped it'); }
     if (!full.startsWith(root + path.sep) || !fs.existsSync(full) || fs.statSync(full).isDirectory()) { res.writeHead(404); return res.end('not here'); }
     state.hits[rel] = (state.hits[rel] || 0) + 1;
     let body = Buffer.from(transform(rel, fs.readFileSync(full), state.mode));
@@ -545,7 +560,7 @@ async function launch() {
    for the same three files, so "the shell is new but the cache still holds the
    old one" is visible rather than averaged away. */
 const LAYERS = async page => page.evaluate(async () => {
-  const rx = /TALLY_UPGRADE_MARKER:([AB])/;
+  const rx = /TALLY_UPGRADE_MARKER:([ABC])/;
   /* NEWEST GENERATION FIRST, the way sw.js's fromCaches reads (an unscoped
      caches.match walks OLDEST first, and with a previous generation kept that
      would print the old copy for a worker that never serves it). */
@@ -681,6 +696,42 @@ async function waitCacheSettled(page, ms = 45000) {
   }
 }
 
+/* A REAL SHEET, so the old page holds itself on its build through a swap.
+   #gearBtn is not a sheet, it is `location.hash = '#/settings'`, so the first
+   version of this opened nothing and graded a page with no sheet on it.
+   #pitBtn is a real openSheet() surface (godmode.openPit uses the same one).
+   A sheet that never opened is recorded and FAILS below rather than passing
+   quietly on a scenario that did not happen. */
+async function openSheet(p) {
+  for (const id of ['pitBtn', 'addFoodBtn', 'gearBtn']) {
+    const hit = await p.evaluate(sel => {
+      const b = document.getElementById(sel);
+      if (!b || !b.getBoundingClientRect().width) return null;
+      b.scrollIntoView({ block: 'center' });
+      const r = b.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }, id);
+    if (!hit) continue;
+    await p.mouse.click(hit.x, hit.y);
+    await sleep(2200);
+    if (await p.evaluate(() => !!document.querySelector('#sheets').children.length)) break;
+  }
+  return p.evaluate(() => !!document.querySelector('#sheets').children.length);
+}
+
+/* WINDOW (R38-17) and THREE GENERATIONS: the OLD page, with a NEWER worker in
+   charge underneath it, lazily imports a module the newer build(s) dropped.
+   Fetched first so the status is named (a 404 into a live document is the
+   finding), then really imported. */
+const lazyImport = p => p.evaluate(async rel => {
+  const out = {};
+  try { const r = await fetch('./' + rel, { cache: 'no-store' }); out.status = r.status; out.type = r.headers.get('content-type'); }
+  catch (e) { out.status = 'threw: ' + String(e).slice(0, 60); }
+  try { const m = await import('./' + rel); out.exports = Object.keys(m).length; }
+  catch (e) { out.exports = 'FAILED: ' + String(e).slice(0, 90); }
+  return out;
+}, DROPPED).catch(e => ({ status: 'evaluate threw: ' + String(e).slice(0, 80) }));
+
 /* ---- one scenario ---------------------------------------------------------- */
 const BREAK = 'js/quests.js';   // a STATIC import of app.js, so the graph dies with it
 
@@ -742,7 +793,7 @@ async function scenario(name, srv, act, { broken = null, offlineAfter = false, n
        context object the reporter never sees. The first version of this dropped
        them and printed "not recorded" for a banner that had actually been
        clicked, which is a check reporting on itself instead of on the app. */
-    for (const k of ['early', 'bannerSeen', 'bannerText', 'duringSheet', 'toast', 'sheetOpen', 'diag', 'firstOpen', 'bootMs', 'bootWall', 'stampHits', 'reg2', 'appUpdateStripped', 'ksVersion', 'lazy', 'installNet', 'carried', 'todayBanner', 'buildLine', 'offlineGetLatest']) {
+    for (const k of ['early', 'bannerSeen', 'bannerText', 'duringSheet', 'toast', 'sheetOpen', 'diag', 'firstOpen', 'bootMs', 'bootWall', 'stampHits', 'reg2', 'appUpdateStripped', 'ksVersion', 'lazy', 'installNet', 'carried', 'todayBanner', 'buildLine', 'offlineGetLatest', 'gens']) {
       if (ctx[k] !== undefined) out[k] = ctx[k];
     }
     // settle long enough for a controllerchange self-reload to happen and finish
@@ -798,6 +849,8 @@ async function scenario(name, srv, act, { broken = null, offlineAfter = false, n
 /* ---- the scenarios --------------------------------------------------------- */
 const A_VERSION = `tally-v${A_NUM}`;
 const B_VERSION = `tally-v${swVersion(fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8'))}`;
+/* THREE GENERATIONS' third build: this tree, one VERSION further on (see transform) */
+const C_VERSION = `tally-v${+swVersion(B_VERSION) + 1}`;
 /* THE BYTE-IDENTICAL SET, computed the way the server serves it (transform
    applied), so CARRIED compares against what the worker could actually have
    reused: every url in BOTH precache lists whose A bytes equal its B bytes. */
@@ -1107,25 +1160,7 @@ const SCENARIOS = {
      row uses, so this is the honest way in. */
   'SHEET OPEN, THEN CLOSED': async ctx => {
     const p = ctx.page;
-    /* #gearBtn is not a sheet, it is `location.hash = '#/settings'`, so the first
-       version of this opened nothing and graded a page with no sheet on it.
-       #pitBtn is a real openSheet() surface (godmode.openPit uses the same one).
-       A sheet that never opened is recorded and FAILS below rather than passing
-       quietly on a scenario that did not happen. */
-    for (const id of ['pitBtn', 'addFoodBtn', 'gearBtn']) {
-      const hit = await p.evaluate(sel => {
-        const b = document.getElementById(sel);
-        if (!b || !b.getBoundingClientRect().width) return null;
-        b.scrollIntoView({ block: 'center' });
-        const r = b.getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      }, id);
-      if (!hit) continue;
-      await p.mouse.click(hit.x, hit.y);
-      await sleep(2200);
-      if (await p.evaluate(() => !!document.querySelector('#sheets').children.length)) break;
-    }
-    ctx.sheetOpen = await p.evaluate(() => !!document.querySelector('#sheets').children.length);
+    ctx.sheetOpen = await openSheet(p);
     /* RECORD the toast, do not sample for it. app.js shows this one for 3600ms
        and the sample that matters is taken seven seconds later, so a single read
        finds an empty element and reports "no toast" about a toast that fired.
@@ -1148,21 +1183,55 @@ const SCENARIOS = {
     ctx.duringSheet = await LAYERS(p);
     ctx.duringSheet.version = await ACTIVE_VERSION(p);
     ctx.duringSheet.stillOpen = await p.evaluate(() => !!document.querySelector('#sheets').children.length);
-    /* WINDOW (R38-17): the OLD page, with the NEW worker in charge underneath it,
-       lazily imports a module B dropped. Fetched first so the status is named
-       (a 404 into a live document is the finding), then really imported. */
-    ctx.lazy = await p.evaluate(async rel => {
-      const out = {};
-      try { const r = await fetch('./' + rel, { cache: 'no-store' }); out.status = r.status; out.type = r.headers.get('content-type'); }
-      catch (e) { out.status = 'threw: ' + String(e).slice(0, 60); }
-      try { const m = await import('./' + rel); out.exports = Object.keys(m).length; }
-      catch (e) { out.exports = 'FAILED: ' + String(e).slice(0, 90); }
-      return out;
-    }, DROPPED).catch(e => ({ status: 'evaluate threw: ' + String(e).slice(0, 80) }));
+    // WINDOW (R38-17)
+    ctx.lazy = await lazyImport(p);
     ctx.toast = (await p.evaluate(() => window.__toasts || [])).join(' | ');
     await p.evaluate(() => history.back());
     await sleep(6000);
     ctx.toast = (await p.evaluate(() => window.__toasts || []).catch(() => [])).join(' | ') || ctx.toast;
+  },
+  /* THREE GENERATIONS. The page a release lands on can outlive TWO releases: a
+     sheet holds it on A (v471 sets updatePending and does not reload while a
+     sheet is up) while B installs and activates underneath it, and then C does.
+     Each swap is provoked the honest way, a real resume (v471's own
+     visibilitychange -> reg.update()), and each is waited for by asking the
+     worker in charge to prove its VERSION (ACTIVE_VERSION). Then the A page
+     imports the module A alone carries. The cache list is read at both steps so
+     a red names which generation went missing. */
+  'THREE GENERATIONS': async ctx => {
+    const p = ctx.page;
+    ctx.sheetOpen = await openSheet(p);
+    const resume = async () => {
+      const other = await ctx.browser.newPage();
+      await other.goto('about:blank');
+      await other.bringToFront();
+      await sleep(1500);
+      await p.bringToFront();
+      await other.close();
+    };
+    /* polled, and a swap that never lands is recorded as the last thing seen so
+       the SETUP row reds on it by name rather than the import row lying */
+    const waitFor = async want => {
+      let v = null;
+      for (let i = 0; i < 40; i++) {
+        v = await ACTIVE_VERSION(p).catch(() => null);
+        if (normVer(v) === want) break;
+        await sleep(1500);
+      }
+      return v;
+    };
+    const gens = () => p.evaluate(async () => (await caches.keys()).filter(k => /^tally-v/.test(k)).sort()).catch(() => []);
+    const g = {};
+    await resume();
+    g.verB = await waitFor(B_VERSION);
+    g.cachesAfterB = await gens();
+    srv.setMode('C');
+    await resume();
+    g.verC = await waitFor(C_VERSION);
+    g.page = (await LAYERS(p).catch(() => ({}))).module;
+    g.caches = await gens();
+    g.lazy = await lazyImport(p);
+    ctx.gens = g;
   },
 };
 
@@ -1575,6 +1644,31 @@ if (sheet && !sheet.error) {
   ok('SHEET CLOSED: closing the last sheet applies the update that queued while it was open, in one reload, to the whole build',
     L.shell === 'B' && L.module === 'B' && L.css === 'B' && sheet.after.loads === 1,
     `shell=${L.shell} module=${L.module} css=${L.css} document loads since the flip=${sheet.after.loads}`);
+}
+
+const tg = all['THREE GENERATIONS'];
+if (tg && !tg.error) {
+  const g = tg.gens || {};
+  const lz = g.lazy || {};
+  const cs = g.caches || [];
+  console.log('');
+  console.log(`FINDING  THREE GENERATIONS. sheet open=${tg.sheetOpen}. In charge after resume #1: ${g.verB}, caches ${JSON.stringify(g.cachesAfterB)}.`);
+  console.log(`         After resume #2 (server on C): ${g.verC}, page still running ${g.page}, caches ${JSON.stringify(cs)}.`);
+  console.log(`         The ${g.page} page's import('./${DROPPED}') (dropped by B and by C) answered ${lz.status} ${lz.type || ''}, module: ${lz.exports}.`);
+  ok(`SETUP THREE GENERATIONS: a sheet held the ${A_VERSION} page open while ${B_VERSION} and then ${C_VERSION} took charge under it`,
+    tg.sheetOpen === true && normVer(g.verB) === B_VERSION && normVer(g.verC) === C_VERSION && g.page === 'A',
+    `sheetOpen=${tg.sheetOpen} after resume #1=${g.verB} after resume #2=${g.verC} page=${g.page}`);
+  /* the finding itself: the generation the OPEN PAGE came from is what has to
+     survive, not merely the newest previous release */
+  ok(`THREE GENERATIONS: with ${C_VERSION} in charge, the still-open ${A_VERSION} page's lazy import of a module only its own build carries is still served`,
+    normVer(g.verC) === C_VERSION && g.page === 'A' && lz.status === 200,
+    `status=${lz.status} (want 200), import()=${lz.exports}, caches=${cs.join(', ')}`);
+  /* the bound, stated with the direction (rule 11): the sweep keeps at most two
+     READY previous generations, so three caches is the ceiling and a fourth is a
+     sweep that has stopped sweeping */
+  ok(`THREE GENERATIONS: the ${A_VERSION} cache survives ${C_VERSION}'s activate while its page is still open, and no more than three tally-v* caches exist`,
+    cs.includes(A_VERSION) && cs.length <= 3,
+    `caches=${cs.join(', ')} (want ${A_VERSION} present, at most three)`);
 }
 
 console.log(`\n${fails.length ? `FAILED (${fails.length}):\n  ` + fails.join('\n  ') : 'ALL GREEN'}`);
