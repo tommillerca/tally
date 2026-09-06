@@ -19,8 +19,8 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
-## v484
-1. The integration train (integ/day5) off v483: Kennel phase A, palettes, the approved v2 recolour art and the Kennel UI; crew activity; the Wardrobe paint virtualization; the truthful iOS permission strings (not a player-visible change, documented in docs/PERMISSION-STRINGS.md). Each row below folds the dated sections further down.
+## v485
+1. The integration train (integ/day5) off v484: Kennel phase A, palettes, the approved v2 recolour art and the Kennel UI; crew activity; the Wardrobe paint virtualization; the truthful iOS permission strings (not a player-visible change, documented in docs/PERMISSION-STRINGS.md). Each row below folds the dated sections further down.
 
 2. PROOF: unit.test.js, pet-pool-audit.mjs, pet-morph-audit.mjs, kennel-audit.mjs | REACH: a granted egg rolls a morph fresh-first over species x morph pairs at MORPH_WEIGHT, the hatch reads it, morphs never touch stats; each morph is a per-fill recolour PNG of Cam's master (ink, whites and creams byte-identical, one midnight tier, Tom approved the sheet 2026-09-06) with tiers built; the Kennel sheet inside the Stable lists every species with a 30-cell collection grid and column headers.
 
@@ -41,6 +41,15 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
 
+## v484
+1. A hotfix off v483, QA round 38's quest items (R38-5, 7, 8, 24). Its rows are the dated "quests tell the truth" section further down, folded here. No quest reward or coin value changed.
+
+2. PROOF: unit.test.js | REACH: a claim on a closed period toasts the truth and repaints instead of returning silently, and the claim path runs the day re-check first (red: a bare if (!res) return swallowed the refusal).
+
+3. PROOF: unit.test.js | REACH: a Quick Add counts toward the new-food quest by name; q-friend and w-friends gate on a cached accepted-friend count, not reachability; w-boss and m-boss need the Pit tried; the water quest shows cups against the goal; a monthly first shown after the 1st scales its target to the days left, reward untouched (each row red on the pre-fix code).
+
+4. PROOF: unit.test.js | REACH: weeklies carry a Monday reset note and dailies a midnight note after 21:00 local; the water hint fires only with q-water on the board and unclaimed; the shown floor quest is sticky for its period across capability changes; the Quest progress link that opened Trends is gone.
+
 ## v483
 1. A hotfix off v482, QA round 38's Kitchen items (R38-21, 22, 23). Its rows are the dated "kitchen on day one" section further down, folded here.
 
@@ -58,6 +67,47 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 3. PROOF: crate-reveal-audit.mjs | REACH: a tap on the crate card at 900, 1400 or 1800 ms no longer destroys the reveal before it draws; the item lands and reads back (EARLYTAP rows, red before: survivedTap true, landedOk false).
 
 4. PROOF: crate-reveal-audit.mjs | REACH: the Add-food button is hidden and inert while a reveal is mounted and for 360 ms after, and the close hint no longer overlaps its box at 393x852 or 375x667 (FABSAFE rows, red before: overlap 3364 px, FAB hit at 600 and 900 ms).
+
+## quests tell the truth (2026-09-06)
+
+Not stamped to a release: hotfix/quests, off v482. HANDOFFr3820260906.md R38-5,
+R38-7, R38-8 and R38-24, re-measured on this tree before fixing.
+
+1. PROOF: unit.test.js | REACH: tapping CLAIM on a quest whose period closed
+   at midnight (or the week/month turning over) while the board sat open no
+   longer does nothing. The claim handler re-checks the day the same way the
+   minute timer does before claiming, then names the truth ("That quest
+   closed at midnight/when the week turned over/when the month turned over")
+   and repaints so the dead CLAIM button is gone, instead of silently
+   swallowing claimQuest's null.
+
+2. PROOF: unit.test.js | REACH: a Quick Add of a food never logged before now
+   completes q-new-food (matched by name, since Quick Add has no food id).
+   w-boss and m-boss now only appear once the Pit has been tried, same as
+   every other Pit quest. "Drink 8 cups of water" shows real partial progress
+   (3/8, not a hidden 0/1). A monthly that first appears after the 1st scales
+   its target to the days actually left in that player's first month; an
+   existing player's target is untouched. Coin, dust and crate rewards are
+   unchanged throughout.
+
+3. PROOF: unit.test.js | REACH: q-friend and w-friends now require an actual
+   accepted friend (read from the cached friends list, refreshed at boot and
+   resume) instead of only a reachable account, so a zero-friend player is no
+   longer handed a quest they cannot complete.
+
+4. PROOF: unit.test.js | REACH: weeklies now warn "Weekly quests reset
+   Monday" and dailies in their last hours warn "Daily quests reset at
+   midnight", the same treatment the monthly tier already had.
+
+5. PROOF: unit.test.js | REACH: connecting a capability (Health, the Pit)
+   mid-period can no longer swap out a quest already shown for a different
+   one; it can only reveal more of what was always there.
+
+6. PROOF: unit.test.js | REACH: "Quest progress" no longer opens Trends, a
+   screen that never says the word quest; the link is dropped since the
+   quest drawer right above it already shows the same progress. The "Claim
+   the water quest for coins" toast only fires when q-water is actually on
+   today's board and not already claimed.
 
 ## v481
 1. A hotfix off v480, QA round 37's notification items (R37-3, 4, 9, 10, 11, 12, 23). Its rows are the dated "notifications consent" section further down, folded here.

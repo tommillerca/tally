@@ -7309,6 +7309,168 @@ test('R37-12 immRateCheck: a minimal rate limit caps immediate pushes per rollin
   assert.equal(rolled.ok, true, 'once the window elapses, a new push must be allowed again');
 });
 
+// ---- R38 quest lane: claims tell the truth, gates match reality ----
+
+test('R38-5 quest claim handler: a closed period toasts the truth and repaints, never swallows null', () => {
+  /* PROVE-RED: on the pre-fix handler (bare `if (!res) return;`, no
+     rollDayIfNeeded() call before claimQuest) this fails with:
+       FAIL (old handler): a bare `if (!res) return;` silently swallows a
+       closed-period refusal (must toast + repaint instead) */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const start = src.indexOf("$$('[data-claim]')");
+  const end = src.indexOf("$$('[data-addmeal]')", start);
+  assert.ok(start !== -1 && end > start, 'the quest claim handler must exist');
+  const block = src.slice(start, end);
+  assert.ok(/rollDayIfNeeded\(\)/.test(block.split('claimQuest(')[0]),
+    'must run the same day re-check the minute timer uses BEFORE calling claimQuest');
+  assert.ok(!/if \(!res\) return;/.test(block),
+    'a bare `if (!res) return;` silently swallows a closed-period refusal');
+  const nullIdx = block.indexOf('if (!res) {');
+  assert.ok(nullIdx !== -1, 'the null result must get its own branch, not a bare return');
+  const nullBranch = block.slice(nullIdx, nullIdx + 500);
+  assert.ok(/toast\(/.test(nullBranch), 'the null-result branch must toast something, matching the other two refusal paths');
+  assert.ok(/refresh\(\)/.test(nullBranch), 'the null-result branch must repaint so a dead CLAIM cannot linger on screen');
+});
+
+test('R38-8 q-new-food: a Quick Add of an unseen name counts as a new food', () => {
+  /* PROVE-RED: on the pre-fix progress fn (`e.foodId && !priorFoodIds.has(...)`,
+     which a foodId:null Quick Add entry can never satisfy) this fails with:
+       FAIL (old code): a brand-new Quick Add food must count toward
+       q-new-food, got 0/1
+       0 !== 1 */
+  const ctx = questCtx('day', {
+    date: '2026-09-06',
+    entries: [{ id: 'e1', date: '2026-09-06', meal: 0, foodId: null, name: 'Mystery Stew' }],
+    allXp: [], allLog: [], priorFoodIds: new Set(), priorQuickNames: new Set(),
+  });
+  const q = DAILY_POOL.find(x => x.id === 'q-new-food');
+  const st = q.progress(ctx);
+  assert.equal(st.cur, 1, `a brand-new Quick Add food must count toward q-new-food, got ${st.cur}/${st.target}`);
+  // a name already logged on a prior day must NOT count as new again
+  const ctxRepeat = questCtx('day', {
+    date: '2026-09-06',
+    entries: [{ id: 'e2', date: '2026-09-06', meal: 0, foodId: null, name: 'Mystery Stew' }],
+    allXp: [], allLog: [], priorFoodIds: new Set(), priorQuickNames: new Set(['mystery stew']),
+  });
+  assert.equal(q.progress(ctxRepeat).cur, 0, 'a Quick Add name already logged before must not count as new');
+});
+
+test('R38-8 w-boss / m-boss: gated on pitTried like every other Pit quest', () => {
+  /* PROVE-RED: on the pre-fix pools (no `need` field on either) this fails with:
+       FAIL (old, w-boss): w-boss must gate on pitTried like every other Pit
+       quest, got need=undefined
+       undefined !== 'pit'
+     (m-boss fails the same way.) */
+  const wBoss = WEEKLY_POOL.find(x => x.id === 'w-boss');
+  const mBoss = MONTHLY_POOL.find(x => x.id === 'm-boss');
+  assert.equal(wBoss.need, 'pit', `w-boss must gate on pitTried, got need=${wBoss.need}`);
+  assert.equal(mBoss.need, 'pit', `m-boss must gate on pitTried, got need=${mBoss.need}`);
+  // sweep every day of a year: a day-one profile (pitTried:false) must never be offered either
+  const NEW = { hkConnected: false, huntEnabled: false, socialOn: false, pitTried: false, kitchenReady: false };
+  let hit = 0;
+  for (let i = 0; i < 400; i++) {
+    const date = new Date(2026, 0, 1 + i).toISOString().slice(0, 10);
+    if (weeklyQuests(date, NEW).some(x => x.id === 'w-boss')) hit++;
+    if (monthlyQuests(date, NEW).some(x => x.id === 'm-boss')) hit++;
+  }
+  assert.equal(hit, 0, `w-boss/m-boss must never be offered to a pre-Pit profile, offered ${hit} times across 400 dates`);
+});
+
+test('R38-8 q-water: shows partial progress instead of a hidden 0/1', () => {
+  /* PROVE-RED: on the pre-fix progress fn (`clamp(c.waterToday ? 1 : 0, 1)`,
+     ignoring cup count entirely) this fails with:
+       FAIL (old q-water): q-water must show partial credit for 3 of 8 cups,
+       got 0/1
+       0 !== 3 */
+  const q = DAILY_POOL.find(x => x.id === 'q-water');
+  const ctx = questCtx('day', { date: '2026-09-06', entries: [], allXp: [], allLog: [], priorFoodIds: new Set(), waterCups: 3 });
+  const st = q.progress(ctx);
+  assert.equal(st.cur, 3, `q-water must show partial credit for 3 of 8 cups, got ${st.cur}/${st.target}`);
+  assert.equal(st.target, 8, `q-water's target must be the real WATER_GOAL, got ${st.target}`);
+  // a past day (no per-day cup count on record) falls back to the old all-or-nothing read
+  const ctxPast = questCtx('day', { date: '2026-09-01', entries: [], allXp: [{ key: 'water-2026-09-01' }], allLog: [], priorFoodIds: new Set(), waterCups: null });
+  const stPast = q.progress(ctxPast);
+  assert.equal(stPast.cur, 1); assert.equal(stPast.target, 1);
+});
+
+test('R38-8 monthly proration: a first month started mid-month scales the target, reward untouched', () => {
+  /* PROVE-RED: on the pre-fix pool (fixed 200000 target, no monthScale) this
+     fails with:
+       FAIL (old m-steps target): a day-one player joining Sept 28 (3 days
+       left) must get an achievable target, got 200000 */
+  const mSteps = MONTHLY_POOL.find(x => x.id === 'm-steps');
+  const mProtein = MONTHLY_POOL.find(x => x.id === 'm-protein');
+  const joinedLate = new Date(2026, 8, 28).getTime(); // account created Sept 28, a 30-day month
+  const ctx = questCtx('month', { date: '2026-09-28', entries: [], allXp: [], allLog: [], priorFoodIds: new Set(), healthRows: [], createdAt: joinedLate });
+  const st = mSteps.progress(ctx);
+  // 30-day Sept, joined the 28th: days remaining = 30-28+1=3; scale=3/30; target=round(200000*0.1)=20000
+  assert.equal(st.target, 20000, `expected a prorated target of 20000, got ${st.target}`);
+  assert.equal(mSteps.coins, 400, 'the reward must stay untouched by proration');
+  const stP = mProtein.progress(ctx);
+  assert.ok(stP.target <= 3, `m-protein's target must not exceed the 3 days actually left, got ${stP.target}`);
+  // an existing player (created in an EARLIER month) keeps the full target
+  const ctxExisting = questCtx('month', { date: '2026-09-28', entries: [], allXp: [], allLog: [], priorFoodIds: new Set(), healthRows: [], createdAt: new Date(2026, 0, 1).getTime() });
+  assert.equal(mSteps.progress(ctxExisting).target, 200000, 'an existing player must not get an easier target just because the month is running out');
+});
+
+test('R38-24 capability change must not re-pick a quest already shown this period', () => {
+  /* PROVE-RED: on the pre-fix pick() (the floor fallback searches outside the
+     drawn set with no memory of what was already shown) this fails with:
+       FAIL (old pick, capability swap): connecting a capability must never
+       drop a quest already shown this period; before=q-scan
+       after=q-pit1,q-pit3
+       + actual - expected
+       + []
+       - [ 'q-scan' ] */
+  const A = { hkConnected: false, huntEnabled: false, socialOn: false, pitTried: false, kitchenReady: false };
+  const before = dailyQuests('2026-01-02', A).map(x => x.id);
+  assert.equal(before.length, 1, 'setup: this date must engage the single-quest floor with everything locked');
+  // app.js persists the floor id in kv the first time it engages and threads it back in as stickyId
+  const after = dailyQuests('2026-01-02', { ...A, pitTried: true, stickyId: before[0] }).map(x => x.id);
+  assert.deepEqual(after.filter(id => before.includes(id)), before,
+    `connecting a capability must never drop a quest already shown this period; before=${before} after=${after}`);
+});
+
+test('R38-8 q-friend / w-friends: gated on an actual accepted friend, not mere reachability', () => {
+  /* PROVE-RED: on the pre-fix wiring (`socialOn: await social.isOnline().catch(() => false)`)
+     this fails with:
+       FAIL (old socialOn): q-friend/w-friends must not gate on mere
+       reachability (isOnline), only on an actual accepted friend */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(!/socialOn: await social\.isOnline\(\)\.catch/.test(src),
+    'q-friend/w-friends must not gate on mere reachability (isOnline), only on an actual accepted friend');
+  assert.ok(/socialOn: \(await kvGet\('friendCount', 0\)\) > 0/.test(src),
+    'must gate on a cached accepted-friend count');
+  assert.ok(/kvSet\('friendCount'/.test(src),
+    'the cached friend count must actually be written somewhere (checkFriendRequests)');
+});
+
+test('R38-7 weeklies and dailies carry the same reset warning the monthly tier already has', () => {
+  /* PROVE-RED: on the pre-fix markup (only the monthly note existed) this
+     fails with:
+       FAIL (old, week note): weeklies must warn before they reset, same as
+       monthlies
+       FAIL (old, day note): dailies in their last hours must warn, same as
+       monthlies */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(/Monthly quests reset on the 1st/.test(src), 'the existing monthly note must be untouched');
+  assert.ok(/Weekly quests reset Monday/.test(src), 'weeklies must warn before they reset, same as monthlies');
+  assert.ok(/Daily quests reset at midnight/.test(src), 'dailies in their last hours must warn, same as monthlies');
+});
+
+test('R38-24 "Quest progress" no longer opens Trends, and the water toast is not unconditional', () => {
+  /* PROVE-RED: on the pre-fix markup this fails with:
+       FAIL (old, qProg present): Quest progress must not point at Trends
+       (#/progress), a screen with no quests on it
+       FAIL (old, unconditional water toast): the water-quest hint must not
+       fire unconditionally */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(!src.includes('id="qProg"'), 'Quest progress must not point at Trends (#/progress), a screen with no quests on it');
+  assert.ok(!/Hydrated! \+\$\{xp\} XP\. Claim the water quest for coins\./.test(src),
+    'the water-quest hint must not fire unconditionally');
+  assert.ok(/waterHint/.test(src), 'the water toast must compute a conditional hint instead');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
