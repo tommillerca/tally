@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 477, date: '2026-09-06', title: 'Your glow stays yours, and one gift at a time', items: [
+    'If you wore a slimed piece, its green glow was painting itself onto every friend in the Crew, the leaderboard and the race. The glow now stays on your own Bonehead.',
+    'The gift card at the top of the Crew tab showed every unopened gift as its own row. It now shows the newest one with a count of the rest, and the next one steps up as you open them.',
+  ] },
   { n: 476, date: '2026-09-06', title: 'A debug overlay leaves, and the Locker Room opens on iPhone', items: [
     'v475 shipped a leftover developer overlay: any error under the hood printed as green text across the top of the screen. It is gone, and a new check on every release fails if anything marked "do not commit" is about to ship again.',
     'On iPhone, tapping the Locker Room poster did nothing. Safari ignores a tap on a disclosure whose header is laid out as a flex row, so the row moved inside the header. The poster opens on a real tap now.',

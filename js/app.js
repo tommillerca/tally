@@ -754,7 +754,13 @@ async function refreshSlimedSlots() {
     const set = new Set();
     for (const [slot, gid] of Object.entries(lo || {})) if (gid && ids.has(gid)) set.add(slot);
     S.slimeSlots = set;
-  } catch { S.slimeSlots = new Set(); }
+    /* 2026-09-06: the look the PLAYER's own Bonehead renders in each slot, so
+       avatarLayersHtml can tell the player's slimed shoe from a friend's shoe.
+       Tom, on v476: "every shoe slot seems to have a green glow now that im
+       looking at my friends in crew" -- the slot test alone painted the
+       viewer's slime onto every outfit on screen. */
+    S.slimeEq = await equipped();
+  } catch { S.slimeSlots = new Set(); S.slimeEq = null; }
 }
 
 // 4-point sparkle in the game's art style (flat gold fill, thick dark outline).
@@ -1986,7 +1992,7 @@ function openBossIntro() {
               in a 4-column grid, which the 192 tier serves at the same device
               density the leaderboard's heads do, and those measured identical to
               the 640px art side by side at 3x. */ ''}
-        ${wall.map((eq, i) => `<span class="bh-stage boss-cell" style="--d:${(i % 4) * 40 + Math.floor(i / 4) * 70}ms">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 192 })}</span>`).join('')}
+        ${wall.map((eq, i) => `<span class="bh-stage boss-cell" style="--d:${(i % 4) * 40 + Math.floor(i / 4) * 70}ms">${avatarLayersHtml(eq, { foreign: true, noYard: true, skip: ['BG', 'C'], thumb: 192 })}</span>`).join('')}
       </div>
       <p class="drop-sub">Fifty-six of them are out there. What you meet depends on where you dig, and it is never the same one twice.</p>
       <button class="drop-cta" id="bossIntroGo">GO HUNTING</button>
@@ -2095,7 +2101,7 @@ const raceLanesHtml = (podium, { prizes = false } = {}) => {
       <div class="bd">
         <div class="nm"><b>${esc(p.name)}</b><span class="st">${p.steps.toLocaleString()}</span></div>
         <div class="track"><i style="width:${pct}%"></i>
-          <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
+          <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'], foreign: true })}</span>
         </div>
         ${prizes ? racePrizeHtml(p) : ''}
       </div>
@@ -5825,7 +5831,11 @@ function avatarLayersHtml(eq, opts = {}) {
        images, so a shiny keeps its kit for free: nothing here reads shinyPetId. */
     const wornPetItems = s.code === 'C' ? petWornItems(itemId, opts.petWear || null) : [];
     // weapon / off-hand glow by rarity (epic/legendary)
-    const slimed = S.slimeSlots && S.slimeSlots.has(s.code);
+    // Slime is the player's own: the slot must be slimed AND this layer must be
+    // the very item the player wears there (a friend's outfit in the same slot
+    // is not). `foreign: true` marks a render of someone else's outfit outright,
+    // so even a friend in the identical piece stays unlit.
+    const slimed = !opts.foreign && S.slimeSlots && S.slimeSlots.has(s.code) && !!S.slimeEq && S.slimeEq[s.code] === itemId;
     /* `'wpnAura' in opts` rather than `opts.wpnAura || S.wpnAura`: a caller that
        passes null MEANS none, and the rack's neutral tiles are exactly that
        caller. Falling back on a falsy value would let the player's own aura leak
@@ -5988,7 +5998,7 @@ function wornArtHtml(id, css) {
 // (how Brock's shiny lizard rendered base-purple on the board).
 const lbAvatar = (p, cls = 'lb-av') =>
   `<div class="${cls}">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' },
-    { noYard: true, skip: ['BG'], thumb: true, shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</div>`;
+    { noYard: true, skip: ['BG'], thumb: true, foreign: true, shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</div>`;
 /* THE BOARD SHOWS THE BONEHEAD, NOT A THUMBNAIL. Tom, 2026-08-08: "make the
    leaderboard look cooler, maybe the number is on top of the bonehead art? right
    now the art is soooo small in the list" and "show the art proudly over 1. 2. 3.
@@ -6027,7 +6037,7 @@ function lbHeadInner(p, px) {
   const oy = px / 2 - SKULL_BOX.cy * scale;
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
   return `<span class="tz-head-in" style="transform:translate(${ox.toFixed(1)}px,${oy.toFixed(1)}px) scale(${scale.toFixed(4)})">
-      <span class="bh-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], thumb: bhTierFor(640 * scale), shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</span>
+      <span class="bh-stage">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], thumb: bhTierFor(640 * scale), foreign: true, shinyPetId: p.pet && p.pet.shiny ? p.pet.id : null })}</span>
     </span>`;
 }
 // Test hook (webdriver only): the board renders from a server payload, so
@@ -6615,7 +6625,7 @@ async function openSpireInfoSheet(info, onAct = null) {
           <span class="lvchip">LV ${lvl} TOWER</span>
           <div class="keeper">
             <div class="bh">${keeperFit
-              ? avatarLayersHtml(keeperFit, { noYard: true, skip: ['BG', 'C'] })
+              ? avatarLayersHtml(keeperFit, { noYard: true, skip: ['BG', 'C'], foreign: !held })
               : `<img src="assets/brand/tomb.png" alt="">`}</div>
             ${keeperPet ? `<span class="pet">${petAsideHtml(keeperPet, 74, { thumb: true })}</span>` : ''}
           </div>
@@ -11502,7 +11512,7 @@ const CHEERS = [
 
 function friendRowAvatar(f) {
   const eq = (f.profile && f.profile.outfit) || { B: 'B0-1', SK: 'SK0-1' };
-  return `<div class="fl-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], thumb: true, shinyPetId: snapShinyPetId(f.profile && f.profile.pet) })}</div>`;
+  return `<div class="fl-av">${avatarLayersHtml(eq, { noYard: true, skip: ['BG'], thumb: true, foreign: true, shinyPetId: snapShinyPetId(f.profile && f.profile.pet) })}</div>`;
 }
 
 /* A NICKNAME IS A NOTE, NOT A RENAME. Tom, 2026-08-07: "When you set a note for a
@@ -11539,7 +11549,7 @@ function crewCardArtHtml(f) {
   const eq = p.outfit || { B: 'B0-1', SK: 'SK0-1' };
   const pet = p.pet && p.pet.id ? `<div class="cfan-pet">${petPortraitHtml(p.pet.id, 58, !!p.pet.shiny, { mass: true, wear: p.pet.wear || null, thumb: true })}</div>` : '';
   return (eq.BG && BH_BY_ID[eq.BG] ? `<img class="cfan-bg" src="${bhThumb(bhAsset(BH_BY_ID[eq.BG]))}" alt="">` : '')
-    + avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 384 }) + pet;
+    + avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], thumb: 384, foreign: true }) + pet;
 }
 function crewCardHtml(f) {
   const p = f.profile || {};
@@ -11785,7 +11795,13 @@ async function renderFriends(el) {
     if (giftCard && giftList) {
       if (!sealed.length) { giftCard.hidden = true; }
       else {
-        giftList.innerHTML = sealed.slice().reverse().map(g => `
+        /* ONE sealed gift at a time (Tom, 2026-09-06, on v476 with a pile of
+           them: "it's just a massive list of gifts from my friends"). The card
+           is a headline, not the archive: newest on top, the rest as a count,
+           and opening one paints the next into the same slot. */
+        const queue = sealed.slice().reverse();
+        const more = queue.length - 1;
+        giftList.innerHTML = queue.slice(0, 1).map(g => `
           <button class="gift-sealed" data-gift="${esc(g.key)}">
             ${/* crateIcon, not bhIcon: 30 was the one golden chest in the app still
                  drawn as a vector at a size the art covers (crateIcon serves its 24
@@ -11794,7 +11810,7 @@ async function renderFriends(el) {
             <span class="wrap">${crateIcon('golden', 30)}</span>
             <span class="tx"><b>${esc(giftSender(g))}</b><small>sent you a gift</small></span>
             <span class="open">OPEN</span>
-          </button>`).join('');
+          </button>`).join('') + (more > 0 ? `<p class="note gift-more">and ${more} more waiting</p>` : '');
         $$('[data-gift]', giftList).forEach(b => b.addEventListener('click', async () => {
           if (b.dataset.busy === '1') return;
           b.dataset.busy = '1';
@@ -12678,7 +12694,7 @@ async function renderFriends(el) {
               <div class="bd">
                 <div class="nm"><b>${esc(p.name)}</b>${raceFreshHtml(p)}<span class="st">${p.steps.toLocaleString()}</span></div>
                 <div class="track"><i style="width:${pct}%"></i>
-                  <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'] })}</span>
+                  <span class="run" style="left:${pct}%">${avatarLayersHtml(p.outfit || { B: 'B0-1', SK: 'SK0-1' }, { noYard: true, skip: ['BG', 'C'], foreign: true })}</span>
                 </div>
               </div>
             </${tag}>`;
@@ -12908,7 +12924,7 @@ function openFriendProfile(f, onChange, opts = {}) {
     <div class="sheet-body">
       <div class="fp-hero${eq.BG && BH_BY_ID[eq.BG] ? ' framed' : ''}">
         ${eq.BG && BH_BY_ID[eq.BG] ? `<img class="fp-hero-backdrop" src="${bhAsset(BH_BY_ID[eq.BG])}" alt="">` : ''}
-        <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'] })}</div>
+        <div class="bh-stage lg">${avatarLayersHtml(eq, { noYard: true, skip: ['BG', 'C'], foreign: true })}</div>
         ${p.pet && p.pet.id ? `<div class="fp-pet">${petSpriteHtml(p.pet.id, 70, false, { mass: true, shiny: !!p.pet.shiny, wear: yardWear, thumb: true })}<span class="fp-pet-lvl">Lv ${p.pet.level}</span></div>` : ''}
         <div class="fp-lvlbadge">Lv ${p.level ?? '?'}</div>
       </div>
@@ -18553,7 +18569,7 @@ function paddockSceneHtml({ roster, places, eggCount = 0, eq, keeper, lurkSp = n
              one document. It was the largest thing left on that screen once the
              pet art was tiered (tests/memory-census.mjs measures it). */''}
         <div class="pdk-keeper" style="left:${keeper.x - keeper.px / 2}px;top:${keeper.y - keeper.px / 2}px;width:${keeper.px}px;height:${keeper.px}px">
-          ${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true, thumb: 384 })}
+          ${avatarLayersHtml(eq, { skip: ['BG', 'C'], noYard: true, thumb: 384, foreign: !!visitor })}
         </div>
         ${/* THE VISITOR STANDS OPPOSITE. Tom, 2026-08-24: "can we make it so the
              player that is visiting the paddock is on the opposite side ... bottom
@@ -22321,7 +22337,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v476'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v477'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -23122,7 +23138,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
            same markup the arena uses". */
         spriteHtml: foeCfg.mage
           ? '<img src="assets/bh/mage/mage-fight.png" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain">'
-          : avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) }),
+          : avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], foreign: true, shinyPetId: snapShinyPetId(foe.pet) }),
         sounds: S.sounds,
       });
     } else {
@@ -23317,10 +23333,10 @@ async function openFight(pitWrap, fighter, foeCfg) {
              would put his lantern in the wrong hand. */
           : foeCfg.mimic ? mimicPlateHtml()
           : foeCfg.wanderer ? `<img class="mage-plate" src="assets/bh/wanderer/wanderer.png" alt="">`
-          : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(foe.pet) })}</div>`}</div>
+          : `<div class="mirror-wrap">${avatarLayersHtml(foe.outfit, { noYard: true, skip: ['BG'], foreign: true, shinyPetId: snapShinyPetId(foe.pet) })}</div>`}</div>
         ${add ? `
         <div class="pet-fighter add" id="addG" data-target="fa">
-          <div class="bh-stage fstage petmini${foeCfg.add && foeCfg.add.beast ? ' beast' : ''}" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(add.pet) })}</div></div>
+          <div class="bh-stage fstage petmini${foeCfg.add && foeCfg.add.beast ? ' beast' : ''}" id="addStage"><div class="mirror-wrap">${avatarLayersHtml(add.outfit, { foreign: true, noYard: true, skip: ['BG'], shinyPetId: snapShinyPetId(add.pet) })}</div></div>
         </div>` : ''}
       </div>
       <div class="fighterG you-side" id="youG">
