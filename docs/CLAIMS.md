@@ -112,6 +112,16 @@ the intervening train).
    and doesn't work in a browser (immediate pushes only; the daily reminder
    and streak saver need the installed app).
 
+## crate reveal payoff (2026-09-06)
+
+Not stamped to a release. hotfix/crate-reveal-payoff, off v482. Round 37 R37-14/R37-19/R37-20.
+
+1. PROOF: crate-reveal-audit.mjs | REACH: finish opening a crate that contains a new cosmetic or gear piece. The completion toast names it and points to the Wardrobe.
+
+2. PROOF: crate-reveal-audit.mjs | REACH: reveal a new cosmetic. Its payoff line says New and names the card's rarity instead of leaving the space blank while duplicate cards show their coin payout.
+
+3. PROOF: crate-reveal-audit.mjs | REACH: hold two or more Common Crates and open the Backpack. One Open all tap spends every Common sequentially and presents their combined hand through the existing reveal. Bone Crates are left alone.
+
 ## v477
 1. A hotfix off v476, two Crew fixes from Tom's live session. Nothing from the integration train is in it.
 

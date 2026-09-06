@@ -32,6 +32,7 @@
  */
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { boot, sleep, serveTree, setWidth } from './godmode.js';
 
@@ -48,6 +49,7 @@ if (!base) {
 }
 const results = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? '  ' + detail : ''}`); };
+const APP_SRC = readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
 
 const { browser, page } = await boot(base, {
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
@@ -181,6 +183,98 @@ ok('TIERS the legendary tier renders (RNG never produced one for the author)',
   !!tiers.legendary, JSON.stringify(tiers.legendary));
 ok('TIERS every rendered card has its art decoded (a CSS box over a blank frame passes a position check)',
   seen.length > 0 && seen.every(([, v]) => v.decoded), JSON.stringify(seen.map(([k, v]) => [k, v.decoded])));
+
+/* ---- PAYOFF + BULK COMMONS: R37-14/R37-19/R37-20 -------------------------
+   A new cosmetic used to build an empty stats band while its duplicate printed
+   a coin payoff. The card-builder row grades the real builder and requires the
+   rarity in the same line, so "New" alone cannot flatten every tier together.
+
+   Five Common Crates also used to expose one OPEN button that consumed one row,
+   then force the player back through the Backpack after every reveal. The bulk
+   row grants five Commons and two Bone Crates, taps the Backpack's real control
+   ONCE, and requires all five Commons, but neither Bone Crate, to be consumed.
+   It then dismisses the one combined reveal and reads the real toast sink.
+
+   PROVE-RED (2026-09-06, origin/main v482):
+     FAIL  PAYOFF a new Legendary cosmetic says New and names its rarity  stats=""
+     FAIL  BULK five Common Crates expose one Open all control  {"commons":5,"bones":2,"buttons":0}
+     FAIL  BULK Common opens are sequential, never Promise.all  handler missing
+     FAIL  BULK one tap opens all five Commons and leaves Bone Crates alone  {"commons":5,"bones":2,"cards":0}
+     FAIL  CLAIM a finished crate reveal names the new item and points to Wardrobe  toast="3 starter ingredients in your Kitchen: exactly one Bone Broth. Cook it."
+ */
+const payoff = await page.evaluate(() => {
+  const item = { id: 'R37-AUDIT', name: 'Audit Legend', rarity: 'legendary', slot: 'H' };
+  const card = window.__crateCard?.({ type: 'cos', item });
+  return { stats: card?.stats || '', rarity: card?.rarity || '' };
+});
+ok('PAYOFF a new Legendary cosmetic says New and names its rarity',
+  payoff.stats === 'New · Legendary' && payoff.rarity === 'legendary', `stats=${JSON.stringify(payoff.stats)}`);
+const bulkHandlerAt = APP_SRC.indexOf("$$('[data-open-all]'");
+const bulkHandler = bulkHandlerAt < 0 ? '' : APP_SRC.slice(bulkHandlerAt, APP_SRC.indexOf("$('#useBoost'", bulkHandlerAt));
+ok('BULK Common opens are sequential, never Promise.all',
+  /for \(const crate of held\) opened\.push\(await openCrate\(crate\.id\)\)/.test(bulkHandler)
+    && !/Promise\.all/.test(bulkHandler), bulkHandler ? 'sequential await found' : 'handler missing');
+
+await page.evaluate(async () => {
+  for (let i = 0; i < 6; i++) {
+    if (!document.querySelector('.pack-reveal')) break;
+    const b = document.querySelector('.pack-reveal .sheet-close');
+    if (b) b.click(); else history.back();
+    await new Promise(r => setTimeout(r, 400));
+  }
+  const db = await import('/js/db.js');
+  for (const row of await db.db.all('inv')) if (row.kind === 'crate') await db.db.del('inv', row.id);
+  for (let i = 0; i < 5; i++) await db.db.put('inv', { id: `r37-common-${i}`, kind: 'crate', crate: 'daily', source: 'r37-bulk-audit', ts: Date.now() + i });
+  for (let i = 0; i < 2; i++) await db.db.put('inv', { id: `r37-bone-${i}`, kind: 'crate', crate: 'golden', source: 'r37-bulk-control', ts: Date.now() + 10 + i });
+  /* Deterministic non-dupe cosmetic: no consumable, no ingredient, common
+     rarity, no gear conversion. The first of five identical rolls is new and
+     the remaining four are dupes, which makes the claim toast deterministic. */
+  Object.defineProperty(crypto, 'getRandomValues', { configurable: true, value: a => { a.fill(0x80000000); return a; } });
+  location.hash = '#/bonehead';
+});
+await sleep(1800);
+await page.evaluate(() => document.querySelector('#chTabs .ch-tab[data-tab="crates"]')?.click());
+await sleep(1400);
+const bulkBefore = await page.evaluate(async () => {
+  const { db } = await import('/js/db.js');
+  const rows = (await db.all('inv')).filter(r => r.kind === 'crate');
+  return { commons: rows.filter(r => r.crate === 'daily').length,
+    bones: rows.filter(r => r.crate === 'golden').length,
+    buttons: document.querySelectorAll('[data-open-all="daily"]').length };
+});
+ok('BULK five Common Crates expose one Open all control',
+  bulkBefore.commons === 5 && bulkBefore.bones === 2 && bulkBefore.buttons === 1, JSON.stringify(bulkBefore));
+if (bulkBefore.buttons) await page.click('[data-open-all="daily"]');
+await sleep(900);
+const bulkAfter = await page.evaluate(async () => {
+  const { db } = await import('/js/db.js');
+  const rows = (await db.all('inv')).filter(r => r.kind === 'crate');
+  return { commons: rows.filter(r => r.crate === 'daily').length,
+    bones: rows.filter(r => r.crate === 'golden').length,
+    cards: document.querySelectorAll('.pack-card').length };
+});
+ok('BULK one tap opens all five Commons and leaves Bone Crates alone',
+  bulkAfter.commons === 0 && bulkAfter.bones === 2 && bulkAfter.cards > 0, JSON.stringify(bulkAfter));
+
+/* Dismiss every card with the real card control. The toast fires only after the
+   reveal resolves, which proves it is tied to a completed open rather than the
+   pre-spend tap. */
+for (let n = 0; n < 20; n++) {
+  const state = await page.evaluate(() => {
+    const reveal = document.querySelector('.pack-reveal');
+    if (!reveal) return 'gone';
+    const tilt = document.querySelector('.pack-tilt');
+    if (!reveal.dataset.landed || !tilt) return 'wait';
+    tilt.click();
+    return 'clicked';
+  });
+  if (state === 'gone') break;
+  await sleep(state === 'clicked' ? 850 : 250);
+}
+await sleep(700);
+const claimToast = await page.evaluate(() => document.querySelector('#toast')?.textContent?.trim() || '');
+ok('CLAIM a finished crate reveal names the new item and points to Wardrobe',
+  /^.+ claimed\. Equip it in your Wardrobe\.$/.test(claimToast), `toast=${JSON.stringify(claimToast)}`);
 
 
 /* ---- PACING + THE LAST CARD ------------------------------------------------
