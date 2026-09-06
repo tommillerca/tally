@@ -64,7 +64,7 @@ import { bossLook, themedLook, FAMILIES as BOSS_FAMILIES } from './bosses.js';
 import { gluttonHeroHtml, gluttonStageHtml, startGluttonLoop } from './glutton.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS, GEAR_SLOT_LABELS, gearStats, gearLabel, gearTalents, gearSetInfo, setBonusLabel, gearArmor } from './gear.js';
 import { petPicks, setPetPick, petCounts, creditEquippedPetSteps, petInstances, equippedPetIid, equippedPetInstance, setEquippedPet, petStepsForIid, petLevelBank, salvageInstance, breedStatus, breedPets, BREED_COOLDOWN_STEPS, grantPet, SHINY_CHANCE, petNicks, setPetNick, NICK_MAX, petWear, togglePetWear, bestInstance } from './loot.js';
-import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs } from './pets.js';
+import { buildBattlePet, familyOf, petLevel, unlockedTiers, PET_TREES, PET_FAMILIES, petHovers, petFacesLeft, petBattleStats, PET_MAX_LEVEL, PET_LEVEL_STEPS, petStepsToNext, petSignature, isMorph, MORPH_LABEL, morphAsset, MORPHS, MORPH_TIER, ownedPairs, ownedCellCount } from './pets.js';
 import { densNear, denKey, denRewardLabel, remoteDen, denGearOdds, claimDenWin, claimDenLoot, isoWeekKey, DEN_RADIUS_M, denWinsCount, escalateDen, minisNear, miniKey, claimMiniWin, MINI_RADIUS_M, secretsNear, SECRET_WHISPER_M, SECRET_REVEAL_M, SECRET_RADIUS_M, gluttonSpot, GLUTTON_RADIUS_M, GLUTTON_BLIGHT_M, gluttonWindow, gluttonKey, claimGluttonWin, backfillDenCeilingIfNeeded} from './poi.js';
 import { showGateIntro } from './gateintro.js';
 import { maybeShowDailyWheel } from './wheel.js';
@@ -504,13 +504,14 @@ const petWearsFootball = (petId, wear) => petWornTints(petId, wearOf(wear)).some
  * section 2.5): the species is not decided yet (rule 0.4), so there is no
  * petId to resolve a variant PNG for, and a still-uncracked egg's colour is
  * a tease, not the pet's actual look. */
-const MORPH_FILTER = {
-  ember:    'hue-rotate(198deg) saturate(1.1) brightness(0.95)',
-  frost:    'hue-rotate(126deg) saturate(0.8) brightness(1.05)',
-  toxic:    'hue-rotate(72deg) saturate(1.3) brightness(0.9)',
-  midnight: 'hue-rotate(252deg) saturate(0.9) brightness(0.55)',
-};
-function eggTint(morph) { return (morph && morph !== 'base' && MORPH_FILTER[morph]) || ''; }
+/* R39-21 (2026-09-06): a FLAT palette colour multiplied onto the shell
+ * (app.css .t3-egg .art.tinted::after, mix-blend-mode: multiply through a
+ * mask of the shell itself), never a hue-rotate: the old relative rotation
+ * turned the cream shell blue for an EMBER egg (measured mean RGB 155,158,188).
+ * Hues match scripts/build-pet-morphs-v2.py's absolute targets (ember 14deg,
+ * frost 200deg, toxic 98deg, midnight 254deg). */
+const MORPH_SHELL = { ember: '#f0763a', frost: '#5fb8ec', toxic: '#8fd23c', midnight: '#6b4fc4' };
+function eggTint(morph) { return (morph && morph !== 'base' && MORPH_SHELL[morph]) || ''; }
 
 function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined, thumb = null) {
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
@@ -644,6 +645,12 @@ const snapShinyPetId = pet => (pet && pet.shiny && pet.id !== 'CX' ? pet.id : nu
 async function ownPetMorph(eq) {
   const sp = eq && eq.C;
   if (!sp || sp === 'CX') return 'base';               // CX exempt (section 0.7)
+  /* R39-13 (2026-09-06): re-read before answering. The Stable's EQUIP button
+     swaps the equipped copy without touching this cache, and Today's hero
+     repaints off it on the way back, so a stale cache here painted the OTHER
+     copy's colour while the Pit (which reads the equipped instance directly)
+     painted the right one. One extra kv read per hero paint. */
+  await refreshPetMorphs();
   return (S.petMorphs && S.petMorphs[sp]) || 'base';
 }
 const snapPetMorph = pet => (pet && pet.id !== 'CX' && isMorph(pet.morph) ? pet.morph : 'base');
@@ -808,10 +815,16 @@ async function refreshShinyPets() { S.shinyPets = new Set(await shinyPetIds()); 
 // alongside S.shinyPets so a synchronous pet render can resolve its own colour.
 async function refreshPetMorphs() {
   const insts = await petInstances();
+  /* R39-13: the EQUIPPED copy wins for its species. bestInstance sorts on
+     lineage then shiny and keeps the first-hatched copy on a tie, so with a
+     base #1 and a midnight #2 (midnight equipped) every S.petMorphs reader
+     painted base while the Pit painted midnight. bestInstance only answers for
+     species with no equipped copy. */
+  const eqInst = await equippedPetInstance();
   const map = {};
   for (const sp of new Set(insts.map(x => x.sp))) {
     if (sp === 'CX') continue; // exempt from morphs (spec section 0.7)
-    const b = bestInstance(insts, sp);
+    const b = (eqInst && eqInst.sp === sp) ? eqInst : bestInstance(insts, sp);
     map[sp] = (b && isMorph(b.morph)) ? b.morph : 'base';
   }
   S.petMorphs = map;
@@ -17261,7 +17274,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
         // (no colour name in the copy below -- the tint is the whole tease).
         const eTint = eggTint(e.morph);
         return `<div class="t3-egg" style="margin-bottom:9px">
-          <span class="art"${eTint ? ` style="filter:${eTint}"` : ''}>${crateIcon('egg', 48)}</span>
+          <span class="art${eTint ? ' tinted' : ''}"${eTint ? ` style="--shell:${eTint}"` : ''}>${crateIcon('egg', 48)}</span>
           <div class="tx">
             <b>${p.ready ? 'READY TO HATCH' : 'STEP EGG'}</b>
             <div class="bar"><i style="width:${pct}%"></i></div>
@@ -20414,27 +20427,32 @@ async function openKennel() {
     : 'Not hatched yet.';
   const rosterRow = s => {
     const morph = bestMorphFor(s.id);
-    const dots = MORPHS.map(m => `<i class="k-dot${owned.has(`${s.id}|${m}`) ? ' on' : ''}" data-dot="${s.id}|${m}" role="button" tabindex="0" aria-label="${esc(dotLabel(s.id, m, s.name))}"></i>`).join('');
+    // R39-11: the dots are indicators, not controls (the grid cells are).
+    const dots = MORPHS.map(m => `<i class="k-dot${owned.has(`${s.id}|${m}`) ? ' on' : ''}"></i>`).join('');
     const morphNames = MORPHS.filter(m => owned.has(`${s.id}|${m}`) && m !== 'base').map(m => MORPH_LABEL[m]);
     return `<div class="k-row">
       <span class="k-thumb">${croppedPetImg(s.id, 48, false, morphAsset(s.id, morph) || null, undefined, 192)}</span>
       <div class="k-id">
         <b>${esc(s.name)}</b>
-        <div class="k-dots" data-sp="${esc(s.id)}">${dots}</div>
+        <div class="k-dots" aria-hidden="true">${dots}</div>
         <p class="k-cap" data-cap="${esc(s.id)}">${esc(morphNames.length ? `${morphNames.join(', ')} owned` : 'Base owned')}</p>
       </div>
     </div>`;
   };
-  // Grid cell art is drawn at a fluid width (the plan's own formula: sheet
-  // width minus outer pad minus four 12px gutters, over five columns), never a
-  // hardcoded 62px that would overflow or shrink oddly at 320px.
-  const cellPx = Math.max(40, Math.floor(((window.innerWidth || 390) - 32 - 48) / 5));
+  /* R39-8/9 (2026-09-06): the art is NOT sized from window.innerWidth. The
+     sheet caps at 600px, so a viewport-derived size overflowed its clipped
+     cell above 605px (43% of the pet visible at 1280x800) and a size frozen
+     at open survived a rotation (154px art in a 48px cell). croppedPetImg's
+     layers are percentages of their box, so the box is drawn at a nominal 48
+     and app.css (.k-cell .petcrop, 100%) lets the grid track size it, live. */
   const gridRow = s => `<div class="k-grid-row">
-      <span class="k-grid-label">${esc(s.name)}</span>
+      <span class="k-grid-label" data-sp="${esc(s.id)}">${esc(s.name)}</span>
       <div class="k-grid-cells">${MORPHS.map(m => {
         const isOwned = owned.has(`${s.id}|${m}`);
-        const art = croppedPetImg(s.id, cellPx, false, isOwned ? (morphAsset(s.id, m) || null) : null, undefined, 192);
-        return `<div class="k-cell${isOwned ? '' : ' locked'}" data-sp="${esc(s.id)}" data-morph="${esc(m)}">${art}${isOwned ? '' : ICONS.lock(14)}</div>`;
+        const art = croppedPetImg(s.id, 48, false, isOwned ? (morphAsset(s.id, m) || null) : null, undefined, 192);
+        // R39-11/23: the cell IS the control (a real <button>, so Enter and Space
+        // come free), and it toggles the row label back on a second press.
+        return `<button type="button" class="k-cell${isOwned ? '' : ' locked'}" data-sp="${esc(s.id)}" data-morph="${esc(m)}" aria-pressed="false" aria-label="${esc(dotLabel(s.id, m, s.name))}">${art}${isOwned ? '' : ICONS.lock(14)}</button>`;
       }).join('')}</div>
     </div>`;
   // COLUMN HEADERS, one row above every species block, matching DESIGN.md's
@@ -20453,13 +20471,16 @@ async function openKennel() {
     <p class="sect-h">Your pets</p>
     <div class="k-roster">${ownedSp.length ? ownedSp.map(rosterRow).join('') : '<p class="k-empty">Hatch an egg to start your collection.</p>'}</div>
     <p class="k-gwart"><b>Gwart says:</b> It's paint, not power. Ember, Frost, Toxic, Midnight, same skeleton underneath.</p>
-    <p class="sect-h">Collection &middot; ${owned.size} / ${KENNEL_SPECIES.length * MORPHS.length}</p>
+    <p class="sect-h">Collection &middot; ${ownedCellCount(owned, KENNEL_SPECIES.map(s => s.id))} / ${KENNEL_SPECIES.length * MORPHS.length}</p>
     <div class="k-grid">${gridHead}${KENNEL_SPECIES.map(gridRow).join('')}</div>`;
-  $$('.k-dot', body).forEach(d => d.addEventListener('click', () => {
-    const [sp, m] = d.dataset.dot.split('|');
+  $$('.k-cell', body).forEach(c => c.addEventListener('click', () => {
+    const { sp, morph: m } = c.dataset;
     const name = (BH_BY_ID[sp] || {}).name || sp;
-    const cap = $(`.k-cap[data-cap="${CSS.escape(sp)}"]`, body);
-    if (cap) cap.textContent = dotLabel(sp, m, name);
+    const label = $(`.k-grid-label[data-sp="${CSS.escape(sp)}"]`, body);
+    const was = c.getAttribute('aria-pressed') === 'true';
+    $$(`.k-cell[data-sp="${CSS.escape(sp)}"]`, body).forEach(o => o.setAttribute('aria-pressed', 'false'));
+    c.setAttribute('aria-pressed', String(!was));
+    if (label) label.textContent = was ? name : dotLabel(sp, m, name);
   }));
 }
 if (typeof window !== 'undefined' && navigator.webdriver) window.__openKennel = openKennel;

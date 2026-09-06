@@ -41,7 +41,7 @@ import { RARITIES, RARITY_ORDER, CRATES, SHOP, DUST_VALUE, gearDustValue, gearSt
   RACK_RARITY_PRICE, RACK_POOLS, RACK_DUST, RACK_AURA, RACK_REROLL_LADDER,
   rollCosmetic, crateEligible,
   eggRow, grantEgg, hatchEgg, addPetInstance, petInstances, pickRandomPet } from '../js/loot.js';
-import { MORPHS, MORPH_WEIGHT, isMorph, rollMorph, ownedPairs, PET_ASSIGN, MORPH_ART, morphAsset } from '../js/pets.js';
+import { MORPHS, MORPH_WEIGHT, isMorph, rollMorph, ownedPairs, PET_ASSIGN, MORPH_ART, morphAsset, ownedCellCount } from '../js/pets.js';
 import { BH_ITEMS, BH_SLOTS, BH_BY_ID, bhAsset, PET_SLOTS } from '../data/boneheadz.js';
 import {
   rollSeeds, harvestYield, SEED_ODDS, PLOTS_FREE, PLOTS_MAX, PLOT_PRICES, plotPrice,
@@ -7185,6 +7185,21 @@ test('KENNEL MORPH_ART: CX, an unknown morph, and an unlisted species all resolv
  * instead of `midnight`) makes the plain-name file below missing and fails;
  * a leftover `__midnight-<tier>.png` file in the folder (an artifact of the
  * old build) fails the second assertion. */
+/* R39-10 (2026-09-06): the Kennel's "Collection N / 30" counted owned.size,
+   which includes CX (the Founder's Lizard, exempt, no cell): "31 / 30" with a
+   full set, "2 / 30" with one cell. Only pairs that have a cell count. */
+test('KENNEL ownedCellCount: CX and an off-grid species never count; a full 6x5 set is exactly 30', () => {
+  const grid = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  const one = ownedPairs([{ sp: 'CX', morph: 'base' }, { sp: 'C1', morph: 'ember' }]);
+  assert.equal(one.size, 2, 'control: ownedPairs itself still counts CX (that is the bug the counter must not inherit)');
+  assert.equal(ownedCellCount(one, grid), 1, 'a Founder\'s Lizard owner with one cell reads 1, not 2');
+  const full = ownedPairs([{ sp: 'CX', morph: 'base' }, ...grid.flatMap(sp => MORPHS.map(m => ({ sp, morph: m })))]);
+  assert.equal(full.size, 31);
+  assert.equal(ownedCellCount(full, grid), 30, 'a full set reads 30 / 30, never 31');
+  // two copies of one pair are one cell
+  assert.equal(ownedCellCount(ownedPairs([{ sp: 'C2', morph: 'frost' }, { sp: 'C2', morph: 'frost' }, { sp: 'C2' }]), grid), 2);
+});
+
 test('KENNEL midnight: exactly one midnight file per species, no leftover luminance-tier files', () => {
   const species = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
   const missing = [];

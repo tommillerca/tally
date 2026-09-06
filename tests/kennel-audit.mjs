@@ -208,12 +208,22 @@ try {
   ok('ROSTER the roster shows exactly one row per OWNED species (5: the 4 granted here plus the demo\'s default C1), not the whole 6-species catalogue and not 0',
     roster.length === 5, `${roster.length} row(s): ${roster.join(', ') || 'none'}`);
 
-  // Now the worst case for FIT: grant the remaining two species and reopen,
-  // so all six rows are on screen at once.
+  // R39-10 COUNT, partial state: the demo's C1 plus the four granted pairs is 5
+  // cells. A Founder's Lizard (CX, exempt from the grid) must not move it.
+  await page.evaluate(async () => { const loot = await import('/js/loot.js'); await loot.addPetInstance('CX', { morph: 'base' }); });
+  await openKennel();
+  const countText = () => page.evaluate(() => [...document.querySelectorAll('#kennelBody .sect-h')].map(p => p.textContent).find(t => /Collection/.test(t)) || '(no Collection header)');
+  let ct = await countText();
+  ok('COUNT the collection counter reads 5 / 30 with five owned cells and a Founder\'s Lizard (CX has no cell, so it must not count)',
+    /Collection\s*·\s*5 \/ 30/.test(ct), ct);
+
+  // Now the worst case for FIT (re-premised 2026-09-06, R39-6): the FULL set,
+  // every species in every colourway, because "Ember, Frost, Toxic, Midnight
+  // owned" is the longest caption the roster can carry and a one-morph roster
+  // could never see it wrap.
   await page.evaluate(async () => {
     const loot = await import('/js/loot.js');
-    await loot.addPetInstance('C1', { morph: 'base' });
-    await loot.addPetInstance('C4', { morph: 'base' });
+    for (const sp of ['C1', 'C2', 'C3', 'C4', 'C5', 'C6']) for (const m of ['base', 'ember', 'frost', 'toxic', 'midnight']) await loot.addPetInstance(sp, { morph: m });
   });
   for (const [w, h] of [[390, 844], [320, 568]]) {
     await setWidth(page, w, h);
@@ -221,12 +231,72 @@ try {
     const m = await page.evaluate(() => {
       const rows = [...document.querySelectorAll('.k-row')];
       const last = rows[rows.length - 1];
-      return { rows: rows.length, bottom: last ? last.getBoundingClientRect().bottom : null };
+      return { rows: rows.length, bottom: last ? last.getBoundingClientRect().bottom : null, caps: [...document.querySelectorAll('.k-cap')].map(c => c.textContent) };
     });
-    ok(`FIT ${w}x${h}: all six roster rows fit on one screen with no scroll`,
-      m.rows === 6 && m.bottom != null && m.bottom <= h,
-      `${m.rows} row(s), last row bottom ${m.bottom}${m.bottom > h ? ` > ${h}` : ` of ${h}`}`);
+    ok(`FIT ${w}x${h}: all six roster rows fit on one screen with no scroll, with every colourway owned on every species`,
+      m.rows === 6 && m.bottom != null && m.bottom <= h && m.caps.every(c => /Ember, Frost, Toxic, Midnight owned/.test(c)),
+      `${m.rows} row(s), last row bottom ${m.bottom}${m.bottom > h ? ` > ${h}` : ` of ${h}`}; caption "${m.caps[0]}"`);
   }
+  ct = await countText();
+  ok('COUNT the collection counter reads 30 / 30 with the full set plus a Founder\'s Lizard, never 31 / 30', /Collection\s*·\s*30 \/ 30/.test(ct), ct);
+
+  // R39-11 HIT, at 320x568 (still open): the thing that looks tappable is the
+  // control, at least 44px a side, and a tap at its centre lands on it.
+  const hit = await page.evaluate(() => [...document.querySelectorAll('.k-cell')].map(c => {
+    const r = c.getBoundingClientRect();
+    c.scrollIntoView({ block: 'center' });
+    const r2 = c.getBoundingClientRect();
+    const at = document.elementFromPoint(r2.left + r2.width / 2, r2.top + r2.height / 2);
+    return { key: `${c.dataset.sp}|${c.dataset.morph}`, w: r.width, h: r.height, tag: c.tagName, lands: !!at && (at === c || c.contains(at)) };
+  }));
+  const badHit = hit.filter(x => Math.min(x.w, x.h) < 44 || x.tag !== 'BUTTON' || !x.lands);
+  ok('HIT every grid cell is a real <button> at least 44px a side and a tap at its centre lands on it (320 wide)',
+    hit.length === 30 && !badHit.length,
+    `${hit.length} cells, smallest ${Math.min(...hit.map(x => Math.min(x.w, x.h))).toFixed(2)}px, tag ${hit[0]?.tag}${badHit.length ? `; bad: ${badHit.slice(0, 3).map(x => `${x.key} ${x.w.toFixed(1)}x${x.h.toFixed(1)} ${x.tag} lands=${x.lands}`).join(', ')}` : ''}`);
+
+  // R39-30 HEAD: each column header's centre sits over its column's cells.
+  const head = await page.evaluate(() => {
+    const hs = [...document.querySelectorAll('.k-grid-head-cell')].map(h => { const r = h.getBoundingClientRect(); return r.left + r.width / 2; });
+    const cs = [...document.querySelectorAll('.k-grid-row .k-cell')].slice(0, 5).map(c => { const r = c.getBoundingClientRect(); return r.left + r.width / 2; });
+    return hs.map((x, i) => Math.abs(x - (cs[i] ?? NaN)));
+  });
+  ok('HEAD the five column headers sit centred over their columns within 0.5px (320 wide)',
+    head.length === 5 && head.every(d => d <= 0.5), `drift px: ${head.map(d => d.toFixed(2)).join(', ') || 'none'}`);
+
+  // R39-23 TOGGLE and R39-11 KEYS: pressing a cell names it in the row label;
+  // pressing it again restores the species name. Enter and Space both work.
+  const label = sp => page.evaluate(sp => document.querySelector(`.k-grid-label[data-sp="${sp}"]`)?.textContent, sp);
+  const press = (sp, m) => page.evaluate((sp, m) => document.querySelector(`.k-cell[data-sp="${sp}"][data-morph="${m}"]`)?.click(), sp, m);
+  const before = await label('C2');
+  await press('C2', 'ember'); const on = await label('C2');
+  await press('C2', 'ember'); const back = await label('C2');
+  ok('TOGGLE tapping a cell names its colourway in the row label, and tapping it again restores the summary',
+    !!before && on === `Ember ${before}` && back === before, `"${before}" -> "${on}" -> "${back}"`);
+  await page.evaluate(() => document.querySelector('.k-cell[data-sp="C2"][data-morph="frost"]')?.focus());
+  await page.keyboard.press('Enter'); const viaEnter = await label('C2');
+  await page.keyboard.press('Space'); const viaSpace = await label('C2');
+  ok('KEYS Enter operates a focused cell and Space toggles it back',
+    viaEnter === `Frost ${before}` && viaSpace === before, `Enter -> "${viaEnter}", Space -> "${viaSpace}"`);
+
+  // R39-8 / R39-9 CLIP: the art fits its clipped cell above the sheet's 600px
+  // cap, and keeps fitting after a rotation with the sheet left open.
+  const clip = () => page.evaluate(() => {
+    const out = [...document.querySelectorAll('.k-cell')].map(c => {
+      const r = c.getBoundingClientRect(), a = c.querySelector('.petcrop')?.getBoundingClientRect();
+      return { key: `${c.dataset.sp}|${c.dataset.morph}`, cell: r.width, art: a ? a.width : 0, over: a ? Math.max(a.left - r.left, r.right - a.right, a.top - r.top, r.bottom - a.bottom) < -0.6 : true };
+    });
+    return { n: out.length, cell: out[0]?.cell, art: out[0]?.art, bad: out.filter(o => o.over) };
+  });
+  await setWidth(page, 1024, 768);
+  await openKennel();
+  let cl = await clip();
+  ok('CLIP 1024x768: every cell\'s art sits inside its clipped cell (the sheet caps at 600px, the viewport does not size the art)',
+    cl.n === 30 && !cl.bad.length, `${cl.n} cells, cell ${cl.cell?.toFixed(1)}px, art ${cl.art?.toFixed(1)}px${cl.bad.length ? `, ${cl.bad.length} overflow` : ''}`);
+  await setWidth(page, 320, 568);
+  await sleep(400);
+  cl = await clip();
+  ok('CLIP rotated to 320x568 with the sheet still open: the art re-fits its cell (nothing frozen at open)',
+    cl.n === 30 && !cl.bad.length, `${cl.n} cells, cell ${cl.cell?.toFixed(1)}px, art ${cl.art?.toFixed(1)}px${cl.bad.length ? `, ${cl.bad.length} overflow` : ''}`);
 } finally {
   await browser.close();
   srv?.close();

@@ -102,6 +102,7 @@ export async function paddockRoster() {
     iid: x.iid,
     sp: x.sp,
     shiny: !!x.shiny,
+    morph: x.morph,   // R39-14 (2026-09-06): the Kennel morph rides beside shiny; app.js petHtml reads r.morph
     lineage: x.lineage | 0,
     bond: bonds[x.iid] | 0,
     maxed: (bonds[x.iid] | 0) >= BOND_MAX,

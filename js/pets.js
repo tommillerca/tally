@@ -302,6 +302,13 @@ const MORPH_SPECIES = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
 export function ownedPairs(instances) {
   return new Set((instances || []).map(x => `${x.sp}|${x.morph || 'base'}`));
 }
+// R39-10 (2026-09-06): how many of those pairs have a CELL in the Kennel grid.
+// owned.size counts CX (exempt, no cell) too: "31 / 30" with a full set.
+export function ownedCellCount(owned, speciesIds) {
+  let n = 0;
+  for (const sp of speciesIds) for (const m of MORPHS) if (owned.has(`${sp}|${m}`)) n++;
+  return n;
+}
 
 function weightedMorph(candidates) {
   const total = candidates.reduce((a, m) => a + MORPH_WEIGHT[m], 0);
