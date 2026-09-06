@@ -17969,6 +17969,20 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
     const timers = [];
     const tOpen = performance.now();   // the CSS beats start counting here
     const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+    /* R37-6: #packFoot's close hint sits directly over #fab (measured, 100% of
+       the FAB's box, both at 393x852 and 375x667: both are bottom-centred). The
+       tab bar is already inert while ANY sheet is open, but closeTopSheet
+       un-inerts it THE INSTANT a close begins (restoreFocus runs synchronously,
+       before the .28s slide-out even starts), specifically so a dying sheet's
+       own pointer-events:none never eats a tap meant for what is behind it. That
+       is correct for every other sheet and wrong for exactly this one: measured,
+       elementFromPoint at packFoot's centre already resolved to the FAB's own
+       <path> 100ms after the close tap, and stayed there. A second tap on the
+       same spot within that window (the single most repeated gesture in the
+       game) opened the Add-food sheet instead of nothing. Held disabled a beat
+       past the sheet's own .28s/320ms teardown, not just past its unmount. */
+    const fab = $('#fab');
+    if (fab) { fab.style.visibility = 'hidden'; fab.style.pointerEvents = 'none'; }
     /* a TAKEOVER, not a sheet over a live screen: this is the payoff. */
     const wrap = openSheet(`
       <div class="reveal-take">
@@ -18009,7 +18023,11 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
             <div class="pack-dots" id="packDots"></div>
           </div>
         </div>
-      </div>`, { cls: 'takeover', onClose: () => { timers.forEach(clearTimeout); burst?.destroy(); setFxLayer(); } });
+      </div>`, { cls: 'takeover', onClose: () => {
+      timers.forEach(clearTimeout); burst?.destroy(); setFxLayer();
+      // R37-6: outlive closeTopSheet's own 320ms teardown, not just this call
+      if (fab) setTimeout(() => { fab.style.visibility = ''; fab.style.pointerEvents = ''; }, 360);
+    } });
     setFxLayer(305);
     const reveal = $('#packReveal', wrap), deck = $('#packDeck', wrap), burstEl = $('#packBurst', wrap);
     /* One reader for the CSS beat table, shared by the sequence and the audio. */
@@ -18164,6 +18182,11 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       const end = () => {
         if (pid == null) return;
         pid = null;
+        /* R37-5: NOT WHILE THE CRATE IS STILL OPENING, same gate as the reveal's
+           own click listener below. Without it a tap on the card itself (rather
+           than beside it) between 900 and 1800ms flung/closed a card that had
+           never been drawn, deleting the reveal before the player saw it. */
+        if (!reveal.dataset.landed) return;
         /* A TAP IS DECIDED HERE, not by waiting for a click. Tom, 2026-08-08:
            "tap on chests does not work, you have to drag. There should be tap
            too."
@@ -18200,7 +18223,7 @@ function openPackReveal(cards, { coins = 0, crate = null, footerNote = '' } = {}
       // in its stats band; without this guard tapping it also flung the card,
       // same reason `reveal`'s own click listener a few lines down excludes
       // buttons.
-      tilt.addEventListener('click', e => { if (e.target.closest('button')) return; if (Math.abs(dx) < 6) fling(-1); });
+      tilt.addEventListener('click', e => { if (e.target.closest('button')) return; if (!reveal.dataset.landed) return; if (Math.abs(dx) < 6) fling(-1); }); // R37-5: same landed gate as pointerup, above
       $('#giftShopLink', tilt)?.addEventListener('click', () => { location.hash = '#/shop'; });
       /* AND ANYWHERE ELSE ON THE SCREEN. Tom, 2026-08-10: "it's not a good swipe
          mechanic right now to next card that needs a fix too. Right now the swipe

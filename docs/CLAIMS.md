@@ -26,6 +26,16 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 3. PROOF: crew-slime-leak-audit.mjs | REACH: the Crew's sealed-gift card renders one gift and "and N more waiting" instead of every sealed gift; six seeded gifts render one button; red on v476 with six.
 
+## first session and crate taps (2026-09-06)
+
+Not stamped to a release. Round 37 handoff, R37-1/R37-5/R37-6.
+
+1. PROOF: first-session-lifecycle-audit.mjs | REACH: an install that finishes onboarding (rather than reopening into an existing save) now gets a day rollover and a resume handler from its very first session: backgrounding and returning does something, and the app closes yesterday if it is left open past midnight. Both used to be registered only from boot(), which a fresh install never runs. bindAppLifecycle() is now called from both boot() and the end of onboarding, guarded so a second call is a no-op.
+
+2. PROOF: crate-reveal-audit.mjs | REACH: tapping a crate reveal's card in the roughly one second before it visibly lands (rather than beside it) no longer destroys the item unseen and unrecoverable. The same guard that already protected a tap-anywhere-on-the-screen now also protects a tap that lands directly on the card.
+
+3. PROOF: crate-reveal-audit.mjs | REACH: the crate reveal's "tap to close" hint no longer sits on top of the Add-food button. A second tap in the same spot shortly after closing a crate can no longer land you on Today with the Add-food sheet open instead of nothing.
+
 ## v476
 1. A hotfix off v475, two changes. Nothing else from the day's integration train is in it.
 
