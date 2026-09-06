@@ -213,6 +213,13 @@
  *   --prove-red=refetch       install ignores the previous generation's ETags.
  *                             CARRIED goes red: every identical entry is
  *                             re-downloaded (R38-18).
+ *   --prove-red=blank         B's hardRefresh is the pre-2026-09-06 one: no
+ *                             reachability check, and it deletes every cache and
+ *                             unregisters before reloading. GET LATEST OFFLINE
+ *                             goes red: a blank app with nothing left (R38-3).
+ *   --prove-red=nobanner      B's Today never calls checkForUpdate and Settings
+ *                             never names the live build. TODAY BANNER and
+ *                             SETTINGS ROW go red (R38-15).
  * Nothing in the repo is edited by any of these: the transform is applied to the
  * bytes on their way out of the server.
  *
@@ -245,7 +252,7 @@ const ONLY = argOf('only') || '';
    REMOVED on the same date: it used to restore the pre-v197 shape as a defect,
    and cache-first is now the shipped design, so keeping it would have pinned a
    superseded instruction. Source: docs/FEEDBACK-2026-08-22-v424.md item 18. */
-const MODES = ['network-first', 'stranded', 'mixed', 'killswitch-ignored', 'stale-version', '404', 'waiting', 'window', 'refetch'];
+const MODES = ['network-first', 'stranded', 'mixed', 'killswitch-ignored', 'stale-version', '404', 'waiting', 'window', 'refetch', 'blank', 'nobanner'];
 if (PROVE && !MODES.includes(PROVE)) {
   console.log(`FAIL  SETUP unknown --prove-red=${PROVE} (${MODES.join(' | ')})`);
   process.exit(1);
@@ -316,6 +323,15 @@ function transform(rel, buf, mode) {
          thing left that can pull a new worker is the worker itself.
          Set per-scenario, and the scenario FAILS if the strip did not land. */
       if (NO_APP_UPDATE) s = s.replace(APP_UPDATE_ANCHOR, 'if (!document.hidden) void 0;').replace(OLD_APP_UPDATE_ANCHOR, 'if (!document.hidden) void 0;');
+      if (mode === 'B' && PROVE === 'blank') {
+        // origin/main's hardRefresh: no reachability check, everything deleted before the reload
+        s = s.replace(APP_ANCHORS.reach, '  if (false) {}');
+        s = s.replace(APP_ANCHORS.update, '      await Promise.all((await caches.keys()).map(k => caches.delete(k))); await reg.unregister(); location.reload(); return;');
+      }
+      if (mode === 'B' && PROVE === 'nobanner') {
+        s = s.replace(APP_ANCHORS.today, '  void 0;\n}');
+        s = s.replace(APP_ANCHORS.row, '    if (false) line.textContent = \'\';');
+      }
       /* appended, so it runs after the module body: window is the only place a
          module-scope const can be read from outside, and the RUNNING value is
          the whole question. Identical in both versions apart from the letter. */
@@ -368,6 +384,13 @@ function transform(rel, buf, mode) {
 /* THE FOUR LINES EVERY sw.js MUTATION ABOVE AIMS AT, named once so a prove-red
    that has drifted off its target is caught by the SETUP check below rather
    than passing as a green that proved nothing. */
+/* the js/app.js lines the R38-3 and R38-15 mutations aim at, same rule */
+const APP_ANCHORS = {
+  reach:  "  if (!(await latestBuild())) { toast('No connection. Try again when you have signal', 3200); return; }",
+  update: '      await reg.update();',
+  today:  '  checkForUpdate(el);\n}',
+  row:    '    if (line && latest > runningBuild()) line.textContent = `Build ${APP_BUILD}${shellV}, v${latest} is live`;',
+};
 const SW_ANCHORS = {
   gate:     '    if ((nav || PRECACHED.has(req.url)) && await shellReady()) {',
   scoped:   "      const hit = await caches.match(nav ? './index.html' : req.url, { cacheName: VERSION });",
@@ -411,7 +434,7 @@ async function serveVersioned() {
     const s = net.createServer();
     s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); });
   });
-  const state = { mode: 'A', broken: null, blackhole: false, hits: {}, throttle: null, n304: 0, bytes: 0 };
+  const state = { mode: 'A', broken: null, blackhole: false, hits: {}, throttle: null, n304: 0, bytes: 0, ahead: false };
   const srv = https.createServer(certs(), (req, res) => {
     /* A REAL network failure, not page.setOfflineMode. Every shell request on a
        controlled page is issued by the WORKER in its own target, and
@@ -430,7 +453,11 @@ async function serveVersioned() {
     if (state.mode === 'B' && rel === DROPPED) { res.writeHead(404); return res.end('this build dropped it'); }
     if (!full.startsWith(root + path.sep) || !fs.existsSync(full) || fs.statSync(full).isDirectory()) { res.writeHead(404); return res.end('not here'); }
     state.hits[rel] = (state.hits[rel] || 0) + 1;
-    const body = Buffer.from(transform(rel, fs.readFileSync(full), state.mode));
+    let body = Buffer.from(transform(rel, fs.readFileSync(full), state.mode));
+    /* R38-15: the stamp names a build newer than anything served, so the B page
+       is "behind" without a third build existing. Only version.json, so nothing
+       can actually install. */
+    if (state.ahead && rel === 'version.json') body = Buffer.from('{ "version": "tally-v999" }');
     /* A STRONG ETAG, LIKE GITHUB PAGES SENDS, and a per-response stamp. The
        stamp is on 304s as well, deliberately: a browser HTTP-cache revalidation
        merges the 304's headers into its stored copy, so an entry that took that
@@ -476,6 +503,7 @@ async function serveVersioned() {
     setMode: m => { state.mode = m; },
     setBroken: rel => { state.broken = rel; },
     setBlackhole: v => { state.blackhole = v; },
+    setAhead: v => { state.ahead = v; },
     /* HITS ARE THE ONLY HONEST ANSWER TO "does it go to the network". Asking the
        page, or reading the worker's caches, both grade something downstream of
        the question; the server either got the request or it did not. */
@@ -723,7 +751,7 @@ async function scenario(name, srv, act, { broken = null, offlineAfter = false, n
        context object the reporter never sees. The first version of this dropped
        them and printed "not recorded" for a banner that had actually been
        clicked, which is a check reporting on itself instead of on the app. */
-    for (const k of ['early', 'bannerSeen', 'bannerText', 'duringSheet', 'toast', 'sheetOpen', 'diag', 'firstOpen', 'bootMs', 'bootWall', 'stampHits', 'reg2', 'appUpdateStripped', 'ksVersion', 'lazy', 'installNet', 'carried']) {
+    for (const k of ['early', 'bannerSeen', 'bannerText', 'duringSheet', 'toast', 'sheetOpen', 'diag', 'firstOpen', 'bootMs', 'bootWall', 'stampHits', 'reg2', 'appUpdateStripped', 'ksVersion', 'lazy', 'installNet', 'carried', 'todayBanner', 'buildLine', 'offlineGetLatest']) {
       if (ctx[k] !== undefined) out[k] = ctx[k];
     }
     // settle long enough for a controllerchange self-reload to happen and finish
@@ -826,6 +854,8 @@ if (PROVE) {
     'waiting': gone(SW_ANCHORS.skip),
     'window': gone(SW_ANCHORS.sweep) && served.includes('keys.filter(k => k !== VERSION).map'),
     'refetch': gone(SW_ANCHORS.etag) && served.includes('const etag = null;'),
+    'blank': (() => { const a = fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8'); const b = transform('js/app.js', Buffer.from(a), 'B'); return a.includes(APP_ANCHORS.reach) && a.includes(APP_ANCHORS.update) && !b.includes(APP_ANCHORS.reach) && !b.includes(APP_ANCHORS.update); })(),
+    'nobanner': (() => { const a = fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8'); const b = transform('js/app.js', Buffer.from(a), 'B'); return a.includes(APP_ANCHORS.today) && a.includes(APP_ANCHORS.row) && !b.includes(APP_ANCHORS.today) && !b.includes(APP_ANCHORS.row); })(),
   }[PROVE];
   if (!changed) {
     console.log(`FAIL  SETUP --prove-red=${PROVE} did not actually change anything, so a green run below would prove nothing.`);
@@ -1015,6 +1045,56 @@ const SCENARIOS = {
       });
       await p.mouse.click(hit.x, hit.y);
       await sleep(6000);
+    }
+    /* THE NEW BUILD'S OWN UPDATE SURFACES (R38-15, R38-3). The page is B now
+       (if the banner did its job), and B is the newest build there is, so the
+       stamp is made to claim a newer one: nothing can install, but every "you
+       are behind" surface lights up. Then the network is taken away and Get
+       latest is pressed, which used to leave a blank app with no caches and no
+       worker. Every step is recorded rather than thrown, so a failure here is a
+       red row and not an ERROR that hides the banner rows above. */
+    try {
+      srv.setAhead(true);
+      await p.evaluate(() => { location.hash = '#/progress'; });
+      await sleep(800);
+      await p.evaluate(() => { location.hash = '#/today'; });
+      await sleep(3500);
+      ctx.todayBanner = await p.evaluate(() => {
+        const b = document.querySelector('#screen #updBannerBtn');
+        return { seen: !!b, text: (b?.textContent || '').replace(/\s+/g, ' ').trim(), build: window.__tallyBuild || '-' };
+      }).catch(e => ({ seen: false, text: 'evaluate threw: ' + String(e).slice(0, 80) }));
+      await p.evaluate(() => { location.hash = '#/settings'; });
+      await sleep(3500);
+      ctx.buildLine = await p.evaluate(() => (document.querySelector('#buildLine')?.textContent || '(no #buildLine)').trim()).catch(e => 'evaluate threw: ' + String(e).slice(0, 80));
+      await p.evaluate(() => {
+        window.__toasts = [];
+        const t = document.getElementById('toast');
+        if (!t) return;
+        const grab = () => { const s = (t.textContent || '').trim(); if (s && !window.__toasts.includes(s)) window.__toasts.push(s); };
+        new MutationObserver(grab).observe(t, { childList: true, characterData: true, subtree: true, attributes: true });
+      }).catch(() => {});
+      srv.setBlackhole(true);
+      const btn = await p.evaluate(() => {
+        const b = document.getElementById('updateBtn');
+        if (!b || !b.getBoundingClientRect().width) return null;
+        b.scrollIntoView({ block: 'center' });
+        const r = b.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }).catch(() => null);
+      if (btn) await p.mouse.click(btn.x, btn.y);
+      await sleep(7000);
+      ctx.offlineGetLatest = await p.evaluate(async () => ({
+        caches: (await caches.keys()).filter(k => /^tally-v/.test(k)),
+        reg: !!(await navigator.serviceWorker.getRegistration()),
+        controlled: !!navigator.serviceWorker.controller,
+        screenKids: document.getElementById('screen')?.children.length ?? -1,
+        toasts: (window.__toasts || []).join(' | '),
+        build: window.__tallyBuild || '-',
+      })).catch(e => ({ error: 'the page is gone: ' + String(e).slice(0, 80), caches: [], screenKids: -1, toasts: '' }));
+      if (!btn) ctx.offlineGetLatest.error = 'no #updateBtn to press';
+    } finally {
+      srv.setBlackhole(false);
+      srv.setAhead(false);
     }
   },
   /* the claim in app.js:519-520: with a sheet open the update is NOT applied and
@@ -1438,6 +1518,18 @@ if (banner && !banner.error) {
   ok('hardRefresh() from the banner really lands the player on the new build, with the new worker in charge',
     banner.after.layers.shell === 'B' && banner.after.layers.module === 'B' && normVer(banner.after.version) === B_VERSION,
     `shell=${banner.after.layers.shell} module=${banner.after.layers.module} worker=${banner.after.version} caches=${JSON.stringify(banner.after.layers.caches)}`);
+  /* R38-15 and R38-3, graded on the NEW build's page with the stamp claiming v999 */
+  const tb2 = banner.todayBanner || {};
+  const og = banner.offlineGetLatest || {};
+  console.log(`FINDING  on the ${tb2.build} page with version.json claiming v999: Today banner ${tb2.seen ? 'SHOWN' : 'NOT shown'}${tb2.text ? ` "${tb2.text}"` : ''}; Settings build row "${banner.buildLine}".`);
+  console.log(`         Get latest pressed with the network gone: caches ${JSON.stringify(og.caches)}, registration=${og.reg}, controlled=${og.controlled}, #screen children=${og.screenKids}, toasts "${og.toasts}"${og.error ? ', ' + og.error : ''}.`);
+  ok('TODAY BANNER (R38-15): the update banner is on Today, the screen a stranded player actually opens, not only on Progress',
+    tb2.seen === true && /v999 is live/.test(tb2.text), `seen=${tb2.seen} text="${tb2.text}"`);
+  ok('SETTINGS ROW (R38-15): the build row names the live build when this one is behind',
+    /v999 is live/.test(String(banner.buildLine)), `"${banner.buildLine}"`);
+  ok('GET LATEST OFFLINE (R38-3): with no signal, Get latest leaves the worker, the caches and the running app in place, and says so',
+    !og.error && og.caches.includes(B_VERSION) && og.reg === true && og.screenKids > 0 && /No connection/.test(og.toasts),
+    `caches=${JSON.stringify(og.caches)} registration=${og.reg} #screen children=${og.screenKids} toasts="${og.toasts}"${og.error ? ' ' + og.error : ''}`);
 }
 const sheet = all['SHEET OPEN, THEN CLOSED'];
 if (sheet && !sheet.error) {
