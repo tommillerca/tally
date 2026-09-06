@@ -13,6 +13,7 @@ import { claimDay, db, newId } from './db.js';
 import { keepersBoon } from './spires.js';
 import { awardOnce } from './game.js';
 import { crateRow, eggRow } from './loot.js';
+import { WATER_GOAL } from './wellness.js';
 
 function hashStr(s) {
   let h = 2166136261;
@@ -58,6 +59,25 @@ function periodDates(period, date) {
 // XP each claim grants, scaled by period.
 const REWARD_XP = { day: 25, week: 70, month: 160 };
 
+/* R38-8: a monthly's target assumes the whole month. A player whose account was
+   created mid-month (a fresh install on the 28th) sees the same 200,000-step
+   target as someone who had all 30 days, which is why m-steps read
+   9000/200000 (63,667 steps/day needed) and m-protein (20 days) was already
+   arithmetically impossible after the 11th. Scale to the days actually left in
+   THIS player's first month, counted from account creation (S.settings.createdAt),
+   never from "today", so an existing player who simply procrastinated does not
+   get an easier target as the month runs out. Reward is untouched (Tom's ruling:
+   the economy stays as it is); only the bar the player has to clear moves. */
+function monthProrationScale(date, createdAt) {
+  if (!createdAt) return 1;
+  const createdKey = dateKey(new Date(createdAt));
+  if (monthKeyOf(createdKey) !== monthKeyOf(date)) return 1; // not their first month: full target
+  const totalDays = monthDates(date).length;
+  const createdDay = Number(createdKey.slice(8, 10));
+  const daysRemaining = totalDays - createdDay + 1; // inclusive of the creation day itself
+  return Math.max(1, daysRemaining) / totalDays;
+}
+
 /* ---------- context ---------- */
 // base: { date, entries (today), allXp, allLog, healthRows, targets,
 //         weighedToday, priorFoodIds, hkConnected, huntEnabled }
@@ -85,6 +105,11 @@ export function questCtx(period, base) {
     loggedAnyToday: (base.entries || []).length > 0 || !!base.weighedToday
       || base.allXp.some(r => r.type === 'wellness' && r.date === base.date),
     priorFoodIds: base.priorFoodIds || new Set(),
+    /* R38-8 q-new-food: Quick Add writes foodId: null, so a genuinely new food
+       logged through the app's primary logging path never had anything to
+       compare against and the counter never left 0/1. Quick Add entries are
+       matched by name instead, against names logged on PRIOR days only. */
+    priorQuickNames: base.priorQuickNames || new Set(),
     scanToday: base.allXp.some(r => r.type === 'scan' && r.date === base.date),
     targets: base.targets,
     // period-scoped aggregates
@@ -112,11 +137,18 @@ export function questCtx(period, base) {
     harvests: countType('garden'),
     bedToday: base.allXp.some(r => r.key === `bed-${base.date}`),
     waterToday: base.allXp.some(r => r.key === `water-${base.date}`),
+    /* R38-8: q-water rendered 0/1 with no partial credit, the only multi-unit
+       daily that hid its own progress. base.waterCups is the live cup count
+       for the day being viewed (null on a past day, whose per-day count was
+       never kept); when it exists, count against the real WATER_GOAL instead
+       of a single all-or-nothing unit. */
+    waterCups: base.waterCups,
     sleepToday: base.allXp.some(r => r.key === `sleep-${base.date}`),
     wellnessDays: new Set(base.allXp.filter(r => r.type === 'wellness' && inP(r)).map(r => r.date)).size,
     logDays,
     friendBattles: countType('friendbattle'),
     friendsBattled: new Set(base.allXp.filter(r => r.type === 'friendbattle' && inP(r) && r.friendId).map(r => r.friendId)).size,
+    monthScale: period === 'month' ? monthProrationScale(base.date, base.createdAt) : 1,
   };
 }
 
@@ -135,8 +167,16 @@ export const DAILY_POOL = [
     progress: c => { const t = c.targets?.p || 150; return clamp(dayTotals(c.entries).p, t); } },
   { id: 'q-scan', name: 'Laser checkout', desc: 'Log a food by scanning its barcode', coins: 40,
     progress: c => clamp(c.scanToday ? 1 : 0, 1) },
+  /* R38-8: uncompletable through the primary logging path. Quick Add (the
+     first thing a new player reaches for) writes foodId: null, so `e.foodId &&`
+     excluded every one of those entries and the counter never left 0/1 no
+     matter how many brand-new foods were logged. A Quick Add entry has no id
+     to compare, so it counts as new by NAME instead, against names logged on
+     prior days only (case/whitespace-insensitive: the same food typed twice
+     should not double as "new"). */
   { id: 'q-new-food', name: 'Explorer', desc: 'Log a food you have never logged before', coins: 50,
-    progress: c => clamp(c.entries.filter(e => e.foodId && !c.priorFoodIds.has(e.foodId)).length, 1) },
+    progress: c => clamp(c.entries.filter(e => e.foodId ? !c.priorFoodIds.has(e.foodId)
+      : (e.name && !c.priorQuickNames.has(String(e.name).trim().toLowerCase()))).length, 1) },
   { id: 'q-weigh', name: 'Data point', desc: 'Log a weigh-in', coins: 40,
     progress: c => clamp(c.weighedToday ? 1 : 0, 1) },
   /* Same class, found in the same playtest: the Kitchen on day one is a dead
@@ -150,7 +190,11 @@ export const DAILY_POOL = [
      mistake the day-one Pit card was. REVIVAL: restore it here from git history;
      `harvestedToday` in the context above still works. */
   { id: 'q-water', name: 'Stay watered', desc: 'Drink 8 cups of water', coins: 45,
-    progress: c => clamp(c.waterToday ? 1 : 0, 1) },
+    /* R38-8: rendered 0/1 with no partial credit, unlike every other multi-unit
+       daily. waterCups is only known for the day actually being viewed (kv
+       'wellness' keeps no history), so a past day falls back to the old
+       all-or-nothing read rather than a count it does not have. */
+    progress: c => c.waterCups != null ? clamp(c.waterCups, WATER_GOAL) : clamp(c.waterToday ? 1 : 0, 1) },
   { id: 'q-bed', name: 'Make your bed', desc: 'Start the day right: make your bed', coins: 40,
     progress: c => clamp(c.bedToday ? 1 : 0, 1) },
   { id: 'q-sleep', name: 'Rest up', desc: 'Log a good night of sleep', coins: 55,
@@ -192,7 +236,11 @@ export const WEEKLY_POOL = [
     progress: c => clamp(c.workoutDays, 4) },
   { id: 'w-protein', name: 'Protein week', desc: 'Hit your protein target on 5 days', coins: 150, crate: 'golden',
     progress: c => clamp(c.proteinDays, 5) },
-  { id: 'w-boss', name: 'Boss hunter', desc: 'Beat 2 world bosses this week', coins: 180, crate: 'golden', dust: 60,
+  /* R38-8: ungated behind a door nothing points at (the world boss den is only
+     reachable from inside the Pit sheet, and no UI copy says "world boss").
+     Gated on pitTried like every other Pit-adjacent quest, so it shows up once
+     the player has actually found the Pit rather than on a day-one board. */
+  { id: 'w-boss', name: 'Boss hunter', desc: 'Beat 2 world bosses this week', coins: 180, crate: 'golden', dust: 60, need: 'pit',
     progress: c => clamp(c.bossWins, 2) },
   { id: 'w-hunt', name: 'Scavenger', desc: 'Collect 15 spawns this week', coins: 140, crate: 'golden', ingredient: 'ectoplasm', need: 'hunt',
     progress: c => clamp(c.spawns, 15) },
@@ -225,18 +273,25 @@ export const WEEKLY_POOL = [
     progress: c => clamp(c.friendsBattled, 3) },
 ];
 
+/* R38-8: every monthly target below is scaled by ctx.monthScale (see
+   monthProrationScale above), so a first month that started mid-month asks for
+   a share of the full month's target proportional to the days actually left,
+   instead of the arithmetically-impossible full number. Untouched (scale 1)
+   for anyone whose first month this is not. */
+const scaleT = (t, c) => Math.max(1, Math.round(t * (c.monthScale ?? 1)));
 export const MONTHLY_POOL = [
   { id: 'm-steps', name: 'Marathoner', desc: 'Walk 200,000 steps this month', coins: 400, crate: 'egg', need: 'hk',
-    progress: c => clamp(c.steps, 200000) },
+    progress: c => clamp(c.steps, scaleT(200000, c)) },
   { id: 'm-pit', name: 'Pit veteran', desc: 'Win 50 Pit fights this month', coins: 400, crate: 'egg', need: 'pit',
-    progress: c => clamp(c.pitWins, 50) },
-  { id: 'm-boss', name: 'Boss slayer', desc: 'Beat 8 world bosses this month', coins: 500, crate: 'egg', dust: 150,
-    progress: c => clamp(c.bossWins, 8) },
+    progress: c => clamp(c.pitWins, scaleT(50, c)) },
+  /* R38-8: ungated behind a door nothing points at, same fix as w-boss above. */
+  { id: 'm-boss', name: 'Boss slayer', desc: 'Beat 8 world bosses this month', coins: 500, crate: 'egg', dust: 150, need: 'pit',
+    progress: c => clamp(c.bossWins, scaleT(8, c)) },
   { id: 'm-protein', name: 'Protein month', desc: 'Hit your protein target on 20 days', coins: 400, crate: 'egg',
-    progress: c => clamp(c.proteinDays, 20) },
+    progress: c => clamp(c.proteinDays, scaleT(20, c)) },
 ];
 
-function pick(pool, seedStr, n, { hkConnected, huntEnabled, socialOn, pitTried, kitchenReady } = {}) {
+function pick(pool, seedStr, n, { hkConnected, huntEnabled, socialOn, pitTried, kitchenReady, stickyId } = {}) {
   /* Callers that predate a gate must not silently lose quests, so an undefined
      flag means "no opinion, keep it". Only an explicit false hides one. */
   const off = (flag) => flag === false;
@@ -278,7 +333,23 @@ function pick(pool, seedStr, n, { hkConnected, huntEnabled, socialOn, pitTried, 
      CAN do, because zero quests is a dead screen (the first-week rule). That
      floor is the one surviving substitution and it is bounded at one. */
   const drawn = order.slice(0, n);
-  const out = drawn.filter(ok);
+  let out = drawn.filter(ok);
+  /* R38-24: THE FLOOR ITSELF CAN BE SWAPPED. "A locked player sees fewer
+     quests, never different ones" (the comment above) holds for members of
+     `drawn`, but the floor fallback below searches the WHOLE order, so IT can
+     pick a quest outside `drawn`. Measured: connecting Health mid-month
+     dropped a floor quest (m-protein, already shown, already in progress) the
+     instant hkConnected made a DIFFERENT drawn member (m-steps) newly `ok`,
+     because the branch below only fires while `out` is empty and stopped
+     being empty. `stickyId` is the id of whatever floor quest THIS player was
+     already shown for THIS period (app.js persists it in kv the first time the
+     floor engages, and only then); as long as it is still `ok`, it stays
+     even after something else in `drawn` unlocks, so a capability change can
+     only ADD to what a player has seen this period, never replace it. */
+  if (stickyId && !out.some(q => q.id === stickyId)) {
+    const sticky = order.find(q => q.id === stickyId && ok(q));
+    if (sticky) out = [sticky, ...out].slice(0, n);
+  }
   if (!out.length) {
     const fallback = order.find(ok);
     if (fallback) out.push(fallback);

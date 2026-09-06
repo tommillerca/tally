@@ -2995,6 +2995,15 @@ async function checkFriendRequests() {
     if (!(await social.isOnline())) return;
     const { fresh, incoming } = await social.newFriendRequests();
     await setCrewBadgeFrom((incoming || []).length); // requests + unread deliveries
+    /* R38-8: q-friend / w-friends need an ACTUAL accepted friend, not just a
+       reachable account (isOnline() alone let a zero-friend account draw
+       them). Cache the count locally so quest gating (Today render) never
+       waits on a live fetch; checkFriendRequests already runs on boot + resume,
+       not per render. A failed read must not become the new baseline, same
+       rule listFriends documents for itself: only write on a read that
+       actually reached the server. */
+    const friendsData = await social.listFriends();
+    if (friendsData.reached !== false) await kvSet('friendCount', (friendsData.friends || []).length);
     if (!fresh.length) return;
     const prefs = await notifPrefs();
     if (prefs.enabled && prefs.friends) {
@@ -3968,7 +3977,13 @@ async function renderToday(el) {
   // them; with Health connected the walk row would double-ask for data the
   // sync already has. null = hide the row entirely.
   const manualWalks = wellness && !S.settings.hkConnected ? await manualWalksToday(S.date) : null;
-  const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled, socialOn: await social.isOnline().catch(() => false),
+  const qopts = { hkConnected: !!S.settings.hkConnected, huntEnabled,
+    /* R38-8: isOnline() only means "has an API and an account", so a
+       zero-friend account was handed q-friend as one of two dailies. Gate on
+       whether the CACHED friends list (checkFriendRequests, boot + resume
+       cadence) has ever recorded an accepted friend, so this never waits on a
+       live fetch and a brief connectivity blip cannot flicker the gate. */
+    socialOn: (await kvGet('friendCount', 0)) > 0,
     /* A quest list should describe a day this player can actually have. The Pit
        appears once they have been there (win or lose: trying is the gate, not
        winning), and the Kitchen once it has something in it. */
@@ -3991,14 +4006,45 @@ async function renderToday(el) {
   const qbase = {
     date: S.date, entries, allXp, allLog, healthRows, targets: S.settings.targets,
     priorFoodIds: new Set(allLog.filter(e => e.date < S.date && e.foodId).map(e => e.foodId)),
+    // R38-8 q-new-food: Quick Add's foodId: null entries have no id to compare,
+    // so they are matched by name instead, against prior-day Quick Add names.
+    priorQuickNames: new Set(allLog.filter(e => e.date < S.date && !e.foodId && e.name).map(e => String(e.name).trim().toLowerCase())),
     weighedToday: !!(await db.get('weights', S.date)),
     hkConnected: qopts.hkConnected, huntEnabled,
+    // R38-8 q-water partial credit: only known for the day actually on screen.
+    waterCups: wellness ? wellness.water : null,
+    // R38-8 monthly proration: account creation, so a first month that started
+    // mid-month scales down instead of asking for the whole month's total.
+    createdAt: S.settings.createdAt,
   };
+  /* R38-24: a capability change must not re-pick a quest already shown this
+     period. dailyQuests/weeklyQuests/monthlyQuests only ever DROP a quest
+     under a new gate (never substitute) EXCEPT the single-quest floor, which
+     searches outside the drawn set and so can swap for a different quest the
+     moment something else in the drawn set unlocks (see quests.js pick()).
+     Only tracked for the LIVE period (isToday): a past day is a read-only
+     record (Tom, 2026-08-23) so nothing there can be unlocked out from under
+     it, and clobbering today's sticky record with a past day's would be worse
+     than the bug. */
+  const liveToday = S.date === dateKey();
+  const floorMemo = liveToday ? ((await kvGet('questFloor', null)) || {}) : {};
+  async function pickSticky(tier, fn) {
+    const periodKey = periodKeyOf(tier, S.date);
+    if (!liveToday) return fn(S.date, qopts);
+    const rec = floorMemo[tier];
+    const stickyId = (rec && rec.periodKey === periodKey) ? rec.id : undefined;
+    const quests = fn(S.date, { ...qopts, stickyId });
+    if (quests.length === 1 && (!rec || rec.periodKey !== periodKey || rec.id !== quests[0].id)) {
+      floorMemo[tier] = { periodKey, id: quests[0].id };
+      await kvSet('questFloor', floorMemo);
+    }
+    return quests;
+  }
   // three quest tiers, each with its own period-scoped context
   const questTiers = [
-    { period: 'day', label: "TODAY'S QUESTS", quests: dailyQuests(S.date, qopts), ctx: questCtx('day', qbase) },
-    { period: 'week', label: 'THIS WEEK', quests: weeklyQuests(S.date, qopts), ctx: questCtx('week', qbase) },
-    { period: 'month', label: 'THIS MONTH', quests: monthlyQuests(S.date, qopts), ctx: questCtx('month', qbase) },
+    { period: 'day', label: "TODAY'S QUESTS", quests: await pickSticky('day', dailyQuests), ctx: questCtx('day', qbase) },
+    { period: 'week', label: 'THIS WEEK', quests: await pickSticky('week', weeklyQuests), ctx: questCtx('week', qbase) },
+    { period: 'month', label: 'THIS MONTH', quests: await pickSticky('month', monthlyQuests), ctx: questCtx('month', qbase) },
   ];
   const tot = shownTotals(entries);   // sum of the rounded rows, so the ring agrees with them (L8)
   const remaining = Math.round(t.kcal - tot.kcal);
@@ -4315,13 +4361,33 @@ async function renderToday(el) {
     <div class="q-card-body">
     ${isToday ? '' : `<p class="note">A record of ${esc(title)}. Quests are claimed on the day.</p>`}
     ${questTiers.map(tier => {
-      let monthEndNote = '';
+      /* R38-7: weeklies and monthlies reset with no warning; the monthly tier
+         already had one line (js/app.js, added earlier). Same treatment for
+         weeklies (their own reset day, Monday) and for dailies in their last
+         hours, so all three tiers say the same kind of thing before they
+         reset the player's progress in front of them. */
+      let resetNote = '';
       if (tier.period === 'month') {
         const [y, m, d] = S.date.split('-').map(Number);
         const daysInMonth = new Date(y, m, 0).getDate();
         const daysRemaining = daysInMonth - d;
         if (daysRemaining <= 3 && tier.quests.some(q => questState(q, tier.ctx).cur > 0)) {
-          monthEndNote = '<p class="note" style="margin-top: 4px; margin-bottom: 8px;">Monthly quests reset on the 1st</p>';
+          resetNote = '<p class="note" style="margin-top: 4px; margin-bottom: 8px;">Monthly quests reset on the 1st</p>';
+        }
+      } else if (tier.period === 'week') {
+        // weekKeyOf (js/quests.js) is Monday-start, so the last day of the ISO
+        // week is Sunday. Date arithmetic off S.date, same as the monthly note
+        // above, not the live clock.
+        const [y, m, d] = S.date.split('-').map(Number);
+        const dow = (new Date(y, m - 1, d).getDay() + 6) % 7; // 0=Mon..6=Sun
+        if (dow === 6 && tier.quests.some(q => questState(q, tier.ctx).cur > 0)) {
+          resetNote = '<p class="note" style="margin-top: 4px; margin-bottom: 8px;">Weekly quests reset Monday</p>';
+        }
+      } else if (tier.period === 'day' && isToday) {
+        // needs the live wall clock (a past day's "hours left" is meaningless),
+        // so gated on isToday unlike the week/month notes above.
+        if (new Date().getHours() >= 21 && tier.quests.some(q => questState(q, tier.ctx).cur > 0)) {
+          resetNote = '<p class="note" style="margin-top: 4px; margin-bottom: 8px;">Daily quests reset at midnight</p>';
         }
       }
       return `
@@ -4330,7 +4396,7 @@ async function renderToday(el) {
              that is not today. The tier list is built before isToday exists, so
              the label is corrected here rather than reordering that block. */''}
       <div class="q-tier-h">${tier.period === 'day' && !isToday ? 'DAILY QUESTS' : tier.label}</div>
-      ${monthEndNote}
+      ${resetNote}
       <div class="q-list">
       ${tier.quests.map(q => {
         const st = questState(q, tier.ctx);
@@ -4356,7 +4422,6 @@ async function renderToday(el) {
       </div>
     </div>`;
     }).join('')}
-    <button class="link" id="qProg" style="margin-top:4px">Quest progress</button>
     </div>
   </details>
 
@@ -4588,7 +4653,10 @@ async function renderToday(el) {
   $('#charBtn')?.addEventListener('click', () => openCharacter('crates')); // Bonehead hub, landing on the Backpack the tile is named for
   $('#stableBtn')?.addEventListener('click', openStable);
   $('#pitBtn')?.addEventListener('click', openPit);
-  $('#qProg')?.addEventListener('click', () => { location.hash = '#/progress'; });
+  /* R38-24: "Quest progress" opened Trends, a screen that says "quest" zero
+     times. The quest drawer right above this button already shows every
+     quest's own progress bar, so the link had nowhere honest left to point:
+     dropped rather than wired to a screen that repeats itself. */
   /* 2026-09-06, QA round 37 R37-16: the coin pill opened the Backpack, the same
      door the crate chip beside it already is, and nothing on Today led to the
      Shop (the v475 teaser banner is gated off). Coins are for the Shop. */
@@ -4715,7 +4783,18 @@ async function renderToday(el) {
   // controls no longer yanks the player to the top.
   $('#wWater')?.addEventListener('click', async () => {
     const { w, xp } = await addWater(1); dropSound(S.sounds);
-    if (xp > 0) { confettiBurst(innerWidth / 2, innerHeight * 0.4, 12); chimeSound(S.sounds); toast(`Hydrated! +${xp} XP. Claim the water quest for coins.`, 2800); }
+    if (xp > 0) {
+      confettiBurst(innerWidth / 2, innerHeight * 0.4, 12); chimeSound(S.sounds);
+      /* R38-24: this used to say "Claim the water quest for coins" every time
+         the wellness goal was reached, unconditionally — it fired on a day
+         one's board that held only q-sleep and q-protein, no water quest in
+         sight. Only mention it when q-water is actually today's board and not
+         already claimed. */
+      const dayTier = questTiers.find(t => t.period === 'day');
+      const waterQ = dayTier?.quests.find(x => x.id === 'q-water');
+      const waterHint = waterQ && !questState(waterQ, dayTier.ctx).claimed ? ' Claim the water quest for coins.' : '';
+      toast(`Hydrated! +${xp} XP.${waterHint}`, 2800);
+    }
     else toast(`Water ${w.water}/${WATER_GOAL} cups${w.water >= WATER_GOAL ? '' : ` · ${WATER_GOAL - w.water} to go for +8 XP`}`, 1800);
     refresh();
   });
@@ -4793,6 +4872,12 @@ async function renderToday(el) {
     const tier = questTiers.find(t => t.period === period);
     const q = tier?.quests.find(x => x.id === b.dataset.claim);
     if (!q) return;
+    /* R38-5: the same day/week/month re-check the minute timer uses, run
+       BEFORE the claim rather than trusted to have already run. An app left
+       open past the roll relies on the 60s interval (or the midnight timeout)
+       to catch it; a backgrounded tab can throttle both, so a tap can still
+       land on a stale board. This catches the day up (and repaints) first. */
+    await rollDayIfNeeded();
     const res = await claimQuest(b.dataset.pkey, q, period);
     /* The period is already paid out. This is reachable when a gate flips and
        swaps a quest into a list whose slots are spent, so it has to explain
@@ -4813,7 +4898,22 @@ async function renderToday(el) {
       dayGuardToast(res.dayGuard);
       return;
     }
-    if (!res) return;
+    /* R38-5: the third refusal, and it used to be the only one that stayed
+       silent. claimQuest returns bare null for a period that closed (the
+       clock rolled past midnight/Monday/the 1st while this board sat open) OR
+       for a write that genuinely failed to mint, and the handler swallowed
+       both: no coins, no toast, no reveal, and the button stayed put looking
+       claimable. Tell the truth about which one happened (periodKeyOf is the
+       same closed-period test claimQuest itself uses) and repaint either way
+       so a dead CLAIM never lingers on screen. */
+    if (!res) {
+      const closed = b.dataset.pkey < periodKeyOf(period, dateKey());
+      toast(closed
+        ? `That quest closed ${period === 'day' ? 'at midnight' : period === 'week' ? 'when the week turned over' : 'when the month turned over'}.`
+        : 'Could not claim that quest. Try again.', 3200);
+      refresh();
+      return;
+    }
     trackEvent('quest_claim', { id: q.id, period });
     confettiBurst(ev.clientX || innerWidth / 2, ev.clientY || 240, period === 'day' ? 14 : 22);
     period === 'day' ? questSound(S.sounds) : levelSound(S.sounds);
@@ -22540,7 +22640,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v483'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v484'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
