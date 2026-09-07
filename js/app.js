@@ -15658,6 +15658,26 @@ addEventListener('bh-levelup', e => {
   maybeCelebrate();
 });
 
+/* R41-21: WHAT THIS PARTICULAR STREAK MEANS. Measured 2026-09-07 at 393x852,
+   before this change: day 7's card carried three content blocks (🔥 7 days /
+   "Streak milestone · +100 XP" / the "On a roll" badge) and day 14's carried
+   two, because BADGES has streak-3, streak-7 and streak-30 and nothing at 14.
+   Day 14's card was therefore a strict subset of day 7's: the LONGER streak was
+   the thinner screen.
+   Adding a streak-14 badge would have fixed the shape and it is not mine to add:
+   a badge pays +25 XP and lands in the badge grid, which is an economy change
+   and Tom's call. This is copy plus counts the app already holds, and it is on
+   EVERY milestone, not bolted onto 14: a card keyed to one number would break
+   again at 50. Nothing here is computed, invented or projected; see celeStats. */
+const STREAK_LINES = {
+  3: 'Three days. Three is the one that usually breaks.',
+  7: 'A full week. Seven days, none of them missed.',
+  14: 'Two weeks. Nobody keeps fourteen days by accident.',
+  30: 'A month of it. That is not a run any more, it is how you eat.',
+  50: 'Fifty days. Most people never see the far side of a month.',
+  100: 'A hundred days. There is no trick left to tell you about.',
+};
+
 const LEVELUP_LINES = [
   'Another level? I felt that in my femurs.',
   'New level, same beautiful skull.',
@@ -15686,6 +15706,26 @@ function maybeCelebrate() {
     S.celebration = null;
     if (c) openCelebration(c);
   }, 380);
+}
+
+/* THE COUNTS ARE READ, NEVER DERIVED. Every chip here is a length of something
+   the player owns, printed as-is: pieces found, pets in the Stable, badges
+   earned. No averages, no projections, no "you are on track for" (Tom's ruling:
+   no fabricated numbers). A count of zero gets no chip, because "0 pets" is a
+   sentence about an absence and this screen is about what they have built.
+   Returns null when there is nothing true to say, so the card is unchanged for
+   a player with nothing yet rather than carrying an empty row. */
+async function celeStats() {
+  let pieces = 0, pets = 0, badges = 0;
+  try {
+    const [cos, insts, earned] = await Promise.all([ownedCosmeticIds(), petInstances(), earnedBadgeIds()]);
+    pieces = cos.size; pets = insts.length; badges = earned.size;
+  } catch { return null; }
+  const chips = [];
+  if (pieces) chips.push(`<span class="bh-pill">${ICONS.bone(14)} ${pieces} piece${pieces === 1 ? '' : 's'} found</span>`);
+  if (pets) chips.push(`<span class="bh-pill">${crateIcon('egg', 14)} ${pets} pet${pets === 1 ? '' : 's'}</span>`);
+  if (badges) chips.push(`<span class="bh-pill">${ICONS.star(14)} ${badges} badge${badges === 1 ? '' : 's'}</span>`);
+  return chips.length ? `<div class="cele-stats">${chips.join('')}</div>` : null;
 }
 
 async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null, note = null, newPet = null }) {
@@ -15718,7 +15758,16 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
     return;
   }
   const bits = [];
-  if (streakMilestone) bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP</div>`);
+  if (streakMilestone) {
+    /* "· Bone Crate" is not decoration: streakAwards() grants a GOLDEN crate on
+       every milestone (js/game.js, `grantCrate('golden', 'streak-' + ...)`) and
+       no card has ever said so. */
+    bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP · Bone Crate</div>`);
+    const line = STREAK_LINES[streakMilestone];
+    if (line) bits.push(`<div class="cele-line">${esc(line)}</div>`);
+    const stats = await celeStats();
+    if (stats) bits.push(stats);
+  }
   for (const b of newBadges) bits.push(`<div class="cele-badge"><span>${badgeIconHtml(b.icon,26)}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)} · +25 XP</small></div></div>`);
   if (!levelUp && !bits.length) return;
   // Confetti stays for badges and streaks. The level-up moment has its own
@@ -15749,6 +15798,12 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
   $('#celeOk', wrap).addEventListener('click', () => history.back());
 }
 
+
+/* Test seam, webdriver-gated like __packReveal / __spireSheet / __toast.
+   A streak milestone is reachable only by logging on N real consecutive days,
+   so tests/streak-card-audit.mjs would otherwise have to hand-roll the markup
+   it is grading, which grades nothing. This is the shipped function. */
+if (typeof window !== 'undefined' && navigator.webdriver) window.__celebrate = openCelebration;
 
 /* The level-up MOMENT. A breathing lime glow bursts behind the player's own
    Bonehead. Never a stock figure, this surface is under the figure contract and

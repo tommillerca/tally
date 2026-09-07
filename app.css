@@ -760,6 +760,13 @@ a { color: var(--accent); text-decoration: none; }
 
 .cele-big { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; }
 .cele-sub { font-size: 14px; color: var(--text-2); font-weight: 600; margin-top: 3px; }
+/* R41-21. The streak card's own line, and the counts under it. Deliberately
+   quiet: the number is the headline, this is the sentence and the receipt.
+   .bh-pill is the app's existing chip, the same one the level-up rewards row
+   and the Wardrobe's "N found" wear, so nothing new is being taught here. */
+.cele-line { margin-top: 12px; font-size: 14.5px; line-height: 1.45; color: var(--text-2); padding: 0 10px; }
+.cele-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; margin-top: 14px; padding: 0 6px; }
+
 .cele-badge {
   display: flex; align-items: center; gap: 12px; text-align: left;
   background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px;
