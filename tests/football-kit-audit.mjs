@@ -960,6 +960,10 @@ ok('POOL-CONTROL the kit really is a large share of the pools those rows protect
    names it. Retire the kit and it goes quiet with FOOTBALL_KIT_LIVE. */
 const swSrc = readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
 const swHas = u => swSrc.includes(`'./${u}'`);
+/* R40-25, 2026-09-07 (QA round 40, master handoff): "zero of 26 football art
+   files are in sw.js PRECACHE while all three plates the poster replaced are".
+   The list is DERIVED from FOOTBALL_SHELF and what is on disk rather than typed
+   out, so a sixth garment is covered the day it ships. */
 const NEEDED_384 = ['poster', ...FB.FOOTBALL_SHELF.map(g => g.key)]
   .flatMap(k => [`${k}.png`, `${k}.mask-a.png`, `${k}.mask-b.png`])
   .map(f => `assets/bh/thumb/384/football/${f}`)
