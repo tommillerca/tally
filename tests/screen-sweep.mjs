@@ -177,6 +177,50 @@ for (const t of ['today', 'boneyard', 'friends', 'bonehead', 'progress']) {
     !arrival.err && arrival.textLen > 20, `${t}: ${arrival.textLen} chars`);
 }
 
+/* ---- PRIVACY: a policy link reachable from the app, with the survey DONE -----
+   R43-1, App Store guideline 5.1.1(i), and it was a rejection waiting to happen.
+   privacy.html has shipped and answered 200 for months, but the only two links to
+   it lived INSIDE the survey sheet, and the Settings row that opens that sheet is
+   gated on `!surveyDone`. Fill the survey -- which is the state every player who
+   engaged with the app is in -- and the app has no privacy link at all. A DOM
+   sweep of all six routes for an anchor matching privacy|terms|legal|eula matched
+   ZERO times.
+   So this walks every route in the state the bug lives in (surveyDone TRUE,
+   anti-regression rule 12: measure in the state the player is complaining about),
+   and it is not satisfied by finding an anchor: it FETCHES the href and requires a
+   200 whose body is the policy rather than the app shell, because sw.js answers a
+   navigation miss with index.html and "the link exists" would pass on a 404.
+   PROVE-RED: delete the Privacy policy row from Settings' ABOUT card and
+   PRIVACY-LINK goes red with 0 matches across 7 routes. */
+await page.evaluate(async () => { const db = await import('./js/db.js'); await db.kvSet('surveyDone', true); });
+const legal = [];
+for (const r of ROUTES) {
+  await page.evaluate(h => { location.hash = '#/' + h; }, r);
+  await sleep(2200);
+  const hits = await page.evaluate(() => [...document.querySelectorAll('#screen a[href]')]
+    .filter(a => /privacy|terms|legal|eula/i.test(a.getAttribute('href') + ' ' + (a.textContent || '')))
+    .filter(a => a.getBoundingClientRect().width > 0)
+    .map(a => ({ href: a.href, text: (a.textContent || '').trim().slice(0, 30) })));
+  for (const h of hits) legal.push({ route: r, ...h });
+}
+ok('PRIVACY-LINK a policy link is reachable in-app with the survey ALREADY DONE',
+   legal.length > 0, legal.length ? JSON.stringify(legal[0]) + ` (${legal.length} across ${ROUTES.length} routes)` : `0 matches across ${ROUTES.length} routes`);
+
+/* A survey-gated link would not count even if one existed, so pin that the hit is
+   the permanent Settings row rather than something that vanishes again. */
+ok('PRIVACY-LINK it is on Settings, which needs no account and no survey',
+   legal.some(l => l.route === 'settings'), legal.map(l => l.route).join(',') || 'none');
+
+const served = legal.length ? await page.evaluate(async href => {
+  try {
+    const r = await fetch(href, { cache: 'no-store' });
+    const body = await r.text();
+    return { status: r.status, len: body.length, policy: /privacy/i.test(body) && !/id="screen"/.test(body) };
+  } catch (e) { return { err: String(e) }; }
+}, legal[0].href) : { err: 'no link to resolve' };
+ok('PRIVACY-LINK the target resolves 200 and is the policy, not the app shell',
+   served.status === 200 && served.policy === true, JSON.stringify(served));
+
 await browser.close();
 if (srv) srv.kill();
 const failed = results.filter(r => !r.pass);

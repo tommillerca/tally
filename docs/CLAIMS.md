@@ -25,6 +25,18 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v506
+1. A hotfix off v505 from Tom's own photograph of the live app on his phone: a dark strip with a card edge in it near the top of Today. Its dated section is further down, folded here.
+
+2. PROOF: top-strip-audit.mjs, today-peek-audit.mjs | REACH: Today, while the running build is behind the live one. `#updBanner` sat between `.today-plate` and `.hero-card`, and `.hero-scene`'s upward bleed is a negative top margin that collapses out through `.hero-card` and lands the art at y=0 only while nothing above it has height. With the banner mounted the negative margin ate the banner instead of the scroller's padding: hero top measured 91.9 instead of 0 (73 padding + 79.9 banner + 12 margin - 73 bleed) at --sat 59, leaving 18.9px of the plate's dark backdrop with the banner's amber top edge on it, between the safe-area strip and the hero. The banner moved below `.hero-actions` to become the first card of the feed, which also puts it where the scroll peek carries a player to it. The hero at rest is unchanged, because the div is empty and zero-height at every other time. Proven red at both insets on a stale client, with both fresh configurations green as the control.
+
+## v505
+1. A hotfix off v504: the two App Store submission blockers from the R43 audit pack, both of them copy and reachability rather than behaviour. Its dated section is further down, folded here.
+
+2. PROOF: screen-sweep.mjs, unit.test.js | REACH: Settings, ABOUT, "Privacy policy", Read. App Store guideline 5.1.1(i) requires the policy to be reachable in the app; before this it was linked from exactly two places, both inside the survey sheet, and that row is gated on !surveyDone, so a DOM sweep of all six routes on a save with the survey already filled returned zero anchors matching privacy|terms|legal|eula. The row is now permanent and ungated, needs no account, and resolves offline and inside the store build because privacy.html was added to sw.js's PRECACHE and to native/build-www.sh's copy list (it had never been in the native bundle at all, so a relative href would have 404'd in the exact build App Review opens, and shell() answers a navigation miss with index.html, which would have handed a reviewer the app instead of the policy). The browser row fetches the href rather than trusting the anchor, for that reason. Proven red at 0 matches across 7 routes.
+
+3. PROOF: unit.test.js | REACH: open the Boneyard map. The intro said, at the moment of the location grant, "Your location is used on this phone only, never stored, never uploaded", while the map's own boot sends a 0.02-degree grid cell of about 2.2 km to the server for Spires (js/spires.js SPIRE_CELL_DEG). The copy now says spawns and dens are worked out on the phone and exact coordinates never leave it, and that the map cell goes to the server for the shared towers, which matches the iOS purpose string corrected in v498 and privacy.html's "Location and the map" section. Nothing on the wire changed. The guard is a conjunction, so if Spires ever stop sending a cell it goes red and asks for the copy to be revisited rather than letting "never uploaded" become true by accident. Proven red with the line restored.
+
 ## v504
 1. A hotfix off v503: the 32 football colourways repainted to the palettes players recognise, approved by Tom on the rendered before and after sheet, 2026-09-07. Its dated section is further down, folded here.
 
@@ -80,6 +92,54 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 7. PROOF: unit.test.js | REACH: the Pit's board says when the day's twelve paid sparring slots are spent and the victory card drops its coin pill instead of printing +0; Gwart's greeting keeps a persisted anti-repeat bag so consecutive days differ; the daily spin fires on a first-day session and is queued after a level-up sheet instead of skipped; Today's level chip repaints on fight settle the way the wallet pill already did (each row red before the fix, quoted in the dated "the day tells the truth" section).
 
 8. PROOF: take-and-pay-audit.mjs | REACH: openCrate, hatchEgg, disenchantGear, both salvage paths and the legacy-egg conversion spend their input and write their payout in one transaction, so killing every IndexedDB transaction after the take leaves the player with the item or the full payout, never neither (six CRASH rows red on the pre-fix order: crate consumed with 0 coins and no rows, egg gone with no pet, gear gone with no dust).
+
+## an audit cannot grade the wrong worktree (2026-09-07)
+PROOF: serve-tree-identity-audit.mjs
+
+## the app says where it stands (2026-09-07)
+
+Not stamped to a release: hotfix/privacy-and-location-copy, off v504. Two
+submission blockers from the R43 audit pack, both of them copy and reachability
+rather than behaviour. Nothing about what the app sends changed.
+
+1. PROOF: screen-sweep.mjs, unit.test.js | REACH: Settings, ABOUT, "Privacy policy", Read. The row is never gated, needs no account, and works offline and inside the store build because privacy.html is now in sw.js's PRECACHE and in native/build-www.sh's copy list. Before this, privacy.html was linked from exactly two places, both inside the survey sheet, whose Settings row is gated on `!surveyDone`, so the only route to the policy vanished the moment a player filled the survey: App Store guideline 5.1.1(i), and a rejection. PRIVACY-LINK walks all seven routes with `surveyDone` forced TRUE and fetches the href rather than trusting the anchor, because sw.js answers a navigation miss with index.html and a 404 would otherwise read as a pass. Proven red on origin/main: 0 matches across 7 routes, and the static half fails with "Settings must carry a privacy policy row".
+
+2. PROOF: unit.test.js | REACH: open the Boneyard map. The intro used to say, at the moment of the location grant, "Your location is used on this phone only, never stored, never uploaded", while the map's own boot sends a 0.02-degree grid cell (about 2.2 km, `GET /spires?ids=sp-2464--6156` from 49.2827, -123.1207) to the server for Spires. It now says spawns and dens are worked out on the phone and exact coordinates never leave it, and that the map cell you are in, about 2.2 km across, goes to the server for the shared towers. That matches the iOS purpose string corrected in v498 and privacy.html's "Location and the map" section; nothing on the wire changed. The guard is a conjunction, so if Spires ever stop sending a cell it goes red and asks for the copy to be revisited rather than letting "never uploaded" become true by accident. Proven red with the line restored: `js/app.js:21449: "used on this phone only"`.
+## the top of the screen is one colour (2026-09-07)
+
+Not stamped to a release: fix/top-sliver, off v504. Tom, from a screenshot of
+the live app on his own iPhone: "ive noticed this top sliver recently a couple
+times sometimes it goes away i think after an update but looks glitchy". A black
+band across the full width a few tens of points down from the top, with the top
+two rounded corners and the warm amber top edge of a card clipped inside it, and
+CORRECT hero green both above and below it.
+
+DIAGNOSED OFF A RENDER RATHER THAN OFF THE CSS, and reproduced on demand. The
+band is `.today-plate::before` (the page backdrop, rgb(13,12,18)) and the clipped
+card is `.upd-banner`, the "Update available" banner. `#updBanner` was the second
+child of the Today screen, between `.today-plate` and `.hero-card`, and it is
+EMPTY unless version.json says the live build is ahead of the running one: that
+is the whole of the intermittency, and it is exactly why an update clears it.
+The hero's bleed under the island is a negative `margin-top: calc(-1 * (--sat +
+14px))` on `.hero-scene` which collapses out through `.hero-card`, and it only
+lands the art at y=0 while nothing above it has height. Measured at 393x852,
+--sat 59, with the banner mounted: `#updBanner` 73 -> 152.9 (79.9 tall) and
+`.hero-scene` 91.9, i.e. 73 + 79.9 + 12 - 73. The negative margin ate 73px of the
+BANNER instead of the scroller's padding, the opaque hero painted over the rest,
+and the 18.9px left over is the band. At --sat 0 the same arithmetic leaves
+77.9px of it. Not a fade and not a gap: an overlap.
+
+RULED OUT, each against the render rather than in the abstract: a restored
+scrollTop (the band is there at scrollTop 0); a transform or containing block
+clipping the bleed (with the banner absent the hero's box measures top 0 at both
+insets); a crate or news plate mounting above the hero (the screen's child list
+is plate, hero-card, hero-actions, and nothing else can precede the hero: the only
+other insert in js/app.js is one `grid.insertBefore` in the Boneyard); and the
+service worker pairing a stale app.css with a fresh js/app.js (sw.js precaches
+both into ONE cache named VERSION, all-or-nothing on install, and serves the
+shell cache-first out of that single cache, so the two cannot disagree).
+
+1. PROOF: top-strip-audit.mjs | REACH: on the Bonehead tab the colour behind the status bar and the Dynamic Island runs unbroken into the hero art, including while you are on an old build with the "Update available" banner showing. That banner moved from above the hero to under the four doors, where it is the first card of the feed. Proven red on the pre-fix tree at both insets: hero top 91.9 against a ceiling of 0.5, and 144 of 408 (--sat 0) and 40 of 644 (--sat 59) page-background pixels in the strip above the currency chips.
 
 ## the crate deals its cards smoothly (2026-09-07)
 

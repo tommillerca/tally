@@ -1,8 +1,14 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v504';
+const VERSION = 'tally-v506';
 const PRECACHE = [
   './',
   './index.html',
+  /* THE PRIVACY POLICY IS PART OF THE SHELL, not an optional page (R43-1).
+     Settings' ABOUT card links it permanently, App Store 5.1.1(i) requires it to
+     be reachable in the app, and the shell() branch below answers a navigation
+     miss with index.html, so an uncached privacy.html on a plane would silently
+     hand the player the app instead of the policy. */
+  './privacy.html',
   './app.css',
   './manifest.webmanifest',
   './js/app.js',

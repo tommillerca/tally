@@ -2,3 +2,8 @@ node_modules
 node_modules/
 .DS_Store
 tests/levelpaid-trace-out/
+
+# serveTree writes a random proof file into the tree it is about to serve and
+# removes it in a finally. A harness SIGKILL (which process.on(exit) cannot catch)
+# can strand one, and a `git add -A` ship chain would commit it.
+.serve-tree-*
