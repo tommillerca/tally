@@ -191,6 +191,24 @@ function holdArrival(el) {
   if (!capT) capT = setTimeout(flushArrivals, ARRIVE_MAX_MS);
 }
 
+/* MOVE A MARKER ONLY IF IT MOVED (R41-18, 2026-09-07).
+   Marker.setLngLat is not free and it is not idempotent: maplibre's _update
+   writes the transform AND schedules a requestAnimationFrame per call, for the
+   terrain-occlusion opacity pass (vendor/maplibre/maplibre-gl.js, Marker
+   `_update` -> `frameAsync(...).then(_updateOpacity)`). refreshWorld re-asserts
+   every marker's position on every pass, so a player standing perfectly still
+   was paying one rAF per marker per pass for a picture that could not have
+   changed: MEASURED on the real Boneyard, 9.2 rAF/s with nothing moving, 7.4 of
+   them from refreshSpawns' setLngLat alone.
+   Compared at the coordinates the map is actually given, so a snap that
+   resolves later still lands: this drops the no-op, never a real move. */
+export function moveMarker(m, lng, lat) {
+  if (!m || m._dead) return;
+  const p = m.getLngLat?.();
+  if (p && p.lng === lng && p.lat === lat) return;
+  m.setLngLat([lng, lat]);
+}
+
 export function domMarker(maplibregl, map, { lat, lng, el, anchor = 'center' }) {
   if (!map) {
     try { el?.remove(); } catch { /* never attached */ }

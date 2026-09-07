@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 502, date: '2026-09-07', title: 'A quiet Boneyard, and a Locker Room that reads', items: [
+    'Standing still on the Boneyard map was redrawing the whole map hundreds of times a second because your position wobbles by a metre or two even when you are not moving. It now redraws when you actually move, which is the single biggest thing you will feel in your battery.',
+    'The Locker Room\'s row of team colours was a line of dots too small to read: it shows six real colour discs and a count of the rest. The poster loads the right size of art instead of a 359 KB file into a thumbnail, the price you can afford updates the moment you spend, and the football art is cached with everything else so the room opens offline.',
+    'The Add button no longer sits over the top of a News row on Today, and a piece whose art fails to load can no longer be bought as a smear of colour with nothing under it.',
+  ] },
   { n: 501, date: '2026-09-07', title: 'The Wanderer walks in front', items: [
     'Map pins were painting over the Wanderer, so the thing hunting you sat behind a coin icon. He walks in front of every pin now, and your own marker still sits on top of him, because that one is how you collect.',
   ] },
