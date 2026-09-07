@@ -118,6 +118,72 @@ CSS, the kin chips and the Dressing Room family tile's tier.
    a lower-rarity colourway (the one you wear) carries that colourway's tier
    badge and border, at that colourway's price, instead of the family's best
    member's tier.
+## locker room polish and a quiet Boneyard (2026-09-07)
+
+Not stamped to a release: hotfix/lockerroom-polish, off v498.
+HANDOFFMASTER20260906.md R40-21..27 and R41-18, each re-measured on this tree
+before it was touched and again after.
+
+1. PROOF: locker-polish-audit.mjs | REACH: The "every team's colours" proof on
+   the Locker Room poster and on every kit tile is readable now. It was 32 discs
+   sharing whatever width the strip had left: 5.84 px across at 393, 5.28 at 375
+   and 3.56 at 320, which is a row of dots rather than a claim about colour. Six
+   10 px discs and a "+26" say the same thing and can be seen saying it. The
+   count is still on screen, in the chip and in the label a screen reader reads.
+
+2. PROOF: locker-polish-audit.mjs | REACH: Tapping a News row on Today no longer
+   sometimes taps the add button instead. The round-plus button hangs 8.1 px up
+   into the scrolling page (12.1 with its ring), and a row passing through that
+   band had its own visible centre owned by it: measured 58 x 7.9 px at 393x852
+   and 375x667, with the hit test answering the button and not the row. The page
+   now ends above the button, so no row can sit under it at any scroll position.
+   Round 40's own 58 x 20.1 px was measured off unclipped rectangles, which count
+   rows already hidden behind the tab bar; the defect is real and it is 7.9 px.
+
+3. PROOF: locker-polish-audit.mjs | REACH: A Locker Room buy button knows what
+   is in your wallet at the moment you look at it. The shelf read your balance
+   once, when the Shop was drawn, and the kit room's tiles are built later, when
+   you open it: earn or spend anything in between and the price told you the old
+   number, either refusing a purchase you could now afford or arming to buy one
+   you could not. Both the tiles and the tap read the live balance now.
+
+4. PROOF: locker-polish-audit.mjs | REACH: Today's news banner costs 202 KB less
+   on every cold boot. The Locker Room hero was fetching the full-size poster,
+   359 KB, into a 97.8 px box; it serves the 157 KB tier that already existed,
+   which still covers that box at 2x, and falls back to the master if the tier
+   is ever missing.
+
+5. PROOF: football-kit-audit.mjs (PRECACHE, PRECACHE-CONTROL), precache-audit.mjs,
+   sw-upgrade-audit.mjs | REACH: The Locker Room survives a cold or offline boot.
+   None of the kit's art was in the service worker's precache while all three
+   plates the poster replaced still were, so the newest thing in the game was the
+   one thing an offline first boot drew as holes. The sixteen files the news hero
+   and the Shop's lead shelf actually draw (the 384 tier) are precached now:
+   11,714.0 KB to 11,997.7 KB of install, 211 entries to 227. The kit room's own
+   grid is left on the runtime road on purpose, because it does not exist in the
+   page until somebody opens it. The conditional-precache path is unchanged and
+   sw-upgrade-audit's CARRIED row is still green (183 of 183 carried by 304).
+
+6. PROOF: locker-polish-audit.mjs | REACH: If a garment's art ever fails to
+   arrive, the tile says nothing rather than selling you nothing. The art layer
+   was removed on error and its two colour layers were not, so the team's colours
+   went on painting the shape of a garment that was not there, on a tile still
+   charging 4,200 coins. The colour layers now leave with the art they belong to,
+   and that tile's buy button goes dead.
+
+7. PROOF: boneyard-raf-audit.mjs | REACH: Standing still in the Boneyard costs
+   the phone almost nothing. It used to cost the same as walking: a phone that
+   never moves still reports a position a metre or two away every 1.2 s, and each
+   of those re-pinned all 49 markers and started a fresh 900 ms camera glide, so
+   the map animated three quarters of the time with nothing to show. Measured
+   with the scheduler hooked: 1,843.7 animation frames a second, 21.65 per frame,
+   against 1.8 after. A marker is only moved when it has actually moved, and the
+   camera only follows a fix that carried you 4 m, which is 1.7 px on screen at
+   the Boneyard's own zoom. Walking is unchanged to look at and still costs
+   ~17 frames of marker work per frame: that half is maplibre's own per-marker
+   pass over DOM markers during a camera move, not the app's, and it is named
+   here rather than claimed as fixed.
+
 ## the day tells the truth (2026-09-07)
 
 Not stamped to a release: hotfix/daily-truth, off v496. HANDOFFMASTER20260906.md
