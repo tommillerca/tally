@@ -12,6 +12,15 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v508
+1. A hotfix off v507: the App Store reviewer's small-screen pass from round 43, including a regression this project shipped in v489. Its dated section is further down, folded here.
+
+2. PROOF: onb-audit.mjs | REACH: onboarding, the screen titled THIS ONE'S YOURS, at 320x568. PR #395 fixed the primary button falling below the fold by making `.onb-foot` sticky with a full-bleed background. The cure overshot: the opaque footer measured 159.8px of a 568px viewport and the nameplate's visible fraction measured 0.000, so the screen that names your Bonehead showed no name, and a real click at the reroll button's coordinates hit `span` (the footer's own copy) and left the name unchanged. At 375x667 the nameplate measured 0.467 visible. The step is now a viewport-height column of two bands: content in its own scrollport, footer static beside it. It cannot regress in either direction by construction, which is the point: the button is a flex item of a box exactly one viewport tall, so it is on screen at first paint whether or not the content fits, and the content is clipped by a scrollport that ends where the footer begins, so nothing can sit under it. Padding on the scroller was rejected because reserved space at the end of a document does nothing at scrollTop 0, which is where the defect lived. Nameplate now 1.000 at all three viewports and the reroll click rerolls at all three. R39-15's own rows were asserted green on both trees in the same pass, so neither fix can be bought with the other.
+
+3. PROOF: onb-audit.mjs | REACH: onboarding, THE PLAN. The chips you had just selected sat behind the footer at every viewport, including 393x852 where the entire Goal row was behind the save button, measured as 1 of 4 rows covered with a clip fraction of 1.000 and the centre hitting `#onbSave`. Now 0 of 4 at all three. CHIPS-REACHABLE was green on both trees, so a chip past the form's own fold was never the defect.
+
+4. PROOF: fight-tray-audit.mjs, fight-press-audit.mjs | REACH: a fight at 320x568. The fourth move, Bone Guard, exposed 19.8px against a 40px tap floor, its centre hit `div#fightBody`, and a real press left the log reading "Round one. Your turn." Now 44.5px exposed and the press takes the turn, at all three viewports.
+
 ## v507
 1. A hotfix off v506: the boot a lapsed player gets, which round 43 found was the one boot nobody had ever graded. Its dated section is further down, folded here.
 

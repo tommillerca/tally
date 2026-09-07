@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 508, date: '2026-09-07', title: 'Small screens keep their controls', items: [
+    'On the smallest phones the naming screen showed no name. The footer had grown to 160px of a 568px screen and swallowed the whole nameplate, and the reroll button did nothing where it sat, because the thing you were tapping was the footer covering it. That was our fix from four days ago overshooting the problem it was solving. The name is visible at every size now, and the button under your thumb is the button you pressed.',
+    'The plan screen was hiding the choices you had just made behind its own save button, at every screen size. Your selections stay visible.',
+    'On a 320px-wide phone the fourth combat move hung below the fold and a tap on it landed on the fight behind it. All four moves are reachable.',
+  ] },
   { n: 507, date: '2026-09-07', title: 'Coming back is a welcome', items: [
     'If you have been away, the app now says so properly, at the top of Today where you will actually see it, instead of 368px below the fold where nobody ever read it. It no longer claims everything is where you left it while your streak reads zero: it says the streak starts over and nothing else does, and it names what survived, including the last day you logged, which was closed and paid.',
     'The line telling you that you were paid for the day you walked away was being printed underneath the daily wheel, so nobody read it on the one boot where it matters. It sits above the wheel now.',
