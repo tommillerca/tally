@@ -947,8 +947,9 @@ export async function settle(page, ms = 250) {
  * pass them yourself and expect the reload. tests/unit.test.js enforces that any
  * direct setViewport call states both keys.
  */
-export async function setWidth(page, width, height = 932) {
-  await page.setViewport({ width, height, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+// Optional DPR is per call. Existing audits continue to request DPR 2.
+export async function setWidth(page, width, height = 932, deviceScaleFactor = 2) {
+  await page.setViewport({ width, height, deviceScaleFactor, isMobile: true, hasTouch: true });
 }
 
 /* SERVE THIS CHECKOUT, AND FAIL LOUDLY IF THE PORT WAS NOT OURS.
