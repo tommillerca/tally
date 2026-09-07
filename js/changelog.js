@@ -4,6 +4,9 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 504, date: '2026-09-07', title: 'The kit finally looks like the teams', items: [
+    'Every one of the 32 team colourways was redrawn to its real colours. Some were a long way off: the ones you would picture as royal blue and red, or navy and neon green, were painted cream and grey, brown and gold, moss and pink. The names have not changed, only the paint.',
+  ] },
   { n: 503, date: '2026-09-07', title: 'The Kennel explains itself', items: [
     'Pets in the Kennel were drawn from art smaller than the space they fill, so some looked soft. They are sharp now, at every phone size.',
     'The Kennel moved out of the corner of the Stable header into a proper door under the Paddock\'s, showing your colours and how many of the thirty you have found, and a line above the grid says what a filled cell and a locked one mean.',

@@ -19,6 +19,11 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v504
+1. A hotfix off v503: the 32 football colourways repainted to the palettes players recognise, approved by Tom on the rendered before and after sheet, 2026-09-07. Its dated section is further down, folded here.
+
+2. PROOF: football-kit-audit.mjs, football-render-audit.mjs, football-rail-audit.mjs | REACH: each team's two colours are now the published brand pair of the franchise it stands in for, measured as a CIE76 distance from that pair: the worst five before were 158.6, 148.2, 142.2, 136.5 and 127.4, and every team reads 0.0 after. Team names, ids and the tint pipeline are untouched. The PAIR row keeps every team's two colours a readable distance apart on a 24 px disc (minimum 17.59) and no two teams share a pair; the LEGIBLE row keeps each team's own two colours apart (minimum 44.46), which replaced a contrast rule the real league would fail (six navy shells, four black, and one aqua-on-orange pair at 1.16 to 1). Both were proven red on a tree with a duplicated and a near-identical pair.
+
 ## v503
 1. A hotfix off v502 from Tom's play of the Kennel: blurry pets, the entry nobody finds, the grid nobody can read, and a copy rail worth no scroll. Its dated section is further down, folded here.
 
