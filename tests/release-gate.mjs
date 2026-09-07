@@ -261,6 +261,7 @@ const PURE = ['transmog-receipt-audit.mjs', 'today-reads-lint.mjs', 'kitchen-ato
   'currency-revision-lint.mjs', 'inv-tombstone-audit.mjs',
   'take-and-pay-audit.mjs'];   // 2026-09-06 lane 2: the take and its whole payout are one transaction; node-only, ~1s
 PURE.unshift('store-copy-lint.mjs');
+PURE.push('submission-preflight-audit.mjs');   // 2026-09-07: drives native/submission-preflight.mjs for real and proves it refuses all three (a bundle without STORE_BUILD=1, a synced config that still has a server URL, a reachable TestFlight string) with a healthy control; node-only, <1s
 PURE.push('coins-merge-tie-audit.mjs');   // R38-13: coinsRev bumps by magnitude, importAll keeps the higher balance on a tie, taken receipts; node-only (shipped unregistered in v485)
 PURE.unshift('no-debug-markers-lint.mjs');
 /* routine-race-audit is PURE for the same reason spawn-claim-atomic-audit is:

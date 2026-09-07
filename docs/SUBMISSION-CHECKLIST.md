@@ -66,9 +66,13 @@ pass. Status as of `prep/submission` (branched off `integ/day3`).
 - [x] App Store Connect API key is installed at
       `~/.appstoreconnect/private_keys/AuthKey_R6B586JNRN.p8`; Key ID
       `R6B586JNRN` and the issuer ID are already wired into
-      `native/build-ios.sh`. Existing checked-in upload logs cover builds 11
-      through 15; the work order reports builds 11 through 20 uploaded, but
-      builds 16 through 20 were not independently verified in this checkout.
+      `native/build-ios.sh`. Verified against App Store Connect
+      directly on 2026-09-07 (`python3 native/asc.py list`): builds 11 through
+      20 are uploaded and VALID, 12/13/15-19 are IN_BETA_TESTING with the Inner
+      Circle and Friends & Family groups, and build 20 is READY_FOR_BETA_TESTING
+      but attached to NO group, so it is invisible in TestFlight. Every one of
+      them was built by the pre-submission path, so all of them carry
+      STORE_BUILD=false and the remote shell.
 
 ## Not done in this pass, on purpose
 
