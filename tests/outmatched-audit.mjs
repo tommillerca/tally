@@ -39,10 +39,19 @@ const PROGRESSED_ALLOC = { power: 18, marrow: 18, wind: 18, reflex: 18, hype: 18
    above OUTMATCHED_WIN_RATE moves with it. */
 const PROGRESSED_TALENTS = ['callcrows', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'sharpbeaks', 'flock', 'flock', 'flock', 'carrion', 'roost', 'roost', 'frenzy', 'frenzy', 'murder'];
 
+/* NO PET IN EITHER STATE, on purpose: the harness's own fixture profile ships
+   an owned, equipped pet (measured: iid m0-C1), which fights alongside the
+   player and is exactly the confound isOutmatched's unit rows deliberately
+   exclude (js/pit.js estimateWinRate takes stats + talents only there). Clearing
+   petInst here keeps this browser row measuring the same thing the unit rows
+   do, rather than "is THIS fixture's specific pet enough to save a fresh
+   level 2", which is a different and much noisier question. */
 const setBuild = (alloc, talents) => page.evaluate(async (alloc, talents) => {
   const db = await import('./js/db.js');
   await db.kvSet('trainalloc', alloc);
   await db.kvSet('talents', talents);
+  await db.kvSet('petInst', []);
+  await db.kvSet('petEquipped', null);
   return { alloc: await db.kvGet('trainalloc', {}), talents: await db.kvGet('talents', []) };
 }, alloc, talents);
 
