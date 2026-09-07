@@ -482,21 +482,28 @@ try {
   const armToasts = () => page.evaluate(() => {
     window.__toasts = [];
     const t = document.getElementById('toast');
-    new MutationObserver(() => { const s = (t.textContent || '').trim(); if (s && !t.hidden && window.__toasts[window.__toasts.length - 1] !== s) window.__toasts.push(s); })
-      .observe(t, { childList: true, characterData: true, subtree: true, attributes: true });
+    /* TEXT changes only. nextToast() writes textContent once per message, so
+       that is one push per toast; watching attributes too re-pushed the OLD
+       text when the `out` class landed 2.2s later (measured: RAIL-FULL-SWAP
+       read the Gannets toast as a Wasps one). */
+    new MutationObserver(() => { const s = (t.textContent || '').trim(); if (s) window.__toasts.push(s); })
+      .observe(t, { childList: true, characterData: true, subtree: true });
   });
   await armToasts();
-  const toasts = () => page.evaluate(() => window.__toasts.slice());
+  /* a toast QUEUES behind one still showing (2.2s + 180ms exit), so a row that
+     claims "nothing was said" waits out the previous toast before reading */
+  const toasts = async (wait = 0) => { if (wait) await sleep(wait); return page.evaluate(() => window.__toasts.slice()); };
   const railRead = () => page.evaluate(() => {
     const p = document.querySelector('.pet-wear:not([hidden])'), rail = p && p.querySelector('.fb-rail');
     if (!rail) return null;
     const rr = rail.getBoundingClientRect();
     const tiles = [...rail.querySelectorAll('[data-pwteam]')].map((b, i) => {
       const r = b.getBoundingClientRect();
-      return { i, team: b.dataset.pwteam, locked: b.classList.contains('locked'), on: b.classList.contains('on'), tag: b.querySelector('small').textContent.trim(), end: Math.round(r.right - rr.left + rail.scrollLeft) };
+      return { i, team: b.dataset.pwteam, locked: b.classList.contains('locked'), on: b.classList.contains('on'), tag: b.querySelector('small').textContent.trim(),
+        centre: Math.round(r.left + r.width / 2 - rr.left + rail.scrollLeft), inView: r.left >= rr.left - 1 && r.right <= rr.right + 1 };
     });
     const on = tiles.find(t => t.on) || null;
-    return { view: rail.clientWidth, total: rail.scrollWidth, tiles, on: on && on.team, onTag: on && on.tag, onLocked: !!(on && on.locked),
+    return { view: rail.clientWidth, total: rail.scrollWidth, tiles, on: on && on.team, onTag: on && on.tag, onLocked: !!(on && on.locked), onInView: !!(on && on.inView),
       pickedLocked: tiles.filter(t => t.locked && /picked|worn/i.test(t.tag)).map(t => t.team),
       garments: [...p.querySelectorAll('.pw-row:not(.fb-rail) [data-petwear]')].map(b => b.dataset.petwear) };
   });
@@ -510,9 +517,13 @@ try {
   const r0 = await railRead();
   setup('SAMPLE the Stable rail is on screen with three owned teams to order', !!r0 && r0.tiles.filter(t => !t.locked).length === 3, r0 ? `${r0.tiles.filter(t => !t.locked).length} owned of ${r0.tiles.length}` : 'no rail');
   const owned0 = r0.tiles.filter(t => !t.locked), firstLocked = r0.tiles.findIndex(t => t.locked);
-  ok(`RAIL-ORDER owned teams come first and every one of them ends inside the first screen of the rail (view ${r0.view}px of ${r0.total}px)`,
-    owned0.every(t => t.i < firstLocked) && Math.max(...owned0.map(t => t.end)) <= r0.view,
-    `owned at positions ${owned0.map(t => `#${t.i + 1}`).join(' ')} (first locked #${firstLocked + 1}); farthest owned tile ends at ${Math.max(...owned0.map(t => t.end))}px, view ${r0.view}px`);
+  /* the rail centre-snaps, so "on the first screen" is measured as the scroll
+     from the first owned tile's centre to the last one's: under one view */
+  const ownedSpan = Math.max(...owned0.map(t => t.centre)) - Math.min(...owned0.map(t => t.centre));
+  ok(`RAIL-ORDER owned teams come first, before every locked one, and the farthest owned team is under one screen of scrolling from the first (view ${r0.view}px of ${r0.total}px)`,
+    owned0.every(t => t.i < firstLocked) && ownedSpan < r0.view && r0.onInView,
+    `owned at positions ${owned0.map(t => `#${t.i + 1}`).join(' ')} (first locked #${firstLocked + 1}); ${ownedSpan}px from first owned centre to last, view ${r0.view}px; parked tile in view ${r0.onInView}`);
+  await shot('06-stable-rail-393');
   /* both NAVY pieces on, then tap the team that has only the helmet */
   const navyOn = [await tapTile(footballItemId(NAVY, 'pet-helmet')), await tapTile(footballItemId(NAVY, 'pet-jersey'))];
   const w0 = await wearOf();
@@ -530,7 +541,7 @@ try {
   /* the team that has both: a full swap, no toast at all */
   await page.evaluate(() => { window.__toasts = []; });
   const goldTapped = await tapTeam(GOLD);
-  const w2 = await wearOf(), r2 = await railRead(), t2 = await toasts();
+  const w2 = await wearOf(), r2 = await railRead(), t2 = await toasts(1500);
   ok(`RAIL-FULL-SWAP tapping ${FOOTBALL_TEAM_BY_ID[GOLD].name} (both pieces owned) swaps both and says nothing`,
     goldTapped && w2.CH === footballItemId(GOLD, 'pet-helmet') && w2.CT === footballItemId(GOLD, 'pet-jersey') && t2.length === 0 && !!r2 && r2.on === GOLD && r2.onTag === 'Worn',
     `wear ${JSON.stringify(w2)}, toasts ${JSON.stringify(t2)}, rail on ${r2 && r2.on} (${r2 && r2.onTag})`);
@@ -549,9 +560,21 @@ try {
   await focus(LIZARDS[0].inst.iid);
   await openStable();
   const r5 = await railRead();
-  ok(`RAIL-REMEMBERS after a reload and a fresh open with nothing worn the rail is still parked on the last team picked (${FOOTBALL_TEAM_BY_ID[GOLD].name}), centred on screen`,
-    !!r5 && r5.on === GOLD && r5.garments.includes(footballItemId(GOLD, 'pet-helmet')),
-    `rail on ${r5 && r5.on} (${r5 && r5.onTag}); garment tiles ${r5 && r5.garments.join(' ')}`);
+  ok(`RAIL-REMEMBERS after a reload and a fresh open with nothing worn the rail is still parked on the last team picked (${FOOTBALL_TEAM_BY_ID[GOLD].name}), in view, and the garment tiles show that team`,
+    !!r5 && r5.on === GOLD && r5.onInView && r5.garments.includes(footballItemId(GOLD, 'pet-helmet')),
+    `rail on ${r5 && r5.on} (${r5 && r5.onTag}), in view ${r5 && r5.onInView}; garment tiles ${r5 && r5.garments.join(' ')}`);
+  /* the SE: same rail, 320 wide, parked tile still in view */
+  await setWidth(page, 320, 568);
+  await sleep(600);
+  await page.evaluate(() => document.querySelector('.pet-wear:not([hidden]) .fb-rail')?.scrollIntoView({ block: 'center' }));
+  await sleep(400);
+  const r6 = await railRead();
+  ok(`RAIL-SE at 320px the parked team is in view and every owned team is within one screen of it`,
+    !!r6 && r6.on === GOLD && r6.onInView && (Math.max(...r6.tiles.filter(t => !t.locked).map(t => t.centre)) - Math.min(...r6.tiles.filter(t => !t.locked).map(t => t.centre))) < r6.view,
+    r6 ? `view ${r6.view}px, parked ${r6.on} in view ${r6.onInView}, owned centres ${r6.tiles.filter(t => !t.locked).map(t => t.centre).join(' ')}` : 'no rail');
+  await shot('07-stable-rail-320');
+  await setWidth(page, 393, 852);
+  await sleep(400);
 
   /* ------------------------------------------------------ PET-WEARS ---- */
   const worn = [];
@@ -878,6 +901,34 @@ try {
   ok('VISOR-CONTROL with the mask turned off in the live DOM the same measurement DOES report an escape, so the row above can fail',
     !loose.err && loose.escaped > 0 && loose.escaped > clipped.escaped,
     loose.err || `unclipped ${loose.escaped} escaped px of ${loose.eye} vs clipped ${clipped.escaped} of ${clipped.eye}`);
+
+  /* ----------------------------------------------------------- PILL ---- */
+  /* HANDOFFMASTER20260906 B11 (R40-20): the Locker Room poster's price pill was
+     `white-space: nowrap` on a 203px string and ran past its own card by 7.0px
+     at 393, 24.1px at 375 and 79.1px at 320, where it read "4,200 A PIECE, 16"
+     and stopped. Measured as rects on the real Shop at the three widths. */
+  await page.evaluate(() => { location.hash = '#/shop'; });
+  await sleep(1200);
+  const pillAt = async (w, h) => {
+    await setWidth(page, w, h);
+    await sleep(700);
+    await page.evaluate(() => document.querySelector('.fb-drop .t3-price')?.scrollIntoView({ block: 'center' }));
+    await sleep(300);
+    const m = await page.evaluate(() => {
+      const pill = document.querySelector('.fb-drop .t3-price'), card = pill && pill.closest('.t3-drop.fb-drop');
+      if (!pill || !card) return null;
+      const p = pill.getBoundingClientRect(), c = card.getBoundingClientRect();
+      return { text: pill.textContent.trim().replace(/\s+/g, ' '), w: +p.width.toFixed(1), h: +p.height.toFixed(1), over: +(p.right - c.right).toFixed(1), left: +(p.left - c.left).toFixed(1) };
+    });
+    if (w === 393 || w === 320) await shot(`08-price-pill-${w}`);
+    return m;
+  };
+  const pills = { 393: await pillAt(393, 852), 375: await pillAt(375, 667), 320: await pillAt(320, 568) };
+  const badPills = Object.entries(pills).filter(([, m]) => !m || !(m.w > 0 && m.h > 0) || m.over > 0 || m.left < 0);
+  ok('PILL the Locker Room price pill stays inside its card at 393, 375 and 320 and still reads both prices',
+    badPills.length === 0 && Object.values(pills).every(m => /a piece/.test(m.text) && /the lot/.test(m.text)),
+    Object.entries(pills).map(([w, m]) => `${w}: ${m ? `${m.w}x${m.h}, overflow ${m.over}px, "${m.text}"` : 'NO PILL'}`).join(' | '));
+  await setWidth(page, 393, 852);
 
 } finally {
   await browser.close().catch(() => {});
