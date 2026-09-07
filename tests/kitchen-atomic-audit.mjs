@@ -15,6 +15,14 @@
  *      lockout can never exceed one cooldown.
  *  O4  grantPotion was the last read-modify-write granter in the file: two Serve
  *      taps in one frame emptied two pots and banked one potion. kvUpdate now.
+ *  O5  cancelCook (2026-09-06, R39-z) nulled the pot and refunded ingredients as
+ *      TWO separate kvUpdate calls, which CLAIMS wrongly called atomic: a crash
+ *      between the two committed transactions left the pot gone with nothing
+ *      refunded. Folded into one kvUpdateMulti transaction, same shape as
+ *      collectDish's own claim. Proven by forcing the ingredients half to throw
+ *      (RECIPE_BY_ID's needs replaced with null, so Object.entries(null) throws)
+ *      and asserting BOTH the pot and the ingredients are untouched, not just
+ *      one of them.
  *
  * PURE: node only, mem-idb under the real js/db.js and js/cooking.js, <1s.
  * HONESTY on the two CONCURRENT rows: mem-idb commits on a macrotask and the
@@ -98,6 +106,37 @@ ok('CONCURRENT two overlapping grantPotion(id) land two potions', pots[pid] === 
 await Promise.all([cook.grantPotion(pid), cook.grantPotion(cook.POTIONS[1].id)]);
 const pots2 = await cook.potionsInv();
 ok('CONCURRENT two different potions granted at once both land', pots2[pid] === 3 && pots2[cook.POTIONS[1].id] === 1, JSON.stringify(pots2));
+
+/* ---- O5: cancelCook is one transaction, both-or-neither under a mid-cancel throw ---- */
+await kvSet('potsOwned', 1);
+await kvSet('ingredients', { marrow: 2, salt: 1 });
+await kvSet('cooking', null);
+const start = await cook.startCook('bone-broth', NOW);
+ok('CONTROL a funded bone-broth cook starts', start.ok === true, JSON.stringify(start));
+const invBefore = await cook.ingredients();
+const cookingBefore = await kvGet('cooking');
+
+// inject the throw: needs replaced with something Object.entries chokes on,
+// so the ingredients-refund updater throws AFTER the cooking updater already
+// decided there is something to cancel, same instant the old two-transaction
+// code was already past its own point of no return
+const savedNeeds = cook.RECIPE_BY_ID['bone-broth'].needs;
+cook.RECIPE_BY_ID['bone-broth'].needs = null;
+let threw = null;
+try { await cook.cancelCook(0); } catch (e) { threw = e; }
+cook.RECIPE_BY_ID['bone-broth'].needs = savedNeeds;
+ok('MID-CANCEL a throw between the two halves rejects the call', !!threw, String(threw));
+const invAfter = await cook.ingredients();
+const cookingAfter = await kvGet('cooking');
+ok('MID-CANCEL the pot is untouched, not silently emptied', JSON.stringify(cookingAfter) === JSON.stringify(cookingBefore),
+  `before=${JSON.stringify(cookingBefore)} after=${JSON.stringify(cookingAfter)}`);
+ok('MID-CANCEL the ingredients are untouched, not refunded without the pot', JSON.stringify(invAfter) === JSON.stringify(invBefore),
+  `before=${JSON.stringify(invBefore)} after=${JSON.stringify(invAfter)}`);
+// the honest case still works: cancel with the recipe intact refunds cleanly
+const clean = await cook.cancelCook(0);
+ok('CONTROL a normal cancel returns the recipe and refunds in full',
+  clean?.id === 'bone-broth' && (await kvGet('cooking'))?.[0] == null && (await cook.ingredients()).marrow === 2 && (await cook.ingredients()).salt === 1,
+  JSON.stringify({ clean, cooking: await kvGet('cooking'), inv: await cook.ingredients() }));
 
 console.log(out.join('\n'));
 console.log(fails ? `\nFAIL (${fails})` : `\nall green, ${out.length} checks`);

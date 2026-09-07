@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 495, date: '2026-09-07', title: 'Open all recovers, cancel is one step, the routine cap holds', items: [
+    'If one crate in an Open all fails partway, the ones already opened are still revealed, the rest stay in your Backpack, and the button comes back.',
+    'Cancelling a pot returns its ingredients in the same step it empties the pot, so a bad moment can no longer leave you with an empty pot and no ingredients.',
+    'Finishing two wellness routines at the same instant paid 20 XP against a 15 cap. The cap is checked and paid in one step now; both routines still count as done.',
+  ] },
   { n: 494, date: '2026-09-07', title: 'Two phones, one wallet', items: [
     'Coins and Bone Dust now carry their own change counter, written in the same step as the balance, on every path that moves them: earning, spending on the rack, a spawn pick-up, a quest payout. When two phones meet, the newer wallet wins and spent coins or dust can no longer come back from an older save.',
     'Using up a potion, a battle charm, a streak freeze or a salvaged pet is recorded in the same step as the removal, and the record never expires, so an old backup can no longer bring a spent item back to life.',

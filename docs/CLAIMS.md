@@ -29,6 +29,53 @@ audit of v485 (the aggregator handoff of 2026-09-06, lanes 1 and 3).
 2. PROOF: currency-revision-lint.mjs | REACH: the next place somebody writes a coin or dust balance cannot forget the revision. A static scan of every script forbids a raw balance write, requires the revision function beside every balance function in a claim's pay map, and requires the three shared helpers to route through the one revisioned primitive. Red on v493 with four findings (RAW, MAP, ASSIGN, PRIM), then red on the fixed tree for each of three single-site mutations, one check each.
 
 3. PROOF: inv-tombstone-audit.mjs | REACH: a consumed item stays consumed. Using a draught or a Battle Charm, opening a crate, or losing a pet's last cosmetic copy deletes the row and writes its receipt in one transaction, and the receipt list has no size cap any more (it kept the newest 500, so the 501st use let an old backup bring item 1 back). Measured bound: about 23 bytes a receipt, so 10,000 consumed items is about 230 KB inside a 2.2 MB backup ceiling; a merge unions receipts from both devices and never drops one. Red before, on v493: RING 1 revived (the oldest: yes); RING-CRATE 1 revived (the oldest: yes); ATOMIC row gone: true, receipt: false; ATOMIC-CRATE row gone: true, receipt: false.
+## open all recovers, cancel is one step (2026-09-06)
+
+Not stamped to a release: fix/openall-kitchen-atomic, off v493. HANDOFFr3920260906.md
+Lane 5 (open-all recovery) and Lane 6 (Kitchen cancel atomicity), both re-measured
+on this tree before fixing.
+
+1. PROOF: crate-reveal-audit.mjs | REACH: the Backpack's "Open all" control on a
+   row of Common Crates used to be able to spend several crates, hit a bad row
+   partway through, and lose the whole batch: nothing already opened was shown,
+   the crates the loop never reached still sat spent-looking in inventory, and
+   the button never came back. Poisoning the third of five crates mid-loop
+   reproduced it (0 cards shown, the button staying disabled forever). Now a
+   mid-loop failure still reveals whatever was actually taken, leaves every
+   untouched crate exactly where it was, and the control comes back the same
+   way a clean run leaves it.
+
+2. PROOF: kitchen-atomic-audit.mjs | REACH: cancelling a pot in the Kitchen
+   refunds its ingredients and empties the pot in one step. A crash between the
+   two used to be possible (the pot cleared with nothing refunded, or the
+   reverse), because they ran as two separate saves; forcing that exact
+   mid-cancel failure now leaves the pot and the ingredients both exactly where
+   they were before you tapped Cancel, never half-done. kitchen-day-one-strand-audit.mjs
+   (the recovery from the day-one mis-tap this shares its Cancel path with)
+   stays green.
+
+CORRECTION to "## v483" item 4 below: it called the pot-and-refund cancel "one
+atomic step" on the day it shipped. It was not; that was two separate saves with
+a real gap between them, exactly the failure item 2 above fixes. Corrected rather
+than left standing, because this file is read to check whether a note is true NOW.
+## the routine cap holds under a race (2026-09-07)
+
+Not stamped to a release: fix/wellness-xp-ceiling, no ticket-facing changelog
+line. markRoutine read the daily routine-XP cap off a ledger scan and decided
+the payout several awaits later, so two DIFFERENT routines finishing at once
+both read cap-1 and both minted the reward: a documented 15 XP ceiling
+(ROUTINE_XP 5 x ROUTINE_XP_CAP 3) paid 20 (measured 2026-09-06). The cap and
+the payout are now one atomic claim through awardCapped's shared-ordinal
+addIfAbsent (js/game.js), the same primitive every other repeatable daily
+reward already uses.
+
+1. PROOF: routine-race-audit.mjs, unit.test.js | REACH: marking two different
+   self-care routines done at the same moment, on the day only one XP-earning
+   slot is left, pays the XP to one of them and 0 to the other instead of
+   both; the day's total routine XP never exceeds 15 no matter how the taps
+   land, and both routines are still remembered as done today either way
+   (red before: +10 XP paid on the race, 20 XP total, 0 of 2 calls reporting
+   capped).
 
 ## pit readout and exit (2026-09-06)
 
@@ -194,6 +241,15 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 ## register 429 wallet (2026-09-06)
 
 1. PROOF: unit.test.js | REACH: a fresh install receives the complete social-welcome grant locally before registration. Two consecutive 429 responses retry once, leave exactly 50 welcome coins and 10 XP under the server's existing receipt key, and surface one named failure toast. A later registration cannot pay the grant twice.
+## v495
+1. A hotfix off v494, lanes 5, 6 and 7 of the data-integrity plan. Its rows are the dated sections "open all recovers, cancel is one step" and "the routine cap holds under a race" further down, folded here.
+
+2. PROOF: crate-reveal-audit.mjs | REACH: the Common Open all loop reveals everything it actually opened when a later crate throws, leaves the unopened crates in place and re-enables the control (RECOVERY rows red before: cards=0, disabled=true with crate 3 poisoned).
+
+3. PROOF: kitchen-atomic-audit.mjs, kitchen-day-one-strand-audit.mjs | REACH: cancelCook empties the pot and refunds its ingredients in one transaction (MID-CANCEL red before: the pot emptied with no refund when the second write failed); the earlier CLAIMS row that called the cancel atomic is corrected.
+
+4. PROOF: routine-race-audit.mjs, unit.test.js | REACH: the wellness routine cap is claimed through per-day ordinal slots with the app's test-and-set, so two distinct routines finishing at once pay 15 total and both record completion (red before: 20 XP total, 0 of 2 capped).
+
 ## v494
 1. A hotfix off v493, lanes 1 and 3 of the data-integrity plan (Codex audit, 2026-09-06). Its rows are the dated "currency and receipts are one transaction" section further down, folded here.
 
@@ -284,7 +340,7 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: pit-kitchen-hint-audit.mjs | REACH: the Pit carries one line naming the active dish buff, or pointing at the Kitchen when ingredients or a dish are owned, and nothing when there is nothing to cook (BUFF and NUDGE rows red with the line removed, QUIET grades the absence).
 
-4. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a cooking pot can be cancelled and refunds its ingredients in one atomic step, and the day-one Kitchen says which recipe the starter kit is for before the first tap (TIP and CANCEL rows red when reverted separately; the strand itself reproduced first: marrow 1, salt 0, 0 of 13 buttons).
+4. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a cooking pot can be cancelled and refunds its ingredients, and the day-one Kitchen says which recipe the starter kit is for before the first tap (TIP and CANCEL rows red when reverted separately; the strand itself reproduced first: marrow 1, salt 0, 0 of 13 buttons). (This called the cancel "one atomic step" when it shipped. It was not: the pot was cleared and the ingredients refunded as two separate saves, with a real gap a crash could land in. See "## open all recovers, cancel is one step (2026-09-06)" above for the actual fix. Corrected rather than left standing, because this file is read to check whether a note is true NOW.)
 ## health card today (2026-09-06)
 
 1. PROOF: health-intake-audit.mjs | REACH: Open Today before connecting Apple
