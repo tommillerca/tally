@@ -991,7 +991,7 @@ test('battle charm: cannot stack a second charm over a running one', () => {
     .replace(/\/\/[^\n]*/g, ' ')
     .replace(/'[^']*'|"[^"]*"|`[^`]*`/g, "''");
   const guard = bare.search(/if\s*\(\s*\(?\s*buffs\.xp2[^)]*\)?[^)]*\)\s*return/);
-  const spend = bare.indexOf('db.del');
+  const spend = bare.search(/db\.(?:del|takeInv)\(/);   // 2026-09-06: the consume is db.takeInv (delete + receipt, one transaction)
   assert.ok(guard >= 0, 'activateBattleCharm must refuse while charges remain (guard missing)');
   assert.ok(spend >= 0, 'activateBattleCharm should still consume the item when it DOES activate');
   assert.ok(guard < spend, 'the refusal must come BEFORE the item is consumed, or the charm is eaten anyway');
@@ -2141,7 +2141,7 @@ test('the freeze payout claims atomically BEFORE it pays, and pays before it del
   assert.ok(/addIfAbsent\('kv', \{ k: 'freeze-refunded'/.test(fn), 'must claim via db.addIfAbsent on the ORIGINAL kv key');
   assert.ok(!/kvSet\('freeze-refunded'/.test(fn), 'a kvSet flag is not a claim and must not be the guard');
   assert.ok(fn.indexOf('addIfAbsent') < fn.indexOf('coinsAdd'), 'the claim must be resolved BEFORE any coin moves');
-  assert.ok(fn.indexOf('coinsAdd') < fn.indexOf('db.del'), 'coins must be credited BEFORE rows are deleted');
+  assert.ok(fn.indexOf('coinsAdd') < fn.search(/db\.(?:del|takeInv)\(/), 'coins must be credited BEFORE rows are deleted');   // 2026-09-06: the delete is db.takeInv now
   assert.ok(/\* 100/.test(fn), 'must pay 100 coins each');
 });
 
