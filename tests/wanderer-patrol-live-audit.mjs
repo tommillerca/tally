@@ -553,12 +553,23 @@ if (behind && !cap && !empty) {
      Measured on v423 before it: pan 2 widths (508 and the 200 px fallback);
      zoom 4 widths including that same 200. */
   const d = s0drive;
-  /* The floor is 20 and 12, not 60. These are requestAnimationFrame samples and
-     the frame rate here is whatever swiftshader manages while MapLibre is
-     rasterising tiles: measured across runs on this machine at 131, 115 and 54
-     frames for the pan and 91, 59 and 20 for the zoom. What this row is for is a
-     driver that never ran at all, which reports 0 or 1 (rule 3), not a slow
-     machine, and setting the bar at the best run seen would make it flaky. */
+  /* R43-16: these are rAF sample counts, not counts of changing cone pixels.
+     A frozen cone can still be sampled 100 times. The 40 pan / 12 zoom floors
+     check capture density; TRACKS-LIVE checks growth and intermediate widths.
+     QA reports 10, 6 and 9 zoom frames under software rendering. This count
+     depends on rasteriser throughput, so it cannot by itself diagnose an app
+     defect. No replacement floor has been calibrated here: sockets/browser
+     proofs are forbidden, and lowering it by inference would weaken the guard.
+     Also, 6 total samples cannot contain the >=8 distinct widths TRACKS-LIVE
+     requires. QA's claim that every dependent row passed needs raw per-run logs.
+     REVIEWER EXPERIMENT: on the same browser, tile host and software renderer,
+     record timestamped widths plus camera centre/zoom through both windows, in
+     repeated clean and throttled runs. Repeat on throwaway trees with the cone
+     frozen, the zoom snapped, and the v423 200px fallback restored. Compare
+     actual intermediate growth and world-tick coverage, not just callback count.
+     Two differing endpoints exclude a constant but cannot exclude a snap. Keep
+     both floors and TRACKS-LIVE's eight-width bound until these measurements
+     establish a discriminator that rejects all three defects on this machine. */
   ok('CONTROL the map was really driven and the cone really sampled',
     !!d && !d.error && d.pan.frames >= 40 && d.zoom.frames >= 12,
     d ? (d.error || `${d.pan.frames} frames over the pan, ${d.zoom.frames} over the zoom`) : 'no driver ran');
