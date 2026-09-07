@@ -191,12 +191,34 @@ try {
   await openStable();
 
   const hasBtn = await page.evaluate(() => !!document.getElementById('kennelBtn'));
-  setup('SAMPLE the Stable header has a #kennelBtn to click', hasBtn, hasBtn ? 'present' : 'no #kennelBtn in the Stable\'s header');
+  setup('SAMPLE the Stable has a #kennelBtn to click', hasBtn, hasBtn ? 'present' : 'no #kennelBtn in the Stable');
+
+  /* DOOR (2026-09-07, v500: "Kennel button placement not intuitive" / "How to
+     use the kennel not clear at all"). The way in is a DOOR IN THE BODY, not a
+     button in the sheet head: it must sit inside #stableBody (the head's
+     trailing corner is where Done lives, and that is where this used to be),
+     it must name itself and say what is inside in one line, and it must be a
+     real target. The count is graded loosely (a number over 30) because the
+     seeded roster changes between phases of this file; NAMING is the part that
+     regresses. */
+  const door = await page.evaluate(() => {
+    const b = document.getElementById('kennelBtn');
+    if (!b) return null;
+    const r = b.getBoundingClientRect();
+    const small = b.querySelector('small')?.textContent || '';
+    return { inBody: !!b.closest('#stableBody'), inHead: !!b.closest('.sheet-head'),
+      name: (b.querySelector('b')?.textContent || '').trim(), small, w: r.width, h: r.height,
+      lands: (() => { const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!at && (at === b || b.contains(at)); })(),
+      swatches: b.querySelectorAll('.kdoor-sw i').length };
+  });
+  ok('DOOR the way into the Kennel is a door in the Stable\'s BODY (never the sheet head\'s dismiss corner), naming itself and saying what is inside in one line, at least 44px tall and hit-testable',
+    !!door && door.inBody && !door.inHead && /KENNEL/i.test(door.name) && /colour/i.test(door.small) && /\d+ of 30/.test(door.small) && door.h >= 44 && door.lands && door.swatches === 5,
+    door ? `in body=${door.inBody} in head=${door.inHead} "${door.name}" / "${door.small}" ${door.w.toFixed(1)}x${door.h.toFixed(1)} lands=${door.lands} swatches=${door.swatches}` : 'no #kennelBtn');
 
   await page.evaluate(() => document.getElementById('kennelBtn')?.click());
   await sleep(900);
   const opened = await page.evaluate(() => !!document.getElementById('kennelBody')?.children.length);
-  ok('BUTTON the Stable header button opens the Kennel sheet, rendered with content', opened,
+  ok('BUTTON the Stable\'s Kennel door opens the Kennel sheet, rendered with content', opened,
     opened ? '#kennelBody has children' : '#kennelBody is empty or absent');
 
   const grid = await page.evaluate(() => [...document.querySelectorAll('.k-cell')].map(c => ({
@@ -225,6 +247,13 @@ try {
   ok('UNOWNED an ungranted pair draws the locked placeholder, decoded and never a 404 (a silhouette, not a broken image)',
     !!unownedCell && unownedCell.locked && unownedCell.lock && unownedCell.nw > 0,
     unownedCell ? `C4|base: locked=${unownedCell.locked} lock-glyph=${unownedCell.lock} naturalWidth ${unownedCell.nw}` : 'cell not found');
+
+  /* LEAD (2026-09-07): the one line that says how to read the grid, at the
+     point of use. Without it the grid's whole rule -- in colour means yours,
+     greyed means not -- is something a player has to infer from 30 tiles. */
+  const lead = await page.evaluate(() => document.querySelector('.k-lead')?.textContent || '');
+  ok('LEAD a one-line explanation of the grid\'s own reading rule sits directly above it',
+    /colour/i.test(lead) && /lock/i.test(lead) && /tap/i.test(lead), lead || '(no .k-lead found)');
 
   const gwart = await page.evaluate(() => document.querySelector('.k-gwart')?.textContent || '');
   ok('GWART the cosmetic-only explainer line is on the screen',
@@ -328,6 +357,45 @@ try {
   await page.keyboard.press('Space'); const viaSpace = await label('C2');
   ok('KEYS Enter operates a focused cell and Space toggles it back',
     viaEnter === `Frost ${before}` && viaSpace === before, `Enter -> "${viaEnter}", Space -> "${viaSpace}"`);
+
+  /* ART (2026-09-07, v500: "Some pets in the kennel blurry photos"). THE
+     HOUSE RULE IS 1.4x. A layer drawn above about 1.4x its own source is a
+     defect here (the football poster's 384 decision, art-resolution-audit).
+     This is the ratio that matters and it is NOT the cell width: the crop
+     scales each species' ink to fill the cell, so the <img> is ~2.8x the box
+     it peeps through. Measured on the shipped v500 code, this row is red at
+     both viewports:
+       393x852  FAIL "worst 1.821x C1|frost (349.5 device px off a 192px
+                source); over 1.4x: C1 1.82, C5 1.76, C3 1.51, C4 1.51,
+                C2 1.43" -- 25 of 30 cells over
+       320x568  FAIL "worst 1.396x" is UNDER the ceiling, so the narrow phone
+                alone would have passed; that is why both viewports are graded.
+     DIRECTION AND BOUND (anti-regression rule 11): failure is UPWARD and the
+     bound is a ceiling, never a trend -- a bigger ratio is always worse, and
+     serving a smaller tier than needed can only lower it.
+     EMPTY IS A FAILURE: zero measured cells fails. */
+  for (const [w, h] of [[393, 852], [320, 568]]) {
+    await setWidth(page, w, h);
+    await openKennel();
+    const art = await page.evaluate(() => {
+      const dpr = window.devicePixelRatio || 1;
+      const rows = [];
+      const add = (key, img) => {
+        if (!img || !img.naturalWidth) { rows.push({ key, ratio: Infinity, dev: 0, nw: 0, src: img ? img.currentSrc : '(no img)' }); return; }
+        const r = img.getBoundingClientRect();
+        rows.push({ key, ratio: (r.width * dpr) / img.naturalWidth, dev: r.width * dpr, nw: img.naturalWidth, src: img.currentSrc });
+      };
+      for (const c of document.querySelectorAll('.k-cell')) add(`${c.dataset.sp}|${c.dataset.morph}`, c.querySelector('img'));
+      for (const t of document.querySelectorAll('.k-row')) add(`roster ${t.querySelector('b')?.textContent}`, t.querySelector('.k-thumb img'));
+      return rows;
+    });
+    const over = art.filter(r => r.ratio > 1.4).sort((a, b) => b.ratio - a.ratio);
+    const worst = art.slice().sort((a, b) => b.ratio - a.ratio)[0];
+    ok(`ART ${w}x${h}: no Kennel pet art is drawn above 1.4x its own source file (${art.length} images measured)`,
+      art.length >= 36 && !over.length,
+      art.length ? `worst ${worst.ratio.toFixed(3)}x ${worst.key} (${worst.dev.toFixed(1)} device px off a ${worst.nw}px source, ${String(worst.src).replace(/.*\/assets/, 'assets')})${over.length ? `; over 1.4x: ${over.slice(0, 6).map(o => `${o.key} ${o.ratio.toFixed(2)}`).join(', ')}${over.length > 6 ? ` and ${over.length - 6} more` : ''}` : ''}`
+        : 'NO IMAGES MEASURED (an empty sample is a failure, not a pass)');
+  }
 
   // R39-8 / R39-9 CLIP: the art fits its clipped cell above the sheet's 600px
   // cap, and keeps fitting after a rotation with the sheet left open.

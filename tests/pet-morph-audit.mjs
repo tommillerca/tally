@@ -373,6 +373,35 @@ async function run() {
        copy its own colour (paddockRoster carries morph beside shiny). */
     await page.click('#stableBtn').catch(() => {});
     await sleep(700);
+
+    /* KIN (2026-09-07). Tom, on v500: "Scrolling through multiple pets in
+       stable just shows their lvl not a little picture of them or something so
+       not intuitive to want to go scroll that rail." The copy rail under the
+       focused card must carry the PET, not just a level, and it must be each
+       copy's OWN look -- which is the whole reason this file exists: with two
+       C5s, one base and one midnight, a rail that drew the species would draw
+       the same picture twice and say nothing. Decoded (naturalWidth > 0), per
+       instance, right species AND right morph, inside the 44px tap floor.
+       Proved red on the shipped v500 rail (text-only chips):
+         SAMPLE  "2 chip(s), with an image: 0"  -> exits 2, grading nothing,
+                 which is the correct answer for a rail with no pictures on it.
+       And with the portrait in but keyed off the SPECIES instead of the
+       instance (morph dropped):
+         KIN     FAIL "copy-1 assets/bh/thumb/384/C/C5.png ok | copy-2
+                 assets/bh/thumb/384/C/C5.png WRONG MORPH (want midnight)" */
+    const kin = await page.evaluate(() => [...document.querySelectorAll('.cf-kin .chip')].map(c => {
+      const img = c.querySelector('img');
+      return { iid: c.dataset.kin, h: c.getBoundingClientRect().height,
+        nw: img ? img.naturalWidth : 0, src: img ? (img.currentSrc || img.src) : null };
+    }));
+    setup('SAMPLE the Stable\'s copy rail is showing both C5 copies, each with an image element to grade',
+      kin.length === 2 && kin.every(k => k.src), `${kin.length} chip(s), with an image: ${kin.filter(k => k.src).length}`);
+    const wantKin = { 'copy-1': /\/C\/(?:thumb\/\d+\/C\/)?C5\.png$/, 'copy-2': /\/morph\/C5__midnight\.png$/ };
+    const kinBad = kin.filter(k => !(k.nw > 0 && k.h >= 44 && (wantKin[k.iid] || /$^/).test(k.src || '')));
+    ok('KIN every copy chip in the Stable rail carries a DECODED picture of that copy -- right species, right colourway, inside the 44px tap floor',
+      kin.length === 2 && !kinBad.length,
+      kin.map(k => `${k.iid} ${String(k.src).replace(/.*\/assets/, 'assets')} nw=${k.nw} h=${k.h.toFixed(1)} ${(wantKin[k.iid] || /$^/).test(k.src || '') ? 'ok' : 'WRONG ART'}`).join(' | '));
+
     await page.evaluate(() => document.getElementById('stableToPaddock')?.click());
     await sleep(1400);
     const pdk = await page.evaluate(() => Object.fromEntries(['copy-1', 'copy-2'].map(iid => {
