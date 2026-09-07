@@ -77,7 +77,7 @@ import {
   spawnIngredient, SPAWN_FOOD, cookState, startCook, queueCook, advanceQueue, QUEUE_MAX, collectDish, cancelCook, activeFoodBuffs, foodCoinMult, foodCombatBuff, consumeFightFoodBuffs, fmtCookTime, foodBuffLabel,
   POTIONS, POTION_BY_ID, RECIPE_BY_ID, potionsInv, usePotion, potionCount,
   MAX_POTS, nextPotPrice, addPot,
-  pantryDishes, activatePantryDish, discardPantryDish,
+  pantryDishes, activatePantryDish, discardPantryDish, dishWorth,
   transmuteStatus, doTransmute, transmutePicks, TRANSMUTE,
 } from './cooking.js';
 import {
@@ -8249,7 +8249,7 @@ async function openKitchen() {
       const canStart = have && canStartAny;
       const verb = cook.freeCount > 0 ? (r.potion ? 'Brew' : 'Cook') : 'Line up';
       return `<div class="crate-row recipe ${have ? '' : 'lack'}"><span class="crate-ico">${recipeIconHtml(r, 26)}</span>
-        <div style="flex:1"><b>${esc(r.name)}</b><small>${esc(r.desc)}</small><small class="recipe-need">${needStr} · ${r.cookMin < 60 ? r.cookMin + 'm' : (r.cookMin / 60) + 'h'} cook</small></div>
+        <div style="flex:1"><b>${esc(r.name)}</b><small>${esc(r.desc)}</small>${dishWorth(r.id) ? `<small>${esc(dishWorth(r.id))}</small>` : ''}<small class="recipe-need">${needStr} · ${r.cookMin < 60 ? r.cookMin + 'm' : (r.cookMin / 60) + 'h'} cook</small></div>
         <button class="btn small ${canStart ? '' : 'ghost'}" data-cook="${r.id}" ${canStart ? '' : 'disabled'}>${verb}</button></div>`;
     };
     // one card per owned pot: idle / cooking (progress) / ready (serve)
@@ -23885,7 +23885,7 @@ async function renderPit(wrap) {
   const pitInv = await ingredients();
   const pitPantry = await pantryDishes();
   const kitchenLine = pitCombatBuffs.length
-    ? `<p class="note" style="margin:2px 2px 8px">${pitCombatBuffs.map(b => `${b.icon} <b>${esc(b.name)}</b> active: ${esc(foodBuffLabel(b))}`).join(' · ')}</p>`
+    ? `<p class="note" style="margin:2px 2px 8px">${pitCombatBuffs.map(b => `${b.icon} <b>${esc(b.name)}</b> active: ${esc(foodBuffLabel(b))}${dishWorth(b.recipe) ? ` ${esc(dishWorth(b.recipe))}` : ''}`).join(' · ')}</p>`
     : (ingredientCount(pitInv) > 0 || pitPantry.length > 0)
       ? `<p class="note" style="margin:2px 2px 8px">${pitPantry.length ? 'A cooked dish is waiting' : 'Ingredients are waiting'} in your Kitchen — cook up a buff before your next fight.</p>`
       : '';

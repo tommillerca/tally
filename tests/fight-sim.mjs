@@ -42,8 +42,8 @@ const playerTurn = smartPlayerTurn;
  * back does: same stats, same turns, only the talents differ. The dummy has an
  * absurd Marrow so it survives long enough to be a ruler, and it never acts, so
  * there is no AI variance in the number. */
-function damagePerTurn({ stats, talents, pet }, { turns = 10, seed = 1 } = {}) {
-  const player = makeFighter({ name: 'P', stats, talents, pet });
+function damagePerTurn({ stats, talents, pet, food = null }, { turns = 10, seed = 1 } = {}) {
+  const player = makeFighter({ name: 'P', stats, talents, pet, food });
   const dummy = makeFighter({ name: 'DUMMY', stats: { ...stats, marrow: 4000, reflex: 0 } });
   const fight = createFight({ player, foe: dummy, seed, aiLevel: 1 });
   const startHp = fight.f.hp;
@@ -56,8 +56,12 @@ function damagePerTurn({ stats, talents, pet }, { turns = 10, seed = 1 } = {}) {
 }
 
 /* METRIC 2: win rate against a real, fighting foe scaled like a ladder rung. */
-function runFight({ stats, talents, pet, foeMult, seed }) {
-  const player = makeFighter({ name: 'P', stats, talents, pet });
+/* `food` is a COOKED DISH's buff object (js/cooking.js RECIPES[].buff), on the
+   PLAYER only, which is what the Kitchen actually does. Added 2026-09-07 so the
+   Pit's "what is this dish worth" line is measured here rather than asserted:
+   makeFighter has always taken it, this harness simply never passed it. */
+function runFight({ stats, talents, pet, food = null, foeMult, seed }) {
+  const player = makeFighter({ name: 'P', stats, talents, pet, food });
   const foe = makeFighter({ name: 'F', stats: scaleStats(stats, foeMult) });
   const fight = createFight({ player, foe, seed, aiLevel: 4 });
   let guard = 0;
