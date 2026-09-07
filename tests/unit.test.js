@@ -7366,8 +7366,10 @@ test('B13 Gwart\'s bag survives 5 consecutive boots with no immediate repeat', (
      reload, that part is correct and unchanged), seeded from whatever was
      persisted to kv last time (gwRecent), then one pick. Deterministic RNG
      (always take index 0 of the eligible pool) makes this reproducible: it
-     is also the shape that PROVES the old bug, below. */
-  const POOL = ['gear1', 'gear2', 'gear3', 'gear4', 'gear5', 'gear6', 'gear7']; // 7 lines, B13's own count
+     is also the shape that PROVES the old bug, below.
+     2026-09-06, B13: POOL below is a fixture stand-in (7 dummy lines), not the
+     app's real Gwart line table. */
+  const POOL = ['gear1', 'gear2', 'gear3', 'gear4', 'gear5', 'gear6', 'gear7'];
   const rand0 = () => 0;
   let persisted = []; // stands in for kv 'gwRecent' across boots
   let prevLine = null;
@@ -7386,7 +7388,8 @@ test('B13 PROVE-RED: the same 5 boots repeat every time with no seeding', () => 
   /* This is the bug as shipped: gwSaid/gwLast were module-scope with nothing
      read back from kv, so every reload started the bag empty and unaware of
      what was last said. Same pool, same deterministic RNG, just skip
-     seedBagFromRecent (the fix): every boot pulls the same first line. */
+     seedBagFromRecent (the fix): every boot pulls the same first line.
+     2026-09-06, B13: POOL below is the same fixture stand-in as above. */
   const POOL = ['gear1', 'gear2', 'gear3', 'gear4', 'gear5', 'gear6', 'gear7'];
   const rand0 = () => 0;
   const linesSaid = [];
