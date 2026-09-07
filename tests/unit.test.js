@@ -7040,6 +7040,49 @@ test('R38-12 restoreWithPhrase: a 429 shows the real wait from retryAfterMs, not
   }
 });
 
+/* R37-24: a fresh install finishes onboarding before its Crew registration.
+ * A rate-limited /register used to return before the welcome grant existed
+ * locally, leaving Today with playerId null and a zero wallet. The retry is
+ * deliberately forced to fail too so this row also grades the one named toast.
+ * PROVE-RED on v487:
+ *   FAIL R37-24 register 429: the welcome wallet lands once and the failed retry toasts once
+ *     register must retry exactly once after a 429
+ *     1 !== 2 */
+test('R37-24 register 429: the welcome wallet lands once and the failed retry toasts once', async () => {
+  await import('./mem-idb.mjs');
+  const dbm = await import('../js/db.js');
+  const s = await import('../js/social.js');
+  dbm.useDbName('unit-r37-24-register-429');
+  const origFetch = globalThis.fetch;
+  let registerCalls = 0, toasts = 0, allowSuccess = false;
+  globalThis.fetch = async url => {
+    if (String(url).endsWith('/register')) {
+      registerCalls++;
+      if (allowSuccess) return { ok: true, status: 200, json: async () => ({ playerId: 'r37-24', handle: 'Audit Bones', friendCode: 'BONE-TEST-TEST', name: null }) };
+      return { ok: false, status: 429, json: async () => ({ error: 'rate limited' }) };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  try {
+    const r = await s.goOnline({ retryDelayMs: 0, onRegisterFailure: () => { toasts++; } });
+    assert.equal(r.ok, false, 'two register 429s must still report registration failure');
+    assert.equal(registerCalls, 2, 'register must retry exactly once after a 429');
+    assert.equal(await dbm.kvGet('coins', 0), 50,
+      'fresh onboarding keeps the 50-coin welcome grant despite register 429');
+    assert.equal((await dbm.db.get('xp', 'social-welcome'))?.xp, 10,
+      'the local receipt must mirror the full server welcome payload so dedupe does not lose its 10 XP');
+    assert.equal(toasts, 1, 'the failed retry must produce exactly one named failure toast');
+    allowSuccess = true;
+    const landed = await s.goOnline({ retryDelayMs: 0, onRegisterFailure: () => { toasts++; } });
+    assert.equal(landed.ok, true, 'a later registration must land once the server accepts it');
+    assert.equal(await dbm.kvGet('coins', 0), 50, 'a later retry must not pay the welcome grant twice');
+    assert.equal(toasts, 1, 'a later successful registration must not repeat the failure toast');
+    assert.equal((await dbm.kvGet('social', null))?.playerId, 'r37-24', 'the successful retry must store the real player id');
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+});
+
 // ---- R38 quest lane: claims tell the truth, gates match reality ----
 
 test('R38-5 quest claim handler: a closed period toasts the truth and repaints, never swallows null', () => {

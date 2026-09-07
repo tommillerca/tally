@@ -180,6 +180,14 @@ Not stamped to a release. HANDOFFr3820260906.md R38-21/R38-22/R38-23.
 
 3. PROOF: kitchen-day-one-strand-audit.mjs | REACH: a day-one cook that goes wrong is recoverable. The starter pouch ({marrow:2, salt:1}) is also enough to brew Stoneskin Draught, and doing that first used to leave nothing else affordable with no way back (measured: 606 coins of foraging to recover, against a roughly 300-coin day-one wallet). A Cancel control on any cooking pot (armed, so a stray tap cannot cost real progress) now refunds the ingredients in full, and the Kitchen names which recipe the starter ingredients are for before the first tap. Red independently on the tip and on the cancel control; the audit reproduces the exact strand (cooks Stoneskin, confirms 0 of 13 recipes affordable) before proving the recovery.
 
+## register 429 wallet (2026-09-06)
+
+1. PROOF: unit.test.js | REACH: a fresh install receives the complete social-welcome grant locally before registration. Two consecutive 429 responses retry once, leave exactly 50 welcome coins and 10 XP under the server's existing receipt key, and surface one named failure toast. A later registration cannot pay the grant twice.
+## v493
+1. A hotfix off v492, Codex's round-37 lane (R37-24). Its rows are its dated section further down, folded here.
+
+2. PROOF: unit.test.js | REACH: a freshly minted identity receives the social-welcome payload (50 coins, 10 XP) locally through one claimAndPay transaction before registration; POST /register retries once after a 429 with backoff; a second failure shows one onboarding line saying the coins are safe; a later server grant dedupes against the same receipt so coins stay exactly 50 (red before: register must retry exactly once after a 429, 1 !== 2; the forced double-429 row asserts two attempts, 50 coins, 10 XP, one toast, then a permitted registration stores the real player id with no second toast).
+
 ## v492
 1. A hotfix off v491 from Tom's live play test. Its rows are the dated "pit readout and exit" section further down, folded here.
 
