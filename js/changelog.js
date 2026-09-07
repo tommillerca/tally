@@ -4,6 +4,10 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 497, date: '2026-09-07', title: 'The Stable rail tells the truth', items: [
+    'The lizard\'s team rail puts the teams you own first, parks on the team you picked last time, and tapping a team you own applies it to every football piece she has in that team. Tapping a team you do not own says which piece is missing, never that a helmet you own is not in your wardrobe.',
+    'The Locker Room price line fits inside its card at every phone width, the pet copy chips meet the 44 px tap floor, a pet armed for breeding stays visible when you step to another copy, and a family tile\'s rarity badge matches the piece it shows.',
+  ] },
   { n: 496, date: '2026-09-07', title: 'Three builds deep, nothing goes missing', items: [
     'An update now remembers which build each open screen came from and keeps that build\'s files until the screen reloads, even if two updates land in a row. Before, a second update could sweep away files a still-open screen needed.',
   ] },

@@ -19,6 +19,55 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## the Stable rail tells the truth (2026-09-06)
+
+Not stamped to a release: hotfix/stable-rail-truth, off v493. HANDOFFMASTER20260906.md
+B9, B10, B11 and R40-28..31, re-measured on this tree before fixing. Owned by this
+lane: the Stable's pet wardrobe shelf and team rail, the Locker Room price pill's
+CSS, the kin chips and the Dressing Room family tile's tier.
+
+1. PROOF: football-render-audit.mjs | REACH: Open the Stable on a lizard that
+   owns a football piece. The teams you own come first on the rail, the ones
+   you do not come after, dimmed and marked Locked with no price. Measured with
+   three owned teams: they sit at positions 1, 2 and 3 of 32, 192px from the
+   first to the last on a 393px screen, where before the owned Glasswater
+   helmet sat 3113px along a 3337px rail.
+
+2. PROOF: football-render-audit.mjs | REACH: The rail opens parked on the team
+   you last picked here, else the team she has on, else the first team you own
+   a piece for, and it remembers the pick across closing the Stable, a reload
+   and a fresh open. A team you own nothing in is never the parked one, so a
+   Locked tile never reads Picked.
+
+3. PROOF: football-render-audit.mjs | REACH: Tap a team you own and every
+   worn piece that exists in that team swaps to it, in one tap. When both
+   pieces exist you hear nothing. When one does not, the piece that does
+   swaps, the other stays as it was, and the toast names it: "Her Lizard
+   Jersey does not come in Glasswater Gannets colours in your wardrobe."
+   Before, the same tap on a helmet you owned did nothing and said "That
+   colourway is not in your wardrobe." Tap a Locked team with nothing on and
+   the toast is "Nothing of hers comes in Hollow Howlers colours yet." and
+   the rail stays where it was.
+
+4. PROOF: football-render-audit.mjs | REACH: In the Shop, the Locker Room
+   poster's price pill ("4,200 a piece, 16,800 the lot") wraps onto two lines
+   inside its card. Measured against the text column it is laid out in, on
+   v493 before fixing: the 203.1px nowrap pill ran 23.0px past it at 393,
+   40.1px at 375 and 95.1px at 320 (the brief's 7.0 / 24.1 / 79.1 are the same
+   overrun taken 16px further out, at the card's padding edge; the card clips,
+   so at 320 it read "4,200 A PIECE, 16" and stopped). After: 0px past the
+   column and 16px inside the card border at all three widths, both prices
+   readable.
+
+5. PROOF: pet-ownership-audit.mjs | REACH: In the Stable, the chips under a
+   pet with more than one copy are 44px tall (were 40). Arm one copy for
+   breeding, step to another copy through its chip, and the armed copy's chip
+   still says "breeding"; the BREED button speaks for the copy in front.
+
+6. PROOF: unit.test.js | REACH: In the Dressing Room, a family tile that shows
+   a lower-rarity colourway (the one you wear) carries that colourway's tier
+   badge and border, at that colourway's price, instead of the family's best
+   member's tier.
 ## currency and receipts are one transaction (2026-09-06)
 
 Not stamped to a release: fix/currency-revisions, off v493. Codex's read-only
@@ -250,6 +299,13 @@ READY cache, not the cache of the page still running").
 1. PROOF: sw-upgrade-audit.mjs | REACH: a player who keeps a sheet open on build A while build B and then build C install and take charge underneath still gets A's own modules when the old page lazily imports one (THREE GENERATIONS row, red before: the A page's import of the module only its build carries answered 404 with caches tally-v493, tally-v494; green after: 200, caches tally-v471, tally-v494). The worker keeps every generation an open page came from, at most two behind the current build, and sweeps the rest; the generation nobody is running (B here) goes.
 
 2. PROOF: sw-upgrade-audit.mjs, offline-boot-audit.mjs, dead-shell-audit.mjs | REACH: nothing else about the swap moved: the new worker still takes over the moment its whole build is cached (R38-1), the page it takes over from keeps its own generation (R38-17), identical entries are still reused across the install (R38-18), and a cold offline boot and the dead-shell recovery still work with the extra tally-clients bookkeeping cache present.
+## v497
+1. A hotfix off v496, master handoff B9, B10, B11 and R40-28..31. Its rows are the dated section "the Stable rail tells the truth" further down, folded here.
+
+2. PROOF: football-render-audit.mjs | REACH: owned colourways lead the Stable rail (positions 1 to 3 of 32, 192 px span, was 3113 of 3337), the rail parks on and persists the last pick (S.settings.petRailTeam), an owned team applies to every worn piece that exists in it and the toast names only a genuinely missing piece, a Locked team never reads Picked (RAIL-ORDER, RAIL-TOAST, RAIL-HALF-SWAP, RAIL-LOCKED, RAIL-REMEMBERS, RAIL-SE red on v493 with the quoted positions and toasts).
+
+3. PROOF: football-render-audit.mjs, pet-ownership-audit.mjs, unit.test.js | REACH: the Locker Room price pill stays inside its text column at 320, 375 and 393 (PILL red before: 95.1, 40.1, 23.0 px past the column), kin chips are 44 px (KIN-TAP red at 40), a pet armed for breeding keeps its chip across copies (KIN-BREED), and a mixed-rarity family tile carries the shown item's rarity badge (R40-31 unit row red: fam r-legendary on a worn common).
+
 ## v496
 1. A hotfix off v495, lane 4 of the data-integrity plan plus the hero-share audit re-premise. Its rows are the dated section "three generations, no orphaned page" further down, folded here.
 

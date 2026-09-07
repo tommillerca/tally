@@ -16351,8 +16351,9 @@ async function renderCharacter(wrap, tab, opts = {}) {
                 /* the tile shows the colourway being tried, else the one worn, else the family's best (first after the sort) */
                 const i = fam.find(v => v.id === sel) || fam.find(v => v.id === cur) || fam[0];
                 if (fam.length === 1) return cell(i.id, `${lookArt(i)}${costTag(i.id)}${rarityTagHtml(i.rarity)}`, `${i.name} · ${i.rarity}`, `r-${i.rarity}`);
-                return cell(i.id, `${lookArt(i)}${costTag(i.id)}${rarityTagHtml(fam[0].rarity)}<span class="ward-fam-n" aria-hidden="true">${fam.length}</span>`,
-                  `${i.name} · ${fam.length} colourways`, `fam r-${fam[0].rarity}`,
+                /* the badge and border follow the item SHOWN and priced, not the family's best (R40-31) */
+                return cell(i.id, `${lookArt(i)}${costTag(i.id)}${rarityTagHtml(i.rarity)}<span class="ward-fam-n" aria-hidden="true">${fam.length}</span>`,
+                  `${i.name} · ${fam.length} colourways`, `fam r-${i.rarity}`,
                   ` data-family="${esc(bhFamilyKey(i))}" data-fam-ids="${esc(fam.map(v => v.id).join(' '))}" aria-expanded="false" aria-label="${esc(i.name)}, ${fam.length} colourways"`);
               }).join('')}`;
         /* ---------------------------------------------------------------- v2
@@ -19106,10 +19107,12 @@ async function openStable(opts = {}) {
      markup be born at the OLD size and then transition, which is the only way to
      animate across a rebuild without rewriting the screen to patch in place. */
   let cfWasPanelled = false;
-  // the team the pet wardrobe's rail is armed with while nothing football is
-  // worn. render() rebuilds cfWear from scratch, so this has to live outside
-  // it the same way cfIid and openIid do.
-  let petRailTeam = FOOTBALL_TEAMS[0].id;
+  // the team the pet wardrobe's rail is parked on: the last one picked here,
+  // persisted in settings so the pick survives closing the Stable and the next
+  // boot (R40-29: the rail forgot it unless something was worn, so 2,944px of
+  // scrolling was paid again every visit). render() rebuilds cfWear from
+  // scratch, so this has to live outside it the same way cfIid and openIid do.
+  let petRailTeam = (S.settings || {}).petRailTeam || null;
   // when we arrive from a pet level-up, that pet's tree is the reason we are here
   let focusIid = opts.focusIid || null;
   const focusSp = opts.focusSp || null;
@@ -19225,7 +19228,7 @@ async function openStable(opts = {}) {
     const roster = order.map(sp => (cfInst && cfInst.sp === sp ? cfInst : null) || bySp[sp].find(x => x.iid === eqIid) || bySp[sp].slice().sort(byBest)[0]);
     const kinChips = inst => bySp[inst.sp].length < 2 ? '' : bySp[inst.sp].slice().sort(byBest).map(x => {
       const on = x.iid === inst.iid;
-      return `<button class="chip${on ? ' on' : ''}" type="button" data-kin="${x.iid}" role="option" aria-selected="${on}">${nicks[x.iid] ? esc(nicks[x.iid]) + ' · ' : ''}Lv ${petLevel(bank[x.iid] || 0)}${x.shiny ? ' ✦' : ''}${x.iid === eqIid ? ' · out' : ''}</button>`;
+      return `<button class="chip${on ? ' on' : ''}" type="button" data-kin="${x.iid}" role="option" aria-selected="${on}">${nicks[x.iid] ? esc(nicks[x.iid]) + ' · ' : ''}Lv ${petLevel(bank[x.iid] || 0)}${x.shiny ? ' ✦' : ''}${x.iid === eqIid ? ' · out' : ''}${sel.includes(x.iid) ? ' · breeding' : ''}</button>`;
     }).join('');
     const focusIdx = Math.max(0, roster.findIndex(x => x.iid === (cfIid || eqIid)));
     const focused = roster[focusIdx] || roster[0] || null;
@@ -19366,18 +19369,26 @@ async function openStable(opts = {}) {
          the v476 collapse existed to stop. */
       const fbMine = mine.filter(i => i.football);
       const wornFb = fbMine.filter(i => S.petWear[BH_BY_ID[i.id].slot] === i.id);
-      const team = wornFb.length ? wornFb[0].football.team : petRailTeam;
+      /* THE RAIL TELLS THE TRUTH (R40-15/16/28/29, measured on v488): it parks on
+         the last team picked here, else the team she has on, else the first team
+         she owns a piece for, and a team she owns nothing in can never be the
+         parked one. Owned teams come FIRST, locked ones after and dimmed, so the
+         tile a player can actually use is on the first screen instead of 3113px
+         along a 3337px rail. */
+      const ownTeam = t => fbMine.some(i => i.football.team === t);
+      const team = [petRailTeam, ...wornFb.map(i => i.football.team), ...FOOTBALL_TEAMS.map(t => t.id)].find(t => t && ownTeam(t));
       const wearRow = [...bhFamilies(mine).values()].map(fam => {
         if (fam.length === 1) return petWearItemBtn(fam[0]);
         const worn = fam.find(i => S.petWear[BH_BY_ID[i.id].slot] === i.id);
         return petWearItemBtn(worn || fam.find(i => i.football && i.football.team === team) || fam[0], fam);
       }).join('');
-      const railRow = !fbMine.length ? '' : `<div class="pw-row fb-rail" role="listbox" aria-label="Team colourways">${FOOTBALL_TEAMS.map(t => {
-        const own = fbMine.some(i => i.football.team === t.id), on = t.id === team;
+      const railTeams = [...FOOTBALL_TEAMS].sort((p, q) => ownTeam(q.id) - ownTeam(p.id));
+      const railRow = !fbMine.length ? '' : `<div class="pw-row fb-rail" role="listbox" aria-label="Team colourways">${railTeams.map(t => {
+        const own = ownTeam(t.id), on = t.id === team;
         return `<button class="pw-item fbr${on ? ' on' : ''}${own ? '' : ' locked'}" type="button" data-pwteam="${t.id}" role="option" aria-selected="${on}" title="${esc(t.name)}">
           <i class="fb-swatch" style="--fa:${t.a};--fb:${t.b}"></i>
           <b>${esc(t.name)}</b>
-          <small>${on ? (wornFb.length ? 'Worn' : 'Picked') : own ? 'Yours' : `${ICONS.lock(9)} Locked`}</small>
+          <small>${on ? (wornFb.some(i => i.football.team === team) ? 'Worn' : 'Picked') : own ? 'Yours' : `${ICONS.lock(9)} Locked`}</small>
         </button>`;
       }).join('')}</div>`;
       return `<div class="pet-wear" data-pwsp="${sp}"${shown ? '' : ' hidden'}><div class="pw-h">${esc(her)}'s wardrobe</div>
@@ -20001,12 +20012,31 @@ async function openStable(opts = {}) {
        swap is one write per worn piece and she is never bare in between. With
        nothing football worn it only arms the rail, so the next garment tap wears
        that team. */
+    /* AND THE TOAST IS ONLY EVER TRUE (R40-16: it told a player who OWNED the
+       Glasswater helmet "That colourway is not in your wardrobe", because the
+       loop broke on the first worn piece the team lacked and never reached the
+       one it had). Every worn piece the team HAS is swapped; the ones it lacks
+       stay as they are and are NAMED before the swap (R40-17: a half-swap must
+       not leave a two-team kit silently). A team she owns nothing in is never
+       parked on (R40-28: a Locked tile read "Picked" and then did nothing). */
     $$('[data-pwteam]', body).forEach(btn => btn.addEventListener('click', async () => {
       const team = btn.dataset.pwteam, sp = btn.closest('.pet-wear').dataset.pwsp;
+      const t = FOOTBALL_TEAM_BY_ID[team] || { name: team };
+      const label = i => FOOTBALL_GARMENT_BY_KEY[i.football.garment].label;
+      const hasHere = i => ownedCos.has(footballItemId(team, i.football.garment));
+      const worn = Object.values(S.petWear).map(id => BH_BY_ID[id]).filter(i => i && i.football && petCanWear(i, sp));
+      const missing = worn.filter(i => !hasHere(i));
+      const anyHere = BH_ITEMS_WITH_UNRELEASED.some(i => i.football && i.football.team === team && petCanWear(i, sp) && ownedCos.has(i.id));
+      if (missing.length) toast(`Her ${missing.map(label).join(' and ')} ${missing.length > 1 ? 'do' : 'does'} not come in ${t.name} colours in your wardrobe.`);
+      else if (!anyHere) toast(`Nothing of hers comes in ${t.name} colours yet.`);
+      if (!anyHere) return;
       petRailTeam = team;
-      for (const cur of Object.values(S.petWear).map(id => BH_BY_ID[id]).filter(i => i && i.football && petCanWear(i, sp) && i.football.team !== team)) {
+      S.settings = S.settings || {};
+      S.settings.petRailTeam = team;
+      saveSettings();
+      for (const cur of worn.filter(i => i.football.team !== team && hasHere(i))) {
         const r = await togglePetWear(footballItemId(team, cur.football.garment));
-        if (!r.ok) { toast('That colourway is not in your wardrobe.'); break; }
+        if (!r.ok) toast(`Could not put the ${t.name} ${label(cur)} on.`);
       }
       await refreshPetWear();
       popSound(S.sounds);
@@ -22757,7 +22787,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v496'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v497'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
