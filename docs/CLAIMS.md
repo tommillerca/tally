@@ -19,6 +19,15 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v503
+1. A hotfix off v502 from Tom's play of the Kennel: blurry pets, the entry nobody finds, the grid nobody can read, and a copy rail worth no scroll. Its dated section is further down, folded here.
+
+2. PROOF: kennel-audit.mjs, art-resolution-audit.mjs | REACH: every Kennel cell and roster thumb draws at or under its source. The sheet asked for a fixed 192 tier while the crop scales each species' ink to fill its cell, so a pet drew at up to 1.82 times its source at 393 wide (C1 349.5 device px off 192) while the same cell measured 1.396 at 320, under the ceiling: the ART row grades both viewports for exactly that reason. Handing the pick to the tier picker every other surface uses takes the worst to 0.910, at a measured cost of 55.2 to 67.9 MB decoded on a full-collection save against a 90 MB ceiling.
+
+3. PROOF: kennel-audit.mjs | REACH: the Kennel's door sits in the Stable's body under the Paddock's, built from the same door parts, showing your five colourway swatches and how many of the thirty you hold, and one line above the grid says a filled cell is a colour you have hatched and a locked one is not (DOOR row red with the entry back in the header at 73.3 by 44 in the dismiss corner and no swatches; LEAD row red with the line deleted). Roster dots carry each colourway's own hue instead of one accent, and an unowned cell flattens to a silhouette so the grid reads as a set with holes.
+
+4. PROOF: pet-ownership-audit.mjs, kennel-audit.mjs | REACH: each copy chip under a Stable card carries a 26 px portrait of that instance, so a base copy and a midnight copy of one species look different in the rail, inside the same 44 px tap target (KIN row red when the portrait is keyed off the species: copy-2 drew copy-1's art; the chips-are-text state exits without grading rather than passing).
+
 ## v502
 1. A hotfix off v501: the Locker Room polish and the Boneyard's frame cost (master handoff R40-21..27 and R41-18). Its dated section is further down, folded here.
 
@@ -86,6 +95,19 @@ with it mounted and 16.7ms with it hidden.
 
 1. PROOF: crate-reveal-audit.mjs | REACH: Open a Bone Crate from your Backpack and flick through its three cards: each card leaves and the next one arrives at full frame rate instead of half. Measured over the 520ms of the move, dropped frames 8-16 before and 1-5 after, frames rendered 18-27 before and 47-59 after. Nothing about what a crate pays, the reveal's copy, the tap guards (R37-5) or the Open all recovery (R39) changes.
 
+## the Kennel explains itself (2026-09-07)
+
+Not stamped to a release: hotfix/kennel-ux, off v500. Tom's four items from
+playing the Kennel that shipped in v500, verbatim: "Some pets in the kennel
+blurry photos", "Kennel button placement not intuitive", "How to use the kennel
+not clear at all", "Scrolling through multiple pets in stable just shows their
+lvl not a little picture of them or something so not intuitive to want to go
+scroll that rail."
+
+1. PROOF: kennel-audit.mjs | REACH: Open the Kennel: the pets are sharp. The art was served at a fixed 192px tier while the crop scales each species' ink to fill its cell, so a 62.6px cell at 393x852 drew a 349.5 device-pixel Drizzle off a 192px file, 1.82x its source; five of the six species were over the house 1.4x ceiling (C1 1.82, C5 1.76, C3 1.51, C4 1.51, C2 1.43) and only Bumbleseal, drawn small in her own canvas, was under. The tier now comes from the geometry, the way every other tiered surface picks one: worst ratio 0.91 at 393x852 and 0.70 at 320x568, both viewports graded because the narrow phone alone measured 1.396 and would have passed. Decoded image bytes on the screen rise from 55.2 MB to 67.9 MB, measured on the same full-collection save, against the project's 90 MB ceiling.
+2. PROOF: kennel-audit.mjs | REACH: Open the Stable: the way into the Kennel is a door under the Paddock's, reading THE KENNEL and "Every colour your pets come in", with a strip of the five colourway swatches filled for the ones you own and a count of how many of the 30 you have found. It used to be a 73x44 button in the sheet head's trailing corner, 8px from Done, which is the corner this app puts DISMISS in, wearing a one-word label that named nothing.
+3. PROOF: kennel-audit.mjs | REACH: In the Kennel, one line above the grid says how to read it: in colour is one you've hatched, greyed out with a lock is one you haven't, tap any to name it. An unowned cell is flattened to a silhouette on the page ground so it reads as a hole in the set rather than an underexposed pet, and each dot under a pet in the roster now carries that colourway's own colour instead of one flat accent, so which colours you own reads without the caption.
+4. PROOF: pet-morph-audit.mjs | REACH: Own two copies of one species in the Stable and look at the row of chips under the card: each chip carries a small picture of that copy in its own colourway beside its level, shiny mark and "out" state, so the rail shows what is on it. The chips keep their 44px tap floor and the row still scrolls.
 ## the Wanderer walks in front (2026-09-07)
 
 Not stamped to a release: hotfix/wanderer-z, off v500. Tom, live: "Boneyard:

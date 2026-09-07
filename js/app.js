@@ -513,6 +513,13 @@ const petWearsFootball = (petId, wear) => petWornTints(petId, wearOf(wear)).some
  * frost 200deg, toxic 98deg, midnight 254deg). */
 const MORPH_SHELL = { ember: '#f0763a', frost: '#5fb8ec', toxic: '#8fd23c', midnight: '#6b4fc4' };
 function eggTint(morph) { return (morph && morph !== 'base' && MORPH_SHELL[morph]) || ''; }
+/* THE SWATCH COLOUR FOR A COLOURWAY, wherever one is drawn as a dot rather than
+   as art: the Kennel's roster dots and the Stable door's strip. Same hues as the
+   shells above (the v2 recolour's own absolute targets), plus bone cream for
+   base, so "which colours do I have" reads without decoding a pet. It replaced a
+   flat acid-lime dot on every colourway, which said "owned" and nothing else --
+   DESIGN.md keeps the accent scarce and meaning "go", not "collected". */
+function morphSwatch(morph) { return MORPH_SHELL[morph] || 'var(--text)'; }
 
 function croppedPetImg(petId, px, ground = false, srcOverride = null, wear = undefined, thumb = null) {
   const src = srcOverride || bhAsset(BH_BY_ID[petId]);
@@ -19567,16 +19574,22 @@ async function openStable(opts = {}) {
   // CLOSED. Both used to be null, so render() re-opened the active pet's tree
   // every time you closed it and the control looked broken.
   let openIid = focusIid || undefined;   // which pet's talent tree is expanded inline
-  /* THE KENNEL LIVES HERE (Tom's ruling, 2026-09-05): one button in the header,
-     not a sixth Today door and not the Paddock (off limits this phase, see
-     scratchpad/kennel/KENNEL-UX.md section 1). Grouped with Done in its own
-     flex wrapper so `justify-content:space-between` on .sheet-head still puts
-     exactly two things apart (the title, and the trailing controls) rather than
-     centring this button between them. */
+  /* THE KENNEL LIVES IN THE STABLE (Tom's ruling, 2026-09-05) -- but it is a
+     DOOR IN THE BODY now, not a button in the header. Tom, on v500: "Kennel
+     button placement not intuitive" and "How to use the kennel not clear at
+     all". Measured before moving it: 73.3x44 at (240, 48.5), i.e. the sheet
+     head's trailing corner, 8px from Done. That corner is where this app puts
+     DISMISS, so the newest screen in the game was sitting in the close slot
+     wearing `btn ghost small`, with a one-word name that says nothing about
+     what is behind it. Both halves are the same mistake the Paddock's own
+     entry made and the same fix it got (see the door below and its note):
+     a place gets a DOOR that names itself, says what is inside in one line and
+     counts its contents. It MOVED rather than being duplicated, so there is
+     still exactly one way in and it still carries #kennelBtn, the id every
+     handler and audit clicks. */
   const wrap = openSheet(`
-    <div class="sheet-head"><h2>The Stable</h2><div style="display:flex;gap:8px"><button class="btn ghost small" id="kennelBtn">Kennel</button><button class="sheet-close">Done</button></div></div>
+    <div class="sheet-head"><h2>The Stable</h2><button class="sheet-close">Done</button></div>
     <div class="sheet-body" id="stableBody"></div>`, { cls: 'full', onClose: () => { if (currentTab() === 'today') refresh(); } });
-  $('#kennelBtn', wrap)?.addEventListener('click', () => openKennel());
   async function render() {
     const body = $('#stableBody', wrap);
     if (!body) return;
@@ -19680,9 +19693,17 @@ async function openStable(opts = {}) {
     const rank = x => [petLevel(bank[x.iid] || 0), x.shiny ? 1 : 0, x.lineage || 0];
     const byBest = (p, q) => { const a = rank(p), b = rank(q); return (b[0] - a[0]) || (b[1] - a[1]) || (b[2] - a[2]); };
     const roster = order.map(sp => (cfInst && cfInst.sp === sp ? cfInst : null) || bySp[sp].find(x => x.iid === eqIid) || bySp[sp].slice().sort(byBest)[0]);
+    /* THE PET IS IN THE CHIP. Tom, on v500: "Scrolling through multiple pets in
+       stable just shows their lvl not a little picture of them or something so
+       not intuitive to want to go scroll that rail." A row of "Lv 1 / Lv 1"
+       gives a player no reason to move their thumb, and it hides the one thing
+       that actually differs between two copies now that morphs exist: the
+       colour. petPortraitHtml is the app's own path (figure contract rule 1: a
+       pet is an INSTANCE, so shiny and morph come off the instance row, never
+       off a species id), thumb: true so the tier follows the geometry. */
     const kinChips = inst => bySp[inst.sp].length < 2 ? '' : bySp[inst.sp].slice().sort(byBest).map(x => {
       const on = x.iid === inst.iid;
-      return `<button class="chip${on ? ' on' : ''}" type="button" data-kin="${x.iid}" role="option" aria-selected="${on}">${nicks[x.iid] ? esc(nicks[x.iid]) + ' · ' : ''}Lv ${petLevel(bank[x.iid] || 0)}${x.shiny ? ' ✦' : ''}${x.iid === eqIid ? ' · out' : ''}${sel.includes(x.iid) ? ' · breeding' : ''}</button>`;
+      return `<button class="chip kin${on ? ' on' : ''}" type="button" data-kin="${x.iid}" role="option" aria-selected="${on}"><span class="kin-pic" aria-hidden="true">${petPortraitHtml(x.sp, 26, x.shiny, { thumb: true, morph: x.morph })}</span><span class="kin-tx">${nicks[x.iid] ? esc(nicks[x.iid]) + ' · ' : ''}Lv ${petLevel(bank[x.iid] || 0)}${x.shiny ? ' ✦' : ''}${x.iid === eqIid ? ' · out' : ''}${sel.includes(x.iid) ? ' · breeding' : ''}</span></button>`;
     }).join('');
     const focusIdx = Math.max(0, roster.findIndex(x => x.iid === (cfIid || eqIid)));
     const focused = roster[focusIdx] || roster[0] || null;
@@ -19904,6 +19925,13 @@ async function openStable(opts = {}) {
        Your two RAREST, because that is the collection worth walking out to see. */
     const doorSp = order.slice(0, 2);
     const doorPx = 28;
+    /* The Kennel door's own numbers, from the same instances this render already
+       has: which colourways you own anywhere (the swatch strip) and how many of
+       the 30 cells are filled (the count, ownedCellCount so CX cannot inflate
+       it -- R39-10). Pure reads, no extra query. */
+    const kennelOwned = ownedPairs(insts);
+    const kennelMorphs = new Set([...kennelOwned].map(k => k.split('|')[1]));
+    const kennelFound = ownedCellCount(kennelOwned, KENNEL_SPECIES.map(x => x.id));
     body.innerHTML = `
       <button class="pdk-door" id="stableToPaddock" type="button">
         <span class="pdk-door-scene" aria-hidden="true">
@@ -19930,6 +19958,25 @@ async function openStable(opts = {}) {
              quoted the ternary in backticks, closed the template literal it sits
              inside, and broke the app on the spot: "Unexpected identifier ICONS". The
              warning below is not decoration, it is a rake, and I stepped on it. -->
+        <span class="pdk-door-go" aria-hidden="true">›</span>
+      </button>
+      <!-- THE KENNEL DOOR. Same grammar as the Paddock's above it (name in
+           Bangers, one line saying what is inside, count, chevron) because it
+           answers the same kind of question and a second vocabulary would be
+           the cost of a second idea. It carries NO scene: the Paddock's pitch
+           is "not a list, a place", so its door shows the place; the Kennel is
+           a collection, so its door shows the collection -- the five colourway
+           swatches, filled for the ones you own, which is the SAME reading rule
+           the grid inside uses. That is the teaching, and it costs no image.
+           The small line is the one-line explanation at the point of use, the
+           way the Dressing Room and the Paddock's "Tap a pet to say hi" teach:
+           no tutorial screen, no takeover. -->
+      <button class="pdk-door kdoor" id="kennelBtn" type="button">
+        <span class="kdoor-sw" aria-hidden="true">${MORPHS.map(m => `<i class="${kennelMorphs.has(m) ? 'on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('')}</span>
+        <span class="pdk-door-tx">
+          <b>THE KENNEL</b>
+          <small>Every colour your pets come in &middot; ${kennelFound} of ${KENNEL_SPECIES.length * MORPHS.length}</small>
+        </span>
         <span class="pdk-door-go" aria-hidden="true">›</span>
       </button>
       <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
@@ -20547,6 +20594,7 @@ async function openStable(opts = {}) {
     $('#breedCancel', body)?.addEventListener('click', () => { sel = []; offSp = null; render(); });
     $('#petsHelp', body)?.addEventListener('click', openPetsHelp);
     $('#stableToPaddock', body)?.addEventListener('click', () => openPaddock());
+    $('#kennelBtn', body)?.addEventListener('click', () => openKennel());
     /* THE BAR GETS A CONTAINING BLOCK, NOT SCROLL ROOM. See the long note above
        .breed-bar.sticky in app.css for the two fixes that came before this.
        Short version: `position: sticky; bottom: 0` is clamped by its containing
@@ -20702,10 +20750,10 @@ async function openKennel() {
   const rosterRow = s => {
     const morph = bestMorphFor(s.id);
     // R39-11: the dots are indicators, not controls (the grid cells are).
-    const dots = MORPHS.map(m => `<i class="k-dot${owned.has(`${s.id}|${m}`) ? ' on' : ''}"></i>`).join('');
+    const dots = MORPHS.map(m => `<i class="k-dot${owned.has(`${s.id}|${m}`) ? ' on' : ''}" style="--kc:${morphSwatch(m)}"></i>`).join('');
     const morphNames = MORPHS.filter(m => owned.has(`${s.id}|${m}`) && m !== 'base').map(m => MORPH_LABEL[m]);
     return `<div class="k-row">
-      <span class="k-thumb">${croppedPetImg(s.id, 48, false, morphAsset(s.id, morph) || null, undefined, 192)}</span>
+      <span class="k-thumb">${croppedPetImg(s.id, 48, false, morphAsset(s.id, morph) || null, undefined, true)}</span>
       <div class="k-id">
         <b>${esc(s.name)}</b>
         <div class="k-dots" aria-hidden="true">${dots}</div>
@@ -20719,11 +20767,21 @@ async function openKennel() {
      at open survived a rotation (154px art in a 48px cell). croppedPetImg's
      layers are percentages of their box, so the box is drawn at a nominal 48
      and app.css (.k-cell .petcrop, 100%) lets the grid track size it, live. */
+  /* THE TIER IS GEOMETRY-DERIVED (`true`), NOT A HARDCODED 192. Tom, on v500:
+     "Some pets in the kennel blurry photos". Measured cause, not a guess: the
+     crop scales the ink to fill the cell, so the <img> is ~2.8x the box it
+     peeps through -- at 393x852 the 62.6px cell drew a 349.5 DEVICE-pixel
+     Drizzle off a 192px file, 1.82x its source. Five of six species were over
+     the house 1.4x ceiling (C1 1.82, C5 1.76, C3/C4 1.51, C2 1.43); only
+     Bumbleseal, drawn small in her own canvas, was under. `true` hands the
+     tier to bhTierFor(imgSize), the same picker every other tiered surface
+     uses, which lands each species on 384 or 192 by its own crop and drops the
+     worst ratio to 0.88. Guard: tests/kennel-audit.mjs, the ART row. */
   const gridRow = s => `<div class="k-grid-row">
       <span class="k-grid-label" data-sp="${esc(s.id)}">${esc(s.name)}</span>
       <div class="k-grid-cells">${MORPHS.map(m => {
         const isOwned = owned.has(`${s.id}|${m}`);
-        const art = croppedPetImg(s.id, 48, false, isOwned ? (morphAsset(s.id, m) || null) : null, undefined, 192);
+        const art = croppedPetImg(s.id, 48, false, isOwned ? (morphAsset(s.id, m) || null) : null, undefined, true);
         // R39-11/23: the cell IS the control (a real <button>, so Enter and Space
         // come free), and it toggles the row label back on a second press.
         return `<button type="button" class="k-cell${isOwned ? '' : ' locked'}" data-sp="${esc(s.id)}" data-morph="${esc(m)}" aria-pressed="false" aria-label="${esc(dotLabel(s.id, m, s.name))}">${art}${isOwned ? '' : ICONS.lock(14)}</button>`;
@@ -20746,6 +20804,12 @@ async function openKennel() {
     <div class="k-roster">${ownedSp.length ? ownedSp.map(rosterRow).join('') : '<p class="k-empty">Hatch an egg to start your collection.</p>'}</div>
     <p class="k-gwart"><b>Gwart says:</b> It's paint, not power. Ember, Frost, Toxic, Midnight, same skeleton underneath.</p>
     <p class="sect-h">Collection &middot; ${ownedCellCount(owned, KENNEL_SPECIES.map(s => s.id))} / ${KENNEL_SPECIES.length * MORPHS.length}</p>
+    <!-- HOW TO READ THE GRID, one line, at the point of use (v500: "How to use
+         the kennel not clear at all"). The same idiom the Paddock's "Tap a pet
+         to say hi" and the Dressing Room's lead already use: a sentence where
+         the thing is, never a tutorial screen. It says the rule the colours
+         encode AND names the one control the screen has. -->
+    <p class="k-lead">In colour is one you've hatched. Greyed out with a lock is one you haven't. Tap any to name it.</p>
     <div class="k-grid">${gridHead}${KENNEL_SPECIES.map(gridRow).join('')}</div>`;
   $$('.k-cell', body).forEach(c => c.addEventListener('click', () => {
     const { sp, morph: m } = c.dataset;
@@ -23358,7 +23422,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v502'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v503'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

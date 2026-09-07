@@ -8971,6 +8971,15 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .cf-kin::-webkit-scrollbar { display: none; }
 .cf-kin:empty { display: none; }
 .cf-kin .chip { min-height: 44px; display: inline-flex; align-items: center; scroll-snap-align: center; }   /* 44, the tap floor (R40-30: measured 40) */
+/* THE PORTRAIT IN THE CHIP (v500). 26px of art beside the level, so the rail
+   shows what is on it: two copies of one species differ by colourway now, and
+   a colourway is the one thing a level number cannot say. The chip keeps its
+   44px tap floor -- the picture sits INSIDE the existing height, it does not
+   set it -- and the pet is clipped to its own box, so a hovering species
+   cannot push the row taller than a grounded one. */
+.cf-kin .chip.kin { gap: 7px; padding-left: 6px; }
+.cf-kin .kin-pic { flex: 0 0 26px; width: 26px; height: 26px; display: block; overflow: hidden; }
+.cf-kin .kin-tx { white-space: nowrap; }
 .cf-cap { padding: 4px 4px 0; text-align: center; }
 .cf-cap b {
   display: block; font-family: var(--display); font-weight: 400; font-size: 27px;
@@ -9871,6 +9880,19 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .pdk-tile:active, .pdk-teaser:active { transform: translateY(2px); box-shadow: 0 1px 0 #17151d; }
 .pdk-tile.on, .pdk-teaser.on { border-color: #a5e847; box-shadow: 0 3px 0 #17151d, 0 0 0 2px rgba(165, 232, 71, .35); }
 
+/* THE KENNEL DOOR, in the Stable's body (2026-09-07). It borrows .pdk-door
+   whole -- border, drop shadow, press, text column, chevron -- because it is
+   the same object as the Paddock's door and a second set of tokens for one
+   more row is how a design system grows two of everything. The only override
+   is the left panel: no scene, a strip of the five colourway swatches instead,
+   filled for the ones you own. Same reading rule as the grid behind it. */
+.kdoor .kdoor-sw { flex: 0 0 74px; align-self: stretch; display: grid; grid-template-columns: repeat(5, 1fr);
+  align-items: center; gap: 4px; padding: 0 10px; background: var(--surface-3); }
+.kdoor .kdoor-sw i { display: block; height: 22px; border-radius: 4px;
+  background: var(--surface-2); border: 1px solid var(--line-strong); }
+.kdoor .kdoor-sw i.on { background: var(--kc); border-color: var(--kc); }
+.kdoor .pdk-door-tx { padding: 12px 4px 12px 12px; }
+
 /* ---------- The Kennel, Kennel Phase A (2026-09-05) ----------
    A display screen, not a shop: no glow anywhere on a pet here, deliberately
    (Tom's ruling) -- .k-cell and .k-dot carry no box-shadow at all, unlike the
@@ -9889,11 +9911,17 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .k-id b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .k-dots { display: flex; gap: 6px; margin-top: 4px; }
 .k-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--surface-3); border: 1px solid var(--line-strong); display: inline-block; }
-.k-dot.on { background: var(--accent); border-color: var(--accent); }
+/* THE DOT IS THE COLOURWAY'S OWN COLOUR, not the accent (v500: "How to use the
+   kennel not clear at all"). Five identical lime dots said "you own five of
+   something" and made the player read the caption to learn WHICH; the shell
+   hues say it at a glance, and DESIGN.md keeps the accent scarce and meaning
+   "go", never "collected". --kc is set inline from morphSwatch (js/app.js). */
+.k-dot.on { background: var(--kc, var(--text)); border-color: var(--kc, var(--text)); }
 /* R39-6: ONE LINE, ELLIPSISED. "Ember, Frost, Toxic, Midnight owned" wrapped
    at 320px, grew the row 63 -> 79px and put the sixth row 80px past the fold. */
 .k-cap { font-size: 11.5px; color: var(--text-3); margin: 3px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .k-empty { color: var(--text-3); font-size: 13px; padding: 12px 0; }
+.k-lead { font-size: 12px; color: var(--text-3); margin: -2px 0 10px; line-height: 1.45; }
 /* LABEL ABOVE, NOT BESIDE: a side label would eat into the same 5-column
    budget the plan derives from sheet width alone (viewport - outer pad - four
    12px gutters, over five columns), so the cell size computed in JS would no
@@ -9920,7 +9948,14 @@ html:not(.booted) .gear-btn { animation: shellFurniture 0s linear 8s both; }
 .k-cell { position: relative; aspect-ratio: 1; padding: 0; background: var(--surface-2); border-radius: var(--radius-sm); display: grid; place-items: center; overflow: hidden; }
 .k-cell .petcrop { width: 100% !important; height: 100% !important; }
 .k-cell[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
-.k-cell.locked .petcrop img { filter: grayscale(1) brightness(.4); opacity: .55; }
+/* AN EMPTY SLOT, NOT A DIM PET. Tom, on v500: a player who has never opened
+   this should tell an owned cell from an unowned one in one look. At
+   brightness(.4)/opacity(.55) an unowned cell still read as a picture of an
+   animal, so the grid looked like 30 pets of varying exposure. Flattened to a
+   silhouette it reads as a hole in the set -- still the species' own shape (so
+   the row is legible) and still a decoded image, never a 404. */
+.k-cell.locked .petcrop img { filter: grayscale(1) brightness(.18) contrast(.6); opacity: .5; }
+.k-cell.locked { background: var(--bg); }
 .k-cell svg { position: absolute; bottom: 4px; right: 4px; color: var(--text-3); }
 
 /* ---------- Discord card hero (Tom, 2026-08-12) ----------

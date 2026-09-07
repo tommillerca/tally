@@ -63,6 +63,21 @@
  *            delta 49.64" (the hue-rotate painted an Ember shell BLUE, the
  *            exact failure mode the brief measured at 155,158,188)
  *
+ * V500 FEEDBACK ROUND (2026-09-07), the KIN row. Tom: the Stable's copy rail
+ * "just shows their lvl not a little picture of them". Two mutations, each RUN
+ * in a `cp -R` throwaway copy over the v500 code, HEADLESS_MODE=shell:
+ *
+ *   the chip reverted to the shipped v500 text-only markup
+ *     -> SETUP "2 chip(s), with an image: 0" -> exit 2, "This audit GRADED
+ *        NOTHING", which is the right answer for a rail with no pictures on it
+ *        (an empty sample is a failure, never a pass).
+ *   the portrait kept but keyed off the SPECIES, dropping the instance's morph
+ *     -> KIN FAIL "copy-1 assets/bh/thumb/192/C/C5.png nw=192 h=46.0 ok |
+ *        copy-2 assets/bh/thumb/192/C/C5.png nw=192 h=46.0 WRONG ART". Only
+ *        KIN -- and this is the mutation that matters, because a picture that
+ *        is merely PRESENT is indistinguishable from a correct one on a rail of
+ *        one species until the two copies differ by colour.
+ *
  * Run: HEADLESS_MODE=shell node tests/pet-morph-audit.mjs [baseUrl] [--shots DIR]
  * Self-serving with no URL: serves this checkout, can never grade production.
  */
@@ -373,6 +388,35 @@ async function run() {
        copy its own colour (paddockRoster carries morph beside shiny). */
     await page.click('#stableBtn').catch(() => {});
     await sleep(700);
+
+    /* KIN (2026-09-07). Tom, on v500: "Scrolling through multiple pets in
+       stable just shows their lvl not a little picture of them or something so
+       not intuitive to want to go scroll that rail." The copy rail under the
+       focused card must carry the PET, not just a level, and it must be each
+       copy's OWN look -- which is the whole reason this file exists: with two
+       C5s, one base and one midnight, a rail that drew the species would draw
+       the same picture twice and say nothing. Decoded (naturalWidth > 0), per
+       instance, right species AND right morph, inside the 44px tap floor.
+       Proved red on the shipped v500 rail (text-only chips):
+         SAMPLE  "2 chip(s), with an image: 0"  -> exits 2, grading nothing,
+                 which is the correct answer for a rail with no pictures on it.
+       And with the portrait in but keyed off the SPECIES instead of the
+       instance (morph dropped):
+         KIN     FAIL "copy-1 assets/bh/thumb/384/C/C5.png ok | copy-2
+                 assets/bh/thumb/384/C/C5.png WRONG MORPH (want midnight)" */
+    const kin = await page.evaluate(() => [...document.querySelectorAll('.cf-kin .chip')].map(c => {
+      const img = c.querySelector('img');
+      return { iid: c.dataset.kin, h: c.getBoundingClientRect().height,
+        nw: img ? img.naturalWidth : 0, src: img ? (img.currentSrc || img.src) : null };
+    }));
+    setup('SAMPLE the Stable\'s copy rail is showing both C5 copies, each with an image element to grade',
+      kin.length === 2 && kin.every(k => k.src), `${kin.length} chip(s), with an image: ${kin.filter(k => k.src).length}`);
+    const wantKin = { 'copy-1': /\/C\/(?:thumb\/\d+\/C\/)?C5\.png$/, 'copy-2': /\/morph\/C5__midnight\.png$/ };
+    const kinBad = kin.filter(k => !(k.nw > 0 && k.h >= 44 && (wantKin[k.iid] || /$^/).test(k.src || '')));
+    ok('KIN every copy chip in the Stable rail carries a DECODED picture of that copy -- right species, right colourway, inside the 44px tap floor',
+      kin.length === 2 && !kinBad.length,
+      kin.map(k => `${k.iid} ${String(k.src).replace(/.*\/assets/, 'assets')} nw=${k.nw} h=${k.h.toFixed(1)} ${(wantKin[k.iid] || /$^/).test(k.src || '') ? 'ok' : 'WRONG ART'}`).join(' | '));
+
     await page.evaluate(() => document.getElementById('stableToPaddock')?.click());
     await sleep(1400);
     const pdk = await page.evaluate(() => Object.fromEntries(['copy-1', 'copy-2'].map(iid => {
