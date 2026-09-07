@@ -7,6 +7,39 @@ const ios = await readFile(new URL('../native/build-ios.sh', import.meta.url), '
 const failures = [];
 const check = (ok, message) => { if (!ok) failures.push(message); };
 
+// CONTROL: exercise the same scanner the repo and archived bundle use. Exact
+// findings pin both comment removal and the original source line after the island.
+const island = "const TESTFLIGHT_URL = 'https://testflight.apple.com/join/HIDDEN';\n"
+  + "const invite = 'Join the beta';\n"
+  + '// Test hook (webdriver only), same reasoning as __community above.\n';
+const fixtures = [
+  ['single URL', "function later(){ window.open('https://testflight.apple.com/join/LEAK'); }", 'testflight.apple.com', 4],
+  ['template URL', 'function later(){ window.open(`https://testflight.apple.com/join/LEAK`); }', 'testflight.apple.com', 4],
+  ['double URL', 'function later(){ window.open("https://testflight.apple.com/join/LEAK"); }', 'testflight.apple.com', 4],
+  ['genuine line comment', '// https://testflight.apple.com/join/COMMENT\nconst safe = "hello";', null],
+  ['comment-like string', 'const s = "not // a comment"; const row = "Open TestFlight";', 'TestFlight', 4],
+  ['block-like string', 'const s = "not /* a comment"; const row = "Open TestFlight";', 'TestFlight', 4],
+  ['genuine block comment', '/* TestFlight\nbeta */ const safe = "hello";', null],
+  ['after block comment', '/* TestFlight\nbeta */ const row = "Open TestFlight";', 'TestFlight', 5],
+  ['multiline template', 'const row = `hello\nhttps://testflight.apple.com/join/LEAK`;', 'testflight.apple.com', 5],
+  ['nested template expression', 'const row = `hello ${/* beta */ `https://testflight.apple.com/join/LEAK`}`;', 'testflight.apple.com', 4],
+  ['template expression comment', 'const row = `hello ${1 // TestFlight\n}`;', null],
+  ['escaped quote', String.raw`const s = "quote \" not // a comment"; const row = "Open TestFlight";`, 'TestFlight', 4],
+  ['regex literal', String.raw`const re = /[/*]/; const row = "Open TestFlight";`, 'TestFlight', 4],
+];
+for (const [name, source, hit, line] of fixtures) {
+  const found = scanReachable(island + source, 'fixture.js');
+  const expected = hit ? [`reachable "${hit}" at fixture.js:${line}`] : [];
+  const ok = JSON.stringify(found) === JSON.stringify(expected);
+  console.log(`${ok ? 'PASS' : 'FAIL'} scanner ${name}: ${JSON.stringify(found)} (want ${JSON.stringify(expected)})`);
+  check(ok, `scanner fixture ${name}`);
+}
+const malformed = scanReachable(island + 'const s = "unterminated', 'fixture.js');
+check(malformed.length === 1 && malformed[0].startsWith('cannot tokenize fixture.js:'),
+  'tokenizer errors must refuse the scan');
+check(scanReachable('const safe = "hello";', 'fixture.js').includes('beta invitation block was not found in fixture.js'),
+  'missing invitation markers must refuse the scan');
+
 check(/const\s+STORE_BUILD\s*=\s*false\s*;/.test(app), 'shared source does not declare STORE_BUILD=false');
 check(/const\s+SHOW_BETA_THANKS\s*=\s*!STORE_BUILD\s*;/.test(app), 'beta surfaces are not derived from STORE_BUILD');
 check(/function\s+thanksBannerHtml\(\)\s*{\s*if\s*\(!SHOW_BETA_THANKS\)\s*return\s+''/.test(app), 'Crew thank-you strip is reachable');

@@ -6,7 +6,7 @@
  * so a preflight that silently stopped checking would be caught.
  */
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readdirSync, symlinkSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -52,6 +52,37 @@ run('server', 'SERVER   a synced config that still has a server URL is refused',
 run('string', 'STRING   a reachable TestFlight string is refused',
   { app: bundle('true', "const row = { label: 'Open TestFlight' };"), config: { appId: 'com.boneheadz.gym' } },
   1, 'reachable');
+
+for (const [slug, extra, wantExit] of [
+  ['single-url', "function later(){ window.open('https://testflight.apple.com/join/LEAK'); }", 1],
+  ['template-url', 'function later(){ window.open(`https://testflight.apple.com/join/LEAK`); }', 1],
+  ['double-url', 'function later(){ window.open("https://testflight.apple.com/join/LEAK"); }', 1],
+  ['line-comment', '// https://testflight.apple.com/join/COMMENT\nconst safe = "hello";', 0],
+  ['comment-in-string', 'const s = "not // a comment"; const row = "Open TestFlight";', 1],
+]) {
+  run(slug, `SCANNER  ${slug}`,
+    { app: bundle('true', extra), config: { appId: 'com.boneheadz.gym' } },
+    wantExit, wantExit ? 'reachable' : 'submission preflight passed');
+}
+
+// CONTROL: run the gate's real coverage check, then add a runnable file in a
+// throwaway tests directory. No fixture touches the checkout or starts a server.
+const coverageDir = path.join(dir, 'tests');
+mkdirSync(coverageDir);
+for (const file of readdirSync(HERE)) {
+  if (file === 'release-gate.mjs') copyFileSync(path.join(HERE, file), path.join(coverageDir, file));
+  else symlinkSync(path.join(HERE, file), path.join(coverageDir, file));
+}
+function coverage(name, wantExit, wantText) {
+  const r = spawnSync(process.execPath, [path.join(coverageDir, 'release-gate.mjs'), '--coverage-only'], { encoding: 'utf8' });
+  const out = `${r.stdout}${r.stderr}`;
+  const ok = r.status === wantExit && out.includes(wantText);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  COVERAGE ${name}  exit ${r.status} (want ${wantExit})  ${out.trim()}`);
+  if (!ok) failures.push(`coverage ${name}`);
+}
+coverage('registered helper', 0, 'coverage:');
+writeFileSync(path.join(coverageDir, 'unregistered-store-fixture.mjs'), 'process.exit(0);\n');
+coverage('unregistered runnable refused', 1, 'unregistered-store-fixture.mjs');
 
 rmSync(dir, { recursive: true, force: true });
 if (failures.length) { console.error(`\nsubmission-preflight: ${failures.length} FAILED`); process.exit(1); }
