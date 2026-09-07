@@ -47,7 +47,7 @@ import { pixCur } from './icons-pix.js';
 import * as social from './social.js';
 import { NAME_ADJ, NAME_NOUN, buildName as buildDisplayName, randomName } from './names.js';
 import { initAnalytics, track as trackEvent, flush as flushAnalytics, screen as trackScreen, sendReport, sendSurvey } from './analytics.js';
-import { loadMaplibre, createBoneyardMap, domMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
+import { loadMaplibre, createBoneyardMap, domMarker, moveMarker, markMapInteracted, resetMapInteracted, MAP_START_ZOOM } from './map.js';
 import { hlwArt } from './hollow-art.js';
 /* runTalkBox only: no screen emits talk-box markup of its own right now (Today's
    came off in v418), and the reveal path still has to start any box that appears.
@@ -9889,6 +9889,24 @@ const FB_TILE_SCALE = { 'fit-fbhead': 1.4, 'fit-torso': 1.7, 'fit-feet': 2.2 };
    (~143/174px, both clear it) and the 640 master for the cleats (~225px,
    clears no tier -- fit-feet's crop is the steepest of the three). */
 const kitTierCss = it => FB_TILE_W * (FB_TILE_SCALE[fitClass(it)] || 2.3);
+/* THE COLOURWAY PROOF: SIX DISCS AND A "+26" (R40-21, 2026-09-07).
+   All 32 were drawn in a 16-column grid whose columns were `1fr`, so the disc
+   size was whatever the container had left. MEASURED on the rendered kit room:
+   the tile strip is 138.5px wide at 393 and 102px at 320, which made the disc
+   5.84px and 3.56px -- below the 8px floor, i.e. a row of dots that proves
+   nothing. Six 10px discs plus the "+26" fit the NARROWEST strip measured
+   (6x10 + 5x3 + 3 + ~18px of text = 96px inside 102px) and the count is still
+   stated, both in the chip and in the aria-label, so nothing is hidden.
+   ONE FUNCTION, TWO CALL SITES: the hero and the tiles drew the same markup
+   twice and a cap applied to one of them would be the same defect halved. */
+const FB_STRIP_DISCS = 6;
+const fbTeamsStripHtml = () => {
+  const shown = FOOTBALL_TEAMS.slice(0, FB_STRIP_DISCS);
+  const rest = FOOTBALL_TEAMS.length - shown.length;
+  return `<div class="fb-teams" role="img" aria-label="${FOOTBALL_TEAMS.length} team colourways">${
+    shown.map(t => `<i class="fb-swatch xs" style="--fa:${t.a};--fb:${t.b}"></i>`).join('')
+    }${rest > 0 ? `<b class="fb-more">+${rest}</b>` : ''}</div>`;
+};
 function footballShelfHtml(ownedCos, coinBal, open = false) {
   const team = FOOTBALL_TEAM_BY_ID[S.fbTeam] || FOOTBALL_TEAMS[0];   // the PREVIEW colourway, not a variant on sale
   const price = FOOTBALL_KIT_PRICE_PLACEHOLDER;
@@ -9947,7 +9965,7 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
           <span class="eyebrow">Locker room · ${FOOTBALL_TEAMS.length} teams${ownedHere ? ` · ${ownedHere} of ${sold.length} yours` : ''}</span>
           <h2>FOOTBALL KIT</h2>
           <small>Helmet, jersey and cleats for your Bonehead. A helmet and jersey for the lizard. Buy a piece and it is yours in every team's colours.</small>
-          <div class="fb-teams" role="img" aria-label="${FOOTBALL_TEAMS.length} team colourways">${FOOTBALL_TEAMS.map(t => `<i class="fb-swatch xs" style="--fa:${t.a};--fb:${t.b}"></i>`).join('')}</div>
+          ${fbTeamsStripHtml()}
           <span class="t3-price">${Number.isFinite(price) ? `${ICONS.coin(13)} ${price.toLocaleString()} a piece${footballBundleSellable() ? `, ${kit.bundle.toLocaleString()} the lot` : ''}` : 'Not for sale yet'}</span>
         </div>
       </div>
@@ -9974,14 +9992,13 @@ function footballShelfHtml(ownedCos, coinBal, open = false) {
    price/quote/bundleOwned are cheap synchronous reads and the listener
    re-derives its own copy rather than reaching into this closure. */
 function footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned) {
-  /* THE 32-DISC STRIP, reused verbatim from the hero above (same class, same
-     markup): Tom's live feedback on v474, "It looks like you're just buying the
-     blue and gold colorway. I know there's text that says you get all of them,
-     but that needs some work." The grey "All 32 colourways" line was easy to
-     miss; 32 team discs under it is the same claim made visible rather than
-     stated. No new CSS, no new art: `.fb-teams`/`.fb-swatch.xs` already draw the
-     hero's strip at any container width. */
-  const teamStripHtml = () => `<div class="fb-teams" role="img" aria-label="${FOOTBALL_TEAMS.length} team colourways">${FOOTBALL_TEAMS.map(t => `<i class="fb-swatch xs" style="--fa:${t.a};--fb:${t.b}"></i>`).join('')}</div>`;
+  /* THE COLOURWAY STRIP, the same one the hero above draws (fbTeamsStripHtml,
+     which is where the six-discs-and-a-"+26" measurement lives): Tom's live
+     feedback on v474, "It looks like you're just buying the blue and gold
+     colorway. I know there's text that says you get all of them, but that needs
+     some work." The grey "All 32 colourways" line was easy to miss; team discs
+     under it are the same claim made visible rather than stated. */
+  const teamStripHtml = fbTeamsStripHtml;
   return `
       <label class="fb-pick"><span>Preview colours</span>
         <select id="fbTeam">${FOOTBALL_TEAMS.map(t => `<option value="${t.id}"${t.id === team.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
@@ -10536,11 +10553,22 @@ async function renderShop(el) {
          the rack's own rule ("a control that answers is kinder than one that
          ignores you"), instead of making an unaffordable price play the same
          two-tap ritual as a real spend. */
-      if (b.classList.contains('cant')) {
-        const amt = +b.dataset.amt;
-        toast(`That costs ${amt.toLocaleString()}. You have ${coinBal.toLocaleString()}.`, 2600);
+      /* THE LIVE WALLET, NOT THE ONE THIS RENDER CLOSED OVER (R40-23).
+         `coinBal` is read once, at the top of renderShop, and the kit room's
+         body can be built minutes later by the 'toggle' listener below -- so a
+         player who earned or spent anything in between met a pill graded
+         against a balance that no longer existed: an affordable piece answering
+         "you have 0", or a `cant` pill refusing a purchase they could now make.
+         One await here covers BOTH: the class is only how the pill LOOKS, the
+         number below is what decides. */
+      const bal = await coins();
+      const amt = +b.dataset.amt;
+      if (Number.isFinite(amt) && amt > bal) {
+        toast(`That costs ${amt.toLocaleString()}. You have ${bal.toLocaleString()}.`, 2600);
+        b.classList.add('cant');
         return;
       }
+      b.classList.remove('cant');
       if (b.dataset.armed !== '1') {
         b.dataset.label = b.dataset.label || b.innerHTML;
         b.dataset.armed = '1'; b.textContent = 'Tap again to buy';
@@ -10580,7 +10608,7 @@ async function renderShop(el) {
      section: wasOpen.fb re-renders #fbSect already open AND already filled
      (footballShelfHtml does that eagerly), so the FIRST toggle after a
      buy/team-change re-render fires 'toggle' with nothing to do. */
-  $('#fbSect', el)?.addEventListener('toggle', e => {
+  $('#fbSect', el)?.addEventListener('toggle', async e => {
     if (!e.target.open) return;
     const body = $('.t3-dropbody', e.target);
     if (!body || body.childElementCount) return;
@@ -10590,7 +10618,9 @@ async function renderShop(el) {
     const ownedHere = footballOwnedGarmentCount(ownedCos);
     const quote = footballBundleQuote(ownedHere);
     const bundleOwned = ownedHere === sold.length;
-    body.innerHTML = footballDropBodyHtml(ownedCos, coinBal, team, sold, price, quote, bundleOwned);
+    // the LIVE balance, for the reason in wireDropBuyButtons above: this body is
+    // built when the player opens the room, not when the shop was rendered.
+    body.innerHTML = footballDropBodyHtml(ownedCos, await coins(), team, sold, price, quote, bundleOwned);
     $('#fbTeam', body)?.addEventListener('change', ev => { S.fbTeam = ev.target.value; rerender(); });
     wireDropBuyButtons(body);
   });
@@ -14060,7 +14090,19 @@ function hypePlateHtml(src) {
   const tx = (1 - cw * s) / 2 - p.x0 * iw;                    // ink centred across the box
   const ty = 1 - p.y1 * ih;                                   // ink SEATED on the box floor
   const pc = n => (n * 100).toFixed(2) + '%';
-  return `<span class="hype-fig"><img src="${src}" alt=""
+  /* THE 384 TIER, NOT THE MASTER (R40-24). The hero slot is a ~100px box and it
+     was shipping the full-size plate into it: MEASURED off the rendered news
+     pill, the poster's <img> draws at 97.8 CSS px at 393 and 82.7 at 375/320,
+     and the file on the wire was the 359 KB 640 master. 97.8 x dpr2 = 195.6
+     device px, which is exactly the tier bhTierFor picks for every other caller
+     at that size (192 does not cover it, 384 does), and the tier is 157 KB: 202
+     KB of every cold boot, on the DEFAULT screen, for no pixel.
+     bhThumb hands back `src` unchanged for a plate outside BH_THUMB_RE (the
+     Mimic, the Wanderer, the Live Wire have no tiers), so this is the football
+     poster only, and data-full + THUMB_FALLBACK mean a missing tier costs the
+     bytes it saved rather than the hero. */
+  const tiered = bhThumb(src, 384);
+  return `<span class="hype-fig"><img src="${tiered}" alt=""${tiered === src ? '' : ` data-full="${src}" ${THUMB_FALLBACK}`}
     style="width:${pc(iw)};height:${pc(ih)};transform:translate(${pc(tx / iw)},${pc(ty / ih)})"></span>`;
 }
 
@@ -21986,7 +22028,7 @@ async function renderBoneyard(el) {
           rec = { marker: domMarker(maplibregl, map, { lat: d.lat, lng: d.lng, el, anchor: 'bottom' }), el, den: d };
           denMarkers.set(d.id, rec);
         } else {
-          rec.marker.setLngLat([d.lng, d.lat]); // reposition if the snap resolved after first render
+          moveMarker(rec.marker, d.lng, d.lat); // reposition if the snap resolved after first render (a no-op move costs a rAF: see moveMarker)
         }
         rec.den = d;
         rec.el.classList.toggle('claimed', claimedBoss.has(denKey(date, d)));
@@ -22028,7 +22070,7 @@ async function renderBoneyard(el) {
           rec = { marker: domMarker(maplibregl, map, { lat: m.lat, lng: m.lng, el, anchor: 'center' }), el, mini: m };
           miniMarkers.set(m.id, rec);
         } else {
-          rec.marker.setLngLat([m.lng, m.lat]); // reposition if the snap resolved after first render
+          moveMarker(rec.marker, m.lng, m.lat); // reposition if the snap resolved after first render (a no-op move costs a rAF: see moveMarker)
         }
         rec.mini = m;
         rec.el.classList.toggle('claimed', claimedMini.has(miniKey(date, m)));
@@ -22073,7 +22115,7 @@ async function renderBoneyard(el) {
         el.innerHTML = `<div class="glutton-blight-halo"></div><img src="assets/bh/glutton/idle.png" alt="The Glutton">`;
         gluttonRec = { marker: domMarker(maplibregl, map, { lat: glat, lng: glng, el, anchor: 'center' }), el };
       } else {
-        gluttonRec.marker.setLngLat([glng, glat]);
+        moveMarker(gluttonRec.marker, glng, glat);
       }
       // Size the blight fog to the REAL suppression radius so the dead ground you
       // see matches where loot actually stops spawning. Convert metres -> px at
@@ -22226,7 +22268,7 @@ async function renderBoneyard(el) {
           rec = { marker: domMarker(maplibregl, map, { lat: w.lat, lng: w.lng, el, anchor: 'center' }), el, w };
           wandererMarkers.set(w.id, rec);
         } else {
-          rec.marker.setLngLat([w.lng, w.lat]);
+          moveMarker(rec.marker, w.lng, w.lat);
           rec.w = w;   // the zoom repaint reads his CURRENT beat, not the one he arrived on
         }
         /* NEVER placeWalkable. Every other POI is snapped onto the nearest road
@@ -22628,7 +22670,7 @@ async function renderBoneyard(el) {
           rec = { marker: domMarker(maplibregl, map, { lat: s.lat, lng: s.lng, el }), el, spawn: s };
           spawnMarkers.set(s.id, rec);
         } else {
-          rec.marker.setLngLat([s.lng, s.lat]); // keep marker on its snapped position
+          moveMarker(rec.marker, s.lng, s.lat); // keep marker on its snapped position
         }
         rec.spawn = s;
         rec.el.classList.toggle('inrange', s.dist <= COLLECT_RADIUS_M);
@@ -22978,7 +23020,9 @@ async function renderBoneyard(el) {
     const prevCleanupGB = cleanupExtras;
     cleanupExtras = () => { prevCleanupGB(); removeEventListener('bh-glutton-beaten', onGluttonBeaten); removeEventListener('bh-mimic-beaten', onMimicBeaten); removeEventListener('bh-wanderer-beaten', onWandererBeaten); removeEventListener('bh-spire-claimed', onSpireClaimed); removeEventListener('bh-spire-tried', onSpireTried); };
 
-    let lastTick = 0, ema = null;
+    /* 4 m: the follow ease's own dead band, see the block at the easeTo below. */
+    const EASE_MIN_M = 4;
+    let lastTick = 0, ema = null, lastEase = null;
     huntWatchId = navigator.geolocation.watchPosition(pos => {
       const now = Date.now();
       if (now - lastTick < 1200) return;
@@ -23002,10 +23046,30 @@ async function renderBoneyard(el) {
         const cone = $('.map-cone', body);
         if (cone) { cone.hidden = false; cone.style.transform = `rotate(${Math.round(heading)}deg)`; }
       }
-      youMarker.setLngLat([lng, lat]);
+      moveMarker(youMarker, lng, lat);
       sizeRadius();   // lat changed, so metres-per-pixel did too
       youWalk.move(lat, lng);
-      if (follow && map) map.easeTo({ center: [lng, lat], duration: 900 });
+      /* THE CAMERA FOLLOWS REAL MOTION, NOT GPS JITTER (R41-18, 2026-09-07).
+         Every fix used to start a fresh 900ms easeTo, and a camera ease fires
+         `move` on EVERY frame it runs -- which is what turns 21 DOM markers
+         into 21 rAF a frame (maplibre reschedules each marker's occlusion pass
+         per move; see moveMarker in js/map.js). A phone lying on a table still
+         delivers a fix every 1.2s, and the smoothed position still wanders a
+         metre or two, so the map was easing three quarters of the time with
+         nothing on screen changing. MEASURED walking the Boneyard: 2,071 rAF/s
+         against 9.2 standing still.
+         THE DEAD BAND IS SMALLER THAN A PIXEL AND A HALF. At MAP_START_ZOOM
+         (15.4) and this latitude the ground resolution is ~2.4 m per CSS pixel,
+         so 4 m is 1.7 px: a fix that has not carried the player that far cannot
+         move the picture, whether or not the camera chases it. A walker at
+         1.4 m/s clears 4 m every third fix and the follow they see is the same
+         900 ms glide it always was.
+         MEASURED, jittering the fix ~1 m the way a phone on a table does:
+         9.2 rAF/s before, 1.4 after. */
+      if (follow && map && (!lastEase || distanceM(lastEase.lat, lastEase.lng, lat, lng) >= EASE_MIN_M)) {
+        lastEase = { lat, lng };
+        map.easeTo({ center: [lng, lat], duration: 900 });
+      }
       refreshWorld();
       /* WITHDRAW A STALE FIGHT PROMPT. The den sheet never expired: round-3 GPS
          walk held a live Fight button 600 m from the den. Close it the moment a

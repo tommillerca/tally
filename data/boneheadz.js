@@ -2153,8 +2153,19 @@ export const bhTierFor = css => BH_THUMB_TIERS.find(t => t >= css * 2) || 640;
 /* The fallback, as an attribute so it survives innerHTML: swap to the full-size
    art once, then give up and remove the layer. Anti-regression rule 8, and it is
    also why every tiered surface needs a check on the DECODED WIDTH -- a whole
-   missing sheet degrades to a clean-looking pass with the memory quietly back. */
-export const THUMB_FALLBACK = 'onerror="if(this.dataset.full){this.src=this.dataset.full;this.removeAttribute(\'data-full\');}else{this.remove();}"';
+   missing sheet degrades to a clean-looking pass with the memory quietly back.
+
+   AND THE GARMENT'S TINT SPANS GO WITH IT (R40-26, 2026-09-07). A football
+   piece is an <img> IMMEDIATELY followed by its .fb-tint multiply spans (see
+   footballTintHtml and croppedPetImg's tintOf: both emit `layer + tints`, in
+   that order, in that parent), and the spans are masked colour, not art. So
+   removing the img alone left the team's two colours floating on the mannequin
+   in the shape of a garment that is not there -- disembodied paint -- and the
+   kit-room tile went on charging 4,200 coins for it. The walk stops at the
+   first non-.fb-tint sibling, so it can only ever take the layer's OWN spans,
+   and a tile whose art died is marked .noart and has its buy button disabled:
+   nothing sells a piece it could not draw. */
+export const THUMB_FALLBACK = 'onerror="if(this.dataset.full){this.src=this.dataset.full;this.removeAttribute(\'data-full\');}else{var n=this.nextElementSibling,k=0;while(n&&n.classList&&n.classList.contains(\'fb-tint\')){var x=n;n=n.nextElementSibling;x.remove();k++;}var t=k&&this.closest&&this.closest(\'.drop-item\');if(t){t.classList.add(\'noart\');var b=t.querySelector(\'.drop-buy\');if(b){b.disabled=true;b.textContent=\'Art missing\';}}this.remove();}"';
 
 /* The pet art PNGs draw the creature small in the lower-right of a 640² canvas, so a
    plain full-square image renders it tiny and off-centre: the ink is ~0.30 x 0.29 of
