@@ -8026,6 +8026,73 @@ test('B16 the Spire sheet renders the outmatched line and always states the dail
     'openSpireSheet must always state that fighting a tower you do not hold spends today\'s attempt, win or lose');
 });
 
+// ---- R43-2: no shipped string may claim location is never uploaded ----------
+/* MEASURED, not argued. With geolocation pinned to 49.2827, -123.1207 the app
+   sent `GET /spires?ids=sp-2464--6156` on every map open: 49.2827 / 0.02 = 2464,
+   -123.1207 / 0.02 = -6156, and js/spires.js's SPIRE_CELL_DEG is 0.02 deg, a cell
+   about 2.2 km across. So a cell derived from GPS goes to the server. The map
+   intro told the player, at the moment of the grant, "used on this phone only,
+   never stored, never uploaded". The iOS purpose string was corrected in v498
+   (docs/PERMISSION-STRINGS.md), which left the in-app copy as the only place
+   contradicting the wire, and a reviewer reads the copy.
+   THE GUARD IS A CONJUNCTION, deliberately: the claim is only false while the app
+   actually sends the cell, so it re-derives that from js/spires.js rather than
+   assuming it. If Spires ever stop sending a cell, the sender row goes red and
+   tells the next person to revisit the copy instead of silently letting
+   "never uploaded" become true again by accident.
+   PROVE-RED: restore the line and this fails quoting
+   `js/app.js:21449: "Your location is used on this phone only, never stored,
+   never uploaded."` */
+test('R43-2 no shipped string claims location is never uploaded while spires.js sends a cell', () => {
+  const spires = readFileSync(join(here, '..', 'js', 'spires.js'), 'utf8');
+  const cell = spires.match(/SPIRE_CELL_DEG\s*=\s*([\d.]+)/);
+  assert.ok(cell, 'js/spires.js must declare SPIRE_CELL_DEG; if Spires no longer grid the player, revisit the location copy');
+  assert.ok(/cellOf/.test(spires) && /\bids=|\bids:/.test(spires + readFileSync(join(here, '..', 'js', 'social.js'), 'utf8')),
+    'the cell must still be sent to the server; if it is not, this guard and the copy both need revisiting');
+
+  /* Every file whose strings a player or a reviewer can read. Derived 2026-09-07
+     from the R43 audit pack's own sweep (HANDOFFr43part1, R43-2), which searched
+     the whole tree for the claim and found it in exactly one shipped surface. js/changelog.js is
+     excluded on purpose: its entries are a dated historical record, and the entry
+     that mentions location already names the Spire exception correctly. */
+  const FILES = ['js/app.js', 'js/hunt.js', 'js/spires.js', 'js/geo.js', 'privacy.html', 'support.html'];
+  const CLAIM = /never (?:stored|uploaded|sent anywhere)|used on this phone only/i;
+  const offenders = [];
+  for (const f of FILES) {
+    const path = join(here, '..', ...f.split('/'));
+    if (!existsSync(path)) continue;
+    for (const [n, line] of readFileSync(path, 'utf8').split('\n').entries()) {
+      if (!/location|GPS|coordinate/i.test(line)) continue;
+      /* "your GPS COORDINATES are never sent anywhere" is true and is what
+         privacy.html and the plist both say: the cell is not the coordinates.
+         The false claim is the one made about location in general. */
+      if (/coordinates?\s+(?:are\s+)?never|exact coordinates never/i.test(line)) continue;
+      const hit = line.match(CLAIM);
+      if (hit) offenders.push(`${f}:${n + 1}: "${hit[0]}" in ${line.trim().slice(0, 160)}`);
+    }
+  }
+  assert.equal(offenders.length, 0,
+    `location copy contradicts the ~${(+cell[1] * 111).toFixed(1)} km cell the app sends:\n  ` + offenders.join('\n  '));
+});
+
+// ---- R43-1: the privacy policy link is permanent, not survey-gated -----------
+/* The browser half is screen-sweep.mjs's PRIVACY-LINK rows. This is the cheap
+   static half: the ABOUT row must not be inside a `${surveyDone ? ...}` template,
+   because that is exactly how the only two existing links disappeared.
+   PROVE-RED: wrap the row in the surveyDone ternary and this fails. */
+test('R43-1 Settings ABOUT links the privacy policy unconditionally', () => {
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const row = src.match(/^.*id="privacyBtn".*$/m);
+  assert.ok(row, 'Settings must carry a privacy policy row (App Store guideline 5.1.1(i))');
+  assert.ok(/href="privacy\.html"/.test(row[0]), 'the row must link privacy.html');
+  assert.ok(!/\$\{[^}]*surveyDone[^}]*\?/.test(row[0]) && !/surveyDone/.test(row[0]),
+    'the privacy row must not be gated on survey state');
+  const sw = readFileSync(join(here, '..', 'sw.js'), 'utf8');
+  assert.ok(/'\.\/privacy\.html'/.test(sw), "privacy.html must be in sw.js's PRECACHE so the link works offline");
+  const build = readFileSync(join(here, '..', 'native', 'build-www.sh'), 'utf8');
+  assert.ok(/\$SRC\/privacy\.html/.test(build), 'native/build-www.sh must copy privacy.html or the store build 404s the link');
+});
+
 await runAll();
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
