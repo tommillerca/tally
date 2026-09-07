@@ -20,6 +20,7 @@ import {
   boneDust, boneDustAdd, disenchantGear, salvagePet, gearDustValue, petDustValue, slimedGearIds,
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
+  newCosmeticIds, newSlotCodes, clearNewInSlot,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   stripAll, stripAllPlan,
   DROP, buyDropItem, buyFootballItem, buyFootballBundle, refundStreakFreezes,
@@ -15735,6 +15736,26 @@ addEventListener('bh-levelup', e => {
   maybeCelebrate();
 });
 
+/* R41-21: WHAT THIS PARTICULAR STREAK MEANS. Measured 2026-09-07 at 393x852,
+   before this change: day 7's card carried three content blocks (🔥 7 days /
+   "Streak milestone · +100 XP" / the "On a roll" badge) and day 14's carried
+   two, because BADGES has streak-3, streak-7 and streak-30 and nothing at 14.
+   Day 14's card was therefore a strict subset of day 7's: the LONGER streak was
+   the thinner screen.
+   Adding a streak-14 badge would have fixed the shape and it is not mine to add:
+   a badge pays +25 XP and lands in the badge grid, which is an economy change
+   and Tom's call. This is copy plus counts the app already holds, and it is on
+   EVERY milestone, not bolted onto 14: a card keyed to one number would break
+   again at 50. Nothing here is computed, invented or projected; see celeStats. */
+const STREAK_LINES = {
+  3: 'Three days. Three is the one that usually breaks.',
+  7: 'A full week. Seven days, none of them missed.',
+  14: 'Two weeks. Nobody keeps fourteen days by accident.',
+  30: 'A month of it. That is not a run any more, it is how you eat.',
+  50: 'Fifty days. Most people never see the far side of a month.',
+  100: 'A hundred days. There is no trick left to tell you about.',
+};
+
 const LEVELUP_LINES = [
   'Another level? I felt that in my femurs.',
   'New level, same beautiful skull.',
@@ -15763,6 +15784,26 @@ function maybeCelebrate() {
     S.celebration = null;
     if (c) openCelebration(c);
   }, 380);
+}
+
+/* THE COUNTS ARE READ, NEVER DERIVED. Every chip here is a length of something
+   the player owns, printed as-is: pieces found, pets in the Stable, badges
+   earned. No averages, no projections, no "you are on track for" (Tom's ruling:
+   no fabricated numbers). A count of zero gets no chip, because "0 pets" is a
+   sentence about an absence and this screen is about what they have built.
+   Returns null when there is nothing true to say, so the card is unchanged for
+   a player with nothing yet rather than carrying an empty row. */
+async function celeStats() {
+  let pieces = 0, pets = 0, badges = 0;
+  try {
+    const [cos, insts, earned] = await Promise.all([ownedCosmeticIds(), petInstances(), earnedBadgeIds()]);
+    pieces = cos.size; pets = insts.length; badges = earned.size;
+  } catch { return null; }
+  const chips = [];
+  if (pieces) chips.push(`<span class="bh-pill">${ICONS.bone(16)} ${pieces} piece${pieces === 1 ? '' : 's'} found</span>`);
+  if (pets) chips.push(`<span class="bh-pill">${crateIcon('egg', 16)} ${pets} pet${pets === 1 ? '' : 's'}</span>`);
+  if (badges) chips.push(`<span class="bh-pill">${ICONS.star(16)} ${badges} badge${badges === 1 ? '' : 's'}</span>`);
+  return chips.length ? `<div class="cele-stats">${chips.join('')}</div>` : null;
 }
 
 async function openCelebration({ levelUp = null, levelRewards = null, newBadges = [], streakMilestone = null, fromLevel = null, note = null, newPet = null }) {
@@ -15795,7 +15836,16 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
     return;
   }
   const bits = [];
-  if (streakMilestone) bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP</div>`);
+  if (streakMilestone) {
+    /* "· Bone Crate" is not decoration: streakAwards() grants a GOLDEN crate on
+       every milestone (js/game.js, `grantCrate('golden', 'streak-' + ...)`) and
+       no card has ever said so. */
+    bits.push(`<div class="cele-big">🔥 ${streakMilestone} days</div><div class="cele-sub">Streak milestone · +100 XP · Bone Crate</div>`);
+    const line = STREAK_LINES[streakMilestone];
+    if (line) bits.push(`<div class="cele-line">${esc(line)}</div>`);
+    const stats = await celeStats();
+    if (stats) bits.push(stats);
+  }
   for (const b of newBadges) bits.push(`<div class="cele-badge"><span>${badgeIconHtml(b.icon,26)}</span><div><b>${esc(b.name)}</b><small>${esc(b.desc)} · +25 XP</small></div></div>`);
   if (!levelUp && !bits.length) return;
   // Confetti stays for badges and streaks. The level-up moment has its own
@@ -15826,6 +15876,12 @@ async function openCelebration({ levelUp = null, levelRewards = null, newBadges 
   $('#celeOk', wrap).addEventListener('click', () => history.back());
 }
 
+
+/* Test seam, webdriver-gated like __packReveal / __spireSheet / __toast.
+   A streak milestone is reachable only by logging on N real consecutive days,
+   so tests/streak-card-audit.mjs would otherwise have to hand-roll the markup
+   it is grading, which grades nothing. This is the shipped function. */
+if (typeof window !== 'undefined' && navigator.webdriver) window.__celebrate = openCelebration;
 
 /* The level-up MOMENT. A breathing lime glow bursts behind the player's own
    Bonehead. Never a stock figure, this surface is under the figure contract and
@@ -16402,9 +16458,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
   if (tab === 'wardrobe') {
     const owned = await ownedCosmeticIds();
     // tm and dustBal are reassigned by restageLook after a paid commit (QA round 23 F1)
-    let [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal, fitList] = await Promise.all([
-      ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(),
+    let [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal, fitList, invRows] = await Promise.all([
+      ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(), db.all('inv'),
     ]);
+    /* R39-25, THE UNREAD MARK. One inv scan, shared by both readers, on the
+       WARDROBE's render only: nothing here runs on Today's tick, which is what
+       today-reads-lint exists to keep true. The rows are read BEFORE the clear
+       below, so the slot you land on shows its dots once and is quiet on the
+       next render and after a reload. */
+    const newIds = await newCosmeticIds(invRows);
+    const newSlots = await newSlotCodes(invRows);
     const fitPrices = await Promise.all(fitList.map(f => fitPrice(f)));
     // What "Take it all off" would actually take off, computed by the same
     // function that does it, so the chip cannot offer a strip that does nothing
@@ -16494,6 +16557,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
               : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}"${fbTintAttr(art)}${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
           : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? ICONS.hidden(18) : '+'}</span>`}
         ${mog ? `<span class="pd-mog" title="Look changed">${sparkIco(11)}</span>` : ''}
+        ${newSlots.has(code) ? '<span class="new-dot" role="img" aria-label="New"></span>' : ''}
         <span class="pd-tag">${esc(label)}</span>
         ${g ? `<span class="pd-gear">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>` : ''}
       </button>`;
@@ -16753,6 +16817,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)} · ${esc(i.rarity)}">
             ${famArtHtml(i)}
             ${rarityTagHtml(i.rarity)}
+            ${newIds.has(i.id) ? NEW_DOT : ''}
           </button>`;
           /* data-equip AND data-family: the tap equips what the tile is showing
              (so wearing this piece still costs exactly one tap, as it does
@@ -16765,6 +16830,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ${famArtHtml(i)}
             ${rarityTagHtml(best.rarity)}
             <span class="ward-fam-n" aria-hidden="true">${fam.length}</span>
+            ${fam.some(v => newIds.has(v.id)) ? NEW_DOT : ''}
           </button>`;
         }).join('')}
         ${gearItems.map(g => {
@@ -16776,6 +16842,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ${rarityTagHtml(g.rarity)}
             <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
+            ${newIds.has(g.id) ? NEW_DOT : ''}
           </button>`;
         }).join('')}
       </div>
@@ -17026,6 +17093,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
        are transmogging"). Same trim as the doll slots. */
     hydratePackArt(content, '.pd-art[data-art]');
     lazyHydrateWardArt(content);       // PERF-4: the grid's tiles paint as they near the viewport, not all at once
+    /* R39-25: THE GRID FOR THIS SLOT IS NOW ON SCREEN, SO IT HAS BEEN SEEN.
+       After the HTML, never before it: the marks above were rendered from the
+       pre-clear rows so the slot you land on shows its dots once. Clearing is a
+       put per still-flagged row in THIS slot only, so a slot with nothing new
+       writes nothing. Awaited so a reload straight after cannot race it. */
+    if (newSlots.has(slot)) await clearNewInSlot(slot);
     const wirePd = b => b.addEventListener('click', async () => {
       S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null;
       await renderCharacter(wrap, 'wardrobe', { instant: true });
@@ -18031,6 +18104,11 @@ const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
    and its title, and it is the same vocabulary the crate odds sheet already
    prints. Bottom-left, because the equipped tick owns the top-right corner and
    the SLIMED tag owns the top-left. */
+/* R39-25's unread mark, in the app's own badge language: the same accent plate
+   and --bg ring the crate count and the News dot wear, at dot size. One string,
+   used by the paper-doll slot rail and by all three wardrobe tile shapes, so a
+   tile that grew a mark and a rail that did not cannot happen. */
+const NEW_DOT = '<span class="new-dot" role="img" aria-label="New"></span>';
 function rarityTagHtml(rarity) {
   const r = String(rarity || '');
   return RAR_ORDER.includes(r) ? `<span class="ward-rar" aria-hidden="true">${r[0].toUpperCase()}</span>` : '';
@@ -23538,7 +23616,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v508'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v509'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {

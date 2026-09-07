@@ -4,6 +4,11 @@
 // Append new entries to the TOP. `n` is the build number used only for the dot.
 export const CHANGES = [
 
+  { n: 509, date: '2026-09-07', title: 'The first hour keeps its promises', items: [
+    'A message popping up could sit on top of the buttons you were about to press. In a fight on a smaller phone it covered six of your moves, including the one you were reaching for. Messages now sit clear of any panel\'s controls.',
+    'A piece you have just won is marked with a dot until you have actually looked at it, on both the slot rail and the tile, so a crate reward does not vanish into a full wardrobe.',
+    'Every streak milestone now says something the last one did not: a line of its own, the golden Bone Crate it hands you, and a count of what you have collected so far. Day fourteen used to say strictly less than day seven.',
+  ] },
   { n: 508, date: '2026-09-07', title: 'Small screens keep their controls', items: [
     'On the smallest phones the naming screen showed no name. The footer had grown to 160px of a 568px screen and swallowed the whole nameplate, and the reroll button did nothing where it sat, because the thing you were tapping was the footer covering it. That was our fix from four days ago overshooting the problem it was solving. The name is visible at every size now, and the button under your thumb is the button you pressed.',
     'The plan screen was hiding the choices you had just made behind its own save button, at every screen size. Your selections stay visible.',

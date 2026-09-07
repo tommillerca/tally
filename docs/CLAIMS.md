@@ -12,6 +12,15 @@ the upload path and its guards.
 3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
 
 
+## v509
+1. A hotfix off v508: three first-hour defects from the R41/R39 packs. Its dated section is further down, folded here.
+
+2. PROOF: toast-sheet-audit.mjs, toast-map-audit.mjs | REACH: any sheet with controls at its foot, with a toast firing. Measured unfixed in a real fight: at 375x667 the toast box 26.3,466 322.5x105 covered SIX move buttons, Jab and Bone Spike entirely; at 393x852 it clipped Haymaker and Bone Guard. The collision is structural rather than the Pit's, because every sheet puts its controls at the bottom and `.toast` sits 96px off the bottom, so the fix is one CSS rule keyed on a sheet existing (`body:has(#sheets .sheet) .toast`), the same shape as the shipped map rule and out-specifying it. Deferring the toast until the sheet closed was rejected on inspection of the call sites: most toasts in this app ARE a sheet's own feedback, so holding them detaches the answer from the action. After: toast at y=110 at both widths, zero intersection with 10 controls including Flee, and toast-map-audit's SEAT still 96px. The 393x852 row is declared in the audit header as a fence rather than a reproduction, because with an eight-move tray the toast lands in the tray's empty tail and the row is green on the unfixed tree.
+
+3. PROOF: new-cosmetic-mark-audit.mjs | REACH: win a cosmetic, then open the Wardrobe. A piece arrived with nothing marking it, so a crate reward disappeared into a full collection. Every grant path already routes through two row builders, so `nw: 1` on the row covers crates, drops, hatches, shop and quest payouts in two lines, rendered as a dot in the app's existing badge language on the slot rail and the tile and cleared when the grid renders. The flag lives on the row rather than in a table of per-slot seen-timestamps deliberately: a timestamp needs a backfill answer for every existing account and the honest one is a wall of dots on a shipped collection, so an absent flag reads as seen. Measured after: dots on 14 slots and 1 of 3 tiles, both zero on the next render and after a reload. Cost is one extra inv read on the Wardrobe render and zero on Today's tick, with today-reads-lint green.
+
+4. PROOF: streak-card-audit.mjs | REACH: reach a streak milestone. Measured at 393x852: day 7 drew three content blocks and day 14 drew two, because BADGES has streak-3, streak-7 and streak-30 and nothing at 14, so with the number stripped day 14 said strictly less than day 7. No streak-14 badge was added: that pays XP and lands in the badge grid, which is an economy change and Tom's call. Instead every milestone gains a line of its own, a row of counts read straight off what the player owns with a chip dropped at zero, and the golden Bone Crate that streakAwards has always granted and no card ever mentioned. After: day 7 five blocks, day 14 four, and day 14 carries a line day 7 does not. The audit's CONTROL row goes red if a streak-14 badge is ever added, which is a signal to re-read the file rather than delete the row.
+
 ## v508
 1. A hotfix off v507: the App Store reviewer's small-screen pass from round 43, including a regression this project shipped in v489. Its dated section is further down, folded here.
 
@@ -281,6 +290,15 @@ frame. Back to back in one process, two passes agreeing, median frame 33.3ms
 with it mounted and 16.7ms with it hidden.
 
 1. PROOF: crate-reveal-audit.mjs | REACH: Open a Bone Crate from your Backpack and flick through its three cards: each card leaves and the next one arrives at full frame rate instead of half. Measured over the 520ms of the move, dropped frames 8-16 before and 1-5 after, frames rendered 18-27 before and 47-59 after. Nothing about what a crate pays, the reveal's copy, the tap guards (R37-5) or the Open all recovery (R39) changes.
+
+## the first hour keeps its promises (2026-09-07)
+
+Not stamped to a release: hotfix/first-hour-polish, off v503. Three items from
+the QA master handoff that needed no ruling: R41-20, R39-25 and R41-21.
+
+1. PROOF: toast-sheet-audit.mjs | REACH: A toast can no longer sit on top of a control you are being asked to use. The welcome-kit message fires 1.2s after onboarding and a new player is five taps from their first fight, so it landed on the move tray: measured at 375x667 it covered six move buttons, Jab (110.3x54.8) and Bone Spike whole, and at 393x852 on a nine-move tray it took 104.8x27.8 of Haymaker and 116.3x27.8 of Bone Guard. Fixed for every sheet rather than for the Pit, because every sheet in the app puts its controls at the bottom and the toast's seat is 96px off the bottom: while a sheet is open the toast takes a seat under the sheet head, clear of the Flee button as well. Everywhere else it has not moved (96px, graded).
+2. PROOF: new-cosmetic-mark-audit.mjs | REACH: Win a cosmetic and it stays findable. From the moment it is granted, the Wardrobe's paper doll marks the slot it landed in with a dot, and the tile inside that slot carries one too, in the same accent-on-dark language the crate count and the News dot already use. Both clear when you open that slot's grid, and stay clear after a reload. Nothing you already owned is marked: the flag is written by the grant, so an existing collection is quiet.
+3. PROOF: streak-card-audit.mjs | REACH: A longer streak is no longer a thinner screen. Measured at 393x852: day 7's card carried three blocks of content and day 14's carried two, because there is a badge at 7 and none at 14, so with the number taken out day 14 said nothing day 7 did not. Every streak milestone now carries a line of its own and a row of counts you can check yourself (pieces found, pets, badges, each one a length of something you own, dropped when it is zero), and the sub-line names the golden Bone Crate the milestone has always paid and never mentioned. No badge was added at 14: that pays XP and is an economy change, not a copy fix.
 
 ## the Kennel explains itself (2026-09-07)
 
