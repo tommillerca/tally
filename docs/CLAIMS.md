@@ -267,7 +267,9 @@ before it was touched and again after.
    plates the poster replaced still were, so the newest thing in the game was the
    one thing an offline first boot drew as holes. The sixteen files the news hero
    and the Shop's lead shelf actually draw (the 384 tier) are precached now:
-   11,714.0 KB to 11,997.7 KB of install, 211 entries to 227. The kit room's own
+   211 entries to 227, and 283.7 KB more to install (11,714.0 KB to 11,997.7 KB
+   measured on the v498 base this was written against; 12,012.7 KB after the
+   merge with v500, whose own art moved the total by 15 KB). The kit room's own
    grid is left on the runtime road on purpose, because it does not exist in the
    page until somebody opens it. The conditional-precache path is unchanged and
    sw-upgrade-audit's CARRIED row is still green (183 of 183 carried by 304).
