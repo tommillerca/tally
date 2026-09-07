@@ -1657,6 +1657,7 @@ async function boot() {
   maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
     if (spun === true && !sheetStack.length) refresh();
     else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);   // QA round 26 O14: the refused wheel used to vanish without a word
+    else if (spun?.pending) wheelRetryPending = true;   // B14: a sheet was open; closeTopSheet retries once the stack drains
   }).catch(() => {});
   refundStreakFreezes().then(r => {
     if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
@@ -1743,6 +1744,7 @@ async function rollDayIfNeeded() {
     maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
       if (spun === true && !sheetStack.length) refresh();
       else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);   // QA round 26 O14
+      else if (spun?.pending) wheelRetryPending = true;   // B14: retried by closeTopSheet
     }).catch(() => {});
     refreshNotifSchedules();
     return true;
@@ -3536,6 +3538,44 @@ function announce(msg) {
 }
 
 const sheetStack = [];
+/* B14: set when maybeShowDailyWheel returned { pending: true } (a sheet was
+   open when it wanted to show). closeTopSheet drains it the moment the stack
+   is empty again, so a level-up sheet at boot delays the spin instead of
+   eating it for the day. See the wheel call sites and closeTopSheet below. */
+let wheelRetryPending = false;
+/* Shared by the two call sites that are not boot()'s or rollDayIfNeeded()'s own
+   inline call (both pinned verbatim by tests/unit.test.js R26-O14 and left
+   untouched): the retry below, and enterAppFromOnboarding's day-one fire. Same
+   three outcomes as those two copies. */
+function fireDailyWheel() {
+  maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
+    if (spun === true && !sheetStack.length) refresh();
+    else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);
+    else if (spun?.pending) wheelRetryPending = true;
+  }).catch(() => {});
+}
+/* refreshLevelChip: same doctrine as renderToday's own refreshWalletPill, for
+   the identical reason (R41-16). A Pit fight settles behind Today's own DOM
+   (the Pit is a sheet over it) and only #pitBody repainted on close, so XP a
+   fight just paid sat unread on the chip until the player navigated away and
+   back: measured, the chip read 0/200 while the ledger already held 65.
+   Repaints exactly the chip's own numbers, never a full re-render (same
+   anti-regression reasons as the wallet pill).
+   DELIBERATELY MODULE SCOPE, not nested beside refreshWalletPill inside
+   renderToday: totalXp() is a full 'xp' store scan on a cache miss, and
+   tests/today-reads-lint.mjs walks every call reachable from renderToday's
+   OWN body (not just what runs synchronously in its render tick), so a
+   closure defined in there reading xp counts as a second scan and that guard
+   goes red (A1). Living out here, it is invisible to that walk. */
+window.__refreshLevelChip = async () => {
+  const chip = $('#lvlChip'); if (!chip || !chip.isConnected) return;
+  const lvl = levelFor(await totalXp());
+  const row = $('.hero-lvrow', chip);
+  if (row) row.innerHTML = `<span class="hero-lv">Lv ${lvl.level}</span><span class="hero-title">${esc(lvl.name)}</span>`;
+  const xprow = $('.hero-xprow', chip);
+  if (xprow) xprow.innerHTML = `<span class="hero-xpn">${lvl.into.toLocaleString()}/${lvl.need.toLocaleString()}</span>`
+    + Array.from({ length: XP_PIPS }, (_, i) => `<i${i < Math.ceil(lvl.pct / (100 / XP_PIPS)) ? ' class="on"' : ''}></i>`).join('');
+};
 /* set when a new service worker took over while a sheet was open, so the
    reload the toast promised happens the moment the last sheet closes */
 let updatePending = false;
@@ -3633,6 +3673,10 @@ function closeTopSheet() {
   if (updatePending && !sheetStack.length) { updatePending = false; location.reload(); return; }
   try { rec.onClose?.(); } catch { /* noop */ }
   try { rec.restoreFocus?.(); } catch { /* noop */ }
+  /* B14: the ONE place every sheet finishes closing, so a spin owed while a
+     level-up (or any) sheet was open fires the moment nothing blocks it any
+     more, rather than waiting for the next boot or midnight roll. */
+  if (!sheetStack.length && wheelRetryPending) { wheelRetryPending = false; fireDailyWheel(); }
   const sheet = $('.sheet', rec.wrap), back = $('.sheet-backdrop', rec.wrap);
   if (reducedMotion || !sheet) { rec.wrap.remove(); return; }
   // slide down + backdrop fade, then remove. pointer-events off immediately so a
@@ -15150,6 +15194,14 @@ function enterAppFromOnboarding() {
   bindAppLifecycle(); // R37-1: this session took the onboarding path, not boot(), and never got resume/day-roll/notif/autoSync binding
   location.hash = '#/today';
   route();
+  /* B14: boot()'s own maybeShowDailyWheel call never runs for this session
+     (boot() returned before reaching it, the moment it found no S.settings),
+     and nothing else on this path ever called it, so day one never fired the
+     day's spin at all -- not a deliberate exclusion (claimDay's first-run
+     branch seeds and lets a fresh device through same as any other day), just
+     a wiring gap this exit point owns for both a finished onboarding and a
+     mid-onboarding restore. */
+  fireDailyWheel();
 }
 
 /* ================= game: celebrations + progress ================= */
@@ -25162,6 +25214,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
          (150 wanderer + 10 fight + 25 badge). Counted from the badges
          evaluateBadges actually claimed, so a duplicate can never inflate it. */
       xp += badges.length * BADGE_XP;
+      /* R41-16: after evaluateBadges, so the xp store already carries every
+         row this win minted (badges included; awardOnce writes on the spot). */
+      window.__refreshLevelChip?.();
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
     } else if (fight.over.winner === 'f') {
@@ -25172,6 +25227,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       coins = foeCfg.mode === 'spar' ? (await claimSpar(fightId, false)).coins : 5;
       if (coins) await coinsAdd(coins);
       window.__refreshWalletPill?.();
+      window.__refreshLevelChip?.();   // R41-16: no xp on a loss, but stays true to "like the wallet pill does"
     }
     /* Spend the day's attempt on this tower, whatever the outcome. Outside the
        win/lose branches on purpose: a loss and a draw have to consume it too, or

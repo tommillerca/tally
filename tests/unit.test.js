@@ -5363,9 +5363,12 @@ test('R26 O1 (a) openVeil pushes the stack; a popped history entry and a route c
   let api;
   // back() runs the shipped popstate handler, verbatim (asserted above)
   const history = { pushState: st => pushes.push(st), back: () => { backs.push(1); if (sheetStack.length) api.closeTopSheet(); } };
-  api = new Function('sheetStack', 'history', 'document', '$', 'reducedMotion', 'updatePending', 'location',
+  // B14: closeTopSheet now reads wheelRetryPending and calls fireDailyWheel()
+  // when the stack drains; both are harmless stand-ins here (false / no-op),
+  // since this test is about the veil/history plumbing, not the wheel retry.
+  api = new Function('sheetStack', 'history', 'document', '$', 'reducedMotion', 'updatePending', 'location', 'wheelRetryPending', 'fireDailyWheel',
     `${src}; return { openVeil, closeTopSheet, closeAllSheets };`)(
-    sheetStack, history, { body: { appendChild: v => { v.appended = true; } } }, () => null, true, false, { reload() {} });
+    sheetStack, history, { body: { appendChild: v => { v.appended = true; } } }, () => null, true, false, { reload() {} }, false, () => {});
   const { openVeil, closeAllSheets } = api;
   const mkVeil = () => ({ appended: false, removed: false, remove() { this.removed = true; }, addEventListener(t, f) { this.tap = f; } });
 
@@ -7402,6 +7405,108 @@ test('B13 renderToday seeds the bag before Gwart speaks, and gwPick persists it'
   const before = src.slice(Math.max(0, gwLineAt - 200), gwLineAt);
   assert.match(before, /await loadGwMemory\(\);/, 'renderToday must seed the bag from kv before Gwart\'s opening line');
   assert.match(src, /function gwPick\(pool\) \{[\s\S]{0,300}kvSet\('gwRecent'/, 'gwPick must persist the bag to kv so the next boot can seed from it');
+});
+
+/* ---- B14: the daily spin cannot fire on day one, and is skipped when a
+   level-up sheet is open at boot (R41-11) ----
+   Two independent gaps, both source-pinned since maybeShowDailyWheel needs a
+   real browser to drive behaviourally (tests/wheel-audit.mjs covers that).
+   1. sheetStackOpen() used to `return false`, indistinguishable from "already
+      claimed today" to every caller, so nothing ever retried once the
+      blocking sheet closed. PROVE-RED: reverting to `return false` here
+      would still pass every other wheel.js test in this file (day-guard,
+      claimSpin) but this assertion goes red on that exact line.
+   2. boot() only reaches its own maybeShowDailyWheel call after `if
+      (!S.settings) { renderOnboarding(...); return; }`, so a fresh install
+      never ran it that session, and enterAppFromOnboarding (the only exit
+      from onboarding) never called it either. Not a deliberate exclusion:
+      claimDay's first-run branch seeds and lets a brand-new device through
+      exactly like any other day (js/db.js: "FIRST RUN ... seed and let the
+      player through"), so day one differs from day two only by this missing
+      wire. PROVE-RED: dropping the fireDailyWheel() call from
+      enterAppFromOnboarding removes the only site that fires the wheel on
+      this path (boot's own copy never runs for it) and this test goes red. */
+test('B14 sheetStackOpen no longer returns a bare false (nothing could ever retry it)', () => {
+  const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
+  assert.match(wheel, /if \(sheetStackOpen\(\)\) return \{ pending: true \};/,
+    'maybeShowDailyWheel must hand back a distinguishable "still owed" signal when a sheet blocks it, not a bare false (B14)');
+  assert.ok(!/if \(sheetStackOpen\(\)\) return false;/.test(wheel),
+    'the old unretriable false is still here alongside the new return (B14)');
+});
+
+test('B14 app.js retries the wheel once the blocking sheet stack drains, and fires it on day one', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /let wheelRetryPending = false;/, 'the retry flag is missing (B14)');
+  const helper = app.match(/function fireDailyWheel\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(helper, 'fireDailyWheel (the shared retry/day-one caller) is missing (B14)');
+  assert.match(helper[0], /maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{/, 'fireDailyWheel must call the real maybeShowDailyWheel');
+  assert.match(helper[0], /else if \(spun\?\.pending\) wheelRetryPending = true;/, 'fireDailyWheel must re-arm the retry flag on a pending result');
+  // closeTopSheet: the ONE place every sheet finishes closing (Escape, backdrop
+  // tap, the Done button and popstate all route through it) drains the flag.
+  const cts = app.match(/function closeTopSheet\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(cts, 'closeTopSheet not found');
+  assert.match(cts[0], /if \(!sheetStack\.length && wheelRetryPending\) \{ wheelRetryPending = false; fireDailyWheel\(\); \}/,
+    'closeTopSheet does not drain a pending wheel retry when the stack empties (B14)');
+  // both of boot()'s and rollDayIfNeeded's OWN inline calls (pinned verbatim
+  // elsewhere by the R26-O14 test) must also feed the same flag, or a sheet
+  // open at exactly one of those two moments would still eat the spin silently.
+  const boot = app.match(/maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{\n {4}if \(spun === true[\s\S]*?\n {2}\}\)\.catch\(\(\) => \{\}\);/);
+  assert.ok(boot && /else if \(spun\?\.pending\) wheelRetryPending = true;/.test(boot[0]), 'boot()\'s wheel call does not arm the retry flag on pending (B14)');
+  const roll = app.match(/maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{\n {6}if \(spun === true[\s\S]*?\n {4}\}\)\.catch\(\(\) => \{\}\);/);
+  assert.ok(roll && /else if \(spun\?\.pending\) wheelRetryPending = true;/.test(roll[0]), 'rollDayIfNeeded\'s wheel call does not arm the retry flag on pending (B14)');
+  // day one: enterAppFromOnboarding is the only exit from onboarding (a
+  // finished signup AND a mid-onboarding restore both land there), and boot()
+  // returns before its own call ever runs for this session.
+  const eafo = app.match(/function enterAppFromOnboarding\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(eafo, 'enterAppFromOnboarding not found');
+  assert.match(eafo[0], /fireDailyWheel\(\);/, 'enterAppFromOnboarding never fires the daily wheel: day one gets zero chance at it (B14)');
+});
+
+/* ---- R41-16: the Today level chip repaints on fight settle, like the
+   wallet pill does ----
+   __refreshWalletPill already fixed this class for coins/dust/vigor (see its
+   own comment: "the Pit is a sheet OVER this screen ... only #pitBody was
+   re-rendered on close"). The level chip had no equivalent, so a fight that
+   leveled you up (or just moved XP within the level) left #lvlChip reading
+   its pre-fight numbers until the player left Today and came back, measured
+   at chip 0/200 against a ledger of 65.
+   PROVE-RED: dropping either window.__refreshLevelChip?.() call below (win
+   or loss) removes the only place that repaints the chip for that outcome,
+   and this test goes red on the missing call. */
+test('R41-16 __refreshLevelChip exists and fires on both fight-settle outcomes, beside the wallet pill', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const helper = app.match(/window\.__refreshLevelChip = async \(\) => \{[\s\S]*?\n\};\n/);
+  assert.ok(helper, '__refreshLevelChip is missing');
+  // MUST live at module scope, not nested inside renderToday: today-reads-lint.mjs
+  // (A1) walks every call reachable from renderToday's own body, so a closure
+  // defined in there that reaches totalXp() -> db.all('xp') on a cache miss
+  // would count as a second 'xp' scan and that guard goes red.
+  const rt = app.match(/\nasync function renderToday\(el\) \{\n([\s\S]*?)\n\}\n/);
+  assert.ok(rt, 'renderToday not found');
+  assert.ok(!rt[1].includes('window.__refreshLevelChip ='), '__refreshLevelChip must not be defined inside renderToday (today-reads-lint.mjs A1 would double-count its xp read)');
+  /* totalXp(), not a literal db.all('xp') here: cached, reuses the existing
+     epoch check instead of re-scanning on every call. */
+  assert.match(helper[0], /levelFor\(await totalXp\(\)\)/, '__refreshLevelChip must re-derive the level from a fresh xp total (totalXp(), not a stale in-memory one)');
+  assert.ok(!/\bdb\.all\('xp'\)/.test(helper[0]), '__refreshLevelChip must not add a second literal db.all(\'xp\') inside renderToday (R17-P2)');
+  assert.match(helper[0], /hero-lvrow/, '__refreshLevelChip must repaint the level/name row');
+  assert.match(helper[0], /hero-xprow/, '__refreshLevelChip must repaint the XP/pips row');
+  // the fight-settle function (openFight's nested settle()): both outcomes
+  // must call it next to the wallet pill's own call, the same way B3 made the
+  // spar board and victory card agree with each other rather than drift apart.
+  // openFight is a huge, deeply-nested function (settle/aiPlay/doEndTurn/etc),
+  // so bound it by its own start and the next top-level function's start
+  // rather than a brace-matching regex.
+  const ofStart = app.indexOf('async function openFight(pitWrap, fighter, foeCfg) {');
+  assert.ok(ofStart > 0, 'openFight not found');
+  const ofEnd = app.indexOf('\nfunction buildFaqHtml(', ofStart);
+  assert.ok(ofEnd > ofStart, 'openFight\'s end boundary (buildFaqHtml) not found; the function moved');
+  const openFight = app.slice(ofStart, ofEnd);
+  // bounded to the win branch's own few lines, so a removed call cannot be
+  // masked by the loss branch's own (separate) call further down the file
+  const winSite = openFight.match(/window\.__refreshWalletPill\?\.\(\);[^\n]*\n\s*const badges = await evaluateBadges\(\);\n[\s\S]{0,900}?\n\s*window\.__refreshLevelChip\?\.\(\);\n\s*confettiRain\(90\);/);
+  assert.ok(winSite, 'the win branch does not refresh the level chip after badges are evaluated (R41-16)');
+  const lossSite = openFight.match(/coins = foeCfg\.mode === 'spar'[\s\S]*?window\.__refreshWalletPill\?\.\(\);\n\s*window\.__refreshLevelChip\?\.\(\);/);
+  assert.ok(lossSite, 'the loss branch does not refresh the level chip beside the wallet pill (R41-16)');
 });
 
 await runAll();
