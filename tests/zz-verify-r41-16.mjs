@@ -4,10 +4,11 @@
  * reads #lvlChip's DOM text before and after, on the SAME standing screen. */
 import { boot, seed, openPit, fightRung, finishFight, settle, sleep, serveTree } from './godmode.js';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = '..';
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const srv = await serveTree(ROOT);
-const base = srv.url + '?demo';
+const base = srv.url;   // boot() appends ?demo itself; appending it here too double-added the query string
 let bad = 0;
 const check = (l, ok, d = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${l}${d ? '  ' + d : ''}`); if (!ok) bad++; };
 
@@ -50,6 +51,6 @@ const afterNav = await chipText();
 check('the in-place repaint matches what a full re-render shows (no false number)', after === afterNav, `inPlace="${after}" reRendered="${afterNav}"`);
 
 await browser.close();
-srv.kill();
+srv.close();
 console.log(bad ? `\n${bad} FAILED` : '\nALL GREEN');
 process.exit(bad ? 1 : 0);
