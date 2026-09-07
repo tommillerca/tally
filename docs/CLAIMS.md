@@ -19,6 +19,10 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## an audit cannot grade the wrong worktree (2026-09-07)
+
+PROOF: serve-tree-identity-audit.mjs
+
 ## v504
 1. A hotfix off v503: the 32 football colourways repainted to the palettes players recognise, approved by Tom on the rendered before and after sheet, 2026-09-07. Its dated section is further down, folded here.
 

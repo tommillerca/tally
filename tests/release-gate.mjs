@@ -272,6 +272,7 @@ PURE.unshift('no-debug-markers-lint.mjs');
    ledger scan, then decided several awaits later, off that stale count. */
 PURE.push('routine-race-audit.mjs');
 PURE.unshift('version-align-lint.mjs');
+PURE.push('serve-tree-identity-audit.mjs'); // serveTree refuses a fixed port that answers from another checkout; node-only
 const BROWSER = [
   /* the raw-sink fix's STATE half. render-sink-lint pins the source, and this
      repo has watched shape assertions stay green over broken state, so this one
