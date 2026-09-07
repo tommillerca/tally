@@ -214,18 +214,27 @@ async function run(offsetDeg, label) {
       dLantern = +Math.hypot(c.x - l.x, c.y - l.y).toFixed(2);
       dPlateCentre = +Math.hypot(c.x - (bb.left + bb.width / 2), c.y - (bb.top + bb.height / 2)).toFixed(2);
     }
-    /* IS HE AT THE BACK OF THE MARKER LAYER. Graded on the STACKING ORDER, not
-       on whether a pin happened to land on him this run: the field is generated
-       from the clock, so "no pin overlapped him" is a normal outcome and a
-       hit-test alone would pass vacuously on exactly the runs that matter.
-       (Measured: removing the z-index rule and re-running left this row green,
-       because querySelector('.map-spawn') picked one that was nowhere near him.)
+    /* IS HE IN FRONT OF THE MARKER LAYER (AND STILL BEHIND THE PLAYER). Graded
+       on the STACKING ORDER, not on whether a pin happened to land on him this
+       run: the field is generated from the clock, so "no pin overlapped him" is
+       a normal outcome and a hit-test alone would pass vacuously on exactly the
+       runs that matter. (Measured: removing the z-index rule and re-running
+       left this row green, because querySelector('.map-spawn') picked one that
+       was nowhere near him.)
+       REVERSED 2026-09-07: Tom, live on v500, "icons on map on top of wanderer
+       should be behind him." He used to be pushed BEHIND the group below; now
+       he clears it. The player's own marker (.map-you) is deliberately
+       exempted -- its collect ring is functional, not decorative -- and keeps
+       winning over him, per the note in js/wanderer.js.
        The z-index is always there to read, so it always grades. */
     const zOf = sel => { const n = document.querySelector(sel); return n ? getComputedStyle(n).zIndex : null; };
     const zWanderer = mark ? getComputedStyle(mark).zIndex : null;
-    const zOthers = ['.map-you', '.map-spawn'].map(zOf).filter(v => v !== null);
-    const behindAll = zWanderer !== null && zOthers.length > 0
-      && zOthers.every(z => Number(z) > Number(zWanderer));
+    const zYou = zOf('.map-you');
+    const zOthers = ['.map-spawn'].map(zOf).filter(v => v !== null);
+    const inFrontOfMarkers = zWanderer !== null && zOthers.length > 0
+      && zOthers.every(z => Number(z) < Number(zWanderer));
+    const behindPlayer = zWanderer !== null && zYou !== null && Number(zYou) > Number(zWanderer);
+    const behindAll = inFrontOfMarkers && behindPlayer;
     // and where a pin DOES land on him, it must really be tappable
     let pinsOnHim = 0, pinsHittable = 0;
     if (rb) {
@@ -263,7 +272,7 @@ async function run(offsetDeg, label) {
       inkW: ink ? Math.round(ink.w) : null, inkH: ink ? Math.round(ink.h) : null,
       ringPx: rr ? Math.round(rr.width) : null, pinPx: pr ? Math.round(pr.width) : null,
       through, dLantern, dPlateCentre, facingEast: east,
-      zWanderer, zOthers, behindAll, pinsOnHim, pinsHittable,
+      zWanderer, zYou, zOthers, behindAll, pinsOnHim, pinsHittable,
       range: W.CONE_RANGE_M, markPx: rb ? Math.round(rb.width) : null,
       screenH: innerHeight, screenW: innerWidth,
       arena: !!arena, foeName,
@@ -274,6 +283,79 @@ async function run(offsetDeg, label) {
       encButtons: [...document.querySelectorAll('.wnd-enc-acts .btn')].map(b => b.textContent.trim()),
     };
   }, target.w.id);
+  /* STACK-LIVE: DOES HIS ART ACTUALLY PAINT ON TOP, MEASURED IN PIXELS, NOT
+     JUST Z-INDEX ASSERTED. PINS-SURVIVE above reads getComputedStyle, which
+     would stay green on a browser that keyed the rule to the wrong selector
+     while leaving the WANDERER'S OWN z-index numerically fine, or on any other
+     mismatch between what the numbers say and what actually composites; it
+     says nothing about what a player's eye sees. Two markers are placed at the
+     WANDERER'S OWN lat/lng -- not wherever the clock's field happened to land
+     one, which PINS-SURVIVE's own note already measured as a normal empty
+     case -- so the overlap is forced and deterministic, then the render is
+     sampled twice at the identical device pixel: once with him visible, once
+     with him hidden. If hiding him changes the pixel, the synthetic markers
+     really were underneath waiting to show through, which is the control that
+     keeps the first sample from vacuously reading his own background. */
+  const stack = label !== 'behind' ? null : await (async () => {
+    const setup = await page.evaluate(async (wid) => {
+      const mark = document.querySelector(`.map-wanderer-mark[data-w="${wid}"]`);
+      if (!mark) return { error: 'no wanderer mark' };
+      const bb = mark.getBoundingClientRect();
+      if (!(bb.width > 10) || bb.left < 0 || bb.top < 0 || bb.right > innerWidth || bb.bottom > innerHeight) {
+        return { error: `wanderer mark off-screen or too small: ${JSON.stringify(bb)}` };
+      }
+      const map = window.__map;
+      if (!map) return { error: 'no window.__map' };
+      // his ink's own centre (see the INK bounds elsewhere in this suite), not the
+      // transparent margins of the plate's square box
+      const px = Math.round(bb.left + 0.533 * bb.width);
+      const py = Math.round(bb.top + 0.463 * bb.height);
+      const centre = map.unproject([px, py]);
+      const { domMarker, loadMaplibre } = await import('./js/map.js');
+      const gl = await loadMaplibre();
+      window.__stackMade = [['map-spawn', 'rgb(255,0,0)'], ['map-den-mark', 'rgb(0,0,255)']].map(([cls, color]) => {
+        const el = document.createElement('div');
+        el.className = cls;
+        el.style.cssText = `width:80px;height:80px;background:${color};`;
+        return domMarker(gl, map, { lat: centre.lat, lng: centre.lng, el, anchor: 'center' });
+      });
+      // app.css fades a new POI marker in over .22s (#mapStage .map-spawn etc.); wait
+      // it out so the pixel sampled below is the marker's real opacity, not mid-fade.
+      await new Promise(r => setTimeout(r, 350));
+      return { px, py };
+    }, target.w.id);
+    if (setup.error) return { error: setup.error };
+    const samplePixel = async () => {
+      const b64 = await page.screenshot({ encoding: 'base64' });
+      return page.evaluate(({ b64, px, py }) => new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = img.naturalWidth; c.height = img.naturalHeight;
+          const g = c.getContext('2d');
+          g.drawImage(img, 0, 0);
+          const dpr = window.devicePixelRatio || 1;
+          const d = g.getImageData(Math.round(px * dpr), Math.round(py * dpr), 1, 1).data;
+          resolve([d[0], d[1], d[2], d[3]]);
+        };
+        img.src = 'data:image/png;base64,' + b64;
+      }), { b64, px: setup.px, py: setup.py });
+    };
+    const withWanderer = await samplePixel();
+    await page.evaluate((wid) => {
+      const m = document.querySelector(`.map-wanderer-mark[data-w="${wid}"]`);
+      if (m) m.style.display = 'none';
+    }, target.w.id);
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const withoutWanderer = await samplePixel();
+    await page.evaluate((wid) => {
+      const m = document.querySelector(`.map-wanderer-mark[data-w="${wid}"]`);
+      if (m) m.style.display = '';
+      (window.__stackMade || []).forEach(mk => mk.remove());
+      window.__stackMade = null;
+    }, target.w.id);
+    return { px: setup.px, py: setup.py, withWanderer, withoutWanderer };
+  })();
   /* DOES THE BEAM HOLD STILL WHILE THE MAP MOVES. Tom, 2026-08-22: "the
      wanderer's light cone is flickering in size ... the cone shouldn't flicker
      or change size."
@@ -331,7 +413,7 @@ async function run(offsetDeg, label) {
   // kept for the eye, not asserted on: the rows above measure the DOM
   if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/wanderer-${label}.png` });
   await browser.close();
-  return { target, seenState, drive };
+  return { target, seenState, drive, stack };
 }
 
 /* EVERY ROW IS NAMED IN THE UNPROVEN LIST TOO, so a machine that cannot draw the
@@ -343,7 +425,9 @@ const ROWS = [
   'CONTROL the lantern is nowhere near the middle of him, so LANTERN-LIVE is not vacuous',
   'LANTERN-LIVE on the real map the beam springs from his flame, not his chest',
   'LOOMS-LIVE he is the biggest thing on the map, by a distance, and no bigger',
-  'PINS-SURVIVE he sits at the BACK of the marker layer, so the pins and the player clear him',
+  'PINS-SURVIVE he paints in front of the marker layer and behind the player, and the pins stay tappable',
+  'CONTROL synthetic markers were forced onto his exact point, so STACK-LIVE is not vacuous',
+  'STACK-LIVE his art wins the overlap in real pixels, not just in z-index, against 2 other marker kinds',
   'TAPTHRU-LIVE a tap on his coat reaches the map underneath, not him',
   'REACH-LIVE the beam is a searchlight, not a puddle: it runs past the edge of the screen',
   'NO-AMBUSH standing behind him starts no fight',
@@ -362,10 +446,10 @@ let cap = behind && behind.cap;
 /* AHEAD_ROW is the index in ROWS where the second boot's rows start, so an
    empty sample in one boot declares that boot's rows and leaves the other
    boot's real verdicts alone. */
-const AHEAD_ROW = 14;
+const AHEAD_ROW = 16;
 let empty = behind && behind.empty, emptyFrom = empty ? 0 : null;
 if (behind && !cap && !empty) {
-  const { target: t, seenState: s, drive: s0drive } = behind;
+  const { target: t, seenState: s, drive: s0drive, stack } = behind;
   ok('CONTROL the behind-him fix was really outside his cone', t.predicted === false,
     `45 m at heading+180 from ${t.w.heading.toFixed(0)} deg`);
   ok('DRAWN-LIVE he is on the real map, as Cam drew him', s.hasMark && s.markVisible && /wanderer\.png$/.test(s.imgSrc || ''),
@@ -412,11 +496,24 @@ if (behind && !cap && !empty) {
     + `so ${(s.inkW / s.ringPx).toFixed(2)}x the ring and ${(100 * s.inkW / s.screenW).toFixed(0)}% of a ${s.screenW}px screen`);
   /* The hit-test half only means anything for pins whose centre is on screen,
      for the same reason as TAPTHRU above; the z-index half always grades. */
-  ok('PINS-SURVIVE he sits at the BACK of the marker layer, so the pins and the player clear him',
+  ok('PINS-SURVIVE he paints IN FRONT of the marker layer and still BEHIND the player, and the pins stay tappable',
     s.behindAll === true && s.pinsHittable === s.pinsOnHim,
-    `wanderer z-index ${s.zWanderer} against [${s.zOthers}]; ` +
+    `wanderer z-index ${s.zWanderer} above markers [${s.zOthers}] and below player ${s.zYou}; ` +
     `${s.pinsHittable}/${s.pinsOnHim} pin(s) overlapping his ${JSON.stringify(s.markRect)} box are still tappable ` +
     `(on a ${s.screenW}x${s.screenH} screen)`);
+  /* Solid, saturated colours (pure red / pure blue) rather than real marker art
+     so a hit is unambiguous: nothing else on this screen paints that exact RGB. */
+  const isRed = c => Array.isArray(c) && Math.abs(c[0] - 255) < 40 && c[1] < 40 && c[2] < 40;
+  const isBlue = c => Array.isArray(c) && c[0] < 40 && c[1] < 40 && Math.abs(c[2] - 255) < 40;
+  const isSynthetic = c => isRed(c) || isBlue(c);
+  ok('CONTROL synthetic markers were forced onto his exact point, so STACK-LIVE is not vacuous',
+    !!stack && !stack.error && isSynthetic(stack.withoutWanderer),
+    stack && !stack.error ? `pixel with him hidden: rgba(${stack.withoutWanderer})` : (stack && stack.error) || 'not measured');
+  ok('STACK-LIVE his art wins the overlap in real pixels, not just in z-index, against 2 other marker kinds',
+    !!stack && !stack.error && !isSynthetic(stack.withWanderer),
+    stack && !stack.error
+      ? `at device pixel (${stack.px},${stack.py}): visible rgba(${stack.withWanderer}), hidden rgba(${stack.withoutWanderer})`
+      : (stack && stack.error) || 'not measured');
   /* GATED ON THE PROBE BEING ON SCREEN, and it says so either way: a null from
      elementFromPoint is "the browser was asked about a pixel that does not
      exist", not "the Wanderer swallowed the tap", and the two used to print the

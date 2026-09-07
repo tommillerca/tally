@@ -19,6 +19,20 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## v502
+1. A hotfix off v501: the Locker Room polish and the Boneyard's frame cost (master handoff R40-21..27 and R41-18). Its dated section is further down, folded here.
+
+2. PROOF: boneyard-raf-audit.mjs, boneyard-audit.mjs | REACH: a stationary player whose fix jitters no longer drives the map: 1,843.7 requestAnimationFrame calls a second (21.65 a frame) becomes 1.8 a second, because a no-op reposition is skipped and the camera only eases when the fix moved at least 4 m. Walking still costs the library's own per-marker pass over 49 DOM markers (2,071 to about 1,114 to 1,750 a second); the audit sets no ceiling there and says why.
+
+3. PROOF: locker-polish-audit.mjs, football-kit-audit.mjs, precache-audit.mjs, sw-upgrade-audit.mjs | REACH: the colourway strip shows six 10 px discs and a plus-26 chip instead of 5.84 px dots at 393 and 3.56 at 320 (DISCS row red with those numbers); the buy pill reads the live balance so what you can afford updates the moment you spend (PILL row red: cant false, tap said null); the news hero serves the 384 tier, 157 KB on the wire against a 359 KB master (HERO row red at 350.9 KB); and the football art the shop and poster need is precached, 211 entries and 11,714 KB becoming 227 and 11,998 KB with the conditional carry still green (PRECACHE row red: 16 files asked for, 0 listed).
+
+4. PROOF: locker-polish-audit.mjs | REACH: Today's Add button can no longer cover a News row at any scroll position, because the scroller keeps a 13 px transparent border while its background still paints under it (FAB row red: the row was covered 58 by 7.9 px and elementFromPoint answered the button); and a garment whose master fails to load drops its tint spans and disables its buy instead of selling a smear of colour (NOART rows red: 2 spans still painting, buy enabled).
+
+## v501
+1. A hotfix off v500: the Wanderer's stacking on the Boneyard map (Tom's live report) and the gate-hygiene work that makes every registered audit run (Codex). Their dated sections are further down, folded here.
+
+2. PROOF: wanderer-patrol-live-audit.mjs | REACH: the Wanderer paints in front of every other map pin, and the player's own marker still paints in front of him because collecting depends on it. Measured in real pixels at a forced overlap (two synthetic markers dropped on his own point, sampled with him visible and hidden): before, both reads returned the marker's colour and his coat contributed nothing; the STACK-LIVE row is red on that (visible and hidden both rgba(0,0,255,255)) and green after, with the marker group at 1, the Wanderer at 2 and the player at 3 as class rules MapLibre cannot overwrite on a reposition.
+
 ## v500
 1. A hotfix off v499 from Tom's live report that opening a crate is slow and glitchy between cards.
 
@@ -85,6 +99,35 @@ scroll that rail."
 2. PROOF: kennel-audit.mjs | REACH: Open the Stable: the way into the Kennel is a door under the Paddock's, reading THE KENNEL and "Every colour your pets come in", with a strip of the five colourway swatches filled for the ones you own and a count of how many of the 30 you have found. It used to be a 73x44 button in the sheet head's trailing corner, 8px from Done, which is the corner this app puts DISMISS in, wearing a one-word label that named nothing.
 3. PROOF: kennel-audit.mjs | REACH: In the Kennel, one line above the grid says how to read it: in colour is one you've hatched, greyed out with a lock is one you haven't, tap any to name it. An unowned cell is flattened to a silhouette on the page ground so it reads as a hole in the set rather than an underexposed pet, and each dot under a pet in the roster now carries that colourway's own colour instead of one flat accent, so which colours you own reads without the caption.
 4. PROOF: pet-morph-audit.mjs | REACH: Own two copies of one species in the Stable and look at the row of chips under the card: each chip carries a small picture of that copy in its own colourway beside its level, shiny mark and "out" state, so the rail shows what is on it. The chips keep their 44px tap floor and the row still scrolls.
+## the Wanderer walks in front (2026-09-07)
+
+Not stamped to a release: hotfix/wanderer-z, off v500. Tom, live: "Boneyard:
+icons on map on top of wanderer should be behind him."
+
+MEASURED BEFORE FIXING, on the real Boneyard: `.map-wanderer-mark { z-index: 0 }`
+against `.map-you, .map-spawn, .map-den-mark, .map-mini-mark, .map-spire,
+.map-glutton-mark { z-index: 1 }` (js/wanderer.js, dated 2026-08-23), so every
+other marker painted over him. A forced, deterministic overlap (two synthetic
+markers dropped at his own lat/lng) sampled the real render at that pixel: with
+him hidden the pixel read the synthetic colour exactly; with him visible it
+read the same synthetic colour, proving nothing of his own art survived the
+overlap.
+
+FIXED by reordering the same rule: `.map-wanderer-mark` now carries z-index 2,
+the marker group (spawns, dens, POIs, spires, coin piles) carries z-index 1, and
+`.map-you` alone carries z-index 3. The player's own marker is the one
+exception, kept on top of him: its 75 m collect ring is functional, not
+decorative, and burying it was the reason he was pushed to the back in the
+first place (js/wanderer.js note, 2026-08-23). No change to his cone, his patrol,
+or any marker's size.
+
+PROVEN RED on a throwaway `cp -R` with the old rule restored: PINS-SURVIVE and
+STACK-LIVE both failed, exit 1 --
+`FAIL  STACK-LIVE his art wins the overlap in real pixels, not just in z-index,
+against 2 other marker kinds  | at device pixel (196,344): visible
+rgba(0,0,255,255), hidden rgba(0,0,255,255)`. Fixed: 19/19, exit 0.
+
+1. PROOF: wanderer-patrol-live-audit.mjs, marker-anchor-audit.mjs | REACH: on the Boneyard map, the Wanderer's coat now paints over every spawn, den, POI, spire and coin-pile marker he overlaps; your own marker and its collect ring still paint over him. Measured on the real render at the forced overlap point: with him visible the pixel is his own colour (not the marker's), and with him hidden it becomes the marker's colour, so the fix is proven in pixels, not only in the stacking rule.
 
 ## kennel round 39 (2026-09-06)
 
@@ -240,6 +283,74 @@ CSS, the kin chips and the Dressing Room family tile's tier.
    a lower-rarity colourway (the one you wear) carries that colourway's tier
    badge and border, at that colourway's price, instead of the family's best
    member's tier.
+## locker room polish and a quiet Boneyard (2026-09-07)
+
+Not stamped to a release: hotfix/lockerroom-polish, off v498.
+HANDOFFMASTER20260906.md R40-21..27 and R41-18, each re-measured on this tree
+before it was touched and again after.
+
+1. PROOF: locker-polish-audit.mjs | REACH: The "every team's colours" proof on
+   the Locker Room poster and on every kit tile is readable now. It was 32 discs
+   sharing whatever width the strip had left: 5.84 px across at 393, 5.28 at 375
+   and 3.56 at 320, which is a row of dots rather than a claim about colour. Six
+   10 px discs and a "+26" say the same thing and can be seen saying it. The
+   count is still on screen, in the chip and in the label a screen reader reads.
+
+2. PROOF: locker-polish-audit.mjs | REACH: Tapping a News row on Today no longer
+   sometimes taps the add button instead. The round-plus button hangs 8.1 px up
+   into the scrolling page (12.1 with its ring), and a row passing through that
+   band had its own visible centre owned by it: measured 58 x 7.9 px at 393x852
+   and 375x667, with the hit test answering the button and not the row. The page
+   now ends above the button, so no row can sit under it at any scroll position.
+   Round 40's own 58 x 20.1 px was measured off unclipped rectangles, which count
+   rows already hidden behind the tab bar; the defect is real and it is 7.9 px.
+
+3. PROOF: locker-polish-audit.mjs | REACH: A Locker Room buy button knows what
+   is in your wallet at the moment you look at it. The shelf read your balance
+   once, when the Shop was drawn, and the kit room's tiles are built later, when
+   you open it: earn or spend anything in between and the price told you the old
+   number, either refusing a purchase you could now afford or arming to buy one
+   you could not. Both the tiles and the tap read the live balance now.
+
+4. PROOF: locker-polish-audit.mjs | REACH: Today's news banner costs 202 KB less
+   on every cold boot. The Locker Room hero was fetching the full-size poster,
+   359 KB, into a 97.8 px box; it serves the 157 KB tier that already existed,
+   which still covers that box at 2x, and falls back to the master if the tier
+   is ever missing.
+
+5. PROOF: football-kit-audit.mjs (PRECACHE, PRECACHE-CONTROL), precache-audit.mjs,
+   sw-upgrade-audit.mjs | REACH: The Locker Room survives a cold or offline boot.
+   None of the kit's art was in the service worker's precache while all three
+   plates the poster replaced still were, so the newest thing in the game was the
+   one thing an offline first boot drew as holes. The sixteen files the news hero
+   and the Shop's lead shelf actually draw (the 384 tier) are precached now:
+   211 entries to 227, and 283.7 KB more to install (11,714.0 KB to 11,997.7 KB
+   measured on the v498 base this was written against; 12,012.7 KB after the
+   merge with v500, whose own art moved the total by 15 KB). The kit room's own
+   grid is left on the runtime road on purpose, because it does not exist in the
+   page until somebody opens it. The conditional-precache path is unchanged and
+   sw-upgrade-audit's CARRIED row is still green (183 of 183 carried by 304).
+
+6. PROOF: locker-polish-audit.mjs | REACH: If a garment's art ever fails to
+   arrive, the tile says nothing rather than selling you nothing. The art layer
+   was removed on error and its two colour layers were not, so the team's colours
+   went on painting the shape of a garment that was not there, on a tile still
+   charging 4,200 coins. The colour layers now leave with the art they belong to,
+   and that tile's buy button goes dead.
+
+7. PROOF: boneyard-raf-audit.mjs | REACH: Standing still in the Boneyard costs
+   the phone almost nothing. It used to cost the same as walking: a phone that
+   never moves still reports a position a metre or two away every 1.2 s, and each
+   of those re-pinned all 49 markers and started a fresh 900 ms camera glide, so
+   the map animated three quarters of the time with nothing to show. Measured
+   with the scheduler hooked: 1,843.7 animation frames a second, 21.65 per frame,
+   against 1.8 after. A marker is only moved when it has actually moved, and the
+   camera only follows a fix that carried you 4 m, which is 1.7 px on screen at
+   the Boneyard's own zoom. Walking is unchanged to look at and still costs
+   ~17 frames of marker work per frame: that half is maplibre's own per-marker
+   pass over DOM markers during a camera move, not the app's, and it is named
+   here rather than claimed as fixed.
+
 ## the day tells the truth (2026-09-07)
 
 Not stamped to a release: hotfix/daily-truth, off v496. HANDOFFMASTER20260906.md
@@ -326,6 +437,24 @@ reward already uses.
    land, and both routines are still remembered as done today either way
    (red before: +10 XP paid on the race, 20 XP total, 0 of 2 calls reporting
    capped).
+
+## the gate runs what it registers (2026-09-06)
+
+Not stamped to a release: fix/gate-hygiene-c, off v493.
+
+1. PROOF: release-gate.mjs | REACH: Every runnable guard belongs to exactly one
+   tier that executes it. A declared guard missing from every running tier, a
+   duplicate, or a never-run tier stops the gate before browser work begins.
+
+2. PROOF: recovery-audit.mjs, log-write-failure-audit.mjs | REACH: The recovery
+   suite reaches a dropped backup download after registration, and the log-write
+   suite always runs its normal, failed-log and failed-XP cases.
+
+3. PROOF: pet-wardrobe-audit.mjs, crew-fan-audit.mjs,
+   reveal-mannequin-audit.mjs, harness-leak-audit.mjs | REACH: Image checks wait
+   a bounded time for real decode evidence, while a missing image still fails;
+   test browsers launched through an explicit browser path are reaped if their
+   owning audit is killed.
 
 ## pit readout and exit (2026-09-06)
 

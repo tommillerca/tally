@@ -1012,6 +1012,43 @@ ok('POOL-CONTROL the kit really is a large share of the pools those rows protect
     ? loaded.map(([k, r]) => `${k}: ${r.fb}/${r.all} = ${(100 * r.fb / r.all).toFixed(1)}%`).join(', ')
     : `the kit is shut, so BH_ITEMS carries none of it (${loaded.length} loaded slots)`);
 
+/* ---------------------------------------------------------------- PRECACHE --
+   R40-25: ZERO of the kit's art was in sw.js PRECACHE while all three plates
+   the Locker Room poster took the news hero slot FROM were. A cold or offline
+   boot drew the newest thing in the game as holes, and sw.js answers a miss on
+   a same-origin request it does not carry with index.html.
+   THE 384 TIER IS WHAT THE TWO ALWAYS-BUILT SURFACES ASK FOR, so that is what
+   this row demands and all it demands: hypePlateHtml serves the news hero
+   through bhThumb(src, 384) and the Shop's kit poster passes thumb:384 to
+   avatarLayersHtml and croppedPetImg. The kit-room GRID's masters are NOT
+   required here: its body does not exist in the document until a player opens
+   #fbSect (footballShelfHtml's lazy t3-dropbody), so they stay on the runtime
+   road.
+   DIRECTION OF FAILURE: drop any of the sixteen lines from sw.js and this row
+   names it. Retire the kit and it goes quiet with FOOTBALL_KIT_LIVE. */
+const swSrc = readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
+const swHas = u => swSrc.includes(`'./${u}'`);
+/* R40-25, 2026-09-07 (QA round 40, master handoff): "zero of 26 football art
+   files are in sw.js PRECACHE while all three plates the poster replaced are".
+   The list is DERIVED from FOOTBALL_SHELF and what is on disk rather than typed
+   out, so a sixth garment is covered the day it ships. */
+const NEEDED_384 = ['poster', ...FB.FOOTBALL_SHELF.map(g => g.key)]
+  .flatMap(k => [`${k}.png`, `${k}.mask-a.png`, `${k}.mask-b.png`])
+  .map(f => `assets/bh/thumb/384/football/${f}`)
+  .filter(u => existsSync(path.join(ROOT, u)));
+const missingSw = NEEDED_384.filter(u => !swHas(u));
+ok('PRECACHE the 384 tier the news hero and the Shop poster draw is in sw.js PRECACHE',
+  !FB.FOOTBALL_KIT_LIVE || (NEEDED_384.length >= 16 && missingSw.length === 0),
+  `${NEEDED_384.length} files the two surfaces ask for, ${NEEDED_384.length - missingSw.length} listed`
+  + (missingSw.length ? `; MISSING: ${missingSw.join(', ')}` : ''));
+/* The control: the row above is only worth having if those files EXIST at the
+   size the tier claims. A precached 404 is a worse hole than an unlisted file,
+   because install() fails on it and the whole shell falls back. */
+const wrongTier = NEEDED_384.filter(u => readFileSync(path.join(ROOT, u)).length < 512);
+ok('PRECACHE-CONTROL every file that row names is really on disk with bytes in it',
+  NEEDED_384.length > 0 && wrongTier.length === 0,
+  `${NEEDED_384.length} files, smallest ${Math.min(...NEEDED_384.map(u => readFileSync(path.join(ROOT, u)).length))} bytes`);
+
 console.log(fails
   ? '\nFOOTBALL KIT AUDIT: FAILED'
   : `\nFOOTBALL KIT AUDIT: ${TEAMS.length} teams read apart, ${ITEMS.length} items on eight triplets, the tint lands on the hex, and an unpriced kit is not for sale`);

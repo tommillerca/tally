@@ -148,6 +148,22 @@ svg { display: block; }
 .screen {
   flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   padding: calc(var(--sat) + 14px) var(--pad) 24px;
+  /* THE FAB'S OVERHANG, TAKEN OUT OF THE SCROLLPORT (R40-22, 2026-09-07).
+     #fab has margin-top:-26px, so it hangs above the tab bar and INTO this
+     scroller: measured at 393x852 and 375x667, its box starts 8.1px above the
+     scroller's bottom edge and its 4px --bg ring another 4px above that. Any
+     row that happens to be passing through that band is covered by it, and
+     document.elementFromPoint at the row's own visible centre answers #fab --
+     measured on the News rows announcing the Locker Room, 58 x 7.9px, at both
+     widths: a tap there opens the food sheet rather than the row.
+     A BORDER, NOT PADDING OR A MARGIN. A scroller clips its content to the
+     PADDING box, so a transparent bottom border is a band content can never
+     enter, while the element's own background still paints under it (default
+     background-clip: border-box) -- which is what keeps .screen--today's
+     --hero-edge colour running all the way down to the bar, the exact thing
+     Tom flagged when the backdrop stopped short. 13px covers the 12.1px the
+     FAB and its ring reach; re-measure if .fab's size or margin move. */
+  border-bottom: 13px solid transparent;
 }
 
 /* AND THE SCROLLER CARRIES THE ART'S OWN TOP EDGE, so a bounce does not uncover
@@ -6616,7 +6632,15 @@ body::before {
    tile and the 32-team strip on the banner. */
 .fb-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink); flex: 0 0 auto;
   background: linear-gradient(135deg, var(--fa) 0 50%, var(--fb) 50% 100%); box-shadow: var(--sh-sm); }
-.fb-swatch.xs { width: auto; height: auto; aspect-ratio: 1; border-width: 1px; box-shadow: none; }
+/* 10px, A REAL SIZE, NOT `1fr` OF WHATEVER IS LEFT (R40-21). Sixteen auto-width
+   columns divided the strip by the container: MEASURED on the rendered kit room,
+   the tile strips are 138.5px at 393 and 102px at 320, so a disc came out 5.84px
+   and 3.56px -- a row of dots, not a colourway proof. The count is capped
+   instead (fbTeamsStripHtml) and the disc gets a fixed size that clears the 8px
+   floor at every width. */
+.fb-swatch.xs { width: 10px; height: 10px; border-width: 1px; box-shadow: none; }
+/* the "+26" that carries the teams the strip does not draw */
+.fb-more { font-size: 10px; font-weight: 800; line-height: 1; color: var(--text-2); letter-spacing: -0.2px; }
 /* THE KIT ROOM POSTER (Tom, 2026-09-05): the art takes the whole left side and the
    full height; the title sits over the copy; no coral, it sits on the surface like
    the cards around it. The .t3-drop shell (border, radius, grain, open-state
@@ -6645,7 +6669,7 @@ body::before {
 .fb-drop .t3-price { font-size: 15px; flex-wrap: wrap; max-width: 100%; box-sizing: border-box; row-gap: 0; line-height: 1.25; }
 .fb-hero-pet { position: absolute; right: -2px; bottom: -4px; z-index: 2; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
 .fb-hero-pet .petcrop { display: block; }
-.fb-teams { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; margin: 0 0 8px; }
+.fb-teams { display: flex; align-items: center; gap: 3px; margin: 0 0 8px; }
 .drop-item.fb::before { content: 'KIT'; }
 .fb-worn { position: relative; width: 88px; height: 88px; margin: 0 auto; overflow: hidden; border-radius: 10px; }
 .drop-item.fb .petcrop { display: block; margin: 0 auto; }

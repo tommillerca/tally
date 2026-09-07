@@ -1,5 +1,5 @@
 // Tally service worker: precache the app shell, runtime-cache heavy OCR assets.
-const VERSION = 'tally-v500';
+const VERSION = 'tally-v502';
 const PRECACHE = [
   './',
   './index.html',
@@ -200,6 +200,34 @@ const PRECACHE = [
      blank-screen bug. */
   './assets/bh/mage/mage-192.png',
   './assets/bh/wanderer/wanderer-192.png',
+  /* THE FOOTBALL KIT'S 384 TIER (R40-25, 2026-09-07). Zero of the kit's art was
+     on this list while all three plates it took the hero slot FROM (the Mimic,
+     the Wanderer, the Live Wire) were, so the newest thing in the game was the
+     one thing a cold or offline boot could not draw.
+     THE 384 TIER, NOT THE 640 MASTERS, because 384 is what these two surfaces
+     ask for: the news hero on Today (hypePlateHtml, measured at a 97.8 CSS px
+     box) and the kit room's own poster in the Shop (avatarLayersHtml thumb:384
+     for the player stack, croppedPetImg 384 for the lizard). The masters are
+     reached only by the kit-room GRID, which does not exist in the document
+     until a player opens #fbSect, so they stay on the runtime road: precaching
+     them would be 907 KB for a screen most boots never build.
+     283 KB for the sixteen: 154 KB is the poster the DEFAULT screen draws. */
+  './assets/bh/thumb/384/football/poster.png',
+  './assets/bh/thumb/384/football/helmet.png',
+  './assets/bh/thumb/384/football/helmet.mask-a.png',
+  './assets/bh/thumb/384/football/helmet.mask-b.png',
+  './assets/bh/thumb/384/football/jersey.png',
+  './assets/bh/thumb/384/football/jersey.mask-a.png',
+  './assets/bh/thumb/384/football/jersey.mask-b.png',
+  './assets/bh/thumb/384/football/cleats.png',
+  './assets/bh/thumb/384/football/cleats.mask-a.png',
+  './assets/bh/thumb/384/football/cleats.mask-b.png',
+  './assets/bh/thumb/384/football/pet-helmet.png',
+  './assets/bh/thumb/384/football/pet-helmet.mask-a.png',
+  './assets/bh/thumb/384/football/pet-helmet.mask-b.png',
+  './assets/bh/thumb/384/football/pet-jersey.png',
+  './assets/bh/thumb/384/football/pet-jersey.mask-a.png',
+  './assets/bh/thumb/384/football/pet-jersey.mask-b.png',
   './assets/brand/tomb-192.png',
   // Cam's lightning layers, cut from mage-fx.png: his casts are drawn with these,
   // so a cold cache must not fire a spell with no spell in it

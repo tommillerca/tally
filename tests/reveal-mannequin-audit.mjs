@@ -35,7 +35,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boot, sleep, serveTree } from './godmode.js';
+import { boot, sleep, serveTree, waitForImageDecode } from './godmode.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const results = [];
@@ -113,7 +113,9 @@ async function showCard(kind, arg) {
    not". `scale` is the drawn width of the 640 square divided by the width of the
    window it peeps through, taken from the live transform matrix, which is the
    only honest way to ask whether the piece is framed or lost on a whole body. */
-const measure = () => page.evaluate(() => {
+const measure = async () => {
+  await waitForImageDecode(page, '.pack-reveal .pc-worn img');
+  return page.evaluate(() => {
   const worn = document.querySelector('.pack-reveal .pc-worn');
   if (!worn) return { err: 'no .pc-worn on the card', canvas: !!document.querySelector('.pack-reveal .pc-canvas') };
   const anim = worn.querySelector('.bh-anim');
@@ -129,7 +131,8 @@ const measure = () => page.evaluate(() => {
       nw: im.naturalWidth,
     })),
   };
-});
+  });
+};
 
 /* The cases. Real ids, one per builder path, chosen so the two halves Tom named
    are both present: a grill (the scaling complaint) and a hat with a cut-out. */

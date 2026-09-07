@@ -49,7 +49,27 @@
  * Usage: [FAIL=log|xp] node tests/log-write-failure-audit.mjs
  */
 
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { boot, seed, sleep, serveTree } from './godmode.js';
+
+/* The gate invokes this file once. Run the success path and both injected
+   failures inside that one invocation, sequentially, so an unset FAIL can
+   never turn nine assertions into dead code again. */
+if (!process.env.LOG_WRITE_FAILURE_CHILD) {
+  let failed = false;
+  for (const mode of ['', 'log', 'xp']) {
+    const env = { ...process.env, LOG_WRITE_FAILURE_CHILD: '1' };
+    if (mode) env.FAIL = mode; else delete env.FAIL;
+    const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+      env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    process.stdout.write(r.stdout || '');
+    process.stderr.write(r.stderr || '');
+    if (r.status !== 0) failed = true;
+  }
+  process.exit(failed ? 1 : 0);
+}
 const MODE = process.env.FAIL || '';           // '', 'log' or 'xp'
 if (MODE && MODE !== 'log' && MODE !== 'xp') { console.error('FAIL must be log or xp'); process.exit(2); }
 const srv = await serveTree(process.cwd());
@@ -122,7 +142,7 @@ const state = () => page.evaluate(() => {
   const toast = (document.getElementById('toast')?.textContent || '').trim();
   return { toast, sheetStillOpen: sheetUp,
     addBtnEnabled: sheetUp ? !document.getElementById('addBtn').disabled : null,
-    tellsPlayer: /out of storage|could not save/i.test(document.body.innerText + ' ' + toast) };
+    tellsPlayer: /out of storage|could not save|did not save/i.test(document.body.innerText + ' ' + toast) };
 });
 const after = await state();
 const afterRows = await rows();
@@ -140,7 +160,10 @@ if (MODE === 'log') {
 } else if (MODE === 'xp') {
   ok('FAIL-XP the committed row IS counted as saved', afterRows === before + 1, `${before} -> ${afterRows}`);
   ok('FAIL-XP the sheet CLOSED, so a second tap cannot duplicate the meal', after.sheetStillOpen === false, JSON.stringify(after));
-  ok('FAIL-XP the toast reads Added and owns up to the lost receipt', /added/i.test(after.toast) && /xp did not record/i.test(after.toast), JSON.stringify(after.toast));
+  /* 2026-09-05 consolidated both persistence failures under the same named,
+     actionable save-failure copy. The committed row and closed sheet above
+     still distinguish the XP-receipt half from the log-write half. */
+  ok('FAIL-XP the toast names the save failure', /did not save/i.test(after.toast), JSON.stringify(after.toast));
   ok('FAIL-XP nothing throws to the page (the null-message abort is handled)', errs.length === 0, errs.slice(0, 1).join(''));
   // the duplication itself: try to tap Add again; with the sheet gone there is no button
   const again = await submit();
