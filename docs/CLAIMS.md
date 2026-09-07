@@ -35,6 +35,31 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 8. PROOF: take-and-pay-audit.mjs | REACH: openCrate, hatchEgg, disenchantGear, both salvage paths and the legacy-egg conversion spend their input and write their payout in one transaction, so killing every IndexedDB transaction after the take leaves the player with the item or the full payout, never neither (six CRASH rows red on the pre-fix order: crate consumed with 0 coins and no rows, egg gone with no pet, gear gone with no dust).
 
+## the crate deals its cards smoothly (2026-09-07)
+
+Not stamped to a release: hotfix/crate-reveal-jank, off v498. Tom, on v498:
+"opening crates right now is super slow and glitchy between the items after one
+in the crate."
+
+MEASURED BEFORE FIXING, on v481 (before the tap guards), v487 (Open all and the
+payoff), v495 (the Open all recovery) and v498 (atomic take-and-pay), driving a
+real three-card Bone Crate through the Backpack's own OPEN button, two runs
+each. There is NO regression to attribute: the tap-to-next-card-interactive gap
+is 331 to 340ms on all four (it is fling's own `at(330, advance)`), and the
+per-card cost is identical too, 2 layouts, ~32 style recalcs, 1.9ms of script,
+ZERO canvas work and no long task. Every suspect in the brief measured dead: the
+card art is already warmed by openPackReveal and a crate deals `wear` cards, so
+drawTrimmedArt never runs between cards; the payoff toast fires once, after the
+whole reveal, not per card; `dataset.landed` is set in the same microtask turn
+the deck is rebuilt in.
+
+The cause is present in v481 too: the reveal renders at half rate for its whole
+life because #packBurst is a full-screen WebGL fragment shader drawing every
+frame. Back to back in one process, two passes agreeing, median frame 33.3ms
+with it mounted and 16.7ms with it hidden.
+
+1. PROOF: crate-reveal-audit.mjs | REACH: Open a Bone Crate from your Backpack and flick through its three cards: each card leaves and the next one arrives at full frame rate instead of half. Measured over the 520ms of the move, dropped frames 8-16 before and 1-5 after, frames rendered 18-27 before and 47-59 after. Nothing about what a crate pays, the reveal's copy, the tap guards (R37-5) or the Open all recovery (R39) changes.
+
 ## kennel round 39 (2026-09-06)
 
 Not stamped to a release: kennel/r39, off integ/day5 (v488). HANDOFFr3920260906.md
