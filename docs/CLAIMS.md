@@ -87,6 +87,9 @@ somebody typed `GATED ?mogv2` next to it and had to look at that.
 
 8. PROOF: take-and-pay-audit.mjs | REACH: openCrate, hatchEgg, disenchantGear, both salvage paths and the legacy-egg conversion spend their input and write their payout in one transaction, so killing every IndexedDB transaction after the take leaves the player with the item or the full payout, never neither (six CRASH rows red on the pre-fix order: crate consumed with 0 coins and no rows, egg gone with no pet, gear gone with no dust).
 
+## an audit cannot grade the wrong worktree (2026-09-07)
+PROOF: serve-tree-identity-audit.mjs
+
 ## the app says where it stands (2026-09-07)
 
 Not stamped to a release: hotfix/privacy-and-location-copy, off v504. Two

@@ -26,6 +26,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -979,6 +980,12 @@ export async function serveTree(root, { timeoutMs = 15000, forcePort = null } = 
     s.once('error', rej);
     s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => res(port)); });
   });
+  /* A random file in the requested tree proves identity even when two checkouts
+     contain byte-identical commits. A hash of repository content cannot do that. */
+  const proofName = `.serve-tree-${randomUUID()}`;
+  const proofPath = path.join(root, proofName);
+  const proofToken = randomUUID();
+  fs.writeFileSync(proofPath, proofToken, { flag: 'wx' });
   const srv = spawn('python3', ['-m', 'http.server', String(port), '--bind', '127.0.0.1'],
     { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
   /* Track BEFORE anything downstream can throw, same reason as boot(): the caller
@@ -992,11 +999,24 @@ export async function serveTree(root, { timeoutMs = 15000, forcePort = null } = 
 
   const url = `http://127.0.0.1:${port}/`;
   const t0 = Date.now();
-  for (;;) {
-    if (exited) throw new Error(`serveTree: python died before serving ${url} (${exited}). stderr: ${err.trim().split('\n').pop() || '(silent)'}`);
-    try { if ((await fetch(url + 'index.html')).ok) break; } catch { /* not up yet */ }
-    if (Date.now() - t0 > timeoutMs) { srv.kill('SIGKILL'); throw new Error(`serveTree: nothing answered on ${url} within ${timeoutMs}ms. stderr: ${err.trim() || '(silent)'}`); }
-    await new Promise(r => setTimeout(r, 100));
+  try {
+    for (;;) {
+      if (exited) throw new Error(`serveTree: python died before serving ${url} (${exited}). stderr: ${err.trim().split('\n').pop() || '(silent)'}`);
+      try {
+        const answer = await fetch(url + encodeURIComponent(proofName), { cache: 'no-store' });
+        const body = await answer.text();
+        if (answer.ok && body === proofToken) break;
+        srv.kill('SIGKILL');
+        throw new Error(`serveTree: something else is already serving that port (${url}) instead of ${path.resolve(root)}; the audit would otherwise have graded a different tree. Stop the server on port ${port} and retry.`);
+      } catch (e) {
+        if (/^serveTree: something else is already serving that port/.test(e.message)) throw e;
+        /* A refused connection means python is not ready yet. */
+      }
+      if (Date.now() - t0 > timeoutMs) { srv.kill('SIGKILL'); throw new Error(`serveTree: nothing answered on ${url} within ${timeoutMs}ms. stderr: ${err.trim() || '(silent)'}`); }
+      await new Promise(r => setTimeout(r, 100));
+    }
+  } finally {
+    fs.unlinkSync(proofPath);
   }
   return { url, port, close: () => { try { srv.kill('SIGKILL'); } catch { /* already gone */ } } };
 }
