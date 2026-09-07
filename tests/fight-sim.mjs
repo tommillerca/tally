@@ -6,13 +6,12 @@
  * nobody ever did, which is how an uncapped multiplicative damage chain got to
  * eight talent trees deep without anyone measuring it.
  *
- * pit.js is pure (it imports only pets.js, no DOM, no IndexedDB), so a real fight
+ * pit.js is pure (no DOM or IndexedDB), so a real fight
  * runs headless in a millisecond. This drives thousands of them.
  *
- * WHAT IT MEASURES, per build: win rate and median turns-to-kill against a foe
- * scaled off the player's own stats, which is how the game actually builds its
- * enemies (scaleStats). A build that ends fights in half the turns of the
- * baseline is not "strong", it is the reason the Pit has no difficulty.
+ * WHAT IT MEASURES: paired-seed pet contributions against the actual Pit and
+ * Gauntlet configs, including talents, style and AI. The legacy dummy DPT ruler
+ * remains separate for balance.mjs's existing no-pet guards.
  *
  * Usage:
  *   node tests/fight-sim.mjs              # the standard board
@@ -21,8 +20,10 @@
 import { pathToFileURL } from 'node:url';
 import {
   makeFighter, createFight, endTurn, aiTakeTurn,
-  scaleStats, TURN_CAP, smartPlayerTurn,
+  scaleStats, TURN_CAP, smartPlayerTurn, LADDER, CHAMPION, RUNG_TALENTS, endlessFoe,
 } from '../js/pit.js';
+
+import { buildBattlePet, PET_ASSIGN, PET_TREES, PET_STATS, PET_SIGNATURE, SHINY_STAT_MULT, PET_LINEAGE_STEP } from '../js/pets.js';
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? Number(process.argv[i + 1]) : d; };
 const SEEDS = arg('--seeds', 160);
@@ -56,32 +57,69 @@ function damagePerTurn({ stats, talents, pet }, { turns = 10, seed = 1 } = {}) {
 }
 
 /* METRIC 2: win rate against a real, fighting foe scaled like a ladder rung. */
-function runFight({ stats, talents, pet, foeMult, seed }) {
-  const player = makeFighter({ name: 'P', stats, talents, pet });
-  const foe = makeFighter({ name: 'F', stats: scaleStats(stats, foeMult) });
-  const fight = createFight({ player, foe, seed, aiLevel: 4 });
+export function createSimFight({ stats, talents, pet, food, foeMult, foeCfg, seed }) {
+  const player = makeFighter({ name: 'P', stats, talents, pet, food });
+  const cfg = foeCfg || { mult: foeMult, aiLevel: 4 };
+  const foe = makeFighter({ name: cfg.name || 'F', stats: scaleStats(stats, cfg.mult),
+    style: cfg.style || 'plain', talents: cfg.talents || [] });
+  if (cfg.mage) foe.wraith = true;
+  const add = cfg.add ? makeFighter({ name: cfg.add.name || 'A',
+    stats: scaleStats(stats, cfg.add.mult), talents: cfg.add.talents || [] }) : null;
+  return createFight({ player, foe, add, seed, aiLevel: cfg.aiLevel });
+}
+
+export function runFight(build) {
+  const fight = createSimFight(build);
   let guard = 0;
   while (!fight.over && guard++ < TURN_CAP * 4) {
     if (fight.active === 'p') playerTurn(fight);
     else { aiTakeTurn(fight); if (!fight.over) endTurn(fight); }
   }
-  return { winner: fight.over ? fight.over.winner : 'draw', turns: fight.turn };
+  if (!fight.over) throw new Error('fight-sim exhausted its loop guard before a result');
+  return { winner: fight.over.winner, turns: fight.turn };
 }
 
-export function measure(build, { foeMult = 0.8, seeds = SEEDS } = {}) {
-  let wins = 0; const turns = []; const dpts = [];
+// Wilson score intervals retain uncertainty even at 0/N and N/N wins.
+export function winInterval(wins, n, z = 1.959963984540054) {
+  if (!Number.isInteger(n) || n < 1 || wins < 0 || wins > n) throw new Error('nonempty valid sample required');
+  const p = wins / n, den = 1 + z * z / n;
+  const mid = (p + z * z / (2 * n)) / den;
+  const half = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / den;
+  return [Math.max(0, mid - half), Math.min(1, mid + half)];
+}
+const median = xs => xs.length ? (xs[Math.floor((xs.length - 1) / 2)] + xs[Math.floor(xs.length / 2)]) / 2 : null;
+// Distribution-free order-statistic CI, conditional on winning. For <6 wins
+// the sample cannot bound a two-sided 95% median, so report it as unbounded.
+export function medianInterval(sorted) {
+  const n = sorted.length;
+  if (!n) return null;
+  let logMass = -n * Math.LN2, tail = 0, k = 0;
+  for (let j = 0; j < n / 2; j++) {
+    tail += Math.exp(logMass);
+    if (tail > 0.025) break;
+    k = j + 1;
+    logMass += Math.log((n - j) / (j + 1));
+  }
+  return k ? [sorted[k - 1], sorted[n - k]] : [-Infinity, Infinity];
+}
+
+export function measure(build, { foeMult = 0.8, foeCfg, seeds = SEEDS, offense = !foeCfg } = {}) {
+  if (!Number.isInteger(seeds) || seeds < 1) throw new Error('seeds must be a positive integer');
+  let wins = 0, draws = 0; const turns = [], dpts = [], outcomes = [];
   for (let s = 1; s <= seeds; s++) {
     const seed = s * 7919;
-    dpts.push(damagePerTurn(build, { seed }));
-    const r = runFight({ ...build, foeMult, seed });
+    if (offense) dpts.push(damagePerTurn(build, { seed }));
+    const r = runFight({ ...build, foeMult, foeCfg, seed });
+    outcomes.push(r);
     if (r.winner === 'p') { wins++; turns.push(r.turns); }
+    if (r.winner === 'draw') draws++;
   }
   turns.sort((a, b) => a - b); dpts.sort((a, b) => a - b);
   return {
-    name: build.name,
-    winRate: wins / seeds,
-    medianTurns: turns.length ? turns[Math.floor(turns.length / 2)] : null,
-    dpt: dpts[Math.floor(dpts.length / 2)],
+    name: build.name, wins, draws, seeds, outcomes,
+    winRate: wins / seeds, winCI: winInterval(wins, seeds),
+    medianTurns: median(turns), medianCI: medianInterval(turns),
+    dpt: offense ? dpts[Math.floor(dpts.length / 2)] : null,
   };
 }
 
@@ -162,36 +200,98 @@ export const STACKS = [
 ];
 
 
-// pathToFileURL, not string concatenation: this project lives under
-// "Hyperframes Editor" and the space arrives percent-encoded in import.meta.url,
-// so the naive compare silently never matched and the script printed nothing.
+// HIGH is a veteran scenario, not a measured population percentile: 20
+// feedings, each consuming a pet, separated by 6,000 steps (loot.js). There is
+// no lineage cap. These boosts multiply intrinsic stats, not all ability damage.
+export const HIGH_LINEAGE = 20;
+export const FOES = [
+  ...LADDER.filter(l => [4, 8].includes(l.rung)).map(l => ({ ...l,
+    key: `Pit ${l.rung}`, aiLevel: 2, talents: RUNG_TALENTS[l.rung] || [] })),
+  { ...CHAMPION, key: 'Champion', aiLevel: 3 },
+  ...[1, 10, 13].map(rank => ({ ...endlessFoe(rank), key: `Gauntlet ${rank}` })),
+];
+
+export function petPicks(id, level, branch) {
+  return branch === 'none' ? [] : PET_TREES[PET_ASSIGN[id]]
+    .filter(t => t.tier <= level).map(t => t.opts[branch === 'A' ? 0 : 1].id);
+}
+export const PET_BUILDS = Object.keys(PET_ASSIGN).flatMap(id => {
+  const rows = [];
+  const add = (level, branch, shiny = false, lineage = 0, stack = false) => {
+    const parent = stack ? STACKS[STACKS.length - 1] : BUILDS[0];
+    rows.push({ ...parent,
+      name: `${id}/${PET_ASSIGN[id]} L${level} ${branch}${shiny ? ' shiny' : ''}${lineage ? ` lin${lineage}` : ''}${stack ? ' STACK' : ''}`,
+      baseline: parent.name,
+      pet: buildBattlePet(id, level, petPicks(id, level, branch), { shiny, lineage }),
+    });
+  };
+  add(1, 'none');
+  for (const level of [6, 10]) for (const branch of ['none', 'A', 'B']) add(level, branch);
+  add(10, 'A', true);
+  for (const branch of ['A', 'B']) {
+    add(10, branch, true, HIGH_LINEAGE);
+    add(10, branch, true, HIGH_LINEAGE, true);
+  }
+  return rows;
+});
+
+// Conservative 95% difference interval: two 97.5% Wilson intervals with
+// Bonferroni coverage. Valid without treating paired seed outcomes as independent.
+export function contribution(row, base) {
+  if (row === base) return { winDelta: 0, winDeltaCI: [0, 0], turnsDelta: row.medianTurns == null ? null : 0 };
+  const a = winInterval(row.wins, row.seeds, 2.241402727604947);
+  const b = winInterval(base.wins, base.seeds, 2.241402727604947);
+  return { winDelta: row.winRate - base.winRate, winDeltaCI: [a[0] - b[1], a[1] - b[0]],
+    turnsDelta: row.medianTurns != null && base.medianTurns != null ? row.medianTurns - base.medianTurns : null };
+}
+
+const pct = n => (100 * n).toFixed(1);
+const interval = (ci, format = String) => ci ? `[${ci.map(format).join(',')}]` : 'NA';
+const signed = n => n == null ? 'NA' : `${n > 0 ? '+' : ''}${n.toFixed(1)}`;
+const ttk = r => r.medianTurns == null ? 'NA (0 wins)' : `${r.medianTurns} ${r.medianCI.every(Number.isFinite) ? interval(r.medianCI) : '[unbounded]'}`;
+
+export function printPetBoard({ seeds = SEEDS } = {}) {
+  console.log(`PET BOARD: ${BUILDS.length + STACKS.length} no-pet + ${PET_BUILDS.length} pet builds x ${FOES.length} real configs x ${seeds} seeds`);
+  console.log('Stats: power/marrow/wind/reflex/hype = 55. No food, gear or tutorial. Captain-first target. Special then basic pet policy.');
+  console.log('Win CI: 95% Wilson; delta CI: conservative 95% difference. Same seeds for every build. Pointwise, not multiple-comparison certification.');
+  console.log('TTK: median fight.turn among WINS ONLY, with exact conservative 95% order-statistic CI. NA = no wins; unbounded = too few wins.');
+  console.log('Delta TTK compares winning subsets, not paired kill times. Draws count as nonwins. Delta baseline matches player talents.');
+  console.log('A/B select first/second option at EVERY unlocked tier. Covers every talent, not every mixed path or optimal policy. L10 automatically activates the species signature.');
+  console.log(`HIGH lineage=${HIGH_LINEAGE}: plausible veteran with 20 consumed pets and 6,000-step feeding cooldowns, not telemetry or an upper bound. Lineage stacks forever.`);
+  for (const id of Object.keys(PET_ASSIGN)) {
+    const m = PET_STATS[id].mult;
+    console.log(`${id}: intrinsic rarity budget ${m} x shiny ${SHINY_STAT_MULT} x (1 + ${PET_LINEAGE_STEP} x ${HIGH_LINEAGE}) = ${(m * SHINY_STAT_MULT * (1 + PET_LINEAGE_STEP * HIGH_LINEAGE)).toFixed(4)}x, before species tilt/rounding. Signature: ${PET_SIGNATURE[id]?.name || 'MISSING'}`);
+    console.log(`  A=${petPicks(id, 10, 'A').join(',')} | B=${petPicks(id, 10, 'B').join(',')}`);
+  }
+  console.log('FINDINGS: Pack Tactics sets pet.cooldown=1, but dispatch uses meta.cd=2; simulated unchanged. C6 has no species signature in this checkout.');
+  console.log('Intrinsic rarity/shiny/lineage chiefly improve the pet body. Special damage/shields are owner/level-based; the formula is not a blanket DPS multiplier.');
+  const all = [];
+  for (const foeCfg of FOES) {
+    console.log(`\n${foeCfg.key}: ${foeCfg.name} mult=${foeCfg.mult} AI=${foeCfg.aiLevel} style=${foeCfg.style || 'plain'} talents=${(foeCfg.talents || []).join(',')}`);
+    console.log('build | wins/draws | win% [95% CI] | delta pp [95% CI] | winning TTK [95% CI] | delta TTK');
+    const baselines = new Map();
+    for (const build of [...BUILDS, ...STACKS, ...PET_BUILDS]) {
+      const row = measure(build, { foeCfg, seeds });
+      if (!build.pet) baselines.set(build.name, row);
+      const base = baselines.get(build.baseline || BUILDS[0].name);
+      const d = contribution(row, base);
+      console.log(`${row.name} | ${row.wins}/${row.draws} | ${pct(row.winRate)} ${interval(row.winCI, pct)} | ${signed(100 * d.winDelta)} ${interval(d.winDeltaCI, pct)} | ${ttk(row)} | ${signed(d.turnsDelta)}`);
+      all.push({ build, row, foeCfg, delta: d });
+    }
+  }
+  // A screening rule, not a newly invented pet balance band. Existing no-pet
+  // damage ceilings do not bound a second body's soak/healing/status effects.
+  const flags = all.filter(x => x.build.pet && x.foeCfg.mult > 1 && x.row.winCI[0] > 0.9);
+  console.log('\nOUTLIER SCREEN: lower 95% win bound >90% against a stronger real foe (advisory, no approved pet design band).');
+  for (const x of flags) console.log(`FLAG ${x.foeCfg.key} ${x.row.name}: ${pct(x.row.winRate)}% ${interval(x.row.winCI, pct)}, TTK ${ttk(x.row)}`);
+  console.log(`${flags.length} flagged cells. This finite board cannot certify unbounded lineage or untested mixed talent paths.`);
+  return all;
+}
+
 const isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
-  console.log(`fight-sim: ${BUILDS.length} builds + ${STACKS.length} stacks x ${SEEDS} seeds`);
-  console.log('damage/turn vs a dummy (offense, no AI noise) + win% vs a foe at 80% of your stats\n');
+  console.log(`LEGACY NO-PET DPT RULER: ${SEEDS} seeds, dummy only; not a ladder win-rate claim`);
   const rows = [...BUILDS, ...STACKS].map(b => measure(b));
-  const base = rows[0];
-  const pad = (s, n) => String(s).padEnd(n);
-  console.log(pad('build', 30) + pad('dmg/turn', 11) + pad('x base', 9) + pad('win%', 7) + 'median turns');
-  console.log('-'.repeat(76));
-  for (const r of rows) {
-    console.log(
-      pad(r.name, 30) +
-      pad(r.dpt.toFixed(1), 11) +
-      pad((r.dpt / base.dpt).toFixed(2) + 'x', 9) +
-      pad((r.winRate * 100).toFixed(0) + '%', 7) +
-      (r.medianTurns ?? 'never won')
-    );
-  }
-  console.log('\nSame stats in every row, so the multiplier IS the talents.');
-  /* THE LADDER COLUMNS: the same builds against the rungs players actually
-     fight. Without these, the 0.8x dummy column reads as the game (it did, for
-     two days: a "100%, no ceiling" alarm that survived into a plan and five
-     candidate nerfs before anyone asked what the foe was). */
-  console.log('\nwin% vs the game\'s own rungs   Glutton 1.3   Wanderer 1.45');
-  for (const b of [...BUILDS, ...STACKS].filter(x => /STACK|Crow|two free|stamina engine|baseline/.test(x.name))) {
-    const a = Math.round(measure(b, { foeMult: 1.3 }).winRate * 100);
-    const c = Math.round(measure(b, { foeMult: 1.45 }).winRate * 100);
-    console.log(b.name.padEnd(30) + String(a + '%').padStart(12) + String(c + '%').padStart(15));
-  }
+  for (const r of rows) console.log(`${r.name}: ${r.dpt.toFixed(1)} damage/turn, ${(r.dpt / rows[0].dpt).toFixed(2)}x baseline`);
+  printPetBoard();
 }
