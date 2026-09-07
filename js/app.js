@@ -20,6 +20,7 @@ import {
   boneDust, boneDustAdd, disenchantGear, salvagePet, gearDustValue, petDustValue, slimedGearIds,
   shinyPetIds,
   transmogMap, applyTransmog, clearTransmog, collectedLooks, transmogCost, TRANSMOG_HIDE, transmogPrice,
+  newCosmeticIds, newSlotCodes, clearNewInSlot,
   fits, captureFit, applyFit, renameFit, deleteFit, fitPrice, fitThumbArt, MAX_FITS,
   stripAll, stripAllPlan,
   DROP, buyDropItem, buyFootballItem, buyFootballBundle, refundStreakFreezes,
@@ -16324,9 +16325,16 @@ async function renderCharacter(wrap, tab, opts = {}) {
   if (tab === 'wardrobe') {
     const owned = await ownedCosmeticIds();
     // tm and dustBal are reassigned by restageLook after a paid commit (QA round 23 F1)
-    let [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal, fitList] = await Promise.all([
-      ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(),
+    let [gOwnedSet, gearLo, fighter, slimedSet, tm, looks, dustBal, fitList, invRows] = await Promise.all([
+      ownedGearIds(), gearLoadout(), buildFighter(), slimedGearIds(), transmogMap(), collectedLooks(), boneDust(), fits(), db.all('inv'),
     ]);
+    /* R39-25, THE UNREAD MARK. One inv scan, shared by both readers, on the
+       WARDROBE's render only: nothing here runs on Today's tick, which is what
+       today-reads-lint exists to keep true. The rows are read BEFORE the clear
+       below, so the slot you land on shows its dots once and is quiet on the
+       next render and after a reload. */
+    const newIds = await newCosmeticIds(invRows);
+    const newSlots = await newSlotCodes(invRows);
     const fitPrices = await Promise.all(fitList.map(f => fitPrice(f)));
     // What "Take it all off" would actually take off, computed by the same
     // function that does it, so the chip cannot offer a strip that does nothing
@@ -16416,6 +16424,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
               : `<canvas class="pd-art" width="200" height="200" data-art="${esc(bhTrim(bhAsset(art)))}"${fbTintAttr(art)}${code === 'SK' ? ' data-pad="0.2"' : ''}></canvas>`)
           : `<span class="pd-empty">${mog === TRANSMOG_HIDE ? ICONS.hidden(18) : '+'}</span>`}
         ${mog ? `<span class="pd-mog" title="Look changed">${sparkIco(11)}</span>` : ''}
+        ${newSlots.has(code) ? '<span class="new-dot" role="img" aria-label="New"></span>' : ''}
         <span class="pd-tag">${esc(label)}</span>
         ${g ? `<span class="pd-gear">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>` : ''}
       </button>`;
@@ -16675,6 +16684,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
           <button class="ward-cell r-${i.rarity} ${eq[slot] === i.id && !gearLo[slot] ? 'equipped' : ''}" data-equip="${i.id}" title="${esc(i.name)} · ${esc(i.rarity)}">
             ${famArtHtml(i)}
             ${rarityTagHtml(i.rarity)}
+            ${newIds.has(i.id) ? NEW_DOT : ''}
           </button>`;
           /* data-equip AND data-family: the tap equips what the tile is showing
              (so wearing this piece still costs exactly one tap, as it does
@@ -16687,6 +16697,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ${famArtHtml(i)}
             ${rarityTagHtml(best.rarity)}
             <span class="ward-fam-n" aria-hidden="true">${fam.length}</span>
+            ${fam.some(v => newIds.has(v.id)) ? NEW_DOT : ''}
           </button>`;
         }).join('')}
         ${gearItems.map(g => {
@@ -16698,6 +16709,7 @@ async function renderCharacter(wrap, tab, opts = {}) {
             ${rarityTagHtml(g.rarity)}
             <span class="gear-stat">${gearLabel(g)}${g.talent ? ' ' + ICONS.boltIco(11) : ''}</span>
             ${locked ? `<span class="gear-lock">Lv ${g.minLevel}</span>` : ''}
+            ${newIds.has(g.id) ? NEW_DOT : ''}
           </button>`;
         }).join('')}
       </div>
@@ -16948,6 +16960,12 @@ async function renderCharacter(wrap, tab, opts = {}) {
        are transmogging"). Same trim as the doll slots. */
     hydratePackArt(content, '.pd-art[data-art]');
     lazyHydrateWardArt(content);       // PERF-4: the grid's tiles paint as they near the viewport, not all at once
+    /* R39-25: THE GRID FOR THIS SLOT IS NOW ON SCREEN, SO IT HAS BEEN SEEN.
+       After the HTML, never before it: the marks above were rendered from the
+       pre-clear rows so the slot you land on shows its dots once. Clearing is a
+       put per still-flagged row in THIS slot only, so a slot with nothing new
+       writes nothing. Awaited so a reload straight after cannot race it. */
+    if (newSlots.has(slot)) await clearNewInSlot(slot);
     const wirePd = b => b.addEventListener('click', async () => {
       S.wardrobeSlot = b.dataset.pd; S.wardrobePreview = null; S.lookPreview = null;
       await renderCharacter(wrap, 'wardrobe', { instant: true });
@@ -17953,6 +17971,11 @@ const RAR_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
    and its title, and it is the same vocabulary the crate odds sheet already
    prints. Bottom-left, because the equipped tick owns the top-right corner and
    the SLIMED tag owns the top-left. */
+/* R39-25's unread mark, in the app's own badge language: the same accent plate
+   and --bg ring the crate count and the News dot wear, at dot size. One string,
+   used by the paper-doll slot rail and by all three wardrobe tile shapes, so a
+   tile that grew a mark and a rail that did not cannot happen. */
+const NEW_DOT = '<span class="new-dot" role="img" aria-label="New"></span>';
 function rarityTagHtml(rarity) {
   const r = String(rarity || '');
   return RAR_ORDER.includes(r) ? `<span class="ward-rar" aria-hidden="true">${r[0].toUpperCase()}</span>` : '';
