@@ -299,6 +299,13 @@ READY cache, not the cache of the page still running").
 1. PROOF: sw-upgrade-audit.mjs | REACH: a player who keeps a sheet open on build A while build B and then build C install and take charge underneath still gets A's own modules when the old page lazily imports one (THREE GENERATIONS row, red before: the A page's import of the module only its build carries answered 404 with caches tally-v493, tally-v494; green after: 200, caches tally-v471, tally-v494). The worker keeps every generation an open page came from, at most two behind the current build, and sweeps the rest; the generation nobody is running (B here) goes.
 
 2. PROOF: sw-upgrade-audit.mjs, offline-boot-audit.mjs, dead-shell-audit.mjs | REACH: nothing else about the swap moved: the new worker still takes over the moment its whole build is cached (R38-1), the page it takes over from keeps its own generation (R38-17), identical entries are still reused across the install (R38-18), and a cold offline boot and the dead-shell recovery still work with the extra tally-clients bookkeeping cache present.
+## v497
+1. A hotfix off v496, master handoff B9, B10, B11 and R40-28..31. Its rows are the dated section "the Stable rail tells the truth" further down, folded here.
+
+2. PROOF: football-render-audit.mjs | REACH: owned colourways lead the Stable rail (positions 1 to 3 of 32, 192 px span, was 3113 of 3337), the rail parks on and persists the last pick (S.settings.petRailTeam), an owned team applies to every worn piece that exists in it and the toast names only a genuinely missing piece, a Locked team never reads Picked (RAIL-ORDER, RAIL-TOAST, RAIL-HALF-SWAP, RAIL-LOCKED, RAIL-REMEMBERS, RAIL-SE red on v493 with the quoted positions and toasts).
+
+3. PROOF: football-render-audit.mjs, pet-ownership-audit.mjs, unit.test.js | REACH: the Locker Room price pill stays inside its text column at 320, 375 and 393 (PILL red before: 95.1, 40.1, 23.0 px past the column), kin chips are 44 px (KIN-TAP red at 40), a pet armed for breeding keeps its chip across copies (KIN-BREED), and a mixed-rarity family tile carries the shown item's rarity badge (R40-31 unit row red: fam r-legendary on a worn common).
+
 ## v496
 1. A hotfix off v495, lane 4 of the data-integrity plan plus the hero-share audit re-premise. Its rows are the dated section "three generations, no orphaned page" further down, folded here.
 
