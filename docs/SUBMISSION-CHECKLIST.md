@@ -21,9 +21,11 @@ pass. Status as of `prep/submission` (branched off `integ/day3`).
       boots and renders (Today screen, 4-tab bar) served from a bare static
       server with no network dependency and no service worker. See
       `native/README.md` for the exact commands.
-- [ ] Not yet done: an actual `npx cap sync ios` + Xcode archive against the
-      bundle. Nothing here required Xcode; that's the next lane, after Tom
-      says go.
+- [x] `SUBMISSION=1 native/build-ios.sh` is the archive/upload path for a store
+      bundle. It builds with STORE_BUILD=true, syncs with no `server` key,
+      preflights both conditions plus reachable beta copy, and restores the
+      remote-shell config on every exit. The script rows are graded by
+      `tests/store-copy-lint.mjs`; no Xcode or sync command was run in this pass.
 
 ## Worker / server
 
@@ -61,11 +63,12 @@ pass. Status as of `prep/submission` (branched off `integ/day3`).
 
 - [x] Subtitle, promotional text, description, keywords, support/marketing/
       privacy URLs: all paste-ready in `TESTFLIGHT.md`.
-- [ ] App Store Connect API key (the actual upload blocker): Tom generates
-      it in ASC (Users and Access > Integrations, role App Manager) and
-      hands over the `.p8` + Key ID + Issuer ID when ready to upload. Not
-      needed for this prep pass; only for the eventual `altool`/Transporter
-      step, which nobody runs from here.
+- [x] App Store Connect API key is installed at
+      `~/.appstoreconnect/private_keys/AuthKey_R6B586JNRN.p8`; Key ID
+      `R6B586JNRN` and the issuer ID are already wired into
+      `native/build-ios.sh`. Existing checked-in upload logs cover builds 11
+      through 15; the work order reports builds 11 through 20 uploaded, but
+      builds 16 through 20 were not independently verified in this checkout.
 
 ## Not done in this pass, on purpose
 

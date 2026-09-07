@@ -1,5 +1,11 @@
 # What each patch note claims, and what backs it
 
+## the submission build asserts itself (2026-09-07)
+
+1. PROOF: store-copy-lint.mjs
+
+2. PROOF: unit.test.js
+
 Written 2026-08-24 after four notes in twenty-four hours told players things that
 were not true for them. `tests/claim-evidence-lint.mjs` reds the gate if the
 newest changelog entry has an item that is not answered here.
