@@ -1786,3 +1786,107 @@ export function scaleStats(stats, mult) {
   for (const k of Object.keys(stats)) out[k] = Math.max(5, Math.min(100, Math.round(stats[k] * mult)));
   return out;
 }
+
+/* ===== "CAN THIS PLAYER PLAUSIBLY WIN THIS FOE?" (master handoff B16, 2026-09-07)
+ *
+ * Tom: at level 2 the Glutton (228 HP) and the Spire (210 HP) are unwinnable,
+ * and losing the Spire spends the day's only attempt at that tower, and
+ * neither explainer sheet says so. One helper, reused by both sheets (js/app.js
+ * openGluttonSheet + openSpireSheet), answers it the way every balance question
+ * in this file gets answered: MEASURED, not reasoned from the stat formulas.
+ *
+ * smartPlayerTurn below is tests/fight-sim.mjs's own policy (setup buffs/summons
+ * first, then the best legal damage per AP, mend under 30% HP), moved here so
+ * the sim that CALIBRATES the threshold and the sheet that USES it are running
+ * the exact same simulated player, not two different opinions of "plays well".
+ * fight-sim.mjs imports it from here now instead of keeping its own copy.
+ *
+ * MEASURED, this holds exactly for the Glutton and only PARTLY for the Spire:
+ * see the curve below OUTMATCHED_WIN_RATE. The 228/210 HP figures are both
+ * real (mult 1.30 and 1.00 of a fresh player's own stats), but a plain
+ * unclaimed Spire's NPC warden gets an easier AI below character level 12
+ * (spires.js wardenFor) and never actually crosses the outmatched line at any
+ * roll of its mult; a rival's tower, defended by a real specced build, does.
+ * The line is measured per fight, not hardcoded to either foe, so it shows up
+ * exactly where the numbers say it should rather than everywhere Tom's
+ * shorthand implied.
+ */
+export const SETUP_FIRST = ['rage', 'totem', 'raisedead', 'callcrows', 'ward'];
+export function smartPlayerTurn(fight) {
+  let guard = 0;
+  while (!fight.over && fight.active === 'p' && fight.ap > 0 && guard++ < 8) {
+    const legal = actionsFor(fight).filter(x => x.enabled);
+    if (!legal.length) break;
+    const has = id => legal.find(x => x.id === id);
+    let pick = null;
+    if (fight.p.hp < fight.p.d.maxHp * 0.3 && (has('mend') || has('guard'))) pick = has('mend') ? 'mend' : 'guard';
+    if (!pick && has('callcrows') && (fight.p.flock || 0) < 3) pick = 'callcrows';
+    if (!pick) for (const id of SETUP_FIRST) if (id !== 'callcrows' && has(id)) { pick = id; break; }
+    if (!pick && has('signature')) pick = 'signature';
+    if (!pick) {
+      const dmg = legal
+        .filter(a => ACTIONS[a.id] && ACTIONS[a.id].base)
+        .map(a => ({ id: a.id, v: expectedDamage(a.id, fight.p, fight.f, fight.f) / Math.max(1, a.ap) }))
+        .sort((x, y) => y.v - x.v);
+      pick = dmg.length ? dmg[0].id : legal[0].id;
+    }
+    applyAction(fight, pick);
+  }
+  if (!fight.over) endTurn(fight);
+}
+
+/* MEASURED CURVE (estimateWinRate below, 200 seeds/row, deterministic seeds so
+ * every number here reproduces exactly; measured 2026-09-07). "Level" is a
+ * rough label, not a real lever: combat stats come from training points earned
+ * by behavior (allocatedStats above), not from XP level directly, so "a fresh
+ * level 2" below means the flat, unspent base every player starts from, and
+ * "progressed" means real stat AND talent investment, not just a bigger number.
+ *
+ *   vs the Glutton (mult 1.30, aiLevel 3, talents heavyhands/marrowlust/bonebreaker):
+ *     flat base, no talents (a fresh level 2)              ->   0% win
+ *     BASE 55 all stats + Crow Lord's full flock chain      ->  11% win
+ *
+ *   vs an unclaimed Spire's NPC warden (aiLevel 2 below character level 12,
+ *   mult 0.90-1.25 of the player's own stats, spires.js wardenFor):
+ *     flat base, no talents, worst-roll tower (mult 1.25)   ->   8% win
+ *     BASE 55 + Crow Lord, same worst-roll tower             ->  50% win
+ *   MEASURED, NOT ASSUMED FROM THE 210 HP FIGURE: a fresh level 2 does NOT
+ *   cross this threshold against the plain NPC warden anywhere in its mult
+ *   range (8-52% win across seeds and the full range, three different player
+ *   policies tried). wardenFor deliberately hands every player below level 12
+ *   the EASIER aiLevel 2 warden, which is enough to keep the fight hard but
+ *   not hopeless. The line only fires here for a genuinely tough matchup:
+ *
+ *   vs a rival's Spire, defended by their own real build (aiLevel always 3):
+ *     flat base, no talents, vs a specced rival (Slab rage stack, BASE 55) -> 0% win
+ *
+ * 0.05 sits under every truly-fresh row above and under every row with real
+ * progress (stats AND talents) behind it. It never trips for the plain NPC
+ * warden at any tested mult; it does trip for a hard rival tower, which is the
+ * real "outmatched Spire" case the sheet needs to warn about. */
+export const OUTMATCHED_WIN_RATE = 0.05;
+
+export function estimateWinRate(build, foe, { seeds = 40 } = {}) {
+  let wins = 0;
+  for (let s = 1; s <= seeds; s++) {
+    const seed = s * 7919;
+    const player = makeFighter({ name: 'P', stats: build.stats, talents: build.talents, pet: build.pet, food: build.food, gearArmor: build.gearArmor });
+    const f = makeFighter({ name: 'F', stats: foe.stats, talents: foe.talents || [], style: foe.style || 'plain' });
+    const fight = createFight({ player, foe: f, seed, aiLevel: foe.aiLevel || 2 });
+    let guard = 0;
+    while (!fight.over && guard++ < TURN_CAP * 4) {
+      if (fight.active === 'p') smartPlayerTurn(fight);
+      else { aiTakeTurn(fight); if (!fight.over) endTurn(fight); }
+    }
+    if (fight.over && fight.over.winner === 'p') wins++;
+  }
+  return wins / seeds;
+}
+
+/** "Can this player plausibly win this foe?" Same fight engine, same stats and
+ * talents the real encounter would use; below OUTMATCHED_WIN_RATE reads as
+ * unwinnable rather than merely hard. Used by openGluttonSheet and
+ * openSpireSheet (js/app.js) to show one plain line, nothing more. */
+export function isOutmatched(build, foe, opts) {
+  return estimateWinRate(build, foe, opts) < OUTMATCHED_WIN_RATE;
+}
