@@ -277,6 +277,111 @@ ok('CLAIM a finished crate reveal names the new item and points to Wardrobe',
   /^.+ claimed\. Equip it in your Wardrobe\.$/.test(claimToast), `toast=${JSON.stringify(claimToast)}`);
 
 
+/* ---- BULK RECOVERY: R39-y, a mid-loop failure must not swallow what already
+   opened ---------------------------------------------------------------------
+   Codex audit v487, "Bulk open has no failure recovery around its sequential
+   loop. If the third openCrate rejects, earlier opens are committed, no
+   combined reveal appears, and the button remains disabled" (js/app.js:17191,
+   17195 pre-fix). The handler threw straight out of the click listener, so:
+   the two crates already spent were never shown to the player, the reveal
+   never opened, and "OPEN ALL" stayed disabled forever with no re-render to
+   fix it.
+
+   This poisons the THIRD of five Commons with openCrate's own existing
+   defensive branch (crateRow.kind !== 'crate'): db.take removes the row,
+   openCrate finds the wrong kind, puts the SAME row straight back unchanged,
+   and throws 'crate gone'. That is a real crate-row corruption, not a stubbed
+   function, and it leaves the poisoned row sitting in inventory exactly like
+   a crate the loop never got to.
+
+   PROVE-RED (2026-09-06, pre-fix js/app.js): the try/catch below did not
+   exist, so `for (const crate of held) opened.push(await openCrate(crate.id))`
+   threw out of the handler on crate 3:
+     FAIL  RECOVERY the first two opens are revealed even though crate 3 threw  cards=0
+     FAIL  RECOVERY three crates remain (the poisoned one plus the two never attempted)  remain=2
+     FAIL  RECOVERY the Open all control comes back enabled  disabled=true
+ */
+await page.evaluate(async () => {
+  for (let i = 0; i < 6; i++) {
+    if (!document.querySelector('.pack-reveal')) break;
+    const b = document.querySelector('.pack-reveal .sheet-close');
+    if (b) b.click(); else history.back();
+    await new Promise(r => setTimeout(r, 400));
+  }
+});
+await sleep(500);
+await page.evaluate(async () => {
+  const db = await import('/js/db.js');
+  for (const row of await db.db.all('inv')) if (row.kind === 'crate') await db.db.del('inv', row.id);
+  for (let i = 0; i < 5; i++) await db.db.put('inv', { id: `r39-recover-${i}`, kind: 'crate', crate: 'daily', source: 'r39-recovery-audit', ts: Date.now() + i });
+  Object.defineProperty(crypto, 'getRandomValues', { configurable: true, value: a => { a.fill(0x80000000); return a; } });
+});
+/* Render the tab with all FIVE still healthy: the handler's `held` array is a
+   closure captured at render time, so the corruption below has to land AFTER
+   this render and BEFORE the click, the same way a row could go bad on disk
+   between a screen painting and a tap landing on it. Poisoning before the
+   render would just make the crate invisible to the tab, never reaching
+   openCrate at all. */
+await page.evaluate(() => document.querySelector('.ch-tab[data-tab="wardrobe"]')?.click());
+await sleep(300);
+await page.evaluate(() => document.querySelector('.ch-tab[data-tab="crates"]')?.click());
+await sleep(700);
+const preClick = await page.evaluate(() => ({
+  buttons: document.querySelectorAll('[data-open-all="daily"]').length,
+}));
+// poison the third, now that the rendered handler already holds all five ids
+await page.evaluate(async () => {
+  const db = await import('/js/db.js');
+  const third = await db.db.get('inv', 'r39-recover-2');
+  await db.db.put('inv', { ...third, kind: 'poisoned' });
+});
+if (preClick.buttons) await page.click('[data-open-all="daily"]');
+await sleep(900);
+const recovery = await page.evaluate(async () => {
+  const db = await import('/js/db.js');
+  const rows = (await db.db.all('inv')).filter(r => r.id && r.id.startsWith('r39-recover-'));
+  return {
+    cards: document.querySelectorAll('.pack-card').length,
+    remain: rows.length,
+  };
+});
+ok('RECOVERY the first two opens are revealed even though crate 3 threw',
+  recovery.cards > 0, `cards=${recovery.cards}`);
+ok('RECOVERY three crates remain (the poisoned one plus the two never attempted)',
+  recovery.remain === 3, `remain=${recovery.remain}`);
+/* Advance through the reveal with the real card control (same drive the CLAIM
+   test above uses), not history.back(): openCrateReveal only resolves via its
+   own done() path, which fires on the LAST card's advance, and the handler's
+   renderCharacter (the thing that re-enables or removes the button) sits right
+   after that await. A close that bypasses done() -- and pack-reveal has no
+   .sheet-close of its own to click, so the generic drain used elsewhere in
+   this file falls through to history.back() -- would leave that render never
+   run, and the control could look stuck for a reason that has nothing to do
+   with the recovery fix. */
+for (let n = 0; n < 20; n++) {
+  const state = await page.evaluate(() => {
+    const reveal = document.querySelector('.pack-reveal');
+    if (!reveal) return 'gone';
+    const tilt = document.querySelector('.pack-tilt');
+    if (!reveal.dataset.landed || !tilt) return 'wait';
+    tilt.click();
+    return 'clicked';
+  });
+  if (state === 'gone') break;
+  await sleep(state === 'clicked' ? 850 : 250);
+}
+await sleep(700);
+const afterDrain = await page.evaluate(() => ({
+  hasButton: !!document.querySelector('[data-open-all="daily"]'),
+  disabled: !!document.querySelector('[data-open-all="daily"]')?.disabled,
+}));
+/* the tab fully re-renders once the reveal resolves, so the control is either a
+   fresh enabled button (crates remain) or gone (none left); either way it is
+   never the same disabled node the click left behind. */
+ok('RECOVERY the Open all control comes back enabled',
+  afterDrain.hasButton && !afterDrain.disabled, `hasButton=${afterDrain.hasButton} disabled=${afterDrain.disabled}`);
+
+
 /* ---- PACING + THE LAST CARD ------------------------------------------------
    Tom, 2026-08-08: "the swiping and closing of the crate when it's finished feels
    buggy" and "the initial open needs to happen a bit faster".

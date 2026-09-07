@@ -5132,6 +5132,35 @@ test('R23 F6: Dressing Room look tiles are sorted by rarity and carry r-<rarity>
   assert.equal(arts[0].id, 'c1', 'lookTilesHtml must sort a copy, not the caller\'s array');
 });
 
+/* HANDOFFMASTER20260906 R40-31: a mixed-rarity family (51 of 67 multi-member
+   families are) showed its BEST member's tier badge and border over a lower-
+   rarity item shown and priced on the tile. The tile's tier follows the item it
+   shows. Same slice and stubs as R23 F6 above, with a real two-member family
+   and the common member worn. */
+test('R40-31 a family tile\'s tier badge and border follow the item shown, not the family\'s best', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const a = app.indexOf('const cell = (val, inner, title');
+  const b = app.indexOf('/* ---------------------------------------------------------------- v2', a);
+  assert.ok(a > 0 && b > a, 'the transmog `cell` helper moved: re-anchor this slice');
+  const slice = app.slice(a, b);
+  const rarOrder = app.match(/^const RAR_ORDER = .*$/m)[0];
+  const tagFn = app.match(/function rarityTagHtml\(rarity\) \{[\s\S]*?\n\}/)[0];
+  const byFam = arr => { const m = new Map(); for (const i of arr) { if (!m.has(i.fam)) m.set(i.fam, []); m.get(i.fam).push(i); } return m; };
+  const build = cur => new Function('cur', 'sel', 'esc', 'ownArt', 'wornGear', 'bhTrim', 'bhAsset', 'ICONS', 'TRANSMOG_HIDE', 'costTag',
+    'fbTintAttr', 'bhFamilies', 'bhFamilyKey',
+    `${rarOrder}; ${tagFn}; ${slice}; return lookTilesHtml;`)(
+    cur, '', String, { id: 'own' }, null, x => x, i => i.id + '.png', { hidden: () => '<svg/>' }, '__hide__', () => '',
+    () => '', byFam, i => i.fam);
+  const arts = [{ id: 'h-l', fam: 'h', name: 'Helmet', rarity: 'legendary' }, { id: 'h-c', fam: 'h', name: 'Helmet', rarity: 'common' }];
+  const tile = html => [...html.matchAll(/<button class="ward-cell look ([^"]*)" data-look="([^"]*)"[^>]*>([\s\S]*?)<\/button>/g)].map(m => ({ cls: m[1], id: m[2], tag: (m[3].match(/class="ward-rar"[^>]*>([A-Z])</) || [])[1] })).find(t => t.cls.includes('fam'));
+  const worn = tile(build('h-c')(arts));
+  assert.equal(worn.id, 'h-c', 'the tile shows the worn member');
+  assert.ok(worn.cls.split(/\s+/).includes('r-common') && !/r-legendary/.test(worn.cls), `worn common helmet carries the legendary border: ${worn.cls}`);
+  assert.equal(worn.tag, 'C', `worn common helmet carries the badge ${worn.tag}`);
+  const best = tile(build('')(arts));
+  assert.ok(best.id === 'h-l' && best.cls.split(/\s+/).includes('r-legendary') && best.tag === 'L', `nothing worn shows the best member at its own tier: ${best.id} ${best.cls} ${best.tag}`);
+});
+
 /* QA ROUND 23 F8. At 6 fits [data-fit-save] used to vanish, so the only storage
    cap in the app printed no total, and "You can keep 6 fits. Bin one first." was
    dead code (captureFit can only return `full` from a control that only rendered

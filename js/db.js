@@ -528,6 +528,51 @@ export function kvUpdate(k, fn, fallback = null) {
   })));
 }
 
+/* kvUpdate ABOVE, BUT ACROSS SEVERAL KV ROWS IN ONE TRANSACTION.
+ *
+ * cancelCook (js/cooking.js) used to null the pot's kv row and refund its
+ * ingredients as two separate kvUpdate calls: correct against a same-instant
+ * double-cancel (each transaction refuses on its own), but a crash between the
+ * two left the pot gone with the ingredients never returned. Same shape as the
+ * `kv` map claimAndPay already runs inside ONE transaction for a claim-and-pay;
+ * this is that same multi-key loop without requiring a claim row to hang it
+ * off, for callers that only need several kv rows to commit or abort together.
+ *
+ * `updaters` is {key: fn}, each fn synchronous with kvUpdate's exact contract
+ * (cur => next; undefined writes nothing; a throw aborts the WHOLE transaction,
+ * so every key's write is discarded, not only the one that threw). Keys run in
+ * the order given, so a later updater can read state set by an earlier one
+ * (cancelCook's ingredients fn only refunds once the cooking fn has decided
+ * there is something to refund). `fallbacks` is {key: value} for a row that
+ * has never been written, same as kvUpdate's own `fallback` arg, per key
+ * because 'cooking' and 'ingredients' do not share a shape. Resolves
+ * {key: result}. */
+export function kvUpdateMulti(updaters, fallbacks = {}) {
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
+  bumpStore('kv');
+  const keys = Object.keys(updaters);
+  return guard('kv', keys, 'kvUpdateMulti', () => open().then(db => new Promise((resolve, reject) => {
+    const t = db.transaction('kv', 'readwrite');
+    const os = t.objectStore('kv');
+    const out = {};
+    let threw = null;
+    for (const k of keys) {
+      const g = os.get(k);
+      g.onsuccess = () => {
+        if (threw) return;
+        const cur = g.result ? g.result.v : (k in fallbacks ? fallbacks[k] : null);
+        let next;
+        try { next = updaters[k](cur); } catch (e) { threw = e; try { t.abort(); } catch { /* already going */ } return; }
+        out[k] = next;
+        if (next !== undefined) os.put({ k, v: next });
+      };
+    }
+    t.oncomplete = () => resolve(out);
+    t.onerror = () => reject(threw || t.error);
+    t.onabort = () => reject(threw || t.error || new Error('kvUpdateMulti aborted'));
+  })));
+}
+
 /* The currency primitive. `coins` and `bonedust` are plain numbers in kv and
    every balance change in the game goes through here, so this one function is
    the difference between an exact balance and a drifting one. The clamp is the
