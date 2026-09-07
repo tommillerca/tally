@@ -15108,7 +15108,7 @@ async function saveInitialSettings(np) {
   // registers brand-new installs (that minted one abandoned level-1 "player"
   // per bounced install). Finishing onboarding is the opt-in moment.
   if (!(S.demo || navigator.webdriver === true)) {
-    social.goOnline().then(r => { toastNamePickRefusal(r.namePick); if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
+    social.goOnline({ onRegisterFailure: message => toast(message, 4200) }).then(r => { toastNamePickRefusal(r.namePick); if (r.ok) return social.autoSync(socialSnapshot, APP_SOCIAL_V); }).catch(() => {});
   }
   enterAppFromOnboarding();
 }
@@ -22743,7 +22743,7 @@ const XP_PIPS = 20;
 // what your pet has to say when you poke it (handoff: option 1d)
 const PET_LINES = ['Grrf.', 'He has opinions.', 'Woof. (Feed him.)', 'Bark. Bones. Bark.', "That's his whole vocabulary."];
 if (S.island) document.documentElement.classList.add('fx-island');
-const APP_BUILD = 'v492'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
+const APP_BUILD = 'v494'; // shown in Settings so we can confirm the running build; bump with sw.js VERSION
 // Crew grants land as a pack reveal (item grants get cards, coins/XP ride the
 // footer); pure coin/XP deliveries keep the light toast so boot stays calm.
 function presentGrantDelivery(r) {
@@ -25819,7 +25819,7 @@ async function seedDemo() {
       hrv: demoHrv[i],
     });
   }
-  await kvSet('coins', 340);
+  await coinsAdd(340);   // fresh demo db, so this IS 340; goes through the revisioned primitive like every other balance write
   // The demo weapon is a LEGENDARY (Onyx Dagger) rather than the common flail,
   // so the rack's aura tile can be checked against a weapon that actually
   // carries a rarity halo to replace. Demo seed only; ?demo never touches a

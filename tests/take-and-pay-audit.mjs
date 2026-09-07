@@ -95,6 +95,10 @@ const ok = (m, cond, detail = '') => {
 };
 const invRows = async () => db.all('inv');
 const has = async id => (await db.get('inv', id)) !== undefined;
+/* the take receipt: kv 'invTaken' since the merge with fix/currency-revisions
+   (js/db.js atomic writes it for every 'inv' removal, uncapped); the legacy
+   'crateTaken' list is still read by importAll, so a receipt on it counts too */
+const receipts = async () => new Set([...((await kvGet('invTaken', [])) || []), ...((await kvGet('crateTaken', [])) || [])]);
 
 /* ================= CRATE ================= */
 useDbName('tap-crate');
@@ -107,9 +111,9 @@ useDbName('tap-crate');
   const gone = !(await has(crate.id));
   const coins = await kvGet('coins', 0), rev = await kvGet('coinsRev', 0);
   const inv = await invRows();
-  const taken = ((await kvGet('crateTaken', [])) || []).includes(crate.id);
+  const taken = (await receipts()).has(crate.id);
   let landed = false, why = '';
-  if (!r.ok) why = `openCrate threw "${r.err}"; coins ${coins}, coinsRev ${rev}, ${inv.length} inv rows, crateTaken ${taken}`;
+  if (!r.ok) why = `openCrate threw "${r.err}"; coins ${coins}, coinsRev ${rev}, ${inv.length} inv rows, receipt ${taken}`;
   else {
     const res = r.v;
     const looks = (await kvGet('looks', [])) || [];
@@ -123,7 +127,7 @@ useDbName('tap-crate');
     }
     if (coins !== res.coins) missing.push(`coins ${coins} (want ${res.coins})`);
     if (rev !== res.coins) missing.push(`coinsRev ${rev} (want ${res.coins})`);
-    if (!taken) missing.push('crateTaken receipt');
+    if (!taken) missing.push('take receipt');
     landed = missing.length === 0 && res.results.length === 3;
     why = `results=${res.results.map(x => x.type).join(',')} coins=${res.coins}${missing.length ? ' MISSING: ' + missing.join('; ') : ''}`;
   }
@@ -152,7 +156,7 @@ useDbName('tap-crate-race');
   const wins = both.filter(b => b.ok);
   const coins = await kvGet('coins', 0);
   ok('REBOOT crate: two overlapping opens of one crate pay exactly once',
-    wins.length === 1 && coins === wins[0].v.coins && ((await kvGet('crateTaken', [])) || []).length === 1,
+    wins.length === 1 && coins === wins[0].v.coins && (await receipts()).size === 1,
     `wins=${wins.length} coins=${coins} (winner said ${wins[0] && wins[0].v.coins})`);
 }
 
