@@ -7953,6 +7953,19 @@ body::before {
    ONBOARDING (market-quality-mockups/onb-*.html, approved 2026-08-07).
    The first 90 seconds: sell the product, hand over the character, capture the
    plan honestly. Launch funnel: every step tracks. ============================================================================ */
+/* THE STEP OWNS THE WHOLE SCREEN BOX, like the Boneyard route above.
+   #screen pads `calc(var(--sat) + 14px) var(--pad) 24px` and .onb pads
+   `calc(var(--sat) + 22px) 22px` on top of that, so the onboarding counted the
+   notch TWICE (the same double-count the .screen--map note calls out) and the
+   footer's full-bleed negative margins stopped 16px short of the screen at both
+   edges. Measured at 320x568 before this: .onb runs 14 to 582 against a 568
+   viewport, so a 100dvh step hung 14px past the fold and clipped the last line
+   of the footer, and the footer's backing painted 38 to 282 of 320.
+   A :has() rule rather than a class, because renderOnboarding does not go
+   through route() and route() is what clears the screen-- classes: a class set
+   here would leak onto Today. .survey-feat and body:has(.map-act) above already
+   rely on :has. */
+.screen:has(> .onb) { padding: 0; }
 .onb {
   position: relative; height: 100vh; height: 100dvh; display: flex; flex-direction: column;
   align-items: center; padding: calc(var(--sat) + 22px) 22px 0;
@@ -8039,7 +8052,12 @@ body::before {
    form of this rule was an overlay and what replaced it. The footer keeps the
    full-bleed backing (a hairline separates it from the scrolled content) and it
    owns the bottom safe-area inset, which is why .onb's padding-bottom is 0. */
-.onb-foot { width: 100%; flex: none; z-index: 2; margin-left: -22px; margin-right: -22px; padding: 14px 22px calc(var(--sab) + 16px); background: var(--bg); border-top: 1px solid var(--line); }
+/* align-self + width:auto, NOT width:100%: .onb is a centred flex column, and a
+   100% width is 100% of its CONTENT box, so the negative margins this rule has
+   carried since it was written moved nothing and the "full bleed" backing
+   measured 22 to 298 of a 320px screen. Stretching to the cross axis first is
+   what lets them reach the edges. */
+.onb-foot { width: auto; align-self: stretch; flex: none; z-index: 2; margin-left: -22px; margin-right: -22px; padding: 14px 22px calc(var(--sab) + 16px); background: var(--bg); border-top: 1px solid var(--line); }
 .onb-foot .btn { width: 100%; }
 .onb-quiet { display: block; width: 100%; text-align: center; font-size: 13px; font-weight: 700; color: var(--text-3); margin-top: 13px; line-height: 1.5; }
 .onb-quiet b { color: var(--coral); }
