@@ -2,11 +2,11 @@
 // Depends only on db + the generated cosmetics manifest, so the whole economy
 // stays portable (no DOM, no web-only APIs).
 
-import { db, kvGet, kvSet, kvBump, kvUpdate, newId } from './db.js';
+import { db, kvGet, kvSet, kvBump, kvUpdate, newId, takeAndPay, payAtomic } from './db.js';
 import { BH_ITEMS, BH_BY_ID, BH_SLOTS, PET_SHOP, PET_SLOTS } from '../data/boneheadz.js';
 import { FOOTBALL_KIT_PRICE_PLACEHOLDER, FOOTBALL_BUNDLE_PRICE_PLACEHOLDER, FOOTBALL_TEAMS, FOOTBALL_GARMENT_BY_KEY, FOOTBALL_SOLD, footballItemId, footballGrantIds, footballBundleIds, footballBundleQuote, footballOwnedGarmentCount, footballBundleSellable, footballPieceSellable, visorRefusesEquip } from '../data/football-teams.js';
 import { GEAR_ITEMS, GEAR_BY_ID, GEAR_SLOTS } from './gear.js';
-import { grantIngredient, COMMON_INGREDIENT_IDS } from './cooking.js';
+import { COMMON_INGREDIENT_IDS } from './cooking.js';
 
 export const RARITIES = {
   common:    { label: 'Common',    color: '#9fac9f', w: 52, dupe: 10 },
@@ -908,6 +908,17 @@ export async function coins() { return (await kvGet('coins', 0)) || 0; }
    devices' changes happened to add up to the exact same total, which an
    independently divergent history essentially never does by accident. */
 export async function coinsAdd(n) { const v = await kvBump('coins', n); await kvBump('coinsRev', Math.max(1, Math.abs(n))); return v; }
+/* THE KV HALF OF coinsAdd / boneDustAdd, for a payout that has to ride inside the
+   transaction that spends its input (takeAndPay / payAtomic, 2026-09-06): same
+   clamp, same magnitude bump of the revision key, in ONE write. 'dustRev' is the
+   Bone Dust ordering key the currency lane is adding beside coinsRev; harmless
+   until importAll reads it, correct the moment it does. Computed keys on
+   purpose: the dust-spend census in unit.test.js reads a literal `bonedust:` as
+   a spend. */
+const bumpPay = (k, revKey, n) => ({
+  [k]: cur => Math.max(0, (Number(cur) || 0) + n),
+  [revKey]: cur => (Number(cur) || 0) + Math.max(1, Math.abs(n)),
+});
 
 /* THE ATOMIC SPEND, and it is the only honest way to take money in this file.
    Every buy used to read the balance, compare it to the price, and THEN call
@@ -963,10 +974,12 @@ export async function ownedCosmeticIds() {
  * `cos:<itemId>`. Rows minted before this keep their random ids and are
  * untouched; the ownership check above still short-circuits for anyone who
  * already owns the item, so no existing save changes shape. */
+// eggRow's sibling, same reason: the row a cosmetic grant writes, without the write.
+export function cosRow(itemId, source) { return { id: `cos:${itemId}`, kind: 'cos', itemId, source, ts: Date.now() }; }
 export async function grantCosmetic(itemId, source) {
   const owned = await ownedCosmeticIds();
   if (owned.has(itemId)) return null;
-  const row = { id: `cos:${itemId}`, kind: 'cos', itemId, source, ts: Date.now() };
+  const row = cosRow(itemId, source);
   if (!await db.addIfAbsent('inv', row)) return null;   // another tab got there first
   await collectLook(itemId);
   return row;
@@ -987,10 +1000,13 @@ export async function grantGear(gearId, source, opts = {}) {
   // `slimed`: the rare green-glowing Glutton variant. Purely cosmetic + a brag,
   // stored on the inv row so the wardrobe can mark the piece forever.
   // Deterministic id, same reasoning as grantCosmetic: a gear id is ownable once.
-  const row = { id: `gear:${gearId}`, kind: 'gear', gearId, source, ts: Date.now(), ...(opts.slimed ? { slimed: true } : {}) };
+  const row = gearRow(gearId, source, opts);
   if (!await db.addIfAbsent('inv', row)) return null;   // another tab got there first
   await collectLook(g.artId);
   return g;
+}
+export function gearRow(gearId, source, opts = {}) {
+  return { id: `gear:${gearId}`, kind: 'gear', gearId, source, ts: Date.now(), ...(opts.slimed ? { slimed: true } : {}) };
 }
 
 // Gear ids the player owns a SLIMED copy of (Glutton drops).
@@ -1041,10 +1057,12 @@ export async function disenchantGear(gearId) {
      succeeds whether or not anything was there, so two tabs melting the same
      piece both deleted (the second a no-op) and both paid full dust. `take`
      does the read and the delete in one transaction and reports which call
-     actually found it, so exactly one melt can ever be paid for. */
-  if (!await db.take('inv', row.id)) return { ok: false, reason: 'not-owned' };
+     actually found it, so exactly one melt can ever be paid for.
+     AND PAY IN THE SAME TRANSACTION (2026-09-06): the dust used to be a second
+     write after the take, so a process death between them melted the piece and
+     paid nothing. takeAndPay is the same take with the dust riding inside it. */
   const dust = gearDustValue(g);
-  await boneDustAdd(dust);
+  if (!await takeAndPay('inv', row.id, { kv: bumpPay('bonedust', 'dustRev', dust) })) return { ok: false, reason: 'not-owned' };
   return { ok: true, dust, name: g.name };
 }
 
@@ -1062,26 +1080,45 @@ export async function salvagePet(petId) {
      removeWorstInstance is pure precisely so it can run inside the transaction.
      Sacrifices the WORST copy first (keeps your best / shinies); a better copy
      pays out more dust so salvaging a shiny or bred pet still feels fair. */
-  let removed = null;
-  const instances = await kvUpdate('petInst', raw => {
-    const r = removeWorstInstance(Array.isArray(raw) ? raw : list, petId);
-    if (!r.removed) return undefined;
-    removed = r.removed;
-    return r.instances;
-  }, list);
-  if (!instances) return { ok: false, reason: 'not-owned' };
-  const remaining = speciesCount(instances, petId);
+  /* AND THE PAYOUT RIDES IN THAT SAME TRANSACTION (2026-09-06). The dust, and
+     when this was the last copy the 'cos' ownership row, its take receipt and
+     the legacy anchor, were separate writes after the take: a death between them
+     destroyed the pet and paid nothing, or left an owned species with zero
+     copies, which reclaimOwnedPets then MINTS BACK, so the same pet could be
+     salvaged again. The updater throws `refused` when the copy is already gone,
+     which aborts the lot (js/db.js payAtomic). Priced off the pre-read copy
+     removeWorstInstance will pick, and checked against it inside. */
+  const worst = removeWorstInstance(list, petId).removed;
+  const dust = petDustValue(item) + (worst && worst.shiny ? 15 : 0) + (worst ? (worst.lineage || 0) * 8 : 0);
+  const last = speciesCount(list, petId) === 1;
+  const cos = last ? (await db.all('inv')).find(r => r.kind === 'cos' && r.itemId === petId) : null;
+  const gone = () => Object.assign(new Error('not-owned'), { refused: true });
+  let remaining = 0;
+  try {
+    await payAtomic({
+      kv: {
+        petInst: raw => {
+          const r = removeWorstInstance(Array.isArray(raw) ? raw : list, petId);
+          if (!r.removed || r.removed.iid !== worst.iid) throw gone();
+          remaining = speciesCount(r.instances, petId);
+          if ((remaining === 0) !== last) throw gone();   // the roster moved under the plan: refuse, the retry re-plans
+          return r.instances;
+        },
+        ...bumpPay('bonedust', 'dustRev', dust),
+        ...(last ? { pets: rec => { const p = { ...(rec || {}) }; delete p[petId]; return p; } } : {}),
+        ...(cos ? { invTaken: cur => invTakenNext(cur, cos.id) } : {}),   // R38-13
+      },
+      dels: cos ? [{ store: 'inv', key: cos.id }] : [],
+    });
+  } catch (e) {
+    if (e && e.refused) return { ok: false, reason: 'not-owned' };
+    throw e;
+  }
   if (remaining === 0) {
-    // last copy gone: drop ownership, unequip, clear the legacy anchor
-    const inv = await db.all('inv');
-    const row = inv.find(r => r.kind === 'cos' && r.itemId === petId);
-    if (row) { await db.del('inv', row.id); await markInvTaken(row.id); }   // R38-13
+    // last copy gone: unequip (a slot heal, not a payout; equippedPetIid repairs it too)
     const eq = await equipped({ raw: true });
     if (eq.C === petId) await equip('C', null);
-    const pets = (await kvGet('pets', {})) || {}; delete pets[petId]; await kvSet('pets', pets);
   }
-  const dust = petDustValue(item) + (removed && removed.shiny ? 15 : 0) + (removed ? (removed.lineage || 0) * 8 : 0);
-  await boneDustAdd(dust);
   return { ok: true, dust, name: item.name, remaining };
 }
 
@@ -1248,11 +1285,6 @@ export async function hatchEgg(invId) {
   if (!row) throw new Error('egg gone');
   const { ready } = eggProgress(row, await lifetimeStepsSum());
   if (!ready) return { ready: false };
-  /* THE EGG ROW IS THE RIGHT TO ONE PET, so taking it IS the claim. Reading it
-     above and deleting it here used to be two transactions, so two overlapping
-     hatches of one egg both found it and both minted a pet instance. db.take
-     hands the row to exactly one caller; anybody else sees it already gone. */
-  if (!(await db.take('inv', row.id))) return { ready: false };
   const owned = await ownedCosmeticIds();
   /* The roll stays UNCONDITIONAL so the rng stream is identical to before; only
      the RESULT is gated. A species outside SHINY_ART must never mint shiny:
@@ -1261,7 +1293,15 @@ export async function hatchEgg(invId) {
   const shinyRoll = rng() < SHINY_CHANCE;
   const pick = pickRandomPet(owned);
   const isShiny = shinyRoll && SHINY_ART.includes(pick.id);
-  await addPetInstance(pick.id, { shiny: isShiny });
+  /* THE EGG ROW IS THE RIGHT TO ONE PET, so taking it IS the claim. Reading it
+     above and deleting it in a second transaction let two overlapping hatches of
+     one egg both mint a pet; takeAndPay hands the row to exactly one caller.
+     AND THE PET IS MINTED IN THAT SAME TRANSACTION (2026-09-06): the take used to
+     come first and addPetInstance after it, so a death between them destroyed a
+     fully walked egg and hatched nothing. The roll above is unconditional and
+     unchanged, so the rng stream is identical to before. */
+  const { pay } = await petInstancePay(pick.id, { shiny: isShiny });
+  if (!(await takeAndPay('inv', row.id, pay))) return { ready: false };
   // first hatch: nobody is out yet, so the heal in equippedPetIid equips her (R39-1)
   await equippedPetIid();
   /* DUPE IS ASKED OF THE PICK, not of whether a fresh species existed. It drives
@@ -1568,21 +1608,37 @@ export async function petInstances() {
 // row inside one kvUpdate, rather than reading a list and writing it back whole,
 // means a concurrent salvagePet / salvageInstance / breedPets kvUpdate on this
 // same row can never be undone by this call's own stale read.
-export async function addPetInstance(sp, { shiny = false, hatchedAtSteps = null, startLevelSteps = 0 } = {}) {
+// ONE TRANSACTION (2026-09-06): the instance, the ownership flag, the legacy
+// anchor and the level-bank seed used to be four writes, and hatchEgg needs all
+// of them to ride inside the transaction that spends the egg. petInstancePay
+// builds that payload once, for both callers, so the two cannot drift apart.
+export async function addPetInstance(sp, opts = {}) {
+  const { inst, pay } = await petInstancePay(sp, opts);
+  await payAtomic(pay);
+  return inst;
+}
+async function petInstancePay(sp, { shiny = false, hatchedAtSteps = null, startLevelSteps = 0 } = {}) {
   await petInstances();   // migrates / heals a legacy save first, same as every other writer
+  await petLevelBank();   // migrates the bank to its iid-keyed shape first, so the seed below lands in it
   const anchor = hatchedAtSteps == null ? await lifetimeStepsSum() : hatchedAtSteps;
   const inst = { iid: newIid(sp), sp, lineage: 0, shiny: !!shiny, hatchedAtSteps: anchor };
-  await kvUpdate('petInst', raw => addInstance(Array.isArray(raw) ? raw : [], inst), []);
-  await grantCosmetic(sp, 'hatch');                 // idempotent ownership flag
-  const petsRec = (await kvGet('pets', {})) || {};
-  if (!petsRec[sp]) { petsRec[sp] = { hatchedAtSteps: anchor }; }
-  if (shiny) petsRec[sp].shiny = true;
-  await kvSet('pets', petsRec);
-  // seed this individual's level bank (a fresh hatch starts at level 1)
-  const bank = await petLevelBank();
-  bank[inst.iid] = Math.max(0, startLevelSteps || 0);
-  await kvSet('petLvlSteps', bank);
-  return inst;
+  const owned = (await ownedCosmeticIds()).has(sp);
+  const pay = {
+    kv: {
+      petInst: raw => addInstance(Array.isArray(raw) ? raw : [], inst),
+      pets: rec => {
+        const p = { ...(rec || {}) };
+        if (!p[sp]) p[sp] = { hatchedAtSteps: anchor };
+        if (shiny) p[sp] = { ...p[sp], shiny: true };
+        return p;
+      },
+      // seed this individual's level bank (a fresh hatch starts at level 1)
+      petLvlSteps: bank => ({ ...(bank || {}), [inst.iid]: Math.max(0, startLevelSteps || 0) }),
+      ...(owned ? {} : { looks: cur => looksWith(cur, [sp]) }),
+    },
+    puts: owned ? [] : [{ store: 'inv', val: cosRow(sp, 'hatch') }],   // the ownership flag, same row grantCosmetic writes
+  };
+  return { inst, pay };
 }
 
 /* ---------- Paddock bonds (kv 'petBonds' = {iid: 0..5}) ----------
@@ -1687,11 +1743,33 @@ export async function salvageInstance(iid) {
   const inst = list.find(x => x.iid === iid);
   if (!inst) return { ok: false, reason: 'gone' };
   const item = BH_BY_ID[inst.sp] || {};
-  // salvagePet's fix, by instance id: the take decides the payout, not a stale read
-  const next = await kvUpdate('petInst', raw => {
-    const arr = Array.isArray(raw) ? raw : list;
-    return arr.some(x => x.iid === iid) ? arr.filter(x => x.iid !== iid) : undefined;
-  }, list);
+  // salvagePet's fix, by instance id: the take decides the payout, not a stale read.
+  // And, as there (2026-09-06), the dust and the last-copy ownership teardown ride
+  // inside that same transaction; the side maps below are idempotent cleanup.
+  const dust = petDustValue(item) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8;
+  const last = speciesCount(list, inst.sp) === 1;
+  const cos = last ? (await db.all('inv')).find(r => r.kind === 'cos' && r.itemId === inst.sp) : null;
+  let next = null;
+  try {
+    await payAtomic({
+      kv: {
+        petInst: raw => {
+          const arr = Array.isArray(raw) ? raw : list;
+          if (!arr.some(x => x.iid === iid)) throw Object.assign(new Error('gone'), { refused: true });
+          next = arr.filter(x => x.iid !== iid);
+          if ((speciesCount(next, inst.sp) === 0) !== last) throw Object.assign(new Error('gone'), { refused: true });   // roster moved under the plan
+          return next;
+        },
+        ...bumpPay('bonedust', 'dustRev', dust),
+        ...(last ? { pets: rec => { const p = { ...(rec || {}) }; delete p[inst.sp]; return p; } } : {}),
+        ...(cos ? { invTaken: cur => invTakenNext(cur, cos.id) } : {}),   // R38-13
+      },
+      dels: cos ? [{ store: 'inv', key: cos.id }] : [],
+    });
+  } catch (e) {
+    if (e && e.refused) return { ok: false, reason: 'gone' };
+    throw e;
+  }
   if (!next) return { ok: false, reason: 'gone' };
   const bank = await petLevelBank(); delete bank[iid]; await kvSet('petLvlSteps', bank);
   await clearBond(iid);              // a destroyed pet takes its affection with it
@@ -1701,14 +1779,6 @@ export async function salvageInstance(iid) {
     await kvSet('petEquipped', repl ? repl.iid : null);
     if (repl) await equip('C', repl.sp); else await equip('C', null);
   }
-  if (speciesCount(next, inst.sp) === 0) {
-    const inv = await db.all('inv');
-    const row = inv.find(r => r.kind === 'cos' && r.itemId === inst.sp);
-    if (row) { await db.del('inv', row.id); await markInvTaken(row.id); }   // R38-13
-    const petsRec = (await kvGet('pets', {})) || {}; delete petsRec[inst.sp]; await kvSet('pets', petsRec);
-  }
-  const dust = petDustValue(item) + (inst.shiny ? 15 : 0) + (inst.lineage || 0) * 8;
-  await boneDustAdd(dust);
   return { ok: true, dust, name: item.name, remaining: speciesCount(next, inst.sp) };
 }
 
@@ -1931,8 +2001,10 @@ export async function migrateLegacyEggs() {
        two boots running this at the same instant both read the same legacy row,
        both "deleted" it and both granted an egg. `take` reports which call
        actually found it, which is the same fix disenchantGear carries above. */
-    if (!await db.take('inv', r.id)) continue;
-    await grantEgg(r.source || 'legacy');
+    /* AND THE EGG IS GRANTED IN THAT SAME TRANSACTION (2026-09-06): grantEgg
+       used to follow the take, so a boot interrupted between them erased the
+       legacy crate and left no egg. */
+    if (!await takeAndPay('inv', r.id, { puts: [{ store: 'inv', val: await eggRow(r.source || 'legacy') }] })) continue;
     converted++;
   }
   return converted;
@@ -1947,8 +2019,9 @@ export async function grantCrate(kind, source) {
   return row;
 }
 
+export function consumableRow(type, source) { return { id: newId(), kind: type, source, ts: Date.now() }; }
 export async function grantConsumable(type, source) {
-  const row = { id: newId(), kind: type, source, ts: Date.now() };
+  const row = consumableRow(type, source);
   await db.put('inv', row);
   return row;
 }
@@ -2070,11 +2143,20 @@ export function rollCosmetic(owned, floor, slotBias) {
    ('invTaken', not 'crateTaken') so this never has to reason about the crate
    path's own list; importAll checks both. */
 async function markInvTaken(id) {
-  await kvUpdate('invTaken', cur => {
-    const arr = Array.isArray(cur) ? cur : [];
-    if (arr.includes(id)) return undefined;
-    return [...arr, id].slice(-500);
-  }, []);
+  await kvUpdate('invTaken', cur => invTakenNext(cur, id), []);
+}
+// the pure updater, so a take-and-pay transaction can carry the receipt too
+function invTakenNext(cur, id) {
+  const arr = Array.isArray(cur) ? cur : [];
+  if (arr.includes(id)) return undefined;
+  return [...arr, id].slice(-500);
+}
+// collectLook's pure half, same reason: the looks a payout collects ride inside it
+function looksWith(cur, artIds) {
+  const arr = Array.isArray(cur) ? [...cur] : [];
+  let changed = false;
+  for (const a of artIds) if (a && !arr.includes(a)) { arr.push(a); changed = true; }
+  return changed ? arr : undefined;
 }
 
 /* SPEND THE CRATE BEFORE YOU ROLL IT, AND SPEND IT ATOMICALLY.
@@ -2089,26 +2171,21 @@ async function markInvTaken(id) {
  * which is recoverable, where the other order pays a crate nobody owns out of
  * the economy, which is not. */
 export async function openCrate(invId) {
-  const crateRow = await db.take('inv', invId);
-  if (!crateRow || crateRow.kind !== 'crate') {
-    if (crateRow) await db.put('inv', crateRow);   // not a crate: put it straight back
-    throw new Error('crate gone');
-  }
-  /* THE TAKE RECEIPT (QA round 34 P0). A cloud merge (js/db.js importAll,
-     replace:false) `os.put`s every 'inv' row a blob carries, unconditionally:
-     right, for a row this device has never seen, wrong for one it already
-     opened, because a blob older than the local save still carries the
-     unopened row. Same bounded-list idiom js/social.js already uses for
-     'grantsSeen'. importAll checks this id before re-adding an inv row on a
-     merge; a crate this device has taken can never come back through one. */
-  await kvUpdate('crateTaken', cur => {
-    const arr = Array.isArray(cur) ? cur : [];
-    if (arr.includes(crateRow.id)) return undefined;
-    return [...arr, crateRow.id].slice(-500);
-  }, []);
+  /* ROLL FIRST, THEN TAKE AND PAY IN ONE TRANSACTION (2026-09-06). The take used
+     to come first and every grant after it in its own transaction, and the
+     comment above accepted losing the crate on a crash. That is a Golden Crate
+     gone with a partial hand or none. The rolls below only READ (owned sets,
+     the level cap) and stage rows; nothing is written until takeAndPay at the
+     bottom, where the crate's delete, its receipt, every staged row, the looks
+     and the coins commit together or not at all. Two overlapping opens still
+     resolve to exactly one paid caller: the loser's get finds no row. */
+  const crateRow = await db.get('inv', invId);
+  if (!crateRow || crateRow.kind !== 'crate') throw new Error('crate gone');
   const def = CRATES[crateRow.crate] || CRATES.daily;
   const owned = await ownedCosmeticIds();
   const results = [];
+  const puts = [], looks = [], ings = {};   // the hand, staged
+  const gNew = new Set();                   // gear staged this open, so a later roll sees it as owned
   let coinsWon = Math.round(def.coins[0] + rng() * (def.coins[1] - def.coins[0]));
 
   for (let i = 0; i < def.rolls; i++) {
@@ -2119,14 +2196,14 @@ export async function openCrate(invId) {
       // items people actually spend) fill the rest.
       const pool = ['xp2', 'vigor'];
       const type = pool[Math.floor(rng() * pool.length)];
-      await grantConsumable(type, 'crate');
+      puts.push({ store: 'inv', val: consumableRow(type, 'crate') });
       results.push({ type: 'consumable', consumable: type });
       continue;
     }
     // a no-walk fallback for cooking: crates sometimes hold a common ingredient
     if (rng() < 0.28) {
       const ing = COMMON_INGREDIENT_IDS[Math.floor(rng() * COMMON_INGREDIENT_IDS.length)];
-      await grantIngredient(ing);
+      ings[ing] = (ings[ing] || 0) + 1;
       results.push({ type: 'ingredient', ingredient: ing });
       continue;
     }
@@ -2139,9 +2216,12 @@ export async function openCrate(invId) {
       const cap = _lf(await _txp()).level + 3;
       const variants = GEAR_ITEMS.filter(g => g.artId === item.id && (g.minLevel || 1) <= cap);
       const gOwned = await ownedGearIds();
+      for (const id of gNew) gOwned.add(id);
       const pick = variants.find(g => !gOwned.has(g.id)) || variants[Math.floor(rng() * variants.length)];
       if (pick && !gOwned.has(pick.id)) {
-        await grantGear(pick.id, 'crate');
+        puts.push({ store: 'inv', val: gearRow(pick.id, 'crate') });
+        looks.push(pick.artId);
+        gNew.add(pick.id);
         results.push({ type: 'gear', gear: pick, item });
         continue;
       } else if (pick) {
@@ -2156,12 +2236,37 @@ export async function openCrate(invId) {
       coinsWon += value;
       results.push({ type: 'dupe', item, coins: value });
     } else {
-      await grantCosmetic(item.id, 'crate');
+      puts.push({ store: 'inv', val: cosRow(item.id, 'crate') });
+      looks.push(item.id);
       owned.add(item.id);
       results.push({ type: 'cos', item });
     }
   }
-  await coinsAdd(coinsWon);
+  /* THE TAKE RECEIPT (QA round 34 P0). A cloud merge (js/db.js importAll,
+     replace:false) `os.put`s every 'inv' row a blob carries, unconditionally:
+     right, for a row this device has never seen, wrong for one it already
+     opened, because a blob older than the local save still carries the
+     unopened row. Same bounded-list idiom js/social.js already uses for
+     'grantsSeen'. importAll checks this id before re-adding an inv row on a
+     merge; a crate this device has taken can never come back through one. */
+  const pay = {
+    kv: {
+      crateTaken: cur => {
+        const arr = Array.isArray(cur) ? cur : [];
+        if (arr.includes(crateRow.id)) return undefined;
+        return [...arr, crateRow.id].slice(-500);
+      },
+      ...bumpPay('coins', 'coinsRev', coinsWon),
+      ...(looks.length ? { looks: cur => looksWith(cur, looks) } : {}),
+      ...(Object.keys(ings).length ? { ingredients: inv => {   // grantIngredient's updater, staged
+        const out = { ...(inv || {}) };
+        for (const [id, n] of Object.entries(ings)) out[id] = (out[id] || 0) + n;
+        return out;
+      } } : {}),
+    },
+    puts,
+  };
+  if (!await takeAndPay('inv', invId, pay)) throw new Error('crate gone');
   return { crate: crateRow.crate, def, results, coins: coinsWon };
 }
 

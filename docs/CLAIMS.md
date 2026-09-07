@@ -19,6 +19,27 @@ The three states exist so the author writes down the thing that makes a false no
 obvious. Every one of the four bad notes would have been caught at the moment
 somebody typed `GATED ?mogv2` next to it and had to look at that.
 
+## take and pay is one step (2026-09-06)
+
+Not stamped to a release: fix/atomic-take-and-pay, off v492. Lane 2 of the
+2026-09-06 economy audit.
+
+1. PROOF: take-and-pay-audit.mjs (six CRASH rows, each proved red on origin/main
+   bce3a937 with the same file: crate, egg, gear, salvageInstance, salvagePet,
+   legacy egg-crate) | REACH: Opening a crate, hatching an egg, melting a piece of
+   gear or destroying a pet can no longer take the thing away and then fail to
+   pay you for it. Each of those used to spend the input first and hand over the
+   reward a moment later in separate saves, so an app killed between the two left
+   you with neither. The spend and the whole payout are one save now: a kill at
+   any point leaves either the unopened crate, the unhatched egg, the piece, the
+   pet, or the complete reward with the input gone. Nothing pending, nothing to
+   resume. Measured by killing every save after the take: on the old order a Bone
+   Crate vanished with no coins and no items, a walked egg vanished with no pet, a
+   rare piece melted for 0 dust; on the new order the full hand, the pet instance
+   with its ownership row and level seed, and the dust with its revision are all
+   on disk. The legacy egg-crate sweep on the Crates tab converts a crate to an
+   egg in the same one save.
+
 ## pit readout and exit (2026-09-06)
 
 Not stamped to a release: hotfix/pit-ap-exit, off v487. Tom on live v487, two

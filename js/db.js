@@ -273,6 +273,11 @@ function reportWriteFailure(store, val, op, err) {
      with real write failures; it must not toast "that did not save" or queue a
      write_fail event for a player who is simply short on coins. */
   if (err && err.insufficientFunds) return;
+  /* Same class, wider name (2026-09-06, takeAndPay/payAtomic): a kv updater that
+     THROWS `refused` is saying "on looking at the real state inside the
+     transaction, this action is not owed" (a pet copy already salvaged by a
+     concurrent tap). The abort is the answer, not a failed save. */
+  if (err && err.refused) return;
   const key = keyOf(store, val);
   const quiet = writeIsQuiet(store, val);
   const quota = /quota|QuotaExceeded/i.test(`${(err && err.name) || ''} ${(err && err.message) || ''}`);
@@ -410,6 +415,68 @@ export function take(store, key) {
   })));
 }
 
+/* ATOMIC TAKE-AND-PAY: db.take and everything the row buys, in ONE transaction.
+ *
+ * take made the CLAIM indivisible and nothing else. openCrate, hatchEgg,
+ * disenchantGear and migrateLegacyEggs all took the row and then paid in later
+ * transactions, so a process death between them destroyed the input and paid
+ * nothing: a fully walked egg gone with no pet, a Golden Crate gone with no
+ * hand (2026-09-06 economy audit). `take` here is the same get-then-delete, and
+ * the payout is dispatched from INSIDE the get's success callback, exactly the
+ * way claimAndPay dispatches from its add(), so it joins the SAME transaction.
+ * When the row is already gone nothing at all is written and `undefined` comes
+ * back, which is take's own contract.
+ *
+ * `pay` is claimAndPay's shape plus `dels`: `kv` {key: SYNCHRONOUS fn, undefined
+ * writes nothing}, `puts` [{store, val}], `dels` [{store, key}]. A kv fn may
+ * THROW to abort the whole transaction (the take included); tag the error
+ * `refused` when that is a refusal rather than a failure, see reportWriteFailure.
+ *
+ * payAtomic is the same body with no row to take, for a payout that has no
+ * single inv row as its authority (a pet mint, a pet salvage keyed on kv
+ * 'petInst', where the kv fn itself is the claim and throws when the copy is
+ * already gone). */
+function atomic({ take = null, kv = {}, puts = [], dels = [] }, op) {
+  if (frozen) return Promise.reject(new Error(FROZEN_MSG));
+  const kvKeys = Object.keys(kv);
+  const stores = [...new Set([...(take ? [take.store] : []), ...(kvKeys.length ? ['kv'] : []),
+    ...puts.map(p => p.store), ...dels.map(d => d.store)])];
+  for (const s of stores) bumpStore(s);   // same stamp discipline as addIfAbsent
+  const [label, labelKey] = take ? [take.store, take.key] : ['kv', kvKeys[0]];
+  return guard(label, labelKey, op, () => open().then(db => new Promise((resolve, reject) => {
+    const t = db.transaction(stores, 'readwrite');
+    let row = true;           // payAtomic resolves true; takeAndPay resolves the row
+    let threw = null;
+    const die = e => { threw = e; try { t.abort(); } catch { /* already going */ } };
+    const pay = () => {
+      try {
+        const os = kvKeys.length ? t.objectStore('kv') : null;
+        for (const k of kvKeys) {
+          const g = os.get(k);
+          g.onsuccess = () => {
+            try {
+              const next = kv[k](g.result ? g.result.v : undefined);
+              if (next !== undefined) os.put({ k, v: next });
+            } catch (e) { die(e); }
+          };
+        }
+        for (const p of puts) t.objectStore(p.store).put(p.val);
+        for (const d of dels) t.objectStore(d.store).delete(d.key);
+      } catch (e) { die(e); }
+    };
+    if (take) {
+      const os = t.objectStore(take.store);
+      const g = os.get(take.key);
+      g.onsuccess = () => { row = g.result; if (row === undefined) return; os.delete(take.key); pay(); };
+    } else pay();
+    t.oncomplete = () => resolve(row);
+    t.onerror = () => reject(threw || t.error);
+    t.onabort = () => reject(threw || t.error || new Error(`${op} aborted`));
+  })));
+}
+export function takeAndPay(store, key, pay = {}) { return atomic({ ...pay, take: { store, key } }, 'takeAndPay'); }
+export function payAtomic(pay = {}) { return atomic(pay, 'payAtomic'); }
+
 /* ATOMIC READ-MODIFY-WRITE on one kv row. `fn` MUST be synchronous, see above.
    Returns the value that was actually stored. This is the replacement for every
    `const v = await kvGet(k); v.push(x); await kvSet(k, v)` in the tree: that
@@ -464,6 +531,8 @@ export const db = {
   addIfAbsent: (store, val) => addIfAbsent(store, val),
   claimAndPay: (store, row, pay) => claimAndPay(store, row, pay),
   take: (store, key) => take(store, key),
+  takeAndPay: (store, key, pay) => takeAndPay(store, key, pay),
+  payAtomic: (pay) => payAtomic(pay),
   byIndex: (store, index, value) => open().then(db => new Promise((resolve, reject) => {
     const t = db.transaction(store, 'readonly');
     const req = t.objectStore(store).index(index).getAll(value);
