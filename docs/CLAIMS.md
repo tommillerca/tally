@@ -1,23 +1,16 @@
 # What each patch note claims, and what backs it
 
-Written 2026-08-24 after four notes in twenty-four hours told players things that
-were not true for them. `tests/claim-evidence-lint.mjs` reds the gate if the
-newest changelog entry has an item that is not answered here.
+## the submission build asserts itself (2026-09-07)
 
-Two fields per claim, both required:
+Not stamped to a release: no shipped file changed, so no version bump. This is
+the upload path and its guards.
 
-- **PROOF** the audit that grades it. It must exist and be registered in the gate,
-  or citing it is citing a check nobody runs. `NONE <reason>` is allowed and
-  honest; a claim with no audit at all is not.
-- **REACH** how a PLAYER gets to it, written the way you would tell them. Or one
-  of three honest not-yet states, any of which fails the gate on a shipped entry:
-  - `GATED <flag>` the code is there and switched off for players
-  - `PENDING-DEPLOY <what>` the client is out, the server half is not
-  - `NEEDS-PEER <what>` it only fills in once somebody else updates
+1. PROOF: store-copy-lint.mjs | REACH: `native/build-ios.sh`, the only script that archives and uploads, called plain `./build-www.sh` and `npx cap sync ios` against the unmodified `native/capacitor.config.json`, which carries `server.url = https://tommillerca.github.io/tally/`. So every build ever uploaded shipped `STORE_BUILD=false` (the Crew invite strip, the THANK YOU card, the News row, the "Open TestFlight" button and the Settings Diagnostics row all reachable) AND loaded the live site over the network rather than its own bundle, which is the blank-shell-on-bad-wifi failure the bundled path exists to prevent. `native/build-store.sh` did it correctly but nothing called it, and its own comment expected a human to swap the two configs by hand between prep and upload. `SUBMISSION=1` is now an explicit mode that delegates the bundle and the no-server config to `build-store.sh` (one copy, so the two cannot drift), swaps the config in for the sync, restores it on EXIT even when the archive fails, and runs the preflight before archiving. The default path is unchanged, deliberately: Tom ruled the remote shell stays wired for internal builds. Five rows grade the shape of that branch and were each proven red by breaking it (delegation, the trap, the preflight call, the mode itself, and the surviving default path).
 
-The three states exist so the author writes down the thing that makes a false note
-obvious. Every one of the four bad notes would have been caught at the moment
-somebody typed `GATED ?mogv2` next to it and had to look at that.
+2. PROOF: submission-preflight-audit.mjs | REACH: `native/submission-preflight.mjs` runs after `npx cap sync ios` and grades the bundle that is about to be archived rather than the repo: the bundle declares `STORE_BUILD = true`, the synced iOS config has no `server` key, and no TestFlight or beta string is reachable. It exits non-zero, so `set -e` stops the script before the archive. The audit drives all three refusals plus a healthy control against real invocations, because a guard that cannot fail is not a guard. Verified against a real `build-store.sh` output (passes) and against a real internal `build-www.sh` output, where it names both defects: "does not declare STORE_BUILD = true" and "still has a server key, so the app would load the live site over the network instead of its own bundle".
+
+3. PROOF: store-copy-lint.mjs | REACH: the reachability scan lived in one file and was copied into a second. This project has already paid for a shared scanner whose copies disagreed, so it now lives once in `tests/store-copy-scan.mjs` and both callers import it: the lint grades `js/app.js` in the repo, the preflight grades `native/www/js/app.js` in the bundle.
+
 
 ## v506
 1. A hotfix off v505 from Tom's own photograph of the live app on his phone: a dark strip with a card edge in it near the top of Today. Its dated section is further down, folded here.

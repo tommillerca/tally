@@ -4,9 +4,33 @@ KEY=R6B586JNRN
 ISS=4e28ee87-e98d-4a22-baef-dcf3a1941e59
 NATIVE="/Users/tommiller/Documents/Hyperframes Editor/tally/native"
 cd "$NATIVE"
-echo "=== build-www + cap sync ==="
-./build-www.sh
-npx cap sync ios
+
+# SUBMISSION=1 is the ONLY path that may be uploaded to the App Store, and it is
+# deliberately not the default: Tom ruled the remote shell stays wired for
+# internal/TestFlight builds because it makes testing fast
+# (docs/HANDOFF-CODEX-2026-09-05.md #6). Without the flag this script behaves
+# exactly as it always has.
+#
+# It delegates the bundle and the no-server config to build-store.sh rather than
+# repeating them, so the two cannot drift, then swaps the config in for the sync
+# and restores it on EXIT even if the archive fails.
+if [ "${SUBMISSION:-0}" = "1" ]; then
+  echo "=== SUBMISSION build: bundled www, beta surfaces off, no server URL ==="
+  ./build-store.sh
+  CONFIG_BACKUP="$(mktemp "$NATIVE/capacitor.config.json.submission.XXXXXX")"
+  cp "$NATIVE/capacitor.config.json" "$CONFIG_BACKUP"
+  restore_config() { cp "$CONFIG_BACKUP" "$NATIVE/capacitor.config.json"; rm -f "$CONFIG_BACKUP"; }
+  trap restore_config EXIT
+  cp "$NATIVE/capacitor.config.store.json" "$NATIVE/capacitor.config.json"
+  npx cap sync ios
+  # Assert the bundle that is about to be archived, not the repo. Exits non-zero.
+  node "$NATIVE/submission-preflight.mjs" \
+    "$NATIVE/www/js/app.js" "$NATIVE/ios/App/App/capacitor.config.json"
+else
+  echo "=== internal build: remote shell, beta surfaces on ==="
+  ./build-www.sh
+  npx cap sync ios
+fi
 cd ios/App
 
 # PREFLIGHT. The build number comes from App Store Connect, not from this repo:
