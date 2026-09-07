@@ -684,34 +684,22 @@ export function foodBuffLabel(b, now = Date.now()) {
  * DOES ("+25% dmg, 4 fights left") and never what that is worth, which is the
  * question a player actually has in front of a fight.
  *
- * MEASURED, NOT ASSERTED, in tests/fight-sim.mjs against a MIRROR (a foe at
- * 100% of the player's own stats), 2000 seeds per arm, no talents, both arms on
- * the same seed list. 2026-09-07 on this tree, as loss rate (the share of even
- * fights you lose), with a level-5 Hound / with no pet:
- *     no dish            15.3% / 62.6%
- *     Bone Broth          1.5% / 25.0%   delta +13.8pp [12.2,15.5] / +37.7pp [34.8,40.5]
- *     Hearty Hash         2.0% / 11.9%   delta +13.3pp [11.6,15.0] / +50.8pp [48.2,53.3]
- *     Necromancer's Feast 0.2% /  2.3%   delta +15.1pp [13.6,16.7] / +60.3pp [58.1,62.5]
- *     Marrow Stew         8.5% / 44.6%   delta  +6.8pp [ 4.8, 8.8] / +18.1pp [15.0,21.1]
- *     Hunter's Skewer    15.3% / 62.6%   delta  +0.0pp [-2.2, 2.2] / +0.0pp SPANS ZERO
- *     Bonemeal Kibble    14.4% / 62.6%   delta  +0.9pp [-1.3, 3.1] / +0.0pp SPANS ZERO
+ * Measured against a mirror, 2000 seeds per arm, no talents, with a level-5
+ * Hound and with no pet. smartPlayerTurn now takes one smartPetTurn before
+ * endTurn, matching the app's body -> pet -> end-turn sequence.
  *
- * SO THE COPY IS BANDED, NOT NUMBERED. The two configurations disagree on the
- * SIZE of every effect by about 3x (a mirror with a pet is already an 85% win,
- * so there is a ceiling in that column), and a percentage printed on a screen
- * would be one of those two numbers pretending to be the answer. What survives
- * both columns is the halving: Broth, Hash and the Feast each cut the fights
- * you lose by more than half in BOTH, and the Stew cuts them by 29-44%, which
- * is real and is not a half.
+ * The hound baseline wins 1941/2000, the no-pet baseline 747/2000. Broth,
+ * Hash and Feast more than halve losses in both. Stew wins 1976/2000 and
+ * 1108/2000: a real edge, still below each big dish. Compare those dishes
+ * directly: the weakest big dish (Hash) beats Stew by an interval of
+ * [0.25, 1.41]pp with the hound; without a pet, Broth is the closest at
+ * [16.74, 22.51]pp. Overlapping dish-vs-baseline intervals do not answer
+ * that comparison because both include uncertainty about the same baseline.
  *
- * THE TWO PET DISHES CARRY NO CLAIM AT ALL, and that is a fact about the
- * instrument, not about them. js/pit.js smartPlayerTurn (which is what
- * fight-sim drives) never takes a PET action, so the Skewer's whole effect
- * (the pet's special ignores its cooldown) can never fire in the harness and
- * the Kibble's only reaches the pet's passive. Their measured 0.0pp is the sim
- * declining to answer, so nothing here answers for it: they show what they do
- * and stop. Printing "no edge" off that number would be the fabricated figure
- * Tom's ruling forbids, pointed the other way.
+ * Skewer wins 1975/2000 and Kibble 1972/2000 with the hound, both clear of
+ * baseline; neither changes the no-pet result. Their sentences explicitly
+ * name the trained hound, the configuration that supports the claim. No
+ * percentage belongs in the copy: the size depends on the configuration.
  *
  * tests/dish-worth-audit.mjs re-measures this on every gate run and fails if a
  * dish's claim stops being true, so a re-cost cannot leave the copy lying. */
@@ -720,6 +708,8 @@ export const DISH_WORTH = {
   'hearty-hash': 'Measured: against an even fight it more than halves the fights you lose.',
   'necro-feast': 'Measured: against an even fight it more than halves the fights you lose.',
   'marrow-stew': 'Measured: it cuts the fights you lose against an even foe, less than the big dishes do.',
+  'hunters-skewer': 'Measured: with a trained hound at your side, more special attacks help you lose fewer fights against an even foe.',
+  'bonemeal-kibble': 'Measured: with a trained hound at your side, a tougher, harder-hitting pet helps you lose fewer fights against an even foe.',
 };
 export const dishWorth = recipeId => DISH_WORTH[recipeId] || '';
 
