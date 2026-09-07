@@ -674,6 +674,25 @@ svg { display: block; }
    Guard: tests/toast-map-audit.mjs. */
 body:has(.map-act:not([hidden])) .toast { bottom: calc(var(--sab) + 158px); }
 
+/* AND IT MUST NOT LAND ON A SHEET'S CONTROLS EITHER. R41-20: the welcome-kit
+   toast fires 1.2s after onboarding and a new player is five taps from their
+   first fight, so it arrives on top of the move tray it is not talking about.
+   Measured 2026-09-07 against a real fight: at 375x667 the toast (26.3,506.5
+   322.5x64.5) covered Jab whole (110.3x54.8 of a 110.3x54.8 button) and 100.0px
+   of Peck the Eyes and Swing; at 393x852 it took 104.8x27.8 of Haymaker and
+   116.3x27.8 of Bone Guard.
+   Fixed generally rather than for the fight tray: EVERY sheet in this app puts
+   its controls at the bottom (the move tray, a shop's buy row, the Wardrobe's
+   bar, every .btn-row) and the toast's shipped seat is 96px off the bottom, so
+   the collision is structural, not the Pit's. While a sheet is up the toast
+   takes a seat under the sheet head instead: sheet top is --sat + 24, the grab
+   handle is 15.5 and the head is ~62, so 110 clears it. A short bottom sheet
+   leaves the toast over the backdrop, which asks nothing of anybody.
+   Keyed on a sheet EXISTING rather than on any route or class, the same way the
+   .map-act rule is keyed on the card being visible.
+   Guard: tests/toast-sheet-audit.mjs. */
+body:has(#sheets .sheet) .toast { top: calc(var(--sat) + 110px); bottom: auto; }
+
 /* progress bar (ocr) */
 .progress { height: 6px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin: 10px 0; }
 .progress i { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s ease; }
