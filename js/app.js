@@ -7,7 +7,8 @@ import {
   levelFor, totalXp, onFoodLogged, onWeighIn, onHealthSync, awardDayCloseIfDue, dayCloseNews, habitGrantCard,
   initGameIfNeeded, gameInitSettled, initLootIfNeeded, backfillStarterSeedsIfNeeded, retireGardenIfNeeded, evaluateBadges, earnedBadgeIds,
   BADGES, xpForDate, parseHkPayload, award, claimFriendBattle,
-  awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar,
+  awardCapped, XP_DAILY_CAP, BADGE_XP, buildStats, claimSpar, sparBoardState,
+  bagPick, seedBagFromRecent, GW_RECENT_CAP,
 } from './game.js';
 import {
   RARITIES, CRATES, CONSUMABLES, SHOP, coins, coinsAdd, grantCrate, grantCosmetic, inventory, ownedCosmeticIds,
@@ -1746,6 +1747,7 @@ async function boot() {
   maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
     if (spun === true && !sheetStack.length) refresh();
     else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);   // QA round 26 O14: the refused wheel used to vanish without a word
+    else if (spun?.pending) wheelRetryPending = true;   // B14: a sheet was open; closeTopSheet retries once the stack drains
   }).catch(() => {});
   refundStreakFreezes().then(r => {
     if (r) toast(`Streak Freezes have been retired. Your ${r.count} paid out: +${r.coins.toLocaleString()} coins.`, 5200);
@@ -1832,6 +1834,7 @@ async function rollDayIfNeeded() {
     maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
       if (spun === true && !sheetStack.length) refresh();
       else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);   // QA round 26 O14
+      else if (spun?.pending) wheelRetryPending = true;   // B14: retried by closeTopSheet
     }).catch(() => {});
     refreshNotifSchedules();
     return true;
@@ -3652,6 +3655,44 @@ function announce(msg) {
 }
 
 const sheetStack = [];
+/* B14: set when maybeShowDailyWheel returned { pending: true } (a sheet was
+   open when it wanted to show). closeTopSheet drains it the moment the stack
+   is empty again, so a level-up sheet at boot delays the spin instead of
+   eating it for the day. See the wheel call sites and closeTopSheet below. */
+let wheelRetryPending = false;
+/* Shared by the two call sites that are not boot()'s or rollDayIfNeeded()'s own
+   inline call (both pinned verbatim by tests/unit.test.js R26-O14 and left
+   untouched): the retry below, and enterAppFromOnboarding's day-one fire. Same
+   three outcomes as those two copies. */
+function fireDailyWheel() {
+  maybeShowDailyWheel({ sounds: S.sounds }).then(spun => {
+    if (spun === true && !sheetStack.length) refresh();
+    else if (spun?.dayGuard) dayGuardToast(spun.dayGuard);
+    else if (spun?.pending) wheelRetryPending = true;
+  }).catch(() => {});
+}
+/* refreshLevelChip: same doctrine as renderToday's own refreshWalletPill, for
+   the identical reason (R41-16). A Pit fight settles behind Today's own DOM
+   (the Pit is a sheet over it) and only #pitBody repainted on close, so XP a
+   fight just paid sat unread on the chip until the player navigated away and
+   back: measured, the chip read 0/200 while the ledger already held 65.
+   Repaints exactly the chip's own numbers, never a full re-render (same
+   anti-regression reasons as the wallet pill).
+   DELIBERATELY MODULE SCOPE, not nested beside refreshWalletPill inside
+   renderToday: totalXp() is a full 'xp' store scan on a cache miss, and
+   tests/today-reads-lint.mjs walks every call reachable from renderToday's
+   OWN body (not just what runs synchronously in its render tick), so a
+   closure defined in there reading xp counts as a second scan and that guard
+   goes red (A1). Living out here, it is invisible to that walk. */
+window.__refreshLevelChip = async () => {
+  const chip = $('#lvlChip'); if (!chip || !chip.isConnected) return;
+  const lvl = levelFor(await totalXp());
+  const row = $('.hero-lvrow', chip);
+  if (row) row.innerHTML = `<span class="hero-lv">Lv ${lvl.level}</span><span class="hero-title">${esc(lvl.name)}</span>`;
+  const xprow = $('.hero-xprow', chip);
+  if (xprow) xprow.innerHTML = `<span class="hero-xpn">${lvl.into.toLocaleString()}/${lvl.need.toLocaleString()}</span>`
+    + Array.from({ length: XP_PIPS }, (_, i) => `<i${i < Math.ceil(lvl.pct / (100 / XP_PIPS)) ? ' class="on"' : ''}></i>`).join('');
+};
 /* set when a new service worker took over while a sheet was open, so the
    reload the toast promised happens the moment the last sheet closes */
 let updatePending = false;
@@ -3749,6 +3790,10 @@ function closeTopSheet() {
   if (updatePending && !sheetStack.length) { updatePending = false; location.reload(); return; }
   try { rec.onClose?.(); } catch { /* noop */ }
   try { rec.restoreFocus?.(); } catch { /* noop */ }
+  /* B14: the ONE place every sheet finishes closing, so a spin owed while a
+     level-up (or any) sheet was open fires the moment nothing blocks it any
+     more, rather than waiting for the next boot or midnight roll. */
+  if (!sheetStack.length && wheelRetryPending) { wheelRetryPending = false; fireDailyWheel(); }
   const sheet = $('.sheet', rec.wrap), back = $('.sheet-backdrop', rec.wrap);
   if (reducedMotion || !sheet) { rec.wrap.remove(); return; }
   // slide down + backdrop fade, then remove. pointer-events off immediately so a
@@ -4321,6 +4366,7 @@ async function renderToday(el) {
     everLogged: allLog.length > 0,
     freshInstall: !!S.settings.createdAt && dateKey(new Date(S.settings.createdAt)) === S.date,
   };
+  await loadGwMemory(); // B13: seed the anti-repeat bag from the last reload before he speaks
   const gwLine = gwartLine(gwCtx);
   /* HE MAKES HIS ENTRANCE ONCE A SESSION, NOT ONCE A TAP. Read AND set here, in
      the render that emits the markup, so the very first Today of the session
@@ -5444,20 +5490,33 @@ if (typeof window !== 'undefined' && navigator.webdriver) {
  * The bag is keyed on the STRINGS, not on a bucket, so a state change
  * mid-session (the crate gets opened) carries the memory across instead of
  * resetting it, and an interpolated line (`Day 4.`) behaves like any other. It
- * is bounded by the pool it is drawing from, because that is what empties it. */
+ * is bounded by the pool it is drawing from, because that is what empties it.
+ *
+ * B13: the bag above was module scope, so it died on every reload. A player
+ * who opens the app once a day never keeps a session alive long enough for
+ * it to matter, and got the same line twelve days running. Persist the last
+ * few lines said (kv `gwRecent`) and seed the bag from them at the first
+ * renderToday of a fresh load (loadGwMemory, called there before he first
+ * speaks), so a boot's first pick still excludes what was said last time
+ * instead of starting the bag empty. The picking algorithm itself
+ * (bagPick/seedBagFromRecent) lives in js/game.js so it is one thing, not
+ * two, and a guard can drive it without a DOM. */
 const gwSaid = new Set();
 let gwLast = '';
+let gwMemoryLoaded = false;
+async function loadGwMemory() {
+  if (gwMemoryLoaded) return;
+  gwMemoryLoaded = true;
+  try { gwLast = seedBagFromRecent(gwSaid, await kvGet('gwRecent', [])) || gwLast; }
+  catch { /* cosmetic; never block a render on this */ }
+}
 function gwPick(pool) {
-  if (!pool.length) return gwLast;
-  let fresh = pool.filter(l => !gwSaid.has(l));
-  if (!fresh.length) {
-    gwSaid.clear();
-    fresh = pool.filter(l => l !== gwLast);
-    if (!fresh.length) fresh = pool;            // a one-line pool has no second choice
-  }
-  const line = fresh[Math.floor(Math.random() * fresh.length)];
+  const line = bagPick(pool, gwSaid, gwLast);
   gwSaid.add(line);
   gwLast = line;
+  // B13: fire-and-forget; gwPick stays sync so every caller (tap, idle timer,
+  // the opening line) is unchanged. Only the last few survive a reload.
+  kvSet('gwRecent', [...gwSaid].slice(-GW_RECENT_CAP)).catch(() => {});
   return line;
 }
 /* THE CRATE REMINDER FIRES ONCE PER APP OPEN. Tom, 2026-08-22: "If you have an
@@ -15349,6 +15408,14 @@ function enterAppFromOnboarding() {
   bindAppLifecycle(); // R37-1: this session took the onboarding path, not boot(), and never got resume/day-roll/notif/autoSync binding
   location.hash = '#/today';
   route();
+  /* B14: boot()'s own maybeShowDailyWheel call never runs for this session
+     (boot() returned before reaching it, the moment it found no S.settings),
+     and nothing else on this path ever called it, so day one never fired the
+     day's spin at all -- not a deliberate exclusion (claimDay's first-run
+     branch seeds and lets a fresh device through same as any other day), just
+     a wiring gap this exit point owns for both a finished onboarding and a
+     mid-onboarding restore. */
+  fireDailyWheel();
 }
 
 /* ================= game: celebrations + progress ================= */
@@ -23479,6 +23546,9 @@ async function renderPit(wrap) {
   const fighter = await buildFighter();
   const xpRows = await db.all('xp');
   const beaten = pitBeatKeys(xpRows);
+  // B3: today's paid sparring slots, for the board line only (see sparBoardState).
+  const sparUsed = xpRows.filter(r => r.type === 'spar' && r.date === date).length;
+  const sparBoard = sparBoardState(sparUsed);
   const rungsBeaten = LADDER.filter(r => beaten.has(`pitrung-${r.rung}`)).length;
   const champOpen = rungsBeaten >= LADDER.length;
   const champBeaten = beaten.has('pitchamp');
@@ -23518,7 +23588,7 @@ async function renderPit(wrap) {
     <div class="t3-sect"><b>Sparring · no stakes</b><i></i><span class="r chip" style="font-size:11px">Always free</span></div>
     ${[['easy', 'Loose Bones', 0.8], ['even', 'Your Shadow', 1.0], ['hard', 'Mean Mirror', 1.15]].map(([id, name, m]) => `
       <div class="t3-row"><span class="t3-med">${ICONS.pit(24)}</span>
-        <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · +15 coins on a win</small></div>
+        <div class="t3-tx"><b>${name}</b><small>${Math.round(m * 100)}% of your stats · ${sparBoard.line}</small></div>
         <button class="btn ghost" data-spar="${m}" data-name="${name}" aria-label="Fight ${esc(name)}">FIGHT</button>
       </div>`).join('')}`;
   const ladderSect = `
@@ -25564,6 +25634,9 @@ async function openFight(pitWrap, fighter, foeCfg) {
          (150 wanderer + 10 fight + 25 badge). Counted from the badges
          evaluateBadges actually claimed, so a duplicate can never inflate it. */
       xp += badges.length * BADGE_XP;
+      /* R41-16: after evaluateBadges, so the xp store already carries every
+         row this win minted (badges included; awardOnce writes on the spot). */
+      window.__refreshLevelChip?.();
       confettiRain(90); levelSound(S.sounds);
       if (badges.length) queueCelebration({ newBadges: badges });
     } else if (fight.over.winner === 'f') {
@@ -25574,6 +25647,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       coins = foeCfg.mode === 'spar' ? (await claimSpar(fightId, false)).coins : 5;
       if (coins) await coinsAdd(coins);
       window.__refreshWalletPill?.();
+      window.__refreshLevelChip?.();   // R41-16: no xp on a loss, but stays true to "like the wallet pill does"
     }
     /* Spend the day's attempt on this tower, whatever the outcome. Outside the
        win/lose branches on purpose: a loss and a draw have to consume it too, or
@@ -25593,7 +25667,7 @@ async function openFight(pitWrap, fighter, foeCfg) {
       ? `<p class="note" style="margin:8px 0 16px">${won ? 'Nice win!' : 'Good scrap.'} You already claimed today's reward against ${esc(foeCfg.name)}. Battle a different friend for more coins + XP.</p>`
       : won
       ? `<div class="reward-row">
-           <span class="reward-pill">${ICONS.coin(15)} +${coins}</span>
+           ${coins ? `<span class="reward-pill">${ICONS.coin(15)} +${coins}</span>` : ''}
            ${xp ? `<span class="reward-pill">${ICONS.star(14)} +${xp} XP</span>` : ''}
            ${extras.map(e => `<span class="reward-pill">${esc(e)}</span>`).join('')}
          </div>

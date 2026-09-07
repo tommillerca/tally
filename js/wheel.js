@@ -308,7 +308,15 @@ export async function maybeShowDailyWheel({ sounds = true, force = false } = {})
   }
 
   await waitForSplash();
-  if (sheetStackOpen()) return false;              // don't stack over an open sheet
+  /* B14: this used to return a bare false, indistinguishable from "already
+     claimed today" or "webdriver" to the caller, so nothing ever retried once
+     the blocking sheet closed. A level-up sheet opening during boot's splash
+     wait (initGameIfNeeded's XP replay dispatches bh-levelup synchronously)
+     measured 5 of 14 days losing the spin outright: it never re-fired that
+     session. Nothing has been claimed yet (the date gate above is idempotent
+     and commit() below is what actually spends the day), so telling the
+     caller "still owed, try again once the stack drains" is free. */
+  if (sheetStackOpen()) return { pending: true };  // don't stack over an open sheet
 
   const rng = preview ? mulberry32((Math.random() * 1e9) | 0) : mulberry32(hashStr('wheel:' + today));
   let idx = pickPrizeIndex(rng);

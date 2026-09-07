@@ -114,6 +114,35 @@ CSS, the kin chips and the Dressing Room family tile's tier.
    a lower-rarity colourway (the one you wear) carries that colourway's tier
    badge and border, at that colourway's price, instead of the family's best
    member's tier.
+## the day tells the truth (2026-09-07)
+
+Not stamped to a release: hotfix/daily-truth, off v496. HANDOFFMASTER20260906.md
+B3, B13, B14, R41-16.
+
+1. PROOF: unit.test.js | REACH: sparring past the day's 12 paid slots no longer
+   prints "+15 coins on a win" over a wall that pays 0, and a capped win's
+   victory card drops its coin pill instead of printing a literal "+0" beside
+   the XP it did earn. Sparring itself stays free and unlimited; only the
+   money stops, the same shape the Pit-charge cap already handles honestly.
+   No economy change: SPAR_DAILY_CAP, SPAR_COINS and claimSpar are untouched.
+
+2. PROOF: unit.test.js | REACH: Gwart's "put your gear on" line no longer
+   repeats for a fortnight of once-a-day opens. The last few lines he said
+   persist to kv (gwRecent) and seed the anti-repeat bag on the next boot,
+   before he speaks.
+
+3. PROOF: unit.test.js | REACH: the daily spin wheel fires on day one (a
+   finished signup and a mid-onboarding restore both reach it now), and a
+   level-up sheet open at boot no longer eats the day's spin outright:
+   closeTopSheet retries it the moment the sheet stack drains. Day one was
+   never a deliberate exclusion (claimDay's first-run branch already lets a
+   brand-new device through like any other day); it was a missing wire.
+
+4. PROOF: unit.test.js | REACH: Today's level chip (Lv, title, XP bar)
+   repaints the moment a Pit fight settles, win or lose, without navigating
+   away and back, the same fix class the wallet pill already got for
+   coins/dust/Vigor.
+
 ## currency and receipts are one transaction (2026-09-06)
 
 Not stamped to a release: fix/currency-revisions, off v493. Codex's read-only

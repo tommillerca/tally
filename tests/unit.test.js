@@ -28,6 +28,8 @@ import { mapOffProduct, mapFdcFood, rankFdcResults, fetchOffProduct, fetchOffPro
 import { GENERIC_FOODS, searchFoods } from '../data/generic-foods.js';
 import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard } from '../js/game.js';
 import { STAT_META, STYLES, hasFightableStats } from '../js/pit.js';
+import { xpForLevel, levelFor, badgeCheck, parseHkPayload, LEVEL_NAMES, BADGES, levelCoins, dayCloseNews, habitGrantCard, sparBoardState, SPAR_DAILY_CAP, bagPick, seedBagFromRecent, GW_RECENT_CAP } from '../js/game.js';
+import { STAT_META, STYLES } from '../js/pit.js';
 import * as pitMod from '../js/pit.js';
 const mkFighter = pitMod.makeFighter;
 import {
@@ -5463,9 +5465,12 @@ test('R26 O1 (a) openVeil pushes the stack; a popped history entry and a route c
   let api;
   // back() runs the shipped popstate handler, verbatim (asserted above)
   const history = { pushState: st => pushes.push(st), back: () => { backs.push(1); if (sheetStack.length) api.closeTopSheet(); } };
-  api = new Function('sheetStack', 'history', 'document', '$', 'reducedMotion', 'updatePending', 'location',
+  // B14: closeTopSheet now reads wheelRetryPending and calls fireDailyWheel()
+  // when the stack drains; both are harmless stand-ins here (false / no-op),
+  // since this test is about the veil/history plumbing, not the wheel retry.
+  api = new Function('sheetStack', 'history', 'document', '$', 'reducedMotion', 'updatePending', 'location', 'wheelRetryPending', 'fireDailyWheel',
     `${src}; return { openVeil, closeTopSheet, closeAllSheets };`)(
-    sheetStack, history, { body: { appendChild: v => { v.appended = true; } } }, () => null, true, false, { reload() {} });
+    sheetStack, history, { body: { appendChild: v => { v.appended = true; } } }, () => null, true, false, { reload() {} }, false, () => {});
   const { openVeil, closeAllSheets } = api;
   const mkVeil = () => ({ appended: false, removed: false, remove() { this.removed = true; }, addEventListener(t, f) { this.tap = f; } });
 
@@ -7779,6 +7784,182 @@ test("R39-31 the Stable's wardrobe heading escapes the species name at both site
   const escaped = (src.match(/<div class="pw-h">\$\{esc\(her\)\}'s wardrobe/g) || []).length;
   const raw = (src.match(/<div class="pw-h">\$\{her\}'s wardrobe/g) || []).length;
   assert.ok(escaped === 2 && raw === 0, `both wardrobe headings must go through esc(): ${escaped} escaped, ${raw} raw`);
+});
+
+test('B3 sparBoardState tells the truth at slots 12 of 12', () => {
+  /* PROVE-RED: before this selector existed, the board line was a hardcoded
+     "+15 coins on a win" with no state check at all, so at 12 of 12 (the cap)
+     it still claimed a coin reward that claimSpar no longer pays. */
+  assert.equal(SPAR_DAILY_CAP, 12, 'cap moved; sparBoardState fixture below assumes 12');
+  const under = sparBoardState(11);
+  assert.equal(under.capped, false, '11 of 12 spent must not read as capped');
+  assert.equal(under.line, '+15 coins on a win');
+  const at = sparBoardState(12);
+  assert.equal(at.capped, true, '12 of 12 spent (the cap) must read as capped');
+  assert.notEqual(at.line, '+15 coins on a win', 'the board must stop promising a coin reward once paid slots are spent');
+  assert.match(at.line, /paid spars are done/i);
+  const over = sparBoardState(13);
+  assert.equal(over.capped, true, 'past the cap must still read as capped');
+});
+
+test('B3 the victory card omits the +0 coin pill', () => {
+  /* PROVE-RED: the reward-row used to render `+${coins}` unconditionally, so a
+     capped spar win (coins:0 from claimSpar) printed a literal "+0" coin pill
+     under a card that also offers XP. */
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.ok(/\$\{coins \? `<span class="reward-pill">\$\{ICONS\.coin\(15\)\} \+\$\{coins\}<\/span>` : ''\}/.test(src),
+    'the coin reward pill must be conditional on coins, same as the XP pill beside it');
+});
+
+test('B13 Gwart\'s bag survives 5 consecutive boots with no immediate repeat', () => {
+  /* A "boot" is a fresh module load: a brand-new `said` Set (the bag dies on
+     reload, that part is correct and unchanged), seeded from whatever was
+     persisted to kv last time (gwRecent), then one pick. Deterministic RNG
+     (always take index 0 of the eligible pool) makes this reproducible: it
+     is also the shape that PROVES the old bug, below.
+     2026-09-06, B13: POOL below is a fixture stand-in (7 dummy lines), not the
+     app's real Gwart line table. */
+  const POOL = ['gear1', 'gear2', 'gear3', 'gear4', 'gear5', 'gear6', 'gear7'];
+  const rand0 = () => 0;
+  let persisted = []; // stands in for kv 'gwRecent' across boots
+  let prevLine = null;
+  for (let boot = 0; boot < 5; boot++) {
+    const said = new Set();
+    const seededLast = seedBagFromRecent(said, persisted);
+    const line = bagPick(POOL, said, seededLast, rand0);
+    if (prevLine !== null) assert.notEqual(line, prevLine, `boot ${boot} immediately repeated boot ${boot - 1}'s line ("${line}")`);
+    prevLine = line;
+    said.add(line);
+    persisted = [...said].slice(-GW_RECENT_CAP);
+  }
+});
+
+test('B13 PROVE-RED: the same 5 boots repeat every time with no seeding', () => {
+  /* This is the bug as shipped: gwSaid/gwLast were module-scope with nothing
+     read back from kv, so every reload started the bag empty and unaware of
+     what was last said. Same pool, same deterministic RNG, just skip
+     seedBagFromRecent (the fix): every boot pulls the same first line.
+     2026-09-06, B13: POOL below is the same fixture stand-in as above. */
+  const POOL = ['gear1', 'gear2', 'gear3', 'gear4', 'gear5', 'gear6', 'gear7'];
+  const rand0 = () => 0;
+  const linesSaid = [];
+  for (let boot = 0; boot < 5; boot++) {
+    const said = new Set(); // dies on reload, never seeded: the reported bug
+    linesSaid.push(bagPick(POOL, said, '', rand0));
+  }
+  assert.ok(linesSaid.every(l => l === linesSaid[0]),
+    'sanity check on the bug shape: an unseeded bag with a fixed RNG must repeat every boot');
+});
+
+test('B13 renderToday seeds the bag before Gwart speaks, and gwPick persists it', () => {
+  const src = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const gwLineAt = src.indexOf('const gwLine = gwartLine(gwCtx);');
+  assert.ok(gwLineAt > -1, 'renderToday\'s opening gwartLine call is gone from js/app.js');
+  const before = src.slice(Math.max(0, gwLineAt - 200), gwLineAt);
+  assert.match(before, /await loadGwMemory\(\);/, 'renderToday must seed the bag from kv before Gwart\'s opening line');
+  assert.match(src, /function gwPick\(pool\) \{[\s\S]{0,300}kvSet\('gwRecent'/, 'gwPick must persist the bag to kv so the next boot can seed from it');
+});
+
+/* ---- B14: the daily spin cannot fire on day one, and is skipped when a
+   level-up sheet is open at boot (R41-11) ----
+   Two independent gaps, both source-pinned since maybeShowDailyWheel needs a
+   real browser to drive behaviourally (tests/wheel-audit.mjs covers that).
+   1. sheetStackOpen() used to `return false`, indistinguishable from "already
+      claimed today" to every caller, so nothing ever retried once the
+      blocking sheet closed. PROVE-RED: reverting to `return false` here
+      would still pass every other wheel.js test in this file (day-guard,
+      claimSpin) but this assertion goes red on that exact line.
+   2. boot() only reaches its own maybeShowDailyWheel call after `if
+      (!S.settings) { renderOnboarding(...); return; }`, so a fresh install
+      never ran it that session, and enterAppFromOnboarding (the only exit
+      from onboarding) never called it either. Not a deliberate exclusion:
+      claimDay's first-run branch seeds and lets a brand-new device through
+      exactly like any other day (js/db.js: "FIRST RUN ... seed and let the
+      player through"), so day one differs from day two only by this missing
+      wire. PROVE-RED: dropping the fireDailyWheel() call from
+      enterAppFromOnboarding removes the only site that fires the wheel on
+      this path (boot's own copy never runs for it) and this test goes red. */
+test('B14 sheetStackOpen no longer returns a bare false (nothing could ever retry it)', () => {
+  const wheel = readFileSync(join(here, '..', 'js', 'wheel.js'), 'utf8');
+  assert.match(wheel, /if \(sheetStackOpen\(\)\) return \{ pending: true \};/,
+    'maybeShowDailyWheel must hand back a distinguishable "still owed" signal when a sheet blocks it, not a bare false (B14)');
+  assert.ok(!/if \(sheetStackOpen\(\)\) return false;/.test(wheel),
+    'the old unretriable false is still here alongside the new return (B14)');
+});
+
+test('B14 app.js retries the wheel once the blocking sheet stack drains, and fires it on day one', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  assert.match(app, /let wheelRetryPending = false;/, 'the retry flag is missing (B14)');
+  const helper = app.match(/function fireDailyWheel\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(helper, 'fireDailyWheel (the shared retry/day-one caller) is missing (B14)');
+  assert.match(helper[0], /maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{/, 'fireDailyWheel must call the real maybeShowDailyWheel');
+  assert.match(helper[0], /else if \(spun\?\.pending\) wheelRetryPending = true;/, 'fireDailyWheel must re-arm the retry flag on a pending result');
+  // closeTopSheet: the ONE place every sheet finishes closing (Escape, backdrop
+  // tap, the Done button and popstate all route through it) drains the flag.
+  const cts = app.match(/function closeTopSheet\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(cts, 'closeTopSheet not found');
+  assert.match(cts[0], /if \(!sheetStack\.length && wheelRetryPending\) \{ wheelRetryPending = false; fireDailyWheel\(\); \}/,
+    'closeTopSheet does not drain a pending wheel retry when the stack empties (B14)');
+  // both of boot()'s and rollDayIfNeeded's OWN inline calls (pinned verbatim
+  // elsewhere by the R26-O14 test) must also feed the same flag, or a sheet
+  // open at exactly one of those two moments would still eat the spin silently.
+  const boot = app.match(/maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{\n {4}if \(spun === true[\s\S]*?\n {2}\}\)\.catch\(\(\) => \{\}\);/);
+  assert.ok(boot && /else if \(spun\?\.pending\) wheelRetryPending = true;/.test(boot[0]), 'boot()\'s wheel call does not arm the retry flag on pending (B14)');
+  const roll = app.match(/maybeShowDailyWheel\(\{ sounds: S\.sounds \}\)\.then\(spun => \{\n {6}if \(spun === true[\s\S]*?\n {4}\}\)\.catch\(\(\) => \{\}\);/);
+  assert.ok(roll && /else if \(spun\?\.pending\) wheelRetryPending = true;/.test(roll[0]), 'rollDayIfNeeded\'s wheel call does not arm the retry flag on pending (B14)');
+  // day one: enterAppFromOnboarding is the only exit from onboarding (a
+  // finished signup AND a mid-onboarding restore both land there), and boot()
+  // returns before its own call ever runs for this session.
+  const eafo = app.match(/function enterAppFromOnboarding\(\) \{[\s\S]*?\n\}\n/);
+  assert.ok(eafo, 'enterAppFromOnboarding not found');
+  assert.match(eafo[0], /fireDailyWheel\(\);/, 'enterAppFromOnboarding never fires the daily wheel: day one gets zero chance at it (B14)');
+});
+
+/* ---- R41-16: the Today level chip repaints on fight settle, like the
+   wallet pill does ----
+   __refreshWalletPill already fixed this class for coins/dust/vigor (see its
+   own comment: "the Pit is a sheet OVER this screen ... only #pitBody was
+   re-rendered on close"). The level chip had no equivalent, so a fight that
+   leveled you up (or just moved XP within the level) left #lvlChip reading
+   its pre-fight numbers until the player left Today and came back, measured
+   at chip 0/200 against a ledger of 65.
+   PROVE-RED: dropping either window.__refreshLevelChip?.() call below (win
+   or loss) removes the only place that repaints the chip for that outcome,
+   and this test goes red on the missing call. */
+test('R41-16 __refreshLevelChip exists and fires on both fight-settle outcomes, beside the wallet pill', () => {
+  const app = readFileSync(join(here, '..', 'js', 'app.js'), 'utf8');
+  const helper = app.match(/window\.__refreshLevelChip = async \(\) => \{[\s\S]*?\n\};\n/);
+  assert.ok(helper, '__refreshLevelChip is missing');
+  // MUST live at module scope, not nested inside renderToday: today-reads-lint.mjs
+  // (A1) walks every call reachable from renderToday's own body, so a closure
+  // defined in there that reaches totalXp() -> db.all('xp') on a cache miss
+  // would count as a second 'xp' scan and that guard goes red.
+  const rt = app.match(/\nasync function renderToday\(el\) \{\n([\s\S]*?)\n\}\n/);
+  assert.ok(rt, 'renderToday not found');
+  assert.ok(!rt[1].includes('window.__refreshLevelChip ='), '__refreshLevelChip must not be defined inside renderToday (today-reads-lint.mjs A1 would double-count its xp read)');
+  /* totalXp(), not a literal db.all('xp') here: cached, reuses the existing
+     epoch check instead of re-scanning on every call. */
+  assert.match(helper[0], /levelFor\(await totalXp\(\)\)/, '__refreshLevelChip must re-derive the level from a fresh xp total (totalXp(), not a stale in-memory one)');
+  assert.ok(!/\bdb\.all\('xp'\)/.test(helper[0]), '__refreshLevelChip must not add a second literal db.all(\'xp\') inside renderToday (R17-P2)');
+  assert.match(helper[0], /hero-lvrow/, '__refreshLevelChip must repaint the level/name row');
+  assert.match(helper[0], /hero-xprow/, '__refreshLevelChip must repaint the XP/pips row');
+  // the fight-settle function (openFight's nested settle()): both outcomes
+  // must call it next to the wallet pill's own call, the same way B3 made the
+  // spar board and victory card agree with each other rather than drift apart.
+  // openFight is a huge, deeply-nested function (settle/aiPlay/doEndTurn/etc),
+  // so bound it by its own start and the next top-level function's start
+  // rather than a brace-matching regex.
+  const ofStart = app.indexOf('async function openFight(pitWrap, fighter, foeCfg) {');
+  assert.ok(ofStart > 0, 'openFight not found');
+  const ofEnd = app.indexOf('\nfunction buildFaqHtml(', ofStart);
+  assert.ok(ofEnd > ofStart, 'openFight\'s end boundary (buildFaqHtml) not found; the function moved');
+  const openFight = app.slice(ofStart, ofEnd);
+  // bounded to the win branch's own few lines, so a removed call cannot be
+  // masked by the loss branch's own (separate) call further down the file
+  const winSite = openFight.match(/window\.__refreshWalletPill\?\.\(\);[^\n]*\n\s*const badges = await evaluateBadges\(\);\n[\s\S]{0,900}?\n\s*window\.__refreshLevelChip\?\.\(\);\n\s*confettiRain\(90\);/);
+  assert.ok(winSite, 'the win branch does not refresh the level chip after badges are evaluated (R41-16)');
+  const lossSite = openFight.match(/coins = foeCfg\.mode === 'spar'[\s\S]*?window\.__refreshWalletPill\?\.\(\);\n\s*window\.__refreshLevelChip\?\.\(\);/);
+  assert.ok(lossSite, 'the loss branch does not refresh the level chip beside the wallet pill (R41-16)');
 });
 
 await runAll();
